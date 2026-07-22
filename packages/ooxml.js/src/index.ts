@@ -30,3 +30,13 @@ export type {
 
 export { XmlPartSchema, BinaryPartSchema, PartSchema, PackageSchema } from './model/package';
 export type { XmlPart, BinaryPart, Part, Package } from './model/package';
+
+export { readDocx, DocxDocumentSchema, ParagraphSchema, RunSchema } from './typed/docx';
+export type { DocxDocument, Paragraph, Run } from './typed/docx';
+
+export { readPptx, PptxPresentationSchema, SlideSchema } from './typed/pptx';
+export type { PptxPresentation, Slide } from './typed/pptx';
+
+export { readXlsx, XlsxWorkbookSchema, XlsxSheetSchema, XlsxCellSchema } from './typed/xlsx';
+export type { XlsxWorkbook, XlsxSheet, XlsxCell } from './typed/xlsx';
+
