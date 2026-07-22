@@ -1,0 +1,55 @@
+{
+  "name": "ooxml.js",
+  "version": "0.1.0",
+  "description": "Type-safe, lossless round-trip conversion between OOXML packages (docx, pptx, xlsx) and JSON, built on Zod 4 codecs.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "prepublishOnly": "pnpm run typecheck && tsdown && publint && attw --pack",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "ooxml",
+    "docx",
+    "pptx",
+    "xlsx",
+    "round-trip",
+    "zod",
+    "codec",
+    "opc"
+  ],
+  "license": "MIT",
+  "packageManager": "pnpm@11.6.0",
+  "dependencies": {
+    "fast-xml-parser": "^5.10.1",
+    "fflate": "^0.8.3",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
+    "@types/node": "^26.1.1",
+    "publint": "^0.3.21",
+    "tsdown": "^0.22.13",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  }
+}
