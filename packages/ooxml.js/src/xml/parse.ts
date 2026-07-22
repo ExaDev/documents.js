@@ -11,6 +11,7 @@ const PARSER = new XMLParser({
   commentPropName: '__comment',
   processEntities: false,
   parseTagValue: false,
+  trimValues: false,
 });
 
 export function parseXml(xml: string): XmlNode[] {
