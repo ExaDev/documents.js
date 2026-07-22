@@ -1,5 +1,5 @@
 import type { XmlElement, XmlNode } from '../model/node';
-import type { Part } from '../model/package';
+import type { Package, Part } from '../model/package';
 
 // Depth-first walk over a node forest, yielding every node and descending into element children.
 export function* walk(nodes: XmlNode[]): Generator<XmlNode> {
@@ -84,4 +84,63 @@ export function textContent(element: XmlElement): string {
     }
   }
   return decodeEntities(text);
+}
+
+export interface Relationship {
+  type: string;
+  target: string;
+  targetMode?: string;
+}
+
+// The .rels part for a given part path: word/document.xml -> word/_rels/document.xml.rels.
+function relsPathFor(partPath: string): string {
+  const lastSlash = partPath.lastIndexOf('/');
+  const dir = lastSlash === -1 ? '' : partPath.slice(0, lastSlash);
+  const fileName = lastSlash === -1 ? partPath : partPath.slice(lastSlash + 1);
+  return `${dir}/_rels/${fileName}.rels`;
+}
+
+// Resolve a relationship Target (relative to the subject part's directory, or package-rooted with a leading slash) to a package-relative part path.
+function resolveRelTarget(partPath: string, target: string): string {
+  if (target.startsWith('/')) {
+    return target.slice(1);
+  }
+  const lastSlash = partPath.lastIndexOf('/');
+  const baseDir = lastSlash === -1 ? '' : partPath.slice(0, lastSlash);
+  const resolved: string[] = [];
+  for (const segment of `${baseDir}/${target}`.split('/')) {
+    if (segment === '' || segment === '.') {
+      continue;
+    }
+    if (segment === '..') {
+      resolved.pop();
+    } else {
+      resolved.push(segment);
+    }
+  }
+  return resolved.join('/');
+}
+
+// Resolve a part's relationships to a Map of r:id -> { type, target, targetMode? }. Internal targets become package-relative part paths; external targets (TargetMode="External", e.g. hyperlink URLs) are kept verbatim.
+export function resolveRelationships(pkg: Package, partPath: string): Map<string, Relationship> {
+  const map = new Map<string, Relationship>();
+  const rels = rootElement(pkg.parts[relsPathFor(partPath)]);
+  if (rels === undefined) {
+    return map;
+  }
+  for (const rel of childrenWithTag(rels, 'Relationship')) {
+    const id = attr(rel, 'Id');
+    const type = attr(rel, 'Type');
+    const target = attr(rel, 'Target');
+    if (id === undefined || type === undefined || target === undefined) {
+      continue;
+    }
+    const targetMode = attr(rel, 'TargetMode');
+    map.set(id, {
+      type,
+      target: targetMode === 'External' ? target : resolveRelTarget(partPath, target),
+      targetMode,
+    });
+  }
+  return map;
 }
