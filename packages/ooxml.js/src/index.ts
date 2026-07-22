@@ -31,12 +31,43 @@ export type {
 export { XmlPartSchema, BinaryPartSchema, PartSchema, PackageSchema } from './model/package';
 export type { XmlPart, BinaryPart, Part, Package } from './model/package';
 
-export { readDocx, DocxDocumentSchema, ParagraphSchema, RunSchema } from './typed/docx';
-export type { DocxDocument, Paragraph, Run } from './typed/docx';
+export {
+  readDocx,
+  DocxDocumentSchema,
+  ParagraphSchema,
+  RunSchema,
+  ListMembershipSchema,
+  TableSchema,
+  TableRowSchema,
+  TableCellSchema,
+  HyperlinkSchema,
+  CommentSchema,
+  FootnoteSchema,
+} from './typed/docx';
+export type {
+  DocxDocument,
+  Paragraph,
+  Run,
+  ListMembership,
+  Table,
+  TableRow,
+  TableCell,
+  Hyperlink,
+  Comment,
+  Footnote,
+} from './typed/docx';
 
-export { readPptx, PptxPresentationSchema, SlideSchema } from './typed/pptx';
-export type { PptxPresentation, Slide } from './typed/pptx';
+export {
+  readPptx,
+  PptxPresentationSchema,
+  SlideSchema,
+  ShapeSchema,
+  PptxTableSchema,
+  PptxTableRowSchema,
+  PptxTableCellSchema,
+} from './typed/pptx';
+export type { PptxPresentation, Slide, Shape, PptxTable, PptxTableRow, PptxTableCell } from './typed/pptx';
 
-export { readXlsx, XlsxWorkbookSchema, XlsxSheetSchema, XlsxCellSchema } from './typed/xlsx';
-export type { XlsxWorkbook, XlsxSheet, XlsxCell } from './typed/xlsx';
+export { readXlsx, XlsxWorkbookSchema, XlsxSheetSchema, XlsxCellSchema, DefinedNameSchema } from './typed/xlsx';
+export type { XlsxWorkbook, XlsxSheet, XlsxCell, DefinedName } from './typed/xlsx';
 
