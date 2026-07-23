@@ -14,8 +14,10 @@ const functions = [
   'readXlsx',
   'toCompact',
   'fromCompact',
+  'decodeCompactPackage',
+  'encodeCompactPackage',
 ];
-const objects = ['packageCodec', 'xmlCodec', 'compactCodec'];
+const objects = ['packageCodec', 'xmlCodec', 'compactCodec', 'compactPackageCodec'];
 for (const name of functions) {
   if (typeof esm[name] !== 'function') throw new Error(`ESM build is missing function export: ${name}`);
   if (typeof cjs[name] !== 'function') throw new Error(`CJS build is missing function export: ${name}`);
@@ -59,6 +61,14 @@ if (JSON.stringify(esm.fromCompact(esm.toCompact(pkg1))) !== JSON.stringify(pkg1
 }
 if (JSON.stringify(cjs.fromCompact(cjs.toCompact(pkg1))) !== JSON.stringify(pkg1)) {
   throw new Error('CJS compact codec round-trip is not idempotent');
+}
+
+// The direct bytes <-> CompactPackage codec round-trips through both artifacts.
+if (JSON.stringify(esm.decodePackage(esm.encodeCompactPackage(esm.decodeCompactPackage(bytes)))) !== JSON.stringify(pkg1)) {
+  throw new Error('ESM bytes<->CompactPackage codec round-trip is not idempotent');
+}
+if (JSON.stringify(cjs.decodePackage(cjs.encodeCompactPackage(cjs.decodeCompactPackage(bytes)))) !== JSON.stringify(pkg1)) {
+  throw new Error('CJS bytes<->CompactPackage codec round-trip is not idempotent');
 }
 
 console.log('smoke OK: ESM and CJS builds both load, expose the same API, round-trip idempotently, and decode entities');

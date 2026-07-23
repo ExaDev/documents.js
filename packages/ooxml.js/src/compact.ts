@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { type Package, PackageSchema } from './model/package';
 import type { Attribute, XmlNode } from './model/node';
+import { decodePackage, encodePackage } from './codec';
 
 // A flat number[] of alternating [nameIdx, valueIdx, ...] pairs into the string table.
 export type CompactAttrPairs = number[];
@@ -186,4 +187,18 @@ export function toCompact(pkg: Package): CompactPackage {
 
 export function fromCompact(cpkg: CompactPackage): Package {
   return z.encode(compactCodec, cpkg);
+}
+
+// OOXML package bytes <-> the ooxml.js compact form directly, composing packageCodec and compactCodec so callers who only care about bytes and CompactPackage don't have to go through Package by hand.
+export const compactPackageCodec = z.codec(z.instanceof(Uint8Array), CompactPackageSchema, {
+  decode: (bytes) => toCompact(decodePackage(bytes)),
+  encode: (cpkg) => encodePackage(fromCompact(cpkg)),
+});
+
+export function decodeCompactPackage(bytes: Uint8Array<ArrayBuffer>): CompactPackage {
+  return z.decode(compactPackageCodec, bytes);
+}
+
+export function encodeCompactPackage(cpkg: CompactPackage): Uint8Array<ArrayBuffer> {
+  return z.encode(compactPackageCodec, cpkg);
 }

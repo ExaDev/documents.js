@@ -31,7 +31,18 @@ export type {
 export { XmlPartSchema, BinaryPartSchema, PartSchema, PackageSchema } from './model/package';
 export type { XmlPart, BinaryPart, Part, Package } from './model/package';
 
-export { compactCodec, toCompact, fromCompact, CompactPackageSchema, CompactPartSchema, CompactXmlNodeSchema, isCompactXmlNode } from './compact';
+export {
+  compactCodec,
+  toCompact,
+  fromCompact,
+  compactPackageCodec,
+  decodeCompactPackage,
+  encodeCompactPackage,
+  CompactPackageSchema,
+  CompactPartSchema,
+  CompactXmlNodeSchema,
+  isCompactXmlNode,
+} from './compact';
 export type { CompactPackage, CompactPart, CompactXmlNode, CompactAttrPairs } from './compact';
 
 export {

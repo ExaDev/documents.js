@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decodePackage, encodePackage, fromCompact, toCompact, zipPackage } from './index';
+import { decodeCompactPackage, decodePackage, encodeCompactPackage, encodePackage, fromCompact, toCompact, zipPackage } from './index';
 import type { Package, XmlElement } from './index';
 
 function enc(s: string): Uint8Array<ArrayBuffer> {
@@ -70,6 +70,32 @@ describe('compact codec round-trip', () => {
     expect(decodePackage(encodePackage(roundTripped)).parts['word/media/image1.png']).toEqual(
       decodePackage(zipPackage(docxParts())).parts['word/media/image1.png'],
     );
+  });
+});
+
+describe('bytes <-> CompactPackage codec (compactPackageCodec)', () => {
+  it('decodeCompactPackage(bytes) equals toCompact(decodePackage(bytes))', () => {
+    const bytes = zipPackage(docxParts());
+    expect(decodeCompactPackage(bytes)).toEqual(toCompact(decodePackage(bytes)));
+  });
+
+  it('round-trips bytes -> CompactPackage -> bytes -> Package back to the original Package', () => {
+    const bytes = zipPackage(docxParts());
+    const original = decodePackage(bytes);
+    const compact = decodeCompactPackage(bytes);
+    const roundTrippedBytes = encodeCompactPackage(compact);
+    expect(decodePackage(roundTrippedBytes)).toEqual(original);
+  });
+
+  it('encodeCompactPackage(compact) equals encodePackage(fromCompact(compact))', () => {
+    const pkg = docxPackage();
+    const compact = toCompact(pkg);
+    expect(decodePackage(encodeCompactPackage(compact))).toEqual(decodePackage(encodePackage(fromCompact(compact))));
+  });
+
+  it('is deterministic across repeated calls', () => {
+    const bytes = zipPackage(docxParts());
+    expect(decodeCompactPackage(bytes)).toEqual(decodeCompactPackage(bytes));
   });
 });
 

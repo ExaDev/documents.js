@@ -74,6 +74,15 @@ const roundTripped = fromCompact(compact); // deep-equals pkg
 
 It is a JSON shape, not a compression layer: every string is still human-readable text, so it stays diffable and debuggable, just without the repeated structural keys and duplicate strings of the verbose `Package` model. `fromCompact(toCompact(pkg))` round-trips exactly, and `toCompact` is deterministic for a given `Package` value (the same input always produces the same string table).
 
+Every pair of the three formats — OOXML bytes, `Package`, and `CompactPackage` — has a direct codec, so you never have to hand-compose two calls: `packageCodec` (bytes ⇄ `Package`), `compactCodec` (`Package` ⇄ `CompactPackage`), and `compactPackageCodec` (bytes ⇄ `CompactPackage` directly, via `decodeCompactPackage`/`encodeCompactPackage`):
+
+```ts
+import { decodeCompactPackage, encodeCompactPackage } from 'ooxml.js';
+
+const compact = decodeCompactPackage(bytes); // OOXML bytes -> CompactPackage directly
+const out = encodeCompactPackage(compact); // CompactPackage -> OOXML bytes directly
+```
+
 ## Build, test, and lint
 
 ```sh
@@ -97,7 +106,7 @@ The package is layered from a lossless core outward to lossy convenience views:
 - **`src/zip.ts`** — thin wrapper over `fflate`'s synchronous `zipSync`/`unzipSync`, isomorphic and dependency-free.
 - **`src/package-io/`** — `read.ts` and `write.ts` sit between the zip and XML layers: unzip a package into path -> bytes, classify each entry as XML or binary (`looksLikeXml` sniffs the leading non-whitespace byte for `<`), and parse/serialize accordingly.
 - **`src/codec.ts`** — the public round-trip surface: `packageCodec`/`xmlCodec` are `z.codec()` pairs, and `decodePackage`/`encodePackage` are the ergonomic wrappers around them.
-- **`src/compact.ts`** — the ooxml.js format: `compactCodec` (`z.codec(PackageSchema, CompactPackageSchema, …)`) maps `Package ⇄ CompactPackage`, with `toCompact`/`fromCompact` as the ergonomic wrappers, composing on top of `packageCodec` rather than replacing it.
+- **`src/compact.ts`** — the ooxml.js format: `compactCodec` (`z.codec(PackageSchema, CompactPackageSchema, …)`) maps `Package ⇄ CompactPackage`, with `toCompact`/`fromCompact` as the ergonomic wrappers. `compactPackageCodec` composes `packageCodec` and `compactCodec` into a direct bytes ⇄ `CompactPackage` codec (`decodeCompactPackage`/`encodeCompactPackage`), so all three format pairs — bytes/`Package`, `Package`/`CompactPackage`, bytes/`CompactPackage` — have a named codec rather than requiring callers to chain two.
 - **`src/typed/`** — one-way, lossy projections (`docx.ts`, `pptx.ts`, `xlsx.ts`) that read the generic `Package` into ergonomic document/presentation/workbook models: `readDocx` covers paragraphs, runs, tables, resolved hyperlinks, comments, footnotes, headers/footers and list membership; `readPptx` covers slide text, shapes, tables and speaker notes; `readXlsx` covers cell values and formulas, merged ranges and defined names. These cannot be encoded back to a `Package` — round-tripping always goes through `decodePackage`/`encodePackage`, never through a typed view. `util.ts` holds the shared XML-walking helpers (`walk`, `elementsWithTag`, `childrenWithTag`, `attr`, `rootElement`, `textContent`, entity decoding, `resolveRelationships`) that all three typed readers build on.
 
 ## Conventions
