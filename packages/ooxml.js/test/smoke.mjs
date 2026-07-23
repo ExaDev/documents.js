@@ -5,8 +5,17 @@ import * as esm from '../dist/index.js';
 const require = createRequire(import.meta.url);
 const cjs = require('../dist/index.cjs');
 
-const functions = ['decodePackage', 'encodePackage', 'zipPackage', 'readDocx', 'readPptx', 'readXlsx'];
-const objects = ['packageCodec', 'xmlCodec'];
+const functions = [
+  'decodePackage',
+  'encodePackage',
+  'zipPackage',
+  'readDocx',
+  'readPptx',
+  'readXlsx',
+  'toCompact',
+  'fromCompact',
+];
+const objects = ['packageCodec', 'xmlCodec', 'compactCodec'];
 for (const name of functions) {
   if (typeof esm[name] !== 'function') throw new Error(`ESM build is missing function export: ${name}`);
   if (typeof cjs[name] !== 'function') throw new Error(`CJS build is missing function export: ${name}`);
@@ -42,6 +51,14 @@ if (doc.paragraphs[0]?.runs[0]?.text !== 'Smoke & test') {
 const cdoc = cjs.readDocx(cjs.decodePackage(bytes));
 if (cdoc.paragraphs[0]?.runs[0]?.text !== 'Smoke & test') {
   throw new Error('CJS readDocx did not extract the expected decoded text');
+}
+
+// Compact codec round-trips through both artifacts.
+if (JSON.stringify(esm.fromCompact(esm.toCompact(pkg1))) !== JSON.stringify(pkg1)) {
+  throw new Error('ESM compact codec round-trip is not idempotent');
+}
+if (JSON.stringify(cjs.fromCompact(cjs.toCompact(pkg1))) !== JSON.stringify(pkg1)) {
+  throw new Error('CJS compact codec round-trip is not idempotent');
 }
 
 console.log('smoke OK: ESM and CJS builds both load, expose the same API, round-trip idempotently, and decode entities');

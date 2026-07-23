@@ -56,6 +56,24 @@ import { decodePackage, readDocx } from 'ooxml.js';
 const doc = readDocx(decodePackage(bytes));
 ```
 
+## The ooxml.js format
+
+The verbose `Package` JSON is faithful but repetitive: every node repeats its `type`/`tag`/`attributes`/`children` keys, and tag and namespace strings recur thousands of times across a real document. **The ooxml.js format** is a compact, still-plain-JSON alternative — tuple-encoded nodes plus a single interned string table — that composes on top of `packageCodec` without changing what it guarantees:
+
+```
+OOXML bytes --[packageCodec]--> Package --[compactCodec]--> CompactPackage (the ooxml.js format)
+```
+
+```ts
+import { decodePackage, toCompact, fromCompact } from 'ooxml.js';
+
+const pkg = decodePackage(bytes);
+const compact = toCompact(pkg); // { s: string[], p: Record<path, CompactPart> }
+const roundTripped = fromCompact(compact); // deep-equals pkg
+```
+
+It is a JSON shape, not a compression layer: every string is still human-readable text, so it stays diffable and debuggable, just without the repeated structural keys and duplicate strings of the verbose `Package` model. `fromCompact(toCompact(pkg))` round-trips exactly, and `toCompact` is deterministic for a given `Package` value (the same input always produces the same string table).
+
 ## Build, test, and lint
 
 ```sh
@@ -79,12 +97,13 @@ The package is layered from a lossless core outward to lossy convenience views:
 - **`src/zip.ts`** — thin wrapper over `fflate`'s synchronous `zipSync`/`unzipSync`, isomorphic and dependency-free.
 - **`src/package-io/`** — `read.ts` and `write.ts` sit between the zip and XML layers: unzip a package into path -> bytes, classify each entry as XML or binary (`looksLikeXml` sniffs the leading non-whitespace byte for `<`), and parse/serialize accordingly.
 - **`src/codec.ts`** — the public round-trip surface: `packageCodec`/`xmlCodec` are `z.codec()` pairs, and `decodePackage`/`encodePackage` are the ergonomic wrappers around them.
+- **`src/compact.ts`** — the ooxml.js format: `compactCodec` (`z.codec(PackageSchema, CompactPackageSchema, …)`) maps `Package ⇄ CompactPackage`, with `toCompact`/`fromCompact` as the ergonomic wrappers, composing on top of `packageCodec` rather than replacing it.
 - **`src/typed/`** — one-way, lossy projections (`docx.ts`, `pptx.ts`, `xlsx.ts`) that read the generic `Package` into ergonomic document/presentation/workbook models: `readDocx` covers paragraphs, runs, tables, resolved hyperlinks, comments, footnotes, headers/footers and list membership; `readPptx` covers slide text, shapes, tables and speaker notes; `readXlsx` covers cell values and formulas, merged ranges and defined names. These cannot be encoded back to a `Package` — round-tripping always goes through `decodePackage`/`encodePackage`, never through a typed view. `util.ts` holds the shared XML-walking helpers (`walk`, `elementsWithTag`, `childrenWithTag`, `attr`, `rootElement`, `textContent`, entity decoding, `resolveRelationships`) that all three typed readers build on.
 
 ## Conventions
 
 - **Zod-first schema/type/guard.** Every model type is inferred from its Zod schema (`z.infer<typeof XSchema>`), not hand-written — schema, type, and validator stay in lockstep.
-- **`XmlNode` uses a recursive structural guard, not `z.lazy`.** `z.lazy` collapses to `unknown` for the element-children case in the Zod version this project pins, so `XmlElementSchema` validates `children` via `z.custom<XmlNode>(isXmlNode)`, a hand-written recursive type guard in `model/node.ts`. Any change to `XmlNode`'s shape must update `isXmlNode` in step.
+- **`XmlNode` uses a recursive structural guard, not `z.lazy`.** `z.lazy` collapses to `unknown` for the element-children case in the Zod version this project pins, so `XmlElementSchema` validates `children` via `z.custom<XmlNode>(isXmlNode)`, a hand-written recursive type guard in `model/node.ts`. Any change to `XmlNode`'s shape must update `isXmlNode` in step. `src/compact.ts`'s `CompactXmlNode` reuses the same pattern (`isCompactXmlNode` + `z.custom`) for the same reason.
 - **Lossless core vs. lossy views is a hard boundary.** `decodePackage`/`encodePackage` (and the underlying codecs) must stay byte/part faithful — every part round-trips unchanged. `src/typed/*` readers are explicitly one-way and are allowed to drop information (documented per-reader, e.g. `readDocx`'s bold/italic toggle presence check ignores `w:val`, and `readXlsx` drops cell styles, formats and charts). Don't blur this line by adding write-back support to a typed reader; a full round-trip always goes through the generic `Package`.
 - **XML entities stay raw in the lossless layer.** `parseXml` runs with `processEntities: false` so encoded entities (e.g. `&amp;`) are preserved verbatim for round-trip fidelity; typed readers decode the five standard entities (`decodeEntities` in `typed/util.ts`) only in their own lossy projection, never in the core model.
 
