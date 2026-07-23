@@ -90,10 +90,12 @@ pnpm build          # tsdown -> dist/ (ESM + CJS + .d.ts, via tsdown.config.ts)
 pnpm typecheck      # tsc --noEmit
 pnpm test           # vitest run
 pnpm test:watch     # vitest
-pnpm test:smoke     # builds dist/, then verifies the built ESM and CJS artifacts both load and behave identically (test/smoke.mjs)
+pnpm test:smoke     # builds dist/, then runs test/smoke.test.mjs to verify the built ESM and CJS artifacts both load and behave identically
 ```
 
 There is no separate lint script or ESLint config; `pnpm typecheck` and `vitest` are the enforced gates. `pnpm prepublishOnly` runs `typecheck`, `tsdown`, `publint`, and `@arethetypeswrong/cli` (`attw --pack`) — the full publish-readiness check — before a release.
+
+`test/smoke.test.mjs` loads the actual built `dist/index.js` (ESM) and `dist/index.cjs` (CJS) artifacts and checks they load and behave identically — a check none of `vitest`'s normal run, `tsc`, `publint`, or `attw` can do, since those either run against source or statically analyse package metadata without executing the compiled output. `vitest.config.ts` defines it as its own `smoke` project (vitest's `test.projects`), separate from the `unit` project (`src/**/*.test.ts`); `pnpm test`/`test:watch` pass `--project unit` and `pnpm test:smoke` passes `--project smoke` after `tsdown` rebuilds `dist/`, so neither run touches the other project's files.
 
 To run a single test file: `pnpm vitest run src/typed/docx.test.ts`.
 
@@ -119,7 +121,8 @@ The package is layered from a lossless core outward to lossy convenience views:
 ## Gotchas and quirks
 
 - **No git remote is configured yet.** `git remote -v` is empty; this repository has not been pushed anywhere. Confirm the intended origin before assuming a `git push` target.
-- **`test:smoke` depends on a fresh build.** It runs `tsdown && node test/smoke.mjs`, so it always rebuilds `dist/` first — don't run it expecting to test a stale build.
+- **`test:smoke` depends on a fresh build.** It runs `tsdown && vitest run --project smoke`, so it always rebuilds `dist/` first — don't run it expecting to test a stale build.
+- **`--project` matters for `test/smoke.test.mjs`.** `vitest.config.ts` defines `unit` and `smoke` as separate projects; `pnpm test`/`test:watch`/`test:smoke` always pass the right `--project` flag. A bare `vitest`/`vitest run` with no `--project` filter runs both projects, and `smoke` fails loudly (`Cannot find module '../dist/index.js'`) if `dist/` hasn't been built yet — a clear failure pointing at the cause, not a silent false pass, but still worth knowing if you invoke `vitest` directly instead of through the npm scripts.
 - **Binary-vs-XML part classification is a byte sniff, not an extension check.** `package-io/read.ts`'s `looksLikeXml` looks for a leading `<` after skipping a UTF-8 BOM and whitespace; this is deliberate (no standard OOXML binary part starts with `<`) but means any future binary format starting with `<` would misclassify.
 - **`fflate`'s bundled types are ahead of what it actually allocates.** `zip.ts` casts `fflate`'s `Uint8Array<ArrayBufferLike>` results to `Uint8Array<ArrayBuffer>` with a comment explaining why the narrowing is safe (fflate only ever allocates a real `ArrayBuffer`) — don't remove the cast without preserving that guarantee elsewhere.
 - **No CI workflow exists yet.** There is no `.github/workflows/` directory; `pnpm build`, `pnpm typecheck`, and `pnpm test` are run locally/manually, not gated by GitHub Actions.

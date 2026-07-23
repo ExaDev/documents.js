@@ -27,9 +27,9 @@
     "build": "tsdown",
     "prepublishOnly": "pnpm run typecheck && tsdown && publint && attw --pack",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:smoke": "tsdown && node test/smoke.mjs"
+    "test": "vitest run --project unit",
+    "test:watch": "vitest --project unit",
+    "test:smoke": "tsdown && vitest run --project smoke"
   },
   "keywords": [
     "ooxml",
