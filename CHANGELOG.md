@@ -1,3 +1,10 @@
+# [1.19.0](https://github.com/ExaDev/documents.js/compare/v1.18.0...v1.19.0) (2026-07-30)
+
+
+### Features
+
+* **layout:** add docx flow/pagination engine, completing docx->PDF ([e840e91](https://github.com/ExaDev/documents.js/commit/e840e91f83fde072460590985e42829c2593fc54))
+
 # [1.18.0](https://github.com/ExaDev/documents.js/compare/v1.17.0...v1.18.0) (2026-07-30)
 
 
