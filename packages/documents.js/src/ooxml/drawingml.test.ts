@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { el } from '../xml/fragment';
 import {
+  applyGroupTransform,
   EMPTY_THEME,
   readColorMap,
+  readGroupXfrm,
   readSchemeColor,
   readSolidFillColor,
   readSrgbColor,
@@ -187,5 +189,47 @@ describe('readSolidFillColor', () => {
   it('returns undefined when the wrapper is undefined or has no recognised colour child', () => {
     expect(readSolidFillColor(undefined, readColorMap(undefined), EMPTY_THEME)).toBeUndefined();
     expect(readSolidFillColor(el('a:solidFill'), readColorMap(undefined), EMPTY_THEME)).toBeUndefined();
+  });
+});
+
+describe('readGroupXfrm', () => {
+  it('reads off/ext/chOff/chExt, all converted to points', () => {
+    const xfrm = el('a:xfrm', {}, [
+      el('a:off', { x: '914400', y: '457200' }),
+      el('a:ext', { cx: '1828800', cy: '914400' }),
+      el('a:chOff', { x: '0', y: '0' }),
+      el('a:chExt', { cx: '914400', cy: '457200' }),
+    ]);
+    expect(readGroupXfrm(xfrm)).toEqual({ offXPt: 72, offYPt: 36, extWidthPt: 144, extHeightPt: 72, childOffXPt: 0, childOffYPt: 0, childExtWidthPt: 72, childExtHeightPt: 36 });
+  });
+
+  it('returns undefined for a regular (non-group) xfrm with no chOff/chExt', () => {
+    const xfrm = el('a:xfrm', {}, [el('a:off', { x: '0', y: '0' }), el('a:ext', { cx: '914400', cy: '914400' })]);
+    expect(readGroupXfrm(xfrm)).toBeUndefined();
+  });
+
+  it('returns undefined for undefined input', () => {
+    expect(readGroupXfrm(undefined)).toBeUndefined();
+  });
+});
+
+describe('applyGroupTransform', () => {
+  it('is the identity when the group and child coordinate spaces coincide', () => {
+    const group = { offXPt: 0, offYPt: 0, extWidthPt: 100, extHeightPt: 100, childOffXPt: 0, childOffYPt: 0, childExtWidthPt: 100, childExtHeightPt: 100 };
+    const child = { xPt: 10, yPt: 20, widthPt: 30, heightPt: 40 };
+    expect(applyGroupTransform(group, child)).toEqual(child);
+  });
+
+  it('scales and translates a child frame into the parent space (verified against Apache POI\'s DrawGroupShape)', () => {
+    const group = { offXPt: 100, offYPt: 100, extWidthPt: 200, extHeightPt: 200, childOffXPt: 0, childOffYPt: 0, childExtWidthPt: 100, childExtHeightPt: 100 };
+    const child = { xPt: 10, yPt: 10, widthPt: 20, heightPt: 20 };
+    // scaleX = scaleY = 200/100 = 2; absolute = 100 + (10-0)*2 = 120, size = 20*2 = 40.
+    expect(applyGroupTransform(group, child)).toEqual({ xPt: 120, yPt: 120, widthPt: 40, heightPt: 40 });
+  });
+
+  it('falls back to a scale of 1 when a child extent is zero, rather than dividing by zero', () => {
+    const group = { offXPt: 0, offYPt: 0, extWidthPt: 200, extHeightPt: 200, childOffXPt: 0, childOffYPt: 0, childExtWidthPt: 0, childExtHeightPt: 0 };
+    const child = { xPt: 10, yPt: 10, widthPt: 20, heightPt: 20 };
+    expect(applyGroupTransform(group, child)).toEqual({ xPt: 10, yPt: 10, widthPt: 20, heightPt: 20 });
   });
 });

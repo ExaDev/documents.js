@@ -2,6 +2,7 @@ import type { XmlElement } from 'ooxml.js';
 import { attr, childrenWithTag, elementsWithTag } from 'ooxml.js';
 import type { ColorTransform, LayoutColor } from '../model/color';
 import { applyColorTransforms, rgbHexToColor } from '../model/color';
+import type { Box } from '../model/geometry';
 import { emuToPt } from '../model/units';
 
 // Shared DrawingML (the `a:` namespace) primitives -- xfrm geometry, colour/theme resolution -- used by both the pptx shape tree (src/ooxml/pptx/*) and, from Task 12 onward, docx's wp:inline drawings. Nothing here knows about WordprocessingML or PresentationML structure specifically.
@@ -200,4 +201,58 @@ export function readSolidFillColor(solidFillEl: XmlElement | undefined, colorMap
   }
   const srgbClr = childrenWithTag(solidFillEl, 'a:srgbClr')[0];
   return srgbClr === undefined ? undefined : readSrgbColor(srgbClr);
+}
+
+// A group shape's own a:xfrm carries two rectangles: off/ext (the group's position/size in its PARENT's coordinate space) and chOff/chExt (the coordinate space its own children's off/ext values are expressed in, often a completely different scale/origin). Mapping a child's local frame into the parent space is ECMA-376's own group-transform algorithm -- verified against Apache POI's DrawGroupShape (translate to interior-relative coordinates, scale by exterior/interior size ratio, translate to the exterior position), a mature, independent OOXML rendering implementation.
+export interface GroupChildTransform {
+  readonly offXPt: number;
+  readonly offYPt: number;
+  readonly extWidthPt: number;
+  readonly extHeightPt: number;
+  readonly childOffXPt: number;
+  readonly childOffYPt: number;
+  readonly childExtWidthPt: number;
+  readonly childExtHeightPt: number;
+}
+
+// Reads a group shape's a:xfrm (its own off/ext plus its chOff/chExt), all converted to points. Undefined if `xfrm` lacks a chOff/chExt pair -- a regular (non-group) shape's a:xfrm never has one, so this doubles as "is this actually a group transform".
+export function readGroupXfrm(xfrm: XmlElement | undefined): GroupChildTransform | undefined {
+  const base = readXfrm(xfrm);
+  if (base === undefined || xfrm === undefined) {
+    return undefined;
+  }
+  const chOff = childrenWithTag(xfrm, 'a:chOff')[0];
+  const chExt = childrenWithTag(xfrm, 'a:chExt')[0];
+  if (chOff === undefined || chExt === undefined) {
+    return undefined;
+  }
+  const cx = attr(chOff, 'x');
+  const cy = attr(chOff, 'y');
+  const ccx = attr(chExt, 'cx');
+  const ccy = attr(chExt, 'cy');
+  if (cx === undefined || cy === undefined || ccx === undefined || ccy === undefined) {
+    return undefined;
+  }
+  return {
+    offXPt: base.xPt,
+    offYPt: base.yPt,
+    extWidthPt: base.widthPt,
+    extHeightPt: base.heightPt,
+    childOffXPt: emuToPt(Number(cx)),
+    childOffYPt: emuToPt(Number(cy)),
+    childExtWidthPt: emuToPt(Number(ccx)),
+    childExtHeightPt: emuToPt(Number(ccy)),
+  };
+}
+
+// Maps a child shape's own local (chOff/chExt-relative) frame into the group's parent coordinate space.
+export function applyGroupTransform(group: GroupChildTransform, childFrame: Box): Box {
+  const scaleX = group.childExtWidthPt === 0 ? 1 : group.extWidthPt / group.childExtWidthPt;
+  const scaleY = group.childExtHeightPt === 0 ? 1 : group.extHeightPt / group.childExtHeightPt;
+  return {
+    xPt: group.offXPt + (childFrame.xPt - group.childOffXPt) * scaleX,
+    yPt: group.offYPt + (childFrame.yPt - group.childOffYPt) * scaleY,
+    widthPt: childFrame.widthPt * scaleX,
+    heightPt: childFrame.heightPt * scaleY,
+  };
 }
