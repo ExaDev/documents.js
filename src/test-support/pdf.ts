@@ -238,3 +238,16 @@ export function inlineImagePdf(): Uint8Array<ArrayBuffer> {
   b.classicXrefAndTrailer(5, '/Root 1 0 R');
   return b.bytes();
 }
+
+// Two pages under a Pages node that itself carries /MediaBox and /Resources -- neither Page defines them directly, so a reader must inherit both down from the Pages node (ISO 32000-1 7.7.3.4, Table 30). The second page additionally sets its own /Rotate, which an inheriting reader must not overwrite with any (here absent) inherited value.
+export function inheritedPageAttributesPdf(): Uint8Array<ArrayBuffer> {
+  const b = new FixtureBuilder().header('1.4');
+  b.object(1, '<< /Type /Catalog /Pages 2 0 R >>');
+  b.object(2, '<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 /MediaBox [0 0 300 200] /Resources << /Font << /F1 5 0 R >> >> >>');
+  b.object(3, '<< /Type /Page /Parent 2 0 R /Contents 6 0 R >>');
+  b.object(4, '<< /Type /Page /Parent 2 0 R /Contents 6 0 R /Rotate 90 >>');
+  b.object(5, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+  b.stream(6, '<< >>', enc(HELLO_CONTENT));
+  b.classicXrefAndTrailer(6, '/Root 1 0 R');
+  return b.bytes();
+}

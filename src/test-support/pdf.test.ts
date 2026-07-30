@@ -5,6 +5,7 @@ import {
   encryptedPdf,
   formXObjectPdf,
   incrementalUpdatePdf,
+  inheritedPageAttributesPdf,
   inlineImagePdf,
   minimalClassicXrefPdf,
   nonZeroOriginMediaBoxPdf,
@@ -186,6 +187,26 @@ describe('formXObjectPdf', () => {
     expect(text).toContain('/Fm1 Do');
     expect(text).toContain('/Subtype /Form');
     expect(text).toContain('In a form');
+  });
+});
+
+describe('inheritedPageAttributesPdf', () => {
+  it('puts /MediaBox and /Resources on the Pages node, not either Page', () => {
+    const bytes = inheritedPageAttributesPdf();
+    verifyFullClassicXref(bytes);
+    const text = decode(bytes);
+    const pagesObj = text.slice(text.indexOf('2 0 obj'), text.indexOf('endobj', text.indexOf('2 0 obj')));
+    expect(pagesObj).toContain('/MediaBox [0 0 300 200]');
+    expect(pagesObj).toContain('/Resources');
+    const firstPageObj = text.slice(text.indexOf('3 0 obj'), text.indexOf('endobj', text.indexOf('3 0 obj')));
+    expect(firstPageObj).not.toContain('/MediaBox');
+    expect(firstPageObj).not.toContain('/Resources');
+  });
+
+  it('sets /Rotate directly on only the second page', () => {
+    const text = decode(inheritedPageAttributesPdf());
+    const secondPageObj = text.slice(text.indexOf('4 0 obj'), text.indexOf('endobj', text.indexOf('4 0 obj')));
+    expect(secondPageObj).toContain('/Rotate 90');
   });
 });
 
