@@ -64,6 +64,8 @@ export interface ContentTableCell {
 
 export interface ContentTableRow {
   cells: ContentTableCell[];
+  // pptx tables carry an explicit row height (a:tr/@h); docx tables (Task 12) do not model one at the row level in the same way, so this is undefined there and estimated from content at layout time.
+  heightPt?: number;
 }
 
 export interface ContentTable {
@@ -87,7 +89,12 @@ function isContentTableCell(value: unknown): value is ContentTableCell {
 }
 
 function isContentTableRow(value: unknown): value is ContentTableRow {
-  return isRecord(value) && Array.isArray(value.cells) && value.cells.every(isContentTableCell);
+  return (
+    isRecord(value) &&
+    Array.isArray(value.cells) &&
+    value.cells.every(isContentTableCell) &&
+    (value.heightPt === undefined || typeof value.heightPt === 'number')
+  );
 }
 
 // Recursive structural guard. Used via z.custom so table cells validate without a recursive Zod schema (which collapses to `unknown` under z.lazy in this Zod version).
@@ -132,6 +139,7 @@ export const ContentTableCellSchema = z.object({
 
 export const ContentTableRowSchema = z.object({
   cells: z.array(ContentTableCellSchema),
+  heightPt: z.number().positive().optional(),
 });
 
 export const ContentTableSchema = z.object({
