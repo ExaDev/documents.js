@@ -1,3 +1,13 @@
+# [1.10.0](https://github.com/ExaDev/documents.js/compare/v1.9.0...v1.10.0) (2026-07-30)
+
+
+### Features
+
+* **model:** add DrawingML hundredths-of-a-point font-size conversion ([d7b311c](https://github.com/ExaDev/documents.js/commit/d7b311c928ef1ff5bdb561721992099eaf095a22))
+* **model:** add DrawingML shade/tint/lumMod/lumOff colour transforms ([9a0f675](https://github.com/ExaDev/documents.js/commit/9a0f675106d54d46574274708dfd67c726ece015))
+* **ooxml:** add shared docProps metadata reader ([228c9f1](https://github.com/ExaDev/documents.js/commit/228c9f115fa8cc14204f45754a6fb4af49043a5f))
+* **ooxml:** add shared DrawingML geometry and theme colour resolution ([9542423](https://github.com/ExaDev/documents.js/commit/95424230c36320789a330350ca954f0b767df5ac))
+
 # [1.9.0](https://github.com/ExaDev/documents.js/compare/v1.8.0...v1.9.0) (2026-07-30)
 
 
