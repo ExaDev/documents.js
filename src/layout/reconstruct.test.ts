@@ -83,11 +83,18 @@ describe('reconstructWordprocessing: runs within a line', () => {
     expect(para!.runs.map((r) => r.text)).toEqual(['Left', '\t', 'Right']);
   });
 
-  it('does not insert a tab for ordinary word spacing', () => {
-    const pg = page(612, 792, [text({ text: 'Left', xPt: 50, yPt: 700, widthPt: 20 }), text({ text: 'Right', xPt: 75, yPt: 700, widthPt: 20 })]); // gap = 5, well under 24
+  it('inserts a plain space, not a tab, for ordinary word spacing', () => {
+    const pg = page(612, 792, [text({ text: 'Left', xPt: 50, yPt: 700, widthPt: 20 }), text({ text: 'Right', xPt: 75, yPt: 700, widthPt: 20 })]); // gap = 5, well under the 24pt tab threshold
     const doc = reconstructWordprocessing(docFrom([pg]));
     const [para] = paragraphs(doc);
-    expect(para!.runs.map((r) => r.text)).toEqual(['Left', 'Right']);
+    expect(para!.runs.map((r) => r.text)).toEqual(['Left ', 'Right']);
+  });
+
+  it('does not insert anything for a directly-adjacent item with no real gap (e.g. a styling split mid-word)', () => {
+    const pg = page(612, 792, [text({ text: 'un', xPt: 50, yPt: 700, widthPt: 20, bold: true }), text({ text: 'happy', xPt: 70, yPt: 700, widthPt: 40 })]); // gap = 0
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    const [para] = paragraphs(doc);
+    expect(para!.runs.map((r) => r.text)).toEqual(['un', 'happy']);
   });
 
   it('carries font, size, weight, and colour through to the run', () => {
