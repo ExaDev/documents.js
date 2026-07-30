@@ -1,3 +1,11 @@
+# [1.13.0](https://github.com/ExaDev/documents.js/compare/v1.12.0...v1.13.0) (2026-07-30)
+
+
+### Features
+
+* **ooxml:** read pptx text-box insets and normAutofit scale ([5ed0849](https://github.com/ExaDev/documents.js/commit/5ed08491c6bbf1a6a40d5ec4cd17ddb86a6e7bfe))
+* **pdf:** add rotatePointAboutCenter for shape-rotation reconciliation ([48ff663](https://github.com/ExaDev/documents.js/commit/48ff663221914c0d08672ee0808373f5543a247c))
+
 # [1.12.0](https://github.com/ExaDev/documents.js/compare/v1.11.0...v1.12.0) (2026-07-30)
 
 
