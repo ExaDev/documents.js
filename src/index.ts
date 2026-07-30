@@ -112,6 +112,8 @@ export type { LayoutColor } from './model/color';
 export { COLOR_BLACK, rgbHexToColor } from './model/color';
 export type { Alignment, LayoutFont } from './model/style';
 export { DEFAULT_LAYOUT_FONT } from './model/style';
+// Magic-byte-validated Uint8Array schemas, so a caller passing the wrong format -- to these functions directly, or as the input/output schema half of a z.codec() below -- gets a clear Zod validation error instead of a confusing failure three layers down.
+export { DocxBytesSchema, PdfBytesSchema, PptxBytesSchema } from './model/bytes';
 
 // --- The live-view read+write editors: a real manipulation API for docx/pptx content, since ooxml.js's own typed readers explicitly forbid write-back. ---
 export type { DocxBody } from './edit/docx/editor';
@@ -136,6 +138,8 @@ export { writePdf } from './pdf/write';
 export type { PdfDiagnostic, PdfDiagnosticSeverity, PdfDiagnosticSink } from './pdf/diagnostics';
 export { NOOP_DIAGNOSTIC_SINK, PdfEncryptedError, PdfParseError } from './pdf/diagnostics';
 export type { WinAnsiSubstitution } from './pdf/winansi';
+// A schema-validated z.codec() pair over readPdf/writePdf (PDF bytes <-> LayoutDocument), mirroring ooxml.js's own packageCodec -- the no-extra-options form; use readPdf/writePdf directly for cancellation, diagnostics, a custom clock, or WinAnsi-substitution reporting.
+export { pdfCodec } from './pdf/codec';
 
 // --- Format <-> ContentDocument readers and layout algorithms, each independently usable rather than only reachable through the ergonomic conversions below. ---
 export { readDocxContent } from './ooxml/docx/read';
@@ -150,6 +154,9 @@ export { reconstructPresentation, reconstructWordprocessing } from './layout/rec
 // --- The four ergonomic top-level conversions. ---
 export type { DocumentToPdfOptions, PdfToDocumentOptions } from './convert/convert';
 export { docxToPdf, pdfToDocx, pdfToPptx, pptxToPdf } from './convert/convert';
+
+// Schema-validated z.codec() pairs over the conversions above (docx/pptx bytes <-> PDF bytes), the no-extra-options form -- use docxToPdf/pdfToDocx/pptxToPdf/pdfToPptx directly for cancellation or diagnostics.
+export { docxPdfCodec, pptxPdfCodec } from './convert/codec';
 
 // --- The swappable conversion port, for a caller that wants to inject a different (e.g. remote) implementation later without changing call sites. ---
 export type { ConversionRequest, ConversionResult, Diagnostic, DocumentConverter, DocumentFormat, DocumentPayload } from './convert/port';

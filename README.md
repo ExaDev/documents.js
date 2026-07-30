@@ -84,6 +84,19 @@ const layout = readPdf(pdfBytes); // -> LayoutDocument: pages of positioned text
 const bytes = writePdf(layout);
 ```
 
+The same three round trips (PDF ⇄ `LayoutDocument`, docx ⇄ PDF, pptx ⇄ PDF) are each also available as a schema-validated [`z.codec()`](https://zod.dev) pair, mirroring `ooxml.js`'s own `packageCodec` — `z.decode`/`z.encode` validate both the raw bytes (against the magic-byte schemas below) and the parsed value (against `LayoutDocumentSchema`) on every call, catching a malformed value that a bare function call wouldn't. This is the no-extra-options form: `readPdf`/`writePdf`/`docxToPdf`/etc. remain the entry points for cancellation (`signal`), diagnostics (`sink`), or substitution reporting (`onSubstitution`), none of which fit `z.codec()`'s fixed `decode(input)`/`encode(output)` signature.
+
+```ts
+import { z } from 'zod';
+import { docxPdfCodec, pdfCodec, pptxPdfCodec } from 'documents.js';
+
+const layout = z.decode(pdfCodec, pdfBytes); // throws a ZodError if pdfBytes has no %PDF- header
+const pdfBytes2 = z.encode(pdfCodec, layout);
+
+const pdfFromDocx = z.decode(docxPdfCodec, docxBytes);
+const docxBack = z.encode(docxPdfCodec, pdfFromDocx);
+```
+
 `readDocxContent`/`readPptxContent` (docx/pptx → `ContentDocument`), `convertWordprocessingToLayout`/`convertPresentationToLayout` (`ContentDocument` → `LayoutDocument`), and `reconstructWordprocessing`/`reconstructPresentation` (`LayoutDocument` → `ContentDocument`) are each exported individually too, for a caller that wants one stage of the pipeline without the rest.
 
 ## Architecture
@@ -97,9 +110,10 @@ The package is layered from generic primitives outward to the two conversion dir
 - **`src/pdf/`** — the hand-written PDF codec, importing only `model`/`bytes`/`image` (no OOXML knowledge at all):
   - **Write**: `objects.ts` (the `PdfObject` discriminated union), `afm-widths.ts`/`encoding.ts`/`winansi.ts`/`fonts.ts` (standard-14 metrics, WinAnsi encoding, family resolution), `measure.ts`/`text-layout.ts` (greedy line-wrapping), `matrix.ts`, `content-write.ts` (`LayoutItem[]` → content-stream operators), `write.ts` (the full object graph, classic cross-reference table, trailer).
   - **Read**: `lexer.ts`/`parse.ts` (byte tokenizer and tokens → `PdfObject`), `filters.ts`/`predictors.ts` (Flate/LZW/ASCII85/ASCIIHex/RunLength, TIFF/PNG predictors), `xref.ts`/`document.ts` (classic and cross-reference-stream resolution, object streams, `/Prev` chains, linear-scan recovery, the page tree with attribute inheritance), `content-read.ts`/`interpret.ts` (the content-stream tokenizer and graphics/text state machine, including form-XObject recursion), `cmap.ts`/`font-style.ts`/`font-read.ts` (`/ToUnicode` CMaps, font-dictionary resolution), `images-read.ts` (Image XObjects → PNG/JPEG bytes), `read.ts` (`readPdf`, assembling all of the above into a `LayoutDocument`).
+  - `codec.ts` — `pdfCodec`, a `z.codec()` pair over `readPdf`/`writePdf` (PDF bytes ⇄ `LayoutDocument`).
 - **`src/ooxml/`** — resolves a `Package` into a `ContentDocument`: `docx/styles.ts` implements the full docx style cascade (`docDefaults` → named-style `basedOn` chains → paragraph-mark run properties → character styles → direct formatting) and `docx/read.ts` walks `word/document.xml`; `pptx/inherit.ts` implements the placeholder → layout → master → theme inheritance cascade (the single highest-value correctness feature for pptx, since most real shapes carry no position of their own) and `pptx/read.ts` walks the slide tree, resolving slide order through the presentation's own relationships rather than filename order.
 - **`src/layout/`** — the pure conversion algorithms, importing only `model` (no I/O): `engine.ts` (`ContentDocument` wordprocessing → `LayoutDocument`: flow, line-breaking, pagination), `slides.ts` (`ContentDocument` presentation → `LayoutDocument`: direct EMU-to-point placement, no pagination needed), `reconstruct.ts` (`LayoutDocument` → `ContentDocument`, both variants: baseline-proximity line clustering, then paragraph/text-block clustering from geometry — PDF has no semantic paragraph or shape structure to recover, only positioned glyphs).
-- **`src/convert/`** — `convert.ts` (the four ergonomic wrappers), `port.ts`/`local.ts` (the swappable `DocumentConverter` contract and its synchronous local implementation).
+- **`src/convert/`** — `convert.ts` (the four ergonomic wrappers), `codec.ts` (`docxPdfCodec`/`pptxPdfCodec`, a `z.codec()` pair over each), `port.ts`/`local.ts` (the swappable `DocumentConverter` contract and its synchronous local implementation).
 
 Dependency direction is strictly downward and checkable: `model`/`bytes` import nothing local; `image` imports `bytes` only; `pdf` imports `model`+`bytes`+`image` only; `ooxml/*` imports `xml`/`model` only (no PDF knowledge); `layout` imports `model` only; `convert` composes everything else. No `PdfObject`/`PdfDict`/`PdfStream` type appears outside `src/pdf/`.
 
@@ -120,6 +134,7 @@ To run a single test file: `pnpm vitest run src/path/to/file.test.ts`.
 ## Conventions
 
 - **Zod-first schema/type/guard**, matching `ooxml.js`: every model type is inferred from its Zod schema, never hand-written. `ContentBlock` (recursive, mirroring `ooxml.js`'s own `XmlNode` treatment) uses a hand-written structural guard + `z.custom`, not `z.lazy`, which collapses to `unknown` for recursive element-children in the pinned Zod version.
+- **`z.codec()` for every schema-to-schema round trip**, matching `ooxml.js`'s `packageCodec`/`xmlCodec`: `pdfCodec` (PDF bytes ⇄ `LayoutDocument`) and `docxPdfCodec`/`pptxPdfCodec` (docx/pptx bytes ⇄ PDF bytes) each wrap an already-independently-tested function pair, adding automatic two-way schema validation. These are deliberately the no-options form — `readPdf`/`writePdf`/`docxToPdf`/`pdfToDocx`/`pptxToPdf`/`pdfToPptx` remain the primary entry points wherever a caller needs an `AbortSignal`, a `PdfDiagnosticSink`, or an `onSubstitution` callback, since `z.codec()`'s fixed `decode(input)`/`encode(output)` signature has no room for side-channel options.
 - **`PdfObject` has no Zod schema at all**, deliberately: it never crosses a public boundary or round-trips through JSON, and is constructed exclusively by this package's own parser — validating it would just be validating our own output. It narrows natively on its own `kind` discriminant instead, the same reasoning `ooxml.js` applies when it picks a hand-written `isXmlNode` guard over `z.lazy`.
 - **No type assertions anywhere.** Every third-party or loosely-typed value is narrowed through a type guard or a Zod parse at the boundary.
 - **Live views, not flatten-and-regenerate.** `src/edit/*`'s editor classes hold a reference directly into the real `Package`/`XmlElement` objects; saving is `encodePackage(pkg)`, nothing more. This is what makes "everything you didn't touch stays byte-faithful" a structural guarantee rather than a best effort.
@@ -144,7 +159,7 @@ To run a single test file: `pnpm vitest run src/path/to/file.test.ts`.
 
 **PDF → docx/pptx** is necessarily a **best-effort reconstruction** from geometry: a PDF page is just positioned glyphs and images, with no semantic paragraph or shape structure to recover. Reading order, bold/italic/colour/font-size, and page/slide count are preserved; paragraph and text-block boundaries are inferred from baseline spacing and left-margin indentation, not recovered exactly.
 
-Neither direction is round-trip-lossless, and the two conversions are not inverses of each other — `pdfToDocx(docxToPdf(x))` will not reproduce `x` exactly, and is not intended to. This is a deliberate, permanent contrast with `ooxml.js`'s own `packageCodec`, which genuinely is a lossless round trip.
+Neither direction is round-trip-lossless, and the two conversions are not inverses of each other — `pdfToDocx(docxToPdf(x))` will not reproduce `x` exactly, and is not intended to. This is a deliberate, permanent contrast with `ooxml.js`'s own `packageCodec`, which genuinely is a lossless round trip. `docxPdfCodec`/`pptxPdfCodec`/`pdfCodec` share `packageCodec`'s *mechanism* (`z.codec()`, schema-validated both ways) but not its *guarantee* — wrapping a lossy conversion in `z.codec()` validates the shape of what comes out, not its fidelity to what went in.
 
 **Optional real-world corpus.** `test/corpus/` (gitignored, never committed) holds a `pnpm test:corpus` vitest project for manual conformance checking against real PDFs a hand-built fixture can't fully stand in for — a Word "Save as PDF", a PowerPoint "Save as PDF", a Chrome "Print to PDF", a LibreOffice export. It is not part of `pnpm test` and does not gate CI; drop files in locally before a significant parser change.
 
