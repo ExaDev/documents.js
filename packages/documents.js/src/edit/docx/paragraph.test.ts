@@ -71,6 +71,31 @@ describe('DocxParagraph styleId / alignment / list', () => {
   });
 });
 
+describe('DocxParagraph.appendTab', () => {
+  it('appends a w:tab element inside its own run, not a literal tab character in text', () => {
+    const paragraphElement = el('w:p', {}, []);
+    const paragraph = new DocxParagraph([paragraphElement], paragraphElement);
+    paragraph.appendTab();
+    const run = paragraphElement.children[0];
+    if (run?.type !== 'element' || run.tag !== 'w:r') {
+      throw new Error('expected a w:r child');
+    }
+    const tab = run.children[0];
+    expect(tab?.type === 'element' ? tab.tag : undefined).toBe('w:tab');
+  });
+
+  it('interleaves correctly between real runs, in document order', () => {
+    const paragraphElement = el('w:p', {}, []);
+    const paragraph = new DocxParagraph([paragraphElement], paragraphElement);
+    paragraph.appendRun({ text: 'before' });
+    paragraph.appendTab();
+    paragraph.appendRun({ text: 'after' });
+    const tags = paragraphElement.children.map((c) => (c.type === 'element' ? c.tag : undefined));
+    expect(tags).toEqual(['w:r', 'w:r', 'w:r']);
+    expect(paragraph.text).toBe('beforeafter'); // w:tab contributes no text-content characters (ooxml.js's textContent has no WordprocessingML-specific knowledge of it) -- its presence is verified structurally above
+  });
+});
+
 describe('DocxParagraph.remove', () => {
   it('removes the paragraph from its container and throws on further use', () => {
     const { container, paragraph } = paragraphFromXml();

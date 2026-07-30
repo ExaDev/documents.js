@@ -1,9 +1,11 @@
 import type { XmlElement, XmlNode } from 'ooxml.js';
 import { attr, textContent } from 'ooxml.js';
 import type { Box } from '../../model/geometry';
+import type { LayoutColor } from '../../model/color';
 import { emuToPt, ptToEmu } from '../../model/units';
+import type { Alignment } from '../../model/style';
 import { removeChild } from '../../xml/edit';
-import { encodeXmlText } from '../../xml/entities';
+import { encodeXmlText, needsSpacePreserve } from '../../xml/entities';
 import { el, txt } from '../../xml/fragment';
 
 function directChild(parent: XmlElement, tag: string): XmlElement | undefined {
@@ -103,10 +105,84 @@ export class PptxShape {
     txBody.children = [...nonParagraphChildren, paragraph];
   }
 
+  // Replaces the shape's whole text body with multiple styled paragraphs -- the richer counterpart to the flat `text` setter above, for callers (the PDF->pptx reconstruction path) that already have per-run bold/italic/font/size/colour and per-paragraph alignment to place, not just a single plain string.
+  setParagraphs(paragraphs: readonly DrawingParagraphInit[]): void {
+    const node = this.live();
+    let txBody = directChild(node, 'p:txBody');
+    if (txBody === undefined) {
+      txBody = el('p:txBody', {}, [el('a:bodyPr'), el('a:lstStyle')]);
+      node.children.push(txBody);
+    }
+    const nonParagraphChildren = txBody.children.filter((c) => !(c.type === 'element' && c.tag === 'a:p'));
+    txBody.children = [...nonParagraphChildren, ...paragraphs.map(buildDrawingParagraph)];
+  }
+
   remove(): void {
     removeChild(this.container, this.live());
     this.removed = true;
   }
+}
+
+export interface DrawingRunInit {
+  readonly text: string;
+  readonly bold?: boolean;
+  readonly italic?: boolean;
+  readonly fontFamily?: string;
+  readonly sizePt?: number;
+  readonly color?: LayoutColor;
+}
+
+export interface DrawingParagraphInit {
+  readonly runs: readonly DrawingRunInit[];
+  readonly alignment?: Alignment;
+}
+
+// a:pPr/@algn's own value set (ECMA-376 20.1.10.2) -- distinct spellings from WordprocessingML's w:jc.
+const ALIGNMENT_TO_ALGN: Readonly<Record<Alignment, string>> = { left: 'l', center: 'ctr', right: 'r', justify: 'just' };
+
+// a:rPr/@sz is in hundredths of a point (ECMA-376 20.1.10.71), unlike WordprocessingML's half-points.
+const HUNDREDTHS_POINT_PER_POINT = 100;
+
+function colorToHex(color: LayoutColor): string {
+  const toByte = (c: number): string => Math.round(c * 255).toString(16).padStart(2, '0');
+  return `${toByte(color.r)}${toByte(color.g)}${toByte(color.b)}`.toUpperCase();
+}
+
+// DrawingML run properties are attribute-based toggles (b="1", i="1" on a:rPr itself), not the element-presence toggles WordprocessingML uses (w:b/w:i as child elements) -- the same distinction docx/styles.ts documents for the read side, mirrored here on write.
+function buildDrawingRun(init: DrawingRunInit): XmlElement {
+  const rPrAttrs: Record<string, string> = {};
+  if (init.bold === true) {
+    rPrAttrs.b = '1';
+  }
+  if (init.italic === true) {
+    rPrAttrs.i = '1';
+  }
+  if (init.sizePt !== undefined) {
+    rPrAttrs.sz = String(Math.round(init.sizePt * HUNDREDTHS_POINT_PER_POINT));
+  }
+  const rPrChildren: XmlNode[] = [];
+  if (init.color !== undefined) {
+    rPrChildren.push(el('a:solidFill', {}, [el('a:srgbClr', { val: colorToHex(init.color) })]));
+  }
+  if (init.fontFamily !== undefined) {
+    rPrChildren.push(el('a:latin', { typeface: init.fontFamily }));
+  }
+  const rPr = Object.keys(rPrAttrs).length > 0 || rPrChildren.length > 0 ? [el('a:rPr', rPrAttrs, rPrChildren)] : [];
+  const tAttrs: Record<string, string> = needsSpacePreserve(init.text) ? { 'xml:space': 'preserve' } : {};
+  return el('a:r', {}, [...rPr, el('a:t', tAttrs, [txt(encodeXmlText(init.text))])]);
+}
+
+function buildDrawingParagraph(init: DrawingParagraphInit): XmlElement {
+  const children: XmlNode[] = [];
+  if (init.alignment !== undefined) {
+    children.push(el('a:pPr', { algn: ALIGNMENT_TO_ALGN[init.alignment] }));
+  }
+  if (init.runs.length === 0) {
+    children.push(el('a:endParaRPr')); // an empty paragraph still needs some content, matching how PowerPoint itself emits one
+  } else {
+    children.push(...init.runs.map(buildDrawingRun));
+  }
+  return el('a:p', {}, children);
 }
 
 export function buildTextBoxShape(frame: Box, text: string, shapeId: number): XmlElement {
