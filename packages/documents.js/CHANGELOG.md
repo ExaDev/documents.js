@@ -1,3 +1,10 @@
+# [1.17.0](https://github.com/ExaDev/documents.js/compare/v1.16.0...v1.17.0) (2026-07-30)
+
+
+### Features
+
+* **ooxml:** add the docx style cascade resolver ([47b53c6](https://github.com/ExaDev/documents.js/commit/47b53c6027f404acf0939f5c1bb46195dca3ef0e))
+
 # [1.16.0](https://github.com/ExaDev/documents.js/compare/v1.15.0...v1.16.0) (2026-07-30)
 
 
