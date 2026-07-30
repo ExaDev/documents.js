@@ -142,13 +142,14 @@ const out = encodeCompactPackage(compact); // CompactPackage -> OOXML bytes dire
 
 ```sh
 pnpm build          # tsdown -> dist/ (ESM + CJS + .d.ts, via tsdown.config.ts)
+pnpm lint           # eslint . --max-warnings 0
 pnpm typecheck      # tsc --noEmit
 pnpm test           # vitest run
 pnpm test:watch     # vitest
 pnpm test:smoke     # builds dist/, then runs test/smoke.test.mjs to verify the built ESM and CJS artifacts both load and behave identically
 ```
 
-There is no separate lint script or ESLint config; `pnpm typecheck` and `vitest` are the enforced gates. `pnpm prepublishOnly` runs `typecheck`, `tsdown`, `publint`, and `@arethetypeswrong/cli` (`attw --pack`) — the full publish-readiness check — before a release.
+`pnpm prepublishOnly` runs `lint`, `typecheck`, `tsdown`, `publint`, and `@arethetypeswrong/cli` (`attw --pack`) — the full publish-readiness check — before a release.
 
 `test/smoke.test.mjs` loads the actual built `dist/index.js` (ESM) and `dist/index.cjs` (CJS) artifacts and checks they load and behave identically — a check none of `vitest`'s normal run, `tsc`, `publint`, or `attw` can do, since those either run against source or statically analyse package metadata without executing the compiled output. `vitest.config.ts` defines it as its own `smoke` project (vitest's `test.projects`), separate from the `unit` project (`src/**/*.test.ts`); `pnpm test`/`test:watch` pass `--project unit` and `pnpm test:smoke` passes `--project smoke` after `tsdown` rebuilds `dist/`, so neither run touches the other project's files.
 
@@ -172,15 +173,15 @@ The package is layered from a lossless core outward to lossy convenience views:
 - **`XmlNode` uses a recursive structural guard, not `z.lazy`.** `z.lazy` collapses to `unknown` for the element-children case in the Zod version this project pins, so `XmlElementSchema` validates `children` via `z.custom<XmlNode>(isXmlNode)`, a hand-written recursive type guard in `model/node.ts`. Any change to `XmlNode`'s shape must update `isXmlNode` in step. `src/compact.ts`'s `CompactXmlNode` reuses the same pattern (`isCompactXmlNode` + `z.custom`) for the same reason.
 - **Lossless core vs. lossy views is a hard boundary.** `decodePackage`/`encodePackage` (and the underlying codecs) must stay byte/part faithful — every part round-trips unchanged. `src/typed/*` readers are explicitly one-way and are allowed to drop information (documented per-reader, e.g. `readDocx`'s bold/italic toggle presence check ignores `w:val`, and `readXlsx` drops cell styles, formats and charts). Don't blur this line by adding write-back support to a typed reader; a full round-trip always goes through the generic `Package`.
 - **XML entities stay raw in the lossless layer.** `parseXml` runs with `processEntities: false` so encoded entities (e.g. `&amp;`) are preserved verbatim for round-trip fidelity; typed readers decode the five standard entities (`decodeEntities` in `typed/util.ts`) only in their own lossy projection, never in the core model.
+- **No type assertions.** `eslint.config.ts` runs `@typescript-eslint/consistent-type-assertions` with `assertionStyle: "never"`, banning `as` and angle-bracket casts outright, with `linterOptions.noInlineConfig: true` so there is no `eslint-disable` escape hatch either — narrow with a guard or parse with Zod. An exception would have to be scoped structurally, as a `files`-matched override block in `eslint.config.ts`, not an inline comment.
 
 ## Gotchas and quirks
 
-- **No git remote is configured yet.** `git remote -v` is empty; this repository has not been pushed anywhere. Confirm the intended origin before assuming a `git push` target.
 - **`test:smoke` depends on a fresh build.** It runs `tsdown && vitest run --project smoke`, so it always rebuilds `dist/` first — don't run it expecting to test a stale build.
 - **`--project` matters for `test/smoke.test.mjs`.** `vitest.config.ts` defines `unit` and `smoke` as separate projects; `pnpm test`/`test:watch`/`test:smoke` always pass the right `--project` flag. A bare `vitest`/`vitest run` with no `--project` filter runs both projects, and `smoke` fails loudly (`Cannot find module '../dist/index.js'`) if `dist/` hasn't been built yet — a clear failure pointing at the cause, not a silent false pass, but still worth knowing if you invoke `vitest` directly instead of through the npm scripts.
 - **Binary-vs-XML part classification is a byte sniff, not an extension check.** `package-io/read.ts`'s `looksLikeXml` looks for a leading `<` after skipping a UTF-8 BOM and whitespace; this is deliberate (no standard OOXML binary part starts with `<`) but means any future binary format starting with `<` would misclassify.
-- **`fflate`'s bundled types are ahead of what it actually allocates.** `zip.ts` casts `fflate`'s `Uint8Array<ArrayBufferLike>` results to `Uint8Array<ArrayBuffer>` with a comment explaining why the narrowing is safe (fflate only ever allocates a real `ArrayBuffer`) — don't remove the cast without preserving that guarantee elsewhere.
-- **No CI workflow exists yet.** There is no `.github/workflows/` directory; `pnpm build`, `pnpm typecheck`, and `pnpm test` are run locally/manually, not gated by GitHub Actions.
+- **`Array.isArray` narrows `unknown` to `any[]`, not `unknown[]`.** `lib.es5.d.ts` types its parameter as `any`, so TypeScript can't do better even after the check succeeds — indexing straight into the result (e.g. `value[0]`) silently reintroduces `any` and trips `@typescript-eslint/no-unsafe-assignment`. `compact.ts` and `xml/parse.ts` each define a local `isUnknownArray` guard (`value is unknown[]`) for exactly this reason; reach for it instead of `Array.isArray` wherever the narrowed element is going to be read.
+- **TypeScript is pinned to the latest 6.x, not 7.** TypeScript 7 restructured its JS-facing API surface heavily enough that both `typescript-eslint` (peer range `<6.1.0`) and `cosmiconfig`'s TypeScript loader (used by `semantic-release` to read `release.config.ts`, via `typescript.findConfigFile`, which TS 7 no longer exports) break under it. Upgrading past 6.x has to wait for that ecosystem tooling to add TS 7 support.
 
 ## Fidelity
 
@@ -188,9 +189,15 @@ Conversion is **part-content-faithful**: every XML part re-serialises to equival
 
 It is **not** guaranteed to be byte-for-byte identical at the ZIP-container level — re-zipping changes archive entry layout (entry order, compression, metadata), and that is not achievable deterministically across the tools that produce OOXML files.
 
+## Release and publishing
+
+`.github/workflows/ci.yml` runs commitlint, lint, typecheck, the unit suite, and the smoke test on every push and pull request. On a push to `main` where those all pass, `release.config.ts` drives [semantic-release](https://semantic-release.gitbook.io/semantic-release): commit history since the last tag decides the version bump, `CHANGELOG.md` and `package.json` are committed back to `main`, a GitHub Release is cut, and the package publishes to [npmjs.org](https://www.npmjs.com/package/ooxml.js) — via npm's OIDC trusted publishing, so no `NPM_TOKEN` exists anywhere in the pipeline.
+
+Whether that release actually published a new version is detected by diffing `package.json`'s version before and after the release step, not by trusting a third-party action's own detection. Two further jobs gate on that: one republishes the same build under the scoped `@exadev/ooxml.js` alias to GitHub Packages (which has no OIDC exchange of its own, so it authenticates with `GITHUB_TOKEN` instead), and one packs the release into its own directory, generates an SPDX SBOM (`pnpm sbom`), and signs both an SBOM and a build-provenance attestation against that exact tarball — verifiable independently of the registry, and still present if the package is later unpublished.
+
 ## Contributing
 
-Commits follow Conventional Commits (`feat:`, `fix:`, `test:`, `chore:`), evidenced by the existing git history; there is no `CONTRIBUTING.md` or enforced commit hook yet. There is a single `main` branch and no open pull request workflow established so far.
+Commits follow Conventional Commits (`feat:`, `fix:`, `test:`, `chore:`, …), enforced by commitlint (`commitlint.config.ts`) via a husky `commit-msg` hook and a CI `commitlint` job — semantic-release's version bump depends on these being well-formed, not just style. A husky `pre-commit` hook runs `lint-staged` (`eslint --fix` on staged `*.ts` files) and `pre-push` runs the test suite. There is a single `main` branch and no open pull request workflow established so far.
 
 ## License
 
