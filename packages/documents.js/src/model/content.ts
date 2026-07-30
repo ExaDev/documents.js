@@ -148,10 +148,11 @@ export const ContentSectionSchema = z.object({
 });
 export type ContentSection = z.infer<typeof ContentSectionSchema>;
 
-// A pptx shape's frame keeps OOXML's own convention: top-left origin, y down, in points already converted from EMU. The one deliberate Y-flip into PDF space happens once, in src/layout/slides.ts.
+// A pptx shape's frame keeps OOXML's own convention: top-left origin, y down, in points already converted from EMU. The one deliberate Y-flip into PDF space happens once, in src/layout/slides.ts. rotationDeg is clockwise (DrawingML's own a:xfrm/@rot sense), about the frame's own centre, and is undefined rather than 0 for an unrotated shape -- keeping the common case field-free rather than a stored, always-present zero.
 export const ContentShapeSchema = z.object({
   name: z.string().optional(),
   frame: BoxSchema,
+  rotationDeg: z.number().optional(),
   blocks: z.array(ContentBlockSchema),
 });
 export type ContentShape = z.infer<typeof ContentShapeSchema>;
