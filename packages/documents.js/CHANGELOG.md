@@ -1,3 +1,11 @@
+# [1.9.0](https://github.com/ExaDev/documents.js/compare/v1.8.0...v1.9.0) (2026-07-30)
+
+
+### Features
+
+* add ClockPort and abort-signal ports ([43bf591](https://github.com/ExaDev/documents.js/commit/43bf591241474d3ce0fce48a99c65392d39c8f19))
+* **pdf:** add writePdf, assembling the full object graph and xref table ([3c1c793](https://github.com/ExaDev/documents.js/commit/3c1c793949e99ebb8f115815b43da95bfab07b1f))
+
 # [1.8.0](https://github.com/ExaDev/documents.js/compare/v1.7.0...v1.8.0) (2026-07-30)
 
 
