@@ -33,6 +33,20 @@ const UNICODE_TO_WINANSI: ReadonlyMap<number, number> = new Map([
   [0x203a, 0x9b], [0x20ac, 0x80], [0x2122, 0x99],
 ]);
 
+let winAnsiCodeToUnicodeTable: ReadonlyMap<number, number> | undefined;
+
+// The inverse of UNICODE_TO_WINANSI, built once on first use: WinAnsi code (0-255) -> Unicode code point. Used by the read path (encoding.ts's glyphNameToUnicode, font-read.ts's simple-font fallback decoding) to recover text when no /ToUnicode CMap is present -- the write path never needs this direction.
+export function winAnsiCodeToUnicode(code: number): number | undefined {
+  if (winAnsiCodeToUnicodeTable === undefined) {
+    const inverted = new Map<number, number>();
+    for (const [unicode, winAnsiCode] of UNICODE_TO_WINANSI) {
+      inverted.set(winAnsiCode, unicode);
+    }
+    winAnsiCodeToUnicodeTable = inverted;
+  }
+  return winAnsiCodeToUnicodeTable.get(code);
+}
+
 // The byte substituted for any character with no WinAnsi representation -- '?' (0x3F), always representable, and visually signals "something was lost" rather than silently vanishing.
 const FALLBACK_BYTE = 0x3f;
 const FALLBACK_CHAR = '?';

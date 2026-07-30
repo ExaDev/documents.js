@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { encodeForShow, sanitizeToWinAnsi } from './winansi';
+import { encodeForShow, sanitizeToWinAnsi, winAnsiCodeToUnicode } from './winansi';
 
 describe('sanitizeToWinAnsi', () => {
   it('passes plain ASCII through unchanged, byte for byte', () => {
@@ -50,5 +50,24 @@ describe('encodeForShow', () => {
   it('uses the fixed Courier width regardless of character', () => {
     expect(encodeForShow('i', 'Courier').width1000).toBe(600);
     expect(encodeForShow('W', 'Courier').width1000).toBe(600);
+  });
+});
+
+describe('winAnsiCodeToUnicode', () => {
+  it('is the exact inverse of sanitizeToWinAnsi for every representable character', () => {
+    for (const ch of ['A', 'z', ' ', 'é', '€', '“', '”', '—']) {
+      const { codes } = sanitizeToWinAnsi(ch);
+      expect(codes).toHaveLength(1);
+      const [code] = codes;
+      if (code === undefined) {
+        throw new Error('expected one code');
+      }
+      expect(winAnsiCodeToUnicode(code)).toBe(ch.codePointAt(0));
+    }
+  });
+
+  it('returns undefined for a CP1252 byte position that is genuinely unassigned', () => {
+    expect(winAnsiCodeToUnicode(0x81)).toBeUndefined();
+    expect(winAnsiCodeToUnicode(0x8d)).toBeUndefined();
   });
 });
