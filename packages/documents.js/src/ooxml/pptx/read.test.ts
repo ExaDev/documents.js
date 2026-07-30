@@ -69,7 +69,7 @@ function buildFixturePackage(): Package {
   const bodyShape = el('p:sp', {}, [
     el('p:nvSpPr', {}, [el('p:cNvPr', { id: '3', name: 'Body 1' }), el('p:cNvSpPr'), el('p:nvPr')]),
     el('p:spPr', {}, [el('a:xfrm', {}, [el('a:off', { x: '914400', y: '2286000' }), el('a:ext', { cx: '3657600', cy: '914400' })])]),
-    el('p:txBody', {}, [bodyPara]),
+    el('p:txBody', {}, [el('a:bodyPr', { lIns: '182880', tIns: '91440', rIns: '182880', bIns: '91440' }, [el('a:normAutofit', { fontScale: '92000', lnSpcReduction: '10000' })]), bodyPara]),
   ]);
 
   const picShape = el('p:pic', {}, [
@@ -301,6 +301,48 @@ describe('readPptxContent: paragraph formatting', () => {
     const para = asParagraph(bodyShape?.blocks[0]);
     expect(para.runs[1]?.underline).toBe(true);
     expect(para.runs[1]?.strike).toBe(true);
+  });
+});
+
+describe('readPptxContent: text-box insets and autofit', () => {
+  it('reads explicit a:bodyPr insets and a:normAutofit scaling', () => {
+    const doc = readPptxContent(buildFixturePackage());
+    if (doc.kind !== 'presentation') {
+      throw new Error('expected presentation');
+    }
+    const bodyShape = doc.slides[1]?.shapes.find((s) => s.name === 'Body 1');
+    expect(bodyShape?.insetLeftPt).toBe(14.4);
+    expect(bodyShape?.insetTopPt).toBe(7.2);
+    expect(bodyShape?.insetRightPt).toBe(14.4);
+    expect(bodyShape?.insetBottomPt).toBe(7.2);
+    expect(bodyShape?.fontScale).toBe(0.92);
+    expect(bodyShape?.lineSpacingReduction).toBe(0.1);
+  });
+
+  it('falls back to ECMA-376\'s default insets when a:bodyPr is absent, with no autofit', () => {
+    const doc = readPptxContent(buildFixturePackage());
+    if (doc.kind !== 'presentation') {
+      throw new Error('expected presentation');
+    }
+    const titleShape = doc.slides[1]?.shapes.find((s) => s.name === 'Title 1');
+    expect(titleShape?.insetLeftPt).toBe(7.2);
+    expect(titleShape?.insetTopPt).toBe(3.6);
+    expect(titleShape?.insetRightPt).toBe(7.2);
+    expect(titleShape?.insetBottomPt).toBe(3.6);
+    expect(titleShape?.fontScale).toBeUndefined();
+    expect(titleShape?.lineSpacingReduction).toBeUndefined();
+  });
+
+  it('reads zero insets for a picture, which has no text body at all', () => {
+    const doc = readPptxContent(buildFixturePackage());
+    if (doc.kind !== 'presentation') {
+      throw new Error('expected presentation');
+    }
+    const picShape = doc.slides[1]?.shapes.find((s) => s.name === 'Picture 1');
+    expect(picShape?.insetLeftPt).toBe(0);
+    expect(picShape?.insetTopPt).toBe(0);
+    expect(picShape?.insetRightPt).toBe(0);
+    expect(picShape?.insetBottomPt).toBe(0);
   });
 });
 
