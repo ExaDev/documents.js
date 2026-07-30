@@ -1,34 +1,21 @@
-import { base64ToBytes } from 'ooxml.js';
-import { crc32 } from '../bytes/crc32';
-import { readJpegInfo } from '../image/jpeg-info';
-import { decodePng } from '../image/png-decode';
-import { COLOR_BLACK } from '../model/color';
-import type { ContentDocument, ContentImageBlock, ContentParagraph, ContentRun, ContentShape, ContentSlide, ContentTable, ContentTableRow } from '../model/content';
+import type { ContentDocument, ContentParagraph, ContentShape, ContentSlide, ContentTable } from '../model/content';
 import type { Box } from '../model/geometry';
 import { flipY } from '../model/geometry';
 import type { LayoutDocument, LayoutImage, LayoutImageAsset, LayoutItem, LayoutLink, LayoutPage, LayoutText } from '../model/layout';
 import { LAYOUT_FORMAT_VERSION } from '../model/layout';
-import type { Alignment, LayoutFont } from '../model/style';
-import { DEFAULT_LAYOUT_FONT } from '../model/style';
 import type { Point } from '../pdf/matrix';
 import { rotatePointAboutCenter } from '../pdf/matrix';
 import type { TextMeasurer } from '../pdf/measure';
-import type { StyledRun, WrappedLine } from '../pdf/text-layout';
 import { wrapRunsToWidth } from '../pdf/text-layout';
+import { alignmentOffsetPt, effectiveStyledRuns, estimateRowHeightPt, lineNaturalHeightPt, registerImage, sumColumnWidthsPt } from './shared';
 
-// ContentDocument (the presentation variant) -> LayoutDocument: pptx's tractable layout direction. No pagination -- one slide is always exactly one PDF page (slide size maps directly to the page's own widthPt/heightPt) -- and no group-transform resolution either, since src/ooxml/pptx/read.ts already flattened every group into absolute shape positions at read time. What's left is genuinely just: wrap each shape's text within its own box (reusing the exact wrapRunsToWidth docx will also use), place images at their shape's frame, render table grids directly from explicit column widths/row heights, and apply the one deliberate Y-flip from OOXML's top-left/y-down space into PDF's bottom-left/y-up space.
+// ContentDocument (the presentation variant) -> LayoutDocument: pptx's tractable layout direction. No pagination -- one slide is always exactly one PDF page (slide size maps directly to the page's own widthPt/heightPt) -- and no group-transform resolution either, since src/ooxml/pptx/read.ts already flattened every group into absolute shape positions at read time. What's left is genuinely just: wrap each shape's text within its own box (reusing the exact wrapRunsToWidth docx also uses), place images at their shape's frame, render table grids directly from explicit column widths/row heights, and apply the one deliberate Y-flip from OOXML's top-left/y-down space into PDF's bottom-left/y-up space.
 
 export interface SlidesLayoutOptions {
   readonly measurer: TextMeasurer;
 }
 
 type PresentationContentDocument = Extract<ContentDocument, { kind: 'presentation' }>;
-
-// PowerPoint's own conventional default body-text size, used only as a last-resort height for a wholly empty paragraph (no runs at all) whose own resolved default size isn't available at this layer -- ContentParagraph doesn't retain the cascade-resolved default for a paragraph with zero runs, only what ended up on its actual runs.
-const NOMINAL_EMPTY_PARAGRAPH_SIZE_PT = 18;
-
-// A table row's own explicit height (a:tr/@h) is present for essentially every real-world pptx table; this is a nominal fallback exercised only for a hand-built or malformed table that omits it.
-const FALLBACK_ROW_HEIGHT_PT = 20;
 
 interface ShapePlacement {
   place(point: Point): Point;
@@ -43,47 +30,6 @@ function shapePlacement(flippedFrame: Box, rotationDeg: number | undefined): Sha
   const ccwDeg = -rotationDeg;
   const center: Point = { x: flippedFrame.xPt + flippedFrame.widthPt / 2, y: flippedFrame.yPt + flippedFrame.heightPt / 2 };
   return { place: (p) => rotatePointAboutCenter(p, center, ccwDeg), layoutRotationDeg: ccwDeg };
-}
-
-function runFont(run: ContentRun): LayoutFont {
-  return {
-    family: run.fontFamily ?? DEFAULT_LAYOUT_FONT.family,
-    weight: run.bold === true ? 'bold' : 'normal',
-    style: run.italic === true ? 'italic' : 'normal',
-  };
-}
-
-function toStyledRuns(runs: readonly ContentRun[], fontScale: number): StyledRun[] {
-  return runs.map((run) => ({
-    text: run.text,
-    font: runFont(run),
-    sizePt: (run.sizePt ?? NOMINAL_EMPTY_PARAGRAPH_SIZE_PT) * fontScale,
-    color: run.color ?? COLOR_BLACK,
-    underline: run.underline,
-    hyperlink: run.hyperlink,
-  }));
-}
-
-function lineNaturalHeightPt(line: WrappedLine, measurer: TextMeasurer, fallback: StyledRun): number {
-  if (line.fragments.length === 0) {
-    return measurer.lineHeightAtSize(fallback.font, fallback.sizePt);
-  }
-  let max = 0;
-  for (const fragment of line.fragments) {
-    max = Math.max(max, measurer.lineHeightAtSize(fragment.font, fragment.sizePt));
-  }
-  return max;
-}
-
-// Justification (stretching inter-word spacing to fill the line) is not implemented for v1 -- treated as left-aligned, a documented narrowing rather than a silent approximation left unexplained.
-function alignmentOffsetPt(alignment: Alignment | undefined, contentWidthPt: number, lineWidthPt: number): number {
-  if (alignment === 'center') {
-    return Math.max(0, (contentWidthPt - lineWidthPt) / 2);
-  }
-  if (alignment === 'right') {
-    return Math.max(0, contentWidthPt - lineWidthPt);
-  }
-  return 0;
 }
 
 // Lays out one paragraph's wrapped lines, appending LayoutText items (and a LayoutLink per hyperlinked fragment) to `out`, and returns the y-down cursor position immediately after the paragraph (including its own spacingAfterPt).
@@ -101,8 +47,7 @@ function layoutParagraph(
 ): number {
   let cursorYDown = startYDown + (paragraph.spacingBeforePt ?? 0);
 
-  const styledRuns = toStyledRuns(paragraph.runs, fontScale);
-  const effectiveRuns: StyledRun[] = styledRuns.length > 0 ? styledRuns : [{ text: '', font: DEFAULT_LAYOUT_FONT, sizePt: NOMINAL_EMPTY_PARAGRAPH_SIZE_PT * fontScale, color: COLOR_BLACK }];
+  const effectiveRuns = effectiveStyledRuns(paragraph.runs, fontScale);
   const fallbackRun = effectiveRuns[0]!;
 
   const paragraphLeftXDown = contentLeftXDown + (paragraph.indentLeftPt ?? 0);
@@ -154,49 +99,6 @@ function layoutParagraph(
   return cursorYDown;
 }
 
-function decodeImageDimensions(format: 'png' | 'jpeg', bytes: Uint8Array<ArrayBuffer>): { widthPx: number; heightPx: number } {
-  if (format === 'jpeg') {
-    const info = readJpegInfo(bytes);
-    return { widthPx: info.width, heightPx: info.height };
-  }
-  const raw = decodePng(bytes);
-  return { widthPx: raw.width, heightPx: raw.height };
-}
-
-// Registers an image in the document-wide asset registry, deduplicating by content: an identical image (e.g. a repeated logo) reuses the same imageId across every shape/slide that references it. The id is a short CRC32-derived string rather than the raw base64 itself -- a 32-bit hash's collision risk is negligible at the scale of images in a single presentation, and it keeps write.ts's resource names readable.
-function registerImage(block: ContentImageBlock, images: Record<string, LayoutImageAsset>): string {
-  const bytes = base64ToBytes(block.base64);
-  const imageId = `img${crc32(bytes).toString(16)}`;
-  if (!(imageId in images)) {
-    const { widthPx, heightPx } = decodeImageDimensions(block.format, bytes);
-    images[imageId] = { format: block.format, base64: block.base64, widthPx, heightPx };
-  }
-  return imageId;
-}
-
-function sumColumnWidthsPt(columnWidthsPt: readonly number[], startIndex: number, span: number): number {
-  let sum = 0;
-  for (let i = startIndex; i < startIndex + span && i < columnWidthsPt.length; i++) {
-    sum += columnWidthsPt[i] ?? 0;
-  }
-  return sum;
-}
-
-function estimateRowHeightPt(row: ContentTableRow, measurer: TextMeasurer): number {
-  let max = FALLBACK_ROW_HEIGHT_PT;
-  for (const cell of row.cells) {
-    for (const block of cell.blocks) {
-      if (block.kind !== 'paragraph') {
-        continue;
-      }
-      const styledRuns = toStyledRuns(block.runs, 1);
-      const fallback: StyledRun = styledRuns[0] ?? { text: '', font: DEFAULT_LAYOUT_FONT, sizePt: NOMINAL_EMPTY_PARAGRAPH_SIZE_PT, color: COLOR_BLACK };
-      max = Math.max(max, measurer.lineHeightAtSize(fallback.font, fallback.sizePt));
-    }
-  }
-  return max;
-}
-
 // Renders a table's grid directly from its own explicit column widths and row heights (falling back to content-derived estimates only when a row's own height is missing) rather than proportionally estimating, since pptx tables -- unlike docx's -- already carry this geometry. Cell background rects are skipped entirely when the containing shape is rotated: LayoutRect has no rotation field of its own, and a misplaced (unrotated) rect would be a worse defect than a missing one for what is, in practice, a rare case.
 function layoutTable(table: ContentTable, contentLeftXDown: number, contentWidthPt: number, startYDown: number, slideHeightPt: number, placement: ShapePlacement, measurer: TextMeasurer, out: LayoutItem[]): number {
   let cursorYDown = startYDown;
@@ -204,7 +106,7 @@ function layoutTable(table: ContentTable, contentLeftXDown: number, contentWidth
   const scale = gridWidthPt > 0 ? contentWidthPt / gridWidthPt : 1;
 
   for (const row of table.rows) {
-    const rowHeightPt = row.heightPt ?? estimateRowHeightPt(row, measurer);
+    const rowHeightPt = row.heightPt ?? estimateRowHeightPt(row, measurer, table.columnWidthsPt, scale);
     let cellXDown = contentLeftXDown;
     let colIndex = 0;
 
