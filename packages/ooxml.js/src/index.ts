@@ -7,6 +7,18 @@ export { unzipPackage, zipPackage } from './zip';
 export { bytesToBase64, base64ToBytes } from './util/base64';
 
 export {
+  walk,
+  elementsWithTag,
+  childrenWithTag,
+  attr,
+  rootElement,
+  decodeEntities,
+  textContent,
+  resolveRelationships,
+} from './typed/util';
+export type { Relationship } from './typed/util';
+
+export {
   XmlNodeSchema,
   XmlElementSchema,
   AttributeSchema,
