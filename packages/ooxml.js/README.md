@@ -1,6 +1,6 @@
 # ooxml.js
 
-[![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/ooxml.js) [![npm](https://img.shields.io/badge/npm-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/ooxml.js) [![version](https://img.shields.io/badge/version-1.0.0-blue)](https://github.com/ExaDev/ooxml.js/releases/tag/v1.0.0) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/ooxml.js/ci.yml?branch=main)](https://github.com/ExaDev/ooxml.js/actions)
+[![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/ooxml.js) [![npm](https://img.shields.io/npm/v/ooxml.js?logo=npm)](https://www.npmjs.com/package/ooxml.js) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/ooxml.js/ci.yml?branch=main)](https://github.com/ExaDev/ooxml.js/actions)
 
 > Type-safe, lossless round-trip conversion between OOXML packages (`.docx`, `.pptx`, `.xlsx`) and a faithful JSON model, built on [Zod 4](https://zod.dev) codecs.
 
