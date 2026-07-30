@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  drawingMlFontSizeToPt,
   emuToPt,
   EMU_PER_POINT,
   halfPointsToPt,
   lineUnitsToMultiplier,
+  ptToDrawingMlFontSize,
   ptToEmu,
   ptToHalfPoints,
   ptToTwips,
@@ -37,5 +39,11 @@ describe('units', () => {
 
   it('lineUnitsToMultiplier(360) is 1.5 spacing', () => {
     expect(lineUnitsToMultiplier(360)).toBe(1.5);
+  });
+
+  it('drawingMlFontSizeToPt and ptToDrawingMlFontSize are exact inverses, and distinct from the half-point scale', () => {
+    const pt = 18;
+    expect(drawingMlFontSizeToPt(ptToDrawingMlFontSize(pt))).toBe(pt);
+    expect(ptToDrawingMlFontSize(pt)).toBe(1800); // hundredths of a point, not half-points (36)
   });
 });
