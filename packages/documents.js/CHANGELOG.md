@@ -1,3 +1,10 @@
+# [1.27.0](https://github.com/ExaDev/documents.js/compare/v1.26.0...v1.27.0) (2026-07-30)
+
+
+### Features
+
+* **pdf:** add readPdf, completing the PDF read pipeline ([0ee8404](https://github.com/ExaDev/documents.js/commit/0ee84048a622f8e3c53919bdef52a126eacaeb1e))
+
 # [1.26.0](https://github.com/ExaDev/documents.js/compare/v1.25.0...v1.26.0) (2026-07-30)
 
 
