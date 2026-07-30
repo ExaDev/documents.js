@@ -6,6 +6,11 @@ import type { ContentBlock, ContentDocument, ContentParagraph, ContentRun, Conte
 import { CONTENT_FORMAT_VERSION } from '../model/content';
 import type { LayoutDocument, LayoutImage, LayoutImageAsset, LayoutPage, LayoutText } from '../model/layout';
 import type { Alignment } from '../model/style';
+import { throwIfAborted } from '../ports/abort';
+
+export interface ReconstructOptions {
+  readonly signal?: AbortSignal;
+}
 
 // LayoutDocument -> ContentDocument: PDF has no semantic paragraph/shape structure, just positioned glyphs and images, so both directions here are necessarily best-effort reconstructions from geometry -- this is the plan's most explicit fidelity trade-off, not a bug to be perfected later. Every threshold below is either the exact value the implementation plan specifies (cited inline) or a documented, deliberately bounded heuristic.
 
@@ -123,10 +128,12 @@ function estimateModalLineSpacing(lines: readonly TextLine[]): number {
 // PDF -> docx (wordprocessing): line clustering, then paragraph clustering.
 // ---------------------------------------------------------------------------
 
-export function reconstructWordprocessing(doc: LayoutDocument): ContentDocument {
+export function reconstructWordprocessing(doc: LayoutDocument, options?: ReconstructOptions): ContentDocument {
+  const signal = options?.signal;
   const sections: ContentSection[] = [];
   let currentGroup: LayoutPage[] = [];
   for (const page of doc.pages) {
+    throwIfAborted(signal);
     if (currentGroup.length > 0 && !samePageSize(currentGroup[0]!, page)) {
       sections.push(buildSection(currentGroup, doc.images));
       currentGroup = [];
@@ -247,8 +254,12 @@ function paragraphToContentParagraph(paragraph: TextParagraph): ContentParagraph
 // PDF -> pptx (presentation): page = slide, cluster text into blocks.
 // ---------------------------------------------------------------------------
 
-export function reconstructPresentation(doc: LayoutDocument): ContentDocument {
-  const slides = doc.pages.map((page) => reconstructSlide(page, doc.images));
+export function reconstructPresentation(doc: LayoutDocument, options?: ReconstructOptions): ContentDocument {
+  const signal = options?.signal;
+  const slides = doc.pages.map((page) => {
+    throwIfAborted(signal);
+    return reconstructSlide(page, doc.images);
+  });
   return { kind: 'presentation', formatVersion: CONTENT_FORMAT_VERSION, metadata: doc.metadata, slides };
 }
 

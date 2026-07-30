@@ -228,3 +228,17 @@ describe('reconstruct: empty input', () => {
     expect(doc.slides[0]!.shapes).toEqual([]);
   });
 });
+
+describe('reconstruct: cancellation', () => {
+  it('reconstructWordprocessing throws when the signal is already aborted', () => {
+    const controller = new AbortController();
+    controller.abort();
+    expect(() => reconstructWordprocessing(docFrom([page(612, 792, [])]), { signal: controller.signal })).toThrow();
+  });
+
+  it('reconstructPresentation throws when the signal is already aborted', () => {
+    const controller = new AbortController();
+    controller.abort();
+    expect(() => reconstructPresentation(docFrom([page(960, 540, [])]), { signal: controller.signal })).toThrow();
+  });
+});
