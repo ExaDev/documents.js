@@ -1,3 +1,11 @@
+# [1.30.0](https://github.com/ExaDev/documents.js/compare/v1.29.0...v1.30.0) (2026-07-30)
+
+
+### Features
+
+* **edit:** add buildDocxPackage and buildPptxPackage ([8fbe3db](https://github.com/ExaDev/documents.js/commit/8fbe3dbe98ea7ae0bc96892544136d7c018680cb))
+* **edit:** add PptxEditor.slideSize ([4e06bda](https://github.com/ExaDev/documents.js/commit/4e06bda82b61547e8c7012a7e2d5d4d21124c4f7))
+
 # [1.29.0](https://github.com/ExaDev/documents.js/compare/v1.28.0...v1.29.0) (2026-07-30)
 
 
