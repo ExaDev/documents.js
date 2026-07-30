@@ -1,3 +1,11 @@
+# [1.20.0](https://github.com/ExaDev/documents.js/compare/v1.19.0...v1.20.0) (2026-07-30)
+
+
+### Features
+
+* **pdf:** add byte-level PDF lexer ([4255153](https://github.com/ExaDev/documents.js/commit/4255153e73861ee87dd836a04a881bd065c7ee3e)), closes [#XX](https://github.com/ExaDev/documents.js/issues/XX)
+* **pdf:** add diagnostics vocabulary for the read-side parser ([956e5b0](https://github.com/ExaDev/documents.js/commit/956e5b022035f9244986ce2bea51973f871776de))
+
 # [1.19.0](https://github.com/ExaDev/documents.js/compare/v1.18.0...v1.19.0) (2026-07-30)
 
 
