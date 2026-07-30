@@ -1,3 +1,10 @@
+# [1.22.0](https://github.com/ExaDev/documents.js/compare/v1.21.0...v1.22.0) (2026-07-30)
+
+
+### Features
+
+* **pdf:** add stream filter decoding and Flate/LZW predictors ([ed648a6](https://github.com/ExaDev/documents.js/commit/ed648a622c37b46df6c872d0f83a7abb549bd464))
+
 # [1.21.0](https://github.com/ExaDev/documents.js/compare/v1.20.0...v1.21.0) (2026-07-30)
 
 
