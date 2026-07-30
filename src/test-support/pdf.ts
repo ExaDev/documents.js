@@ -251,3 +251,16 @@ export function inheritedPageAttributesPdf(): Uint8Array<ArrayBuffer> {
   b.classicXrefAndTrailer(6, '/Root 1 0 R');
   return b.bytes();
 }
+
+// An /Info dict mixing the two real-world string encodings a reader must handle: /Title as UTF-16BE-with-BOM (our own writer's own convention, ISO 32000-1 7.9.2.2's "long form"), and /Author/Keywords as plain literal-string PDFDocEncoding (the common case for ASCII-only metadata most third-party producers emit). /CreationDate uses the PDF date format (ISO 32000-1 7.9.4) with an explicit UTC+02:00 offset.
+export function withInfoDictPdf(): Uint8Array<ArrayBuffer> {
+  const b = new FixtureBuilder().header('1.4');
+  catalogPagesPageFontObjects(b, 5);
+  b.stream(5, '<< >>', enc(HELLO_CONTENT));
+  const titleHex = `feff${Array.from('Test Doc')
+    .map((ch) => ch.charCodeAt(0).toString(16).padStart(4, '0'))
+    .join('')}`;
+  b.object(6, `<< /Title <${titleHex}> /Author (Jane Smith) /Keywords (alpha, beta) /CreationDate (D:20240115103000+02'00') >>`);
+  b.classicXrefAndTrailer(6, '/Root 1 0 R /Info 6 0 R');
+  return b.bytes();
+}

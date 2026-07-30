@@ -10,6 +10,7 @@ import {
   minimalClassicXrefPdf,
   nonZeroOriginMediaBoxPdf,
   rotatedPagePdf,
+  withInfoDictPdf,
   xrefStreamWithObjectStreamPdf,
 } from './pdf';
 
@@ -207,6 +208,29 @@ describe('inheritedPageAttributesPdf', () => {
     const text = decode(inheritedPageAttributesPdf());
     const secondPageObj = text.slice(text.indexOf('4 0 obj'), text.indexOf('endobj', text.indexOf('4 0 obj')));
     expect(secondPageObj).toContain('/Rotate 90');
+  });
+});
+
+describe('withInfoDictPdf', () => {
+  it('encodes /Title as UTF-16BE with a leading BOM', () => {
+    const text = decode(withInfoDictPdf());
+    expect(text).toContain('/Title <feff');
+  });
+
+  it('encodes /Author and /Keywords as plain literal strings', () => {
+    const text = decode(withInfoDictPdf());
+    expect(text).toContain('/Author (Jane Smith)');
+    expect(text).toContain('/Keywords (alpha, beta)');
+  });
+
+  it("encodes /CreationDate in the PDF date format with an explicit offset", () => {
+    const text = decode(withInfoDictPdf());
+    expect(text).toContain("/CreationDate (D:20240115103000+02'00')");
+  });
+
+  it('links the trailer\'s /Info to the dict object', () => {
+    const text = decode(withInfoDictPdf());
+    expect(text).toMatch(/trailer\n<<[^>]*\/Info 6 0 R/);
   });
 });
 
