@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/ExaDev/documents.js/compare/v1.1.0...v1.2.0) (2026-07-30)
+
+
+### Features
+
+* add byte primitives and hand-written PNG/JPEG image codecs ([9b8011e](https://github.com/ExaDev/documents.js/commit/9b8011e92079a538edfcbf99b0be132336e73936))
+
 # [1.1.0](https://github.com/ExaDev/documents.js/compare/v1.0.0...v1.1.0) (2026-07-30)
 
 
