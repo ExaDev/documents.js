@@ -1,3 +1,10 @@
+# [1.33.0](https://github.com/ExaDev/documents.js/compare/v1.32.0...v1.33.0) (2026-07-30)
+
+
+### Features
+
+* add z.codec() pairs for PDF and docx/pptx byte round trips ([c218623](https://github.com/ExaDev/documents.js/commit/c2186238cbd35bfa19a06ce742e857c440684652))
+
 # [1.32.0](https://github.com/ExaDev/documents.js/compare/v1.31.0...v1.32.0) (2026-07-30)
 
 
