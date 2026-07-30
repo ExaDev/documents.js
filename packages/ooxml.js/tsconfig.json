@@ -15,5 +15,5 @@
     "esModuleInterop": true,
     "resolveJsonModule": true
   },
-  "include": ["src", "tsdown.config.ts", "vitest.config.ts", "release.config.ts", "commitlint.config.ts"]
+  "include": ["src", "tsdown.config.ts", "vitest.config.ts", "commitlint.config.ts"]
 }
