@@ -148,11 +148,17 @@ export const ContentSectionSchema = z.object({
 });
 export type ContentSection = z.infer<typeof ContentSectionSchema>;
 
-// A pptx shape's frame keeps OOXML's own convention: top-left origin, y down, in points already converted from EMU. The one deliberate Y-flip into PDF space happens once, in src/layout/slides.ts. rotationDeg is clockwise (DrawingML's own a:xfrm/@rot sense), about the frame's own centre, and is undefined rather than 0 for an unrotated shape -- keeping the common case field-free rather than a stored, always-present zero.
+// A pptx shape's frame keeps OOXML's own convention: top-left origin, y down, in points already converted from EMU. The one deliberate Y-flip into PDF space happens once, in src/layout/slides.ts. rotationDeg is clockwise (DrawingML's own a:xfrm/@rot sense), about the frame's own centre, and is undefined rather than 0 for an unrotated shape -- keeping the common case field-free rather than a stored, always-present zero. insetLeftPt/insetTopPt/insetRightPt/insetBottomPt are always present (never optional): every shape has SOME inset, whether from an explicit a:bodyPr or ECMA-376's own documented default, and a picture/table (which has no text body at all) resolves to zero rather than leaving the field absent -- so a layout consumer never needs a fallback of its own. fontScale/lineSpacingReduction come from a:normAutofit's already-computed PowerPoint values (present only when the source shape actually has autofit-shrunk text) and are applied directly rather than re-solved.
 export const ContentShapeSchema = z.object({
   name: z.string().optional(),
   frame: BoxSchema,
   rotationDeg: z.number().optional(),
+  insetLeftPt: z.number().nonnegative(),
+  insetTopPt: z.number().nonnegative(),
+  insetRightPt: z.number().nonnegative(),
+  insetBottomPt: z.number().nonnegative(),
+  fontScale: z.number().positive().optional(),
+  lineSpacingReduction: z.number().nonnegative().optional(),
   blocks: z.array(ContentBlockSchema),
 });
 export type ContentShape = z.infer<typeof ContentShapeSchema>;

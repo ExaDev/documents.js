@@ -62,7 +62,7 @@ describe('ContentDocumentSchema', () => {
       slides: [
         {
           size: { widthPt: 960, heightPt: 540 },
-          shapes: [{ frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 50 }, blocks: [paragraph] }],
+          shapes: [{ frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 50 }, insetLeftPt: 0, insetTopPt: 0, insetRightPt: 0, insetBottomPt: 0, blocks: [paragraph] }],
           notes: '',
         },
       ],

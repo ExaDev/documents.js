@@ -180,6 +180,44 @@ function textBodyParagraphs(txBody: XmlElement | undefined, placeholderType: str
   return txBody === undefined ? [] : childrenWithTag(txBody, 'a:p').map((p) => readParagraph(p, placeholderType, context, slideRels));
 }
 
+// ECMA-376's own documented defaults for a:bodyPr's inset attributes when unspecified (officeopenxml.com's Body Properties/Positioning and Insets reference, matching CT_TextBodyProperties): left/right 91440 EMU (0.1in), top/bottom 45720 EMU (0.05in).
+const DEFAULT_INSET_LEFT_RIGHT_EMU = 91440;
+const DEFAULT_INSET_TOP_BOTTOM_EMU = 45720;
+
+interface ShapeTextExtras {
+  readonly insetLeftPt: number;
+  readonly insetTopPt: number;
+  readonly insetRightPt: number;
+  readonly insetBottomPt: number;
+  readonly fontScale: number | undefined;
+  readonly lineSpacingReduction: number | undefined;
+}
+
+const NO_TEXT_BODY_EXTRAS: ShapeTextExtras = { insetLeftPt: 0, insetTopPt: 0, insetRightPt: 0, insetBottomPt: 0, fontScale: undefined, lineSpacingReduction: undefined };
+
+// Reads a:bodyPr's insets (falling back to ECMA-376's own defaults) and any a:normAutofit-computed shrinkage. A shape with no p:txBody at all (a picture, a table frame) has no text body properties to read -- its insets are genuinely zero, not a missing/defaulted value, since nothing ever positions text against them.
+function readShapeTextExtras(txBody: XmlElement | undefined): ShapeTextExtras {
+  if (txBody === undefined) {
+    return NO_TEXT_BODY_EXTRAS;
+  }
+  const bodyPr = childrenWithTag(txBody, 'a:bodyPr')[0];
+  const lIns = bodyPr === undefined ? undefined : attr(bodyPr, 'lIns');
+  const tIns = bodyPr === undefined ? undefined : attr(bodyPr, 'tIns');
+  const rIns = bodyPr === undefined ? undefined : attr(bodyPr, 'rIns');
+  const bIns = bodyPr === undefined ? undefined : attr(bodyPr, 'bIns');
+  const normAutofit = bodyPr === undefined ? undefined : childrenWithTag(bodyPr, 'a:normAutofit')[0];
+  const fontScale = normAutofit === undefined ? undefined : attr(normAutofit, 'fontScale');
+  const lnSpcReduction = normAutofit === undefined ? undefined : attr(normAutofit, 'lnSpcReduction');
+  return {
+    insetLeftPt: emuToPt(lIns === undefined ? DEFAULT_INSET_LEFT_RIGHT_EMU : Number(lIns)),
+    insetTopPt: emuToPt(tIns === undefined ? DEFAULT_INSET_TOP_BOTTOM_EMU : Number(tIns)),
+    insetRightPt: emuToPt(rIns === undefined ? DEFAULT_INSET_LEFT_RIGHT_EMU : Number(rIns)),
+    insetBottomPt: emuToPt(bIns === undefined ? DEFAULT_INSET_TOP_BOTTOM_EMU : Number(bIns)),
+    fontScale: fontScale === undefined ? undefined : Number(fontScale) / 100_000,
+    lineSpacingReduction: lnSpcReduction === undefined ? undefined : Number(lnSpcReduction) / 100_000,
+  };
+}
+
 // p:spPr (shape properties, holding a:xfrm) is named identically on both p:sp and p:pic -- the only two callers of this function.
 function resolveShapeFrame(shape: XmlElement, context: SlideInheritanceContext, parentTransform: GroupChildTransform | undefined): { frame: Box; rotationDeg: number | undefined } | undefined {
   const key = readPlaceholderKey(shape);
@@ -205,7 +243,8 @@ function readSpShape(sp: XmlElement, context: SlideInheritanceContext, slideRels
   const key = readPlaceholderKey(sp);
   const txBody = childrenWithTag(sp, 'p:txBody')[0];
   const blocks = textBodyParagraphs(txBody, key?.type, context, slideRels);
-  return { name: shapeName(sp), frame: resolved.frame, rotationDeg: resolved.rotationDeg, blocks };
+  const extras = readShapeTextExtras(txBody);
+  return { name: shapeName(sp), frame: resolved.frame, rotationDeg: resolved.rotationDeg, ...extras, blocks };
 }
 
 function readPicShape(pic: XmlElement, context: SlideInheritanceContext, slideRels: ReadonlyMap<string, Relationship>, pkg: Package, parentTransform: GroupChildTransform | undefined): ContentShape | undefined {
@@ -228,7 +267,7 @@ function readPicShape(pic: XmlElement, context: SlideInheritanceContext, slideRe
     }
   }
   // An unresolvable image (missing relationship/part, or bytes that don't sniff as PNG/JPEG) keeps the shape's geometry with empty content, rather than dropping the shape entirely.
-  return { name: shapeName(pic), frame: resolved.frame, rotationDeg: resolved.rotationDeg, blocks };
+  return { name: shapeName(pic), frame: resolved.frame, rotationDeg: resolved.rotationDeg, ...NO_TEXT_BODY_EXTRAS, blocks };
 }
 
 function readTableCell(tc: XmlElement, context: SlideInheritanceContext, slideRels: ReadonlyMap<string, Relationship>): ContentTableCell {
@@ -275,7 +314,7 @@ function readGraphicFrameShape(gf: XmlElement, context: SlideInheritanceContext,
   const tbl = uri === TABLE_GRAPHIC_URI && graphicData !== undefined ? childrenWithTag(graphicData, 'a:tbl')[0] : undefined;
   // A non-table graphic frame (chart/SmartArt/OLE) keeps its geometry with empty content -- out of v1 scope beyond their raster mc:Fallback, which lives outside a:graphicData entirely and isn't reached from here.
   const blocks: ContentBlock[] = tbl === undefined ? [] : [readTable(tbl, context, slideRels)];
-  return { name: shapeName(gf), frame, rotationDeg, blocks };
+  return { name: shapeName(gf), frame, rotationDeg, ...NO_TEXT_BODY_EXTRAS, blocks };
 }
 
 // Flattens the shape tree, including nested p:grpSp groups, into ContentSlide's flat shapes list -- ContentDocument has no representation for a nested group, so group resolution (composing each level's chOff/chExt transform into an absolute frame) happens here rather than being deferred to the layout stage. p:cxnSp (connector lines) are skipped: decorative, no text content, general vector-path recovery is out of v1 scope.
