@@ -13,6 +13,9 @@ export const TWIPS_PER_POINT = TWIPS_PER_INCH / POINTS_PER_INCH;
 // Half-points: WordprocessingML's unit for font size (w:sz) and border widths.
 export const HALF_POINTS_PER_POINT = 2;
 
+// Hundredths of a point: DrawingML's own unit for run font size (a:rPr/@sz, a:defRPr/@sz) -- a different scale from WordprocessingML's half-point w:sz, easy to conflate since both are "OOXML font size units".
+export const DRAWINGML_FONT_SIZE_HUNDREDTHS_PER_POINT = 100;
+
 // w:spacing/@w:line is expressed in 240ths of a line when @w:lineRule="auto"; 240 (not 100) is the unit ECMA-376 defines for this attribute, so a lineVal of 240 means exactly single spacing.
 export const LINE_UNITS_PER_LINE = 240;
 
@@ -38,6 +41,14 @@ export function halfPointsToPt(halfPoints: number): number {
 
 export function ptToHalfPoints(pt: number): number {
   return Math.round(pt * HALF_POINTS_PER_POINT);
+}
+
+export function drawingMlFontSizeToPt(hundredths: number): number {
+  return hundredths / DRAWINGML_FONT_SIZE_HUNDREDTHS_PER_POINT;
+}
+
+export function ptToDrawingMlFontSize(pt: number): number {
+  return Math.round(pt * DRAWINGML_FONT_SIZE_HUNDREDTHS_PER_POINT);
 }
 
 // The single-line-spacing multiplier implied by a w:spacing/@w:line value under @w:lineRule="auto".
