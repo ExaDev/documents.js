@@ -1,3 +1,15 @@
+# [1.32.0](https://github.com/ExaDev/documents.js/compare/v1.31.0...v1.32.0) (2026-07-30)
+
+
+### Bug Fixes
+
+* **layout:** insert a space between words reconstructed from PDF text ([4c25ccd](https://github.com/ExaDev/documents.js/commit/4c25ccd746c24b1b70ae31ef8f362e22718eb629))
+
+
+### Features
+
+* **convert:** add the ergonomic conversion functions and public API ([42e26a9](https://github.com/ExaDev/documents.js/commit/42e26a9a6e3b8442e2baf4ace7efa1f983809d84))
+
 # [1.31.0](https://github.com/ExaDev/documents.js/compare/v1.30.0...v1.31.0) (2026-07-30)
 
 
