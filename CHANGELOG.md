@@ -1,3 +1,10 @@
+# [1.8.0](https://github.com/ExaDev/documents.js/compare/v1.7.0...v1.8.0) (2026-07-30)
+
+
+### Features
+
+* **pdf:** add content-stream generation from LayoutItem ([2c26dd5](https://github.com/ExaDev/documents.js/commit/2c26dd54afd97e6de1e28050bd46e7b198f702d1))
+
 # [1.7.0](https://github.com/ExaDev/documents.js/compare/v1.6.0...v1.7.0) (2026-07-30)
 
 
