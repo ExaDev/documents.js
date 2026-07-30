@@ -1,3 +1,10 @@
+# [1.5.0](https://github.com/ExaDev/documents.js/compare/v1.4.0...v1.5.0) (2026-07-30)
+
+
+### Features
+
+* add the PDF object model, serializer, and standard-14 font metrics ([1801e3c](https://github.com/ExaDev/documents.js/commit/1801e3c783eb134475d3c075e8120e7ee1c8c65b))
+
 # [1.4.0](https://github.com/ExaDev/documents.js/compare/v1.3.0...v1.4.0) (2026-07-30)
 
 
