@@ -55,3 +55,10 @@ export function matrixScaleY(m: Matrix): number {
 export function matrixRotationDegrees(m: Matrix): number {
   return (Math.atan2(m[1], m[0]) * 180) / Math.PI;
 }
+
+// Rotates `point` about `center` by `degrees` (counter-clockwise, this module's own convention). Used to reconcile two different rotation pivots: DrawingML rotates a shape about its own bounding-box centre (a:xfrm/@rot), but content-write.ts's writeText/writeImage rotate about the anchor point passed as xPt/yPt -- which is invariant under that rotation by construction (translationMatrix is applied after rotationMatrix, so whatever anchor is passed is exactly where it ends up). Feeding this function the shape's UNROTATED corner and its centre computes the corner position a caller must pass as xPt/yPt so the centre-pivot rotation PowerPoint actually performs comes out identical, without needing to change how the writer itself rotates.
+export function rotatePointAboutCenter(point: Point, center: Point, degrees: number): Point {
+  const relative: Point = { x: point.x - center.x, y: point.y - center.y };
+  const rotated = applyMatrix(rotationMatrix(degrees), relative);
+  return { x: rotated.x + center.x, y: rotated.y + center.y };
+}
