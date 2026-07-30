@@ -1,3 +1,10 @@
+# [1.16.0](https://github.com/ExaDev/documents.js/compare/v1.15.0...v1.16.0) (2026-07-30)
+
+
+### Features
+
+* **layout:** add pptx direct-placement layout, completing pptx->PDF ([a8dfd27](https://github.com/ExaDev/documents.js/commit/a8dfd27c53b0a11a787a9be0d163d6de2c7d9a60))
+
 # [1.15.0](https://github.com/ExaDev/documents.js/compare/v1.14.0...v1.15.0) (2026-07-30)
 
 
