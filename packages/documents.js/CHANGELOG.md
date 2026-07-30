@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/ExaDev/documents.js/compare/v1.2.0...v1.3.0) (2026-07-30)
+
+
+### Features
+
+* add the docx live-view read+write editor ([752c9fc](https://github.com/ExaDev/documents.js/commit/752c9fc6b34df56213f343761fae20e829054de0))
+
 # [1.2.0](https://github.com/ExaDev/documents.js/compare/v1.1.0...v1.2.0) (2026-07-30)
 
 
