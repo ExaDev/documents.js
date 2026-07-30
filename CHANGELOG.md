@@ -1,3 +1,10 @@
+# [1.14.0](https://github.com/ExaDev/documents.js/compare/v1.13.0...v1.14.0) (2026-07-30)
+
+
+### Features
+
+* **ooxml:** read pptx table row height from a:tr/[@h](https://github.com/h) ([fda7067](https://github.com/ExaDev/documents.js/commit/fda706746a0d333d9fade7e2684233c790940673))
+
 # [1.13.0](https://github.com/ExaDev/documents.js/compare/v1.12.0...v1.13.0) (2026-07-30)
 
 
