@@ -6,6 +6,7 @@ import {
   matrixScaleX,
   matrixScaleY,
   multiplyMatrices,
+  rotatePointAboutCenter,
   rotationMatrix,
   scaleMatrix,
   translationMatrix,
@@ -71,5 +72,34 @@ describe('matrixScaleX / matrixScaleY / matrixRotationDegrees', () => {
   it('recovers the rotation angle from a rotation matrix', () => {
     expect(matrixRotationDegrees(rotationMatrix(30))).toBeCloseTo(30, 10);
     expect(matrixRotationDegrees(rotationMatrix(0))).toBeCloseTo(0, 10);
+  });
+});
+
+describe('rotatePointAboutCenter', () => {
+  it('leaves the centre itself unchanged', () => {
+    const center = { x: 10, y: 20 };
+    expect(rotatePointAboutCenter(center, center, 90)).toEqual(center);
+  });
+
+  it('a 90-degree rotation of a point directly right of centre lands directly above it', () => {
+    const center = { x: 0, y: 0 };
+    const result = rotatePointAboutCenter({ x: 10, y: 0 }, center, 90);
+    expect(result.x).toBeCloseTo(0, 10);
+    expect(result.y).toBeCloseTo(10, 10);
+  });
+
+  it('is a no-op at 0 degrees', () => {
+    const point = { x: 5, y: 7 };
+    const center = { x: 1, y: 1 };
+    const result = rotatePointAboutCenter(point, center, 0);
+    expect(result.x).toBeCloseTo(point.x, 10);
+    expect(result.y).toBeCloseTo(point.y, 10);
+  });
+
+  it('a 180-degree rotation reflects the point through the centre', () => {
+    const center = { x: 5, y: 5 };
+    const result = rotatePointAboutCenter({ x: 8, y: 5 }, center, 180);
+    expect(result.x).toBeCloseTo(2, 10);
+    expect(result.y).toBeCloseTo(5, 10);
   });
 });
