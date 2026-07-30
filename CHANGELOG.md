@@ -1,3 +1,10 @@
+# [1.6.0](https://github.com/ExaDev/documents.js/compare/v1.5.0...v1.6.0) (2026-07-30)
+
+
+### Features
+
+* add WinAnsi sanitization, font-family resolution, and matrix math for the PDF writer ([f37b301](https://github.com/ExaDev/documents.js/commit/f37b3011630d267073afedb9efb79830bf3ac782))
+
 # [1.5.0](https://github.com/ExaDev/documents.js/compare/v1.4.0...v1.5.0) (2026-07-30)
 
 
