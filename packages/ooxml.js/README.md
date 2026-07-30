@@ -72,6 +72,59 @@ const compact = toCompact(pkg); // { s: string[], p: Record<path, CompactPart> }
 const roundTripped = fromCompact(compact); // deep-equals pkg
 ```
 
+For example, a `word/document.xml` part holding a single run of text:
+
+```xml
+<w:p><w:r><w:t>Hi</w:t></w:r></w:p>
+```
+
+decodes to this `Package` (one entry in `parts`, each element an `XmlNode`):
+
+```json
+{
+  "parts": {
+    "word/document.xml": {
+      "kind": "xml",
+      "nodes": [
+        {
+          "type": "element",
+          "tag": "w:p",
+          "attributes": [],
+          "children": [
+            {
+              "type": "element",
+              "tag": "w:r",
+              "attributes": [],
+              "children": [
+                {
+                  "type": "element",
+                  "tag": "w:t",
+                  "attributes": [],
+                  "children": [{ "type": "text", "value": "Hi" }]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
+```
+
+`toCompact` interns every tag and text value once, in first-occurrence order, and replaces each node with a tuple (a leading type code — `0` for element, `1` for text — followed by string-table indices):
+
+```json
+{
+  "s": ["w:p", "w:r", "w:t", "Hi"],
+  "p": {
+    "word/document.xml": [[0, 0, [], [[0, 1, [], [[0, 2, [], [[1, 3]]]]]]]]
+  }
+}
+```
+
+Reading the outer tuple: `[0, 0, [], [...]]` is an element (`0`) whose tag is `s[0]` (`"w:p"`), with no attributes (`[]`), wrapping one child — the same shape recursively for `w:r` and `w:t`, down to the text leaf `[1, 3]` (type `1` = text, value `s[3]` = `"Hi"`).
+
 It is a JSON shape, not a compression layer: every string is still human-readable text, so it stays diffable and debuggable, just without the repeated structural keys and duplicate strings of the verbose `Package` model. `fromCompact(toCompact(pkg))` round-trips exactly, and `toCompact` is deterministic for a given `Package` value (the same input always produces the same string table).
 
 Every pair of the three formats — OOXML bytes, `Package`, and `CompactPackage` — has a direct codec, so you never have to hand-compose two calls: `packageCodec` (bytes ⇄ `Package`), `compactCodec` (`Package` ⇄ `CompactPackage`), and `compactPackageCodec` (bytes ⇄ `CompactPackage` directly, via `decodeCompactPackage`/`encodeCompactPackage`):
