@@ -1,3 +1,10 @@
+# [1.23.0](https://github.com/ExaDev/documents.js/compare/v1.22.0...v1.23.0) (2026-07-30)
+
+
+### Features
+
+* **pdf:** add cross-reference resolution and the object store ([a63c4f6](https://github.com/ExaDev/documents.js/commit/a63c4f64c8014345ef1cf88ee6a29e2c9b16bb3f))
+
 # [1.22.0](https://github.com/ExaDev/documents.js/compare/v1.21.0...v1.22.0) (2026-07-30)
 
 
