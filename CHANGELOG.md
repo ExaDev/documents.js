@@ -1,3 +1,10 @@
+# [1.18.0](https://github.com/ExaDev/documents.js/compare/v1.17.0...v1.18.0) (2026-07-30)
+
+
+### Features
+
+* **ooxml:** add readDocxContent, Package -> ContentDocument for docx ([266007a](https://github.com/ExaDev/documents.js/commit/266007a2331b2fb18ca333992f640d8119f6c124))
+
 # [1.17.0](https://github.com/ExaDev/documents.js/compare/v1.16.0...v1.17.0) (2026-07-30)
 
 
