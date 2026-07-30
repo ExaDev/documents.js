@@ -1,14 +1,20 @@
 # documents.js
 
-> Bidirectional docx/pptx ⇄ PDF conversion and a read+write editable OOXML document model, built on [ooxml.js](https://github.com/ExaDev/ooxml.js) and Zod 4 codecs.
+[![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/documents.js) [![npm](https://img.shields.io/npm/v/documents.js?logo=npm)](https://www.npmjs.com/package/documents.js) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/documents.js/ci.yml?branch=main)](https://github.com/ExaDev/documents.js/actions)
 
-`documents.js` depends on `ooxml.js` for lossless docx/pptx/xlsx ⇄ JSON handling and extends it in two directions `ooxml.js` deliberately does not cover: full PDF support, and a read-**and-write** manipulation API for docx/pptx content (`ooxml.js`'s own typed readers are one-way and explicitly forbid write-back). PDF reading, writing, and the docx⇄pdf/pptx⇄pdf conversion codecs are entirely hand-written — no external PDF library is a dependency.
+> Bidirectional docx/pptx ⇄ PDF conversion, a read-and-write live-view editor for docx/pptx content, and a fully hand-written PDF codec, built on [ooxml.js](https://github.com/ExaDev/ooxml.js).
 
-**Status: early bootstrap.** This repository currently contains only project scaffolding; the source tree, tooling, and package have not been built yet.
+`documents.js` depends on `ooxml.js` for lossless docx/pptx/xlsx ⇄ JSON handling and extends it in two directions `ooxml.js` deliberately does not cover: full PDF support (parsing arbitrary real-world PDFs and generating new ones), and a read-**and-write** manipulation API for docx/pptx content — `ooxml.js`'s own typed readers (`readDocx`/`readPptx`) are one-way and explicitly forbid write-back. PDF reading, writing, and the docx⇄PDF/pptx⇄PDF conversion pipeline are entirely hand-written: no external PDF library (`pdf-lib`, `pdfjs-dist`, `mupdf`, or any other) is a dependency. The one exception is [`fflate`](https://github.com/101arrowz/fflate) for raw DEFLATE/zlib compression underneath PDF's `FlateDecode` filter and PNG's `IDAT` chunks — the same dependency `ooxml.js` itself already relies on for ZIP handling.
+
+## Why
+
+Converting docx/pptx to PDF and back is usually solved by wrapping a mature third-party PDF library. This package takes the opposite approach: every layer of the PDF format — the object model, the cross-reference table, the content-stream operators, standard-font metrics, the parser's cross-reference/object-stream resolution and content-stream interpreter — is hand-written against the ISO 32000-1 specification. That is a genuinely large undertaking (the PDF codec is comparable in size to the rest of the package combined), and it comes with an honest trade-off spelled out in [Fidelity](#fidelity) below: this is not, and does not attempt to be, as robust against adversarial or badly malformed real-world PDFs as a library with 15+ years of hardening. What it buys instead is a dependency-free, fully auditable PDF implementation with no supply-chain surface beyond `ooxml.js` and `fflate`.
+
+The read-and-write editor exists because `ooxml.js`'s own typed readers are a deliberate one-way, lossy projection — reading is fine, but there is no way to add a paragraph, style a run, or insert an image and get a valid docx/pptx back out. `documents.js`'s editors are live views directly over the `XmlElement` objects inside a decoded `Package`: a mutation edits that tree in place, and everything you don't touch round-trips byte-faithful, because it never stopped being the original XML.
 
 ## Getting started
 
-Requires Node.js `>=20` and pnpm `11.6.0` (pinned via `packageManager` in `package.json`, once it exists).
+Requires Node.js `>=20` and pnpm `11.6.0` (pinned via `packageManager` in `package.json`).
 
 ```sh
 pnpm install
@@ -22,9 +28,82 @@ pnpm add documents.js
 npm install documents.js
 ```
 
-## Build, test, and lint
+## Usage
 
-Once the tooling scaffold lands, the scripts mirror `ooxml.js` exactly:
+The four ergonomic conversions:
+
+```ts
+import { docxToPdf, pdfToDocx, pptxToPdf, pdfToPptx } from 'documents.js';
+
+const pdfBytes = docxToPdf(docxBytes);
+const docxBytes2 = pdfToDocx(pdfBytes);
+
+const pdfFromSlides = pptxToPdf(pptxBytes);
+const pptxBytes2 = pdfToPptx(pdfFromSlides);
+```
+
+Each accepts an optional `signal` (`AbortSignal`) and either a `onSubstitution` callback (docx/pptx → PDF, called once per character not representable in a standard-14 font) or a `sink` (PDF → docx/pptx, called once per recoverable parse diagnostic).
+
+The same four conversions behind a swappable port, for a caller that wants to inject a different implementation later without changing call sites:
+
+```ts
+import { createLocalDocumentConverter } from 'documents.js';
+
+const converter = createLocalDocumentConverter();
+const { document, diagnostics } = await converter.convert(
+  { source: { format: 'docx', bytes: docxBytes }, targetFormat: 'pdf' },
+  { signal: new AbortController().signal },
+);
+```
+
+Reading and editing docx/pptx content directly, without going through PDF at all:
+
+```ts
+import { openDocx, createDocx } from 'documents.js';
+
+const editor = openDocx(existingDocxBytes);
+const paragraph = editor.body.appendParagraph({ alignment: 'center' });
+const run = paragraph.appendRun({ text: 'Hello' });
+run.bold = true;
+run.color = { r: 1, g: 0, b: 0 };
+const bytes = editor.toBytes();
+
+// or start from nothing:
+const fresh = createDocx();
+fresh.body.appendParagraph().appendRun({ text: 'New document' });
+```
+
+`openPptx`/`createPptx` and `PptxSlide`/`PptxShape` are the pptx equivalent (`slide.addTextBox`, `slide.addImage`, `shape.setParagraphs` for multi-paragraph styled text).
+
+Reading and writing PDF bytes directly, without going through docx/pptx:
+
+```ts
+import { readPdf, writePdf } from 'documents.js';
+
+const layout = readPdf(pdfBytes); // -> LayoutDocument: pages of positioned text/image/rect/link items
+const bytes = writePdf(layout);
+```
+
+`readDocxContent`/`readPptxContent` (docx/pptx → `ContentDocument`), `convertWordprocessingToLayout`/`convertPresentationToLayout` (`ContentDocument` → `LayoutDocument`), and `reconstructWordprocessing`/`reconstructPresentation` (`LayoutDocument` → `ContentDocument`) are each exported individually too, for a caller that wants one stage of the pipeline without the rest.
+
+## Architecture
+
+The package is layered from generic primitives outward to the two conversion directions:
+
+- **`src/model/`** — Zod schemas only, no behaviour: unit conversions (EMU/twip/point/half-point), geometry (`Box`, `PageSize`, `Margins`, the one deliberate `flipY` between OOXML's top-left/y-down space and PDF's bottom-left/y-up space), colour, and the two pivot models — `LayoutDocument` (the PDF-side pivot: pages of positioned text/image/rect/line/ellipse/link items, PDF-native coordinates and units) and `ContentDocument` (the semantic pivot: a discriminated union of `wordprocessing` and `presentation` variants sharing paragraph/run/table/image building blocks).
+- **`src/bytes/`** and **`src/image/`** — generic byte and image-container primitives with zero PDF or OOXML knowledge: a chunked byte writer, a backtracking byte reader, CRC32, and a hand-written PNG decoder/encoder (palette/gray/RGB/alpha, multi-`IDAT` files, all five scanline filters) plus JPEG marker scanning for dimensions only — JPEG's compressed bytes pass through completely unchanged in both directions. `src/bytes/flate.ts` is the only file that imports `fflate`, mirroring how `ooxml.js`'s own `src/zip.ts` wraps it for ZIP handling.
+- **`src/xml/`** and **`src/opc/`** — parent-aware XML query/mutation and OPC package mechanics (relationship IDs, content-type entries, atomic media-part insertion) built over `ooxml.js`'s `Package`/`XmlNode`, needed because `ooxml.js`'s own XML nodes have no parent pointers and `ooxml.js` never writes new parts into an existing package.
+- **`src/edit/`** — the read-and-write editable model: live-view classes (`DocxEditor`/`DocxParagraph`/`DocxRun`/`DocxTable`, `PptxEditor`/`PptxSlide`/`PptxShape`) wrapping the actual `XmlElement` objects inside a decoded `Package`, plus `buildDocxPackage`/`buildPptxPackage` bridging a `ContentDocument` to a fresh package built entirely through those same primitives.
+- **`src/pdf/`** — the hand-written PDF codec, importing only `model`/`bytes`/`image` (no OOXML knowledge at all):
+  - **Write**: `objects.ts` (the `PdfObject` discriminated union), `afm-widths.ts`/`encoding.ts`/`winansi.ts`/`fonts.ts` (standard-14 metrics, WinAnsi encoding, family resolution), `measure.ts`/`text-layout.ts` (greedy line-wrapping), `matrix.ts`, `content-write.ts` (`LayoutItem[]` → content-stream operators), `write.ts` (the full object graph, classic cross-reference table, trailer).
+  - **Read**: `lexer.ts`/`parse.ts` (byte tokenizer and tokens → `PdfObject`), `filters.ts`/`predictors.ts` (Flate/LZW/ASCII85/ASCIIHex/RunLength, TIFF/PNG predictors), `xref.ts`/`document.ts` (classic and cross-reference-stream resolution, object streams, `/Prev` chains, linear-scan recovery, the page tree with attribute inheritance), `content-read.ts`/`interpret.ts` (the content-stream tokenizer and graphics/text state machine, including form-XObject recursion), `cmap.ts`/`font-style.ts`/`font-read.ts` (`/ToUnicode` CMaps, font-dictionary resolution), `images-read.ts` (Image XObjects → PNG/JPEG bytes), `read.ts` (`readPdf`, assembling all of the above into a `LayoutDocument`).
+- **`src/ooxml/`** — resolves a `Package` into a `ContentDocument`: `docx/styles.ts` implements the full docx style cascade (`docDefaults` → named-style `basedOn` chains → paragraph-mark run properties → character styles → direct formatting) and `docx/read.ts` walks `word/document.xml`; `pptx/inherit.ts` implements the placeholder → layout → master → theme inheritance cascade (the single highest-value correctness feature for pptx, since most real shapes carry no position of their own) and `pptx/read.ts` walks the slide tree, resolving slide order through the presentation's own relationships rather than filename order.
+- **`src/layout/`** — the pure conversion algorithms, importing only `model` (no I/O): `engine.ts` (`ContentDocument` wordprocessing → `LayoutDocument`: flow, line-breaking, pagination), `slides.ts` (`ContentDocument` presentation → `LayoutDocument`: direct EMU-to-point placement, no pagination needed), `reconstruct.ts` (`LayoutDocument` → `ContentDocument`, both variants: baseline-proximity line clustering, then paragraph/text-block clustering from geometry — PDF has no semantic paragraph or shape structure to recover, only positioned glyphs).
+- **`src/convert/`** — `convert.ts` (the four ergonomic wrappers), `port.ts`/`local.ts` (the swappable `DocumentConverter` contract and its synchronous local implementation).
+
+Dependency direction is strictly downward and checkable: `model`/`bytes` import nothing local; `image` imports `bytes` only; `pdf` imports `model`+`bytes`+`image` only; `ooxml/*` imports `xml`/`model` only (no PDF knowledge); `layout` imports `model` only; `convert` composes everything else. No `PdfObject`/`PdfDict`/`PdfStream` type appears outside `src/pdf/`.
+
+## Build, test, and lint
 
 ```sh
 pnpm build         # tsdown -> dist/ (ESM + CJS + .d.ts)
@@ -32,40 +111,52 @@ pnpm typecheck     # tsc --noEmit
 pnpm lint          # eslint . --max-warnings 0
 pnpm test          # vitest run --project unit
 pnpm test:watch    # vitest --project unit
-pnpm test:smoke    # rebuilds dist/, then verifies ESM/CJS parity
-pnpm test:corpus   # optional real-world PDF conformance checks against a local, gitignored test/corpus/
+pnpm test:smoke    # rebuilds dist/, then verifies ESM/CJS parity and a real docxToPdf/pdfToDocx round trip from the built CJS bundle
+pnpm test:corpus   # optional real-world PDF conformance checks against a local, gitignored test/corpus/ (see Fidelity)
 ```
 
 To run a single test file: `pnpm vitest run src/path/to/file.test.ts`.
 
-## Architecture
-
-The package is layered from a lossless OOXML core (delegated entirely to `ooxml.js`) outward to conversion and editing:
-
-- **`src/model/`** — Zod schemas only: unit conversions (EMU/twip/point/half-point), geometry, color, and the two pivot models — `LayoutDocument` (the PDF-side pivot: pages of positioned text/image/rect/line/ellipse/link items, PDF-native coordinates) and `ContentDocument` (the semantic pivot: a discriminated union of `wordprocessing` and `presentation` variants sharing paragraph/run/table/image building blocks).
-- **`src/bytes/`** and **`src/image/`** — generic byte and image-container primitives (PNG decode/encode, JPEG marker scanning) with zero PDF or OOXML knowledge. `src/bytes/flate.ts` is the only file that imports `fflate`, mirroring how `ooxml.js`'s own `src/zip.ts` wraps `fflate` for ZIP handling.
-- **`src/xml/`** and **`src/opc/`** — parent-aware XML query/mutation and OPC package mechanics (relationships, content types, media parts) built over `ooxml.js`'s `Package`/`XmlNode`.
-- **`src/edit/`** — the read+write editable model: live-view wrappers over the actual `XmlElement` objects inside a decoded `Package`, so mutations edit the tree in place and untouched content stays byte-faithful on save. This is the novel piece beyond what `ooxml.js` itself provides.
-- **`src/pdf/`** — a fully hand-written PDF codec: object model, writer (content-stream generation, standard-14 font metrics, xref table), and reader (tokenizer, cross-reference/object-stream resolution, content-stream interpreter, font/Unicode recovery). No external PDF library.
-- **`src/ooxml/`** — resolves a `Package` into a `ContentDocument`: the docx style cascade (`basedOn` chains, theme fonts, toggle properties) and the pptx placeholder→layout→master→theme inheritance cascade.
-- **`src/layout/`** — the conversion algorithms: `ContentDocument → LayoutDocument` (docx flow/pagination; pptx direct EMU-to-point placement) and the reverse (`LayoutDocument → ContentDocument`, via line/paragraph/shape clustering).
-- **`src/convert/`** — the `DocumentConverter` port/contract and its local adapter, plus the `docxPdfCodec`/`pptxPdfCodec` Zod codecs and ergonomic `docxToPdf`/`pdfToDocx`/`pptxToPdf`/`pdfToPptx` wrappers.
-
 ## Conventions
 
-- **Zod-first schema/type/guard**, matching `ooxml.js`: every model type is inferred from its Zod schema, never hand-written. Recursive types (`ContentBlock`, mirroring `ooxml.js`'s `XmlNode`) use a hand-written structural guard + `z.custom`, not `z.lazy`.
-- **No type assertions.** Every third-party or loosely-typed value (from `fast-xml-parser` via `ooxml.js`) is narrowed through a type guard or a Zod parse at the boundary. `src/pdf/`'s own object model narrows natively on its `kind` discriminant, so it needs no such guard.
-- **Dependency direction is strictly downward and checkable**: `model`/`bytes` import nothing local; `image` imports `bytes` only; `pdf` imports `model`+`bytes`+`image` only (no OOXML knowledge); `ooxml/*` imports `xml`/`model` only (no PDF knowledge); `layout` imports `model` only (pure, no I/O); `convert` composes everything else. No `PdfObject`/`PdfDict`/`PdfStream` type may appear outside `src/pdf/`.
+- **Zod-first schema/type/guard**, matching `ooxml.js`: every model type is inferred from its Zod schema, never hand-written. `ContentBlock` (recursive, mirroring `ooxml.js`'s own `XmlNode` treatment) uses a hand-written structural guard + `z.custom`, not `z.lazy`, which collapses to `unknown` for recursive element-children in the pinned Zod version.
+- **`PdfObject` has no Zod schema at all**, deliberately: it never crosses a public boundary or round-trips through JSON, and is constructed exclusively by this package's own parser — validating it would just be validating our own output. It narrows natively on its own `kind` discriminant instead, the same reasoning `ooxml.js` applies when it picks a hand-written `isXmlNode` guard over `z.lazy`.
+- **No type assertions anywhere.** Every third-party or loosely-typed value is narrowed through a type guard or a Zod parse at the boundary.
+- **Live views, not flatten-and-regenerate.** `src/edit/*`'s editor classes hold a reference directly into the real `Package`/`XmlElement` objects; saving is `encodePackage(pkg)`, nothing more. This is what makes "everything you didn't touch stays byte-faithful" a structural guarantee rather than a best effort.
+- **A three-tier PDF-read failure policy**, applied consistently across every `src/pdf/*` read module: throw a typed `PdfParseError`/`PdfEncryptedError` for a file that cannot be meaningfully processed at all; recover with a `PdfDiagnostic` (`severity: 'warning'`) for something malformed but salvageable (a bad `startxref`, a wrong stream `/Length`); degrade with a diagnostic for an individual unsupported feature (an unimplemented filter, an unrecognised colour space) while the rest of the document still reads.
 - **Conventional commits**, enforced via commitlint + husky, matching `ooxml.js`.
 
 ## Gotchas and quirks
 
-- **`ooxml.js`'s typed readers (`readDocx`/`readPptx`) are not used as a basis for conversion.** They flatten body content with a recursive-descendant search (destroying document order for paragraphs inside tables) and carry no font/size/color/geometry data. `documents.js` walks `word/document.xml`/`ppt/slides/slideN.xml` directly.
-- **The docx⇄pdf and pptx⇄pdf conversion codecs are explicitly not round-trip-lossless** — in deliberate contrast to `ooxml.js`'s own `packageCodec`, which is. A `z.codec()` here means a validated, named pair of format-*converting* transforms, not a lossless round-trip guarantee.
-- **PDF output uses standard-14 fonts only (no embedding).** Helvetica/Times-Roman are metric-compatible substitutes for Arial/Times New Roman, but Word's actual default fonts (Calibri, Aptos) are not — expect a faithful visual approximation, not a line-identical reproduction of Word/PowerPoint's own rendering.
-- **Reading arbitrary real-world PDFs is the hardest part of this package.** The hand-written parser targets cleanly-generated output from mainstream producers (Word, PowerPoint, Chrome, LibreOffice, Acrobat) and fails loudly and specifically on adversarial or badly malformed files, rather than matching a mature library's robustness.
-- **Encrypted PDFs are unsupported** (`/Encrypt` present → throws), including the common empty-user-password case.
-- **JPEG images pass through losslessly** (embedded/extracted via PDF's `DCTDecode` filter with no decode/re-encode); PNG-sourced images go through a real, narrowly-scoped hand-written codec.
+- **`ooxml.js`'s typed readers (`readDocx`/`readPptx`) are not used as a basis for conversion, and are deliberately not re-exported from this package's own public surface.** They flatten body content with a recursive-descendant search (destroying document order for paragraphs inside tables) and carry no font/size/colour/geometry data. `documents.js` walks `word/document.xml`/`ppt/slides/slideN.xml` directly, and exposing both `ContentDocument` and `ooxml.js`'s typed readers in one API would be a trap — two competing, differently-lossy document models.
+- **The docx⇄PDF and pptx⇄PDF conversions are explicitly not round-trip-lossless** — in deliberate contrast to `ooxml.js`'s own `packageCodec`, which is byte/part-faithful by design. See [Fidelity](#fidelity).
+- **PDF output uses the standard 14 fonts only — no font embedding.** Helvetica/Times-Roman are genuinely metric-compatible substitutes for Arial/Times New Roman, but Word's actual current defaults (Calibri, Aptos) are not, so line wrapping and pagination will drift slightly from what Word itself would produce. Expect a faithful visual approximation, not a line-identical reproduction.
+- **Reading arbitrary real-world PDFs is the single largest risk surface in this package**, and the parser is honest about its design target: cleanly-generated output from mainstream producers (Word, PowerPoint, Chrome, LibreOffice, Acrobat), recovering from the malformations those producers and their downstream tooling actually create, and failing loudly and specifically on anything else — not matching a mature library's robustness against adversarial input.
+- **Encrypted PDFs are unsupported.** `/Encrypt` present in the trailer throws `PdfEncryptedError`, even for the common empty-user-password case.
+- **`CCITTFaxDecode`/`JBIG2Decode`/`JPXDecode` PDF images are unsupported** (scanned-fax and JPEG2000 formats) — the image is skipped with a diagnostic, the rest of the page still reads. JPEG images (`DCTDecode`) pass through completely losslessly in both directions; PNG-sourced images go through a real, narrowly-scoped hand-written codec.
+- **PDF → docx/pptx reconstruction has no table or vector-shape recovery.** A PDF has no semantic table structure to recover — a wide horizontal gap on a line becomes a tab character, not a reconstructed grid. General vector paths, curves, gradients, and shadings are not recovered either.
+- **Table cell `colSpan`/`rowSpan` and pptx shape rotation are read from a `ContentDocument` but not yet written back** by `buildDocxPackage`/`buildPptxPackage` — a merged cell round-trips as an ordinary unmerged one, and a rotated shape round-trips unrotated. Both are bounded, tracked gaps (the cell's own text content and the shape's own position are still correct), not silent ones.
+- **docx headers/footers, live `PAGE`/`NUMPAGES` field substitution, and inline images are not read** by `readDocxContent` — a deliberate, tracked scope narrowing from the original design, not an oversight.
+
+## Fidelity
+
+**docx/pptx → PDF** is a genuine layout render: the docx flow/pagination engine and the pptx direct-placement engine both produce real positioned text, images, tables, and (for docx) numbered/bulleted lists, styled through the full cascade (theme fonts/colours, `basedOn` chains, placeholder inheritance). It is a faithful **visual approximation**, not a pixel- or line-identical reproduction of what Word/PowerPoint would themselves render — see the standard-14 font substitution gotcha above.
+
+**PDF → docx/pptx** is necessarily a **best-effort reconstruction** from geometry: a PDF page is just positioned glyphs and images, with no semantic paragraph or shape structure to recover. Reading order, bold/italic/colour/font-size, and page/slide count are preserved; paragraph and text-block boundaries are inferred from baseline spacing and left-margin indentation, not recovered exactly.
+
+Neither direction is round-trip-lossless, and the two conversions are not inverses of each other — `pdfToDocx(docxToPdf(x))` will not reproduce `x` exactly, and is not intended to. This is a deliberate, permanent contrast with `ooxml.js`'s own `packageCodec`, which genuinely is a lossless round trip.
+
+**Optional real-world corpus.** `test/corpus/` (gitignored, never committed) holds a `pnpm test:corpus` vitest project for manual conformance checking against real PDFs a hand-built fixture can't fully stand in for — a Word "Save as PDF", a PowerPoint "Save as PDF", a Chrome "Print to PDF", a LibreOffice export. It is not part of `pnpm test` and does not gate CI; drop files in locally before a significant parser change.
+
+## Release and publishing
+
+`.github/workflows/ci.yml` runs commitlint, lint, typecheck, the unit suite, and the smoke test on every push and pull request. On a push to `main` where those all pass, `release.config.ts` drives [semantic-release](https://semantic-release.gitbook.io/semantic-release): commit history since the last tag decides the version bump, `CHANGELOG.md` and `package.json` are committed back to `main`, a GitHub Release is cut, and the package publishes to [npmjs.org](https://www.npmjs.com/package/documents.js) — via npm's OIDC trusted publishing, so no `NPM_TOKEN` exists anywhere in the pipeline.
+
+Whether that release actually published a new version is detected by diffing `package.json`'s version before and after the release step, not by trusting a third-party action's own detection. Two further jobs gate on that: one republishes the same build under the scoped `@exadev/documents.js` alias to GitHub Packages (which has no OIDC exchange of its own, so it authenticates with `GITHUB_TOKEN` instead), and one packs the release into its own directory, generates an SPDX SBOM (`pnpm sbom`), and signs both an SBOM and a build-provenance attestation against that exact tarball — verifiable independently of the registry, and still present if the package is later unpublished.
+
+## Contributing
+
+Commits follow Conventional Commits (`feat:`, `fix:`, `test:`, `chore:`, …), enforced by commitlint (`commitlint.config.ts`) via a husky `commit-msg` hook and a CI `commitlint` job — semantic-release's version bump depends on these being well-formed, not just style. A husky `pre-commit` hook runs `lint-staged` (`eslint --fix` on staged `*.ts` files) and `pre-push` runs the test suite. There is a single `main` branch and no open pull request workflow established so far.
 
 ## References
 
