@@ -147,3 +147,22 @@ describe('wrapTextToWidth', () => {
     expect(wrapTextToWidth('hello world', FONT, 10, COLOR, measurer, 8)).toEqual(['hello', 'world']);
   });
 });
+
+describe('wrapRunsToWidth: hyperlink pass-through', () => {
+  it('carries a run\'s hyperlink through onto every fragment it produces, including across a wrap and an emergency split', () => {
+    const measurer = fakeMeasurer();
+    const linked = { ...run('helloworld'), hyperlink: 'https://example.com' };
+    const lines = wrapRunsToWidth([linked], measurer, 4); // forces an emergency character-level split
+    for (const line of lines) {
+      for (const fragment of line.fragments) {
+        expect(fragment.hyperlink).toBe('https://example.com');
+      }
+    }
+  });
+
+  it('leaves hyperlink undefined for a run that has none', () => {
+    const measurer = fakeMeasurer();
+    const lines = wrapRunsToWidth([run('hello')], measurer, 100);
+    expect(lines[0]?.fragments[0]?.hyperlink).toBeUndefined();
+  });
+});

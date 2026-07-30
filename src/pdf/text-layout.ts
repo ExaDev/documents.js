@@ -8,6 +8,8 @@ export interface StyledRun {
   readonly sizePt: number;
   readonly color: LayoutColor;
   readonly underline?: boolean;
+  // An external URI, carried through atomisation/wrapping unchanged so a caller (src/layout/slides.ts) can emit a LayoutLink covering each wrapped fragment's own position -- text-layout.ts itself never interprets this, purely a pass-through field.
+  readonly hyperlink?: string;
 }
 
 export interface StyledFragment {
@@ -16,6 +18,7 @@ export interface StyledFragment {
   readonly sizePt: number;
   readonly color: LayoutColor;
   readonly underline?: boolean;
+  readonly hyperlink?: string;
 }
 
 export interface WrappedLine {
@@ -67,7 +70,7 @@ function atomizeRuns(runs: readonly StyledRun[], measurer: TextMeasurer): Atom[]
         flushWord();
         atoms.push({ kind: 'glue', widthPt: measurer.widthOfTextAtSize(token, run.font, run.sizePt) });
       } else {
-        wordFragments.push({ text: token, font: run.font, sizePt: run.sizePt, color: run.color, underline: run.underline });
+        wordFragments.push({ text: token, font: run.font, sizePt: run.sizePt, color: run.color, underline: run.underline, hyperlink: run.hyperlink });
         wordWidth += measurer.widthOfTextAtSize(token, run.font, run.sizePt);
       }
     }
