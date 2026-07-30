@@ -181,4 +181,46 @@ describe('readDocx expanded constructs', () => {
       expect(paragraph.list).toBeUndefined();
     }
   });
+
+  // Regression: a table cell's paragraph must not also surface in the flat `paragraphs` field. Before the fix, `paragraphs` was built with an unrestricted recursive descendant search that found every w:p including ones nested inside w:tbl/w:tr/w:tc, duplicating each cell paragraph alongside its already-correct representation under `tables`.
+  it('excludes table-cell paragraphs from the flat paragraphs list', () => {
+    const documentXml = enc(
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Body paragraph</w:t></w:r></w:p><w:tbl><w:tr><w:tc><w:p><w:r><w:t>Cell paragraph</w:t></w:r></w:p></w:tc></w:tr></w:tbl></w:body></w:document>',
+    );
+    const result = readDocx(
+      decodePackage(
+        zipPackage({
+          '[Content_Types].xml': CONTENT_TYPES_DOCX,
+          '_rels/.rels': ROOT_RELS_DOCX,
+          'word/document.xml': documentXml,
+        }),
+      ),
+    );
+
+    expect(result.paragraphs).toHaveLength(1);
+    expect(result.paragraphs[0]?.runs[0]?.text).toBe('Body paragraph');
+
+    expect(result.tables).toHaveLength(1);
+    expect(result.tables[0]?.rows[0]?.cells[0]?.paragraphs).toHaveLength(1);
+    expect(result.tables[0]?.rows[0]?.cells[0]?.paragraphs[0]?.runs[0]?.text).toBe('Cell paragraph');
+  });
+
+  // Regression guard against overcorrection: a paragraph wrapped in a w:sdt content control (not inside a table) is genuine body-level reading-order content and must still appear in the flat paragraphs list.
+  it('still includes a paragraph nested inside a w:sdt content control', () => {
+    const documentXml = enc(
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:sdt><w:sdtContent><w:p><w:r><w:t>SDT paragraph</w:t></w:r></w:p></w:sdtContent></w:sdt></w:body></w:document>',
+    );
+    const result = readDocx(
+      decodePackage(
+        zipPackage({
+          '[Content_Types].xml': CONTENT_TYPES_DOCX,
+          '_rels/.rels': ROOT_RELS_DOCX,
+          'word/document.xml': documentXml,
+        }),
+      ),
+    );
+
+    expect(result.paragraphs).toHaveLength(1);
+    expect(result.paragraphs[0]?.runs[0]?.text).toBe('SDT paragraph');
+  });
 });

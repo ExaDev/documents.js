@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { Package } from '../model/package';
-import type { XmlElement } from '../model/node';
+import type { XmlElement, XmlNode } from '../model/node';
 import type { Relationship } from './util';
 import { attr, childrenWithTag, elementsWithTag, resolveRelationships, rootElement, textContent } from './util';
 
@@ -128,6 +128,27 @@ function readTable(table: XmlElement): Table {
   return { rows: childrenWithTag(table, 'w:tr').map(readRow) };
 }
 
+// Depth-first walk over a node forest that does not descend into `w:tbl` subtrees, otherwise identical to util.ts's own `walk`. Kept local to this file (rather than added to the generic util.ts primitives) because skipping `w:tbl` encodes docx-specific document-model knowledge, not general XML traversal.
+function* walkExcludingTables(nodes: XmlNode[]): Generator<XmlNode> {
+  for (const node of nodes) {
+    yield node;
+    if (node.type === 'element' && node.tag !== 'w:tbl') {
+      yield* walkExcludingTables(node.children);
+    }
+  }
+}
+
+// Body-level `w:p` paragraphs only: descends into every wrapper (w:sdt content controls, w:ins/w:del tracked changes, mc:AlternateContent, etc.) except `w:tbl`, whose cell paragraphs are already represented via the `tables` field's own readTable -> readRow -> readCell walk. Without this exclusion a table-cell paragraph would appear twice in a DocxDocument: once here and once nested under `tables`.
+function bodyParagraphElements(nodes: XmlNode[]): XmlElement[] {
+  const out: XmlElement[] = [];
+  for (const node of walkExcludingTables(nodes)) {
+    if (node.type === 'element' && node.tag === 'w:p') {
+      out.push(node);
+    }
+  }
+  return out;
+}
+
 // text is the concatenated w:t content of the hyperlink; target resolves the r:id relationship, defaulting to an empty string for an unresolvable or absent id (a dangling hyperlink reads as a hyperlink with unknown target rather than an error).
 function readHyperlink(hyperlink: XmlElement, rels: Map<string, Relationship>): Hyperlink {
   const text = elementsWithTag(hyperlink.children, 'w:t').map(textContent).join('');
@@ -207,7 +228,7 @@ export function readDocx(pkg: Package): DocxDocument {
   }
   const rels = resolveRelationships(pkg, 'word/document.xml');
   return {
-    paragraphs: elementsWithTag(part.nodes, 'w:p').map(readParagraph),
+    paragraphs: bodyParagraphElements(part.nodes).map(readParagraph),
     tables: elementsWithTag(part.nodes, 'w:tbl').map(readTable),
     hyperlinks: elementsWithTag(part.nodes, 'w:hyperlink').map((h) => readHyperlink(h, rels)),
     comments: readComments(pkg),
