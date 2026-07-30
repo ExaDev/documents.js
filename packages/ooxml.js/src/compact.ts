@@ -22,13 +22,18 @@ export type CompactXmlNode =
   | CompactDeclaration
   | CompactPi;
 
+// Array.isArray narrows unknown to any[], not unknown[] -- lib.es5.d.ts types its parameter as `any`, so TypeScript can't do better even after the check. This guard exists so indexing the result stays unknown rather than silently reintroducing any.
+function isUnknownArray(value: unknown): value is unknown[] {
+  return Array.isArray(value);
+}
+
 function isCompactAttrPairs(value: unknown): value is CompactAttrPairs {
-  return Array.isArray(value) && value.every((v) => typeof v === 'number');
+  return isUnknownArray(value) && value.every((v) => typeof v === 'number');
 }
 
 // Recursive structural guard, mirroring model/node.ts's isXmlNode: z.lazy + z.union collapses to `unknown` for the element-children case in this zod version, so the recursive union goes through z.custom instead.
 export function isCompactXmlNode(value: unknown): value is CompactXmlNode {
-  if (!Array.isArray(value)) {
+  if (!isUnknownArray(value)) {
     return false;
   }
   const code = value[0];

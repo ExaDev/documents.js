@@ -78,7 +78,7 @@ function readNotes(pkg: Package, slidePath: string): string {
     return '';
   }
   const part = pkg.parts[notesPath];
-  if (part === undefined || part.kind !== 'xml') {
+  if (part?.kind !== 'xml') {
     return '';
   }
   return elementsWithTag(part.nodes, 'a:t').map(textContent).join('');

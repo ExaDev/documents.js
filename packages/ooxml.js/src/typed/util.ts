@@ -44,7 +44,7 @@ export function attr(element: XmlElement, name: string): string | undefined {
 
 // The root element of a part, skipping the leading <?xml ?> declaration node; undefined for a missing or binary part.
 export function rootElement(part: Part | undefined): XmlElement | undefined {
-  if (part === undefined || part.kind !== 'xml') {
+  if (part?.kind !== 'xml') {
     return undefined;
   }
   for (const node of part.nodes) {

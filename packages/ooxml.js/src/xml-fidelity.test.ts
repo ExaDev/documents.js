@@ -55,7 +55,7 @@ function findElement(roots: XmlNode[], tag: string): XmlElement | undefined {
 
 function documentXmlNodes(pkg: Package): XmlNode[] {
   const part = pkg.parts['word/document.xml'];
-  if (!part || part.kind !== 'xml') {
+  if (part?.kind !== 'xml') {
     throw new Error('word/document.xml is not an xml part');
   }
   return part.nodes;

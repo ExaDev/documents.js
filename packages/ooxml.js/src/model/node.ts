@@ -51,7 +51,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isAttribute(value: unknown): value is Attribute {
-  return isRecord(value) && typeof value['name'] === 'string' && typeof value['value'] === 'string';
+  return isRecord(value) && typeof value.name === 'string' && typeof value.value === 'string';
 }
 
 // Recursive structural guard. Used via z.custom so element children validate without a recursive Zod schema (which collapses to `unknown` under z.lazy in this zod version).
@@ -59,23 +59,23 @@ export function isXmlNode(value: unknown): value is XmlNode {
   if (!isRecord(value)) {
     return false;
   }
-  const t = value['type'];
+  const t = value.type;
   if (t === 'text' || t === 'cdata' || t === 'comment') {
-    return typeof value['value'] === 'string';
+    return typeof value.value === 'string';
   }
   if (t === 'declaration') {
-    return Array.isArray(value['attributes']) && value['attributes'].every(isAttribute);
+    return Array.isArray(value.attributes) && value.attributes.every(isAttribute);
   }
   if (t === 'pi') {
-    return typeof value['target'] === 'string' && typeof value['content'] === 'string';
+    return typeof value.target === 'string' && typeof value.content === 'string';
   }
   if (t === 'element') {
     return (
-      typeof value['tag'] === 'string' &&
-      Array.isArray(value['attributes']) &&
-      value['attributes'].every(isAttribute) &&
-      Array.isArray(value['children']) &&
-      value['children'].every(isXmlNode)
+      typeof value.tag === 'string' &&
+      Array.isArray(value.attributes) &&
+      value.attributes.every(isAttribute) &&
+      Array.isArray(value.children) &&
+      value.children.every(isXmlNode)
     );
   }
   return false;

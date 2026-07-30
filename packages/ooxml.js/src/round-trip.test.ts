@@ -94,7 +94,7 @@ describe('package round-trip (decode -> encode -> decode)', () => {
   it('docx: binary part round-trips losslessly', () => {
     const pkg1 = decodePackage(zipPackage(docxParts()));
     const binary = pkg1.parts['word/media/image1.png'];
-    expect(binary && binary.kind === 'binary').toBe(true);
+    expect(binary?.kind === 'binary').toBe(true);
     const pkg2 = decodePackage(encodePackage(pkg1));
     expect(pkg2.parts['word/media/image1.png']).toEqual(binary);
   });
@@ -102,8 +102,8 @@ describe('package round-trip (decode -> encode -> decode)', () => {
   it('docx: XML part preserves namespaced attributes and entities', () => {
     const pkg = decodePackage(zipPackage(docxParts()));
     const document = pkg.parts['word/document.xml'];
-    expect(document && document.kind === 'xml').toBe(true);
-    if (document && document.kind === 'xml') {
+    expect(document?.kind === 'xml').toBe(true);
+    if (document?.kind === 'xml') {
       const xml = new TextDecoder().decode(new TextEncoder().encode(JSON.stringify(document)));
       expect(xml).toContain('Hello &amp; world');
       expect(xml).toContain('w:rsidR');

@@ -5,7 +5,7 @@ const TABLE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
 const DECODE: Uint8Array<ArrayBuffer> = (() => {
   const map = new Uint8Array(256).fill(255);
   for (let i = 0; i < TABLE.length; i = i + 1) {
-    map[TABLE.charCodeAt(i)!] = i;
+    map[TABLE.charCodeAt(i)] = i;
   }
   return map;
 })();
@@ -31,10 +31,10 @@ export function base64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
   const out = new Uint8Array(((len * 3) / 4) | 0);
   let p = 0;
   for (let i = 0; i < len; i = i + 4) {
-    const c0 = DECODE[clean.charCodeAt(i)!]!;
-    const c1 = DECODE[clean.charCodeAt(i + 1)!]!;
-    const c2 = clean.charCodeAt(i + 2)!;
-    const c3 = clean.charCodeAt(i + 3)!;
+    const c0 = DECODE[clean.charCodeAt(i)]!;
+    const c1 = DECODE[clean.charCodeAt(i + 1)]!;
+    const c2 = clean.charCodeAt(i + 2);
+    const c3 = clean.charCodeAt(i + 3);
     if (c0 === 255 || c1 === 255) {
       throw new Error('invalid base64 input');
     }

@@ -188,7 +188,7 @@ function readHeaderFooterText(pkg: Package, prefix: string): string[] {
       continue;
     }
     const part = pkg.parts[path];
-    if (part === undefined || part.kind !== 'xml') {
+    if (part?.kind !== 'xml') {
       continue;
     }
     out.push(elementsWithTag(part.nodes, 'w:t').map(textContent).join(''));

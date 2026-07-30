@@ -22,6 +22,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+// Array.isArray narrows unknown to any[], not unknown[] -- lib.es5.d.ts types its parameter as `any`, so TypeScript can't do better even after the check. This guard exists so indexing the result stays unknown rather than silently reintroducing any.
+function isUnknownArray(value: unknown): value is unknown[] {
+  return Array.isArray(value);
+}
+
 function asString(value: unknown): string {
   if (typeof value !== 'string') {
     throw new Error(`expected string while parsing XML, got ${typeof value}`);
@@ -30,7 +35,7 @@ function asString(value: unknown): string {
 }
 
 function parseNodes(raw: unknown): XmlNode[] {
-  if (!Array.isArray(raw)) {
+  if (!isUnknownArray(raw)) {
     throw new Error('fast-xml-parser output was not an ordered array');
   }
   return raw.map(parseNode);
@@ -58,10 +63,10 @@ function parseNode(raw: unknown): XmlNode {
     return { type: 'text', value: asString(raw['#text']) };
   }
   if (tagKey === '__comment') {
-    return { type: 'comment', value: scalarText(raw['__comment']) };
+    return { type: 'comment', value: scalarText(raw.__comment) };
   }
   if (tagKey === '__cdata') {
-    return { type: 'cdata', value: scalarText(raw['__cdata']) };
+    return { type: 'cdata', value: scalarText(raw.__cdata) };
   }
   if (tagKey === '?xml') {
     return { type: 'declaration', attributes };
@@ -91,7 +96,7 @@ function parseAttributes(raw: unknown): Attribute[] {
 
 // Comments, CDATA and PIs wrap their text as [{ '#text': string }].
 function scalarText(raw: unknown): string {
-  if (!Array.isArray(raw) || raw.length === 0) {
+  if (!isUnknownArray(raw) || raw.length === 0) {
     throw new Error('expected a scalar-text wrapper array');
   }
   const first = raw[0];
