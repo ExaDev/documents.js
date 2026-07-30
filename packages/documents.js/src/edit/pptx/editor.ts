@@ -1,5 +1,7 @@
 import type { Package, XmlElement } from 'ooxml.js';
 import { decodePackage, encodePackage, resolveRelationships, rootElement } from 'ooxml.js';
+import type { PageSize } from '../../model/geometry';
+import { emuToPt, ptToEmu } from '../../model/units';
 import { ensureContentTypeOverride } from '../../opc/content-types';
 import { addRelationship } from '../../opc/rels';
 import { el } from '../../xml/fragment';
@@ -47,6 +49,14 @@ function findSldIdLst(presentationRoot: XmlElement): XmlElement {
     throw new Error(`${PRESENTATION_PART_PATH} has no p:sldIdLst element`);
   }
   return sldIdLst;
+}
+
+function findSldSz(presentationRoot: XmlElement): XmlElement {
+  const sldSz = directChild(presentationRoot, 'p:sldSz');
+  if (sldSz === undefined) {
+    throw new Error(`${PRESENTATION_PART_PATH} has no p:sldSz element`);
+  }
+  return sldSz;
 }
 
 function nextSlideId(sldIdLst: XmlElement): number {
@@ -190,6 +200,22 @@ export class PptxEditor {
     });
     const insertAt = to < updatedIndices.length ? (updatedIndices[to] ?? sldIdLst.children.length) : sldIdLst.children.length;
     sldIdLst.children.splice(insertAt, 0, moved);
+  }
+
+  // p:sldSz is presentation-wide, not per-slide (unlike ContentSlide.size, which PDF-reconstructed content sets per page) -- a caller building a deck from content whose pages share one size sets this once; createEmptyPptxPackage's own scaffold default is PowerPoint's standard 16:9 widescreen.
+  get slideSize(): PageSize {
+    const sldSz = findSldSz(findPresentationRoot(this.pkg));
+    const cx = attrValue(sldSz, 'cx');
+    const cy = attrValue(sldSz, 'cy');
+    return { widthPt: cx === undefined ? 0 : emuToPt(Number.parseInt(cx, 10)), heightPt: cy === undefined ? 0 : emuToPt(Number.parseInt(cy, 10)) };
+  }
+
+  set slideSize(size: PageSize) {
+    const sldSz = findSldSz(findPresentationRoot(this.pkg));
+    sldSz.attributes = [
+      { name: 'cx', value: String(ptToEmu(size.widthPt)) },
+      { name: 'cy', value: String(ptToEmu(size.heightPt)) },
+    ];
   }
 
   toPackage(): Package {
