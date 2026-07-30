@@ -89,6 +89,19 @@ describe('PptxSlide.notes', () => {
   });
 });
 
+describe('PptxEditor.slideSize', () => {
+  it('defaults to the standard 16:9 widescreen size', () => {
+    const editor = createPptx();
+    expect(editor.slideSize).toEqual({ widthPt: 960, heightPt: 540 });
+  });
+
+  it('can be set and read back', () => {
+    const editor = createPptx();
+    editor.slideSize = { widthPt: 612, heightPt: 792 };
+    expect(editor.slideSize).toEqual({ widthPt: 612, heightPt: 792 });
+  });
+});
+
 describe('live-view fidelity for pptx', () => {
   it('mutating a shape leaves every other part unchanged', () => {
     const before = minimalPptxPackage();
