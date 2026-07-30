@@ -1,3 +1,11 @@
+# [1.25.0](https://github.com/ExaDev/documents.js/compare/v1.24.0...v1.25.0) (2026-07-30)
+
+
+### Features
+
+* **pdf:** add code-to-Unicode lookups for the read path ([7ef1591](https://github.com/ExaDev/documents.js/commit/7ef1591d8d72cacaaf885b34bb03f9351ad3fddf))
+* **pdf:** add ToUnicode CMap parsing and font-dict resolution ([973bb70](https://github.com/ExaDev/documents.js/commit/973bb70aac114134ab97955ff42a0b6593fee342))
+
 # [1.24.0](https://github.com/ExaDev/documents.js/compare/v1.23.0...v1.24.0) (2026-07-30)
 
 
