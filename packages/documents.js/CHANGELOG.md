@@ -1,3 +1,10 @@
+# [1.26.0](https://github.com/ExaDev/documents.js/compare/v1.25.0...v1.26.0) (2026-07-30)
+
+
+### Features
+
+* **pdf:** add Image XObject decoding to PNG/JPEG bytes ([902529f](https://github.com/ExaDev/documents.js/commit/902529f058f0edc6d57f8bd540c03c5f0261ed37))
+
 # [1.25.0](https://github.com/ExaDev/documents.js/compare/v1.24.0...v1.25.0) (2026-07-30)
 
 
