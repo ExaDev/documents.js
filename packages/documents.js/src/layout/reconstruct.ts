@@ -62,6 +62,25 @@ function textItemToContentRun(item: LayoutText): ContentRun {
   };
 }
 
+// A small absolute floor (not font-size-relative) below which two adjacent items are treated as directly continuing the same word (e.g. a bold/italic sub-run split mid-word) rather than separate words needing a space -- guards against float-rounding noise producing a spurious tiny positive gap.
+const MIN_WORD_GAP_PT = 0.5;
+
+// Appends ContentRuns for one line's items, inserting the word-space or tab a caller reading the reconstructed text needs between them: PDF text extraction carries no literal space characters between separately-shown words (interpret.ts's word-wrapping and per-item positioning use xOffsetPt, not embedded spaces), so a positive gap between consecutive items must be turned back into an actual space (or, when it's large enough to read as tabbed/columnar content, a tab) rather than silently concatenating adjacent words together.
+function pushRunsForLine(runs: ContentRun[], line: TextLine): void {
+  line.items.forEach((item, itemIndex) => {
+    if (itemIndex > 0) {
+      const prevItem = line.items[itemIndex - 1]!;
+      const gap = item.xPt - (prevItem.xPt + (prevItem.widthPt ?? 0));
+      if (gap > LARGE_GAP_EM_MULTIPLIER * item.sizePt) {
+        runs.push({ text: '\t' });
+      } else if (gap > MIN_WORD_GAP_PT) {
+        runs[runs.length - 1]!.text += ' ';
+      }
+    }
+    runs.push(textItemToContentRun(item));
+  });
+}
+
 function bucketCounts(values: readonly number[], bucketSize: number): Map<number, number> {
   const counts = new Map<number, number>();
   for (const v of values) {
@@ -235,16 +254,7 @@ function paragraphToContentParagraph(paragraph: TextParagraph): ContentParagraph
         lastRun.text += ' ';
       }
     }
-    line.items.forEach((item, itemIndex) => {
-      if (itemIndex > 0) {
-        const prevItem = line.items[itemIndex - 1]!;
-        const gap = item.xPt - (prevItem.xPt + (prevItem.widthPt ?? 0));
-        if (gap > LARGE_GAP_EM_MULTIPLIER * item.sizePt) {
-          runs.push({ text: '\t' });
-        }
-      }
-      runs.push(textItemToContentRun(item));
-    });
+    pushRunsForLine(runs, line);
   });
 
   return { kind: 'paragraph', runs, alignment };
@@ -358,7 +368,9 @@ function computeBlockFrame(block: TextBlock, slideHeightPt: number): Box {
 }
 
 function lineToParagraph(line: TextLine): ContentParagraph {
-  return { kind: 'paragraph', runs: line.items.map(textItemToContentRun) };
+  const runs: ContentRun[] = [];
+  pushRunsForLine(runs, line);
+  return { kind: 'paragraph', runs };
 }
 
 function blockToShape(block: TextBlock, slideHeightPt: number): ContentShape {
