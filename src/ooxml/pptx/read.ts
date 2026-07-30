@@ -294,7 +294,10 @@ function readTableCell(tc: XmlElement, context: SlideInheritanceContext, slideRe
 function readTable(tbl: XmlElement, context: SlideInheritanceContext, slideRels: ReadonlyMap<string, Relationship>): ContentTable {
   const tblGrid = childrenWithTag(tbl, 'a:tblGrid')[0];
   const columnWidthsPt = tblGrid === undefined ? [] : childrenWithTag(tblGrid, 'a:gridCol').map((col) => emuToPt(Number(attr(col, 'w') ?? '0')));
-  const rows = childrenWithTag(tbl, 'a:tr').map((tr) => ({ cells: childrenWithTag(tr, 'a:tc').map((tc) => readTableCell(tc, context, slideRels)) }));
+  const rows = childrenWithTag(tbl, 'a:tr').map((tr) => {
+    const h = attr(tr, 'h');
+    return { cells: childrenWithTag(tr, 'a:tc').map((tc) => readTableCell(tc, context, slideRels)), heightPt: h === undefined ? undefined : emuToPt(Number(h)) };
+  });
   return { kind: 'table', rows, columnWidthsPt };
 }
 

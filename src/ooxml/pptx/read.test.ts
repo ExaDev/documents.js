@@ -84,7 +84,7 @@ function buildFixturePackage(): Package {
   const cellB = el('a:tc', {}, [el('a:txBody', {}, [el('a:p', {}, [el('a:r', {}, [el('a:t', {}, [txt('B')])])])])]);
   const tbl = el('a:tbl', {}, [
     el('a:tblGrid', {}, [el('a:gridCol', { w: '1270000' }), el('a:gridCol', { w: '1905000' })]),
-    el('a:tr', {}, [mergedCell, continuationCell]),
+    el('a:tr', { h: '457200' }, [mergedCell, continuationCell]),
     el('a:tr', {}, [cellA, cellB]),
   ]);
   const tableFrame = el('p:graphicFrame', {}, [
@@ -373,6 +373,17 @@ describe('readPptxContent: tables', () => {
     expect(table.rows[0]?.cells[0]?.colSpan).toBe(2);
     expect(asParagraph(table.rows[0]?.cells[0]?.blocks[0]).runs[0]?.text).toBe('Merged');
     expect(table.rows[0]?.cells[1]?.blocks).toEqual([]);
+  });
+
+  it('reads a row\'s explicit height, and leaves it undefined when a:tr has no h attribute', () => {
+    const doc = readPptxContent(buildFixturePackage());
+    if (doc.kind !== 'presentation') {
+      throw new Error('expected presentation');
+    }
+    const tableShape = doc.slides[1]?.shapes.find((s) => s.name === 'Table 1');
+    const table = asTable(tableShape?.blocks[0]);
+    expect(table.rows[0]?.heightPt).toBe(36);
+    expect(table.rows[1]?.heightPt).toBeUndefined();
   });
 
   it('reads a cell\'s background fill', () => {
