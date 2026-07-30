@@ -1,3 +1,12 @@
+# [1.11.0](https://github.com/ExaDev/documents.js/compare/v1.10.0...v1.11.0) (2026-07-30)
+
+
+### Features
+
+* **model:** add rotationDeg to ContentShape ([82bae97](https://github.com/ExaDev/documents.js/commit/82bae9778e02ff6dc70e1a1facf3e82703348560))
+* **ooxml:** add DrawingML group-shape child-to-parent transform ([357af37](https://github.com/ExaDev/documents.js/commit/357af3784ccbf391242e287d76ccbcfbbdca258e))
+* **ooxml:** add pptx placeholder/layout/master/theme inheritance cascade ([86cc6fc](https://github.com/ExaDev/documents.js/commit/86cc6fc4cd4ed4cdec7c59dc7fb8fdcb7bc965d8))
+
 # [1.10.0](https://github.com/ExaDev/documents.js/compare/v1.9.0...v1.10.0) (2026-07-30)
 
 
