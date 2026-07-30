@@ -1,3 +1,10 @@
+# [1.15.0](https://github.com/ExaDev/documents.js/compare/v1.14.0...v1.15.0) (2026-07-30)
+
+
+### Features
+
+* **pdf:** carry hyperlink through text-layout wrapping ([3798607](https://github.com/ExaDev/documents.js/commit/379860764cc817e8849850c834f12d41ef1e7bc1))
+
 # [1.14.0](https://github.com/ExaDev/documents.js/compare/v1.13.0...v1.14.0) (2026-07-30)
 
 
