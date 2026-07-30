@@ -3,6 +3,14 @@
   "version": "0.1.0",
   "description": "Type-safe, lossless round-trip conversion between OOXML packages (docx, pptx, xlsx) and JSON, built on Zod 4 codecs.",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ExaDev/ooxml.js.git"
+  },
+  "homepage": "https://github.com/ExaDev/ooxml.js#readme",
+  "bugs": {
+    "url": "https://github.com/ExaDev/ooxml.js/issues"
+  },
   "exports": {
     ".": {
       "types": {
@@ -19,6 +27,11 @@
   "files": [
     "dist"
   ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "registry": "https://registry.npmjs.org/"
+  },
   "sideEffects": false,
   "engines": {
     "node": ">=20"
@@ -29,7 +42,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --project unit",
     "test:watch": "vitest --project unit",
-    "test:smoke": "tsdown && vitest run --project smoke"
+    "test:smoke": "tsdown && vitest run --project smoke",
+    "prepare": "husky",
+    "release": "semantic-release"
   },
   "keywords": [
     "ooxml",
@@ -50,8 +65,14 @@
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
+    "@commitlint/cli": "^21.2.1",
+    "@commitlint/config-conventional": "^21.2.0",
+    "@semantic-release/changelog": "^7.0.0",
+    "@semantic-release/git": "^11.0.1",
     "@types/node": "^26.1.1",
+    "husky": "^9.1.7",
     "publint": "^0.3.21",
+    "semantic-release": "^25.0.8",
     "tsdown": "^0.22.13",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10"
