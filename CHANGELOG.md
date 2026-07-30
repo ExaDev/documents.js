@@ -1,3 +1,10 @@
+# [1.24.0](https://github.com/ExaDev/documents.js/compare/v1.23.0...v1.24.0) (2026-07-30)
+
+
+### Features
+
+* **pdf:** add content-stream tokenizing and the graphics/text interpreter ([bc2a846](https://github.com/ExaDev/documents.js/commit/bc2a846bac76b18ac9f15141706ba6cee1e4f728))
+
 # [1.23.0](https://github.com/ExaDev/documents.js/compare/v1.22.0...v1.23.0) (2026-07-30)
 
 
