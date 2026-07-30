@@ -176,12 +176,13 @@ jobs:
       # Pack into a directory of its own, separate from dist/ (tsdown's raw build output). The attestation subject has to be the artefact that actually ships -- attesting dist/ itself would mix in files that never leave the repo, producing digests that match nothing a consumer can download.
       - run: pnpm pack --pack-destination release-artifact
       - run: pnpm sbom --sbom-format spdx --prod > release-artifact/sbom.spdx.json
+      # attest-sbom/attest-build-provenance are deprecated wrappers around actions/attest; called as two steps (sbom-path present vs. absent) rather than one, since actions/attest's docs don't clearly state whether passing both together attests SBOM and provenance in a single call or SBOM only -- two steps is the unambiguous equivalent of what this replaced.
       - name: Attest SBOM
-        uses: actions/attest-sbom@v4
+        uses: actions/attest@v4
         with:
           subject-path: release-artifact/*.tgz
           sbom-path: release-artifact/sbom.spdx.json
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@v4
+        uses: actions/attest@v4
         with:
           subject-path: release-artifact/*.tgz
