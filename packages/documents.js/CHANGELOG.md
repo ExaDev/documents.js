@@ -1,3 +1,10 @@
+# [1.12.0](https://github.com/ExaDev/documents.js/compare/v1.11.0...v1.12.0) (2026-07-30)
+
+
+### Features
+
+* **ooxml:** add readPptxContent, Package -> ContentDocument for pptx ([d4f9660](https://github.com/ExaDev/documents.js/commit/d4f9660c33895746f3849ee24e62814d722810d6))
+
 # [1.11.0](https://github.com/ExaDev/documents.js/compare/v1.10.0...v1.11.0) (2026-07-30)
 
 
