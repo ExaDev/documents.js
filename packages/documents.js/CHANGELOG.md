@@ -1,3 +1,10 @@
+# [1.21.0](https://github.com/ExaDev/documents.js/compare/v1.20.0...v1.21.0) (2026-07-30)
+
+
+### Features
+
+* **pdf:** add tokens-to-PdfObject parser ([2eb72e9](https://github.com/ExaDev/documents.js/commit/2eb72e91a6824d6ada85be74d4d9c61bfc1b16af))
+
 # [1.20.0](https://github.com/ExaDev/documents.js/compare/v1.19.0...v1.20.0) (2026-07-30)
 
 
