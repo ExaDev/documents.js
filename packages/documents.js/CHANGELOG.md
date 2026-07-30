@@ -1,3 +1,11 @@
+# [1.7.0](https://github.com/ExaDev/documents.js/compare/v1.6.0...v1.7.0) (2026-07-30)
+
+
+### Features
+
+* **pdf:** add greedy line-wrapping over styled runs ([f843c54](https://github.com/ExaDev/documents.js/commit/f843c544f6fe3bf816ee047992181bbe2ce92aec))
+* **pdf:** add standard-14 font text measurer ([1605f44](https://github.com/ExaDev/documents.js/commit/1605f44028cbac81d65bccce050b3622f76b6062))
+
 # [1.6.0](https://github.com/ExaDev/documents.js/compare/v1.5.0...v1.6.0) (2026-07-30)
 
 
