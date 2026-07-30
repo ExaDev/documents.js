@@ -1,3 +1,10 @@
+# [1.28.0](https://github.com/ExaDev/documents.js/compare/v1.27.0...v1.28.0) (2026-07-30)
+
+
+### Features
+
+* **layout:** add PDF -> docx/pptx reconstruction ([2038a46](https://github.com/ExaDev/documents.js/commit/2038a46d7e0bfaa18ecc94a6df67e16f2bdb3c77))
+
 # [1.27.0](https://github.com/ExaDev/documents.js/compare/v1.26.0...v1.27.0) (2026-07-30)
 
 
