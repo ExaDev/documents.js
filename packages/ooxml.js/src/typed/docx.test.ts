@@ -150,6 +150,25 @@ describe('readDocx expanded constructs', () => {
     expect(listParagraph?.list).toEqual({ numId: '1', level: 0 });
   });
 
+  // w:ilvl's w:val is a raw XML attribute string; readListMembership must coerce it with Number() rather than passing it through, or ListMembership.level (typed as z.number()) silently holds a string at runtime.
+  it('coerces w:ilvl to a number, not the raw XML attribute string', () => {
+    const documentXml = enc(
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:pPr><w:numPr><w:ilvl w:val="2"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>nested item</w:t></w:r></w:p></w:body></w:document>',
+    );
+    const result = readDocx(
+      decodePackage(
+        zipPackage({
+          '[Content_Types].xml': CONTENT_TYPES_DOCX,
+          '_rels/.rels': ROOT_RELS_DOCX,
+          'word/document.xml': documentXml,
+        }),
+      ),
+    );
+    const list = result.paragraphs[0]?.list;
+    expect(typeof list?.level).toBe('number');
+    expect(list?.level).toBe(2);
+  });
+
   it('leaves list undefined on a plain paragraph', () => {
     const result = readDocx(decodePackage(zipPackage(docxParts())));
     expect(result.tables).toEqual([]);
