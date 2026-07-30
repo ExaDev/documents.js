@@ -143,9 +143,11 @@ jobs:
           # GitHub Packages has no OIDC trusted-publishing exchange, so this job (unlike release above) authenticates with a token -- GITHUB_TOKEN is sufficient and needs no separate secret.
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
-      - name: Rewrite package name for the GitHub Packages scope
-        # GitHub Packages requires the npm package name to be scoped to the repo owner. Rewriting the field rather than keeping a second package.json means this alias cannot drift away from the real package's metadata.
-        run: npm pkg set name="@exadev/ooxml.js"
+      - name: Rewrite package name and registry for the GitHub Packages scope
+        # GitHub Packages requires the npm package name to be scoped to the repo owner. Rewriting the fields rather than keeping a second package.json means this alias cannot drift away from the real package's metadata. publishConfig.registry has to be overridden too: it takes precedence over the .npmrc registry-url set by setup-node above, so without this the publish silently targets registry.npmjs.org instead -- confirmed failure mode, not a hypothetical (404 on the npmjs.org registry, since GITHUB_TOKEN isn't a credential it recognises).
+        run: |
+          npm pkg set name="@exadev/ooxml.js"
+          npm pkg set publishConfig.registry="https://npm.pkg.github.com"
       - run: pnpm publish --access public --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
