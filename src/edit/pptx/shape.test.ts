@@ -41,6 +41,79 @@ describe('buildTextBoxShape / PptxShape frame and text', () => {
   });
 });
 
+function txBodyOf(shapeElement: ReturnType<typeof buildTextBoxShape>): { paragraphs: XmlNode[] } {
+  const txBody = shapeElement.children.find((c) => c.type === 'element' && c.tag === 'p:txBody');
+  if (txBody?.type !== 'element') {
+    throw new Error('expected a p:txBody child');
+  }
+  return { paragraphs: txBody.children.filter((c) => c.type === 'element' && c.tag === 'a:p') };
+}
+
+function elementChild(node: XmlNode, tag: string): Extract<XmlNode, { type: 'element' }> | undefined {
+  if (node.type !== 'element') {
+    return undefined;
+  }
+  const found = node.children.find((c) => c.type === 'element' && c.tag === tag);
+  return found?.type === 'element' ? found : undefined;
+}
+
+describe('PptxShape.setParagraphs', () => {
+  it('replaces the previous single-run text with multiple styled paragraphs', () => {
+    const shapeElement = buildTextBoxShape({ xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 }, 'Old', 2);
+    const shape = new PptxShape([shapeElement], shapeElement);
+    shape.setParagraphs([{ runs: [{ text: 'First' }] }, { runs: [{ text: 'Second' }] }]);
+    const { paragraphs } = txBodyOf(shapeElement);
+    expect(paragraphs).toHaveLength(2);
+  });
+
+  it('sets bold/italic/size/colour/font as a:rPr attributes and children', () => {
+    const shapeElement = buildTextBoxShape({ xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 }, 'Old', 2);
+    const shape = new PptxShape([shapeElement], shapeElement);
+    shape.setParagraphs([{ runs: [{ text: 'Styled', bold: true, italic: true, sizePt: 18, fontFamily: 'Georgia', color: { r: 1, g: 0, b: 0 } }] }]);
+    const { paragraphs } = txBodyOf(shapeElement);
+    const run = elementChild(paragraphs[0]!, 'a:r');
+    const rPr = run !== undefined ? elementChild(run, 'a:rPr') : undefined;
+    if (rPr === undefined) {
+      throw new Error('expected a:rPr');
+    }
+    expect(rPr.attributes).toContainEqual({ name: 'b', value: '1' });
+    expect(rPr.attributes).toContainEqual({ name: 'i', value: '1' });
+    expect(rPr.attributes).toContainEqual({ name: 'sz', value: '1800' });
+    const solidFill = elementChild(rPr, 'a:solidFill');
+    const srgbClr = solidFill !== undefined ? elementChild(solidFill, 'a:srgbClr') : undefined;
+    expect(srgbClr?.attributes).toContainEqual({ name: 'val', value: 'FF0000' });
+    const latin = elementChild(rPr, 'a:latin');
+    expect(latin?.attributes).toContainEqual({ name: 'typeface', value: 'Georgia' });
+  });
+
+  it('sets paragraph alignment as a:pPr/@algn', () => {
+    const shapeElement = buildTextBoxShape({ xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 }, 'Old', 2);
+    const shape = new PptxShape([shapeElement], shapeElement);
+    shape.setParagraphs([{ runs: [{ text: 'Centered' }], alignment: 'center' }]);
+    const { paragraphs } = txBodyOf(shapeElement);
+    const pPr = elementChild(paragraphs[0]!, 'a:pPr');
+    expect(pPr?.attributes).toContainEqual({ name: 'algn', value: 'ctr' });
+  });
+
+  it('emits a:endParaRPr for an empty paragraph rather than omitting it', () => {
+    const shapeElement = buildTextBoxShape({ xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 }, 'Old', 2);
+    const shape = new PptxShape([shapeElement], shapeElement);
+    shape.setParagraphs([{ runs: [] }]);
+    const { paragraphs } = txBodyOf(shapeElement);
+    expect(paragraphs).toHaveLength(1);
+    expect(elementChild(paragraphs[0]!, 'a:endParaRPr')).toBeDefined();
+  });
+
+  it('omits a:rPr entirely for a plain, unstyled run', () => {
+    const shapeElement = buildTextBoxShape({ xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 }, 'Old', 2);
+    const shape = new PptxShape([shapeElement], shapeElement);
+    shape.setParagraphs([{ runs: [{ text: 'Plain' }] }]);
+    const { paragraphs } = txBodyOf(shapeElement);
+    const run = elementChild(paragraphs[0]!, 'a:r');
+    expect(run !== undefined ? elementChild(run, 'a:rPr') : undefined).toBeUndefined();
+  });
+});
+
 describe('buildPictureShape', () => {
   it('embeds the relationship id and frame', () => {
     const frame = { xPt: 10, yPt: 20, widthPt: 30, heightPt: 40 };

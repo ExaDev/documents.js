@@ -80,6 +80,12 @@ export class DocxParagraph {
     return new DocxRun(node.children, runElement);
   }
 
+  // A tab character inside w:t is not the same as a real tab stop advance -- WordprocessingML represents one as its own w:tab element inside a run, never as a literal tab byte in text content.
+  appendTab(): void {
+    const node = this.live();
+    node.children.push(el('w:r', {}, [el('w:tab')]));
+  }
+
   insertRunAt(index: number, init?: RunInit): DocxRun {
     const node = this.live();
     const runElement = buildRun(init);
