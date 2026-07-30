@@ -1,3 +1,10 @@
+# [1.4.0](https://github.com/ExaDev/documents.js/compare/v1.3.0...v1.4.0) (2026-07-30)
+
+
+### Features
+
+* add the pptx live-view read+write editor ([76d355d](https://github.com/ExaDev/documents.js/commit/76d355d65c2ea76617dffad43fb976345802da3c))
+
 # [1.3.0](https://github.com/ExaDev/documents.js/compare/v1.2.0...v1.3.0) (2026-07-30)
 
 
