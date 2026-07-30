@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/ExaDev/documents.js/compare/v1.0.0...v1.1.0) (2026-07-30)
+
+
+### Features
+
+* add XML mutation and OPC package mechanics layers ([4086462](https://github.com/ExaDev/documents.js/commit/4086462517e76d2a81c92b394608ce5c077a7dc6))
+
 # 1.0.0 (2026-07-30)
 
 
