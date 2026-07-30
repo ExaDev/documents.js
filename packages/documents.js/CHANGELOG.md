@@ -1,3 +1,10 @@
+# [1.31.0](https://github.com/ExaDev/documents.js/compare/v1.30.0...v1.31.0) (2026-07-30)
+
+
+### Features
+
+* thread an abort signal through readPdf and reconstruct* ([49dfb21](https://github.com/ExaDev/documents.js/commit/49dfb21feacb1bbf426749ba9bd684ceda5417b0))
+
 # [1.30.0](https://github.com/ExaDev/documents.js/compare/v1.29.0...v1.30.0) (2026-07-30)
 
 
