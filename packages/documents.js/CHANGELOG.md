@@ -1,3 +1,10 @@
+# [1.29.0](https://github.com/ExaDev/documents.js/compare/v1.28.0...v1.29.0) (2026-07-30)
+
+
+### Features
+
+* **edit:** add tab runs to docx and rich styled text to pptx shapes ([c1affde](https://github.com/ExaDev/documents.js/commit/c1affdea7720afb8422d127ac30a63bf71a8866d))
+
 # [1.28.0](https://github.com/ExaDev/documents.js/compare/v1.27.0...v1.28.0) (2026-07-30)
 
 
