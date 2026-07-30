@@ -129,6 +129,14 @@ describe('readPdf: page-tree attribute inheritance', () => {
   });
 });
 
+describe('readPdf: cancellation', () => {
+  it('throws when the signal is already aborted before reading begins', () => {
+    const controller = new AbortController();
+    controller.abort();
+    expect(() => readPdf(minimalClassicXrefPdf(), { signal: controller.signal })).toThrow();
+  });
+});
+
 describe('readPdf: metadata', () => {
   it('reads /Title, /Author, /Keywords, and /CreationDate from /Info', () => {
     const doc = readPdf(withInfoDictPdf());

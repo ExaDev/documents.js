@@ -8,6 +8,7 @@ import { openPdfDocument } from './document';
 import type { PdfDiagnosticSink } from './diagnostics';
 import { NOOP_DIAGNOSTIC_SINK, PdfParseError } from './diagnostics';
 import { decodeStream } from './filters';
+import { throwIfAborted } from '../ports/abort';
 import type { FontResolverService } from './font-read';
 import { createFontResolver } from './font-read';
 import { readImageXObject } from './images-read';
@@ -22,6 +23,7 @@ import { asArray, asName, asNumber, dictGet } from './objects';
 
 export interface ReadPdfOptions {
   readonly sink?: PdfDiagnosticSink;
+  readonly signal?: AbortSignal;
 }
 
 const PDF_HEADER_BYTES = new TextEncoder().encode('%PDF-');
@@ -46,6 +48,7 @@ function hasPdfHeader(bytes: Uint8Array<ArrayBuffer>): boolean {
 
 export function readPdf(bytes: Uint8Array<ArrayBuffer>, options?: ReadPdfOptions): LayoutDocument {
   const sink = options?.sink ?? NOOP_DIAGNOSTIC_SINK;
+  const signal = options?.signal;
   if (!hasPdfHeader(bytes)) {
     throw new PdfParseError('pdf/no-header', 'no "%PDF-" header found within the first bytes of the file; this does not look like a PDF at all');
   }
@@ -55,7 +58,10 @@ export function readPdf(bytes: Uint8Array<ArrayBuffer>, options?: ReadPdfOptions
   const images: Record<string, LayoutImageAsset> = {};
   const imageIdCache = new Map<PdfDict, string | null>();
 
-  const pages = doc.pages().map((pageDict) => readPage(pageDict, resolver, fontResolver, images, imageIdCache, sink));
+  const pages = doc.pages().map((pageDict) => {
+    throwIfAborted(signal);
+    return readPage(pageDict, resolver, fontResolver, images, imageIdCache, sink);
+  });
 
   return {
     formatVersion: LAYOUT_FORMAT_VERSION,
