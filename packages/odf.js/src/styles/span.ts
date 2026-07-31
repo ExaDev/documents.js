@@ -1,6 +1,7 @@
 import type { Attribute, XmlElement, XmlNode } from '../model/node';
 import { el } from '../xml/fragment';
 import { encodeXmlText } from '../xml/entities';
+import { getOdfSpaceCount, measureOdfNodeLength, sumOdfNodeLength } from '../typed/shared/text';
 
 // The ODF-specific "wrap this character range in a formattable unit" operation, with no docx analogue: a docx run already IS the formatting unit, but ODF paragraph text content is a flat sequence of text nodes plus text:s (space-run)/text:tab/text:line-break elements with no pre-existing span structure. Applying a style to characters [start, end) means splitting/wrapping exactly that range into a text:span referencing the given style name, splitting any text:s/text:tab/text:line-break/text:span that straddles either boundary.
 //
@@ -11,7 +12,7 @@ export function ensureSpan(paragraph: XmlElement, start: number, end: number, st
   if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < start) {
     throw new Error(`ensureSpan: invalid range [${start}, ${end})`);
   }
-  const total = sumLength(paragraph.children);
+  const total = sumOdfNodeLength(paragraph.children);
   if (end > total) {
     throw new Error(`ensureSpan: range end ${end} exceeds the container's total character length ${total}`);
   }
@@ -46,57 +47,17 @@ function setStyleName(span: XmlElement, styleName: string): void {
   span.attributes.push({ name: 'text:style-name', value: encoded });
 }
 
-function getSpaceCount(spaceElement: XmlElement): number {
-  const raw = spaceElement.attributes.find((attribute) => attribute.name === 'text:c')?.value;
-  if (raw === undefined) {
-    return 1; // text:c defaults to 1 per the ODF schema.
-  }
-  const parsed = Number.parseInt(raw, 10);
-  if (!Number.isInteger(parsed) || parsed < 0 || String(parsed) !== raw) {
-    throw new Error(`ensureSpan: text:s has a malformed text:c attribute: "${raw}"`);
-  }
-  return parsed;
-}
-
 function buildSpaceRun(count: number): XmlElement {
   return count === 1 ? el('text:s') : el('text:s', { 'text:c': String(count) });
 }
 
-// The length (in character positions) a single node contributes: a text node's string length, a text:s's text:c count, 1 for text:tab/text:line-break, the recursive sum of a text:span's own children, and 0 for anything else (comments, CDATA, PIs, declarations, and any other zero-width inline element such as a bookmark) -- these never get split, they simply end up on whichever side of a boundary they naturally fall.
-function measureLength(node: XmlNode): number {
-  if (node.type === 'text') {
-    return node.value.length;
-  }
-  if (node.type !== 'element') {
-    return 0;
-  }
-  if (node.tag === 'text:s') {
-    return getSpaceCount(node);
-  }
-  if (node.tag === 'text:tab' || node.tag === 'text:line-break') {
-    return 1;
-  }
-  if (node.tag === 'text:span') {
-    return sumLength(node.children);
-  }
-  return 0;
-}
-
-function sumLength(nodes: readonly XmlNode[]): number {
-  let total = 0;
-  for (const node of nodes) {
-    total += measureLength(node);
-  }
-  return total;
-}
-
-// Splits a single node at a character offset strictly inside it (0 < offset < measureLength(node), guaranteed by splitChildrenAt's caller). A text node splits by string slicing; a text:s splits into two text:s elements whose counts sum to the original (a text:c="5" run split at offset 2 becomes text:c="2" and text:c="3", never silently merged or corrupted); a text:span splits recursively into two sibling spans carrying the same style-name, each holding its half of the original content. text:tab/text:line-break have length exactly 1, so an offset strictly between 0 and 1 can never be an integer -- that branch is unreachable given ensureSpan's own integer-offset validation, and throws rather than silently doing something wrong if it is ever somehow reached.
+// Splits a single node at a character offset strictly inside it (0 < offset < measureOdfNodeLength(node), guaranteed by splitChildrenAt's caller). A text node splits by string slicing; a text:s splits into two text:s elements whose counts sum to the original (a text:c="5" run split at offset 2 becomes text:c="2" and text:c="3", never silently merged or corrupted); a text:span splits recursively into two sibling spans carrying the same style-name, each holding its half of the original content. text:tab/text:line-break have length exactly 1, so an offset strictly between 0 and 1 can never be an integer -- that branch is unreachable given ensureSpan's own integer-offset validation, and throws rather than silently doing something wrong if it is ever somehow reached.
 function splitNode(node: XmlNode, offset: number): { left?: XmlNode; right?: XmlNode } {
   if (node.type === 'text') {
     return { left: { type: 'text', value: node.value.slice(0, offset) }, right: { type: 'text', value: node.value.slice(offset) } };
   }
   if (node.type === 'element' && node.tag === 'text:s') {
-    const count = getSpaceCount(node);
+    const count = getOdfSpaceCount(node);
     return { left: buildSpaceRun(offset), right: buildSpaceRun(count - offset) };
   }
   if (node.type === 'element' && node.tag === 'text:span') {
@@ -123,7 +84,7 @@ function splitChildrenAt(children: readonly XmlNode[], offset: number): { before
       return { before, after: children.slice(index) };
     }
     const node = children[index]!;
-    const length = measureLength(node);
+    const length = measureOdfNodeLength(node);
     if (remaining >= length) {
       before.push(node);
       remaining -= length;

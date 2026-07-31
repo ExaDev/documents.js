@@ -1,13 +1,15 @@
 import { z } from 'zod';
-import { AlignmentSchema, ColorSchema, rgbHexToColor, colorToRgbHex, type Color } from 'document-content-model';
+import { AlignmentSchema, ColorSchema } from 'document-content-model';
 import type { Attribute, XmlElement } from '../model/node';
 import { encodeXmlText } from '../xml/entities';
+import { parseOdfLength, formatOdfLength } from '../typed/shared/units';
+import { parseOdfColor, formatOdfColor } from '../typed/shared/color';
 
 // ODF has no direct/inline formatting at all: a docx run can carry bold/color/size straight on w:rPr, but an ODF text:span can only ever reference a NAMED style by @text:style-name -- every formatting difference becomes (or reuses) a named "automatic style" declared in <office:automatic-styles>. This module is the property-bag half of that machinery: a plain, serializable value covering the paragraph/run-level fields document-content-model's ContentRun/ContentParagraph need to round-trip, plus the parse (style:style attributes -> bag) and build (bag -> style:style attributes) directions between it and real ODF XML. registry.ts and serialize.ts (siblings in this directory) are the callers; span.ts is the sibling that actually wraps a character range in a text:span referencing an interned style name.
 //
 // Every attribute name below was verified against real style:style/style:text-properties/style:paragraph-properties output from LibreOffice 26.2 (via `soffice --headless --convert-to odt/ods` on hand-built HTML/CSV fixtures -- see the odf-groundtruth scratch directory referenced in the accompanying commit) and cross-checked against the OASIS ODF 1.2 schema reference (datypic.com's ODF 1.1/1.2 schema browser, itself mirroring the OASIS RNG/XSD). Two things are easy to get wrong by guessing:
 // - fo:font-family is used here (a direct, spec-valid attribute -- OASIS ODF 1.2 part 1 section 20.190) rather than style:font-name, which is LibreOffice's own preferred *shorthand* that instead references a <style:font-face> declared in <office:font-face-decls>. odf.js does not yet manage font-face-decls, so fo:font-family is the correct, self-contained choice: it carries the family name directly on the property itself, with nothing else to keep in sync.
-// - Lengths (fo:font-size, fo:margin-*, fo:text-indent) are written here in "pt" (e.g. "12pt"), not the "cm" LibreOffice's own UI defaults to -- both are valid per the ODF `length` datatype (pattern `-?(\d+(\.\d+)?|\.\d+)(cm|mm|in|pt|pc|px)`, confirmed against datypic.com/sc/odf/t-length or equivalent), and "pt" avoids a unit-conversion rounding step entirely since this package's own model (and document-content-model's) is already pt-based throughout. Parsing (see parseLength below) accepts all six units, since an adopted real-world document may use any of them.
+// - Lengths (fo:font-size, fo:margin-*, fo:text-indent) are written here in "pt" (e.g. "12pt"), not the "cm" LibreOffice's own UI defaults to -- both are valid per the ODF `length` datatype (pattern `-?(\d+(\.\d+)?|\.\d+)(cm|mm|in|pt|pc|px)`, confirmed against datypic.com/sc/odf/t-length or equivalent), and "pt" avoids a unit-conversion rounding step entirely since this package's own model (and document-content-model's) is already pt-based throughout. Parsing (see parseLength below, a re-export of ../typed/shared/units.ts's parseOdfLength -- the canonical, single implementation of ODF length parsing/formatting every reader in this package shares) accepts all six units, since an adopted real-world document may use any of them.
 
 export const StylePropertiesSchema = z.object({
   bold: z.boolean().optional(),
@@ -81,48 +83,11 @@ function attributeMap(element: XmlElement): Map<string, string> {
   return map;
 }
 
-type LengthUnit = 'cm' | 'mm' | 'in' | 'pt' | 'pc' | 'px';
-
-// ODF `length` datatype: a (possibly negative, possibly fractional) number immediately followed by one of these six unit suffixes -- see the top-of-file comment for the verification source.
-const LENGTH_PATTERN = /^(-?(?:\d+(?:\.\d+)?|\.\d+))(cm|mm|in|pt|pc|px)$/;
-
-function unitToPtFactor(unit: LengthUnit): number {
-  switch (unit) {
-    case 'pt':
-      return 1;
-    case 'in':
-      return 72;
-    case 'cm':
-      return 72 / 2.54;
-    case 'mm':
-      return 72 / 25.4;
-    case 'pc':
-      return 12;
-    case 'px':
-      return 0.75; // CSS reference pixel: 96px = 1in = 72pt, so 1px = 0.75pt.
-  }
-}
-
-function isLengthUnit(value: string): value is LengthUnit {
-  return value === 'cm' || value === 'mm' || value === 'in' || value === 'pt' || value === 'pc' || value === 'px';
-}
-
-// Parses an ODF length value (any of its six valid units) into points, or undefined if the string doesn't match the ODF `length` grammar at all. Liberal on read -- an adopted real-world document may use any unit -- deliberately paired with a strict, pt-only writer (see formatPt in this module and its callers in serialize.ts) so this package's own output is always unambiguous and unit-conversion-free.
-export function parseLength(value: string): number | undefined {
-  const match = LENGTH_PATTERN.exec(value);
-  if (match === null) {
-    return undefined;
-  }
-  const numeric = match[1];
-  const unit = match[2];
-  if (numeric === undefined || unit === undefined || !isLengthUnit(unit)) {
-    return undefined;
-  }
-  return Number(numeric) * unitToPtFactor(unit);
-}
+// The canonical ODF length parse/format pair now lives in ../typed/shared/units.ts, shared with every other reader in this package (and future odt/ods/odp/odg readers) rather than duplicated here -- see that module's own top-of-file note for the unit-conversion constants and their verification. parseLength/formatPt are kept as this module's own public names (both re-exported from index.ts and covered by this module's existing test suite) purely as stable aliases: parseLength is units.ts's parseOdfLength unchanged, and formatPt is formatOdfLength pinned to "pt" -- this package's own writers' one and only output unit (see the top-of-file note above).
+export const parseLength = parseOdfLength;
 
 export function formatPt(valuePt: number): string {
-  return `${valuePt}pt`;
+  return formatOdfLength(valuePt, 'pt');
 }
 
 const PERCENTAGE_PATTERN = /^(-?(?:\d+(?:\.\d+)?|\.\d+))%$/;
@@ -144,19 +109,9 @@ export function formatPercentageMultiplier(multiplier: number): string {
   return `${multiplier * 100}%`;
 }
 
-const COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
-
-// fo:color's `text:color` datatype is always "#" followed by exactly 6 hex digits (unlike CSS, which permits omitting the "#"); document-content-model's rgbHexToColor accepts either form, so this module enforces the stricter ODF-only shape itself before delegating.
-function parseColor(value: string): Color | undefined {
-  if (!COLOR_PATTERN.test(value)) {
-    return undefined;
-  }
-  return rgbHexToColor(value);
-}
-
-function formatColor(color: Color): string {
-  return `#${colorToRgbHex(color)}`;
-}
+// The canonical ODF colour parse/format pair now lives in ../typed/shared/color.ts, shared with every other reader in this package rather than duplicated here -- see that module's own top-of-file note on the text:color datatype. Kept as local aliases so the rest of this file (and its existing tests) can keep calling parseColor/formatColor unchanged.
+const parseColor = parseOdfColor;
+const formatColor = formatOdfColor;
 
 // Reads a boolean tri-state (true/false/absent) plus an "unrecognised combination" outcome from ODF's compound line-decoration attributes (underline: style+width+color; strike: style+type). Ground truth (LibreOffice 26.2): underline "on" is `style:text-underline-style="solid" style:text-underline-width="auto" style:text-underline-color="font-color"`; strike "on" is `style:text-line-through-style="solid" style:text-line-through-type="single"`. Only that exact canonical "on" shape, or a plain "none" with no companion attributes, parses cleanly -- anything else (a custom underline colour, a dotted style, a companion attribute present alongside "none") is real formatting information this boolean model cannot represent, so it comes back as 'unknown' rather than being silently approximated.
 function parseLineDecoration(
