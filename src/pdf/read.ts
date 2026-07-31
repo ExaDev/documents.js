@@ -18,6 +18,7 @@ import type { Matrix } from './matrix';
 import { applyMatrix, matrixRotationDegrees, matrixScaleX, matrixScaleY, multiplyMatrices, translationMatrix } from './matrix';
 import type { PdfDict, PdfObject } from './objects';
 import { asArray, asName, asNumber, dictGet } from './objects';
+import { NOTES_ANNOTATION_AUTHOR } from './write';
 
 // readPdf(bytes, options?) -> LayoutDocument: the top of the read pipeline, assembling every other src/pdf/* read module (document.ts's object store and page tree, interpret.ts's graphics/text extraction, font-read.ts's width/decode, images-read.ts's PNG/JPEG recovery) into the same pivot model src/pdf/write.ts consumes on the way out, so a document round-trips through readPdf -> writePdf structurally even though neither claims byte- or content-fidelity.
 
@@ -164,7 +165,9 @@ function readPage(page: PdfDict, resolver: PdfObjectResolver, fontResolver: Font
   }
   items.push(...readLinkAnnotations(page, pageMatrix, resolver));
 
-  return { widthPt: rotationResult.widthPt, heightPt: rotationResult.heightPt, items };
+  const notes = readPageNotes(page, resolver);
+
+  return { widthPt: rotationResult.widthPt, heightPt: rotationResult.heightPt, items, ...(notes !== undefined ? { notes } : {}) };
 }
 
 function convertExtractedItem(item: ExtractedItem, pageMatrix: Matrix, fontResolver: FontResolverService, images: Record<string, LayoutImageAsset>, imageIdCache: Map<PdfDict, string | null>, resolver: PdfObjectResolver, sink: PdfDiagnosticSink): LayoutItem | undefined {
@@ -319,6 +322,30 @@ function readLinkUri(annot: PdfDict, resolver: PdfObjectResolver): string | unde
   }
   const uriObj = dictGet(action, 'URI');
   return uriObj?.kind === 'string' ? decodePdfString(uriObj.bytes) : undefined;
+}
+
+// pptx speaker notes carried as a hidden /Subtype /Text annotation (see write.ts's buildNotesAnnotDict) -- the /T marker distinguishes an annotation this package's own writer produced from a genuine sticky note a human or another tool left on the page, which would also be /Subtype /Text but authored by someone/something else. Returns undefined (not '') when no such annotation exists, so reconstructPresentation's own page.notes ?? '' fallback is the one place that decides what "no notes" means for a ContentSlide.
+function readPageNotes(page: PdfDict, resolver: PdfObjectResolver): string | undefined {
+  const annotsArr = asArray(dictGet(page, 'Annots'));
+  if (annotsArr === undefined) {
+    return undefined;
+  }
+  for (const annotRef of annotsArr) {
+    const annot = resolver.resolveDict(annotRef);
+    if (annot === undefined || asName(dictGet(annot, 'Subtype')) !== 'Text') {
+      continue;
+    }
+    const titleObj = dictGet(annot, 'T');
+    const title = titleObj?.kind === 'string' ? decodePdfString(titleObj.bytes) : undefined;
+    if (title !== NOTES_ANNOTATION_AUTHOR) {
+      continue;
+    }
+    const contentsObj = dictGet(annot, 'Contents');
+    if (contentsObj?.kind === 'string') {
+      return decodePdfString(contentsObj.bytes);
+    }
+  }
+  return undefined;
 }
 
 // --- PDF string decoding and /Info metadata: our own writer always emits UTF-16BE-with-BOM (write.ts's textToPdfString); a third-party producer's plain-ASCII PDFDocEncoding is approximated as a direct byte-per-character (Latin-1-ish) decode, correct for the overwhelming common ASCII-only case. ---

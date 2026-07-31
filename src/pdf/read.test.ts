@@ -8,6 +8,7 @@ import {
   incrementalUpdatePdf,
   minimalClassicXrefPdf,
   nonZeroOriginMediaBoxPdf,
+  pdfWithForeignHiddenAnnotationPdf,
   rotatedPagePdf,
   withInfoDictPdf,
   xrefStreamWithObjectStreamPdf,
@@ -146,6 +147,14 @@ describe('readPdf: metadata', () => {
       keywords: ['alpha', 'beta'],
       createdIso: '2024-01-15T10:30:00+02:00',
     });
+  });
+});
+
+describe('readPdf: page notes', () => {
+  // pdfWithForeignHiddenAnnotationPdf is built independently of src/pdf/write.ts (see test-support/pdf.ts's own top-of-file rationale) specifically so this proves readPageNotes's /T-marker check against a genuinely foreign annotation, not just against what our own writer happens to produce.
+  it('does not mistake a third-party tool\'s own hidden sticky note for pptx speaker notes', () => {
+    const doc = readPdf(pdfWithForeignHiddenAnnotationPdf());
+    expect(doc.pages[0]!.notes).toBeUndefined();
   });
 });
 

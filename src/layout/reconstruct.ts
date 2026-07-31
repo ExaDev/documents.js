@@ -288,8 +288,8 @@ function reconstructSlide(page: LayoutPage, images: Record<string, LayoutImageAs
     }
   }
 
-  // Images before text shapes in z-order (plan Step 10).
-  return { size: { widthPt: page.widthPt, heightPt: page.heightPt }, shapes: [...imageShapes, ...textShapes], notes: '' };
+  // Images before text shapes in z-order (plan Step 10). notes recovers LayoutPage's own private page-dictionary entry (see pdf/write.ts/read.ts) when the source PDF was produced by this package's own pptxToPdf -- absent (falls back to '') for a PDF from any other producer, since nothing else would ever write it.
+  return { size: { widthPt: page.widthPt, heightPt: page.heightPt }, shapes: [...imageShapes, ...textShapes], notes: page.notes ?? '' };
 }
 
 interface TextBlock {

@@ -89,6 +89,8 @@ export const LayoutPageSchema = z.object({
   widthPt: z.number().positive(),
   heightPt: z.number().positive(),
   items: z.array(LayoutItemSchema), // paints in array order, like a PDF content stream
+  // pptx speaker notes for the slide this page came from, if any -- carried as a private, non-visible entry on the PDF page's own dictionary (see write.ts/read.ts), never painted into the page content. PDF has no native concept of hidden presenter notes, so this is this package's own round-trip mechanism, not a real PDF feature -- a PDF produced by anything else will never have it, and a PDF consumer other than this package's own readPdf will never see it either.
+  notes: z.string().optional(),
 });
 export type LayoutPage = z.infer<typeof LayoutPageSchema>;
 

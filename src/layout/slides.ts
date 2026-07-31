@@ -163,10 +163,10 @@ function convertSlide(slide: ContentSlide, measurer: TextMeasurer, images: Recor
   for (const shape of slide.shapes) {
     convertShape(shape, slide.size.heightPt, measurer, images, items);
   }
-  return { widthPt: slide.size.widthPt, heightPt: slide.size.heightPt, items };
+  // Notes are carried as a private page-dictionary entry (LayoutPage.notes, see pdf/write.ts), never painted as visible content -- PDF has no native concept of hidden presenter notes, so this is purely a round-trip mechanism for this package's own pptxToPdf/pdfToPptx pair, not a real PDF feature.
+  return { widthPt: slide.size.widthPt, heightPt: slide.size.heightPt, items, ...(slide.notes.length > 0 ? { notes: slide.notes } : {}) };
 }
 
-// Speaker notes are deliberately not laid out here -- out of v1 scope for pptx->PDF (see the implementation plan's v1 OUT list); ContentSlide.notes is simply not read.
 export function convertPresentationToLayout(doc: PresentationContentDocument, options: SlidesLayoutOptions): LayoutDocument {
   const images: Record<string, LayoutImageAsset> = {};
   const pages = doc.slides.map((slide) => convertSlide(slide, options.measurer, images));

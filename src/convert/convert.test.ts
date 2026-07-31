@@ -84,4 +84,18 @@ describe('pdfToPptx', () => {
       .join(' ');
     expect(text).toContain('Slide round trip');
   });
+
+  // Confirmed missing by round-tripping a real Keynote-authored pptx with speaker notes through this exact pipeline: notes came back empty. Fixed via a hidden /Subtype /Text PDF annotation (see pdf/write.ts's buildNotesAnnotDict / pdf/read.ts's readPageNotes) -- PDF has no native presenter-notes concept, so this is this package's own round-trip mechanism, not a real PDF feature a third-party PDF would carry.
+  it('round-trips speaker notes through pptxToPdf then pdfToPptx', () => {
+    const editor = createPptx();
+    const slide = editor.addSlide();
+    slide.addTextBox({ frame: { xPt: 50, yPt: 50, widthPt: 400, heightPt: 100 }, text: 'Slide with notes' });
+    slide.notes = 'These are the speaker notes for this slide';
+
+    const pdfBytes = pptxToPdf(editor.toBytes());
+    const pptxBytes = pdfToPptx(pdfBytes);
+    const roundTripped = openPptx(pptxBytes);
+
+    expect(roundTripped.slides()[0]?.notes).toBe('These are the speaker notes for this slide');
+  });
 });
