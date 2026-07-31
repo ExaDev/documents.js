@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { el } from '../../xml/fragment';
-import { parsePageSize, parseMargins, parseBox } from './geometry';
+import { parseLinePoints, parseMargins, parseBox, parsePageSize } from './geometry';
 
 // Fixtures below marked "real LibreOffice output" are copied verbatim from styles.xml's style:page-layout-properties (the ja_ott_normal.ott template) and a Writer image-frame draw:custom-shape (Modern_business_letter_serif.ott's header) -- both under /Applications/LibreOffice.app/Contents/Resources/template/**, LibreOffice 26.2.5.2.
 
@@ -100,5 +100,33 @@ describe('parseBox', () => {
   it('returns undefined when an attribute is present but unparseable', () => {
     const element = el('draw:frame', { 'svg:x': '1pt', 'svg:y': '1pt', 'svg:width': 'auto', 'svg:height': '1pt' });
     expect(parseBox(element)).toBeUndefined();
+  });
+});
+
+describe('parseLinePoints', () => {
+  it('parses svg:x1/y1/x2/y2 (real LibreOffice draw:line output) into from/to points', () => {
+    const element = el('draw:line', { 'svg:x1': '9cm', 'svg:y1': '1cm', 'svg:x2': '13cm', 'svg:y2': '4cm' });
+    const points = parseLinePoints(element);
+    expect(points?.from.xPt).toBeCloseTo((9 * 72) / 2.54, 6);
+    expect(points?.from.yPt).toBeCloseTo((1 * 72) / 2.54, 6);
+    expect(points?.to.xPt).toBeCloseTo((13 * 72) / 2.54, 6);
+    expect(points?.to.yPt).toBeCloseTo((4 * 72) / 2.54, 6);
+  });
+
+  it('parses an exact pt-based line with no rounding drift', () => {
+    const element = el('draw:line', { 'svg:x1': '0pt', 'svg:y1': '0pt', 'svg:x2': '10pt', 'svg:y2': '20pt' });
+    expect(parseLinePoints(element)).toEqual({ from: { xPt: 0, yPt: 0 }, to: { xPt: 10, yPt: 20 } });
+  });
+
+  it('returns undefined when any one of the four endpoint attributes is missing', () => {
+    expect(parseLinePoints(el('draw:line', { 'svg:y1': '1pt', 'svg:x2': '1pt', 'svg:y2': '1pt' }))).toBeUndefined();
+    expect(parseLinePoints(el('draw:line', { 'svg:x1': '1pt', 'svg:x2': '1pt', 'svg:y2': '1pt' }))).toBeUndefined();
+    expect(parseLinePoints(el('draw:line', { 'svg:x1': '1pt', 'svg:y1': '1pt', 'svg:y2': '1pt' }))).toBeUndefined();
+    expect(parseLinePoints(el('draw:line', { 'svg:x1': '1pt', 'svg:y1': '1pt', 'svg:x2': '1pt' }))).toBeUndefined();
+  });
+
+  it('returns undefined when an endpoint attribute is present but unparseable', () => {
+    const element = el('draw:line', { 'svg:x1': '1pt', 'svg:y1': 'auto', 'svg:x2': '1pt', 'svg:y2': '1pt' });
+    expect(parseLinePoints(element)).toBeUndefined();
   });
 });

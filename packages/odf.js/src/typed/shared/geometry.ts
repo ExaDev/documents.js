@@ -1,4 +1,4 @@
-import type { Box, Margins, PageSize } from 'document-content-model';
+import type { Box, ContentPathPoint, Margins, PageSize } from 'document-content-model';
 import type { XmlElement } from '../../model/node';
 import { attrValue } from '../../xml/query';
 import { parseOdfLength } from './units';
@@ -56,4 +56,23 @@ export function parseBox(element: XmlElement): Box | undefined {
     return undefined;
   }
   return { xPt, yPt, widthPt, heightPt };
+}
+
+// draw:line is the one drawing shape that carries no svg:x/y/width/height box at all -- its geometry is a plain pair of endpoints, svg:x1/svg:y1/svg:x2/svg:y2 directly on the element (confirmed against real LibreOffice 26.2 .odg output; see typed/shared/path.ts's own top-of-file note on the verification method used for this same fixture). Unlike parseBox's four-required-together contract, each endpoint is read as its own pair -- there is no meaningful "partial line" fallback either way, so any one of the four being absent or unparseable is still, correctly, "no resolvable geometry" (undefined).
+export function parseLinePoints(element: XmlElement): { from: ContentPathPoint; to: ContentPathPoint } | undefined {
+  const x1Value = attrValue(element, 'svg:x1');
+  const y1Value = attrValue(element, 'svg:y1');
+  const x2Value = attrValue(element, 'svg:x2');
+  const y2Value = attrValue(element, 'svg:y2');
+  if (x1Value === undefined || y1Value === undefined || x2Value === undefined || y2Value === undefined) {
+    return undefined;
+  }
+  const x1Pt = parseOdfLength(x1Value);
+  const y1Pt = parseOdfLength(y1Value);
+  const x2Pt = parseOdfLength(x2Value);
+  const y2Pt = parseOdfLength(y2Value);
+  if (x1Pt === undefined || y1Pt === undefined || x2Pt === undefined || y2Pt === undefined) {
+    return undefined;
+  }
+  return { from: { xPt: x1Pt, yPt: y1Pt }, to: { xPt: x2Pt, yPt: y2Pt } };
 }
