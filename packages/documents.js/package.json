@@ -64,9 +64,9 @@
   "license": "MIT",
   "packageManager": "pnpm@11.6.0",
   "dependencies": {
-    "document-content-model": "^1.0.0",
+    "document-content-model": "^1.1.0",
     "fflate": "^0.8.3",
-    "ooxml.js": "^2.0.0",
+    "ooxml.js": "^2.1.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
