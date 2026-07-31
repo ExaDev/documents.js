@@ -1,0 +1,138 @@
+import type { Package, XmlElement } from 'odf.js';
+import { decodePackage, encodePackage } from 'odf.js';
+import { ensurePageBreakStyleName } from './automatic-styles';
+import { buildList, OdtList } from './list';
+import type { ParagraphInit } from './paragraph';
+import { buildParagraph, OdtParagraph } from './paragraph';
+import { createEmptyOdtPackage } from './scaffold';
+import type { TableInit } from './table';
+import { buildTable, OdtTable } from './table';
+
+const CONTENT_PART_PATH = 'content.xml';
+
+export interface OdtBody {
+  appendParagraph(init?: ParagraphInit): OdtParagraph;
+  appendTable(init: TableInit): OdtTable;
+  appendList(): OdtList;
+  appendPageBreak(): void;
+}
+
+function findContentRoot(pkg: Package): XmlElement {
+  const part = pkg.parts[CONTENT_PART_PATH];
+  const root = part?.kind === 'xml' ? part.nodes.find((n): n is XmlElement => n.type === 'element') : undefined;
+  if (root === undefined) {
+    throw new Error(`package has no root element at ${CONTENT_PART_PATH}`);
+  }
+  return root;
+}
+
+function directChild(parent: XmlElement, tag: string): XmlElement | undefined {
+  for (const child of parent.children) {
+    if (child.type === 'element' && child.tag === tag) {
+      return child;
+    }
+  }
+  return undefined;
+}
+
+function findOfficeText(contentRoot: XmlElement): XmlElement {
+  const body = directChild(contentRoot, 'office:body');
+  const text = body === undefined ? undefined : directChild(body, 'office:text');
+  if (text === undefined) {
+    throw new Error(`${CONTENT_PART_PATH} has no office:body/office:text element`);
+  }
+  return text;
+}
+
+class OdtBodyImpl implements OdtBody {
+  constructor(
+    private readonly officeText: XmlElement,
+    private readonly pkg: Package,
+  ) {}
+
+  appendParagraph(init?: ParagraphInit): OdtParagraph {
+    const paragraphElement = buildParagraph(this.pkg, init);
+    this.officeText.children.push(paragraphElement);
+    return new OdtParagraph(this.officeText.children, paragraphElement, this.pkg);
+  }
+
+  appendTable(init: TableInit): OdtTable {
+    const tableElement = buildTable(this.pkg, init);
+    this.officeText.children.push(tableElement);
+    return new OdtTable(this.officeText.children, tableElement, this.pkg);
+  }
+
+  appendList(): OdtList {
+    const listElement = buildList(this.pkg);
+    this.officeText.children.push(listElement);
+    return new OdtList(this.officeText.children, listElement, this.pkg);
+  }
+
+  // ODF has no inline "hard page break" content element the way WordprocessingML's w:br/@w:type="page" is (see docx's own DocxBody.appendPageBreak, src/edit/docx/editor.ts) -- a manual page break is exclusively a paragraph-style property (style:paragraph-properties/@fo:break-before="page"), so this inserts an empty paragraph pointed at the shared page-break style (automatic-styles.ts's ensurePageBreakStyleName).
+  appendPageBreak(): void {
+    const paragraphElement = buildParagraph(this.pkg);
+    paragraphElement.attributes.push({ name: 'text:style-name', value: ensurePageBreakStyleName(this.pkg) });
+    this.officeText.children.push(paragraphElement);
+  }
+}
+
+export class OdtEditor {
+  readonly body: OdtBody;
+  private readonly pkg: Package;
+
+  constructor(pkg: Package) {
+    this.pkg = pkg;
+    const officeText = findOfficeText(findContentRoot(pkg));
+    this.body = new OdtBodyImpl(officeText, pkg);
+  }
+
+  // Direct text:p children of office:text only -- a paragraph nested inside a text:list-item (see list.ts) is reached via OdtList/OdtListItem, and a paragraph inside a table:table-cell (see table.ts) via OdtTable, mirroring DocxEditor.paragraphs' own direct-children-only scope (src/edit/docx/editor.ts). A heading (text:h, a distinct ODF tag from text:p, unlike WordprocessingML where a heading is just a w:p with a pStyle) is deliberately not surfaced here -- a documented, bounded gap for whenever this editor grows heading support, not a silent one: the heading itself is untouched, byte-preserved XML either way, simply outside what this traversal method finds.
+  paragraphs(): OdtParagraph[] {
+    const officeText = findOfficeText(findContentRoot(this.pkg));
+    const out: OdtParagraph[] = [];
+    for (const child of officeText.children) {
+      if (child.type === 'element' && child.tag === 'text:p') {
+        out.push(new OdtParagraph(officeText.children, child, this.pkg));
+      }
+    }
+    return out;
+  }
+
+  tables(): OdtTable[] {
+    const officeText = findOfficeText(findContentRoot(this.pkg));
+    const out: OdtTable[] = [];
+    for (const child of officeText.children) {
+      if (child.type === 'element' && child.tag === 'table:table') {
+        out.push(new OdtTable(officeText.children, child, this.pkg));
+      }
+    }
+    return out;
+  }
+
+  lists(): OdtList[] {
+    const officeText = findOfficeText(findContentRoot(this.pkg));
+    const out: OdtList[] = [];
+    for (const child of officeText.children) {
+      if (child.type === 'element' && child.tag === 'text:list') {
+        out.push(new OdtList(officeText.children, child, this.pkg));
+      }
+    }
+    return out;
+  }
+
+  toPackage(): Package {
+    return this.pkg;
+  }
+
+  toBytes(): Uint8Array<ArrayBuffer> {
+    return encodePackage(this.pkg);
+  }
+}
+
+export function openOdt(bytes: Uint8Array<ArrayBuffer>): OdtEditor {
+  return new OdtEditor(decodePackage(bytes));
+}
+
+export function createOdt(): OdtEditor {
+  return new OdtEditor(createEmptyOdtPackage());
+}
