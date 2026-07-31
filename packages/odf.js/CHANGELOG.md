@@ -1,3 +1,12 @@
+# [1.4.0](https://github.com/ExaDev/odf.js/compare/v1.3.1...v1.4.0) (2026-07-31)
+
+
+### Features
+
+* add a deep descendant-element search to the ODF XML query helpers ([d94cf2f](https://github.com/ExaDev/odf.js/commit/d94cf2fcc70242368860d26f679d79b09dcba4cc))
+* add readOdp and the shared odp/odg shape vocabulary ([a11f95a](https://github.com/ExaDev/odf.js/commit/a11f95adb17f662bb7c91072c4ad94a20f08026c))
+* split cascade.ts's style-chain walk from its property extraction ([0b1444e](https://github.com/ExaDev/odf.js/commit/0b1444e25aa7c94a66f3f79bdaf83fc3cedc69bc))
+
 ## [1.3.1](https://github.com/ExaDev/odf.js/compare/v1.3.0...v1.3.1) (2026-07-31)
 
 # [1.3.0](https://github.com/ExaDev/odf.js/compare/v1.2.0...v1.3.0) (2026-07-31)
