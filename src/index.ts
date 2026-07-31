@@ -1,4 +1,4 @@
-// documents.js's public surface: bidirectional docx/pptx/odt <-> PDF conversion, one-directional odp -> PDF conversion, a read+write live-view editor for docx/pptx/odt, and a hand-written PDF codec, built on ooxml.js's lossless OOXML core and odf.js's lossless ODF core.
+// documents.js's public surface: bidirectional docx/pptx/odt/odp <-> PDF conversion, one-directional ods -> PDF conversion (no PDF -> ods yet -- see convert/convert.ts's own module doc for why), a read+write live-view editor for docx/pptx/odt/odp/ods, and a hand-written PDF codec, built on ooxml.js's lossless OOXML core and odf.js's lossless ODF core.
 
 // --- ooxml.js's lossless OOXML core, re-exported so consumers need only this one dependency. Its own typed readers (readDocx/readPptx/readXlsx) and their result types are deliberately NOT re-exported here: readDocxContent/readPptxContent (below) already wrap readDocx/readPptx into ContentDocument, so exposing both the wrapper and the thing it wraps would be a trap -- two overlapping entry points to the same underlying read, one of which (readDocx/readPptx's own comments/footnotes/headers/footers) carries fields ContentDocument doesn't model at all. ---
 export {
@@ -162,6 +162,11 @@ export { createOdp, OdpEditor, openOdp } from './edit/odp/editor';
 export { OdpSlide } from './edit/odp/slide';
 export { OdpShape } from './edit/odp/shape';
 export { buildOdpPackage } from './edit/odp/content';
+
+export { createOds, OdsEditor, openOds } from './edit/ods/editor';
+export { OdsSheet } from './edit/ods/sheet';
+export { OdsCell } from './edit/ods/cell';
+export { buildOdsPackage } from './edit/ods/content';
 
 // --- The hand-written PDF codec. ---
 export type { ReadPdfOptions } from './pdf/read';
