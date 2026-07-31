@@ -1,3 +1,12 @@
+# [1.44.0](https://github.com/ExaDev/documents.js/compare/v1.43.1...v1.44.0) (2026-07-31)
+
+
+### Features
+
+* add convertDrawingToLayout, laying out odg vector primitives and shapes ([58aae96](https://github.com/ExaDev/documents.js/commit/58aae962590885e6fa1b039c2236c89a03b51c32))
+* add odgToPdf, converting odg drawings to PDF ([79a5b71](https://github.com/ExaDev/documents.js/commit/79a5b719caedc79bed663fc258aeab89c2a1fb79))
+* add writePath, emitting PDF path operators for LayoutPath items ([64b8fb7](https://github.com/ExaDev/documents.js/commit/64b8fb703fd389fc46077466887b1766a6ce0a81))
+
 ## [1.43.1](https://github.com/ExaDev/documents.js/compare/v1.43.0...v1.43.1) (2026-07-31)
 
 # [1.43.0](https://github.com/ExaDev/documents.js/compare/v1.42.0...v1.43.0) (2026-07-31)
