@@ -7,6 +7,8 @@ import { AlignmentSchema } from './style';
 
 // The shared block model underlying a wordprocessing document's sections and a presentation document's slides. Ported from ooxml.js's src/typed/shared/content.ts (itself ported from documents.js's src/model/content.ts) -- the canonical home now; ooxml.js and documents.js both import this instead of maintaining their own copy. The ContentDocument envelope below (formatVersion + kind + wordprocessing/presentation variants) is this package's own addition on top of that shared vocabulary, matching documents.js's existing model/content.ts shape, since a caller needs a single top-level value to carry through a conversion pipeline.
 
+// sourcePath is assigned by each format's reader at read time and copied onto emitted LayoutItems by the layout engine; this package only defines the field, it doesn't generate values. Known limitation: sourcePath values are stable within one read+layout pass over a single document, not across edits -- inserting content earlier in a document shifts every later path. This is not a stable identity scheme for incremental re-layout; it exists for tagged/accessible-PDF-style traceability and debugging, not edit-tracking.
+
 export const ContentRunSchema = z.object({
   text: z.string(),
   bold: z.boolean().optional(),
@@ -17,6 +19,7 @@ export const ContentRunSchema = z.object({
   sizePt: z.number().positive().optional(),
   color: ColorSchema.optional(),
   hyperlink: z.string().optional(), // resolved external URI
+  sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
 });
 export type ContentRun = z.infer<typeof ContentRunSchema>;
 
@@ -37,6 +40,7 @@ export const ContentParagraphSchema = z.object({
   lineSpacing: z.number().positive().optional(), // multiple of single line height
   indentLeftPt: z.number().optional(),
   indentFirstLinePt: z.number().optional(),
+  sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
 });
 export type ContentParagraph = z.infer<typeof ContentParagraphSchema>;
 
@@ -47,10 +51,14 @@ export const ContentImageBlockSchema = z.object({
   widthPt: z.number().positive(),
   heightPt: z.number().positive(),
   altText: z.string().optional(),
+  sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
 });
 export type ContentImageBlock = z.infer<typeof ContentImageBlockSchema>;
 
-export const ContentPageBreakSchema = z.object({ kind: z.literal('pageBreak') });
+export const ContentPageBreakSchema = z.object({
+  kind: z.literal('pageBreak'),
+  sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
+});
 export type ContentPageBreak = z.infer<typeof ContentPageBreakSchema>;
 
 // ContentTable is mutually recursive with ContentBlock (a cell contains blocks, which may themselves be tables) -- hand-written, mirroring ooxml.js's own XmlElement/isXmlNode pattern, since z.lazy() collapses to `unknown` for recursive children in the pinned Zod version.
@@ -71,6 +79,7 @@ export interface ContentTable {
   kind: 'table';
   rows: ContentTableRow[];
   columnWidthsPt: number[];
+  sourcePath?: string; // deterministic, document-order-derived path assigned by the format reader
 }
 
 export type ContentBlock = ContentParagraph | ContentTable | ContentImageBlock | ContentPageBreak;
@@ -145,6 +154,7 @@ export const ContentTableSchema = z.object({
   kind: z.literal('table'),
   rows: z.array(ContentTableRowSchema),
   columnWidthsPt: z.array(z.number().positive()),
+  sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
 });
 
 // A docx section: a run of pages sharing one page size/margins (a w:sectPr boundary starts a new one).
@@ -166,6 +176,7 @@ export const ContentShapeSchema = z.object({
   insetBottomPt: z.number().nonnegative(),
   fontScale: z.number().positive().optional(),
   lineSpacingReduction: z.number().nonnegative().optional(),
+  sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
   blocks: z.array(ContentBlockSchema),
 });
 export type ContentShape = z.infer<typeof ContentShapeSchema>;

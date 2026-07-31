@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { COLOR_BLACK } from './color';
 import {
-  CONTENT_FORMAT_VERSION,
   type ContentBlock,
+  ContentBlockSchema,
+  CONTENT_FORMAT_VERSION,
   type ContentDocument,
   ContentDocumentSchema,
+  ContentRunSchema,
+  ContentShapeSchema,
   type ContentTable,
   isContentBlock,
 } from './content';
@@ -177,6 +180,66 @@ function presentationDocument(): ContentDocument {
     ],
   };
 }
+
+describe('sourcePath', () => {
+  it('survives a JSON round trip when set on every block kind that carries it', () => {
+    const runWithSourcePath: ContentBlock = {
+      kind: 'paragraph',
+      runs: [{ text: 'Traceable', sourcePath: 'sections[0].blocks[0].runs[0]' }],
+      sourcePath: 'sections[0].blocks[0]',
+    };
+    const imageWithSourcePath: ContentBlock = {
+      kind: 'image',
+      format: 'png',
+      base64: 'AA==',
+      widthPt: 100,
+      heightPt: 50,
+      sourcePath: 'sections[0].blocks[1]',
+    };
+    const pageBreakWithSourcePath: ContentBlock = { kind: 'pageBreak', sourcePath: 'sections[0].blocks[2]' };
+    const tableWithSourcePath: ContentTable = {
+      kind: 'table',
+      rows: [{ cells: [{ blocks: [paragraph] }] }],
+      columnWidthsPt: [100],
+      sourcePath: 'sections[0].blocks[3]',
+    };
+
+    for (const block of [runWithSourcePath, imageWithSourcePath, pageBreakWithSourcePath, tableWithSourcePath]) {
+      expect(isContentBlock(block)).toBe(true);
+      const parsed = ContentBlockSchema.parse(block);
+      const roundTripped: unknown = JSON.parse(JSON.stringify(parsed));
+      expect(ContentBlockSchema.parse(roundTripped)).toEqual(block);
+    }
+
+    const shapeWithSourcePath = ContentShapeSchema.parse({
+      frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 100 },
+      insetLeftPt: 0,
+      insetTopPt: 0,
+      insetRightPt: 0,
+      insetBottomPt: 0,
+      blocks: [],
+      sourcePath: 'slides[0].shapes[0]',
+    });
+    const shapeRoundTripped: unknown = JSON.parse(JSON.stringify(shapeWithSourcePath));
+    expect(ContentShapeSchema.parse(shapeRoundTripped)).toEqual(shapeWithSourcePath);
+  });
+
+  it('parses correctly when sourcePath is omitted, matching every other optional field', () => {
+    expect(ContentRunSchema.parse({ text: 'No path' })).toEqual({ text: 'No path' });
+    expect(ContentBlockSchema.parse(paragraph)).toEqual(paragraph);
+    expect(ContentBlockSchema.parse(pageBreak)).toEqual(pageBreak);
+    expect(ContentBlockSchema.parse(table)).toEqual(table);
+    const shapeWithoutSourcePath = ContentShapeSchema.parse({
+      frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 100 },
+      insetLeftPt: 0,
+      insetTopPt: 0,
+      insetRightPt: 0,
+      insetBottomPt: 0,
+      blocks: [],
+    });
+    expect(shapeWithoutSourcePath.sourcePath).toBeUndefined();
+  });
+});
 
 describe('ContentDocumentSchema round trips', () => {
   it('deep-equals the original wordprocessing document after a JSON round trip', () => {

@@ -6,6 +6,8 @@ import { LayoutFontSchema } from './style';
 // Bumped whenever LayoutDocumentSchema's shape changes incompatibly, so a value serialized by one version of a consumer can be recognised (and rejected, rather than silently misread) by another.
 export const LAYOUT_FORMAT_VERSION = 1;
 
+// sourcePath is assigned by each format's reader at read time and copied onto emitted LayoutItems by the layout engine; this package only defines the field, it doesn't generate values. Known limitation: sourcePath values are stable within one read+layout pass over a single document, not across edits -- inserting content earlier in a document shifts every later path. This is not a stable identity scheme for incremental re-layout; it exists for tagged/accessible-PDF-style traceability and debugging, not edit-tracking.
+
 // A single painted or annotated element on a page. Coordinates are always PDF user space: origin bottom-left, y increasing upward, unit = point. Every field carries an explicit Pt suffix so a caller can never accidentally mix this with ContentShape.frame's OOXML (top-left, y-down) space.
 export const LayoutTextSchema = z.object({
   kind: z.literal('text'),
@@ -18,6 +20,7 @@ export const LayoutTextSchema = z.object({
   widthPt: z.number().nonnegative().optional(), // measured (write path) or reported (read path)
   rotationDeg: z.number().optional(),
   underline: z.boolean().optional(),
+  sourcePath: z.string().optional(), // deterministic, document-order-derived path copied from the ContentDocument item this was laid out from
 });
 export type LayoutText = z.infer<typeof LayoutTextSchema>;
 
@@ -29,6 +32,7 @@ export const LayoutImageSchema = z.object({
   widthPt: z.number().positive(),
   heightPt: z.number().positive(),
   rotationDeg: z.number().optional(),
+  sourcePath: z.string().optional(), // deterministic, document-order-derived path copied from the ContentDocument item this was laid out from
 });
 export type LayoutImage = z.infer<typeof LayoutImageSchema>;
 
@@ -40,6 +44,7 @@ export const LayoutRectSchema = z.object({
   heightPt: z.number().nonnegative(),
   fill: ColorSchema.optional(),
   stroke: z.object({ color: ColorSchema, widthPt: z.number().positive() }).optional(),
+  sourcePath: z.string().optional(), // deterministic, document-order-derived path copied from the ContentDocument item this was laid out from
 });
 export type LayoutRect = z.infer<typeof LayoutRectSchema>;
 
@@ -51,6 +56,7 @@ export const LayoutLineSchema = z.object({
   y2Pt: z.number(),
   color: ColorSchema,
   widthPt: z.number().positive(),
+  sourcePath: z.string().optional(), // deterministic, document-order-derived path copied from the ContentDocument item this was laid out from
 });
 export type LayoutLine = z.infer<typeof LayoutLineSchema>;
 
@@ -62,6 +68,7 @@ export const LayoutEllipseSchema = z.object({
   heightPt: z.number().positive(),
   fill: ColorSchema.optional(),
   stroke: z.object({ color: ColorSchema, widthPt: z.number().positive() }).optional(),
+  sourcePath: z.string().optional(), // deterministic, document-order-derived path copied from the ContentDocument item this was laid out from
 });
 export type LayoutEllipse = z.infer<typeof LayoutEllipseSchema>;
 
@@ -73,6 +80,7 @@ export const LayoutLinkSchema = z.object({
   yPt: z.number(),
   widthPt: z.number().nonnegative(),
   heightPt: z.number().nonnegative(),
+  sourcePath: z.string().optional(), // deterministic, document-order-derived path copied from the ContentDocument item this was laid out from
 });
 export type LayoutLink = z.infer<typeof LayoutLinkSchema>;
 

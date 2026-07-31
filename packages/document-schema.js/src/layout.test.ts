@@ -84,6 +84,31 @@ describe('LayoutItemSchema', () => {
   });
 });
 
+describe('LayoutItemSchema sourcePath', () => {
+  it('survives a JSON round trip when set on every item kind', () => {
+    const itemsWithSourcePath: LayoutItem[] = [
+      { ...text, sourcePath: 'sections[0].blocks[0].runs[0]' },
+      { ...imageItem, sourcePath: 'sections[0].blocks[1]' },
+      { ...rect, sourcePath: 'slides[0].shapes[0]' },
+      { ...line, sourcePath: 'slides[0].shapes[1]' },
+      { ...ellipse, sourcePath: 'slides[0].shapes[2]' },
+      { ...link, sourcePath: 'sections[0].blocks[0].runs[1]' },
+    ];
+    for (const item of itemsWithSourcePath) {
+      const parsed = LayoutItemSchema.parse(item);
+      const roundTripped: unknown = JSON.parse(JSON.stringify(parsed));
+      expect(LayoutItemSchema.parse(roundTripped)).toEqual(item);
+    }
+  });
+
+  it('parses correctly when sourcePath is omitted, matching every other optional field', () => {
+    for (const item of [text, imageItem, rect, line, ellipse, link]) {
+      const parsed = LayoutItemSchema.parse(item);
+      expect(parsed.sourcePath).toBeUndefined();
+    }
+  });
+});
+
 function layoutDocument(): LayoutDocument {
   return {
     formatVersion: LAYOUT_FORMAT_VERSION,
