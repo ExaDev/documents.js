@@ -1,4 +1,4 @@
-import type { LayoutEllipse, LayoutImage, LayoutItem, LayoutLine, LayoutRect, LayoutText } from 'document-content-model';
+import type { LayoutEllipse, LayoutImage, LayoutItem, LayoutLine, LayoutPath, LayoutRect, LayoutSubpath, LayoutText } from 'document-content-model';
 import type { LayoutColor } from '../model/color';
 import type { LayoutFont } from '../model/style';
 import type { StandardFontName } from './afm-widths';
@@ -84,18 +84,24 @@ function writeText(writer: ByteWriter, item: LayoutText, context: ContentWriteCo
   }
 }
 
-// 'f' (fill only), 'S' (stroke only), 'B' (both), or undefined when neither is set -- a rect/ellipse with neither fill nor stroke is a valid LayoutItem (the schema permits it) that simply paints nothing, so callers skip emitting path bytes for it entirely rather than drawing an invisible path.
-function paintOperatorFor(fill: LayoutColor | undefined, stroke: { readonly color: LayoutColor; readonly widthPt: number } | undefined): 'f' | 'S' | 'B' | undefined {
+// 'f'/'f*' (fill only, nonzero/evenodd), 'S' (stroke only), 'B'/'B*' (both, nonzero/evenodd), or undefined when neither is set -- a rect/ellipse/path with neither fill nor stroke is a valid LayoutItem (the schema permits it) that simply paints nothing, so callers skip emitting path bytes for it entirely rather than drawing an invisible path. fillRule only ever matters when fill is set (rect/ellipse never pass one, always taking the nonzero 'f'/'B' branch); a path with fillRule: 'evenodd' takes the starred variant instead.
+function paintOperatorFor(fill: LayoutColor | undefined, stroke: { readonly color: LayoutColor; readonly widthPt: number } | undefined, fillRule?: 'nonzero' | 'evenodd'): 'f' | 'f*' | 'S' | 'B' | 'B*' | undefined {
+  const evenOdd = fillRule === 'evenodd';
   if (fill !== undefined && stroke !== undefined) {
-    return 'B';
+    return evenOdd ? 'B*' : 'B';
   }
   if (fill !== undefined) {
-    return 'f';
+    return evenOdd ? 'f*' : 'f';
   }
   if (stroke !== undefined) {
     return 'S';
   }
   return undefined;
+}
+
+// Formats an x/y pair as PDF operands, e.g. for m/l/c/re coordinates -- shared by writeEllipse and writeSubpath, the two emitters that build points programmatically rather than lifting them straight off a LayoutItem's own named fields.
+function formatPoint(x: number, y: number): string {
+  return `${formatNumber(x)} ${formatNumber(y)}`;
 }
 
 function writeFillAndStroke(writer: ByteWriter, fill: LayoutColor | undefined, stroke: { readonly color: LayoutColor; readonly widthPt: number } | undefined): void {
@@ -139,13 +145,39 @@ function writeEllipse(writer: ByteWriter, item: LayoutEllipse): void {
   const ry = item.heightPt / 2;
   const kx = rx * BEZIER_KAPPA;
   const ky = ry * BEZIER_KAPPA;
-  const point = (x: number, y: number): string => `${formatNumber(x)} ${formatNumber(y)}`;
 
-  writer.writeAscii(`${point(cx + rx, cy)} m\n`);
-  writer.writeAscii(`${point(cx + rx, cy + ky)} ${point(cx + kx, cy + ry)} ${point(cx, cy + ry)} c\n`);
-  writer.writeAscii(`${point(cx - kx, cy + ry)} ${point(cx - rx, cy + ky)} ${point(cx - rx, cy)} c\n`);
-  writer.writeAscii(`${point(cx - rx, cy - ky)} ${point(cx - kx, cy - ry)} ${point(cx, cy - ry)} c\n`);
-  writer.writeAscii(`${point(cx + kx, cy - ry)} ${point(cx + rx, cy - ky)} ${point(cx + rx, cy)} c\n`);
+  writer.writeAscii(`${formatPoint(cx + rx, cy)} m\n`);
+  writer.writeAscii(`${formatPoint(cx + rx, cy + ky)} ${formatPoint(cx + kx, cy + ry)} ${formatPoint(cx, cy + ry)} c\n`);
+  writer.writeAscii(`${formatPoint(cx - kx, cy + ry)} ${formatPoint(cx - rx, cy + ky)} ${formatPoint(cx - rx, cy)} c\n`);
+  writer.writeAscii(`${formatPoint(cx - rx, cy - ky)} ${formatPoint(cx - kx, cy - ry)} ${formatPoint(cx, cy - ry)} c\n`);
+  writer.writeAscii(`${formatPoint(cx + kx, cy - ry)} ${formatPoint(cx + rx, cy - ky)} ${formatPoint(cx + rx, cy)} c\n`);
+  writer.writeAscii(`${paint}\n`);
+}
+
+// One subpath: m (moveto the subpath's own starting point), then l/c per segment, then h if the subpath is closed. No quadratic-to-cubic elevation and no SVG elliptical-arc endpoint-to-center parameterization exist anywhere in this module, deliberately: LayoutPathSegment's own discriminated union (document-content-model's layout.ts) only ever has 'line'/'cubic' variants, because the sole real-world producer of a LayoutPath -- odf.js's own svg:d/draw:points parser (typed/shared/path.ts), verified against genuine LibreOffice output -- never emits a quadratic or an arc segment in the first place: ODF's own svg:d grammar recognises S/s, Q/q, T/t, A/a as command letters (so the token stream stays in sync) but that parser explicitly produces no segment for any of them, real LibreOffice output for rectangles/ellipses/freeform curves/basic custom-shape presets never exercises them, and ContentPathSegmentSchema itself only models 'line'/'cubic' regardless. There is nothing here to elevate or parameterize, and building that conversion code with no caller would be unused code kept "just in case".
+function writeSubpath(writer: ByteWriter, subpath: LayoutSubpath): void {
+  writer.writeAscii(`${formatPoint(subpath.startXPt, subpath.startYPt)} m\n`);
+  for (const segment of subpath.segments) {
+    if (segment.kind === 'line') {
+      writer.writeAscii(`${formatPoint(segment.xPt, segment.yPt)} l\n`);
+    } else {
+      writer.writeAscii(`${formatPoint(segment.c1xPt, segment.c1yPt)} ${formatPoint(segment.c2xPt, segment.c2yPt)} ${formatPoint(segment.xPt, segment.yPt)} c\n`);
+    }
+  }
+  if (subpath.closed) {
+    writer.writeAscii('h\n');
+  }
+}
+
+function writePath(writer: ByteWriter, item: LayoutPath): void {
+  const paint = paintOperatorFor(item.fill, item.stroke, item.fillRule);
+  if (paint === undefined) {
+    return;
+  }
+  writeFillAndStroke(writer, item.fill, item.stroke);
+  for (const subpath of item.subpaths) {
+    writeSubpath(writer, subpath);
+  }
   writer.writeAscii(`${paint}\n`);
 }
 
@@ -178,6 +210,8 @@ export function writeContentStream(items: readonly LayoutItem[], context: Conten
       writeLine(writer, item);
     } else if (item.kind === 'ellipse') {
       writeEllipse(writer, item);
+    } else if (item.kind === 'path') {
+      writePath(writer, item);
     }
   }
 
