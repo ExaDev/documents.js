@@ -1,14 +1,28 @@
-import type { LayoutItem, LayoutText } from 'document-content-model';
+import type { LayoutItem, LayoutPath, LayoutRect, LayoutText } from 'document-content-model';
+import { decodePackage } from 'odf.js';
 import { describe, expect, it } from 'vitest';
 import { createDocx, openDocx } from '../edit/docx/editor';
 import { openOdp } from '../edit/odp/editor';
 import { openOdt } from '../edit/odt/editor';
 import { createPptx, openPptx } from '../edit/pptx/editor';
+import { convertDrawingToLayout } from '../layout/drawing';
+import { readOdgContent } from '../odf/odg/read';
+import { createStandardFontMeasurer } from '../pdf/measure';
 import { readPdf } from '../pdf/read';
+import { minimalOdgBytes } from '../test-support/odg';
 import { minimalOdpBytes } from '../test-support/odp';
 import { minimalOdsBytes } from '../test-support/ods';
 import { minimalOdtBytes } from '../test-support/odt';
-import { docxToPdf, odpToPdf, odsToPdf, odtToPdf, pdfToDocx, pdfToOdp, pdfToOdt, pdfToPptx, pptxToPdf } from './convert';
+import { docxToPdf, odgToPdf, odpToPdf, odsToPdf, odtToPdf, pdfToDocx, pdfToOdp, pdfToOdt, pdfToPptx, pptxToPdf } from './convert';
+
+// Builds the same intermediate LayoutDocument odgToPdf itself builds internally (readOdgContent -> convertDrawingToLayout), so a test can assert on 'path'/'rect' LayoutItem kinds directly -- readPdf's own content-stream interpreter does not reconstruct 'path'/'line'/'ellipse' items at all (src/pdf/interpret.ts), so round-tripping the fixture's curve/z-order back through readPdf is not possible; this is the direct way to prove them.
+function layoutFromMinimalOdg() {
+  const content = readOdgContent(decodePackage(minimalOdgBytes()));
+  if (content.kind !== 'drawing') {
+    throw new Error('expected a drawing ContentDocument');
+  }
+  return convertDrawingToLayout(content, { measurer: createStandardFontMeasurer() });
+}
 
 function pdfHeader(bytes: Uint8Array<ArrayBuffer>): string {
   return new TextDecoder('latin1').decode(bytes.subarray(0, 5));
@@ -146,6 +160,55 @@ describe('odsToPdf', () => {
     const controller = new AbortController();
     controller.abort();
     expect(() => odsToPdf(minimalOdsBytes(), { signal: controller.signal })).toThrow();
+  });
+});
+
+describe('odgToPdf', () => {
+  // Proves the architectural point specific to drawings: an odg package, decoded via odf.js's own decodePackage and read via readOdgContent, feeds convertDrawingToLayout (genuinely new layout code for the vector-primitive vocabulary, though its ContentShape half reuses convertShape from slides.ts unmodified -- see convert.ts's own module doc) and comes out as a real, valid PDF.
+  it('produces valid PDF bytes with the fixture\'s real page size and text content', () => {
+    const pdfBytes = odgToPdf(minimalOdgBytes());
+    expect(pdfHeader(pdfBytes)).toBe('%PDF-');
+
+    const layout = readPdf(pdfBytes);
+    expect(layout.pages).toHaveLength(1);
+    expect(layout.pages[0]).toMatchObject({ widthPt: 400, heightPt: 300 });
+    const text = layout.pages[0]?.items.filter((item) => item.kind === 'text').map((item) => item.text).join(' ');
+    expect(text).toContain('Label');
+  });
+
+  // Genuinely curved, not a straight-line approximation: the fixture's draw:path carries a real svg:d cubic segment (ground-truth-verified real LibreOffice output, see test-support/odg.ts's own note), and this asserts convertDrawingToLayout's own output -- the exact LayoutDocument odgToPdf builds internally -- carries a LayoutPath item whose subpath actually has a 'cubic' segment, not a 'line'-only approximation of the curve.
+  it('carries the fixture\'s real curved path through to a LayoutPath item with a genuine cubic segment', () => {
+    const layout = layoutFromMinimalOdg();
+    const pathItem = layout.pages[0]?.items.find((item): item is LayoutPath => item.kind === 'path');
+    expect(pathItem).toBeDefined();
+    expect(pathItem?.subpaths[0]?.segments.some((segment) => segment.kind === 'cubic')).toBe(true);
+    expect(pathItem?.subpaths[0]?.closed).toBe(true);
+  });
+
+  // The fixture's three rects (test-support/odg.ts) are BACK, FRONT, then the plain Rect1 in document order -- document order is real LibreOffice paint order (odf.js's own typed/draw/shapes.ts note), so the back rect's LayoutRect item must come first in array order for it to paint underneath the overlapping front rect, matching the module doc's documented paint-order convention.
+  it('emits the three rects in document (paint) order', () => {
+    const layout = layoutFromMinimalOdg();
+    const rects = (layout.pages[0]?.items.filter((item): item is LayoutRect => item.kind === 'rect')) ?? [];
+    expect(rects.map((rect) => rect.fill)).toEqual([
+      { r: 1, g: 0.5019607843137255, b: 0 }, // grBack, #ff8000
+      { r: 0.5019607843137255, g: 0, b: 1 }, // grFront, #8000ff
+      { r: 1, g: 0, b: 0 }, // grRect, #ff0000
+    ]);
+  });
+
+  // Vectors paint before shapes -- this module's own documented, bounded paint-order limitation (see src/layout/drawing.ts's top-of-file note): the fixture's text frame is the LAST element in document order, but must still appear AFTER every vector LayoutItem in the emitted array.
+  it('paints every vector before the text shape, per the documented vectors-first convention', () => {
+    const layout = layoutFromMinimalOdg();
+    const kinds = layout.pages[0]?.items.map((item) => item.kind) ?? [];
+    const textIndex = kinds.indexOf('text');
+    const lastVectorIndex = Math.max(kinds.lastIndexOf('rect'), kinds.lastIndexOf('ellipse'), kinds.lastIndexOf('line'), kinds.lastIndexOf('path'));
+    expect(textIndex).toBeGreaterThan(lastVectorIndex);
+  });
+
+  it('throws when the signal is already aborted', () => {
+    const controller = new AbortController();
+    controller.abort();
+    expect(() => odgToPdf(minimalOdgBytes(), { signal: controller.signal })).toThrow();
   });
 });
 
