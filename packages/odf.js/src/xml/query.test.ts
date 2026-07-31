@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { el, txt } from './fragment';
-import { rootElement, findChildElement, childrenWithTag, attrValue } from './query';
+import { rootElement, findChildElement, childrenWithTag, elementsWithTag, attrValue } from './query';
 
 describe('rootElement', () => {
   it('returns the first element node, skipping a leading declaration', () => {
@@ -41,6 +41,26 @@ describe('childrenWithTag', () => {
 
   it('returns an empty array when no child matches', () => {
     expect(childrenWithTag(el('office:meta'), 'meta:keyword')).toEqual([]);
+  });
+});
+
+describe('elementsWithTag', () => {
+  it('finds a matching element at any depth, in document order', () => {
+    const deep = el('text:p', {}, [txt('deep')]);
+    const shallow = el('text:p', {}, [txt('shallow')]);
+    const list = el('text:list', {}, [el('text:list-item', {}, [deep])]);
+    const container = el('draw:text-box', {}, [shallow, list]);
+    expect(elementsWithTag([container], 'text:p')).toEqual([shallow, deep]);
+  });
+
+  it('returns an empty array when nothing matches', () => {
+    expect(elementsWithTag([el('draw:text-box')], 'text:p')).toEqual([]);
+  });
+
+  it('does not match the forest root itself unless it is passed as one of the input nodes', () => {
+    const root = el('text:p', {}, [txt('x')]);
+    expect(elementsWithTag(root.children, 'text:p')).toEqual([]);
+    expect(elementsWithTag([root], 'text:p')).toEqual([root]);
   });
 });
 

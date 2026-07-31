@@ -80,7 +80,7 @@ export type { StyleFamily, InternRequest, OtherPartRef, StyleRegistryOptions } f
 
 export { ensureSpan } from './styles/span';
 
-export { rootElement, findChildElement, childrenWithTag, attrValue } from './xml/query';
+export { rootElement, findChildElement, childrenWithTag, elementsWithTag, attrValue } from './xml/query';
 export { decodeXmlText } from './xml/entities';
 
 export { parseOdfLength, formatOdfLength } from './typed/shared/units';

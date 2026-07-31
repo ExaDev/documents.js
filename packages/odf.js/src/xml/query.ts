@@ -33,6 +33,27 @@ export function childrenWithTag(element: XmlElement, tag: string): XmlElement[] 
   return out;
 }
 
+// Depth-first pre-order walk over a node forest, descending into every element's own children -- the shared traversal every descendant-search helper below builds on.
+function* walk(nodes: readonly XmlNode[]): Generator<XmlNode> {
+  for (const node of nodes) {
+    yield node;
+    if (node.type === 'element') {
+      yield* walk(node.children);
+    }
+  }
+}
+
+// Every element anywhere in the given forest (not just direct children) with the given tag, in document order -- for a schema position that isn't fixed relative to its container (e.g. a text:p that may sit directly under a draw:text-box or be nested inside a text:list-item), where childrenWithTag's direct-children-only search isn't enough. Mirrors ooxml.js's own elementsWithTag (src/typed/util.ts), which establishes the same descendant-search convention for the equivalent OOXML concept.
+export function elementsWithTag(nodes: readonly XmlNode[], tag: string): XmlElement[] {
+  const out: XmlElement[] = [];
+  for (const node of walk(nodes)) {
+    if (node.type === 'element' && node.tag === tag) {
+      out.push(node);
+    }
+  }
+  return out;
+}
+
 export function attrValue(element: XmlElement, name: string): string | undefined {
   return element.attributes.find((attribute) => attribute.name === name)?.value;
 }
