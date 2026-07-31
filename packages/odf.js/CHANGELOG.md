@@ -1,3 +1,10 @@
+# [1.7.0](https://github.com/ExaDev/odf.js/compare/v1.6.0...v1.7.0) (2026-07-31)
+
+
+### Features
+
+* add readOds, a geometry-and-print-settings-rich spreadsheet reader ([55f8eae](https://github.com/ExaDev/odf.js/commit/55f8eae3990e0d710f49c45020661e5fc96acd00))
+
 # [1.6.0](https://github.com/ExaDev/odf.js/compare/v1.5.0...v1.6.0) (2026-07-31)
 
 
