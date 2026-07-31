@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/ExaDev/document-content-model/compare/v1.2.1...v1.3.0) (2026-07-31)
+
+
+### Features
+
+* add LayoutPath, a general vector-path item for the PDF pivot ([cb76475](https://github.com/ExaDev/document-content-model/commit/cb76475b64b34a6b543dd787ac869e5030d5823b))
+
 ## [1.2.1](https://github.com/ExaDev/document-content-model/compare/v1.2.0...v1.2.1) (2026-07-31)
 
 # [1.2.0](https://github.com/ExaDev/document-content-model/compare/v1.1.1...v1.2.0) (2026-07-31)
