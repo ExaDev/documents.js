@@ -50,12 +50,14 @@ const pkg = z.decode(packageCodec, bytes);
 const out = z.encode(packageCodec, pkg);
 ```
 
-Typed reading views project the generic `Package` into ergonomic models (lossy; for reading, not round-trip):
+Typed reading views project the generic `Package` into ergonomic models (lossy; for reading, not round-trip). `readDocx`/`readPptx` resolve the full style/theme cascade, so document order, run/paragraph styling, and geometry all come through, not just flattened text:
 
 ```ts
 import { decodePackage, readDocx } from 'ooxml.js';
 
 const doc = readDocx(decodePackage(bytes));
+// doc.sections[0].blocks holds paragraphs/tables/page-breaks in document order (including
+// inside tables); each run already carries its cascade-resolved bold/italic/colour/font.
 ```
 
 ## The ooxml.js format
@@ -177,6 +179,7 @@ The package is layered from a lossless core outward to lossy convenience views:
 
 ## Gotchas and quirks
 
+- **`readDocx`/`readPptx` are richer than a flat text/shape dump, but still not a round-trip path — here is what's still not captured.** Not modelled: numbering *definitions* themselves (glyph, format, restart-at-level, from `word/numbering.xml`) — only each paragraph's own `numId`/`level` *membership* is captured, so a consumer can group paragraphs into a list but can't render the list's own markers without separately reading `word/numbering.xml`; table cell border styling (`w:tcBorders`, `a:tcPr` line properties — only cell shading/fill is read); docx's own `w:themeColor` run-colour references (real-world runs overwhelmingly use direct `w:val` hex instead); live `PAGE`/`NUMPAGES` field re-evaluation (fields resolve to Word's own cached result text, correct unless a different pagination would change the value); and docx inline/floating images (`w:drawing`) — `readPptx`'s picture-shape reading (`p:pic`) has no docx-side equivalent yet. On the pptx side specifically: connector shapes (`p:cxnSp`) are skipped entirely (decorative, no text); a shape's rotation is passed through from its own local `a:xfrm/@rot` rather than composed through a rotated or flipped parent group (ECMA-376's real composition rule there is one of DrawingML's more arcane corners); and non-table graphic frames (chart/SmartArt/OLE) come through with correct geometry but empty content.
 - **`test:smoke` depends on a fresh build.** It runs `tsdown && vitest run --project smoke`, so it always rebuilds `dist/` first — don't run it expecting to test a stale build.
 - **`--project` matters for `test/smoke.test.mjs`.** `vitest.config.ts` defines `unit` and `smoke` as separate projects; `pnpm test`/`test:watch`/`test:smoke` always pass the right `--project` flag. A bare `vitest`/`vitest run` with no `--project` filter runs both projects, and `smoke` fails loudly (`Cannot find module '../dist/index.js'`) if `dist/` hasn't been built yet — a clear failure pointing at the cause, not a silent false pass, but still worth knowing if you invoke `vitest` directly instead of through the npm scripts.
 - **Binary-vs-XML part classification is a byte sniff, not an extension check.** `package-io/read.ts`'s `looksLikeXml` looks for a leading `<` after skipping a UTF-8 BOM and whitespace; this is deliberate (no standard OOXML binary part starts with `<`) but means any future binary format starting with `<` would misclassify.
