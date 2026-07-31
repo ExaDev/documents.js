@@ -1,3 +1,15 @@
+# [1.36.0](https://github.com/ExaDev/documents.js/compare/v1.35.1...v1.36.0) (2026-07-31)
+
+
+### Bug Fixes
+
+* merge duplicate document-content-model minimum-release-age excludes into one entry ([bed7e8e](https://github.com/ExaDev/documents.js/commit/bed7e8e6c591076c7a7477fd9990fa44c86bee1e))
+
+
+### Features
+
+* add ODF byte-signature schemas and an odf.js/ooxml.js structural-compatibility guard ([90a5819](https://github.com/ExaDev/documents.js/commit/90a5819238ec308cbd381d4bf1fa0433cfeffe60))
+
 ## [1.35.1](https://github.com/ExaDev/documents.js/compare/v1.35.0...v1.35.1) (2026-07-31)
 
 # [1.35.0](https://github.com/ExaDev/documents.js/compare/v1.34.2...v1.35.0) (2026-07-31)
