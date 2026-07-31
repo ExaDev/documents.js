@@ -2,6 +2,7 @@ import { decodePackage, encodePackage as encodeOdfPackage } from 'odf.js';
 import { encodePackage } from 'ooxml.js';
 import { buildDocxPackage } from '../edit/docx/content';
 import { openDocx } from '../edit/docx/editor';
+import { buildOdpPackage } from '../edit/odp/content';
 import { buildOdtPackage } from '../edit/odt/content';
 import { buildPptxPackage } from '../edit/pptx/content';
 import { openPptx } from '../edit/pptx/editor';
@@ -18,7 +19,7 @@ import { readPdf } from '../pdf/read';
 import { writePdf } from '../pdf/write';
 import type { WinAnsiSubstitution } from '../pdf/winansi';
 
-// Seven ergonomic conversions (docx/pptx/odt <-> PDF, plus the one-directional odp -> PDF), each composing already-independently-tested pipeline stages: docx/pptx/odt/odp -> PDF reads the source package into a ContentDocument, lays it out into a LayoutDocument, and writes PDF bytes -- odtToPdf and odpToPdf both reuse convertWordprocessingToLayout/convertPresentationToLayout completely unmodified, the exact same engines docxToPdf/pptxToPdf feed, since readDocxContent/readOdtContent produce the identical WordprocessingContentDocument shape and readPptxContent/readOdpContent produce the identical PresentationContentDocument shape regardless of which package format (OOXML or ODF) they read; PDF -> docx/pptx/odt reads PDF bytes into a LayoutDocument, reconstructs a best-effort ContentDocument from its geometry via reconstructWordprocessing/reconstructPresentation (entirely unmodified, format-agnostic functions -- the same architectural bet odtToPdf's own build already proved), and builds a fresh OOXML or ODF package. pdfToOdt's own package-building half is buildOdtPackage (src/edit/odt/content.ts), the odt-side counterpart to buildDocxPackage, built on the src/edit/odt/* live-view editor. odp has no reverse direction yet: there is no live-view odp editor (no buildOdpPackage) to build a package back from a reconstructed PresentationContentDocument, so odpToPdf is deliberately one-directional only -- the same scope boundary odt closed with pdfToOdt but odp hasn't reached yet. Neither round-trip direction claims round-trip fidelity -- see src/layout/reconstruct.ts's own module doc for why PDF -> docx/pptx/odt specifically cannot.
+// Eight ergonomic conversions (docx/pptx/odt/odp <-> PDF), each composing already-independently-tested pipeline stages: docx/pptx/odt/odp -> PDF reads the source package into a ContentDocument, lays it out into a LayoutDocument, and writes PDF bytes -- odtToPdf and odpToPdf both reuse convertWordprocessingToLayout/convertPresentationToLayout completely unmodified, the exact same engines docxToPdf/pptxToPdf feed, since readDocxContent/readOdtContent produce the identical WordprocessingContentDocument shape and readPptxContent/readOdpContent produce the identical PresentationContentDocument shape regardless of which package format (OOXML or ODF) they read; PDF -> docx/pptx/odt/odp reads PDF bytes into a LayoutDocument, reconstructs a best-effort ContentDocument from its geometry via reconstructWordprocessing/reconstructPresentation (entirely unmodified, format-agnostic functions -- the same architectural bet odtToPdf's own build already proved, and reconstructPresentation needed zero changes for odp either), and builds a fresh OOXML or ODF package. pdfToOdt's own package-building half is buildOdtPackage (src/edit/odt/content.ts); pdfToOdp's is buildOdpPackage (src/edit/odp/content.ts) -- the odp-side counterpart to buildPptxPackage, built on the src/edit/odp/* live-view editor, closing the same reverse-direction gap odt closed once pdfToOdt existed. Neither round-trip direction claims round-trip fidelity -- see src/layout/reconstruct.ts's own module doc for why PDF -> docx/pptx/odt/odp specifically cannot.
 
 export interface DocumentToPdfOptions {
   readonly signal?: AbortSignal;
@@ -93,4 +94,11 @@ export function pdfToOdt(bytes: Uint8Array<ArrayBuffer>, options?: PdfToDocument
   const layout = readPdf(bytes, { signal: options?.signal, sink: options?.sink });
   const content = reconstructWordprocessing(layout, { signal: options?.signal });
   return encodeOdfPackage(buildOdtPackage(content));
+}
+
+// buildOdpPackage produces an odf.js Package too, mirroring pdfToOdt's own use of encodeOdfPackage above -- reconstructPresentation is the exact same function odpToPdf's own module doc already documents as unmodified for odp; this is simply its reverse direction.
+export function pdfToOdp(bytes: Uint8Array<ArrayBuffer>, options?: PdfToDocumentOptions): Uint8Array<ArrayBuffer> {
+  const layout = readPdf(bytes, { signal: options?.signal, sink: options?.sink });
+  const content = reconstructPresentation(layout, { signal: options?.signal });
+  return encodeOdfPackage(buildOdpPackage(content));
 }

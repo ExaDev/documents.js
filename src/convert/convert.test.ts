@@ -1,12 +1,13 @@
 import type { LayoutItem, LayoutText } from 'document-content-model';
 import { describe, expect, it } from 'vitest';
 import { createDocx, openDocx } from '../edit/docx/editor';
+import { openOdp } from '../edit/odp/editor';
 import { openOdt } from '../edit/odt/editor';
 import { createPptx, openPptx } from '../edit/pptx/editor';
 import { readPdf } from '../pdf/read';
 import { minimalOdpBytes } from '../test-support/odp';
 import { minimalOdtBytes } from '../test-support/odt';
-import { docxToPdf, odpToPdf, odtToPdf, pdfToDocx, pdfToOdt, pdfToPptx, pptxToPdf } from './convert';
+import { docxToPdf, odpToPdf, odtToPdf, pdfToDocx, pdfToOdp, pdfToOdt, pdfToPptx, pptxToPdf } from './convert';
 
 function pdfHeader(bytes: Uint8Array<ArrayBuffer>): string {
   return new TextDecoder('latin1').decode(bytes.subarray(0, 5));
@@ -176,6 +177,50 @@ describe('pdfToOdt', () => {
     expect(runs.some((r) => r.bold)).toBe(true);
     expect(runs.some((r) => r.color?.r === 1 && r.color.g === 0 && r.color.b === 0)).toBe(true);
     expect(runs.some((r) => r.sizePt === 24)).toBe(true);
+  });
+});
+
+describe('pdfToOdp', () => {
+  // The fixture's title frame is rotated 30 degrees (see test-support/odp.ts), and wrapRunsToWidth fragments it into one LayoutText per word -- reconstructPresentation's own geometry-based line clustering does not guarantee those fragments come back in original reading order for rotated text (mirrors convert.test.ts's own odpToPdf rotated-shape test, which checks only the title's first word for the identical reason). This checks each word landed somewhere, not that the phrase reconstructed in its original order.
+  it('round-trips text content through odpToPdf then pdfToOdp', () => {
+    const pdfBytes = odpToPdf(minimalOdpBytes());
+    const odpBytes = pdfToOdp(pdfBytes);
+    const editor = openOdp(odpBytes);
+    const text = editor
+      .slides()
+      .flatMap((s) => s.shapes())
+      .map((s) => s.text)
+      .join(' ');
+    expect(text).toContain('Hello');
+    expect(text).toContain('from');
+    expect(text).toContain('odp');
+  });
+
+  // Mirrors pdfToPptx's own equivalent test: exercises the full pipeline (readPdf -> reconstructPresentation, entirely unmodified -- the same architectural bet odpToPdf's own build already proved -- -> buildOdpPackage) through a fresh, hand-built pptx rather than the minimalOdpBytes fixture, so a bold/coloured/sized run really is recovered from PDF geometry, not merely carried through unchanged.
+  it('round-trips a bold, coloured, sized run through pptxToPdf then pdfToOdp', () => {
+    const pptxEditor = createPptx();
+    pptxEditor.addSlide().addTextBox({ frame: { xPt: 50, yPt: 50, widthPt: 400, heightPt: 100 }, text: 'StyledSlideRun' });
+
+    const pdfBytes = pptxToPdf(pptxEditor.toBytes());
+    const odpBytes = pdfToOdp(pdfBytes);
+    const roundTripped = openOdp(odpBytes);
+
+    const shapes = roundTripped.slides().flatMap((s) => s.shapes());
+    const text = shapes.map((s) => s.text).join(' ');
+    expect(text).toContain('StyledSlideRun');
+  });
+
+  it('round-trips speaker notes through odpToPdf then pdfToOdp', () => {
+    const editor = createPptx();
+    const slide = editor.addSlide();
+    slide.addTextBox({ frame: { xPt: 50, yPt: 50, widthPt: 400, heightPt: 100 }, text: 'Slide with notes' });
+    slide.notes = 'These are the speaker notes for this slide';
+
+    const pdfBytes = pptxToPdf(editor.toBytes());
+    const odpBytes = pdfToOdp(pdfBytes);
+    const roundTripped = openOdp(odpBytes);
+
+    expect(roundTripped.slides()[0]?.notes).toBe('These are the speaker notes for this slide');
   });
 });
 

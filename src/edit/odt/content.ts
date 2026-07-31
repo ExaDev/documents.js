@@ -28,7 +28,8 @@ export function buildOdtPackage(content: ContentDocument): Package {
   return editor.toPackage();
 }
 
-function populateParagraph(paragraph: OdtParagraph, block: ContentParagraph): void {
+// Exported so src/edit/odp/content.ts's own buildOdpPackage can reuse this exact resolve-alignment-then-append-styled-runs logic for a presentation shape's own paragraphs -- a draw:frame's draw:text-box holds the identical text:p/text:span content model office:text does, interned into the identical content.xml StyleRegistry (see src/edit/odt/props.ts), so there is no presentation-specific variant of this function to write.
+export function populateParagraph(paragraph: OdtParagraph, block: ContentParagraph): void {
   if (block.alignment !== undefined) {
     paragraph.alignment = block.alignment;
   }

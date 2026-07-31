@@ -1,6 +1,6 @@
 import type { PdfDiagnostic } from '../pdf/diagnostics';
 import type { WinAnsiSubstitution } from '../pdf/winansi';
-import { docxToPdf, odpToPdf, odtToPdf, pdfToDocx, pdfToOdt, pdfToPptx, pptxToPdf } from './convert';
+import { docxToPdf, odpToPdf, odtToPdf, pdfToDocx, pdfToOdp, pdfToOdt, pdfToPptx, pptxToPdf } from './convert';
 import type { ConversionRequest, ConversionResult, Diagnostic, DocumentConverter, DocumentFormat } from './port';
 
 const SUPPORTED_CONVERSIONS: readonly { readonly source: DocumentFormat; readonly target: DocumentFormat }[] = [
@@ -11,6 +11,7 @@ const SUPPORTED_CONVERSIONS: readonly { readonly source: DocumentFormat; readonl
   { source: 'pdf', target: 'docx' },
   { source: 'pdf', target: 'pptx' },
   { source: 'pdf', target: 'odt' },
+  { source: 'pdf', target: 'odp' },
 ];
 
 function substitutionDiagnostic(substitution: WinAnsiSubstitution, context: { readonly pageIndex: number }): Diagnostic {
@@ -61,6 +62,10 @@ export function createLocalDocumentConverter(): DocumentConverter {
       if (source.format === 'pdf' && targetFormat === 'odt') {
         const bytes = pdfToOdt(source.bytes, { signal: options.signal, sink: (d) => diagnostics.push(fromPdfDiagnostic(d)) });
         return Promise.resolve({ document: { format: 'odt', bytes }, diagnostics });
+      }
+      if (source.format === 'pdf' && targetFormat === 'odp') {
+        const bytes = pdfToOdp(source.bytes, { signal: options.signal, sink: (d) => diagnostics.push(fromPdfDiagnostic(d)) });
+        return Promise.resolve({ document: { format: 'odp', bytes }, diagnostics });
       }
       return Promise.reject(new Error(`unsupported conversion: ${source.format} -> ${targetFormat}`));
     },
