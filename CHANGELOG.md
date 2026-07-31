@@ -1,3 +1,10 @@
+# [1.34.0](https://github.com/ExaDev/documents.js/compare/v1.33.4...v1.34.0) (2026-07-31)
+
+
+### Features
+
+* carry pptx speaker notes through the PDF round trip ([3ee79ba](https://github.com/ExaDev/documents.js/commit/3ee79bab8486eddc6fb9a4cee89fb0d1e15b2480))
+
 ## [1.33.4](https://github.com/ExaDev/documents.js/compare/v1.33.3...v1.33.4) (2026-07-31)
 
 
