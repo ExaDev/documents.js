@@ -2,7 +2,7 @@ import type { Package } from 'odf.js';
 import { bytesToBase64, decodePackage, el, encodePackage, ODF_MEDIA_TYPES, txt } from 'odf.js';
 import { encodePng } from '../image/png-encode';
 
-// Never imported by src/index.ts and never reaches dist/. Mirrors src/test-support/odt.ts's own reasoning: there is no live-view odp editor (no buildOdpPackage/createOdp), so hand-authored ODF XML assembled via odf.js's own el/txt fragment builders and serialized via odf.js's own encodePackage is currently the only way to get odp test bytes at all, short of committing a real LibreOffice export. Shape choices mirror odf.js's own src/typed/odp/read.test.ts fixture -- multiple draw:page elements, a rotated frame, a grouped pair of shapes, an image, a table, and speaker notes -- the same real-shape ground truth that fixture verified against genuine LibreOffice 26.2 output.
+// Never imported by src/index.ts and never reaches dist/. Mirrors src/test-support/odt.ts's own reasoning: hand-authored ODF XML assembled via odf.js's own el/txt fragment builders and serialized via odf.js's own encodePackage, never via this package's own createEmptyOdpPackage (src/edit/odp/scaffold.ts) or createOdp, so a bug in that scaffold/editor cannot hide behind a fixture built with the same code. Shape choices mirror odf.js's own src/typed/odp/read.test.ts fixture -- multiple draw:page elements, a rotated frame, a grouped pair of shapes, an image, a table, and speaker notes -- the same real-shape ground truth that fixture verified against genuine LibreOffice 26.2 output.
 
 function enc(s: string): Uint8Array<ArrayBuffer> {
   return new TextEncoder().encode(s);
