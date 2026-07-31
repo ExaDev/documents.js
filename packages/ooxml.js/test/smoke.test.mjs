@@ -61,7 +61,9 @@ describe.each([
 
   it('readDocx extracts decoded entity text', () => {
     const doc = api.readDocx(pkg1);
-    expect(doc.paragraphs[0]?.runs[0]?.text).toBe('Smoke & test');
+    const firstBlock = doc.sections[0]?.blocks[0];
+    expect(firstBlock?.kind).toBe('paragraph');
+    expect(firstBlock?.kind === 'paragraph' ? firstBlock.runs[0]?.text : undefined).toBe('Smoke & test');
   });
 
   it('the Package <-> CompactPackage codec round-trips', () => {
