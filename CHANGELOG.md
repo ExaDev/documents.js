@@ -1,3 +1,10 @@
+## [1.33.4](https://github.com/ExaDev/documents.js/compare/v1.33.3...v1.33.4) (2026-07-31)
+
+
+### Bug Fixes
+
+* make speaker notes actually open in real presentation software ([bd3b11e](https://github.com/ExaDev/documents.js/commit/bd3b11ed21b200083f39115ee705619b625e88ea))
+
 ## [1.33.3](https://github.com/ExaDev/documents.js/compare/v1.33.2...v1.33.3) (2026-07-31)
 
 
