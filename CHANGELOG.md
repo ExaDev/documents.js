@@ -1,3 +1,10 @@
+# [1.45.0](https://github.com/ExaDev/documents.js/compare/v1.44.0...v1.45.0) (2026-07-31)
+
+
+### Features
+
+* add the odg live-view editor ([89467ae](https://github.com/ExaDev/documents.js/commit/89467ae9899cd214a2744130bc717b739a2b9b22))
+
 # [1.44.0](https://github.com/ExaDev/documents.js/compare/v1.43.1...v1.44.0) (2026-07-31)
 
 
