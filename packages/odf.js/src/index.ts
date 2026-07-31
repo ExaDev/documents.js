@@ -112,3 +112,6 @@ export { readDrawFrame, walkDrawShapes } from './typed/draw/shapes';
 
 export { readOdp } from './typed/odp/read';
 export type { OdpDocument } from './typed/odp/read';
+
+export { readOdt } from './typed/odt/read';
+export type { OdtDocument } from './typed/odt/read';
