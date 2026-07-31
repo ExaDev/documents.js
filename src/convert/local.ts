@@ -1,13 +1,15 @@
 import type { PdfDiagnostic } from '../pdf/diagnostics';
 import type { WinAnsiSubstitution } from '../pdf/winansi';
-import { docxToPdf, odpToPdf, odtToPdf, pdfToDocx, pdfToOdp, pdfToOdt, pdfToPptx, pptxToPdf } from './convert';
+import { docxToPdf, odpToPdf, odsToPdf, odtToPdf, pdfToDocx, pdfToOdp, pdfToOdt, pdfToPptx, pptxToPdf } from './convert';
 import type { ConversionRequest, ConversionResult, Diagnostic, DocumentConverter, DocumentFormat } from './port';
 
+// ods appears only as a source, never a target: there is no pdfToOds (see convert.ts's own module doc for why PDF -> ods is a fundamentally unstarted problem, not a small extension of reconstructWordprocessing/reconstructPresentation).
 const SUPPORTED_CONVERSIONS: readonly { readonly source: DocumentFormat; readonly target: DocumentFormat }[] = [
   { source: 'docx', target: 'pdf' },
   { source: 'pptx', target: 'pdf' },
   { source: 'odt', target: 'pdf' },
   { source: 'odp', target: 'pdf' },
+  { source: 'ods', target: 'pdf' },
   { source: 'pdf', target: 'docx' },
   { source: 'pdf', target: 'pptx' },
   { source: 'pdf', target: 'odt' },
@@ -49,6 +51,10 @@ export function createLocalDocumentConverter(): DocumentConverter {
       }
       if (source.format === 'odp' && targetFormat === 'pdf') {
         const bytes = odpToPdf(source.bytes, { signal: options.signal, onSubstitution: (s, c) => diagnostics.push(substitutionDiagnostic(s, c)) });
+        return Promise.resolve({ document: { format: 'pdf', bytes }, diagnostics });
+      }
+      if (source.format === 'ods' && targetFormat === 'pdf') {
+        const bytes = odsToPdf(source.bytes, { signal: options.signal, onSubstitution: (s, c) => diagnostics.push(substitutionDiagnostic(s, c)) });
         return Promise.resolve({ document: { format: 'pdf', bytes }, diagnostics });
       }
       if (source.format === 'pdf' && targetFormat === 'docx') {

@@ -19,6 +19,7 @@ const FUNCTIONS = [
   'readPptxContent',
   'readOdtContent',
   'readOdpContent',
+  'readOdsContent',
   'readPdf',
   'writePdf',
   'docxToPdf',
@@ -27,6 +28,7 @@ const FUNCTIONS = [
   'pdfToPptx',
   'odtToPdf',
   'odpToPdf',
+  'odsToPdf',
   'openOdp',
   'createOdp',
   'pdfToOdp',
@@ -50,6 +52,18 @@ function minimalOdpBytes() {
   const mimetype = new TextEncoder().encode(ODF_MEDIA_TYPES.odp);
   const contentXml = new TextEncoder().encode(
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0" xmlns:presentation="urn:oasis:names:tc:opendocument:xmlns:presentation:1.0" xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0"><office:body><office:presentation><draw:page><draw:frame svg:x="20pt" svg:y="20pt" svg:width="300pt" svg:height="50pt"><draw:text-box><text:p>Hello from the odp smoke test</text:p></draw:text-box></draw:frame><presentation:notes><draw:frame svg:x="20pt" svg:y="300pt" svg:width="300pt" svg:height="50pt"><draw:text-box><text:p>Smoke test speaker notes</text:p></draw:text-box></draw:frame></presentation:notes></draw:page></office:presentation></office:body></office:document-content>',
+  );
+  return zipPackage([
+    ['mimetype', { bytes: mimetype, stored: true }],
+    ['content.xml', { bytes: contentXml }],
+  ]);
+}
+
+// This mirrors minimalOdtBytes above exactly, just with office:spreadsheet/table:table/table:table-row/table:table-cell in place of office:text/text:p -- proving odsToPdf's entire pipeline (odf.js's decodePackage, dist's own readOdsContent/convertSpreadsheetToLayout/writePdf) actually works from the built dist/ artifact via hand-built ODF XML. There is no createOds/openOds live-view editor to exercise separately (odsToPdf is one-directional -- see src/convert/convert.ts's own module doc), unlike odp's pair of smoke tests below. The column carries an explicit wide style (mirroring odt.ts's own Col1/Col2 automatic-styles) so the cell's own real standard-14-font text genuinely fits without src/layout/sheets.ts's own string-overflow truncation kicking in -- a bare default-width column at real font metrics would truncate a sentence-length string, which is the correct algorithm behaviour, not a smoke-test bug, but would make this particular assertion the wrong one to write.
+function minimalOdsBytes() {
+  const mimetype = new TextEncoder().encode(ODF_MEDIA_TYPES.ods);
+  const contentXml = new TextEncoder().encode(
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"><office:automatic-styles><style:style style:name="Wide" style:family="table-column"><style:table-column-properties style:column-width="10cm"/></style:style></office:automatic-styles><office:body><office:spreadsheet><table:table table:name="Sheet1"><table:table-column table:style-name="Wide"/><table:table-row><table:table-cell office:value-type="string"><text:p>Hello from the ods smoke test</text:p></table:table-cell></table:table-row></table:table></office:spreadsheet></office:body></office:document-content>',
   );
   return zipPackage([
     ['mimetype', { bytes: mimetype, stored: true }],
@@ -115,6 +129,21 @@ describe('dist/ end-to-end: odpToPdf, from the CJS build', () => {
       .join(' ');
     expect(text).toContain('Hello from the odp smoke test');
     expect(layout.pages[0]?.notes).toBe('Smoke test speaker notes');
+  });
+});
+
+describe('dist/ end-to-end: odsToPdf, from the CJS build', () => {
+  it('produces a real PDF from a genuine ODF spreadsheet package, without throwing', () => {
+    const pdfBytes = cjs.odsToPdf(minimalOdsBytes());
+    expect(pdfBytes.length).toBeGreaterThan(0);
+    expect(new TextDecoder('latin1').decode(pdfBytes.subarray(0, 5))).toBe('%PDF-');
+
+    const layout = cjs.readPdf(pdfBytes);
+    const text = layout.pages[0]?.items
+      .filter((item) => item.kind === 'text')
+      .map((item) => item.text)
+      .join(' ');
+    expect(text).toContain('Hello from the ods smoke test');
   });
 });
 
