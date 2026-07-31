@@ -1,11 +1,12 @@
 import type { PdfDiagnostic } from '../pdf/diagnostics';
 import type { WinAnsiSubstitution } from '../pdf/winansi';
-import { docxToPdf, pdfToDocx, pdfToPptx, pptxToPdf } from './convert';
+import { docxToPdf, odtToPdf, pdfToDocx, pdfToPptx, pptxToPdf } from './convert';
 import type { ConversionRequest, ConversionResult, Diagnostic, DocumentConverter, DocumentFormat } from './port';
 
 const SUPPORTED_CONVERSIONS: readonly { readonly source: DocumentFormat; readonly target: DocumentFormat }[] = [
   { source: 'docx', target: 'pdf' },
   { source: 'pptx', target: 'pdf' },
+  { source: 'odt', target: 'pdf' },
   { source: 'pdf', target: 'docx' },
   { source: 'pdf', target: 'pptx' },
 ];
@@ -37,6 +38,10 @@ export function createLocalDocumentConverter(): DocumentConverter {
       }
       if (source.format === 'pptx' && targetFormat === 'pdf') {
         const bytes = pptxToPdf(source.bytes, { signal: options.signal, onSubstitution: (s, c) => diagnostics.push(substitutionDiagnostic(s, c)) });
+        return Promise.resolve({ document: { format: 'pdf', bytes }, diagnostics });
+      }
+      if (source.format === 'odt' && targetFormat === 'pdf') {
+        const bytes = odtToPdf(source.bytes, { signal: options.signal, onSubstitution: (s, c) => diagnostics.push(substitutionDiagnostic(s, c)) });
         return Promise.resolve({ document: { format: 'pdf', bytes }, diagnostics });
       }
       if (source.format === 'pdf' && targetFormat === 'docx') {

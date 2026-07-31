@@ -1,3 +1,4 @@
+import { decodePackage } from 'odf.js';
 import { encodePackage } from 'ooxml.js';
 import { buildDocxPackage } from '../edit/docx/content';
 import { openDocx } from '../edit/docx/editor';
@@ -6,6 +7,7 @@ import { openPptx } from '../edit/pptx/editor';
 import { convertWordprocessingToLayout } from '../layout/engine';
 import { reconstructPresentation, reconstructWordprocessing } from '../layout/reconstruct';
 import { convertPresentationToLayout } from '../layout/slides';
+import { readOdtContent } from '../odf/odt/read';
 import { readDocxContent } from '../ooxml/docx/read';
 import { readPptxContent } from '../ooxml/pptx/read';
 import type { PdfDiagnosticSink } from '../pdf/diagnostics';
@@ -14,7 +16,7 @@ import { readPdf } from '../pdf/read';
 import { writePdf } from '../pdf/write';
 import type { WinAnsiSubstitution } from '../pdf/winansi';
 
-// The four ergonomic top-level conversions, each composing already-independently-tested pipeline stages: docx/pptx -> PDF reads the OOXML package into a ContentDocument, lays it out into a LayoutDocument, and writes PDF bytes; PDF -> docx/pptx reads PDF bytes into a LayoutDocument, reconstructs a best-effort ContentDocument from its geometry, and builds a fresh OOXML package. Neither direction claims round-trip fidelity -- see src/layout/reconstruct.ts's own module doc for why PDF -> docx/pptx specifically cannot.
+// The four round-trip ergonomic conversions (docx/pptx <-> PDF) plus one one-directional addition (odt -> PDF), each composing already-independently-tested pipeline stages: docx/pptx/odt -> PDF reads the source package into a ContentDocument, lays it out into a LayoutDocument, and writes PDF bytes -- odtToPdf reuses convertWordprocessingToLayout completely unmodified, the exact same engine docxToPdf feeds, since readDocxContent and readOdtContent both produce the identical WordprocessingContentDocument shape regardless of which package format (OOXML or ODF) they read; PDF -> docx/pptx reads PDF bytes into a LayoutDocument, reconstructs a best-effort ContentDocument from its geometry, and builds a fresh OOXML package. There is no pdfToOdt yet -- that direction needs a live-view odt editor (an odt-equivalent of buildDocxPackage), which doesn't exist in this package yet. Neither round-trip direction claims round-trip fidelity -- see src/layout/reconstruct.ts's own module doc for why PDF -> docx/pptx specifically cannot.
 
 export interface DocumentToPdfOptions {
   readonly signal?: AbortSignal;
@@ -28,6 +30,18 @@ export function docxToPdf(bytes: Uint8Array<ArrayBuffer>, options?: DocumentToPd
   // readDocxContent's declared return type is the full ContentDocument union, even though it always produces the wordprocessing variant in practice -- this both documents and enforces that.
   if (content.kind !== 'wordprocessing') {
     throw new Error('readDocxContent returned a non-wordprocessing ContentDocument');
+  }
+  const layout = convertWordprocessingToLayout(content, { measurer: createStandardFontMeasurer() });
+  return writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution });
+}
+
+// odt's package is decoded via odf.js's own decodePackage, NOT ooxml.js's -- an odt file is an ODF package, not an OOXML one, so it needs odf.js's own codec to become a Package at all. Everything downstream of that (readOdtContent -> convertWordprocessingToLayout -> writePdf) is identical to docxToPdf's own pipeline, which is the whole architectural point.
+export function odtToPdf(bytes: Uint8Array<ArrayBuffer>, options?: DocumentToPdfOptions): Uint8Array<ArrayBuffer> {
+  const pkg = decodePackage(bytes);
+  const content = readOdtContent(pkg);
+  // readOdtContent's declared return type is the full ContentDocument union, even though it always produces the wordprocessing variant in practice -- this both documents and enforces that, mirroring docxToPdf's own guard above.
+  if (content.kind !== 'wordprocessing') {
+    throw new Error('readOdtContent returned a non-wordprocessing ContentDocument');
   }
   const layout = convertWordprocessingToLayout(content, { measurer: createStandardFontMeasurer() });
   return writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution });

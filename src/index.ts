@@ -1,4 +1,4 @@
-// documents.js's public surface: bidirectional docx/pptx <-> PDF conversion, a read+write live-view editor for docx/pptx, and a hand-written PDF codec, built on ooxml.js's lossless OOXML core.
+// documents.js's public surface: bidirectional docx/pptx <-> PDF conversion, one-directional odt -> PDF conversion, a read+write live-view editor for docx/pptx, and a hand-written PDF codec, built on ooxml.js's lossless OOXML core and odf.js's lossless ODF core.
 
 // --- ooxml.js's lossless OOXML core, re-exported so consumers need only this one dependency. Its own typed readers (readDocx/readPptx/readXlsx) and their result types are deliberately NOT re-exported here: readDocxContent/readPptxContent (below) already wrap readDocx/readPptx into ContentDocument, so exposing both the wrapper and the thing it wraps would be a trap -- two overlapping entry points to the same underlying read, one of which (readDocx/readPptx's own comments/footnotes/headers/footers) carries fields ContentDocument doesn't model at all. ---
 export {
@@ -143,6 +143,7 @@ export { pdfCodec } from './pdf/codec';
 // --- Format <-> ContentDocument readers and layout algorithms, each independently usable rather than only reachable through the ergonomic conversions below. ---
 export { readDocxContent } from './ooxml/docx/read';
 export { readPptxContent } from './ooxml/pptx/read';
+export { readOdtContent } from './odf/odt/read';
 export type { EngineLayoutOptions } from './layout/engine';
 export { convertWordprocessingToLayout } from './layout/engine';
 export type { SlidesLayoutOptions } from './layout/slides';
@@ -150,9 +151,9 @@ export { convertPresentationToLayout } from './layout/slides';
 export type { ReconstructOptions } from './layout/reconstruct';
 export { reconstructPresentation, reconstructWordprocessing } from './layout/reconstruct';
 
-// --- The four ergonomic top-level conversions. ---
+// --- The four round-trip ergonomic conversions, plus odtToPdf's one-directional addition (see convert/convert.ts's own module doc for why there is no pdfToOdt yet). ---
 export type { DocumentToPdfOptions, PdfToDocumentOptions } from './convert/convert';
-export { docxToPdf, pdfToDocx, pdfToPptx, pptxToPdf } from './convert/convert';
+export { docxToPdf, odtToPdf, pdfToDocx, pdfToPptx, pptxToPdf } from './convert/convert';
 
 // Schema-validated z.codec() pairs over the conversions above (docx/pptx bytes <-> PDF bytes), the no-extra-options form -- use docxToPdf/pdfToDocx/pptxToPdf/pdfToPptx directly for cancellation or diagnostics.
 export { docxPdfCodec, pptxPdfCodec } from './convert/codec';

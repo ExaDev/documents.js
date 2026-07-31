@@ -2,7 +2,7 @@
 
 [![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/documents.js) [![npm](https://img.shields.io/badge/npm-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/documents.js) [![Release](https://img.shields.io/github/v/release/ExaDev/documents.js)](https://github.com/ExaDev/documents.js/releases/latest) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/documents.js/ci.yml?branch=main)](https://github.com/ExaDev/documents.js/actions)
 
-> Bidirectional docx/pptx ⇄ PDF conversion, a read-and-write live-view editor for docx/pptx content, and a fully hand-written PDF codec, built on [ooxml.js](https://github.com/ExaDev/ooxml.js).
+> Bidirectional docx/pptx ⇄ PDF conversion, one-directional odt → PDF conversion, a read-and-write live-view editor for docx/pptx content, and a fully hand-written PDF codec, built on [ooxml.js](https://github.com/ExaDev/ooxml.js) and [odf.js](https://github.com/ExaDev/odf.js).
 
 `documents.js` depends on `ooxml.js` for lossless docx/pptx/xlsx ⇄ JSON handling and extends it in two directions `ooxml.js` deliberately does not cover: full PDF support (parsing arbitrary real-world PDFs and generating new ones), and a read-**and-write** manipulation API for docx/pptx content — `ooxml.js`'s own typed readers (`readDocx`/`readPptx`) are one-way and explicitly forbid write-back. PDF reading, writing, and the docx⇄PDF/pptx⇄PDF conversion pipeline are entirely hand-written: no external PDF library (`pdf-lib`, `pdfjs-dist`, `mupdf`, or any other) is a dependency. The one exception is [`fflate`](https://github.com/101arrowz/fflate) for raw DEFLATE/zlib compression underneath PDF's `FlateDecode` filter and PNG's `IDAT` chunks — the same dependency `ooxml.js` itself already relies on for ZIP handling.
 
@@ -30,21 +30,23 @@ npm install documents.js
 
 ## Usage
 
-The four ergonomic conversions:
+The four round-trip ergonomic conversions, plus odt's one-directional addition:
 
 ```ts
-import { docxToPdf, pdfToDocx, pptxToPdf, pdfToPptx } from 'documents.js';
+import { docxToPdf, odtToPdf, pdfToDocx, pptxToPdf, pdfToPptx } from 'documents.js';
 
 const pdfBytes = docxToPdf(docxBytes);
 const docxBytes2 = pdfToDocx(pdfBytes);
 
 const pdfFromSlides = pptxToPdf(pptxBytes);
 const pptxBytes2 = pdfToPptx(pdfFromSlides);
+
+const pdfFromOdt = odtToPdf(odtBytes); // odt -> PDF only -- there is no pdfToOdt yet (no live-view odt editor exists to build one back)
 ```
 
-Each accepts an optional `signal` (`AbortSignal`) and either a `onSubstitution` callback (docx/pptx → PDF, called once per character not representable in a standard-14 font) or a `sink` (PDF → docx/pptx, called once per recoverable parse diagnostic).
+Each accepts an optional `signal` (`AbortSignal`) and either a `onSubstitution` callback (docx/pptx/odt → PDF, called once per character not representable in a standard-14 font) or a `sink` (PDF → docx/pptx, called once per recoverable parse diagnostic).
 
-The same four conversions behind a swappable port, for a caller that wants to inject a different implementation later without changing call sites:
+The same conversions behind a swappable port, for a caller that wants to inject a different implementation later without changing call sites:
 
 ```ts
 import { createLocalDocumentConverter } from 'documents.js';
@@ -97,7 +99,7 @@ const pdfFromDocx = z.decode(docxPdfCodec, docxBytes);
 const docxBack = z.encode(docxPdfCodec, pdfFromDocx);
 ```
 
-`readDocxContent`/`readPptxContent` (docx/pptx → `ContentDocument`), `convertWordprocessingToLayout`/`convertPresentationToLayout` (`ContentDocument` → `LayoutDocument`), and `reconstructWordprocessing`/`reconstructPresentation` (`LayoutDocument` → `ContentDocument`) are each exported individually too, for a caller that wants one stage of the pipeline without the rest.
+`readDocxContent`/`readPptxContent`/`readOdtContent` (docx/pptx/odt → `ContentDocument`), `convertWordprocessingToLayout`/`convertPresentationToLayout` (`ContentDocument` → `LayoutDocument`), and `reconstructWordprocessing`/`reconstructPresentation` (`LayoutDocument` → `ContentDocument`) are each exported individually too, for a caller that wants one stage of the pipeline without the rest. `readDocxContent` and `readOdtContent` both produce the identical `wordprocessing`-variant `ContentDocument` shape from two completely unrelated package formats (OOXML and ODF), which is what lets `odtToPdf` feed `convertWordprocessingToLayout` without a single line of that engine changing.
 
 ## Architecture
 
@@ -112,10 +114,11 @@ The package is layered from generic primitives outward to the two conversion dir
   - **Read**: `lexer.ts`/`parse.ts` (byte tokenizer and tokens → `PdfObject`), `filters.ts`/`predictors.ts` (Flate/LZW/ASCII85/ASCIIHex/RunLength, TIFF/PNG predictors), `xref.ts`/`document.ts` (classic and cross-reference-stream resolution, object streams, `/Prev` chains, linear-scan recovery, the page tree with attribute inheritance), `content-read.ts`/`interpret.ts` (the content-stream tokenizer and graphics/text state machine, including form-XObject recursion), `cmap.ts`/`font-style.ts`/`font-read.ts` (`/ToUnicode` CMaps, font-dictionary resolution), `images-read.ts` (Image XObjects → PNG/JPEG bytes), `read.ts` (`readPdf`, assembling all of the above into a `LayoutDocument`).
   - `codec.ts` — `pdfCodec`, a `z.codec()` pair over `readPdf`/`writePdf` (PDF bytes ⇄ `LayoutDocument`).
 - **`src/ooxml/`** — resolves a `Package` into a `ContentDocument`: `docx/read.ts` and `pptx/read.ts` are now thin adapters over `ooxml.js`'s own `readDocx`/`readPptx`, wrapping their `{ metadata, sections }`/`{ metadata, slides }` result into `ContentDocument`'s `wordprocessing`/`presentation` shape. The docx style cascade (`docDefaults` → named-style `basedOn` chains → paragraph-mark run properties → character styles → direct formatting), the pptx placeholder → layout → master → theme inheritance cascade, and DrawingML geometry/colour resolution all now live upstream in `ooxml.js` itself, not in this package.
-- **`src/layout/`** — the pure conversion algorithms, importing only `model` (no I/O): `engine.ts` (`ContentDocument` wordprocessing → `LayoutDocument`: flow, line-breaking, pagination), `slides.ts` (`ContentDocument` presentation → `LayoutDocument`: direct EMU-to-point placement, no pagination needed), `reconstruct.ts` (`LayoutDocument` → `ContentDocument`, both variants: baseline-proximity line clustering, then paragraph/text-block clustering from geometry — PDF has no semantic paragraph or shape structure to recover, only positioned glyphs).
-- **`src/convert/`** — `convert.ts` (the four ergonomic wrappers), `codec.ts` (`docxPdfCodec`/`pptxPdfCodec`, a `z.codec()` pair over each), `port.ts`/`local.ts` (the swappable `DocumentConverter` contract and its synchronous local implementation).
+- **`src/odf/`** — the ODF-side counterpart to `src/ooxml/`, resolving an `odf.js` `Package` into a `ContentDocument`: `odt/read.ts`'s `readOdtContent` is a thin adapter over `odf.js`'s own `readOdt`, wrapping its `{ metadata, sections }` result into the identical `wordprocessing` shape `readDocxContent` produces — the concrete proof that odt and docx genuinely share one pivot and one layout engine. There is no `src/odf/odt/content.ts` (`buildOdtPackage`) yet: odt has no live-view editor, so the PDF → odt direction doesn't exist.
+- **`src/layout/`** — the pure conversion algorithms, importing only `model` (no I/O): `engine.ts` (`ContentDocument` wordprocessing → `LayoutDocument`: flow, line-breaking, pagination — fed identically by docx- and odt-sourced content), `slides.ts` (`ContentDocument` presentation → `LayoutDocument`: direct EMU-to-point placement, no pagination needed), `reconstruct.ts` (`LayoutDocument` → `ContentDocument`, both variants: baseline-proximity line clustering, then paragraph/text-block clustering from geometry — PDF has no semantic paragraph or shape structure to recover, only positioned glyphs).
+- **`src/convert/`** — `convert.ts` (the four round-trip ergonomic wrappers plus `odtToPdf`'s one-directional addition), `codec.ts` (`docxPdfCodec`/`pptxPdfCodec`, a `z.codec()` pair over each — there is no `odtPdfCodec`, since a `z.codec()` pair needs both directions), `port.ts`/`local.ts` (the swappable `DocumentConverter` contract and its synchronous local implementation, covering `docx`/`pptx`/`odt` → `pdf` and `pdf` → `docx`/`pptx`).
 
-Dependency direction is strictly downward and checkable: `model`/`bytes` import nothing local; `image` imports `bytes` only; `pdf` imports `model`+`bytes`+`image` only; `ooxml/*` imports `xml`/`model` only (no PDF knowledge); `layout` imports `model` only; `convert` composes everything else. No `PdfObject`/`PdfDict`/`PdfStream` type appears outside `src/pdf/`.
+Dependency direction is strictly downward and checkable: `model`/`bytes` import nothing local; `image` imports `bytes` only; `pdf` imports `model`+`bytes`+`image` only; `ooxml/*` imports `xml`/`model` only (no PDF knowledge); `odf/*` imports `model` only (no PDF knowledge, no `xml/*` — `odf.js` already owns its own XML query helpers); `layout` imports `model` only; `convert` composes everything else. No `PdfObject`/`PdfDict`/`PdfStream` type appears outside `src/pdf/`.
 
 ## Build, test, and lint
 
@@ -125,7 +128,7 @@ pnpm typecheck     # tsc --noEmit
 pnpm lint          # eslint . --max-warnings 0
 pnpm test          # vitest run --project unit
 pnpm test:watch    # vitest --project unit
-pnpm test:smoke    # rebuilds dist/, then verifies ESM/CJS parity and a real docxToPdf/pdfToDocx round trip from the built CJS bundle
+pnpm test:smoke    # rebuilds dist/, then verifies ESM/CJS parity, a real docxToPdf/pdfToDocx round trip, and a real odtToPdf conversion, from the built CJS bundle
 pnpm test:corpus   # optional real-world PDF conformance checks against a local, gitignored test/corpus/ (see Fidelity)
 ```
 
@@ -145,6 +148,7 @@ To run a single test file: `pnpm vitest run src/path/to/file.test.ts`.
 
 - **`ooxml.js`'s typed readers (`readDocx`/`readPptx`) are now the actual basis for conversion** — `readDocxContent`/`readPptxContent` are thin wrappers around them, not an independent walk of `word/document.xml`/`ppt/slides/slideN.xml`. They are still deliberately not re-exported from this package's own public surface: `readDocx`/`readPptx` also carry `comments`/`footnotes`/`headers`/`footers` (docx) that `ContentDocument` doesn't model, so exposing both the wrapper and the thing it wraps would invite a caller to reach for the wrong one rather than genuinely offering two competing models.
 - **The docx⇄PDF and pptx⇄PDF conversions are explicitly not round-trip-lossless** — in deliberate contrast to `ooxml.js`'s own `packageCodec`, which is byte/part-faithful by design. See [Fidelity](#fidelity).
+- **`odtToPdf` is one-directional — there is no `pdfToOdt`.** The PDF → docx/pptx direction needs a live-view editor to build the output package (`buildDocxPackage`/`buildPptxPackage`); odt has no live-view editor in this package yet (no `openOdt`/`createOdt`), so there is nothing for a `pdfToOdt` to build a package through. `odtToPdf` itself needed zero new layout code: `readOdtContent` (`src/odf/odt/read.ts`) produces the identical `wordprocessing` `ContentDocument` shape `readDocxContent` does, so it feeds `convertWordprocessingToLayout` unmodified.
 - **PDF output uses the standard 14 fonts only — no font embedding.** Helvetica/Times-Roman are genuinely metric-compatible substitutes for Arial/Times New Roman, but Word's actual current defaults (Calibri, Aptos) are not, so line wrapping and pagination will drift slightly from what Word itself would produce. Expect a faithful visual approximation, not a line-identical reproduction.
 - **Reading arbitrary real-world PDFs is the single largest risk surface in this package**, and the parser is honest about its design target: cleanly-generated output from mainstream producers (Word, PowerPoint, Chrome, LibreOffice, Acrobat), recovering from the malformations those producers and their downstream tooling actually create, and failing loudly and specifically on anything else — not matching a mature library's robustness against adversarial input.
 - **Encrypted PDFs are unsupported.** `/Encrypt` present in the trailer throws `PdfEncryptedError`, even for the common empty-user-password case.
@@ -157,7 +161,7 @@ To run a single test file: `pnpm vitest run src/path/to/file.test.ts`.
 
 ## Fidelity
 
-**docx/pptx → PDF** is a genuine layout render: the docx flow/pagination engine and the pptx direct-placement engine both produce real positioned text, images, tables, and (for docx) numbered/bulleted lists, styled through the full cascade (theme fonts/colours, `basedOn` chains, placeholder inheritance). It is a faithful **visual approximation**, not a pixel- or line-identical reproduction of what Word/PowerPoint would themselves render — see the standard-14 font substitution gotcha above.
+**docx/pptx/odt → PDF** is a genuine layout render: the docx/odt flow/pagination engine and the pptx direct-placement engine both produce real positioned text, images, tables, and (for docx/odt) numbered/bulleted lists, styled through the full cascade (theme fonts/colours, `basedOn` chains, placeholder inheritance for docx/pptx; `style:default-style`/`style:parent-style-name` chains for odt). It is a faithful **visual approximation**, not a pixel- or line-identical reproduction of what Word/PowerPoint/Writer would themselves render — see the standard-14 font substitution gotcha above.
 
 **PDF → docx/pptx** is necessarily a **best-effort reconstruction** from geometry: a PDF page is just positioned glyphs and images, with no semantic paragraph or shape structure to recover. Reading order, bold/italic/colour/font-size, and page/slide count are preserved; paragraph and text-block boundaries are inferred from baseline spacing and left-margin indentation, not recovered exactly.
 
@@ -179,7 +183,7 @@ Commits follow Conventional Commits (`feat:`, `fix:`, `test:`, `chore:`, …), e
 
 - [ooxml.js](https://github.com/ExaDev/ooxml.js) — the sibling package this depends on for all docx/pptx/xlsx ⇄ JSON handling and cascade-resolved typed reading.
 - [document-content-model](https://github.com/ExaDev/document-content-model) — the sibling package that owns `ContentDocument`/`LayoutDocument` themselves; both `ooxml.js` and `documents.js` import from it rather than each maintaining an independent copy.
-- [odf.js](https://github.com/ExaDev/odf.js) — a sibling package doing the equivalent lossless-codec job for the OpenDocument Format (odt/ods/odp/odg/…), also built on `document-content-model`. A dependency of `documents.js` as of this package's `Odt`/`Ods`/`Odp`/`OdgBytesSchema` (`src/model/bytes.ts`), which validate against its `ODF_MEDIA_TYPES` table, and `src/interop.test.ts`, a type-level guard that `ooxml.js`'s and `odf.js`'s raw `XmlElement`/`XmlNode`/`Attribute`/`Package` container types stay structurally compatible. Full odt/ods/odp/odg → `ContentDocument` reading (the equivalent of `readDocxContent`/`readPptxContent`) is not yet integrated.
+- [odf.js](https://github.com/ExaDev/odf.js) — a sibling package doing the equivalent lossless-codec job for the OpenDocument Format (odt/ods/odp/odg/…), also built on `document-content-model`. A dependency of `documents.js` for: this package's `Odt`/`Ods`/`Odp`/`OdgBytesSchema` (`src/model/bytes.ts`), which validate against its `ODF_MEDIA_TYPES` table; `src/interop.test.ts`, a type-level guard that `ooxml.js`'s and `odf.js`'s raw `XmlElement`/`XmlNode`/`Attribute`/`Package` container types stay structurally compatible; and `src/odf/odt/read.ts`'s `readOdtContent`, a thin adapter over `odf.js`'s own `readOdt`, feeding `odtToPdf` (`src/convert/convert.ts`). odt → `ContentDocument` reading and PDF conversion are integrated; ods/odp/odg → `ContentDocument` reading (the equivalent for spreadsheets, presentations, and drawings) is not yet.
 
 ## License
 
