@@ -1,3 +1,10 @@
+# [1.8.0](https://github.com/ExaDev/odf.js/compare/v1.7.0...v1.8.0) (2026-07-31)
+
+
+### Features
+
+* add readOdfFormula, surfacing raw MathML and StarMath annotations ([f3fd726](https://github.com/ExaDev/odf.js/commit/f3fd726eb707191823cf0958d5d39890a26343b2))
+
 # [1.7.0](https://github.com/ExaDev/odf.js/compare/v1.6.0...v1.7.0) (2026-07-31)
 
 
