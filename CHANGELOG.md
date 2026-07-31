@@ -1,3 +1,10 @@
+# [1.38.0](https://github.com/ExaDev/documents.js/compare/v1.37.0...v1.38.0) (2026-07-31)
+
+
+### Features
+
+* add ODF package mechanics and whitespace-run text encoding ([d633b0b](https://github.com/ExaDev/documents.js/commit/d633b0bccd54399561dc6a30cba5e09d38cce86c))
+
 # [1.37.0](https://github.com/ExaDev/documents.js/compare/v1.36.0...v1.37.0) (2026-07-31)
 
 
