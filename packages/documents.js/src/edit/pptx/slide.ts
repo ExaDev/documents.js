@@ -9,6 +9,7 @@ import { encodeXmlText } from '../../xml/entities';
 import { el, txt } from '../../xml/fragment';
 import type { ImageInit, MediaContext } from './image';
 import { insertPictureShapeMedia } from './image';
+import { buildEmptyGroupSpTree, DML_NS, ensureNotesMaster, NOTES_MASTER_REL_TYPE, PML_NS } from './scaffold';
 import { buildTextBoxShape, PptxShape } from './shape';
 
 export interface TextBoxInit {
@@ -69,21 +70,25 @@ const NOTES_SLIDE_RELATIONSHIP_TYPE = 'http://schemas.openxmlformats.org/officeD
 const NOTES_SLIDE_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml';
 
 function buildMinimalNotesSlide(text: string): XmlElement {
-  // Intentionally minimal: a single body placeholder holding the text, with no notesMaster/ notesLayout relationship chain -- a documented scope limitation for this editor, not a silent one.
+  // A single body placeholder holding the text, with an explicit a:xfrm rather than leaving the placeholder to inherit geometry from the notesMaster's own matching placeholder (position/size matched against a real Keynote-exported reference file's own notes body placeholder). type="body" without idx matches the same reference: idx="1" alone (this scaffold's earlier attempt) turned out not to be the actual defect blocking Keynote from opening the file at all -- see the p:clrMapOvr note below for what was.
   const body = el('p:sp', {}, [
     el('p:nvSpPr', {}, [
       el('p:cNvPr', { id: '2', name: 'Notes Placeholder' }),
       el('p:cNvSpPr', {}, [el('a:spLocks', { noGrp: '1' })]),
       el('p:nvPr', {}, [el('p:ph', { type: 'body', idx: '1' })]),
     ]),
-    el('p:spPr'),
+    el('p:spPr', {}, [el('a:xfrm', {}, [el('a:off', { x: '685800', y: '4400550' }), el('a:ext', { cx: '5486400', cy: '4200525' })])]),
     el('p:txBody', {}, [
       el('a:bodyPr'),
       el('a:lstStyle'),
       el('a:p', {}, [el('a:r', {}, [el('a:t', {}, [txt(encodeXmlText(text))])])]),
     ]),
   ]);
-  return el('p:notes', {}, [el('p:cSld', {}, [el('p:spTree', {}, [body])])]);
+  // xmlns:p/xmlns:a and the mandatory p:nvGrpSpPr/p:grpSpPr pair are required on p:notes' own p:spTree for the same reason they are on a slide's (see editor.ts's buildEmptySlideRoot).
+  const spTree = buildEmptyGroupSpTree();
+  spTree.children.push(body);
+  // CT_NotesSlide requires p:clrMapOvr as a direct sibling of p:cSld (mirroring CT_SlideLayout's own p:clrMapOvr, which this scaffold already got right) -- confirmed missing, and confirmed as the actual blocker, by diffing against a real Keynote-exported reference pptx with speaker notes: every other structural piece here (namespaces, the nvGrpSpPr/grpSpPr pair, the notesMaster chain) was already correct and still failed to open without this element.
+  return el('p:notes', { 'xmlns:p': PML_NS, 'xmlns:a': DML_NS }, [el('p:cSld', {}, [spTree]), el('p:clrMapOvr', {}, [el('a:masterClrMapping')])]);
 }
 
 export interface SlideContext {
@@ -160,13 +165,16 @@ export class PptxSlide {
     const existingRel = [...rels.values()].find((r) => r.type === NOTES_SLIDE_RELATIONSHIP_TYPE);
     let notesPartPath: string;
     if (existingRel === undefined) {
-      const nextIndex = Object.keys(pkg.parts).filter((p) => p.startsWith('ppt/notesSlides/')).length + 1;
+      const nextIndex = Object.keys(pkg.parts).filter((p) => /^ppt\/notesSlides\/notesSlide\d+\.xml$/.test(p)).length + 1;
       notesPartPath = `ppt/notesSlides/notesSlide${nextIndex}.xml`;
       ensureContentTypeOverride(pkg, notesPartPath, NOTES_SLIDE_CONTENT_TYPE);
       addRelationship(pkg, slidePartPath, {
         type: NOTES_SLIDE_RELATIONSHIP_TYPE,
         target: buildRelativeTarget(slidePartPath, notesPartPath),
       });
+      // CT_NotesSlide requires its own relationship to a notesMaster, the same way an ordinary slide requires one to a slideLayout -- confirmed by testing against real Keynote, which rejected the whole file when this notesSlide part existed without it.
+      const notesMasterPartPath = ensureNotesMaster(pkg);
+      addRelationship(pkg, notesPartPath, { type: NOTES_MASTER_REL_TYPE, target: buildRelativeTarget(notesPartPath, notesMasterPartPath) });
     } else {
       notesPartPath = existingRel.target;
     }

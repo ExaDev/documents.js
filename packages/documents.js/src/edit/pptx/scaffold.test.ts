@@ -1,6 +1,6 @@
 import { attr, childrenWithTag, decodePackage, encodePackage, resolveRelationships, rootElement } from 'ooxml.js';
 import { describe, expect, it } from 'vitest';
-import { createEmptyPptxPackage } from './scaffold';
+import { createEmptyPptxPackage, ensureNotesMaster } from './scaffold';
 
 describe('createEmptyPptxPackage', () => {
   it('has every part a minimal, real-world-openable pptx needs, with no slides yet', () => {
@@ -96,5 +96,49 @@ describe('createEmptyPptxPackage', () => {
     expect(rId).toBeDefined();
     const presentationRels = resolveRelationships(pkg, 'ppt/presentation.xml');
     expect(rId === undefined ? undefined : presentationRels.get(rId)?.target).toBe('ppt/slideMasters/slideMaster1.xml');
+  });
+
+  // p:notesSz is required alongside p:sldSz per CT_Presentation, even before any slide ever uses speaker notes -- confirmed present in every real PowerPoint/Keynote-authored presentation.xml.
+  it('declares a US-Letter-portrait p:notesSz', () => {
+    const pkg = createEmptyPptxPackage();
+    const root = rootElement(pkg.parts['ppt/presentation.xml']);
+    const notesSz = root === undefined ? undefined : childrenWithTag(root, 'p:notesSz')[0];
+    expect(notesSz === undefined ? undefined : attr(notesSz, 'cx')).toBe('6858000');
+    expect(notesSz === undefined ? undefined : attr(notesSz, 'cy')).toBe('9144000');
+  });
+});
+
+describe('ensureNotesMaster', () => {
+  it('creates ppt/notesMasters/notesMaster1.xml, wires it into p:notesMasterIdLst (right after p:sldMasterIdLst), and is idempotent', () => {
+    const pkg = createEmptyPptxPackage();
+    const firstCallPath = ensureNotesMaster(pkg);
+    expect(firstCallPath).toBe('ppt/notesMasters/notesMaster1.xml');
+    expect(pkg.parts['ppt/notesMasters/notesMaster1.xml']).toBeDefined();
+
+    const root = rootElement(pkg.parts['ppt/presentation.xml']);
+    const tags = root?.children.filter((c) => c.type === 'element').map((c) => (c.type === 'element' ? c.tag : ''));
+    expect(tags?.indexOf('p:sldMasterIdLst')).toBe(0);
+    expect(tags?.indexOf('p:notesMasterIdLst')).toBe(1);
+
+    const partCountAfterFirstCall = Object.keys(pkg.parts).length;
+    const secondCallPath = ensureNotesMaster(pkg);
+    expect(secondCallPath).toBe(firstCallPath);
+    expect(Object.keys(pkg.parts)).toHaveLength(partCountAfterFirstCall);
+  });
+
+  // Confirmed by diffing against a real Keynote-exported reference pptx with speaker notes: this element is required by CT_NotesMaster (a real reader rejects a notesSlide relating to a notesMaster that has no p:clrMap), mirroring the identity map already used on the slide master.
+  it('the notes master has an identity p:clrMap', () => {
+    const pkg = createEmptyPptxPackage();
+    ensureNotesMaster(pkg);
+    const master = rootElement(pkg.parts['ppt/notesMasters/notesMaster1.xml']);
+    const clrMap = master === undefined ? undefined : childrenWithTag(master, 'p:clrMap')[0];
+    expect(clrMap === undefined ? undefined : attr(clrMap, 'bg1')).toBe('lt1');
+  });
+
+  it('the notes master relates to the theme', () => {
+    const pkg = createEmptyPptxPackage();
+    ensureNotesMaster(pkg);
+    const masterRels = [...resolveRelationships(pkg, 'ppt/notesMasters/notesMaster1.xml').values()];
+    expect(masterRels.some((r) => r.target === 'ppt/theme/theme1.xml')).toBe(true);
   });
 });

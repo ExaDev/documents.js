@@ -1,4 +1,4 @@
-import { decodePackage, resolveRelationships, rootElement } from 'ooxml.js';
+import { childrenWithTag, decodePackage, resolveRelationships, rootElement } from 'ooxml.js';
 import { describe, expect, it } from 'vitest';
 import { minimalPptxBytes, minimalPptxPackage } from '../../test-support/pptx';
 import { assertPartsUnchangedExcept } from '../../test-support/fidelity';
@@ -94,13 +94,35 @@ describe('PptxSlide.notes', () => {
     expect(decodePackage(editor.toBytes())).toEqual(editor.toPackage());
   });
 
+  // Every one of these was confirmed as a real defect by opening a generated file in actual Keynote, not by this package's own (namespace-agnostic, schema-non-validating) reader, which tolerated all of them. The p:clrMapOvr omission specifically was found by diffing against a real Keynote-exported reference pptx with speaker notes, after the namespace/spTree/notesMaster-chain fixes alone still left the file rejected -- p:clrMapOvr is a required CT_NotesSlide element (a direct sibling of p:cSld, mirroring CT_SlideLayout's own p:clrMapOvr), not an optional nicety.
+  it('declares xmlns:p/xmlns:a on the notes root, includes the mandatory p:nvGrpSpPr/p:grpSpPr pair, and includes p:clrMapOvr', () => {
+    const editor = createPptx();
+    const slide = editor.addSlide();
+    slide.notes = 'Speaker notes here';
+    const notesPartPath = Object.keys(editor.toPackage().parts).find((p) => /^ppt\/notesSlides\/notesSlide\d+\.xml$/.test(p));
+    if (notesPartPath === undefined) {
+      throw new Error('expected setting notes to have created a ppt/notesSlides/notesSlideN.xml part');
+    }
+    const notesRoot = rootElement(editor.toPackage().parts[notesPartPath]);
+    const names = notesRoot?.attributes.map((a) => a.name) ?? [];
+    expect(names).toEqual(expect.arrayContaining(['xmlns:p', 'xmlns:a']));
+    const topLevelTags = notesRoot?.children.filter((c) => c.type === 'element').map((c) => (c.type === 'element' ? c.tag : ''));
+    expect(topLevelTags).toEqual(['p:cSld', 'p:clrMapOvr']);
+    const clrMapOvr = notesRoot === undefined ? undefined : childrenWithTag(notesRoot, 'p:clrMapOvr')[0];
+    expect(clrMapOvr === undefined ? undefined : childrenWithTag(clrMapOvr, 'a:masterClrMapping')[0]).toBeDefined();
+    const cSld = notesRoot === undefined ? undefined : childrenWithTag(notesRoot, 'p:cSld')[0];
+    const spTree = cSld === undefined ? undefined : childrenWithTag(cSld, 'p:spTree')[0];
+    const leadingTags = spTree?.children.filter((c) => c.type === 'element').slice(0, 2).map((c) => (c.type === 'element' ? c.tag : ''));
+    expect(leadingTags).toEqual(['p:nvGrpSpPr', 'p:grpSpPr']);
+  });
+
   it('updates the existing notes part rather than creating a second one', () => {
     const editor = createPptx();
     const slide = editor.addSlide();
     slide.notes = 'First';
     slide.notes = 'Second';
     expect(slide.notes).toBe('Second');
-    const notesParts = Object.keys(editor.toPackage().parts).filter((p) => p.startsWith('ppt/notesSlides/'));
+    const notesParts = Object.keys(editor.toPackage().parts).filter((p) => /^ppt\/notesSlides\/notesSlide\d+\.xml$/.test(p));
     expect(notesParts).toHaveLength(1);
   });
 });

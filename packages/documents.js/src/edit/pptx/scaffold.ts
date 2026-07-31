@@ -14,18 +14,26 @@ export const R_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/relat
 const DEFAULT_SLIDE_WIDTH_EMU = '12192000';
 const DEFAULT_SLIDE_HEIGHT_EMU = '6858000';
 
+// PowerPoint's default notes-page size: 6858000 x 9144000 EMU (7.5 x 10 in, US Letter portrait) -- CT_Presentation's own p:notesSz, required alongside p:sldSz even when no slide ever has notes.
+const DEFAULT_NOTES_WIDTH_EMU = '6858000';
+const DEFAULT_NOTES_HEIGHT_EMU = '9144000';
+
 const SLIDE_MASTER_PART_PATH = 'ppt/slideMasters/slideMaster1.xml';
 export const SLIDE_LAYOUT_PART_PATH = 'ppt/slideLayouts/slideLayout1.xml';
 const THEME_PART_PATH = 'ppt/theme/theme1.xml';
 const PRESENTATION_PART_PATH = 'ppt/presentation.xml';
+const NOTES_MASTER_PART_PATH = 'ppt/notesMasters/notesMaster1.xml';
 
 const SLIDE_MASTER_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml';
 const SLIDE_LAYOUT_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml';
 const THEME_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.theme+xml';
+const NOTES_MASTER_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.presentationml.notesMaster+xml';
 
 const SLIDE_MASTER_REL_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster';
 export const SLIDE_LAYOUT_REL_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout';
 const THEME_REL_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme';
+// Used both from presentation.xml (pointing at the one notesMaster) and from each notesSlideN.xml (CT_NotesSlide's own required relationship to it, mirroring a slide's required relationship to its slideLayout).
+export const NOTES_MASTER_REL_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesMaster';
 
 // ECMA-376 Part 1, 13.3.9: p:sldMasterId/@id and p:sldLayoutId/@id both draw from a reserved high range starting at 2147483648 (0x80000000), distinct from the 256+ range ordinary slide ids use (see editor.ts's own MIN_SLIDE_ID) -- both are the spec's own minimums, not arbitrary.
 const MIN_MASTER_OR_LAYOUT_ID = 2147483648;
@@ -120,6 +128,38 @@ function buildSlideLayout(): XmlElement {
   ]);
 }
 
+// The minimal p:notesMaster (CT_NotesMaster): an explicit white background, an empty shape tree, and the identity colour map -- CT_NotesSlide requires every notesSlide to relate to exactly this kind of part (mirroring a slide's own required relationship to a slideLayout), so a notesSlide created without one is rejected by a real reader even though this package's own reader has no such requirement.
+function buildNotesMaster(): XmlElement {
+  return el('p:notesMaster', { 'xmlns:p': PML_NS, 'xmlns:a': DML_NS }, [el('p:cSld', {}, [buildWhiteBackground(), buildEmptyGroupSpTree()]), buildIdentityColorMap()]);
+}
+
+// Lazily creates the single ppt/notesMasters/notesMaster1.xml part and wires it into presentation.xml's own p:notesMasterIdLst, the first time any slide's notes are set -- most presentations never use speaker notes, so this isn't part of createEmptyPptxPackage's own upfront scaffold. Idempotent: a second call is a no-op and returns the same part path. The caller (PptxSlide's notes setter) still has to add the specific notesSlideN.xml's own relationship to the returned path -- CT_NotesSlide's chain is per-notes-slide, the same way each ordinary slide relates individually to the one shared slideLayout.
+export function ensureNotesMaster(pkg: Package): string {
+  if (pkg.parts[NOTES_MASTER_PART_PATH] !== undefined) {
+    return NOTES_MASTER_PART_PATH;
+  }
+
+  const masterToThemeTarget = buildRelativeTarget(NOTES_MASTER_PART_PATH, THEME_PART_PATH);
+  addRelationship(pkg, NOTES_MASTER_PART_PATH, { type: THEME_REL_TYPE, target: masterToThemeTarget });
+  pkg.parts[NOTES_MASTER_PART_PATH] = { kind: 'xml', nodes: [declaration(), buildNotesMaster()] };
+  ensureContentTypeOverride(pkg, NOTES_MASTER_PART_PATH, NOTES_MASTER_CONTENT_TYPE);
+
+  const presentationToNotesMasterTarget = buildRelativeTarget(PRESENTATION_PART_PATH, NOTES_MASTER_PART_PATH);
+  const relId = addRelationship(pkg, PRESENTATION_PART_PATH, { type: NOTES_MASTER_REL_TYPE, target: presentationToNotesMasterTarget });
+
+  const presentationPart = pkg.parts[PRESENTATION_PART_PATH];
+  const presentationElement = presentationPart?.kind === 'xml' ? presentationPart.nodes.find((n): n is XmlElement => n.type === 'element') : undefined;
+  if (presentationElement === undefined) {
+    throw new Error('ensureNotesMaster: package has no ppt/presentation.xml element');
+  }
+  // p:notesMasterIdLst must directly follow p:sldMasterIdLst in CT_Presentation's own element sequence -- inserted here rather than appended, since this runs after createEmptyPptxPackage already built sldMasterIdLst/sldIdLst/sldSz in their own required order.
+  const sldMasterIdLstIndex = presentationElement.children.findIndex((c) => c.type === 'element' && c.tag === 'p:sldMasterIdLst');
+  const notesMasterIdLst = el('p:notesMasterIdLst', {}, [el('p:notesMasterId', { 'r:id': relId })]);
+  presentationElement.children.splice(sldMasterIdLstIndex === -1 ? 0 : sldMasterIdLstIndex + 1, 0, notesMasterIdLst);
+
+  return NOTES_MASTER_PART_PATH;
+}
+
 // Builds a minimal but genuinely valid, openable pptx package from nothing: [Content_Types].xml, the root relationship to ppt/presentation.xml, a widescreen presentation with an empty p:sldIdLst, and the slideMaster -> slideLayout -> theme chain ECMA-376 requires every presentation to have. (An earlier, chain-free version of this scaffold opened fine in this package's own reader, which tolerates a missing chain by design, but Keynote rejected it outright -- confirmed by testing.)
 export function createEmptyPptxPackage(): Package {
   const contentTypes = el('Types', { xmlns: CONTENT_TYPES_NS }, [
@@ -168,6 +208,7 @@ export function createEmptyPptxPackage(): Package {
     el('p:sldMasterIdLst', {}, [el('p:sldMasterId', { id: String(MIN_MASTER_OR_LAYOUT_ID), 'r:id': presentationToMasterRelId })]),
     el('p:sldIdLst'),
     el('p:sldSz', { cx: DEFAULT_SLIDE_WIDTH_EMU, cy: DEFAULT_SLIDE_HEIGHT_EMU }),
+    el('p:notesSz', { cx: DEFAULT_NOTES_WIDTH_EMU, cy: DEFAULT_NOTES_HEIGHT_EMU }),
   );
 
   return pkg;
