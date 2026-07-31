@@ -66,6 +66,7 @@
   "dependencies": {
     "document-content-model": "^1.1.0",
     "fflate": "^0.8.3",
+    "odf.js": "^1.8.0",
     "ooxml.js": "^2.1.0",
     "zod": "^4.4.3"
   },

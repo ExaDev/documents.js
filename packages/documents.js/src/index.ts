@@ -111,8 +111,8 @@ export type { LayoutColor } from './model/color';
 export { COLOR_BLACK, rgbHexToColor } from './model/color';
 export type { Alignment, LayoutFont } from './model/style';
 export { DEFAULT_LAYOUT_FONT } from './model/style';
-// Magic-byte-validated Uint8Array schemas, so a caller passing the wrong format -- to these functions directly, or as the input/output schema half of a z.codec() below -- gets a clear Zod validation error instead of a confusing failure three layers down.
-export { DocxBytesSchema, PdfBytesSchema, PptxBytesSchema } from './model/bytes';
+// Magic-byte-validated Uint8Array schemas, so a caller passing the wrong format -- to these functions directly, or as the input/output schema half of a z.codec() below -- gets a clear Zod validation error instead of a confusing failure three layers down. The Odt/Ods/Odp/Odg schemas check the package's actual declared media type (see src/model/bytes.ts), a stronger check than Docx/PptxBytesSchema's generic ZIP-signature check.
+export { DocxBytesSchema, OdgBytesSchema, OdpBytesSchema, OdsBytesSchema, OdtBytesSchema, PdfBytesSchema, PptxBytesSchema } from './model/bytes';
 
 // --- The live-view read+write editors: a real manipulation API for docx/pptx content, since ooxml.js's own typed readers explicitly forbid write-back. ---
 export type { DocxBody } from './edit/docx/editor';
