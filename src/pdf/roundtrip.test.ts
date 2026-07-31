@@ -1,16 +1,17 @@
 import { bytesToBase64 } from 'ooxml.js';
 import { describe, expect, it } from 'vitest';
-import type { LayoutDocument, LayoutImageAsset, LayoutItem, LayoutPage } from 'document-content-model';
+import type { LayoutDocument, LayoutImageAsset, LayoutItem, LayoutPage, LayoutPath } from 'document-content-model';
 import { LAYOUT_FORMAT_VERSION, LayoutDocumentSchema } from 'document-content-model';
 import { encodePng } from '../image/png-encode';
 import { readPdf } from './read';
 import { writePdf } from './write';
 
-// write.test.ts and read.test.ts each test writePdf/readPdf in isolation -- the former against emitted content-stream bytes, the latter against PDFs hand-built independently in test-support/pdf.ts, deliberately never through writePdf itself (see that file's own top-of-file rationale). Neither proves the two halves agree with each other. This file is the one place that runs writePdf then readPdf back-to-back, proving LayoutDocument -- the structured, Zod-validated, plain-JSON pivot model both functions speak (see document-content-model's own layout.test.ts JSON.stringify/parse test) -- actually survives a real write/read cycle through this package's own codec, not just its own schema in isolation. Per the documented v1 scope, only text/rect/image/link items are read back as such (line and ellipse are write-only -- general vector-path recovery is out of scope, see read.ts/interpret.ts's ExtractedItem union), so this file covers exactly those four kinds.
+// write.test.ts and read.test.ts each test writePdf/readPdf in isolation -- the former against emitted content-stream bytes, the latter against PDFs hand-built independently in test-support/pdf.ts, deliberately never through writePdf itself (see that file's own top-of-file rationale). Neither proves the two halves agree with each other. This file is the one place that runs writePdf then readPdf back-to-back, proving LayoutDocument -- the structured, Zod-validated, plain-JSON pivot model both functions speak (see document-content-model's own layout.test.ts JSON.stringify/parse test) -- actually survives a real write/read cycle through this package's own codec, not just its own schema in isolation. Per the documented v1 scope, text/rect/path/image/link items are read back as such (line and ellipse are still write-only -- neither writeLine's straight segment nor writeEllipse's four fixed Bezier arcs is distinguishable, once written, from an equivalent general path built by hand, so recovering them as their own LayoutLine/LayoutEllipse kinds specifically would need shape-detection heuristics nothing has asked for yet; both read back as an ordinary LayoutPath instead), so this file covers those five kinds.
 
 const HELVETICA = { family: 'Helvetica', weight: 'normal', style: 'normal' } as const;
 const BLACK = { r: 0, g: 0, b: 0 };
 const RED = { r: 1, g: 0, b: 0 };
+const BLUE = { r: 0, g: 0, b: 1 };
 
 function docWithPages(pages: LayoutPage[], images: Record<string, LayoutImageAsset> = {}): LayoutDocument {
   return { formatVersion: LAYOUT_FORMAT_VERSION, metadata: {}, pages, images };
@@ -98,6 +99,51 @@ describe('writePdf -> readPdf: structural round trip', () => {
     const result = readPdf(writePdf(doc)); // default options: compress: true
 
     expect(result.pages[0]!.items).toMatchObject([{ kind: 'text', text: 'Compressed' }]);
+  });
+
+  // The strongest possible check on the new general-path machinery: not interpret.ts in isolation (interpret.test.ts) and not writePath in isolation (write-path.test.ts), but the two run genuinely back to back through this package's own writePdf/readPdf codec -- proving the write and read halves of path recovery actually agree with each other, not just that each independently does something plausible.
+  it('recovers a closed straight-line path with fill and stroke both set', () => {
+    const path: LayoutPath = {
+      kind: 'path',
+      fill: RED,
+      stroke: { color: BLACK, widthPt: 2 },
+      subpaths: [{ startXPt: 20, startYPt: 20, closed: true, segments: [{ kind: 'line', xPt: 80, yPt: 20 }, { kind: 'line', xPt: 80, yPt: 60 }, { kind: 'line', xPt: 20, yPt: 60 }] }],
+    };
+    const doc = docWithItems([path]);
+
+    const result = readPdf(writePdf(doc, { compress: false }));
+
+    expect(result.pages[0]!.items).toEqual([path]);
+  });
+
+  it('recovers an open stroke-only path with a real cubic curve', () => {
+    const path: LayoutPath = {
+      kind: 'path',
+      stroke: { color: BLUE, widthPt: 3 },
+      subpaths: [{ startXPt: 0, startYPt: 0, closed: false, segments: [{ kind: 'cubic', c1xPt: 0, c1yPt: 40, c2xPt: 40, c2yPt: 40, xPt: 40, yPt: 0 }] }],
+    };
+    const doc = docWithItems([path]);
+
+    const result = readPdf(writePdf(doc, { compress: false }));
+
+    expect(result.pages[0]!.items).toEqual([path]);
+  });
+
+  it('recovers multiple subpaths under an even-odd fill rule -- the standard "hole" construction', () => {
+    const path: LayoutPath = {
+      kind: 'path',
+      fill: BLACK,
+      fillRule: 'evenodd',
+      subpaths: [
+        { startXPt: 0, startYPt: 0, closed: true, segments: [{ kind: 'line', xPt: 20, yPt: 0 }, { kind: 'line', xPt: 20, yPt: 20 }, { kind: 'line', xPt: 0, yPt: 20 }] },
+        { startXPt: 5, startYPt: 5, closed: true, segments: [{ kind: 'line', xPt: 15, yPt: 5 }, { kind: 'line', xPt: 15, yPt: 15 }, { kind: 'line', xPt: 5, yPt: 15 }] },
+      ],
+    };
+    const doc = docWithItems([path]);
+
+    const result = readPdf(writePdf(doc, { compress: false }));
+
+    expect(result.pages[0]!.items).toEqual([path]);
   });
 
   // page.notes carries pptx speaker notes through the PDF round trip (see layout/slides.ts and layout/reconstruct.ts) as a hidden /Subtype /Text annotation (write.ts's buildNotesAnnotDict) -- PDF has no native concept of presenter notes, so this is this package's own round-trip mechanism, confirmed here at the LayoutDocument level and separately confirmed against real Keynote (see editor.test.ts and this project's own manual verification).

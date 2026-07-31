@@ -134,7 +134,7 @@ describe('interpretContentStream: text', () => {
   });
 });
 
-describe('interpretContentStream: axis-aligned rectangles', () => {
+describe('interpretContentStream: axis-aligned rectangles (the rect fast path)', () => {
   it('recovers a rectangle painted under a non-rotated CTM', () => {
     const { sink } = collectDiagnostics();
     const items = interpretContentStream(textBytes('1 0 0 rg 10 10 50 20 re f'), EMPTY_RESOURCES, {
@@ -145,9 +145,148 @@ describe('interpretContentStream: axis-aligned rectangles', () => {
     expect(items).toEqual([{ kind: 'rect', xPt: 10, yPt: 10, widthPt: 50, heightPt: 20, color: { r: 1, g: 0, b: 0 } }]);
   });
 
-  it('does not recover a rectangle under a rotated CTM', () => {
+  // Previously this fell entirely outside v1 scope (general path/curve/stroke recovery didn't exist yet) and produced nothing at all -- isAxisAligned still correctly excludes a rotated CTM from the rect fast path, but the same `re` now contributes a real 4-point subpath to the general path machinery below, which does recover it.
+  it('falls through to a general path -- not the rect fast path -- when the CTM is rotated', () => {
     const { sink } = collectDiagnostics();
     const items = interpretContentStream(textBytes('0 1 -1 0 0 0 cm 10 10 50 20 re f'), EMPTY_RESOURCES, {
+      fontMetrics: fixedWidthFontMetrics(),
+      resolver: makeResolver(new Map()),
+      sink,
+    });
+    expect(items).toEqual([
+      {
+        kind: 'path',
+        subpaths: [
+          {
+            startXPt: -10,
+            startYPt: 10,
+            closed: true,
+            segments: [
+              { kind: 'line', xPt: -10, yPt: 60 },
+              { kind: 'line', xPt: -30, yPt: 60 },
+              { kind: 'line', xPt: -30, yPt: 10 },
+            ],
+          },
+        ],
+        fillRule: 'nonzero',
+        fill: { r: 0, g: 0, b: 0 },
+        stroke: undefined,
+      },
+    ]);
+  });
+
+  // Previously "discarding the pending rect" meant producing nothing at all, since general path/stroke recovery didn't exist yet -- pendingRect is still correctly discarded (no 'rect' item), but the `re` and the `m`/`l` that follow it now both contribute subpaths to one recovered general path, painted here by the stroke operator.
+  it('discards the pending rect fast path once another path-construction operator intervenes, but still recovers the resulting general path', () => {
+    const { sink } = collectDiagnostics();
+    const items = interpretContentStream(textBytes('10 10 50 20 re 0 0 m 1 1 l S f'), EMPTY_RESOURCES, {
+      fontMetrics: fixedWidthFontMetrics(),
+      resolver: makeResolver(new Map()),
+      sink,
+    });
+    expect(items).toEqual([
+      {
+        kind: 'path',
+        subpaths: [
+          { startXPt: 10, startYPt: 10, closed: true, segments: [{ kind: 'line', xPt: 60, yPt: 10 }, { kind: 'line', xPt: 60, yPt: 30 }, { kind: 'line', xPt: 10, yPt: 30 }] },
+          { startXPt: 0, startYPt: 0, closed: false, segments: [{ kind: 'line', xPt: 1, yPt: 1 }] },
+        ],
+        fillRule: 'nonzero',
+        fill: undefined,
+        stroke: { color: { r: 0, g: 0, b: 0 }, widthPt: 1 },
+      },
+    ]);
+  });
+});
+
+describe('interpretContentStream: general paths', () => {
+  it('recovers an open path with just a stroke, no fill', () => {
+    const { sink } = collectDiagnostics();
+    const items = interpretContentStream(textBytes('0 0 1 RG 2 w 0 0 m 10 10 l S'), EMPTY_RESOURCES, {
+      fontMetrics: fixedWidthFontMetrics(),
+      resolver: makeResolver(new Map()),
+      sink,
+    });
+    expect(items).toEqual([
+      {
+        kind: 'path',
+        subpaths: [{ startXPt: 0, startYPt: 0, closed: false, segments: [{ kind: 'line', xPt: 10, yPt: 10 }] }],
+        fillRule: 'nonzero',
+        fill: undefined,
+        stroke: { color: { r: 0, g: 0, b: 1 }, widthPt: 2 },
+      },
+    ]);
+  });
+
+  it('recovers a closed path with both fill and stroke set', () => {
+    const { sink } = collectDiagnostics();
+    const items = interpretContentStream(textBytes('1 0 0 rg 0 0 0 RG 3 w 0 0 m 10 0 l 10 10 l h B'), EMPTY_RESOURCES, {
+      fontMetrics: fixedWidthFontMetrics(),
+      resolver: makeResolver(new Map()),
+      sink,
+    });
+    expect(items).toEqual([
+      {
+        kind: 'path',
+        subpaths: [{ startXPt: 0, startYPt: 0, closed: true, segments: [{ kind: 'line', xPt: 10, yPt: 0 }, { kind: 'line', xPt: 10, yPt: 10 }] }],
+        fillRule: 'nonzero',
+        fill: { r: 1, g: 0, b: 0 },
+        stroke: { color: { r: 0, g: 0, b: 0 }, widthPt: 3 },
+      },
+    ]);
+  });
+
+  it('derives a v operator\'s implicit first control point from the current point', () => {
+    const { sink } = collectDiagnostics();
+    // v's only operands are control point 2 (20,10) and the endpoint (30,0); control point 1 must come out equal to the current point, (0,0).
+    const items = interpretContentStream(textBytes('0 0 1 RG 0 0 m 20 10 30 0 v S'), EMPTY_RESOURCES, {
+      fontMetrics: fixedWidthFontMetrics(),
+      resolver: makeResolver(new Map()),
+      sink,
+    });
+    const [item] = items;
+    if (item?.kind !== 'path') {
+      throw new Error('expected a path item');
+    }
+    expect(item.subpaths).toEqual([{ startXPt: 0, startYPt: 0, closed: false, segments: [{ kind: 'cubic', c1xPt: 0, c1yPt: 0, c2xPt: 20, c2yPt: 10, xPt: 30, yPt: 0 }] }]);
+  });
+
+  it('derives a y operator\'s implicit second control point from the endpoint', () => {
+    const { sink } = collectDiagnostics();
+    // y's only operands are control point 1 (10,10) and the endpoint (30,0); control point 2 must come out equal to that same endpoint.
+    const items = interpretContentStream(textBytes('0 0 1 RG 0 0 m 10 10 30 0 y S'), EMPTY_RESOURCES, {
+      fontMetrics: fixedWidthFontMetrics(),
+      resolver: makeResolver(new Map()),
+      sink,
+    });
+    const [item] = items;
+    if (item?.kind !== 'path') {
+      throw new Error('expected a path item');
+    }
+    expect(item.subpaths).toEqual([{ startXPt: 0, startYPt: 0, closed: false, segments: [{ kind: 'cubic', c1xPt: 10, c1yPt: 10, c2xPt: 30, c2yPt: 0, xPt: 30, yPt: 0 }] }]);
+  });
+
+  it('recovers multiple subpaths under an even-odd fill rule, the standard "hole" construction', () => {
+    const { sink } = collectDiagnostics();
+    const outer = '0 0 m 20 0 l 20 20 l 0 20 l h';
+    const inner = '5 5 m 15 5 l 15 15 l 5 15 l h';
+    const items = interpretContentStream(textBytes(`0 0 0 rg ${outer} ${inner} f*`), EMPTY_RESOURCES, {
+      fontMetrics: fixedWidthFontMetrics(),
+      resolver: makeResolver(new Map()),
+      sink,
+    });
+    const [item] = items;
+    if (item?.kind !== 'path') {
+      throw new Error('expected a path item');
+    }
+    expect(item.subpaths).toHaveLength(2);
+    expect(item.fillRule).toBe('evenodd');
+    expect(item.fill).toEqual({ r: 0, g: 0, b: 0 });
+    expect(item.stroke).toBeUndefined();
+  });
+
+  it('emits nothing for n, even when a real path was constructed, since a clip-only path has no ink', () => {
+    const { sink } = collectDiagnostics();
+    const items = interpretContentStream(textBytes('0 0 m 10 10 l 10 0 l h n'), EMPTY_RESOURCES, {
       fontMetrics: fixedWidthFontMetrics(),
       resolver: makeResolver(new Map()),
       sink,
@@ -155,14 +294,18 @@ describe('interpretContentStream: axis-aligned rectangles', () => {
     expect(items).toEqual([]);
   });
 
-  it('discards a pending rect if any other path-construction operator intervenes', () => {
+  it('uses the PDF default line width of 1 when no w operator has set one', () => {
     const { sink } = collectDiagnostics();
-    const items = interpretContentStream(textBytes('10 10 50 20 re 0 0 m 1 1 l S f'), EMPTY_RESOURCES, {
+    const items = interpretContentStream(textBytes('0 0 m 10 10 l S'), EMPTY_RESOURCES, {
       fontMetrics: fixedWidthFontMetrics(),
       resolver: makeResolver(new Map()),
       sink,
     });
-    expect(items).toEqual([]);
+    const [item] = items;
+    if (item?.kind !== 'path') {
+      throw new Error('expected a path item');
+    }
+    expect(item.stroke).toEqual({ color: { r: 0, g: 0, b: 0 }, widthPt: 1 });
   });
 });
 
