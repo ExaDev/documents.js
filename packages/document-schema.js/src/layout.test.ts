@@ -61,6 +61,25 @@ const ellipse: LayoutItem = {
   fill: { r: 0.1, g: 0.2, b: 0.3 },
 };
 
+const path: LayoutItem = {
+  kind: 'path',
+  subpaths: [
+    {
+      startXPt: 0,
+      startYPt: 0,
+      closed: true,
+      segments: [
+        { kind: 'line', xPt: 10, yPt: 0 },
+        { kind: 'cubic', c1xPt: 15, c1yPt: 5, c2xPt: 15, c2yPt: 15, xPt: 10, yPt: 20 },
+        { kind: 'line', xPt: 0, yPt: 20 },
+      ],
+    },
+  ],
+  fill: { r: 0.4, g: 0.5, b: 0.6 },
+  fillRule: 'evenodd',
+  stroke: { color: COLOR_BLACK, widthPt: 1 },
+};
+
 const link: LayoutItem = {
   kind: 'link',
   uri: 'https://example.com/',
@@ -72,7 +91,7 @@ const link: LayoutItem = {
 
 describe('LayoutItemSchema', () => {
   it('accepts every item kind and preserves every field through a JSON round trip', () => {
-    for (const item of [text, imageItem, rect, line, ellipse, link]) {
+    for (const item of [text, imageItem, rect, line, ellipse, path, link]) {
       const parsed = LayoutItemSchema.parse(item);
       const roundTripped: unknown = JSON.parse(JSON.stringify(parsed));
       expect(LayoutItemSchema.parse(roundTripped)).toEqual(item);
@@ -84,6 +103,34 @@ describe('LayoutItemSchema', () => {
   });
 });
 
+describe('LayoutPathSchema', () => {
+  it('accepts a minimal open subpath with no fill, stroke, or fillRule', () => {
+    const minimal: LayoutItem = {
+      kind: 'path',
+      subpaths: [{ startXPt: 0, startYPt: 0, closed: false, segments: [{ kind: 'line', xPt: 10, yPt: 10 }] }],
+    };
+    expect(LayoutItemSchema.parse(minimal)).toEqual(minimal);
+  });
+
+  it('accepts a path with multiple subpaths, matching an evenodd hole punched through a fill', () => {
+    const withHole: LayoutItem = {
+      kind: 'path',
+      subpaths: [
+        { startXPt: 0, startYPt: 0, closed: true, segments: [{ kind: 'line', xPt: 20, yPt: 0 }, { kind: 'line', xPt: 20, yPt: 20 }, { kind: 'line', xPt: 0, yPt: 20 }] },
+        { startXPt: 5, startYPt: 5, closed: true, segments: [{ kind: 'line', xPt: 15, yPt: 5 }, { kind: 'line', xPt: 15, yPt: 15 }, { kind: 'line', xPt: 5, yPt: 15 }] },
+      ],
+      fill: COLOR_BLACK,
+      fillRule: 'evenodd',
+    };
+    expect(LayoutItemSchema.parse(withHole)).toEqual(withHole);
+  });
+
+  it('rejects a segment kind other than line/cubic', () => {
+    const invalid = { kind: 'path', subpaths: [{ startXPt: 0, startYPt: 0, closed: false, segments: [{ kind: 'quadratic', xPt: 1, yPt: 1 }] }] };
+    expect(LayoutItemSchema.safeParse(invalid).success).toBe(false);
+  });
+});
+
 describe('LayoutItemSchema sourcePath', () => {
   it('survives a JSON round trip when set on every item kind', () => {
     const itemsWithSourcePath: LayoutItem[] = [
@@ -92,6 +139,7 @@ describe('LayoutItemSchema sourcePath', () => {
       { ...rect, sourcePath: 'slides[0].shapes[0]' },
       { ...line, sourcePath: 'slides[0].shapes[1]' },
       { ...ellipse, sourcePath: 'slides[0].shapes[2]' },
+      { ...path, sourcePath: 'pages[0].vectors[0]' },
       { ...link, sourcePath: 'sections[0].blocks[0].runs[1]' },
     ];
     for (const item of itemsWithSourcePath) {
@@ -102,7 +150,7 @@ describe('LayoutItemSchema sourcePath', () => {
   });
 
   it('parses correctly when sourcePath is omitted, matching every other optional field', () => {
-    for (const item of [text, imageItem, rect, line, ellipse, link]) {
+    for (const item of [text, imageItem, rect, line, ellipse, path, link]) {
       const parsed = LayoutItemSchema.parse(item);
       expect(parsed.sourcePath).toBeUndefined();
     }
@@ -126,7 +174,7 @@ function layoutDocument(): LayoutDocument {
       {
         widthPt: 612,
         heightPt: 792,
-        items: [text, imageItem, rect, line, ellipse, link],
+        items: [text, imageItem, rect, line, ellipse, path, link],
         notes: 'Speaker notes carried as a hidden annotation.',
       },
       {

@@ -72,6 +72,41 @@ export const LayoutEllipseSchema = z.object({
 });
 export type LayoutEllipse = z.infer<typeof LayoutEllipseSchema>;
 
+// A path segment in page-absolute PDF user space (see LayoutPathSchema below), not the subpath's own local coordinate space -- unlike ContentVector's 'path' variant (document-content-model's content.ts), which is still in the source shape's local, viewBox-relative space and needs a frame to place it. By the time a LayoutPath exists, the layout engine has already resolved every point through flipY and shape placement, matching how LayoutLine's x1Pt/y1Pt/x2Pt/y2Pt are already page-absolute rather than carrying a separate frame.
+export const LayoutPathSegmentSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('line'), xPt: z.number(), yPt: z.number() }),
+  z.object({
+    kind: z.literal('cubic'),
+    c1xPt: z.number(),
+    c1yPt: z.number(),
+    c2xPt: z.number(),
+    c2yPt: z.number(),
+    xPt: z.number(),
+    yPt: z.number(),
+  }),
+]);
+export type LayoutPathSegment = z.infer<typeof LayoutPathSegmentSchema>;
+
+// One contiguous subpath: an initial moveto point, then a sequence of line/cubic segments, closed or open -- the PDF content-stream model directly (m, then l/c per segment, then an optional h).
+export const LayoutSubpathSchema = z.object({
+  startXPt: z.number(),
+  startYPt: z.number(),
+  segments: z.array(LayoutPathSegmentSchema),
+  closed: z.boolean(),
+});
+export type LayoutSubpath = z.infer<typeof LayoutSubpathSchema>;
+
+// A general vector path: one or more subpaths sharing one fill/stroke, painted with the given fill rule (PDF's f vs f* / B vs B*) -- the LayoutRect/LayoutEllipse fill/stroke shape convention, reused verbatim, plus fillRule since a path (unlike a rect or ellipse) can be self-intersecting or contain nested/overlapping subpaths where nonzero vs evenodd actually changes what paints.
+export const LayoutPathSchema = z.object({
+  kind: z.literal('path'),
+  subpaths: z.array(LayoutSubpathSchema),
+  fill: ColorSchema.optional(),
+  fillRule: z.enum(['nonzero', 'evenodd']).optional(),
+  stroke: z.object({ color: ColorSchema, widthPt: z.number().positive() }).optional(),
+  sourcePath: z.string().optional(), // deterministic, document-order-derived path copied from the ContentDocument item this was laid out from
+});
+export type LayoutPath = z.infer<typeof LayoutPathSchema>;
+
 // A URI annotation rectangle -- not painted content, but a clickable region.
 export const LayoutLinkSchema = z.object({
   kind: z.literal('link'),
@@ -90,6 +125,7 @@ export const LayoutItemSchema = z.discriminatedUnion('kind', [
   LayoutRectSchema,
   LayoutLineSchema,
   LayoutEllipseSchema,
+  LayoutPathSchema,
   LayoutLinkSchema,
 ]);
 export type LayoutItem = z.infer<typeof LayoutItemSchema>;
