@@ -96,7 +96,7 @@ export { type Alignment, AlignmentSchema } from './typed/shared/style';
 
 export { getOdfSpaceCount, measureOdfNodeLength, sumOdfNodeLength, decodeOdfText } from './typed/shared/text';
 
-export { resolveStyle } from './typed/shared/cascade';
-export type { CascadeDiagnostic, StyleCascadeResult } from './typed/shared/cascade';
+export { resolveStyle, resolveStyleElementChain, findStyleElement } from './typed/shared/cascade';
+export type { CascadeDiagnostic, StyleCascadeResult, StyleElementChainResult } from './typed/shared/cascade';
 
 export { readOdfMetadata, META_PART } from './typed/shared/metadata';

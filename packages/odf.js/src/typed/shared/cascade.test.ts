@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { Package } from '../../model/package';
 import type { XmlElement, XmlNode } from '../../model/node';
 import { el, txt } from '../../xml/fragment';
-import { resolveStyle } from './cascade';
+import { childrenWithTag } from '../../xml/query';
+import { findStyleElement, resolveStyle, resolveStyleElementChain } from './cascade';
 
 function contentPackage(automaticStyleChildren: XmlNode[] = []): Package['parts'][string] {
   return { kind: 'xml', nodes: [el('office:document-content', {}, [el('office:automatic-styles', {}, automaticStyleChildren)])] };
@@ -245,5 +246,70 @@ describe('resolveStyle: malformed style entries during collection', () => {
     const second = el('style:default-style', { 'style:family': 'paragraph' }, [paragraphProps({ 'fo:text-align': 'right' })]);
     const pkg: Package = { parts: { 'styles.xml': stylesPackage([first, second]) } };
     expect(resolveStyle(undefined, 'paragraph', pkg)).toEqual({ properties: { alignment: 'left' }, diagnostics: [] });
+  });
+});
+
+describe('resolveStyleElementChain', () => {
+  it('returns the same root-first element order resolveStyle folds through, for a caller that needs a property vocabulary StyleProperties does not model', () => {
+    const grandparent = styleStyle('GP', 'graphic', {}, [el('style:graphic-properties', { 'fo:padding-left': '0.25cm' })]);
+    const parent = styleStyle('P', 'graphic', { 'style:parent-style-name': 'GP' }, [el('style:graphic-properties', { 'fo:padding-top': '0.125cm' })]);
+    const pkg: Package = { parts: { 'styles.xml': stylesPackage([grandparent, parent]) } };
+
+    const result = resolveStyleElementChain('P', 'graphic', pkg);
+    expect(result.diagnostics).toEqual([]);
+    expect(result.elements.map((element) => element.attributes.find((a) => a.name === 'style:name')?.value)).toEqual(['GP', 'P']);
+  });
+
+  it('returns just the family default-style element when styleName is undefined', () => {
+    const defaultStyle = el('style:default-style', { 'style:family': 'graphic' }, [el('style:graphic-properties', { 'fo:padding-left': '0.25cm' })]);
+    const pkg: Package = { parts: { 'styles.xml': stylesPackage([defaultStyle]) } };
+    expect(resolveStyleElementChain(undefined, 'graphic', pkg).elements).toEqual([defaultStyle]);
+  });
+
+  it('reports the same cyclic-chain diagnostic resolveStyle itself reports, since resolveStyle is now a thin wrapper over this', () => {
+    const a = styleStyle('A', 'graphic', { 'style:parent-style-name': 'B' }, []);
+    const b = styleStyle('B', 'graphic', { 'style:parent-style-name': 'A' }, []);
+    const pkg: Package = { parts: { 'styles.xml': stylesPackage([a, b]) } };
+    expect(resolveStyleElementChain('A', 'graphic', pkg).diagnostics[0]?.message).toMatch(/cyclic/i);
+  });
+});
+
+describe('findStyleElement', () => {
+  it('finds a style:style by (name, family) without walking any parent chain', () => {
+    const target = styleStyle('ce1', 'table-cell', {}, [el('style:table-cell-properties', { 'fo:background-color': '#ff0000' })]);
+    const pkg: Package = { parts: { 'content.xml': contentPackage([target]) } };
+    expect(findStyleElement('ce1', 'table-cell', pkg)).toBe(target);
+  });
+
+  it('finds a style defined in styles.xml, not just content.xml', () => {
+    const target = styleStyle('co1', 'table-column', {}, [el('style:table-column-properties', { 'style:column-width': '5cm' })]);
+    const pkg: Package = { parts: { 'styles.xml': stylesPackage([], [target]) } };
+    expect(findStyleElement('co1', 'table-column', pkg)).toBe(target);
+  });
+
+  it('returns undefined for a name that does not exist under the given family', () => {
+    const target = styleStyle('ce1', 'table-cell', {}, []);
+    const pkg: Package = { parts: { 'content.xml': contentPackage([target]) } };
+    expect(findStyleElement('ce1', 'table-row', pkg)).toBeUndefined();
+  });
+});
+
+// Sanity check that resolveStyleElementChain's extraction is exercised by exactly one child-element lookup pattern real callers (table.ts, shapes.ts) actually use: reading a specific properties child off each element in the chain.
+describe('resolveStyleElementChain: real-world consumption pattern', () => {
+  it('lets a caller fold an arbitrary properties child across the whole chain, root-first, later entries overriding earlier ones', () => {
+    const standard = styleStyle('standard', 'graphic', {}, [el('style:graphic-properties', { 'fo:padding-left': '0.25cm', 'fo:padding-top': '0.125cm' })]);
+    const gr1 = styleStyle('gr1', 'graphic', { 'style:parent-style-name': 'standard' }, [el('style:graphic-properties', { 'fo:padding-top': '0.5cm' })]);
+    const pkg: Package = { parts: { 'styles.xml': stylesPackage([standard]), 'content.xml': contentPackage([gr1]) } };
+
+    const { elements } = resolveStyleElementChain('gr1', 'graphic', pkg);
+    let paddingLeft: string | undefined;
+    let paddingTop: string | undefined;
+    for (const element of elements) {
+      const props = childrenWithTag(element, 'style:graphic-properties')[0];
+      paddingLeft = props?.attributes.find((a) => a.name === 'fo:padding-left')?.value ?? paddingLeft;
+      paddingTop = props?.attributes.find((a) => a.name === 'fo:padding-top')?.value ?? paddingTop;
+    }
+    expect(paddingLeft).toBe('0.25cm'); // inherited from "standard", never overridden by gr1
+    expect(paddingTop).toBe('0.5cm'); // gr1's own value wins over "standard"'s
   });
 });
