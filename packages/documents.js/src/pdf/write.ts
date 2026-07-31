@@ -219,6 +219,22 @@ function isLinkItem(item: { readonly kind: string }): item is LayoutLink {
   return item.kind === 'link';
 }
 
+// PDF has no native concept of hidden presenter notes, but it does have a standard construct for "a note attached to a page that isn't part of the page's visible content": a /Subtype /Text annotation (the same one Acrobat's own sticky-note tool creates), with the Hidden annotation flag (ISO 32000-1 Table 165, bit position 2, value 2 -- "do not display the annotation... regardless of its annotation flags... in any way") set so it never renders or prints. This is how pptx speaker notes survive pptxToPdf -> pdfToPptx: reusing a real, standard PDF construct that generic PDF tooling already knows to preserve in an Annots array, rather than a bespoke private dictionary key nothing else would recognise. /T marks authorship so read.ts's readPageNotes only ever treats an annotation genuinely written by this function as recovered notes, not a real sticky note a human or another tool happened to leave on the page.
+const NOTES_ANNOTATION_HIDDEN_FLAG = 2;
+// Exported so read.ts's readPageNotes checks the exact same marker, rather than a second, driftable copy of the string.
+export const NOTES_ANNOTATION_AUTHOR = 'documents.js:notes';
+
+function buildNotesAnnotDict(notes: string): PdfObject {
+  return pdfDict({
+    Type: pdfName('Annot'),
+    Subtype: pdfName('Text'),
+    Rect: pdfArray([0, 0, 0, 0].map((n) => pdfNum(n))),
+    Contents: textToPdfString(notes),
+    T: textToPdfString(NOTES_ANNOTATION_AUTHOR),
+    F: pdfNum(NOTES_ANNOTATION_HIDDEN_FLAG),
+  });
+}
+
 interface AllocatedObject {
   readonly num: number;
   readonly value: PdfObject;
@@ -340,6 +356,9 @@ export function writePdf(doc: LayoutDocument, options: WritePdfOptions = {}): Ui
     objects.push({ num: contentsNum, value: pdfStream(contentsDict, finalContentBytes) });
 
     const annots = page.items.filter(isLinkItem).map((link) => buildLinkAnnotDict(link));
+    if (page.notes !== undefined && page.notes.length > 0) {
+      annots.push(buildNotesAnnotDict(page.notes));
+    }
 
     const pageEntries = new Map<string, PdfObject>([
       ['Type', pdfName('Page')],

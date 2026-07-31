@@ -99,4 +99,24 @@ describe('writePdf -> readPdf: structural round trip', () => {
 
     expect(result.pages[0]!.items).toMatchObject([{ kind: 'text', text: 'Compressed' }]);
   });
+
+  // page.notes carries pptx speaker notes through the PDF round trip (see layout/slides.ts and layout/reconstruct.ts) as a hidden /Subtype /Text annotation (write.ts's buildNotesAnnotDict) -- PDF has no native concept of presenter notes, so this is this package's own round-trip mechanism, confirmed here at the LayoutDocument level and separately confirmed against real Keynote (see editor.test.ts and this project's own manual verification).
+  it('recovers page.notes from the hidden notes annotation, and omits it entirely when absent', () => {
+    const withNotes = docWithPages([{ widthPt: 300, heightPt: 200, items: [], notes: 'Speaker notes for this page' }]);
+    const resultWithNotes = readPdf(writePdf(withNotes, { compress: false }));
+    expect(resultWithNotes.pages[0]!.notes).toBe('Speaker notes for this page');
+
+    const withoutNotes = docWithItems([]);
+    const resultWithoutNotes = readPdf(writePdf(withoutNotes, { compress: false }));
+    expect(resultWithoutNotes.pages[0]!.notes).toBeUndefined();
+  });
+
+  it('never surfaces the hidden notes annotation as a visible LayoutItem', () => {
+    const doc = docWithPages([{ widthPt: 300, heightPt: 200, items: [{ kind: 'text', text: 'Visible', xPt: 0, yPt: 0, font: HELVETICA, sizePt: 12, color: BLACK }], notes: 'Hidden notes text' }]);
+
+    const result = readPdf(writePdf(doc, { compress: false }));
+
+    expect(result.pages[0]!.items).toHaveLength(1);
+    expect(result.pages[0]!.items[0]).toMatchObject({ kind: 'text', text: 'Visible' });
+  });
 });

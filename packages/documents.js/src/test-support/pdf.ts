@@ -252,6 +252,16 @@ export function inheritedPageAttributesPdf(): Uint8Array<ArrayBuffer> {
   return b.bytes();
 }
 
+// A page with a hidden /Subtype /Text annotation NOT authored by documents.js's own writer (a different /T, as a real third-party tool's own sticky note would have) -- proves readPageNotes's /T-marker check genuinely discriminates our own notes annotation from someone else's, rather than treating every hidden Text annotation as recovered pptx notes.
+export function pdfWithForeignHiddenAnnotationPdf(): Uint8Array<ArrayBuffer> {
+  const b = new FixtureBuilder().header('1.4');
+  catalogPagesPageFontObjects(b, 5, '[0 0 200 100]', '/Annots [6 0 R] ');
+  b.stream(5, '<< >>', enc(HELLO_CONTENT));
+  b.object(6, '<< /Type /Annot /Subtype /Text /Rect [0 0 0 0] /Contents (A real reviewer note, not pptx speaker notes) /T (Some Other Tool) /F 2 >>');
+  b.classicXrefAndTrailer(6, '/Root 1 0 R');
+  return b.bytes();
+}
+
 // An /Info dict mixing the two real-world string encodings a reader must handle: /Title as UTF-16BE-with-BOM (our own writer's own convention, ISO 32000-1 7.9.2.2's "long form"), and /Author/Keywords as plain literal-string PDFDocEncoding (the common case for ASCII-only metadata most third-party producers emit). /CreationDate uses the PDF date format (ISO 32000-1 7.9.4) with an explicit UTC+02:00 offset.
 export function withInfoDictPdf(): Uint8Array<ArrayBuffer> {
   const b = new FixtureBuilder().header('1.4');
