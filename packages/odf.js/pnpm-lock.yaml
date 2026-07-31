@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       document-content-model:
-        specifier: ^1.1.0
-        version: 1.1.0
+        specifier: ^1.2.0
+        version: 1.2.0
       fast-xml-parser:
         specifier: ^5.10.1
         version: 5.10.1
@@ -1056,8 +1056,8 @@ packages:
     resolution: {integrity: sha512-WkrWp9GR4KXfKGYzOLmTuGVi1UWFfws377n9cc55/tb6DuqyF6pcQ5AbiHEshaDpY9v6oaSr2XCDidGmMwdzIA==}
     engines: {node: '>=8'}
 
-  document-content-model@1.1.0:
-    resolution: {integrity: sha512-1CkzXUas2M0cRPiWrSU3PI5ZTsRRMRStRphJtUQJ3QZneLELGtyVRecwIvp3yGGZrTcHmNrqgvH+ZLHMewq2Nw==}
+  document-content-model@1.2.0:
+    resolution: {integrity: sha512-T1Hz2be2NILsfTHFrSNVsdZWGUrBJhLEXGaBVpHCr24eEgmx8cMM7G6oq86kjbo6d9tTs0+z4WCn2G0MxAOaNA==}
     engines: {node: '>=20'}
 
   dot-prop@5.3.0:
@@ -3581,7 +3581,7 @@ snapshots:
     dependencies:
       path-type: 4.0.0
 
-  document-content-model@1.1.0:
+  document-content-model@1.2.0:
     dependencies:
       zod: 4.4.3
 
