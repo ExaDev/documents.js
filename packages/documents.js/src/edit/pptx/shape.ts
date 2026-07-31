@@ -148,7 +148,7 @@ function colorToHex(color: LayoutColor): string {
   return `${toByte(color.r)}${toByte(color.g)}${toByte(color.b)}`.toUpperCase();
 }
 
-// DrawingML run properties are attribute-based toggles (b="1", i="1" on a:rPr itself), not the element-presence toggles WordprocessingML uses (w:b/w:i as child elements) -- the same distinction docx/styles.ts documents for the read side, mirrored here on write.
+// DrawingML run properties are attribute-based toggles (b="1", i="1" on a:rPr itself), not the element-presence toggles WordprocessingML uses (w:b/w:i as child elements) -- the same distinction ooxml.js's readPptx documents for the read side, mirrored here on write.
 function buildDrawingRun(init: DrawingRunInit): XmlElement {
   const rPrAttrs: Record<string, string> = {};
   if (init.bold === true) {
