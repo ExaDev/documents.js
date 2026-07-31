@@ -1,3 +1,10 @@
+# [1.41.0](https://github.com/ExaDev/documents.js/compare/v1.40.0...v1.41.0) (2026-07-31)
+
+
+### Features
+
+* add the odp live-view editor and pdfToOdp ([320f80c](https://github.com/ExaDev/documents.js/commit/320f80cb3a6c5d1505630e0ed8fb32a1d9647f50))
+
 # [1.40.0](https://github.com/ExaDev/documents.js/compare/v1.39.1...v1.40.0) (2026-07-31)
 
 
