@@ -59,3 +59,23 @@ export {
   ManifestProblemSchema,
 } from './manifest';
 export type { ManifestEntry, Manifest, ManifestProblem, BuildManifestOptions } from './manifest';
+
+export {
+  StylePropertiesSchema,
+  parseTextProperties,
+  parseParagraphProperties,
+  parseStyleElementProperties,
+  textPropertiesToAttributes,
+  paragraphPropertiesToAttributes,
+  parseLength,
+  formatPt,
+  formatPercentageMultiplier,
+} from './styles/properties';
+export type { StyleProperties, ParsedProperties } from './styles/properties';
+
+export { buildStylePropertyElements, canonicalPropertiesString } from './styles/serialize';
+
+export { StyleRegistry, STYLE_FAMILIES } from './styles/registry';
+export type { StyleFamily, InternRequest, OtherPartRef, StyleRegistryOptions } from './styles/registry';
+
+export { ensureSpan } from './styles/span';
