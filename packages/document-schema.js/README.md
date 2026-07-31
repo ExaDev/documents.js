@@ -17,6 +17,14 @@ const content = ContentDocumentSchema.parse(someWordprocessingOrPresentationValu
 const layout = LayoutDocumentSchema.parse(somePageLayoutValue);
 ```
 
+## Used by
+
+- [ooxml.js](https://github.com/ExaDev/ooxml.js) — its `readDocx`/`readPptx` return `ContentSection[]`/`ContentSlide[]` typed against this package's own schemas, not a locally-defined lookalike.
+- [odf.js](https://github.com/ExaDev/odf.js) — its ODF typed readers (`readOdt`, `readOdp`, `readOdg`, …) return the same shared types, so an ODF document and an OOXML document speak the identical pivot.
+- [documents.js](https://github.com/ExaDev/documents.js) — the primary consumer of both `ContentDocument` (the semantic pivot) and `LayoutDocument` (the PDF-rendering pivot), which it converts between via its layout engines and PDF codec.
+
+None of these three packages depend on each other for this vocabulary — each depends on `document-content-model` directly, which is the whole point: one schema, not three independently-maintained, drift-prone copies.
+
 ## License
 
 MIT
