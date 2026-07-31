@@ -1,3 +1,10 @@
+# [1.46.0](https://github.com/ExaDev/documents.js/compare/v1.45.0...v1.46.0) (2026-07-31)
+
+
+### Features
+
+* track general vector paths in the PDF content-stream reader ([24f7aea](https://github.com/ExaDev/documents.js/commit/24f7aea6479d490697ded4e5c9503e097562436b))
+
 # [1.45.0](https://github.com/ExaDev/documents.js/compare/v1.44.0...v1.45.0) (2026-07-31)
 
 
