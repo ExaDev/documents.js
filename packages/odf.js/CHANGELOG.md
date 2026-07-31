@@ -1,3 +1,16 @@
+# [1.6.0](https://github.com/ExaDev/odf.js/compare/v1.5.0...v1.6.0) (2026-07-31)
+
+
+### Bug Fixes
+
+* **deps:** lower minimumReleaseAge for CI's frozen-lockfile install ([a264433](https://github.com/ExaDev/odf.js/commit/a26443324e3b8e6d7540fa732277ad0f4789fb4a)), closes [pnpm/pnpm#10361](https://github.com/pnpm/pnpm/issues/10361) [#9997](https://github.com/ExaDev/odf.js/issues/9997) [#10438](https://github.com/ExaDev/odf.js/issues/10438)
+
+
+### Features
+
+* add an ODF path-data and points-list grammar parser ([cb4e7d8](https://github.com/ExaDev/odf.js/commit/cb4e7d8a7b047a4087d57fc8d6dab6ad7f9a541c))
+* add readOdg and extend the shared shape vocabulary with vector primitives ([14b4ef9](https://github.com/ExaDev/odf.js/commit/14b4ef999c978b3b4d765bfd942d1ae939ad9a61))
+
 # [1.5.0](https://github.com/ExaDev/odf.js/compare/v1.4.0...v1.5.0) (2026-07-31)
 
 
