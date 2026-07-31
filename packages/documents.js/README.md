@@ -1,6 +1,6 @@
 # documents.js
 
-[![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/documents.js) [![npm](https://img.shields.io/npm/v/documents.js?logo=npm)](https://www.npmjs.com/package/documents.js) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/documents.js/ci.yml?branch=main)](https://github.com/ExaDev/documents.js/actions)
+[![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/documents.js) [![npm](https://img.shields.io/badge/npm-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/documents.js) [![Release](https://img.shields.io/github/v/release/ExaDev/documents.js)](https://github.com/ExaDev/documents.js/releases/latest) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/documents.js/ci.yml?branch=main)](https://github.com/ExaDev/documents.js/actions)
 
 > Bidirectional docx/pptx ⇄ PDF conversion, a read-and-write live-view editor for docx/pptx content, and a fully hand-written PDF codec, built on [ooxml.js](https://github.com/ExaDev/ooxml.js).
 
