@@ -129,6 +129,17 @@ export type { DrawingParagraphInit, DrawingRunInit } from './edit/pptx/shape';
 export { PptxShape } from './edit/pptx/shape';
 export { buildPptxPackage } from './edit/pptx/content';
 
+export type { OdtBody } from './edit/odt/editor';
+export { createOdt, OdtEditor, openOdt } from './edit/odt/editor';
+export type { ParagraphInit as OdtParagraphInit } from './edit/odt/paragraph';
+export { OdtParagraph } from './edit/odt/paragraph';
+export type { RunInit as OdtRunInit } from './edit/odt/run';
+export { OdtRun } from './edit/odt/run';
+export { OdtList, OdtListItem } from './edit/odt/list';
+export type { TableInit as OdtTableInit } from './edit/odt/table';
+export { OdtTable, OdtTableCell, OdtTableRow } from './edit/odt/table';
+export { buildOdtPackage } from './edit/odt/content';
+
 // --- The hand-written PDF codec. ---
 export type { ReadPdfOptions } from './pdf/read';
 export { readPdf } from './pdf/read';

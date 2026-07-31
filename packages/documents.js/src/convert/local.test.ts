@@ -22,7 +22,7 @@ function buildSamplePptx(text: string): Uint8Array<ArrayBuffer> {
 }
 
 describe('createLocalDocumentConverter: shape', () => {
-  it('reports contractVersion and the four supported conversion pairs', () => {
+  it('reports contractVersion and the supported conversion pairs', () => {
     const converter = createLocalDocumentConverter();
     expect(converter.contractVersion).toBe(1);
     expect(converter.conversions).toEqual([
@@ -31,6 +31,7 @@ describe('createLocalDocumentConverter: shape', () => {
       { source: 'odt', target: 'pdf' },
       { source: 'pdf', target: 'docx' },
       { source: 'pdf', target: 'pptx' },
+      { source: 'pdf', target: 'odt' },
     ]);
   });
 });
@@ -70,6 +71,14 @@ describe('createLocalDocumentConverter: convert', () => {
     const pptxToPdfResult = await converter.convert({ source: { format: 'pptx', bytes: buildSamplePptx('Hi') }, targetFormat: 'pdf' }, { signal: new AbortController().signal });
     const result = await converter.convert({ source: pptxToPdfResult.document, targetFormat: 'pptx' }, { signal: new AbortController().signal });
     expect(result.document.format).toBe('pptx');
+    expect(result.document.bytes.length).toBeGreaterThan(0);
+  });
+
+  it('converts pdf to odt', async () => {
+    const converter = createLocalDocumentConverter();
+    const odtToPdfResult = await converter.convert({ source: { format: 'odt', bytes: minimalOdtBytes() }, targetFormat: 'pdf' }, { signal: new AbortController().signal });
+    const result = await converter.convert({ source: odtToPdfResult.document, targetFormat: 'odt' }, { signal: new AbortController().signal });
+    expect(result.document.format).toBe('odt');
     expect(result.document.bytes.length).toBeGreaterThan(0);
   });
 

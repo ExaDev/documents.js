@@ -1,0 +1,121 @@
+import type { Package, XmlElement, XmlNode } from 'odf.js';
+import { attr } from 'ooxml.js';
+import { removeAttr, removeChild, setAttr } from '../../xml/edit';
+import { el } from '../../xml/fragment';
+import { decodeOdfText } from '../../xml/odf-text';
+import type { Alignment } from '../../model/style';
+import { applyStyleChange, readCurrentStyleProperties } from './props';
+import type { RunInit } from './run';
+import { buildRun, OdtRun } from './run';
+
+export interface ParagraphInit {
+  readonly text?: string;
+  readonly styleId?: string;
+  readonly alignment?: Alignment;
+}
+
+// A live view over a text:p element -- see docx's paragraph.ts (src/edit/docx/paragraph.ts) for the same live-view rationale. List membership has no counterpart here: unlike DocxParagraph, which carries a w:numPr property naming which list/level it belongs to, ODF nests lists STRUCTURALLY (a text:list contains text:list-item elements, which directly contain the member text:p/text:h elements) -- a paragraph's list membership is a fact about where it sits in the tree, not a property on the paragraph itself. See list.ts's OdtList/OdtListItem for how list paragraphs are actually built.
+export class OdtParagraph {
+  private readonly container: XmlNode[];
+  private readonly node: XmlElement;
+  private readonly pkg: Package;
+  private removed = false;
+
+  constructor(container: XmlNode[], node: XmlElement, pkg: Package) {
+    this.container = container;
+    this.node = node;
+    this.pkg = pkg;
+  }
+
+  private live(): XmlElement {
+    if (this.removed) {
+      throw new Error('this OdtParagraph has been removed from its body and can no longer be used');
+    }
+    return this.node;
+  }
+
+  // *** decodeOdfText, NEVER ooxml.js's textContent() -- see src/xml/odf-text.ts's own top-of-file warning: textContent() silently drops text:s/text:tab/text:line-break, producing silently-wrong, silently-shorter text with no error at all. Repeated here because every ODF text getter in this codebase must carry this warning at its own call site. ***
+  get text(): string {
+    return decodeOdfText(this.live().children);
+  }
+
+  runs(): OdtRun[] {
+    const node = this.live();
+    const out: OdtRun[] = [];
+    for (const child of node.children) {
+      if (child.type === 'element' && child.tag === 'text:span') {
+        out.push(new OdtRun(node.children, child, this.pkg));
+      }
+    }
+    return out;
+  }
+
+  appendRun(init?: RunInit): OdtRun {
+    const node = this.live();
+    const span = buildRun(this.pkg, init);
+    node.children.push(span);
+    return new OdtRun(node.children, span, this.pkg);
+  }
+
+  // A tab character inside a text node is not the same as a real tab-stop advance -- ODF represents one as its own text:tab element (see src/xml/odf-text.ts's encodeOdfText), never as a literal tab byte in text-node content.
+  appendTab(): void {
+    this.live().children.push(el('text:tab'));
+  }
+
+  insertRunAt(index: number, init?: RunInit): OdtRun {
+    const node = this.live();
+    const span = buildRun(this.pkg, init);
+    const spanIndices: number[] = [];
+    node.children.forEach((child, i) => {
+      if (child.type === 'element' && child.tag === 'text:span') {
+        spanIndices.push(i);
+      }
+    });
+    const insertAt = index < spanIndices.length ? (spanIndices[index] ?? node.children.length) : node.children.length;
+    node.children.splice(insertAt, 0, span);
+    return new OdtRun(node.children, span, this.pkg);
+  }
+
+  // A direct pointer at an existing NAMED style (e.g. "Heading_20_1", a style defined in office:styles rather than minted into office:automatic-styles) -- mirrors DocxParagraph's own styleId setter (src/edit/docx/paragraph.ts), which similarly writes w:pStyle directly rather than going through a cascade-aware helper. Unlike alignment/spacing below, this bypasses applyStyleChange entirely: it repoints text:style-name at a caller-supplied name outright, rather than merging a property change into whatever style is already referenced. Pointing this at a name that resolves to nothing (e.g. a raw docx-style styleId carried over from a cross-format ContentDocument) is not an error -- odf.js's own resolveStyle tolerates an unresolvable style name by contributing no properties, leaving the paragraph valid but unstyled, exactly as ODF itself does.
+  get styleId(): string | undefined {
+    return attr(this.live(), 'text:style-name');
+  }
+
+  set styleId(value: string | undefined) {
+    const node = this.live();
+    if (value === undefined) {
+      removeAttr(node, 'text:style-name');
+      return;
+    }
+    setAttr(node, 'text:style-name', value);
+  }
+
+  get alignment(): Alignment | undefined {
+    return readCurrentStyleProperties(this.pkg, this.live(), 'paragraph').alignment;
+  }
+
+  set alignment(value: Alignment | undefined) {
+    applyStyleChange(this.pkg, this.live(), 'paragraph', { alignment: value });
+  }
+
+  remove(): void {
+    removeChild(this.container, this.live());
+    this.removed = true;
+  }
+}
+
+// Builds a fresh text:p from scratch (not a live view -- for constructing new paragraphs to append or insert, whose properties are then read back through OdtParagraph once inserted into the tree). Mirrors run.ts's buildRun: applies init's properties by constructing a throwaway OdtParagraph over the new node and driving it through the exact same setters every later mutation uses.
+export function buildParagraph(pkg: Package, init: ParagraphInit = {}): XmlElement {
+  const node = el('text:p');
+  const paragraph = new OdtParagraph([], node, pkg);
+  if (init.styleId !== undefined) {
+    paragraph.styleId = init.styleId;
+  }
+  if (init.alignment !== undefined) {
+    paragraph.alignment = init.alignment;
+  }
+  if (init.text !== undefined) {
+    node.children.push(buildRun(pkg, { text: init.text }));
+  }
+  return node;
+}
