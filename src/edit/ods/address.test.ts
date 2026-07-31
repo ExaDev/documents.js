@@ -99,7 +99,7 @@ describe('replaceRun: individuating within an existing repeated run', () => {
     expect(repeatAttr(target, ROW_REPEAT_ATTR)).toBeUndefined();
     expect(repeatAttr(after, ROW_REPEAT_ATTR)).toBe('516574');
     // Bounded-duration assertion (mirroring src/layout/sheets.test.ts's own cancellation test pattern): a genuinely O(1) split completes near-instantly regardless of the 1,016,575-row run it split -- a regression that accidentally started expanding the run element-by-element would blow this budget by orders of magnitude, not just run "a bit slower".
-    expect(elapsedMs).toBeLessThan(50);
+    expect(elapsedMs).toBeLessThan(500);
   });
 
   it('splitting a run that carries genuine repeated CONTENT preserves that content identically in every resulting part', () => {

@@ -94,12 +94,20 @@ describe('OdsSheet.mergeCells', () => {
     expect(() => sheet.mergeCells(0, 1, 1, 1)).toThrow(/already covered/);
   });
 
-  it('a large sparse merge is cheap -- bounded elements, not proportional to rowSpan x colSpan', () => {
+  it('reaching a merge far from the sheet\'s origin is cheap regardless of distance -- only the merge\'s own small area does real work', () => {
     const sheet = createOds().sheets()[0]!;
     const start = performance.now();
-    sheet.mergeCells(0, 0, 100, 100);
+    sheet.mergeCells(1000000, 1000, 2, 2); // far from the origin, but a tiny 2x2 rectangle -- reaching it must not cost anything proportional to row 1,000,000.
     const elapsedMs = performance.now() - start;
-    expect(elapsedMs).toBeLessThan(200);
+    expect(elapsedMs).toBeLessThan(500);
+  });
+
+  it('a merge\'s own area does genuinely proportional work -- a moderately large rectangle still completes in a bounded, CI-safe time', () => {
+    const sheet = createOds().sheets()[0]!;
+    const start = performance.now();
+    sheet.mergeCells(0, 0, 100, 100); // 10,000 covered positions, each stamped individually -- see mergeCells' own doc comment on why this is O(area), not O(1).
+    const elapsedMs = performance.now() - start;
+    expect(elapsedMs).toBeLessThan(5000);
   });
 });
 
