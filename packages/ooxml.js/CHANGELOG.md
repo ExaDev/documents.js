@@ -1,3 +1,33 @@
+# [2.0.0](https://github.com/ExaDev/ooxml.js/compare/v1.3.1...v2.0.0) (2026-07-31)
+
+
+* feat!: resolve style/theme cascades into readDocx sections and readPptx shapes ([e37fb03](https://github.com/ExaDev/ooxml.js/commit/e37fb0342e0b432e70d9ae6ab24d13929024217a))
+
+
+### Bug Fixes
+
+* update smoke test to readDocx's sections/blocks shape ([da798d9](https://github.com/ExaDev/ooxml.js/commit/da798d913a6b7e11b96b08fbf9afe875b48bd554))
+
+
+### Features
+
+* add shared OOXML content model and geometry/colour/unit primitives ([8d032f0](https://github.com/ExaDev/ooxml.js/commit/8d032f04dc3c0a37fa3a091df498af46f887b09d))
+
+
+### BREAKING CHANGES
+
+* DocxDocument's shape changes from
+{ paragraphs, tables, hyperlinks, comments, footnotes, headers, footers }
+to { metadata, sections, comments, footnotes, headers, footers } --
+sections' ordered ContentBlock[] supersedes the separate paragraphs/
+tables arrays, and each run's own resolved hyperlink field supersedes
+the flat hyperlinks array. PptxPresentation is renamed PptxDocument and
+its shape changes from { slides: [{ index, text, shapes: [{ text }],
+tables, notes }] } to { metadata, slides: [{ size, shapes: [{ name,
+frame, rotationDeg, insets, blocks }], notes }] } -- array position
+supersedes the old index field, and each shape's own blocks (paragraphs/
+tables/images) supersedes the separate flat shapes/tables arrays.
+
 ## [1.3.1](https://github.com/ExaDev/ooxml.js/compare/v1.3.0...v1.3.1) (2026-07-30)
 
 
