@@ -1,6 +1,6 @@
 {
   "name": "document-content-model",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "The canonical, format-agnostic content and layout schemas shared by ooxml.js, odf.js, and documents.js -- pure Zod schemas, no behaviour.",
   "type": "module",
   "repository": {
