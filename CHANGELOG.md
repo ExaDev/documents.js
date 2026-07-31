@@ -1,3 +1,10 @@
+## [1.33.3](https://github.com/ExaDev/documents.js/compare/v1.33.2...v1.33.3) (2026-07-31)
+
+
+### Bug Fixes
+
+* make generated pptx files actually open in real presentation software ([79c793c](https://github.com/ExaDev/documents.js/commit/79c793c966121e7dfa1436ecc52ad469e43160a8))
+
 ## [1.33.2](https://github.com/ExaDev/documents.js/compare/v1.33.1...v1.33.2) (2026-07-31)
 
 ## [1.33.1](https://github.com/ExaDev/documents.js/compare/v1.33.0...v1.33.1) (2026-07-31)
