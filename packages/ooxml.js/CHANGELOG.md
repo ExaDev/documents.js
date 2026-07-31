@@ -1,3 +1,10 @@
+# [2.1.0](https://github.com/ExaDev/ooxml.js/compare/v2.0.4...v2.1.0) (2026-07-31)
+
+
+### Features
+
+* assign sourcePath on readDocx/readPptx content in document order ([536ee59](https://github.com/ExaDev/ooxml.js/commit/536ee59efbf1cdc333fb7e4fb358dd7f2d9f874c))
+
 ## [2.0.4](https://github.com/ExaDev/ooxml.js/compare/v2.0.3...v2.0.4) (2026-07-31)
 
 ## [2.0.3](https://github.com/ExaDev/ooxml.js/compare/v2.0.2...v2.0.3) (2026-07-31)
