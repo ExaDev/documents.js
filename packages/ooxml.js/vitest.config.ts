@@ -7,6 +7,7 @@ export default defineConfig({
       provider: 'v8',
       include: ['src/**/*.ts'],
       exclude: ['src/**/*.test.ts'],
+      reporter: ['text', 'html', 'cobertura'],
     },
     projects: [
       { test: { name: 'unit', include: ['src/**/*.test.ts'] } },
