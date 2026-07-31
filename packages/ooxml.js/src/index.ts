@@ -57,20 +57,20 @@ export {
 } from './compact';
 export type { CompactPackage, CompactPart, CompactXmlNode, CompactAttrPairs } from './compact';
 
-// --- The shared content model: one block model (paragraphs, tables, images, page breaks) underlying both readDocx's sections and readPptx's slides, plus the geometry/colour/unit primitives it's expressed in. ---
-export { BoxSchema, MarginsSchema, PageSizeSchema, PAGE_SIZE_A4, PAGE_SIZE_LETTER, SLIDE_SIZE_STANDARD, SLIDE_SIZE_WIDESCREEN } from './typed/shared/geometry';
-export type { Box, Margins, PageSize } from './typed/shared/geometry';
-
-export { COLOR_BLACK, ColorSchema, applyColorTransforms, colorToRgbHex, rgbHexToColor } from './typed/shared/color';
-export type { Color, ColorTransform } from './typed/shared/color';
-
-export { AlignmentSchema } from './typed/shared/style';
-export type { Alignment } from './typed/shared/style';
-
-export { DocumentMetadataSchema } from './typed/shared/metadata';
-export type { DocumentMetadata } from './typed/shared/metadata';
-
+// --- The shared content model: one block model (paragraphs, tables, images, page breaks) underlying both readDocx's sections and readPptx's slides, plus the geometry/colour/unit primitives it's expressed in. Sourced from document-content-model, the sibling package that also backs documents.js's own PDF-side pivot -- these re-exports keep ooxml.js's own public API surface unchanged even though the definitions no longer live in this package. ---
 export {
+  BoxSchema,
+  MarginsSchema,
+  PageSizeSchema,
+  PAGE_SIZE_A4,
+  PAGE_SIZE_LETTER,
+  SLIDE_SIZE_STANDARD,
+  SLIDE_SIZE_WIDESCREEN,
+  COLOR_BLACK,
+  ColorSchema,
+  colorToRgbHex,
+  rgbHexToColor,
+  AlignmentSchema,
   ContentBlockSchema,
   ContentImageBlockSchema,
   ContentListMembershipSchema,
@@ -84,8 +84,13 @@ export {
   ContentTableRowSchema,
   ContentTableSchema,
   isContentBlock,
-} from './typed/shared/content';
+} from 'document-content-model';
 export type {
+  Box,
+  Margins,
+  PageSize,
+  Color,
+  Alignment,
   ContentBlock,
   ContentImageBlock,
   ContentListMembership,
@@ -98,7 +103,13 @@ export type {
   ContentTable,
   ContentTableCell,
   ContentTableRow,
-} from './typed/shared/content';
+} from 'document-content-model';
+
+export { applyColorTransforms } from './typed/shared/color';
+export type { ColorTransform } from './typed/shared/color';
+
+export { DocumentMetadataSchema } from './typed/shared/metadata';
+export type { DocumentMetadata } from './typed/shared/metadata';
 
 export { sniffImageFormat } from './image/sniff';
 export type { ImageFormat } from './image/sniff';

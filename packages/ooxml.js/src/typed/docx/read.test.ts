@@ -1,7 +1,7 @@
 import type { Package } from '../../model/package';
 import type { XmlElement } from '../../model/node';
 import { describe, expect, it } from 'vitest';
-import type { ContentBlock, ContentParagraph, ContentTable } from '../shared/content';
+import type { ContentBlock, ContentParagraph, ContentTable } from 'document-content-model';
 import { el, txt } from '../../test-support/fragment';
 import { readDocx } from './read';
 

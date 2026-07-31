@@ -1,7 +1,8 @@
 import type { XmlElement } from '../../model/node';
-import type { Box } from './geometry';
-import type { Color, ColorTransform } from './color';
-import { applyColorTransforms, rgbHexToColor } from './color';
+import type { Box, Color } from 'document-content-model';
+import { rgbHexToColor } from 'document-content-model';
+import type { ColorTransform } from './color';
+import { applyColorTransforms } from './color';
 import { emuToPt } from './units';
 import { attr, childrenWithTag, elementsWithTag } from '../util';
 

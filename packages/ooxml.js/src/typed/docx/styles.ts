@@ -1,7 +1,6 @@
 import type { XmlElement } from '../../model/node';
-import type { Color } from '../shared/color';
-import { rgbHexToColor } from '../shared/color';
-import type { Alignment } from '../shared/style';
+import type { Alignment, Color } from 'document-content-model';
+import { rgbHexToColor } from 'document-content-model';
 import { halfPointsToPt, lineUnitsToMultiplier, twipsToPt } from '../shared/units';
 import type { DrawingTheme } from '../shared/drawingml';
 import { attr, childrenWithTag, elementsWithTag } from '../util';

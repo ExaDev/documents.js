@@ -1,13 +1,9 @@
 import { z } from 'zod';
 import type { Package } from '../../model/package';
 import type { XmlElement, XmlNode } from '../../model/node';
-import type { Color } from '../shared/color';
-import { rgbHexToColor } from '../shared/color';
-import type { ContentBlock, ContentListMembership, ContentParagraph, ContentRun, ContentSection, ContentTable, ContentTableCell } from '../shared/content';
-import { ContentSectionSchema } from '../shared/content';
+import type { Color, ContentBlock, ContentListMembership, ContentParagraph, ContentRun, ContentSection, ContentTable, ContentTableCell, Margins, PageSize } from 'document-content-model';
+import { ContentSectionSchema, PAGE_SIZE_LETTER, rgbHexToColor } from 'document-content-model';
 import { DocumentMetadataSchema, readCoreProperties } from '../shared/metadata';
-import type { Margins, PageSize } from '../shared/geometry';
-import { PAGE_SIZE_LETTER } from '../shared/geometry';
 import { twipsToPt } from '../shared/units';
 import type { DrawingTheme } from '../shared/drawingml';
 import { EMPTY_THEME, readTheme } from '../shared/drawingml';

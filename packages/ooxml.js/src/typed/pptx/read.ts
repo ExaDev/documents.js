@@ -1,11 +1,8 @@
 import { z } from 'zod';
 import type { Package } from '../../model/package';
 import type { XmlElement, XmlNode } from '../../model/node';
-import type { ContentBlock, ContentImageBlock, ContentParagraph, ContentRun, ContentShape, ContentSlide, ContentTable, ContentTableCell } from '../shared/content';
-import { ContentSlideSchema } from '../shared/content';
-import type { Box, PageSize } from '../shared/geometry';
-import { SLIDE_SIZE_WIDESCREEN } from '../shared/geometry';
-import type { Alignment } from '../shared/style';
+import type { Alignment, Box, ContentBlock, ContentImageBlock, ContentParagraph, ContentRun, ContentShape, ContentSlide, ContentTable, ContentTableCell, PageSize } from 'document-content-model';
+import { ContentSlideSchema, SLIDE_SIZE_WIDESCREEN } from 'document-content-model';
 import { drawingMlFontSizeToPt, emuToPt } from '../shared/units';
 import { sniffImageFormat } from '../../image/sniff';
 import type { GroupChildTransform } from '../shared/drawingml';
