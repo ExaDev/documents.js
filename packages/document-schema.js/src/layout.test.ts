@@ -1,0 +1,144 @@
+import { describe, expect, it } from 'vitest';
+import { COLOR_BLACK } from './color';
+import {
+  LAYOUT_FORMAT_VERSION,
+  type LayoutDocument,
+  LayoutDocumentSchema,
+  type LayoutItem,
+  LayoutItemSchema,
+} from './layout';
+import { DEFAULT_LAYOUT_FONT } from './style';
+
+const text: LayoutItem = {
+  kind: 'text',
+  text: 'Hello, layout.',
+  xPt: 72,
+  yPt: 720,
+  font: DEFAULT_LAYOUT_FONT,
+  sizePt: 12,
+  color: COLOR_BLACK,
+  widthPt: 90.5,
+  rotationDeg: 0,
+  underline: true,
+};
+
+const imageItem: LayoutItem = {
+  kind: 'image',
+  imageId: 'logo',
+  xPt: 10,
+  yPt: 700,
+  widthPt: 50,
+  heightPt: 25,
+  rotationDeg: 5,
+};
+
+const rect: LayoutItem = {
+  kind: 'rect',
+  xPt: 0,
+  yPt: 0,
+  widthPt: 200,
+  heightPt: 100,
+  fill: { r: 0.9, g: 0.9, b: 0.9 },
+  stroke: { color: COLOR_BLACK, widthPt: 1.5 },
+};
+
+const line: LayoutItem = {
+  kind: 'line',
+  x1Pt: 0,
+  y1Pt: 0,
+  x2Pt: 100,
+  y2Pt: 100,
+  color: COLOR_BLACK,
+  widthPt: 2,
+};
+
+const ellipse: LayoutItem = {
+  kind: 'ellipse',
+  xPt: 20,
+  yPt: 20,
+  widthPt: 40,
+  heightPt: 40,
+  fill: { r: 0.1, g: 0.2, b: 0.3 },
+};
+
+const link: LayoutItem = {
+  kind: 'link',
+  uri: 'https://example.com/',
+  xPt: 5,
+  yPt: 5,
+  widthPt: 60,
+  heightPt: 15,
+};
+
+describe('LayoutItemSchema', () => {
+  it('accepts every item kind and preserves every field through a JSON round trip', () => {
+    for (const item of [text, imageItem, rect, line, ellipse, link]) {
+      const parsed = LayoutItemSchema.parse(item);
+      const roundTripped: unknown = JSON.parse(JSON.stringify(parsed));
+      expect(LayoutItemSchema.parse(roundTripped)).toEqual(item);
+    }
+  });
+
+  it('rejects an unknown kind', () => {
+    expect(LayoutItemSchema.safeParse({ kind: 'circle', xPt: 0, yPt: 0 }).success).toBe(false);
+  });
+});
+
+function layoutDocument(): LayoutDocument {
+  return {
+    formatVersion: LAYOUT_FORMAT_VERSION,
+    metadata: {
+      title: 'Layout round trip',
+      author: 'document-content-model',
+      subject: 'testing',
+      keywords: ['layout', 'pdf'],
+      creator: 'document-content-model tests',
+      producer: 'document-content-model tests', // producer is normally PDF-only; exercised here as a plain optional field
+      createdIso: '2026-07-30T00:00:00.000Z',
+      modifiedIso: '2026-07-30T01:00:00.000Z',
+    },
+    pages: [
+      {
+        widthPt: 612,
+        heightPt: 792,
+        items: [text, imageItem, rect, line, ellipse, link],
+        notes: 'Speaker notes carried as a hidden annotation.',
+      },
+      {
+        widthPt: 612,
+        heightPt: 792,
+        items: [text],
+        // deliberately no `notes` field, exercising the page-without-notes case
+      },
+    ],
+    images: {
+      logo: { format: 'png', base64: 'AA==', widthPx: 32, heightPx: 32 },
+      photo: { format: 'jpeg', base64: '/9k=', widthPx: 1024, heightPx: 768 },
+    },
+  };
+}
+
+describe('LayoutDocumentSchema round trips', () => {
+  it('deep-equals the original document after a JSON round trip, covering a page with notes and a page without', () => {
+    const original = layoutDocument();
+    const parsed = LayoutDocumentSchema.parse(original);
+    const roundTripped: unknown = JSON.parse(JSON.stringify(parsed));
+    expect(LayoutDocumentSchema.parse(roundTripped)).toEqual(original);
+  });
+
+  it('accepts a minimal document with an empty page and empty image registry', () => {
+    const doc: LayoutDocument = {
+      formatVersion: LAYOUT_FORMAT_VERSION,
+      metadata: {},
+      pages: [{ widthPt: 612, heightPt: 792, items: [] }],
+      images: {},
+    };
+    expect(LayoutDocumentSchema.parse(doc)).toEqual(doc);
+  });
+
+  it('rejects a mismatched formatVersion', () => {
+    expect(
+      LayoutDocumentSchema.safeParse({ formatVersion: 2, metadata: {}, pages: [], images: {} }).success,
+    ).toBe(false);
+  });
+});
