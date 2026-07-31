@@ -1,3 +1,15 @@
+# [1.37.0](https://github.com/ExaDev/documents.js/compare/v1.36.0...v1.37.0) (2026-07-31)
+
+
+### Bug Fixes
+
+* handle document-content-model's embeddedObject ContentBlock variant ([9e898c0](https://github.com/ExaDev/documents.js/commit/9e898c08870ee671bdfcee8671a4398a137d02a0))
+
+
+### Features
+
+* add odtToPdf, converting OpenDocument Text through the existing docx layout engine ([a33e01b](https://github.com/ExaDev/documents.js/commit/a33e01b9865a6b2c731548e04c00205118b6ebf4))
+
 # [1.36.0](https://github.com/ExaDev/documents.js/compare/v1.35.1...v1.36.0) (2026-07-31)
 
 
