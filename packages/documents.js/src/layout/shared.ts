@@ -34,6 +34,7 @@ export function toStyledRuns(runs: readonly ContentRun[], fontScale = 1): Styled
     color: run.color ?? COLOR_BLACK,
     underline: run.underline,
     hyperlink: run.hyperlink,
+    sourcePath: run.sourcePath,
   }));
 }
 

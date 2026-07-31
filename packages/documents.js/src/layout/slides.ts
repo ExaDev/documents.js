@@ -75,6 +75,7 @@ function layoutParagraph(
         color: fragment.color,
         underline: fragment.underline,
         rotationDeg: placement.layoutRotationDeg,
+        sourcePath: fragment.sourcePath,
       };
       out.push(textItem);
 
@@ -88,6 +89,7 @@ function layoutParagraph(
           yPt: linkBottomLeft.y,
           widthPt: fragmentWidthPt,
           heightPt: line.ascentPt - line.descentPt,
+          sourcePath: fragment.sourcePath,
         };
         out.push(link);
       }
@@ -116,7 +118,8 @@ function layoutTable(table: ContentTable, contentLeftXDown: number, contentWidth
 
       if (cell.background !== undefined && placement.layoutRotationDeg === undefined) {
         const cellFrame = flipY({ xPt: cellXDown, yPt: cursorYDown, widthPt: cellWidthPt, heightPt: rowHeightPt }, slideHeightPt);
-        out.push({ kind: 'rect', xPt: cellFrame.xPt, yPt: cellFrame.yPt, widthPt: cellFrame.widthPt, heightPt: cellFrame.heightPt, fill: cell.background });
+        // ContentTableCell has no sourcePath of its own (only ContentTable does -- see document-content-model), so a per-cell background rect can only be attributed at the table's own granularity, not to the specific cell.
+        out.push({ kind: 'rect', xPt: cellFrame.xPt, yPt: cellFrame.yPt, widthPt: cellFrame.widthPt, heightPt: cellFrame.heightPt, fill: cell.background, sourcePath: table.sourcePath });
       }
 
       let cellCursorYDown = cursorYDown;
@@ -149,7 +152,7 @@ function convertShape(shape: ContentShape, slideHeightPt: number, measurer: Text
     } else if (block.kind === 'image') {
       const imageId = registerImage(block, images);
       const placed = placement.place({ x: flippedFrame.xPt, y: flippedFrame.yPt });
-      const imageItem: LayoutImage = { kind: 'image', imageId, xPt: placed.x, yPt: placed.y, widthPt: flippedFrame.widthPt, heightPt: flippedFrame.heightPt, rotationDeg: placement.layoutRotationDeg };
+      const imageItem: LayoutImage = { kind: 'image', imageId, xPt: placed.x, yPt: placed.y, widthPt: flippedFrame.widthPt, heightPt: flippedFrame.heightPt, rotationDeg: placement.layoutRotationDeg, sourcePath: block.sourcePath };
       out.push(imageItem);
     } else if (block.kind === 'table') {
       cursorYDown = layoutTable(block, contentLeftXDown, contentWidthPt, cursorYDown, slideHeightPt, placement, measurer, out);
