@@ -1,3 +1,10 @@
+# [1.42.0](https://github.com/ExaDev/documents.js/compare/v1.41.0...v1.42.0) (2026-07-31)
+
+
+### Features
+
+* add the spreadsheet layout algorithm and odsToPdf ([4bbacf1](https://github.com/ExaDev/documents.js/commit/4bbacf173fd8a1bf9a5c4e995520a27fc52a489e))
+
 # [1.41.0](https://github.com/ExaDev/documents.js/compare/v1.40.0...v1.41.0) (2026-07-31)
 
 
