@@ -1,3 +1,10 @@
+# [1.5.0](https://github.com/ExaDev/odf.js/compare/v1.4.0...v1.5.0) (2026-07-31)
+
+
+### Features
+
+* add readOdt, the first end-to-end ODF content reader ([c156e7f](https://github.com/ExaDev/odf.js/commit/c156e7ff61631af7c33a7abd57699267f5d46519))
+
 # [1.4.0](https://github.com/ExaDev/odf.js/compare/v1.3.1...v1.4.0) (2026-07-31)
 
 
