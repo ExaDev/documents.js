@@ -157,7 +157,7 @@ function convertShape(shape: ContentShape, slideHeightPt: number, measurer: Text
     } else if (block.kind === 'table') {
       cursorYDown = layoutTable(block, contentLeftXDown, contentWidthPt, cursorYDown, slideHeightPt, placement, measurer, out);
     }
-    // 'pageBreak' blocks never occur in a pptx-sourced ContentDocument (only docx's reader emits them) -- present only for ContentBlock's type exhaustiveness.
+    // 'pageBreak' blocks never occur in a pptx-sourced ContentDocument (only docx's reader emits them), and 'embeddedObject' blocks are not produced by any reader this package depends on yet (document-content-model's forward-looking schema addition -- see edit/docx/content.ts's own note on the same gap) -- both present only for ContentBlock's type exhaustiveness.
   }
 }
 
