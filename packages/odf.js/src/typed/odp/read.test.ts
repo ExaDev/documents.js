@@ -1,0 +1,146 @@
+import { describe, expect, it } from 'vitest';
+import type { Package } from '../../model/package';
+import { el, txt } from '../../xml/fragment';
+import { bytesToBase64 } from '../../util/base64';
+import { readOdp } from './read';
+
+// A full, real-shape .odp fixture assembled from XML shapes verified against genuine LibreOffice 26.2 output (soffice --headless --convert-to odp on hand-built .fodp source, and an odp -> odp round trip to confirm LibreOffice's OWN writer's exact serialization -- see this repository's own commit history for the verification method): multiple draw:page elements in native document order, a rotated text frame, a grouped pair of shapes, an image, a table, and speaker notes, matching this package's other typed-reader tests' established convention of building packages programmatically from ground-truth-verified shapes rather than loading a committed binary fixture (mirroring ooxml.js's own src/typed/pptx/read.test.ts).
+
+function tinyPngBase64(): string {
+  return bytesToBase64(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]));
+}
+
+function stylesXml(): Package['parts'][string] {
+  return {
+    kind: 'xml',
+    nodes: [
+      el('office:document-styles', {}, [
+        el('office:automatic-styles', {}, [el('style:page-layout', { 'style:name': 'PM1' }, [el('style:page-layout-properties', { 'fo:page-width': '720pt', 'fo:page-height': '540pt' })])]),
+        el('office:master-styles', {}, [el('style:master-page', { 'style:name': 'Default', 'style:page-layout-name': 'PM1' })]),
+      ]),
+    ],
+  };
+}
+
+function buildFixturePackage(): Package {
+  // Slide 1: a rotated title frame with real text, a grouped pair of shapes, and speaker notes.
+  const titleFrame = el('draw:frame', { 'draw:name': 'Title', 'svg:width': '200pt', 'svg:height': '60pt', 'draw:transform': 'rotate(0.5235987755982988) translate(50pt 50pt)' }, [
+    el('draw:text-box', {}, [el('text:p', {}, [txt('Slide One Title')])]),
+  ]);
+  const groupShapeA = el('draw:frame', { 'draw:name': 'A', 'svg:x': '50pt', 'svg:y': '150pt', 'svg:width': '80pt', 'svg:height': '40pt' }, [el('draw:text-box', {}, [el('text:p', {}, [txt('A')])])]);
+  const groupShapeB = el('draw:frame', { 'draw:name': 'B', 'svg:x': '150pt', 'svg:y': '150pt', 'svg:width': '80pt', 'svg:height': '40pt' }, [el('draw:text-box', {}, [el('text:p', {}, [txt('B')])])]);
+  const group = el('draw:g', {}, [groupShapeA, groupShapeB]);
+  const notes = el('presentation:notes', {}, [el('draw:frame', { 'svg:x': '20pt', 'svg:y': '400pt', 'svg:width': '300pt', 'svg:height': '100pt' }, [el('draw:text-box', {}, [el('text:p', {}, [txt('First line of notes.')]), el('text:p', {}, [txt('Second line.')])])])]);
+  const slide1 = el('draw:page', { 'draw:name': 'Slide1', 'draw:master-page-name': 'Default' }, [titleFrame, group, notes]);
+
+  // Slide 2: an image and a table, no notes.
+  const imageFrame = el('draw:frame', { 'svg:x': '400pt', 'svg:y': '50pt', 'svg:width': '60pt', 'svg:height': '60pt' }, [el('draw:image', { 'xlink:href': 'Pictures/img1.png' })]);
+  const table = el('table:table', {}, [
+    el('table:table-column'),
+    el('table:table-column'),
+    el('table:table-row', {}, [
+      el('table:table-cell', { 'table:number-columns-spanned': '2' }, [el('text:p', {}, [txt('Spanned Header')])]),
+      el('table:covered-table-cell'),
+    ]),
+    el('table:table-row', {}, [el('table:table-cell', {}, [el('text:p', {}, [txt('R2C1')])]), el('table:table-cell', {}, [el('text:p', {}, [txt('R2C2')])])]),
+  ]);
+  const tableFrame = el('draw:frame', { 'svg:x': '50pt', 'svg:y': '200pt', 'svg:width': '300pt', 'svg:height': '100pt' }, [table]);
+  const slide2 = el('draw:page', { 'draw:name': 'Slide2', 'draw:master-page-name': 'Default' }, [imageFrame, tableFrame]);
+
+  const contentXml: Package['parts'][string] = {
+    kind: 'xml',
+    nodes: [el('office:document-content', {}, [el('office:body', {}, [el('office:presentation', {}, [slide1, slide2])])])],
+  };
+
+  const metaXml: Package['parts'][string] = {
+    kind: 'xml',
+    nodes: [el('office:document-meta', {}, [el('office:meta', {}, [el('dc:title', {}, [txt('My Presentation')])])])],
+  };
+
+  return {
+    parts: {
+      'content.xml': contentXml,
+      'styles.xml': stylesXml(),
+      'meta.xml': metaXml,
+      'Pictures/img1.png': { kind: 'binary', base64: tinyPngBase64() },
+    },
+  };
+}
+
+describe('readOdp', () => {
+  it('reads slides in native document order (draw:page order, no p:sldIdLst-style indirection to resolve)', () => {
+    const { slides } = readOdp(buildFixturePackage());
+    expect(slides).toHaveLength(2);
+  });
+
+  it('resolves slide size from the master-page -> page-layout chain (draw:master-page-name -> style:master-page -> style:page-layout-name -> style:page-layout-properties)', () => {
+    const { slides } = readOdp(buildFixturePackage());
+    expect(slides[0]?.size).toEqual({ widthPt: 720, heightPt: 540 });
+    expect(slides[1]?.size).toEqual({ widthPt: 720, heightPt: 540 });
+  });
+
+  it('falls back to document-content-model\'s own SLIDE_SIZE_WIDESCREEN when the master-page/page-layout chain does not resolve', () => {
+    const pkg = buildFixturePackage();
+    delete pkg.parts['styles.xml'];
+    const { slides } = readOdp(pkg);
+    expect(slides[0]?.size.widthPt).toBeGreaterThan(0);
+  });
+
+  it('reads a rotated shape\'s real text content and its pixel-verified geometry (see transform.test.ts for the render-based derivation)', () => {
+    const { slides } = readOdp(buildFixturePackage());
+    const title = slides[0]?.shapes.find((s) => s.name === 'Title');
+    expect(title).toBeDefined();
+    expect(title?.blocks[0]).toMatchObject({ kind: 'paragraph', runs: [{ text: 'Slide One Title' }] });
+    expect(title?.rotationDeg).toBeCloseTo(-30, 6);
+  });
+
+  it('flattens a grouped pair of shapes into the slide\'s own flat shape list, in document order', () => {
+    const { slides } = readOdp(buildFixturePackage());
+    const names = slides[0]?.shapes.map((s) => s.name);
+    expect(names).toEqual(['Title', 'A', 'B']);
+  });
+
+  it('extracts speaker notes text, joining multiple text:p lines with a newline', () => {
+    const { slides } = readOdp(buildFixturePackage());
+    expect(slides[0]?.notes).toBe('First line of notes.\nSecond line.');
+  });
+
+  it('reads an empty string for notes when a slide carries no presentation:notes at all', () => {
+    const { slides } = readOdp(buildFixturePackage());
+    expect(slides[1]?.notes).toBe('');
+  });
+
+  it('reads an image shape\'s referenced media part on the slide with no notes', () => {
+    const { slides } = readOdp(buildFixturePackage());
+    const imageShape = slides[1]?.shapes.find((s) => s.blocks[0]?.kind === 'image');
+    expect(imageShape?.blocks[0]).toMatchObject({ kind: 'image', format: 'png', widthPt: 60, heightPt: 60 });
+  });
+
+  it('reads a table shape with a spanned header row and a covered cell', () => {
+    const { slides } = readOdp(buildFixturePackage());
+    const tableShape = slides[1]?.shapes.find((s) => s.blocks[0]?.kind === 'table');
+    const table = tableShape?.blocks[0];
+    if (table?.kind !== 'table') {
+      throw new Error('expected a table block');
+    }
+    expect(table.rows[0]?.cells[0]).toMatchObject({ colSpan: 2 });
+    expect(table.rows[0]?.cells[1]).toEqual({ blocks: [] });
+    expect(table.rows[1]?.cells.map((c) => (c.blocks[0]?.kind === 'paragraph' ? c.blocks[0].runs[0]?.text : undefined))).toEqual(['R2C1', 'R2C2']);
+  });
+
+  it('reads document metadata via meta.xml', () => {
+    const { metadata } = readOdp(buildFixturePackage());
+    expect(metadata.title).toBe('My Presentation');
+  });
+
+  it('reads an empty slides array for a package with no office:presentation at all', () => {
+    const pkg: Package = { parts: { 'content.xml': { kind: 'xml', nodes: [el('office:document-content', {}, [el('office:body')])] } } };
+    expect(readOdp(pkg).slides).toEqual([]);
+  });
+
+  it('reads an empty slides array and empty metadata for a package with no content.xml at all', () => {
+    const result = readOdp({ parts: {} });
+    expect(result.slides).toEqual([]);
+    expect(result.metadata).toEqual({});
+  });
+});

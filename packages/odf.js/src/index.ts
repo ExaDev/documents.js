@@ -100,3 +100,15 @@ export { resolveStyle, resolveStyleElementChain, findStyleElement } from './type
 export type { CascadeDiagnostic, StyleCascadeResult, StyleElementChainResult } from './typed/shared/cascade';
 
 export { readOdfMetadata, META_PART } from './typed/shared/metadata';
+
+export { readOdfParagraph } from './typed/shared/paragraph';
+
+export { readOdfTable } from './typed/shared/table';
+
+export { parseOdfTransform, applyOdfTransform, netRotationDeg, resolveOdfShapeGeometry, composeOdfGroupTransform } from './typed/shared/transform';
+export type { OdfTransformFunction, OdfPoint, OdfShapeGeometry } from './typed/shared/transform';
+
+export { readDrawFrame, walkDrawShapes } from './typed/draw/shapes';
+
+export { readOdp } from './typed/odp/read';
+export type { OdpDocument } from './typed/odp/read';
