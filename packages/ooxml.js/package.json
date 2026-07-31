@@ -43,6 +43,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --project unit",
     "test:watch": "vitest --project unit",
+    "test:coverage": "vitest run --project unit --coverage",
     "test:smoke": "tsdown && vitest run --project smoke",
     "prepare": "husky",
     "release": "semantic-release"
@@ -72,6 +73,7 @@
     "@semantic-release/changelog": "^7.0.0",
     "@semantic-release/git": "^11.0.1",
     "@types/node": "^26.1.1",
+    "@vitest/coverage-v8": "^4.1.10",
     "eslint": "^10.8.0",
     "globals": "^17.8.0",
     "husky": "^9.1.7",
