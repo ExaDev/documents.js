@@ -49,6 +49,22 @@ describe('ContentDocumentSchema', () => {
     expect(ContentDocumentSchema.parse(doc)).toEqual(doc);
   });
 
+  it('accepts a minimal drawing document with a vector and a text shape', () => {
+    const doc = {
+      kind: 'drawing',
+      formatVersion: CONTENT_FORMAT_VERSION,
+      metadata: {},
+      pages: [
+        {
+          size: { widthPt: 400, heightPt: 300 },
+          shapes: [{ frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 50 }, insetLeftPt: 0, insetTopPt: 0, insetRightPt: 0, insetBottomPt: 0, blocks: [paragraph] }],
+          vectors: [{ kind: 'rect', frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 }, fill: { r: 1, g: 0, b: 0 } }],
+        },
+      ],
+    };
+    expect(ContentDocumentSchema.parse(doc)).toEqual(doc);
+  });
+
   it('rejects an unknown discriminant', () => {
     expect(ContentDocumentSchema.safeParse({ kind: 'spreadsheet' }).success).toBe(false);
   });

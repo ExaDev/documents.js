@@ -1,0 +1,184 @@
+import { describe, expect, it } from 'vitest';
+import type { ContentDrawPage, ContentRun, ContentShape, ContentVector } from 'document-content-model';
+import { CONTENT_FORMAT_VERSION } from '../model/content';
+import type { ContentDocument } from '../model/content';
+import type { TextMeasurer } from '../pdf/measure';
+import { convertDrawingToLayout } from './drawing';
+
+const BLACK = { r: 0, g: 0, b: 0 };
+const RED = { r: 1, g: 0, b: 0 };
+const BLUE = { r: 0, g: 0, b: 1 };
+
+// Mirrors src/layout/slides.test.ts's own fakeMeasurer convention exactly: every character is sizePt/10 pt wide, so text-shape wrap/position assertions can be exact.
+function fakeMeasurer(): TextMeasurer {
+  return {
+    widthOfTextAtSize: (text, _font, sizePt) => Array.from(text).length * (sizePt / 10),
+    lineHeightAtSize: (_font, sizePt) => sizePt * 1.2,
+    ascenderAtSize: (_font, sizePt) => sizePt * 0.8,
+    descenderAtSize: (_font, sizePt) => -sizePt * 0.2,
+    underlineAtSize: (_font, sizePt) => ({ offsetPt: -sizePt * 0.1, thicknessPt: sizePt * 0.05 }),
+    horizontalScaleFor: () => 1,
+  };
+}
+
+function run(text: string, overrides: Partial<ContentRun> = {}): ContentRun {
+  return { text, ...overrides };
+}
+
+function textShape(text: string, overrides: Partial<ContentShape> = {}): ContentShape {
+  return {
+    frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 50 },
+    insetLeftPt: 0,
+    insetTopPt: 0,
+    insetRightPt: 0,
+    insetBottomPt: 0,
+    blocks: [{ kind: 'paragraph', runs: [run(text)] }],
+    ...overrides,
+  };
+}
+
+function page(overrides: Partial<ContentDrawPage> = {}): ContentDrawPage {
+  return { size: { widthPt: 400, heightPt: 300 }, shapes: [], vectors: [], ...overrides };
+}
+
+function drawingDoc(pages: ContentDrawPage[]): Extract<ContentDocument, { kind: 'drawing' }> {
+  return { kind: 'drawing', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, pages };
+}
+
+function convert(pages: ContentDrawPage[]) {
+  return convertDrawingToLayout(drawingDoc(pages), { measurer: fakeMeasurer() });
+}
+
+describe('convertDrawingToLayout: rect vector', () => {
+  it('flips a rect vector\'s frame from top-left/y-down page space into bottom-left/y-up PDF space', () => {
+    const vector: ContentVector = { kind: 'rect', frame: { xPt: 10, yPt: 20, widthPt: 30, heightPt: 40 }, fill: RED };
+    const layout = convert([page({ vectors: [vector] })]);
+    expect(layout.pages[0]?.items).toEqual([{ kind: 'rect', xPt: 10, yPt: 300 - 20 - 40, widthPt: 30, heightPt: 40, fill: RED, stroke: undefined, sourcePath: undefined }]);
+  });
+
+  it('carries stroke and sourcePath straight through', () => {
+    const vector: ContentVector = { kind: 'rect', frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 }, stroke: { color: BLACK, widthPt: 2 }, sourcePath: 'pages[0].vectors[0]' };
+    const layout = convert([page({ vectors: [vector] })]);
+    expect(layout.pages[0]?.items[0]).toMatchObject({ kind: 'rect', stroke: { color: BLACK, widthPt: 2 }, sourcePath: 'pages[0].vectors[0]' });
+  });
+});
+
+describe('convertDrawingToLayout: ellipse vector', () => {
+  it('flips an ellipse vector\'s frame the same way a rect\'s is flipped', () => {
+    const vector: ContentVector = { kind: 'ellipse', frame: { xPt: 5, yPt: 5, widthPt: 50, heightPt: 20 }, fill: BLUE };
+    const layout = convert([page({ vectors: [vector] })]);
+    expect(layout.pages[0]?.items).toEqual([{ kind: 'ellipse', xPt: 5, yPt: 300 - 5 - 20, widthPt: 50, heightPt: 20, fill: BLUE, stroke: undefined, sourcePath: undefined }]);
+  });
+});
+
+describe('convertDrawingToLayout: line vector', () => {
+  it('flips both endpoints\' y independently, leaving x untouched', () => {
+    const vector: ContentVector = { kind: 'line', from: { xPt: 0, yPt: 10 }, to: { xPt: 40, yPt: 60 }, stroke: { color: BLACK, widthPt: 3 } };
+    const layout = convert([page({ vectors: [vector] })]);
+    expect(layout.pages[0]?.items).toEqual([{ kind: 'line', x1Pt: 0, y1Pt: 300 - 10, x2Pt: 40, y2Pt: 300 - 60, color: BLACK, widthPt: 3, sourcePath: undefined }]);
+  });
+});
+
+describe('convertDrawingToLayout: path vector', () => {
+  // The path's own subpath/segment points are LOCAL to the vector's frame (top-left origin, y down, sized to frame.widthPt x frame.heightPt -- ContentVectorSchema's own 'path' variant contract): resolving to PDF-absolute space is frame.xPt/yPt + the local point, then a single flip of the whole page-space point.
+  it('resolves a closed subpath\'s line segments through frame offset + page flip together', () => {
+    const vector: ContentVector = {
+      kind: 'path',
+      frame: { xPt: 100, yPt: 50, widthPt: 40, heightPt: 40 },
+      subpaths: [{ start: { xPt: 0, yPt: 0 }, closed: true, segments: [{ kind: 'line', to: { xPt: 40, yPt: 0 } }, { kind: 'line', to: { xPt: 20, yPt: 40 } }] }],
+      fill: RED,
+    };
+    const layout = convert([page({ vectors: [vector] })]);
+    const item = layout.pages[0]?.items[0];
+    expect(item).toEqual({
+      kind: 'path',
+      subpaths: [
+        {
+          startXPt: 100 + 0,
+          startYPt: 300 - 50 - 0,
+          closed: true,
+          segments: [
+            { kind: 'line', xPt: 100 + 40, yPt: 300 - 50 - 0 },
+            { kind: 'line', xPt: 100 + 20, yPt: 300 - 50 - 40 },
+          ],
+        },
+      ],
+      fill: RED,
+      fillRule: undefined,
+      stroke: undefined,
+      sourcePath: undefined,
+    });
+  });
+
+  it('resolves a cubic segment\'s two control points and endpoint identically to a line segment\'s single point', () => {
+    const vector: ContentVector = {
+      kind: 'path',
+      frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 100 },
+      subpaths: [{ start: { xPt: 0, yPt: 0 }, closed: false, segments: [{ kind: 'cubic', control1: { xPt: 10, yPt: 20 }, control2: { xPt: 30, yPt: 40 }, to: { xPt: 50, yPt: 60 } }] }],
+      fillRule: 'evenodd',
+    };
+    const layout = convert([page({ vectors: [vector] })]);
+    const item = layout.pages[0]?.items[0];
+    expect(item).toMatchObject({
+      kind: 'path',
+      fillRule: 'evenodd',
+      subpaths: [
+        {
+          startXPt: 0,
+          startYPt: 300,
+          closed: false,
+          segments: [{ kind: 'cubic', c1xPt: 10, c1yPt: 300 - 20, c2xPt: 30, c2yPt: 300 - 40, xPt: 50, yPt: 300 - 60 }],
+        },
+      ],
+    });
+  });
+
+  it('resolves every subpath in a multi-subpath path', () => {
+    const vector: ContentVector = {
+      kind: 'path',
+      frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 100 },
+      subpaths: [
+        { start: { xPt: 0, yPt: 0 }, closed: true, segments: [{ kind: 'line', to: { xPt: 10, yPt: 0 } }] },
+        { start: { xPt: 5, yPt: 5 }, closed: true, segments: [{ kind: 'line', to: { xPt: 8, yPt: 5 } }] },
+      ],
+    };
+    const layout = convert([page({ vectors: [vector] })]);
+    const item = layout.pages[0]?.items[0];
+    if (item?.kind !== 'path') {
+      throw new Error('expected a path item');
+    }
+    expect(item.subpaths).toHaveLength(2);
+  });
+});
+
+describe('convertDrawingToLayout: paint order', () => {
+  it('paints every vector before every shape, per the documented vectors-first convention', () => {
+    const rectVector: ContentVector = { kind: 'rect', frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 }, fill: RED };
+    const shape = textShape('Label');
+    const layout = convert([page({ shapes: [shape], vectors: [rectVector] })]);
+    expect(layout.pages[0]?.items.map((item) => item.kind)).toEqual(['rect', 'text']);
+  });
+
+  it('preserves each array\'s own internal document order (already paint-ordered by the reader)', () => {
+    const back: ContentVector = { kind: 'rect', frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 }, fill: RED };
+    const front: ContentVector = { kind: 'rect', frame: { xPt: 5, yPt: 5, widthPt: 10, heightPt: 10 }, fill: BLUE };
+    const layout = convert([page({ vectors: [back, front] })]);
+    const items = layout.pages[0]?.items ?? [];
+    expect(items.map((item) => (item.kind === 'rect' ? item.fill : undefined))).toEqual([RED, BLUE]);
+  });
+
+  it('reuses convertShape verbatim for a ContentShape\'s text content, matching pptx/odp output', () => {
+    const layout = convert([page({ shapes: [textShape('Drawing')] })]);
+    const text = layout.pages[0]?.items.find((item) => item.kind === 'text');
+    expect(text).toMatchObject({ kind: 'text', text: 'Drawing' });
+  });
+});
+
+describe('convertDrawingToLayout: multiple pages', () => {
+  it('produces one LayoutPage per ContentDrawPage, in order', () => {
+    const layout = convert([page({ size: { widthPt: 200, heightPt: 100 } }), page({ size: { widthPt: 300, heightPt: 150 } })]);
+    expect(layout.pages).toHaveLength(2);
+    expect(layout.pages[0]).toMatchObject({ widthPt: 200, heightPt: 100 });
+    expect(layout.pages[1]).toMatchObject({ widthPt: 300, heightPt: 150 });
+  });
+});
