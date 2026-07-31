@@ -1,6 +1,6 @@
 // The conversion behaviour modelled as a swappable port/contract, not a hard-wired function -- this workspace's standing "portable runtime and storage boundaries" convention, even though the only implementation today (local.ts) is entirely synchronous under the hood. `convert()` itself stays async and takes a mandatory abort signal regardless of that: it's a portability contract for a future non-local adapter (a remote conversion service, say), not a reflection of the local implementation's own synchronicity.
 
-export type DocumentFormat = 'docx' | 'pptx' | 'odt' | 'pdf';
+export type DocumentFormat = 'docx' | 'pptx' | 'odt' | 'odp' | 'pdf';
 
 export interface DocumentPayload {
   readonly format: DocumentFormat;

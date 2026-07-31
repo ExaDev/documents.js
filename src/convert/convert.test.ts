@@ -1,13 +1,19 @@
+import type { LayoutItem, LayoutText } from 'document-content-model';
 import { describe, expect, it } from 'vitest';
 import { createDocx, openDocx } from '../edit/docx/editor';
 import { openOdt } from '../edit/odt/editor';
 import { createPptx, openPptx } from '../edit/pptx/editor';
 import { readPdf } from '../pdf/read';
+import { minimalOdpBytes } from '../test-support/odp';
 import { minimalOdtBytes } from '../test-support/odt';
-import { docxToPdf, odtToPdf, pdfToDocx, pdfToOdt, pdfToPptx, pptxToPdf } from './convert';
+import { docxToPdf, odpToPdf, odtToPdf, pdfToDocx, pdfToOdt, pdfToPptx, pptxToPdf } from './convert';
 
 function pdfHeader(bytes: Uint8Array<ArrayBuffer>): string {
   return new TextDecoder('latin1').decode(bytes.subarray(0, 5));
+}
+
+function findText(items: readonly LayoutItem[], text: string): LayoutText | undefined {
+  return items.find((item): item is LayoutText => item.kind === 'text' && item.text === text);
 }
 
 function buildSampleDocx(text: string): Uint8Array<ArrayBuffer> {
@@ -54,6 +60,49 @@ describe('odtToPdf', () => {
     const controller = new AbortController();
     controller.abort();
     expect(() => odtToPdf(minimalOdtBytes(), { signal: controller.signal })).toThrow();
+  });
+});
+
+describe('odpToPdf', () => {
+  // Proves the same architectural point convertPresentationToLayout's own module doc claims for pptx: an odp package, decoded via odf.js's own decodePackage (not ooxml.js's) and read via readOdpContent, feeds convertPresentationToLayout completely unmodified -- the identical engine pptxToPdf feeds -- and comes out as a genuine, multi-page PDF with real slide content (title text, grouped shapes, table cells, and an image).
+  it('produces valid PDF bytes with real slide content from an odp presentation', () => {
+    const pdfBytes = odpToPdf(minimalOdpBytes());
+    expect(pdfHeader(pdfBytes)).toBe('%PDF-');
+
+    const layout = readPdf(pdfBytes);
+    expect(layout.pages).toHaveLength(2);
+    const page1Text = layout.pages[0]?.items.filter((item) => item.kind === 'text').map((item) => item.text).join(' ');
+    expect(page1Text).toContain('Hello from odp');
+    expect(page1Text).toContain('Grouped A');
+    expect(page1Text).toContain('Grouped B');
+    const page2Text = layout.pages[1]?.items.filter((item) => item.kind === 'text').map((item) => item.text).join(' ');
+    expect(page2Text).toContain('A1');
+    expect(page2Text).toContain('B1');
+    expect(layout.pages[1]?.items.some((item) => item.kind === 'image')).toBe(true);
+  });
+
+  // "Should work for free" claims deserve verification, not just assumption: presentation:notes is read into ContentSlide.notes by odf.js's own readOdp, and src/layout/slides.ts's hidden-annotation notes mechanism (already built and proven for pptxToPdf) carries any ContentSlide.notes through to the PDF regardless of which reader produced the ContentSlide -- this asserts that is genuinely true for odp too, with zero new notes-handling code written for this change.
+  it('carries odp speaker notes through to the PDF via the existing hidden-annotation mechanism, with no new notes-handling code', () => {
+    const pdfBytes = odpToPdf(minimalOdpBytes());
+    const layout = readPdf(pdfBytes);
+    expect(layout.pages[0]?.notes).toBe('Speaker notes for slide one.');
+    // Slide two carries no presentation:notes at all -- confirms the "no notes" case doesn't leak a stray annotation either.
+    expect(layout.pages[1]?.notes).toBeUndefined();
+  });
+
+  // The fixture's draw:transform="rotate(0.5235987755982988) ..." is exactly 30 degrees; odf.js's own readOdp resolves that to ContentShape.rotationDeg -30 (its own read.test.ts asserts the identical value for the identical transform string), and convertPresentationToLayout's shapePlacement negates it again (DrawingML/ODF rotate clockwise, the PDF writer rotates counter-clockwise) to land on +30 here -- the same shared shapePlacement code pptxToPdf's own rotated-shape handling uses. wrapRunsToWidth fragments the title into one LayoutText per word, so this looks for the title's first word rather than the whole phrase.
+  it('reads a rotated shape through to positioned PDF text (rotation resolved by the same shared shape-placement code pptxToPdf uses)', () => {
+    const pdfBytes = odpToPdf(minimalOdpBytes());
+    const layout = readPdf(pdfBytes);
+    const rotatedText = findText(layout.pages[0]!.items, 'Hello');
+    expect(rotatedText).toBeDefined();
+    expect(rotatedText?.rotationDeg).toBeCloseTo(30, 1);
+  });
+
+  it('throws when the signal is already aborted', () => {
+    const controller = new AbortController();
+    controller.abort();
+    expect(() => odpToPdf(minimalOdpBytes(), { signal: controller.signal })).toThrow();
   });
 });
 

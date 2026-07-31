@@ -1,4 +1,4 @@
-// documents.js's public surface: bidirectional docx/pptx <-> PDF conversion, one-directional odt -> PDF conversion, a read+write live-view editor for docx/pptx, and a hand-written PDF codec, built on ooxml.js's lossless OOXML core and odf.js's lossless ODF core.
+// documents.js's public surface: bidirectional docx/pptx/odt <-> PDF conversion, one-directional odp -> PDF conversion, a read+write live-view editor for docx/pptx/odt, and a hand-written PDF codec, built on ooxml.js's lossless OOXML core and odf.js's lossless ODF core.
 
 // --- ooxml.js's lossless OOXML core, re-exported so consumers need only this one dependency. Its own typed readers (readDocx/readPptx/readXlsx) and their result types are deliberately NOT re-exported here: readDocxContent/readPptxContent (below) already wrap readDocx/readPptx into ContentDocument, so exposing both the wrapper and the thing it wraps would be a trap -- two overlapping entry points to the same underlying read, one of which (readDocx/readPptx's own comments/footnotes/headers/footers) carries fields ContentDocument doesn't model at all. ---
 export {
@@ -155,6 +155,7 @@ export { pdfCodec } from './pdf/codec';
 export { readDocxContent } from './ooxml/docx/read';
 export { readPptxContent } from './ooxml/pptx/read';
 export { readOdtContent } from './odf/odt/read';
+export { readOdpContent } from './odf/odp/read';
 export type { EngineLayoutOptions } from './layout/engine';
 export { convertWordprocessingToLayout } from './layout/engine';
 export type { SlidesLayoutOptions } from './layout/slides';
@@ -162,11 +163,11 @@ export { convertPresentationToLayout } from './layout/slides';
 export type { ReconstructOptions } from './layout/reconstruct';
 export { reconstructPresentation, reconstructWordprocessing } from './layout/reconstruct';
 
-// --- The six round-trip ergonomic conversions (docx/pptx/odt <-> PDF). ---
+// --- Seven ergonomic conversions (docx/pptx/odt <-> PDF, plus the one-directional odp -> PDF). ---
 export type { DocumentToPdfOptions, PdfToDocumentOptions } from './convert/convert';
-export { docxToPdf, odtToPdf, pdfToDocx, pdfToOdt, pdfToPptx, pptxToPdf } from './convert/convert';
+export { docxToPdf, odpToPdf, odtToPdf, pdfToDocx, pdfToOdt, pdfToPptx, pptxToPdf } from './convert/convert';
 
-// Schema-validated z.codec() pairs over the conversions above (docx/pptx/odt bytes <-> PDF bytes), the no-extra-options form -- use docxToPdf/pdfToDocx/pptxToPdf/pdfToPptx/odtToPdf/pdfToOdt directly for cancellation or diagnostics.
+// Schema-validated z.codec() pairs over the conversions above (docx/pptx/odt bytes <-> PDF bytes), the no-extra-options form -- use docxToPdf/pdfToDocx/pptxToPdf/pdfToPptx/odtToPdf/pdfToOdt directly for cancellation or diagnostics. odp has no codec here yet: a z.codec() pair needs a genuine decode+encode round trip, and odp has no reverse (pdfToOdp) direction to encode with, the same reason odt itself went without odtPdfCodec until pdfToOdt existed (see git history a33e01b vs ca37f88) -- a codec whose encode half always throws would advertise a capability the type doesn't actually have, which is worse than no codec at all.
 export { docxPdfCodec, odtPdfCodec, pptxPdfCodec } from './convert/codec';
 
 // --- The swappable conversion port, for a caller that wants to inject a different (e.g. remote) implementation later without changing call sites. ---
