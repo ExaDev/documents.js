@@ -6,8 +6,9 @@ import { openOdt } from '../edit/odt/editor';
 import { createPptx, openPptx } from '../edit/pptx/editor';
 import { readPdf } from '../pdf/read';
 import { minimalOdpBytes } from '../test-support/odp';
+import { minimalOdsBytes } from '../test-support/ods';
 import { minimalOdtBytes } from '../test-support/odt';
-import { docxToPdf, odpToPdf, odtToPdf, pdfToDocx, pdfToOdp, pdfToOdt, pdfToPptx, pptxToPdf } from './convert';
+import { docxToPdf, odpToPdf, odsToPdf, odtToPdf, pdfToDocx, pdfToOdp, pdfToOdt, pdfToPptx, pptxToPdf } from './convert';
 
 function pdfHeader(bytes: Uint8Array<ArrayBuffer>): string {
   return new TextDecoder('latin1').decode(bytes.subarray(0, 5));
@@ -104,6 +105,47 @@ describe('odpToPdf', () => {
     const controller = new AbortController();
     controller.abort();
     expect(() => odpToPdf(minimalOdpBytes(), { signal: controller.signal })).toThrow();
+  });
+});
+
+describe('odsToPdf', () => {
+  // Proves the architectural point specific to sheets: an ods package, decoded via odf.js's own decodePackage and read via readOdsContent, feeds convertSpreadsheetToLayout (genuinely new layout code, not a reused docx/pptx engine -- see convert.ts's own module doc) and comes out as a real PDF carrying real cell content, a real merged cell, and a hidden column that contributes nothing at all to the rendered page.
+  it('produces valid PDF bytes with real cell content from an ods spreadsheet', () => {
+    const pdfBytes = odsToPdf(minimalOdsBytes());
+    expect(pdfHeader(pdfBytes)).toBe('%PDF-');
+
+    const layout = readPdf(pdfBytes);
+    expect(layout.pages).toHaveLength(1);
+    const text = layout.pages[0]?.items.filter((item) => item.kind === 'text').map((item) => item.text).join(' ');
+    expect(text).toContain('Name');
+    expect(text).toContain('Acme');
+    expect(text).toContain('Merged');
+  });
+
+  // The fixture's column B is hidden (table:visibility="collapse") and carries the 'Amount'/123.45 cells -- neither should appear anywhere in the rendered PDF at all, confirming src/layout/sheets.ts's own "skip hidden entirely" fix (a real bug caught during this change's own real-file verification: a hidden column's cell was rendering a stray zero-width '###'/truncated fragment instead of nothing).
+  it('renders nothing at all for cells anchored in a hidden column', () => {
+    const pdfBytes = odsToPdf(minimalOdsBytes());
+    const layout = readPdf(pdfBytes);
+    const text = layout.pages[0]?.items.filter((item) => item.kind === 'text').map((item) => item.text).join(' ');
+    expect(text).not.toContain('Amount');
+    expect(text).not.toContain('123.45');
+    expect(text).not.toContain('#');
+  });
+
+  it('reads print settings (page size, headers) through to the rendered page', () => {
+    // Gridlines aren't asserted here via a round trip through readPdf: readPdf's own content-stream interpreter (src/pdf/interpret.ts) never reconstructs a 'line' kind item at all -- a pre-existing, documented asymmetry of the read direction, not something this change touches. Gridline emission itself (one LayoutLine per boundary) is already covered directly at the layout level by src/layout/sheets.test.ts.
+    const pdfBytes = odsToPdf(minimalOdsBytes());
+    const layout = readPdf(pdfBytes);
+    expect(layout.pages[0]).toMatchObject({ widthPt: 400, heightPt: 300 });
+    const text = layout.pages[0]?.items.filter((item) => item.kind === 'text').map((item) => item.text) ?? [];
+    expect(text).toContain('A'); // column-letter header label
+    expect(text).toContain('1'); // row-number header label
+  });
+
+  it('throws when the signal is already aborted', () => {
+    const controller = new AbortController();
+    controller.abort();
+    expect(() => odsToPdf(minimalOdsBytes(), { signal: controller.signal })).toThrow();
   });
 });
 

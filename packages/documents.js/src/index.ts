@@ -71,6 +71,7 @@ export {
 // --- The semantic content model: one read+write-capable model for both docx and pptx, instead of ooxml.js's two one-way, lossy, format-specific typed readers. The full vocabulary (ContentBlock and everything beneath it) is sourced from document-content-model, the sibling schema package shared with ooxml.js; only the ContentDocument envelope itself (and its own CONTENT_FORMAT_VERSION) stays local to this package -- see src/model/content.ts. ---
 export type {
   ContentBlock,
+  ContentCellValue,
   ContentImageBlock,
   ContentListMembership,
   ContentPageBreak,
@@ -78,6 +79,14 @@ export type {
   ContentRun,
   ContentSection,
   ContentShape,
+  ContentSheet,
+  ContentSheetCell,
+  ContentSheetColumn,
+  ContentSheetImage,
+  ContentSheetPrintRange,
+  ContentSheetPrintSettings,
+  ContentSheetRepeatRange,
+  ContentSheetRow,
   ContentSlide,
   ContentTable,
   ContentTableCell,
@@ -85,12 +94,20 @@ export type {
 } from 'document-content-model';
 export {
   ContentBlockSchema,
+  ContentCellValueSchema,
   ContentImageBlockSchema,
   ContentPageBreakSchema,
   ContentParagraphSchema,
   ContentRunSchema,
   ContentSectionSchema,
   ContentShapeSchema,
+  ContentSheetCellSchema,
+  ContentSheetColumnSchema,
+  ContentSheetPrintRangeSchema,
+  ContentSheetPrintSettingsSchema,
+  ContentSheetRepeatRangeSchema,
+  ContentSheetRowSchema,
+  ContentSheetSchema,
   ContentSlideSchema,
   ContentTableCellSchema,
   ContentTableRowSchema,
@@ -162,16 +179,21 @@ export { readDocxContent } from './ooxml/docx/read';
 export { readPptxContent } from './ooxml/pptx/read';
 export { readOdtContent } from './odf/odt/read';
 export { readOdpContent } from './odf/odp/read';
+export { readOdsContent } from './odf/ods/read';
 export type { EngineLayoutOptions } from './layout/engine';
 export { convertWordprocessingToLayout } from './layout/engine';
 export type { SlidesLayoutOptions } from './layout/slides';
 export { convertPresentationToLayout } from './layout/slides';
+export type { SheetsLayoutOptions } from './layout/sheets';
+export { convertSpreadsheetToLayout } from './layout/sheets';
 export type { ReconstructOptions } from './layout/reconstruct';
 export { reconstructPresentation, reconstructWordprocessing } from './layout/reconstruct';
 
-// --- Eight ergonomic conversions (docx/pptx/odt/odp <-> PDF). ---
+// --- Nine ergonomic conversions (docx/pptx/odt/odp/ods <-> PDF -- ods is one-directional, PDF -> ods does not exist yet, see convert.ts's own module doc). ---
 export type { DocumentToPdfOptions, PdfToDocumentOptions } from './convert/convert';
-export { docxToPdf, odpToPdf, odtToPdf, pdfToDocx, pdfToOdp, pdfToOdt, pdfToPptx, pptxToPdf } from './convert/convert';
+export { docxToPdf, odpToPdf, odsToPdf, odtToPdf, pdfToDocx, pdfToOdp, pdfToOdt, pdfToPptx, pptxToPdf } from './convert/convert';
+
+// odsPdfCodec deliberately does not exist yet: this package's own established precedent (odtPdfCodec/odpPdfCodec) only adds a z.codec() pair once BOTH directions of a format exist (see docxPdfCodec/pptxPdfCodec, odtPdfCodec/odpPdfCodec below) -- odsToPdf alone, with no pdfToOds, does not warrant one.
 
 // Schema-validated z.codec() pairs over the conversions above (docx/pptx/odt/odp bytes <-> PDF bytes), the no-extra-options form -- use docxToPdf/pdfToDocx/pptxToPdf/pdfToPptx/odtToPdf/pdfToOdt/odpToPdf/pdfToOdp directly for cancellation or diagnostics.
 export { docxPdfCodec, odpPdfCodec, odtPdfCodec, pptxPdfCodec } from './convert/codec';

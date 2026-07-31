@@ -1,0 +1,73 @@
+import type { Package } from 'odf.js';
+import { bytesToBase64, decodePackage, el, encodePackage, ODF_MEDIA_TYPES, txt } from 'odf.js';
+
+// Never imported by src/index.ts and never reaches dist/. Mirrors src/test-support/odp.ts's own reasoning: there is no live-view ods editor (no buildOdsPackage/createOds -- this package's own odsToPdf is one-directional, see convert/convert.ts's own module doc), so hand-authored ODF XML assembled via odf.js's own el/txt fragment builders and serialized via odf.js's own encodePackage is currently the only way to get ods test bytes at all, short of committing a real LibreOffice export. Shape choices exercise the same real-shape ground truth odf.js's own src/typed/ods/read.test.ts fixture already verified against genuine LibreOffice 26.2 output: explicit column widths, a hidden column, mixed office:value-type cells (string/float/boolean), a merged cell, and print settings (page size, gridlines/headers, page order) resolved through table:table -> style:style[family="table"] -> style:master-page-name -> style:master-page -> style:page-layout.
+
+function enc(s: string): Uint8Array<ArrayBuffer> {
+  return new TextEncoder().encode(s);
+}
+
+function stylesXmlPart(): Package['parts'][string] {
+  return {
+    kind: 'xml',
+    nodes: [
+      el('office:document-styles', {}, [
+        el('office:automatic-styles', {}, [el('style:page-layout', { 'style:name': 'PM1' }, [el('style:page-layout-properties', { 'fo:page-width': '400pt', 'fo:page-height': '300pt', 'style:print': 'grid headers', 'style:print-page-order': 'ttb' })])]),
+        el('office:master-styles', {}, [el('style:master-page', { 'style:name': 'Default', 'style:page-layout-name': 'PM1' })]),
+      ]),
+    ],
+  };
+}
+
+// One sheet, "Data": column A (index 0, 3cm wide) and column B (index 1, hidden). A header row (string cells) then a data row mixing a string, a float, and a boolean, plus a merged 2x1 cell anchored at row 2 (0-based) demonstrating table:number-columns-spanned/table:covered-table-cell.
+function buildFixturePackage(): Package {
+  const columnA = el('table:table-column', { 'table:style-name': 'ColA' });
+  const columnB = el('table:table-column', { 'table:style-name': 'ColB', 'table:visibility': 'collapse' });
+
+  const headerRow = el('table:table-row', {}, [el('table:table-cell', { 'office:value-type': 'string' }, [el('text:p', {}, [txt('Name')])]), el('table:table-cell', { 'office:value-type': 'string' }, [el('text:p', {}, [txt('Amount')])])]);
+  const dataRow = el('table:table-row', {}, [
+    el('table:table-cell', { 'office:value-type': 'string' }, [el('text:p', {}, [txt('Acme')])]),
+    el('table:table-cell', { 'office:value-type': 'float', 'office:value': '123.45' }, [el('text:p', {}, [txt('123.45')])]),
+  ]);
+  const mergedRow = el('table:table-row', {}, [el('table:table-cell', { 'table:number-columns-spanned': '2', 'office:value-type': 'string' }, [el('text:p', {}, [txt('Merged')])]), el('table:covered-table-cell')]);
+
+  const table = el('table:table', { 'table:name': 'Data', 'table:style-name': 'DataTable' }, [columnA, columnB, headerRow, dataRow, mergedRow]);
+
+  const contentXml: Package['parts'][string] = {
+    kind: 'xml',
+    nodes: [
+      el('office:document-content', {}, [
+        el('office:automatic-styles', {}, [
+          el('style:style', { 'style:name': 'ColA', 'style:family': 'table-column' }, [el('style:table-column-properties', { 'style:column-width': '3cm' })]),
+          el('style:style', { 'style:name': 'ColB', 'style:family': 'table-column' }, [el('style:table-column-properties', { 'style:column-width': '2cm' })]),
+          // table:table's own print-settings master page is a DIRECT attribute of its style:style[family="table"] element -- confirmed by odf.js's own readOds (readPrintSettings calls attrValue(tableStyleElement, 'style:master-page-name') on the style element itself, never a nested style:table-properties child), unlike odp's own draw:master-page-name which sits directly on draw:page instead.
+          el('style:style', { 'style:name': 'DataTable', 'style:family': 'table', 'style:master-page-name': 'Default' }),
+        ]),
+        el('office:body', {}, [el('office:spreadsheet', {}, [table])]),
+      ]),
+    ],
+  };
+
+  const metaXml: Package['parts'][string] = {
+    kind: 'xml',
+    nodes: [el('office:document-meta', {}, [el('office:meta', {}, [el('dc:title', {}, [txt('My Spreadsheet')])])])],
+  };
+
+  return {
+    parts: {
+      mimetype: { kind: 'binary', base64: bytesToBase64(enc(ODF_MEDIA_TYPES.ods)) },
+      'content.xml': contentXml,
+      'styles.xml': stylesXmlPart(),
+      'meta.xml': metaXml,
+    },
+  };
+}
+
+// A minimal but structurally authentic ods package (mimetype part first and stored, a real office:document-content with a hidden column, mixed value-type cells, a merged cell, and print settings resolved from a real master-page/page-layout chain) -- enough to round-trip through decodePackage and readOdsContent without needing a real LibreOffice-exported binary.
+export function minimalOdsBytes(): Uint8Array<ArrayBuffer> {
+  return encodePackage(buildFixturePackage());
+}
+
+export function minimalOdsPackage(): Package {
+  return decodePackage(minimalOdsBytes());
+}
