@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createDocx } from '../edit/docx/editor';
 import { createPptx } from '../edit/pptx/editor';
 import { brokenStartxrefPdf } from '../test-support/pdf';
+import { minimalOdpBytes } from '../test-support/odp';
 import { minimalOdtBytes } from '../test-support/odt';
 import { createLocalDocumentConverter } from './local';
 
@@ -29,6 +30,7 @@ describe('createLocalDocumentConverter: shape', () => {
       { source: 'docx', target: 'pdf' },
       { source: 'pptx', target: 'pdf' },
       { source: 'odt', target: 'pdf' },
+      { source: 'odp', target: 'pdf' },
       { source: 'pdf', target: 'docx' },
       { source: 'pdf', target: 'pptx' },
       { source: 'pdf', target: 'odt' },
@@ -54,6 +56,13 @@ describe('createLocalDocumentConverter: convert', () => {
   it('converts odt to pdf', async () => {
     const converter = createLocalDocumentConverter();
     const result = await converter.convert({ source: { format: 'odt', bytes: minimalOdtBytes() }, targetFormat: 'pdf' }, { signal: new AbortController().signal });
+    expect(result.document.format).toBe('pdf');
+    expect(pdfHeader(result.document.bytes)).toBe('%PDF-');
+  });
+
+  it('converts odp to pdf', async () => {
+    const converter = createLocalDocumentConverter();
+    const result = await converter.convert({ source: { format: 'odp', bytes: minimalOdpBytes() }, targetFormat: 'pdf' }, { signal: new AbortController().signal });
     expect(result.document.format).toBe('pdf');
     expect(pdfHeader(result.document.bytes)).toBe('%PDF-');
   });

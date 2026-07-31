@@ -18,6 +18,7 @@ const FUNCTIONS = [
   'readDocxContent',
   'readPptxContent',
   'readOdtContent',
+  'readOdpContent',
   'readPdf',
   'writePdf',
   'docxToPdf',
@@ -25,6 +26,7 @@ const FUNCTIONS = [
   'pptxToPdf',
   'pdfToPptx',
   'odtToPdf',
+  'odpToPdf',
   'createLocalDocumentConverter',
 ];
 
@@ -33,6 +35,18 @@ function minimalOdtBytes() {
   const mimetype = new TextEncoder().encode(ODF_MEDIA_TYPES.odt);
   const contentXml = new TextEncoder().encode(
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"><office:body><office:text><text:p>Hello from the odt smoke test</text:p></office:text></office:body></office:document-content>',
+  );
+  return zipPackage([
+    ['mimetype', { bytes: mimetype, stored: true }],
+    ['content.xml', { bytes: contentXml }],
+  ]);
+}
+
+// odp has no live-view editor in documents.js either, so this mirrors minimalOdtBytes above exactly, just with office:presentation/draw:page/presentation:notes in place of office:text/text:p -- proving odpToPdf's entire pipeline (odf.js's decodePackage, dist's own readOdpContent/convertPresentationToLayout/writePdf, including the notes hidden-annotation mechanism) actually works from the built dist/ artifact.
+function minimalOdpBytes() {
+  const mimetype = new TextEncoder().encode(ODF_MEDIA_TYPES.odp);
+  const contentXml = new TextEncoder().encode(
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0" xmlns:presentation="urn:oasis:names:tc:opendocument:xmlns:presentation:1.0" xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0"><office:body><office:presentation><draw:page><draw:frame svg:x="20pt" svg:y="20pt" svg:width="300pt" svg:height="50pt"><draw:text-box><text:p>Hello from the odp smoke test</text:p></draw:text-box></draw:frame><presentation:notes><draw:frame svg:x="20pt" svg:y="300pt" svg:width="300pt" svg:height="50pt"><draw:text-box><text:p>Smoke test speaker notes</text:p></draw:text-box></draw:frame></presentation:notes></draw:page></office:presentation></office:body></office:document-content>',
   );
   return zipPackage([
     ['mimetype', { bytes: mimetype, stored: true }],
@@ -82,5 +96,21 @@ describe('dist/ end-to-end: odtToPdf, from the CJS build', () => {
       .map((item) => item.text)
       .join(' ');
     expect(text).toContain('Hello from the odt smoke test');
+  });
+});
+
+describe('dist/ end-to-end: odpToPdf, from the CJS build', () => {
+  it('produces a real PDF from a genuine ODF package, with speaker notes carried through, without throwing', () => {
+    const pdfBytes = cjs.odpToPdf(minimalOdpBytes());
+    expect(pdfBytes.length).toBeGreaterThan(0);
+    expect(new TextDecoder('latin1').decode(pdfBytes.subarray(0, 5))).toBe('%PDF-');
+
+    const layout = cjs.readPdf(pdfBytes);
+    const text = layout.pages[0]?.items
+      .filter((item) => item.kind === 'text')
+      .map((item) => item.text)
+      .join(' ');
+    expect(text).toContain('Hello from the odp smoke test');
+    expect(layout.pages[0]?.notes).toBe('Smoke test speaker notes');
   });
 });
