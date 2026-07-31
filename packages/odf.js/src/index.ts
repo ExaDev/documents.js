@@ -86,7 +86,7 @@ export { decodeXmlText } from './xml/entities';
 export { parseOdfLength, formatOdfLength } from './typed/shared/units';
 export type { LengthUnit } from './typed/shared/units';
 
-export { columnIndexToLetters, cellReference, TableCursor } from './typed/shared/a1';
+export { columnIndexToLetters, cellReference, columnLettersToIndex, parseCellReference, TableCursor } from './typed/shared/a1';
 
 export { parseOdfColor, formatOdfColor } from './typed/shared/color';
 
@@ -108,7 +108,7 @@ export { readOdfTable } from './typed/shared/table';
 export { parseOdfTransform, applyOdfTransform, netRotationDeg, resolveOdfShapeGeometry, composeOdfGroupTransform } from './typed/shared/transform';
 export type { OdfTransformFunction, OdfPoint, OdfShapeGeometry } from './typed/shared/transform';
 
-export { resolveDrawPageSize } from './typed/shared/masterpage';
+export { resolveDrawPageSize, resolvePageLayoutProperties } from './typed/shared/masterpage';
 
 export {
   parseOdfViewBox,
@@ -131,3 +131,6 @@ export type { OdtDocument } from './typed/odt/read';
 
 export { readOdg } from './typed/odg/read';
 export type { OdgDocument } from './typed/odg/read';
+
+export { readOds } from './typed/ods/read';
+export type { OdsDocument } from './typed/ods/read';

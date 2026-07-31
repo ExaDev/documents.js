@@ -4,7 +4,7 @@ import type { Package } from '../../model/package';
 import { attrValue, childrenWithTag, findChildElement, rootElement } from '../../xml/query';
 import { parsePageSize } from './geometry';
 
-// draw:page's own page-size resolution chain -- draw:master-page-name -> style:master-page -> style:page-layout-name -> style:page-layout-properties -- verified structurally identical between office:presentation and office:drawing draw:page content against the OASIS ODF schema (draw:page's own attribute/content-model definition is a single, format-agnostic schema fragment reused by both office:body children, not two separate definitions): a drawing's own draw:page carries draw:master-page-name exactly like a presentation's does, resolving through the SAME style:master-page/style:page-layout machinery in styles.xml. Shared here (rather than duplicated the way odt/read.ts's OWN findPageLayoutElement deliberately is -- see that module's own top-of-file note on why ITS case differs) because odp and odg's own resolution is not merely similar but IDENTICAL: no format-specific divergence to keep separate.
+// The master-page -> page-layout resolution chain shared by every ODF format that references a style:master-page by NAME: style:master-page -> style:page-layout-name -> style:page-layout -> style:page-layout-properties. draw:page's own page-size resolution (draw:master-page-name -> ...) was verified structurally identical between office:presentation and office:drawing draw:page content against the OASIS ODF schema (draw:page's own attribute/content-model definition is a single, format-agnostic schema fragment reused by both office:body children, not two separate definitions): a drawing's own draw:page carries draw:master-page-name exactly like a presentation's does, resolving through the SAME style:master-page/style:page-layout machinery in styles.xml. resolveDrawPageSize below is now a thin wrapper over resolvePageLayoutProperties -- the master-page-name -> page-layout-properties HALF of the chain -- because a spreadsheet's own print-settings resolution (typed/ods/read.ts) needs the identical remaining chain but starts from a genuinely different attribute (style:master-page-name on the table:table's own style:style[family="table"], not draw:master-page-name on a draw:page) and needs more than just PageSize out of the resolved properties (scale, page order, print token list, ...). Sharing the master-page-name -> properties half here, while leaving "how do we get the master-page name in the first place" to each caller, is the correct cut: that first step is genuinely format-specific, the rest is byte-for-byte identical machinery.
 
 const STYLES_PART = 'styles.xml';
 const CONTENT_PART = 'content.xml';
@@ -49,12 +49,17 @@ function findPageLayoutElement(pkg: Package, pageLayoutName: string | undefined)
   return undefined;
 }
 
-// Resolves one draw:page's own size through the full chain, or undefined if any link doesn't resolve -- the caller supplies its own format-appropriate fallback (a presentation and a drawing document have genuinely different real-world defaults; see readOdp/readOdg's own DEFAULT_PAGE_SIZE constants) rather than this shared function baking one in.
-export function resolveDrawPageSize(page: XmlElement, pkg: Package): PageSize | undefined {
-  const masterPageName = attrValue(page, 'draw:master-page-name');
+// Resolves a style:master-page NAME through the full chain (style:master-page -> style:page-layout-name -> style:page-layout -> style:page-layout-properties) to that page-layout's own style:page-layout-properties element, or undefined if any link doesn't resolve (no name given, no such master page, no page-layout-name, no such page-layout, or a page-layout with no style:page-layout-properties child at all -- real LibreOffice output omits it entirely for an untouched default page style, confirmed against a freshly-created, unmodified Calc document's own Default/Mpm1 page-layout). Exported so any typed reader whose OWN format resolves a master-page-name from a different starting attribute (draw:master-page-name below; a spreadsheet's table:table -> style:style[family="table"] -> style:master-page-name, in typed/ods/read.ts) can reuse this exact remaining chain rather than re-walking it.
+export function resolvePageLayoutProperties(pkg: Package, masterPageName: string | undefined): XmlElement | undefined {
   const masterPage = findMasterPageElement(pkg, masterPageName);
   const pageLayoutName = masterPage === undefined ? undefined : attrValue(masterPage, 'style:page-layout-name');
   const pageLayout = findPageLayoutElement(pkg, pageLayoutName);
-  const properties = pageLayout === undefined ? undefined : childrenWithTag(pageLayout, 'style:page-layout-properties')[0];
+  return pageLayout === undefined ? undefined : childrenWithTag(pageLayout, 'style:page-layout-properties')[0];
+}
+
+// Resolves one draw:page's own size through the full chain, or undefined if any link doesn't resolve -- the caller supplies its own format-appropriate fallback (a presentation and a drawing document have genuinely different real-world defaults; see readOdp/readOdg's own DEFAULT_PAGE_SIZE constants) rather than this shared function baking one in.
+export function resolveDrawPageSize(page: XmlElement, pkg: Package): PageSize | undefined {
+  const masterPageName = attrValue(page, 'draw:master-page-name');
+  const properties = resolvePageLayoutProperties(pkg, masterPageName);
   return properties === undefined ? undefined : parsePageSize(properties);
 }

@@ -28,6 +28,36 @@ export function cellReference(columnIndex: number, rowIndex: number): string {
   return `${columnIndexToLetters(columnIndex)}${rowIndex + 1}`;
 }
 
+// The reverse of columnIndexToLetters: "A" -> 0, "Z" -> 25, "AA" -> 26, "XFD" -> 16383. Unlike columnIndexToLetters/cellReference (which construct a reference from a position THIS package already knows to be valid), this parses text a producer wrote into an XML attribute -- e.g. ods's own table:print-ranges cell-range-address strings (typed/ods/read.ts) -- so it returns undefined for anything that isn't a run of one or more uppercase A-Z letters rather than throwing.
+export function columnLettersToIndex(letters: string): number | undefined {
+  if (!/^[A-Z]+$/.test(letters)) {
+    return undefined;
+  }
+  let index = 0;
+  for (const char of letters) {
+    index = index * ALPHABET_SIZE + (char.charCodeAt(0) - ALPHABET_START_CODE + 1);
+  }
+  return index - 1; // Shift back from the bijective base-26 1-based encoding to a 0-based column index.
+}
+
+// The reverse of cellReference: parses an A1-style reference ("B7") into 0-based column/row indices, or undefined if it doesn't match the grammar -- for the same "this parses untrusted producer text, not this package's own construction" reason columnLettersToIndex is non-throwing.
+export function parseCellReference(reference: string): { column: number; row: number } | undefined {
+  const match = /^([A-Z]+)(\d+)$/.exec(reference);
+  if (match === null) {
+    return undefined;
+  }
+  const [, letters, digits] = match;
+  if (letters === undefined || digits === undefined) {
+    return undefined;
+  }
+  const column = columnLettersToIndex(letters);
+  const row = Number.parseInt(digits, 10) - 1;
+  if (column === undefined || row < 0) {
+    return undefined;
+  }
+  return { column, row };
+}
+
 function validateRepeatCount(repeatCount: number, caller: string): void {
   if (!Number.isInteger(repeatCount) || repeatCount < 1) {
     throw new Error(`${caller}: repeatCount must be a positive integer, got ${repeatCount}`);
