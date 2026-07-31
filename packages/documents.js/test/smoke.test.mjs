@@ -34,10 +34,13 @@ const FUNCTIONS = [
   'openOdp',
   'createOdp',
   'pdfToOdp',
+  'openOdg',
+  'createOdg',
+  'buildOdgPackage',
   'createLocalDocumentConverter',
 ];
 
-// odt has no live-view editor in documents.js yet (see src/convert/convert.ts's own module doc), so unlike the docx bytes below -- built through cjs.createDocx() itself -- these minimal odt bytes are hand-built directly against odf.js (documents.js's own real, already-installed dependency), mirroring src/test-support/odt.ts's fixture exactly. This is deliberate duplication, not an oversight: it is the only way to prove odtToPdf's ENTIRE pipeline (odf.js's decodePackage, dist's own readOdtContent/convertWordprocessingToLayout/writePdf) actually works from the built dist/ artifact, rather than from source.
+// These minimal odt bytes are hand-built directly against odf.js (documents.js's own real, already-installed dependency), mirroring src/test-support/odt.ts's fixture exactly, rather than built through this package's own createOdt(). This is deliberate duplication, not an oversight: it is the only way to prove odtToPdf's ENTIRE pipeline (odf.js's decodePackage, dist's own readOdtContent/convertWordprocessingToLayout/writePdf) actually works from the built dist/ artifact independent of documents.js's own odt live-view editor, the same reasoning the odp/odg blocks further down apply when they build their own fixture bytes via cjs.createOdp()/cjs.createOdg() instead.
 function minimalOdtBytes() {
   const mimetype = new TextEncoder().encode(ODF_MEDIA_TYPES.odt);
   const contentXml = new TextEncoder().encode(
@@ -197,5 +200,51 @@ describe('dist/ end-to-end: odpToPdf then pdfToOdp, from the CJS build', () => {
       .join(' ');
     expect(text).toContain('Hello');
     expect(text).toContain('smoke');
+  });
+});
+
+// There is no pdfToOdg yet (see src/convert/convert.ts's own module doc), so unlike the odp block above this cannot round-trip all the way back to odg -- it instead proves cjs.createOdg()'s live-view editor (page-level add/remove, addRect/addEllipse/addLine/addPath, and reused OdpShape text boxes) reaches the built dist/ artifact and produces a genuinely renderable drawing, by feeding the freshly built odg bytes through odgToPdf and confirming both the vector geometry and the text survive into the rendered PDF; buildOdgPackage is exercised directly too (not just re-exported), proving the standalone ContentDocument -> odg bridge also reaches dist/.
+describe('dist/ end-to-end: odg live-view editor, from the CJS build', () => {
+  it('builds a drawing via cjs.createOdg() (a curved path, a filled rect, a text label), converts it to PDF, and renders correctly', () => {
+    const editor = cjs.createOdg();
+    const page = editor.addPage();
+    page.addRect({ frame: { xPt: 20, yPt: 20, widthPt: 80, heightPt: 60 }, fill: { r: 1, g: 0, b: 0 } });
+    page.addPath({
+      frame: { xPt: 150, yPt: 20, widthPt: 80, heightPt: 80 },
+      subpaths: [
+        {
+          start: { xPt: 0, yPt: 80 },
+          closed: true,
+          segments: [
+            { kind: 'line', to: { xPt: 60, yPt: 80 } },
+            { kind: 'cubic', control1: { xPt: 80, yPt: 80 }, control2: { xPt: 80, yPt: 0 }, to: { xPt: 40, yPt: 0 } },
+          ],
+        },
+      ],
+      fill: { r: 0, g: 0.5, b: 1 },
+    });
+    page.addTextBox({ frame: { xPt: 20, yPt: 120, widthPt: 300, heightPt: 40 }, text: 'Hello from the odg editor smoke test' });
+    const odgBytes = editor.toBytes();
+
+    const pdfBytes = cjs.odgToPdf(odgBytes);
+    expect(pdfBytes.length).toBeGreaterThan(0);
+    expect(new TextDecoder('latin1').decode(pdfBytes.subarray(0, 5))).toBe('%PDF-');
+
+    // readPdf's own content-stream interpreter does not track general path construction operators yet (only the specific `re` rectangle operator -- see the README's own pdfToOds/pdfToOdg gotcha), so the curved path written above is NOT expected to come back as a 'path' LayoutItem on read -- only the rect and the text are checked here, the same scope the odgToPdf smoke test above already exercises.
+    const layout = cjs.readPdf(pdfBytes);
+    const items = layout.pages[0]?.items ?? [];
+    expect(items.some((item) => item.kind === 'rect')).toBe(true);
+    const text = items
+      .filter((item) => item.kind === 'text')
+      .map((item) => item.text)
+      .join(' ');
+    expect(text).toContain('Hello');
+    expect(text).toContain('smoke');
+
+    // buildOdgPackage, exercised directly (not merely re-exported) -- the standalone ContentDocument -> odg bridge, reachable from dist/ too. Goes via editor.toPackage()/new OdgEditor(...) rather than raw decodePackage/encodePackage, since the bare decodePackage/encodePackage names re-exported from documents.js's own index are ooxml.js's (for docx/pptx), not odf.js's -- OdgEditor's own toPackage()/constructor is this package's established way to move an odf.js Package in and out of the live-view editor without that ambiguity.
+    const content = cjs.readOdgContent(editor.toPackage());
+    const rebuiltPkg = cjs.buildOdgPackage(content);
+    const rebuilt = new cjs.OdgEditor(rebuiltPkg);
+    expect(rebuilt.pages()).toHaveLength(1);
   });
 });
