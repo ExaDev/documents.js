@@ -75,7 +75,28 @@ export type { StyleProperties, ParsedProperties } from './styles/properties';
 
 export { buildStylePropertyElements, canonicalPropertiesString } from './styles/serialize';
 
-export { StyleRegistry, STYLE_FAMILIES } from './styles/registry';
+export { StyleRegistry, STYLE_FAMILIES, isStyleFamily } from './styles/registry';
 export type { StyleFamily, InternRequest, OtherPartRef, StyleRegistryOptions } from './styles/registry';
 
 export { ensureSpan } from './styles/span';
+
+export { rootElement, findChildElement, childrenWithTag, attrValue } from './xml/query';
+export { decodeXmlText } from './xml/entities';
+
+export { parseOdfLength, formatOdfLength } from './typed/shared/units';
+export type { LengthUnit } from './typed/shared/units';
+
+export { columnIndexToLetters, cellReference, TableCursor } from './typed/shared/a1';
+
+export { parseOdfColor, formatOdfColor } from './typed/shared/color';
+
+export { parsePageSize, parseMargins, parseBox } from './typed/shared/geometry';
+
+export { type Alignment, AlignmentSchema } from './typed/shared/style';
+
+export { getOdfSpaceCount, measureOdfNodeLength, sumOdfNodeLength, decodeOdfText } from './typed/shared/text';
+
+export { resolveStyle } from './typed/shared/cascade';
+export type { CascadeDiagnostic, StyleCascadeResult } from './typed/shared/cascade';
+
+export { readOdfMetadata, META_PART } from './typed/shared/metadata';
