@@ -8,6 +8,7 @@ import { sniffImageFormat } from '../../image/sniff';
 import type { GroupChildTransform } from '../shared/drawingml';
 import { applyGroupTransform, readGroupXfrm, readSolidFillColor, readXfrm } from '../shared/drawingml';
 import { DocumentMetadataSchema, readCoreProperties } from '../shared/metadata';
+import { assignSourcePaths } from '../shared/source-path';
 import type { Relationship } from '../util';
 import { attr, childrenWithTag, elementsWithTag, resolveRelationships, rootElement, textContent } from '../util';
 import { base64ToBytes } from '../../util/base64';
@@ -420,5 +421,12 @@ export function readPptx(pkg: Package): PptxDocument {
   const presentationRoot = rootElement(pkg.parts[PRESENTATION_PATH]);
   const size = readSlideSize(presentationRoot);
   const slides = readSlidePathsInOrder(pkg, presentationRoot).map((slidePath) => readSlide(pkg, slidePath, size));
+  slides.forEach((slide, slideIndex) => {
+    slide.shapes.forEach((shape, shapeIndex) => {
+      const shapePath = `slides[${slideIndex}].shapes[${shapeIndex}]`;
+      shape.sourcePath = shapePath;
+      assignSourcePaths(shape.blocks, shapePath);
+    });
+  });
   return { metadata: readCoreProperties(pkg), slides };
 }

@@ -378,6 +378,47 @@ describe('readPptx: rotation', () => {
   });
 });
 
+describe('readPptx: sourcePath', () => {
+  it('assigns slides[N].shapes[N] to each shape, in the flattened document order', () => {
+    const doc = readPptx(buildFixturePackage());
+    // sldIdLst orders slide2 before slide1, so slides[0] is slide2 (one shape) and slides[1] is slide1.
+    expect(doc.slides[0]?.shapes[0]?.sourcePath).toBe('slides[0].shapes[0]');
+    const titleShape = doc.slides[1]?.shapes.find((s) => s.name === 'Title 1');
+    const bodyShape = doc.slides[1]?.shapes.find((s) => s.name === 'Body 1');
+    expect(titleShape?.sourcePath).toBe('slides[1].shapes[0]');
+    expect(bodyShape?.sourcePath).toBe('slides[1].shapes[1]');
+  });
+
+  it('assigns slides[N].shapes[N].blocks[N] and .runs[N] to a shape\'s paragraph content', () => {
+    const doc = readPptx(buildFixturePackage());
+    const titleShape = doc.slides[1]?.shapes.find((s) => s.name === 'Title 1');
+    const titlePara = asParagraph(titleShape?.blocks[0]);
+    expect(titlePara.sourcePath).toBe('slides[1].shapes[0].blocks[0]');
+    expect(titlePara.runs[0]?.sourcePath).toBe('slides[1].shapes[0].blocks[0].runs[0]');
+    expect(titlePara.runs[1]?.sourcePath).toBe('slides[1].shapes[0].blocks[0].runs[1]');
+  });
+
+  it('assigns a group\'s flattened child shape its own position in the slide\'s flat shape list', () => {
+    const doc = readPptx(buildFixturePackage());
+    const grouped = doc.slides[1]?.shapes.find((s) => s.name === 'Grouped shape');
+    // spTree1 order: title(0), body(1), pic(2), table(3), grouped child(4).
+    expect(grouped?.sourcePath).toBe('slides[1].shapes[4]');
+    expect(asParagraph(grouped?.blocks[0]).sourcePath).toBe('slides[1].shapes[4].blocks[0]');
+  });
+
+  it('nests a table shape\'s own cell content under slides[N].shapes[N].blocks[N].rows[N].cells[N].blocks[N]', () => {
+    const doc = readPptx(buildFixturePackage());
+    const tableShape = doc.slides[1]?.shapes.find((s) => s.name === 'Table 1');
+    const table = asTable(tableShape?.blocks[0]);
+    expect(table.sourcePath).toBe('slides[1].shapes[3].blocks[0]');
+    const mergedCellPara = asParagraph(table.rows[0]?.cells[0]?.blocks[0]);
+    expect(mergedCellPara.sourcePath).toBe('slides[1].shapes[3].blocks[0].rows[0].cells[0].blocks[0]');
+    expect(mergedCellPara.runs[0]?.sourcePath).toBe('slides[1].shapes[3].blocks[0].rows[0].cells[0].blocks[0].runs[0]');
+    const cellBPara = asParagraph(table.rows[1]?.cells[1]?.blocks[0]);
+    expect(cellBPara.sourcePath).toBe('slides[1].shapes[3].blocks[0].rows[1].cells[1].blocks[0]');
+  });
+});
+
 describe('readPptx: notes', () => {
   it('prefers the notes slide\'s own body placeholder over concatenating every a:t (excluding the slide-number field)', () => {
     const doc = readPptx(buildFixturePackage());

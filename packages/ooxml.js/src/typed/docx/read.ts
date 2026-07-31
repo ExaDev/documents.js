@@ -7,6 +7,7 @@ import { DocumentMetadataSchema, readCoreProperties } from '../shared/metadata';
 import { twipsToPt } from '../shared/units';
 import type { DrawingTheme } from '../shared/drawingml';
 import { EMPTY_THEME, readTheme } from '../shared/drawingml';
+import { assignSourcePaths } from '../shared/source-path';
 import type { Relationship } from '../util';
 import { attr, childrenWithTag, elementsWithTag, resolveRelationships, rootElement, textContent } from '../util';
 import type { DocxStyleContext } from './styles';
@@ -327,6 +328,7 @@ function readSections(body: XmlElement, context: DocxStyleContext, rels: Readonl
   if (currentBlocks.length > 0 || sections.length === 0) {
     sections.push({ pageSize: PAGE_SIZE_LETTER, margins: DEFAULT_MARGINS, blocks: currentBlocks });
   }
+  sections.forEach((section, sectionIndex) => assignSourcePaths(section.blocks, `sections[${sectionIndex}]`));
   return sections;
 }
 

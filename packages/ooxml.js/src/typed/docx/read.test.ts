@@ -243,6 +243,37 @@ describe('readDocx: tables', () => {
   });
 });
 
+describe('readDocx: sourcePath', () => {
+  it('assigns sections[N].blocks[N] and sections[N].blocks[N].runs[N] in document order', () => {
+    const doc = readDocx(buildFixturePackage());
+    const title = asParagraph(doc.sections[0]?.blocks[0]);
+    expect(title.sourcePath).toBe('sections[0].blocks[0]');
+    expect(title.runs[0]?.sourcePath).toBe('sections[0].blocks[0].runs[0]');
+    expect(doc.sections[0]?.blocks[1]?.sourcePath).toBe('sections[0].blocks[1]'); // the pageBreak block
+    const secondSection = asParagraph(doc.sections[1]?.blocks[0]);
+    expect(secondSection.sourcePath).toBe('sections[1].blocks[0]');
+    expect(secondSection.runs[0]?.sourcePath).toBe('sections[1].blocks[0].runs[0]');
+  });
+
+  it('assigns a multi-run paragraph\'s runs their own zero-based index', () => {
+    const doc = readDocx(buildFixturePackage());
+    const tabBreakBlock = asParagraph(doc.sections[0]?.blocks[9]);
+    expect(tabBreakBlock.sourcePath).toBe('sections[0].blocks[9]');
+    expect(tabBreakBlock.runs[0]?.sourcePath).toBe('sections[0].blocks[9].runs[0]');
+  });
+
+  it('nests a table cell\'s own blocks under sections[N].blocks[N].rows[N].cells[N].blocks[N]', () => {
+    const doc = readDocx(buildFixturePackage());
+    const table = asTable(doc.sections[0]?.blocks[10]);
+    expect(table.sourcePath).toBe('sections[0].blocks[10]');
+    const mergedCell = asParagraph(table.rows[0]?.cells[0]?.blocks[0]);
+    expect(mergedCell.sourcePath).toBe('sections[0].blocks[10].rows[0].cells[0].blocks[0]');
+    expect(mergedCell.runs[0]?.sourcePath).toBe('sections[0].blocks[10].rows[0].cells[0].blocks[0].runs[0]');
+    const right1Cell = asParagraph(table.rows[1]?.cells[1]?.blocks[0]);
+    expect(right1Cell.sourcePath).toBe('sections[0].blocks[10].rows[1].cells[1].blocks[0]');
+  });
+});
+
 describe('readDocx: multi-section support', () => {
   it('starts a new section at a mid-document w:pPr/w:sectPr, with that section\'s own page size and margins', () => {
     const doc = readDocx(buildFixturePackage());
