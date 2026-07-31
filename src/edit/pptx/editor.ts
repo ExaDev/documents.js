@@ -3,9 +3,10 @@ import { decodePackage, encodePackage, resolveRelationships, rootElement } from 
 import type { PageSize } from '../../model/geometry';
 import { emuToPt, ptToEmu } from '../../model/units';
 import { ensureContentTypeOverride } from '../../opc/content-types';
+import { buildRelativeTarget } from '../../opc/paths';
 import { addRelationship } from '../../opc/rels';
 import { el } from '../../xml/fragment';
-import { createEmptyPptxPackage } from './scaffold';
+import { buildEmptyGroupSpTree, createEmptyPptxPackage, DML_NS, PML_NS, R_NS, SLIDE_LAYOUT_PART_PATH, SLIDE_LAYOUT_REL_TYPE } from './scaffold';
 import type { SlideContext } from './slide';
 import { PptxSlide } from './slide';
 
@@ -97,8 +98,9 @@ function nextSlidePartIndex(pkg: Package): number {
   return max + 1;
 }
 
+// xmlns:p/xmlns:a/xmlns:r are mandatory on this root element -- each OOXML part is its own independent XML document, so a slide part declares its own namespace prefixes regardless of what ppt/presentation.xml declares. Their absence (this function's previous form) is invalid XML-namespaces and is rejected by any namespace-aware parser; this package's own reader tolerates it only because ooxml.js's XmlElement model matches tag strings literally rather than resolving namespace URIs. Confirmed against real Keynote, which rejected a slide built without them.
 function buildEmptySlideRoot(): XmlElement {
-  return el('p:sld', {}, [el('p:cSld', {}, [el('p:spTree')])]);
+  return el('p:sld', { 'xmlns:p': PML_NS, 'xmlns:a': DML_NS, 'xmlns:r': R_NS }, [el('p:cSld', {}, [buildEmptyGroupSpTree()])]);
 }
 
 export class PptxEditor {
@@ -148,6 +150,8 @@ export class PptxEditor {
       type: SLIDE_RELATIONSHIP_TYPE,
       target: `slides/slide${partIndex}.xml`,
     });
+    // Every real p:sld must relate to a slideLayout (CT_Slide's own mandatory chain) -- createEmptyPptxPackage's own single blank layout, referenced here by every slide this editor creates.
+    addRelationship(this.pkg, slidePartPath, { type: SLIDE_LAYOUT_REL_TYPE, target: buildRelativeTarget(slidePartPath, SLIDE_LAYOUT_PART_PATH) });
 
     const slideId = nextSlideId(sldIdLst);
     sldIdLst.children.push(el('p:sldId', { id: String(slideId), 'r:id': relationshipId }));
