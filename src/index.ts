@@ -1,6 +1,6 @@
 // documents.js's public surface: bidirectional docx/pptx <-> PDF conversion, a read+write live-view editor for docx/pptx, and a hand-written PDF codec, built on ooxml.js's lossless OOXML core.
 
-// --- ooxml.js's lossless OOXML core, re-exported so consumers need only this one dependency. Its own typed readers (readDocx/readPptx/readXlsx) and their result types are deliberately NOT re-exported here: ContentDocument (below) supersedes them for this package's purposes, and exposing both would be a trap -- two competing, differently-lossy document models under one API surface. ---
+// --- ooxml.js's lossless OOXML core, re-exported so consumers need only this one dependency. Its own typed readers (readDocx/readPptx/readXlsx) and their result types are deliberately NOT re-exported here: readDocxContent/readPptxContent (below) already wrap readDocx/readPptx into ContentDocument, so exposing both the wrapper and the thing it wraps would be a trap -- two overlapping entry points to the same underlying read, one of which (readDocx/readPptx's own comments/footnotes/headers/footers) carries fields ContentDocument doesn't model at all. ---
 export {
   type Attribute,
   AttributeSchema,
