@@ -31,3 +31,31 @@ export type {
 
 export { XmlPartSchema, BinaryPartSchema, PartSchema, PackageSchema } from './model/package';
 export type { XmlPart, BinaryPart, Part, Package } from './model/package';
+
+export { ODF_NAMESPACES, xmlnsAttributes } from './ns';
+export type { OdfNamespacePrefix } from './ns';
+
+export { ODF_MEDIA_TYPES, mediaTypeForExtension } from './media-type';
+export type { OdfExtension } from './media-type';
+
+export { sniffImageFormat } from './image/sniff';
+export type { ImageFormat } from './image/sniff';
+
+export { readMimetype, writeMimetype, MIMETYPE_PART } from './mimetype';
+
+export { el, txt } from './xml/fragment';
+export { encodeXmlText } from './xml/entities';
+
+export {
+  readManifest,
+  buildManifest,
+  writeManifest,
+  syncManifest,
+  validateManifest,
+  setDocumentMediaType,
+  MANIFEST_PART,
+  ManifestEntrySchema,
+  ManifestSchema,
+  ManifestProblemSchema,
+} from './manifest';
+export type { ManifestEntry, Manifest, ManifestProblem, BuildManifestOptions } from './manifest';

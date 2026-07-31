@@ -6,8 +6,31 @@ import * as esm from '../dist/index.js';
 const require = createRequire(import.meta.url);
 const cjs = require('../dist/index.cjs');
 
-const FUNCTIONS = ['decodePackage', 'encodePackage', 'zipPackage', 'unzipPackage', 'parseXml', 'buildXml', 'bytesToBase64', 'base64ToBytes'];
-const OBJECTS = ['packageCodec', 'xmlCodec'];
+const FUNCTIONS = [
+  'decodePackage',
+  'encodePackage',
+  'zipPackage',
+  'unzipPackage',
+  'parseXml',
+  'buildXml',
+  'bytesToBase64',
+  'base64ToBytes',
+  'xmlnsAttributes',
+  'mediaTypeForExtension',
+  'sniffImageFormat',
+  'readMimetype',
+  'writeMimetype',
+  'el',
+  'txt',
+  'encodeXmlText',
+  'readManifest',
+  'buildManifest',
+  'writeManifest',
+  'syncManifest',
+  'validateManifest',
+  'setDocumentMediaType',
+];
+const OBJECTS = ['packageCodec', 'xmlCodec', 'ODF_NAMESPACES', 'ODF_MEDIA_TYPES'];
 
 describe('dist/ exports are present in both builds', () => {
   for (const name of FUNCTIONS) {
@@ -57,5 +80,17 @@ describe.each([
     const content = pkg1.parts['content.xml'];
     expect(content?.kind).toBe('xml');
     expect(JSON.stringify(content)).toContain('Smoke &amp; test');
+  });
+
+  it('reads the mimetype part written into the fixture zip', () => {
+    expect(api.readMimetype(pkg1)).toBe('application/vnd.oasis.opendocument.text');
+  });
+
+  it('builds and validates a manifest that exhaustively covers the fixture package', () => {
+    const withManifest = api.decodePackage(bytes);
+    api.syncManifest(withManifest);
+    expect(api.validateManifest(withManifest)).toEqual([]);
+    const manifest = api.readManifest(withManifest);
+    expect(manifest.entries.find((e) => e.fullPath === '/')?.mediaType).toBe('application/vnd.oasis.opendocument.text');
   });
 });
