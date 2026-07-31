@@ -137,7 +137,8 @@ function layoutTable(table: ContentTable, contentLeftXDown: number, contentWidth
   return cursorYDown;
 }
 
-function convertShape(shape: ContentShape, slideHeightPt: number, measurer: TextMeasurer, images: Record<string, LayoutImageAsset>, out: LayoutItem[]): void {
+// Exported for reuse by src/layout/drawing.ts: a drawing page's own ContentShape entries (draw:frame text/table/image content, and unrecognised custom-shape presets salvaged as text -- see odf.js's typed/draw/shapes.ts) are the exact same ContentShapeSchema-typed value a slide's shapes are, so odg gets slide-quality paragraph flow, image placement, and table layout for free rather than a second, drifting copy of this function.
+export function convertShape(shape: ContentShape, slideHeightPt: number, measurer: TextMeasurer, images: Record<string, LayoutImageAsset>, out: LayoutItem[]): void {
   const flippedFrame = flipY(shape.frame, slideHeightPt);
   const placement = shapePlacement(flippedFrame, shape.rotationDeg);
   const contentLeftXDown = shape.frame.xPt + shape.insetLeftPt;
