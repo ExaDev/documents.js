@@ -162,12 +162,12 @@ export { convertPresentationToLayout } from './layout/slides';
 export type { ReconstructOptions } from './layout/reconstruct';
 export { reconstructPresentation, reconstructWordprocessing } from './layout/reconstruct';
 
-// --- The four round-trip ergonomic conversions, plus odtToPdf's one-directional addition (see convert/convert.ts's own module doc for why there is no pdfToOdt yet). ---
+// --- The six round-trip ergonomic conversions (docx/pptx/odt <-> PDF). ---
 export type { DocumentToPdfOptions, PdfToDocumentOptions } from './convert/convert';
-export { docxToPdf, odtToPdf, pdfToDocx, pdfToPptx, pptxToPdf } from './convert/convert';
+export { docxToPdf, odtToPdf, pdfToDocx, pdfToOdt, pdfToPptx, pptxToPdf } from './convert/convert';
 
-// Schema-validated z.codec() pairs over the conversions above (docx/pptx bytes <-> PDF bytes), the no-extra-options form -- use docxToPdf/pdfToDocx/pptxToPdf/pdfToPptx directly for cancellation or diagnostics.
-export { docxPdfCodec, pptxPdfCodec } from './convert/codec';
+// Schema-validated z.codec() pairs over the conversions above (docx/pptx/odt bytes <-> PDF bytes), the no-extra-options form -- use docxToPdf/pdfToDocx/pptxToPdf/pdfToPptx/odtToPdf/pdfToOdt directly for cancellation or diagnostics.
+export { docxPdfCodec, odtPdfCodec, pptxPdfCodec } from './convert/codec';
 
 // --- The swappable conversion port, for a caller that wants to inject a different (e.g. remote) implementation later without changing call sites. ---
 export type { ConversionRequest, ConversionResult, Diagnostic, DocumentConverter, DocumentFormat, DocumentPayload } from './convert/port';
