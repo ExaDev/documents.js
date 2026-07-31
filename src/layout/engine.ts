@@ -79,6 +79,7 @@ function layoutParagraphFlow(
         sizePt: fragment.sizePt,
         color: fragment.color,
         underline: fragment.underline,
+        sourcePath: fragment.sourcePath,
       };
       state.items.push(textItem);
 
@@ -91,6 +92,7 @@ function layoutParagraphFlow(
           yPt: section.pageSize.heightPt - baselineYDown + line.descentPt,
           widthPt: fragmentWidthPt,
           heightPt: line.ascentPt - line.descentPt,
+          sourcePath: fragment.sourcePath,
         };
         state.items.push(link);
       }
@@ -125,6 +127,7 @@ function layoutParagraphInCell(paragraph: ContentParagraph, cellLeftXDown: numbe
         sizePt: fragment.sizePt,
         color: fragment.color,
         underline: fragment.underline,
+        sourcePath: fragment.sourcePath,
       });
     }
     cursorYDown += lineHeightPt;
@@ -150,7 +153,8 @@ function layoutTableFlow(table: ContentTable, section: ContentSection, pages: La
 
       if (cell.background !== undefined) {
         const cellFrame = flipY({ xPt: cellXDown, yPt: state.cursorYDown, widthPt: cellWidthPt, heightPt: rowHeightPt }, section.pageSize.heightPt);
-        state.items.push({ kind: 'rect', xPt: cellFrame.xPt, yPt: cellFrame.yPt, widthPt: cellFrame.widthPt, heightPt: cellFrame.heightPt, fill: cell.background });
+        // ContentTableCell has no sourcePath of its own (only ContentTable does -- see document-content-model), so a per-cell background rect can only be attributed at the table's own granularity, not to the specific cell.
+        state.items.push({ kind: 'rect', xPt: cellFrame.xPt, yPt: cellFrame.yPt, widthPt: cellFrame.widthPt, heightPt: cellFrame.heightPt, fill: cell.background, sourcePath: table.sourcePath });
       }
 
       let cellCursorYDown = state.cursorYDown;
@@ -171,7 +175,7 @@ function layoutImageFlow(block: ContentImageBlock, section: ContentSection, page
   ensureRoom(state, section, pages, block.heightPt, contentBottomYDown);
   const imageId = registerImage(block, images);
   const flippedFrame = flipY({ xPt: contentLeftXDown, yPt: state.cursorYDown, widthPt: block.widthPt, heightPt: block.heightPt }, section.pageSize.heightPt);
-  const imageItem: LayoutImage = { kind: 'image', imageId, xPt: flippedFrame.xPt, yPt: flippedFrame.yPt, widthPt: flippedFrame.widthPt, heightPt: flippedFrame.heightPt };
+  const imageItem: LayoutImage = { kind: 'image', imageId, xPt: flippedFrame.xPt, yPt: flippedFrame.yPt, widthPt: flippedFrame.widthPt, heightPt: flippedFrame.heightPt, sourcePath: block.sourcePath };
   state.items.push(imageItem);
   state.cursorYDown += block.heightPt;
 }
