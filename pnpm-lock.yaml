@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       document-content-model:
-        specifier: ^1.1.0
-        version: 1.1.0
+        specifier: ^1.2.0
+        version: 1.2.0
       fflate:
         specifier: ^0.8.3
         version: 0.8.3
@@ -1058,10 +1058,6 @@ packages:
   dir-glob@3.0.1:
     resolution: {integrity: sha512-WkrWp9GR4KXfKGYzOLmTuGVi1UWFfws377n9cc55/tb6DuqyF6pcQ5AbiHEshaDpY9v6oaSr2XCDidGmMwdzIA==}
     engines: {node: '>=8'}
-
-  document-content-model@1.1.0:
-    resolution: {integrity: sha512-1CkzXUas2M0cRPiWrSU3PI5ZTsRRMRStRphJtUQJ3QZneLELGtyVRecwIvp3yGGZrTcHmNrqgvH+ZLHMewq2Nw==}
-    engines: {node: '>=20'}
 
   document-content-model@1.2.0:
     resolution: {integrity: sha512-T1Hz2be2NILsfTHFrSNVsdZWGUrBJhLEXGaBVpHCr24eEgmx8cMM7G6oq86kjbo6d9tTs0+z4WCn2G0MxAOaNA==}
@@ -3596,10 +3592,6 @@ snapshots:
     dependencies:
       path-type: 4.0.0
 
-  document-content-model@1.1.0:
-    dependencies:
-      zod: 4.4.3
-
   document-content-model@1.2.0:
     dependencies:
       zod: 4.4.3
@@ -4278,7 +4270,7 @@ snapshots:
 
   ooxml.js@2.1.0:
     dependencies:
-      document-content-model: 1.1.0
+      document-content-model: 1.2.0
       fast-xml-parser: 5.10.1
       fflate: 0.8.3
       zod: 4.4.3
