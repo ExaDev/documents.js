@@ -1,7 +1,7 @@
 import type { Package } from 'odf.js';
 import { decodePackage, ODF_MEDIA_TYPES, zipPackage } from 'odf.js';
 
-// Never imported by src/index.ts and never reaches dist/. See docx.ts's top-of-file comment -- the same reasoning applies here, and there is an additional reason specific to odt: this package has no live-view odt editor yet (no buildOdtPackage/createOdt -- see convert/convert.ts's own module doc), so hand-authored ODF XML zipped via odf.js's own zipPackage/decodePackage is currently the ONLY way to get odt test bytes at all, short of committing a real LibreOffice export. zipPackage's entry order matters here in a way it never does for docx/pptx.ts's own OOXML fixtures: ODF requires the "mimetype" part to be the very first zip entry, stored uncompressed (see src/model/bytes.ts's own OdtBytesSchema note), so `stored: true` on that entry alone, first in the array, is load-bearing.
+// Never imported by src/index.ts and never reaches dist/. See docx.ts's top-of-file comment -- the same reasoning applies here: hand-authored ODF XML zipped via odf.js's own zipPackage/decodePackage, never via this package's own createEmptyOdtPackage (src/edit/odt/scaffold.ts), so a bug in that scaffold cannot hide behind a fixture built with the same code. zipPackage's entry order matters here in a way it never does for docx/pptx.ts's own OOXML fixtures: ODF requires the "mimetype" part to be the very first zip entry, stored uncompressed (see src/model/bytes.ts's own OdtBytesSchema note), so `stored: true` on that entry alone, first in the array, is load-bearing.
 
 function enc(s: string): Uint8Array<ArrayBuffer> {
   return new TextEncoder().encode(s);
