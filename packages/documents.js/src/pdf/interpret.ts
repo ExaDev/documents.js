@@ -1,14 +1,14 @@
 import type { LayoutColor } from '../model/color';
 import { COLOR_BLACK } from '../model/color';
 import { decodeStream } from './filters';
-import type { Matrix } from './matrix';
-import { IDENTITY_MATRIX, multiplyMatrices, translationMatrix } from './matrix';
+import type { Matrix, Point } from './matrix';
+import { IDENTITY_MATRIX, applyMatrix, multiplyMatrices, translationMatrix } from './matrix';
 import type { PdfDict, PdfObject } from './objects';
 import { asArray, asName, asNumber, dictGet } from './objects';
 import { readContentStream } from './content-read';
 import type { PdfDiagnosticSink } from './diagnostics';
 
-// The graphics/text state machine: walks a page's (or a recursed form XObject's) content-stream operations, tracking exactly the state v1 needs to recover -- CTM, fill/stroke colour, and text position/font/size -- and emits one ExtractedItem per meaningful paint operation. Everything else (clipping, shadings, patterns, general path construction/stroking) is deliberately not modelled; see the implementation plan's v1 scope for the reasoning.
+// The graphics/text state machine: walks a page's (or a recursed form XObject's) content-stream operations, tracking exactly the state v1 needs to recover -- CTM, fill/stroke colour, line width, and text position/font/size -- and emits one ExtractedItem per meaningful paint operation. Everything else (clipping, shadings, patterns) is deliberately not modelled; see the implementation plan's v1 scope for the reasoning. General path construction (m/l/c/v/y/h/re) and stroking ARE modelled, recovered as ExtractedPath below.
 
 export interface ExtractedTextRun {
   readonly kind: 'text';
@@ -21,7 +21,7 @@ export interface ExtractedTextRun {
   readonly color: LayoutColor;
 }
 
-// Only the specific axis-aligned filled-rectangle case (a bare "re" immediately painted with f/F/f*, under a non-rotated CTM) is recovered -- general path/curve/stroke reconstruction is out of v1 scope.
+// The specific axis-aligned filled-rectangle fast path: a bare "re" immediately painted with f/F/f*, under a non-rotated CTM, and nothing else. Anything more general (a rotated CTM, a stroke, curves, multiple subpaths) falls through to ExtractedPath below instead.
 export interface ExtractedRect {
   readonly kind: 'rect';
   readonly xPt: number;
@@ -29,6 +29,27 @@ export interface ExtractedRect {
   readonly widthPt: number;
   readonly heightPt: number;
   readonly color: LayoutColor;
+}
+
+// One line or cubic-Bezier segment of a subpath, device-space (CTM-applied, not yet page-matrix-applied -- matching ExtractedRect's own convention), mirroring document-content-model's LayoutPathSegment shape exactly so read.ts's conversion is a pure per-point transform.
+export type ExtractedPathSegment =
+  | { readonly kind: 'line'; readonly xPt: number; readonly yPt: number }
+  | { readonly kind: 'cubic'; readonly c1xPt: number; readonly c1yPt: number; readonly c2xPt: number; readonly c2yPt: number; readonly xPt: number; readonly yPt: number };
+
+export interface ExtractedSubpath {
+  readonly startXPt: number;
+  readonly startYPt: number;
+  readonly segments: readonly ExtractedPathSegment[];
+  readonly closed: boolean;
+}
+
+// General vector-path recovery: anything painted by a path-construction sequence too general for the ExtractedRect fast path above -- a rotated/skewed CTM, a stroke, a curve, multiple subpaths, or a `re` mixed with other path operators in the same sequence. `fillRule` always reflects which paint operator actually ran (nonzero for the plain family, evenodd for the starred family) even when `fill` is undefined, since it costs nothing to record accurately here; read.ts's convertPath is the layer that decides whether it's worth keeping in the minimal LayoutPath it builds.
+export interface ExtractedPath {
+  readonly kind: 'path';
+  readonly subpaths: readonly ExtractedSubpath[];
+  readonly fillRule: 'nonzero' | 'evenodd';
+  readonly fill: LayoutColor | undefined;
+  readonly stroke: { readonly color: LayoutColor; readonly widthPt: number } | undefined;
 }
 
 export interface ExtractedImage {
@@ -45,7 +66,7 @@ export interface ExtractedInlineImage {
   readonly matrix: Matrix;
 }
 
-export type ExtractedItem = ExtractedTextRun | ExtractedRect | ExtractedImage | ExtractedInlineImage;
+export type ExtractedItem = ExtractedTextRun | ExtractedRect | ExtractedPath | ExtractedImage | ExtractedInlineImage;
 
 export interface GlyphAdvance {
   readonly widthPer1000: number; // 1000ths of text space, matching PDF's own /Widths convention
@@ -73,11 +94,14 @@ export interface InterpretContext {
 const MAX_FORM_XOBJECT_DEPTH = 12;
 // An unremarkable mid-range glyph advance (half an em) used only when a shown font resource can't be resolved to any width table at all -- purely to stop subsequent glyphs collapsing onto the same point; the position is already degraded at that point regardless, and is reported via a diagnostic.
 const FALLBACK_GLYPH_WIDTH_PER_1000 = 500;
+// ISO 32000-1 Table 52: the graphics state's own line width parameter defaults to 1.0 (user-space units) until a `w` operator sets it explicitly.
+const DEFAULT_LINE_WIDTH_PT = 1;
 
 interface GraphicsState {
   readonly ctm: Matrix;
   readonly fillColor: LayoutColor;
   readonly strokeColor: LayoutColor;
+  readonly lineWidth: number;
 }
 
 interface TextState {
@@ -175,9 +199,23 @@ function rectFromOperands(operands: readonly PdfObject[], ctm: Matrix): PendingR
 
 export function interpretContentStream(bytes: Uint8Array<ArrayBuffer>, resources: PdfDict, context: InterpretContext): ExtractedItem[] {
   const items: ExtractedItem[] = [];
-  const initialState: GraphicsState = { ctm: IDENTITY_MATRIX, fillColor: COLOR_BLACK, strokeColor: COLOR_BLACK };
+  const initialState: GraphicsState = { ctm: IDENTITY_MATRIX, fillColor: COLOR_BLACK, strokeColor: COLOR_BLACK, lineWidth: DEFAULT_LINE_WIDTH_PT };
   runContentStream(bytes, resources, initialState, context, items, 0);
   return items;
+}
+
+// A subpath still being accumulated within one runContentStream call -- `segments` is mutable (pushed to as l/c/v/y arrive) and `closed` flips true on `h` (or the implicit closepath s/b/b* perform); once finalized it is pushed as-is into pathSubpaths, which is exactly ExtractedSubpath's own shape (a mutable segments array satisfies the readonly array field type).
+interface MutableSubpath {
+  readonly startXPt: number;
+  readonly startYPt: number;
+  readonly segments: ExtractedPathSegment[];
+  closed: boolean;
+}
+
+// The device-space point a `v` operator's implicit first control point equals: the subpath's last segment endpoint, or its own start point if no segment has been added yet.
+function lastPointOf(subpath: MutableSubpath): Point {
+  const last = subpath.segments[subpath.segments.length - 1];
+  return last === undefined ? { x: subpath.startXPt, y: subpath.startYPt } : { x: last.xPt, y: last.yPt };
 }
 
 function runContentStream(bytes: Uint8Array<ArrayBuffer>, resources: PdfDict, initialState: GraphicsState, context: InterpretContext, items: ExtractedItem[], depth: number): void {
@@ -186,6 +224,78 @@ function runContentStream(bytes: Uint8Array<ArrayBuffer>, resources: PdfDict, in
   let gs = initialState;
   let ts = defaultTextState();
   let pendingRect: PendingRect | undefined;
+  let pathSubpaths: MutableSubpath[] = [];
+  let currentSubpath: MutableSubpath | undefined;
+
+  // `m` starts a new subpath, finalizing whatever was previously open into pathSubpaths -- `re`'s own implicit leading `m` (see appendRectSubpath) reuses this too. Both a real paint operator and the very next `m` are the only two things that ever finalize a subpath.
+  const finalizeCurrentSubpath = (): void => {
+    if (currentSubpath !== undefined) {
+      pathSubpaths.push(currentSubpath);
+      currentSubpath = undefined;
+    }
+  };
+
+  // Clears every scrap of path state after a paint operator (or a discarded rect), exactly mirroring how pendingRect alone was reset before general path tracking existed.
+  const resetPath = (): void => {
+    pendingRect = undefined;
+    pathSubpaths = [];
+    currentSubpath = undefined;
+  };
+
+  // ISO 32000-1 8.5.2.1: `re` is defined as exactly the sequence "x y m (x+w) y l (x+w)(y+h) l x (y+h) l h" -- so alongside populating pendingRect for the axis-aligned fast path, it always appends that same 4-point closed subpath to pathSubpaths too, regardless of CTM alignment, so a `re` mixed with other path operators (or under a rotated CTM) still contributes correctly to a general path.
+  const appendRectSubpath = (operands: readonly PdfObject[], ctm: Matrix): void => {
+    finalizeCurrentSubpath();
+    const x = numAt(operands, 0);
+    const y = numAt(operands, 1);
+    const w = numAt(operands, 2);
+    const h = numAt(operands, 3);
+    const p1 = applyMatrix(ctm, { x, y });
+    const p2 = applyMatrix(ctm, { x: x + w, y });
+    const p3 = applyMatrix(ctm, { x: x + w, y: y + h });
+    const p4 = applyMatrix(ctm, { x, y: y + h });
+    pathSubpaths.push({
+      startXPt: p1.x,
+      startYPt: p1.y,
+      segments: [
+        { kind: 'line', xPt: p2.x, yPt: p2.y },
+        { kind: 'line', xPt: p3.x, yPt: p3.y },
+        { kind: 'line', xPt: p4.x, yPt: p4.y },
+      ],
+      closed: true,
+    });
+  };
+
+  // f/F/S/B/b use the nonzero winding rule; the starred variants (f*/B*/b*) use even-odd -- ISO 32000-1 Table 60. `s`/`n` have no fill at all, so their nonzero default is never actually consulted (convertPath in read.ts only keeps fillRule when fill is set).
+  const paintFillRuleFor = (operator: string): 'nonzero' | 'evenodd' => (operator.endsWith('*') ? 'evenodd' : 'nonzero');
+
+  // Every path-painting operator (f/F/f*/S/s/B/B*/b/b*/n) funnels through here. `n` never emits (a clip-only path has no ink); the axis-aligned single-`re` fast path is preserved byte-for-byte for f/F/f* (the only operators that ever produced ExtractedRect); everything else that actually constructed a path emits one ExtractedPath.
+  const emitPaint = (operator: string): void => {
+    if (operator === 'n') {
+      resetPath();
+      return;
+    }
+    if ((operator === 's' || operator === 'b' || operator === 'b*') && currentSubpath !== undefined) {
+      currentSubpath.closed = true; // s/b/b* are each defined as "h" followed by their non-close counterpart.
+    }
+    if ((operator === 'f' || operator === 'F' || operator === 'f*') && currentSubpath === undefined && pathSubpaths.length === 1 && pendingRect !== undefined) {
+      items.push({ kind: 'rect', ...pendingRect, color: gs.fillColor });
+      resetPath();
+      return;
+    }
+    finalizeCurrentSubpath();
+    if (pathSubpaths.length > 0) {
+      const isFillOp = operator === 'f' || operator === 'F' || operator === 'f*' || operator === 'B' || operator === 'B*' || operator === 'b' || operator === 'b*';
+      const isStrokeOp = operator === 'S' || operator === 's' || operator === 'B' || operator === 'B*' || operator === 'b' || operator === 'b*';
+      items.push({
+        kind: 'path',
+        subpaths: pathSubpaths,
+        fillRule: paintFillRuleFor(operator),
+        fill: isFillOp ? gs.fillColor : undefined,
+        stroke: isStrokeOp ? { color: gs.strokeColor, widthPt: gs.lineWidth } : undefined,
+      });
+    }
+    resetPath();
+  };
 
   const advanceThroughString = (codes: Uint8Array<ArrayBuffer>): void => {
     if (ts.fontResourceName === undefined) {
@@ -326,23 +436,60 @@ function runContentStream(bytes: Uint8Array<ArrayBuffer>, resources: PdfDict, in
       }
       case 're':
         pendingRect = rectFromOperands(operands, gs.ctm);
+        appendRectSubpath(operands, gs.ctm);
         break;
-      case 'm':
-      case 'l':
-      case 'c':
-      case 'v':
-      case 'y':
-      case 'h':
+      case 'm': {
+        finalizeCurrentSubpath();
+        const p = applyMatrix(gs.ctm, { x: numAt(operands, 0), y: numAt(operands, 1) });
+        currentSubpath = { startXPt: p.x, startYPt: p.y, segments: [], closed: false };
         pendingRect = undefined;
+        break;
+      }
+      case 'l': {
+        const p = applyMatrix(gs.ctm, { x: numAt(operands, 0), y: numAt(operands, 1) });
+        currentSubpath?.segments.push({ kind: 'line', xPt: p.x, yPt: p.y });
+        pendingRect = undefined;
+        break;
+      }
+      case 'c': {
+        const c1 = applyMatrix(gs.ctm, { x: numAt(operands, 0), y: numAt(operands, 1) });
+        const c2 = applyMatrix(gs.ctm, { x: numAt(operands, 2), y: numAt(operands, 3) });
+        const p = applyMatrix(gs.ctm, { x: numAt(operands, 4), y: numAt(operands, 5) });
+        currentSubpath?.segments.push({ kind: 'cubic', c1xPt: c1.x, c1yPt: c1.y, c2xPt: c2.x, c2yPt: c2.y, xPt: p.x, yPt: p.y });
+        pendingRect = undefined;
+        break;
+      }
+      case 'v': {
+        // Shorthand cubic: the first control point is the current point, only the second control point and the endpoint are given as operands.
+        if (currentSubpath !== undefined) {
+          const cur = lastPointOf(currentSubpath);
+          const c2 = applyMatrix(gs.ctm, { x: numAt(operands, 0), y: numAt(operands, 1) });
+          const p = applyMatrix(gs.ctm, { x: numAt(operands, 2), y: numAt(operands, 3) });
+          currentSubpath.segments.push({ kind: 'cubic', c1xPt: cur.x, c1yPt: cur.y, c2xPt: c2.x, c2yPt: c2.y, xPt: p.x, yPt: p.y });
+        }
+        pendingRect = undefined;
+        break;
+      }
+      case 'y': {
+        // Shorthand cubic: the second control point equals the endpoint, only the first control point and the endpoint are given as operands.
+        const c1 = applyMatrix(gs.ctm, { x: numAt(operands, 0), y: numAt(operands, 1) });
+        const p = applyMatrix(gs.ctm, { x: numAt(operands, 2), y: numAt(operands, 3) });
+        currentSubpath?.segments.push({ kind: 'cubic', c1xPt: c1.x, c1yPt: c1.y, c2xPt: p.x, c2yPt: p.y, xPt: p.x, yPt: p.y });
+        pendingRect = undefined;
+        break;
+      }
+      case 'h':
+        if (currentSubpath !== undefined) {
+          currentSubpath.closed = true;
+        }
+        pendingRect = undefined;
+        break;
+      case 'w':
+        gs = { ...gs, lineWidth: numAt(operands, 0) };
         break;
       case 'f':
       case 'F':
       case 'f*':
-        if (pendingRect !== undefined) {
-          items.push({ kind: 'rect', ...pendingRect, color: gs.fillColor });
-        }
-        pendingRect = undefined;
-        break;
       case 'S':
       case 's':
       case 'B':
@@ -350,7 +497,7 @@ function runContentStream(bytes: Uint8Array<ArrayBuffer>, resources: PdfDict, in
       case 'b':
       case 'b*':
       case 'n':
-        pendingRect = undefined;
+        emitPaint(operator);
         break;
       case 'BT':
         ts = defaultTextState();
@@ -426,7 +573,7 @@ function runContentStream(bytes: Uint8Array<ArrayBuffer>, resources: PdfDict, in
         handleDo(asName(operands[0]));
         break;
       default:
-        break; // every other operator (marked content, shading, clipping, ExtGState, general stroking) is outside v1's extraction scope
+        break; // every other operator (marked content, shading, clipping, ExtGState, dash pattern, line cap/join) is outside v1's extraction scope
     }
   }
 }

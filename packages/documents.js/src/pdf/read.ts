@@ -1,7 +1,7 @@
 import { bytesToBase64 } from 'ooxml.js';
 import { crc32 } from '../bytes/crc32';
 import { concatBytes } from '../bytes/writer';
-import type { LayoutDocument, LayoutImageAsset, LayoutItem, LayoutLink, LayoutMetadata, LayoutPage, LayoutRect, LayoutText } from 'document-content-model';
+import type { LayoutDocument, LayoutImageAsset, LayoutItem, LayoutLink, LayoutMetadata, LayoutPage, LayoutPath, LayoutPathSegment, LayoutRect, LayoutSubpath, LayoutText } from 'document-content-model';
 import { LAYOUT_FORMAT_VERSION } from 'document-content-model';
 import type { LayoutFont } from '../model/style';
 import { openPdfDocument } from './document';
@@ -12,7 +12,7 @@ import { throwIfAborted } from '../ports/abort';
 import type { FontResolverService } from './font-read';
 import { createFontResolver } from './font-read';
 import { readImageXObject } from './images-read';
-import type { ExtractedImage, ExtractedInlineImage, ExtractedItem, ExtractedRect, ExtractedTextRun, PdfObjectResolver } from './interpret';
+import type { ExtractedImage, ExtractedInlineImage, ExtractedItem, ExtractedPath, ExtractedRect, ExtractedSubpath, ExtractedTextRun, PdfObjectResolver } from './interpret';
 import { interpretContentStream } from './interpret';
 import type { Matrix } from './matrix';
 import { applyMatrix, matrixRotationDegrees, matrixScaleX, matrixScaleY, multiplyMatrices, translationMatrix } from './matrix';
@@ -177,6 +177,9 @@ function convertExtractedItem(item: ExtractedItem, pageMatrix: Matrix, fontResol
   if (item.kind === 'rect') {
     return convertRect(item, pageMatrix);
   }
+  if (item.kind === 'path') {
+    return convertPath(item, pageMatrix);
+  }
   if (item.kind === 'image') {
     return convertImage(item, pageMatrix, images, imageIdCache, resolver, sink);
   }
@@ -224,6 +227,33 @@ function convertRect(item: ExtractedRect, pageMatrix: Matrix): LayoutRect {
     widthPt: Math.abs(p2.x - p1.x),
     heightPt: Math.abs(p2.y - p1.y),
     fill: item.color,
+  };
+}
+
+// Unlike convertRect, a general path carries no axis-aligned-only assumption, so every point of every subpath (start point, and each segment's own endpoint plus, for a cubic, both control points) is transformed individually through pageMatrix -- correct under rotation because an affine transform distributes over a Bezier curve's control points exactly as it does over a straight line's endpoints.
+function transformSubpath(subpath: ExtractedSubpath, pageMatrix: Matrix): LayoutSubpath {
+  const start = applyMatrix(pageMatrix, { x: subpath.startXPt, y: subpath.startYPt });
+  const segments: LayoutPathSegment[] = subpath.segments.map((segment) => {
+    if (segment.kind === 'line') {
+      const p = applyMatrix(pageMatrix, { x: segment.xPt, y: segment.yPt });
+      return { kind: 'line', xPt: p.x, yPt: p.y };
+    }
+    const c1 = applyMatrix(pageMatrix, { x: segment.c1xPt, y: segment.c1yPt });
+    const c2 = applyMatrix(pageMatrix, { x: segment.c2xPt, y: segment.c2yPt });
+    const p = applyMatrix(pageMatrix, { x: segment.xPt, y: segment.yPt });
+    return { kind: 'cubic', c1xPt: c1.x, c1yPt: c1.y, c2xPt: c2.x, c2yPt: c2.y, xPt: p.x, yPt: p.y };
+  });
+  return { startXPt: start.x, startYPt: start.y, segments, closed: subpath.closed };
+}
+
+// fillRule is only kept when there's actually a fill to apply it to -- a stroke-only path's fillRule (always 'nonzero', see interpret.ts's paintFillRuleFor) is real but meaningless, so it's dropped here rather than round-tripped as noise, mirroring content-write.ts's own "fillRule only ever matters when fill is set" convention.
+function convertPath(item: ExtractedPath, pageMatrix: Matrix): LayoutPath {
+  return {
+    kind: 'path',
+    subpaths: item.subpaths.map((subpath) => transformSubpath(subpath, pageMatrix)),
+    ...(item.fill !== undefined ? { fill: item.fill } : {}),
+    ...(item.fill !== undefined && item.fillRule === 'evenodd' ? { fillRule: 'evenodd' as const } : {}),
+    ...(item.stroke !== undefined ? { stroke: item.stroke } : {}),
   };
 }
 
