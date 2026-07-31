@@ -27,6 +27,9 @@ const FUNCTIONS = [
   'pdfToPptx',
   'odtToPdf',
   'odpToPdf',
+  'openOdp',
+  'createOdp',
+  'pdfToOdp',
   'createLocalDocumentConverter',
 ];
 
@@ -42,7 +45,7 @@ function minimalOdtBytes() {
   ]);
 }
 
-// odp has no live-view editor in documents.js either, so this mirrors minimalOdtBytes above exactly, just with office:presentation/draw:page/presentation:notes in place of office:text/text:p -- proving odpToPdf's entire pipeline (odf.js's decodePackage, dist's own readOdpContent/convertPresentationToLayout/writePdf, including the notes hidden-annotation mechanism) actually works from the built dist/ artifact.
+// This mirrors minimalOdtBytes above exactly, just with office:presentation/draw:page/presentation:notes in place of office:text/text:p -- proving odpToPdf's entire pipeline (odf.js's decodePackage, dist's own readOdpContent/convertPresentationToLayout/writePdf, including the notes hidden-annotation mechanism) actually works from the built dist/ artifact via hand-built ODF XML, independent of this package's own createOdp/openOdp live-view editor (exercised separately below, via a fresh presentation built entirely through cjs.createOdp() itself).
 function minimalOdpBytes() {
   const mimetype = new TextEncoder().encode(ODF_MEDIA_TYPES.odp);
   const contentXml = new TextEncoder().encode(
@@ -112,5 +115,29 @@ describe('dist/ end-to-end: odpToPdf, from the CJS build', () => {
       .join(' ');
     expect(text).toContain('Hello from the odp smoke test');
     expect(layout.pages[0]?.notes).toBe('Smoke test speaker notes');
+  });
+});
+
+describe('dist/ end-to-end: odpToPdf then pdfToOdp, from the CJS build', () => {
+  it('builds a presentation via cjs.createOdp(), converts it to PDF and back, without throwing', () => {
+    const editor = cjs.createOdp();
+    const slide = editor.addSlide();
+    slide.addTextBox({ frame: { xPt: 50, yPt: 50, widthPt: 400, heightPt: 100 }, text: 'Hello from the odp editor smoke test' });
+    const odpBytes = editor.toBytes();
+
+    const pdfBytes = cjs.odpToPdf(odpBytes);
+    expect(pdfBytes.length).toBeGreaterThan(0);
+    expect(new TextDecoder('latin1').decode(pdfBytes.subarray(0, 5))).toBe('%PDF-');
+
+    const roundTrippedOdpBytes = cjs.pdfToOdp(pdfBytes);
+    expect(roundTrippedOdpBytes.length).toBeGreaterThan(0);
+    const roundTripped = cjs.openOdp(roundTrippedOdpBytes);
+    const text = roundTripped
+      .slides()
+      .flatMap((s) => s.shapes())
+      .map((s) => s.text)
+      .join(' ');
+    expect(text).toContain('Hello');
+    expect(text).toContain('smoke');
   });
 });

@@ -1,10 +1,12 @@
 import { z } from 'zod';
 import { describe, expect, it } from 'vitest';
 import { createDocx, openDocx } from '../edit/docx/editor';
+import { openOdp } from '../edit/odp/editor';
 import { openOdt } from '../edit/odt/editor';
 import { createPptx, openPptx } from '../edit/pptx/editor';
+import { minimalOdpBytes } from '../test-support/odp';
 import { minimalOdtBytes } from '../test-support/odt';
-import { docxPdfCodec, odtPdfCodec, pptxPdfCodec } from './codec';
+import { docxPdfCodec, odpPdfCodec, odtPdfCodec, pptxPdfCodec } from './codec';
 
 function pdfHeader(bytes: Uint8Array<ArrayBuffer>): string {
   return new TextDecoder('latin1').decode(bytes.subarray(0, 5));
@@ -91,5 +93,33 @@ describe('odtPdfCodec', () => {
 
   it('rejects encode input with no %PDF- header before ever reaching pdfToOdt', () => {
     expect(() => z.encode(odtPdfCodec, new TextEncoder().encode('not a pdf'))).toThrow(z.core.$ZodError);
+  });
+});
+
+describe('odpPdfCodec', () => {
+  it('z.decode produces valid PDF bytes from odp bytes', () => {
+    const pdfBytes = z.decode(odpPdfCodec, minimalOdpBytes());
+    expect(pdfHeader(pdfBytes)).toBe('%PDF-');
+  });
+
+  // The fixture's title frame is rotated (see test-support/odp.ts), so reconstructPresentation's word-level fragments are not guaranteed to reconstruct in original reading order -- see convert.test.ts's own pdfToOdp test for the identical reasoning. Checked word-by-word rather than as one phrase.
+  it('z.encode then z.decode round-trips text content, like odpToPdf/pdfToOdp', () => {
+    const pdfBytes = z.decode(odpPdfCodec, minimalOdpBytes());
+    const odpBytes = z.encode(odpPdfCodec, pdfBytes);
+    const text = openOdp(odpBytes)
+      .slides()
+      .flatMap((s) => s.shapes())
+      .map((s) => s.text)
+      .join(' ');
+    expect(text).toContain('Hello');
+    expect(text).toContain('odp');
+  });
+
+  it('rejects decode input whose first zip entry is not a stored odp mimetype part before ever reaching odpToPdf', () => {
+    expect(() => z.decode(odpPdfCodec, new TextEncoder().encode('not an odp'))).toThrow(z.core.$ZodError);
+  });
+
+  it('rejects encode input with no %PDF- header before ever reaching pdfToOdp', () => {
+    expect(() => z.encode(odpPdfCodec, new TextEncoder().encode('not a pdf'))).toThrow(z.core.$ZodError);
   });
 });

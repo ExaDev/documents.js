@@ -140,6 +140,12 @@ export type { TableInit as OdtTableInit } from './edit/odt/table';
 export { OdtTable, OdtTableCell, OdtTableRow } from './edit/odt/table';
 export { buildOdtPackage } from './edit/odt/content';
 
+export type { SlideImageInit as OdpSlideImageInit, TextBoxInit as OdpTextBoxInit } from './edit/odp/slide';
+export { createOdp, OdpEditor, openOdp } from './edit/odp/editor';
+export { OdpSlide } from './edit/odp/slide';
+export { OdpShape } from './edit/odp/shape';
+export { buildOdpPackage } from './edit/odp/content';
+
 // --- The hand-written PDF codec. ---
 export type { ReadPdfOptions } from './pdf/read';
 export { readPdf } from './pdf/read';
@@ -163,12 +169,12 @@ export { convertPresentationToLayout } from './layout/slides';
 export type { ReconstructOptions } from './layout/reconstruct';
 export { reconstructPresentation, reconstructWordprocessing } from './layout/reconstruct';
 
-// --- Seven ergonomic conversions (docx/pptx/odt <-> PDF, plus the one-directional odp -> PDF). ---
+// --- Eight ergonomic conversions (docx/pptx/odt/odp <-> PDF). ---
 export type { DocumentToPdfOptions, PdfToDocumentOptions } from './convert/convert';
-export { docxToPdf, odpToPdf, odtToPdf, pdfToDocx, pdfToOdt, pdfToPptx, pptxToPdf } from './convert/convert';
+export { docxToPdf, odpToPdf, odtToPdf, pdfToDocx, pdfToOdp, pdfToOdt, pdfToPptx, pptxToPdf } from './convert/convert';
 
-// Schema-validated z.codec() pairs over the conversions above (docx/pptx/odt bytes <-> PDF bytes), the no-extra-options form -- use docxToPdf/pdfToDocx/pptxToPdf/pdfToPptx/odtToPdf/pdfToOdt directly for cancellation or diagnostics. odp has no codec here yet: a z.codec() pair needs a genuine decode+encode round trip, and odp has no reverse (pdfToOdp) direction to encode with, the same reason odt itself went without odtPdfCodec until pdfToOdt existed (see git history a33e01b vs ca37f88) -- a codec whose encode half always throws would advertise a capability the type doesn't actually have, which is worse than no codec at all.
-export { docxPdfCodec, odtPdfCodec, pptxPdfCodec } from './convert/codec';
+// Schema-validated z.codec() pairs over the conversions above (docx/pptx/odt/odp bytes <-> PDF bytes), the no-extra-options form -- use docxToPdf/pdfToDocx/pptxToPdf/pdfToPptx/odtToPdf/pdfToOdt/odpToPdf/pdfToOdp directly for cancellation or diagnostics.
+export { docxPdfCodec, odpPdfCodec, odtPdfCodec, pptxPdfCodec } from './convert/codec';
 
 // --- The swappable conversion port, for a caller that wants to inject a different (e.g. remote) implementation later without changing call sites. ---
 export type { ConversionRequest, ConversionResult, Diagnostic, DocumentConverter, DocumentFormat, DocumentPayload } from './convert/port';
