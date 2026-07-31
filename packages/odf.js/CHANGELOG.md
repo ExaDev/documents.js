@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/ExaDev/odf.js/compare/v1.2.0...v1.3.0) (2026-07-31)
+
+
+### Features
+
+* add ODF shared typed primitives (units, a1, colour, geometry, text, cascade, metadata) ([0580e8c](https://github.com/ExaDev/odf.js/commit/0580e8ccb39852a0f311c497dff393e02c1bed8e))
+
 # [1.2.0](https://github.com/ExaDev/odf.js/compare/v1.1.0...v1.2.0) (2026-07-31)
 
 
