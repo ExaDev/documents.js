@@ -1,4 +1,4 @@
-import { decodePackage } from 'ooxml.js';
+import { decodePackage, resolveRelationships, rootElement } from 'ooxml.js';
 import { describe, expect, it } from 'vitest';
 import { minimalPptxBytes, minimalPptxPackage } from '../../test-support/pptx';
 import { assertPartsUnchangedExcept } from '../../test-support/fidelity';
@@ -29,6 +29,22 @@ describe('PptxEditor.addSlide / removeSlideAt / moveSlide', () => {
     expect(slide.shapes()).toHaveLength(0);
     expect(editor.slides()).toHaveLength(1);
     expect(() => editor.toBytes()).not.toThrow();
+  });
+
+  // Confirmed by opening a real generated file in Keynote: a p:sld root with no xmlns:p/xmlns:a/xmlns:r declared on itself, or with no relationship to a slideLayout, is rejected outright even though this package's own reader never required either.
+  it('declares xmlns:p/xmlns:a/xmlns:r on the new slide root and relates it to the scaffold slide layout', () => {
+    const editor = createPptx();
+    const slide = editor.addSlide();
+    const slidePartPath = Object.keys(editor.toPackage().parts).find((p) => /^ppt\/slides\/slide\d+\.xml$/.test(p));
+    if (slidePartPath === undefined) {
+      throw new Error('expected addSlide to have created a ppt/slides/slideN.xml part');
+    }
+    const slideRoot = rootElement(editor.toPackage().parts[slidePartPath]);
+    const names = slideRoot?.attributes.map((a) => a.name) ?? [];
+    expect(names).toEqual(expect.arrayContaining(['xmlns:p', 'xmlns:a', 'xmlns:r']));
+    const slideRels = resolveRelationships(editor.toPackage(), slidePartPath);
+    expect([...slideRels.values()].some((r) => r.target === 'ppt/slideLayouts/slideLayout1.xml')).toBe(true);
+    expect(slide.shapes()).toHaveLength(0);
   });
 
   it('allocates a distinct, increasing sldId for each new slide', () => {
