@@ -1,10 +1,10 @@
+import type { ContentBlock, ContentParagraph, ContentRun, ContentSection, ContentShape, ContentSlide, LayoutDocument, LayoutImage, LayoutImageAsset, LayoutPage, LayoutText } from 'document-content-model';
 import { STANDARD_METRICS } from '../pdf/afm-widths';
 import { resolveStandardFont } from '../pdf/fonts';
 import type { Box, Margins } from '../model/geometry';
 import { flipY } from '../model/geometry';
-import type { ContentBlock, ContentDocument, ContentParagraph, ContentRun, ContentSection, ContentShape, ContentSlide } from '../model/content';
+import type { ContentDocument } from '../model/content';
 import { CONTENT_FORMAT_VERSION } from '../model/content';
-import type { LayoutDocument, LayoutImage, LayoutImageAsset, LayoutPage, LayoutText } from '../model/layout';
 import type { Alignment } from '../model/style';
 import { throwIfAborted } from '../ports/abort';
 

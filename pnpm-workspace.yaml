@@ -1,2 +1,3 @@
 minimumReleaseAgeExclude:
   - ooxml.js@2.0.0
+  - document-content-model@1.0.0

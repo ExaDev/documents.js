@@ -68,10 +68,9 @@ export {
   zipPackage,
 } from 'ooxml.js';
 
-// --- The semantic content model: one read+write-capable model for both docx and pptx, instead of ooxml.js's two one-way, lossy, format-specific typed readers. ---
+// --- The semantic content model: one read+write-capable model for both docx and pptx, instead of ooxml.js's two one-way, lossy, format-specific typed readers. The full vocabulary (ContentBlock and everything beneath it) is sourced from document-content-model, the sibling schema package shared with ooxml.js; only the ContentDocument envelope itself (and its own CONTENT_FORMAT_VERSION) stays local to this package -- see src/model/content.ts. ---
 export type {
   ContentBlock,
-  ContentDocument,
   ContentImageBlock,
   ContentListMembership,
   ContentPageBreak,
@@ -83,11 +82,9 @@ export type {
   ContentTable,
   ContentTableCell,
   ContentTableRow,
-} from './model/content';
+} from 'document-content-model';
 export {
-  CONTENT_FORMAT_VERSION,
   ContentBlockSchema,
-  ContentDocumentSchema,
   ContentImageBlockSchema,
   ContentPageBreakSchema,
   ContentParagraphSchema,
@@ -99,11 +96,13 @@ export {
   ContentTableRowSchema,
   ContentTableSchema,
   isContentBlock,
-} from './model/content';
+} from 'document-content-model';
+export type { ContentDocument } from './model/content';
+export { CONTENT_FORMAT_VERSION, ContentDocumentSchema } from './model/content';
 
-// --- The PDF-side pivot model. ---
-export type { LayoutDocument, LayoutEllipse, LayoutImage, LayoutImageAsset, LayoutItem, LayoutLine, LayoutLink, LayoutMetadata, LayoutPage, LayoutRect, LayoutText } from './model/layout';
-export { LAYOUT_FORMAT_VERSION } from './model/layout';
+// --- The PDF-side pivot model, also sourced from document-content-model. ---
+export type { LayoutDocument, LayoutEllipse, LayoutImage, LayoutImageAsset, LayoutItem, LayoutLine, LayoutLink, LayoutMetadata, LayoutPage, LayoutRect, LayoutText } from 'document-content-model';
+export { LAYOUT_FORMAT_VERSION } from 'document-content-model';
 
 // --- Shared model primitives used by both pivot models. ---
 export type { Box, Margins, PageSize } from './model/geometry';

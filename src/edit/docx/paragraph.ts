@@ -1,6 +1,6 @@
 import type { Package, XmlElement, XmlNode } from 'ooxml.js';
 import { attr, textContent } from 'ooxml.js';
-import type { ContentListMembership } from '../../model/content';
+import type { ContentListMembership } from 'document-content-model';
 import { getOrCreateChildElement, removeChild } from '../../xml/edit';
 import { el } from '../../xml/fragment';
 import type { ImageInit, MediaContext } from './image';

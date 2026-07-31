@@ -1,8 +1,8 @@
 import { bytesToBase64 } from 'ooxml.js';
 import { describe, expect, it } from 'vitest';
+import type { LayoutDocument, LayoutImageAsset, LayoutItem, LayoutPage } from 'document-content-model';
+import { LAYOUT_FORMAT_VERSION } from 'document-content-model';
 import { encodePng } from '../image/png-encode';
-import type { LayoutDocument, LayoutImageAsset, LayoutItem, LayoutPage } from '../model/layout';
-import { LAYOUT_FORMAT_VERSION } from '../model/layout';
 import { writePdf } from './write';
 
 const HELVETICA = { family: 'Helvetica', weight: 'normal', style: 'normal' } as const;

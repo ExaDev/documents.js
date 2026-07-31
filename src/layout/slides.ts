@@ -1,8 +1,8 @@
-import type { ContentDocument, ContentParagraph, ContentShape, ContentSlide, ContentTable } from '../model/content';
+import type { ContentParagraph, ContentShape, ContentSlide, ContentTable, LayoutDocument, LayoutImage, LayoutImageAsset, LayoutItem, LayoutLink, LayoutPage, LayoutText } from 'document-content-model';
+import { LAYOUT_FORMAT_VERSION } from 'document-content-model';
 import type { Box } from '../model/geometry';
 import { flipY } from '../model/geometry';
-import type { LayoutDocument, LayoutImage, LayoutImageAsset, LayoutItem, LayoutLink, LayoutPage, LayoutText } from '../model/layout';
-import { LAYOUT_FORMAT_VERSION } from '../model/layout';
+import type { ContentDocument } from '../model/content';
 import type { Point } from '../pdf/matrix';
 import { rotatePointAboutCenter } from '../pdf/matrix';
 import type { TextMeasurer } from '../pdf/measure';

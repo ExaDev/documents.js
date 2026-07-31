@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { describe, expect, it } from 'vitest';
-import { LayoutDocumentSchema } from '../model/layout';
+import { LayoutDocumentSchema } from 'document-content-model';
 import { minimalClassicXrefPdf } from '../test-support/pdf';
 import { pdfCodec } from './codec';
 import { readPdf } from './read';

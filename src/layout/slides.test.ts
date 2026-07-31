@@ -1,9 +1,9 @@
 import { bytesToBase64 } from 'ooxml.js';
 import { describe, expect, it } from 'vitest';
+import type { ContentImageBlock, ContentParagraph, ContentRun, ContentShape, ContentSlide, ContentTable, LayoutImage, LayoutItem, LayoutLink, LayoutRect, LayoutText } from 'document-content-model';
 import { encodePng } from '../image/png-encode';
 import { CONTENT_FORMAT_VERSION } from '../model/content';
-import type { ContentDocument, ContentImageBlock, ContentParagraph, ContentRun, ContentShape, ContentSlide, ContentTable } from '../model/content';
-import type { LayoutImage, LayoutItem, LayoutLink, LayoutRect, LayoutText } from '../model/layout';
+import type { ContentDocument } from '../model/content';
 import type { TextMeasurer } from '../pdf/measure';
 import { convertPresentationToLayout } from './slides';
 
