@@ -1,3 +1,15 @@
+# [1.43.0](https://github.com/ExaDev/documents.js/compare/v1.42.0...v1.43.0) (2026-07-31)
+
+
+### Bug Fixes
+
+* document mergeCells' area-proportional cost and widen timing budgets ([d9aff72](https://github.com/ExaDev/documents.js/commit/d9aff72d9d139222a7973ec845d3614cccdd9b2c))
+
+
+### Features
+
+* add the ods live-view editor ([c192264](https://github.com/ExaDev/documents.js/commit/c192264292fb206cd7a936a3e2f492b112940e90))
+
 # [1.42.0](https://github.com/ExaDev/documents.js/compare/v1.41.0...v1.42.0) (2026-07-31)
 
 
