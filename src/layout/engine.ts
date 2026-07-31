@@ -199,6 +199,7 @@ function paginateSection(section: ContentSection, measurer: TextMeasurer, images
     } else if (block.kind === 'image') {
       layoutImageFlow(block, section, pages, state, contentLeftXDown, contentBottomYDown, images);
     }
+    // 'embeddedObject' blocks are not produced by any reader this package depends on yet (document-content-model's forward-looking schema addition -- see edit/docx/content.ts's own note on the same gap), so there is nothing to lay out here today.
   }
 
   flushPage(state, section, pages);
