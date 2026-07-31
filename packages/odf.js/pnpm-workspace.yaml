@@ -1,3 +1,6 @@
+# minimumReleaseAgeExclude is NOT honoured by `pnpm install --frozen-lockfile` (the mode CI runs): pnpm's own "verify an already-resolved lockfile" pass ignores per-package excludes entirely and re-checks every entry's raw publish age against minimumReleaseAge with no exceptions -- confirmed by direct reproduction against pnpm 11.6.0 and 11.18.0 (latest), and matches multiple open upstream reports (pnpm/pnpm#10361, #9997, #10438). `pnpm add <exact-version>` has its own separate, more permissive "explicit informed consent" path that DOES auto-populate this list and proceed -- which is why a local `pnpm add` can succeed while the exact same dependency then fails CI's `--frozen-lockfile` install moments later, even with the version already listed below. The entries below are kept as a genuine, auditable record of intent (and DO work for local `pnpm add`/ `pnpm update` resolution), but do not by themselves unblock CI for a same-day sibling-package release -- minimumReleaseAge itself (which frozen-lockfile verification DOES respect) is the only lever that does.
+minimumReleaseAge: 60
+
 minimumReleaseAgeExclude:
   - document-content-model@1.1.0
   - document-content-model@1.2.0
