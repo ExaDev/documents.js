@@ -57,42 +57,59 @@ export {
 } from './compact';
 export type { CompactPackage, CompactPart, CompactXmlNode, CompactAttrPairs } from './compact';
 
-export {
-  readDocx,
-  DocxDocumentSchema,
-  ParagraphSchema,
-  RunSchema,
-  ListMembershipSchema,
-  TableSchema,
-  TableRowSchema,
-  TableCellSchema,
-  HyperlinkSchema,
-  CommentSchema,
-  FootnoteSchema,
-} from './typed/docx';
-export type {
-  DocxDocument,
-  Paragraph,
-  Run,
-  ListMembership,
-  Table,
-  TableRow,
-  TableCell,
-  Hyperlink,
-  Comment,
-  Footnote,
-} from './typed/docx';
+// --- The shared content model: one block model (paragraphs, tables, images, page breaks) underlying both readDocx's sections and readPptx's slides, plus the geometry/colour/unit primitives it's expressed in. ---
+export { BoxSchema, MarginsSchema, PageSizeSchema, PAGE_SIZE_A4, PAGE_SIZE_LETTER, SLIDE_SIZE_STANDARD, SLIDE_SIZE_WIDESCREEN } from './typed/shared/geometry';
+export type { Box, Margins, PageSize } from './typed/shared/geometry';
+
+export { COLOR_BLACK, ColorSchema, applyColorTransforms, colorToRgbHex, rgbHexToColor } from './typed/shared/color';
+export type { Color, ColorTransform } from './typed/shared/color';
+
+export { AlignmentSchema } from './typed/shared/style';
+export type { Alignment } from './typed/shared/style';
+
+export { DocumentMetadataSchema } from './typed/shared/metadata';
+export type { DocumentMetadata } from './typed/shared/metadata';
 
 export {
-  readPptx,
-  PptxPresentationSchema,
-  SlideSchema,
-  ShapeSchema,
-  PptxTableSchema,
-  PptxTableRowSchema,
-  PptxTableCellSchema,
-} from './typed/pptx';
-export type { PptxPresentation, Slide, Shape, PptxTable, PptxTableRow, PptxTableCell } from './typed/pptx';
+  ContentBlockSchema,
+  ContentImageBlockSchema,
+  ContentListMembershipSchema,
+  ContentPageBreakSchema,
+  ContentParagraphSchema,
+  ContentRunSchema,
+  ContentSectionSchema,
+  ContentShapeSchema,
+  ContentSlideSchema,
+  ContentTableCellSchema,
+  ContentTableRowSchema,
+  ContentTableSchema,
+  isContentBlock,
+} from './typed/shared/content';
+export type {
+  ContentBlock,
+  ContentImageBlock,
+  ContentListMembership,
+  ContentPageBreak,
+  ContentParagraph,
+  ContentRun,
+  ContentSection,
+  ContentShape,
+  ContentSlide,
+  ContentTable,
+  ContentTableCell,
+  ContentTableRow,
+} from './typed/shared/content';
+
+export { sniffImageFormat } from './image/sniff';
+export type { ImageFormat } from './image/sniff';
+
+// --- docx: a WordprocessingML reader resolving the full style cascade (docDefaults -> named-style basedOn chains -> paragraph-mark run properties -> character styles -> direct formatting) and DrawingML theme references into ordered sections of paragraphs/tables/page-breaks. ---
+export { readDocx, CommentSchema, DocxDocumentSchema, FootnoteSchema } from './typed/docx/read';
+export type { Comment, DocxDocument, Footnote } from './typed/docx/read';
+
+// --- pptx: a PresentationML reader resolving the placeholder -> layout -> master -> theme inheritance cascade and DrawingML geometry into slides of positioned, styled shapes. ---
+export { readPptx, PptxDocumentSchema } from './typed/pptx/read';
+export type { PptxDocument } from './typed/pptx/read';
 
 export { readXlsx, XlsxWorkbookSchema, XlsxSheetSchema, XlsxCellSchema, DefinedNameSchema } from './typed/xlsx';
 export type { XlsxWorkbook, XlsxSheet, XlsxCell, DefinedName } from './typed/xlsx';
