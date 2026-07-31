@@ -6,10 +6,12 @@ import { buildOdpPackage } from '../edit/odp/content';
 import { buildOdtPackage } from '../edit/odt/content';
 import { buildPptxPackage } from '../edit/pptx/content';
 import { openPptx } from '../edit/pptx/editor';
+import { convertDrawingToLayout } from '../layout/drawing';
 import { convertWordprocessingToLayout } from '../layout/engine';
 import { reconstructPresentation, reconstructWordprocessing } from '../layout/reconstruct';
 import { convertSpreadsheetToLayout } from '../layout/sheets';
 import { convertPresentationToLayout } from '../layout/slides';
+import { readOdgContent } from '../odf/odg/read';
 import { readOdpContent } from '../odf/odp/read';
 import { readOdsContent } from '../odf/ods/read';
 import { readOdtContent } from '../odf/odt/read';
@@ -21,7 +23,7 @@ import { readPdf } from '../pdf/read';
 import { writePdf } from '../pdf/write';
 import type { WinAnsiSubstitution } from '../pdf/winansi';
 
-// Nine ergonomic conversions (docx/pptx/odt/odp/ods <-> PDF -- ods is one-directional, PDF -> ods does not exist yet), each composing already-independently-tested pipeline stages: docx/pptx/odt/odp/ods -> PDF reads the source package into a ContentDocument, lays it out into a LayoutDocument, and writes PDF bytes -- odtToPdf and odpToPdf both reuse convertWordprocessingToLayout/convertPresentationToLayout completely unmodified, the exact same engines docxToPdf/pptxToPdf feed, since readDocxContent/readOdtContent produce the identical WordprocessingContentDocument shape and readPptxContent/readOdpContent produce the identical PresentationContentDocument shape regardless of which package format (OOXML or ODF) they read; odsToPdf is different -- there is no xlsx reader anywhere in this package's own dependency graph to share a pivot shape with, so convertSpreadsheetToLayout (src/layout/sheets.ts) is a genuinely new layout algorithm, not a reused one, and odsToPdf is its only current caller. PDF -> docx/pptx/odt/odp reads PDF bytes into a LayoutDocument, reconstructs a best-effort ContentDocument from its geometry via reconstructWordprocessing/reconstructPresentation (entirely unmodified, format-agnostic functions -- the same architectural bet odtToPdf's own build already proved, and reconstructPresentation needed zero changes for odp either), and builds a fresh OOXML or ODF package. pdfToOdt's own package-building half is buildOdtPackage (src/edit/odt/content.ts); pdfToOdp's is buildOdpPackage (src/edit/odp/content.ts) -- the odp-side counterpart to buildPptxPackage, built on the src/edit/odp/* live-view editor, closing the same reverse-direction gap odt closed once pdfToOdt existed. There is no pdfToOds: reconstructing a ContentSheet's own cell/row/column addressing from PDF geometry (which values are numbers vs formatted strings, where one cell ends and the next begins) is a fundamentally different, unstarted problem from reconstructWordprocessing/reconstructPresentation's own paragraph/shape geometry clustering, not a small extension of it. Neither round-trip direction that DOES exist claims round-trip fidelity -- see src/layout/reconstruct.ts's own module doc for why PDF -> docx/pptx/odt/odp specifically cannot.
+// Ten ergonomic conversions (docx/pptx/odt/odp/ods/odg <-> PDF -- ods and odg are one-directional, PDF -> ods/odg does not exist yet), each composing already-independently-tested pipeline stages: docx/pptx/odt/odp/ods/odg -> PDF reads the source package into a ContentDocument, lays it out into a LayoutDocument, and writes PDF bytes -- odtToPdf and odpToPdf both reuse convertWordprocessingToLayout/convertPresentationToLayout completely unmodified, the exact same engines docxToPdf/pptxToPdf feed, since readDocxContent/readOdtContent produce the identical WordprocessingContentDocument shape and readPptxContent/readOdpContent produce the identical PresentationContentDocument shape regardless of which package format (OOXML or ODF) they read; odsToPdf and odgToPdf are each genuinely new layout algorithms instead, since neither a spreadsheet's column/row-band pagination (convertSpreadsheetToLayout, src/layout/sheets.ts) nor a drawing's vector-primitive vocabulary (convertDrawingToLayout, src/layout/drawing.ts -- which DOES reuse slides.ts's own convertShape for whatever text/image/table content a drawing page also carries) has a docx/pptx analogue to share a pivot shape with. PDF -> docx/pptx/odt/odp reads PDF bytes into a LayoutDocument, reconstructs a best-effort ContentDocument from its geometry via reconstructWordprocessing/reconstructPresentation (entirely unmodified, format-agnostic functions -- the same architectural bet odtToPdf's own build already proved, and reconstructPresentation needed zero changes for odp either), and builds a fresh OOXML or ODF package. pdfToOdt's own package-building half is buildOdtPackage (src/edit/odt/content.ts); pdfToOdp's is buildOdpPackage (src/edit/odp/content.ts) -- the odp-side counterpart to buildPptxPackage, built on the src/edit/odp/* live-view editor, closing the same reverse-direction gap odt closed once pdfToOdt existed. There is no pdfToOds or pdfToOdg: reconstructing a ContentSheet's own cell/row/column addressing, or a ContentDrawPage's own vector-primitive geometry, from PDF geometry alone is a fundamentally different, unstarted problem from reconstructWordprocessing/reconstructPresentation's own paragraph/shape geometry clustering, not a small extension of it. Neither round-trip direction that DOES exist claims round-trip fidelity -- see src/layout/reconstruct.ts's own module doc for why PDF -> docx/pptx/odt/odp specifically cannot.
 
 export interface DocumentToPdfOptions {
   readonly signal?: AbortSignal;
@@ -83,6 +85,18 @@ export function odsToPdf(bytes: Uint8Array<ArrayBuffer>, options?: DocumentToPdf
     throw new Error('readOdsContent returned a non-spreadsheet ContentDocument');
   }
   const layout = convertSpreadsheetToLayout(content, { measurer: createStandardFontMeasurer(), signal: options?.signal });
+  return writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution });
+}
+
+// odg's package is decoded via odf.js's own decodePackage, mirroring odtToPdf/odpToPdf/odsToPdf above. convertDrawingToLayout (src/layout/drawing.ts) is genuinely new layout code, like convertSpreadsheetToLayout -- a drawing's vector-primitive vocabulary (rect/ellipse/line/path) has no docx/pptx analogue, even though the ContentShape (text/image/table) half of a drawing page reuses convertShape from slides.ts unmodified.
+export function odgToPdf(bytes: Uint8Array<ArrayBuffer>, options?: DocumentToPdfOptions): Uint8Array<ArrayBuffer> {
+  const pkg = decodePackage(bytes);
+  const content = readOdgContent(pkg);
+  // readOdgContent's declared return type is the full ContentDocument union, even though it always produces the drawing variant in practice -- this both documents and enforces that, mirroring odtToPdf/odpToPdf/odsToPdf's own guards above.
+  if (content.kind !== 'drawing') {
+    throw new Error('readOdgContent returned a non-drawing ContentDocument');
+  }
+  const layout = convertDrawingToLayout(content, { measurer: createStandardFontMeasurer() });
   return writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution });
 }
 

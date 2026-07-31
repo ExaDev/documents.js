@@ -20,6 +20,7 @@ const FUNCTIONS = [
   'readOdtContent',
   'readOdpContent',
   'readOdsContent',
+  'readOdgContent',
   'readPdf',
   'writePdf',
   'docxToPdf',
@@ -29,6 +30,7 @@ const FUNCTIONS = [
   'odtToPdf',
   'odpToPdf',
   'odsToPdf',
+  'odgToPdf',
   'openOdp',
   'createOdp',
   'pdfToOdp',
@@ -64,6 +66,18 @@ function minimalOdsBytes() {
   const mimetype = new TextEncoder().encode(ODF_MEDIA_TYPES.ods);
   const contentXml = new TextEncoder().encode(
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"><office:automatic-styles><style:style style:name="Wide" style:family="table-column"><style:table-column-properties style:column-width="10cm"/></style:style></office:automatic-styles><office:body><office:spreadsheet><table:table table:name="Sheet1"><table:table-column table:style-name="Wide"/><table:table-row><table:table-cell office:value-type="string"><text:p>Hello from the ods smoke test</text:p></table:table-cell></table:table-row></table:table></office:spreadsheet></office:body></office:document-content>',
+  );
+  return zipPackage([
+    ['mimetype', { bytes: mimetype, stored: true }],
+    ['content.xml', { bytes: contentXml }],
+  ]);
+}
+
+// This mirrors minimalOdsBytes above exactly, just with office:drawing/draw:page/draw:path in place of office:spreadsheet/table:table -- proving odgToPdf's entire pipeline (odf.js's decodePackage, dist's own readOdgContent/convertDrawingToLayout/writePdf, INCLUDING writePath's own m/l/c content-stream emission) actually works from the built dist/ artifact via hand-built ODF XML. The svg:d/svg:viewBox here are the exact ground-truth-verified real LibreOffice curve odf.js's own typed/shared/path.ts documents (see src/test-support/odg.ts's own note) -- this is what proves the curve genuinely reaches the built dist/ writePath as a cubic segment, not just a straight-line approximation. There is no createOdg/openOdg live-view editor to exercise separately (odgToPdf is one-directional -- see src/convert/convert.ts's own module doc), matching ods's own single smoke test above.
+function minimalOdgBytes() {
+  const mimetype = new TextEncoder().encode(ODF_MEDIA_TYPES.odg);
+  const contentXml = new TextEncoder().encode(
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0" xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0" xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"><office:automatic-styles><style:style style:name="grCurve" style:family="graphic"><style:graphic-properties draw:fill-color="#ffff00"/></style:style></office:automatic-styles><office:body><office:drawing><draw:page><draw:path draw:style-name="grCurve" svg:width="3.656cm" svg:height="3.999cm" svg:x="20pt" svg:y="20pt" svg:viewBox="0 0 3657 4000" svg:d="M0 4000h3000c1000 0 1000-4000-1000-4000z"/><draw:frame svg:x="20pt" svg:y="150pt" svg:width="300pt" svg:height="50pt"><draw:text-box><text:p>Hello from the odg smoke test</text:p></draw:text-box></draw:frame></draw:page></office:drawing></office:body></office:document-content>',
   );
   return zipPackage([
     ['mimetype', { bytes: mimetype, stored: true }],
@@ -144,6 +158,21 @@ describe('dist/ end-to-end: odsToPdf, from the CJS build', () => {
       .map((item) => item.text)
       .join(' ');
     expect(text).toContain('Hello from the ods smoke test');
+  });
+});
+
+describe('dist/ end-to-end: odgToPdf, from the CJS build', () => {
+  it('produces a real PDF from a genuine ODF drawing package with a real curved path, without throwing', () => {
+    const pdfBytes = cjs.odgToPdf(minimalOdgBytes());
+    expect(pdfBytes.length).toBeGreaterThan(0);
+    expect(new TextDecoder('latin1').decode(pdfBytes.subarray(0, 5))).toBe('%PDF-');
+
+    const layout = cjs.readPdf(pdfBytes);
+    const text = layout.pages[0]?.items
+      .filter((item) => item.kind === 'text')
+      .map((item) => item.text)
+      .join(' ');
+    expect(text).toContain('Hello from the odg smoke test');
   });
 });
 

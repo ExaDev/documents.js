@@ -72,10 +72,13 @@ export {
 export type {
   ContentBlock,
   ContentCellValue,
+  ContentDrawPage,
   ContentImageBlock,
   ContentListMembership,
   ContentPageBreak,
   ContentParagraph,
+  ContentPathPoint,
+  ContentPathSegment,
   ContentRun,
   ContentSection,
   ContentShape,
@@ -88,16 +91,22 @@ export type {
   ContentSheetRepeatRange,
   ContentSheetRow,
   ContentSlide,
+  ContentStroke,
+  ContentSubpath,
   ContentTable,
   ContentTableCell,
   ContentTableRow,
+  ContentVector,
 } from 'document-content-model';
 export {
   ContentBlockSchema,
   ContentCellValueSchema,
+  ContentDrawPageSchema,
   ContentImageBlockSchema,
   ContentPageBreakSchema,
   ContentParagraphSchema,
+  ContentPathPointSchema,
+  ContentPathSegmentSchema,
   ContentRunSchema,
   ContentSectionSchema,
   ContentShapeSchema,
@@ -109,16 +118,19 @@ export {
   ContentSheetRowSchema,
   ContentSheetSchema,
   ContentSlideSchema,
+  ContentStrokeSchema,
+  ContentSubpathSchema,
   ContentTableCellSchema,
   ContentTableRowSchema,
   ContentTableSchema,
+  ContentVectorSchema,
   isContentBlock,
 } from 'document-content-model';
 export type { ContentDocument } from './model/content';
 export { CONTENT_FORMAT_VERSION, ContentDocumentSchema } from './model/content';
 
 // --- The PDF-side pivot model, also sourced from document-content-model. ---
-export type { LayoutDocument, LayoutEllipse, LayoutImage, LayoutImageAsset, LayoutItem, LayoutLine, LayoutLink, LayoutMetadata, LayoutPage, LayoutRect, LayoutText } from 'document-content-model';
+export type { LayoutDocument, LayoutEllipse, LayoutImage, LayoutImageAsset, LayoutItem, LayoutLine, LayoutLink, LayoutMetadata, LayoutPage, LayoutPath, LayoutPathSegment, LayoutRect, LayoutSubpath, LayoutText } from 'document-content-model';
 export { LAYOUT_FORMAT_VERSION } from 'document-content-model';
 
 // --- Shared model primitives used by both pivot models. ---
@@ -185,20 +197,23 @@ export { readPptxContent } from './ooxml/pptx/read';
 export { readOdtContent } from './odf/odt/read';
 export { readOdpContent } from './odf/odp/read';
 export { readOdsContent } from './odf/ods/read';
+export { readOdgContent } from './odf/odg/read';
 export type { EngineLayoutOptions } from './layout/engine';
 export { convertWordprocessingToLayout } from './layout/engine';
 export type { SlidesLayoutOptions } from './layout/slides';
 export { convertPresentationToLayout } from './layout/slides';
 export type { SheetsLayoutOptions } from './layout/sheets';
 export { convertSpreadsheetToLayout } from './layout/sheets';
+export type { DrawingLayoutOptions } from './layout/drawing';
+export { convertDrawingToLayout } from './layout/drawing';
 export type { ReconstructOptions } from './layout/reconstruct';
 export { reconstructPresentation, reconstructWordprocessing } from './layout/reconstruct';
 
-// --- Nine ergonomic conversions (docx/pptx/odt/odp/ods <-> PDF -- ods is one-directional, PDF -> ods does not exist yet, see convert.ts's own module doc). ---
+// --- Ten ergonomic conversions (docx/pptx/odt/odp/ods/odg <-> PDF -- ods and odg are one-directional, PDF -> ods/odg does not exist yet, see convert.ts's own module doc). ---
 export type { DocumentToPdfOptions, PdfToDocumentOptions } from './convert/convert';
-export { docxToPdf, odpToPdf, odsToPdf, odtToPdf, pdfToDocx, pdfToOdp, pdfToOdt, pdfToPptx, pptxToPdf } from './convert/convert';
+export { docxToPdf, odgToPdf, odpToPdf, odsToPdf, odtToPdf, pdfToDocx, pdfToOdp, pdfToOdt, pdfToPptx, pptxToPdf } from './convert/convert';
 
-// odsPdfCodec deliberately does not exist yet: this package's own established precedent (odtPdfCodec/odpPdfCodec) only adds a z.codec() pair once BOTH directions of a format exist (see docxPdfCodec/pptxPdfCodec, odtPdfCodec/odpPdfCodec below) -- odsToPdf alone, with no pdfToOds, does not warrant one.
+// odsPdfCodec/odgPdfCodec deliberately do not exist yet: this package's own established precedent (odtPdfCodec/odpPdfCodec) only adds a z.codec() pair once BOTH directions of a format exist (see docxPdfCodec/pptxPdfCodec, odtPdfCodec/odpPdfCodec below) -- odsToPdf/odgToPdf alone, with no pdfToOds/pdfToOdg, do not warrant one.
 
 // Schema-validated z.codec() pairs over the conversions above (docx/pptx/odt/odp bytes <-> PDF bytes), the no-extra-options form -- use docxToPdf/pdfToDocx/pptxToPdf/pdfToPptx/odtToPdf/pdfToOdt/odpToPdf/pdfToOdp directly for cancellation or diagnostics.
 export { docxPdfCodec, odpPdfCodec, odtPdfCodec, pptxPdfCodec } from './convert/codec';
