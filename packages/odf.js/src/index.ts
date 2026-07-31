@@ -90,7 +90,7 @@ export { columnIndexToLetters, cellReference, TableCursor } from './typed/shared
 
 export { parseOdfColor, formatOdfColor } from './typed/shared/color';
 
-export { parsePageSize, parseMargins, parseBox } from './typed/shared/geometry';
+export { parsePageSize, parseMargins, parseBox, parseLinePoints } from './typed/shared/geometry';
 
 export { type Alignment, AlignmentSchema } from './typed/shared/style';
 
@@ -108,10 +108,26 @@ export { readOdfTable } from './typed/shared/table';
 export { parseOdfTransform, applyOdfTransform, netRotationDeg, resolveOdfShapeGeometry, composeOdfGroupTransform } from './typed/shared/transform';
 export type { OdfTransformFunction, OdfPoint, OdfShapeGeometry } from './typed/shared/transform';
 
-export { readDrawFrame, walkDrawShapes } from './typed/draw/shapes';
+export { resolveDrawPageSize } from './typed/shared/masterpage';
+
+export {
+  parseOdfViewBox,
+  parseOdfPointsList,
+  parseOdfPathData,
+  scaleOdfRawPoint,
+  buildOdfSubpaths,
+  rawSubpathFromPoints,
+} from './typed/shared/path';
+export type { OdfRawPoint, OdfRawSegment, OdfRawSubpath, OdfViewBox } from './typed/shared/path';
+
+export { readDrawFrame, walkDrawShapes, readDrawPageContent } from './typed/draw/shapes';
+export type { DrawPageContent } from './typed/draw/shapes';
 
 export { readOdp } from './typed/odp/read';
 export type { OdpDocument } from './typed/odp/read';
 
 export { readOdt } from './typed/odt/read';
 export type { OdtDocument } from './typed/odt/read';
+
+export { readOdg } from './typed/odg/read';
+export type { OdgDocument } from './typed/odg/read';

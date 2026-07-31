@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { ContentShape } from 'document-content-model';
 import type { Package } from '../../model/package';
-import type { XmlElement } from '../../model/node';
+import type { XmlElement, XmlNode } from '../../model/node';
 import { el, txt } from '../../xml/fragment';
 import { bytesToBase64 } from '../../util/base64';
-import { readDrawFrame, walkDrawShapes } from './shapes';
+import { readDrawFrame, readDrawPageContent, walkDrawShapes } from './shapes';
 
 function contentPackage(automaticStyleChildren: XmlElement[] = []): Package['parts'][string] {
   return { kind: 'xml', nodes: [el('office:document-content', {}, [el('office:automatic-styles', {}, automaticStyleChildren)])] };
@@ -190,5 +190,320 @@ describe('walkDrawShapes: draw:g group flattening', () => {
     const out: ContentShape[] = [];
     walkDrawShapes([el('draw:g')], [], { parts: {} }, out);
     expect(out).toEqual([]);
+  });
+});
+
+// Vector primitives (odg) -- fixtures below reuse real geometry/attribute shapes verified against genuine LibreOffice 26.2 .odg output (a StarBasic macro run headlessly via the UNO API, NOT hand-authored guesses -- see typed/shared/path.ts's own top-of-file note for the exact verification method and the real svg:d/draw:points strings these fixtures are drawn from).
+
+function vectorPackage(pkg: Package = { parts: {} }): Package {
+  return pkg;
+}
+
+describe('readDrawPageContent: draw:rect / draw:ellipse / draw:circle', () => {
+  it('reads a plain draw:rect into the rect variant, with fill+stroke from its own graphic-family style', () => {
+    const gr1 = graphicStyle('gr1', { 'draw:fill-color': '#ff0000', 'svg:stroke-color': '#000000', 'svg:stroke-width': '0.05cm' });
+    const pkg: Package = { parts: { 'content.xml': contentPackage([gr1]) } };
+    const rect = el('draw:rect', { 'draw:style-name': 'gr1', 'svg:x': '1cm', 'svg:y': '1cm', 'svg:width': '5cm', 'svg:height': '3cm' });
+    const { vectors } = readDrawPageContent([rect], pkg);
+    expect(vectors).toHaveLength(1);
+    const vector = vectors[0];
+    if (vector?.kind !== 'rect') {
+      throw new Error('expected a rect vector');
+    }
+    expect(vector.frame.widthPt).toBeCloseTo(5 * (72 / 2.54), 6);
+    expect(vector.fill).toEqual({ r: 1, g: 0, b: 0 });
+    expect(vector.stroke?.color).toEqual({ r: 0, g: 0, b: 0 });
+    expect(vector.stroke?.widthPt).toBeCloseTo(0.05 * (72 / 2.54), 6);
+  });
+
+  it('reads draw:ellipse and draw:circle into the SAME ellipse variant -- real LibreOffice output writes draw:circle instead of draw:ellipse specifically when width equals height, with no other attribute-shape difference', () => {
+    const ellipse = el('draw:ellipse', { 'svg:x': '0pt', 'svg:y': '0pt', 'svg:width': '50pt', 'svg:height': '30pt' });
+    const circle = el('draw:circle', { 'svg:x': '0pt', 'svg:y': '0pt', 'svg:width': '40pt', 'svg:height': '40pt' });
+    const { vectors } = readDrawPageContent([ellipse, circle], { parts: {} });
+    expect(vectors.map((v) => v.kind)).toEqual(['ellipse', 'ellipse']);
+  });
+
+  it('reads no fill/no stroke when the style carries neither -- a real draw:line\'s own automatic style has no draw:fill-color at all', () => {
+    const rect = el('draw:rect', { 'svg:x': '0pt', 'svg:y': '0pt', 'svg:width': '10pt', 'svg:height': '10pt' });
+    const { vectors } = readDrawPageContent([rect], { parts: {} });
+    const vector = vectors[0];
+    if (vector?.kind !== 'rect') {
+      throw new Error('expected a rect vector');
+    }
+    expect(vector.fill).toBeUndefined();
+    expect(vector.stroke).toBeUndefined();
+  });
+
+  it('honours an explicit draw:fill="none"/draw:stroke="none" override -- confirmed real LibreOffice output for a shape with FillStyle/LineStyle explicitly set to NONE', () => {
+    const gr1 = graphicStyle('gr1', { 'draw:fill': 'none', 'draw:stroke': 'none' });
+    const pkg: Package = { parts: { 'content.xml': contentPackage([gr1]) } };
+    const rect = el('draw:rect', { 'draw:style-name': 'gr1', 'svg:x': '0pt', 'svg:y': '0pt', 'svg:width': '10pt', 'svg:height': '10pt' });
+    const { vectors } = readDrawPageContent([rect], pkg);
+    const vector = vectors[0];
+    if (vector?.kind !== 'rect') {
+      throw new Error('expected a rect vector');
+    }
+    expect(vector.fill).toBeUndefined();
+    expect(vector.stroke).toBeUndefined();
+  });
+
+  it('drops a rect/ellipse with no resolvable geometry at all rather than emitting a fabricated one', () => {
+    expect(readDrawPageContent([el('draw:rect')], { parts: {} }).vectors).toEqual([]);
+    expect(readDrawPageContent([el('draw:ellipse')], { parts: {} }).vectors).toEqual([]);
+  });
+});
+
+describe('readDrawPageContent: draw:line', () => {
+  it('reads svg:x1/y1/x2/y2 into the line variant\'s from/to points, requiring a resolvable stroke', () => {
+    const gr1 = graphicStyle('gr1', { 'svg:stroke-color': '#0000ff', 'svg:stroke-width': '0.03cm' });
+    const pkg: Package = { parts: { 'content.xml': contentPackage([gr1]) } };
+    const line = el('draw:line', { 'draw:style-name': 'gr1', 'svg:x1': '9cm', 'svg:y1': '1cm', 'svg:x2': '13cm', 'svg:y2': '4cm' });
+    const { vectors } = readDrawPageContent([line], pkg);
+    const vector = vectors[0];
+    if (vector?.kind !== 'line') {
+      throw new Error('expected a line vector');
+    }
+    expect(vector.from.xPt).toBeCloseTo(9 * (72 / 2.54), 6);
+    expect(vector.to.yPt).toBeCloseTo(4 * (72 / 2.54), 6);
+    expect(vector.stroke.color).toEqual({ r: 0, g: 0, b: 1 });
+  });
+
+  it('drops a line with no resolvable stroke -- an invisible line has nothing to paint, matching ContentVectorSchema requiring stroke on the line variant', () => {
+    const line = el('draw:line', { 'svg:x1': '0pt', 'svg:y1': '0pt', 'svg:x2': '10pt', 'svg:y2': '10pt' });
+    expect(readDrawPageContent([line], { parts: {} }).vectors).toEqual([]);
+  });
+
+  it('applies an enclosing group\'s own draw:transform to both endpoints directly (no box/pivot needed for a two-point line)', () => {
+    const gr1 = graphicStyle('gr1', { 'svg:stroke-color': '#000000', 'svg:stroke-width': '1pt' });
+    const pkg: Package = { parts: { 'content.xml': contentPackage([gr1]) } };
+    const line = el('draw:line', { 'draw:style-name': 'gr1', 'svg:x1': '0pt', 'svg:y1': '0pt', 'svg:x2': '10pt', 'svg:y2': '0pt' });
+    const group = el('draw:g', { 'draw:transform': 'translate(5pt 5pt)' }, [line]);
+    const { vectors } = readDrawPageContent([group], pkg);
+    const vector = vectors[0];
+    if (vector?.kind !== 'line') {
+      throw new Error('expected a line vector');
+    }
+    expect(vector.from).toEqual({ xPt: 5, yPt: 5 });
+    expect(vector.to).toEqual({ xPt: 15, yPt: 5 });
+  });
+});
+
+describe('readDrawPageContent: draw:path (svg:d) and draw:polygon/draw:polyline (draw:points)', () => {
+  it('parses a real LibreOffice-written closed curve svg:d ("M0 4000h3000c1000 0 1000-4000-1000-4000z") into one line segment then one cubic segment, closed', () => {
+    const path = el('draw:path', {
+      'svg:x': '0pt', 'svg:y': '0pt', 'svg:width': '100pt', 'svg:height': '100pt',
+      'svg:viewBox': '0 0 4000 4000',
+      'svg:d': 'M0 4000h3000c1000 0 1000-4000-1000-4000z',
+    });
+    const { vectors } = readDrawPageContent([path], { parts: {} });
+    const vector = vectors[0];
+    if (vector?.kind !== 'path') {
+      throw new Error('expected a path vector');
+    }
+    expect(vector.subpaths).toHaveLength(1);
+    const subpath = vector.subpaths[0];
+    // viewBox 4000x4000 -> frame 100x100pt: scale factor 0.025 on both axes.
+    expect(subpath?.start).toEqual({ xPt: 0, yPt: 100 });
+    expect(subpath?.closed).toBe(true);
+    expect(subpath?.segments).toEqual([
+      { kind: 'line', to: { xPt: 75, yPt: 100 } },
+      { kind: 'cubic', control1: { xPt: 100, yPt: 100 }, control2: { xPt: 100, yPt: 0 }, to: { xPt: 50, yPt: 0 } },
+    ]);
+  });
+
+  it('the SAME geometry from an OPEN source shape omits the closing z -- closed reads false', () => {
+    const path = el('draw:path', {
+      'svg:x': '0pt', 'svg:y': '0pt', 'svg:width': '100pt', 'svg:height': '100pt',
+      'svg:viewBox': '0 0 4000 4000',
+      'svg:d': 'M0 4000h3000c1000 0 1000-4000-1000-4000',
+    });
+    const { vectors } = readDrawPageContent([path], { parts: {} });
+    const vector = vectors[0];
+    if (vector?.kind !== 'path') {
+      throw new Error('expected a path vector');
+    }
+    expect(vector.subpaths[0]?.closed).toBe(false);
+  });
+
+  it('parses a genuinely diagonal segment (svg:d "l" command, real LibreOffice output) as a line segment, not dropped or misread as horizontal/vertical', () => {
+    const path = el('draw:path', {
+      'svg:x': '0pt', 'svg:y': '0pt', 'svg:width': '48.37pt', 'svg:height': '46.58pt',
+      'svg:viewBox': '0 0 4837 4658',
+      'svg:d': 'M0 4658l3000-4500c1500-1000 3000 3000 500 4500z',
+    });
+    const { vectors } = readDrawPageContent([path], { parts: {} });
+    const vector = vectors[0];
+    if (vector?.kind !== 'path') {
+      throw new Error('expected a path vector');
+    }
+    // viewBox 4837x4658 -> frame 48.37x46.58pt: scale factor exactly 0.01 on both axes.
+    expect(vector.subpaths[0]?.segments[0]).toEqual({ kind: 'line', to: { xPt: 30, yPt: 1.58 } });
+  });
+
+  it('reads draw:polygon\'s own draw:points list (real LibreOffice output, comma/space-delimited "x,y" pairs -- a completely different grammar from svg:d) into a single CLOSED straight-line-only subpath', () => {
+    const polygon = el('draw:polygon', {
+      'svg:x': '0pt', 'svg:y': '0pt', 'svg:width': '40pt', 'svg:height': '30pt',
+      'svg:viewBox': '0 0 4000 3000',
+      'draw:points': '0,3000 2000,0 4000,3000 2000,1500',
+    });
+    const { vectors } = readDrawPageContent([polygon], { parts: {} });
+    const vector = vectors[0];
+    if (vector?.kind !== 'path') {
+      throw new Error('expected a path vector');
+    }
+    expect(vector.subpaths[0]?.closed).toBe(true);
+    expect(vector.subpaths[0]?.start).toEqual({ xPt: 0, yPt: 30 });
+    expect(vector.subpaths[0]?.segments).toEqual([
+      { kind: 'line', to: { xPt: 20, yPt: 0 } },
+      { kind: 'line', to: { xPt: 40, yPt: 30 } },
+      { kind: 'line', to: { xPt: 20, yPt: 15 } },
+    ]);
+  });
+
+  it('reads draw:polyline\'s own draw:points identically, but OPEN', () => {
+    const polyline = el('draw:polyline', {
+      'svg:x': '0pt', 'svg:y': '0pt', 'svg:width': '40pt', 'svg:height': '30pt',
+      'svg:viewBox': '0 0 4000 3000',
+      'draw:points': '0,3000 2000,0',
+    });
+    const { vectors } = readDrawPageContent([polyline], { parts: {} });
+    const vector = vectors[0];
+    if (vector?.kind !== 'path') {
+      throw new Error('expected a path vector');
+    }
+    expect(vector.subpaths[0]?.closed).toBe(false);
+  });
+
+  it('drops a path/polygon/polyline with no resolvable svg:viewBox -- there is no way to scale the raw numbers into the frame\'s own point space', () => {
+    const path = el('draw:path', { 'svg:x': '0pt', 'svg:y': '0pt', 'svg:width': '10pt', 'svg:height': '10pt', 'svg:d': 'M0 0L10 10z' });
+    expect(readDrawPageContent([path], { parts: {} }).vectors).toEqual([]);
+  });
+});
+
+describe('readDrawPageContent: draw:custom-shape presets', () => {
+  function customShape(name: string, type: string, extra: Record<string, string> = {}): XmlElement {
+    return el('draw:custom-shape', { 'draw:name': name, 'svg:x': '0pt', 'svg:y': '0pt', 'svg:width': '50pt', 'svg:height': '30pt', ...extra }, [
+      el('draw:enhanced-geometry', { 'svg:viewBox': '0 0 21600 21600', 'draw:type': type }),
+    ]);
+  }
+
+  it('recognises the "rectangle" preset -- maps to the rect variant using the shape\'s own frame, without evaluating draw:enhanced-path', () => {
+    const { vectors } = readDrawPageContent([customShape('CustomRect1', 'rectangle')], { parts: {} });
+    expect(vectors[0]).toMatchObject({ kind: 'rect', frame: { xPt: 0, yPt: 0, widthPt: 50, heightPt: 30 } });
+  });
+
+  it('recognises the "round-rectangle" preset -- also approximates to the plain rect variant (no rounded-corner concept in ContentVectorSchema)', () => {
+    const { vectors } = readDrawPageContent([customShape('CustomRoundRect1', 'round-rectangle')], { parts: {} });
+    expect(vectors[0]).toMatchObject({ kind: 'rect' });
+  });
+
+  it('recognises the "ellipse" preset -- maps to the ellipse variant', () => {
+    const { vectors } = readDrawPageContent([customShape('CustomEllipse1', 'ellipse')], { parts: {} });
+    expect(vectors[0]).toMatchObject({ kind: 'ellipse' });
+  });
+
+  it('an UNRECOGNISED preset (e.g. "smiley", real LibreOffice basic-shapes-gallery type name) with real text content salvages as a text-only ContentShape, not a vector', () => {
+    const shape = el('draw:custom-shape', { 'draw:name': 'CustomSmiley1', 'svg:x': '0pt', 'svg:y': '0pt', 'svg:width': '50pt', 'svg:height': '30pt' }, [
+      el('text:p', {}, [txt('Hello')]),
+      el('draw:enhanced-geometry', { 'svg:viewBox': '0 0 21600 21600', 'draw:type': 'smiley' }),
+    ]);
+    const { shapes, vectors } = readDrawPageContent([shape], { parts: {} });
+    expect(vectors).toEqual([]);
+    expect(shapes).toHaveLength(1);
+    expect(shapes[0]?.blocks[0]).toMatchObject({ kind: 'paragraph', runs: [{ text: 'Hello' }] });
+  });
+
+  it('an unrecognised preset with NO real text content is skipped entirely -- nothing worth preserving', () => {
+    const { shapes, vectors } = readDrawPageContent([customShape('CustomSmiley1', 'smiley')], { parts: {} });
+    expect(shapes).toEqual([]);
+    expect(vectors).toEqual([]);
+  });
+
+  it('a custom-shape with NO draw:enhanced-geometry at all is treated the same as an unrecognised preset', () => {
+    const shape = el('draw:custom-shape', { 'svg:x': '0pt', 'svg:y': '0pt', 'svg:width': '50pt', 'svg:height': '30pt' });
+    expect(readDrawPageContent([shape], { parts: {} }).vectors).toEqual([]);
+  });
+});
+
+describe('readDrawPageContent: draw:z-index paint order', () => {
+  it('sorts vectors by an EXPLICIT draw:z-index, overriding raw document order -- a shape written FIRST in the XML but with the HIGHEST z-index paints LAST (on top)', () => {
+    // Three rects, distinguished by fill colour (ContentVectorSchema's rect variant carries no name field). Document order: red, green, blue. z-index order: green(0) < blue(1) < red(2).
+    const styles = [
+      graphicStyle('red', { 'draw:fill-color': '#ff0000' }),
+      graphicStyle('green', { 'draw:fill-color': '#00ff00' }),
+      graphicStyle('blue', { 'draw:fill-color': '#0000ff' }),
+    ];
+    const pkg: Package = { parts: { 'content.xml': contentPackage(styles) } };
+    const rectRedFirstInDocument = el('draw:rect', { 'draw:style-name': 'red', 'draw:z-index': '2', 'svg:x': '0pt', 'svg:y': '0pt', 'svg:width': '10pt', 'svg:height': '10pt' });
+    const rectGreenSecondInDocument = el('draw:rect', { 'draw:style-name': 'green', 'draw:z-index': '0', 'svg:x': '0pt', 'svg:y': '0pt', 'svg:width': '10pt', 'svg:height': '10pt' });
+    const rectBlueThirdInDocument = el('draw:rect', { 'draw:style-name': 'blue', 'draw:z-index': '1', 'svg:x': '0pt', 'svg:y': '0pt', 'svg:width': '10pt', 'svg:height': '10pt' });
+    const { vectors } = readDrawPageContent([rectRedFirstInDocument, rectGreenSecondInDocument, rectBlueThirdInDocument], pkg);
+    // Sorted by z-index ascending (bottom to top): green(0), blue(1), red(2) -- NOT document order (red, green, blue).
+    expect(vectors.map((v) => (v.kind === 'rect' ? v.fill : undefined))).toEqual([
+      { r: 0, g: 1, b: 0 },
+      { r: 0, g: 0, b: 1 },
+      { r: 1, g: 0, b: 0 },
+    ]);
+  });
+
+  it('falls back to document-encounter order when draw:z-index is absent -- the REAL LibreOffice case (its own writer never emits draw:z-index; document order already IS paint order after any UI-side reordering)', () => {
+    const rectA = el('draw:rect', { 'svg:x': '0pt', 'svg:y': '0pt', 'svg:width': '10pt', 'svg:height': '10pt' });
+    const ellipseB = el('draw:ellipse', { 'svg:x': '0pt', 'svg:y': '0pt', 'svg:width': '10pt', 'svg:height': '10pt' });
+    const { vectors } = readDrawPageContent([rectA, ellipseB], { parts: {} });
+    expect(vectors.map((v) => v.kind)).toEqual(['rect', 'ellipse']);
+  });
+
+  it('keeps shapes and vectors as two independently paint-ordered arrays, threading ONE monotonic document-index counter across a mixed shapes+vectors+group walk', () => {
+    const frame = el('draw:frame', { 'draw:name': 'Frame1', 'draw:z-index': '5', 'svg:x': '0pt', 'svg:y': '0pt', 'svg:width': '10pt', 'svg:height': '10pt' }, [
+      el('draw:text-box', {}, [el('text:p', {}, [txt('hi')])]),
+    ]);
+    const rect = el('draw:rect', { 'draw:z-index': '0', 'svg:x': '0pt', 'svg:y': '0pt', 'svg:width': '10pt', 'svg:height': '10pt' });
+    const group = el('draw:g', {}, [rect]);
+    const { shapes, vectors } = readDrawPageContent([frame, group], { parts: {} });
+    expect(shapes).toHaveLength(1);
+    expect(vectors).toHaveLength(1);
+  });
+});
+
+describe('readDrawPageContent: group flattening for vector primitives', () => {
+  it('applies an enclosing draw:g\'s own translate to a rect\'s frame, exactly like it already does for draw:frame', () => {
+    const rect = el('draw:rect', { 'svg:x': '10pt', 'svg:y': '10pt', 'svg:width': '20pt', 'svg:height': '20pt' });
+    const group = el('draw:g', { 'draw:transform': 'translate(5pt 5pt)' }, [rect]);
+    const { vectors } = readDrawPageContent([group], { parts: {} });
+    const vector = vectors[0];
+    if (vector?.kind !== 'rect') {
+      throw new Error('expected a rect vector');
+    }
+    expect(vector.frame.xPt).toBeCloseTo(15, 6);
+    expect(vector.frame.yPt).toBeCloseTo(15, 6);
+  });
+
+  it('recurses through nested groups for vector primitives, mirroring walkDrawShapes\' own innermost-first composition', () => {
+    const rect = el('draw:rect', { 'svg:x': '0pt', 'svg:y': '0pt', 'svg:width': '10pt', 'svg:height': '10pt' });
+    const inner = el('draw:g', { 'draw:transform': 'translate(10pt 0pt)' }, [rect]);
+    const outer = el('draw:g', { 'draw:transform': 'translate(0pt 10pt)' }, [inner]);
+    const { vectors } = readDrawPageContent([outer], { parts: {} });
+    const vector = vectors[0];
+    if (vector?.kind !== 'rect') {
+      throw new Error('expected a rect vector');
+    }
+    expect(vector.frame.xPt).toBeCloseTo(10, 6);
+    expect(vector.frame.yPt).toBeCloseTo(10, 6);
+  });
+});
+
+describe('readDrawPageContent: unhandled node kinds', () => {
+  it('ignores a non-element node (text/comment) without error', () => {
+    const nodes: XmlNode[] = [{ type: 'text', value: 'stray text' }];
+    expect(readDrawPageContent(nodes, { parts: {} })).toEqual({ shapes: [], vectors: [] });
+  });
+
+  it('ignores an element tag this reader has no vocabulary for (e.g. dr3d:scene, draw:connector) -- skipped entirely, not an error', () => {
+    const scene = el('dr3d:scene', { 'svg:x': '0pt', 'svg:y': '0pt', 'svg:width': '10pt', 'svg:height': '10pt' });
+    expect(readDrawPageContent([scene], { parts: {} })).toEqual({ shapes: [], vectors: [] });
+  });
+
+  it('produces an empty result for a genuinely empty page', () => {
+    expect(readDrawPageContent([], vectorPackage())).toEqual({ shapes: [], vectors: [] });
   });
 });
