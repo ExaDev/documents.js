@@ -1,8 +1,8 @@
 import { bytesToBase64 } from 'ooxml.js';
 import { crc32 } from '../bytes/crc32';
 import { concatBytes } from '../bytes/writer';
-import type { LayoutDocument, LayoutImageAsset, LayoutItem, LayoutLink, LayoutMetadata, LayoutPage, LayoutRect, LayoutText } from '../model/layout';
-import { LAYOUT_FORMAT_VERSION } from '../model/layout';
+import type { LayoutDocument, LayoutImageAsset, LayoutItem, LayoutLink, LayoutMetadata, LayoutPage, LayoutRect, LayoutText } from 'document-content-model';
+import { LAYOUT_FORMAT_VERSION } from 'document-content-model';
 import type { LayoutFont } from '../model/style';
 import { openPdfDocument } from './document';
 import type { PdfDiagnosticSink } from './diagnostics';

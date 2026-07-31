@@ -3,7 +3,7 @@ import { deflate } from '../bytes/flate';
 import { ByteWriter } from '../bytes/writer';
 import { readJpegInfo } from '../image/jpeg-info';
 import { decodePng } from '../image/png-decode';
-import type { LayoutDocument, LayoutImageAsset, LayoutLink } from '../model/layout';
+import type { LayoutDocument, LayoutImageAsset, LayoutLink } from 'document-content-model';
 import type { FontMetrics, StandardFontName } from './afm-widths';
 import { STANDARD_METRICS, widthOfCode } from './afm-widths';
 import type { ContentWriteContext } from './content-write';

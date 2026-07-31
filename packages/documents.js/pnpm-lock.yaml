@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      document-content-model:
+        specifier: ^1.0.0
+        version: 1.0.0
       fflate:
         specifier: ^0.8.3
         version: 0.8.3
@@ -1159,6 +1162,10 @@ packages:
   dir-glob@3.0.1:
     resolution: {integrity: sha512-WkrWp9GR4KXfKGYzOLmTuGVi1UWFfws377n9cc55/tb6DuqyF6pcQ5AbiHEshaDpY9v6oaSr2XCDidGmMwdzIA==}
     engines: {node: '>=8'}
+
+  document-content-model@1.0.0:
+    resolution: {integrity: sha512-Qr7PwZ8E7FbTmH0zMcguYU7OYeyZ3EfiRUxkY8R+bPfQkhiRVQUTzgUwuOxISuv3yYYtVK4NLzrf+8e4o+06+Q==}
+    engines: {node: '>=20'}
 
   dot-prop@5.3.0:
     resolution: {integrity: sha512-QM8q3zDe58hqUqjraQOmzZ1LIH9SWQJTlEKCH4kJ2oQvLZk7RbQXvtDM2XEq3fwkV9CCvvH4LA0AV+ogFsBM2Q==}
@@ -3763,6 +3770,10 @@ snapshots:
   dir-glob@3.0.1:
     dependencies:
       path-type: 4.0.0
+
+  document-content-model@1.0.0:
+    dependencies:
+      zod: 4.4.3
 
   dot-prop@5.3.0:
     dependencies:

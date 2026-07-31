@@ -1,5 +1,5 @@
+import type { LayoutEllipse, LayoutImage, LayoutItem, LayoutLine, LayoutRect, LayoutText } from 'document-content-model';
 import type { LayoutColor } from '../model/color';
-import type { LayoutEllipse, LayoutImage, LayoutItem, LayoutLine, LayoutRect, LayoutText } from '../model/layout';
 import type { LayoutFont } from '../model/style';
 import type { StandardFontName } from './afm-widths';
 import { ByteWriter } from '../bytes/writer';

@@ -1,6 +1,6 @@
 import { z } from 'zod';
+import { LayoutDocumentSchema } from 'document-content-model';
 import { PdfBytesSchema } from '../model/bytes';
-import { LayoutDocumentSchema } from '../model/layout';
 import { readPdf } from './read';
 import { writePdf } from './write';
 

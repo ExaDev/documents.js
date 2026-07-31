@@ -1,7 +1,7 @@
-import type { ContentDocument, ContentImageBlock, ContentParagraph, ContentSection, ContentTable } from '../model/content';
+import type { ContentImageBlock, ContentParagraph, ContentSection, ContentTable, LayoutDocument, LayoutImage, LayoutImageAsset, LayoutItem, LayoutLink, LayoutPage, LayoutText } from 'document-content-model';
+import { LAYOUT_FORMAT_VERSION } from 'document-content-model';
 import { flipY } from '../model/geometry';
-import type { LayoutDocument, LayoutImage, LayoutImageAsset, LayoutItem, LayoutLink, LayoutPage, LayoutText } from '../model/layout';
-import { LAYOUT_FORMAT_VERSION } from '../model/layout';
+import type { ContentDocument } from '../model/content';
 import type { TextMeasurer } from '../pdf/measure';
 import { wrapRunsToWidth } from '../pdf/text-layout';
 import { alignmentOffsetPt, effectiveStyledRuns, estimateRowHeightPt, lineNaturalHeightPt, registerImage, sumColumnWidthsPt } from './shared';

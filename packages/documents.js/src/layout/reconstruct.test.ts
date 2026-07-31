@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import type { ContentParagraph, ContentShape, LayoutDocument, LayoutImage, LayoutImageAsset, LayoutItem, LayoutPage, LayoutText } from 'document-content-model';
 import { STANDARD_METRICS } from '../pdf/afm-widths';
-import type { LayoutDocument, LayoutImage, LayoutImageAsset, LayoutItem, LayoutPage, LayoutText } from '../model/layout';
-import type { ContentParagraph, ContentShape } from '../model/content';
 import { reconstructPresentation, reconstructWordprocessing } from './reconstruct';
 
 function text(overrides: { text: string; xPt: number; yPt: number; widthPt: number; sizePt?: number; family?: string; bold?: boolean }): LayoutText {

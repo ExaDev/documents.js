@@ -1,12 +1,12 @@
 import { bytesToBase64 } from 'ooxml.js';
 import { describe, expect, it } from 'vitest';
+import type { LayoutDocument, LayoutImageAsset, LayoutItem, LayoutPage } from 'document-content-model';
+import { LAYOUT_FORMAT_VERSION, LayoutDocumentSchema } from 'document-content-model';
 import { encodePng } from '../image/png-encode';
-import type { LayoutDocument, LayoutImageAsset, LayoutItem, LayoutPage } from '../model/layout';
-import { LAYOUT_FORMAT_VERSION, LayoutDocumentSchema } from '../model/layout';
 import { readPdf } from './read';
 import { writePdf } from './write';
 
-// write.test.ts and read.test.ts each test writePdf/readPdf in isolation -- the former against emitted content-stream bytes, the latter against PDFs hand-built independently in test-support/pdf.ts, deliberately never through writePdf itself (see that file's own top-of-file rationale). Neither proves the two halves agree with each other. This file is the one place that runs writePdf then readPdf back-to-back, proving LayoutDocument -- the structured, Zod-validated, plain-JSON pivot model both functions speak (see model/layout.test.ts's own JSON.stringify/parse test) -- actually survives a real write/read cycle through this package's own codec, not just its own schema in isolation. Per the documented v1 scope, only text/rect/image/link items are read back as such (line and ellipse are write-only -- general vector-path recovery is out of scope, see read.ts/interpret.ts's ExtractedItem union), so this file covers exactly those four kinds.
+// write.test.ts and read.test.ts each test writePdf/readPdf in isolation -- the former against emitted content-stream bytes, the latter against PDFs hand-built independently in test-support/pdf.ts, deliberately never through writePdf itself (see that file's own top-of-file rationale). Neither proves the two halves agree with each other. This file is the one place that runs writePdf then readPdf back-to-back, proving LayoutDocument -- the structured, Zod-validated, plain-JSON pivot model both functions speak (see document-content-model's own layout.test.ts JSON.stringify/parse test) -- actually survives a real write/read cycle through this package's own codec, not just its own schema in isolation. Per the documented v1 scope, only text/rect/image/link items are read back as such (line and ellipse are write-only -- general vector-path recovery is out of scope, see read.ts/interpret.ts's ExtractedItem union), so this file covers exactly those four kinds.
 
 const HELVETICA = { family: 'Helvetica', weight: 'normal', style: 'normal' } as const;
 const BLACK = { r: 0, g: 0, b: 0 };

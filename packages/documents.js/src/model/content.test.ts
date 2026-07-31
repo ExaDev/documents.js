@@ -1,14 +1,10 @@
+import type { ContentBlock } from 'document-content-model';
 import { describe, expect, it } from 'vitest';
-import {
-  CONTENT_FORMAT_VERSION,
-  type ContentBlock,
-  ContentDocumentSchema,
-  isContentBlock,
-} from './content';
+import { CONTENT_FORMAT_VERSION, ContentDocumentSchema } from './content';
+
+// The full content vocabulary (ContentRun, ContentParagraph, ContentBlock, ContentTable, isContentBlock, etc.) now lives in document-content-model, with its own exhaustive coverage there -- these tests exercise only the envelope this file still defines: ContentDocumentSchema's own discriminated-union behaviour.
 
 const paragraph: ContentBlock = { kind: 'paragraph', runs: [{ text: 'Hi' }] };
-const image: ContentBlock = { kind: 'image', format: 'png', base64: 'AA==', widthPt: 10, heightPt: 10 };
-const pageBreak: ContentBlock = { kind: 'pageBreak' };
 const table: ContentBlock = {
   kind: 'table',
   rows: [{ cells: [{ blocks: [paragraph] }] }],
@@ -19,23 +15,6 @@ const nestedTable: ContentBlock = {
   rows: [{ cells: [{ blocks: [table] }] }], // a table inside a table cell -- the recursive case
   columnWidthsPt: [200],
 };
-
-describe('isContentBlock', () => {
-  it('accepts every block kind, including a table nested inside a table cell', () => {
-    for (const block of [paragraph, image, pageBreak, table, nestedTable]) {
-      expect(isContentBlock(block)).toBe(true);
-    }
-  });
-
-  it('rejects a malformed block', () => {
-    expect(isContentBlock({ kind: 'paragraph', runs: 'not-an-array' })).toBe(false);
-    expect(isContentBlock({ kind: 'table', rows: [{ cells: [{ blocks: [{ kind: 'bogus' }] }] }] })).toBe(
-      false,
-    );
-    expect(isContentBlock(null)).toBe(false);
-    expect(isContentBlock('a string')).toBe(false);
-  });
-});
 
 describe('ContentDocumentSchema', () => {
   it('accepts a minimal wordprocessing document with a nested table', () => {
