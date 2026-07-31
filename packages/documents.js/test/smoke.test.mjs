@@ -1,6 +1,7 @@
 // Smoke test: the built dist/ artifact loads and works under both ESM and CJS. Run only via `pnpm test:smoke` (tsdown, then vitest scoped to the "smoke" project) -- never part of the default `pnpm test` file set, since it requires a fresh build to mean anything.
 import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
+import { zipPackage, ODF_MEDIA_TYPES } from 'odf.js';
 import * as esm from '../dist/index.js';
 
 const require = createRequire(import.meta.url);
@@ -16,14 +17,28 @@ const FUNCTIONS = [
   'createPptx',
   'readDocxContent',
   'readPptxContent',
+  'readOdtContent',
   'readPdf',
   'writePdf',
   'docxToPdf',
   'pdfToDocx',
   'pptxToPdf',
   'pdfToPptx',
+  'odtToPdf',
   'createLocalDocumentConverter',
 ];
+
+// odt has no live-view editor in documents.js yet (see src/convert/convert.ts's own module doc), so unlike the docx bytes below -- built through cjs.createDocx() itself -- these minimal odt bytes are hand-built directly against odf.js (documents.js's own real, already-installed dependency), mirroring src/test-support/odt.ts's fixture exactly. This is deliberate duplication, not an oversight: it is the only way to prove odtToPdf's ENTIRE pipeline (odf.js's decodePackage, dist's own readOdtContent/convertWordprocessingToLayout/writePdf) actually works from the built dist/ artifact, rather than from source.
+function minimalOdtBytes() {
+  const mimetype = new TextEncoder().encode(ODF_MEDIA_TYPES.odt);
+  const contentXml = new TextEncoder().encode(
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"><office:body><office:text><text:p>Hello from the odt smoke test</text:p></office:text></office:body></office:document-content>',
+  );
+  return zipPackage([
+    ['mimetype', { bytes: mimetype, stored: true }],
+    ['content.xml', { bytes: contentXml }],
+  ]);
+}
 
 describe('dist/ exports are present in both builds', () => {
   for (const name of FUNCTIONS) {
@@ -52,5 +67,20 @@ describe('dist/ end-to-end: docxToPdf then pdfToDocx, from the CJS build', () =>
       .map((p) => p.text)
       .join(' ');
     expect(text).toContain('Hello from the smoke test');
+  });
+});
+
+describe('dist/ end-to-end: odtToPdf, from the CJS build', () => {
+  it('produces a real PDF from a genuine ODF package, without throwing', () => {
+    const pdfBytes = cjs.odtToPdf(minimalOdtBytes());
+    expect(pdfBytes.length).toBeGreaterThan(0);
+    expect(new TextDecoder('latin1').decode(pdfBytes.subarray(0, 5))).toBe('%PDF-');
+
+    const layout = cjs.readPdf(pdfBytes);
+    const text = layout.pages[0]?.items
+      .filter((item) => item.kind === 'text')
+      .map((item) => item.text)
+      .join(' ');
+    expect(text).toContain('Hello from the odt smoke test');
   });
 });

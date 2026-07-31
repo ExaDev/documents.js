@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { createDocx, openDocx } from '../edit/docx/editor';
 import { createPptx, openPptx } from '../edit/pptx/editor';
-import { docxToPdf, pdfToDocx, pdfToPptx, pptxToPdf } from './convert';
+import { readPdf } from '../pdf/read';
+import { minimalOdtBytes } from '../test-support/odt';
+import { docxToPdf, odtToPdf, pdfToDocx, pdfToPptx, pptxToPdf } from './convert';
 
 function pdfHeader(bytes: Uint8Array<ArrayBuffer>): string {
   return new TextDecoder('latin1').decode(bytes.subarray(0, 5));
@@ -29,6 +31,28 @@ describe('docxToPdf', () => {
     const controller = new AbortController();
     controller.abort();
     expect(() => docxToPdf(buildSampleDocx('X'), { signal: controller.signal })).toThrow();
+  });
+});
+
+describe('odtToPdf', () => {
+  // Proves the whole architectural point: an odt package, decoded via odf.js's own decodePackage (not ooxml.js's) and read via readOdtContent, feeds convertWordprocessingToLayout completely unmodified -- the identical engine docxToPdf feeds -- and comes out as a genuine, non-empty PDF page.
+  it('produces valid PDF bytes with non-empty page content from an odt heading, paragraph, and table', () => {
+    const pdfBytes = odtToPdf(minimalOdtBytes());
+    expect(pdfHeader(pdfBytes)).toBe('%PDF-');
+
+    const layout = readPdf(pdfBytes);
+    expect(layout.pages).toHaveLength(1);
+    expect(layout.pages[0]?.items.length).toBeGreaterThan(0);
+    const text = layout.pages[0]?.items.filter((item) => item.kind === 'text').map((item) => item.text).join(' ');
+    expect(text).toContain('Hello from odt');
+    expect(text).toContain('bold text');
+    expect(text).toContain('A1');
+  });
+
+  it('throws when the signal is already aborted', () => {
+    const controller = new AbortController();
+    controller.abort();
+    expect(() => odtToPdf(minimalOdtBytes(), { signal: controller.signal })).toThrow();
   });
 });
 
