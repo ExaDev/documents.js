@@ -1,3 +1,10 @@
+# [1.39.0](https://github.com/ExaDev/documents.js/compare/v1.38.0...v1.39.0) (2026-07-31)
+
+
+### Features
+
+* add the odt live-view editor and pdfToOdt ([ca37f88](https://github.com/ExaDev/documents.js/commit/ca37f8889a11f97740bf545438d9935f931480b5))
+
 # [1.38.0](https://github.com/ExaDev/documents.js/compare/v1.37.0...v1.38.0) (2026-07-31)
 
 
