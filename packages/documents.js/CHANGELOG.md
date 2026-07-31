@@ -1,3 +1,10 @@
+# [1.40.0](https://github.com/ExaDev/documents.js/compare/v1.39.1...v1.40.0) (2026-07-31)
+
+
+### Features
+
+* add odpToPdf, converting OpenDocument Presentation through the existing pptx layout engine ([1f5f950](https://github.com/ExaDev/documents.js/commit/1f5f9500e399ce279bc05c1026defe555f952a0b))
+
 ## [1.39.1](https://github.com/ExaDev/documents.js/compare/v1.39.0...v1.39.1) (2026-07-31)
 
 
