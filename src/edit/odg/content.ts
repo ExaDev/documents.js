@@ -1,0 +1,68 @@
+import type { Package } from 'odf.js';
+import { base64ToBytes } from 'odf.js';
+import type { ContentShape, ContentVector } from 'document-content-model';
+import type { ContentDocument } from '../../model/content';
+import { populateParagraph } from '../odt/content';
+import { createOdg } from './editor';
+import type { OdgPage } from './page';
+
+// ContentDocument -> a fresh odg Package, built entirely through the same edit/odg/* live-view primitives a caller would use by hand -- the odg-side counterpart to src/edit/odp/content.ts's buildOdpPackage. Unlike buildOdpPackage, this has no reverse-direction reader depending on it today -- there is no pdfToOdg (see convert/convert.ts's own module doc: reconstructing a ContentDrawPage's own vector-primitive geometry from PDF geometry is a genuinely separate, unstarted problem, not a small extension of reconstructPresentation) -- so buildOdgPackage exists as a standalone bridge for any caller holding a drawing ContentDocument (most naturally, one that came from readOdgContent itself), not as a step this package's own conversion pipeline calls yet, mirroring buildOdsPackage's own identical situation.
+export function buildOdgPackage(content: ContentDocument): Package {
+  if (content.kind !== 'drawing') {
+    throw new Error('buildOdgPackage requires a drawing ContentDocument');
+  }
+  const editor = createOdg();
+  const firstPage = content.pages[0];
+  if (firstPage !== undefined) {
+    editor.pageSize = firstPage.size;
+  }
+  for (const page of content.pages) {
+    const odgPage = editor.addPage();
+    // Vectors are appended before shapes, matching src/layout/drawing.ts's own convertDrawingToLayout convention (its own top-of-file note: "every vector paints first, every shape paints after" -- the fixed, documented choice for the one real gap in ContentDrawPageSchema, which keeps shapes/vectors as two independently paint-ordered arrays with no shared ordering field between them). Appending in this same order here keeps a rebuilt-from-Content odg page painting identically to how convertDrawingToLayout would already lay the SAME content out.
+    for (const vector of page.vectors) {
+      appendVector(odgPage, vector);
+    }
+    for (const shape of page.shapes) {
+      appendShape(odgPage, shape);
+    }
+  }
+  return editor.toPackage();
+}
+
+function appendVector(page: OdgPage, vector: ContentVector): void {
+  if (vector.kind === 'rect') {
+    page.addRect({ frame: vector.frame, fill: vector.fill, stroke: vector.stroke });
+  } else if (vector.kind === 'ellipse') {
+    page.addEllipse({ frame: vector.frame, fill: vector.fill, stroke: vector.stroke });
+  } else if (vector.kind === 'line') {
+    page.addLine({ from: vector.from, to: vector.to, stroke: vector.stroke });
+  } else {
+    page.addPath({ frame: vector.frame, subpaths: vector.subpaths, fill: vector.fill, stroke: vector.stroke });
+  }
+}
+
+// Mirrors buildOdpPackage's own appendShape (src/edit/odp/content.ts) exactly: an image-only shape becomes a picture frame, everything else becomes a text box populated with its real paragraph content, and rotation carries through either branch -- odg's draw:frame geometry resolution is the SAME resolveOdfShapeGeometry/applyOdfTransform machinery odp uses (see page.ts's own top-of-file note on reusing OdpShape wholesale), so there is no odg-specific variant of this logic to write.
+function appendShape(page: OdgPage, shape: ContentShape): void {
+  const [onlyBlock] = shape.blocks;
+  if (shape.blocks.length === 1 && onlyBlock?.kind === 'image') {
+    const imageShape = page.addImage({ frame: shape.frame, format: onlyBlock.format, bytes: base64ToBytes(onlyBlock.base64), altText: onlyBlock.altText });
+    if (shape.rotationDeg !== undefined) {
+      imageShape.rotationDeg = shape.rotationDeg;
+    }
+    return;
+  }
+
+  const textShape = page.addTextBox({ frame: shape.frame, text: '' });
+  if (shape.rotationDeg !== undefined) {
+    textShape.rotationDeg = shape.rotationDeg;
+  }
+  // addTextBox's own placeholder empty paragraph is discarded in favour of the shape's real paragraph content -- mirrors buildOdpPackage's identical "addTextBox with a throwaway empty string, then overwrite" pattern.
+  const placeholder = textShape.paragraphs()[0];
+  placeholder?.remove();
+  for (const block of shape.blocks) {
+    if (block.kind !== 'paragraph') {
+      continue; // a table or nested image inside a text shape is out of scope for this bridge, mirroring buildOdpPackage's own identical comment.
+    }
+    populateParagraph(textShape.appendParagraph(), block);
+  }
+}

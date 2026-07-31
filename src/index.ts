@@ -180,6 +180,14 @@ export { OdsSheet } from './edit/ods/sheet';
 export { OdsCell } from './edit/ods/cell';
 export { buildOdsPackage } from './edit/ods/content';
 
+export type { PageImageInit as OdgPageImageInit, TextBoxInit as OdgTextBoxInit } from './edit/odg/page';
+export { createOdg, OdgEditor, openOdg } from './edit/odg/editor';
+export { OdgPage } from './edit/odg/page';
+// draw:frame content (text boxes/images) reuses OdpShape wholesale -- see edit/odg/page.ts's own top-of-file note; there is no separate OdgShape class.
+export type { BoxVectorInit as OdgBoxVectorInit, LineVectorInit as OdgLineVectorInit, PathVectorInit as OdgPathVectorInit } from './edit/odg/vector';
+export { OdgBoxVector, OdgLineVector, OdgPathVector } from './edit/odg/vector';
+export { buildOdgPackage } from './edit/odg/content';
+
 // --- The hand-written PDF codec. ---
 export type { ReadPdfOptions } from './pdf/read';
 export { readPdf } from './pdf/read';
