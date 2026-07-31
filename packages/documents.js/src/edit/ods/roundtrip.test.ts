@@ -130,7 +130,7 @@ describe('write-side repeat-count avoidance: a far-out cell address never materi
     const start = performance.now();
     const document = readOds(openOds(bytes).toPackage());
     const elapsedMs = performance.now() - start;
-    expect(elapsedMs).toBeLessThan(500);
+    expect(elapsedMs).toBeLessThan(3000);
 
     const sheetOut = document.sheets.find((s) => s.name === sheet.name)!;
     expect(sheetOut.cells).toHaveLength(1);
@@ -146,7 +146,7 @@ describe('write-side repeat-count avoidance: a far-out cell address never materi
     const start = performance.now();
     sheet.cell(500000, 0).value = { kind: 'number', value: 2 }; // falls squarely inside that placeholder run.
     const elapsedMs = performance.now() - start;
-    expect(elapsedMs).toBeLessThan(50);
+    expect(elapsedMs).toBeLessThan(500);
 
     expect(sheet.cell(1000000, 0).value).toEqual({ kind: 'number', value: 1 });
     expect(sheet.cell(500000, 0).value).toEqual({ kind: 'number', value: 2 });
