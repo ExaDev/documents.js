@@ -1,3 +1,10 @@
+## [1.39.1](https://github.com/ExaDev/documents.js/compare/v1.39.0...v1.39.1) (2026-07-31)
+
+
+### Bug Fixes
+
+* export pdfToOdt and odtPdfCodec from the public API surface ([6137ec2](https://github.com/ExaDev/documents.js/commit/6137ec261b17a98bf451a0160edc8eed58d2a561))
+
 # [1.39.0](https://github.com/ExaDev/documents.js/compare/v1.38.0...v1.39.0) (2026-07-31)
 
 
