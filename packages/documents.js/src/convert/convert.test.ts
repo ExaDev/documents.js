@@ -50,6 +50,26 @@ describe('pdfToDocx', () => {
       .join(' ');
     expect(text).toContain('Round trip content');
   });
+
+  // Exercises the full ooxml.js-backed docx read path (readDocx's style cascade) through the layout render and back: a bold, coloured, explicitly-sized run must still read back as bold/coloured/sized after the round trip, not just as plain text. A single word (rather than a phrase) sidesteps the reconstruction pipeline's separately-documented word-spacing-inference quirk, which is unrelated to this migration and not what this test targets.
+  it('round-trips a bold, coloured, sized run through docxToPdf then pdfToDocx', () => {
+    const editor = createDocx();
+    const run = editor.body.appendParagraph().appendRun({ text: 'StyledRun' });
+    run.bold = true;
+    run.color = { r: 1, g: 0, b: 0 };
+    run.sizePt = 24;
+
+    const pdfBytes = docxToPdf(editor.toBytes());
+    const docxBytes = pdfToDocx(pdfBytes);
+    const roundTripped = openDocx(docxBytes);
+
+    const runs = roundTripped.paragraphs().flatMap((p) => p.runs());
+    const text = runs.map((r) => r.text).join(' ');
+    expect(text).toContain('StyledRun');
+    expect(runs.some((r) => r.bold)).toBe(true);
+    expect(runs.some((r) => r.color?.r === 1 && r.color.g === 0 && r.color.b === 0)).toBe(true);
+    expect(runs.some((r) => r.sizePt === 24)).toBe(true);
+  });
 });
 
 describe('pdfToPptx', () => {
