@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/ExaDev/odf.js/compare/v1.1.0...v1.2.0) (2026-07-31)
+
+
+### Features
+
+* add ODF style interning (StyleRegistry, property serialization, span splitting) ([7d5d541](https://github.com/ExaDev/odf.js/commit/7d5d5415818040eeb05c92a136660e0d3db6a9e2))
+
 # [1.1.0](https://github.com/ExaDev/odf.js/compare/v1.0.0...v1.1.0) (2026-07-31)
 
 
