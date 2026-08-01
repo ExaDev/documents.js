@@ -1,6 +1,6 @@
 import { decodePackage as decodeOoxmlPackage, readXlsxContent } from 'ooxml.js';
-import { describe, expect, it } from 'vitest';
-import { embeddedHsqldbOdbBytes } from '../test-support/odb';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { embeddedHsqldbCachedOdbBytes, embeddedHsqldbOdbBytes } from '../test-support/odb';
 import { odbToCsv, odbToXlsx } from './convert';
 import { OdbTableNotSpecifiedError } from '../odb/csv';
 
@@ -68,5 +68,68 @@ describe('odbToCsv', () => {
     const csvBytes = odbToCsv(embeddedHsqldbOdbBytes(), { table: 'CUSTOMERS' });
     const text = new TextDecoder().decode(csvBytes);
     expect(text).toContain("Carol O'Brien");
+  });
+});
+
+// The Tier 2 byte-level round trip: embeddedHsqldbCachedOdbBytes() (src/test-support/odb.ts) is a real, zipped .odb package wrapping a genuine HSQLDB 1.8.0.10 CACHED-table database's own database/script + database/data + database/properties + database/backup -- decoded exactly the way a caller's own bytes would be, through decodePackage -> readOdbTables (src/odb/read.ts's withCachedTableRows, src/hsqldb/cache.ts) -> odbTablesToSpreadsheetDocument/buildOdbTableCsv. DATE columns are involved, so this suite pins TZ the same way src/hsqldb/cache.test.ts does -- see that file's own comment on why.
+describe('odbToXlsx / odbToCsv: a real HSQLDB 1.8.0.10 CACHED-table database', () => {
+  let previousTz: string | undefined;
+  beforeAll(() => {
+    previousTz = process.env.TZ;
+    process.env.TZ = 'Europe/London';
+  });
+  afterAll(() => {
+    if (previousTz === undefined) {
+      delete process.env.TZ;
+    } else {
+      process.env.TZ = previousTz;
+    }
+  });
+
+  it('produces a spreadsheet ContentDocument with one sheet per table, EMPLOYEES rows decoded from the real binary row store', () => {
+    const xlsxBytes = odbToXlsx(embeddedHsqldbCachedOdbBytes());
+    const content = readXlsxContent(decodeOoxmlPackage(xlsxBytes));
+    expect(content.kind).toBe('spreadsheet');
+    if (content.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    expect(content.sheets.map((sheet) => sheet.name)).toEqual(['EMPLOYEES', 'DEPARTMENTS', 'EMPTY_TABLE', 'TYPE_TEST']);
+
+    const employees = content.sheets[0];
+    if (employees === undefined) {
+      throw new Error('expected an EMPLOYEES sheet');
+    }
+    const row1 = employees.cells.filter((cell) => cell.row === 1).sort((a, b) => a.column - b.column);
+    expect(row1.map((cell) => cell.value)).toEqual([
+      { kind: 'number', value: 1 },
+      { kind: 'string', value: 'Alice Smith' },
+      { kind: 'number', value: 75000.5 },
+      { kind: 'date', value: '2020-01-15' },
+      { kind: 'boolean', value: true },
+      { kind: 'number', value: 1500.25 },
+    ]);
+
+    const emptyTable = content.sheets[2];
+    if (emptyTable === undefined) {
+      throw new Error('expected an EMPTY_TABLE sheet');
+    }
+    // Only the header row -- EMPTY_TABLE has genuinely zero data rows, decoded via the "no SET TABLE...INDEX line at all" pathway (see src/hsqldb/cache.ts's own parseHsqldbIndexRoots comment).
+    expect(emptyTable.cells.map((cell) => cell.row)).toEqual([0, 0]);
+  });
+
+  it('writes the named table as CSV, recovering TIME/TIMESTAMP/BIGINT/SMALLINT/TINYINT from TYPE_TEST', () => {
+    const csvBytes = odbToCsv(embeddedHsqldbCachedOdbBytes(), { table: 'TYPE_TEST' });
+    const text = new TextDecoder().decode(csvBytes);
+    const lines = text.split('\r\n').filter((line) => line.length > 0);
+    expect(lines[0]).toBe('ID,START_TIME,LOGGED_AT,BIG_NUM,SMALL_NUM,TINY_NUM');
+    expect(lines[1]).toBe('1,14:30:00,2024-03-15 09:45:30.123456789,123456789012345,32000,120');
+    expect(lines[2]).toBe('2,23:59:59,1999-12-31 23:59:59,-123456789012345,-32000,-120');
+    expect(lines[3]).toBe('3,,,,,');
+  });
+
+  it('throws OdbTableNotSpecifiedError, naming all four tables, when table is omitted', () => {
+    const bytes = embeddedHsqldbCachedOdbBytes();
+    expect(() => odbToCsv(bytes)).toThrow(OdbTableNotSpecifiedError);
+    expect(() => odbToCsv(bytes)).toThrow(/EMPLOYEES, DEPARTMENTS, EMPTY_TABLE, TYPE_TEST/);
   });
 });
