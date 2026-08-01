@@ -11,7 +11,7 @@ import type { Box, ContentPathPoint, ContentSubpath } from 'document-schema.js';
 //
 // draw:polygon/draw:polyline's own draw:points grammar ("0,3000 2000,0 4000,3000 2000,1500": space-separated "x,y" pairs, comma between the pair's own two numbers) was verified in the SAME macro run -- confirmed genuinely different from svg:d, with no command letters and no implicit-repeat concept at all, just a flat coordinate-pair list.
 //
-// Both svg:d and draw:points express their numbers in the element's OWN svg:viewBox user-space units, NOT points directly -- confirmed: a shape sized "svg:width=3.656cm svg:height=3.999cm" carried svg:viewBox="0 0 3657 4000" with svg:d coordinates in the 0..4000-ish range, not the 0..3.656-ish physical-cm range. scaleOdfRawPoint/buildOdfSubpaths below convert a raw (viewBox-local) point into the SAME "local coordinate space sized to frame.widthPt x frame.heightPt" convention ContentVectorSchema's own 'path' variant documents (see document-content-model's content.ts): the scale factor is frame.widthPt/viewBox.width (and the equivalent for height), with viewBox.minX/minY subtracted first -- a real, if rare, possibility per the general SVG viewBox grammar, even though every viewBox this module has verified against real output began at "0 0".
+// Both svg:d and draw:points express their numbers in the element's OWN svg:viewBox user-space units, NOT points directly -- confirmed: a shape sized "svg:width=3.656cm svg:height=3.999cm" carried svg:viewBox="0 0 3657 4000" with svg:d coordinates in the 0..4000-ish range, not the 0..3.656-ish physical-cm range. scaleOdfRawPoint/buildOdfSubpaths below convert a raw (viewBox-local) point into the SAME "local coordinate space sized to frame.widthPt x frame.heightPt" convention ContentVectorSchema's own 'path' variant documents (see document-schema.js's content.ts): the scale factor is frame.widthPt/viewBox.width (and the equivalent for height), with viewBox.minX/minY subtracted first -- a real, if rare, possibility per the general SVG viewBox grammar, even though every viewBox this module has verified against real output began at "0 0".
 
 export interface OdfRawPoint {
   readonly x: number;
@@ -223,7 +223,7 @@ export function parseOdfPathData(d: string): OdfRawSubpath[] {
   return subpaths;
 }
 
-// Scales a raw (viewBox-local) point into the path's own local point space -- sized to frame.widthPt x frame.heightPt, per ContentVectorSchema's own 'path' variant contract (document-content-model's content.ts: "the size of the path's own local coordinate space, distinct from the subpaths' local-space points"). Deliberately does NOT add frame.xPt/yPt: that offset is the frame's own PAGE-space placement, kept separate from the subpaths' LOCAL space, exactly as that schema comment specifies.
+// Scales a raw (viewBox-local) point into the path's own local point space -- sized to frame.widthPt x frame.heightPt, per ContentVectorSchema's own 'path' variant contract (document-schema.js's content.ts: "the size of the path's own local coordinate space, distinct from the subpaths' local-space points"). Deliberately does NOT add frame.xPt/yPt: that offset is the frame's own PAGE-space placement, kept separate from the subpaths' LOCAL space, exactly as that schema comment specifies.
 export function scaleOdfRawPoint(point: OdfRawPoint, viewBox: OdfViewBox, frame: Box): ContentPathPoint {
   return {
     xPt: (point.x - viewBox.minX) * (frame.widthPt / viewBox.width),

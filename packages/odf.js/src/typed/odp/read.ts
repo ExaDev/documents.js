@@ -12,7 +12,7 @@ import { walkDrawShapes } from '../draw/shapes';
 
 const CONTENT_PART = 'content.xml';
 
-// Slide size resolves per-slide via resolveDrawPageSize (typed/shared/masterpage.ts, shared with odg's own IDENTICAL draw:page resolution chain -- see that module's own top-of-file note), not once for the whole document: unlike OOXML's own single document-level p:sldSz, ODF's model genuinely allows different draw:page elements to reference different master pages (and therefore different page-layouts), even though real-world presentations almost always share one master throughout. Falls back to document-content-model's own SLIDE_SIZE_WIDESCREEN (matching ooxml.js's own pptx reader's fallback) when the chain doesn't resolve.
+// Slide size resolves per-slide via resolveDrawPageSize (typed/shared/masterpage.ts, shared with odg's own IDENTICAL draw:page resolution chain -- see that module's own top-of-file note), not once for the whole document: unlike OOXML's own single document-level p:sldSz, ODF's model genuinely allows different draw:page elements to reference different master pages (and therefore different page-layouts), even though real-world presentations almost always share one master throughout. Falls back to document-schema.js's own SLIDE_SIZE_WIDESCREEN (matching ooxml.js's own pptx reader's fallback) when the chain doesn't resolve.
 function readSlideSize(page: XmlElement, pkg: Package): PageSize {
   return resolveDrawPageSize(page, pkg) ?? SLIDE_SIZE_WIDESCREEN;
 }

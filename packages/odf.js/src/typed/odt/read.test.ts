@@ -237,7 +237,7 @@ describe('readOdt: error and fallback paths (synthetic packages -- not something
     expect(() => readOdt(pkg)).toThrow(/office:text/);
   });
 
-  it('falls back to document-content-model\'s own PAGE_SIZE_A4/2cm-margin defaults when styles.xml is missing entirely', () => {
+  it('falls back to document-schema.js\'s own PAGE_SIZE_A4/2cm-margin defaults when styles.xml is missing entirely', () => {
     const pkg: Package = {
       parts: {
         'content.xml': { kind: 'xml', nodes: [el('office:document-content', {}, [el('office:body', {}, [el('office:text', {}, [el('text:p', {}, [txt('hello')])])])])] },

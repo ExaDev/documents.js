@@ -79,7 +79,7 @@ describe('readOdp', () => {
     expect(slides[1]?.size).toEqual({ widthPt: 720, heightPt: 540 });
   });
 
-  it('falls back to document-content-model\'s own SLIDE_SIZE_WIDESCREEN when the master-page/page-layout chain does not resolve', () => {
+  it('falls back to document-schema.js\'s own SLIDE_SIZE_WIDESCREEN when the master-page/page-layout chain does not resolve', () => {
     const pkg = buildFixturePackage();
     delete pkg.parts['styles.xml'];
     const { slides } = readOdp(pkg);

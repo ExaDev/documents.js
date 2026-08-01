@@ -69,7 +69,7 @@ export function applyOdfTransform(functions: readonly OdfTransformFunction[], po
   return current;
 }
 
-// The net clockwise-on-screen rotation (in degrees, matching document-content-model's ContentShape.rotationDeg convention -- see ooxml.js's own DrawingXfrm.rotationDeg: "Clockwise, per ECMA-376's own a:xfrm/@rot convention", which this package's ContentShape shares) contributed by every rotate() function in the list, summed. Translation contributes no rotation; summing (rather than composing rotation matrices) is exact here because every function this module models is a pure rotation or a pure translation, never a scale/skew that would make the two non-commutative for this purpose.
+// The net clockwise-on-screen rotation (in degrees, matching document-schema.js's ContentShape.rotationDeg convention -- see ooxml.js's own DrawingXfrm.rotationDeg: "Clockwise, per ECMA-376's own a:xfrm/@rot convention", which this package's ContentShape shares) contributed by every rotate() function in the list, summed. Translation contributes no rotation; summing (rather than composing rotation matrices) is exact here because every function this module models is a pure rotation or a pure translation, never a scale/skew that would make the two non-commutative for this purpose.
 export function netRotationDeg(functions: readonly OdfTransformFunction[]): number {
   let totalRad = 0;
   for (const fn of functions) {
