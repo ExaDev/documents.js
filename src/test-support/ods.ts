@@ -136,3 +136,81 @@ export function gridOdsBytes(): Uint8Array<ArrayBuffer> {
 export function gridOdsPackage(): Package {
   return decodePackage(gridOdsBytes());
 }
+
+// A third fixture, purpose-built for the ods<->xlsx cross-format bridge's own round-trip tests (src/convert/bridges.test.ts): three explicitly-widthed columns (3cm/4cm/2cm) and every office:value-type ODS distinguishes on one row each -- string, float, boolean, percentage, currency, date, time -- plus a formula cell (table:formula carried verbatim, never evaluated by either side of the bridge) and a genuine 2-column merge. This is deliberately the richest of the three ods.ts fixtures: xlsx write support (ooxml.js's buildXlsxPackage) is new to the ecosystem, so the bridge's own tests need real, independently-authored ground truth to check against, not a fixture built through the very editor (createOds) the bridge composes with on its own write-back hop.
+function buildRichFixturePackage(): Package {
+  const columns = [
+    el('table:table-column', { 'table:style-name': 'RichColA' }),
+    el('table:table-column', { 'table:style-name': 'RichColB' }),
+    el('table:table-column', { 'table:style-name': 'RichColC' }),
+  ];
+  const headerRow = el('table:table-row', {}, [
+    el('table:table-cell', { 'office:value-type': 'string' }, [el('text:p', {}, [txt('Name')])]),
+    el('table:table-cell', { 'office:value-type': 'string' }, [el('text:p', {}, [txt('Amount')])]),
+    el('table:table-cell', { 'office:value-type': 'string' }, [el('text:p', {}, [txt('Active')])]),
+  ]);
+  const dataRow = el('table:table-row', {}, [
+    el('table:table-cell', { 'office:value-type': 'string' }, [el('text:p', {}, [txt('Widget')])]),
+    el('table:table-cell', { 'office:value-type': 'float', 'office:value': '42.5' }, [el('text:p', {}, [txt('42.5')])]),
+    el('table:table-cell', { 'office:value-type': 'boolean', 'office:boolean-value': 'true' }, [el('text:p', {}, [txt('TRUE')])]),
+  ]);
+  const typedRow = el('table:table-row', {}, [
+    el('table:table-cell', { 'office:value-type': 'percentage', 'office:value': '0.15' }, [el('text:p', {}, [txt('15%')])]),
+    el('table:table-cell', { 'office:value-type': 'currency', 'office:value': '9.99', 'office:currency': 'USD' }, [el('text:p', {}, [txt('$9.99')])]),
+    el('table:table-cell', { 'office:value-type': 'date', 'office:date-value': '2026-01-15' }, [el('text:p', {}, [txt('2026-01-15')])]),
+  ]);
+  const timeAndFormulaRow = el('table:table-row', {}, [
+    el('table:table-cell', { 'office:value-type': 'time', 'office:time-value': 'PT14H30M00S' }, [el('text:p', {}, [txt('14:30')])]),
+    el('table:table-cell', { 'office:value-type': 'float', 'office:value': '85', 'table:formula': 'of:=[.B2]*2' }, [el('text:p', {}, [txt('85')])]),
+  ]);
+  const mergedRow = el('table:table-row', {}, [el('table:table-cell', { 'table:number-columns-spanned': '2', 'office:value-type': 'string' }, [el('text:p', {}, [txt('Merged Cell')])]), el('table:covered-table-cell')]);
+
+  const table = el('table:table', { 'table:name': 'Rich', 'table:style-name': 'RichTable' }, [...columns, headerRow, dataRow, typedRow, timeAndFormulaRow, mergedRow]);
+
+  const contentXml: Package['parts'][string] = {
+    kind: 'xml',
+    nodes: [
+      el('office:document-content', {}, [
+        el('office:automatic-styles', {}, [
+          el('style:style', { 'style:name': 'RichColA', 'style:family': 'table-column' }, [el('style:table-column-properties', { 'style:column-width': '3cm' })]),
+          el('style:style', { 'style:name': 'RichColB', 'style:family': 'table-column' }, [el('style:table-column-properties', { 'style:column-width': '4cm' })]),
+          el('style:style', { 'style:name': 'RichColC', 'style:family': 'table-column' }, [el('style:table-column-properties', { 'style:column-width': '2cm' })]),
+          el('style:style', { 'style:name': 'RichTable', 'style:family': 'table', 'style:master-page-name': 'RichDefault' }),
+        ]),
+        el('office:body', {}, [el('office:spreadsheet', {}, [table])]),
+      ]),
+    ],
+  };
+
+  const stylesXml: Package['parts'][string] = {
+    kind: 'xml',
+    nodes: [
+      el('office:document-styles', {}, [
+        el('office:automatic-styles', {}, [el('style:page-layout', { 'style:name': 'RichPM1' }, [el('style:page-layout-properties', { 'fo:page-width': '400pt', 'fo:page-height': '300pt', 'style:print': 'grid headers', 'style:print-page-order': 'ttb' })])]),
+        el('office:master-styles', {}, [el('style:master-page', { 'style:name': 'RichDefault', 'style:page-layout-name': 'RichPM1' })]),
+      ]),
+    ],
+  };
+
+  const metaXml: Package['parts'][string] = {
+    kind: 'xml',
+    nodes: [el('office:document-meta', {}, [el('office:meta', {}, [el('dc:title', {}, [txt('Rich Spreadsheet')])])])],
+  };
+
+  return {
+    parts: {
+      mimetype: { kind: 'binary', base64: bytesToBase64(enc(ODF_MEDIA_TYPES.ods)) },
+      'content.xml': contentXml,
+      'styles.xml': stylesXml,
+      'meta.xml': metaXml,
+    },
+  };
+}
+
+export function richOdsBytes(): Uint8Array<ArrayBuffer> {
+  return encodePackage(buildRichFixturePackage());
+}
+
+export function richOdsPackage(): Package {
+  return decodePackage(richOdsBytes());
+}
