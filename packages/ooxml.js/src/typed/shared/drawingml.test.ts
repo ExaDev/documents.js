@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { el } from '../../test-support/fragment';
+import { el } from '../../xml/fragment';
 import {
   applyGroupTransform,
   EMPTY_THEME,

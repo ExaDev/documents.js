@@ -1,7 +1,7 @@
 import type { Package } from '../../model/package';
 import type { XmlElement } from '../../model/node';
 import { describe, expect, it } from 'vitest';
-import { el } from '../../test-support/fragment';
+import { el } from '../../xml/fragment';
 import { findMatchingPlaceholder, readPlaceholderKey, resolveDefaultRunProperties, resolvePlaceholderXfrm, resolveSlideInheritance } from './inherit';
 
 // Ported verbatim from documents.js's src/ooxml/pptx/inherit.test.ts.

@@ -1,6 +1,6 @@
 import type { XmlElement } from '../../model/node';
 import { describe, expect, it } from 'vitest';
-import { el } from '../../test-support/fragment';
+import { el } from '../../xml/fragment';
 import { EMPTY_THEME } from '../shared/drawingml';
 import { resolveParagraphProperties, resolveRunProperties } from './styles';
 

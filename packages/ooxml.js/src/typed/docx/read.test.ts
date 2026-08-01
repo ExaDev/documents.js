@@ -2,7 +2,7 @@ import type { Package } from '../../model/package';
 import type { XmlElement } from '../../model/node';
 import { describe, expect, it } from 'vitest';
 import type { ContentBlock, ContentParagraph, ContentTable } from 'document-content-model';
-import { el, txt } from '../../test-support/fragment';
+import { el, txt } from '../../xml/fragment';
 import { readDocx } from './read';
 
 // Ported from documents.js's src/ooxml/docx/read.test.ts, adapted to readDocx's own DocxDocument shape (sections directly, not wrapped in a ContentDocument discriminated union) and merged with this package's comment/footnote/header/footer coverage.

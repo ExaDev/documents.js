@@ -1,7 +1,7 @@
 import type { Package } from '../../model/package';
 import type { XmlElement } from '../../model/node';
 import { describe, expect, it } from 'vitest';
-import { el, txt } from '../../test-support/fragment';
+import { el, txt } from '../../xml/fragment';
 import { readCoreProperties } from './metadata';
 
 // Ported verbatim from documents.js's src/ooxml/core-properties.test.ts.
