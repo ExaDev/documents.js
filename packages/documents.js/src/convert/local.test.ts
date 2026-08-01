@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createDocx } from '../edit/docx/editor';
 import { createPptx } from '../edit/pptx/editor';
 import { brokenStartxrefPdf } from '../test-support/pdf';
+import { FRACTION_FORMULA, odfFormulaBytes } from '../test-support/odf';
 import { minimalOdgBytes } from '../test-support/odg';
 import { minimalOdpBytes } from '../test-support/odp';
 import { minimalOdsBytes } from '../test-support/ods';
@@ -35,6 +36,7 @@ describe('createLocalDocumentConverter: shape', () => {
       { source: 'odp', target: 'pdf' },
       { source: 'ods', target: 'pdf' },
       { source: 'odg', target: 'pdf' },
+      { source: 'odf', target: 'pdf' },
       { source: 'pdf', target: 'docx' },
       { source: 'pdf', target: 'pptx' },
       { source: 'pdf', target: 'odt' },
@@ -90,6 +92,13 @@ describe('createLocalDocumentConverter: convert', () => {
   it('converts odg to pdf', async () => {
     const converter = createLocalDocumentConverter();
     const result = await converter.convert({ source: { format: 'odg', bytes: minimalOdgBytes() }, targetFormat: 'pdf' }, { signal: new AbortController().signal });
+    expect(result.document.format).toBe('pdf');
+    expect(pdfHeader(result.document.bytes)).toBe('%PDF-');
+  });
+
+  it('converts odf to pdf', async () => {
+    const converter = createLocalDocumentConverter();
+    const result = await converter.convert({ source: { format: 'odf', bytes: odfFormulaBytes(FRACTION_FORMULA) }, targetFormat: 'pdf' }, { signal: new AbortController().signal });
     expect(result.document.format).toBe('pdf');
     expect(pdfHeader(result.document.bytes)).toBe('%PDF-');
   });

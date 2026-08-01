@@ -42,6 +42,10 @@ const FUNCTIONS = [
   'createOdg',
   'buildOdgPackage',
   'pdfToOdg',
+  'odfToPdf',
+  'readOdfFormulaContent',
+  'layoutFormula',
+  'loadMathFont',
   'createLocalDocumentConverter',
 ];
 
@@ -86,6 +90,18 @@ function minimalOdgBytes() {
   const mimetype = new TextEncoder().encode(ODF_MEDIA_TYPES.odg);
   const contentXml = new TextEncoder().encode(
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0" xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0" xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"><office:automatic-styles><style:style style:name="grCurve" style:family="graphic"><style:graphic-properties draw:fill-color="#ffff00"/></style:style></office:automatic-styles><office:body><office:drawing><draw:page><draw:path draw:style-name="grCurve" svg:width="3.656cm" svg:height="3.999cm" svg:x="20pt" svg:y="20pt" svg:viewBox="0 0 3657 4000" svg:d="M0 4000h3000c1000 0 1000-4000-1000-4000z"/><draw:frame svg:x="20pt" svg:y="150pt" svg:width="300pt" svg:height="50pt"><draw:text-box><text:p>Hello from the odg smoke test</text:p></draw:text-box></draw:frame></draw:page></office:drawing></office:body></office:document-content>',
+  );
+  return zipPackage([
+    ['mimetype', { bytes: mimetype, stored: true }],
+    ['content.xml', { bytes: contentXml }],
+  ]);
+}
+
+// A standalone .odf formula document (office:body > office:math > math:math, real LibreOffice-shaped MathML with a "math:" namespace prefix throughout -- see src/test-support/odf.ts's own note on why this fixture is prefixed rather than bare) -- proves odfToPdf's entire pipeline (odf.js's decodePackage, dist's own readOdfFormulaContent, src/mathml's layoutFormula, and the embedded STIX Two Math font's real cmap/hmtx/MATH-table-driven CID text-showing in src/pdf/write.ts) actually works from the built dist/ artifact, including the base64-embedded font asset itself surviving the tsdown build unmangled.
+function minimalOdfFormulaBytes() {
+  const mimetype = new TextEncoder().encode(ODF_MEDIA_TYPES.odf);
+  const contentXml = new TextEncoder().encode(
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:math="http://www.w3.org/1998/Math/MathML"><office:body><office:math><math:math xmlns:math="http://www.w3.org/1998/Math/MathML"><math:mfrac><math:mi>a</math:mi><math:mi>b</math:mi></math:mfrac></math:math></office:math></office:body></office:document-content>',
   );
   return zipPackage([
     ['mimetype', { bytes: mimetype, stored: true }],
@@ -304,5 +320,21 @@ describe('dist/ end-to-end: odg live-view editor, odgToPdf then pdfToOdg, from t
       .join(' ');
     expect(roundTrippedText).toContain('Hello');
     expect(roundTrippedText).toContain('smoke');
+  });
+});
+
+describe('dist/ end-to-end: odfToPdf, from the CJS build', () => {
+  it('renders a real formula (a fraction) via the embedded STIX Two Math font, producing a well-formed single-page PDF', () => {
+    const pdfBytes = cjs.odfToPdf(minimalOdfFormulaBytes());
+    expect(pdfBytes.length).toBeGreaterThan(0);
+    expect(new TextDecoder('latin1').decode(pdfBytes.subarray(0, 5))).toBe('%PDF-');
+
+    const layout = cjs.readPdf(pdfBytes);
+    expect(layout.pages).toHaveLength(1);
+    // The fraction rule itself never becomes a LayoutRect/LayoutPath item (it's drawn directly into the page's own content stream by writeFormulaContentStream, entirely outside the LayoutItem model -- see write.ts's own module comment on why a formula can't travel through doc.pages[].items), so this checks the PDF actually contains a real embedded Type0 font resource instead, which is the concrete, checkable proof the math font reached the built dist/ artifact and was used.
+    const raw = new TextDecoder('latin1').decode(pdfBytes);
+    expect(raw).toContain('/Subtype /Type0');
+    expect(raw).toContain('/Encoding /Identity-H');
+    expect(raw).toContain('/Subtype /CIDFontType0C');
   });
 });

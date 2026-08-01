@@ -51,7 +51,7 @@ function presentationDoc(slides: ContentSlide[]): Extract<ContentDocument, { kin
 }
 
 function convert(slides: ContentSlide[]) {
-  return convertPresentationToLayout(presentationDoc(slides), { measurer: fakeMeasurer() });
+  return convertPresentationToLayout(presentationDoc(slides), { measurer: fakeMeasurer() }).document;
 }
 
 function textItems(items: readonly LayoutItem[]): LayoutText[] {

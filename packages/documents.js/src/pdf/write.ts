@@ -1,21 +1,28 @@
 import { base64ToBytes } from 'ooxml.js';
 import { deflate } from '../bytes/flate';
-import { ByteWriter } from '../bytes/writer';
+import { ByteWriter, concatBytes } from '../bytes/writer';
 import { readJpegInfo } from '../image/jpeg-info';
 import { decodePng } from '../image/png-decode';
 import type { LayoutDocument, LayoutImageAsset, LayoutLink } from 'document-content-model';
+import type { PositionedFormula } from '../model/formula';
 import type { FontMetrics, StandardFontName } from './afm-widths';
 import { STANDARD_METRICS, widthOfCode } from './afm-widths';
 import type { ContentWriteContext } from './content-write';
 import { writeContentStream } from './content-write';
 import { winAnsiGlyphName } from './encoding';
 import { resolveStandardFont } from './fonts';
+import { collectUsedGlyphs, writeFormulaContentStream } from './math-content-write';
+import { loadMathFont } from './math-font';
+import { buildMathFontObjects } from './math-font-write';
 import { createStandardFontMeasurer } from './measure';
 import type { PdfDict, PdfObject } from './objects';
 import { pdfArray, pdfDict, pdfHexString, pdfName, pdfNum, pdfRef, pdfStream } from './objects';
 import { throwIfAborted } from '../ports/abort';
 import { writeObject } from './serialize';
 import type { WinAnsiSubstitution } from './winansi';
+
+// A formula's own glyph runs are shown through an embedded CID composite font via Identity-H 2-byte CIDs (see math-content-write.ts's own module comment) -- a fundamentally different content-stream shape from an ordinary LayoutText item's single-byte WinAnsi string, and one document-content-model's own LayoutItem union has no member for (LayoutFont only ever names one of the 14 standard PDF faces -- see src/model/style.ts's own comment -- with no room for "this run uses an embedded, non-standard font resource" at all). A formula therefore cannot travel through LayoutDocument.pages[].items the way every other kind of content this writer draws does; WritePdfOptions.formulas is this module's own, local side channel for it instead, positioned entirely outside document-content-model's own schema.
+const MATH_FONT_RESOURCE_NAME = 'MF';
 
 // WinAnsiEncoding's assigned byte range starts at 32 (space, the first printable ASCII code) and this writer's fonts use exactly the encoding's full byte range up to 255.
 const FIRST_CHAR = 32;
@@ -38,6 +45,8 @@ export interface WritePdfOptions {
   readonly signal?: AbortSignal;
   // Called once per WinAnsi character substitution made while emitting text (see src/pdf/winansi.ts). writePdf itself has no Diagnostic schema to translate these into -- a caller that wants diagnostics (e.g. the local DocumentConverter) supplies this and does the translation itself.
   readonly onSubstitution?: (substitution: WinAnsiSubstitution, context: { readonly pageIndex: number }) => void;
+  // Every embedded formula to draw (src/mathml's own MathBox, already positioned per page) -- see this module's own top-of-file comment for why a formula can't travel through doc.pages[].items itself. The embedded STIX Two Math composite font (one Type0/CIDFontType0/FontDescriptor/FontFile3/ToUnicode object group) is allocated once for the whole document, only when this array is non-empty, and shared across every page that references it -- the same "allocate once, reuse via /Resources" pattern this writer already uses for every standard-14 font and image asset.
+  readonly formulas?: readonly PositionedFormula[];
 }
 
 // PDF's UTF-16BE-with-BOM convention for text strings outside PDFDocEncoding's range (ISO 32000-1 7.9.2.2) -- JS strings are already UTF-16 internally, so this is a direct byte-pair re-encoding of each existing code unit (surrogate pairs included), not a decode/re-encode round trip.
@@ -245,7 +254,7 @@ function xrefEntry(offset: number, generation: number, inUse: boolean): string {
   return `${offset.toString().padStart(10, '0')} ${generation.toString().padStart(5, '0')} ${inUse ? 'n' : 'f'} \n`;
 }
 
-// Assembles a LayoutDocument into a complete PDF file: the object graph (Catalog, Pages, Info, one Font+FontDescriptor pair per standard-14 face actually used, one Image XObject (+SMask) per image asset actually referenced, then each page's own Page dict, Contents stream, and optional Annots), a classic cross-reference table, and a trailer. Objects are allocated in this fixed order -- never derived from Map/object iteration order -- so identical input always produces byte-identical output (see the determinism tests).
+// Assembles a LayoutDocument into a complete PDF file: the object graph (Catalog, Pages, Info, one Font+FontDescriptor pair per standard-14 face actually used, one embedded math composite font group when options.formulas is non-empty (Type0/CIDFontType0/FontDescriptor/FontFile3/ToUnicode -- see math-font-write.ts), one Image XObject (+SMask) per image asset actually referenced, then each page's own Page dict, Contents stream (ordinary LayoutItem bytes followed by that page's own formula bytes, if any -- see math-content-write.ts), and optional Annots), a classic cross-reference table, and a trailer. Objects are allocated in this fixed order -- never derived from Map/object iteration order -- so identical input always produces byte-identical output (see the determinism tests).
 export function writePdf(doc: LayoutDocument, options: WritePdfOptions = {}): Uint8Array<ArrayBuffer> {
   const compress = options.compress ?? true;
   const measurer = createStandardFontMeasurer();
@@ -286,6 +295,12 @@ export function writePdf(doc: LayoutDocument, options: WritePdfOptions = {}): Ui
     imageAllocs.set(imageId, { imageNum, smaskNum, resourceName: `Im${index + 1}`, prepared });
   }
 
+  const formulas = options.formulas ?? [];
+  const mathFontAlloc =
+    formulas.length === 0
+      ? undefined
+      : { type0Num: nextObjNum++, cidFontNum: nextObjNum++, descriptorNum: nextObjNum++, fontFileNum: nextObjNum++, toUnicodeNum: nextObjNum++, resourceName: MATH_FONT_RESOURCE_NAME };
+
   const pageAllocs = doc.pages.map(() => ({ pageNum: nextObjNum++, contentsNum: nextObjNum++ }));
 
   const objects: AllocatedObject[] = [];
@@ -314,14 +329,44 @@ export function writePdf(doc: LayoutDocument, options: WritePdfOptions = {}): Ui
     objects.push({ num: alloc.imageNum, value: pdfStream(alloc.prepared.dict, alloc.prepared.raw) });
   }
 
+  const mathFont = mathFontAlloc === undefined ? undefined : loadMathFont().font;
+  const usedGlyphs = mathFontAlloc === undefined || mathFont === undefined ? undefined : collectUsedGlyphs(formulas, mathFont);
+  if (mathFontAlloc !== undefined && mathFont !== undefined && usedGlyphs !== undefined) {
+    const built = buildMathFontObjects(
+      mathFont,
+      usedGlyphs,
+      { cidFontRef: pdfRef(mathFontAlloc.cidFontNum, 0), descriptorRef: pdfRef(mathFontAlloc.descriptorNum, 0), fontFileRef: pdfRef(mathFontAlloc.fontFileNum, 0), toUnicodeRef: pdfRef(mathFontAlloc.toUnicodeNum, 0) },
+      compress,
+    );
+    objects.push({ num: mathFontAlloc.type0Num, value: built.type0 });
+    objects.push({ num: mathFontAlloc.cidFontNum, value: built.cidFont });
+    objects.push({ num: mathFontAlloc.descriptorNum, value: built.descriptor });
+    objects.push({ num: mathFontAlloc.fontFileNum, value: built.fontFile });
+    objects.push({ num: mathFontAlloc.toUnicodeNum, value: built.toUnicode });
+  }
+
   const resourceEntries = new Map<string, PdfObject>();
-  if (fontAllocs.size > 0) {
-    resourceEntries.set('Font', pdfDict(new Map([...fontAllocs.values()].map((alloc) => [alloc.resourceName, pdfRef(alloc.fontNum, 0)]))));
+  if (fontAllocs.size > 0 || mathFontAlloc !== undefined) {
+    const fontEntries = new Map<string, PdfObject>([...fontAllocs.values()].map((alloc) => [alloc.resourceName, pdfRef(alloc.fontNum, 0)]));
+    if (mathFontAlloc !== undefined) {
+      fontEntries.set(mathFontAlloc.resourceName, pdfRef(mathFontAlloc.type0Num, 0));
+    }
+    resourceEntries.set('Font', pdfDict(fontEntries));
   }
   if (imageAllocs.size > 0) {
     resourceEntries.set('XObject', pdfDict(new Map([...imageAllocs.values()].map((alloc) => [alloc.resourceName, pdfRef(alloc.imageNum, 0)]))));
   }
   const resourcesDict = pdfDict(resourceEntries);
+
+  const formulasByPage = new Map<number, PositionedFormula[]>();
+  for (const formula of formulas) {
+    const forPage = formulasByPage.get(formula.pageIndex);
+    if (forPage === undefined) {
+      formulasByPage.set(formula.pageIndex, [formula]);
+    } else {
+      forPage.push(formula);
+    }
+  }
 
   const context: ContentWriteContext = {
     measurer,
@@ -351,7 +396,11 @@ export function writePdf(doc: LayoutDocument, options: WritePdfOptions = {}): Ui
       options.onSubstitution?.(substitution, { pageIndex });
     }
 
-    const finalContentBytes = compress ? deflate(contentBytes) : contentBytes;
+    const pageFormulas = formulasByPage.get(pageIndex);
+    const formulaBytes = pageFormulas === undefined || mathFontAlloc === undefined || mathFont === undefined ? undefined : writeFormulaContentStream(pageFormulas, { font: mathFont, resourceName: mathFontAlloc.resourceName });
+    const combinedContentBytes = formulaBytes === undefined ? contentBytes : concatBytes([contentBytes, formulaBytes]);
+
+    const finalContentBytes = compress ? deflate(combinedContentBytes) : combinedContentBytes;
     const contentsDict = pdfDict(compress ? { Filter: pdfName('FlateDecode') } : {});
     objects.push({ num: contentsNum, value: pdfStream(contentsDict, finalContentBytes) });
 

@@ -198,17 +198,48 @@ export { NOOP_DIAGNOSTIC_SINK, PdfEncryptedError, PdfParseError } from './pdf/di
 export type { WinAnsiSubstitution } from './pdf/winansi';
 // A schema-validated z.codec() pair over readPdf/writePdf (PDF bytes <-> LayoutDocument), mirroring ooxml.js's own packageCodec -- the no-extra-options form; use readPdf/writePdf directly for cancellation, diagnostics, a custom clock, or WinAnsi-substitution reporting.
 export { pdfCodec } from './pdf/codec';
+// The embedded math font (STIX Two Math, OFL-1.1 -- see assets/fonts/NOTICE.md), parsed once and cached: loadMathFont().font exposes glyphId/glyphSpaceWidth/cffBytes/descriptor directly, and .metricsAt(sizePt) is the MathFontMetrics factory src/mathml's own layoutFormula consumes. Exported for a caller that wants to lay out a formula (via layoutFormula below) without going through odfToPdf's own fixed pipeline.
+export type { LoadedMathFont, MathFont, MathFontDescriptorMetrics } from './pdf/math-font';
+export { loadMathFont } from './pdf/math-font';
+
+// --- MathML presentation-layer typesetting: a pure box-model layout engine (no PDF or ODF knowledge of its own -- see src/mathml/'s own module comments), consuming odf.js's readOdfFormula's own raw MathML tree via a locally-defined, structurally-compatible node type. odfToPdf (below) and the odt/odp embedded-formula layout paths (src/layout/engine.ts, src/layout/slides.ts) are its two real callers; exported directly too, for a caller that wants to lay out a formula (e.g. onto a custom page layout) without going through either. ---
+export type {
+  LayoutFormulaOptions,
+  MathBox,
+  MathColor,
+  MathDiagnostic,
+  MathDiagnosticKind,
+  MathFontMetrics,
+  MathGlyphMetrics,
+  MathGlyphRun,
+  MathLayoutItem,
+  MathLayoutResult,
+  MathMlAttribute,
+  MathMlElement,
+  MathMlNode,
+  MathMlText,
+  MathRule,
+  MathStroke,
+  MathVariant,
+  OperatorProperties,
+} from './mathml';
+export { applyMathVariant, elementChildren, elementLocalName, firstChildByLocalName, isMathMlElement, isMathVariant, layoutFormula, localName, mapMathVariant, operatorProperties, textContent as mathMlTextContent } from './mathml';
 
 // --- Format <-> ContentDocument readers and layout algorithms, each independently usable rather than only reachable through the ergonomic conversions below. ---
 export { readDocxContent } from './ooxml/docx/read';
 export { readPptxContent } from './ooxml/pptx/read';
+export type { OdtContentResult } from './odf/odt/read';
 export { readOdtContent } from './odf/odt/read';
+export type { OdpContentResult } from './odf/odp/read';
 export { readOdpContent } from './odf/odp/read';
 export { readOdsContent } from './odf/ods/read';
 export { readOdgContent } from './odf/odg/read';
-export type { EngineLayoutOptions } from './layout/engine';
+export type { StandaloneFormulaContent } from './odf/formula/read';
+export { readOdfEmbeddedFormula, readOdfFormulaContent } from './odf/formula/read';
+export type { EmbeddedFormula, PositionedFormula } from './model/formula';
+export type { EngineLayoutOptions, WordprocessingLayoutResult } from './layout/engine';
 export { convertWordprocessingToLayout } from './layout/engine';
-export type { SlidesLayoutOptions } from './layout/slides';
+export type { PresentationLayoutResult, SlidesLayoutOptions } from './layout/slides';
 export { convertPresentationToLayout } from './layout/slides';
 export type { SheetsLayoutOptions } from './layout/sheets';
 export { convertSpreadsheetToLayout } from './layout/sheets';
@@ -220,6 +251,9 @@ export { reconstructDrawing, reconstructPresentation, reconstructSpreadsheet, re
 // --- Twelve ergonomic conversions (docx/pptx/odt/odp/ods/odg <-> PDF, all round-trip both ways). ---
 export type { DocumentToPdfOptions, PdfToDocumentOptions } from './convert/convert';
 export { docxToPdf, odgToPdf, odpToPdf, odsToPdf, odtToPdf, pdfToDocx, pdfToOdg, pdfToOdp, pdfToOds, pdfToOdt, pdfToPptx, pptxToPdf } from './convert/convert';
+
+// --- odf (a standalone ODF formula document) -> PDF: not one of the twelve round-trip conversions above (there is no pdfToOdf -- see convert.ts's own module comment on odfToPdf for why: recovering structured MathML from rendered glyphs is a categorically different, OCR-adjacent problem, not a geometry-reconstruction one). Renders via src/mathml's layoutFormula and the embedded STIX Two Math font, the same pipeline the odt/odp embedded-formula paths use. ---
+export { odfToPdf } from './convert/convert';
 
 // Schema-validated z.codec() pairs over the conversions above (docx/pptx/odt/odp/ods/odg bytes <-> PDF bytes), the no-extra-options form -- use docxToPdf/pdfToDocx/pptxToPdf/pdfToPptx/odtToPdf/pdfToOdt/odpToPdf/pdfToOdp/odsToPdf/pdfToOds/odgToPdf/pdfToOdg directly for cancellation or diagnostics.
 export { docxPdfCodec, odgPdfCodec, odpPdfCodec, odsPdfCodec, odtPdfCodec, pptxPdfCodec } from './convert/codec';
