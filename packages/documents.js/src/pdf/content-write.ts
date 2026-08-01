@@ -131,7 +131,7 @@ function writeLine(writer: ByteWriter, item: LayoutLine): void {
   writer.writeAscii('S\n');
 }
 
-// Approximates the ellipse as four cubic Bezier arcs, one per quadrant, using the standard kappa constant for the control-point offset -- PDF has no native ellipse or circle operator.
+// Approximates the ellipse as four cubic Bezier arcs, one per quadrant, using the standard kappa constant for the control-point offset -- PDF has no native ellipse or circle operator. The final arc returns exactly to the starting point, so an explicit `h` (closepath) is emitted even though it draws no additional ink: ISO 32000-1 8.5.3.1 already implicitly closes every subpath for FILL purposes regardless, but never for STROKE, so an ellipse written without `h` paints its own stroke as a technically-open path -- invisible for a smooth curve with no sharp corner at the seam, but it also means readPdf's own general path tracking (interpret.ts) records the recovered subpath as closed: false (it only sets closed: true when it actually sees an `h` operator), which then blocks a filled-and-stroked ellipse from being recognised as fillable by any downstream ODF/SVG consumer that correctly requires an explicitly closed path before filling it (confirmed against real LibreOffice 26.2: a reconstructed ellipse-turned-path with fill set but closed: false rendered with no fill at all). Emitting `h` makes both the PDF bytes and the recovered geometry match the ellipse's own true, always-closed shape.
 function writeEllipse(writer: ByteWriter, item: LayoutEllipse): void {
   const paint = paintOperatorFor(item.fill, item.stroke);
   if (paint === undefined) {
@@ -151,6 +151,7 @@ function writeEllipse(writer: ByteWriter, item: LayoutEllipse): void {
   writer.writeAscii(`${formatPoint(cx - kx, cy + ry)} ${formatPoint(cx - rx, cy + ky)} ${formatPoint(cx - rx, cy)} c\n`);
   writer.writeAscii(`${formatPoint(cx - rx, cy - ky)} ${formatPoint(cx - kx, cy - ry)} ${formatPoint(cx, cy - ry)} c\n`);
   writer.writeAscii(`${formatPoint(cx + kx, cy - ry)} ${formatPoint(cx + rx, cy - ky)} ${formatPoint(cx + rx, cy)} c\n`);
+  writer.writeAscii('h\n');
   writer.writeAscii(`${paint}\n`);
 }
 
