@@ -131,6 +131,38 @@ jobs:
         id: after
         run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
+  publish-aliases:
+    name: Publish aliases (${{ matrix.name }})
+    needs: release
+    if: needs.release.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write # OIDC identity for npm trusted publishing -- the GitHub Packages alias stays its own separate job (see that job's own permissions comment) specifically so it never holds this permission.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: js.documents, registry: 'https://registry.npmjs.org' }
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main # the release commit semantic-release just pushed
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: pnpm
+          # registry-url is deliberately absent. Setting it makes setup-node write an .npmrc containing an _authToken line, and that line wins over the OIDC exchange -- so the setting that looks like it configures the registry is exactly the one that would break trusted publishing.
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Rewrite package name for this alias
+        run: npm pkg set name="${{ matrix.name }}"
+      - run: pnpm publish --access public --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: '' # Blanked, not omitted -- an inherited NODE_AUTH_TOKEN would otherwise be used in preference to the OIDC exchange.
+
   publish-github-packages:
     name: Publish alias to GitHub Packages
     needs: release
@@ -140,6 +172,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # Deliberately no id-token: write here -- see publish-aliases' own comment above for why this job is kept separate: pnpm attempts an OIDC exchange whenever id-token: write is available regardless of target registry, and GitHub Packages has no such exchange to attempt, which would then break its fallback to the GITHUB_TOKEN this job actually authenticates with.
     steps:
       - uses: actions/checkout@v7
         with:
