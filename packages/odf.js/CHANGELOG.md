@@ -1,3 +1,10 @@
+# [1.10.0](https://github.com/ExaDev/odf.js/compare/v1.9.0...v1.10.0) (2026-08-01)
+
+
+### Features
+
+* add readOdbInventory, a typed reader for ODF database package inventories ([89fb54a](https://github.com/ExaDev/odf.js/commit/89fb54a3a700635a234af160a3913481340ab305))
+
 # [1.9.0](https://github.com/ExaDev/odf.js/compare/v1.8.0...v1.9.0) (2026-08-01)
 
 
