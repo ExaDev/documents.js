@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { FRACTION_FORMULA, MATRIX_FORMULA, odfFormulaBytes, SQRT_FORMULA, SUBSUP_FORMULA } from '../test-support/odf';
 import { minimalOdpBytes } from '../test-support/odp';
 import { minimalOdtBytes } from '../test-support/odt';
-import { readPdf } from '../pdf/read';
+import { readPdf } from 'pdf-codec';
 import { odfToPdf, odpToPdf, odtToPdf } from './convert';
 
 // End-to-end coverage for the MathML/formula pipeline: odfToPdf (a standalone .odf formula document) for each of the task's own named curated formulas (a simple fraction, a square root, a superscript/subscript combination, a small matrix via mtable), plus the embedded-formula-inside-odt/odp path. Checks the output PDF is well-formed (readable back through this package's own readPdf; also cross-checked with qpdf --check when that binary is available locally -- see qpdfCheck below) and that real layout invariants hold, not just "it doesn't crash".

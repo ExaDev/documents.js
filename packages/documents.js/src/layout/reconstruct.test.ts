@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ContentDrawPage, ContentParagraph, ContentShape, ContentSheet, LayoutDocument, LayoutImage, LayoutImageAsset, LayoutItem, LayoutPage, LayoutText } from 'document-content-model';
-import { STANDARD_METRICS } from '../pdf/afm-widths';
+import { STANDARD_METRICS } from 'pdf-codec';
 import { reconstructDrawing, reconstructPresentation, reconstructSpreadsheet, reconstructWordprocessing } from './reconstruct';
 
 const RED = { r: 1, g: 0, b: 0 };

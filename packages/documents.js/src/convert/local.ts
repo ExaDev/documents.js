@@ -1,6 +1,5 @@
 import type { DocumentPackage } from 'document-content-model';
-import type { PdfDiagnostic } from '../pdf/diagnostics';
-import type { WinAnsiSubstitution } from '../pdf/winansi';
+import type { PdfDiagnostic, WinAnsiSubstitution } from 'pdf-codec';
 import {
   docxToOdt,
   docxToPdf,

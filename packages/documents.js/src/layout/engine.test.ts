@@ -1,13 +1,13 @@
 import { bytesToBase64 } from 'ooxml.js';
 import { describe, expect, it } from 'vitest';
 import type { ContentBlock, ContentImageBlock, ContentParagraph, ContentRun, ContentSection, ContentTable, LayoutImage, LayoutItem, LayoutLink, LayoutRect, LayoutText } from 'document-content-model';
-import { encodePng } from '../image/png-encode';
 import { CONTENT_FORMAT_VERSION } from '../model/content';
 import type { ContentDocument } from '../model/content';
-import type { TextMeasurer } from '../pdf/measure';
+import type { TextMeasurer } from 'pdf-codec';
+import { encodePng } from 'pdf-codec';
 import { convertWordprocessingToLayout } from './engine';
 
-// Every character is sizePt/10 pt wide; lineHeightAtSize is 1.2x, ascender 0.8x, descender -0.2x -- the same fake-measurer convention already used across src/pdf/text-layout.test.ts, src/layout/slides.test.ts, and src/layout/shared.test.ts.
+// Every character is sizePt/10 pt wide; lineHeightAtSize is 1.2x, ascender 0.8x, descender -0.2x -- the same fake-measurer convention already used across pdf-codec's own text-layout.test.ts, src/layout/slides.test.ts, and src/layout/shared.test.ts.
 function fakeMeasurer(): TextMeasurer {
   return {
     widthOfTextAtSize: (text, _font, sizePt) => Array.from(text).length * (sizePt / 10),

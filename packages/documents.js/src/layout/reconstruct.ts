@@ -26,8 +26,7 @@ import type {
   LayoutSubpath,
   LayoutText,
 } from 'document-content-model';
-import { STANDARD_METRICS } from '../pdf/afm-widths';
-import { resolveStandardFont } from '../pdf/fonts';
+import { resolveStandardFont, STANDARD_METRICS } from 'pdf-codec';
 import type { Box, Margins } from '../model/geometry';
 import { flipY } from '../model/geometry';
 import type { ContentDocument } from '../model/content';
@@ -581,7 +580,7 @@ interface LineSegment {
   readonly y2Pt: number;
 }
 
-// A gridline written by this package's own convertSpreadsheetToLayout (src/layout/sheets.ts's renderGridlines) survives a real PDF round trip as a generic LayoutPath, not a LayoutLine: writeLine's own m/l/S sequence (src/pdf/content-write.ts) reads back through src/pdf/interpret.ts's general path tracking as a single-subpath, single-line-segment, stroke-only LayoutPath -- readPdf never reconstructs a 'line' kind item at all (a pre-existing, already-documented gap; see the README's own interpret.ts gotcha). Both shapes are accepted here so a hand-built LayoutDocument using genuine LayoutLine items (this module's own test fixtures, or a LayoutDocument from a producer other than readPdf) and a real PDF-round-tripped LayoutDocument both detect identically.
+// A gridline written by this package's own convertSpreadsheetToLayout (src/layout/sheets.ts's renderGridlines) survives a real PDF round trip as a generic LayoutPath, not a LayoutLine: pdf-codec's writeLine (content-write.ts) writes an m/l/S sequence that reads back through pdf-codec's own interpret.ts's general path tracking as a single-subpath, single-line-segment, stroke-only LayoutPath -- readPdf never reconstructs a 'line' kind item at all (a pre-existing, already-documented gap; see the README's own interpret.ts gotcha). Both shapes are accepted here so a hand-built LayoutDocument using genuine LayoutLine items (this module's own test fixtures, or a LayoutDocument from a producer other than readPdf) and a real PDF-round-tripped LayoutDocument both detect identically.
 function extractLineCandidates(items: readonly LayoutItem[]): LineSegment[] {
   const segments: LineSegment[] = [];
   for (const item of items) {
@@ -600,7 +599,7 @@ function extractLineCandidates(items: readonly LayoutItem[]): LineSegment[] {
   return segments;
 }
 
-// Tolerance for treating a segment as exactly horizontal/vertical -- generous enough to absorb the sub-point rounding a real PDF content-stream number format (4 decimal places, src/pdf/serialize.ts) introduces on a round trip, tight enough that a genuinely diagonal line (a chart axis, a decorative rule) is never misread as a gridline.
+// Tolerance for treating a segment as exactly horizontal/vertical -- generous enough to absorb the sub-point rounding a real PDF content-stream number format (4 decimal places, pdf-codec's serialize.ts) introduces on a round trip, tight enough that a genuinely diagonal line (a chart axis, a decorative rule) is never misread as a gridline.
 const AXIS_ALIGNMENT_TOLERANCE_PT = 0.5;
 
 // A stray tick mark or cell-border fragment is not evidence of a page-spanning gridline lattice -- only a segment at least this long is considered a lattice candidate at all.

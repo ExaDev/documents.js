@@ -4,8 +4,8 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    // test/smoke.test.mjs and test/corpus/**/*.test.ts import from ../dist or reference an optional local corpus; both are deliberately outside tsconfig's "src" program (they test built output / are gitignored input) -- see their own top-of-file comments and README.md. scripts/ is a standalone maintenance utility (regenerating a vendored binary asset's base64 embedding), also outside tsconfig's "src" program -- see scripts/generate-math-font-asset.mjs's own header comment.
-    ignores: ['dist', 'coverage', 'node_modules', 'test', 'scripts'],
+    // test/smoke.test.mjs imports from ../dist, deliberately outside tsconfig's "src" program (it tests built output) -- see its own top-of-file comment and README.md. The optional, gitignored real-world PDF conformance corpus (formerly test/corpus/, exercising src/pdf/'s standalone build) moved to pdf-codec alongside the codec it tested.
+    ignores: ['dist', 'coverage', 'node_modules', 'test'],
   },
   {
     // Pin the TSConfig root so the parser isn't confused by stray tsconfig.json files elsewhere in the tree. Required because lint-staged runs eslint at commit time.
@@ -27,7 +27,7 @@ export default tseslint.config(
   },
   {
     rules: {
-      // No type assertions anywhere: narrow with a guard or parse with Zod instead. src/pdf/ narrows third-party-shaped values (raw bytes, loosely-typed parsed tokens) through PdfObject's own `kind` discriminant rather than a cast.
+      // No type assertions anywhere: narrow with a guard or parse with Zod instead. The hand-written PDF codec (now the external pdf-codec dependency, formerly src/pdf/) established this pattern by narrowing third-party-shaped values (raw bytes, loosely-typed parsed tokens) through PdfObject's own `kind` discriminant rather than a cast; every other module in this package follows the same convention.
       '@typescript-eslint/consistent-type-assertions': ['error', { assertionStyle: 'never' }],
       '@typescript-eslint/consistent-type-imports': ['error', { fixStyle: 'inline-type-imports' }],
     },

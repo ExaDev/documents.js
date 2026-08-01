@@ -17,9 +17,8 @@ import type { ContentDocument } from '../model/content';
 import type { Alignment, LayoutFont } from '../model/style';
 import { DEFAULT_LAYOUT_FONT } from '../model/style';
 import { throwIfAborted } from '../ports/abort';
-import type { TextMeasurer } from '../pdf/measure';
-import type { StyledFragment, StyledRun } from '../pdf/text-layout';
-import { wrapRunsToWidth } from '../pdf/text-layout';
+import type { StyledFragment, StyledRun, TextMeasurer } from 'pdf-codec';
+import { wrapRunsToWidth } from 'pdf-codec';
 import { alignmentOffsetPt, lineNaturalHeightPt, sumColumnWidthsPt, toStyledRuns } from './shared';
 
 // ContentDocument (the spreadsheet variant) -> LayoutDocument: ods/xlsx's own layout direction, genuinely distinct from both docx's flow/pagination (engine.ts) and pptx's direct placement (slides.ts). A sheet paginates over TWO axes at once (column bands x row bands, not just rows), print settings (range/scale/fit-to-page/repeat rows-columns/gridlines/headers/page order/manual breaks) drive the page grid directly rather than being ignored the way a docx section's margins alone would be, and cell overflow is bounded per cell (###, spill, truncate) rather than wrapped the way paragraph text is. This is also the first layout algorithm in the package genuinely long-running enough (a real sheet can carry tens of thousands of populated cells) to need cooperative cancellation wired into its own per-cell emission loop, not just checked once at the top of the function the way reconstruct.ts's own page/slide loops do.
@@ -51,7 +50,7 @@ const HEADER_LABEL_SIZE_PT = 8;
 const CELL_TEXT_PADDING_PT = 2;
 const HEADER_LABEL_PADDING_PT = 2;
 
-// A misconfigured page/margin/gutter/repeat-band combination could otherwise leave zero or negative available print area, which would divide the band-partition boundary by zero (or a negative number) computing a descaled boundary -- clamped to a small positive floor so band partitioning always terminates with well-defined positive widths rather than Infinity/NaN geometry, the same "at least make progress on pathological input" reasoning src/pdf/text-layout.ts's own emergency character split documents.
+// A misconfigured page/margin/gutter/repeat-band combination could otherwise leave zero or negative available print area, which would divide the band-partition boundary by zero (or a negative number) computing a descaled boundary -- clamped to a small positive floor so band partitioning always terminates with well-defined positive widths rather than Infinity/NaN geometry, the same "at least make progress on pathological input" reasoning pdf-codec's text-layout.ts's own emergency character split documents.
 const MINIMUM_SCALE = 0.01;
 
 // The literal sentinel spreadsheet applications universally render for a numeric-kind value that doesn't fit its own column -- not a computed fill-to-width run of '#' the way a real spreadsheet UI does, since the task this module implements pins down this exact literal.
@@ -216,7 +215,7 @@ function isCellVisuallyEmpty(cell: ContentSheetCell | undefined): boolean {
   return cell === undefined || (cell.value.kind === 'empty' && cell.displayText.length === 0);
 }
 
-// Truncates a wrapped line's own fragments to fit maxWidthPt, stopping at the fragment that crosses the boundary and character-truncating just that one -- deliberately simpler than src/pdf/text-layout.ts's own (private) splitBoxToWidth: a spreadsheet cell's overflow has no "rest" to requeue onto a following line, since a cell never wraps to a second line for width reasons -- it simply stops rendering at the boundary.
+// Truncates a wrapped line's own fragments to fit maxWidthPt, stopping at the fragment that crosses the boundary and character-truncating just that one -- deliberately simpler than pdf-codec's text-layout.ts's own (private) splitBoxToWidth: a spreadsheet cell's overflow has no "rest" to requeue onto a following line, since a cell never wraps to a second line for width reasons -- it simply stops rendering at the boundary.
 function truncateFragmentsToWidth(fragments: readonly (StyledFragment & { readonly xOffsetPt: number })[], measurer: TextMeasurer, maxWidthPt: number): (StyledFragment & { readonly xOffsetPt: number })[] {
   const result: (StyledFragment & { readonly xOffsetPt: number })[] = [];
   for (const fragment of fragments) {

@@ -9,8 +9,7 @@ import { createPptx, openPptx } from '../edit/pptx/editor';
 import { convertDrawingToLayout } from '../layout/drawing';
 import { readOdgContent } from '../odf/odg/read';
 import { readOdsContent } from '../odf/ods/read';
-import { createStandardFontMeasurer } from '../pdf/measure';
-import { readPdf } from '../pdf/read';
+import { createStandardFontMeasurer, readPdf } from 'pdf-codec';
 import { minimalOdgBytes, minimalOdgPackage } from '../test-support/odg';
 import { chapterOdtBytes, odmBytes, odmPackage } from '../test-support/odm';
 import { minimalOdpBytes } from '../test-support/odp';
@@ -18,7 +17,7 @@ import { gridOdsBytes, minimalOdsBytes } from '../test-support/ods';
 import { minimalOdtBytes } from '../test-support/odt';
 import { docxToPdf, inlineOdmSectionToContentSection, odgToPdf, odmToPdf, OdmUnresolvedSectionError, odpToPdf, odsToPdf, odtToPdf, pdfToDocx, pdfToOdg, pdfToOdp, pdfToOds, pdfToOdt, pdfToPptx, pptxToPdf } from './convert';
 
-// Builds the same intermediate LayoutDocument odgToPdf itself builds internally (readOdgContent -> convertDrawingToLayout), so a test can assert on 'path'/'rect' LayoutItem kinds directly -- readPdf's own content-stream interpreter does not reconstruct 'path'/'line'/'ellipse' items at all (src/pdf/interpret.ts), so round-tripping the fixture's curve/z-order back through readPdf is not possible; this is the direct way to prove them.
+// Builds the same intermediate LayoutDocument odgToPdf itself builds internally (readOdgContent -> convertDrawingToLayout), so a test can assert on 'path'/'rect' LayoutItem kinds directly -- readPdf's own content-stream interpreter does not reconstruct 'path'/'line'/'ellipse' items at all (pdf-codec's interpret.ts), so round-tripping the fixture's curve/z-order back through readPdf is not possible; this is the direct way to prove them.
 function layoutFromMinimalOdg() {
   const content = readOdgContent(decodePackage(minimalOdgBytes()));
   if (content.kind !== 'drawing') {
@@ -176,7 +175,7 @@ describe('odsToPdf', () => {
   });
 
   it('reads print settings (page size, headers) through to the rendered page', () => {
-    // Gridlines aren't asserted here via a round trip through readPdf: readPdf's own content-stream interpreter (src/pdf/interpret.ts) never reconstructs a 'line' kind item at all -- a pre-existing, documented asymmetry of the read direction, not something this change touches. Gridline emission itself (one LayoutLine per boundary) is already covered directly at the layout level by src/layout/sheets.test.ts.
+    // Gridlines aren't asserted here via a round trip through readPdf: readPdf's own content-stream interpreter (pdf-codec's interpret.ts) never reconstructs a 'line' kind item at all -- a pre-existing, documented asymmetry of the read direction, not something this change touches. Gridline emission itself (one LayoutLine per boundary) is already covered directly at the layout level by src/layout/sheets.test.ts.
     const pdfBytes = odsToPdf(minimalOdsBytes());
     const layout = readPdf(pdfBytes);
     expect(layout.pages[0]).toMatchObject({ widthPt: 400, heightPt: 300 });
@@ -398,7 +397,7 @@ describe('pdfToOds', () => {
   });
 });
 
-// Several orders of magnitude looser than any single step's own precision (src/pdf/serialize.ts's formatNumber rounds PDF content-stream operands to 4 decimal places; odf.js's own cm<->pt unit conversion and svg-path.ts's 6-decimal-place svg:d formatting each add their own negligible rounding on top) -- generous enough that a genuine geometry bug, not floating-point/string-formatting noise, is what would actually fail an assertion using it.
+// Several orders of magnitude looser than any single step's own precision (pdf-codec's serialize.ts's formatNumber rounds PDF content-stream operands to 4 decimal places; odf.js's own cm<->pt unit conversion and svg-path.ts's 6-decimal-place svg:d formatting each add their own negligible rounding on top) -- generous enough that a genuine geometry bug, not floating-point/string-formatting noise, is what would actually fail an assertion using it.
 const GEOMETRY_TOLERANCE_PT = 0.01;
 
 function closeTo(a: number, b: number, tolerancePt: number): boolean {
@@ -421,7 +420,7 @@ function vectorBoundingBox(vector: ContentVector): { xPt: number; yPt: number; w
 }
 
 describe('pdfToOdg', () => {
-  // PDF has no native rect/ellipse/line primitive beyond one narrow case: readPdf's own content-stream interpreter (src/pdf/interpret.ts) only recovers a LayoutRect fast path for a FILL-ONLY rectangle under a non-rotated CTM (the exact case the fixture's rectBack/rectFront both are). Everything else here -- Rect1 (filled AND stroked, so it takes the 'B' paint operator, not 'f', and therefore misses the fast path), the ellipse (always written as four cubic Beziers, src/pdf/content-write.ts's writeEllipse -- PDF has no native ellipse operator at all), and the line (readPdf never reconstructs a 'line' kind item at all, a pre-existing, already-documented README gotcha, confirmed here to extend to every LayoutLine, not just the ones ods's own gridlines produce) -- comes back as a generic LayoutPath, and therefore round-trips through reconstructDrawing as a ContentVector 'path', not its original kind. This is a real, pre-existing PDF-READ-side limitation (not something reconstructDrawing itself introduces), and an honest, expected-approximate/exact split: position and size survive within floating-point tolerance for every vector regardless of kind change; the vector's own discriminant kind survives exactly only for a fill-only, unrotated rect, and for anything that was already a generic path (the curve) to begin with. The text label's own frame is approximate too, for an unrelated reason: reconstructDrawing derives it from real AFM ascent/descent metrics (the same estimation reconstructPresentation already uses), not the original ODF frame's own explicit svg:x/y/width/height, which no longer exists anywhere in the recovered PDF geometry.
+  // PDF has no native rect/ellipse/line primitive beyond one narrow case: readPdf's own content-stream interpreter (pdf-codec's interpret.ts) only recovers a LayoutRect fast path for a FILL-ONLY rectangle under a non-rotated CTM (the exact case the fixture's rectBack/rectFront both are). Everything else here -- Rect1 (filled AND stroked, so it takes the 'B' paint operator, not 'f', and therefore misses the fast path), the ellipse (always written as four cubic Beziers, pdf-codec's content-write.ts's writeEllipse -- PDF has no native ellipse operator at all), and the line (readPdf never reconstructs a 'line' kind item at all, a pre-existing, already-documented README gotcha, confirmed here to extend to every LayoutLine, not just the ones ods's own gridlines produce) -- comes back as a generic LayoutPath, and therefore round-trips through reconstructDrawing as a ContentVector 'path', not its original kind. This is a real, pre-existing PDF-READ-side limitation (not something reconstructDrawing itself introduces), and an honest, expected-approximate/exact split: position and size survive within floating-point tolerance for every vector regardless of kind change; the vector's own discriminant kind survives exactly only for a fill-only, unrotated rect, and for anything that was already a generic path (the curve) to begin with. The text label's own frame is approximate too, for an unrelated reason: reconstructDrawing derives it from real AFM ascent/descent metrics (the same estimation reconstructPresentation already uses), not the original ODF frame's own explicit svg:x/y/width/height, which no longer exists anywhere in the recovered PDF geometry.
   it("round-trips the fixture's rect/rect/rect/ellipse/line/path mix and text label through odgToPdf then pdfToOdg, with position/size surviving within tolerance and kind narrowing exactly where PDF forces it to", () => {
     const original = readOdgContent(minimalOdgPackage());
     if (original.kind !== 'drawing') {
@@ -484,7 +483,7 @@ describe('pdfToOdg', () => {
     expect(closeTo(ellipseVectorAfter.fill!.b, ellipseVectorBefore.fill!.b, 0.001)).toBe(true);
     expect(ellipseVectorAfter.subpaths[0]?.closed).toBe(true);
 
-    // The curve specifically must still be a genuine cubic segment, not a straight-line approximation of it -- proving writePath -> readPdf's own general path tracking (src/pdf/interpret.ts) recovers the real curve, not just its endpoints, and reconstructDrawing carries that segment kind straight across.
+    // The curve specifically must still be a genuine cubic segment, not a straight-line approximation of it -- proving writePath -> readPdf's own general path tracking (pdf-codec's interpret.ts) recovers the real curve, not just its endpoints, and reconstructDrawing carries that segment kind straight across.
     const curveVectorAfter = afterVectors[5]!;
     if (curveVectorAfter.kind !== 'path') {
       throw new Error('expected the curve to still be a path');

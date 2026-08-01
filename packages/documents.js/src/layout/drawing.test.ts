@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ContentDrawPage, ContentRun, ContentShape, ContentVector } from 'document-content-model';
 import { CONTENT_FORMAT_VERSION } from '../model/content';
 import type { ContentDocument } from '../model/content';
-import type { TextMeasurer } from '../pdf/measure';
+import type { TextMeasurer } from 'pdf-codec';
 import { convertDrawingToLayout } from './drawing';
 
 const BLACK = { r: 0, g: 0, b: 0 };
