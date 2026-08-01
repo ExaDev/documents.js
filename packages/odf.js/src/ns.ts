@@ -37,6 +37,8 @@ export const ODF_NAMESPACES = Object.freeze({
   xsd: 'http://www.w3.org/2001/XMLSchema',
   xsi: 'http://www.w3.org/2001/XMLSchema-instance',
   manifest: 'urn:oasis:names:tc:opendocument:xmlns:manifest:1.0',
+  // Confirmed against the real OASIS ODF 1.3 RelaxNG schema (docs.oasis-open.org/office/OpenDocument/v1.3/csprd02/schemas/OpenDocument-schema-v1.3.rng), not pattern-matched -- follows the same "...:<name>:1.0" convention as chart:/form:/presentation:, unlike the fo:/svg:/smil: "-compatible" traps above.
+  db: 'urn:oasis:names:tc:opendocument:xmlns:database:1.0',
 }) satisfies Readonly<Record<string, string>>;
 
 export type OdfNamespacePrefix = keyof typeof ODF_NAMESPACES;
