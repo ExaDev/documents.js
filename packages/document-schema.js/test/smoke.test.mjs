@@ -23,7 +23,7 @@ describe('smoke: ESM/CJS parity', () => {
 // Verifies scripts/generate-json-schemas.mjs's own output: the three published .schema.json files (see package.json's "files"/"exports"), generated fresh by `pnpm run build` immediately before this test project runs.
 describe('smoke: generated JSON Schema files', () => {
   const schemasDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'schemas');
-  const SHA_PATTERN = /^[0-9a-f]{40}$/; // a real commit SHA, not a hardcoded specific one -- it changes every commit
+  const packageVersion = JSON.parse(readFileSync(join(schemasDir, '..', 'package.json'), 'utf8')).version;
 
   function readSchema(fileName) {
     return JSON.parse(readFileSync(join(schemasDir, fileName), 'utf8'));
@@ -35,19 +35,16 @@ describe('smoke: generated JSON Schema files', () => {
     }
   });
 
-  it("document-package.schema.json's $id is a commit-SHA-pinned raw GitHub URL, and its content/layout refs share that same SHA", () => {
+  it("document-package.schema.json's $id is a jsdelivr URL pinned to the package's own published version, and its content/layout refs share that same version", () => {
     const documentPackage = readSchema('document-package.schema.json');
-    const idMatch = /^https:\/\/raw\.githubusercontent\.com\/ExaDev\/document-schema\.js\/([0-9a-f]{40})\/schemas\/document-package\.schema\.json$/.exec(
-      documentPackage.$id,
+    expect(documentPackage.$id).toBe(
+      `https://cdn.jsdelivr.net/npm/document-schema.js@${packageVersion}/schemas/document-package.schema.json`,
     );
-    expect(idMatch).not.toBeNull();
-    const sha = idMatch[1];
-    expect(sha).toMatch(SHA_PATTERN);
     expect(documentPackage.properties.content.$ref).toBe(
-      `https://raw.githubusercontent.com/ExaDev/document-schema.js/${sha}/schemas/content-document.schema.json`,
+      `https://cdn.jsdelivr.net/npm/document-schema.js@${packageVersion}/schemas/content-document.schema.json`,
     );
     expect(documentPackage.properties.layout.$ref).toBe(
-      `https://raw.githubusercontent.com/ExaDev/document-schema.js/${sha}/schemas/layout-document.schema.json`,
+      `https://cdn.jsdelivr.net/npm/document-schema.js@${packageVersion}/schemas/layout-document.schema.json`,
     );
     expect(documentPackage.required).toEqual(expect.arrayContaining(['formatVersion', 'content']));
   });
