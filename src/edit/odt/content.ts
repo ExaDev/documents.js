@@ -3,6 +3,7 @@ import type { ContentBlock, ContentParagraph, ContentTable } from 'document-cont
 import type { ContentDocument } from '../../model/content';
 import type { OdtBody } from './editor';
 import { createOdt } from './editor';
+import type { OdtList, OdtListItem } from './list';
 import type { OdtParagraph } from './paragraph';
 import type { OdtTableCell } from './table';
 
@@ -21,15 +22,78 @@ export function buildOdtPackage(content: ContentDocument): Package {
       // A section boundary becomes a page break -- distinct per-section page size/margins isn't modelled by this bridge yet, mirroring buildDocxPackage's own identical single-page-layout scope (createOdt()'s single scaffolded page-layout covers every caller this function currently has).
       editor.body.appendPageBreak();
     }
-    for (const block of section.blocks) {
-      appendBlock(editor.body, block);
-    }
+    appendBlocks(editor.body, section.blocks);
   });
   return editor.toPackage();
 }
 
+// Walks a flat block list, routing maximal consecutive runs of list-member paragraphs (block.list !== undefined, docx's own flat numId/level model -- see paragraph.ts's own DocxParagraph.list) through appendListRun instead of appendBlock, since ODF has no flat paragraph-level list property to set the way buildDocxPackage's own populateParagraph does (see that file's own paragraph.list assignment); a list only exists in ODF as a real text:list/text:list-item tree, so it has to be built as one. Every other block kind is unaffected and still goes through appendBlock one at a time.
+function appendBlocks(body: OdtBody, blocks: readonly ContentBlock[]): void {
+  let i = 0;
+  while (i < blocks.length) {
+    const block = blocks[i];
+    if (block === undefined) {
+      i++;
+      continue;
+    }
+    if (block.kind === 'paragraph' && block.list !== undefined) {
+      const run: ContentParagraph[] = [];
+      while (i < blocks.length) {
+        const candidate = blocks[i];
+        if (candidate?.kind !== 'paragraph' || candidate.list === undefined) {
+          break;
+        }
+        run.push(candidate);
+        i++;
+      }
+      appendListRun(body, run);
+      continue;
+    }
+    appendBlock(body, block);
+    i++;
+  }
+}
+
+// Builds a real nested text:list/text:list-item tree from a flat run of list-member paragraphs, the inverse of odf.js's own readOdt list-reading (src/typed/odt/read.ts's readListItems: each top-level text:list gets a synthetic numId, each level of text:list nesting increments ContentParagraph.list.level by one). A run of consecutive paragraphs sharing the same numId stays in one text:list; a numId change starts a brand-new top-level list, mirroring how a real docx numbering restart looks once flattened into ContentParagraph.list. Level changes within one numId walk a stack of open OdtList levels, descending one level at a time via the most recently added item's own addNestedList() -- ODF has no way to open a nested list except from inside an existing item, so a paragraph whose level jumps more than one deeper than the currently open list in a single step (skipping an intermediate level entirely, something no known real docx producer emits) lands one level shallower than declared rather than fabricating an empty intermediate item to descend through; ascending back towards the top level has no such constraint and always lands exactly on the declared level.
+function appendListRun(body: OdtBody, paragraphs: readonly ContentParagraph[]): void {
+  let stack: OdtList[] = [];
+  let lastItem: OdtListItem | undefined;
+  let activeNumId: string | undefined;
+
+  for (const para of paragraphs) {
+    const membership = para.list;
+    if (membership === undefined) {
+      continue; // unreachable given the caller's own filter -- narrows the type for the reads below.
+    }
+    if (activeNumId === undefined || membership.numId !== activeNumId) {
+      stack = [body.appendList()];
+      lastItem = undefined;
+      activeNumId = membership.numId;
+    }
+    // The first item of a fresh list has no item to nest under yet, so it always starts at level 0 regardless of its own declared level -- matches the "cannot skip an intermediate level" bound this function's own top comment documents.
+    const targetLevel = lastItem === undefined ? 0 : membership.level;
+    while (stack.length - 1 < targetLevel && lastItem !== undefined) {
+      stack.push(lastItem.addNestedList());
+      lastItem = undefined;
+    }
+    while (stack.length - 1 > targetLevel) {
+      stack.pop();
+    }
+    const currentList = stack[stack.length - 1];
+    if (currentList === undefined) {
+      continue; // unreachable: stack always holds at least one list once activeNumId is set.
+    }
+    const item = currentList.addItem();
+    populateParagraph(item.appendParagraph(), para);
+    lastItem = item;
+  }
+}
+
 // Exported so src/edit/odp/content.ts's own buildOdpPackage can reuse this exact resolve-alignment-then-append-styled-runs logic for a presentation shape's own paragraphs -- a draw:frame's draw:text-box holds the identical text:p/text:span content model office:text does, interned into the identical content.xml StyleRegistry (see src/edit/odt/props.ts), so there is no presentation-specific variant of this function to write.
 export function populateParagraph(paragraph: OdtParagraph, block: ContentParagraph): void {
+  if (block.styleId !== undefined) {
+    paragraph.styleId = block.styleId;
+  }
   if (block.alignment !== undefined) {
     paragraph.alignment = block.alignment;
   }
