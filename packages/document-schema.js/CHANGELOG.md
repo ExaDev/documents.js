@@ -1,3 +1,10 @@
+## [1.6.1](https://github.com/ExaDev/document-schema.js/compare/v1.6.0...v1.6.1) (2026-08-01)
+
+
+### Bug Fixes
+
+* pin JSON Schema $id to jsdelivr npm version, not commit SHA ([c51e240](https://github.com/ExaDev/document-schema.js/commit/c51e2401178b8a890a4fc2c2fab2590e55743731))
+
 # [1.6.0](https://github.com/ExaDev/document-schema.js/compare/v1.5.3...v1.6.0) (2026-08-01)
 
 
