@@ -1,4 +1,4 @@
-// Named unit constants and conversions between OOXML's measurement units and PDF points (1/72 inch), the single unit LayoutDocument (document-content-model's own src/layout.ts) uses throughout.
+// Named unit constants and conversions between OOXML's measurement units and PDF points (1/72 inch), the single unit LayoutDocument (document-schema.js's own src/layout.ts) uses throughout.
 
 export const POINTS_PER_INCH = 72;
 export const EMU_PER_INCH = 914_400;

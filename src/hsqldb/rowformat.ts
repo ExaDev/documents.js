@@ -37,7 +37,7 @@ const SQL_TYPE_NAME_TO_CODE: Readonly<Record<string, number>> = {
   BIGINT: -5,
 };
 
-// Column types RowInputBase.readData genuinely supports but ContentCellValue has no matching kind for at all (no binary/blob/object kind anywhere in document-content-model's cell-value union) -- named here so resolveHsqldbTypeCode fails with a specific, honest diagnosis rather than the generic "unrecognised type" message a plain lookup miss would give.
+// Column types RowInputBase.readData genuinely supports but ContentCellValue has no matching kind for at all (no binary/blob/object kind anywhere in document-schema.js's cell-value union) -- named here so resolveHsqldbTypeCode fails with a specific, honest diagnosis rather than the generic "unrecognised type" message a plain lookup miss would give.
 const UNSUPPORTED_SQL_TYPE_NAMES: ReadonlySet<string> = new Set(['BINARY', 'VARBINARY', 'LONGVARBINARY', 'OTHER', 'OBJECT']);
 
 const LEADING_WORD_RE = /^([A-Za-z_][A-Za-z0-9_]*)/;
@@ -49,7 +49,7 @@ export function resolveHsqldbTypeCode(declaredType: string): number {
     throw new HsqldbRowFormatError(`cannot resolve a SQL type name from column type clause "${declaredType}"`);
   }
   if (UNSUPPORTED_SQL_TYPE_NAMES.has(word)) {
-    throw new HsqldbRowFormatError(`column type "${word}" has no document-content-model ContentCellValue equivalent (binary/object column types are not representable) -- from declared type "${declaredType}"`);
+    throw new HsqldbRowFormatError(`column type "${word}" has no document-schema.js ContentCellValue equivalent (binary/object column types are not representable) -- from declared type "${declaredType}"`);
   }
   const code = SQL_TYPE_NAME_TO_CODE[word];
   if (code === undefined) {

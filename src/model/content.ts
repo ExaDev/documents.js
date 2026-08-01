@@ -4,7 +4,7 @@ import { ContentDrawPageSchema, ContentSectionSchema, ContentSheetSchema, Conten
 // Bumped whenever ContentDocumentSchema's shape changes incompatibly.
 export const CONTENT_FORMAT_VERSION = 1;
 
-// ContentDocument is the top-level envelope this package's own conversion pipeline reads and writes; everything it wraps (ContentSection, ContentSlide, ContentSheet, ContentDrawPage, and the full ContentBlock vocabulary beneath them) now lives in document-content-model, the sibling schema package shared with ooxml.js. The envelope itself stays here rather than moving too, since documents.js owns its own CONTENT_FORMAT_VERSION independent of document-content-model's own versioning. The 'spreadsheet' and 'drawing' variants each mirror document-content-model's own ContentDocumentSchema union member exactly (a sheets array of ContentSheet; a pages array of ContentDrawPage).
+// ContentDocument is the top-level envelope this package's own conversion pipeline reads and writes; everything it wraps (ContentSection, ContentSlide, ContentSheet, ContentDrawPage, and the full ContentBlock vocabulary beneath them) now lives in document-schema.js, the sibling schema package shared with ooxml.js. The envelope itself stays here rather than moving too, since documents.js owns its own CONTENT_FORMAT_VERSION independent of document-schema.js's own versioning. The 'spreadsheet' and 'drawing' variants each mirror document-schema.js's own ContentDocumentSchema union member exactly (a sheets array of ContentSheet; a pages array of ContentDrawPage).
 export const ContentDocumentSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('wordprocessing'),

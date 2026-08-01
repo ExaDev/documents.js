@@ -1,4 +1,4 @@
-// A local, structurally-compatible mirror of document-content-model's own Color (r/g/b, 0..1) -- deliberately not imported, for the same "zero dependency" reason nodes.ts mirrors odf.js's XmlNode rather than importing it: passing document-content-model's own COLOR_BLACK (or any Color value) into a MathColor-typed field type-checks with no cast, since the shapes are identical.
+// A local, structurally-compatible mirror of document-schema.js's own Color (r/g/b, 0..1) -- deliberately not imported, for the same "zero dependency" reason nodes.ts mirrors odf.js's XmlNode rather than importing it: passing document-schema.js's own COLOR_BLACK (or any Color value) into a MathColor-typed field type-checks with no cast, since the shapes are identical.
 export interface MathColor {
   readonly r: number;
   readonly g: number;

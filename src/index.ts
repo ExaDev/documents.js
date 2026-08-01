@@ -68,7 +68,7 @@ export {
   zipPackage,
 } from 'ooxml.js';
 
-// --- The semantic content model: one read+write-capable model for both docx and pptx, instead of ooxml.js's two one-way, lossy, format-specific typed readers. The full vocabulary (ContentBlock and everything beneath it) is sourced from document-content-model, the sibling schema package shared with ooxml.js; only the ContentDocument envelope itself (and its own CONTENT_FORMAT_VERSION) stays local to this package -- see src/model/content.ts. ---
+// --- The semantic content model: one read+write-capable model for both docx and pptx, instead of ooxml.js's two one-way, lossy, format-specific typed readers. The full vocabulary (ContentBlock and everything beneath it) is sourced from document-schema.js, the sibling schema package shared with ooxml.js; only the ContentDocument envelope itself (and its own CONTENT_FORMAT_VERSION) stays local to this package -- see src/model/content.ts. ---
 export type {
   ContentBlock,
   ContentCellValue,
@@ -129,7 +129,7 @@ export {
 export type { ContentDocument } from './model/content';
 export { CONTENT_FORMAT_VERSION, ContentDocumentSchema } from './model/content';
 
-// --- The PDF-side pivot model, also sourced from document-content-model. ---
+// --- The PDF-side pivot model, also sourced from document-schema.js. ---
 export type { LayoutDocument, LayoutEllipse, LayoutImage, LayoutImageAsset, LayoutItem, LayoutLine, LayoutLink, LayoutMetadata, LayoutPage, LayoutPath, LayoutPathSegment, LayoutRect, LayoutSubpath, LayoutText } from 'document-schema.js';
 export { LAYOUT_FORMAT_VERSION } from 'document-schema.js';
 
