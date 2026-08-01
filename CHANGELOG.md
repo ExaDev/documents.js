@@ -1,3 +1,15 @@
+# [1.49.0](https://github.com/ExaDev/documents.js/compare/v1.48.0...v1.49.0) (2026-08-01)
+
+
+### Bug Fixes
+
+* write paragraph list membership and styleId back through buildDocxPackage/buildOdtPackage ([df6d549](https://github.com/ExaDev/documents.js/commit/df6d549a86e728dd02abce94c7d5931f865dca1e))
+
+
+### Features
+
+* add cross-format bridges (odt<->docx, odp<->pptx, ods<->xlsx) bypassing PDF ([4a1e42f](https://github.com/ExaDev/documents.js/commit/4a1e42f09b48e92949cc7d30ad8fdb6111a6c2f1))
+
 # [1.48.0](https://github.com/ExaDev/documents.js/compare/v1.47.0...v1.48.0) (2026-08-01)
 
 
