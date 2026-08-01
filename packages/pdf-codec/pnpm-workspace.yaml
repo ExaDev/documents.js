@@ -1,1 +1,3 @@
 minimumReleaseAge: 60
+minimumReleaseAgeExclude:
+  - document-schema.js

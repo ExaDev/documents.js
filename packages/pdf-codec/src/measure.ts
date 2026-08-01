@@ -1,4 +1,4 @@
-import type { LayoutFont } from 'document-content-model';
+import type { LayoutFont } from 'document-schema.js';
 import { STANDARD_METRICS } from './afm-widths';
 import { resolveStandardFont } from './fonts';
 import { encodeForShow } from './winansi';

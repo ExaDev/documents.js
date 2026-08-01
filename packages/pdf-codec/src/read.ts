@@ -1,9 +1,9 @@
 import { bytesToBase64 } from './util/base64';
 import { crc32 } from './bytes/crc32';
 import { concatBytes } from './bytes/writer';
-import type { LayoutDocument, LayoutImageAsset, LayoutItem, LayoutLink, LayoutMetadata, LayoutPage, LayoutPath, LayoutPathSegment, LayoutRect, LayoutSubpath, LayoutText } from 'document-content-model';
-import { LAYOUT_FORMAT_VERSION } from 'document-content-model';
-import type { LayoutFont } from 'document-content-model';
+import type { LayoutDocument, LayoutImageAsset, LayoutItem, LayoutLink, LayoutMetadata, LayoutPage, LayoutPath, LayoutPathSegment, LayoutRect, LayoutSubpath, LayoutText } from 'document-schema.js';
+import { LAYOUT_FORMAT_VERSION } from 'document-schema.js';
+import type { LayoutFont } from 'document-schema.js';
 import { openPdfDocument } from './document';
 import type { PdfDiagnosticSink } from './diagnostics';
 import { NOOP_DIAGNOSTIC_SINK, PdfParseError } from './diagnostics';

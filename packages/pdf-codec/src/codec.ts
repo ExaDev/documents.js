@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { LayoutDocumentSchema } from 'document-content-model';
+import { LayoutDocumentSchema } from 'document-schema.js';
 import { readPdf } from './read';
 import { writePdf } from './write';
 

@@ -1,5 +1,5 @@
-import type { Color as LayoutColor } from 'document-content-model';
-import type { LayoutFont } from 'document-content-model';
+import type { Color as LayoutColor } from 'document-schema.js';
+import type { LayoutFont } from 'document-schema.js';
 import type { TextMeasurer } from './measure';
 
 export interface StyledRun {

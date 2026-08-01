@@ -1,6 +1,6 @@
-import type { LayoutEllipse, LayoutImage, LayoutItem, LayoutLine, LayoutPath, LayoutRect, LayoutSubpath, LayoutText } from 'document-content-model';
-import type { Color as LayoutColor } from 'document-content-model';
-import type { LayoutFont } from 'document-content-model';
+import type { LayoutEllipse, LayoutImage, LayoutItem, LayoutLine, LayoutPath, LayoutRect, LayoutSubpath, LayoutText } from 'document-schema.js';
+import type { Color as LayoutColor } from 'document-schema.js';
+import type { LayoutFont } from 'document-schema.js';
 import type { StandardFontName } from './afm-widths';
 import { ByteWriter } from './bytes/writer';
 import type { Matrix } from './matrix';

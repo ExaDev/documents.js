@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { LayoutEllipse, LayoutImage, LayoutLine, LayoutLink, LayoutRect, LayoutText } from 'document-content-model';
+import type { LayoutEllipse, LayoutImage, LayoutLine, LayoutLink, LayoutRect, LayoutText } from 'document-schema.js';
 import type { ContentWriteContext } from './content-write';
 import { writeContentStream } from './content-write';
 import type { TextMeasurer } from './measure';

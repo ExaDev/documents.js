@@ -1,4 +1,4 @@
-import { COLOR_BLACK, type Color as LayoutColor } from 'document-content-model';
+import { COLOR_BLACK, type Color as LayoutColor } from 'document-schema.js';
 import { decodeStream } from './filters';
 import type { Matrix, Point } from './matrix';
 import { IDENTITY_MATRIX, applyMatrix, multiplyMatrices, translationMatrix } from './matrix';
