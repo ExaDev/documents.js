@@ -135,6 +135,13 @@ describe('writeContentStream: ellipse', () => {
     expect(text.trim().endsWith('f')).toBe(true);
   });
 
+  // The four arcs already return exactly to the starting point, so this `h` draws no additional ink -- but it does mark the subpath explicitly closed, which readPdf's own general path tracking (interpret.ts) needs to see in order to recover a filled ellipse as a closed (and therefore fillable, per real ODF/SVG consumers) subpath rather than an open one -- see this function's own top-of-file note.
+  it('emits an explicit h (closepath) before the paint operator, even though the curves already return to their own start point', () => {
+    const item: LayoutEllipse = { kind: 'ellipse', xPt: 0, yPt: 0, widthPt: 10, heightPt: 10, fill: RED, stroke: { color: BLACK, widthPt: 1 } };
+    const text = decode(writeContentStream([item], fakeContext()).bytes);
+    expect(text).toContain('h\nB\n');
+  });
+
   it('skips an ellipse with neither fill nor stroke', () => {
     const item: LayoutEllipse = { kind: 'ellipse', xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 };
     const bytes = writeContentStream([item], fakeContext()).bytes;
