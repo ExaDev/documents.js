@@ -2,7 +2,7 @@
 //
 // This file is the single highest-risk correctness point in the whole pdf-codec extraction: any field drift between this copy and documents.js's own src/mathml/layout-types.ts + src/mathml/metrics.ts breaks silently at documents.js's own call sites (a TS error there, not a failing test here). Cross-reference both files whenever either changes.
 
-// A local, structurally-compatible mirror of document-content-model's own Color (r/g/b, 0..1) -- deliberately not imported, for the same "zero dependency" reason documented above: passing document-content-model's own COLOR_BLACK (or any Color value) into a MathColor-typed field type-checks with no cast, since the shapes are identical.
+// A local, structurally-compatible mirror of document-schema.js's own Color (r/g/b, 0..1) -- deliberately not imported, for the same "zero dependency" reason documented above: passing document-schema.js's own COLOR_BLACK (or any Color value) into a MathColor-typed field type-checks with no cast, since the shapes are identical.
 export interface MathColor {
   readonly r: number;
   readonly g: number;

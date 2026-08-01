@@ -10,7 +10,7 @@ export interface StyledRun {
   readonly underline?: boolean;
   // An external URI, carried through atomisation/wrapping unchanged so a caller (src/layout/slides.ts) can emit a LayoutLink covering each wrapped fragment's own position -- text-layout.ts itself never interprets this, purely a pass-through field.
   readonly hyperlink?: string;
-  // The originating ContentRun's own sourcePath (see document-content-model), carried through atomisation/wrapping unchanged so a caller can stamp it onto every LayoutText/LayoutLink fragment this run produces -- text-layout.ts itself never interprets this, purely a pass-through field. When one run's word is split across a line-wrap boundary or an emergency character-level split, every resulting fragment keeps this same value: the path identifies the source run, not the specific wrapped piece.
+  // The originating ContentRun's own sourcePath (see document-schema.js), carried through atomisation/wrapping unchanged so a caller can stamp it onto every LayoutText/LayoutLink fragment this run produces -- text-layout.ts itself never interprets this, purely a pass-through field. When one run's word is split across a line-wrap boundary or an emergency character-level split, every resulting fragment keeps this same value: the path identifies the source run, not the specific wrapped piece.
   readonly sourcePath?: string;
 }
 

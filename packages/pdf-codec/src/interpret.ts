@@ -30,7 +30,7 @@ export interface ExtractedRect {
   readonly color: LayoutColor;
 }
 
-// One line or cubic-Bezier segment of a subpath, device-space (CTM-applied, not yet page-matrix-applied -- matching ExtractedRect's own convention), mirroring document-content-model's LayoutPathSegment shape exactly so read.ts's conversion is a pure per-point transform.
+// One line or cubic-Bezier segment of a subpath, device-space (CTM-applied, not yet page-matrix-applied -- matching ExtractedRect's own convention), mirroring document-schema.js's LayoutPathSegment shape exactly so read.ts's conversion is a pure per-point transform.
 export type ExtractedPathSegment =
   | { readonly kind: 'line'; readonly xPt: number; readonly yPt: number }
   | { readonly kind: 'cubic'; readonly c1xPt: number; readonly c1yPt: number; readonly c2xPt: number; readonly c2yPt: number; readonly xPt: number; readonly yPt: number };
