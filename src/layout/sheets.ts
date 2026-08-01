@@ -525,6 +525,7 @@ function convertSheetToPages(sheet: ContentSheet, measurer: TextMeasurer, signal
   }
 }
 
+// ContentSheet.embeddedObjects (an objectKind: 'formula' entry among them would be this module's own equivalent of engine.ts's/slides.ts's formula-rendering branch) is never populated by odf.js's own readOds, unlike readOdt's/readOdp's readers -- readOds has no floating-drawing/anchor-resolution mechanism at all yet (ContentSheetImage is an identical, pre-existing, already-documented gap on the write side -- see buildOdsPackage's own module comment in src/edit/ods/content.ts), so there is no `draw:frame` scan this module could even attach a formula-detection pass to the way src/odf/odt/read.ts's and src/odf/odp/read.ts's own detectEmbeddedFormulaFrames do. An embedded formula inside an ods sheet consequently does not render as MathML today -- a real, tracked, bounded gap inherited from upstream, not one this module introduces.
 export function convertSpreadsheetToLayout(doc: SpreadsheetContentDocument, options: SheetsLayoutOptions): LayoutDocument {
   const pages: LayoutPage[] = [];
   for (const sheet of doc.sheets) {
