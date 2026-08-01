@@ -231,6 +231,10 @@ export { docxToOdt, odpToPptx, odsToXlsx, odtToDocx, pptxToOdp, xlsxToOds } from
 // Schema-validated z.codec() pairs over the six bridges above (odt bytes <-> docx bytes, odp bytes <-> pptx bytes, ods bytes <-> xlsx bytes), the no-extra-options form -- use odtToDocx/docxToOdt/odpToPptx/pptxToOdp/odsToXlsx/xlsxToOds directly for cancellation.
 export { odpPptxCodec, odsXlsxCodec, odtDocxCodec } from './convert/codec';
 
+// --- odm (ODF master document, multiple chapters) -> PDF, the one conversion in this package shaped differently from every other: a .odm's chapters are external references (odf.js's readOdm never inlines them -- see odmToPdf's own module comment), so producing a PDF needs a caller-supplied resolveSubDocument callback to hand back each chapter's own .odt bytes. Not part of the twelve-conversion or six-bridge groups above, and not wired into the DocumentConverter port below -- see odmToPdf's own module comment for why. ---
+export type { OdmToPdfOptions } from './convert/convert';
+export { odmToPdf, OdmUnresolvedSectionError } from './convert/convert';
+
 // --- The swappable conversion port, for a caller that wants to inject a different (e.g. remote) implementation later without changing call sites. ---
 export type { ConversionRequest, ConversionResult, Diagnostic, DocumentConverter, DocumentFormat, DocumentPayload } from './convert/port';
 export { createLocalDocumentConverter } from './convert/local';
