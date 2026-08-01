@@ -1,6 +1,9 @@
+import type { ContentSheetPrintSettings } from 'document-content-model';
 import type { XmlElement } from 'odf.js';
 import { describe, expect, it } from 'vitest';
-import { createOds } from './editor';
+import { PAGE_SIZE_A4 } from '../../model/geometry';
+import { readOdsContent } from '../../odf/ods/read';
+import { createOds, openOds } from './editor';
 
 function directChild(parent: XmlElement, tag: string): XmlElement | undefined {
   return parent.children.find((c): c is XmlElement => c.type === 'element' && c.tag === tag);
@@ -108,6 +111,64 @@ describe('OdsSheet.mergeCells', () => {
     sheet.mergeCells(0, 0, 100, 100); // 10,000 covered positions, each stamped individually -- see mergeCells' own doc comment on why this is O(area), not O(1).
     const elapsedMs = performance.now() - start;
     expect(elapsedMs).toBeLessThan(5000);
+  });
+});
+
+const CUSTOM_PRINT_SETTINGS: ContentSheetPrintSettings = {
+  pageSize: { widthPt: 400, heightPt: 300 },
+  margins: { topPt: 10, rightPt: 20, bottomPt: 30, leftPt: 40 },
+  gridlines: true,
+  headers: true,
+  pageOrder: 'overThenDown',
+};
+
+describe('OdsSheet.printSettings', () => {
+  it('get returns the scaffold\'s own real defaults before any set (A4, no gridlines/headers, downThenOver)', () => {
+    const sheet = createOds().sheets()[0]!;
+    expect(sheet.printSettings).toMatchObject({ pageSize: PAGE_SIZE_A4, gridlines: false, headers: false, pageOrder: 'downThenOver' });
+  });
+
+  it('set then get round-trips every field through the live in-memory view', () => {
+    const sheet = createOds().sheets()[0]!;
+    sheet.printSettings = CUSTOM_PRINT_SETTINGS;
+    expect(sheet.printSettings).toEqual(CUSTOM_PRINT_SETTINGS);
+  });
+
+  it('setting one sheet\'s printSettings does not perturb another sheet\'s own', () => {
+    const editor = createOds();
+    const sheetA = editor.sheets()[0]!;
+    const sheetB = editor.addSheet('Second');
+    sheetA.printSettings = CUSTOM_PRINT_SETTINGS;
+    expect(sheetB.printSettings).toMatchObject({ gridlines: false, headers: false, pageOrder: 'downThenOver' });
+  });
+
+  it('mints a fresh style:page-layout/style:master-page/style:style[family="table"] triple on every set, repointing table:style-name rather than mutating whatever the sheet was pointing at before', () => {
+    const editor = createOds();
+    const sheet = editor.sheets()[0]!;
+    sheet.printSettings = CUSTOM_PRINT_SETTINGS;
+    const firstTableStyleName = findTableElement(editor).attributes.find((a) => a.name === 'table:style-name')?.value;
+    sheet.printSettings = { ...CUSTOM_PRINT_SETTINGS, gridlines: false };
+    const secondTableStyleName = findTableElement(editor).attributes.find((a) => a.name === 'table:style-name')?.value;
+    expect(firstTableStyleName).toBeDefined();
+    expect(secondTableStyleName).toBeDefined();
+    expect(secondTableStyleName).not.toBe(firstTableStyleName); // a genuinely different style was minted, not the first one mutated in place
+    expect(sheet.printSettings.gridlines).toBe(false); // the SECOND set's own value is what's actually in effect
+  });
+
+  // Re-reads the ACTUAL SERIALIZED BYTES via odf.js's own real readOds parser (readOdsContent is a thin wrapper over it), not this package's own writer echoing its input back -- proves the page-layout/master-page/table-style chain writeSheetPrintSettings mints is genuinely valid, spec-shaped ODF, not merely an in-memory object this editor's own getter happens to read back correctly.
+  it('a set printSettings survives a real write -> reread round trip via odf.js\'s own readOds parser', () => {
+    const editor = createOds();
+    editor.sheets()[0]!.printSettings = CUSTOM_PRINT_SETTINGS;
+    const bytes = editor.toBytes();
+
+    const reopened = openOds(bytes).sheets()[0]!;
+    expect(reopened.printSettings).toEqual(CUSTOM_PRINT_SETTINGS);
+
+    const content = readOdsContent(openOds(bytes).toPackage());
+    if (content.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    expect(content.sheets[0]!.printSettings).toEqual(CUSTOM_PRINT_SETTINGS);
   });
 });
 
