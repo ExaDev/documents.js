@@ -37,6 +37,7 @@ const FUNCTIONS = [
   'openOdg',
   'createOdg',
   'buildOdgPackage',
+  'pdfToOdg',
   'createLocalDocumentConverter',
 ];
 
@@ -203,9 +204,9 @@ describe('dist/ end-to-end: odpToPdf then pdfToOdp, from the CJS build', () => {
   });
 });
 
-// There is no pdfToOdg yet (see src/convert/convert.ts's own module doc), so unlike the odp block above this cannot round-trip all the way back to odg -- it instead proves cjs.createOdg()'s live-view editor (page-level add/remove, addRect/addEllipse/addLine/addPath, and reused OdpShape text boxes) reaches the built dist/ artifact and produces a genuinely renderable drawing, by feeding the freshly built odg bytes through odgToPdf and confirming both the vector geometry and the text survive into the rendered PDF; buildOdgPackage is exercised directly too (not just re-exported), proving the standalone ContentDocument -> odg bridge also reaches dist/.
-describe('dist/ end-to-end: odg live-view editor, from the CJS build', () => {
-  it('builds a drawing via cjs.createOdg() (a curved path, a filled rect, a text label), converts it to PDF, and renders correctly', () => {
+// pdfToOdg now exists, so unlike the pre-round-trip version of this test, this closes the full loop: cjs.createOdg()'s live-view editor (page-level add/remove, addRect/addEllipse/addLine/addPath, and reused OdpShape text boxes) reaches the built dist/ artifact and produces a genuinely renderable drawing, which is then fed through odgToPdf, back through pdfToOdg, and reopened -- proving reconstructDrawing itself reaches dist/, not just readPdf's own general path tracking. Mirrors the odpToPdf-then-pdfToOdp block above exactly.
+describe('dist/ end-to-end: odg live-view editor, odgToPdf then pdfToOdg, from the CJS build', () => {
+  it('builds a drawing via cjs.createOdg() (a filled rect, a curved path, a text label), round-trips it through PDF, and reopens it', () => {
     const editor = cjs.createOdg();
     const page = editor.addPage();
     page.addRect({ frame: { xPt: 20, yPt: 20, widthPt: 80, heightPt: 60 }, fill: { r: 1, g: 0, b: 0 } });
@@ -230,7 +231,6 @@ describe('dist/ end-to-end: odg live-view editor, from the CJS build', () => {
     expect(pdfBytes.length).toBeGreaterThan(0);
     expect(new TextDecoder('latin1').decode(pdfBytes.subarray(0, 5))).toBe('%PDF-');
 
-    // readPdf's own content-stream interpreter does not track general path construction operators yet (only the specific `re` rectangle operator -- see the README's own pdfToOds/pdfToOdg gotcha), so the curved path written above is NOT expected to come back as a 'path' LayoutItem on read -- only the rect and the text are checked here, the same scope the odgToPdf smoke test above already exercises.
     const layout = cjs.readPdf(pdfBytes);
     const items = layout.pages[0]?.items ?? [];
     expect(items.some((item) => item.kind === 'rect')).toBe(true);
@@ -246,5 +246,17 @@ describe('dist/ end-to-end: odg live-view editor, from the CJS build', () => {
     const rebuiltPkg = cjs.buildOdgPackage(content);
     const rebuilt = new cjs.OdgEditor(rebuiltPkg);
     expect(rebuilt.pages()).toHaveLength(1);
+
+    // pdfToOdg, closing the loop: reconstructDrawing (src/layout/reconstruct.ts) recovers the rect and the text label from the rendered PDF's own geometry and reassembles them into a fresh, real odg package via buildOdgPackage -- reachable from the built dist/ artifact, not just from src/ under vitest.
+    const roundTrippedOdgBytes = cjs.pdfToOdg(pdfBytes);
+    expect(roundTrippedOdgBytes.length).toBeGreaterThan(0);
+    const roundTripped = cjs.openOdg(roundTrippedOdgBytes);
+    const roundTrippedText = roundTripped
+      .pages()
+      .flatMap((p) => p.shapes())
+      .map((s) => s.text)
+      .join(' ');
+    expect(roundTrippedText).toContain('Hello');
+    expect(roundTrippedText).toContain('smoke');
   });
 });

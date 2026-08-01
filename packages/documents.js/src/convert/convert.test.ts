@@ -1,4 +1,4 @@
-import type { LayoutItem, LayoutPath, LayoutRect, LayoutText } from 'document-content-model';
+import type { ContentVector, LayoutItem, LayoutPath, LayoutRect, LayoutText } from 'document-content-model';
 import { decodePackage } from 'odf.js';
 import { describe, expect, it } from 'vitest';
 import { createDocx, openDocx } from '../edit/docx/editor';
@@ -9,11 +9,11 @@ import { convertDrawingToLayout } from '../layout/drawing';
 import { readOdgContent } from '../odf/odg/read';
 import { createStandardFontMeasurer } from '../pdf/measure';
 import { readPdf } from '../pdf/read';
-import { minimalOdgBytes } from '../test-support/odg';
+import { minimalOdgBytes, minimalOdgPackage } from '../test-support/odg';
 import { minimalOdpBytes } from '../test-support/odp';
 import { minimalOdsBytes } from '../test-support/ods';
 import { minimalOdtBytes } from '../test-support/odt';
-import { docxToPdf, odgToPdf, odpToPdf, odsToPdf, odtToPdf, pdfToDocx, pdfToOdp, pdfToOdt, pdfToPptx, pptxToPdf } from './convert';
+import { docxToPdf, odgToPdf, odpToPdf, odsToPdf, odtToPdf, pdfToDocx, pdfToOdg, pdfToOdp, pdfToOdt, pdfToPptx, pptxToPdf } from './convert';
 
 // Builds the same intermediate LayoutDocument odgToPdf itself builds internally (readOdgContent -> convertDrawingToLayout), so a test can assert on 'path'/'rect' LayoutItem kinds directly -- readPdf's own content-stream interpreter does not reconstruct 'path'/'line'/'ellipse' items at all (src/pdf/interpret.ts), so round-tripping the fixture's curve/z-order back through readPdf is not possible; this is the direct way to prove them.
 function layoutFromMinimalOdg() {
@@ -326,6 +326,123 @@ describe('pdfToOdp', () => {
     const roundTripped = openOdp(odpBytes);
 
     expect(roundTripped.slides()[0]?.notes).toBe('These are the speaker notes for this slide');
+  });
+});
+
+// Several orders of magnitude looser than any single step's own precision (src/pdf/serialize.ts's formatNumber rounds PDF content-stream operands to 4 decimal places; odf.js's own cm<->pt unit conversion and svg-path.ts's 6-decimal-place svg:d formatting each add their own negligible rounding on top) -- generous enough that a genuine geometry bug, not floating-point/string-formatting noise, is what would actually fail an assertion using it.
+const GEOMETRY_TOLERANCE_PT = 0.01;
+
+function closeTo(a: number, b: number, tolerancePt: number): boolean {
+  return Math.abs(a - b) <= tolerancePt;
+}
+
+function expectBoxClose(actual: { xPt: number; yPt: number; widthPt: number; heightPt: number }, expected: { xPt: number; yPt: number; widthPt: number; heightPt: number }): void {
+  expect(closeTo(actual.xPt, expected.xPt, GEOMETRY_TOLERANCE_PT)).toBe(true);
+  expect(closeTo(actual.yPt, expected.yPt, GEOMETRY_TOLERANCE_PT)).toBe(true);
+  expect(closeTo(actual.widthPt, expected.widthPt, GEOMETRY_TOLERANCE_PT)).toBe(true);
+  expect(closeTo(actual.heightPt, expected.heightPt, GEOMETRY_TOLERANCE_PT)).toBe(true);
+}
+
+// A uniform bounding box for any ContentVector kind, so a 'rect'/'ellipse'/'path' (frame-carrying) and a 'line' (from/to-carrying) compare on the same footing -- needed here specifically because PDF's own content-stream operators force several vector kinds to collapse to 'path' on the way back through readPdf (see the pdfToOdg test's own note below), so comparing frame-to-frame directly would not type-check, let alone compare the right thing, once the kind itself has changed.
+function vectorBoundingBox(vector: ContentVector): { xPt: number; yPt: number; widthPt: number; heightPt: number } {
+  if (vector.kind === 'line') {
+    return { xPt: Math.min(vector.from.xPt, vector.to.xPt), yPt: Math.min(vector.from.yPt, vector.to.yPt), widthPt: Math.abs(vector.to.xPt - vector.from.xPt), heightPt: Math.abs(vector.to.yPt - vector.from.yPt) };
+  }
+  return vector.frame;
+}
+
+describe('pdfToOdg', () => {
+  // PDF has no native rect/ellipse/line primitive beyond one narrow case: readPdf's own content-stream interpreter (src/pdf/interpret.ts) only recovers a LayoutRect fast path for a FILL-ONLY rectangle under a non-rotated CTM (the exact case the fixture's rectBack/rectFront both are). Everything else here -- Rect1 (filled AND stroked, so it takes the 'B' paint operator, not 'f', and therefore misses the fast path), the ellipse (always written as four cubic Beziers, src/pdf/content-write.ts's writeEllipse -- PDF has no native ellipse operator at all), and the line (readPdf never reconstructs a 'line' kind item at all, a pre-existing, already-documented README gotcha, confirmed here to extend to every LayoutLine, not just the ones ods's own gridlines produce) -- comes back as a generic LayoutPath, and therefore round-trips through reconstructDrawing as a ContentVector 'path', not its original kind. This is a real, pre-existing PDF-READ-side limitation (not something reconstructDrawing itself introduces), and an honest, expected-approximate/exact split: position and size survive within floating-point tolerance for every vector regardless of kind change; the vector's own discriminant kind survives exactly only for a fill-only, unrotated rect, and for anything that was already a generic path (the curve) to begin with. The text label's own frame is approximate too, for an unrelated reason: reconstructDrawing derives it from real AFM ascent/descent metrics (the same estimation reconstructPresentation already uses), not the original ODF frame's own explicit svg:x/y/width/height, which no longer exists anywhere in the recovered PDF geometry.
+  it("round-trips the fixture's rect/rect/rect/ellipse/line/path mix and text label through odgToPdf then pdfToOdg, with position/size surviving within tolerance and kind narrowing exactly where PDF forces it to", () => {
+    const original = readOdgContent(minimalOdgPackage());
+    if (original.kind !== 'drawing') {
+      throw new Error('expected a drawing ContentDocument');
+    }
+
+    const pdfBytes = odgToPdf(minimalOdgBytes());
+    const odgBytes = pdfToOdg(pdfBytes);
+    const roundTripped = readOdgContent(decodePackage(odgBytes)); // reread via odf.js's own real readOdg parser, not this package's own writer echoing its input back
+
+    if (roundTripped.kind !== 'drawing') {
+      throw new Error('expected a drawing ContentDocument');
+    }
+
+    const beforeVectors = original.pages[0]!.vectors;
+    const afterVectors = roundTripped.pages[0]!.vectors;
+    expect(afterVectors).toHaveLength(beforeVectors.length);
+
+    // rectBack, rectFront (fill-only, unrotated): the one case that survives with its original 'rect' kind.
+    expect(afterVectors[0]!.kind).toBe('rect');
+    expect(afterVectors[1]!.kind).toBe('rect');
+    // Rect1 (filled AND stroked), the ellipse, and the line: each degrades to a generic 'path', per this test's own top-of-block note.
+    expect(afterVectors[2]!.kind).toBe('path');
+    expect(afterVectors[3]!.kind).toBe('path');
+    expect(afterVectors[4]!.kind).toBe('path');
+    // curvePath was already a path -- kind is unaffected by the PDF round trip either way.
+    expect(afterVectors[5]!.kind).toBe('path');
+
+    // rectBack/rectFront/Rect1(now a path)/ellipse(now a path)/line(now a path) all compare exactly (within tolerance) against their ORIGINAL frame: none of their own points -- corners for a rect/rectangle-shaped path, kappa-offset control points for an ellipse that by construction never exceed its own bounding box, or the two bare endpoints for a line -- ever extend beyond that frame. curvePath (index 5) is handled separately below, for a genuinely different reason.
+    beforeVectors.slice(0, 5).forEach((before, i) => {
+      expectBoxClose(vectorBoundingBox(afterVectors[i]!), vectorBoundingBox(before));
+    });
+
+    // curvePath's own recovered width does NOT match its original declared frame, and that is expected, not a bug: the fixture's own real-LibreOffice-verified svg:d ("M0 4000h3000c1000 0 1000-4000-1000-4000z", see test-support/odg.ts's own note) has a cubic control point (dx=1000 from x=3000, reaching x=4000) that extends past its own declared svg:viewBox width (3657 units) -- a legitimate real-world SVG/ODF authoring pattern, since a viewBox/frame is a declared coordinate window, not a guaranteed tight bounding box of the raw path data. reconstructDrawing has no "declared frame" to fall back to at all -- a PDF's recovered geometry carries only points -- so its own frame is necessarily the TIGHT bounding box of every recovered point, control points included (per pathBoundingFrame's own doc comment in reconstruct.ts). That tight box can legitimately be larger than whatever frame the original author declared, exactly as it is here. The origin (xPt/yPt) and height still match closely, since the overshoot is one-sided (only the right edge, via the x-extending control point) and the y-extent is unaffected.
+    const curveBefore = vectorBoundingBox(beforeVectors[5]!);
+    const curveAfter = vectorBoundingBox(afterVectors[5]!);
+    expect(closeTo(curveAfter.xPt, curveBefore.xPt, GEOMETRY_TOLERANCE_PT)).toBe(true);
+    expect(closeTo(curveAfter.yPt, curveBefore.yPt, GEOMETRY_TOLERANCE_PT)).toBe(true);
+    expect(closeTo(curveAfter.heightPt, curveBefore.heightPt, GEOMETRY_TOLERANCE_PT)).toBe(true);
+    expect(curveAfter.widthPt).toBeGreaterThanOrEqual(curveBefore.widthPt - GEOMETRY_TOLERANCE_PT); // the tight bounding box can only be as large as or larger than a possibly-non-tight declared frame, never smaller
+
+    // rectBack/rectFront also keep their exact fill colour -- a plain passthrough with no lossy quantization beyond formatNumber's own negligible rounding, unlike the vectors above whose kind itself narrowed.
+    const rectBackAfter = afterVectors[0]!;
+    const rectBackBefore = beforeVectors[0]!;
+    if (rectBackAfter.kind !== 'rect' || rectBackBefore.kind !== 'rect') {
+      throw new Error('expected rectBack to stay a rect on both sides');
+    }
+    expect(closeTo(rectBackAfter.fill!.r, rectBackBefore.fill!.r, 0.001)).toBe(true);
+    expect(closeTo(rectBackAfter.fill!.g, rectBackBefore.fill!.g, 0.001)).toBe(true);
+    expect(closeTo(rectBackAfter.fill!.b, rectBackBefore.fill!.b, 0.001)).toBe(true);
+
+    // The ellipse-turned-path (index 3) also keeps its exact fill colour and, since writeEllipse now emits an explicit closepath (h) even though its four Bezier arcs already return to their own start point, comes back marked closed: true -- required for a real ODF/SVG consumer to fill it at all (confirmed against actual LibreOffice rendering; see the README's own Gotchas note on this exact fix).
+    const ellipseVectorAfter = afterVectors[3]!;
+    const ellipseVectorBefore = beforeVectors[3]!;
+    if (ellipseVectorAfter.kind !== 'path' || ellipseVectorBefore.kind !== 'ellipse') {
+      throw new Error('expected the ellipse to have narrowed to a path');
+    }
+    expect(closeTo(ellipseVectorAfter.fill!.r, ellipseVectorBefore.fill!.r, 0.001)).toBe(true);
+    expect(closeTo(ellipseVectorAfter.fill!.g, ellipseVectorBefore.fill!.g, 0.001)).toBe(true);
+    expect(closeTo(ellipseVectorAfter.fill!.b, ellipseVectorBefore.fill!.b, 0.001)).toBe(true);
+    expect(ellipseVectorAfter.subpaths[0]?.closed).toBe(true);
+
+    // The curve specifically must still be a genuine cubic segment, not a straight-line approximation of it -- proving writePath -> readPdf's own general path tracking (src/pdf/interpret.ts) recovers the real curve, not just its endpoints, and reconstructDrawing carries that segment kind straight across.
+    const curveVectorAfter = afterVectors[5]!;
+    if (curveVectorAfter.kind !== 'path') {
+      throw new Error('expected the curve to still be a path');
+    }
+    expect(curveVectorAfter.subpaths[0]?.segments.some((s) => s.kind === 'cubic')).toBe(true);
+    expect(curveVectorAfter.subpaths[0]?.closed).toBe(true);
+
+    // The text label: content survives exactly; position is approximate only, for the AFM-estimation reason this test's own top-of-block note explains.
+    expect(original.pages[0]!.shapes).toHaveLength(1);
+    expect(roundTripped.pages[0]!.shapes).toHaveLength(1);
+    const [beforeShape] = original.pages[0]!.shapes;
+    const [afterShape] = roundTripped.pages[0]!.shapes;
+    expect(afterShape!.blocks[0]).toMatchObject({ kind: 'paragraph' });
+    const afterParagraph = afterShape!.blocks[0];
+    if (afterParagraph?.kind !== 'paragraph') {
+      throw new Error('expected the text label to survive as a paragraph block');
+    }
+    expect(afterParagraph.runs.map((r) => r.text).join('')).toContain('Label');
+    expect(Math.abs(afterShape!.frame.xPt - beforeShape!.frame.xPt)).toBeLessThan(20); // approximate: AFM-estimated, not the original explicit ODF frame
+    expect(Math.abs(afterShape!.frame.yPt - beforeShape!.frame.yPt)).toBeLessThan(20);
+  });
+
+  it('throws when the signal is already aborted', () => {
+    const pdfBytes = odgToPdf(minimalOdgBytes());
+    const controller = new AbortController();
+    controller.abort();
+    expect(() => pdfToOdg(pdfBytes, { signal: controller.signal })).toThrow();
   });
 });
 
