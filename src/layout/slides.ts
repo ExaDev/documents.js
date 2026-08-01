@@ -1,10 +1,13 @@
-import type { ContentParagraph, ContentShape, ContentSlide, ContentTable, LayoutDocument, LayoutImage, LayoutImageAsset, LayoutItem, LayoutLink, LayoutPage, LayoutText } from 'document-content-model';
-import { LAYOUT_FORMAT_VERSION } from 'document-content-model';
+import type { ContentEmbeddedObjectBlock, ContentParagraph, ContentShape, ContentSlide, ContentTable, LayoutDocument, LayoutImage, LayoutImageAsset, LayoutItem, LayoutLink, LayoutPage, LayoutText } from 'document-content-model';
+import { COLOR_BLACK, LAYOUT_FORMAT_VERSION } from 'document-content-model';
+import { layoutFormula } from '../mathml';
 import type { Box } from '../model/geometry';
 import { flipY } from '../model/geometry';
 import type { ContentDocument } from '../model/content';
+import type { EmbeddedFormula, PositionedFormula } from '../model/formula';
 import type { Point } from '../pdf/matrix';
 import { rotatePointAboutCenter } from '../pdf/matrix';
+import { loadMathFont } from '../pdf/math-font';
 import type { TextMeasurer } from '../pdf/measure';
 import { wrapRunsToWidth } from '../pdf/text-layout';
 import { alignmentOffsetPt, effectiveStyledRuns, estimateRowHeightPt, lineNaturalHeightPt, registerImage, sumColumnWidthsPt } from './shared';
@@ -13,9 +16,30 @@ import { alignmentOffsetPt, effectiveStyledRuns, estimateRowHeightPt, lineNatura
 
 export interface SlidesLayoutOptions {
   readonly measurer: TextMeasurer;
+  // Raw MathML for every embedded formula shape in `doc`, keyed by that shape's own placeholder block sourcePath -- see src/odf/odp/read.ts's readOdpContent for how this map is built, and src/layout/engine.ts's own EngineLayoutOptions.formulas for the identical mechanism on the wordprocessing side.
+  readonly formulas?: ReadonlyMap<string, EmbeddedFormula>;
+}
+
+export interface PresentationLayoutResult {
+  readonly document: LayoutDocument;
+  // Every embedded formula actually rendered via src/mathml, already positioned in PDF page space -- see src/layout/engine.ts's own WordprocessingLayoutResult.formulas for why this can't travel through LayoutDocument.pages[].items itself.
+  readonly formulas: readonly PositionedFormula[];
 }
 
 type PresentationContentDocument = Extract<ContentDocument, { kind: 'presentation' }>;
+
+// See src/layout/engine.ts's own identical constant/function for the reasoning -- a formula shape's own declared frame height is the best available proxy for the source formula's own rendered size, absent any surrounding run to inherit a size from.
+const MIN_FORMULA_SIZE_PT = 8;
+function formulaSizePtFromFrame(frameHeightPt: number): number {
+  return Math.max(MIN_FORMULA_SIZE_PT, frameHeightPt / 2);
+}
+
+// Threaded into convertShape (optionally -- see that function's own comment) so a formula-bearing shape can resolve its own raw MathML and record its positioned result. `positioned` is mutated in place, the same "shared accumulator threaded through a layout pass" pattern src/layout/engine.ts's own `formulas` parameter uses.
+export interface ShapeFormulaContext {
+  readonly formulas: ReadonlyMap<string, EmbeddedFormula>;
+  readonly pageIndex: number;
+  readonly positioned: PositionedFormula[];
+}
 
 interface ShapePlacement {
   place(point: Point): Point;
@@ -137,8 +161,20 @@ function layoutTable(table: ContentTable, contentLeftXDown: number, contentWidth
   return cursorYDown;
 }
 
-// Exported for reuse by src/layout/drawing.ts: a drawing page's own ContentShape entries (draw:frame text/table/image content, and unrecognised custom-shape presets salvaged as text -- see odf.js's typed/draw/shapes.ts) are the exact same ContentShapeSchema-typed value a slide's shapes are, so odg gets slide-quality paragraph flow, image placement, and table layout for free rather than a second, drifting copy of this function.
-export function convertShape(shape: ContentShape, slideHeightPt: number, measurer: TextMeasurer, images: Record<string, LayoutImageAsset>, out: LayoutItem[]): void {
+// A formula shape's own placeholder block (see src/odf/odp/read.ts's readOdpContent) is the shape's ONLY block -- odp's own detection replaces a formula-bearing shape's blocks outright rather than appending alongside other content, unlike odt's paragraph-flow case -- so this places the resolved MathBox directly at the shape's own frame, the same "one block, one position" treatment layoutImageFlow (src/layout/engine.ts) and this function's own image branch above already give an image block. Rotation is deliberately NOT applied to a formula shape (unlike text/image, both routed through `placement.place`): src/pdf/write.ts's own formula content-stream emission has no rotated-CID-text path, only translation -- a real, tracked, bounded gap (position is correct; a rotated formula shape renders unrotated), not a silent one.
+function layoutShapeFormula(block: ContentEmbeddedObjectBlock, flippedFrame: Box, formulaContext: ShapeFormulaContext): void {
+  const embedded = block.sourcePath === undefined ? undefined : formulaContext.formulas.get(block.sourcePath);
+  if (embedded === undefined) {
+    return;
+  }
+  const sizePt = formulaSizePtFromFrame(block.frame.heightPt);
+  const metrics = loadMathFont().metricsAt(sizePt);
+  const { box } = layoutFormula(embedded.mathml, { metrics, sizePt, color: COLOR_BLACK });
+  formulaContext.positioned.push({ pageIndex: formulaContext.pageIndex, xPt: flippedFrame.xPt, yPt: flippedFrame.yPt, box });
+}
+
+// Exported for reuse by src/layout/drawing.ts: a drawing page's own ContentShape entries (draw:frame text/table/image content, and unrecognised custom-shape presets salvaged as text -- see odf.js's typed/draw/shapes.ts) are the exact same ContentShapeSchema-typed value a slide's shapes are, so odg gets slide-quality paragraph flow, image placement, and table layout for free rather than a second, drifting copy of this function. `formulaContext` is optional and appended last precisely so drawing.ts's own existing 5-argument call site keeps compiling unchanged -- odg embedded-formula support is out of this task's own stated scope (odt/ods/odp only), so a formula block reached with no formulaContext simply falls through unhandled, the same as it always did.
+export function convertShape(shape: ContentShape, slideHeightPt: number, measurer: TextMeasurer, images: Record<string, LayoutImageAsset>, out: LayoutItem[], formulaContext?: ShapeFormulaContext): void {
   const flippedFrame = flipY(shape.frame, slideHeightPt);
   const placement = shapePlacement(flippedFrame, shape.rotationDeg);
   const contentLeftXDown = shape.frame.xPt + shape.insetLeftPt;
@@ -157,22 +193,26 @@ export function convertShape(shape: ContentShape, slideHeightPt: number, measure
       out.push(imageItem);
     } else if (block.kind === 'table') {
       cursorYDown = layoutTable(block, contentLeftXDown, contentWidthPt, cursorYDown, slideHeightPt, placement, measurer, out);
+    } else if (block.kind === 'embeddedObject' && block.objectKind === 'formula' && formulaContext !== undefined) {
+      layoutShapeFormula(block, flippedFrame, formulaContext);
     }
-    // 'pageBreak' blocks never occur in a pptx-sourced ContentDocument (only docx's reader emits them), and 'embeddedObject' blocks are not produced by any reader this package depends on yet (document-content-model's forward-looking schema addition -- see edit/docx/content.ts's own note on the same gap) -- both present only for ContentBlock's type exhaustiveness.
+    // 'pageBreak' blocks never occur in a pptx-sourced ContentDocument (only docx's reader emits them). Every other 'embeddedObject' objectKind (wordprocessing/presentation/spreadsheet/drawing), and a 'formula' block reached with no formulaContext, fall through unhandled -- present only for ContentBlock's type exhaustiveness.
   }
 }
 
-function convertSlide(slide: ContentSlide, measurer: TextMeasurer, images: Record<string, LayoutImageAsset>): LayoutPage {
+function convertSlide(slide: ContentSlide, slideIndex: number, measurer: TextMeasurer, images: Record<string, LayoutImageAsset>, formulas: ReadonlyMap<string, EmbeddedFormula> | undefined, positioned: PositionedFormula[]): LayoutPage {
   const items: LayoutItem[] = [];
+  const formulaContext: ShapeFormulaContext | undefined = formulas === undefined ? undefined : { formulas, pageIndex: slideIndex, positioned };
   for (const shape of slide.shapes) {
-    convertShape(shape, slide.size.heightPt, measurer, images, items);
+    convertShape(shape, slide.size.heightPt, measurer, images, items, formulaContext);
   }
   // Notes are carried as a private page-dictionary entry (LayoutPage.notes, see pdf/write.ts), never painted as visible content -- PDF has no native concept of hidden presenter notes, so this is purely a round-trip mechanism for this package's own pptxToPdf/pdfToPptx pair, not a real PDF feature.
   return { widthPt: slide.size.widthPt, heightPt: slide.size.heightPt, items, ...(slide.notes.length > 0 ? { notes: slide.notes } : {}) };
 }
 
-export function convertPresentationToLayout(doc: PresentationContentDocument, options: SlidesLayoutOptions): LayoutDocument {
+export function convertPresentationToLayout(doc: PresentationContentDocument, options: SlidesLayoutOptions): PresentationLayoutResult {
   const images: Record<string, LayoutImageAsset> = {};
-  const pages = doc.slides.map((slide) => convertSlide(slide, options.measurer, images));
-  return { formatVersion: LAYOUT_FORMAT_VERSION, metadata: doc.metadata, pages, images };
+  const formulas: PositionedFormula[] = [];
+  const pages = doc.slides.map((slide, slideIndex) => convertSlide(slide, slideIndex, options.measurer, images, options.formulas, formulas));
+  return { document: { formatVersion: LAYOUT_FORMAT_VERSION, metadata: doc.metadata, pages, images }, formulas };
 }
