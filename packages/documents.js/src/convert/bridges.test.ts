@@ -27,7 +27,7 @@ function docxContentOf(bytes: Uint8Array<ArrayBuffer>) {
 }
 
 function odtContentOf(bytes: Uint8Array<ArrayBuffer>) {
-  const content = readOdtContent(decodeOdfPackage(bytes));
+  const content = readOdtContent(decodeOdfPackage(bytes)).document;
   if (content.kind !== 'wordprocessing') {
     throw new Error('expected a wordprocessing ContentDocument');
   }
@@ -43,7 +43,7 @@ function pptxContentOf(bytes: Uint8Array<ArrayBuffer>) {
 }
 
 function odpContentOf(bytes: Uint8Array<ArrayBuffer>) {
-  const content = readOdpContent(decodeOdfPackage(bytes));
+  const content = readOdpContent(decodeOdfPackage(bytes)).document;
   if (content.kind !== 'presentation') {
     throw new Error('expected a presentation ContentDocument');
   }
