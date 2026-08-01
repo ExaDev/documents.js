@@ -1,3 +1,17 @@
+# [1.47.0](https://github.com/ExaDev/documents.js/compare/v1.46.1...v1.47.0) (2026-08-01)
+
+
+### Bug Fixes
+
+* close the ellipse's Bezier path explicitly in PDF output ([8c204c6](https://github.com/ExaDev/documents.js/commit/8c204c636847767853ef8c104059b62006f7fab9))
+* write draw:fill="solid" explicitly for odg vector styles ([3592d1c](https://github.com/ExaDev/documents.js/commit/3592d1c4c5d713c6249c579b4caf5cd2da9306f7))
+
+
+### Features
+
+* add pdfToOdg and odgPdfCodec, completing odg's round trip ([26f131e](https://github.com/ExaDev/documents.js/commit/26f131e6c284495ee32e918c74d99ba7d717d30d))
+* add reconstructDrawing for PDF-to-drawing geometry recovery ([e71355a](https://github.com/ExaDev/documents.js/commit/e71355a0571d4925ce677457154c0ff81765f600))
+
 ## [1.46.1](https://github.com/ExaDev/documents.js/compare/v1.46.0...v1.46.1) (2026-07-31)
 
 # [1.46.0](https://github.com/ExaDev/documents.js/compare/v1.45.0...v1.46.0) (2026-07-31)
