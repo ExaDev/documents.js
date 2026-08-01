@@ -23,6 +23,9 @@ import { readOdgContent } from '../odf/odg/read';
 import { readOdpContent } from '../odf/odp/read';
 import { readOdsContent } from '../odf/ods/read';
 import { readOdtContent } from '../odf/odt/read';
+import { buildOdbTableCsv } from '../odb/csv';
+import { readOdbTables } from '../odb/read';
+import { odbTablesToSpreadsheetDocument } from '../odb/spreadsheet';
 import { readDocxContent } from '../ooxml/docx/read';
 import { readPptxContent } from '../ooxml/pptx/read';
 import type { PdfDiagnosticSink } from '../pdf/diagnostics';
@@ -328,4 +331,27 @@ export function odmToPdf(bytes: Uint8Array<ArrayBuffer>, options?: OdmToPdfOptio
   };
   const layout = convertWordprocessingToLayout(content, { measurer: createStandardFontMeasurer() });
   return writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution });
+}
+
+// odb (ODF database front-end) Tier 1 support: readOdbTables(pkg) already does the real work (decoder selection over odf.js's own readOdbInventory, then src/hsqldb/script.ts's bounded HSQLDB TEXT-script parser) -- odbToXlsx/odbToCsv below are thin compositions over it, matching odsToXlsx's own "reader -> pivot -> writer" shape. Unlike every conversion above, .odb has no PDF conversion and no reverse (xlsx/csv -> odb) direction at all -- Reports require live SQL execution to render, categorically out of scope (see README) -- so, like odmToPdf, these are deliberately NOT wired into the DocumentConverter port (src/convert/port.ts): that port's {source, targetFormat} contract assumes a conversion has a natural place in DocumentFormat's own bytes-in/bytes-out shape, and odb's own asymmetry (one source format, two unrelated target shapes, one of which needs a table-selection option the other doesn't) doesn't fit it any better than odmToPdf's resolver-shaped conversion did.
+export function odbToXlsx(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBridgeOptions): Uint8Array<ArrayBuffer> {
+  throwIfAborted(options?.signal);
+  const pkg = decodePackage(bytes); // odf.js's own decodePackage -- odb is an ODF package.
+  const tables = readOdbTables(pkg);
+  throwIfAborted(options?.signal);
+  const content = odbTablesToSpreadsheetDocument(tables);
+  return encodePackage(buildXlsxPackage(content)); // ooxml.js's own encodePackage -- buildXlsxPackage produces an OOXML package.
+}
+
+export interface OdbToCsvOptions extends DocumentBridgeOptions {
+  // Selects which table to write as CSV. Required whenever the .odb has more than one table -- omitting it then throws OdbTableNotSpecifiedError naming every available table, rather than guessing. May be omitted when the .odb has exactly one table.
+  readonly table?: string;
+}
+
+export function odbToCsv(bytes: Uint8Array<ArrayBuffer>, options?: OdbToCsvOptions): Uint8Array<ArrayBuffer> {
+  throwIfAborted(options?.signal);
+  const pkg = decodePackage(bytes); // odf.js's own decodePackage -- odb is an ODF package.
+  const tables = readOdbTables(pkg);
+  throwIfAborted(options?.signal);
+  return buildOdbTableCsv(tables, options?.table);
 }

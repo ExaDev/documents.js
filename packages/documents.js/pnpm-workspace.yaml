@@ -2,4 +2,4 @@ minimumReleaseAgeExclude:
   - ooxml.js@2.1.0||2.2.0
   # All versions belong in ONE entry, versions joined by "||" -- pnpm's exclude-policy matcher returns on the first rule whose package name matches, so a second separate "document-content-model@x" line for the same package name is silently never reached.
   - document-content-model@1.1.0||1.2.0||1.3.0
-  - odf.js@1.8.0||1.9.0
+  - odf.js@1.8.0||1.9.0||1.10.0
