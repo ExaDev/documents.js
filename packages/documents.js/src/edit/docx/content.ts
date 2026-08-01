@@ -31,6 +31,7 @@ export function buildDocxPackage(content: ContentDocument): Package {
 function populateParagraph(paragraph: DocxParagraph, block: ContentParagraph): void {
   paragraph.styleId = block.styleId;
   paragraph.alignment = block.alignment;
+  paragraph.list = block.list;
   for (const run of block.runs) {
     if (run.text === '\t') {
       paragraph.appendTab();
