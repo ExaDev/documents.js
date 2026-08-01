@@ -3,6 +3,7 @@ import type { WinAnsiSubstitution } from '../pdf/winansi';
 import {
   docxToOdt,
   docxToPdf,
+  odfToPdf,
   odgToPdf,
   odpToPdf,
   odpToPptx,
@@ -29,6 +30,7 @@ const SUPPORTED_CONVERSIONS: readonly { readonly source: DocumentFormat; readonl
   { source: 'odp', target: 'pdf' },
   { source: 'ods', target: 'pdf' },
   { source: 'odg', target: 'pdf' },
+  { source: 'odf', target: 'pdf' }, // odfToPdf's own one-way direction -- see port.ts's own note on why there is no pdf -> odf entry.
   { source: 'pdf', target: 'docx' },
   { source: 'pdf', target: 'pptx' },
   { source: 'pdf', target: 'odt' },
@@ -87,6 +89,10 @@ export function createLocalDocumentConverter(): DocumentConverter {
       }
       if (source.format === 'odg' && targetFormat === 'pdf') {
         const bytes = odgToPdf(source.bytes, { signal: options.signal, onSubstitution: (s, c) => diagnostics.push(substitutionDiagnostic(s, c)) });
+        return Promise.resolve({ document: { format: 'pdf', bytes }, diagnostics });
+      }
+      if (source.format === 'odf' && targetFormat === 'pdf') {
+        const bytes = odfToPdf(source.bytes, { signal: options.signal, onSubstitution: (s, c) => diagnostics.push(substitutionDiagnostic(s, c)) });
         return Promise.resolve({ document: { format: 'pdf', bytes }, diagnostics });
       }
       if (source.format === 'pdf' && targetFormat === 'docx') {

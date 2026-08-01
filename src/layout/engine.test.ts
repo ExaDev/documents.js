@@ -36,7 +36,7 @@ function doc(sections: ContentSection[]): Extract<ContentDocument, { kind: 'word
 }
 
 function convert(sections: ContentSection[]) {
-  return convertWordprocessingToLayout(doc(sections), { measurer: fakeMeasurer() });
+  return convertWordprocessingToLayout(doc(sections), { measurer: fakeMeasurer() }).document;
 }
 
 function textItems(items: readonly LayoutItem[]): LayoutText[] {

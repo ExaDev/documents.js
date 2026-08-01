@@ -1,7 +1,10 @@
-import type { ContentImageBlock, ContentParagraph, ContentSection, ContentTable, LayoutDocument, LayoutImage, LayoutImageAsset, LayoutItem, LayoutLink, LayoutPage, LayoutText } from 'document-content-model';
-import { LAYOUT_FORMAT_VERSION } from 'document-content-model';
+import type { ContentEmbeddedObjectBlock, ContentImageBlock, ContentParagraph, ContentSection, ContentTable, LayoutDocument, LayoutImage, LayoutImageAsset, LayoutItem, LayoutLink, LayoutPage, LayoutText } from 'document-content-model';
+import { COLOR_BLACK, LAYOUT_FORMAT_VERSION } from 'document-content-model';
+import { layoutFormula } from '../mathml';
 import { flipY } from '../model/geometry';
 import type { ContentDocument } from '../model/content';
+import type { EmbeddedFormula, PositionedFormula } from '../model/formula';
+import { loadMathFont } from '../pdf/math-font';
 import type { TextMeasurer } from '../pdf/measure';
 import { wrapRunsToWidth } from '../pdf/text-layout';
 import { alignmentOffsetPt, effectiveStyledRuns, estimateRowHeightPt, lineNaturalHeightPt, registerImage, sumColumnWidthsPt } from './shared';
@@ -10,9 +13,23 @@ import { alignmentOffsetPt, effectiveStyledRuns, estimateRowHeightPt, lineNatura
 
 export interface EngineLayoutOptions {
   readonly measurer: TextMeasurer;
+  // Raw MathML for every embedded formula block in `doc`, keyed by that block's own sourcePath -- see src/model/formula.ts's own comment on why a formula's real content can't live inside the ContentDocument itself, and src/odf/odt/read.ts's readOdtContent for how this map is built. Omitted (or missing an entry for a particular formula block) falls back to rendering that block's own placeholder ContentDocument as ordinary text -- see layoutEmbeddedObjectFlow below.
+  readonly formulas?: ReadonlyMap<string, EmbeddedFormula>;
+}
+
+export interface WordprocessingLayoutResult {
+  readonly document: LayoutDocument;
+  // Every embedded formula actually rendered via src/mathml, already positioned in PDF page space (bottom-left origin, y-up) -- src/pdf/write.ts's own WritePdfOptions.formulas consumes this directly. See that module's own comment for why a formula's CID-font glyph runs can't travel through LayoutDocument.pages[].items itself.
+  readonly formulas: readonly PositionedFormula[];
 }
 
 type WordprocessingContentDocument = Extract<ContentDocument, { kind: 'wordprocessing' }>;
+
+// A formula embedded inline in running text has no surrounding run to inherit a font size from the way ordinary text does, so this engine picks one from the embedded object's own declared frame height (ContentEmbeddedObjectBlock.frame.heightPt -- the ORIGINAL formula's own rendered size in the source document): a single-line formula's total height (ascent + descent across its tallest/deepest element) is typically a little over twice its base font size, so half the frame height is a reasonable single-pass estimate. This is deliberately a one-shot heuristic, not an iterative fit-to-height search -- close enough for a faithful visual approximation (this package's own established bar -- see the README's Fidelity section), not a guarantee of reproducing the source's exact point size.
+const MIN_FORMULA_SIZE_PT = 8;
+function formulaSizePtFromFrame(frameHeightPt: number): number {
+  return Math.max(MIN_FORMULA_SIZE_PT, frameHeightPt / 2);
+}
 
 // Mutated in place across an entire section's content: `items`/`cursorYDown` describe the page currently being built. Passing this single object around (rather than reassigning a `let` the way a simpler "current page" variable would) is what lets nested layout functions (table cells, individual lines) trigger a page break mid-paragraph or mid-table without every caller needing to thread a replacement value back up.
 interface FlowState {
@@ -180,8 +197,29 @@ function layoutImageFlow(block: ContentImageBlock, section: ContentSection, page
   state.cursorYDown += block.heightPt;
 }
 
+// The one ContentEmbeddedObjectBlock kind this engine actually renders (objectKind: 'formula') -- reserves flow space the same way layoutImageFlow does for an ordinary image, but via src/mathml's own layoutFormula rather than a static width/height, and records the result into `formulas` (consumed by src/pdf/write.ts, not LayoutDocument.pages[].items -- see WordprocessingLayoutResult's own comment on why). Falls back to laying out the placeholder document's own first paragraph as plain text -- the formula's own StarMath annotation, or the literal "[formula]" -- when `options.formulas` has no entry for this block's sourcePath at all (should not happen for a block this package's own readers produced, but a real, honest fallback rather than a silent no-op for a block a caller constructed by hand).
+function layoutFormulaFlow(block: ContentEmbeddedObjectBlock, section: ContentSection, pages: LayoutPage[], state: FlowState, contentLeftXDown: number, contentWidthPt: number, contentBottomYDown: number, measurer: TextMeasurer, options: EngineLayoutOptions, formulas: PositionedFormula[]): void {
+  const embedded = block.sourcePath === undefined ? undefined : options.formulas?.get(block.sourcePath);
+  if (embedded === undefined) {
+    const fallbackParagraph = block.document.kind === 'wordprocessing' ? block.document.sections[0]?.blocks[0] : undefined;
+    if (fallbackParagraph?.kind === 'paragraph') {
+      layoutParagraphFlow(fallbackParagraph, section, pages, state, contentLeftXDown, contentWidthPt, contentBottomYDown, measurer);
+    }
+    return;
+  }
+
+  const sizePt = formulaSizePtFromFrame(block.frame.heightPt);
+  const metrics = loadMathFont().metricsAt(sizePt);
+  const { box } = layoutFormula(embedded.mathml, { metrics, sizePt, color: COLOR_BLACK });
+
+  ensureRoom(state, section, pages, box.heightPt, contentBottomYDown);
+  const flippedFrame = flipY({ xPt: contentLeftXDown, yPt: state.cursorYDown, widthPt: box.widthPt, heightPt: box.heightPt }, section.pageSize.heightPt);
+  formulas.push({ pageIndex: pages.length, xPt: flippedFrame.xPt, yPt: flippedFrame.yPt, box });
+  state.cursorYDown += box.heightPt;
+}
+
 // Paginates one section's own blocks into one or more pages, all sharing that section's page size and margins -- a w:sectPr boundary (see read.ts) just means the next section starts this whole function over with a different pageSize/margins, which is what makes multi-section support fall out for free rather than needing special-casing here.
-function paginateSection(section: ContentSection, measurer: TextMeasurer, images: Record<string, LayoutImageAsset>, pages: LayoutPage[]): void {
+function paginateSection(section: ContentSection, measurer: TextMeasurer, images: Record<string, LayoutImageAsset>, pages: LayoutPage[], options: EngineLayoutOptions, formulas: PositionedFormula[]): void {
   const contentLeftXDown = section.margins.leftPt;
   const contentWidthPt = Math.max(0, section.pageSize.widthPt - section.margins.leftPt - section.margins.rightPt);
   const contentBottomYDown = section.pageSize.heightPt - section.margins.bottomPt;
@@ -198,18 +236,21 @@ function paginateSection(section: ContentSection, measurer: TextMeasurer, images
       layoutTableFlow(block, section, pages, state, contentLeftXDown, contentWidthPt, contentBottomYDown, measurer);
     } else if (block.kind === 'image') {
       layoutImageFlow(block, section, pages, state, contentLeftXDown, contentBottomYDown, images);
+    } else if (block.kind === 'embeddedObject' && block.objectKind === 'formula') {
+      layoutFormulaFlow(block, section, pages, state, contentLeftXDown, contentWidthPt, contentBottomYDown, measurer, options, formulas);
     }
-    // 'embeddedObject' blocks are not produced by any reader this package depends on yet (document-content-model's forward-looking schema addition -- see edit/docx/content.ts's own note on the same gap), so there is nothing to lay out here today.
+    // Every other 'embeddedObject' objectKind (wordprocessing/presentation/spreadsheet/drawing) is not produced by any reader this package depends on yet (document-content-model's forward-looking schema addition -- see edit/docx/content.ts's own note on the same gap), so there is nothing to lay out for those here today.
   }
 
   flushPage(state, section, pages);
 }
 
-export function convertWordprocessingToLayout(doc: WordprocessingContentDocument, options: EngineLayoutOptions): LayoutDocument {
+export function convertWordprocessingToLayout(doc: WordprocessingContentDocument, options: EngineLayoutOptions): WordprocessingLayoutResult {
   const images: Record<string, LayoutImageAsset> = {};
   const pages: LayoutPage[] = [];
+  const formulas: PositionedFormula[] = [];
   for (const section of doc.sections) {
-    paginateSection(section, options.measurer, images, pages);
+    paginateSection(section, options.measurer, images, pages, options, formulas);
   }
-  return { formatVersion: LAYOUT_FORMAT_VERSION, metadata: doc.metadata, pages, images };
+  return { document: { formatVersion: LAYOUT_FORMAT_VERSION, metadata: doc.metadata, pages, images }, formulas };
 }
