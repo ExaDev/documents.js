@@ -113,19 +113,21 @@ describe('readOdbTables: unsupported embedded formats -- named, never silent', (
     };
     expect(() => readOdbTables(pkg)).toThrow(OdbUnsupportedFormatError);
     expect(formatOfThrownError(() => readOdbTables(pkg))).toBe('hsqldb-binary');
-    expect(() => readOdbTables(pkg)).toThrow(/binary script format/);
+    expect(() => readOdbTables(pkg)).toThrow(/binary whole-script format/);
   });
 
-  it('throws OdbUnsupportedFormatError naming HSQLDB\'s compressed script format for gzip-magic-prefixed bytes', () => {
+  it("throws OdbUnsupportedFormatError naming HSQLDB's compressed script format for zlib-header-prefixed bytes", () => {
     const pkg: Package = {
       parts: {
         'content.xml': databaseContentPart([connectionResource('sdbc:embedded:hsqldb')]),
         'META-INF/manifest.xml': manifestPart([...BASE_MANIFEST_ENTRIES, { fullPath: 'database/script', mediaType: '' }]),
-        'database/script': { kind: 'binary', base64: bytesToBase64(new Uint8Array([0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00])) },
+        // The real leading bytes of a genuine hsqldb.script_format=3 file, confirmed by generating one with the actual HSQLDB 1.8.0.10 engine bundled with LibreOffice 26.2 (org.hsqldb.scriptio.ScriptWriterZipped's own java.util.zip.Deflater output -- zlib-framed, RFC 1950, never gzip's 0x1f 0x8b).
+        'database/script': { kind: 'binary', base64: bytesToBase64(new Uint8Array([0x78, 0x9c, 0x5d, 0x51, 0xc1, 0x4a, 0xc3, 0x40])) },
       },
     };
     expect(() => readOdbTables(pkg)).toThrow(OdbUnsupportedFormatError);
     expect(formatOfThrownError(() => readOdbTables(pkg))).toBe('hsqldb-compressed');
+    expect(() => readOdbTables(pkg)).toThrow(/compressed whole-script format/);
   });
 
   it('throws OdbUnsupportedFormatError when an embedded HSQLDB connection has no database/script part at all', () => {
@@ -162,5 +164,63 @@ describe('readOdbTables: propagates HsqldbScriptParseError for a genuinely malfo
       },
     };
     expect(() => readOdbTables(pkg)).toThrow(HsqldbScriptParseError);
+  });
+});
+
+// Tier 2 routing: readOdbTables' own database/data-triggered CACHED-table decoding, exercised here against a small, hand-built synthetic row -- src/hsqldb/cache.test.ts and src/convert/odb.test.ts cover the genuine byte-level round trip against a real HSQLDB 1.8.0.10-produced fixture; this describe block is purely about readOdbTables' own routing/error-handling around that decoder, matching this file's existing minimal-synthetic-package style.
+describe('readOdbTables: CACHED-table routing (database/data present)', () => {
+  // One CACHED table T(A INTEGER, B VARCHAR(5)), one row (A=42, B='hi'), root at file position 32 (right after a zero-filled 32-byte header this decoder never itself inspects) -- byte layout verified against real HSQLDB 1.8.0.10 output (see src/hsqldb/cache.ts's own module comment): [4-byte storageSize=32][16-byte AVL node, all zero][1-byte present-flag][4-byte int32 A=42][1-byte present-flag][4-byte int32 B-length=2]['h','i'].
+  function syntheticCachedTableDataBytes(): Uint8Array<ArrayBuffer> {
+    const bytes = new Uint8Array(64);
+    const view = new DataView(bytes.buffer);
+    view.setInt32(32, 32, false); // storageSize
+    // bytes[36..51] (iBalance/iLeft/iRight/iParent) already zero.
+    view.setUint8(52, 1);
+    view.setInt32(53, 42, false);
+    view.setUint8(57, 1);
+    view.setInt32(58, 2, false);
+    bytes[62] = 'h'.charCodeAt(0);
+    bytes[63] = 'i'.charCodeAt(0);
+    return bytes;
+  }
+
+  const SCRIPT = ["CREATE CACHED TABLE T(A INTEGER,B VARCHAR(5))", "SET TABLE T INDEX'32 0'"].join('\n');
+  const PROPERTIES = ['hsqldb.compatible_version=1.8.0', 'hsqldb.cache_file_scale=1'].join('\n');
+
+  function pkgWithParts(parts: Package['parts']): Package {
+    return {
+      parts: {
+        'content.xml': databaseContentPart([connectionResource('sdbc:embedded:hsqldb')]),
+        'META-INF/manifest.xml': manifestPart([...BASE_MANIFEST_ENTRIES, { fullPath: 'database/script', mediaType: '' }, { fullPath: 'database/data', mediaType: '' }, { fullPath: 'database/properties', mediaType: '' }]),
+        'database/script': binaryPart(SCRIPT),
+        ...parts,
+      },
+    };
+  }
+
+  it('decodes the CACHED table row from database/data when database/data and database/properties are both present', () => {
+    const pkg = pkgWithParts({
+      'database/data': { kind: 'binary', base64: bytesToBase64(syntheticCachedTableDataBytes()) },
+      'database/properties': binaryPart(PROPERTIES),
+    });
+    expect(readOdbTables(pkg)).toEqual([{ tableName: 'T', columns: [{ name: 'A', type: 'INTEGER' }, { name: 'B', type: 'VARCHAR(5)' }], rows: [[{ kind: 'number', value: 42 }, { kind: 'string', value: 'hi' }]] }]);
+  });
+
+  it('leaves parseHsqldbScript\'s own result untouched when database/data is absent entirely', () => {
+    const pkg: Package = {
+      parts: {
+        'content.xml': databaseContentPart([connectionResource('sdbc:embedded:hsqldb')]),
+        'META-INF/manifest.xml': manifestPart([...BASE_MANIFEST_ENTRIES, { fullPath: 'database/script', mediaType: '' }]),
+        'database/script': binaryPart('CREATE MEMORY TABLE T(A INTEGER)'),
+      },
+    };
+    expect(readOdbTables(pkg)).toEqual([{ tableName: 'T', columns: [{ name: 'A', type: 'INTEGER' }], rows: [] }]);
+  });
+
+  it('throws a malformed-package Error when database/data is present but database/properties is not', () => {
+    const pkg = pkgWithParts({
+      'database/data': { kind: 'binary', base64: bytesToBase64(syntheticCachedTableDataBytes()) },
+    });
+    expect(() => readOdbTables(pkg)).toThrow(/database\/properties/);
   });
 });
