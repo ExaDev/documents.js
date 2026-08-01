@@ -1,3 +1,11 @@
+# [1.52.0](https://github.com/ExaDev/documents.js/compare/v1.51.0...v1.52.0) (2026-08-01)
+
+
+### Features
+
+* **convert:** add onDocument callback exposing the built DocumentPackage ([50e7234](https://github.com/ExaDev/documents.js/commit/50e72346ea31df59bc27693784bd19a9a05c78e0))
+* **convert:** surface DocumentPackage through ConversionResult ([b996a7e](https://github.com/ExaDev/documents.js/commit/b996a7ee9863cb2a429cb8c72af8a6070835ce17))
+
 # [1.51.0](https://github.com/ExaDev/documents.js/compare/v1.50.0...v1.51.0) (2026-08-01)
 
 
