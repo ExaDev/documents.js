@@ -131,15 +131,26 @@ jobs:
         id: after
         run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
-  publish-github-packages:
-    name: Publish alias to GitHub Packages
+  publish-aliases:
+    name: Publish aliases (${{ matrix.name }})
     needs: release
     if: needs.release.outputs.published == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
-      packages: write
+      id-token: write # OIDC identity for npm trusted publishing on the five npmjs.org legs
+      packages: write # to push the GitHub Packages leg
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: document-content-model, registry: 'https://registry.npmjs.org', isGitHubPackages: false }
+          - { name: doc-model.js, registry: 'https://registry.npmjs.org', isGitHubPackages: false }
+          - { name: doc-schema.js, registry: 'https://registry.npmjs.org', isGitHubPackages: false }
+          - { name: document-schema, registry: 'https://registry.npmjs.org', isGitHubPackages: false }
+          - { name: document-model.js, registry: 'https://registry.npmjs.org', isGitHubPackages: false }
+          - { name: '@exadev/document-content-model', registry: 'https://npm.pkg.github.com', isGitHubPackages: true }
     steps:
       - uses: actions/checkout@v7
         with:
@@ -149,20 +160,18 @@ jobs:
         with:
           node-version: '22'
           cache: pnpm
-          registry-url: 'https://npm.pkg.github.com'
-          # Explicit, not inferred: setup-node's scope default only matches the scoped package.json name if package.json is already scoped by the time this step runs, and the rewrite below happens after it.
-          scope: '@exadev'
-          # GitHub Packages has no OIDC trusted-publishing exchange, so this job (unlike release above) authenticates with a token -- GITHUB_TOKEN is sufficient and needs no separate secret.
+          # registry-url is deliberately absent for every matrix leg. Setting it makes setup-node write an .npmrc containing an _authToken line, and that line wins over the OIDC exchange for the npmjs.org legs -- so the setting that looks like it configures the registry is exactly the one that would break trusted publishing. A single setup-node step also can't sensibly target six different registries across a matrix anyway. Each leg instead points its own registry via publishConfig.registry below.
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
-      - name: Rewrite package name and registry for the GitHub Packages scope
-        # GitHub Packages requires the npm package name to be scoped to the repo owner. Rewriting the fields rather than keeping a second package.json means this alias cannot drift away from the real package's metadata. publishConfig.registry has to be overridden too: it takes precedence over the .npmrc registry-url set by setup-node above, so without this the publish silently targets registry.npmjs.org instead.
+      - name: Rewrite package name and registry for this alias
+        # Rewriting the checked-out package.json rather than keeping a package.json per alias means no alias can drift away from the real package's metadata -- each matrix leg gets its own fresh runner and checkout, so there is no cross-contamination between legs. publishConfig.registry takes precedence over any .npmrc registry-url regardless, so this is what actually selects the registry for each leg.
         run: |
-          npm pkg set name="@exadev/document-content-model"
-          npm pkg set publishConfig.registry="https://npm.pkg.github.com"
+          npm pkg set name="${{ matrix.name }}"
+          npm pkg set publishConfig.registry="${{ matrix.registry }}"
       - run: pnpm publish --access public --no-git-checks
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Only the GitHub Packages leg needs a credential: GitHub Packages has no OIDC trusted-publishing exchange, so it authenticates with GITHUB_TOKEN. The five npmjs.org legs get an empty string, not an omitted var -- blanked so an inherited NODE_AUTH_TOKEN never shadows the OIDC exchange, matching the release job's own convention above.
+          NODE_AUTH_TOKEN: ${{ matrix.isGitHubPackages && secrets.GITHUB_TOKEN || '' }}
 
   attest:
     name: Attest SBOM and build provenance
