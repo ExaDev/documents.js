@@ -235,6 +235,16 @@ export { odpPptxCodec, odsXlsxCodec, odtDocxCodec } from './convert/codec';
 export type { OdmToPdfOptions } from './convert/convert';
 export { odmToPdf, OdmUnresolvedSectionError } from './convert/convert';
 
+// --- .odb (ODF database front-end) Tier 1 support: HSQLDB's TEXT script format only -- binary/compressed HSQLDB and Firebird-backed .odb are detected and named, not implemented, and an external-only connection is permanently out of scope (see README's Fidelity/Gotchas). readOdbTables is independently usable (Package -> table data), matching the "each pipeline stage independently exported" convention above; odbToXlsx/odbToCsv are the ergonomic conversions, and -- like odmToPdf -- are not wired into the DocumentConverter port below. ---
+export type { HsqldbColumn, HsqldbTable } from './hsqldb/script';
+export { displayTextFor as hsqldbCellDisplayText, HsqldbScriptParseError, parseHsqldbScript } from './hsqldb/script';
+export type { OdbUnsupportedFormat } from './odb/read';
+export { OdbNoEmbeddedDataSourceError, OdbUnsupportedFormatError, readOdbTables } from './odb/read';
+export { odbTablesToSpreadsheetDocument } from './odb/spreadsheet';
+export { OdbTableNotFoundError, OdbTableNotSpecifiedError } from './odb/csv';
+export type { OdbToCsvOptions } from './convert/convert';
+export { odbToCsv, odbToXlsx } from './convert/convert';
+
 // --- The swappable conversion port, for a caller that wants to inject a different (e.g. remote) implementation later without changing call sites. ---
 export type { ConversionRequest, ConversionResult, Diagnostic, DocumentConverter, DocumentFormat, DocumentPayload } from './convert/port';
 export { createLocalDocumentConverter } from './convert/local';
