@@ -1,5 +1,5 @@
-import type { ContentShape, ContentSlide, LayoutMetadata, PageSize } from 'document-content-model';
-import { SLIDE_SIZE_WIDESCREEN } from 'document-content-model';
+import type { ContentShape, ContentSlide, LayoutMetadata, PageSize } from 'document-schema.js';
+import { SLIDE_SIZE_WIDESCREEN } from 'document-schema.js';
 import type { XmlElement } from '../../model/node';
 import type { Package } from '../../model/package';
 import { childrenWithTag, elementsWithTag, findChildElement, rootElement } from '../../xml/query';

@@ -1,4 +1,4 @@
-import type { Box, Color, ContentBlock, ContentImageBlock, ContentShape, ContentStroke, ContentVector } from 'document-content-model';
+import type { Box, Color, ContentBlock, ContentImageBlock, ContentShape, ContentStroke, ContentVector } from 'document-schema.js';
 import type { XmlElement, XmlNode } from '../../model/node';
 import type { Package } from '../../model/package';
 import { attrValue, childrenWithTag, elementsWithTag } from '../../xml/query';

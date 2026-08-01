@@ -1,4 +1,4 @@
-import type { Box, ContentPathPoint, Margins, PageSize } from 'document-content-model';
+import type { Box, ContentPathPoint, Margins, PageSize } from 'document-schema.js';
 import type { XmlElement } from '../../model/node';
 import { attrValue } from '../../xml/query';
 import { parseOdfLength } from './units';

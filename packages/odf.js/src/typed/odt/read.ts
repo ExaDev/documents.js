@@ -1,5 +1,5 @@
-import type { ContentBlock, ContentListMembership, ContentParagraph, ContentSection, LayoutMetadata, Margins, PageSize } from 'document-content-model';
-import { PAGE_SIZE_A4 } from 'document-content-model';
+import type { ContentBlock, ContentListMembership, ContentParagraph, ContentSection, LayoutMetadata, Margins, PageSize } from 'document-schema.js';
+import { PAGE_SIZE_A4 } from 'document-schema.js';
 import type { Package } from '../../model/package';
 import type { XmlElement, XmlNode } from '../../model/node';
 import { rootElement, findChildElement, childrenWithTag, attrValue } from '../../xml/query';

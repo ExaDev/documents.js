@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { AlignmentSchema, ColorSchema } from 'document-content-model';
+import { AlignmentSchema, ColorSchema } from 'document-schema.js';
 import type { Attribute, XmlElement } from '../model/node';
 import { encodeXmlText } from '../xml/entities';
 import { parseOdfLength, formatOdfLength } from '../typed/shared/units';

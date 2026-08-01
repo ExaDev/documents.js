@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ContentShape } from 'document-content-model';
+import type { ContentShape } from 'document-schema.js';
 import type { Package } from '../../model/package';
 import type { XmlElement, XmlNode } from '../../model/node';
 import { el, txt } from '../../xml/fragment';

@@ -1,4 +1,4 @@
-import type { ContentParagraph, ContentRun } from 'document-content-model';
+import type { ContentParagraph, ContentRun } from 'document-schema.js';
 import type { XmlElement, XmlNode } from '../../model/node';
 import type { Package } from '../../model/package';
 import type { StyleProperties } from '../../styles/properties';

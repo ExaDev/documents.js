@@ -1,4 +1,4 @@
-import type { Box, ContentPathPoint, ContentSubpath } from 'document-content-model';
+import type { Box, ContentPathPoint, ContentSubpath } from 'document-schema.js';
 
 // ODF's vector-primitive geometry grammar: draw:path's own svg:d (a real SVG-path-like mini-language, verified against genuine LibreOffice 26.2 output rather than assumed identical to plain SVG -- see the notes below on where it genuinely matches and where a caller must not assume more than what was verified) and draw:polygon/draw:polyline's own draw:points (a completely SEPARATE, simpler comma/space-delimited coordinate-pair list -- NOT an svg:d string at all, confirmed empirically: a straight-line-only closed/open multi-point shape round-trips through LibreOffice's own writer as draw:polygon/draw:polyline with draw:points, never as draw:path with svg:d, regardless of which UNO shape service created it -- LibreOffice reserves draw:path/svg:d specifically for geometry containing at least one genuine Bezier curve segment).
 //

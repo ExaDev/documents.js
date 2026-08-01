@@ -1,4 +1,4 @@
-import type { LayoutMetadata } from 'document-content-model';
+import type { LayoutMetadata } from 'document-schema.js';
 import type { Package } from '../../model/package';
 import type { XmlElement } from '../../model/node';
 import { rootElement, findChildElement, childrenWithTag } from '../../xml/query';

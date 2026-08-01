@@ -1,4 +1,4 @@
-import type { PageSize } from 'document-content-model';
+import type { PageSize } from 'document-schema.js';
 import type { XmlElement } from '../../model/node';
 import type { Package } from '../../model/package';
 import { attrValue, childrenWithTag, findChildElement, rootElement } from '../../xml/query';

@@ -11,8 +11,8 @@ import type {
   LayoutMetadata,
   Margins,
   PageSize,
-} from 'document-content-model';
-import { PAGE_SIZE_A4 } from 'document-content-model';
+} from 'document-schema.js';
+import { PAGE_SIZE_A4 } from 'document-schema.js';
 import type { XmlElement } from '../../model/node';
 import type { Package } from '../../model/package';
 import { attrValue, childrenWithTag, findChildElement, rootElement } from '../../xml/query';

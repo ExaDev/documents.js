@@ -1,5 +1,5 @@
-import type { ContentDrawPage, LayoutMetadata } from 'document-content-model';
-import { PAGE_SIZE_A4 } from 'document-content-model';
+import type { ContentDrawPage, LayoutMetadata } from 'document-schema.js';
+import { PAGE_SIZE_A4 } from 'document-schema.js';
 import type { XmlElement } from '../../model/node';
 import type { Package } from '../../model/package';
 import { childrenWithTag, findChildElement, rootElement } from '../../xml/query';
