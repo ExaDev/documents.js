@@ -41,6 +41,12 @@ describe('createLocalDocumentConverter: shape', () => {
       { source: 'pdf', target: 'odp' },
       { source: 'pdf', target: 'ods' },
       { source: 'pdf', target: 'odg' },
+      { source: 'odt', target: 'docx' },
+      { source: 'docx', target: 'odt' },
+      { source: 'odp', target: 'pptx' },
+      { source: 'pptx', target: 'odp' },
+      { source: 'ods', target: 'xlsx' },
+      { source: 'xlsx', target: 'ods' },
     ]);
   });
 });
@@ -134,6 +140,55 @@ describe('createLocalDocumentConverter: convert', () => {
     const result = await converter.convert({ source: odgToPdfResult.document, targetFormat: 'odg' }, { signal: new AbortController().signal });
     expect(result.document.format).toBe('odg');
     expect(result.document.bytes.length).toBeGreaterThan(0);
+  });
+
+  it('converts odt to docx directly, bypassing PDF', async () => {
+    const converter = createLocalDocumentConverter();
+    const result = await converter.convert({ source: { format: 'odt', bytes: minimalOdtBytes() }, targetFormat: 'docx' }, { signal: new AbortController().signal });
+    expect(result.document.format).toBe('docx');
+    expect(result.document.bytes.length).toBeGreaterThan(0);
+    expect(result.diagnostics).toEqual([]);
+  });
+
+  it('converts docx to odt directly, bypassing PDF', async () => {
+    const converter = createLocalDocumentConverter();
+    const result = await converter.convert({ source: { format: 'docx', bytes: buildSampleDocx('Hi') }, targetFormat: 'odt' }, { signal: new AbortController().signal });
+    expect(result.document.format).toBe('odt');
+    expect(result.document.bytes.length).toBeGreaterThan(0);
+    expect(result.diagnostics).toEqual([]);
+  });
+
+  it('converts odp to pptx directly, bypassing PDF', async () => {
+    const converter = createLocalDocumentConverter();
+    const result = await converter.convert({ source: { format: 'odp', bytes: minimalOdpBytes() }, targetFormat: 'pptx' }, { signal: new AbortController().signal });
+    expect(result.document.format).toBe('pptx');
+    expect(result.document.bytes.length).toBeGreaterThan(0);
+    expect(result.diagnostics).toEqual([]);
+  });
+
+  it('converts pptx to odp directly, bypassing PDF', async () => {
+    const converter = createLocalDocumentConverter();
+    const result = await converter.convert({ source: { format: 'pptx', bytes: buildSamplePptx('Hi') }, targetFormat: 'odp' }, { signal: new AbortController().signal });
+    expect(result.document.format).toBe('odp');
+    expect(result.document.bytes.length).toBeGreaterThan(0);
+    expect(result.diagnostics).toEqual([]);
+  });
+
+  it('converts ods to xlsx directly, bypassing PDF', async () => {
+    const converter = createLocalDocumentConverter();
+    const result = await converter.convert({ source: { format: 'ods', bytes: minimalOdsBytes() }, targetFormat: 'xlsx' }, { signal: new AbortController().signal });
+    expect(result.document.format).toBe('xlsx');
+    expect(result.document.bytes.length).toBeGreaterThan(0);
+    expect(result.diagnostics).toEqual([]);
+  });
+
+  it('converts xlsx to ods directly, bypassing PDF', async () => {
+    const converter = createLocalDocumentConverter();
+    const odsToXlsxResult = await converter.convert({ source: { format: 'ods', bytes: minimalOdsBytes() }, targetFormat: 'xlsx' }, { signal: new AbortController().signal });
+    const result = await converter.convert({ source: odsToXlsxResult.document, targetFormat: 'ods' }, { signal: new AbortController().signal });
+    expect(result.document.format).toBe('ods');
+    expect(result.document.bytes.length).toBeGreaterThan(0);
+    expect(result.diagnostics).toEqual([]);
   });
 
   it('rejects an unsupported conversion pair', async () => {
