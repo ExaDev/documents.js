@@ -1,3 +1,12 @@
+# [2.2.0](https://github.com/ExaDev/ooxml.js/compare/v2.1.1...v2.2.0) (2026-08-01)
+
+
+### Features
+
+* add buildXlsxPackage, the first xlsx writer in this ecosystem ([bfa9473](https://github.com/ExaDev/ooxml.js/commit/bfa9473c17b9e244f093147d5cd78c90f36642e2))
+* add readXlsxContent, a geometry-and-print-settings-rich xlsx reader ([102f1f9](https://github.com/ExaDev/ooxml.js/commit/102f1f943105465f5932877317d562ebe04a88fe))
+* export readXlsxContent/buildXlsxPackage from the public API ([bfe282b](https://github.com/ExaDev/ooxml.js/commit/bfe282b85f08dc38e149af27c3969b7b35ccaa0b))
+
 ## [2.1.1](https://github.com/ExaDev/ooxml.js/compare/v2.1.0...v2.1.1) (2026-07-31)
 
 # [2.1.0](https://github.com/ExaDev/ooxml.js/compare/v2.0.4...v2.1.0) (2026-07-31)
