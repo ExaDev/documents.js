@@ -22,6 +22,8 @@ function graphicPropertyAttrs(init: GraphicStyleInit): Record<string, string> {
   if (init.fill === undefined) {
     attrs['draw:fill'] = 'none';
   } else {
+    // draw:fill="solid" is written explicitly, not left to a consumer's own default -- real LibreOffice (26.2, verified against actual rendered output) fills a draw:rect/draw:ellipse with only draw:fill-color present, but silently renders NO fill at all for a draw:path with only draw:fill-color and no draw:fill="solid" alongside it. ODF's draw:fill enumeration (none/solid/gradient/hatch/bitmap) exists precisely so a reader never has to guess the fill type from which other attributes happen to be present, and this codebase's own readGraphicFill (below) already tolerates either form on read -- so writing it explicitly costs nothing and fixes a real, confirmed rendering gap for every vector kind, not just draw:path.
+    attrs['draw:fill'] = 'solid';
     attrs['draw:fill-color'] = formatOdfColor(init.fill);
   }
   if (init.stroke === undefined) {
