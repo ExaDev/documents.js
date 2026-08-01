@@ -1,6 +1,6 @@
 import type { Package, XmlElement } from 'odf.js';
 import { formatOdfColor, formatOdfLength, parseOdfColor, parseOdfLength } from 'odf.js';
-import type { Color, ContentStroke } from 'document-content-model';
+import type { Color, ContentStroke } from 'document-schema.js';
 import { attr } from 'ooxml.js';
 import { setAttr } from '../../xml/edit';
 import { el } from '../../xml/fragment';

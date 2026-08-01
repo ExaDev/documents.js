@@ -9,8 +9,8 @@ import type {
   LayoutLine,
   LayoutPage,
   LayoutText,
-} from 'document-content-model';
-import { LAYOUT_FORMAT_VERSION } from 'document-content-model';
+} from 'document-schema.js';
+import { LAYOUT_FORMAT_VERSION } from 'document-schema.js';
 import type { LayoutColor } from '../model/color';
 import { COLOR_BLACK, rgbHexToColor } from '../model/color';
 import type { ContentDocument } from '../model/content';

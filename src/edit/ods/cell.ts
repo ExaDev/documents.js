@@ -1,6 +1,6 @@
 import type { Package, XmlElement } from 'odf.js';
 import { attr } from 'ooxml.js';
-import type { ContentCellValue, ContentRun } from 'document-content-model';
+import type { ContentCellValue, ContentRun } from 'document-schema.js';
 import { removeAttr, setAttr } from '../../xml/edit';
 import { el } from '../../xml/fragment';
 import { decodeOdfText, encodeOdfText } from '../../xml/odf-text';

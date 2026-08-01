@@ -1,4 +1,4 @@
-import type { ContentBlock } from 'document-content-model';
+import type { ContentBlock } from 'document-schema.js';
 import { describe, expect, it } from 'vitest';
 import { CONTENT_FORMAT_VERSION, ContentDocumentSchema } from './content';
 

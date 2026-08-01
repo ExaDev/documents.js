@@ -1,7 +1,7 @@
 import type { Package, XmlElement } from 'odf.js';
 import { findStyleElement, formatOdfLength, parseMargins, parsePageSize, resolvePageLayoutProperties } from 'odf.js';
 import { attr } from 'ooxml.js';
-import type { ContentSheetPrintSettings } from 'document-content-model';
+import type { ContentSheetPrintSettings } from 'document-schema.js';
 import type { Margins } from '../../model/geometry';
 import { PAGE_SIZE_A4 } from '../../model/geometry';
 import { setAttr } from '../../xml/edit';

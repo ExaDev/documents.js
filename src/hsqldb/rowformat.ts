@@ -1,4 +1,4 @@
-import type { ContentCellValue } from 'document-content-model';
+import type { ContentCellValue } from 'document-schema.js';
 
 // Per-SQL-type binary field decoding for HSQLDB 1.8.x's own CACHED-table row-store format (org.hsqldb.rowio.RowInputBinary/RowInputBase, org.hsqldb.rowio.RowOutputBinary/RowOutputBase) -- the exact binary layout src/hsqldb/cache.ts (Tier 2) needs to walk a table's rows once it has located them via the B-tree in database/*.data. There is no ratified specification for this format; ground truth here is the actual HSQLDB 1.8.0.10 engine source (decompiled from the real hsqldb.jar bundled with LibreOffice 26.2, Specification-Version 1.8.0.10 -- the exact engine version LibreOffice's embedded HSQLDB driver ships, confirmed via that jar's own META-INF/MANIFEST.MF) cross-checked field-by-field against a real database this same jar produced and re-read via plain JDBC. See src/hsqldb/cache.ts's own module comment for the row/tree-walking half and the full verification account.
 //

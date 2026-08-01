@@ -1,4 +1,4 @@
-import type { ContentCellValue } from 'document-content-model';
+import type { ContentCellValue } from 'document-schema.js';
 import type { HsqldbColumn, HsqldbTable } from './script';
 import { HsqldbRowFormatError, HsqldbDataCursor, readHsqldbColumnValue, resolveHsqldbTypeCode } from './rowformat';
 

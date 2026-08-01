@@ -1,5 +1,5 @@
-import type { ContentEmbeddedObjectBlock, ContentImageBlock, ContentParagraph, ContentSection, ContentTable, LayoutDocument, LayoutImage, LayoutImageAsset, LayoutItem, LayoutLink, LayoutPage, LayoutText } from 'document-content-model';
-import { COLOR_BLACK, LAYOUT_FORMAT_VERSION } from 'document-content-model';
+import type { ContentEmbeddedObjectBlock, ContentImageBlock, ContentParagraph, ContentSection, ContentTable, LayoutDocument, LayoutImage, LayoutImageAsset, LayoutItem, LayoutLink, LayoutPage, LayoutText } from 'document-schema.js';
+import { COLOR_BLACK, LAYOUT_FORMAT_VERSION } from 'document-schema.js';
 import { layoutFormula } from '../mathml';
 import { flipY } from '../model/geometry';
 import type { ContentDocument } from '../model/content';

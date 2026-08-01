@@ -1,7 +1,7 @@
 import type { Package, XmlElement } from 'odf.js';
 import { decodePackage, readOdg } from 'odf.js';
 import { describe, expect, it } from 'vitest';
-import type { ContentSubpath } from 'document-content-model';
+import type { ContentSubpath } from 'document-schema.js';
 import { minimalOdgBytes } from '../../test-support/odg';
 import { createOdg, openOdg } from './editor';
 

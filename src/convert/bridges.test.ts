@@ -1,5 +1,5 @@
-import type { DocumentPackage } from 'document-content-model';
-import { DOCUMENT_PACKAGE_FORMAT_VERSION } from 'document-content-model';
+import type { DocumentPackage } from 'document-schema.js';
+import { DOCUMENT_PACKAGE_FORMAT_VERSION } from 'document-schema.js';
 import { decodePackage as decodeOdfPackage } from 'odf.js';
 import { buildXlsxPackage, decodePackage as decodeOoxmlPackage, encodePackage as encodeOoxmlPackage, readXlsxContent } from 'ooxml.js';
 import { describe, expect, it } from 'vitest';

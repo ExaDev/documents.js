@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ContentDrawPageSchema, ContentSectionSchema, ContentSheetSchema, ContentSlideSchema, LayoutMetadataSchema } from 'document-content-model';
+import { ContentDrawPageSchema, ContentSectionSchema, ContentSheetSchema, ContentSlideSchema, LayoutMetadataSchema } from 'document-schema.js';
 
 // Bumped whenever ContentDocumentSchema's shape changes incompatibly.
 export const CONTENT_FORMAT_VERSION = 1;

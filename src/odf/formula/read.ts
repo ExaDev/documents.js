@@ -1,4 +1,4 @@
-import type { LayoutMetadata } from 'document-content-model';
+import type { LayoutMetadata } from 'document-schema.js';
 import type { Package } from 'odf.js';
 import { readOdfFormula } from 'odf.js';
 import type { EmbeddedFormula } from '../../model/formula';

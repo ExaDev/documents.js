@@ -1,4 +1,4 @@
-import type { ContentSheet, ContentSheetCell, ContentSheetColumn, ContentSheetPrintSettings, ContentSheetRow } from 'document-content-model';
+import type { ContentSheet, ContentSheetCell, ContentSheetColumn, ContentSheetPrintSettings, ContentSheetRow } from 'document-schema.js';
 import type { HsqldbTable } from '../hsqldb/script';
 import { displayTextFor } from '../hsqldb/script';
 import type { ContentDocument } from '../model/content';

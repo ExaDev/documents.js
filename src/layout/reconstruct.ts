@@ -25,7 +25,7 @@ import type {
   LayoutRect,
   LayoutSubpath,
   LayoutText,
-} from 'document-content-model';
+} from 'document-schema.js';
 import { resolveStandardFont, STANDARD_METRICS } from 'pdf-codec';
 import type { Box, Margins } from '../model/geometry';
 import { flipY } from '../model/geometry';

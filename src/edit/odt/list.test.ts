@@ -1,4 +1,4 @@
-import type { ContentBlock, ContentParagraph } from 'document-content-model';
+import type { ContentBlock, ContentParagraph } from 'document-schema.js';
 import { describe, expect, it } from 'vitest';
 import { readOdtContent } from '../../odf/odt/read';
 import { createOdt } from './editor';

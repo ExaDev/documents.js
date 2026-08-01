@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { base64ToBytes } from 'ooxml.js';
-import type { ContentBlock, ContentImageBlock, ContentParagraph, ContentTable } from 'document-content-model';
+import type { ContentBlock, ContentImageBlock, ContentParagraph, ContentTable } from 'document-schema.js';
 import { buildDocxPackage } from '../edit/docx/content';
 import { createDocx } from '../edit/docx/editor';
 import { buildPptxPackage } from '../edit/pptx/content';
