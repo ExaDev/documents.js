@@ -1,6 +1,6 @@
 # document-schema.js
 
-[![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/document-content-model) [![npm](https://img.shields.io/badge/npm-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/document-schema.js) [![Release](https://img.shields.io/github/v/release/ExaDev/document-content-model)](https://github.com/ExaDev/document-content-model/releases/latest) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/document-content-model/ci.yml?branch=main)](https://github.com/ExaDev/document-content-model/actions)
+[![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/document-schema.js) [![npm](https://img.shields.io/badge/npm-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/document-schema.js) [![Release](https://img.shields.io/github/v/release/ExaDev/document-schema.js)](https://github.com/ExaDev/document-schema.js/releases/latest) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/document-schema.js/ci.yml?branch=main)](https://github.com/ExaDev/document-schema.js/actions)
 
 > The canonical, format-agnostic content and layout schema pivot shared by [ooxml.js](https://github.com/ExaDev/ooxml.js), [odf.js](https://github.com/ExaDev/odf.js), and [documents.js](https://github.com/ExaDev/documents.js).
 
@@ -10,7 +10,7 @@ Both `ooxml.js` and `documents.js` independently arrived at the same content voc
 
 It contains only [Zod](https://zod.dev) schemas, their inferred types, and a handful of trivial schema-attached helpers (hex-colour conversion, a recursive structural type guard for the mutually-recursive table/block/embedded-object types). There is no XML, ZIP, PDF, or other binary handling here, and no `zod` dependency other than `zod` itself.
 
-The GitHub repository is still [`ExaDev/document-content-model`](https://github.com/ExaDev/document-content-model), but the published npm package name is `document-schema.js`; `document-content-model`, `doc-model.js`, `doc-schema.js`, `document-schema`, and `document-model.js` republish the identical build as aliases on npmjs.org, alongside a scoped `@exadev/document-content-model` alias on GitHub Packages. A CI matrix job (`publish-aliases` in `.github/workflows/ci.yml`) rewrites `package.json`'s `name` and registry via `npm pkg set` after each release and publishes under each alias in turn -- install whichever name you already depend on.
+The GitHub repository is [`ExaDev/document-schema.js`](https://github.com/ExaDev/document-schema.js), matching the published npm package name; `document-content-model` (the repository's original name, kept resolving), `doc-model.js`, `doc-schema.js`, `document-schema`, and `document-model.js` republish the identical build as aliases on npmjs.org, alongside a scoped `@exadev/document-content-model` alias on GitHub Packages. A CI matrix job (`publish-aliases` in `.github/workflows/ci.yml`) rewrites `package.json`'s `name` and registry via `npm pkg set` after each release and publishes under each alias in turn -- install whichever name you already depend on.
 
 ## Usage
 

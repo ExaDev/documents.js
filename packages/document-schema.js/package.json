@@ -5,11 +5,11 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ExaDev/document-content-model.git"
+    "url": "git+https://github.com/ExaDev/document-schema.js.git"
   },
-  "homepage": "https://github.com/ExaDev/document-content-model#readme",
+  "homepage": "https://github.com/ExaDev/document-schema.js#readme",
   "bugs": {
-    "url": "https://github.com/ExaDev/document-content-model/issues"
+    "url": "https://github.com/ExaDev/document-schema.js/issues"
   },
   "exports": {
     ".": {
