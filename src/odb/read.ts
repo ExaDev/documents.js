@@ -4,8 +4,9 @@ import { decodeHsqldbCachedTables } from '../hsqldb/cache';
 import type { HsqldbTable } from '../hsqldb/script';
 import { parseHsqldbScript } from '../hsqldb/script';
 import { readManifest } from '../odf-package/manifest';
+import { readFirebirdBackup } from '../firebird/backup';
 
-// readOdbTables(pkg) is the decoder-selection shell for .odb (ODF database front-end) packages: it inspects what odf.js's own readOdbInventory and the package's own manifest-media-type-classified parts actually contain, and routes to the implemented decoders -- src/hsqldb/script.ts's Tier 1 HSQLDB TEXT-script parser, extended by src/hsqldb/cache.ts's Tier 2 CACHED-table binary row-store decoder whenever a database/data part is present -- when the shape matches, or throws a specific, named diagnostic naming exactly what was found otherwise -- never a silent empty result. Three failure modes are permanently out of scope, not merely unimplemented: an external-only connection (no embedded engine to read from at all), a Firebird-backed .odb, and HSQLDB's own whole-script BINARY/COMPRESSED serialization (hsqldb.script_format=1/3 -- a materially different and more complex format from CACHED-table row storage: both are the identical length-prefixed, COMMAND-tagged binary encoding of the script's own DDL/DML statements themselves, confirmed against real HSQLDB 1.8.0.10 output; =3 is that exact same binary stream wrapped in ordinary zlib DEFLATE, not a compressed TEXT script -- see this module's own classifyScriptBytes comment). All three throw their own named error class below.
+// readOdbTables(pkg) is the decoder-selection shell for .odb (ODF database front-end) packages: it inspects what odf.js's own readOdbInventory and the package's own manifest-media-type-classified parts actually contain, and routes to the implemented decoders -- src/hsqldb/script.ts's Tier 1 HSQLDB TEXT-script parser, extended by src/hsqldb/cache.ts's Tier 2 CACHED-table binary row-store decoder whenever a database/data part is present, or src/firebird/backup.ts's Tier 3 Firebird gbak-backup-format reader for a Firebird-backed .odb -- when the shape matches, or throws a specific, named diagnostic naming exactly what was found otherwise -- never a silent empty result. Two failure modes remain permanently out of scope, not merely unimplemented: an external-only connection (no embedded engine to read from at all), and HSQLDB's own whole-script BINARY/COMPRESSED serialization (hsqldb.script_format=1/3 -- a materially different and more complex format from CACHED-table row storage: both are the identical length-prefixed, COMMAND-tagged binary encoding of the script's own DDL/DML statements themselves, confirmed against real HSQLDB 1.8.0.10 output; =3 is that exact same binary stream wrapped in ordinary zlib DEFLATE, not a compressed TEXT script -- see this module's own classifyScriptBytes comment). Both throw their own named error class below.
 
 export class OdbNoEmbeddedDataSourceError extends Error {
   readonly url: string | undefined;
@@ -21,7 +22,7 @@ export class OdbNoEmbeddedDataSourceError extends Error {
   }
 }
 
-export type OdbUnsupportedFormat = 'firebird' | 'hsqldb-binary' | 'hsqldb-compressed' | 'unrecognised-engine';
+export type OdbUnsupportedFormat = 'hsqldb-binary' | 'hsqldb-compressed' | 'unrecognised-engine';
 
 export class OdbUnsupportedFormatError extends Error {
   readonly format: OdbUnsupportedFormat;
@@ -36,6 +37,7 @@ export class OdbUnsupportedFormatError extends Error {
 const DATABASE_SCRIPT_PART = 'database/script';
 const DATABASE_DATA_PART = 'database/data';
 const DATABASE_PROPERTIES_PART = 'database/properties';
+const DATABASE_FIREBIRD_PART = 'database/firebird.fbk';
 const EMBEDDED_URL_PREFIX = 'sdbc:embedded:';
 
 // Mirrors odf.js's own private isXmlMediaType (src/typed/odb/read.ts) exactly -- the classification rule the whole "never misclassify database/script" guarantee is built on: a manifest-listed part is worth treating as XML content iff its OWN manifest:media-type says so, never by pattern-matching its path. Not exported by odf.js, so restated here rather than reached for through a non-existent import.
@@ -88,7 +90,15 @@ export function readOdbTables(pkg: Package): readonly HsqldbTable[] {
   const engine = url.slice(EMBEDDED_URL_PREFIX.length);
 
   if (engine === 'firebird') {
-    throw new OdbUnsupportedFormatError('firebird', `Firebird's embedded database engine ("${url}")`);
+    const firebirdPart = pkg.parts[DATABASE_FIREBIRD_PART];
+    if (firebirdPart === undefined) {
+      throw new OdbUnsupportedFormatError('unrecognised-engine', `an embedded Firebird engine with no ${DATABASE_FIREBIRD_PART} part -- an unrecognised embedded storage shape`);
+    }
+    if (firebirdPart.kind !== 'binary') {
+      throw new Error(`readOdbTables: ${DATABASE_FIREBIRD_PART} is not a binary part (found kind "${firebirdPart.kind}") -- malformed .odb package`);
+    }
+    const backupBytes = base64ToBytes(firebirdPart.base64);
+    return readFirebirdBackup(backupBytes).tables;
   }
   if (engine !== 'hsqldb') {
     throw new OdbUnsupportedFormatError('unrecognised-engine', `the embedded "${engine}" database engine`);

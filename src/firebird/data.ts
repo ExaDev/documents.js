@@ -1,0 +1,258 @@
+import type { ContentCellValue } from 'document-content-model';
+import type { FirebirdBackupReader } from './reader';
+import { XdrReader } from './reader';
+import type { FirebirdField, FirebirdRelation } from './schema';
+import { formatFirebirdDate, formatFirebirdTime, formatFirebirdTimestamp } from './date';
+
+// rec_relation_data (row data) parsing -- see the burp.h grammar comment: `<rec_relation_data> <rel attributes> <gen id> <indices> <data> <trigger-old> <rec_relation_end>`, where a relation's own rows are addressed purely by NAME (att_relation_name), resolved against the FirebirdRelation schema map schema.ts already built from the earlier, separate rec_relation pass. Row VALUES only ever arrive here as a `rec_data` record's own att_data_data payload, and only when the whole backup's own att_backup_transportable attribute is TRUE (confirmed true in every real fixture this reader was built against) -- see canonical.cpp's CAN_encode_decode, the exact per-SQL-type XDR shape this module's decodeRowValues mirrors field-for-field.
+
+// rec_type values this module's own row-group loop needs to recognise (restated locally -- see schema.ts's identical note on why these aren't a shared enum import).
+const REC_DATA = 6;
+const REC_BLOB = 7;
+const REC_RELATION_END = 9;
+const REC_GEN_ID = 18;
+const REC_INDEX = 5;
+const REC_TRIGGER = 13;
+
+// att_type values relevant to a rec_relation_data record's own attribute list.
+const ATT_RELATION_NAME = 1;
+
+// att_type values inside a single row's own rec_data record.
+const ATT_DATA_LENGTH = 1;
+const ATT_DATA_DATA = 2;
+// att_xdr_length shares the same numeric value the attribute table assigns it (SERIES + 16, see burp.h) -- restated directly rather than derived, since this module only ever needs the one constant.
+const ATT_XDR_LENGTH = 17;
+
+export class FirebirdDataParseError extends Error {
+  constructor(message: string) {
+    super(`Firebird backup data parse error: ${message}`);
+    this.name = 'FirebirdDataParseError';
+  }
+}
+
+export class FirebirdCompositeRecordUnsupportedError extends Error {
+  readonly recordType: number;
+
+  constructor(recordType: number, context: string) {
+    super(`Firebird backup: encountered record type ${recordType} while ${context}, which this reader's own bounded implementation does not know how to skip safely (its own attribute/sub-record shape has not been verified against a real fixture) -- refusing to guess rather than risk silently desynchronising the rest of the stream`);
+    this.name = 'FirebirdCompositeRecordUnsupportedError';
+    this.recordType = recordType;
+  }
+}
+
+// Skips one blob record's own body (rec_blob tag already consumed by the caller) -- field number/max-segment/segment-count/type attributes, then that many length-prefixed segments. This reader has no BLOB decode of its own (see the README's .odb Tier 3 Fidelity note); a blob-bearing row's blob column is always recorded as an 'empty' ContentCellValue by decodeRowValues below.
+function skipBlobRecord(reader: FirebirdBackupReader): void {
+  let segmentCount: number | undefined;
+  for (;;) {
+    const attribute = reader.readTag();
+    if (attribute === 0) {
+      break;
+    }
+    // Blob-record attributes (burp.h): att_blob_field_number = SERIES+2 = 3, att_blob_type = 4, att_blob_number_segments = 5, att_blob_max_segment = 6, att_blob_data = 7 (a bare tag with no length prefix -- see reader.ts's own top-of-file note). This module needs only the segment count and the bare data tag.
+    if (attribute === 5) {
+      segmentCount = reader.readInt32Attribute();
+    } else if (attribute === 7) {
+      // att_blob_data: a bare tag with no length prefix -- see reader.ts's own top-of-file note. What follows is `segmentCount` individually length-prefixed segments, each a 2-byte length then that many raw bytes.
+      const count = segmentCount ?? 0;
+      for (let i = 0; i < count; i++) {
+        const length = reader.readBlobSegmentLength();
+        reader.readRawPayload(length);
+      }
+    } else {
+      reader.skipAttributeValue();
+    }
+  }
+}
+
+// Decodes exactly one row's own XDR-encoded field-value sequence (canonical.cpp's CAN_encode_decode, direction=DECODE) into ContentCellValue[], one entry per NON-computed field in the relation's own declared order -- matching gbak's own put_data field loop (`if (field->fld_flags & FLD_computed) continue;`). Trailing null-flag shorts (one per non-computed field, same order) are read immediately after every field value per canonical.cpp's own two-pass shape ("Next, get null flags") and applied retroactively: a non-zero null flag replaces whatever value was just decoded with ContentCellValue's 'empty' kind, mirroring src/hsqldb/script.ts's own NULL handling.
+function decodeRowValues(fields: readonly FirebirdField[], payload: Uint8Array<ArrayBuffer>): ContentCellValue[] {
+  const storedFields = fields.filter((field) => !field.computed);
+  const xdr = new XdrReader(payload);
+  const rawValues: (ContentCellValue | undefined)[] = [];
+
+  for (const field of storedFields) {
+    switch (field.physicalType) {
+      case 'short':
+        rawValues.push({ kind: 'number', value: field.scale === 0 ? xdr.readInt16() : xdr.readInt16() * 10 ** field.scale });
+        break;
+      case 'long':
+        rawValues.push({ kind: 'number', value: field.scale === 0 ? xdr.readInt32() : xdr.readInt32() * 10 ** field.scale });
+        break;
+      case 'int64': {
+        const raw = xdr.readInt64();
+        const scaled = field.scale === 0 ? Number(raw) : Number(raw) * 10 ** field.scale;
+        rawValues.push({ kind: 'number', value: scaled });
+        break;
+      }
+      case 'real':
+        rawValues.push({ kind: 'number', value: xdr.readFloat() });
+        break;
+      case 'double':
+        rawValues.push({ kind: 'number', value: xdr.readDouble() });
+        break;
+      case 'sql_date': {
+        const days = xdr.readInt32();
+        rawValues.push({ kind: 'date', value: formatFirebirdDate(days) });
+        break;
+      }
+      case 'sql_time': {
+        const ticks = xdr.readInt32() >>> 0;
+        rawValues.push({ kind: 'time', value: formatFirebirdTime(ticks) });
+        break;
+      }
+      case 'timestamp': {
+        const days = xdr.readInt32();
+        const ticks = xdr.readInt32() >>> 0;
+        rawValues.push({ kind: 'date', value: formatFirebirdTimestamp(days, ticks) });
+        break;
+      }
+      case 'text': {
+        const bytes = xdr.readOpaque(field.lengthBytes);
+        rawValues.push({ kind: 'string', value: new TextDecoder('utf-8').decode(bytes).replace(/\s+$/, '') });
+        break;
+      }
+      case 'varying': {
+        const stringLength = xdr.readInt16();
+        const bytes = xdr.readOpaque(stringLength);
+        rawValues.push({ kind: 'string', value: new TextDecoder('utf-8').decode(bytes) });
+        break;
+      }
+      case 'cstring': {
+        const stringLength = xdr.readInt16();
+        const bytes = xdr.readOpaque(stringLength);
+        rawValues.push({ kind: 'string', value: new TextDecoder('utf-8').decode(bytes) });
+        break;
+      }
+      case 'boolean': {
+        const bytes = xdr.readOpaque(field.lengthBytes);
+        rawValues.push({ kind: 'boolean', value: (bytes[0] ?? 0) !== 0 });
+        break;
+      }
+      case 'blob':
+        // The blob's own quad (two 32-bit halves: a blob ID, not its content) still occupies the row's own fixed field slot and must be consumed to keep the XDR cursor aligned with every field after it -- but this reader has no blob-body decode (see the README's .odb Tier 3 Fidelity note), so the column's own value is always recorded as empty regardless of whether the blob ID is null.
+        xdr.readInt32();
+        xdr.readInt32();
+        rawValues.push({ kind: 'empty' });
+        break;
+      case 'quad':
+        // An ARRAY-typed column's own blob-id quad -- same reasoning as 'blob' above: consumed for alignment, never decoded.
+        xdr.readInt32();
+        xdr.readInt32();
+        rawValues.push({ kind: 'empty' });
+        break;
+      case 'int128':
+      case 'dec64':
+      case 'dec128':
+      case 'unsupported-tz':
+        throw new FirebirdDataParseError(`column "${field.name}" has physical type "${field.physicalType}", which this reader's own bounded implementation does not decode (FB4+-only types not exercised by this reader's Firebird 3.0-era real fixture) -- see the README's .odb Tier 3 Fidelity note`);
+    }
+  }
+
+  // Trailing null-flag pass: one XDR short per non-computed field, same declared order, immediately after every field value (canonical.cpp's own second loop). A non-zero flag means the field is NULL -- Firebird's own sqlind convention (-1 for null, 0 for a real value), though this reader treats ANY non-zero flag as null rather than asserting the exact -1 sentinel, matching restore.epp's own equally permissive `xdr_short` read-back.
+  for (let i = 0; i < storedFields.length; i++) {
+    const nullFlag = xdr.readInt16();
+    if (nullFlag !== 0) {
+      rawValues[i] = { kind: 'empty' };
+    }
+  }
+
+  return rawValues.map((value) => value ?? { kind: 'empty' });
+}
+
+// Reads one rec_data record's own row-group (the tag itself already consumed by the caller) -- one-or-more consecutive rows, each shaped `att_data_length <int32> [att_xdr_length <int32>] att_data_data <bytes -- raw or RLE-compressed, see reader.ts's own Encoding 3 note> (rec_blob)*`, ending when the tag immediately following a row's own trailing blob records is anything other than another rec_data -- see reader.ts's own top-of-file note and this module's own top-of-file note for the full empirical derivation. Returns the decoded rows plus the record type that terminated the group (handed back to the caller, since IT owns interpreting what that terminator means: another rec_data means "resume this same loop from the top", anything else means "the row-group for this relation is over"). compressed mirrors the whole backup's own att_backup_compress flag (readBackupHeader in backup.ts) -- a per-backup, not per-row, setting.
+function readRowGroup(reader: FirebirdBackupReader, relation: FirebirdRelation, compressed: boolean): { rows: ContentCellValue[][]; terminator: number } {
+  const rows: ContentCellValue[][] = [];
+  let terminator: number;
+
+  for (;;) {
+    const lengthTag = reader.readTag();
+    if (lengthTag !== ATT_DATA_LENGTH) {
+      throw new FirebirdDataParseError(`relation "${relation.name}": expected att_data_length (tag ${ATT_DATA_LENGTH}), found tag ${lengthTag}`);
+    }
+    const recordLength = reader.readInt32Attribute();
+
+    let xdrLength = recordLength;
+    const maybeXdrTag = reader.readTag();
+    if (maybeXdrTag === ATT_XDR_LENGTH) {
+      xdrLength = reader.readInt32Attribute();
+    } else if (maybeXdrTag !== ATT_DATA_DATA) {
+      throw new FirebirdDataParseError(`relation "${relation.name}": expected att_xdr_length or att_data_data, found tag ${maybeXdrTag}`);
+    }
+
+    if (maybeXdrTag !== ATT_DATA_DATA) {
+      const dataTag = reader.readTag();
+      if (dataTag !== ATT_DATA_DATA) {
+        throw new FirebirdDataParseError(`relation "${relation.name}": expected att_data_data (tag ${ATT_DATA_DATA}), found tag ${dataTag}`);
+      }
+    }
+
+    const payload = compressed ? reader.readCompressedPayload(xdrLength) : reader.readRawPayload(xdrLength);
+    rows.push(decodeRowValues(relation.fields, payload));
+
+    let next = reader.readTag();
+    while (next === REC_BLOB) {
+      skipBlobRecord(reader);
+      next = reader.readTag();
+    }
+
+    if (next !== REC_DATA) {
+      terminator = next;
+      break;
+    }
+  }
+
+  return { rows, terminator };
+}
+
+// Reads one rec_relation_data record in full (the tag itself already consumed by the caller): its own attribute list (identifying the relation by name), then the mixed record sequence the burp.h grammar comment describes (`<gen id> <indices> <data> <trigger-old> <rec_relation_end>`) -- in practice, whatever order rec_gen_id/rec_index/rec_trigger/rec_data actually appear in (this reader makes no assumption about their relative order, matching restore.epp's own get_relation_data dispatch loop). schema is a name -> FirebirdRelation map already built from the earlier, separate rec_relation pass (readRelationSchema); throws if a rec_relation_data references a name with no matching schema.
+export function readRelationData(reader: FirebirdBackupReader, schema: ReadonlyMap<string, FirebirdRelation>, compressed: boolean): { relationName: string; rows: ContentCellValue[][] } {
+  let name: string | undefined;
+
+  for (;;) {
+    const attribute = reader.readTag();
+    if (attribute === 0) {
+      break;
+    }
+    if (attribute === ATT_RELATION_NAME) {
+      name = reader.readTextAttribute();
+    } else {
+      reader.skipAttributeValue();
+    }
+  }
+
+  if (name === undefined) {
+    throw new FirebirdDataParseError('a rec_relation_data record had no att_relation_name attribute');
+  }
+  const relation = schema.get(name);
+  if (relation === undefined) {
+    throw new FirebirdDataParseError(`rec_relation_data references relation "${name}", which no earlier rec_relation declared`);
+  }
+
+  const rows: ContentCellValue[][] = [];
+  let recordType = reader.readTag();
+  for (;;) {
+    if (recordType === REC_RELATION_END) {
+      break;
+    }
+    if (recordType === REC_DATA) {
+      const group = readRowGroup(reader, relation, compressed);
+      rows.push(...group.rows);
+      recordType = group.terminator;
+      continue;
+    }
+    if (recordType === REC_GEN_ID) {
+      reader.readAttributeBytes(); // a bare length-prefixed int32 value, no attribute-tag wrapper (restore.epp: `gen_id = get_int32(tdgbl);` directly, no get_attribute call first).
+      recordType = reader.readTag();
+      continue;
+    }
+    if (recordType === REC_INDEX || recordType === REC_TRIGGER) {
+      // Both flat, attribute-list-only records (restore.epp's get_index/get_trigger_old) -- an index definition (segment names/uniqueness/etc, e.g. the implicit index a PRIMARY KEY constraint creates) or an old-style trigger, neither of which this reader models. Genuinely skippable: this reader has no use for either, and their own attribute vocabulary carries no table/column/row data.
+      reader.skipFlatRecordAttributes();
+      recordType = reader.readTag();
+      continue;
+    }
+    throw new FirebirdCompositeRecordUnsupportedError(recordType, `reading relation data for "${name}"`);
+  }
+
+  return { relationName: name, rows };
+}
