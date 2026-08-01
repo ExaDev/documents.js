@@ -1,3 +1,16 @@
+# [1.48.0](https://github.com/ExaDev/documents.js/compare/v1.47.0...v1.48.0) (2026-08-01)
+
+
+### Bug Fixes
+
+* write ods sheet print settings via a new OdsSheet.printSettings getter/setter ([041bfbe](https://github.com/ExaDev/documents.js/commit/041bfbe2d26b8ade9b1da955445af45d21210d68))
+
+
+### Features
+
+* add pdfToOds and odsPdfCodec, completing ods's round trip ([5005809](https://github.com/ExaDev/documents.js/commit/5005809a0440094fe1822553ce3465b0474c2f69))
+* add reconstructSpreadsheet for PDF-to-spreadsheet grid recovery ([162c0a2](https://github.com/ExaDev/documents.js/commit/162c0a205af87525d4e6c98361f4ec8c81de67a0))
+
 # [1.47.0](https://github.com/ExaDev/documents.js/compare/v1.46.1...v1.47.0) (2026-08-01)
 
 
