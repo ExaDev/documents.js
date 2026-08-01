@@ -1,6 +1,6 @@
 {
   "name": "pdf-codec",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Hand-written, dependency-minimal PDF codec: parses arbitrary real-world PDFs and generates new ones, built on document-content-model's LayoutDocument pivot and Zod 4 codecs.",
   "type": "module",
   "repository": {
