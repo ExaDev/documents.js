@@ -1,0 +1,89 @@
+{
+  "name": "pdf-codec",
+  "version": "0.1.0",
+  "description": "Hand-written, dependency-minimal PDF codec: parses arbitrary real-world PDFs and generates new ones, built on document-content-model's LayoutDocument pivot and Zod 4 codecs.",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ExaDev/pdf-codec.git"
+  },
+  "homepage": "https://github.com/ExaDev/pdf-codec#readme",
+  "bugs": {
+    "url": "https://github.com/ExaDev/pdf-codec/issues"
+  },
+  "exports": {
+    ".": {
+      "types": {
+        "import": "./dist/index.d.ts",
+        "require": "./dist/index.d.cts"
+      },
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "registry": "https://registry.npmjs.org/"
+  },
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "prepublishOnly": "pnpm run lint && pnpm run typecheck && tsdown && publint && attw --pack",
+    "lint": "eslint . --max-warnings 0",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --project unit",
+    "test:watch": "vitest --project unit",
+    "test:coverage": "vitest run --project unit --coverage",
+    "test:corpus": "vitest run --project corpus",
+    "test:smoke": "tsdown && vitest run --project smoke",
+    "prepare": "husky",
+    "release": "semantic-release"
+  },
+  "keywords": [
+    "pdf",
+    "pdf-parser",
+    "pdf-writer",
+    "pdf-generation",
+    "codec",
+    "round-trip",
+    "zod",
+    "mathml"
+  ],
+  "license": "MIT",
+  "packageManager": "pnpm@11.6.0",
+  "dependencies": {
+    "document-content-model": "^1.5.1",
+    "fflate": "^0.8.3",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
+    "@commitlint/cli": "^21.2.1",
+    "@commitlint/config-conventional": "^21.2.0",
+    "@eslint/js": "^10.0.1",
+    "@semantic-release/changelog": "^7.0.0",
+    "@semantic-release/git": "^11.0.1",
+    "@types/node": "^26.1.1",
+    "@vitest/coverage-v8": "^4.1.10",
+    "eslint": "^10.8.0",
+    "globals": "^17.8.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.2.0",
+    "publint": "^0.3.21",
+    "semantic-release": "^25.0.8",
+    "tsdown": "^0.22.13",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.65.0",
+    "vitest": "^4.1.10"
+  }
+}
