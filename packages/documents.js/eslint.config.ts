@@ -4,8 +4,8 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    // test/smoke.test.mjs and test/corpus/**/*.test.ts import from ../dist or reference an optional local corpus; both are deliberately outside tsconfig's "src" program (they test built output / are gitignored input) -- see their own top-of-file comments and README.md.
-    ignores: ['dist', 'coverage', 'node_modules', 'test'],
+    // test/smoke.test.mjs and test/corpus/**/*.test.ts import from ../dist or reference an optional local corpus; both are deliberately outside tsconfig's "src" program (they test built output / are gitignored input) -- see their own top-of-file comments and README.md. scripts/ is a standalone maintenance utility (regenerating a vendored binary asset's base64 embedding), also outside tsconfig's "src" program -- see scripts/generate-math-font-asset.mjs's own header comment.
+    ignores: ['dist', 'coverage', 'node_modules', 'test', 'scripts'],
   },
   {
     // Pin the TSConfig root so the parser isn't confused by stray tsconfig.json files elsewhere in the tree. Required because lint-staged runs eslint at commit time.
