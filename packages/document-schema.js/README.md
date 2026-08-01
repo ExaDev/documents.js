@@ -10,7 +10,7 @@ Both `ooxml.js` and `documents.js` independently arrived at the same content voc
 
 It contains only [Zod](https://zod.dev) schemas, their inferred types, and a handful of trivial schema-attached helpers (hex-colour conversion, a recursive structural type guard for the mutually-recursive table/block/embedded-object types). There is no XML, ZIP, PDF, or other binary handling here, and no `zod` dependency other than `zod` itself.
 
-The GitHub repository is [`ExaDev/document-schema.js`](https://github.com/ExaDev/document-schema.js), matching the published npm package name; `document-content-model` (the repository's original name, kept resolving), `doc-model.js`, `doc-schema.js`, `document-schema`, and `document-model.js` republish the identical build as aliases on npmjs.org, alongside a scoped `@exadev/document-content-model` alias on GitHub Packages. A CI matrix job (`publish-aliases` in `.github/workflows/ci.yml`) rewrites `package.json`'s `name` and registry via `npm pkg set` after each release and publishes under each alias in turn -- install whichever name you already depend on.
+The GitHub repository is [`ExaDev/document-schema.js`](https://github.com/ExaDev/document-schema.js), matching the published npm package name.
 
 ## Usage
 
@@ -29,7 +29,7 @@ const pkg = DocumentPackageSchema.parse({ formatVersion: 1, content, layout });
 - [documents.js](https://github.com/ExaDev/documents.js) — the primary consumer of both `ContentDocument` and `LayoutDocument`, which it converts between via its layout engines and its `pdf-codec` dependency, and of `DocumentPackage` as the `onDocument` side-channel value its conversion functions hand back.
 - [pdf-codec](https://github.com/ExaDev/pdf-codec) — the hand-written PDF codec extracted from `documents.js`: `readPdf`/`writePdf` and its own `pdfCodec` z.codec() pair operate entirely in terms of this package's `LayoutDocument` (plus the item kinds it's built from -- `LayoutItem`/`LayoutText`/`LayoutImage`/`LayoutRect`/`LayoutEllipse`/`LayoutLink`/`LayoutPath`/`LayoutSubpath`/`LayoutPathSegment`/`LayoutPage`/`LayoutImageAsset`/`LayoutMetadata`), `Color`/`LayoutFont` (aliased `LayoutColor`/`LayoutFont` at its own call sites), and `LAYOUT_FORMAT_VERSION`/`COLOR_BLACK`/`LayoutDocumentSchema` -- it never redeclares any of these itself, unlike its own `MathBox`/`PositionedFormula` mirror of `documents.js`'s MathML types (a deliberate, narrower exception -- see pdf-codec's own README).
 
-None of these four packages depend on each other for this vocabulary — each depends on `document-schema.js` (or one of its aliases above) directly, which is the whole point: one schema, not four independently-maintained, drift-prone copies.
+None of these four packages depend on each other for this vocabulary — each depends on `document-schema.js` directly, which is the whole point: one schema, not four independently-maintained, drift-prone copies.
 
 ## License
 
