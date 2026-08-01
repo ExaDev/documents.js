@@ -1,3 +1,17 @@
+# [1.53.0](https://github.com/ExaDev/documents.js/compare/v1.52.0...v1.53.0) (2026-08-01)
+
+
+### Features
+
+* export CACHED-table .odb decoding from the public API ([424340b](https://github.com/ExaDev/documents.js/commit/424340bd10d8a10959b35c0984c1be93e7755a8a))
+* **firebird:** add a Firebird gbak backup format reader for .odb Tier 3 ([52063e0](https://github.com/ExaDev/documents.js/commit/52063e07b6796dd58f4ca7baedb214817caac53a))
+* **hsqldb:** decode HSQLDB 1.8.x binary field encoding for CACHED-table rows ([7e86f32](https://github.com/ExaDev/documents.js/commit/7e86f3297e1aa7d06107ef3e5ff544e7948ece92))
+* **hsqldb:** walk a CACHED table's own row-store tree from its SET TABLE INDEX root ([b5c7eb4](https://github.com/ExaDev/documents.js/commit/b5c7eb43b0c081db0ab87fd3bb26ecc099118d75))
+* **odb:** add .odb Tier 2 HSQLDB CACHED-table (binary row-store) decoding ([968b957](https://github.com/ExaDev/documents.js/commit/968b957351f5634fc791e8374ef2fca94fb06a47))
+* **odb:** add .odb Tier 3 Firebird gbak backup format decoding ([786d324](https://github.com/ExaDev/documents.js/commit/786d32442b6d318e3afe43946c4440e793b595af))
+* **odb:** route Firebird-embedded .odb packages to readFirebirdBackup ([10d56ba](https://github.com/ExaDev/documents.js/commit/10d56bae312aec1fc32e792212e562ece9e6cefd))
+* **odb:** splice CACHED-table rows into readOdbTables; fix compressed-script detection ([a4e4464](https://github.com/ExaDev/documents.js/commit/a4e44649ace07e54cd7d74c86543b26cfbc1d448))
+
 # [1.52.0](https://github.com/ExaDev/documents.js/compare/v1.51.0...v1.52.0) (2026-08-01)
 
 
