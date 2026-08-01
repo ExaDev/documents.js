@@ -45,6 +45,7 @@ function zipBytesSchema(label: string) {
 
 export const DocxBytesSchema = zipBytesSchema('docx');
 export const PptxBytesSchema = zipBytesSchema('pptx');
+export const XlsxBytesSchema = zipBytesSchema('xlsx');
 
 export const PdfBytesSchema = z.instanceof(Uint8Array).refine(
   (bytes) => containsBytesWithin(bytes, PDF_HEADER, PDF_HEADER_SEARCH_WINDOW),
