@@ -22,6 +22,26 @@ const layout = LayoutDocumentSchema.parse(somePageLayoutValue);
 const pkg = DocumentPackageSchema.parse({ formatVersion: 1, content, layout });
 ```
 
+## JSON Schema
+
+Alongside the Zod schemas/types above, the package publishes three plain [JSON Schema](https://json-schema.org) files -- generated from the same Zod definitions via [`z.toJSONSchema()`](https://zod.dev/json-schema) at build time (`scripts/generate-json-schemas.mjs`) -- for non-TypeScript consumers that want to validate against or generate types from these shapes without depending on Zod at all:
+
+```ts
+const documentPackageSchema = require('document-schema.js/schemas/document-package.schema.json');
+// or, from a bundler/toolchain that supports JSON module imports:
+import documentPackageSchema from 'document-schema.js/schemas/document-package.schema.json' with { type: 'json' };
+```
+
+or from any language/tool that can read a file out of `node_modules`:
+
+```
+node_modules/document-schema.js/schemas/document-package.schema.json
+node_modules/document-schema.js/schemas/content-document.schema.json
+node_modules/document-schema.js/schemas/layout-document.schema.json
+```
+
+Each file's `$id` is a commit-SHA-pinned `https://raw.githubusercontent.com/ExaDev/document-schema.js/<sha>/schemas/<file>` URL -- immutable, and cross-referenced between the three files via real `$ref`s (e.g. `document-package.schema.json`'s `content`/`layout` properties `$ref` the other two files directly), so a JSON Schema validator that resolves `$ref`s over HTTP (or against local copies of all three files) can validate a whole `DocumentPackage` value. `content-document.schema.json` additionally carries a `$defs` block for the recursive paragraph/table/embedded-object block model, which Zod's own converter can't express directly (see that script's own top-of-file comment for why).
+
 ## Used by
 
 - [ooxml.js](https://github.com/ExaDev/ooxml.js) — its `readDocx`/`readPptx`/`readXlsxContent` return `ContentSection[]`/`ContentSlide[]`/spreadsheet `ContentSheet[]` typed against this package's own schemas, not a locally-defined lookalike.

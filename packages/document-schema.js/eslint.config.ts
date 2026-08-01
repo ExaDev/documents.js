@@ -4,8 +4,8 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    // test/smoke.test.mjs imports from ../dist, a build artefact that may not exist at lint time and is deliberately outside tsconfig's "src" program (it tests the built output, not the source) -- see its own top-of-file comment and CLAUDE.md.
-    ignores: ['dist', 'coverage', 'node_modules', 'test'],
+    // test/smoke.test.mjs imports from ../dist, a build artefact that may not exist at lint time and is deliberately outside tsconfig's "src" program (it tests the built output, not the source) -- see its own top-of-file comment and CLAUDE.md. scripts/generate-json-schemas.mjs is the same kind of standalone build step, also importing from ../dist -- matching pdf-codec's own eslint.config.ts precedent for its scripts/ directory.
+    ignores: ['dist', 'coverage', 'node_modules', 'test', 'scripts'],
   },
   {
     // Pin the TSConfig root so the parser isn't confused by stray tsconfig.json files elsewhere in the tree. Required because lint-staged runs eslint at commit time.

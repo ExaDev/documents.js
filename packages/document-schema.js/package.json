@@ -19,13 +19,17 @@
       },
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
-    }
+    },
+    "./schemas/document-package.schema.json": "./schemas/document-package.schema.json",
+    "./schemas/content-document.schema.json": "./schemas/content-document.schema.json",
+    "./schemas/layout-document.schema.json": "./schemas/layout-document.schema.json"
   },
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "schemas"
   ],
   "publishConfig": {
     "access": "public",
@@ -37,14 +41,14 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "tsdown",
-    "prepublishOnly": "pnpm run lint && pnpm run typecheck && tsdown && publint && attw --pack",
+    "build": "tsdown && node scripts/generate-json-schemas.mjs",
+    "prepublishOnly": "pnpm run lint && pnpm run typecheck && pnpm run build && publint && attw --pack",
     "lint": "eslint . --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --project unit",
     "test:watch": "vitest --project unit",
     "test:coverage": "vitest run --project unit --coverage",
-    "test:smoke": "tsdown && vitest run --project smoke",
+    "test:smoke": "pnpm run build && vitest run --project smoke",
     "prepare": "husky",
     "release": "semantic-release"
   },
