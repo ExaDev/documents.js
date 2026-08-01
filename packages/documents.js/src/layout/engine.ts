@@ -169,7 +169,7 @@ function layoutTableFlow(table: ContentTable, section: ContentSection, pages: La
 
       if (cell.background !== undefined) {
         const cellFrame = flipY({ xPt: cellXDown, yPt: state.cursorYDown, widthPt: cellWidthPt, heightPt: rowHeightPt }, section.pageSize.heightPt);
-        // ContentTableCell has no sourcePath of its own (only ContentTable does -- see document-content-model), so a per-cell background rect can only be attributed at the table's own granularity, not to the specific cell.
+        // ContentTableCell has no sourcePath of its own (only ContentTable does -- see document-schema.js), so a per-cell background rect can only be attributed at the table's own granularity, not to the specific cell.
         state.items.push({ kind: 'rect', xPt: cellFrame.xPt, yPt: cellFrame.yPt, widthPt: cellFrame.widthPt, heightPt: cellFrame.heightPt, fill: cell.background, sourcePath: table.sourcePath });
       }
 
@@ -238,7 +238,7 @@ function paginateSection(section: ContentSection, measurer: TextMeasurer, images
     } else if (block.kind === 'embeddedObject' && block.objectKind === 'formula') {
       layoutFormulaFlow(block, section, pages, state, contentLeftXDown, contentWidthPt, contentBottomYDown, measurer, options, formulas);
     }
-    // Every other 'embeddedObject' objectKind (wordprocessing/presentation/spreadsheet/drawing) is not produced by any reader this package depends on yet (document-content-model's forward-looking schema addition -- see edit/docx/content.ts's own note on the same gap), so there is nothing to lay out for those here today.
+    // Every other 'embeddedObject' objectKind (wordprocessing/presentation/spreadsheet/drawing) is not produced by any reader this package depends on yet (document-schema.js's forward-looking schema addition -- see edit/docx/content.ts's own note on the same gap), so there is nothing to lay out for those here today.
   }
 
   flushPage(state, section, pages);

@@ -2,7 +2,7 @@ import type { ContentBlock } from 'document-schema.js';
 import { describe, expect, it } from 'vitest';
 import { CONTENT_FORMAT_VERSION, ContentDocumentSchema } from './content';
 
-// The full content vocabulary (ContentRun, ContentParagraph, ContentBlock, ContentTable, isContentBlock, etc.) now lives in document-content-model, with its own exhaustive coverage there -- these tests exercise only the envelope this file still defines: ContentDocumentSchema's own discriminated-union behaviour.
+// The full content vocabulary (ContentRun, ContentParagraph, ContentBlock, ContentTable, isContentBlock, etc.) now lives in document-schema.js, with its own exhaustive coverage there -- these tests exercise only the envelope this file still defines: ContentDocumentSchema's own discriminated-union behaviour.
 
 const paragraph: ContentBlock = { kind: 'paragraph', runs: [{ text: 'Hi' }] };
 const table: ContentBlock = {

@@ -5,7 +5,7 @@ import type { ContentDocument } from '../model/content';
 import { CONTENT_FORMAT_VERSION } from '../model/content';
 import { PAGE_SIZE_A4 } from '../model/geometry';
 
-// Maps the table data readOdbTables/parseHsqldbScript produces onto document-content-model's own ContentSheetSchema pivot -- the same pivot ooxml.js's buildXlsxPackage and this package's own buildOdsPackage/convertSpreadsheetToLayout already consume -- so odbToXlsx (src/convert/convert.ts) is nothing more than odbTablesToSpreadsheetDocument(readOdbTables(pkg)) fed straight into buildXlsxPackage. One sheet per table: a header row of the table's own column names, then one data row per HsqldbTable row, each cell already carrying the typed ContentCellValue the SQL parser produced.
+// Maps the table data readOdbTables/parseHsqldbScript produces onto document-schema.js's own ContentSheetSchema pivot -- the same pivot ooxml.js's buildXlsxPackage and this package's own buildOdsPackage/convertSpreadsheetToLayout already consume -- so odbToXlsx (src/convert/convert.ts) is nothing more than odbTablesToSpreadsheetDocument(readOdbTables(pkg)) fed straight into buildXlsxPackage. One sheet per table: a header row of the table's own column names, then one data row per HsqldbTable row, each cell already carrying the typed ContentCellValue the SQL parser produced.
 
 const HEADER_ROW_INDEX = 0;
 // Fallback sizing only -- this table never had a real ODF column-width/row-height style to read from, unlike every other ContentSheet producer in this package (readOdsContent, reconstructSpreadsheet). Mirrors src/layout/sheets.ts's own DEFAULT_COLUMN_WIDTH_PT/DEFAULT_ROW_HEIGHT_PT fallback values exactly, restated locally rather than imported since that module keeps them private.

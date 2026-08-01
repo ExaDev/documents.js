@@ -107,5 +107,5 @@ function appendBlock(body: DocxBody, block: ContentBlock): void {
   } else if (block.kind === 'table') {
     appendTable(body, block);
   }
-  // block.kind === 'embeddedObject' (document-content-model's forward-looking schema addition for an OLE-style nested document -- formula/wordprocessing/presentation/spreadsheet/drawing) falls through here unhandled: no reader this package depends on (ooxml.js's readDocx/readPptx, odf.js's readOdt/readOdp/readOds/readOdg) produces one yet, so there is nothing to round-trip today -- a documented, currently-unreachable gap, not a silent one.
+  // block.kind === 'embeddedObject' (document-schema.js's forward-looking schema addition for an OLE-style nested document -- formula/wordprocessing/presentation/spreadsheet/drawing) falls through here unhandled: no reader this package depends on (ooxml.js's readDocx/readPptx, odf.js's readOdt/readOdp/readOds/readOdg) produces one yet, so there is nothing to round-trip today -- a documented, currently-unreachable gap, not a silent one.
 }
