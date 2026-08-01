@@ -3,6 +3,8 @@ export { parsePackage } from './package-io/read';
 export { serializePackage } from './package-io/write';
 export { parseXml } from './xml/parse';
 export { buildXml } from './xml/build';
+export { el, txt } from './xml/fragment';
+export { encodeXmlText } from './xml/entities';
 export { unzipPackage, zipPackage } from './zip';
 export { bytesToBase64, base64ToBytes } from './util/base64';
 
@@ -84,6 +86,17 @@ export {
   ContentTableRowSchema,
   ContentTableSchema,
   isContentBlock,
+  CONTENT_FORMAT_VERSION,
+  ContentDocumentSchema,
+  ContentCellValueSchema,
+  ContentSheetSchema,
+  ContentSheetCellSchema,
+  ContentSheetColumnSchema,
+  ContentSheetRowSchema,
+  ContentSheetImageSchema,
+  ContentSheetPrintRangeSchema,
+  ContentSheetRepeatRangeSchema,
+  ContentSheetPrintSettingsSchema,
 } from 'document-content-model';
 export type {
   Box,
@@ -103,6 +116,16 @@ export type {
   ContentTable,
   ContentTableCell,
   ContentTableRow,
+  ContentDocument,
+  ContentCellValue,
+  ContentSheet,
+  ContentSheetCell,
+  ContentSheetColumn,
+  ContentSheetRow,
+  ContentSheetImage,
+  ContentSheetPrintRange,
+  ContentSheetRepeatRange,
+  ContentSheetPrintSettings,
 } from 'document-content-model';
 
 export { applyColorTransforms } from './typed/shared/color';
@@ -124,4 +147,8 @@ export type { PptxDocument } from './typed/pptx/read';
 
 export { readXlsx, XlsxWorkbookSchema, XlsxSheetSchema, XlsxCellSchema, DefinedNameSchema } from './typed/xlsx';
 export type { XlsxWorkbook, XlsxSheet, XlsxCell, DefinedName } from './typed/xlsx';
+
+// --- xlsx (rich): a geometry- and print-settings-rich SpreadsheetML reader/writer pair around ContentDocument (kind: 'spreadsheet') -- column widths, row heights, hidden rows/columns, merged ranges, every cell value kind xlsx itself distinguishes, and print settings (page size/margins/scale/fit-to-page/repeat rows-columns/gridlines/headers/page order/manual breaks). readXlsxContent matches readOds's own established bar in the sibling odf.js package; buildXlsxPackage is this package's first writer of genuinely new xlsx content, the read side's honest inverse. Distinct from readXlsx above (XlsxWorkbook, a lossy one-way cell-values-only projection with no write side) -- both stay exported since they serve different callers. ---
+export { readXlsxContent } from './typed/xlsx/content';
+export { buildXlsxPackage } from './typed/xlsx/build';
 

@@ -13,6 +13,8 @@ const FUNCTIONS = [
   'readDocx',
   'readPptx',
   'readXlsx',
+  'readXlsxContent',
+  'buildXlsxPackage',
   'toCompact',
   'fromCompact',
   'decodeCompactPackage',
