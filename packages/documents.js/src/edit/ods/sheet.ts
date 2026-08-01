@@ -1,9 +1,11 @@
 import type { Package, XmlElement, XmlNode } from 'odf.js';
 import { parseCellReference } from 'odf.js';
 import { attr } from 'ooxml.js';
+import type { ContentSheetPrintSettings } from 'document-content-model';
 import { removeChild, setAttr } from '../../xml/edit';
 import { COVERED_CELL_TAG, resolveCellNode } from './address';
 import { OdsCell } from './cell';
+import { readSheetPrintSettings, writeSheetPrintSettings } from './print-settings';
 
 const NAME_ATTR = 'table:name';
 
@@ -37,6 +39,15 @@ export class OdsSheet {
 
   set name(value: string) {
     setAttr(this.live(), NAME_ATTR, value);
+  }
+
+  // Reads pageSize/margins/gridlines/headers/pageOrder from this sheet's own table:style-name -> style:master-page-name -> style:page-layout chain; the setter mints a fresh page-layout/master-page/table-style triple and repoints this table:table's own table:style-name to it, rather than mutating whatever it was pointing at before -- see print-settings.ts's own top-of-file note for why. printRange/scale/fitToPages/repeatRows/repeatColumns/manualBreaks are a documented, bounded gap on both sides: the getter never reads them and the setter never writes them (see print-settings.ts).
+  get printSettings(): ContentSheetPrintSettings {
+    return readSheetPrintSettings(this.pkg, this.live());
+  }
+
+  set printSettings(value: ContentSheetPrintSettings) {
+    writeSheetPrintSettings(this.pkg, this.live(), value);
   }
 
   // Resolves (individuating/gap-filling as needed) the cell at 0-based (row, column) and wraps it as an OdsCell -- rejecting a position covered by another cell's own merged range outright (see OdsCell's own class doc: a table:covered-table-cell is never wrapped), rather than silently handing back something whose value/formula/displayText setters would corrupt the merge.
