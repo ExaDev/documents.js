@@ -269,9 +269,11 @@ export { odpPptxCodec, odsXlsxCodec, odtDocxCodec } from './convert/codec';
 export type { OdmToPdfOptions } from './convert/convert';
 export { odmToPdf, OdmUnresolvedSectionError } from './convert/convert';
 
-// --- .odb (ODF database front-end) Tier 1 support: HSQLDB's TEXT script format only -- binary/compressed HSQLDB and Firebird-backed .odb are detected and named, not implemented, and an external-only connection is permanently out of scope (see README's Fidelity/Gotchas). readOdbTables is independently usable (Package -> table data), matching the "each pipeline stage independently exported" convention above; odbToXlsx/odbToCsv are the ergonomic conversions, and -- like odmToPdf -- are not wired into the DocumentConverter port below. ---
+// --- .odb (ODF database front-end): HSQLDB's TEXT script format (Tier 1, src/hsqldb/script.ts) plus its own binary CACHED-table row-store format (Tier 2, src/hsqldb/cache.ts, src/hsqldb/rowformat.ts) -- both wired transparently into readOdbTables/odbToXlsx/odbToCsv, so a caller never needs to know which storage shape a given table used. HSQLDB's own whole-script BINARY/COMPRESSED serialisation and a Firebird-backed .odb are detected and named, not implemented, and an external-only connection is permanently out of scope (see README's Fidelity/Gotchas). readOdbTables is independently usable (Package -> table data), matching the "each pipeline stage independently exported" convention above; decodeHsqldbCachedTables is the equivalent Tier 2 stage, for a caller that already has Tier 1's own parsed tables plus database/data's and database/properties' raw text/bytes from somewhere other than a full .odb Package; odbToXlsx/odbToCsv are the ergonomic conversions, and -- like odmToPdf -- are not wired into the DocumentConverter port below. ---
 export type { HsqldbColumn, HsqldbTable } from './hsqldb/script';
 export { displayTextFor as hsqldbCellDisplayText, HsqldbScriptParseError, parseHsqldbScript } from './hsqldb/script';
+export { decodeHsqldbCachedTables } from './hsqldb/cache';
+export { HsqldbRowFormatError } from './hsqldb/rowformat';
 export type { OdbUnsupportedFormat } from './odb/read';
 export { OdbNoEmbeddedDataSourceError, OdbUnsupportedFormatError, readOdbTables } from './odb/read';
 export { odbTablesToSpreadsheetDocument } from './odb/spreadsheet';
