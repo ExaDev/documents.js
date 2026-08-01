@@ -1,4 +1,25 @@
-import type { ContentBlock, ContentParagraph, ContentRun, ContentSection, ContentShape, ContentSlide, LayoutDocument, LayoutImage, LayoutImageAsset, LayoutPage, LayoutText } from 'document-content-model';
+import type {
+  ContentBlock,
+  ContentDrawPage,
+  ContentParagraph,
+  ContentPathPoint,
+  ContentRun,
+  ContentSection,
+  ContentShape,
+  ContentSlide,
+  ContentSubpath,
+  ContentVector,
+  LayoutDocument,
+  LayoutEllipse,
+  LayoutImage,
+  LayoutImageAsset,
+  LayoutLine,
+  LayoutPage,
+  LayoutPath,
+  LayoutRect,
+  LayoutSubpath,
+  LayoutText,
+} from 'document-content-model';
 import { STANDARD_METRICS } from '../pdf/afm-widths';
 import { resolveStandardFont } from '../pdf/fonts';
 import type { Box, Margins } from '../model/geometry';
@@ -399,5 +420,144 @@ function imageToShape(img: LayoutImage, slideHeightPt: number, images: Record<st
     insetRightPt: 0,
     insetBottomPt: 0,
     blocks: [{ kind: 'image', format: asset.format, base64: asset.base64, widthPt: img.widthPt, heightPt: img.heightPt }],
+  };
+}
+
+// ---------------------------------------------------------------------------
+// PDF -> odg (drawing): deliberately more tractable than reconstructWordprocessing/reconstructPresentation above, because a drawing has no semantic structure to infer at all -- no baseline clustering, no paragraph inference. Every painted LayoutItem maps close to 1:1 back onto an ODF construct, in the same z-order (array position) it was painted.
+// ---------------------------------------------------------------------------
+
+export function reconstructDrawing(doc: LayoutDocument, options?: ReconstructOptions): ContentDocument {
+  const signal = options?.signal;
+  const pages: ContentDrawPage[] = doc.pages.map((page) => {
+    throwIfAborted(signal);
+    return reconstructDrawPage(page, doc.images);
+  });
+  return { kind: 'drawing', formatVersion: CONTENT_FORMAT_VERSION, metadata: doc.metadata, pages };
+}
+
+// ContentDrawPageSchema keeps shapes and vectors as two independently paint-ordered arrays with no field recording their relative order -- the same documented gap drawing.ts's own convertDrawingToLayout resolves one way (vectors always paint before shapes) when going the other direction. reconstructDrawPage resolves it in reverse identically: walk page.items in original paint order once, bucketing each item into whichever array its own kind belongs to, so each array keeps the relative order its own items appeared in overall. A page built by convertDrawingToLayout itself (vectors-then-shapes, by construction) round-trips its own paint order exactly this way; a LayoutDocument from any other producer gets the same bucketing, the only ordering ContentDrawPageSchema's own shape is able to express at all. 'link' items have no drawing-page equivalent and are dropped, matching reconstructPageBlocks/reconstructSlide's own existing precedent above of ignoring link items entirely.
+function reconstructDrawPage(page: LayoutPage, images: Record<string, LayoutImageAsset>): ContentDrawPage {
+  const vectors: ContentVector[] = [];
+  const shapes: ContentShape[] = [];
+  for (const item of page.items) {
+    if (item.kind === 'rect') {
+      vectors.push(layoutRectToVector(item, page.heightPt));
+    } else if (item.kind === 'ellipse') {
+      vectors.push(layoutEllipseToVector(item, page.heightPt));
+    } else if (item.kind === 'line') {
+      vectors.push(layoutLineToVector(item, page.heightPt));
+    } else if (item.kind === 'path') {
+      vectors.push(layoutPathToVector(item, page.heightPt));
+    } else if (item.kind === 'text') {
+      shapes.push(layoutTextToShape(item, page.heightPt));
+    } else if (item.kind === 'image') {
+      const shape = imageToShape(item, page.heightPt, images);
+      if (shape !== undefined) {
+        shapes.push(shape);
+      }
+    }
+  }
+  return { size: { widthPt: page.widthPt, heightPt: page.heightPt }, shapes, vectors };
+}
+
+// The exact inverse of drawing.ts's own convertRectVector/convertEllipseVector: flipY is its own exact inverse (see model/geometry.ts's own doc comment), so re-flipping a LayoutRect/LayoutEllipse's bottom-left/y-up box recovers the identical top-left/y-down frame convertDrawingToLayout started from.
+function layoutRectToVector(item: LayoutRect, pageHeightPt: number): ContentVector {
+  const frame = flipY({ xPt: item.xPt, yPt: item.yPt, widthPt: item.widthPt, heightPt: item.heightPt }, pageHeightPt);
+  return { kind: 'rect', frame, fill: item.fill, stroke: item.stroke, sourcePath: item.sourcePath };
+}
+
+function layoutEllipseToVector(item: LayoutEllipse, pageHeightPt: number): ContentVector {
+  const frame = flipY({ xPt: item.xPt, yPt: item.yPt, widthPt: item.widthPt, heightPt: item.heightPt }, pageHeightPt);
+  return { kind: 'ellipse', frame, fill: item.fill, stroke: item.stroke, sourcePath: item.sourcePath };
+}
+
+// The exact inverse of drawing.ts's own convertLineVector: a bare point flip (pageHeightPt - yPt), not a box flip, since a line's two endpoints carry no independent width/height to preserve.
+function layoutLineToVector(item: LayoutLine, pageHeightPt: number): ContentVector {
+  return {
+    kind: 'line',
+    from: { xPt: item.x1Pt, yPt: pageHeightPt - item.y1Pt },
+    to: { xPt: item.x2Pt, yPt: pageHeightPt - item.y2Pt },
+    stroke: { color: item.color, widthPt: item.widthPt },
+    sourcePath: item.sourcePath,
+  };
+}
+
+interface PathPointRef {
+  readonly xPt: number;
+  readonly yPt: number;
+}
+
+function collectPathPoints(subpaths: readonly LayoutSubpath[]): PathPointRef[] {
+  const points: PathPointRef[] = [];
+  for (const subpath of subpaths) {
+    points.push({ xPt: subpath.startXPt, yPt: subpath.startYPt });
+    for (const segment of subpath.segments) {
+      if (segment.kind === 'cubic') {
+        points.push({ xPt: segment.c1xPt, yPt: segment.c1yPt });
+        points.push({ xPt: segment.c2xPt, yPt: segment.c2yPt });
+      }
+      points.push({ xPt: segment.xPt, yPt: segment.yPt });
+    }
+  }
+  return points;
+}
+
+// Unlike a rect/ellipse/line item, a LayoutPath carries no frame of its own -- drawing.ts's own convertPathVector resolves each point through the ORIGINAL ContentVector frame, information a PDF's recovered geometry no longer carries at all. The frame reconstructed here is instead the tight bounding box of every point in the path, including cubic control points, not just line/curve endpoints: a cubic Bezier curve is guaranteed to lie within the convex hull of its four control points, so including them guarantees the frame fully contains the rendered curve rather than clipping it. A cubic segment's own control points are never on the curve itself, so this frame is not necessarily identical to whatever frame the path originally had in a hand-authored ODF file -- it is the tightest one derivable from the recovered geometry alone, an honest, bounded reconstruction choice rather than an attempt at exactly recovering an original frame that no longer exists anywhere in a PDF's own geometry.
+function pathBoundingFrame(points: readonly PathPointRef[], pageHeightPt: number): Box {
+  if (points.length === 0) {
+    return { xPt: 0, yPt: 0, widthPt: 0, heightPt: 0 };
+  }
+  let minX = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let minYDown = Number.POSITIVE_INFINITY;
+  let maxYDown = Number.NEGATIVE_INFINITY;
+  for (const point of points) {
+    const yDown = pageHeightPt - point.yPt;
+    minX = Math.min(minX, point.xPt);
+    maxX = Math.max(maxX, point.xPt);
+    minYDown = Math.min(minYDown, yDown);
+    maxYDown = Math.max(maxYDown, yDown);
+  }
+  return { xPt: minX, yPt: minYDown, widthPt: maxX - minX, heightPt: maxYDown - minYDown };
+}
+
+// The exact inverse of drawing.ts's own placePathPoint (frame.xPt + point.xPt, pageHeightPt - frame.yPt - point.yPt): solved for point.xPt/point.yPt given an absolute PDF-space point and the frame computed above.
+function localizePathPoint(frame: Box, point: PathPointRef, pageHeightPt: number): ContentPathPoint {
+  return { xPt: point.xPt - frame.xPt, yPt: pageHeightPt - frame.yPt - point.yPt };
+}
+
+function layoutPathToVector(item: LayoutPath, pageHeightPt: number): ContentVector {
+  const points = collectPathPoints(item.subpaths);
+  const frame = pathBoundingFrame(points, pageHeightPt);
+  const subpaths: ContentSubpath[] = item.subpaths.map((subpath) => ({
+    start: localizePathPoint(frame, { xPt: subpath.startXPt, yPt: subpath.startYPt }, pageHeightPt),
+    closed: subpath.closed,
+    segments: subpath.segments.map((segment) => {
+      if (segment.kind === 'line') {
+        return { kind: 'line' as const, to: localizePathPoint(frame, { xPt: segment.xPt, yPt: segment.yPt }, pageHeightPt) };
+      }
+      return {
+        kind: 'cubic' as const,
+        control1: localizePathPoint(frame, { xPt: segment.c1xPt, yPt: segment.c1yPt }, pageHeightPt),
+        control2: localizePathPoint(frame, { xPt: segment.c2xPt, yPt: segment.c2yPt }, pageHeightPt),
+        to: localizePathPoint(frame, { xPt: segment.xPt, yPt: segment.yPt }, pageHeightPt),
+      };
+    }),
+  }));
+  return { kind: 'path', frame, subpaths, fill: item.fill, fillRule: item.fillRule, stroke: item.stroke, sourcePath: item.sourcePath };
+}
+
+// A single LayoutText item maps to exactly one ContentShape holding one single-run paragraph -- reuses computeBlockFrame/textItemToContentRun verbatim rather than inventing a second frame-estimation approach (the same real AFM ascent/descent math reconstructPresentation's own blockToShape already uses above, degenerating correctly to a one-line, one-item block). Unlike blockToShape (which can merge several LayoutText items into one block and therefore cannot assign a single rotation to the merged result), this mapping is genuinely 1:1, so item.rotationDeg carries straight across, negated -- the same LayoutImage counter-clockwise -> ContentShape clockwise convention imageToShape already applies below.
+function layoutTextToShape(item: LayoutText, pageHeightPt: number): ContentShape {
+  const frame = computeBlockFrame({ lines: [{ items: [item], baselineY: item.yPt }] }, pageHeightPt);
+  return {
+    frame,
+    rotationDeg: item.rotationDeg !== undefined ? -item.rotationDeg : undefined,
+    insetLeftPt: 0,
+    insetTopPt: 0,
+    insetRightPt: 0,
+    insetBottomPt: 0,
+    blocks: [{ kind: 'paragraph', runs: [textItemToContentRun(item)] }],
   };
 }
