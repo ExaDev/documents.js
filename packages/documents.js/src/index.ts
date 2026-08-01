@@ -269,7 +269,7 @@ export { odpPptxCodec, odsXlsxCodec, odtDocxCodec } from './convert/codec';
 export type { OdmToPdfOptions } from './convert/convert';
 export { odmToPdf, OdmUnresolvedSectionError } from './convert/convert';
 
-// --- .odb (ODF database front-end): HSQLDB's TEXT script format (Tier 1, src/hsqldb/script.ts) plus its own binary CACHED-table row-store format (Tier 2, src/hsqldb/cache.ts, src/hsqldb/rowformat.ts) -- both wired transparently into readOdbTables/odbToXlsx/odbToCsv, so a caller never needs to know which storage shape a given table used. HSQLDB's own whole-script BINARY/COMPRESSED serialisation and a Firebird-backed .odb are detected and named, not implemented, and an external-only connection is permanently out of scope (see README's Fidelity/Gotchas). readOdbTables is independently usable (Package -> table data), matching the "each pipeline stage independently exported" convention above; decodeHsqldbCachedTables is the equivalent Tier 2 stage, for a caller that already has Tier 1's own parsed tables plus database/data's and database/properties' raw text/bytes from somewhere other than a full .odb Package; odbToXlsx/odbToCsv are the ergonomic conversions, and -- like odmToPdf -- are not wired into the DocumentConverter port below. ---
+// --- .odb (ODF database front-end): HSQLDB's TEXT script format (Tier 1, src/hsqldb/script.ts) plus its own binary CACHED-table row-store format (Tier 2, src/hsqldb/cache.ts, src/hsqldb/rowformat.ts), and Firebird's own gbak logical-backup format (Tier 3, src/firebird/backup.ts, database/firebird.fbk -- NOT raw ODS page format, see the README's .odb Tier 3 Gotchas entry for the empirical finding that corrected this) -- all wired transparently into readOdbTables/odbToXlsx/odbToCsv, so a caller never needs to know which storage shape or engine a given .odb used. HSQLDB's own whole-script BINARY/COMPRESSED serialisation remains detected and named, not implemented, and an external-only connection is permanently out of scope (see README's Fidelity/Gotchas). readOdbTables is independently usable (Package -> table data) and dispatches to whichever tier the package's own embedded engine matches, matching the "each pipeline stage independently exported" convention above; decodeHsqldbCachedTables is the equivalent Tier 2 stage, for a caller that already has Tier 1's own parsed tables plus database/data's and database/properties' raw text/bytes from somewhere other than a full .odb Package; readFirebirdBackup is the equivalent Tier 3 stage (raw database/firebird.fbk bytes -> HsqldbTable[], the identical pivot shape parseHsqldbScript produces) for a caller that has already extracted those bytes itself; odbToXlsx/odbToCsv are the ergonomic conversions, and -- like odmToPdf -- are not wired into the DocumentConverter port below. ---
 export type { HsqldbColumn, HsqldbTable } from './hsqldb/script';
 export { displayTextFor as hsqldbCellDisplayText, HsqldbScriptParseError, parseHsqldbScript } from './hsqldb/script';
 export { decodeHsqldbCachedTables } from './hsqldb/cache';
@@ -280,6 +280,17 @@ export { odbTablesToSpreadsheetDocument } from './odb/spreadsheet';
 export { OdbTableNotFoundError, OdbTableNotSpecifiedError } from './odb/csv';
 export type { OdbToCsvOptions } from './convert/convert';
 export { odbToCsv, odbToXlsx } from './convert/convert';
+export type { FirebirdBackupSummary, ReadFirebirdBackupResult } from './firebird/backup';
+export {
+  FirebirdBackupFormatError,
+  FirebirdCompositeRecordUnsupportedError,
+  FirebirdSchemaParseError,
+  readFirebirdBackup,
+  SUPPORTED_BACKUP_FORMAT_VERSION as FIREBIRD_SUPPORTED_BACKUP_FORMAT_VERSION,
+} from './firebird/backup';
+export { FirebirdDataParseError } from './firebird/data';
+export { FirebirdUnsupportedFieldTypeError } from './firebird/blr-types';
+export { FirebirdBackupParseError } from './firebird/reader';
 
 // --- The swappable conversion port, for a caller that wants to inject a different (e.g. remote) implementation later without changing call sites. ---
 export type { ConversionRequest, ConversionResult, Diagnostic, DocumentConverter, DocumentFormat, DocumentPayload } from './convert/port';

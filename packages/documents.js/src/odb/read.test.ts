@@ -2,6 +2,7 @@ import type { Package, XmlNode } from 'odf.js';
 import { bytesToBase64, el } from 'odf.js';
 import { describe, expect, it } from 'vitest';
 import { HsqldbScriptParseError } from '../hsqldb/script';
+import { RICH_FIXTURE_FBK_BASE64 } from '../test-support/firebird';
 import { OdbNoEmbeddedDataSourceError, OdbUnsupportedFormatError, readOdbTables } from './read';
 
 // Mirrors odf.js's own src/typed/odb/read.test.ts fixture-building style (databaseContentPart/manifestPart) -- readOdbTables sits directly on top of readOdbInventory, so its own tests build the identical minimal Package shape rather than a real .odb file. src/convert/odb.test.ts covers the genuine byte-level odbToXlsx/odbToCsv round trip separately.
@@ -80,8 +81,24 @@ describe('readOdbTables: no embedded data source', () => {
   });
 });
 
+describe('readOdbTables: embedded Firebird gbak backup (Tier 3, happy path)', () => {
+  it('routes to the Tier 3 Firebird reader and returns its tables, matching the real fixture field-by-field', () => {
+    const pkg: Package = {
+      parts: {
+        'content.xml': databaseContentPart([connectionResource('sdbc:embedded:firebird')]),
+        'META-INF/manifest.xml': manifestPart([...BASE_MANIFEST_ENTRIES, { fullPath: 'database/firebird.fbk', mediaType: '' }]),
+        'database/firebird.fbk': { kind: 'binary', base64: RICH_FIXTURE_FBK_BASE64 },
+      },
+    };
+    const tables = readOdbTables(pkg);
+    expect(tables.map((table) => table.tableName)).toEqual(['EMPLOYEES', 'DEPARTMENTS']);
+    const employees = tables.find((table) => table.tableName === 'EMPLOYEES');
+    expect(employees?.rows).toHaveLength(4);
+  });
+});
+
 describe('readOdbTables: unsupported embedded formats -- named, never silent', () => {
-  it('throws OdbUnsupportedFormatError naming Firebird for an embedded Firebird connection, even with no database/script part at all', () => {
+  it('throws OdbUnsupportedFormatError naming an unrecognised embedded storage shape for an embedded Firebird connection with no database/firebird.fbk part at all', () => {
     const pkg: Package = {
       parts: {
         'content.xml': databaseContentPart([connectionResource('sdbc:embedded:firebird')]),
@@ -89,7 +106,7 @@ describe('readOdbTables: unsupported embedded formats -- named, never silent', (
       },
     };
     expect(() => readOdbTables(pkg)).toThrow(OdbUnsupportedFormatError);
-    expect(formatOfThrownError(() => readOdbTables(pkg))).toBe('firebird');
+    expect(formatOfThrownError(() => readOdbTables(pkg))).toBe('unrecognised-engine');
   });
 
   it('throws OdbUnsupportedFormatError for an unrecognised embedded engine name', () => {
