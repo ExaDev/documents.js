@@ -1,3 +1,10 @@
+# [1.54.0](https://github.com/ExaDev/documents.js/compare/v1.53.3...v1.54.0) (2026-08-01)
+
+
+### Features
+
+* publish js.documents as an additional npm alias ([3cbe604](https://github.com/ExaDev/documents.js/commit/3cbe604b3f53b0f9965dd2e119cfb8573d26bac3))
+
 ## [1.53.3](https://github.com/ExaDev/documents.js/compare/v1.53.2...v1.53.3) (2026-08-01)
 
 ## [1.53.2](https://github.com/ExaDev/documents.js/compare/v1.53.1...v1.53.2) (2026-08-01)
