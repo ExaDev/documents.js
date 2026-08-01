@@ -1,5 +1,5 @@
 import type { ContentVector, LayoutItem, LayoutPath, LayoutRect, LayoutText } from 'document-content-model';
-import { decodePackage } from 'odf.js';
+import { decodePackage, el, txt } from 'odf.js';
 import { describe, expect, it } from 'vitest';
 import { createDocx, openDocx } from '../edit/docx/editor';
 import { openOdp } from '../edit/odp/editor';
@@ -11,10 +11,11 @@ import { readOdsContent } from '../odf/ods/read';
 import { createStandardFontMeasurer } from '../pdf/measure';
 import { readPdf } from '../pdf/read';
 import { minimalOdgBytes, minimalOdgPackage } from '../test-support/odg';
+import { chapterOdtBytes, odmBytes, odmPackage } from '../test-support/odm';
 import { minimalOdpBytes } from '../test-support/odp';
 import { gridOdsBytes, minimalOdsBytes } from '../test-support/ods';
 import { minimalOdtBytes } from '../test-support/odt';
-import { docxToPdf, odgToPdf, odpToPdf, odsToPdf, odtToPdf, pdfToDocx, pdfToOdg, pdfToOdp, pdfToOds, pdfToOdt, pdfToPptx, pptxToPdf } from './convert';
+import { docxToPdf, inlineOdmSectionToContentSection, odgToPdf, odmToPdf, OdmUnresolvedSectionError, odpToPdf, odsToPdf, odtToPdf, pdfToDocx, pdfToOdg, pdfToOdp, pdfToOds, pdfToOdt, pdfToPptx, pptxToPdf } from './convert';
 
 // Builds the same intermediate LayoutDocument odgToPdf itself builds internally (readOdgContent -> convertDrawingToLayout), so a test can assert on 'path'/'rect' LayoutItem kinds directly -- readPdf's own content-stream interpreter does not reconstruct 'path'/'line'/'ellipse' items at all (src/pdf/interpret.ts), so round-tripping the fixture's curve/z-order back through readPdf is not possible; this is the direct way to prove them.
 function layoutFromMinimalOdg() {
@@ -512,5 +513,153 @@ describe('pdfToPptx', () => {
     const roundTripped = openPptx(pptxBytes);
 
     expect(roundTripped.slides()[0]?.notes).toBe('These are the speaker notes for this slide');
+  });
+});
+
+function pageText(layout: ReturnType<typeof readPdf>, pageIndex: number): string {
+  return (
+    layout.pages[pageIndex]?.items
+      .filter((item): item is LayoutText => item.kind === 'text')
+      .map((item) => item.text)
+      .join(' ') ?? ''
+  );
+}
+
+describe('odmToPdf', () => {
+  it('produces one page per chapter, in text:section document order, each chapter starting a fresh page', () => {
+    const bytes = odmBytes([
+      { name: 'Chapter1', href: '../chapter1.odt' },
+      { name: 'Chapter2', href: '../chapter2.odt' },
+    ]);
+    const chapters = new Map([
+      ['../chapter1.odt', chapterOdtBytes('Chapter One', 'Body of chapter one.')],
+      ['../chapter2.odt', chapterOdtBytes('Chapter Two', 'Body of chapter two.')],
+    ]);
+
+    const pdfBytes = odmToPdf(bytes, { resolveSubDocument: (href) => chapters.get(href) });
+    expect(pdfHeader(pdfBytes)).toBe('%PDF-');
+
+    const layout = readPdf(pdfBytes);
+    expect(layout.pages).toHaveLength(2);
+    expect(pageText(layout, 0)).toContain('Chapter One');
+    expect(pageText(layout, 0)).toContain('Body of chapter one.');
+    expect(pageText(layout, 0)).not.toContain('Chapter Two');
+    expect(pageText(layout, 1)).toContain('Chapter Two');
+    expect(pageText(layout, 1)).toContain('Body of chapter two.');
+    expect(pageText(layout, 1)).not.toContain('Chapter One');
+  });
+
+  it('throws when the signal is already aborted', () => {
+    const bytes = odmBytes([{ name: 'Chapter1', href: '../chapter1.odt' }]);
+    const controller = new AbortController();
+    controller.abort();
+    expect(() => odmToPdf(bytes, { signal: controller.signal, resolveSubDocument: () => chapterOdtBytes('X', 'Y') })).toThrow();
+  });
+
+  it('throws OdmUnresolvedSectionError naming the unresolved href when no resolver is given at all', () => {
+    const bytes = odmBytes([{ name: 'Chapter1', href: '../chapter1.odt' }]);
+
+    let caught: unknown;
+    try {
+      odmToPdf(bytes);
+    } catch (error) {
+      caught = error;
+    }
+
+    if (!(caught instanceof OdmUnresolvedSectionError)) {
+      throw new Error('expected odmToPdf to throw OdmUnresolvedSectionError');
+    }
+    expect(caught.hrefs).toEqual(['../chapter1.odt']);
+    expect(caught.message).toContain('../chapter1.odt');
+  });
+
+  it('throws OdmUnresolvedSectionError naming the unresolved href when the resolver returns undefined for it', () => {
+    const bytes = odmBytes([{ name: 'Chapter1', href: '../chapter1.odt' }]);
+
+    let caught: unknown;
+    try {
+      odmToPdf(bytes, { resolveSubDocument: () => undefined });
+    } catch (error) {
+      caught = error;
+    }
+
+    if (!(caught instanceof OdmUnresolvedSectionError)) {
+      throw new Error('expected odmToPdf to throw OdmUnresolvedSectionError');
+    }
+    expect(caught.hrefs).toEqual(['../chapter1.odt']);
+  });
+
+  // Proves the whole point of collecting unresolved hrefs up front rather than throwing on the first miss: three sections, only the middle one resolvable, and the thrown error names BOTH of the other two -- not just whichever the loop reached first.
+  it('collects every unresolved href across all sections before throwing, not just the first', () => {
+    const bytes = odmBytes([
+      { name: 'Chapter1', href: '../missing-a.odt' },
+      { name: 'Chapter2', href: '../chapter2.odt' },
+      { name: 'Chapter3', href: '../missing-b.odt' },
+    ]);
+
+    let caught: unknown;
+    try {
+      odmToPdf(bytes, { resolveSubDocument: (href) => (href === '../chapter2.odt' ? chapterOdtBytes('Chapter Two', 'Body.') : undefined) });
+    } catch (error) {
+      caught = error;
+    }
+
+    if (!(caught instanceof OdmUnresolvedSectionError)) {
+      throw new Error('expected odmToPdf to throw OdmUnresolvedSectionError');
+    }
+    expect(caught.hrefs).toEqual(['../missing-a.odt', '../missing-b.odt']);
+    expect(caught.message).toContain('../missing-a.odt');
+    expect(caught.message).toContain('../missing-b.odt');
+  });
+});
+
+describe('inlineOdmSectionToContentSection', () => {
+  // readOdm's own inlineContent field is declared for schema-completeness but never actually populated by the installed odf.js 1.9.0 (a real .odm's text:section-source is always a bare external reference -- see odmToPdf's own module comment), so there is no byte-level .odm fixture that can drive this branch through odmToPdf's own public entry point; this exercises the conversion function directly with a hand-built OdmSection instead, the only way to prove it works at all.
+  it('builds a ContentSection directly from inlineContent, without needing a resolver', () => {
+    const pkg = odmPackage([]);
+    const contentSection = inlineOdmSectionToContentSection(
+      {
+        name: 'Inline',
+        href: 'unused.odt',
+        inlineContent: [el('text:h', { 'text:outline-level': '1' }, [txt('Inline Chapter')]), el('text:p', {}, [txt('Inline body text.')])],
+      },
+      pkg,
+    );
+
+    expect(contentSection.blocks).toHaveLength(2);
+    const [heading, paragraph] = contentSection.blocks;
+    if (heading?.kind !== 'paragraph' || paragraph?.kind !== 'paragraph') {
+      throw new Error('expected two paragraph blocks');
+    }
+    expect(heading.runs.map((run) => run.text).join('')).toBe('Inline Chapter');
+    expect(paragraph.runs.map((run) => run.text).join('')).toBe('Inline body text.');
+  });
+
+  it('skips inline node kinds with no ContentBlock representation and reads a table via readOdfTable', () => {
+    const pkg = odmPackage([]);
+    const contentSection = inlineOdmSectionToContentSection(
+      {
+        name: 'Inline',
+        href: 'unused.odt',
+        inlineContent: [
+          el('draw:frame'), // no ContentBlock this package's own odt reader produces either -- silently skipped
+          el('table:table', {}, [el('table:table-row', {}, [el('table:table-cell', {}, [el('text:p', {}, [txt('Cell text')])])])]),
+        ],
+      },
+      pkg,
+    );
+
+    expect(contentSection.blocks).toHaveLength(1);
+    const [table] = contentSection.blocks;
+    if (table?.kind !== 'table') {
+      throw new Error('expected a table block');
+    }
+    expect(table.rows[0]?.cells[0]?.blocks[0]).toMatchObject({ kind: 'paragraph' });
+  });
+
+  it('returns an empty blocks array, rather than throwing, when inlineContent is absent', () => {
+    const pkg = odmPackage([]);
+    const contentSection = inlineOdmSectionToContentSection({ name: 'Inline', href: 'unused.odt' }, pkg);
+    expect(contentSection.blocks).toEqual([]);
   });
 });

@@ -1,4 +1,6 @@
-import { decodePackage, encodePackage as encodeOdfPackage } from 'odf.js';
+import type { ContentBlock, ContentSection } from 'document-content-model';
+import type { OdmSection, Package } from 'odf.js';
+import { decodePackage, encodePackage as encodeOdfPackage, readOdfMetadata, readOdfParagraph, readOdfTable, readOdm } from 'odf.js';
 import { buildXlsxPackage, decodePackage as decodeOoxmlPackage, encodePackage, readXlsxContent } from 'ooxml.js';
 import { buildDocxPackage } from '../edit/docx/content';
 import { openDocx } from '../edit/docx/editor';
@@ -13,6 +15,10 @@ import { convertWordprocessingToLayout } from '../layout/engine';
 import { reconstructDrawing, reconstructPresentation, reconstructSpreadsheet, reconstructWordprocessing } from '../layout/reconstruct';
 import { convertSpreadsheetToLayout } from '../layout/sheets';
 import { convertPresentationToLayout } from '../layout/slides';
+import type { ContentDocument } from '../model/content';
+import { CONTENT_FORMAT_VERSION } from '../model/content';
+import type { Margins } from '../model/geometry';
+import { PAGE_SIZE_A4 } from '../model/geometry';
 import { readOdgContent } from '../odf/odg/read';
 import { readOdpContent } from '../odf/odp/read';
 import { readOdsContent } from '../odf/ods/read';
@@ -223,4 +229,103 @@ export function xlsxToOds(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBrid
   }
   throwIfAborted(options?.signal);
   return encodeOdfPackage(buildOdsPackage(content)); // odf.js's own encodePackage -- buildOdsPackage produces an ODF package.
+}
+
+// odmToPdf -- the thirteenth conversion, and the one deliberately not shaped like the other twelve: a .odm master document doesn't carry its chapters' own content at all (readOdm's own module -- see odf.js's implementation report -- confirmed against real LibreOffice output that a text:section-source is always a bare external reference, never an embedded or cached copy), so producing a PDF requires a caller-supplied resolveSubDocument callback to hand back each chapter's own .odt bytes given its href. This is why odmToPdf takes an options object shape the other twelve conversions don't, and why it is not wired into the DocumentConverter port (src/convert/port.ts) -- that port's convert(request, options) contract is fixed single-bytes-in/bytes-out, and widening it with a resolver parameter for this one format would leak an odm-specific concern into every other conversion's own request shape. A caller wanting odmToPdf behind the port can wrap it in their own adapter.
+export interface OdmToPdfOptions extends DocumentToPdfOptions {
+  // Called once per section whose chapter content could not be read inline from the master document itself, with that section's own href (e.g. "../chapter1.odt"). Returns that chapter's own .odt bytes, or undefined if the caller has no bytes for it -- an undefined result is not itself an error here; odmToPdf collects every section that ends up unresolved (no inline content AND no bytes from this callback, or no callback at all) and throws exactly once, naming all of them, rather than surfacing only the first the loop happens to reach.
+  readonly resolveSubDocument?: (href: string) => Uint8Array<ArrayBuffer> | undefined;
+}
+
+// The throw tier for odmToPdf's own source-resolution step: a section whose chapter content could not be obtained at all. This mirrors src/pdf/diagnostics.ts's own PdfParseError -- "a file that cannot be meaningfully processed at all" throws rather than degrading -- but that class's own code namespace and module doc are both scoped to src/pdf/*'s read-side failures specifically ("This module is the shared vocabulary every other src/pdf/* read-side module reports through"), and odmToPdf's own failure happens earlier, before any PDF has been touched, while still resolving the master document's own external references. A dedicated class rather than a PdfParseError subclass, then, with every unresolved href collected up front (see the loop in odmToPdf below) so a caller sees the complete list in one thrown error instead of fixing hrefs one at a time across repeated calls.
+export class OdmUnresolvedSectionError extends Error {
+  readonly hrefs: readonly string[];
+
+  constructor(hrefs: readonly string[]) {
+    super(`odmToPdf: ${hrefs.length} chapter section(s) could not be resolved -- no inline content and no resolveSubDocument result for: ${hrefs.join(', ')}`);
+    this.name = 'OdmUnresolvedSectionError';
+    this.hrefs = hrefs;
+  }
+}
+
+// 2cm margins on an A4 page -- the exact fallback odf.js's own readOdt falls back to (readFirstMasterPageGeometry) when a document has no page-layout of its own, confirmed directly against the installed odf.js 1.9.0 build. inlineOdmSectionToContentSection reaches this same fallback for the identical reason: inline chapter content was never its own document with its own master-page/page-layout chain to resolve a real page size from.
+const INLINE_SECTION_MARGIN_PT = 56.69291338582677;
+const INLINE_SECTION_MARGINS: Margins = { topPt: INLINE_SECTION_MARGIN_PT, rightPt: INLINE_SECTION_MARGIN_PT, bottomPt: INLINE_SECTION_MARGIN_PT, leftPt: INLINE_SECTION_MARGIN_PT };
+
+// Builds a ContentSection directly from an OdmSection's own inlineContent (readonly XmlNode[]), for the case readOdm's own type declares but the installed odf.js 1.9.0 never actually produces (see readOdm's own implementation report: a real .odm's text:section-source is always a bare external reference, never inline-cached content) -- kept for schema-completeness against a future odf.js version, or a producer other than LibreOffice, that does populate it. readOdfParagraph/readOdfTable are the exact per-element primitives odf.js's own readOdt calls internally (via its own unexported readBlocks) to build a real chapter's blocks, so walking inlineContent with them directly produces the identical ContentParagraph/ContentTable shapes readOdt would for equivalent real chapter content. Any other inline node kind (a bare draw frame, a table-of-contents placeholder) has no ContentBlock this package's own odt reader produces either -- silently skipped, mirroring paginateSection's own handling of block kinds it doesn't lay out (src/layout/engine.ts).
+export function inlineOdmSectionToContentSection(section: OdmSection, pkg: Package): ContentSection {
+  const blocks: ContentBlock[] = [];
+  for (const node of section.inlineContent ?? []) {
+    if (node.type !== 'element') {
+      continue;
+    }
+    if (node.tag === 'text:p' || node.tag === 'text:h') {
+      blocks.push(readOdfParagraph(node, pkg));
+    } else if (node.tag === 'table:table') {
+      blocks.push(readOdfTable(node, pkg));
+    }
+  }
+  return { pageSize: PAGE_SIZE_A4, margins: INLINE_SECTION_MARGINS, blocks };
+}
+
+// Prepends an explicit page-break block to a chapter's own first section, the same {kind:'pageBreak'} block ooxml.js's own readDocx already derives from w:pageBreakBefore (see paginateSection's own handling of it, src/layout/engine.ts) -- signalling "a new chapter starts here" as an explicit content-level marker rather than leaning on the incidental fact that a fresh ContentSection already starts its own fresh page in the engine today. Applied to every chapter after the first when combining chapters below.
+function withLeadingChapterBreak(section: ContentSection): ContentSection {
+  const pageBreak: ContentBlock = { kind: 'pageBreak' };
+  return { ...section, blocks: [pageBreak, ...section.blocks] };
+}
+
+// odm bytes -> PDF bytes: reads the master document's own text:section list (readOdm), resolves each chapter's own content -- inline (rare to nonexistent in practice, see inlineOdmSectionToContentSection's own note) or via options.resolveSubDocument reading that section's href -- then concatenates every chapter's own ContentSection[] in text:section document order into one combined section list, with an explicit page-break block marking each chapter boundary, and feeds the WHOLE combined document through convertWordprocessingToLayout completely unmodified. This is the same "zero engine modification" bet every other conversion in this file relies on: the engine has no idea, and no way to tell, that its sections came from six chapters instead of one document's own multi-section w:sectPr/style:master-page structure. A section with neither inline content nor a resolveSubDocument result is never silently dropped -- every such section across the whole document is collected first, and only once every section has been attempted does an OdmUnresolvedSectionError throw, naming all of them together.
+export function odmToPdf(bytes: Uint8Array<ArrayBuffer>, options?: OdmToPdfOptions): Uint8Array<ArrayBuffer> {
+  throwIfAborted(options?.signal);
+  const pkg = decodePackage(bytes); // odf.js's own decodePackage -- odm is an ODF package.
+  const odm = readOdm(pkg);
+
+  const unresolvedHrefs: string[] = [];
+  const chapterSections: ContentSection[][] = [];
+
+  for (const section of odm.sections) {
+    throwIfAborted(options?.signal);
+
+    if (section.inlineContent !== undefined) {
+      chapterSections.push([inlineOdmSectionToContentSection(section, pkg)]);
+      continue;
+    }
+
+    const chapterBytes = options?.resolveSubDocument?.(section.href);
+    if (chapterBytes === undefined) {
+      unresolvedHrefs.push(section.href);
+      continue;
+    }
+
+    const chapterPkg = decodePackage(chapterBytes); // odf.js's own decodePackage -- a linked chapter is itself an odt (ODF) package.
+    const chapterContent = readOdtContent(chapterPkg);
+    if (chapterContent.kind !== 'wordprocessing') {
+      throw new Error('readOdtContent returned a non-wordprocessing ContentDocument');
+    }
+    chapterSections.push(chapterContent.sections);
+  }
+
+  if (unresolvedHrefs.length > 0) {
+    throw new OdmUnresolvedSectionError(unresolvedHrefs);
+  }
+
+  const combinedSections: ContentSection[] = [];
+  chapterSections.forEach((sections, chapterIndex) => {
+    if (chapterIndex === 0) {
+      combinedSections.push(...sections);
+      return;
+    }
+    combinedSections.push(...sections.map((section, sectionIndex) => (sectionIndex === 0 ? withLeadingChapterBreak(section) : section)));
+  });
+
+  throwIfAborted(options?.signal);
+  // Typed via Extract rather than the full ContentDocument union -- unlike every X-to-PDF sibling above, which reads a full-union-typed ContentDocument from another function and narrows it with a runtime `if (content.kind !== '...')` guard, this object is a literal this function writes itself two lines below: its 'wordprocessing' discriminant is already statically known, so a runtime guard here would only ever check something already proven at compile time.
+  const content: Extract<ContentDocument, { kind: 'wordprocessing' }> = {
+    kind: 'wordprocessing',
+    formatVersion: CONTENT_FORMAT_VERSION,
+    metadata: readOdfMetadata(pkg),
+    sections: combinedSections,
+  };
+  const layout = convertWordprocessingToLayout(content, { measurer: createStandardFontMeasurer() });
+  return writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution });
 }
