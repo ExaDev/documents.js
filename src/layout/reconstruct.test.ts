@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import type { ContentParagraph, ContentShape, LayoutDocument, LayoutImage, LayoutImageAsset, LayoutItem, LayoutPage, LayoutText } from 'document-content-model';
+import type { ContentDrawPage, ContentParagraph, ContentShape, LayoutDocument, LayoutImage, LayoutImageAsset, LayoutItem, LayoutPage, LayoutText } from 'document-content-model';
 import { STANDARD_METRICS } from '../pdf/afm-widths';
-import { reconstructPresentation, reconstructWordprocessing } from './reconstruct';
+import { reconstructDrawing, reconstructPresentation, reconstructWordprocessing } from './reconstruct';
+
+const RED = { r: 1, g: 0, b: 0 };
+const BLACK = { r: 0, g: 0, b: 0 };
 
 function text(overrides: { text: string; xPt: number; yPt: number; widthPt: number; sizePt?: number; family?: string; bold?: boolean }): LayoutText {
   return {
@@ -246,5 +249,169 @@ describe('reconstruct: cancellation', () => {
     const controller = new AbortController();
     controller.abort();
     expect(() => reconstructPresentation(docFrom([page(960, 540, [])]), { signal: controller.signal })).toThrow();
+  });
+});
+
+function drawPages(doc: ReturnType<typeof reconstructDrawing>): ContentDrawPage[] {
+  if (doc.kind !== 'drawing') {
+    throw new Error('expected a drawing document');
+  }
+  return doc.pages;
+}
+
+describe('reconstructDrawing: vector mapping', () => {
+  it('maps a LayoutRect to a rect ContentVector via the exact flipY inverse', () => {
+    const item: LayoutItem = { kind: 'rect', xPt: 20, yPt: 30, widthPt: 100, heightPt: 40, fill: RED };
+    const doc = reconstructDrawing(docFrom([page(400, 300, [item])]));
+    const [pg] = drawPages(doc);
+    expect(pg!.vectors).toEqual([{ kind: 'rect', frame: { xPt: 20, yPt: 230, widthPt: 100, heightPt: 40 }, fill: RED, stroke: undefined, sourcePath: undefined }]); // yPt = 300 - 30 - 40
+  });
+
+  it('maps a LayoutEllipse to an ellipse ContentVector via the exact flipY inverse', () => {
+    const item: LayoutItem = { kind: 'ellipse', xPt: 50, yPt: 60, widthPt: 80, heightPt: 20, stroke: { color: BLACK, widthPt: 1 } };
+    const doc = reconstructDrawing(docFrom([page(400, 300, [item])]));
+    const [pg] = drawPages(doc);
+    expect(pg!.vectors).toEqual([{ kind: 'ellipse', frame: { xPt: 50, yPt: 220, widthPt: 80, heightPt: 20 }, fill: undefined, stroke: { color: BLACK, widthPt: 1 }, sourcePath: undefined }]); // yPt = 300 - 60 - 20
+  });
+
+  it('maps a LayoutLine to a line ContentVector with a synthesized stroke object', () => {
+    const item: LayoutItem = { kind: 'line', x1Pt: 10, y1Pt: 20, x2Pt: 90, y2Pt: 60, color: BLACK, widthPt: 2 };
+    const doc = reconstructDrawing(docFrom([page(400, 300, [item])]));
+    const [pg] = drawPages(doc);
+    expect(pg!.vectors).toEqual([{ kind: 'line', from: { xPt: 10, yPt: 280 }, to: { xPt: 90, yPt: 240 }, stroke: { color: BLACK, widthPt: 2 }, sourcePath: undefined }]); // yPt = 300 - y1Pt/y2Pt
+  });
+
+  it('maps a LayoutPath to a path ContentVector with a tight bounding-box frame and localized subpath points', () => {
+    const item: LayoutItem = {
+      kind: 'path',
+      subpaths: [{ startXPt: 50, startYPt: 250, closed: false, segments: [{ kind: 'line', xPt: 150, yPt: 250 }] }],
+      fill: RED,
+    };
+    const doc = reconstructDrawing(docFrom([page(400, 300, [item])]));
+    const [pg] = drawPages(doc);
+    expect(pg!.vectors).toEqual([
+      {
+        kind: 'path',
+        frame: { xPt: 50, yPt: 50, widthPt: 100, heightPt: 0 }, // bounding box of (50,250) and (150,250) in page-space y-down
+        subpaths: [{ start: { xPt: 0, yPt: 0 }, closed: false, segments: [{ kind: 'line', to: { xPt: 100, yPt: 0 } }] }],
+        fill: RED,
+        fillRule: undefined,
+        stroke: undefined,
+        sourcePath: undefined,
+      },
+    ]);
+  });
+
+  // A cubic segment's control points are never on the curve itself, but the curve is guaranteed to lie within their convex hull -- so the reconstructed frame must include them, not just the segment's start/end points. Both endpoints here share yPt=0, so a bounding box computed from endpoints alone would collapse to zero height; the control points alone reach yPt=100, which is what this test actually proves is captured.
+  it('includes cubic control points in the path bounding frame, not just segment endpoints', () => {
+    const item: LayoutItem = {
+      kind: 'path',
+      subpaths: [{ startXPt: 0, startYPt: 0, closed: false, segments: [{ kind: 'cubic', c1xPt: 0, c1yPt: 100, c2xPt: 100, c2yPt: 100, xPt: 100, yPt: 0 }] }],
+    };
+    const doc = reconstructDrawing(docFrom([page(200, 100, [item])]));
+    const [pg] = drawPages(doc);
+    const vector = pg!.vectors[0];
+    expect(vector).toMatchObject({ kind: 'path', frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 100 } });
+    expect(vector).toMatchObject({ subpaths: [{ start: { xPt: 0, yPt: 100 }, segments: [{ kind: 'cubic', control1: { xPt: 0, yPt: 0 }, control2: { xPt: 100, yPt: 0 }, to: { xPt: 100, yPt: 100 } }] }] });
+  });
+});
+
+describe('reconstructDrawing: shape mapping', () => {
+  it('maps a LayoutText item to a single-run ContentShape, reusing the same real-AFM frame estimate reconstructPresentation uses', () => {
+    const metrics = STANDARD_METRICS.Helvetica;
+    const sizePt = 12;
+    const item = text({ text: 'X', xPt: 100, yPt: 400, widthPt: 50, sizePt });
+    const doc = reconstructDrawing(docFrom([page(960, 540, [item])]));
+    const [pg] = drawPages(doc);
+    const ascentPt = (metrics.ascender / 1000) * sizePt;
+    const descentPt = (Math.abs(metrics.descender) / 1000) * sizePt;
+    const expectedTopY = 540 - (400 + ascentPt);
+    expect(pg!.shapes).toHaveLength(1);
+    const [shape] = pg!.shapes;
+    expect(shape!.frame.xPt).toBe(100);
+    expect(shape!.frame.yPt).toBeCloseTo(expectedTopY, 6);
+    expect(shape!.frame.heightPt).toBeCloseTo(ascentPt + descentPt, 6);
+    expect(shape!.frame.widthPt).toBe(50);
+    expect(shape).toMatchObject({ insetLeftPt: 0, insetTopPt: 0, insetRightPt: 0, insetBottomPt: 0, blocks: [{ kind: 'paragraph', runs: [{ text: 'X' }] }] });
+  });
+
+  // Unlike reconstructPresentation's own blockToShape (which can merge several LayoutText items into one shape and therefore drops rotation entirely, since no single rotation would be correct for a merged result), reconstructDrawing maps one LayoutText item to exactly one ContentShape, so there is no such ambiguity -- rotation carries straight across, negated, the same LayoutImage counter-clockwise -> ContentShape clockwise convention already established below.
+  it("negates a LayoutText item's rotationDeg into ContentShape.rotationDeg, unlike reconstructPresentation's own blockToShape", () => {
+    const item: LayoutText = { ...text({ text: 'R', xPt: 50, yPt: 50, widthPt: 20 }), rotationDeg: 30 };
+    const doc = reconstructDrawing(docFrom([page(400, 300, [item])]));
+    const [pg] = drawPages(doc);
+    expect(pg!.shapes[0]!.rotationDeg).toBe(-30);
+  });
+
+  it('leaves ContentShape.rotationDeg undefined when the source LayoutText item carries no rotation', () => {
+    const item = text({ text: 'Upright', xPt: 50, yPt: 50, widthPt: 40 });
+    const doc = reconstructDrawing(docFrom([page(400, 300, [item])]));
+    const [pg] = drawPages(doc);
+    expect(pg!.shapes[0]!.rotationDeg).toBeUndefined();
+  });
+
+  it('maps a LayoutImage item to a ContentShape wrapping a ContentImageBlock, reusing imageToShape unmodified', () => {
+    const item = image({ imageId: 'img1', xPt: 50, yPt: 50, widthPt: 80, heightPt: 60 });
+    const doc = reconstructDrawing(docFrom([page(400, 300, [item])], { img1: { format: 'png', base64: 'AAAA', widthPx: 10, heightPx: 5 } }));
+    const [pg] = drawPages(doc);
+    expect(pg!.shapes).toHaveLength(1);
+    expect(pg!.shapes[0]!.blocks[0]).toMatchObject({ kind: 'image', format: 'png', base64: 'AAAA' });
+  });
+
+  it('skips an image item whose asset is missing from the document image map, without crashing', () => {
+    const item = image({ imageId: 'missing', xPt: 50, yPt: 50, widthPt: 80, heightPt: 60 });
+    const doc = reconstructDrawing(docFrom([page(400, 300, [item])]));
+    const [pg] = drawPages(doc);
+    expect(pg!.shapes).toEqual([]);
+  });
+});
+
+describe('reconstructDrawing: paint order and page structure', () => {
+  it("buckets items into vectors/shapes, each array keeping its own items' relative document order", () => {
+    const rectA: LayoutItem = { kind: 'rect', xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 };
+    const rectB: LayoutItem = { kind: 'rect', xPt: 20, yPt: 0, widthPt: 10, heightPt: 10 };
+    const textItem = text({ text: 'Label', xPt: 0, yPt: 100, widthPt: 40 });
+    const imageItem = image({ imageId: 'img1', xPt: 0, yPt: 50, widthPt: 20, heightPt: 20 });
+    const doc = reconstructDrawing(docFrom([page(400, 300, [rectA, textItem, rectB, imageItem])], { img1: { format: 'png', base64: 'AAAA', widthPx: 10, heightPx: 5 } }));
+    const [pg] = drawPages(doc);
+    expect(pg!.vectors).toHaveLength(2); // rectA then rectB -- the interleaved text/image items are dropped from this array entirely
+    expect(pg!.shapes.map((s) => s.blocks[0]!.kind)).toEqual(['paragraph', 'image']); // textItem then imageItem -- the interleaved rects are dropped from this array entirely
+  });
+
+  it('drops link items entirely, since a drawing page has no link-equivalent construct', () => {
+    const linkItem: LayoutItem = { kind: 'link', uri: 'https://example.com', xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 };
+    const doc = reconstructDrawing(docFrom([page(400, 300, [linkItem])]));
+    const [pg] = drawPages(doc);
+    expect(pg!.vectors).toEqual([]);
+    expect(pg!.shapes).toEqual([]);
+  });
+
+  it("uses each source page's own widthPt/heightPt directly as ContentDrawPage.size, one page per LayoutPage", () => {
+    const doc = reconstructDrawing(docFrom([page(400, 300, []), page(200, 150, [])]));
+    const pgs = drawPages(doc);
+    expect(pgs.map((p) => p.size)).toEqual([
+      { widthPt: 400, heightPt: 300 },
+      { widthPt: 200, heightPt: 150 },
+    ]);
+  });
+
+  it('carries document metadata through unchanged', () => {
+    const doc = reconstructDrawing({ formatVersion: 1, metadata: { title: 'My Drawing' }, pages: [page(400, 300, [])], images: {} });
+    expect(doc.metadata).toEqual({ title: 'My Drawing' });
+  });
+});
+
+describe('reconstructDrawing: empty input and cancellation', () => {
+  it('produces an empty page (no vectors, no shapes) for a page with no items', () => {
+    const doc = reconstructDrawing(docFrom([page(400, 300, [])]));
+    const [pg] = drawPages(doc);
+    expect(pg!.vectors).toEqual([]);
+    expect(pg!.shapes).toEqual([]);
+  });
+
+  it('throws when the signal is already aborted', () => {
+    const controller = new AbortController();
+    controller.abort();
+    expect(() => reconstructDrawing(docFrom([page(400, 300, [])]), { signal: controller.signal })).toThrow();
   });
 });
