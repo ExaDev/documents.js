@@ -1,3 +1,16 @@
+# [1.5.0](https://github.com/ExaDev/document-schema.js/compare/v1.4.0...v1.5.0) (2026-08-01)
+
+
+### Bug Fixes
+
+* update repository/homepage/bugs URLs to the renamed document-schema.js repo ([b823e65](https://github.com/ExaDev/document-schema.js/commit/b823e653084ab5a9fb254472be59c107d5b25bb1))
+
+
+### Features
+
+* publish package under five additional name aliases ([75591bf](https://github.com/ExaDev/document-schema.js/commit/75591bff1769beda45b8b96d8a7a4fb954ed0cf1))
+* rename package to document-schema.js ([9bf01b7](https://github.com/ExaDev/document-schema.js/commit/9bf01b7b4114c547deec27b1a6b5b2ad491020eb))
+
 # [1.4.0](https://github.com/ExaDev/document-content-model/compare/v1.3.0...v1.4.0) (2026-08-01)
 
 
