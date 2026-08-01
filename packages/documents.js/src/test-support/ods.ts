@@ -1,4 +1,4 @@
-import type { Package } from 'odf.js';
+import type { Package, XmlElement } from 'odf.js';
 import { bytesToBase64, decodePackage, el, encodePackage, ODF_MEDIA_TYPES, txt } from 'odf.js';
 
 // Never imported by src/index.ts and never reaches dist/. Predates edit/ods/* (this package's own live-view ods editor, added later -- see createOds/OdsEditor there): this fixture is still hand-authored ODF XML assembled directly via odf.js's own el/txt fragment builders and serialized via odf.js's own encodePackage, kept exactly as-is rather than rebuilt through the editor, since its whole point is an INDEPENDENT construction path for readOdsContent's own tests -- building the fixture through the very editor that createOds/OdsSheet/OdsCell also drive would make a read-side regression and a write-side regression capable of silently cancelling each other out. Shape choices exercise the same real-shape ground truth odf.js's own src/typed/ods/read.test.ts fixture already verified against genuine LibreOffice 26.2 output: explicit column widths, a hidden column, mixed office:value-type cells (string/float/boolean), a merged cell, and print settings (page size, gridlines/headers, page order) resolved through table:table -> style:style[family="table"] -> style:master-page-name -> style:master-page -> style:page-layout.
@@ -70,4 +70,69 @@ export function minimalOdsBytes(): Uint8Array<ArrayBuffer> {
 
 export function minimalOdsPackage(): Package {
   return decodePackage(minimalOdsBytes());
+}
+
+// A second, purpose-built fixture for pdfToOds's own round-trip test (src/convert/convert.test.ts): three real, fully visible columns (unlike minimalOdsBytes's own hidden column B, whose zero rendered width collapses two of its own gridline boundaries onto the same x position) and three rows, with gridlines AND headers explicitly enabled via style:print="grid headers" -- so odsToPdf actually draws the LayoutLine lattice reconstructSpreadsheet's own gridline-detection path (src/layout/reconstruct.ts) needs something real to find, rather than falling through to its text-clustering path. Every row carries an explicit style:row-height, unlike minimalOdsBytes's own rows: odf.js's own readRowLayout (typed/ods/read.ts) resolves a row with no table:style-name to heightPt 0 (a genuinely measured "no explicit height was ever set" reading, not a fallback guess), and src/layout/sheets.ts's own resolveAxis then uses that literal 0 rather than substituting DEFAULT_ROW_HEIGHT_PT -- an explicit ContentSheetRow entry always wins over the fallback, by design, the same way an explicitly hidden row does. A real LibreOffice-authored spreadsheet always writes an explicit row-height style, so this fixture does too.
+function buildGridFixturePackage(): Package {
+  function columnStyle(name: string): XmlElement {
+    return el('style:style', { 'style:name': name, 'style:family': 'table-column' }, [el('style:table-column-properties', { 'style:column-width': '2cm' })]);
+  }
+  function stringCell(value: string): XmlElement {
+    return el('table:table-cell', { 'office:value-type': 'string' }, [el('text:p', {}, [txt(value)])]);
+  }
+
+  const columns = [el('table:table-column', { 'table:style-name': 'GridColA' }), el('table:table-column', { 'table:style-name': 'GridColB' }), el('table:table-column', { 'table:style-name': 'GridColC' })];
+  const rowAttrs = { 'table:style-name': 'GridRow' };
+  const headerRow = el('table:table-row', rowAttrs, [stringCell('Alpha'), stringCell('Beta'), stringCell('Gamma')]);
+  const dataRow1 = el('table:table-row', rowAttrs, [stringCell('One'), stringCell('Two'), stringCell('Three')]);
+  const dataRow2 = el('table:table-row', rowAttrs, [stringCell('Four'), stringCell('Five'), stringCell('Six')]);
+  const table = el('table:table', { 'table:name': 'Grid', 'table:style-name': 'GridTable' }, [...columns, headerRow, dataRow1, dataRow2]);
+
+  const contentXml: Package['parts'][string] = {
+    kind: 'xml',
+    nodes: [
+      el('office:document-content', {}, [
+        el('office:automatic-styles', {}, [
+          columnStyle('GridColA'),
+          columnStyle('GridColB'),
+          columnStyle('GridColC'),
+          el('style:style', { 'style:name': 'GridRow', 'style:family': 'table-row' }, [el('style:table-row-properties', { 'style:row-height': '0.6cm' })]),
+          el('style:style', { 'style:name': 'GridTable', 'style:family': 'table', 'style:master-page-name': 'GridDefault' }),
+        ]),
+        el('office:body', {}, [el('office:spreadsheet', {}, [table])]),
+      ]),
+    ],
+  };
+
+  const stylesXml: Package['parts'][string] = {
+    kind: 'xml',
+    nodes: [
+      el('office:document-styles', {}, [
+        el('office:automatic-styles', {}, [el('style:page-layout', { 'style:name': 'GridPM1' }, [el('style:page-layout-properties', { 'fo:page-width': '400pt', 'fo:page-height': '300pt', 'style:print': 'grid headers', 'style:print-page-order': 'ttb' })])]),
+        el('office:master-styles', {}, [el('style:master-page', { 'style:name': 'GridDefault', 'style:page-layout-name': 'GridPM1' })]),
+      ]),
+    ],
+  };
+
+  const metaXml: Package['parts'][string] = {
+    kind: 'xml',
+    nodes: [el('office:document-meta', {}, [el('office:meta', {}, [el('dc:title', {}, [txt('Grid Spreadsheet')])])])],
+  };
+
+  return {
+    parts: {
+      mimetype: { kind: 'binary', base64: bytesToBase64(enc(ODF_MEDIA_TYPES.ods)) },
+      'content.xml': contentXml,
+      'styles.xml': stylesXml,
+      'meta.xml': metaXml,
+    },
+  };
+}
+
+export function gridOdsBytes(): Uint8Array<ArrayBuffer> {
+  return encodePackage(buildGridFixturePackage());
+}
+
+export function gridOdsPackage(): Package {
+  return decodePackage(gridOdsBytes());
 }

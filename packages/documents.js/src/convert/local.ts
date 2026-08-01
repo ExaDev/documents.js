@@ -1,9 +1,8 @@
 import type { PdfDiagnostic } from '../pdf/diagnostics';
 import type { WinAnsiSubstitution } from '../pdf/winansi';
-import { docxToPdf, odgToPdf, odpToPdf, odsToPdf, odtToPdf, pdfToDocx, pdfToOdg, pdfToOdp, pdfToOdt, pdfToPptx, pptxToPdf } from './convert';
+import { docxToPdf, odgToPdf, odpToPdf, odsToPdf, odtToPdf, pdfToDocx, pdfToOdg, pdfToOdp, pdfToOds, pdfToOdt, pdfToPptx, pptxToPdf } from './convert';
 import type { ConversionRequest, ConversionResult, Diagnostic, DocumentConverter, DocumentFormat } from './port';
 
-// ods appears only as a source, never a target: there is no pdfToOds (see convert.ts's own module doc for why PDF -> ods is a fundamentally unstarted problem, not a small extension of reconstructWordprocessing/reconstructPresentation/reconstructDrawing).
 const SUPPORTED_CONVERSIONS: readonly { readonly source: DocumentFormat; readonly target: DocumentFormat }[] = [
   { source: 'docx', target: 'pdf' },
   { source: 'pptx', target: 'pdf' },
@@ -15,6 +14,7 @@ const SUPPORTED_CONVERSIONS: readonly { readonly source: DocumentFormat; readonl
   { source: 'pdf', target: 'pptx' },
   { source: 'pdf', target: 'odt' },
   { source: 'pdf', target: 'odp' },
+  { source: 'pdf', target: 'ods' },
   { source: 'pdf', target: 'odg' },
 ];
 
@@ -78,6 +78,10 @@ export function createLocalDocumentConverter(): DocumentConverter {
       if (source.format === 'pdf' && targetFormat === 'odp') {
         const bytes = pdfToOdp(source.bytes, { signal: options.signal, sink: (d) => diagnostics.push(fromPdfDiagnostic(d)) });
         return Promise.resolve({ document: { format: 'odp', bytes }, diagnostics });
+      }
+      if (source.format === 'pdf' && targetFormat === 'ods') {
+        const bytes = pdfToOds(source.bytes, { signal: options.signal, sink: (d) => diagnostics.push(fromPdfDiagnostic(d)) });
+        return Promise.resolve({ document: { format: 'ods', bytes }, diagnostics });
       }
       if (source.format === 'pdf' && targetFormat === 'odg') {
         const bytes = pdfToOdg(source.bytes, { signal: options.signal, sink: (d) => diagnostics.push(fromPdfDiagnostic(d)) });

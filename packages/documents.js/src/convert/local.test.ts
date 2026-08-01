@@ -39,6 +39,7 @@ describe('createLocalDocumentConverter: shape', () => {
       { source: 'pdf', target: 'pptx' },
       { source: 'pdf', target: 'odt' },
       { source: 'pdf', target: 'odp' },
+      { source: 'pdf', target: 'ods' },
       { source: 'pdf', target: 'odg' },
     ]);
   });
@@ -116,6 +117,14 @@ describe('createLocalDocumentConverter: convert', () => {
     const odpToPdfResult = await converter.convert({ source: { format: 'odp', bytes: minimalOdpBytes() }, targetFormat: 'pdf' }, { signal: new AbortController().signal });
     const result = await converter.convert({ source: odpToPdfResult.document, targetFormat: 'odp' }, { signal: new AbortController().signal });
     expect(result.document.format).toBe('odp');
+    expect(result.document.bytes.length).toBeGreaterThan(0);
+  });
+
+  it('converts pdf to ods', async () => {
+    const converter = createLocalDocumentConverter();
+    const odsToPdfResult = await converter.convert({ source: { format: 'ods', bytes: minimalOdsBytes() }, targetFormat: 'pdf' }, { signal: new AbortController().signal });
+    const result = await converter.convert({ source: odsToPdfResult.document, targetFormat: 'ods' }, { signal: new AbortController().signal });
+    expect(result.document.format).toBe('ods');
     expect(result.document.bytes.length).toBeGreaterThan(0);
   });
 

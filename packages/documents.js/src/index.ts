@@ -1,4 +1,4 @@
-// documents.js's public surface: bidirectional docx/pptx/odt/odp <-> PDF conversion, one-directional ods -> PDF conversion (no PDF -> ods yet -- see convert/convert.ts's own module doc for why), a read+write live-view editor for docx/pptx/odt/odp/ods, and a hand-written PDF codec, built on ooxml.js's lossless OOXML core and odf.js's lossless ODF core.
+// documents.js's public surface: bidirectional docx/pptx/odt/odp/ods/odg <-> PDF conversion, a read+write live-view editor for docx/pptx/odt/odp/ods/odg, and a hand-written PDF codec, built on ooxml.js's lossless OOXML core and odf.js's lossless ODF core.
 
 // --- ooxml.js's lossless OOXML core, re-exported so consumers need only this one dependency. Its own typed readers (readDocx/readPptx/readXlsx) and their result types are deliberately NOT re-exported here: readDocxContent/readPptxContent (below) already wrap readDocx/readPptx into ContentDocument, so exposing both the wrapper and the thing it wraps would be a trap -- two overlapping entry points to the same underlying read, one of which (readDocx/readPptx's own comments/footnotes/headers/footers) carries fields ContentDocument doesn't model at all. ---
 export {
@@ -215,16 +215,14 @@ export { convertSpreadsheetToLayout } from './layout/sheets';
 export type { DrawingLayoutOptions } from './layout/drawing';
 export { convertDrawingToLayout } from './layout/drawing';
 export type { ReconstructOptions } from './layout/reconstruct';
-export { reconstructDrawing, reconstructPresentation, reconstructWordprocessing } from './layout/reconstruct';
+export { reconstructDrawing, reconstructPresentation, reconstructSpreadsheet, reconstructWordprocessing } from './layout/reconstruct';
 
-// --- Eleven ergonomic conversions (docx/pptx/odt/odp/odg <-> PDF, plus one-directional ods -> PDF -- PDF -> ods does not exist yet, see convert.ts's own module doc). ---
+// --- Twelve ergonomic conversions (docx/pptx/odt/odp/ods/odg <-> PDF, all round-trip both ways). ---
 export type { DocumentToPdfOptions, PdfToDocumentOptions } from './convert/convert';
-export { docxToPdf, odgToPdf, odpToPdf, odsToPdf, odtToPdf, pdfToDocx, pdfToOdg, pdfToOdp, pdfToOdt, pdfToPptx, pptxToPdf } from './convert/convert';
+export { docxToPdf, odgToPdf, odpToPdf, odsToPdf, odtToPdf, pdfToDocx, pdfToOdg, pdfToOdp, pdfToOds, pdfToOdt, pdfToPptx, pptxToPdf } from './convert/convert';
 
-// odsPdfCodec deliberately does not exist: this package's own established precedent (odtPdfCodec/odpPdfCodec, and now odgPdfCodec) only adds a z.codec() pair once BOTH directions of a format exist (see docxPdfCodec/pptxPdfCodec, odtPdfCodec/odpPdfCodec, odgPdfCodec below) -- odsToPdf alone, with no pdfToOds, does not warrant one.
-
-// Schema-validated z.codec() pairs over the conversions above (docx/pptx/odt/odp/odg bytes <-> PDF bytes), the no-extra-options form -- use docxToPdf/pdfToDocx/pptxToPdf/pdfToPptx/odtToPdf/pdfToOdt/odpToPdf/pdfToOdp/odgToPdf/pdfToOdg directly for cancellation or diagnostics.
-export { docxPdfCodec, odgPdfCodec, odpPdfCodec, odtPdfCodec, pptxPdfCodec } from './convert/codec';
+// Schema-validated z.codec() pairs over the conversions above (docx/pptx/odt/odp/ods/odg bytes <-> PDF bytes), the no-extra-options form -- use docxToPdf/pdfToDocx/pptxToPdf/pdfToPptx/odtToPdf/pdfToOdt/odpToPdf/pdfToOdp/odsToPdf/pdfToOds/odgToPdf/pdfToOdg directly for cancellation or diagnostics.
+export { docxPdfCodec, odgPdfCodec, odpPdfCodec, odsPdfCodec, odtPdfCodec, pptxPdfCodec } from './convert/codec';
 
 // --- The swappable conversion port, for a caller that wants to inject a different (e.g. remote) implementation later without changing call sites. ---
 export type { ConversionRequest, ConversionResult, Diagnostic, DocumentConverter, DocumentFormat, DocumentPayload } from './convert/port';

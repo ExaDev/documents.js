@@ -3,12 +3,14 @@ import { describe, expect, it } from 'vitest';
 import { createDocx, openDocx } from '../edit/docx/editor';
 import { openOdg } from '../edit/odg/editor';
 import { openOdp } from '../edit/odp/editor';
+import { openOds } from '../edit/ods/editor';
 import { openOdt } from '../edit/odt/editor';
 import { createPptx, openPptx } from '../edit/pptx/editor';
 import { minimalOdgBytes } from '../test-support/odg';
 import { minimalOdpBytes } from '../test-support/odp';
+import { gridOdsBytes } from '../test-support/ods';
 import { minimalOdtBytes } from '../test-support/odt';
-import { docxPdfCodec, odgPdfCodec, odpPdfCodec, odtPdfCodec, pptxPdfCodec } from './codec';
+import { docxPdfCodec, odgPdfCodec, odpPdfCodec, odsPdfCodec, odtPdfCodec, pptxPdfCodec } from './codec';
 
 function pdfHeader(bytes: Uint8Array<ArrayBuffer>): string {
   return new TextDecoder('latin1').decode(bytes.subarray(0, 5));
@@ -123,6 +125,30 @@ describe('odpPdfCodec', () => {
 
   it('rejects encode input with no %PDF- header before ever reaching pdfToOdp', () => {
     expect(() => z.encode(odpPdfCodec, new TextEncoder().encode('not a pdf'))).toThrow(z.core.$ZodError);
+  });
+});
+
+describe('odsPdfCodec', () => {
+  it('z.decode produces valid PDF bytes from ods bytes', () => {
+    const pdfBytes = z.decode(odsPdfCodec, gridOdsBytes());
+    expect(pdfHeader(pdfBytes)).toBe('%PDF-');
+  });
+
+  // gridOdsBytes (src/test-support/ods.ts) has gridlines enabled, so this exercises the same gridline-lattice reconstruction path as convert.test.ts's own pdfToOds test -- see that test's own note for why.
+  it('z.encode then z.decode round-trips every cell\'s text content, like odsToPdf/pdfToOds', () => {
+    const pdfBytes = z.decode(odsPdfCodec, gridOdsBytes());
+    const odsBytes = z.encode(odsPdfCodec, pdfBytes);
+    const [sheet] = openOds(odsBytes).sheets();
+    const text = sheet!.cell(0, 0).displayText + sheet!.cell(1, 1).displayText + sheet!.cell(2, 2).displayText;
+    expect(text).toBe('AlphaTwoSix');
+  });
+
+  it('rejects decode input whose first zip entry is not a stored ods mimetype part before ever reaching odsToPdf', () => {
+    expect(() => z.decode(odsPdfCodec, new TextEncoder().encode('not an ods'))).toThrow(z.core.$ZodError);
+  });
+
+  it('rejects encode input with no %PDF- header before ever reaching pdfToOds', () => {
+    expect(() => z.encode(odsPdfCodec, new TextEncoder().encode('not a pdf'))).toThrow(z.core.$ZodError);
   });
 });
 
