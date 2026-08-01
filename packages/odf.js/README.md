@@ -8,7 +8,7 @@
 
 **This package does not depend on `ooxml.js`**, even though the two do near-identical jobs for their respective formats: `ooxml.js` is a package signed, SBOM-attested, and branded exclusively around ECMA-376/OOXML, so depending on it here would be a permanently wrong signal for an OASIS-standard codec, and would force a breaking `ooxml.js` release every time an ODF-only fix needed the shared primitive layer. Instead, `odf.js` duplicates the small (~400-line) generic ZIP/XML/`Package` layer as its own code — kept deliberately structurally identical (plain, unmarked shapes, no branding) so TypeScript's structural typing makes the two packages' `Package`/`XmlNode`/`XmlElement` values freely interchangeable wherever a shared consumer (like `documents.js`) needs to treat them uniformly, without either package formally depending on the other.
 
-Both packages **do** depend on [`document-content-model`](https://github.com/ExaDev/document-content-model), the genuinely shared canonical schema for `ContentDocument`/`LayoutDocument` — the semantic content model (paragraphs, runs, tables, shapes, slides) both an ODF and an OOXML reader ultimately produce. `odf.js`'s typed readers return the real, imported `ContentSection`/`ContentSlide`/etc. types from that package, not a structurally-similar lookalike, so a downstream consumer (`documents.js`) can run an `.odt` through the exact same layout/pagination engine it already uses for `.docx`, unmodified.
+Both packages **do** depend on [`document-content-model`](https://github.com/ExaDev/document-schema.js), the genuinely shared canonical schema for `ContentDocument`/`LayoutDocument` — the semantic content model (paragraphs, runs, tables, shapes, slides) both an ODF and an OOXML reader ultimately produce. `odf.js`'s typed readers return the real, imported `ContentSection`/`ContentSlide`/etc. types from that package, not a structurally-similar lookalike, so a downstream consumer (`documents.js`) can run an `.odt` through the exact same layout/pagination engine it already uses for `.docx`, unmodified.
 
 ## Status
 
@@ -113,7 +113,7 @@ Commits follow Conventional Commits (`feat:`, `fix:`, `test:`, `chore:`, …), e
 ## References
 
 - [ooxml.js](https://github.com/ExaDev/ooxml.js) — the sibling package doing the equivalent lossless-codec job for OOXML (docx/pptx/xlsx). Architecturally mirrored, deliberately not depended on — see [Why no `ooxml.js` dependency](#why-no-ooxmljs-dependency).
-- [document-content-model](https://github.com/ExaDev/document-content-model) — the canonical `ContentDocument`/`LayoutDocument` schema pivot both this package and `ooxml.js` depend on.
+- [document-content-model](https://github.com/ExaDev/document-schema.js) — the canonical `ContentDocument`/`LayoutDocument` schema pivot both this package and `ooxml.js` depend on.
 - [documents.js](https://github.com/ExaDev/documents.js) — the downstream consumer, already built on this package's typed readers: its own `readOdtContent`/`readOdpContent`/`readOdsContent`/`readOdgContent` are thin adapters over `readOdt`/`readOdp`/`readOds`/`readOdg`, feeding both ODF ⇄ PDF conversion (`odtToPdf`/`odpToPdf`/`odsToPdf`/`odgToPdf` and their inverses) and independently-built live-view ODF editors (`OdtEditor`/`OdpEditor`/`OdsEditor`/`OdgEditor`).
 
 ## License
