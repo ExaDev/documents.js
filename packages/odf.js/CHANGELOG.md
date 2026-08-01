@@ -1,3 +1,10 @@
+# [1.9.0](https://github.com/ExaDev/odf.js/compare/v1.8.0...v1.9.0) (2026-08-01)
+
+
+### Features
+
+* add readOdm, a typed reader for ODF master documents ([43ea51b](https://github.com/ExaDev/odf.js/commit/43ea51b5b1acbd3ed06c31ba40e3cae0464adae4))
+
 # [1.8.0](https://github.com/ExaDev/odf.js/compare/v1.7.0...v1.8.0) (2026-07-31)
 
 
