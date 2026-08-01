@@ -7,13 +7,14 @@ import { openOdt } from '../edit/odt/editor';
 import { createPptx, openPptx } from '../edit/pptx/editor';
 import { convertDrawingToLayout } from '../layout/drawing';
 import { readOdgContent } from '../odf/odg/read';
+import { readOdsContent } from '../odf/ods/read';
 import { createStandardFontMeasurer } from '../pdf/measure';
 import { readPdf } from '../pdf/read';
 import { minimalOdgBytes, minimalOdgPackage } from '../test-support/odg';
 import { minimalOdpBytes } from '../test-support/odp';
-import { minimalOdsBytes } from '../test-support/ods';
+import { gridOdsBytes, minimalOdsBytes } from '../test-support/ods';
 import { minimalOdtBytes } from '../test-support/odt';
-import { docxToPdf, odgToPdf, odpToPdf, odsToPdf, odtToPdf, pdfToDocx, pdfToOdg, pdfToOdp, pdfToOdt, pdfToPptx, pptxToPdf } from './convert';
+import { docxToPdf, odgToPdf, odpToPdf, odsToPdf, odtToPdf, pdfToDocx, pdfToOdg, pdfToOdp, pdfToOds, pdfToOdt, pdfToPptx, pptxToPdf } from './convert';
 
 // Builds the same intermediate LayoutDocument odgToPdf itself builds internally (readOdgContent -> convertDrawingToLayout), so a test can assert on 'path'/'rect' LayoutItem kinds directly -- readPdf's own content-stream interpreter does not reconstruct 'path'/'line'/'ellipse' items at all (src/pdf/interpret.ts), so round-tripping the fixture's curve/z-order back through readPdf is not possible; this is the direct way to prove them.
 function layoutFromMinimalOdg() {
@@ -326,6 +327,46 @@ describe('pdfToOdp', () => {
     const roundTripped = openOdp(odpBytes);
 
     expect(roundTripped.slides()[0]?.notes).toBe('These are the speaker notes for this slide');
+  });
+});
+
+describe('pdfToOds', () => {
+  // gridOdsBytes (src/test-support/ods.ts) is a purpose-built fixture: three real, fully visible columns and three rows, gridlines AND headers explicitly enabled -- unlike minimalOdsBytes's own hidden column, which collapses two of its own gridline boundaries onto the same x position and would defeat this test's whole point. odsToPdf genuinely draws the LayoutLine lattice (src/layout/sheets.ts's renderGridlines) reconstructSpreadsheet's own gridline-detection path needs, so this proves the lattice path is what actually ran, not the text-clustering fallback -- and that every recovered cell is an honest bare string, never re-parsed into a typed value.
+  it('round-trips a real gridline lattice and every cell\'s text through odsToPdf then pdfToOds, detected via the drawn gridlines rather than text-position clustering', () => {
+    const pdfBytes = odsToPdf(gridOdsBytes());
+    const odsBytes = pdfToOds(pdfBytes);
+    const roundTripped = readOdsContent(decodePackage(odsBytes)); // reread via odf.js's own real readOds parser (readOdsContent is a thin wrapper over it), not this package's own writer echoing its input back
+    if (roundTripped.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+
+    const [sheet] = roundTripped.sheets;
+    expect(sheet).toBeDefined();
+    expect(sheet!.printSettings.gridlines).toBe(true); // confirms the gridline-lattice path was actually taken, not the text-clustering fallback
+
+    for (const cell of sheet!.cells) {
+      expect(cell.value).toEqual({ kind: 'string', value: cell.displayText }); // honest recovery -- a bare string, never re-parsed into number/date/boolean, never claimed as a formula
+    }
+
+    const byRow = new Map<number, string[]>();
+    for (const cell of sheet!.cells) {
+      const row = byRow.get(cell.row) ?? [];
+      row[cell.column] = cell.displayText;
+      byRow.set(cell.row, row);
+    }
+    const rows = [...byRow.keys()].sort((a, b) => a - b).map((r) => byRow.get(r));
+    expect(rows).toEqual([
+      ['Alpha', 'Beta', 'Gamma'],
+      ['One', 'Two', 'Three'],
+      ['Four', 'Five', 'Six'],
+    ]);
+  });
+
+  it('throws when the signal is already aborted', () => {
+    const pdfBytes = odsToPdf(gridOdsBytes());
+    const controller = new AbortController();
+    controller.abort();
+    expect(() => pdfToOds(pdfBytes, { signal: controller.signal })).toThrow();
   });
 });
 

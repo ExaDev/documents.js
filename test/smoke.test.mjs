@@ -34,6 +34,10 @@ const FUNCTIONS = [
   'openOdp',
   'createOdp',
   'pdfToOdp',
+  'openOds',
+  'createOds',
+  'buildOdsPackage',
+  'pdfToOds',
   'openOdg',
   'createOdg',
   'buildOdgPackage',
@@ -65,7 +69,7 @@ function minimalOdpBytes() {
   ]);
 }
 
-// This mirrors minimalOdtBytes above exactly, just with office:spreadsheet/table:table/table:table-row/table:table-cell in place of office:text/text:p -- proving odsToPdf's entire pipeline (odf.js's decodePackage, dist's own readOdsContent/convertSpreadsheetToLayout/writePdf) actually works from the built dist/ artifact via hand-built ODF XML. There is no createOds/openOds live-view editor to exercise separately (odsToPdf is one-directional -- see src/convert/convert.ts's own module doc), unlike odp's pair of smoke tests below. The column carries an explicit wide style (mirroring odt.ts's own Col1/Col2 automatic-styles) so the cell's own real standard-14-font text genuinely fits without src/layout/sheets.ts's own string-overflow truncation kicking in -- a bare default-width column at real font metrics would truncate a sentence-length string, which is the correct algorithm behaviour, not a smoke-test bug, but would make this particular assertion the wrong one to write.
+// This mirrors minimalOdtBytes above exactly, just with office:spreadsheet/table:table/table:table-row/table:table-cell in place of office:text/text:p -- proving odsToPdf's entire pipeline (odf.js's decodePackage, dist's own readOdsContent/convertSpreadsheetToLayout/writePdf) actually works from the built dist/ artifact via hand-built ODF XML, independent of this package's own createOds/openOds live-view editor (exercised separately below, via a fresh spreadsheet built entirely through cjs.createOds() itself). The column carries an explicit wide style (mirroring odt.ts's own Col1/Col2 automatic-styles) so the cell's own real standard-14-font text genuinely fits without src/layout/sheets.ts's own string-overflow truncation kicking in -- a bare default-width column at real font metrics would truncate a sentence-length string, which is the correct algorithm behaviour, not a smoke-test bug, but would make this particular assertion the wrong one to write.
 function minimalOdsBytes() {
   const mimetype = new TextEncoder().encode(ODF_MEDIA_TYPES.ods);
   const contentXml = new TextEncoder().encode(
@@ -77,7 +81,7 @@ function minimalOdsBytes() {
   ]);
 }
 
-// This mirrors minimalOdsBytes above exactly, just with office:drawing/draw:page/draw:path in place of office:spreadsheet/table:table -- proving odgToPdf's entire pipeline (odf.js's decodePackage, dist's own readOdgContent/convertDrawingToLayout/writePdf, INCLUDING writePath's own m/l/c content-stream emission) actually works from the built dist/ artifact via hand-built ODF XML. The svg:d/svg:viewBox here are the exact ground-truth-verified real LibreOffice curve odf.js's own typed/shared/path.ts documents (see src/test-support/odg.ts's own note) -- this is what proves the curve genuinely reaches the built dist/ writePath as a cubic segment, not just a straight-line approximation. There is no createOdg/openOdg live-view editor to exercise separately (odgToPdf is one-directional -- see src/convert/convert.ts's own module doc), matching ods's own single smoke test above.
+// This mirrors minimalOdsBytes above exactly, just with office:drawing/draw:page/draw:path in place of office:spreadsheet/table:table -- proving odgToPdf's entire pipeline (odf.js's decodePackage, dist's own readOdgContent/convertDrawingToLayout/writePdf, INCLUDING writePath's own m/l/c content-stream emission) actually works from the built dist/ artifact via hand-built ODF XML. The svg:d/svg:viewBox here are the exact ground-truth-verified real LibreOffice curve odf.js's own typed/shared/path.ts documents (see src/test-support/odg.ts's own note) -- this is what proves the curve genuinely reaches the built dist/ writePath as a cubic segment, not just a straight-line approximation. There is no createOdg/openOdg live-view editor to exercise separately in THIS particular block (it is exercised below, via a fresh drawing built entirely through cjs.createOdg() itself), matching ods's own pair of smoke tests above.
 function minimalOdgBytes() {
   const mimetype = new TextEncoder().encode(ODF_MEDIA_TYPES.odg);
   const contentXml = new TextEncoder().encode(
@@ -162,6 +166,48 @@ describe('dist/ end-to-end: odsToPdf, from the CJS build', () => {
       .map((item) => item.text)
       .join(' ');
     expect(text).toContain('Hello from the ods smoke test');
+  });
+});
+
+// pdfToOds now exists, so unlike ods's own PDF-only test above, this closes the full loop: minimalOdsBytes' own real column-width style gives odsToPdf real, non-degenerate geometry to render (unlike a bare cjs.createOds() sheet, which has no column-width/row-height setter of its own yet -- a documented, tracked gap, see src/edit/ods/content.ts's own module doc -- so its cells would render at zero-size bands with nothing meaningful to recover). pdfToOds is then fed the rendered PDF and reopened -- proving reconstructSpreadsheet itself reaches dist/, not just readPdf's own general path tracking.
+describe('dist/ end-to-end: odsToPdf then pdfToOds, from the CJS build', () => {
+  it('round-trips a genuine ODF spreadsheet package\'s cell text through PDF and back', () => {
+    const pdfBytes = cjs.odsToPdf(minimalOdsBytes());
+    expect(pdfBytes.length).toBeGreaterThan(0);
+    expect(new TextDecoder('latin1').decode(pdfBytes.subarray(0, 5))).toBe('%PDF-');
+
+    // pdfToOds, closing the loop: reconstructSpreadsheet (src/layout/reconstruct.ts) recovers the rendered text's own geometry into a grid and reassembles it into a fresh, real ods package via buildOdsPackage -- reachable from the built dist/ artifact, not just from src/ under vitest.
+    const roundTrippedOdsBytes = cjs.pdfToOds(pdfBytes);
+    expect(roundTrippedOdsBytes.length).toBeGreaterThan(0);
+    const roundTripped = cjs.openOds(roundTrippedOdsBytes);
+    const text = roundTripped
+      .sheets()
+      .map((sheet) => sheet.cell(0, 0).displayText)
+      .join(' ');
+    expect(text).toContain('Hello from the ods smoke test');
+  });
+});
+
+// The printSettings getter/setter (src/edit/ods/print-settings.ts) is genuinely new write code -- exercised here directly on a cjs.createOds() sheet, independent of any real cell geometry, since that's all this specific property needs to prove it reaches dist/ correctly (mints a real style:page-layout/style:master-page/style:style[family="table"] chain and reads it back through a real reopen). buildOdsPackage/OdsEditor are exercised directly too (not merely re-exported), mirroring the odg block below's own "exercised directly" pattern -- the standalone ContentDocument -> ods bridge, reachable from dist/ too.
+describe('dist/ end-to-end: ods printSettings and buildOdsPackage, from the CJS build', () => {
+  it('sets and reads back printSettings through a real write -> reread round trip, and rebuilds a package via buildOdsPackage', () => {
+    const editor = cjs.createOds();
+    const sheet = editor.sheets()[0];
+    const settings = { pageSize: { widthPt: 400, heightPt: 300 }, margins: { topPt: 20, rightPt: 20, bottomPt: 20, leftPt: 20 }, gridlines: true, headers: true, pageOrder: 'overThenDown' };
+    sheet.printSettings = settings;
+    sheet.cell(0, 0).value = { kind: 'string', value: 'Hello from the ods editor smoke test' };
+    const odsBytes = editor.toBytes();
+
+    const reopened = cjs.openOds(odsBytes).sheets()[0];
+    expect(reopened.printSettings).toEqual(settings);
+
+    const content = cjs.readOdsContent(editor.toPackage());
+    expect(content.sheets[0].printSettings).toEqual(settings);
+    const rebuiltPkg = cjs.buildOdsPackage(content);
+    const rebuilt = new cjs.OdsEditor(rebuiltPkg);
+    expect(rebuilt.sheets()).toHaveLength(1);
+    expect(rebuilt.sheets()[0].printSettings).toEqual(settings);
+    expect(rebuilt.sheets()[0].cell(0, 0).displayText).toBe('Hello from the ods editor smoke test');
   });
 });
 
