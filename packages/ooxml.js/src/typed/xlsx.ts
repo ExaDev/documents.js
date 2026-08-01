@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { Package } from '../model/package';
 import type { XmlElement } from '../model/node';
 import { attr, childrenWithTag, elementsWithTag, rootElement, textContent } from './util';
+import { loadSharedStrings } from './xlsx/shared-strings';
 
 // Lossy ergonomic projection of a SpreadsheetML (xlsx) package into a reading view. This is a one-way read view over the generic Package model: it keeps sheet names, cell references, resolved string and numeric values, cell formulas, merged-cell ranges, and defined names, and discards everything else (formats, styles, charts, and all other markup). It is not a round-trip path — encoding this view back to OOXML is not supported.
 
@@ -32,23 +33,6 @@ export const XlsxWorkbookSchema = z.object({
 export type XlsxWorkbook = z.infer<typeof XlsxWorkbookSchema>;
 
 const SHEET_PATH_RE = /^xl\/worksheets\/sheet(\d+)\.xml$/;
-
-// Shared strings: each <si> holds one or more <t> runs (plain text, or rich-text runs nested in <r>); their text concatenates into the indexed string value.
-function loadSharedStrings(pkg: Package): string[] {
-  const root = rootElement(pkg.parts['xl/sharedStrings.xml']);
-  if (root === undefined) {
-    return [];
-  }
-  const strings: string[] = [];
-  for (const si of childrenWithTag(root, 'si')) {
-    let value = '';
-    for (const t of elementsWithTag(si.children, 't')) {
-      value += textContent(t);
-    }
-    strings.push(value);
-  }
-  return strings;
-}
 
 // Targets in xl/_rels/workbook.xml.rels are relative to the rels part's directory (xl/), so "worksheets/sheet1.xml" resolves to "xl/worksheets/sheet1.xml"; a leading slash is already package-rooted.
 function resolveRelTarget(target: string): string {
