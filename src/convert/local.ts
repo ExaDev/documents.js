@@ -1,3 +1,4 @@
+import type { DocumentPackage } from 'document-content-model';
 import type { PdfDiagnostic } from '../pdf/diagnostics';
 import type { WinAnsiSubstitution } from '../pdf/winansi';
 import {
@@ -61,88 +62,94 @@ function fromPdfDiagnostic(diagnostic: PdfDiagnostic): Diagnostic {
 
 export function createLocalDocumentConverter(): DocumentConverter {
   return {
-    contractVersion: 1,
+    // ConversionResult now carries an optional `package` field (see port.ts) -- the local implementation below populates it from every conversion function's own onDocument callback.
+    contractVersion: 2,
     conversions: SUPPORTED_CONVERSIONS,
     convert(request: ConversionRequest, options: { readonly signal: AbortSignal }): Promise<ConversionResult> {
       const { source, targetFormat } = request;
       const diagnostics: Diagnostic[] = [];
+      let documentPackage: DocumentPackage | undefined;
+      const onDocument = (pkg: DocumentPackage): void => {
+        documentPackage = pkg;
+      };
 
       if (source.format === 'docx' && targetFormat === 'pdf') {
-        const bytes = docxToPdf(source.bytes, { signal: options.signal, onSubstitution: (s, c) => diagnostics.push(substitutionDiagnostic(s, c)) });
-        return Promise.resolve({ document: { format: 'pdf', bytes }, diagnostics });
+        const bytes = docxToPdf(source.bytes, { signal: options.signal, onSubstitution: (s, c) => diagnostics.push(substitutionDiagnostic(s, c)), onDocument });
+        return Promise.resolve({ document: { format: 'pdf', bytes }, diagnostics, package: documentPackage });
       }
       if (source.format === 'pptx' && targetFormat === 'pdf') {
-        const bytes = pptxToPdf(source.bytes, { signal: options.signal, onSubstitution: (s, c) => diagnostics.push(substitutionDiagnostic(s, c)) });
-        return Promise.resolve({ document: { format: 'pdf', bytes }, diagnostics });
+        const bytes = pptxToPdf(source.bytes, { signal: options.signal, onSubstitution: (s, c) => diagnostics.push(substitutionDiagnostic(s, c)), onDocument });
+        return Promise.resolve({ document: { format: 'pdf', bytes }, diagnostics, package: documentPackage });
       }
       if (source.format === 'odt' && targetFormat === 'pdf') {
-        const bytes = odtToPdf(source.bytes, { signal: options.signal, onSubstitution: (s, c) => diagnostics.push(substitutionDiagnostic(s, c)) });
-        return Promise.resolve({ document: { format: 'pdf', bytes }, diagnostics });
+        const bytes = odtToPdf(source.bytes, { signal: options.signal, onSubstitution: (s, c) => diagnostics.push(substitutionDiagnostic(s, c)), onDocument });
+        return Promise.resolve({ document: { format: 'pdf', bytes }, diagnostics, package: documentPackage });
       }
       if (source.format === 'odp' && targetFormat === 'pdf') {
-        const bytes = odpToPdf(source.bytes, { signal: options.signal, onSubstitution: (s, c) => diagnostics.push(substitutionDiagnostic(s, c)) });
-        return Promise.resolve({ document: { format: 'pdf', bytes }, diagnostics });
+        const bytes = odpToPdf(source.bytes, { signal: options.signal, onSubstitution: (s, c) => diagnostics.push(substitutionDiagnostic(s, c)), onDocument });
+        return Promise.resolve({ document: { format: 'pdf', bytes }, diagnostics, package: documentPackage });
       }
       if (source.format === 'ods' && targetFormat === 'pdf') {
-        const bytes = odsToPdf(source.bytes, { signal: options.signal, onSubstitution: (s, c) => diagnostics.push(substitutionDiagnostic(s, c)) });
-        return Promise.resolve({ document: { format: 'pdf', bytes }, diagnostics });
+        const bytes = odsToPdf(source.bytes, { signal: options.signal, onSubstitution: (s, c) => diagnostics.push(substitutionDiagnostic(s, c)), onDocument });
+        return Promise.resolve({ document: { format: 'pdf', bytes }, diagnostics, package: documentPackage });
       }
       if (source.format === 'odg' && targetFormat === 'pdf') {
-        const bytes = odgToPdf(source.bytes, { signal: options.signal, onSubstitution: (s, c) => diagnostics.push(substitutionDiagnostic(s, c)) });
-        return Promise.resolve({ document: { format: 'pdf', bytes }, diagnostics });
+        const bytes = odgToPdf(source.bytes, { signal: options.signal, onSubstitution: (s, c) => diagnostics.push(substitutionDiagnostic(s, c)), onDocument });
+        return Promise.resolve({ document: { format: 'pdf', bytes }, diagnostics, package: documentPackage });
       }
       if (source.format === 'odf' && targetFormat === 'pdf') {
-        const bytes = odfToPdf(source.bytes, { signal: options.signal, onSubstitution: (s, c) => diagnostics.push(substitutionDiagnostic(s, c)) });
-        return Promise.resolve({ document: { format: 'pdf', bytes }, diagnostics });
+        // odfToPdf accepts onDocument (it shares docx/odt/pptx/odp/ods/odg's own options type) but never invokes it -- see that function's own comment -- so `documentPackage` stays undefined here, and `package` on the returned result is correctly omitted.
+        const bytes = odfToPdf(source.bytes, { signal: options.signal, onSubstitution: (s, c) => diagnostics.push(substitutionDiagnostic(s, c)), onDocument });
+        return Promise.resolve({ document: { format: 'pdf', bytes }, diagnostics, package: documentPackage });
       }
       if (source.format === 'pdf' && targetFormat === 'docx') {
-        const bytes = pdfToDocx(source.bytes, { signal: options.signal, sink: (d) => diagnostics.push(fromPdfDiagnostic(d)) });
-        return Promise.resolve({ document: { format: 'docx', bytes }, diagnostics });
+        const bytes = pdfToDocx(source.bytes, { signal: options.signal, sink: (d) => diagnostics.push(fromPdfDiagnostic(d)), onDocument });
+        return Promise.resolve({ document: { format: 'docx', bytes }, diagnostics, package: documentPackage });
       }
       if (source.format === 'pdf' && targetFormat === 'pptx') {
-        const bytes = pdfToPptx(source.bytes, { signal: options.signal, sink: (d) => diagnostics.push(fromPdfDiagnostic(d)) });
-        return Promise.resolve({ document: { format: 'pptx', bytes }, diagnostics });
+        const bytes = pdfToPptx(source.bytes, { signal: options.signal, sink: (d) => diagnostics.push(fromPdfDiagnostic(d)), onDocument });
+        return Promise.resolve({ document: { format: 'pptx', bytes }, diagnostics, package: documentPackage });
       }
       if (source.format === 'pdf' && targetFormat === 'odt') {
-        const bytes = pdfToOdt(source.bytes, { signal: options.signal, sink: (d) => diagnostics.push(fromPdfDiagnostic(d)) });
-        return Promise.resolve({ document: { format: 'odt', bytes }, diagnostics });
+        const bytes = pdfToOdt(source.bytes, { signal: options.signal, sink: (d) => diagnostics.push(fromPdfDiagnostic(d)), onDocument });
+        return Promise.resolve({ document: { format: 'odt', bytes }, diagnostics, package: documentPackage });
       }
       if (source.format === 'pdf' && targetFormat === 'odp') {
-        const bytes = pdfToOdp(source.bytes, { signal: options.signal, sink: (d) => diagnostics.push(fromPdfDiagnostic(d)) });
-        return Promise.resolve({ document: { format: 'odp', bytes }, diagnostics });
+        const bytes = pdfToOdp(source.bytes, { signal: options.signal, sink: (d) => diagnostics.push(fromPdfDiagnostic(d)), onDocument });
+        return Promise.resolve({ document: { format: 'odp', bytes }, diagnostics, package: documentPackage });
       }
       if (source.format === 'pdf' && targetFormat === 'ods') {
-        const bytes = pdfToOds(source.bytes, { signal: options.signal, sink: (d) => diagnostics.push(fromPdfDiagnostic(d)) });
-        return Promise.resolve({ document: { format: 'ods', bytes }, diagnostics });
+        const bytes = pdfToOds(source.bytes, { signal: options.signal, sink: (d) => diagnostics.push(fromPdfDiagnostic(d)), onDocument });
+        return Promise.resolve({ document: { format: 'ods', bytes }, diagnostics, package: documentPackage });
       }
       if (source.format === 'pdf' && targetFormat === 'odg') {
-        const bytes = pdfToOdg(source.bytes, { signal: options.signal, sink: (d) => diagnostics.push(fromPdfDiagnostic(d)) });
-        return Promise.resolve({ document: { format: 'odg', bytes }, diagnostics });
+        const bytes = pdfToOdg(source.bytes, { signal: options.signal, sink: (d) => diagnostics.push(fromPdfDiagnostic(d)), onDocument });
+        return Promise.resolve({ document: { format: 'odg', bytes }, diagnostics, package: documentPackage });
       }
-      // The six PDF-bypassing cross-format bridges: no diagnostics, since there is no font substitution or PDF-parse degradation to report -- a direct ContentDocument-pivot copy either succeeds outright or throws (an input of the wrong kind).
+      // The six PDF-bypassing cross-format bridges: no diagnostics, since there is no font substitution or PDF-parse degradation to report -- a direct ContentDocument-pivot copy either succeeds outright or throws (an input of the wrong kind). Each still reports a package (content populated, layout always undefined -- see DocumentBridgeOptions.onDocument).
       if (source.format === 'odt' && targetFormat === 'docx') {
-        const bytes = odtToDocx(source.bytes, { signal: options.signal });
-        return Promise.resolve({ document: { format: 'docx', bytes }, diagnostics });
+        const bytes = odtToDocx(source.bytes, { signal: options.signal, onDocument });
+        return Promise.resolve({ document: { format: 'docx', bytes }, diagnostics, package: documentPackage });
       }
       if (source.format === 'docx' && targetFormat === 'odt') {
-        const bytes = docxToOdt(source.bytes, { signal: options.signal });
-        return Promise.resolve({ document: { format: 'odt', bytes }, diagnostics });
+        const bytes = docxToOdt(source.bytes, { signal: options.signal, onDocument });
+        return Promise.resolve({ document: { format: 'odt', bytes }, diagnostics, package: documentPackage });
       }
       if (source.format === 'odp' && targetFormat === 'pptx') {
-        const bytes = odpToPptx(source.bytes, { signal: options.signal });
-        return Promise.resolve({ document: { format: 'pptx', bytes }, diagnostics });
+        const bytes = odpToPptx(source.bytes, { signal: options.signal, onDocument });
+        return Promise.resolve({ document: { format: 'pptx', bytes }, diagnostics, package: documentPackage });
       }
       if (source.format === 'pptx' && targetFormat === 'odp') {
-        const bytes = pptxToOdp(source.bytes, { signal: options.signal });
-        return Promise.resolve({ document: { format: 'odp', bytes }, diagnostics });
+        const bytes = pptxToOdp(source.bytes, { signal: options.signal, onDocument });
+        return Promise.resolve({ document: { format: 'odp', bytes }, diagnostics, package: documentPackage });
       }
       if (source.format === 'ods' && targetFormat === 'xlsx') {
-        const bytes = odsToXlsx(source.bytes, { signal: options.signal });
-        return Promise.resolve({ document: { format: 'xlsx', bytes }, diagnostics });
+        const bytes = odsToXlsx(source.bytes, { signal: options.signal, onDocument });
+        return Promise.resolve({ document: { format: 'xlsx', bytes }, diagnostics, package: documentPackage });
       }
       if (source.format === 'xlsx' && targetFormat === 'ods') {
-        const bytes = xlsxToOds(source.bytes, { signal: options.signal });
-        return Promise.resolve({ document: { format: 'ods', bytes }, diagnostics });
+        const bytes = xlsxToOds(source.bytes, { signal: options.signal, onDocument });
+        return Promise.resolve({ document: { format: 'ods', bytes }, diagnostics, package: documentPackage });
       }
       return Promise.reject(new Error(`unsupported conversion: ${source.format} -> ${targetFormat}`));
     },

@@ -28,7 +28,7 @@ function buildSamplePptx(text: string): Uint8Array<ArrayBuffer> {
 describe('createLocalDocumentConverter: shape', () => {
   it('reports contractVersion and the supported conversion pairs', () => {
     const converter = createLocalDocumentConverter();
-    expect(converter.contractVersion).toBe(1);
+    expect(converter.contractVersion).toBe(2);
     expect(converter.conversions).toEqual([
       { source: 'docx', target: 'pdf' },
       { source: 'pptx', target: 'pdf' },
@@ -215,5 +215,36 @@ describe('createLocalDocumentConverter: convert', () => {
     const converter = createLocalDocumentConverter();
     const result = await converter.convert({ source: { format: 'pdf', bytes: brokenStartxrefPdf() }, targetFormat: 'docx' }, { signal: new AbortController().signal });
     expect(result.diagnostics.some((d) => d.code === 'pdf/xref-recovered')).toBe(true);
+  });
+
+  it('returns a package with correlated content and layout for a PDF-pivot conversion (docx -> pdf)', async () => {
+    const converter = createLocalDocumentConverter();
+    const result = await converter.convert({ source: { format: 'docx', bytes: buildSampleDocx('Hi') }, targetFormat: 'pdf' }, { signal: new AbortController().signal });
+
+    expect(result.package).toBeDefined();
+    const pkg = result.package!;
+    expect(pkg.content.kind).toBe('wordprocessing');
+    expect(pkg.layout).toBeDefined();
+    if (pkg.content.kind !== 'wordprocessing') {
+      throw new Error('expected a wordprocessing ContentDocument');
+    }
+    const paragraph = pkg.content.sections[0]?.blocks[0];
+    if (paragraph?.kind !== 'paragraph') {
+      throw new Error('expected a paragraph block');
+    }
+    const run = paragraph.runs[0];
+    expect(run?.sourcePath).toBeDefined();
+    const layoutText = pkg.layout?.pages[0]?.items.find((item) => item.kind === 'text' && item.sourcePath === run?.sourcePath);
+    expect(layoutText).toBeDefined();
+  });
+
+  it('returns a package with content only (layout undefined) for a PDF-bypassing bridge conversion (odt -> docx)', async () => {
+    const converter = createLocalDocumentConverter();
+    const result = await converter.convert({ source: { format: 'odt', bytes: minimalOdtBytes() }, targetFormat: 'docx' }, { signal: new AbortController().signal });
+
+    expect(result.package).toBeDefined();
+    const pkg = result.package!;
+    expect(pkg.content.kind).toBe('wordprocessing');
+    expect(pkg.layout).toBeUndefined();
   });
 });
