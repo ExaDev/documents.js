@@ -1,3 +1,10 @@
+# [1.4.0](https://github.com/ExaDev/document-content-model/compare/v1.3.0...v1.4.0) (2026-08-01)
+
+
+### Features
+
+* add DocumentPackageSchema, a content+layout superset envelope ([9cd33e6](https://github.com/ExaDev/document-content-model/commit/9cd33e6cf181885d1a1a22477b6dcb731ba0a4d3))
+
 # [1.3.0](https://github.com/ExaDev/document-content-model/compare/v1.2.1...v1.3.0) (2026-07-31)
 
 
