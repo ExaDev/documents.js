@@ -1,3 +1,19 @@
+# [1.51.0](https://github.com/ExaDev/documents.js/compare/v1.50.0...v1.51.0) (2026-08-01)
+
+
+### Features
+
+* add .odb Tier 1 HSQLDB text-script table export ([dee2b3b](https://github.com/ExaDev/documents.js/commit/dee2b3b7e1c492dff7a291dcce66500b8c138e1e))
+* add .odb Tier 1 table extraction and xlsx/CSV conversion ([b9bec5c](https://github.com/ExaDev/documents.js/commit/b9bec5c299fffd08b1dabbd691a642ffe7d494cc))
+* add a bounded HSQLDB TEXT-script parser ([9b15941](https://github.com/ExaDev/documents.js/commit/9b15941357a23a3cf731ac4de7ef9cecb4f7bb6e))
+* add MathML formula rendering for odf-to-PDF conversion ([07ab210](https://github.com/ExaDev/documents.js/commit/07ab210fb4ec0b3ab97c5d842f70bdab89bdcf94))
+* **convert:** add odfToPdf for standalone ODF formula documents ([806ad90](https://github.com/ExaDev/documents.js/commit/806ad90a813ea8dacf6fc3f955e11beefbb74eb0))
+* export the MathML typesetting engine and formula public API ([b0c3e0e](https://github.com/ExaDev/documents.js/commit/b0c3e0ebb5e008f977d9e43ae09aba5c7d5ee074))
+* **layout:** render embedded formulas during wordprocessing and presentation layout ([8efb484](https://github.com/ExaDev/documents.js/commit/8efb484b7640bd56d3dfa0904a32c7860f906553))
+* **mathml:** add MathML presentation-layer typesetting engine ([33d23a3](https://github.com/ExaDev/documents.js/commit/33d23a315d9bfd29a39922eada93db165e629d25))
+* **odf:** detect embedded formula objects in odt and odp ([298e242](https://github.com/ExaDev/documents.js/commit/298e2424c014bf34d8df1b9dab7aa65ca0abde7b))
+* **pdf:** embed STIX Two Math for PDF formula rendering ([04f9550](https://github.com/ExaDev/documents.js/commit/04f9550c71b00c85c0f3205b2dcdc2f12352f476))
+
 # [1.50.0](https://github.com/ExaDev/documents.js/compare/v1.49.0...v1.50.0) (2026-08-01)
 
 
