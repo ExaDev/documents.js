@@ -59,7 +59,7 @@ export {
 } from './compact';
 export type { CompactPackage, CompactPart, CompactXmlNode, CompactAttrPairs } from './compact';
 
-// --- The shared content model: one block model (paragraphs, tables, images, page breaks) underlying both readDocx's sections and readPptx's slides, plus the geometry/colour/unit primitives it's expressed in. Sourced from document-content-model, the sibling package that also backs documents.js's own PDF-side pivot -- these re-exports keep ooxml.js's own public API surface unchanged even though the definitions no longer live in this package. ---
+// --- The shared content model: one block model (paragraphs, tables, images, page breaks) underlying both readDocx's sections and readPptx's slides, plus the geometry/colour/unit primitives it's expressed in. Sourced from document-schema.js, the sibling package that also backs documents.js's own PDF-side pivot -- these re-exports keep ooxml.js's own public API surface unchanged even though the definitions no longer live in this package. ---
 export {
   BoxSchema,
   MarginsSchema,
@@ -97,7 +97,7 @@ export {
   ContentSheetPrintRangeSchema,
   ContentSheetRepeatRangeSchema,
   ContentSheetPrintSettingsSchema,
-} from 'document-content-model';
+} from 'document-schema.js';
 export type {
   Box,
   Margins,
@@ -126,7 +126,7 @@ export type {
   ContentSheetPrintRange,
   ContentSheetRepeatRange,
   ContentSheetPrintSettings,
-} from 'document-content-model';
+} from 'document-schema.js';
 
 export { applyColorTransforms } from './typed/shared/color';
 export type { ColorTransform } from './typed/shared/color';

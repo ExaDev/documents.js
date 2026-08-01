@@ -1,6 +1,6 @@
-import type { Color } from 'document-content-model';
+import type { Color } from 'document-schema.js';
 
-// The Color/ColorSchema shape (and COLOR_BLACK/rgbHexToColor/colorToRgbHex) now live in document-content-model -- this file keeps only the DrawingML colour-transform cascade below, which is genuinely OOXML-specific logic, not a content-model shape.
+// The Color/ColorSchema shape (and COLOR_BLACK/rgbHexToColor/colorToRgbHex) now live in document-schema.js -- this file keeps only the DrawingML colour-transform cascade below, which is genuinely OOXML-specific logic, not a content-model shape.
 
 // DrawingML colour-transform child elements (a:shade, a:tint, a:lumMod, a:lumOff), applied to a base a:srgbClr or theme-resolved a:schemeClr colour. Values are the raw OOXML thousandths-of-a-percent integers (e.g. a:lumMod val="60000" means 60.000%), per ECMA-376 Part 1 20.1.10.55 (ST_Percentage) -- callers read the attribute string and parse it with Number(), passing the result straight through.
 const OOXML_PERCENT_SCALE = 100_000;

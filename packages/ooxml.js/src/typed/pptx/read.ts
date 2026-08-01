@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import type { Package } from '../../model/package';
 import type { XmlElement, XmlNode } from '../../model/node';
-import type { Alignment, Box, ContentBlock, ContentImageBlock, ContentParagraph, ContentRun, ContentShape, ContentSlide, ContentTable, ContentTableCell, PageSize } from 'document-content-model';
-import { ContentSlideSchema, SLIDE_SIZE_WIDESCREEN } from 'document-content-model';
+import type { Alignment, Box, ContentBlock, ContentImageBlock, ContentParagraph, ContentRun, ContentShape, ContentSlide, ContentTable, ContentTableCell, PageSize } from 'document-schema.js';
+import { ContentSlideSchema, SLIDE_SIZE_WIDESCREEN } from 'document-schema.js';
 import { drawingMlFontSizeToPt, emuToPt } from '../shared/units';
 import { sniffImageFormat } from '../../image/sniff';
 import type { GroupChildTransform } from '../shared/drawingml';

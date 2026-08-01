@@ -1,5 +1,5 @@
-import type { ContentSheetPrintSettings, Margins, PageSize } from 'document-content-model';
-import { PAGE_SIZE_LETTER } from 'document-content-model';
+import type { ContentSheetPrintSettings, Margins, PageSize } from 'document-schema.js';
+import { PAGE_SIZE_LETTER } from 'document-schema.js';
 import type { XmlElement } from '../../model/node';
 import { attr, childrenWithTag } from '../util';
 import { POINTS_PER_INCH } from '../shared/units';
@@ -74,7 +74,7 @@ function readManualBreaks(worksheet: XmlElement): ContentSheetPrintSettings['man
   return rows.length > 0 || columns.length > 0 ? { rows, columns } : undefined;
 }
 
-// Per ECMA-376 Part 1 SS18.3.1.2 (brk, CT_Break): "id" is the zero-based row/column index the break occurs immediately above/left of -- the SAME 0-based, break-precedes-this-index convention document-content-model's own ContentSheetPrintSettings.manualBreaks already documents for its own rows/columns arrays (mirroring ODF's fo:break-before semantics), so no index translation is needed in either direction.
+// Per ECMA-376 Part 1 SS18.3.1.2 (brk, CT_Break): "id" is the zero-based row/column index the break occurs immediately above/left of -- the SAME 0-based, break-precedes-this-index convention document-schema.js's own ContentSheetPrintSettings.manualBreaks already documents for its own rows/columns arrays (mirroring ODF's fo:break-before semantics), so no index translation is needed in either direction.
 function readBreakIndices(container: XmlElement): number[] {
   const indices: number[] = [];
   for (const brk of childrenWithTag(container, 'brk')) {

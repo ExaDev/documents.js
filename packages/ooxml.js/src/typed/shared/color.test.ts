@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { applyColorTransforms } from './color';
 
-// Ported verbatim from documents.js's src/model/color.test.ts. rgbHexToColor/colorToRgbHex/ColorSchema/COLOR_BLACK coverage now lives in document-content-model's own test suite -- this file keeps only applyColorTransforms, the DrawingML-specific logic that stayed here.
+// Ported verbatim from documents.js's src/model/color.test.ts. rgbHexToColor/colorToRgbHex/ColorSchema/COLOR_BLACK coverage now lives in document-schema.js's own test suite -- this file keeps only applyColorTransforms, the DrawingML-specific logic that stayed here.
 describe('applyColorTransforms', () => {
   it('lumMod halves luminance for a fully-desaturated colour without touching hue/saturation', () => {
     const white = { r: 1, g: 1, b: 1 };

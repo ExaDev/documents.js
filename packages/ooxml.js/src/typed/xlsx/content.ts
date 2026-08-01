@@ -1,5 +1,5 @@
-import type { ContentCellValue, ContentDocument, ContentSheet, ContentSheetCell, ContentSheetColumn, ContentSheetRow } from 'document-content-model';
-import { CONTENT_FORMAT_VERSION } from 'document-content-model';
+import type { ContentCellValue, ContentDocument, ContentSheet, ContentSheetCell, ContentSheetColumn, ContentSheetRow } from 'document-schema.js';
+import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
 import type { Package } from '../../model/package';
 import type { XmlElement } from '../../model/node';
 import { attr, childrenWithTag, elementsWithTag, resolveRelationships, rootElement, textContent } from '../util';

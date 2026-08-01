@@ -1,6 +1,6 @@
 import type { Package } from '../../model/package';
 import type { XmlElement } from '../../model/node';
-import type { Color } from 'document-content-model';
+import type { Color } from 'document-schema.js';
 import { drawingMlFontSizeToPt } from '../shared/units';
 import type { DrawingTheme, DrawingXfrm } from '../shared/drawingml';
 import { EMPTY_THEME, readColorMap, readSolidFillColor, readTheme, readXfrm, resolveThemeFontReference } from '../shared/drawingml';

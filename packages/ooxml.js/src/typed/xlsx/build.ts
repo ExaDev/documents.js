@@ -1,4 +1,4 @@
-import type { ContentCellValue, ContentDocument, ContentSheet, ContentSheetCell, ContentSheetColumn, ContentSheetPrintSettings, ContentSheetRow, LayoutMetadata } from 'document-content-model';
+import type { ContentCellValue, ContentDocument, ContentSheet, ContentSheetCell, ContentSheetColumn, ContentSheetPrintSettings, ContentSheetRow, LayoutMetadata } from 'document-schema.js';
 import type { Package, XmlPart } from '../../model/package';
 import type { XmlElement, XmlNode } from '../../model/node';
 import { el, txt } from '../../xml/fragment';

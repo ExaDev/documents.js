@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PAGE_SIZE_A4, PAGE_SIZE_LETTER } from 'document-content-model';
+import { PAGE_SIZE_A4, PAGE_SIZE_LETTER } from 'document-schema.js';
 import { el } from '../../xml/fragment';
 import { DEFAULT_HEADER_FOOTER_MARGIN_PT, readPrintSettings } from './print-settings';
 

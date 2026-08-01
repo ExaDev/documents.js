@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { ContentDocument, ContentSheet } from 'document-content-model';
-import { CONTENT_FORMAT_VERSION, PAGE_SIZE_A4, PAGE_SIZE_LETTER } from 'document-content-model';
+import type { ContentDocument, ContentSheet } from 'document-schema.js';
+import { CONTENT_FORMAT_VERSION, PAGE_SIZE_A4, PAGE_SIZE_LETTER } from 'document-schema.js';
 import { encodePackage } from '../../codec';
 import { parsePackage } from '../../package-io/read';
 import { rootElement } from '../util';

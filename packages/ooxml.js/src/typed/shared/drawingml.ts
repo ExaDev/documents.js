@@ -1,6 +1,6 @@
 import type { XmlElement } from '../../model/node';
-import type { Box, Color } from 'document-content-model';
-import { rgbHexToColor } from 'document-content-model';
+import type { Box, Color } from 'document-schema.js';
+import { rgbHexToColor } from 'document-schema.js';
 import type { ColorTransform } from './color';
 import { applyColorTransforms } from './color';
 import { emuToPt } from './units';

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ContentBlock, ContentImageBlock, ContentPageBreak, ContentParagraph, ContentTable } from 'document-content-model';
+import type { ContentBlock, ContentImageBlock, ContentPageBreak, ContentParagraph, ContentTable } from 'document-schema.js';
 import { assignSourcePaths } from './source-path';
 
 function paragraph(...texts: string[]): ContentParagraph {

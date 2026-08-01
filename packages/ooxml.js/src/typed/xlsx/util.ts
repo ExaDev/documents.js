@@ -1,5 +1,5 @@
-import type { PageSize } from 'document-content-model';
-import { PAGE_SIZE_A4, PAGE_SIZE_LETTER } from 'document-content-model';
+import type { PageSize } from 'document-schema.js';
+import { PAGE_SIZE_A4, PAGE_SIZE_LETTER } from 'document-schema.js';
 import { POINTS_PER_INCH } from '../shared/units';
 
 // Small SpreadsheetML-specific helpers shared by typed/xlsx/content.ts (read) and typed/xlsx/build.ts (write) that don't fit a1.ts (cell references) or units.ts (column-width/row-height geometry): xsd:boolean attribute values, ST_PositiveUniversalMeasure length strings, and the ST_PaperSize enumeration.

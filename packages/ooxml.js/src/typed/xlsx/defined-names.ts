@@ -1,4 +1,4 @@
-import type { ContentSheetPrintRange, ContentSheetRepeatRange } from 'document-content-model';
+import type { ContentSheetPrintRange, ContentSheetRepeatRange } from 'document-schema.js';
 import type { Package } from '../../model/package';
 import { attr, childrenWithTag, rootElement, textContent } from '../util';
 import { columnIndexToLetters, columnLettersToIndex, parseRangeReference, rangeReference } from './a1';
@@ -55,7 +55,7 @@ function stripSheetPrefix(segment: string): string {
   return bang === -1 ? segment : segment.slice(bang + 1);
 }
 
-// _xlnm.Print_Area's value is a comma-separated list of one or more absolute ranges (Excel supports multiple non-contiguous print areas per sheet); ContentSheetPrintSettings.printRange models only ONE, so -- matching document-content-model's own documented odf.js precedent for the identical ODF table:print-ranges scope boundary -- only the first range is parsed, and it is a documented, narrow scope boundary rather than a silent one.
+// _xlnm.Print_Area's value is a comma-separated list of one or more absolute ranges (Excel supports multiple non-contiguous print areas per sheet); ContentSheetPrintSettings.printRange models only ONE, so -- matching document-schema.js's own documented odf.js precedent for the identical ODF table:print-ranges scope boundary -- only the first range is parsed, and it is a documented, narrow scope boundary rather than a silent one.
 export function parsePrintAreaValue(value: string): ContentSheetPrintRange | undefined {
   const first = value.split(',')[0]?.trim();
   if (first === undefined || first.length === 0) {

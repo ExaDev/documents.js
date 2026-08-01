@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import type { Package } from '../../model/package';
 import type { XmlElement, XmlNode } from '../../model/node';
-import type { Color, ContentBlock, ContentListMembership, ContentParagraph, ContentRun, ContentSection, ContentTable, ContentTableCell, Margins, PageSize } from 'document-content-model';
-import { ContentSectionSchema, PAGE_SIZE_LETTER, rgbHexToColor } from 'document-content-model';
+import type { Color, ContentBlock, ContentListMembership, ContentParagraph, ContentRun, ContentSection, ContentTable, ContentTableCell, Margins, PageSize } from 'document-schema.js';
+import { ContentSectionSchema, PAGE_SIZE_LETTER, rgbHexToColor } from 'document-schema.js';
 import { DocumentMetadataSchema, readCoreProperties } from '../shared/metadata';
 import { twipsToPt } from '../shared/units';
 import type { DrawingTheme } from '../shared/drawingml';
