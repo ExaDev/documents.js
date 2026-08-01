@@ -1,5 +1,5 @@
 import { decodePackage, encodePackage as encodeOdfPackage } from 'odf.js';
-import { encodePackage } from 'ooxml.js';
+import { buildXlsxPackage, decodePackage as decodeOoxmlPackage, encodePackage, readXlsxContent } from 'ooxml.js';
 import { buildDocxPackage } from '../edit/docx/content';
 import { openDocx } from '../edit/docx/editor';
 import { buildOdgPackage } from '../edit/odg/content';
@@ -24,6 +24,7 @@ import { createStandardFontMeasurer } from '../pdf/measure';
 import { readPdf } from '../pdf/read';
 import { writePdf } from '../pdf/write';
 import type { WinAnsiSubstitution } from '../pdf/winansi';
+import { throwIfAborted } from '../ports/abort';
 
 // Twelve ergonomic conversions (docx/pptx/odt/odp/ods/odg <-> PDF, all now round-trip both ways), each composing already-independently-tested pipeline stages: docx/pptx/odt/odp/ods/odg -> PDF reads the source package into a ContentDocument, lays it out into a LayoutDocument, and writes PDF bytes -- odtToPdf and odpToPdf both reuse convertWordprocessingToLayout/convertPresentationToLayout completely unmodified, the exact same engines docxToPdf/pptxToPdf feed, since readDocxContent/readOdtContent produce the identical WordprocessingContentDocument shape and readPptxContent/readOdpContent produce the identical PresentationContentDocument shape regardless of which package format (OOXML or ODF) they read; odsToPdf and odgToPdf are each genuinely new layout algorithms instead, since neither a spreadsheet's column/row-band pagination (convertSpreadsheetToLayout, src/layout/sheets.ts) nor a drawing's vector-primitive vocabulary (convertDrawingToLayout, src/layout/drawing.ts -- which DOES reuse slides.ts's own convertShape for whatever text/image/table content a drawing page also carries) has a docx/pptx analogue to share a pivot shape with. PDF -> docx/pptx/odt/odp/ods/odg reads PDF bytes into a LayoutDocument, reconstructs a best-effort ContentDocument from its geometry via reconstructWordprocessing/reconstructPresentation/reconstructSpreadsheet/reconstructDrawing, and builds a fresh OOXML or ODF package. pdfToOdt's own package-building half is buildOdtPackage (src/edit/odt/content.ts); pdfToOdp's is buildOdpPackage (src/edit/odp/content.ts) -- the odp-side counterpart to buildPptxPackage, built on the src/edit/odp/* live-view editor, closing the same reverse-direction gap odt closed once pdfToOdt existed. pdfToOdg's is buildOdgPackage (src/edit/odg/content.ts); unlike reconstructWordprocessing/reconstructPresentation (baseline-proximity line clustering, then paragraph/text-block clustering from geometry -- see src/layout/reconstruct.ts's own module doc), reconstructDrawing does no clustering at all, since a drawing has no semantic paragraph or shape structure to recover in the first place -- every painted LayoutItem maps close to 1:1 back onto a ContentVector or ContentShape, in the exact z-order it was painted. pdfToOds's own package-building half is buildOdsPackage (src/edit/ods/content.ts); reconstructSpreadsheet is a genuinely different geometry-recovery problem from either of those two -- a real gridline lattice (when a printed sheet had gridlines enabled) is used DIRECTLY as cell boundaries, and absent one, text is clustered into a 2D grid (rows via clusterIntoLines, columns via recurring x-position anchors) rather than a 1D paragraph flow or a 1:1 item mapping. It recovers what was printed, not what was entered: every cell comes back as a bare string carrying only its own extracted display text, never re-parsed into a number/date/boolean or claimed as a formula. No round-trip direction claims round-trip fidelity -- see src/layout/reconstruct.ts's own module doc for why PDF -> docx/pptx/odt/odp/ods/odg specifically cannot.
 
@@ -145,4 +146,81 @@ export function pdfToOds(bytes: Uint8Array<ArrayBuffer>, options?: PdfToDocument
   const layout = readPdf(bytes, { signal: options?.signal, sink: options?.sink });
   const content = reconstructSpreadsheet(layout, { signal: options?.signal });
   return encodeOdfPackage(buildOdsPackage(content));
+}
+
+// Six cross-format bridges (odt<->docx, odp<->pptx, ods<->xlsx), each bypassing PDF entirely. Every conversion above this point pivots through a LayoutDocument -- a real page-of-positioned-items layout, then (on the way back) a best-effort geometric reconstruction -- because PDF has no semantic document structure of its own to preserve. These six pairs don't have that problem: both formats in each pair already read into and build from the identical ContentDocument variant (readOdtContent/readDocxContent both produce a WordprocessingContentDocument; readOdpContent/readPptxContent both produce a PresentationContentDocument; readOdsContent/readXlsxContent both produce a SpreadsheetContentDocument), so the bridge is nothing more than reader -> writer, with no layout engine, no font measurement, and no geometry-based reconstruction in between. That is a categorically different, much higher-fidelity operation than routing through odtToPdf -> pdfToDocx would be -- see this module's own top-of-file comment for why the PDF-pivot conversions are lossy, and the README's Fidelity section for what these six functions preserve instead. readXlsxContent/buildXlsxPackage come from ooxml.js (its own typed xlsx reader/writer, added alongside the rest of ooxml.js's readDocx/readPptx-family readers); the other four reader/builder pairs are the same functions the PDF-pivot conversions above already use.
+export interface DocumentBridgeOptions {
+  readonly signal?: AbortSignal;
+}
+
+// odt bytes -> docx bytes: readOdtContent(decodePackage(odtBytes)) feeds directly into buildDocxPackage, then ooxml.js's own encodePackage serializes the result -- no writePdf/readPdf, no measurer, no reconstruction. Cancellation has no loop to hook into the way writePdf/readPdf's own page/content-stream loops do (see src/ports/abort.ts's own module comment) -- read and build are each a single bounded pass over the source document -- so the signal is checked once before each of those two stages rather than threaded into buildDocxPackage/readOdtContent themselves, which accept no such option today.
+export function odtToDocx(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBridgeOptions): Uint8Array<ArrayBuffer> {
+  throwIfAborted(options?.signal);
+  const pkg = decodePackage(bytes); // odf.js's own decodePackage -- odt is an ODF package.
+  const content = readOdtContent(pkg);
+  if (content.kind !== 'wordprocessing') {
+    throw new Error('readOdtContent returned a non-wordprocessing ContentDocument');
+  }
+  throwIfAborted(options?.signal);
+  return encodePackage(buildDocxPackage(content)); // ooxml.js's own encodePackage -- buildDocxPackage produces an OOXML package.
+}
+
+// docx bytes -> odt bytes, the reverse of odtToDocx: readDocxContent(decodePackage(docxBytes)) feeds directly into buildOdtPackage, then odf.js's own encodePackage serializes the result.
+export function docxToOdt(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBridgeOptions): Uint8Array<ArrayBuffer> {
+  throwIfAborted(options?.signal);
+  const pkg = decodeOoxmlPackage(bytes); // ooxml.js's own decodePackage -- docx is an OOXML package.
+  const content = readDocxContent(pkg);
+  if (content.kind !== 'wordprocessing') {
+    throw new Error('readDocxContent returned a non-wordprocessing ContentDocument');
+  }
+  throwIfAborted(options?.signal);
+  return encodeOdfPackage(buildOdtPackage(content)); // odf.js's own encodePackage -- buildOdtPackage produces an ODF package.
+}
+
+// odp bytes -> pptx bytes, mirroring odtToDocx exactly for the presentation variant: readOdpContent(decodePackage(odpBytes)) -> buildPptxPackage -> ooxml.js's encodePackage. Speaker notes carry across for free -- both readOdpContent and readPptxContent populate ContentSlide.notes from their own format's native notes mechanism (odp's presentation:notes page vs pptx's notesSlide part), and buildPptxPackage writes ContentSlide.notes straight into a real p:notes part, not the hidden-annotation trick odpToPdf/pptxToPdf need to smuggle notes through a format (PDF) that has no native concept of them at all.
+export function odpToPptx(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBridgeOptions): Uint8Array<ArrayBuffer> {
+  throwIfAborted(options?.signal);
+  const pkg = decodePackage(bytes); // odf.js's own decodePackage -- odp is an ODF package.
+  const content = readOdpContent(pkg);
+  if (content.kind !== 'presentation') {
+    throw new Error('readOdpContent returned a non-presentation ContentDocument');
+  }
+  throwIfAborted(options?.signal);
+  return encodePackage(buildPptxPackage(content)); // ooxml.js's own encodePackage -- buildPptxPackage produces an OOXML package.
+}
+
+// pptx bytes -> odp bytes, the reverse of odpToPptx: readPptxContent(decodePackage(pptxBytes)) -> buildOdpPackage -> odf.js's encodePackage. Notes carry across for the identical reason odpToPptx's own comment documents.
+export function pptxToOdp(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBridgeOptions): Uint8Array<ArrayBuffer> {
+  throwIfAborted(options?.signal);
+  const pkg = decodeOoxmlPackage(bytes); // ooxml.js's own decodePackage -- pptx is an OOXML package.
+  const content = readPptxContent(pkg);
+  if (content.kind !== 'presentation') {
+    throw new Error('readPptxContent returned a non-presentation ContentDocument');
+  }
+  throwIfAborted(options?.signal);
+  return encodeOdfPackage(buildOdpPackage(content)); // odf.js's own encodePackage -- buildOdpPackage produces an ODF package.
+}
+
+// ods bytes -> xlsx bytes, mirroring odtToDocx/odpToPptx for the spreadsheet variant: readOdsContent(decodePackage(odsBytes)) -> buildXlsxPackage -> ooxml.js's encodePackage. This is the least mature of the three bridges -- buildXlsxPackage is ooxml.js's first xlsx writer, and readOdsContent/buildXlsxPackage's own documented gaps (see this package's README Gotchas) both still apply here exactly as they do to every other caller of those two functions.
+export function odsToXlsx(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBridgeOptions): Uint8Array<ArrayBuffer> {
+  throwIfAborted(options?.signal);
+  const pkg = decodePackage(bytes); // odf.js's own decodePackage -- ods is an ODF package.
+  const content = readOdsContent(pkg);
+  if (content.kind !== 'spreadsheet') {
+    throw new Error('readOdsContent returned a non-spreadsheet ContentDocument');
+  }
+  throwIfAborted(options?.signal);
+  return encodePackage(buildXlsxPackage(content)); // ooxml.js's own encodePackage -- buildXlsxPackage produces an OOXML package.
+}
+
+// xlsx bytes -> ods bytes, the reverse of odsToXlsx: readXlsxContent(decodePackage(xlsxBytes)) -> buildOdsPackage -> odf.js's encodePackage. readXlsxContent's declared return type is document-content-model's own ContentDocument union (ooxml.js re-exports it, rather than documents.js's local, independently-versioned equivalent -- see src/model/content.ts's own module comment on why the two stay separate types), but the two are structurally identical schemas, so the narrowed value passes straight into buildOdsPackage without any conversion step.
+export function xlsxToOds(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBridgeOptions): Uint8Array<ArrayBuffer> {
+  throwIfAborted(options?.signal);
+  const pkg = decodeOoxmlPackage(bytes); // ooxml.js's own decodePackage -- xlsx is an OOXML package.
+  const content = readXlsxContent(pkg);
+  if (content.kind !== 'spreadsheet') {
+    throw new Error('readXlsxContent returned a non-spreadsheet ContentDocument');
+  }
+  throwIfAborted(options?.signal);
+  return encodeOdfPackage(buildOdsPackage(content)); // odf.js's own encodePackage -- buildOdsPackage produces an ODF package.
 }

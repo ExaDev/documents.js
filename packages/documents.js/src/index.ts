@@ -141,7 +141,7 @@ export { COLOR_BLACK, rgbHexToColor } from './model/color';
 export type { Alignment, LayoutFont } from './model/style';
 export { DEFAULT_LAYOUT_FONT } from './model/style';
 // Magic-byte-validated Uint8Array schemas, so a caller passing the wrong format -- to these functions directly, or as the input/output schema half of a z.codec() below -- gets a clear Zod validation error instead of a confusing failure three layers down. The Odt/Ods/Odp/Odg schemas check the package's actual declared media type (see src/model/bytes.ts), a stronger check than Docx/PptxBytesSchema's generic ZIP-signature check.
-export { DocxBytesSchema, OdgBytesSchema, OdpBytesSchema, OdsBytesSchema, OdtBytesSchema, PdfBytesSchema, PptxBytesSchema } from './model/bytes';
+export { DocxBytesSchema, OdgBytesSchema, OdpBytesSchema, OdsBytesSchema, OdtBytesSchema, PdfBytesSchema, PptxBytesSchema, XlsxBytesSchema } from './model/bytes';
 
 // --- The live-view read+write editors: a real manipulation API for docx/pptx content, since ooxml.js's own typed readers explicitly forbid write-back. ---
 export type { DocxBody } from './edit/docx/editor';
@@ -223,6 +223,13 @@ export { docxToPdf, odgToPdf, odpToPdf, odsToPdf, odtToPdf, pdfToDocx, pdfToOdg,
 
 // Schema-validated z.codec() pairs over the conversions above (docx/pptx/odt/odp/ods/odg bytes <-> PDF bytes), the no-extra-options form -- use docxToPdf/pdfToDocx/pptxToPdf/pdfToPptx/odtToPdf/pdfToOdt/odpToPdf/pdfToOdp/odsToPdf/pdfToOds/odgToPdf/pdfToOdg directly for cancellation or diagnostics.
 export { docxPdfCodec, odgPdfCodec, odpPdfCodec, odsPdfCodec, odtPdfCodec, pptxPdfCodec } from './convert/codec';
+
+// --- Six cross-format bridges (odt<->docx, odp<->pptx, ods<->xlsx), bypassing PDF entirely -- see convert.ts's own module comment on this section for why these carry substantially higher fidelity than the twelve PDF-pivot conversions above. ---
+export type { DocumentBridgeOptions } from './convert/convert';
+export { docxToOdt, odpToPptx, odsToXlsx, odtToDocx, pptxToOdp, xlsxToOds } from './convert/convert';
+
+// Schema-validated z.codec() pairs over the six bridges above (odt bytes <-> docx bytes, odp bytes <-> pptx bytes, ods bytes <-> xlsx bytes), the no-extra-options form -- use odtToDocx/docxToOdt/odpToPptx/pptxToOdp/odsToXlsx/xlsxToOds directly for cancellation.
+export { odpPptxCodec, odsXlsxCodec, odtDocxCodec } from './convert/codec';
 
 // --- The swappable conversion port, for a caller that wants to inject a different (e.g. remote) implementation later without changing call sites. ---
 export type { ConversionRequest, ConversionResult, Diagnostic, DocumentConverter, DocumentFormat, DocumentPayload } from './convert/port';
