@@ -1,5 +1,5 @@
-import type { ContentBlock, ContentSection, LayoutDocument } from 'document-content-model';
-import { COLOR_BLACK, LAYOUT_FORMAT_VERSION } from 'document-content-model';
+import type { ContentBlock, ContentSection, DocumentPackage, LayoutDocument } from 'document-content-model';
+import { COLOR_BLACK, DOCUMENT_PACKAGE_FORMAT_VERSION, LAYOUT_FORMAT_VERSION } from 'document-content-model';
 import type { OdmSection, Package } from 'odf.js';
 import { decodePackage, encodePackage as encodeOdfPackage, readOdfMetadata, readOdfParagraph, readOdfTable, readOdm } from 'odf.js';
 import { buildXlsxPackage, decodePackage as decodeOoxmlPackage, encodePackage, readXlsxContent } from 'ooxml.js';
@@ -45,6 +45,8 @@ export interface DocumentToPdfOptions {
   readonly signal?: AbortSignal;
   // Called once per WinAnsi character substitution made while emitting text (see src/pdf/winansi.ts) -- writePdf's own hook, passed straight through.
   readonly onSubstitution?: (substitution: WinAnsiSubstitution, context: { readonly pageIndex: number }) => void;
+  // Called exactly once, synchronously, with the DocumentPackage (content + layout) this conversion built internally, before the function returns its bytes -- a side channel for a caller that wants the intermediate pivot value, not just the target bytes, mirroring onSubstitution's own callback shape. odfToPdf also accepts this (it shares this options type) but never invokes it: a standalone formula document has no ContentDocument-shaped structure to report (see readOdfFormulaContent's own module comment).
+  readonly onDocument?: (pkg: DocumentPackage) => void;
 }
 
 export function docxToPdf(bytes: Uint8Array<ArrayBuffer>, options?: DocumentToPdfOptions): Uint8Array<ArrayBuffer> {
@@ -55,6 +57,7 @@ export function docxToPdf(bytes: Uint8Array<ArrayBuffer>, options?: DocumentToPd
     throw new Error('readDocxContent returned a non-wordprocessing ContentDocument');
   }
   const { document: layout, formulas } = convertWordprocessingToLayout(content, { measurer: createStandardFontMeasurer() });
+  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content, layout });
   return writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution, formulas });
 }
 
@@ -67,6 +70,7 @@ export function odtToPdf(bytes: Uint8Array<ArrayBuffer>, options?: DocumentToPdf
     throw new Error('readOdtContent returned a non-wordprocessing ContentDocument');
   }
   const { document: layout, formulas } = convertWordprocessingToLayout(content.document, { measurer: createStandardFontMeasurer(), formulas: content.formulas });
+  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content: content.document, layout });
   return writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution, formulas });
 }
 
@@ -77,6 +81,7 @@ export function pptxToPdf(bytes: Uint8Array<ArrayBuffer>, options?: DocumentToPd
     throw new Error('readPptxContent returned a non-presentation ContentDocument');
   }
   const { document: layout } = convertPresentationToLayout(content, { measurer: createStandardFontMeasurer() });
+  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content, layout });
   return writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution });
 }
 
@@ -89,6 +94,7 @@ export function odpToPdf(bytes: Uint8Array<ArrayBuffer>, options?: DocumentToPdf
     throw new Error('readOdpContent returned a non-presentation ContentDocument');
   }
   const { document: layout, formulas } = convertPresentationToLayout(content.document, { measurer: createStandardFontMeasurer(), formulas: content.formulas });
+  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content: content.document, layout });
   return writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution, formulas });
 }
 
@@ -101,6 +107,7 @@ export function odsToPdf(bytes: Uint8Array<ArrayBuffer>, options?: DocumentToPdf
     throw new Error('readOdsContent returned a non-spreadsheet ContentDocument');
   }
   const layout = convertSpreadsheetToLayout(content, { measurer: createStandardFontMeasurer(), signal: options?.signal });
+  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content, layout });
   return writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution });
 }
 
@@ -113,13 +120,14 @@ export function odgToPdf(bytes: Uint8Array<ArrayBuffer>, options?: DocumentToPdf
     throw new Error('readOdgContent returned a non-drawing ContentDocument');
   }
   const layout = convertDrawingToLayout(content, { measurer: createStandardFontMeasurer() });
+  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content, layout });
   return writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution });
 }
 
 const STANDALONE_FORMULA_SIZE_PT = 18; // larger than a typical embedded formula (see engine.ts's own formulaSizePtFromFrame), since a standalone .odf's own formula is usually the whole document's content, not a small inline element.
 const STANDALONE_FORMULA_MARGIN_PT = 72; // 1 inch
 
-// odf bytes -> PDF bytes: readOdfFormulaContent -> src/mathml's layoutFormula -> a single formula positioned on one A4 page -> writePdf, with the embedded STIX Two Math font (src/pdf/math-font.ts) doing the actual glyph rendering. This is NOT one of the twelve round-trip conversions above (and has no reverse pdfToOdf, no z.codec() pair, and no DocumentConverter port entry -- see src/convert/port.ts's own note): scope for v1, per the design plan this package was built against, is odfToPdf alone, rendering "faithful mathematical typesetting" for a single formula (or small formula document). PDF -> structured MathML is a categorically different, OCR-adjacent problem -- recovering a semantic operator tree (msub vs msup vs a coincidentally-superscript-shaped run of glyphs) from nothing but positioned glyphs and paths has no geometry-reconstruction analogue anywhere else in this package (reconstructWordprocessing/reconstructPresentation recover paragraph/shape STRUCTURE from geometry, never semantic MEANING the way "this pair of glyphs forms a fraction" would require) -- and is deliberately not attempted here.
+// odf bytes -> PDF bytes: readOdfFormulaContent -> src/mathml's layoutFormula -> a single formula positioned on one A4 page -> writePdf, with the embedded STIX Two Math font (src/pdf/math-font.ts) doing the actual glyph rendering. options.onDocument (inherited from the shared DocumentToPdfOptions type) is deliberately never invoked here: readOdfFormulaContent's own return value is not a ContentDocument at all (a standalone formula matches none of ContentDocumentSchema's wordprocessing/presentation/spreadsheet/drawing variants -- see that function's own module comment), and the `layout` value built below carries no LayoutItems either, since the formula itself is rendered through writePdf's separate `formulas` positioning rather than as page content -- there is nothing valid to hand back as a DocumentPackage. This is NOT one of the twelve round-trip conversions above (and has no reverse pdfToOdf, no z.codec() pair, and no DocumentConverter port entry -- see src/convert/port.ts's own note): scope for v1, per the design plan this package was built against, is odfToPdf alone, rendering "faithful mathematical typesetting" for a single formula (or small formula document). PDF -> structured MathML is a categorically different, OCR-adjacent problem -- recovering a semantic operator tree (msub vs msup vs a coincidentally-superscript-shaped run of glyphs) from nothing but positioned glyphs and paths has no geometry-reconstruction analogue anywhere else in this package (reconstructWordprocessing/reconstructPresentation recover paragraph/shape STRUCTURE from geometry, never semantic MEANING the way "this pair of glyphs forms a fraction" would require) -- and is deliberately not attempted here.
 export function odfToPdf(bytes: Uint8Array<ArrayBuffer>, options?: DocumentToPdfOptions): Uint8Array<ArrayBuffer> {
   throwIfAborted(options?.signal);
   const pkg = decodePackage(bytes); // odf.js's own decodePackage -- odf is an ODF package.
@@ -142,17 +150,21 @@ export function odfToPdf(bytes: Uint8Array<ArrayBuffer>, options?: DocumentToPdf
 export interface PdfToDocumentOptions {
   readonly signal?: AbortSignal;
   readonly sink?: PdfDiagnosticSink;
+  // Called exactly once, synchronously, with the DocumentPackage (the readPdf-produced layout, and the reconstructed content built from it) this conversion built internally, before the function returns its bytes -- see DocumentToPdfOptions.onDocument for the mirrored X-to-PDF side of this same side channel.
+  readonly onDocument?: (pkg: DocumentPackage) => void;
 }
 
 export function pdfToDocx(bytes: Uint8Array<ArrayBuffer>, options?: PdfToDocumentOptions): Uint8Array<ArrayBuffer> {
   const layout = readPdf(bytes, { signal: options?.signal, sink: options?.sink });
   const content = reconstructWordprocessing(layout, { signal: options?.signal });
+  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content, layout });
   return encodePackage(buildDocxPackage(content));
 }
 
 export function pdfToPptx(bytes: Uint8Array<ArrayBuffer>, options?: PdfToDocumentOptions): Uint8Array<ArrayBuffer> {
   const layout = readPdf(bytes, { signal: options?.signal, sink: options?.sink });
   const content = reconstructPresentation(layout, { signal: options?.signal });
+  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content, layout });
   return encodePackage(buildPptxPackage(content));
 }
 
@@ -160,6 +172,7 @@ export function pdfToPptx(bytes: Uint8Array<ArrayBuffer>, options?: PdfToDocumen
 export function pdfToOdt(bytes: Uint8Array<ArrayBuffer>, options?: PdfToDocumentOptions): Uint8Array<ArrayBuffer> {
   const layout = readPdf(bytes, { signal: options?.signal, sink: options?.sink });
   const content = reconstructWordprocessing(layout, { signal: options?.signal });
+  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content, layout });
   return encodeOdfPackage(buildOdtPackage(content));
 }
 
@@ -167,6 +180,7 @@ export function pdfToOdt(bytes: Uint8Array<ArrayBuffer>, options?: PdfToDocument
 export function pdfToOdp(bytes: Uint8Array<ArrayBuffer>, options?: PdfToDocumentOptions): Uint8Array<ArrayBuffer> {
   const layout = readPdf(bytes, { signal: options?.signal, sink: options?.sink });
   const content = reconstructPresentation(layout, { signal: options?.signal });
+  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content, layout });
   return encodeOdfPackage(buildOdpPackage(content));
 }
 
@@ -174,6 +188,7 @@ export function pdfToOdp(bytes: Uint8Array<ArrayBuffer>, options?: PdfToDocument
 export function pdfToOdg(bytes: Uint8Array<ArrayBuffer>, options?: PdfToDocumentOptions): Uint8Array<ArrayBuffer> {
   const layout = readPdf(bytes, { signal: options?.signal, sink: options?.sink });
   const content = reconstructDrawing(layout, { signal: options?.signal });
+  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content, layout });
   return encodeOdfPackage(buildOdgPackage(content));
 }
 
@@ -181,12 +196,15 @@ export function pdfToOdg(bytes: Uint8Array<ArrayBuffer>, options?: PdfToDocument
 export function pdfToOds(bytes: Uint8Array<ArrayBuffer>, options?: PdfToDocumentOptions): Uint8Array<ArrayBuffer> {
   const layout = readPdf(bytes, { signal: options?.signal, sink: options?.sink });
   const content = reconstructSpreadsheet(layout, { signal: options?.signal });
+  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content, layout });
   return encodeOdfPackage(buildOdsPackage(content));
 }
 
 // Six cross-format bridges (odt<->docx, odp<->pptx, ods<->xlsx), each bypassing PDF entirely. Every conversion above this point pivots through a LayoutDocument -- a real page-of-positioned-items layout, then (on the way back) a best-effort geometric reconstruction -- because PDF has no semantic document structure of its own to preserve. These six pairs don't have that problem: both formats in each pair already read into and build from the identical ContentDocument variant (readOdtContent/readDocxContent both produce a WordprocessingContentDocument; readOdpContent/readPptxContent both produce a PresentationContentDocument; readOdsContent/readXlsxContent both produce a SpreadsheetContentDocument), so the bridge is nothing more than reader -> writer, with no layout engine, no font measurement, and no geometry-based reconstruction in between. That is a categorically different, much higher-fidelity operation than routing through odtToPdf -> pdfToDocx would be -- see this module's own top-of-file comment for why the PDF-pivot conversions are lossy, and the README's Fidelity section for what these six functions preserve instead. readXlsxContent/buildXlsxPackage come from ooxml.js (its own typed xlsx reader/writer, added alongside the rest of ooxml.js's readDocx/readPptx-family readers); the other four reader/builder pairs are the same functions the PDF-pivot conversions above already use.
 export interface DocumentBridgeOptions {
   readonly signal?: AbortSignal;
+  // Called exactly once, synchronously, with the DocumentPackage this bridge built internally, before the function returns its bytes -- mirroring DocumentToPdfOptions/PdfToDocumentOptions's own onDocument. A bridge never runs a layout engine (see this section's own top-of-block comment), so `layout` is always left undefined here -- DocumentPackageSchema already models layout as optional for exactly this case, and running a layout conversion purely to populate a field no caller asked for would be wasted work.
+  readonly onDocument?: (pkg: DocumentPackage) => void;
 }
 
 // odt bytes -> docx bytes: readOdtContent(decodePackage(odtBytes)) feeds directly into buildDocxPackage, then ooxml.js's own encodePackage serializes the result -- no writePdf/readPdf, no measurer, no reconstruction. Cancellation has no loop to hook into the way writePdf/readPdf's own page/content-stream loops do (see src/ports/abort.ts's own module comment) -- read and build are each a single bounded pass over the source document -- so the signal is checked once before each of those two stages rather than threaded into buildDocxPackage/readOdtContent themselves, which accept no such option today. An embedded formula survives this bridge only as its own placeholder text (its StarMath annotation, or "[formula]") -- buildDocxPackage has no MathML-writing path of its own (OOXML's own math markup, OMML, is a different vocabulary this package does not write), so readOdtContent's own `formulas` map (the real MathML) is simply not consulted here.
@@ -198,6 +216,7 @@ export function odtToDocx(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBrid
     throw new Error('readOdtContent returned a non-wordprocessing ContentDocument');
   }
   throwIfAborted(options?.signal);
+  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content });
   return encodePackage(buildDocxPackage(content)); // ooxml.js's own encodePackage -- buildDocxPackage produces an OOXML package.
 }
 
@@ -210,6 +229,7 @@ export function docxToOdt(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBrid
     throw new Error('readDocxContent returned a non-wordprocessing ContentDocument');
   }
   throwIfAborted(options?.signal);
+  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content });
   return encodeOdfPackage(buildOdtPackage(content)); // odf.js's own encodePackage -- buildOdtPackage produces an ODF package.
 }
 
@@ -222,6 +242,7 @@ export function odpToPptx(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBrid
     throw new Error('readOdpContent returned a non-presentation ContentDocument');
   }
   throwIfAborted(options?.signal);
+  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content });
   return encodePackage(buildPptxPackage(content)); // ooxml.js's own encodePackage -- buildPptxPackage produces an OOXML package.
 }
 
@@ -234,6 +255,7 @@ export function pptxToOdp(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBrid
     throw new Error('readPptxContent returned a non-presentation ContentDocument');
   }
   throwIfAborted(options?.signal);
+  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content });
   return encodeOdfPackage(buildOdpPackage(content)); // odf.js's own encodePackage -- buildOdpPackage produces an ODF package.
 }
 
@@ -246,6 +268,7 @@ export function odsToXlsx(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBrid
     throw new Error('readOdsContent returned a non-spreadsheet ContentDocument');
   }
   throwIfAborted(options?.signal);
+  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content });
   return encodePackage(buildXlsxPackage(content)); // ooxml.js's own encodePackage -- buildXlsxPackage produces an OOXML package.
 }
 
@@ -258,6 +281,7 @@ export function xlsxToOds(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBrid
     throw new Error('readXlsxContent returned a non-spreadsheet ContentDocument');
   }
   throwIfAborted(options?.signal);
+  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content });
   return encodeOdfPackage(buildOdsPackage(content)); // odf.js's own encodePackage -- buildOdsPackage produces an ODF package.
 }
 

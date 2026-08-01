@@ -1,4 +1,5 @@
-import type { ContentVector, LayoutItem, LayoutPath, LayoutRect, LayoutText } from 'document-content-model';
+import type { ContentVector, DocumentPackage, LayoutItem, LayoutPath, LayoutRect, LayoutText } from 'document-content-model';
+import { DOCUMENT_PACKAGE_FORMAT_VERSION } from 'document-content-model';
 import { decodePackage, el, txt } from 'odf.js';
 import { describe, expect, it } from 'vitest';
 import { createDocx, openDocx } from '../edit/docx/editor';
@@ -56,6 +57,32 @@ describe('docxToPdf', () => {
     const controller = new AbortController();
     controller.abort();
     expect(() => docxToPdf(buildSampleDocx('X'), { signal: controller.signal })).toThrow();
+  });
+
+  it('calls onDocument exactly once with a DocumentPackage whose content and layout correlate via sourcePath', () => {
+    let captured: DocumentPackage | undefined;
+    const pdfBytes = docxToPdf(buildSampleDocx('Hello from docx'), { onDocument: (pkg) => { captured = pkg; } });
+    expect(pdfHeader(pdfBytes)).toBe('%PDF-');
+
+    expect(captured).toBeDefined();
+    const pkg = captured!;
+    expect(pkg.formatVersion).toBe(DOCUMENT_PACKAGE_FORMAT_VERSION);
+    expect(pkg.content.kind).toBe('wordprocessing');
+    if (pkg.content.kind !== 'wordprocessing') {
+      throw new Error('expected a wordprocessing ContentDocument');
+    }
+    const paragraph = pkg.content.sections[0]?.blocks[0];
+    if (paragraph?.kind !== 'paragraph') {
+      throw new Error('expected a paragraph block');
+    }
+    const run = paragraph.runs[0];
+    expect(run?.sourcePath).toBeDefined();
+
+    expect(pkg.layout).toBeDefined();
+    // The layout engine's own word-wrapping splits one run's text into several LayoutText items (one per word) that all share that run's sourcePath -- see src/layout/sourcepath.test.ts's own documented behaviour for this exact split. Every matching item joins back up to the original run text, proving real correlation rather than merely "both fields are present".
+    const layoutTexts = (pkg.layout?.pages[0]?.items ?? []).filter((item): item is LayoutText => item.kind === 'text' && item.sourcePath === run?.sourcePath);
+    expect(layoutTexts.length).toBeGreaterThan(0);
+    expect(layoutTexts.map((item) => item.text).join(' ')).toBe('Hello from docx');
   });
 });
 

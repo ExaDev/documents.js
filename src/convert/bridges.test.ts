@@ -1,3 +1,5 @@
+import type { DocumentPackage } from 'document-content-model';
+import { DOCUMENT_PACKAGE_FORMAT_VERSION } from 'document-content-model';
 import { decodePackage as decodeOdfPackage } from 'odf.js';
 import { buildXlsxPackage, decodePackage as decodeOoxmlPackage, encodePackage as encodeOoxmlPackage, readXlsxContent } from 'ooxml.js';
 import { describe, expect, it } from 'vitest';
@@ -14,6 +16,7 @@ import { readOdsContent } from '../odf/ods/read';
 import { readOdtContent } from '../odf/odt/read';
 import { minimalOdpBytes } from '../test-support/odp';
 import { richOdsBytes } from '../test-support/ods';
+import { minimalOdtBytes } from '../test-support/odt';
 import { docxToOdt, odpToPptx, odsToXlsx, odtToDocx, pptxToOdp, xlsxToOds } from './convert';
 
 // The dedicated round-trip suite for the six PDF-bypassing cross-format bridges (convert.ts's own "Six cross-format bridges" section) -- exercised via both directions and both starting points for each of the three pairs (odt<->docx, odp<->pptx, ods<->xlsx), per the project's own explicit "we should also have .odt <-> .docx roundtrip tests and similar for the other types" requirement. Real-file, real-LibreOffice verification (independently-produced odt/odp/ods opened through the bridge and back into LibreOffice) is a separate, manual, non-CI-gated step -- see this repo's own README Fidelity section and test:corpus precedent for why that class of check deliberately never runs inside `pnpm test`.
@@ -140,6 +143,21 @@ function buildRichOdt(): Uint8Array<ArrayBuffer> {
 function paragraphTexts(content: ReturnType<typeof docxContentOf>): string[] {
   return content.sections[0]!.blocks.filter((b) => b.kind === 'paragraph').map((b) => b.runs.map((r) => r.text).join(''));
 }
+
+describe('onDocument (DocumentPackage side channel)', () => {
+  // A bridge never runs a layout engine (see convert.ts's own DocumentBridgeOptions comment), so its DocumentPackage always carries content with layout left undefined -- unlike the PDF-pivot conversions, which populate both (see convert.test.ts's own docxToPdf onDocument test).
+  it('calls onDocument with content populated and layout left undefined', () => {
+    let captured: DocumentPackage | undefined;
+    const docxBytes = odtToDocx(minimalOdtBytes(), { onDocument: (pkg) => { captured = pkg; } });
+    expect(docxBytes.length).toBeGreaterThan(0);
+
+    expect(captured).toBeDefined();
+    const pkg = captured!;
+    expect(pkg.formatVersion).toBe(DOCUMENT_PACKAGE_FORMAT_VERSION);
+    expect(pkg.content.kind).toBe('wordprocessing');
+    expect(pkg.layout).toBeUndefined();
+  });
+});
 
 describe('odt <-> docx: docx -> odt -> docx', () => {
   it('carries text, styleId, run styling, list membership, and table structure through both hops', () => {
