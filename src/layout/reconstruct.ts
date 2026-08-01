@@ -6,6 +6,11 @@ import type {
   ContentRun,
   ContentSection,
   ContentShape,
+  ContentSheet,
+  ContentSheetCell,
+  ContentSheetColumn,
+  ContentSheetPrintSettings,
+  ContentSheetRow,
   ContentSlide,
   ContentSubpath,
   ContentVector,
@@ -13,6 +18,7 @@ import type {
   LayoutEllipse,
   LayoutImage,
   LayoutImageAsset,
+  LayoutItem,
   LayoutLine,
   LayoutPage,
   LayoutPath,
@@ -560,4 +566,339 @@ function layoutTextToShape(item: LayoutText, pageHeightPt: number): ContentShape
     insetBottomPt: 0,
     blocks: [{ kind: 'paragraph', runs: [textItemToContentRun(item)] }],
   };
+}
+
+// ---------------------------------------------------------------------------
+// PDF -> ods (spreadsheet): recovers what was printed, not what was entered. Every recovered cell is a bare string carrying only its own extracted displayText -- never re-parsed into a number/date/boolean, never claimed as a formula, matching this module's own consistent "geometry in, no semantic invention" discipline throughout. Two detection paths, tried in this order per page: (1) a real gridline lattice -- a genuine printed spreadsheet with gridlines enabled draws exactly this, see layout/sheets.ts's own renderGridlines -- is used DIRECTLY as cell boundaries, no inference needed; (2) absent a lattice, text is clustered into a grid from geometry alone, reusing this module's own clusterIntoLines for rows (a spreadsheet cell's own text is never wrapped across lines -- sheets.ts's own module doc -- so a text line already IS a row) and a parallel x-position recurrence clustering for columns, generalizing clusterIntoParagraphs's own single dominantLeftX to several recurring column anchors. Column widths, row heights, and a sheet's own page size are all genuinely MEASURED from recovered geometry, never invented; there is no attempt to recover print INTENT (range/scale/repeat-rows) that a rendered page carries no trace of at all.
+// ---------------------------------------------------------------------------
+
+// --- Path 1: gridline lattice detection -----------------------------------------------------------
+
+interface LineSegment {
+  readonly x1Pt: number;
+  readonly y1Pt: number;
+  readonly x2Pt: number;
+  readonly y2Pt: number;
+}
+
+// A gridline written by this package's own convertSpreadsheetToLayout (src/layout/sheets.ts's renderGridlines) survives a real PDF round trip as a generic LayoutPath, not a LayoutLine: writeLine's own m/l/S sequence (src/pdf/content-write.ts) reads back through src/pdf/interpret.ts's general path tracking as a single-subpath, single-line-segment, stroke-only LayoutPath -- readPdf never reconstructs a 'line' kind item at all (a pre-existing, already-documented gap; see the README's own interpret.ts gotcha). Both shapes are accepted here so a hand-built LayoutDocument using genuine LayoutLine items (this module's own test fixtures, or a LayoutDocument from a producer other than readPdf) and a real PDF-round-tripped LayoutDocument both detect identically.
+function extractLineCandidates(items: readonly LayoutItem[]): LineSegment[] {
+  const segments: LineSegment[] = [];
+  for (const item of items) {
+    if (item.kind === 'line') {
+      segments.push({ x1Pt: item.x1Pt, y1Pt: item.y1Pt, x2Pt: item.x2Pt, y2Pt: item.y2Pt });
+      continue;
+    }
+    if (item.kind === 'path' && item.stroke !== undefined && item.subpaths.length === 1) {
+      const subpath = item.subpaths[0]!;
+      if (subpath.segments.length === 1 && subpath.segments[0]!.kind === 'line') {
+        const segment = subpath.segments[0]!;
+        segments.push({ x1Pt: subpath.startXPt, y1Pt: subpath.startYPt, x2Pt: segment.xPt, y2Pt: segment.yPt });
+      }
+    }
+  }
+  return segments;
+}
+
+// Tolerance for treating a segment as exactly horizontal/vertical -- generous enough to absorb the sub-point rounding a real PDF content-stream number format (4 decimal places, src/pdf/serialize.ts) introduces on a round trip, tight enough that a genuinely diagonal line (a chart axis, a decorative rule) is never misread as a gridline.
+const AXIS_ALIGNMENT_TOLERANCE_PT = 0.5;
+
+// A stray tick mark or cell-border fragment is not evidence of a page-spanning gridline lattice -- only a segment at least this long is considered a lattice candidate at all.
+const MIN_GRIDLINE_LENGTH_PT = 4;
+
+interface AxisLine {
+  readonly position: number; // y for a horizontal candidate, x for a vertical one
+  readonly spanPt: number; // the segment's own length along its own axis
+}
+
+function classifyAxisLine(seg: LineSegment): ({ readonly axis: 'horizontal' | 'vertical' } & AxisLine) | undefined {
+  const dx = Math.abs(seg.x2Pt - seg.x1Pt);
+  const dy = Math.abs(seg.y2Pt - seg.y1Pt);
+  if (dy <= AXIS_ALIGNMENT_TOLERANCE_PT && dx >= MIN_GRIDLINE_LENGTH_PT) {
+    return { axis: 'horizontal', position: (seg.y1Pt + seg.y2Pt) / 2, spanPt: dx };
+  }
+  if (dx <= AXIS_ALIGNMENT_TOLERANCE_PT && dy >= MIN_GRIDLINE_LENGTH_PT) {
+    return { axis: 'vertical', position: (seg.x1Pt + seg.x2Pt) / 2, spanPt: dy };
+  }
+  return undefined;
+}
+
+// Positions within this of each other are the same drawn boundary, not two distinct ones -- generous enough to absorb the same sub-point PDF rounding AXIS_ALIGNMENT_TOLERANCE_PT above already accounts for.
+const POSITION_DEDUPE_TOLERANCE_PT = 0.5;
+
+// Merges near-duplicate positions (keeping the largest observed span for each -- generous, never lossy) and sorts them: descending for rows (PDF y grows upward, so the FIRST row boundary is the largest y, i.e. the top of the grid), ascending for columns (left to right).
+function dedupeAxisLines(lines: readonly AxisLine[], descending: boolean): AxisLine[] {
+  const sorted = [...lines].sort((a, b) => (descending ? b.position - a.position : a.position - b.position));
+  const result: { position: number; spanPt: number }[] = [];
+  for (const candidate of sorted) {
+    const last = result[result.length - 1];
+    if (last !== undefined && Math.abs(candidate.position - last.position) <= POSITION_DEDUPE_TOLERANCE_PT) {
+      last.spanPt = Math.max(last.spanPt, candidate.spanPt);
+    } else {
+      result.push({ position: candidate.position, spanPt: candidate.spanPt });
+    }
+  }
+  return result;
+}
+
+// At least 2 bounded rows/columns (3 boundary lines) before this counts as a lattice at all -- fewer is a page border or a couple of decorative rules, not a printed grid.
+const MIN_GRIDLINE_COUNT_PER_AXIS = 3;
+
+// A genuine gridline lattice draws every line the identical full grid width/height (layout/sheets.ts's own renderGridlines) -- so requiring most lines on an axis to reach close to that axis's own longest observed span is what actually distinguishes "these lines form a grid" from "these are just a few horizontal and vertical strokes that happen to coexist on the page" (a chart axis, an unrelated table border, a couple of decorative rules). 0.9 is generous enough to tolerate the sub-point rounding a real round trip introduces while still rejecting a scatter of unrelated short strokes.
+const GRID_SPAN_CONSISTENCY_RATIO = 0.9;
+
+function isRegularLattice(lines: readonly AxisLine[]): boolean {
+  if (lines.length < MIN_GRIDLINE_COUNT_PER_AXIS) {
+    return false;
+  }
+  const maxSpanPt = Math.max(...lines.map((l) => l.spanPt));
+  const consistentCount = lines.filter((l) => l.spanPt >= maxSpanPt * GRID_SPAN_CONSISTENCY_RATIO).length;
+  return consistentCount >= MIN_GRIDLINE_COUNT_PER_AXIS;
+}
+
+interface GridLattice {
+  readonly rowBoundariesDescPt: readonly number[]; // top-to-bottom, PDF y descending
+  readonly columnBoundariesAscPt: readonly number[]; // left-to-right, PDF x ascending
+}
+
+function detectGridLattice(items: readonly LayoutItem[]): GridLattice | undefined {
+  const horizontal: AxisLine[] = [];
+  const vertical: AxisLine[] = [];
+  for (const seg of extractLineCandidates(items)) {
+    const classified = classifyAxisLine(seg);
+    if (classified === undefined) {
+      continue;
+    }
+    (classified.axis === 'horizontal' ? horizontal : vertical).push(classified);
+  }
+  const rowBoundaries = dedupeAxisLines(horizontal, true);
+  const columnBoundaries = dedupeAxisLines(vertical, false);
+  if (!isRegularLattice(rowBoundaries) || !isRegularLattice(columnBoundaries)) {
+    return undefined;
+  }
+  return { rowBoundariesDescPt: rowBoundaries.map((l) => l.position), columnBoundariesAscPt: columnBoundaries.map((l) => l.position) };
+}
+
+// Only the OUTER edge of the whole lattice gets any tolerance -- generous enough to keep an item sitting just past the grid's own outermost boundary (sub-point PDF-round-trip rounding) inside it. An INTERIOR boundary gets none at all: giving one would open an ambiguous zone straddling two adjacent bands (a real, caught bug -- a column narrow enough that CELL_TEXT_PADDING_PT-scale tolerance on both sides of its own shared boundary let a neighbouring column's own text match the WRONG band first). A cell's own text sits comfortably away from its own band's far edge under ordinary conditions (near the bottom of its own row, near the left of its own column, per sheets.ts's own vertical-bottom alignment and per-cell inset), so a bare half-open partition at every interior boundary is both correct and unambiguous.
+const OUTER_EDGE_TOLERANCE_PT = 3;
+
+function findRowIndex(rowBoundariesDescPt: readonly number[], yPt: number): number | undefined {
+  const lastIndex = rowBoundariesDescPt.length - 1;
+  if (yPt > rowBoundariesDescPt[0]! + OUTER_EDGE_TOLERANCE_PT || yPt < rowBoundariesDescPt[lastIndex]! - OUTER_EDGE_TOLERANCE_PT) {
+    return undefined;
+  }
+  for (let i = 0; i < lastIndex; i++) {
+    if (yPt > rowBoundariesDescPt[i + 1]!) {
+      return i;
+    }
+  }
+  return lastIndex - 1;
+}
+
+function findColumnIndex(columnBoundariesAscPt: readonly number[], xPt: number): number | undefined {
+  const lastIndex = columnBoundariesAscPt.length - 1;
+  if (xPt < columnBoundariesAscPt[0]! - OUTER_EDGE_TOLERANCE_PT || xPt > columnBoundariesAscPt[lastIndex]! + OUTER_EDGE_TOLERANCE_PT) {
+    return undefined;
+  }
+  for (let j = 0; j < lastIndex; j++) {
+    if (xPt < columnBoundariesAscPt[j + 1]!) {
+      return j;
+    }
+  }
+  return lastIndex - 1;
+}
+
+// --- Shared: joining several LayoutText items already known to belong to one recovered cell, and turning row/column groups into ContentSheetCell[] -----
+
+// Reuses this module's own MIN_WORD_GAP_PT threshold (defined above for paragraph/line text) to decide whether consecutive items need a space between them, but never inserts a tab the way pushRunsForLine does: a tab reads as columnar structure WITHIN a line of prose, which is meaningless once the grid itself has already resolved the column structure.
+function joinCellText(items: readonly LayoutText[]): string {
+  const sorted = [...items].sort((a, b) => a.xPt - b.xPt);
+  let text = '';
+  sorted.forEach((item, i) => {
+    if (i > 0) {
+      const prev = sorted[i - 1]!;
+      const gap = item.xPt - (prev.xPt + (prev.widthPt ?? 0));
+      if (gap > MIN_WORD_GAP_PT) {
+        text += ' ';
+      }
+    }
+    text += item.text;
+  });
+  return text;
+}
+
+function groupKey(row: number, column: number): string {
+  return `${row},${column}`;
+}
+
+function addToGroup(groups: Map<string, LayoutText[]>, row: number, column: number, item: LayoutText): void {
+  const key = groupKey(row, column);
+  const existing = groups.get(key);
+  if (existing === undefined) {
+    groups.set(key, [item]);
+  } else {
+    existing.push(item);
+  }
+}
+
+// Every recovered cell is a bare string carrying only its own displayText -- see this section's own top-of-block note. A (row, column) position with no text assigned to it at all is simply never emitted, matching the sparse cell model buildOdsPackage's own appendCell already expects.
+function buildCellsFromGroups(groups: ReadonlyMap<string, readonly LayoutText[]>): ContentSheetCell[] {
+  const cells: ContentSheetCell[] = [];
+  for (const [key, items] of groups) {
+    const displayText = joinCellText(items);
+    if (displayText.length === 0) {
+      continue;
+    }
+    const [rowPart, columnPart] = key.split(',');
+    cells.push({ row: Number(rowPart), column: Number(columnPart), value: { kind: 'string', value: displayText }, displayText });
+  }
+  cells.sort((a, b) => a.row - b.row || a.column - b.column);
+  return cells;
+}
+
+interface ReconstructedGrid {
+  readonly cells: ContentSheetCell[];
+  readonly columns: ContentSheetColumn[];
+  readonly rows: ContentSheetRow[];
+  readonly gridlines: boolean;
+}
+
+// The gridline positions ARE the cell boundaries -- column/row widths are the exact, genuinely measured gap between consecutive drawn lines, not estimated from text at all.
+function buildGridFromLattice(textItems: readonly LayoutText[], lattice: GridLattice): ReconstructedGrid {
+  const groups = new Map<string, LayoutText[]>();
+  for (const item of textItems) {
+    const row = findRowIndex(lattice.rowBoundariesDescPt, item.yPt);
+    const column = findColumnIndex(lattice.columnBoundariesAscPt, item.xPt);
+    if (row === undefined || column === undefined) {
+      continue; // outside the detected grid entirely -- a header-gutter row/column label, a title above the sheet, and so on.
+    }
+    addToGroup(groups, row, column, item);
+  }
+  const columns: ContentSheetColumn[] = [];
+  for (let j = 0; j < lattice.columnBoundariesAscPt.length - 1; j++) {
+    columns.push({ index: j, widthPt: lattice.columnBoundariesAscPt[j + 1]! - lattice.columnBoundariesAscPt[j]! });
+  }
+  const rows: ContentSheetRow[] = [];
+  for (let i = 0; i < lattice.rowBoundariesDescPt.length - 1; i++) {
+    rows.push({ index: i, heightPt: lattice.rowBoundariesDescPt[i]! - lattice.rowBoundariesDescPt[i + 1]! });
+  }
+  return { cells: buildCellsFromGroups(groups), columns, rows, gridlines: true };
+}
+
+// --- Path 2: text-position clustering, no gridlines present -----------------------------------------------------------
+
+// Column x-position tolerance for treating two items across different rows as belonging to the same recovered column -- generous enough to absorb ordinary alignment jitter, tight enough not to merge two genuinely adjacent narrow columns. Reused as bucketCounts' own bucket size, the same recurring-position technique clusterIntoParagraphs's own dominantLeftX already uses for a single margin, generalized here to several.
+const COLUMN_ALIGNMENT_TOLERANCE_PT = 3;
+
+// A recurring x-position must be seen on at least this many distinct rows before it counts as a real column, not a one-off item at a stray x position (a title, a footnote) -- the same "recurring left margin, not a one-off indent" reasoning clusterIntoParagraphs already applies to a single dominant margin.
+const MIN_COLUMN_RECURRENCE = 2;
+
+// Nothing recurred across rows at all (a single-row page, or genuinely unique text at every position) falls back to every distinct position found, so a sparse or single-row page still resolves to a sensible (if narrower) grid rather than an empty one. Takes one anchor x-position per SEGMENT (see splitLineByLargeGaps below), not per raw LayoutText item -- a single cell's own text can legitimately arrive as several directly adjacent items (a run-level style change mid-cell), and clustering on their individual x-positions would scatter one cell's own fragments across several spurious columns instead of treating them as the one candidate they are.
+function detectColumnPositions(segmentsByLine: readonly (readonly TextLine[])[]): number[] {
+  const allXs = segmentsByLine.flatMap((segments) => segments.map((segment) => segment.items[0]!.xPt));
+  if (allXs.length === 0) {
+    return [];
+  }
+  const counts = bucketCounts(allXs, COLUMN_ALIGNMENT_TOLERANCE_PT);
+  const recurring = [...counts.entries()].filter(([, count]) => count >= MIN_COLUMN_RECURRENCE).map(([bucket]) => bucket);
+  const positions = recurring.length > 0 ? recurring : [...counts.keys()];
+  positions.sort((a, b) => a - b);
+  return positions;
+}
+
+function nearestColumnIndex(positions: readonly number[], xPt: number): number {
+  let bestIndex = 0;
+  let bestDistancePt = Number.POSITIVE_INFINITY;
+  positions.forEach((position, index) => {
+    const distancePt = Math.abs(position - xPt);
+    if (distancePt < bestDistancePt) {
+      bestDistancePt = distancePt;
+      bestIndex = index;
+    }
+  });
+  return bestIndex;
+}
+
+// A modest, deliberately nominal fallback for the rare edge case where even the widest measured text extent in the last recovered column is zero (e.g. a LayoutText item carrying no widthPt at all) -- not claimed as a real recovered value, just enough to keep the resulting ContentSheetColumn structurally sane.
+const DEFAULT_COLUMN_WIDTH_FALLBACK_PT = 40;
+
+// The last recovered column has no following anchor to measure a gap against, unlike every other column, whose width is the genuinely measured distance to the next anchor. Falls back to the widest actually-measured text extent within that column (anchor to the item's own right edge) -- still a real geometric measurement, never an invented default.
+function lastColumnWidthPt(groups: ReadonlyMap<string, readonly LayoutText[]>, columnIndex: number, anchorXPt: number): number {
+  let maxWidthPt = 0;
+  for (const [key, items] of groups) {
+    const [, columnPart] = key.split(',');
+    if (Number(columnPart) !== columnIndex) {
+      continue;
+    }
+    for (const item of items) {
+      maxWidthPt = Math.max(maxWidthPt, item.xPt + (item.widthPt ?? 0) - anchorXPt);
+    }
+  }
+  return maxWidthPt > 0 ? maxWidthPt : DEFAULT_COLUMN_WIDTH_FALLBACK_PT;
+}
+
+// Rows reuse clusterIntoLines directly -- a spreadsheet cell's own text is never wrapped across lines (sheets.ts's own module doc), so a text line already IS a row, with no separate row-clustering pass needed. Each line is then split into segments wherever a large horizontal gap occurs, reusing splitLineByLargeGaps verbatim -- the same >2em-gap signal reconstructPresentation's own block clustering already uses to tell "still one cluster of text" from "a new one" -- since a single cell's own text can arrive as several directly adjacent LayoutText fragments (a run-level style change mid-cell) that must be treated as one cell candidate, not several. Row heights are the genuinely measured baseline-to-baseline gap to the next row; the last row (no following baseline to measure against) falls back to this page's own modal line spacing, the same already-justified estimateModalLineSpacing this module uses for paragraph/block clustering above.
+function buildGridFromTextClustering(textItems: readonly LayoutText[]): ReconstructedGrid {
+  const lines = clusterIntoLines(textItems);
+  if (lines.length === 0) {
+    return { cells: [], columns: [], rows: [], gridlines: false };
+  }
+  const segmentsByLine = lines.map((l) => splitLineByLargeGaps(l));
+  const columnPositions = detectColumnPositions(segmentsByLine);
+  const groups = new Map<string, LayoutText[]>();
+  segmentsByLine.forEach((segments, rowIndex) => {
+    for (const segment of segments) {
+      const columnIndex = nearestColumnIndex(columnPositions, segment.items[0]!.xPt);
+      const key = groupKey(rowIndex, columnIndex);
+      const existing = groups.get(key);
+      if (existing === undefined) {
+        groups.set(key, [...segment.items]);
+      } else {
+        existing.push(...segment.items);
+      }
+    }
+  });
+
+  const nominalRowHeightPt = estimateModalLineSpacing(lines);
+  const rows: ContentSheetRow[] = lines.map((line, i) => {
+    const nextBaselineY = lines[i + 1]?.baselineY;
+    const heightPt = nextBaselineY !== undefined ? line.baselineY - nextBaselineY : nominalRowHeightPt;
+    return { index: i, heightPt: heightPt > 0 ? heightPt : nominalRowHeightPt };
+  });
+
+  const columns: ContentSheetColumn[] = columnPositions.map((position, j) => {
+    const nextPosition = columnPositions[j + 1];
+    return { index: j, widthPt: nextPosition !== undefined ? nextPosition - position : lastColumnWidthPt(groups, j, position) };
+  });
+
+  return { cells: buildCellsFromGroups(groups), columns, rows, gridlines: false };
+}
+
+// --- Orchestration: one ContentSheet per PDF page -----------------------------------------------------------
+
+// A PDF page carries no sheet name, and no trace of whether the source spreadsheet's own column/row banding split one sheet across several printed pages -- there is no principled way to re-merge pages back into fewer sheets from geometry alone, so this maps one page to one sheet, exactly as reconstructPresentation maps one page to one slide.
+function reconstructSheet(page: LayoutPage, pageIndex: number): ContentSheet {
+  const textItems = page.items.filter((i): i is LayoutText => i.kind === 'text');
+  const lattice = detectGridLattice(page.items);
+  const grid = lattice !== undefined ? buildGridFromLattice(textItems, lattice) : buildGridFromTextClustering(textItems);
+
+  // Margins have no PDF equivalent to recover, mirroring buildSection's own ZERO_MARGINS reasoning above. gridlines reflects whichever detection path actually ran; headers is always false -- a header-gutter row-number/column-letter label has no reliable geometric signal distinguishing it from an ordinary short cell, so this makes no attempt to detect one (any such label sitting outside the detected grid lattice is simply dropped by findRowIndex/findColumnIndex returning undefined for it, rather than being misread as real cell content). No print range/scale/fit-to-page/repeat-rows/repeat-columns/manual-breaks assumption is made at all -- a rendered page carries no trace of print INTENT, only what was visually printed.
+  const printSettings: ContentSheetPrintSettings = {
+    pageSize: { widthPt: page.widthPt, heightPt: page.heightPt },
+    margins: ZERO_MARGINS,
+    gridlines: grid.gridlines,
+    headers: false,
+    pageOrder: 'downThenOver',
+  };
+
+  return { name: `Sheet${pageIndex + 1}`, cells: grid.cells, columns: grid.columns, rows: grid.rows, images: [], printSettings };
+}
+
+export function reconstructSpreadsheet(doc: LayoutDocument, options?: ReconstructOptions): ContentDocument {
+  const signal = options?.signal;
+  const sheets: ContentSheet[] = doc.pages.map((page, index) => {
+    throwIfAborted(signal);
+    return reconstructSheet(page, index);
+  });
+  return { kind: 'spreadsheet', formatVersion: CONTENT_FORMAT_VERSION, metadata: doc.metadata, sheets };
 }
