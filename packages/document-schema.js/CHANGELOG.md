@@ -1,3 +1,10 @@
+## [1.5.1](https://github.com/ExaDev/document-schema.js/compare/v1.5.0...v1.5.1) (2026-08-01)
+
+
+### Bug Fixes
+
+* split the GitHub Packages alias back into its own job ([40852fc](https://github.com/ExaDev/document-schema.js/commit/40852fc2fdf3eca852a4000ae4268e97da198735))
+
 # [1.5.0](https://github.com/ExaDev/document-schema.js/compare/v1.4.0...v1.5.0) (2026-08-01)
 
 
