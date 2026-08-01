@@ -1,4 +1,4 @@
-import type { ContentPathPoint, ContentSubpath } from 'document-content-model';
+import type { ContentPathPoint, ContentSubpath } from 'document-schema.js';
 
 // The write-side inverse of odf.js's own typed/shared/path.ts (parseOdfPathData/parseOdfViewBox): turns a ContentVector 'path' variant's own subpaths (already in the path's local coordinate space, sized to frame.widthPt x frame.heightPt -- see document-content-model's content.ts, the exact same convention scaleOdfRawPoint/buildOdfSubpaths read INTO on the parse side) into a real svg:d + svg:viewBox attribute pair. Anchoring the viewBox at "0 0 {widthPt} {heightPt}" -- exactly the frame's own current size -- gives a 1:1 scale (buildOdfSubpaths' own scale factor is frame.widthPt/viewBox.width), so the numbers written into svg:d are the SAME numbers as the source ContentPathPoint values, with no rescaling arithmetic needed on write and none needed to recover them on a later reparse.
 

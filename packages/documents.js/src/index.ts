@@ -97,7 +97,7 @@ export type {
   ContentTableCell,
   ContentTableRow,
   ContentVector,
-} from 'document-content-model';
+} from 'document-schema.js';
 export {
   ContentBlockSchema,
   ContentCellValueSchema,
@@ -125,13 +125,13 @@ export {
   ContentTableSchema,
   ContentVectorSchema,
   isContentBlock,
-} from 'document-content-model';
+} from 'document-schema.js';
 export type { ContentDocument } from './model/content';
 export { CONTENT_FORMAT_VERSION, ContentDocumentSchema } from './model/content';
 
 // --- The PDF-side pivot model, also sourced from document-content-model. ---
-export type { LayoutDocument, LayoutEllipse, LayoutImage, LayoutImageAsset, LayoutItem, LayoutLine, LayoutLink, LayoutMetadata, LayoutPage, LayoutPath, LayoutPathSegment, LayoutRect, LayoutSubpath, LayoutText } from 'document-content-model';
-export { LAYOUT_FORMAT_VERSION } from 'document-content-model';
+export type { LayoutDocument, LayoutEllipse, LayoutImage, LayoutImageAsset, LayoutItem, LayoutLine, LayoutLink, LayoutMetadata, LayoutPage, LayoutPath, LayoutPathSegment, LayoutRect, LayoutSubpath, LayoutText } from 'document-schema.js';
+export { LAYOUT_FORMAT_VERSION } from 'document-schema.js';
 
 // --- Shared model primitives used by both pivot models. ---
 export type { Box, Margins, PageSize } from './model/geometry';

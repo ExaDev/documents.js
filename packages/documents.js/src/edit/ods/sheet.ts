@@ -1,7 +1,7 @@
 import type { Package, XmlElement, XmlNode } from 'odf.js';
 import { parseCellReference } from 'odf.js';
 import { attr } from 'ooxml.js';
-import type { ContentSheetPrintSettings } from 'document-content-model';
+import type { ContentSheetPrintSettings } from 'document-schema.js';
 import { removeChild, setAttr } from '../../xml/edit';
 import { COVERED_CELL_TAG, resolveCellNode } from './address';
 import { OdsCell } from './cell';

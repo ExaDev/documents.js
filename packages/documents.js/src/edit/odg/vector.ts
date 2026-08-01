@@ -1,6 +1,6 @@
 import type { Package, XmlElement, XmlNode } from 'odf.js';
 import { buildOdfSubpaths, formatOdfLength, parseBox, parseLinePoints, parseOdfPathData, parseOdfViewBox } from 'odf.js';
-import type { Box, Color, ContentPathPoint, ContentStroke, ContentSubpath } from 'document-content-model';
+import type { Box, Color, ContentPathPoint, ContentStroke, ContentSubpath } from 'document-schema.js';
 import { attr } from 'ooxml.js';
 import { removeChild, setAttr } from '../../xml/edit';
 import { el } from '../../xml/fragment';

@@ -1,4 +1,4 @@
-import type { DocumentPackage } from 'document-content-model';
+import type { DocumentPackage } from 'document-schema.js';
 import type { PdfDiagnostic, WinAnsiSubstitution } from 'pdf-codec';
 import {
   docxToOdt,

@@ -1,4 +1,4 @@
-import type { ContentCellValue } from 'document-content-model';
+import type { ContentCellValue } from 'document-schema.js';
 import type { FirebirdBackupReader } from './reader';
 import { XdrReader } from './reader';
 import type { FirebirdField, FirebirdRelation } from './schema';

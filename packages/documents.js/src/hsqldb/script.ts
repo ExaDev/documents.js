@@ -1,4 +1,4 @@
-import type { ContentCellValue } from 'document-content-model';
+import type { ContentCellValue } from 'document-schema.js';
 
 // HSQLDB's historical TEXT script format (hsqldb.script_format=0, the default LibreOffice's embedded engine writes) renders an entire database as literal SQL text: CREATE TABLE/CREATE USER/GRANT/INSERT INTO statements, one per logical statement, human-readable. This module is a bounded DDL/DML text parser over exactly that format -- a small SQL SUBSET, not a database engine -- extracting column names/types from CREATE TABLE and row values from INSERT INTO, and tolerating (skipping) every other statement kind this package has no use for (users, grants, sequences, indexes, views, schema/session SET commands). It deliberately imports nothing beyond document-content-model's own ContentCellValue type: no odf.js Package/XmlElement knowledge belongs here at all -- the caller (src/odb/read.ts) is responsible for extracting database/script's own raw bytes from a real .odb package and handing them to parseHsqldbScript; this module never sees a Package.
 //

@@ -1,5 +1,5 @@
-import type { ContentBlock, ContentSection, DocumentPackage, LayoutDocument } from 'document-content-model';
-import { COLOR_BLACK, DOCUMENT_PACKAGE_FORMAT_VERSION, LAYOUT_FORMAT_VERSION } from 'document-content-model';
+import type { ContentBlock, ContentSection, DocumentPackage, LayoutDocument } from 'document-schema.js';
+import { COLOR_BLACK, DOCUMENT_PACKAGE_FORMAT_VERSION, LAYOUT_FORMAT_VERSION } from 'document-schema.js';
 import type { OdmSection, Package } from 'odf.js';
 import { decodePackage, encodePackage as encodeOdfPackage, readOdfMetadata, readOdfParagraph, readOdfTable, readOdm } from 'odf.js';
 import { buildXlsxPackage, decodePackage as decodeOoxmlPackage, encodePackage, readXlsxContent } from 'ooxml.js';

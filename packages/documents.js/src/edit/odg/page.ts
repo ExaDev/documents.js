@@ -1,5 +1,5 @@
 import type { Package, XmlElement, XmlNode } from 'odf.js';
-import type { Box } from 'document-content-model';
+import type { Box } from 'document-schema.js';
 import { removeChild } from '../../xml/edit';
 import type { ImageInit, MediaContext } from '../odp/image';
 import { insertImageFrameMedia } from '../odp/image';

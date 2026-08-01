@@ -1,5 +1,5 @@
-import type { ContentVector, DocumentPackage, LayoutItem, LayoutPath, LayoutRect, LayoutText } from 'document-content-model';
-import { DOCUMENT_PACKAGE_FORMAT_VERSION } from 'document-content-model';
+import type { ContentVector, DocumentPackage, LayoutItem, LayoutPath, LayoutRect, LayoutText } from 'document-schema.js';
+import { DOCUMENT_PACKAGE_FORMAT_VERSION } from 'document-schema.js';
 import { decodePackage, el, txt } from 'odf.js';
 import { describe, expect, it } from 'vitest';
 import { createDocx, openDocx } from '../edit/docx/editor';

@@ -1,4 +1,4 @@
-import type { ContentSheetPrintSettings } from 'document-content-model';
+import type { ContentSheetPrintSettings } from 'document-schema.js';
 import type { XmlElement } from 'odf.js';
 import { describe, expect, it } from 'vitest';
 import { PAGE_SIZE_A4 } from '../../model/geometry';

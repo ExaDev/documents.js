@@ -1,6 +1,6 @@
 import { buildOdfSubpaths, parseOdfPathData, parseOdfViewBox } from 'odf.js';
 import { describe, expect, it } from 'vitest';
-import type { ContentSubpath } from 'document-content-model';
+import type { ContentSubpath } from 'document-schema.js';
 import { buildSvgPathData, buildSvgViewBox, formatPathNumber } from './svg-path';
 
 describe('formatPathNumber', () => {

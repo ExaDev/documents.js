@@ -1,5 +1,5 @@
 import { base64ToBytes } from 'ooxml.js';
-import type { ContentImageBlock, ContentRun, ContentTableRow, LayoutImageAsset } from 'document-content-model';
+import type { ContentImageBlock, ContentRun, ContentTableRow, LayoutImageAsset } from 'document-schema.js';
 import { COLOR_BLACK } from '../model/color';
 import type { Alignment, LayoutFont } from '../model/style';
 import { DEFAULT_LAYOUT_FONT } from '../model/style';

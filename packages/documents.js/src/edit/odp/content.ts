@@ -1,6 +1,6 @@
 import type { Package } from 'odf.js';
 import { base64ToBytes } from 'odf.js';
-import type { ContentShape } from 'document-content-model';
+import type { ContentShape } from 'document-schema.js';
 import type { ContentDocument } from '../../model/content';
 import { populateParagraph } from '../odt/content';
 import { createOdp } from './editor';

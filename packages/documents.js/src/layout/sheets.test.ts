@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ContentSheet, ContentSheetCell, ContentSheetPrintSettings, LayoutItem, LayoutLine, LayoutText } from 'document-content-model';
+import type { ContentSheet, ContentSheetCell, ContentSheetPrintSettings, LayoutItem, LayoutLine, LayoutText } from 'document-schema.js';
 import { CONTENT_FORMAT_VERSION } from '../model/content';
 import type { ContentDocument } from '../model/content';
 import type { TextMeasurer } from 'pdf-codec';
