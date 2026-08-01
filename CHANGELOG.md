@@ -1,3 +1,15 @@
+# [1.50.0](https://github.com/ExaDev/documents.js/compare/v1.49.0...v1.50.0) (2026-08-01)
+
+
+### Bug Fixes
+
+* merge duplicate odf.js entries in minimumReleaseAgeExclude into one ([cf07732](https://github.com/ExaDev/documents.js/commit/cf077322a49cf82f72b932c2c20757f6780d9d8a))
+
+
+### Features
+
+* add odmToPdf, concatenating ODF master-document chapters through the odt flow engine ([caf9a1b](https://github.com/ExaDev/documents.js/commit/caf9a1b797c277e345b569f5fa2a720b09792021))
+
 # [1.49.0](https://github.com/ExaDev/documents.js/compare/v1.48.0...v1.49.0) (2026-08-01)
 
 
