@@ -269,7 +269,7 @@ export { odpPptxCodec, odsXlsxCodec, odtDocxCodec } from './convert/codec';
 export type { OdmToPdfOptions } from './convert/convert';
 export { odmToPdf, OdmUnresolvedSectionError } from './convert/convert';
 
-// --- .odb (ODF database front-end) Tier 1 support: HSQLDB's TEXT script format only -- binary/compressed HSQLDB and Firebird-backed .odb are detected and named, not implemented, and an external-only connection is permanently out of scope (see README's Fidelity/Gotchas). readOdbTables is independently usable (Package -> table data), matching the "each pipeline stage independently exported" convention above; odbToXlsx/odbToCsv are the ergonomic conversions, and -- like odmToPdf -- are not wired into the DocumentConverter port below. ---
+// --- .odb (ODF database front-end) support: Tier 1 (HSQLDB's TEXT script format) and Tier 3 (Firebird's own gbak logical-backup format, database/firebird.fbk -- NOT raw ODS page format, see the README's .odb Tier 3 Gotchas entry for the empirical finding that corrected this) -- HSQLDB's own BINARY/COMPRESSED script formats are detected and named, not implemented (a real, still-unimplemented Tier 2), and an external-only connection is permanently out of scope (see README's Fidelity/Gotchas). readOdbTables is independently usable (Package -> table data) and dispatches to whichever tier the package's own embedded engine matches, matching the "each pipeline stage independently exported" convention above; odbToXlsx/odbToCsv are the ergonomic conversions, and -- like odmToPdf -- are not wired into the DocumentConverter port below. readFirebirdBackup is ALSO independently exported (raw database/firebird.fbk bytes -> HsqldbTable[], the identical pivot shape parseHsqldbScript produces) for a caller that has already extracted those bytes itself. ---
 export type { HsqldbColumn, HsqldbTable } from './hsqldb/script';
 export { displayTextFor as hsqldbCellDisplayText, HsqldbScriptParseError, parseHsqldbScript } from './hsqldb/script';
 export type { OdbUnsupportedFormat } from './odb/read';
@@ -278,6 +278,17 @@ export { odbTablesToSpreadsheetDocument } from './odb/spreadsheet';
 export { OdbTableNotFoundError, OdbTableNotSpecifiedError } from './odb/csv';
 export type { OdbToCsvOptions } from './convert/convert';
 export { odbToCsv, odbToXlsx } from './convert/convert';
+export type { FirebirdBackupSummary, ReadFirebirdBackupResult } from './firebird/backup';
+export {
+  FirebirdBackupFormatError,
+  FirebirdCompositeRecordUnsupportedError,
+  FirebirdSchemaParseError,
+  readFirebirdBackup,
+  SUPPORTED_BACKUP_FORMAT_VERSION as FIREBIRD_SUPPORTED_BACKUP_FORMAT_VERSION,
+} from './firebird/backup';
+export { FirebirdDataParseError } from './firebird/data';
+export { FirebirdUnsupportedFieldTypeError } from './firebird/blr-types';
+export { FirebirdBackupParseError } from './firebird/reader';
 
 // --- The swappable conversion port, for a caller that wants to inject a different (e.g. remote) implementation later without changing call sites. ---
 export type { ConversionRequest, ConversionResult, Diagnostic, DocumentConverter, DocumentFormat, DocumentPayload } from './convert/port';
