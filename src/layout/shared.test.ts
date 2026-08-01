@@ -1,8 +1,8 @@
 import { bytesToBase64 } from 'ooxml.js';
 import { describe, expect, it } from 'vitest';
 import type { ContentRun, ContentTableRow, LayoutImageAsset } from 'document-content-model';
-import { encodePng } from '../image/png-encode';
-import type { TextMeasurer } from '../pdf/measure';
+import type { TextMeasurer } from 'pdf-codec';
+import { encodePng } from 'pdf-codec';
 import { alignmentOffsetPt, effectiveStyledRuns, estimateRowHeightPt, lineNaturalHeightPt, NOMINAL_TEXT_SIZE_PT, registerImage, runFont, sumColumnWidthsPt, toStyledRuns } from './shared';
 
 function fakeMeasurer(): TextMeasurer {

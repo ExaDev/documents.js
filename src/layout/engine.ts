@@ -3,10 +3,9 @@ import { COLOR_BLACK, LAYOUT_FORMAT_VERSION } from 'document-content-model';
 import { layoutFormula } from '../mathml';
 import { flipY } from '../model/geometry';
 import type { ContentDocument } from '../model/content';
-import type { EmbeddedFormula, PositionedFormula } from '../model/formula';
-import { loadMathFont } from '../pdf/math-font';
-import type { TextMeasurer } from '../pdf/measure';
-import { wrapRunsToWidth } from '../pdf/text-layout';
+import type { EmbeddedFormula } from '../model/formula';
+import type { PositionedFormula, TextMeasurer } from 'pdf-codec';
+import { loadMathFont, wrapRunsToWidth } from 'pdf-codec';
 import { alignmentOffsetPt, effectiveStyledRuns, estimateRowHeightPt, lineNaturalHeightPt, registerImage, sumColumnWidthsPt } from './shared';
 
 // ContentDocument (the wordprocessing variant) -> LayoutDocument: docx's hard direction. A docx page isn't a fixed canvas the way a pptx slide is -- content flows and paginates, so this engine tracks a vertical cursor per page and starts a new page whenever the next line (or table row) would overflow the current one, honoring explicit page breaks, w:pageBreakBefore, and a per-section page-size/margin change. Headers/footers and live PAGE/NUMPAGES substitution are not laid out here -- src/ooxml/docx/read.ts doesn't read them either, a deliberate, tracked narrowing from the plan's original scope (see that file's own module doc).
@@ -19,7 +18,7 @@ export interface EngineLayoutOptions {
 
 export interface WordprocessingLayoutResult {
   readonly document: LayoutDocument;
-  // Every embedded formula actually rendered via src/mathml, already positioned in PDF page space (bottom-left origin, y-up) -- src/pdf/write.ts's own WritePdfOptions.formulas consumes this directly. See that module's own comment for why a formula's CID-font glyph runs can't travel through LayoutDocument.pages[].items itself.
+  // Every embedded formula actually rendered via src/mathml, already positioned in PDF page space (bottom-left origin, y-up) -- pdf-codec's write.ts's own WritePdfOptions.formulas consumes this directly. See that module's own comment for why a formula's CID-font glyph runs can't travel through LayoutDocument.pages[].items itself.
   readonly formulas: readonly PositionedFormula[];
 }
 
@@ -47,7 +46,7 @@ function flushPage(state: FlowState, section: ContentSection, pages: LayoutPage[
   state.cursorYDown = section.margins.topPt;
 }
 
-// Starts a fresh page only when there is already content on the current one and the next item wouldn't fit -- an empty page is never flushed just because a single, page-exceeding item doesn't fit either (that item is placed on the fresh page regardless and simply overflows its bottom margin, the same "at least make progress" guarantee src/pdf/text-layout.ts's own emergency word-split gives at the character level).
+// Starts a fresh page only when there is already content on the current one and the next item wouldn't fit -- an empty page is never flushed just because a single, page-exceeding item doesn't fit either (that item is placed on the fresh page regardless and simply overflows its bottom margin, the same "at least make progress" guarantee pdf-codec's text-layout.ts's own emergency word-split gives at the character level).
 function ensureRoom(state: FlowState, section: ContentSection, pages: LayoutPage[], neededHeightPt: number, contentBottomYDown: number): void {
   if (state.items.length > 0 && state.cursorYDown + neededHeightPt > contentBottomYDown) {
     flushPage(state, section, pages);
@@ -197,7 +196,7 @@ function layoutImageFlow(block: ContentImageBlock, section: ContentSection, page
   state.cursorYDown += block.heightPt;
 }
 
-// The one ContentEmbeddedObjectBlock kind this engine actually renders (objectKind: 'formula') -- reserves flow space the same way layoutImageFlow does for an ordinary image, but via src/mathml's own layoutFormula rather than a static width/height, and records the result into `formulas` (consumed by src/pdf/write.ts, not LayoutDocument.pages[].items -- see WordprocessingLayoutResult's own comment on why). Falls back to laying out the placeholder document's own first paragraph as plain text -- the formula's own StarMath annotation, or the literal "[formula]" -- when `options.formulas` has no entry for this block's sourcePath at all (should not happen for a block this package's own readers produced, but a real, honest fallback rather than a silent no-op for a block a caller constructed by hand).
+// The one ContentEmbeddedObjectBlock kind this engine actually renders (objectKind: 'formula') -- reserves flow space the same way layoutImageFlow does for an ordinary image, but via src/mathml's own layoutFormula rather than a static width/height, and records the result into `formulas` (consumed by pdf-codec's write.ts, not LayoutDocument.pages[].items -- see WordprocessingLayoutResult's own comment on why). Falls back to laying out the placeholder document's own first paragraph as plain text -- the formula's own StarMath annotation, or the literal "[formula]" -- when `options.formulas` has no entry for this block's sourcePath at all (should not happen for a block this package's own readers produced, but a real, honest fallback rather than a silent no-op for a block a caller constructed by hand).
 function layoutFormulaFlow(block: ContentEmbeddedObjectBlock, section: ContentSection, pages: LayoutPage[], state: FlowState, contentLeftXDown: number, contentWidthPt: number, contentBottomYDown: number, measurer: TextMeasurer, options: EngineLayoutOptions, formulas: PositionedFormula[]): void {
   const embedded = block.sourcePath === undefined ? undefined : options.formulas?.get(block.sourcePath);
   if (embedded === undefined) {

@@ -44,7 +44,6 @@
     "test": "vitest run --project unit",
     "test:watch": "vitest --project unit",
     "test:coverage": "vitest run --project unit --coverage",
-    "test:corpus": "vitest run --project corpus",
     "test:smoke": "tsdown && vitest run --project smoke",
     "prepare": "husky",
     "release": "semantic-release"
@@ -68,6 +67,7 @@
     "fflate": "^0.8.3",
     "odf.js": "^1.10.0",
     "ooxml.js": "^2.2.0",
+    "pdf-codec": "^1.0.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

@@ -35,7 +35,7 @@ export interface MathStroke {
 
 export type MathLayoutItem = MathGlyphRun | MathRule | MathStroke;
 
-// The result of laying out one MathML (sub)tree: a bounding box (widthPt = full width; heightPt = ascentPt + descentPt) plus every positioned item inside it, already flattened to box-local absolute coordinates -- a parent box that embeds a child box does so by adding its own child-placement offset to every one of the child's items and splicing them into its own flat `items` array, rather than nesting MathBox values inside each other. This is deliberately the flattest shape that still lets src/pdf/math-content-write.ts consume a whole formula with a single, non-recursive walk: add the box's own page-placement offset once, emit every item.
+// The result of laying out one MathML (sub)tree: a bounding box (widthPt = full width; heightPt = ascentPt + descentPt) plus every positioned item inside it, already flattened to box-local absolute coordinates -- a parent box that embeds a child box does so by adding its own child-placement offset to every one of the child's items and splicing them into its own flat `items` array, rather than nesting MathBox values inside each other. This is deliberately the flattest shape that still lets pdf-codec's math-content-write.ts (which redeclares its own structurally-identical MathBox -- see pdf-codec's math-types.ts) consume a whole formula with a single, non-recursive walk: add the box's own page-placement offset once, emit every item.
 export interface MathBox {
   readonly widthPt: number;
   readonly heightPt: number;

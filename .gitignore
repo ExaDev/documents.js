@@ -3,4 +3,3 @@ dist/
 *.tsbuildinfo
 .DS_Store
 coverage/
-test/corpus/

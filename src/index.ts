@@ -188,19 +188,19 @@ export type { BoxVectorInit as OdgBoxVectorInit, LineVectorInit as OdgLineVector
 export { OdgBoxVector, OdgLineVector, OdgPathVector } from './edit/odg/vector';
 export { buildOdgPackage } from './edit/odg/content';
 
-// --- The hand-written PDF codec. ---
-export type { ReadPdfOptions } from './pdf/read';
-export { readPdf } from './pdf/read';
-export type { WritePdfOptions } from './pdf/write';
-export { writePdf } from './pdf/write';
-export type { PdfDiagnostic, PdfDiagnosticSeverity, PdfDiagnosticSink } from './pdf/diagnostics';
-export { NOOP_DIAGNOSTIC_SINK, PdfEncryptedError, PdfParseError } from './pdf/diagnostics';
-export type { WinAnsiSubstitution } from './pdf/winansi';
+// --- The hand-written PDF codec, now an external dependency -- see pdf-codec's own README (https://github.com/ExaDev/pdf-codec) for its internals. ---
+export type { ReadPdfOptions } from 'pdf-codec';
+export { readPdf } from 'pdf-codec';
+export type { WritePdfOptions } from 'pdf-codec';
+export { writePdf } from 'pdf-codec';
+export type { PdfDiagnostic, PdfDiagnosticSeverity, PdfDiagnosticSink } from 'pdf-codec';
+export { NOOP_DIAGNOSTIC_SINK, PdfEncryptedError, PdfParseError } from 'pdf-codec';
+export type { WinAnsiSubstitution } from 'pdf-codec';
 // A schema-validated z.codec() pair over readPdf/writePdf (PDF bytes <-> LayoutDocument), mirroring ooxml.js's own packageCodec -- the no-extra-options form; use readPdf/writePdf directly for cancellation, diagnostics, a custom clock, or WinAnsi-substitution reporting.
-export { pdfCodec } from './pdf/codec';
-// The embedded math font (STIX Two Math, OFL-1.1 -- see assets/fonts/NOTICE.md), parsed once and cached: loadMathFont().font exposes glyphId/glyphSpaceWidth/cffBytes/descriptor directly, and .metricsAt(sizePt) is the MathFontMetrics factory src/mathml's own layoutFormula consumes. Exported for a caller that wants to lay out a formula (via layoutFormula below) without going through odfToPdf's own fixed pipeline.
-export type { LoadedMathFont, MathFont, MathFontDescriptorMetrics } from './pdf/math-font';
-export { loadMathFont } from './pdf/math-font';
+export { pdfCodec } from 'pdf-codec';
+// The embedded math font (STIX Two Math, OFL-1.1 -- see pdf-codec's own README), parsed once and cached: loadMathFont().font exposes glyphId/glyphSpaceWidth/cffBytes/descriptor directly, and .metricsAt(sizePt) is the MathFontMetrics factory src/mathml's own layoutFormula consumes. Exported for a caller that wants to lay out a formula (via layoutFormula below) without going through odfToPdf's own fixed pipeline.
+export type { LoadedMathFont, MathFont, MathFontDescriptorMetrics } from 'pdf-codec';
+export { loadMathFont } from 'pdf-codec';
 
 // --- MathML presentation-layer typesetting: a pure box-model layout engine (no PDF or ODF knowledge of its own -- see src/mathml/'s own module comments), consuming odf.js's readOdfFormula's own raw MathML tree via a locally-defined, structurally-compatible node type. odfToPdf (below) and the odt/odp embedded-formula layout paths (src/layout/engine.ts, src/layout/slides.ts) are its two real callers; exported directly too, for a caller that wants to lay out a formula (e.g. onto a custom page layout) without going through either. ---
 export type {
@@ -236,7 +236,8 @@ export { readOdsContent } from './odf/ods/read';
 export { readOdgContent } from './odf/odg/read';
 export type { StandaloneFormulaContent } from './odf/formula/read';
 export { readOdfEmbeddedFormula, readOdfFormulaContent } from './odf/formula/read';
-export type { EmbeddedFormula, PositionedFormula } from './model/formula';
+export type { EmbeddedFormula } from './model/formula';
+export type { PositionedFormula } from 'pdf-codec';
 export type { EngineLayoutOptions, WordprocessingLayoutResult } from './layout/engine';
 export { convertWordprocessingToLayout } from './layout/engine';
 export type { PresentationLayoutResult, SlidesLayoutOptions } from './layout/slides';

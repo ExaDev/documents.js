@@ -3,13 +3,12 @@ import { describe, expect, it } from 'vitest';
 import type { ContentImageBlock, ContentParagraph, ContentRun, ContentSection, ContentShape, ContentSlide, ContentTable, LayoutImage, LayoutItem, LayoutLink, LayoutRect, LayoutText } from 'document-content-model';
 import { createDocx } from '../edit/docx/editor';
 import { createPptx } from '../edit/pptx/editor';
-import { encodePng } from '../image/png-encode';
 import { CONTENT_FORMAT_VERSION } from '../model/content';
 import type { ContentDocument } from '../model/content';
 import { readDocxContent } from '../ooxml/docx/read';
 import { readPptxContent } from '../ooxml/pptx/read';
-import type { TextMeasurer } from '../pdf/measure';
-import { createStandardFontMeasurer } from '../pdf/measure';
+import type { TextMeasurer } from 'pdf-codec';
+import { createStandardFontMeasurer, encodePng } from 'pdf-codec';
 import { convertWordprocessingToLayout } from './engine';
 import { convertPresentationToLayout } from './slides';
 

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ContentSheet, ContentSheetCell, ContentSheetPrintSettings, LayoutItem, LayoutLine, LayoutText } from 'document-content-model';
 import { CONTENT_FORMAT_VERSION } from '../model/content';
 import type { ContentDocument } from '../model/content';
-import type { TextMeasurer } from '../pdf/measure';
+import type { TextMeasurer } from 'pdf-codec';
 import { convertSpreadsheetToLayout } from './sheets';
 
 // Every character is sizePt/10 pt wide; lineHeightAtSize is 1.2x, ascender 0.8x, descender -0.2x -- the same fake-measurer convention already used across src/layout/engine.test.ts and src/layout/slides.test.ts.

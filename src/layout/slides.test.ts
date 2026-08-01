@@ -1,16 +1,16 @@
 import { bytesToBase64 } from 'ooxml.js';
 import { describe, expect, it } from 'vitest';
 import type { ContentImageBlock, ContentParagraph, ContentRun, ContentShape, ContentSlide, ContentTable, LayoutImage, LayoutItem, LayoutLink, LayoutRect, LayoutText } from 'document-content-model';
-import { encodePng } from '../image/png-encode';
 import { CONTENT_FORMAT_VERSION } from '../model/content';
 import type { ContentDocument } from '../model/content';
-import type { TextMeasurer } from '../pdf/measure';
+import type { TextMeasurer } from 'pdf-codec';
+import { encodePng } from 'pdf-codec';
 import { convertPresentationToLayout } from './slides';
 
 const BLACK = { r: 0, g: 0, b: 0 };
 const RED = { r: 1, g: 0, b: 0 };
 
-// Every character is exactly sizePt/10 pt wide -- the same fake measurer convention already used in src/pdf/text-layout.test.ts and src/pdf/content-write.test.ts, so wrap-point and position assertions can be exact.
+// Every character is exactly sizePt/10 pt wide -- the same fake measurer convention already used in pdf-codec's own text-layout.test.ts and content-write.test.ts, so wrap-point and position assertions can be exact.
 function fakeMeasurer(): TextMeasurer {
   return {
     widthOfTextAtSize: (text, _font, sizePt) => Array.from(text).length * (sizePt / 10),

@@ -1,9 +1,9 @@
 import { zlibSync } from 'fflate';
-import { ByteWriter } from '../bytes/writer';
+import { ByteWriter } from 'pdf-codec';
 
-// Hand-built PDF fixtures for the parser (src/pdf/lexer.ts and friends), by literal byte/string concatenation with this file's own local offset tracking -- deliberately importing NOTHING from src/pdf/ itself. A PDF fixture built by calling this package's own writePdf would let a writer bug hide from the reader test and vice versa; the write-side and read-side test oracles must be genuinely independent, not just nominally separate files. Using fflate's zlibSync directly here (for a compressed xref/object stream) is legitimate, not a violation of that independence -- fflate is the shared DEFLATE oracle both sides already depend on; what's being independently constructed is the PDF structure around it, not the compression algorithm.
+// Hand-built PDF fixtures for exercising pdf-codec's own parser (readPdf) through documents.js's DocumentConverter port, by literal byte/string concatenation with this file's own local offset tracking -- deliberately never calling pdf-codec's writePdf itself. A PDF fixture built by calling writePdf would let a writer bug hide from the reader test and vice versa; the write-side and read-side test oracles must be genuinely independent, not just nominally separate files. Using fflate's zlibSync directly here (for a compressed xref/object stream) is legitimate, not a violation of that independence -- fflate is the shared DEFLATE oracle both sides already depend on; what's being independently constructed is the PDF structure around it, not the compression algorithm. ByteWriter itself is just pdf-codec's generic chunked byte-writing primitive, no different from using it for any other byte-level fixture.
 //
-// Do NOT refactor this to call src/pdf/write.ts, however tempting the duplication looks -- that would silently destroy the whole point of this file.
+// Do NOT refactor this to call pdf-codec's writePdf, however tempting the duplication looks -- that would silently destroy the whole point of this file.
 
 function enc(text: string): Uint8Array<ArrayBuffer> {
   return new TextEncoder().encode(text);

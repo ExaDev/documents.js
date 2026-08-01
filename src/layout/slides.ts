@@ -4,12 +4,9 @@ import { layoutFormula } from '../mathml';
 import type { Box } from '../model/geometry';
 import { flipY } from '../model/geometry';
 import type { ContentDocument } from '../model/content';
-import type { EmbeddedFormula, PositionedFormula } from '../model/formula';
-import type { Point } from '../pdf/matrix';
-import { rotatePointAboutCenter } from '../pdf/matrix';
-import { loadMathFont } from '../pdf/math-font';
-import type { TextMeasurer } from '../pdf/measure';
-import { wrapRunsToWidth } from '../pdf/text-layout';
+import type { EmbeddedFormula } from '../model/formula';
+import type { Point, PositionedFormula, TextMeasurer } from 'pdf-codec';
+import { loadMathFont, rotatePointAboutCenter, wrapRunsToWidth } from 'pdf-codec';
 import { alignmentOffsetPt, effectiveStyledRuns, estimateRowHeightPt, lineNaturalHeightPt, registerImage, sumColumnWidthsPt } from './shared';
 
 // ContentDocument (the presentation variant) -> LayoutDocument: pptx's tractable layout direction. No pagination -- one slide is always exactly one PDF page (slide size maps directly to the page's own widthPt/heightPt) -- and no group-transform resolution either, since src/ooxml/pptx/read.ts already flattened every group into absolute shape positions at read time. What's left is genuinely just: wrap each shape's text within its own box (reusing the exact wrapRunsToWidth docx also uses), place images at their shape's frame, render table grids directly from explicit column widths/row heights, and apply the one deliberate Y-flip from OOXML's top-left/y-down space into PDF's bottom-left/y-up space.
@@ -46,7 +43,7 @@ interface ShapePlacement {
   readonly layoutRotationDeg: number | undefined;
 }
 
-// DrawingML rotates a shape about its own bounding-box centre, clockwise; content-write.ts's writer rotates about whatever anchor point it's given, counter-clockwise. rotatePointAboutCenter (src/pdf/matrix.ts) reconciles the two: feeding it an unrotated point and the shape's own centre computes exactly the point a caller must pass as a LayoutItem's xPt/yPt for the writer's own corner-pivot rotation to reproduce PowerPoint's centre-pivot rotation.
+// DrawingML rotates a shape about its own bounding-box centre, clockwise; content-write.ts's writer rotates about whatever anchor point it's given, counter-clockwise. rotatePointAboutCenter (pdf-codec's matrix.ts) reconciles the two: feeding it an unrotated point and the shape's own centre computes exactly the point a caller must pass as a LayoutItem's xPt/yPt for the writer's own corner-pivot rotation to reproduce PowerPoint's centre-pivot rotation.
 function shapePlacement(flippedFrame: Box, rotationDeg: number | undefined): ShapePlacement {
   if (rotationDeg === undefined || rotationDeg === 0) {
     return { place: (p) => p, layoutRotationDeg: undefined };
@@ -161,7 +158,7 @@ function layoutTable(table: ContentTable, contentLeftXDown: number, contentWidth
   return cursorYDown;
 }
 
-// A formula shape's own placeholder block (see src/odf/odp/read.ts's readOdpContent) is the shape's ONLY block -- odp's own detection replaces a formula-bearing shape's blocks outright rather than appending alongside other content, unlike odt's paragraph-flow case -- so this places the resolved MathBox directly at the shape's own frame, the same "one block, one position" treatment layoutImageFlow (src/layout/engine.ts) and this function's own image branch above already give an image block. Rotation is deliberately NOT applied to a formula shape (unlike text/image, both routed through `placement.place`): src/pdf/write.ts's own formula content-stream emission has no rotated-CID-text path, only translation -- a real, tracked, bounded gap (position is correct; a rotated formula shape renders unrotated), not a silent one.
+// A formula shape's own placeholder block (see src/odf/odp/read.ts's readOdpContent) is the shape's ONLY block -- odp's own detection replaces a formula-bearing shape's blocks outright rather than appending alongside other content, unlike odt's paragraph-flow case -- so this places the resolved MathBox directly at the shape's own frame, the same "one block, one position" treatment layoutImageFlow (src/layout/engine.ts) and this function's own image branch above already give an image block. Rotation is deliberately NOT applied to a formula shape (unlike text/image, both routed through `placement.place`): pdf-codec's write.ts's own formula content-stream emission has no rotated-CID-text path, only translation -- a real, tracked, bounded gap (position is correct; a rotated formula shape renders unrotated), not a silent one.
 function layoutShapeFormula(block: ContentEmbeddedObjectBlock, flippedFrame: Box, formulaContext: ShapeFormulaContext): void {
   const embedded = block.sourcePath === undefined ? undefined : formulaContext.formulas.get(block.sourcePath);
   if (embedded === undefined) {
