@@ -164,6 +164,41 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  publish-aliases:
+    name: Publish aliases (${{ matrix.name }})
+    needs: release
+    if: needs.release.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write # OIDC identity for npm trusted publishing -- every leg in this job targets npmjs.org. The GitHub Packages alias is a separate job above specifically so it never holds this permission: pnpm attempts an OIDC exchange whenever id-token: write is available regardless of target registry, and GitHub Packages has no such exchange to attempt -- confirmed the hard way in a sibling repo when this leg used to share that job and failed with "401 Unauthorized - authentication token not provided" even with GITHUB_TOKEN correctly set, because the failed OIDC attempt never fell through to it.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: pdf-codec.js, registry: 'https://registry.npmjs.org' }
+          - { name: pdf-parser.js, registry: 'https://registry.npmjs.org' }
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main # the release commit semantic-release just pushed
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: pnpm
+          # registry-url is deliberately absent. Setting it makes setup-node write an .npmrc containing an _authToken line, and that line wins over the OIDC exchange -- so the setting that looks like it configures the registry is exactly the one that would break trusted publishing.
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Rewrite package name for this alias
+        # Rewriting the checked-out package.json rather than keeping a package.json per alias means no alias can drift away from the real package's metadata -- each matrix leg gets its own fresh runner and checkout, so there is no cross-contamination between legs.
+        run: npm pkg set name="${{ matrix.name }}"
+      - run: pnpm publish --access public --no-git-checks
+        env:
+          # Blanked, not omitted -- an inherited NODE_AUTH_TOKEN would otherwise be used in preference to the OIDC exchange, matching the release job's own convention above.
+          NODE_AUTH_TOKEN: ''
+
   attest:
     name: Attest SBOM and build provenance
     needs: release
