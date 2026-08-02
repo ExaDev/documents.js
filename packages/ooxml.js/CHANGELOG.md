@@ -1,3 +1,10 @@
+## [2.3.1](https://github.com/ExaDev/ooxml.js/compare/v2.3.0...v2.3.1) (2026-08-02)
+
+
+### Bug Fixes
+
+* don't flag or fix an alias whose source is mutated elsewhere ([84eaa69](https://github.com/ExaDev/ooxml.js/commit/84eaa6939411372654c7be50e94abe5973a77013))
+
 # [2.3.0](https://github.com/ExaDev/ooxml.js/compare/v2.2.5...v2.3.0) (2026-08-02)
 
 
