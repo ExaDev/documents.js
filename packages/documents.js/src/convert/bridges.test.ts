@@ -467,14 +467,14 @@ describe('ods <-> xlsx: ods -> xlsx (one hop, the character-width-unit conversio
     expect(cellAt(sheet, 1, 1)?.value).toEqual({ kind: 'number', value: 42.5 });
     expect(cellAt(sheet, 1, 2)?.value).toEqual({ kind: 'boolean', value: true });
 
-    // xlsx has no percentage/currency cell type (ooxml.js's own build.ts: "both write as a plain numeric cell") -- the kind downgrades to 'number', but the underlying numeric VALUE survives exactly.
-    expect(cellAt(sheet, 2, 0)?.value).toEqual({ kind: 'number', value: 0.15 });
-    expect(cellAt(sheet, 2, 1)?.value).toEqual({ kind: 'number', value: 9.99 });
-    // ooxml.js's readXlsxContent (2.5.2+) reads every xlsx t="d" cell as document-schema.js 2.0.0's own 'dateTime' kind, never 'date' -- xlsx has only the one combined date/time serial cell type at the wire level, so the reader can no longer claim a narrower 'date' kind it cannot actually verify; the VALUE STRING still survives byte-for-byte.
-    expect(cellAt(sheet, 2, 2)?.value).toEqual({ kind: 'dateTime', value: '2026-01-15' });
+    // ooxml.js's buildXlsxPackage/readXlsxContent (2.6.1+) now carry a full xlsx number-format engine: a percentage cell writes a real "0%"-family numFmt and reads back as genuine 'percentage', and a currency cell writes a real "[$USD]#,##0.00"-family numFmt (the ISO currency code embedded in the format code itself, not a separate cell attribute -- xlsx has no dedicated currency cell type) and reads back as genuine 'currency' with that code recovered. Both are a real fidelity improvement over the previous "downgrades to plain number" behaviour -- the semantic kind now survives, not just the numeric value.
+    expect(cellAt(sheet, 2, 0)?.value).toEqual({ kind: 'percentage', value: 0.15 });
+    expect(cellAt(sheet, 2, 1)?.value).toEqual({ kind: 'currency', value: 9.99, currency: 'USD' });
+    // The same number-format engine now reads a date-only numFmt back as genuine 'date' rather than the previous catch-all 'dateTime' -- xlsx still has only the one combined date/time serial wire type, but the reader can now tell a date-only format code from one that also carries a time component.
+    expect(cellAt(sheet, 2, 2)?.value).toEqual({ kind: 'date', value: '2026-01-15' });
 
-    // A source ODS 'time' cell shares the identical xlsx t="d" wire type as 'date' above, so it reads back under the same 'dateTime' kind too, carrying its original ISO-8601-duration VALUE STRING verbatim but under a different kind label than it started with.
-    expect(cellAt(sheet, 3, 0)?.value).toEqual({ kind: 'dateTime', value: 'PT14H30M00S' });
+    // A source ODS 'time' cell has no numeric serial to write at all -- its own ContentCellValue carries an ISO-8601 duration STRING ("PT14H30M00S"), not a fractional-day number, so buildXlsxPackage cannot express it as an xlsx date/time serial and writes it as a plain string cell instead. The value string still survives byte-for-byte, just honestly labelled as text rather than mislabelled as a date/time.
+    expect(cellAt(sheet, 3, 0)?.value).toEqual({ kind: 'string', value: 'PT14H30M00S' });
 
     // Formula: written verbatim into <f>, never parsed, translated, or evaluated -- the exact OpenFormula-syntax string ODS carried survives byte-for-byte, even though it is not valid Excel A1 syntax (a real Excel opening this file would show a formula error; this bridge makes no claim about cross-application formula semantics, only about byte preservation).
     const formulaCell = cellAt(sheet, 3, 1);
@@ -517,7 +517,7 @@ describe('ods <-> xlsx: ods -> xlsx -> ods (double hop, starting from ods)', () 
     expect(cellAt(sheet, 4, 0)?.value).toEqual({ kind: 'string', value: 'Merged Cell' });
   });
 
-  it('documents the real, known losses of a full double-hop cycle: percentage/currency downgrade to a plain number and time collapses into date, but column widths now survive within tolerance', () => {
+  it('documents the real, known loss of a full double-hop cycle: time collapses into a plain string, but percentage/currency now survive with kind intact and column widths survive within tolerance', () => {
     const original = odsContentOf(richOdsBytes());
     const originalSheet = original.sheets[0]!;
 
@@ -525,12 +525,12 @@ describe('ods <-> xlsx: ods -> xlsx -> ods (double hop, starting from ods)', () 
     const roundTrippedBytes = xlsxToOds(xlsxBytes);
     const sheet = odsContentOf(roundTrippedBytes).sheets[0]!;
 
-    // Percentage/currency: the VALUE survives, the semantic kind does not (already lost on the first hop, see the one-hop describe block above).
-    expect(cellAt(sheet, 2, 0)?.value).toEqual({ kind: 'number', value: 0.15 });
-    expect(cellAt(sheet, 2, 1)?.value).toEqual({ kind: 'number', value: 9.99 });
+    // Percentage/currency: both the VALUE and the semantic kind now survive the full double hop -- ooxml.js's number-format engine (see the one-hop describe block above) recovers 'percentage'/'currency' on the first hop, and buildOdsPackage's own OdsCell.value setter writes whatever kind it is given back out on the second, so nothing is lost in either direction any more.
+    expect(cellAt(sheet, 2, 0)?.value).toEqual({ kind: 'percentage', value: 0.15 });
+    expect(cellAt(sheet, 2, 1)?.value).toEqual({ kind: 'currency', value: 9.99, currency: 'USD' });
 
-    // Time: collapses into 'date' on the first hop (xlsx has one combined t="d" type) and STAYS 'date' on the second, since buildOdsPackage's own OdsCell.value setter writes whatever kind it is given -- there is no way back to 'time' once the first hop has already thrown that distinction away.
-    expect(cellAt(sheet, 3, 0)?.value).toEqual({ kind: 'date', value: 'PT14H30M00S' });
+    // Time: collapses into a plain 'string' on the first hop (xlsx has no serial representation for an ISO-8601 duration, see the one-hop describe block above) and STAYS 'string' on the second, since buildOdsPackage's own OdsCell.value setter writes whatever kind it is given -- there is no way back to 'time' once the first hop has already thrown that distinction away.
+    expect(cellAt(sheet, 3, 0)?.value).toEqual({ kind: 'string', value: 'PT14H30M00S' });
 
     // Column widths: buildOdsPackage (src/edit/ods/content.ts) now writes ContentSheetColumn.widthPt for real via OdsSheet.setColumnWidth (src/edit/ods/column-row.ts) -- a fix made while composing xlsxToPdf, since an unstyled column previously read back at widthPt 0 there too, and src/layout/sheets.ts's own resolveAxis treats that explicit zero as authoritative rather than falling back to a default (see column-row.ts's own top-of-file note). The tolerance here is COLUMN_WIDTH_TOLERANCE_PT stacked twice, not once -- this is a genuine double hop through the SAME lossy xlsx character-width-unit conversion the one-hop test above already documents (ods pt -> xlsx character-width units on the first hop, xlsx character-width units -> ods pt again on the second), so the accumulated drift can be up to twice the one-hop test's own single-hop bound.
     expect(sheet.columns).toHaveLength(3);
