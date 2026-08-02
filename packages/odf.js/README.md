@@ -10,6 +10,35 @@
 
 Both packages **do** depend on [`document-schema.js`](https://github.com/ExaDev/document-schema.js), the genuinely shared canonical schema for `ContentDocument`/`LayoutDocument` — the semantic content model (paragraphs, runs, tables, shapes, slides) both an ODF and an OOXML reader ultimately produce. `odf.js`'s typed readers return the real, imported `ContentSection`/`ContentSlide`/etc. types from that package, not a structurally-similar lookalike, so a downstream consumer (`documents.js`) can run an `.odt` through the exact same layout/pagination engine it already uses for `.docx`, unmodified.
 
+```mermaid
+graph TD
+    schema("document-schema.js")
+    ooxml("ooxml.js")
+    odf("odf.js")
+    pdfcodec("pdf-codec")
+    documents("documents.js")
+    cli("document-cli")
+
+    schema --> ooxml
+    schema --> odf
+    schema --> pdfcodec
+    schema --> documents
+    ooxml --> documents
+    odf --> documents
+    pdfcodec --> documents
+    documents --> cli
+    odf --> cli
+
+    click schema "https://github.com/ExaDev/document-schema.js" "document-schema.js"
+    click ooxml "https://github.com/ExaDev/ooxml.js" "ooxml.js"
+    click odf "https://github.com/ExaDev/odf.js" "odf.js"
+    click pdfcodec "https://github.com/ExaDev/pdf-codec" "pdf-codec"
+    click documents "https://github.com/ExaDev/documents.js" "documents.js"
+    click cli "https://github.com/ExaDev/document-cli" "document-cli"
+
+    style odf fill:#f9a825,stroke:#333,stroke-width:3px
+```
+
 ## Status
 
 This package is under active development. What's built and shipped:
