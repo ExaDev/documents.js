@@ -1,3 +1,15 @@
+# [1.59.0](https://github.com/ExaDev/documents.js/compare/v1.58.0...v1.59.0) (2026-08-02)
+
+
+### Bug Fixes
+
+* write ods column width and row height instead of dropping them ([ef1afd6](https://github.com/ExaDev/documents.js/commit/ef1afd6f476b5227848ad9c8347c5d44eb809ed8))
+
+
+### Features
+
+* add xlsxToPdf/pdfToXlsx via ods-composed conversion path ([36e810d](https://github.com/ExaDev/documents.js/commit/36e810d77d9f707381c883e6a49a18c579c38830))
+
 # [1.58.0](https://github.com/ExaDev/documents.js/compare/v1.57.1...v1.58.0) (2026-08-02)
 
 
