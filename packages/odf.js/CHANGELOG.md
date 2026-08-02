@@ -1,3 +1,10 @@
+## [1.13.2](https://github.com/ExaDev/odf.js/compare/v1.13.1...v1.13.2) (2026-08-02)
+
+
+### Bug Fixes
+
+* rename ContentSheetPrintSettings.scale to scalePercent for document-schema.js 2.0.0 ([7a5bc58](https://github.com/ExaDev/odf.js/commit/7a5bc585c19dd1f18fdd739d85b606cbf3c54832))
+
 ## [1.13.1](https://github.com/ExaDev/odf.js/compare/v1.13.0...v1.13.1) (2026-08-02)
 
 # [1.13.0](https://github.com/ExaDev/odf.js/compare/v1.12.1...v1.13.0) (2026-08-02)
