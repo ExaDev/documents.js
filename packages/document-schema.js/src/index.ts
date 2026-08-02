@@ -7,3 +7,4 @@ export * from './content';
 export * from './layout';
 export * from './package';
 export * from './schema-io';
+export * from './content-json-schema-defs';
