@@ -1,3 +1,10 @@
+# [1.10.0](https://github.com/ExaDev/document-schema.js/compare/v1.9.1...v1.10.0) (2026-08-02)
+
+
+### Features
+
+* build one file per module, add wildcard deep-import exports ([bf7b002](https://github.com/ExaDev/document-schema.js/commit/bf7b00253ca8e4ab63b4e932d837d009bfee060e))
+
 ## [1.9.1](https://github.com/ExaDev/document-schema.js/compare/v1.9.0...v1.9.1) (2026-08-02)
 
 # [1.9.0](https://github.com/ExaDev/document-schema.js/compare/v1.8.1...v1.9.0) (2026-08-02)
