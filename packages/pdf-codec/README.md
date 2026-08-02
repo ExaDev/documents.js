@@ -98,6 +98,15 @@ Building a layout engine on top of this codec (this is what `documents.js`'s own
 
 The full `src/bytes/`/`src/image/` surface is exported too — `crc32`, `deflate`/`inflate`/`inflateTolerant`, `ByteReader`/`ByteWriter`/`concatBytes`, `readJpegInfo`, `decodePng`/`encodePng`, `unfilterScanlines`/`filterScanlines` — generic byte- and image-container primitives with zero PDF-specific knowledge of their own, useful independently of anything PDF-related.
 
+Every module under `src/` is also deep-importable directly by its own subpath, for a caller that wants one internal module (not part of the curated barrel above) without pulling in the rest:
+
+```ts
+import { crc32 } from 'pdf-codec/bytes/crc32';
+import { readJpegInfo } from 'pdf-codec/image/jpeg-info';
+```
+
+This works via package.json's `"./*"` wildcard export, resolving any `pdf-codec/<path>` subpath to the correspondingly-named file under `dist/` — both ESM `import` and CJS `require` resolve the same way.
+
 ## Architecture
 
 The package is layered from generic primitives outward to the codec itself:
