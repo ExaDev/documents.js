@@ -1,3 +1,10 @@
+## [1.56.1](https://github.com/ExaDev/documents.js/compare/v1.56.0...v1.56.1) (2026-08-02)
+
+
+### Bug Fixes
+
+* don't flag or fix an alias whose source is mutated elsewhere ([6816c25](https://github.com/ExaDev/documents.js/commit/6816c2541a1d0c3579b99fdc7ee2b5bdaa31c102))
+
 # [1.56.0](https://github.com/ExaDev/documents.js/compare/v1.55.0...v1.56.0) (2026-08-02)
 
 
