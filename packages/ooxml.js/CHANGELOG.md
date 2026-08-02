@@ -1,3 +1,10 @@
+# [2.5.0](https://github.com/ExaDev/ooxml.js/compare/v2.4.1...v2.5.0) (2026-08-02)
+
+
+### Features
+
+* build one file per module, add wildcard deep-import exports ([f9d6cb6](https://github.com/ExaDev/ooxml.js/commit/f9d6cb6fda3ea193c5d9b98bc679740f597f389c))
+
 ## [2.4.1](https://github.com/ExaDev/ooxml.js/compare/v2.4.0...v2.4.1) (2026-08-02)
 
 # [2.4.0](https://github.com/ExaDev/ooxml.js/compare/v2.3.1...v2.4.0) (2026-08-02)
