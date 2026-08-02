@@ -1,4 +1,5 @@
 import type {
+  Box,
   ContentCellValue,
   ContentDocument,
   ContentSheet,
@@ -16,14 +17,15 @@ import type { LayoutColor } from '../model/color';
 import { COLOR_BLACK, rgbHexToColor } from '../model/color';
 import type { Alignment } from '../model/style';
 import { DEFAULT_LAYOUT_FONT } from '../model/style';
+import { flipY } from '../model/geometry';
 import { throwIfAborted } from '../ports/abort';
 import type { StyledFragment, StyledRun, TextMeasurer } from 'pdf-codec';
 import { wrapRunsToWidth } from 'pdf-codec';
-import { alignmentOffsetPt, lineNaturalHeightPt, sumColumnWidthsPt, toStyledRuns } from './shared';
+import { alignmentOffsetPt, lineNaturalHeightPt, pushCellBorderLines, sumColumnWidthsPt, toStyledRuns } from './shared';
 
 // ContentDocument (the spreadsheet variant) -> LayoutDocument: ods/xlsx's own layout direction, genuinely distinct from both docx's flow/pagination (engine.ts) and pptx's direct placement (slides.ts). A sheet paginates over TWO axes at once (column bands x row bands, not just rows), print settings (range/scale/fit-to-page/repeat rows-columns/gridlines/headers/page order/manual breaks) drive the page grid directly rather than being ignored the way a docx section's margins alone would be, and cell overflow is bounded per cell (###, spill, truncate) rather than wrapped the way paragraph text is. This is also the first layout algorithm in the package genuinely long-running enough (a real sheet can carry tens of thousands of populated cells) to need cooperative cancellation wired into its own per-cell emission loop, not just checked once at the top of the function the way reconstruct.ts's own page/slide loops do.
 //
-// Two real gaps in document-schema.js's ContentSheetCellSchema (as of 1.2.0), confirmed by reading its full definition before writing this module: it carries no per-cell background colour and no per-cell alignment override at all (unlike ContentTableCellSchema.background for docx/pptx tables), and no border information of any kind. The seven-step z-order below therefore never emits a cell-background LayoutRect or a cell-border LayoutLine -- there is no field anywhere to source either from -- and "alignment when the cell doesn't specify one" always takes the value-type default below, since a cell can never specify one. Both are documented, tracked gaps, not silent omissions.
+// ContentSheetCellSchema carries real per-cell decoration as of document-schema.js 2.0.0 -- background, borders, alignment, and verticalAlignment -- all four of which odf.js's own readOds genuinely populates from a cell's resolved style chain (typed/shared/table.ts's readCellStyleDecoration), so every one of them is live data here, not a speculatively-consumed field. The z-order below emits a real background LayoutRect and real border LayoutLines accordingly, and a cell's own explicit alignment/verticalAlignment override the value-kind default rather than being ignored. The one part of this decoration that still cannot be expressed is a border's own dash STYLE -- see pushCellBorderLines (src/layout/shared.ts) for why that is a gap in the layout schema rather than in this module.
 //
 // A cell's own text is laid out as a SINGLE line, never wrapped or stacked -- deliberate, narrower scope than docx/pptx paragraph flow: a spreadsheet cell's overflow rule (###, spill, truncate) is a single-line concept in every real spreadsheet application, and the task this module implements specifies exactly that. A cell whose own source text contains an explicit line break (readOds's own multi text:p-per-cell join, a rare Alt+Enter case) has wrapRunsToWidth produce more than one WrappedLine; only the FIRST is rendered here, a documented, narrow scope boundary rather than a silent truncation.
 
@@ -280,30 +282,59 @@ function axisSpanSizePt(axis: PositionedAxis, startIndex: number, span: number):
   return sumColumnWidthsPt(axis.sizesPt, startPosition, span);
 }
 
-// Renders one populated cell's text into `out`, in true PAGE space (gridLeftXPt/gridTopYDownPt place the grid's own local origin within the page). Applies the value-type default alignment, vertical-bottom alignment, and the numeric-'###'/string-spill-then-truncate overflow rules, bounded to the current page's own two axes (a spilled string can extend into a later column on the SAME page, never onto a following page/band).
+// One cell's own box in GRID-local-plus-page space, still y-down (gridLeftXPt/gridTopYDownPt place the grid's own local origin within the page), spanning its full colSpan/rowSpan. undefined when the cell's own anchor position isn't on this page at all -- a merge continuation, or a row/column belonging to another band -- in which case nothing about that cell (background, borders, or text) is drawn here.
+function resolveCellFrame(cell: ContentSheetCell, columnAxis: PositionedAxis, rowAxis: PositionedAxis, gridLeftXPt: number, gridTopYDownPt: number): Box | undefined {
+  const columnPosition = columnAxis.positionByIndex.get(cell.column);
+  const rowPosition = rowAxis.positionByIndex.get(cell.row);
+  if (columnPosition === undefined || rowPosition === undefined) {
+    return undefined;
+  }
+  return {
+    xPt: gridLeftXPt + columnAxis.offsetsPt[columnPosition]!,
+    yPt: gridTopYDownPt + rowAxis.offsetsPt[rowPosition]!,
+    widthPt: axisSpanSizePt(columnAxis, cell.column, cell.colSpan ?? 1),
+    heightPt: axisSpanSizePt(rowAxis, cell.row, cell.rowSpan ?? 1),
+  };
+}
+
+// A backgrounded cell's own fill, as a real LayoutRect covering the cell's whole (merge-spanning) frame -- the exact shape src/layout/engine.ts's own table-cell background emission already produces for a docx/odt/pptx/odp table cell, applied to the spreadsheet grid. Unlike that one, a ContentSheetCell always has a genuine sourcePath of its own to attribute the rect to.
+function renderCellBackground(cell: ContentSheetCell, frameYDown: Box, pageHeightPt: number, out: LayoutItem[]): void {
+  if (cell.background === undefined) {
+    return;
+  }
+  const flipped = flipY(frameYDown, pageHeightPt);
+  out.push({ kind: 'rect', xPt: flipped.xPt, yPt: flipped.yPt, widthPt: flipped.widthPt, heightPt: flipped.heightPt, fill: cell.background, sourcePath: cell.sourcePath });
+}
+
+// The default vertical placement for a cell that declares none -- matching every real spreadsheet application's own default, and preserving exactly the behaviour this module had before ContentSheetCell.verticalAlignment existed to override it.
+const DEFAULT_CELL_VERTICAL_ALIGNMENT = 'bottom';
+
+// The y-down top of a single rendered line within its own cell, for each of the three vertical alignments ContentSheetCellSchema models. Every branch is clamped to at least one padding inset below the cell's own top, so a line taller than its own cell overflows downward (visible, overlapping the row below) rather than upward into the row above -- the same clamping the bottom-aligned case has always applied, generalised rather than special-cased.
+function verticalLineTopYDownPt(verticalAlignment: 'top' | 'middle' | 'bottom', cellTopYDownPt: number, cellHeightPt: number, lineHeightPt: number): number {
+  if (verticalAlignment === 'top') {
+    return cellTopYDownPt + CELL_TEXT_PADDING_PT;
+  }
+  if (verticalAlignment === 'middle') {
+    return cellTopYDownPt + Math.max(CELL_TEXT_PADDING_PT, (cellHeightPt - lineHeightPt) / 2);
+  }
+  return cellTopYDownPt + Math.max(CELL_TEXT_PADDING_PT, cellHeightPt - CELL_TEXT_PADDING_PT - lineHeightPt);
+}
+
+// Renders one populated cell's text into `out`, in true PAGE space, within the frame resolveCellFrame already resolved for it. Applies the cell's own explicit alignment/verticalAlignment when it declares one (falling back to the value-kind default and to bottom respectively), and the numeric-'###'/string-spill-then-truncate overflow rules, bounded to the current page's own two axes (a spilled string can extend into a later column on the SAME page, never onto a following page/band).
+//
+// Overflow still keys off the VALUE kind, never the resolved alignment: '###' is what a spreadsheet shows for a too-narrow numeric cell regardless of which way that cell happens to be aligned, and a right-aligned string still spills into an empty neighbour rather than becoming '###'.
 function renderCellText(
   cell: ContentSheetCell,
+  frameYDown: Box,
   rowCells: ReadonlyMap<number, ContentSheetCell> | undefined,
   columnAxis: PositionedAxis,
-  rowAxis: PositionedAxis,
-  gridLeftXPt: number,
-  gridTopYDownPt: number,
   pageHeightPt: number,
   measurer: TextMeasurer,
   out: LayoutItem[],
 ): void {
-  const columnPosition = columnAxis.positionByIndex.get(cell.column);
-  const rowPosition = rowAxis.positionByIndex.get(cell.row);
-  if (columnPosition === undefined || rowPosition === undefined) {
-    return; // the cell's own anchor position isn't on this page at all (a merge continuation, or off this band) -- nothing to draw here.
-  }
+  const { xPt: xLeftPt, yPt: yTopDownPt, widthPt: ownWidthPt, heightPt } = frameYDown;
 
-  const ownWidthPt = axisSpanSizePt(columnAxis, cell.column, cell.colSpan ?? 1);
-  const heightPt = axisSpanSizePt(rowAxis, cell.row, cell.rowSpan ?? 1);
-  const xLeftPt = gridLeftXPt + columnAxis.offsetsPt[columnPosition]!;
-  const yTopDownPt = gridTopYDownPt + rowAxis.offsetsPt[rowPosition]!;
-
-  const alignment = defaultAlignmentForValue(cell.value.kind);
+  const alignment = cell.alignment ?? defaultAlignmentForValue(cell.value.kind);
   const numericLike = isNumericLikeValue(cell.value.kind);
   const styledRuns = cellStyledRuns(cell);
   const naturalLine = wrapRunsToWidth(styledRuns, measurer, Number.POSITIVE_INFINITY)[0]!;
@@ -340,8 +371,7 @@ function renderCellText(
   const alignOffsetPt = alignmentOffsetPt(alignment, availableWidthPt, lineWidthPt);
   const textStartXPt = xLeftPt + CELL_TEXT_PADDING_PT + alignOffsetPt;
   const lineHeightPt = lineNaturalHeightPt(naturalLine, measurer, styledRuns[0]!);
-  // Vertical alignment bottom: the single rendered line sits flush with the cell's own bottom inset, clamped so it never renders above the cell's own top when the line is taller than the cell itself.
-  const lineTopYDownPt = yTopDownPt + Math.max(CELL_TEXT_PADDING_PT, heightPt - CELL_TEXT_PADDING_PT - lineHeightPt);
+  const lineTopYDownPt = verticalLineTopYDownPt(cell.verticalAlignment ?? DEFAULT_CELL_VERTICAL_ALIGNMENT, yTopDownPt, heightPt, lineHeightPt);
   const baselineYDownPt = lineTopYDownPt + naturalLine.ascentPt;
 
   for (const fragment of fragments) {
@@ -497,15 +527,10 @@ function convertSheetToPages(sheet: ContentSheet, measurer: TextMeasurer, signal
     const gridWidthPt = columnAxis.offsetsPt[columnAxis.offsetsPt.length - 1]!;
     const gridHeightPt = rowAxis.offsetsPt[rowAxis.offsetsPt.length - 1]!;
 
-    const items: LayoutItem[] = [];
-
-    // Z-order step 7: cell backgrounds (skipped -- ContentSheetCellSchema models no per-cell background, see this module's own doc comment) -> gridlines -> cell borders (skipped -- no border field either) -> headers -> cell text.
-    if (printSettings.gridlines) {
-      renderGridlines(gridLeftXPt, gridTopYDownPt, gridWidthPt, gridHeightPt, columnAxis.offsetsPt, rowAxis.offsetsPt, pageSize.heightPt, items);
-    }
-    if (printSettings.headers) {
-      renderHeaderLabels(gutter, columnAxis, rowAxis, gridLeftXPt, gridTopYDownPt, pageSize.heightPt, measurer, items);
-    }
+    // Z-order step 7, now emitted in full: cell backgrounds -> gridlines -> cell borders -> headers -> cell text. The three cell-derived layers are collected into their own arrays during ONE walk over the populated cells (rather than three separate walks over the same 50k cells), then concatenated in that order -- so a cell's own declared border paints over the generic gridline underneath it, and every cell's text paints over every cell's background, exactly as a real spreadsheet renders them.
+    const backgroundItems: LayoutItem[] = [];
+    const borderItems: LayoutItem[] = [];
+    const textItems: LayoutItem[] = [];
 
     for (const rowIndex of rowAxis.indices) {
       const rowCells = cellsByRow.get(rowIndex);
@@ -517,9 +542,27 @@ function convertSheetToPages(sheet: ContentSheet, measurer: TextMeasurer, signal
         if (!columnAxis.positionByIndex.has(columnIndex) || hiddenColumnIndices.has(columnIndex) || hiddenRowIndices.has(cell.row)) {
           continue;
         }
-        renderCellText(cell, rowCells, columnAxis, rowAxis, gridLeftXPt, gridTopYDownPt, pageSize.heightPt, measurer, items);
+        const cellFrame = resolveCellFrame(cell, columnAxis, rowAxis, gridLeftXPt, gridTopYDownPt);
+        if (cellFrame === undefined) {
+          continue;
+        }
+        renderCellBackground(cell, cellFrame, pageSize.heightPt, backgroundItems);
+        if (cell.borders !== undefined) {
+          pushCellBorderLines(cell.borders, cellFrame, pageSize.heightPt, cell.sourcePath, borderItems);
+        }
+        renderCellText(cell, cellFrame, rowCells, columnAxis, pageSize.heightPt, measurer, textItems);
       }
     }
+
+    const items: LayoutItem[] = [...backgroundItems];
+    if (printSettings.gridlines) {
+      renderGridlines(gridLeftXPt, gridTopYDownPt, gridWidthPt, gridHeightPt, columnAxis.offsetsPt, rowAxis.offsetsPt, pageSize.heightPt, items);
+    }
+    items.push(...borderItems);
+    if (printSettings.headers) {
+      renderHeaderLabels(gutter, columnAxis, rowAxis, gridLeftXPt, gridTopYDownPt, pageSize.heightPt, measurer, items);
+    }
+    items.push(...textItems);
 
     out.push({ widthPt: pageSize.widthPt, heightPt: pageSize.heightPt, items });
   }

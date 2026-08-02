@@ -1,6 +1,6 @@
 import { bytesToBase64 } from 'ooxml.js';
 import { describe, expect, it } from 'vitest';
-import type { ContentBlock, ContentDocument, ContentImageBlock, ContentParagraph, ContentRun, ContentSection, ContentTable, LayoutImage, LayoutItem, LayoutLink, LayoutRect, LayoutText } from 'document-schema.js';
+import type { ContentBlock, ContentDocument, ContentImageBlock, ContentParagraph, ContentRun, ContentSection, ContentTable, LayoutImage, LayoutItem, LayoutLine, LayoutLink, LayoutRect, LayoutText } from 'document-schema.js';
 import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
 import type { TextMeasurer } from 'pdf-codec';
 import { encodePng } from 'pdf-codec';
@@ -178,6 +178,38 @@ describe('convertWordprocessingToLayout: tables', () => {
     const rects = layout.pages[0]!.items.filter((i): i is LayoutRect => i.kind === 'rect');
     expect(rects).toHaveLength(1);
     expect(rects[0]?.fill).toEqual({ r: 1, g: 0, b: 0 });
+  });
+
+  it('emits one LayoutLine per declared border edge of a cell, at that edge\'s own position', () => {
+    const red = { r: 1, g: 0, b: 0 };
+    const table: ContentTable = { kind: 'table', columnWidthsPt: [100], rows: [{ heightPt: 20, cells: [{ blocks: [], borders: { top: { color: red, widthPt: 2 }, bottom: { color: red, widthPt: 2 } } }] }] };
+    const layout = convert([section([table])]);
+    const lines = layout.pages[0]!.items.filter((i): i is LayoutLine => i.kind === 'line');
+    expect(lines).toHaveLength(2); // top and bottom only -- left/right were never declared
+    // Page height 50, cell frame y-down (0, 0, 100, 20): top edge at PDF y 50, bottom edge at PDF y 30.
+    expect(lines).toContainEqual(expect.objectContaining({ x1Pt: 0, y1Pt: 50, x2Pt: 100, y2Pt: 50, color: red, widthPt: 2 }));
+    expect(lines).toContainEqual(expect.objectContaining({ x1Pt: 0, y1Pt: 30, x2Pt: 100, y2Pt: 30, color: red, widthPt: 2 }));
+  });
+
+  it('attributes a cell\'s own background and borders to that cell\'s own sourcePath, falling back to the table\'s when it has none', () => {
+    const red = { r: 1, g: 0, b: 0 };
+    const table: ContentTable = {
+      kind: 'table',
+      sourcePath: 'sections[0].blocks[0]',
+      columnWidthsPt: [50, 50],
+      rows: [
+        {
+          heightPt: 20,
+          cells: [
+            { blocks: [], background: red, borders: { top: { color: red, widthPt: 1 } }, sourcePath: 'sections[0].blocks[0].rows[0].cells[0]' },
+            { blocks: [], background: red, borders: { top: { color: red, widthPt: 1 } } },
+          ],
+        },
+      ],
+    };
+    const decorations = convert([section([table])]).pages[0]!.items.filter((i) => i.kind === 'rect' || i.kind === 'line');
+    expect(decorations.filter((i) => i.sourcePath === 'sections[0].blocks[0].rows[0].cells[0]')).toHaveLength(2); // the first cell's own rect + line
+    expect(decorations.filter((i) => i.sourcePath === 'sections[0].blocks[0]')).toHaveLength(2); // the second cell's, falling back to the table's
   });
 
   it('scales column widths proportionally to fit the content width', () => {

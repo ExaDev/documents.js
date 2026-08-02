@@ -1,4 +1,4 @@
-import type { ContentVector, DocumentPackage, LayoutItem, LayoutPath, LayoutRect, LayoutText } from 'document-schema.js';
+import type { ContentVector, DocumentPackage, LayoutItem, LayoutLine, LayoutPath, LayoutRect, LayoutText } from 'document-schema.js';
 import { DOCUMENT_PACKAGE_FORMAT_VERSION } from 'document-schema.js';
 import { decodePackage, el, txt } from 'odf.js';
 import { decodePackage as decodeOoxmlPackage, readXlsxContent } from 'ooxml.js';
@@ -17,7 +17,7 @@ import { minimalOdgBytes, minimalOdgPackage } from '../test-support/odg';
 import { chapterOdtBytes, odmBytes, odmPackage } from '../test-support/odm';
 import { richMarkdownText } from '../test-support/markdown';
 import { minimalOdpBytes } from '../test-support/odp';
-import { gridOdsBytes, minimalOdsBytes } from '../test-support/ods';
+import { decoratedOdsBytes, gridOdsBytes, minimalOdsBytes } from '../test-support/ods';
 import { minimalOdtBytes } from '../test-support/odt';
 import { docxToPdf, inlineOdmSectionToContentSection, markdownToPdf, odgToPdf, odmToPdf, OdmUnresolvedSectionError, odpToPdf, odsToPdf, odsToXlsx, odtToPdf, pdfToDocx, pdfToMarkdown, pdfToOdg, pdfToOdp, pdfToOds, pdfToOdt, pdfToPptx, pdfToXlsx, pptxToPdf, xlsxToPdf } from './convert';
 
@@ -226,6 +226,30 @@ describe('odsToPdf', () => {
     const text = layout.pages[0]?.items.filter((item) => item.kind === 'text').map((item) => item.text) ?? [];
     expect(text).toContain('A'); // column-letter header label
     expect(text).toContain('1'); // row-number header label
+  });
+
+  // End-to-end proof for the per-cell decoration wiring, all the way from real ODF style XML: decoratedOdsBytes declares fo:background-color / fo:border / fo:text-align / style:vertical-align on real table-cell styles, odf.js's readOds resolves all four onto ContentSheetCell, and src/layout/sheets.ts turns them into genuine LayoutRect/LayoutLine items and a genuinely different text position. Asserted against onDocument's own LayoutDocument rather than a readPdf round trip, because readPdf never reconstructs a 'line' kind item at all (a documented, pre-existing asymmetry -- see the print-settings test above for the same reason).
+  it('renders a decorated cell\'s own background, borders, alignment, and vertical alignment into the resulting layout', () => {
+    let pkg: DocumentPackage | undefined;
+    odsToPdf(decoratedOdsBytes(), { onDocument: (p) => { pkg = p; } });
+    const items = pkg?.layout?.pages[0]?.items ?? [];
+
+    const rects = items.filter((item): item is LayoutRect => item.kind === 'rect');
+    expect(rects).toHaveLength(1); // exactly the one cell that declared a background
+    expect(rects[0]).toMatchObject({ fill: { r: 1, g: 1, b: 0 } });
+
+    // Cell A declared all four edges via the fo:border shorthand, cell B exactly one (fo:border-bottom) -- five border lines in total, and gridlines are off in this fixture so nothing else contributes a line.
+    const lines = items.filter((item): item is LayoutLine => item.kind === 'line');
+    expect(lines).toHaveLength(5);
+    expect(lines.filter((line) => line.widthPt === 2 && line.color.b === 1)).toHaveLength(4);
+    expect(lines.filter((line) => line.widthPt === 1 && line.color.r === 1)).toHaveLength(1);
+
+    // A is right-aligned and top-aligned; B takes the string default (left) and the bottom default. Both cells sit in the same row of equal-width columns, so A sitting further right within its own column than B does within its own, and higher up the page than B, both follow only from the decoration having been honoured.
+    const texts = items.filter((item): item is LayoutText => item.kind === 'text');
+    const textA = texts.find((item) => item.text === 'A')!;
+    const textB = texts.find((item) => item.text === 'B')!;
+    expect(textA.xPt).toBeGreaterThan(textB.xPt / 2); // right-aligned within column A, not at its own left inset (which would be ~2pt)
+    expect(textA.yPt).toBeGreaterThan(textB.yPt); // top-aligned sits higher up the page (larger PDF y) than bottom-aligned
   });
 
   it('throws when the signal is already aborted', () => {
