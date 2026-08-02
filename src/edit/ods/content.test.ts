@@ -1,7 +1,7 @@
+import type { ContentDocument } from 'document-schema.js';
+import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
 import { readOds } from 'odf.js';
 import { describe, expect, it } from 'vitest';
-import type { ContentDocument } from '../../model/content';
-import { CONTENT_FORMAT_VERSION } from '../../model/content';
 import { buildOdsPackage } from './content';
 
 function spreadsheetDocument(): ContentDocument {

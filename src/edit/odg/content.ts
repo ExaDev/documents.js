@@ -1,7 +1,6 @@
+import type { ContentDocument, ContentShape, ContentVector } from 'document-schema.js';
 import type { Package } from 'odf.js';
 import { base64ToBytes } from 'odf.js';
-import type { ContentShape, ContentVector } from 'document-schema.js';
-import type { ContentDocument } from '../../model/content';
 import { populateParagraph } from '../odt/content';
 import { createOdg } from './editor';
 import type { OdgPage } from './page';

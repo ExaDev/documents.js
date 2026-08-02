@@ -68,10 +68,11 @@ export {
   zipPackage,
 } from 'ooxml.js';
 
-// --- The semantic content model: one read+write-capable model for both docx and pptx, instead of ooxml.js's two one-way, lossy, format-specific typed readers. The full vocabulary (ContentBlock and everything beneath it) is sourced from document-schema.js, the sibling schema package shared with ooxml.js; only the ContentDocument envelope itself (and its own CONTENT_FORMAT_VERSION) stays local to this package -- see src/model/content.ts. ---
+// --- The semantic content model: one read+write-capable model for both docx and pptx, instead of ooxml.js's two one-way, lossy, format-specific typed readers. The full vocabulary (ContentDocument, ContentBlock, and everything beneath them) is sourced from document-schema.js, the sibling schema package shared with ooxml.js and odf.js -- this package defines no schema of its own here, only consumes and re-exports document-schema.js's. ---
 export type {
   ContentBlock,
   ContentCellValue,
+  ContentDocument,
   ContentDrawPage,
   ContentImageBlock,
   ContentListMembership,
@@ -99,8 +100,10 @@ export type {
   ContentVector,
 } from 'document-schema.js';
 export {
+  CONTENT_FORMAT_VERSION,
   ContentBlockSchema,
   ContentCellValueSchema,
+  ContentDocumentSchema,
   ContentDrawPageSchema,
   ContentImageBlockSchema,
   ContentPageBreakSchema,
@@ -126,14 +129,12 @@ export {
   ContentVectorSchema,
   isContentBlock,
 } from 'document-schema.js';
-export type { ContentDocument } from './model/content';
-export { CONTENT_FORMAT_VERSION, ContentDocumentSchema } from './model/content';
 
 // --- The PDF-side pivot model, also sourced from document-schema.js. ---
 export type { LayoutDocument, LayoutEllipse, LayoutImage, LayoutImageAsset, LayoutItem, LayoutLine, LayoutLink, LayoutMetadata, LayoutPage, LayoutPath, LayoutPathSegment, LayoutRect, LayoutSubpath, LayoutText } from 'document-schema.js';
 export { LAYOUT_FORMAT_VERSION } from 'document-schema.js';
 
-// --- document-schema.js's own DocumentPackage type/schema (the envelope pairing its ContentDocument with a LayoutDocument) and its self-describing-JSON helpers. contentDocumentWithSchema / documentSchemaKindOf / documentFromJson's ContentDocument branch / ContentDocumentJson all operate on document-schema.js's OWN ContentDocument shape (the raw content+layout pivot) -- a DIFFERENT, incompatible type from this package's own ContentDocument/ContentDocumentSchema above (a thinner per-conversion envelope wrapping ContentSection/ContentSlide/ContentSheet/ContentDrawPage). document-schema.js's own ContentDocument/ContentDocumentSchema are deliberately not re-exported here under their original names, to avoid colliding with this package's own exports of the same name -- import them directly from document-schema.js if you need to construct/validate a raw value for contentDocumentWithSchema. ---
+// --- document-schema.js's own DocumentPackage type/schema (the envelope pairing a ContentDocument with a LayoutDocument) and its self-describing-JSON helpers. contentDocumentWithSchema / documentSchemaKindOf / documentFromJson's ContentDocument branch / ContentDocumentJson all operate on the identical ContentDocument type exported above. ---
 export type {
   ContentDocumentJson,
   DocumentJsonResult,

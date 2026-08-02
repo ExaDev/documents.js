@@ -1,5 +1,6 @@
 import type {
   ContentBlock,
+  ContentDocument,
   ContentDrawPage,
   ContentParagraph,
   ContentPathPoint,
@@ -26,11 +27,10 @@ import type {
   LayoutSubpath,
   LayoutText,
 } from 'document-schema.js';
+import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
 import { resolveStandardFont, STANDARD_METRICS } from 'pdf-codec';
 import type { Box, Margins } from '../model/geometry';
 import { flipY } from '../model/geometry';
-import type { ContentDocument } from '../model/content';
-import { CONTENT_FORMAT_VERSION } from '../model/content';
 import type { Alignment } from '../model/style';
 import { throwIfAborted } from '../ports/abort';
 

@@ -1,6 +1,5 @@
+import type { ContentBlock, ContentDocument, ContentParagraph, ContentTable } from 'document-schema.js';
 import type { Package } from 'odf.js';
-import type { ContentBlock, ContentParagraph, ContentTable } from 'document-schema.js';
-import type { ContentDocument } from '../../model/content';
 import type { OdtBody } from './editor';
 import { createOdt } from './editor';
 import type { OdtList, OdtListItem } from './list';

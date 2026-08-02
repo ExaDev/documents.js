@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import type { ContentDocument } from 'document-schema.js';
 import { bytesToBase64 } from 'ooxml.js';
-import type { ContentDocument } from '../../model/content';
 import { buildDocxPackage } from './content';
 import { DocxEditor } from './editor';
 

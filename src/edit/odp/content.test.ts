@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import type { ContentDocument } from 'document-schema.js';
 import { bytesToBase64 } from 'odf.js';
-import type { ContentDocument } from '../../model/content';
 import { buildOdpPackage } from './content';
 import { OdpEditor } from './editor';
 

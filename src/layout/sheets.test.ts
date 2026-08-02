@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { ContentSheet, ContentSheetCell, ContentSheetPrintSettings, LayoutItem, LayoutLine, LayoutText } from 'document-schema.js';
-import { CONTENT_FORMAT_VERSION } from '../model/content';
-import type { ContentDocument } from '../model/content';
+import type { ContentDocument, ContentSheet, ContentSheetCell, ContentSheetPrintSettings, LayoutItem, LayoutLine, LayoutText } from 'document-schema.js';
+import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
 import type { TextMeasurer } from 'pdf-codec';
 import { convertSpreadsheetToLayout } from './sheets';
 

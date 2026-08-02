@@ -1,5 +1,5 @@
+import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
 import { describe, expect, it } from 'vitest';
-import { CONTENT_FORMAT_VERSION } from '../../model/content';
 import { minimalDocxPackage } from '../../test-support/docx';
 import { readDocxContent } from './read';
 

@@ -1,9 +1,8 @@
-import type { ContentEmbeddedObjectBlock, ContentParagraph, ContentShape, ContentSlide, ContentTable, LayoutDocument, LayoutImage, LayoutImageAsset, LayoutItem, LayoutLink, LayoutPage, LayoutText } from 'document-schema.js';
+import type { ContentDocument, ContentEmbeddedObjectBlock, ContentParagraph, ContentShape, ContentSlide, ContentTable, LayoutDocument, LayoutImage, LayoutImageAsset, LayoutItem, LayoutLink, LayoutPage, LayoutText } from 'document-schema.js';
 import { COLOR_BLACK, LAYOUT_FORMAT_VERSION } from 'document-schema.js';
 import { layoutFormula } from '../mathml/layout';
 import type { Box } from '../model/geometry';
 import { flipY } from '../model/geometry';
-import type { ContentDocument } from '../model/content';
 import type { EmbeddedFormula } from '../model/formula';
 import type { Point, PositionedFormula, TextMeasurer } from 'pdf-codec';
 import { loadMathFont, rotatePointAboutCenter, wrapRunsToWidth } from 'pdf-codec';

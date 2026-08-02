@@ -1,7 +1,7 @@
+import type { ContentDocument } from 'document-schema.js';
+import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
 import { MarkdownUnsupportedDocumentKindError } from 'markdown-codec';
 import { describe, expect, it } from 'vitest';
-import type { ContentDocument } from '../model/content';
-import { CONTENT_FORMAT_VERSION } from '../model/content';
 import { richMarkdownText } from '../test-support/markdown';
 import { readMarkdownContent } from './read';
 import { buildMarkdownText } from './write';

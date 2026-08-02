@@ -1,8 +1,7 @@
-import type { ContentSheet, ContentSheetCell, ContentSheetColumn, ContentSheetPrintSettings, ContentSheetRow } from 'document-schema.js';
+import type { ContentDocument, ContentSheet, ContentSheetCell, ContentSheetColumn, ContentSheetPrintSettings, ContentSheetRow } from 'document-schema.js';
+import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
 import type { HsqldbTable } from '../hsqldb/script';
 import { displayTextFor } from '../hsqldb/script';
-import type { ContentDocument } from '../model/content';
-import { CONTENT_FORMAT_VERSION } from '../model/content';
 import { PAGE_SIZE_A4 } from '../model/geometry';
 
 // Maps the table data readOdbTables/parseHsqldbScript produces onto document-schema.js's own ContentSheetSchema pivot -- the same pivot ooxml.js's buildXlsxPackage and this package's own buildOdsPackage/convertSpreadsheetToLayout already consume -- so odbToXlsx (src/convert/convert.ts) is nothing more than odbTablesToSpreadsheetDocument(readOdbTables(pkg)) fed straight into buildXlsxPackage. One sheet per table: a header row of the table's own column names, then one data row per HsqldbTable row, each cell already carrying the typed ContentCellValue the SQL parser produced.

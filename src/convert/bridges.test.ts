@@ -1,10 +1,8 @@
-import type { DocumentPackage } from 'document-schema.js';
-import { DOCUMENT_PACKAGE_FORMAT_VERSION } from 'document-schema.js';
+import type { ContentDocument, DocumentPackage } from 'document-schema.js';
+import { CONTENT_FORMAT_VERSION, DOCUMENT_PACKAGE_FORMAT_VERSION } from 'document-schema.js';
 import { decodePackage as decodeOdfPackage } from 'odf.js';
 import { buildXlsxPackage, decodePackage as decodeOoxmlPackage, encodePackage as encodeOoxmlPackage, readXlsxContent } from 'ooxml.js';
 import { describe, expect, it, vi } from 'vitest';
-import type { ContentDocument } from '../model/content';
-import { CONTENT_FORMAT_VERSION } from '../model/content';
 import { createDocx } from '../edit/docx/editor';
 import { createOdp } from '../edit/odp/editor';
 import { createOdt } from '../edit/odt/editor';

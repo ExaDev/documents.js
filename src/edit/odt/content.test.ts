@@ -1,5 +1,5 @@
+import type { ContentDocument } from 'document-schema.js';
 import { describe, expect, it } from 'vitest';
-import type { ContentDocument } from '../../model/content';
 import { buildOdtPackage } from './content';
 import { OdtEditor } from './editor';
 

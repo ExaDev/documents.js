@@ -1,7 +1,7 @@
+import type { ContentDocument } from 'document-schema.js';
+import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
 import type { Box } from '../../model/geometry';
 import { PAGE_SIZE_A4 } from '../../model/geometry';
-import type { ContentDocument } from '../../model/content';
-import { CONTENT_FORMAT_VERSION } from '../../model/content';
 import type { EmbeddedFormula } from '../../model/formula';
 
 const ZERO_MARGINS = { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 };
