@@ -6,6 +6,39 @@
 
 `markdown-codec` is a sibling of [`pdf-codec`](https://github.com/ExaDev/pdf-codec): the same "hand-write the format instead of wrapping a third-party library" bet, aimed at CommonMark and its GitHub Flavored Markdown (GFM) extensions rather than PDF. No `micromark`/`remark`/`marked`/`markdown-it`/`commonmark`/`mdast`/`unified`/`turndown`/`showdown` dependency anywhere in this package — see `eslint.config.ts`'s `no-restricted-imports` rule, which bans importing any of them by name, matching this family's own zero-supply-chain-surface ethos: the only runtime dependencies are `document-schema.js` (the shared pivot) and `zod` (schema validation). `readMarkdown`/`writeMarkdown` read and write `document-schema.js`'s shared `ContentDocument` directly, the same pivot [`documents.js`](https://github.com/ExaDev/documents.js) already builds docx/pptx/odt/odp conversions around, so a caller can bridge markdown to any other format that pivot already supports without this package knowing anything about docx, PDF, or ODF.
 
+```mermaid
+graph TD
+    schema("document-schema.js")
+    ooxml("ooxml.js")
+    odf("odf.js")
+    pdfcodec("pdf-codec")
+    mdcodec("markdown-codec")
+    documents("documents.js")
+    cli("document-cli")
+
+    schema --> ooxml
+    schema --> odf
+    schema --> pdfcodec
+    schema --> mdcodec
+    schema --> documents
+    ooxml --> documents
+    odf --> documents
+    pdfcodec --> documents
+    mdcodec --> documents
+    documents --> cli
+    odf --> cli
+
+    click schema "https://github.com/ExaDev/document-schema.js" "document-schema.js"
+    click ooxml "https://github.com/ExaDev/ooxml.js" "ooxml.js"
+    click odf "https://github.com/ExaDev/odf.js" "odf.js"
+    click pdfcodec "https://github.com/ExaDev/pdf-codec" "pdf-codec"
+    click mdcodec "https://github.com/ExaDev/markdown-codec" "markdown-codec"
+    click documents "https://github.com/ExaDev/documents.js" "documents.js"
+    click cli "https://github.com/ExaDev/document-cli" "document-cli"
+
+    style mdcodec fill:#f9a825,stroke:#333,stroke-width:3px
+```
+
 ## Status
 
 The scanner, block parser (`src/block/`), and inline parser (`src/inline/`) are complete hand-written implementations of CommonMark 0.31.2's own two-phase parsing algorithm, plus GFM's table/strikethrough/autolink/task-list-item extensions. `readMarkdown`/`writeMarkdown`/`markdownCodec` (`src/read.ts`/`src/write.ts`/`src/codec.ts`) are wired and real — front matter extraction, block/inline parsing, and lowering to `ContentDocument` compose in one call through `src/lower/lower.ts`'s `lowerMarkdown`; `src/emit/emit.ts`'s `emitMarkdown` is the structural inverse. Tooling (build, lint, typecheck, CI, release) is fully wired.
