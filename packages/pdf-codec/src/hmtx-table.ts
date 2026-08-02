@@ -10,11 +10,11 @@ export function parseHmtx(font: SfntFont): HmtxTable {
   const hheaBytes = sfntTableBytes(font, 'hhea');
   const hmtxBytes = sfntTableBytes(font, 'hmtx');
   if (hheaBytes === undefined || hmtxBytes === undefined) {
-    throw new Error('math font has no hhea/hmtx table');
+    throw new Error('font has no hhea/hmtx table');
   }
   const numberOfHMetrics = u16(hheaBytes, 34);
   if (numberOfHMetrics === 0) {
-    throw new Error('math font hhea numberOfHMetrics is zero');
+    throw new Error('font hhea numberOfHMetrics is zero');
   }
   const lastWidth = u16(hmtxBytes, (numberOfHMetrics - 1) * 4);
 

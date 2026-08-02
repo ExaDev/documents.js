@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { loadMathFont } from './math-font';
 
-// Every expected value below was independently verified against the real vendored assets/fonts/STIXTwoMath-Regular.otf's own raw bytes while building math-table.ts/math-cmap.ts/math-hmtx.ts (a standalone Node script reading the sfnt table directory directly, not this package's own parser) -- these are real, external cross-checks, not values derived from and re-asserted against this module's own output.
+// Every expected value below was independently verified against the real vendored assets/fonts/STIXTwoMath-Regular.otf's own raw bytes while building math-table.ts/cmap-table.ts/hmtx-table.ts (a standalone Node script reading the sfnt table directory directly, not this package's own parser) -- these are real, external cross-checks, not values derived from and re-asserted against this module's own output.
 describe('loadMathFont', () => {
   it('parses the embedded font header metrics', () => {
     const { font } = loadMathFont();

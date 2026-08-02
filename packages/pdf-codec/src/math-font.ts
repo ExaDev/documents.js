@@ -6,10 +6,10 @@
 import { base64ToBytes } from './util/base64';
 import type { MathFontMetrics, MathGlyphMetrics } from './math-types';
 import { STIX_TWO_MATH_FONT_BASE64 } from './assets/stix-two-math-font';
-import type { CmapLookup } from './math-cmap';
-import { buildCmapLookup } from './math-cmap';
-import type { HmtxTable } from './math-hmtx';
-import { parseHmtx } from './math-hmtx';
+import type { CmapLookup } from './cmap-table';
+import { buildCmapLookup } from './cmap-table';
+import type { HmtxTable } from './hmtx-table';
+import { parseHmtx } from './hmtx-table';
 import type { MathTable } from './math-table';
 import { parseMathTable } from './math-table';
 import type { SfntFont } from './sfnt';
@@ -108,7 +108,11 @@ export function loadMathFont(): LoadedMathFont {
   }
 
   const bytes = base64ToBytes(STIX_TWO_MATH_FONT_BASE64);
-  const sfnt: SfntFont = parseSfnt(bytes);
+  // The embedded font is a vendored, checked-in asset, not untrusted input, so every "this font is unreadable" branch below is an invariant check on this package's own build output rather than a case a caller could hit with a bad document -- parseSfnt/buildCmapLookup return `undefined` for a malformed font because the same parsers also read fonts extracted from arbitrary source documents (see their own module comments).
+  const sfnt: SfntFont | undefined = parseSfnt(bytes);
+  if (sfnt === undefined) {
+    throw new Error('embedded math font is not a readable sfnt container');
+  }
   const headBytes = sfntTableBytes(sfnt, 'head');
   const hheaBytes = sfntTableBytes(sfnt, 'hhea');
   const os2Bytes = sfntTableBytes(sfnt, 'OS/2');
@@ -126,6 +130,9 @@ export function loadMathFont(): LoadedMathFont {
   // STIX Two Math is an upright design (mathvariant='italic' selects a real, distinct, upright-drawn ITALIC GLYPH rather than an algorithmically slanted one -- see variant.ts), so its FontDescriptor's own /ItalicAngle is always 0 -- this module doesn't parse 'post's own Fixed-format italicAngle field at all, since nothing this package ever draws through this font needs a non-zero value.
 
   const cmap = buildCmapLookup(sfnt);
+  if (cmap === undefined) {
+    throw new Error('embedded math font has no readable cmap subtable');
+  }
   const hmtx = parseHmtx(sfnt);
   const math = parseMathTable(sfnt);
 
