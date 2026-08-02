@@ -265,11 +265,15 @@ export type ContentSlide = z.infer<typeof ContentSlideSchema>;
 
 // Spreadsheet content model. Mirrors ODF's own office:value-type vocabulary for cell values (ContentCellValueSchema) plus the sparse cell/column/row addressing and print-settings shape every spreadsheet format (xlsx, ods) shares. No reader or writer in any package consumes this yet -- it exists so odf.js can target a stable, correctly-typed shape for its own .ods reader.
 
-// A cell's own computed/typed value, one variant per ODF office:value-type. formula and displayText live on ContentSheetCellSchema itself, not per-variant here, since a formula can produce any of these value kinds and displayText is a per-cell rendering concern, not part of the value's own type.
+// A decimal-string pattern schema for an exact, arbitrary-precision numeric representation -- optional sign, no leading zeros (other than a bare '0'), an optional fractional part. Deliberately a string, not z.bigint(): bigint is not JSON-serializable and z.toJSONSchema() cannot represent it at all, even with unrepresentable: 'any' (it would silently emit an empty schema).
+export const DecimalStringSchema = z.string().regex(/^-?(0|[1-9]\d*)(\.\d+)?$/);
+export type DecimalString = z.infer<typeof DecimalStringSchema>;
+
+// A cell's own computed/typed value, one variant per ODF office:value-type. formula and displayText live on ContentSheetCellSchema itself, not per-variant here, since a formula can produce any of these value kinds and displayText is a per-cell rendering concern, not part of the value's own type. exactValue is an additive-optional sidecar on the number/percentage/currency variants only (the ones a real spreadsheet stores as an arbitrary-precision decimal underneath): value always remains the nearest IEEE-754 double approximation, present and populated exactly as before; exactValue, when present, is the authoritative exact decimal representation, and a producer should only set it when `String(Number(exactValue))` would not round-trip back to `exactValue` exactly -- so it is absent for the overwhelming majority of real cells (anything a double already represents exactly) and adds zero bytes to ordinary documents.
 export const ContentCellValueSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('number'), value: z.number() }),
-  z.object({ kind: z.literal('percentage'), value: z.number() }), // the underlying numeric value, e.g. 0.5 for a cell displaying "50%"
-  z.object({ kind: z.literal('currency'), value: z.number(), currency: z.string().optional() }), // currency is the ISO 4217 code (e.g. 'USD'), mirroring ODF's office:currency
+  z.object({ kind: z.literal('number'), value: z.number(), exactValue: DecimalStringSchema.optional() }),
+  z.object({ kind: z.literal('percentage'), value: z.number(), exactValue: DecimalStringSchema.optional() }), // the underlying numeric value, e.g. 0.5 for a cell displaying "50%"
+  z.object({ kind: z.literal('currency'), value: z.number(), currency: z.string().optional(), exactValue: DecimalStringSchema.optional() }), // currency is the ISO 4217 code (e.g. 'USD'), mirroring ODF's office:currency
   z.object({ kind: z.literal('boolean'), value: z.boolean() }),
   z.object({ kind: z.literal('date'), value: z.string() }), // ISO-8601 date, e.g. '2026-07-30'
   z.object({ kind: z.literal('time'), value: z.string() }), // ISO-8601 time, e.g. '13:30:00'
