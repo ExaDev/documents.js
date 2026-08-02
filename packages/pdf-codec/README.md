@@ -10,6 +10,35 @@ That is a genuinely large undertaking — this codec is comparable in size to a 
 
 `documents.js` uses this package to convert docx/pptx/odt/odp/ods/odg to and from PDF, and to render MathML formulas (typeset by its own `src/mathml/` engine) through the embedded math font this package parses and writes. That MathML *layout* engine deliberately stays in `documents.js` — see [Architecture](#architecture) below for exactly where the boundary between the two packages sits and why a real `MathBox` value crosses it with zero cast or wrapper.
 
+```mermaid
+graph TD
+    schema("document-schema.js")
+    ooxml("ooxml.js")
+    odf("odf.js")
+    pdfcodec("pdf-codec")
+    documents("documents.js")
+    cli("document-cli")
+
+    schema --> ooxml
+    schema --> odf
+    schema --> pdfcodec
+    schema --> documents
+    ooxml --> documents
+    odf --> documents
+    pdfcodec --> documents
+    documents --> cli
+    odf --> cli
+
+    click schema "https://github.com/ExaDev/document-schema.js" "document-schema.js"
+    click ooxml "https://github.com/ExaDev/ooxml.js" "ooxml.js"
+    click odf "https://github.com/ExaDev/odf.js" "odf.js"
+    click pdfcodec "https://github.com/ExaDev/pdf-codec" "pdf-codec"
+    click documents "https://github.com/ExaDev/documents.js" "documents.js"
+    click cli "https://github.com/ExaDev/document-cli" "document-cli"
+
+    style pdfcodec fill:#f9a825,stroke:#333,stroke-width:3px
+```
+
 ## Getting started
 
 Requires Node.js `>=20` and pnpm `11.6.0` (pinned via `packageManager` in `package.json`).
