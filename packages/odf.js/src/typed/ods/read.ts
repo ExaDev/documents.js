@@ -350,7 +350,7 @@ function readPrintSettings(
     settings.printRange = printRange;
   }
   if (scale !== undefined) {
-    settings.scale = scale;
+    settings.scalePercent = scale;
   }
   if (fitToPages !== undefined) {
     settings.fitToPages = fitToPages;

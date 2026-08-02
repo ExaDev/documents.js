@@ -169,13 +169,13 @@ describe('readOds: kitchen-sink.ods (real LibreOffice output)', () => {
     });
 
     it('reads a percentage scale from style:scale-to="150%"', () => {
-      expect(data.printSettings.scale).toBe(150);
+      expect(data.printSettings.scalePercent).toBe(150);
       expect(data.printSettings.fitToPages).toBeUndefined();
     });
 
     it('reads a fit-to-N-pages scale from style:scale-to-X/style:scale-to-Y on the Summary sheet', () => {
       expect(summary.printSettings.fitToPages).toEqual({ width: 1, height: 2 });
-      expect(summary.printSettings.scale).toBeUndefined();
+      expect(summary.printSettings.scalePercent).toBeUndefined();
     });
 
     it('reads repeat rows/columns from the REAL table:table-header-rows/table:table-header-columns wrapper elements -- not a named range', () => {
@@ -237,7 +237,7 @@ describe('readOds: minimal.ods (real LibreOffice output, default/unmodified shee
     expect(sheet.printSettings.headers).toBe(false);
     expect(sheet.printSettings.pageOrder).toBe('downThenOver');
     expect(sheet.printSettings.printRange).toBeUndefined();
-    expect(sheet.printSettings.scale).toBeUndefined();
+    expect(sheet.printSettings.scalePercent).toBeUndefined();
     expect(sheet.printSettings.fitToPages).toBeUndefined();
     expect(sheet.printSettings.repeatRows).toBeUndefined();
     expect(sheet.printSettings.repeatColumns).toBeUndefined();
