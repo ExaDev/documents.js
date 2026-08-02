@@ -1,3 +1,17 @@
+# [1.60.0](https://github.com/ExaDev/documents.js/compare/v1.59.0...v1.60.0) (2026-08-02)
+
+
+### Bug Fixes
+
+* pin markdown-codec to its final commit and unblock its build script ([2486f76](https://github.com/ExaDev/documents.js/commit/2486f7691ba97307aacad57f58eb3f79bae6916c))
+* re-pin markdown-codec to its prebuilt-dist commit ([e453317](https://github.com/ExaDev/documents.js/commit/e4533177e2f18b979e754808a5d63943d71290c8))
+
+
+### Features
+
+* add markdown reader/writer adapters ([94783f3](https://github.com/ExaDev/documents.js/commit/94783f3f2e6053526e7b830da825e928e6f1b597))
+* wire markdown into the conversion port ([d9c4fbb](https://github.com/ExaDev/documents.js/commit/d9c4fbba686ceb15f84fcd145127408f5253df51))
+
 # [1.59.0](https://github.com/ExaDev/documents.js/compare/v1.58.0...v1.59.0) (2026-08-02)
 
 
