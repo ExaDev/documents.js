@@ -19,7 +19,9 @@ import { readOdtContent } from '../odf/odt/read';
 import { minimalOdpBytes } from '../test-support/odp';
 import { richOdsBytes } from '../test-support/ods';
 import { minimalOdtBytes } from '../test-support/odt';
-import { docxToOdt, odpToPptx, odsToXlsx, odtToDocx, pptxToOdp, xlsxToOds } from './convert';
+import { decodeMarkdownText, encodeMarkdownText } from '../markdown/text';
+import { richMarkdownText } from '../test-support/markdown';
+import { docxToMarkdown, docxToOdt, markdownToDocx, markdownToOdt, odpToPptx, odsToXlsx, odtToDocx, odtToMarkdown, pptxToOdp, xlsxToOds } from './convert';
 
 // The dedicated round-trip suite for the six PDF-bypassing cross-format bridges (convert.ts's own "Six cross-format bridges" section) -- exercised via both directions and both starting points for each of the three pairs (odt<->docx, odp<->pptx, ods<->xlsx), per the project's own explicit "we should also have .odt <-> .docx roundtrip tests and similar for the other types" requirement. Real-file, real-LibreOffice verification (independently-produced odt/odp/ods opened through the bridge and back into LibreOffice) is a separate, manual, non-CI-gated step -- see this repo's own README Fidelity section and test:corpus precedent for why that class of check deliberately never runs inside `pnpm test`.
 
@@ -594,5 +596,133 @@ describe('ods <-> xlsx: xlsx -> ods -> xlsx (double hop, starting from a genuine
     controller.abort();
     const xlsxBytes = encodeOoxmlPackage(buildXlsxPackage(buildXlsxNativeContentDocument()));
     expect(() => xlsxToOds(xlsxBytes, { signal: controller.signal })).toThrow();
+  });
+});
+
+// --- markdown <-> docx, markdown <-> odt --------------------------------------------------------------------------
+//
+// markdownToDocx/docxToMarkdown and markdownToOdt/odtToMarkdown are hand-written bridge functions, not something resolveConversionPath's generic one-hop composition executes automatically -- see capability.ts's own module comment for why (local.ts's DocumentConverter only ever executes a 'direct' strategy, never a composed one).
+
+describe('markdownToDocx/docxToMarkdown and markdownToOdt/odtToMarkdown never invoke the layout engine (no PDF-pivot regression)', () => {
+  it('markdownToDocx does not call convertWordprocessingToLayout', () => {
+    const engineSpy = vi.spyOn(engineModule, 'convertWordprocessingToLayout');
+    markdownToDocx(encodeMarkdownText(richMarkdownText()));
+    expect(engineSpy).not.toHaveBeenCalled();
+  });
+
+  it('docxToMarkdown does not call convertWordprocessingToLayout', () => {
+    const docxBytes = markdownToDocx(encodeMarkdownText(richMarkdownText()));
+    const engineSpy = vi.spyOn(engineModule, 'convertWordprocessingToLayout');
+    docxToMarkdown(docxBytes);
+    expect(engineSpy).not.toHaveBeenCalled();
+  });
+
+  it('markdownToOdt does not call convertWordprocessingToLayout', () => {
+    const engineSpy = vi.spyOn(engineModule, 'convertWordprocessingToLayout');
+    markdownToOdt(encodeMarkdownText(richMarkdownText()));
+    expect(engineSpy).not.toHaveBeenCalled();
+  });
+
+  it('odtToMarkdown does not call convertWordprocessingToLayout', () => {
+    const odtBytes = markdownToOdt(encodeMarkdownText(richMarkdownText()));
+    const engineSpy = vi.spyOn(engineModule, 'convertWordprocessingToLayout');
+    odtToMarkdown(odtBytes);
+    expect(engineSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('onDocument (DocumentPackage side channel): markdown bridges', () => {
+  it('markdownToDocx calls onDocument with content populated and layout left undefined', () => {
+    let captured: DocumentPackage | undefined;
+    const docxBytes = markdownToDocx(encodeMarkdownText(richMarkdownText()), { onDocument: (pkg) => { captured = pkg; } });
+    expect(docxBytes.length).toBeGreaterThan(0);
+    expect(captured).toBeDefined();
+    expect(captured!.content.kind).toBe('wordprocessing');
+    expect(captured!.layout).toBeUndefined();
+  });
+});
+
+describe('markdown <-> docx: markdown -> docx -> markdown', () => {
+  it('carries the heading, bold run, list, and table through both hops', () => {
+    const docxBytes = markdownToDocx(encodeMarkdownText(richMarkdownText()));
+    const roundTrippedBytes = docxToMarkdown(docxBytes);
+    const text = decodeMarkdownText(roundTrippedBytes);
+
+    expect(text).toContain('Report Title');
+    expect(text).toContain('bold');
+    expect(text).toContain('First item');
+    expect(text).toContain('A1');
+  });
+
+  it('carries a Heading1 styleId and list levels through docx as real ContentDocument structure, not just surviving text', () => {
+    const docxBytes = markdownToDocx(encodeMarkdownText(richMarkdownText()));
+    const content = docxContentOf(docxBytes);
+
+    const heading = content.sections[0]!.blocks[0];
+    expect(heading?.kind).toBe('paragraph');
+    expect(heading?.kind === 'paragraph' ? heading.styleId : undefined).toBe('Heading1');
+
+    const listBlocks = content.sections[0]!.blocks.filter((b) => b.kind === 'paragraph' && b.list !== undefined);
+    const levels = listBlocks.map((b) => (b.kind === 'paragraph' ? b.list?.level : undefined));
+    expect(levels).toEqual([0, 0, 1, 0]);
+  });
+
+  it('throws when the signal is already aborted, on both hops', () => {
+    const controller = new AbortController();
+    controller.abort();
+    const markdownBytes = encodeMarkdownText(richMarkdownText());
+    expect(() => markdownToDocx(markdownBytes, { signal: controller.signal })).toThrow();
+    const docxBytes = markdownToDocx(markdownBytes);
+    expect(() => docxToMarkdown(docxBytes, { signal: controller.signal })).toThrow();
+  });
+});
+
+describe('markdown <-> odt: markdown -> odt -> markdown', () => {
+  it('carries the heading, bold run, list, and table through both hops', () => {
+    const odtBytes = markdownToOdt(encodeMarkdownText(richMarkdownText()));
+    const roundTrippedBytes = odtToMarkdown(odtBytes);
+    const text = decodeMarkdownText(roundTrippedBytes);
+
+    expect(text).toContain('Report Title');
+    expect(text).toContain('bold');
+    expect(text).toContain('First item');
+    expect(text).toContain('A1');
+  });
+
+  it('carries a Heading1 styleId through odt as real ContentDocument structure, not just surviving text', () => {
+    const odtBytes = markdownToOdt(encodeMarkdownText(richMarkdownText()));
+    const content = odtContentOf(odtBytes);
+
+    const heading = content.sections[0]!.blocks[0];
+    expect(heading?.kind === 'paragraph' ? heading.styleId : undefined).toBe('Heading1');
+  });
+
+  it('throws when the signal is already aborted, on both hops', () => {
+    const controller = new AbortController();
+    controller.abort();
+    const markdownBytes = encodeMarkdownText(richMarkdownText());
+    expect(() => markdownToOdt(markdownBytes, { signal: controller.signal })).toThrow();
+    const odtBytes = markdownToOdt(markdownBytes);
+    expect(() => odtToMarkdown(odtBytes, { signal: controller.signal })).toThrow();
+  });
+});
+
+// docxToMarkdown/odtToMarkdown starting from a rich, editor-built docx/odt -- proving text, bold+italic styling, and list membership survive the ContentDocument -> markdown direction too, not just markdown -> ContentDocument.
+describe('docx <-> markdown: docx -> markdown -> docx', () => {
+  it('carries text, bold/italic styling, and list membership through both hops', () => {
+    const originalBytes = buildRichDocx();
+    const markdownBytes = docxToMarkdown(originalBytes);
+    const roundTrippedBytes = markdownToDocx(markdownBytes);
+    const roundTripped = docxContentOf(roundTrippedBytes);
+
+    expect(paragraphTexts(roundTripped).join(' ')).toContain('Bold italic coloured text');
+
+    const styledBlock = roundTripped.sections[0]!.blocks.find((b) => b.kind === 'paragraph' && b.runs.some((r) => r.bold));
+    expect(styledBlock?.kind).toBe('paragraph');
+    const styledRun = styledBlock?.kind === 'paragraph' ? styledBlock.runs.find((r) => r.bold) : undefined;
+    expect(styledRun?.bold).toBe(true);
+    expect(styledRun?.italic).toBe(true);
+    // Colour has no markdown source construct at all -- the docxToMarkdown hop drops it, matching writeMarkdown's own documented CommonMark-vocabulary narrowing.
+    expect(styledRun?.color).toBeUndefined();
   });
 });

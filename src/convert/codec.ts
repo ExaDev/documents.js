@@ -1,16 +1,22 @@
 import { z } from 'zod';
-import { DocxBytesSchema, OdgBytesSchema, OdpBytesSchema, OdsBytesSchema, OdtBytesSchema, PdfBytesSchema, PptxBytesSchema, XlsxBytesSchema } from '../model/bytes';
+import { DocxBytesSchema, MarkdownBytesSchema, OdgBytesSchema, OdpBytesSchema, OdsBytesSchema, OdtBytesSchema, PdfBytesSchema, PptxBytesSchema, XlsxBytesSchema } from '../model/bytes';
 import {
+  docxToMarkdown,
   docxToOdt,
   docxToPdf,
+  markdownToDocx,
+  markdownToOdt,
+  markdownToPdf,
   odgToPdf,
   odpToPdf,
   odpToPptx,
   odsToPdf,
   odsToXlsx,
   odtToDocx,
+  odtToMarkdown,
   odtToPdf,
   pdfToDocx,
+  pdfToMarkdown,
   pdfToOdg,
   pdfToOdp,
   pdfToOds,
@@ -60,7 +66,13 @@ export const xlsxPdfCodec = z.codec(XlsxBytesSchema, PdfBytesSchema, {
   encode: (pdfBytes) => pdfToXlsx(pdfBytes),
 });
 
-// odt bytes <-> docx bytes, odp bytes <-> pptx bytes, and ods bytes <-> xlsx bytes: schema-validated z.codec() pairs over the cross-format bridge functions (convert.ts), which unlike every codec above bypass PDF entirely -- see convert.ts's own module comment on that section. These three are consequently NOT subject to the "not round-trip-lossless" caveat the six PDF-pivot codecs above carry (README's Fidelity section); decode/encode is a direct ContentDocument pivot copy with no layout or reconstruction step. Still the no-options form only, for the same reason as above: odtToDocx et al. accept a signal option z.codec()'s fixed decode(input)/encode(output) signature has no room for.
+// markdown bytes <-> PDF bytes: a schema-validated z.codec() pair over markdownToPdf/pdfToMarkdown (convert.ts), which -- unlike xlsxPdfCodec above -- DOES lay markdown out directly (markdownToPdf reuses convertWordprocessingToLayout unmodified, the same engine docxPdfCodec/odtPdfCodec above feed). Still the no-options form only, and still fully subject to the "not round-trip-lossless" caveat every PDF-pivot codec carries -- more so than any other codec in this file, in fact: pdfToMarkdown is the single lossiest conversion in the whole package (see convert.ts's own top-of-file comment and the README's Fidelity section).
+export const markdownPdfCodec = z.codec(MarkdownBytesSchema, PdfBytesSchema, {
+  decode: (markdownBytes) => markdownToPdf(markdownBytes),
+  encode: (pdfBytes) => pdfToMarkdown(pdfBytes),
+});
+
+// odt bytes <-> docx bytes, odp bytes <-> pptx bytes, ods bytes <-> xlsx bytes, markdown bytes <-> docx bytes, and markdown bytes <-> odt bytes: schema-validated z.codec() pairs over the cross-format bridge functions (convert.ts), which unlike every PDF-pivot codec above bypass PDF entirely -- see convert.ts's own module comment on that section. The blanket "not round-trip-lossless doesn't apply to these" claim this comment used to make here is genuinely false for the two markdown pairs below, and is now stated precisely rather than glossed over: odtDocxCodec/odpPptxCodec/odsXlsxCodec decode/encode a direct ContentDocument pivot copy with no layout or reconstruction step, so those three really do carry no PDF-pivot-style lossiness of their own -- but markdownDocxCodec/markdownOdtCodec still lose everything CommonMark/GFM itself cannot represent (colour, font family/size, explicit alignment, page geometry) on the DECODE side (markdown -> docx/odt), simply because that information was never in the markdown source to begin with; ENCODE (docx/odt -> markdown) then discards it a second time on the way back down, same as it always would. That is not the PDF-pivot's geometry-based reconstruction lossiness -- there is still no layout engine and no geometric guessing anywhere in either direction -- but it is real, format-boundary lossiness all the same, and pretending otherwise here would misdescribe what markdownDocxCodec/markdownOdtCodec actually preserve. Still the no-options form only, for the same reason as above: odtToDocx et al. (and now markdownToDocx et al.) accept a signal option z.codec()'s fixed decode(input)/encode(output) signature has no room for.
 export const odtDocxCodec = z.codec(OdtBytesSchema, DocxBytesSchema, {
   decode: (odtBytes) => odtToDocx(odtBytes),
   encode: (docxBytes) => docxToOdt(docxBytes),
@@ -74,4 +86,14 @@ export const odpPptxCodec = z.codec(OdpBytesSchema, PptxBytesSchema, {
 export const odsXlsxCodec = z.codec(OdsBytesSchema, XlsxBytesSchema, {
   decode: (odsBytes) => odsToXlsx(odsBytes),
   encode: (xlsxBytes) => xlsxToOds(xlsxBytes),
+});
+
+export const markdownDocxCodec = z.codec(MarkdownBytesSchema, DocxBytesSchema, {
+  decode: (markdownBytes) => markdownToDocx(markdownBytes),
+  encode: (docxBytes) => docxToMarkdown(docxBytes),
+});
+
+export const markdownOdtCodec = z.codec(MarkdownBytesSchema, OdtBytesSchema, {
+  decode: (markdownBytes) => markdownToOdt(markdownBytes),
+  encode: (odtBytes) => odtToMarkdown(odtBytes),
 });

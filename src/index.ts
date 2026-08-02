@@ -161,8 +161,8 @@ export type { LayoutColor } from './model/color';
 export { COLOR_BLACK, rgbHexToColor } from './model/color';
 export type { Alignment, LayoutFont } from './model/style';
 export { DEFAULT_LAYOUT_FONT } from './model/style';
-// Magic-byte-validated Uint8Array schemas, so a caller passing the wrong format -- to these functions directly, or as the input/output schema half of a z.codec() below -- gets a clear Zod validation error instead of a confusing failure three layers down. The Odt/Ods/Odp/Odg schemas check the package's actual declared media type (see src/model/bytes.ts), a stronger check than Docx/PptxBytesSchema's generic ZIP-signature check.
-export { DocxBytesSchema, OdgBytesSchema, OdpBytesSchema, OdsBytesSchema, OdtBytesSchema, PdfBytesSchema, PptxBytesSchema, XlsxBytesSchema } from './model/bytes';
+// Magic-byte-validated Uint8Array schemas, so a caller passing the wrong format -- to these functions directly, or as the input/output schema half of a z.codec() below -- gets a clear Zod validation error instead of a confusing failure three layers down. The Odt/Ods/Odp/Odg schemas check the package's actual declared media type (see src/model/bytes.ts), a stronger check than Docx/PptxBytesSchema's generic ZIP-signature check. MarkdownBytesSchema is architecturally different from every other schema here -- it checks only well-formed UTF-8, since markdown has no magic bytes or format-level header of its own to check (see src/model/bytes.ts's own comment).
+export { DocxBytesSchema, MarkdownBytesSchema, OdgBytesSchema, OdpBytesSchema, OdsBytesSchema, OdtBytesSchema, PdfBytesSchema, PptxBytesSchema, XlsxBytesSchema } from './model/bytes';
 
 // --- The live-view read+write editors: a real manipulation API for docx/pptx content, since ooxml.js's own typed readers explicitly forbid write-back. ---
 export type { DocxBody } from './edit/docx/editor';
@@ -246,6 +246,10 @@ export { readOdsContent } from './odf/ods/read';
 export { readOdgContent } from './odf/odg/read';
 export type { StandaloneFormulaContent } from './odf/formula/read';
 export { readOdfEmbeddedFormula, readOdfFormulaContent } from './odf/formula/read';
+// markdown <-> ContentDocument -- readMarkdownContent/buildMarkdownText are thin adapters over markdown-codec's own readMarkdown/writeMarkdown (see src/markdown/read.ts's own module comment), never re-exported here directly for the same reason readDocx/readPptx aren't (see this section's own top-of-file note): markdown-codec's own readMarkdown/writeMarkdown operate on document-schema.js's ContentDocument shape directly, a nominally different type from this package's own local ContentDocument above, so exposing both would invite a caller to reach for the wrong one. decodeMarkdownText/encodeMarkdownText are the byte<->text boundary markdown-codec itself has no opinion on (it operates on strings, not bytes) -- exported for a caller composing readMarkdownContent/buildMarkdownText directly, matching every other independently-exported pipeline stage in this section.
+export { decodeMarkdownText, encodeMarkdownText } from './markdown/text';
+export { readMarkdownContent } from './markdown/read';
+export { buildMarkdownText } from './markdown/write';
 export type { EmbeddedFormula } from './model/formula';
 export type { PositionedFormula } from 'pdf-codec';
 export type { EngineLayoutOptions, WordprocessingLayoutResult } from './layout/engine';
@@ -259,22 +263,22 @@ export { convertDrawingToLayout } from './layout/drawing';
 export type { ReconstructOptions } from './layout/reconstruct';
 export { reconstructDrawing, reconstructPresentation, reconstructSpreadsheet, reconstructWordprocessing } from './layout/reconstruct';
 
-// --- Thirteen ergonomic conversions (docx/pptx/odt/odp/ods/odg/xlsx <-> PDF, all round-trip both ways). xlsx<->pdf (xlsxToPdf/pdfToXlsx) composes the ods<->xlsx bridge with the ods<->pdf layout pair internally -- xlsx has no layout engine of its own -- but is a real, direct, single-call conversion pair from a caller's own point of view, matching the other twelve's own options shape exactly. ---
+// --- Fourteen ergonomic conversions (docx/pptx/odt/odp/ods/odg/xlsx/markdown <-> PDF, all round-trip both ways). xlsx<->pdf (xlsxToPdf/pdfToXlsx) composes the ods<->xlsx bridge with the ods<->pdf layout pair internally -- xlsx has no layout engine of its own -- but is a real, direct, single-call conversion pair from a caller's own point of view, matching the other thirteen's own options shape exactly. markdown<->pdf (markdownToPdf/pdfToMarkdown) DOES lay markdown out directly, reusing convertWordprocessingToLayout/reconstructWordprocessing completely unmodified -- but pdfToMarkdown is the single lossiest conversion in the whole package (see convert.ts's own top-of-file comment and the README's Fidelity section). ---
 export type { DocumentToPdfOptions, PdfToDocumentOptions } from './convert/convert';
-export { docxToPdf, odgToPdf, odpToPdf, odsToPdf, odtToPdf, pdfToDocx, pdfToOdg, pdfToOdp, pdfToOds, pdfToOdt, pdfToPptx, pdfToXlsx, pptxToPdf, xlsxToPdf } from './convert/convert';
+export { docxToPdf, markdownToPdf, odgToPdf, odpToPdf, odsToPdf, odtToPdf, pdfToDocx, pdfToMarkdown, pdfToOdg, pdfToOdp, pdfToOds, pdfToOdt, pdfToPptx, pdfToXlsx, pptxToPdf, xlsxToPdf } from './convert/convert';
 
 // --- odf (a standalone ODF formula document) -> PDF: not one of the thirteen round-trip conversions above (there is no pdfToOdf -- see convert.ts's own module comment on odfToPdf for why: recovering structured MathML from rendered glyphs is a categorically different, OCR-adjacent problem, not a geometry-reconstruction one). Renders via src/mathml's layoutFormula and the embedded STIX Two Math font, the same pipeline the odt/odp embedded-formula paths use. ---
 export { odfToPdf } from './convert/convert';
 
-// Schema-validated z.codec() pairs over the conversions above (docx/pptx/odt/odp/ods/odg/xlsx bytes <-> PDF bytes), the no-extra-options form -- use docxToPdf/pdfToDocx/pptxToPdf/pdfToPptx/odtToPdf/pdfToOdt/odpToPdf/pdfToOdp/odsToPdf/pdfToOds/odgToPdf/pdfToOdg/xlsxToPdf/pdfToXlsx directly for cancellation or diagnostics.
-export { docxPdfCodec, odgPdfCodec, odpPdfCodec, odsPdfCodec, odtPdfCodec, pptxPdfCodec, xlsxPdfCodec } from './convert/codec';
+// Schema-validated z.codec() pairs over the conversions above (docx/pptx/odt/odp/ods/odg/xlsx/markdown bytes <-> PDF bytes), the no-extra-options form -- use docxToPdf/pdfToDocx/pptxToPdf/pdfToPptx/odtToPdf/pdfToOdt/odpToPdf/pdfToOdp/odsToPdf/pdfToOds/odgToPdf/pdfToOdg/xlsxToPdf/pdfToXlsx/markdownToPdf/pdfToMarkdown directly for cancellation or diagnostics.
+export { docxPdfCodec, markdownPdfCodec, odgPdfCodec, odpPdfCodec, odsPdfCodec, odtPdfCodec, pptxPdfCodec, xlsxPdfCodec } from './convert/codec';
 
-// --- Six cross-format bridges (odt<->docx, odp<->pptx, ods<->xlsx), bypassing PDF entirely -- see convert.ts's own module comment on this section for why these carry substantially higher fidelity than the twelve PDF-pivot conversions above. ---
+// --- Ten cross-format bridges, five pairs (odt<->docx, odp<->pptx, ods<->xlsx, markdown<->docx, markdown<->odt), bypassing PDF entirely -- see convert.ts's own module comment on this section for why these carry substantially higher fidelity than the fourteen PDF-pivot conversions above. markdownToDocx/docxToMarkdown and markdownToOdt/odtToMarkdown are hand-written bridge functions, not something resolveConversionPath's (capability.ts) generic one-hop composition executes automatically -- see capability.ts's own module comment for why: local.ts's DocumentConverter only ever executes a 'direct' strategy, never a composed one, so wiring a pair into the port requires a real, callable, registered function regardless of whether the resolver could theoretically find that path itself. ---
 export type { DocumentBridgeOptions } from './convert/convert';
-export { docxToOdt, odpToPptx, odsToXlsx, odtToDocx, pptxToOdp, xlsxToOds } from './convert/convert';
+export { docxToMarkdown, docxToOdt, markdownToDocx, markdownToOdt, odpToPptx, odsToXlsx, odtToDocx, odtToMarkdown, pptxToOdp, xlsxToOds } from './convert/convert';
 
-// Schema-validated z.codec() pairs over the six bridges above (odt bytes <-> docx bytes, odp bytes <-> pptx bytes, ods bytes <-> xlsx bytes), the no-extra-options form -- use odtToDocx/docxToOdt/odpToPptx/pptxToOdp/odsToXlsx/xlsxToOds directly for cancellation.
-export { odpPptxCodec, odsXlsxCodec, odtDocxCodec } from './convert/codec';
+// Schema-validated z.codec() pairs over the ten bridges above (odt bytes <-> docx bytes, odp bytes <-> pptx bytes, ods bytes <-> xlsx bytes, markdown bytes <-> docx bytes, markdown bytes <-> odt bytes), the no-extra-options form -- use odtToDocx/docxToOdt/odpToPptx/pptxToOdp/odsToXlsx/xlsxToOds/markdownToDocx/docxToMarkdown/markdownToOdt/odtToMarkdown directly for cancellation.
+export { markdownDocxCodec, markdownOdtCodec, odpPptxCodec, odsXlsxCodec, odtDocxCodec } from './convert/codec';
 
 // --- odm (ODF master document, multiple chapters) -> PDF, the one conversion in this package shaped differently from every other: a .odm's chapters are external references (odf.js's readOdm never inlines them -- see odmToPdf's own module comment), so producing a PDF needs a caller-supplied resolveSubDocument callback to hand back each chapter's own .odt bytes. Not part of the twelve-conversion or six-bridge groups above, and not wired into the DocumentConverter port below -- see odmToPdf's own module comment for why. ---
 export type { OdmToPdfOptions } from './convert/convert';

@@ -11,12 +11,15 @@ import { convertDrawingToLayout } from '../layout/drawing';
 import { readOdgContent } from '../odf/odg/read';
 import { readOdsContent } from '../odf/ods/read';
 import { createStandardFontMeasurer, readPdf } from 'pdf-codec';
+import { MarkdownInvalidUtf8Error } from 'markdown-codec';
+import { decodeMarkdownText, encodeMarkdownText } from '../markdown/text';
 import { minimalOdgBytes, minimalOdgPackage } from '../test-support/odg';
 import { chapterOdtBytes, odmBytes, odmPackage } from '../test-support/odm';
+import { richMarkdownText } from '../test-support/markdown';
 import { minimalOdpBytes } from '../test-support/odp';
 import { gridOdsBytes, minimalOdsBytes } from '../test-support/ods';
 import { minimalOdtBytes } from '../test-support/odt';
-import { docxToPdf, inlineOdmSectionToContentSection, odgToPdf, odmToPdf, OdmUnresolvedSectionError, odpToPdf, odsToPdf, odsToXlsx, odtToPdf, pdfToDocx, pdfToOdg, pdfToOdp, pdfToOds, pdfToOdt, pdfToPptx, pdfToXlsx, pptxToPdf, xlsxToPdf } from './convert';
+import { docxToPdf, inlineOdmSectionToContentSection, markdownToPdf, odgToPdf, odmToPdf, OdmUnresolvedSectionError, odpToPdf, odsToPdf, odsToXlsx, odtToPdf, pdfToDocx, pdfToMarkdown, pdfToOdg, pdfToOdp, pdfToOds, pdfToOdt, pdfToPptx, pdfToXlsx, pptxToPdf, xlsxToPdf } from './convert';
 
 // Builds the same intermediate LayoutDocument odgToPdf itself builds internally (readOdgContent -> convertDrawingToLayout), so a test can assert on 'path'/'rect' LayoutItem kinds directly -- readPdf's own content-stream interpreter does not reconstruct 'path'/'line'/'ellipse' items at all (pdf-codec's interpret.ts), so round-tripping the fixture's curve/z-order back through readPdf is not possible; this is the direct way to prove them.
 function layoutFromMinimalOdg() {
@@ -248,6 +251,31 @@ describe('pptxToPdf', () => {
   });
 });
 
+describe('markdownToPdf', () => {
+  // Proves the architectural point this pair adds: readMarkdownContent produces the identical WordprocessingContentDocument shape readDocxContent/readOdtContent do, so markdownToPdf feeds convertWordprocessingToLayout completely unmodified -- the same engine docxToPdf/odtToPdf feed -- and comes out as a real, valid PDF carrying the heading and list content.
+  it('produces valid PDF bytes with the fixture\'s heading, list, and table content', () => {
+    const pdfBytes = markdownToPdf(encodeMarkdownText(richMarkdownText()));
+    expect(pdfHeader(pdfBytes)).toBe('%PDF-');
+
+    const layout = readPdf(pdfBytes);
+    const text = layout.pages.flatMap((page) => page.items).filter((item) => item.kind === 'text').map((item) => item.text).join(' ');
+    expect(text).toContain('Report');
+    expect(text).toContain('Title');
+    expect(text).toContain('First');
+    expect(text).toContain('A1');
+  });
+
+  it('throws MarkdownInvalidUtf8Error for malformed UTF-8 bytes', () => {
+    expect(() => markdownToPdf(new Uint8Array([0xff, 0xfe, 0x00]))).toThrow(MarkdownInvalidUtf8Error);
+  });
+
+  it('throws when the signal is already aborted', () => {
+    const controller = new AbortController();
+    controller.abort();
+    expect(() => markdownToPdf(encodeMarkdownText(richMarkdownText()), { signal: controller.signal })).toThrow();
+  });
+});
+
 describe('pdfToDocx', () => {
   it('round-trips text content through docxToPdf then pdfToDocx', () => {
     const pdfBytes = docxToPdf(buildSampleDocx('Round trip content'));
@@ -278,6 +306,25 @@ describe('pdfToDocx', () => {
     expect(runs.some((r) => r.bold)).toBe(true);
     expect(runs.some((r) => r.color?.r === 1 && r.color.g === 0 && r.color.b === 0)).toBe(true);
     expect(runs.some((r) => r.sizePt === 24)).toBe(true);
+  });
+});
+
+describe('pdfToMarkdown', () => {
+  // The single lossiest conversion in the whole package (see convert.ts's own top-of-file comment): only the plain text content is asserted here, not styling -- reconstructWordprocessing's own geometry-based recovery plus buildMarkdownText's own CommonMark-vocabulary narrowing (no colour, no explicit alignment) means a round-tripped bold run survives as **bold** markdown syntax, which this test does check for, but a coloured run has nothing to survive as at all.
+  it('round-trips text content through markdownToPdf then pdfToMarkdown', () => {
+    const pdfBytes = markdownToPdf(encodeMarkdownText('# Round Trip\n\nSome **bold** content.\n'));
+    const markdownBytes = pdfToMarkdown(pdfBytes);
+    const text = decodeMarkdownText(markdownBytes);
+    expect(text).toContain('Round');
+    expect(text).toContain('Trip');
+    expect(text).toContain('bold');
+  });
+
+  it('throws when the signal is already aborted', () => {
+    const pdfBytes = markdownToPdf(encodeMarkdownText(richMarkdownText()));
+    const controller = new AbortController();
+    controller.abort();
+    expect(() => pdfToMarkdown(pdfBytes, { signal: controller.signal })).toThrow();
   });
 });
 

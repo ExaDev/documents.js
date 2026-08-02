@@ -1,7 +1,11 @@
 import type { DocumentBridgeOptions, DocumentToPdfOptions, PdfToDocumentOptions } from './convert';
 import {
+  docxToMarkdown,
   docxToOdt,
   docxToPdf,
+  markdownToDocx,
+  markdownToOdt,
+  markdownToPdf,
   odfToPdf,
   odgToPdf,
   odpToPdf,
@@ -9,8 +13,10 @@ import {
   odsToPdf,
   odsToXlsx,
   odtToDocx,
+  odtToMarkdown,
   odtToPdf,
   pdfToDocx,
+  pdfToMarkdown,
   pdfToOdg,
   pdfToOdp,
   pdfToOds,
@@ -24,7 +30,9 @@ import {
 } from './convert';
 import type { DocumentFormat } from './port';
 
-// This module models the real ContentDocument-variant compatibility this family already has (wordprocessing = {docx, odt}, presentation = {pptx, odp}, spreadsheet = {xlsx, ods}, drawing = {odg alone}) plus which nodes have a direct layout-engine path to/from LayoutDocument, then exposes a small, capped, one-intermediate-hop path resolver over that model. Every (source, target) pair this package actually supports (local.ts's own DIRECT_EDGES below) has either a direct layout-engine edge to/from pdf, a direct same-variant bridge, or -- for xlsx<->pdf specifically -- a real, ergonomic conversion function (xlsxToPdf/pdfToXlsx, convert.ts) that composes the ods<->xlsx bridge with the ods<->pdf layout edge internally, since xlsx shares the spreadsheet variant with ods but has no layout-engine edge of its own. resolveConversionPath can independently find that identical one-hop path by composing DIRECT_EDGES itself (xlsx -> ods -> pdf, via the ods<->xlsx bridge and ods<->pdf layout edge) -- see capability.test.ts's own dedicated proof of the resolver's own composition mechanism -- but DIRECT_EDGES lists xlsx<->pdf as a direct edge regardless, since resolveConversionPath always prefers a direct match over composing one, and xlsxToPdf/pdfToXlsx are real, single-call functions from a caller's own point of view, not something a caller has to chain themselves.
+// This module models the real ContentDocument-variant compatibility this family already has (wordprocessing = {docx, odt, markdown}, presentation = {pptx, odp}, spreadsheet = {xlsx, ods}, drawing = {odg alone}) plus which nodes have a direct layout-engine path to/from LayoutDocument, then exposes a small, capped, one-intermediate-hop path resolver over that model. Every (source, target) pair this package actually supports (local.ts's own DIRECT_EDGES below) has either a direct layout-engine edge to/from pdf, a direct same-variant bridge, or -- for xlsx<->pdf specifically -- a real, ergonomic conversion function (xlsxToPdf/pdfToXlsx, convert.ts) that composes the ods<->xlsx bridge with the ods<->pdf layout edge internally, since xlsx shares the spreadsheet variant with ods but has no layout-engine edge of its own. resolveConversionPath can independently find that identical one-hop path by composing DIRECT_EDGES itself (xlsx -> ods -> pdf, via the ods<->xlsx bridge and ods<->pdf layout edge) -- see capability.test.ts's own dedicated proof of the resolver's own composition mechanism -- but DIRECT_EDGES lists xlsx<->pdf as a direct edge regardless, since resolveConversionPath always prefers a direct match over composing one, and xlsxToPdf/pdfToXlsx are real, single-call functions from a caller's own point of view, not something a caller has to chain themselves.
+//
+// markdown was wired in the identical way, not by leaning on resolveConversionPath's own composition ability: local.ts's DocumentConverter only ever EXECUTES a 'direct' strategy (see that file's own comment -- "a pair with neither a direct edge nor a one-hop composed path still rejects exactly as it always has"), never a composed one, so resolveConversionPath finding a theoretical markdown -> pdf -> docx path would not make that pair actually convertible through the port. markdownToDocx/docxToMarkdown and markdownToOdt/odtToMarkdown are consequently hand-written, real bridge functions (convert.ts), registered below as direct edges -- exactly the same reason xlsxToPdf/pdfToXlsx had to be hand-composed functions despite the resolver being able to "find" that identical path on its own.
 
 export type ContentVariant = 'wordprocessing' | 'presentation' | 'spreadsheet' | 'drawing';
 
@@ -46,6 +54,8 @@ export const FORMAT_CAPABILITIES: Readonly<Record<DocumentFormat, FormatCapabili
   xlsx: { format: 'xlsx', variant: 'spreadsheet', hasLayoutPath: false },
   odg: { format: 'odg', variant: 'drawing', hasLayoutPath: true },
   odf: { format: 'odf', hasLayoutPath: false },
+  // markdown shares the wordprocessing variant with docx/odt (readMarkdownContent produces the identical WordprocessingContentDocument shape -- see convert.ts's own top-of-file comment) and has a genuine layout-engine edge of its own (markdownToPdf/pdfToMarkdown both reuse convertWordprocessingToLayout/reconstructWordprocessing unmodified), unlike xlsx above.
+  markdown: { format: 'markdown', variant: 'wordprocessing', hasLayoutPath: true },
   pdf: { format: 'pdf', hasLayoutPath: false },
 };
 
@@ -85,6 +95,8 @@ export const DIRECT_EDGES: readonly ConversionEdge[] = [
   { kind: 'toPdf', source: 'odf', target: 'pdf', convert: odfToPdf },
   // xlsx's own edge -- unlike every other 'toPdf' edge above, xlsxToPdf has no genuine layout-engine pipeline of its own: it composes the xlsx<->ods bridge with ods's own layout edge internally (see FORMAT_CAPABILITIES.xlsx and xlsxToPdf's own module comment in convert.ts). Still a real, direct, single-call edge from this list's own point of view.
   { kind: 'toPdf', source: 'xlsx', target: 'pdf', convert: xlsxToPdf },
+  // markdown's own edge -- unlike xlsx above, markdownToPdf DOES have a genuine layout-engine pipeline of its own (it reuses convertWordprocessingToLayout unmodified, see FORMAT_CAPABILITIES.markdown).
+  { kind: 'toPdf', source: 'markdown', target: 'pdf', convert: markdownToPdf },
   { kind: 'fromPdf', source: 'pdf', target: 'docx', convert: pdfToDocx },
   { kind: 'fromPdf', source: 'pdf', target: 'pptx', convert: pdfToPptx },
   { kind: 'fromPdf', source: 'pdf', target: 'odt', convert: pdfToOdt },
@@ -93,13 +105,18 @@ export const DIRECT_EDGES: readonly ConversionEdge[] = [
   { kind: 'fromPdf', source: 'pdf', target: 'odg', convert: pdfToOdg },
   // pdfToXlsx's own edge, mirroring xlsxToPdf above -- composed via pdfToOds + odsToXlsx internally, still a real, direct, single-call edge here.
   { kind: 'fromPdf', source: 'pdf', target: 'xlsx', convert: pdfToXlsx },
-  // The six PDF-bypassing cross-format bridges (src/convert/convert.ts's own dedicated section) -- direct ContentDocument-pivot conversions, not routed through pdf.
+  { kind: 'fromPdf', source: 'pdf', target: 'markdown', convert: pdfToMarkdown },
+  // The ten PDF-bypassing cross-format bridges, five pairs (src/convert/convert.ts's own dedicated section) -- direct ContentDocument-pivot conversions, not routed through pdf.
   { kind: 'bridge', source: 'odt', target: 'docx', convert: odtToDocx },
   { kind: 'bridge', source: 'docx', target: 'odt', convert: docxToOdt },
   { kind: 'bridge', source: 'odp', target: 'pptx', convert: odpToPptx },
   { kind: 'bridge', source: 'pptx', target: 'odp', convert: pptxToOdp },
   { kind: 'bridge', source: 'ods', target: 'xlsx', convert: odsToXlsx },
   { kind: 'bridge', source: 'xlsx', target: 'ods', convert: xlsxToOds },
+  { kind: 'bridge', source: 'markdown', target: 'docx', convert: markdownToDocx },
+  { kind: 'bridge', source: 'docx', target: 'markdown', convert: docxToMarkdown },
+  { kind: 'bridge', source: 'markdown', target: 'odt', convert: markdownToOdt },
+  { kind: 'bridge', source: 'odt', target: 'markdown', convert: odtToMarkdown },
 ];
 
 export type ConversionStrategy =
