@@ -47,6 +47,12 @@ const FUNCTIONS = [
   'layoutFormula',
   'loadMathFont',
   'createLocalDocumentConverter',
+  'documentPackageWithSchema',
+  'contentDocumentWithSchema',
+  'layoutDocumentWithSchema',
+  'documentSchemaKindOf',
+  'documentFromJson',
+  'schemaUriFor',
 ];
 
 // These minimal odt bytes are hand-built directly against odf.js (documents.js's own real, already-installed dependency), mirroring src/test-support/odt.ts's fixture exactly, rather than built through this package's own createOdt(). This is deliberate duplication, not an oversight: it is the only way to prove odtToPdf's ENTIRE pipeline (odf.js's decodePackage, dist's own readOdtContent/convertWordprocessingToLayout/writePdf) actually works from the built dist/ artifact independent of documents.js's own odt live-view editor, the same reasoning the odp/odg blocks further down apply when they build their own fixture bytes via cjs.createOdp()/cjs.createOdg() instead.
@@ -201,6 +207,28 @@ describe('dist/ end-to-end: odsToPdf then pdfToOds, from the CJS build', () => {
       .map((sheet) => sheet.cell(0, 0).displayText)
       .join(' ');
     expect(text).toContain('Hello from the ods smoke test');
+  });
+});
+
+// documentPackageWithSchema/documentFromJson are re-exported from document-schema.js (not defined in this package's own src/) -- this proves the re-export actually resolves through the built dist/ artifact and that the stamped $schema is a real, correctly-versioned document-schema.js URL, not just that the identifier exists.
+describe('dist/ end-to-end: documentPackageWithSchema/documentFromJson, from the CJS build', () => {
+  it('stamps a real DocumentPackage built by docxToPdf with $schema, and round-trips it back through documentFromJson', () => {
+    const docxEditor = cjs.createDocx();
+    docxEditor.body.appendParagraph().appendRun({ text: 'Hello from the schema smoke test' });
+    const docxBytes = docxEditor.toBytes();
+
+    let documentPackage;
+    cjs.docxToPdf(docxBytes, { onDocument: (pkg) => (documentPackage = pkg) });
+    expect(documentPackage).toBeDefined();
+
+    const tagged = cjs.documentPackageWithSchema(documentPackage);
+    expect(tagged.$schema).toMatch(
+      /^https:\/\/cdn\.jsdelivr\.net\/npm\/document-schema\.js@\d+\.\d+\.\d+\/schemas\/document-package\.schema\.json$/,
+    );
+
+    const result = cjs.documentFromJson(JSON.parse(JSON.stringify(tagged)));
+    expect(result.kind).toBe('DocumentPackage');
+    expect(result.value).toEqual(documentPackage);
   });
 });
 

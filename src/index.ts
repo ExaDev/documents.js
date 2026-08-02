@@ -133,6 +133,27 @@ export { CONTENT_FORMAT_VERSION, ContentDocumentSchema } from './model/content';
 export type { LayoutDocument, LayoutEllipse, LayoutImage, LayoutImageAsset, LayoutItem, LayoutLine, LayoutLink, LayoutMetadata, LayoutPage, LayoutPath, LayoutPathSegment, LayoutRect, LayoutSubpath, LayoutText } from 'document-schema.js';
 export { LAYOUT_FORMAT_VERSION } from 'document-schema.js';
 
+// --- document-schema.js's own DocumentPackage type/schema (the envelope pairing its ContentDocument with a LayoutDocument) and its self-describing-JSON helpers. contentDocumentWithSchema / documentSchemaKindOf / documentFromJson's ContentDocument branch / ContentDocumentJson all operate on document-schema.js's OWN ContentDocument shape (the raw content+layout pivot) -- a DIFFERENT, incompatible type from this package's own ContentDocument/ContentDocumentSchema above (a thinner per-conversion envelope wrapping ContentSection/ContentSlide/ContentSheet/ContentDrawPage). document-schema.js's own ContentDocument/ContentDocumentSchema are deliberately not re-exported here under their original names, to avoid colliding with this package's own exports of the same name -- import them directly from document-schema.js if you need to construct/validate a raw value for contentDocumentWithSchema. ---
+export type {
+  ContentDocumentJson,
+  DocumentJsonResult,
+  DocumentPackage,
+  DocumentPackageJson,
+  DocumentSchemaKind,
+  LayoutDocumentJson,
+} from 'document-schema.js';
+export {
+  contentDocumentWithSchema,
+  documentFromJson,
+  documentPackageWithSchema,
+  DocumentPackageSchema,
+  documentSchemaKindOf,
+  layoutDocumentWithSchema,
+  LayoutDocumentSchema,
+  schemaUriFor,
+  UnrecognizedDocumentSchemaError,
+} from 'document-schema.js';
+
 // --- Shared model primitives used by both pivot models. ---
 export type { Box, Margins, PageSize } from './model/geometry';
 export { flipY, PAGE_SIZE_A4, PAGE_SIZE_LETTER, SLIDE_SIZE_STANDARD, SLIDE_SIZE_WIDESCREEN } from './model/geometry';
