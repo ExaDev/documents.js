@@ -16,16 +16,19 @@ graph TD
     ooxml("ooxml.js")
     odf("odf.js")
     pdfcodec("pdf-codec")
+    mdcodec("markdown-codec")
     documents("documents.js")
     cli("document-cli")
 
     schema --> ooxml
     schema --> odf
     schema --> pdfcodec
+    schema --> mdcodec
     schema --> documents
     ooxml --> documents
     odf --> documents
     pdfcodec --> documents
+    mdcodec --> documents
     documents --> cli
     odf --> cli
 
@@ -33,6 +36,7 @@ graph TD
     click ooxml "https://github.com/ExaDev/ooxml.js" "ooxml.js"
     click odf "https://github.com/ExaDev/odf.js" "odf.js"
     click pdfcodec "https://github.com/ExaDev/pdf-codec" "pdf-codec"
+    click mdcodec "https://github.com/ExaDev/markdown-codec" "markdown-codec"
     click documents "https://github.com/ExaDev/documents.js" "documents.js"
     click cli "https://github.com/ExaDev/document-cli" "document-cli"
 
