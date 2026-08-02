@@ -1,3 +1,10 @@
+# [1.56.0](https://github.com/ExaDev/documents.js/compare/v1.55.0...v1.56.0) (2026-08-02)
+
+
+### Features
+
+* add custom pointless-reassignment autofix rule, ban re-exports outside src/index.ts ([bbc66c8](https://github.com/ExaDev/documents.js/commit/bbc66c8b1b8a0b4893d4ec75572d5b382f589707))
+
 # [1.55.0](https://github.com/ExaDev/documents.js/compare/v1.54.6...v1.55.0) (2026-08-02)
 
 
