@@ -39,4 +39,11 @@ export default tseslint.config(
       '@typescript-eslint/consistent-type-imports': ['error', { fixStyle: 'inline-type-imports' }],
     },
   },
+  {
+    // A no-op arrow function is a standard, harmless way to stand in for a callback prop (onSubmit, onCancel, ...) a given test case never exercises -- flagging every one of these as an error would just push authors toward padding each with a pointless comment body instead. Scoped to test files only: production code has no legitimate reason for an empty function body.
+    files: ['**/*.test.ts', '**/*.test.tsx'],
+    rules: {
+      '@typescript-eslint/no-empty-function': ['error', { allow: ['arrowFunctions', 'asyncFunctions'] }],
+    },
+  },
 );

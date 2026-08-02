@@ -1,0 +1,238 @@
+import type { DocxEditor, HsqldbTable, LayoutDocument, OdgEditor, OdpEditor, OdsEditor, OdtEditor, PptxEditor } from 'documents.js';
+
+// RULE FOR EVERY SCREEN BUILT ON THIS STATE: documents.js's editor objects (DocxRun, OdtParagraph, PptxShape, OdsCell, OdgBoxVector, ...) are LIVE VIEWS over the mutable XML tree inside the decoded package -- `run.bold = true` edits that tree in place and produces no new object reference anywhere. Call the accessors (`editor.paragraphs()`, `slide.shapes()`, `sheet.cell(r, c)`) FRESH on every render and never cache their results in useState/useMemo: any mutation, from any screen, silently invalidates an array captured on an earlier render, and nothing in the type system or in React will tell you. `AppState.hasUnsavedChanges` flipping (and the new outer state object the reducer returns with it) is the ONLY re-render signal a mutation produces -- see the deliberate-impurity note in reducer.ts.
+
+export type Screen =
+  | { readonly kind: 'launcher' }
+  | { readonly kind: 'filePicker'; readonly purpose: 'open' | 'saveAs' | 'exportTarget'; readonly cwd: string }
+  | { readonly kind: 'newDocumentPicker' }
+  | { readonly kind: 'bodyList' }
+  | { readonly kind: 'paragraphDetail'; readonly blockIndex: number }
+  | { readonly kind: 'runEditor'; readonly blockIndex: number; readonly runIndex: number }
+  | { readonly kind: 'tableView'; readonly blockIndex: number }
+  | { readonly kind: 'tableCellDetail'; readonly blockIndex: number; readonly row: number; readonly col: number }
+  | { readonly kind: 'listEditor'; readonly blockIndex: number }
+  | { readonly kind: 'slideList' }
+  | { readonly kind: 'slideDetail'; readonly slideIndex: number }
+  | { readonly kind: 'shapeEditor'; readonly slideIndex: number; readonly shapeIndex: number }
+  | { readonly kind: 'notesEditor'; readonly slideIndex: number }
+  | { readonly kind: 'sheetList' }
+  | { readonly kind: 'spreadsheetGrid'; readonly sheetIndex: number }
+  | { readonly kind: 'cellDetail'; readonly sheetIndex: number; readonly row: number; readonly col: number }
+  | { readonly kind: 'printSettingsEditor'; readonly sheetIndex: number }
+  | { readonly kind: 'pageList' }
+  | { readonly kind: 'pageDetail'; readonly pageIndex: number }
+  | { readonly kind: 'shapeOrVectorDetail'; readonly pageIndex: number; readonly itemIndex: number }
+  | { readonly kind: 'odbTableList' }
+  | { readonly kind: 'odbTableRows'; readonly tableName: string }
+  | { readonly kind: 'pdfPageList' }
+  | { readonly kind: 'pdfPageItems'; readonly pageIndex: number }
+  | { readonly kind: 'pdfItemDetail'; readonly pageIndex: number; readonly itemIndex: number }
+  | { readonly kind: 'exportOptions' }
+  | { readonly kind: 'saveAsPrompt' };
+
+export type ScreenKind = Screen['kind'];
+
+export interface DocxOpenDocument {
+  readonly format: 'docx';
+  readonly editor: DocxEditor;
+  readonly path: string | undefined;
+}
+
+export interface PptxOpenDocument {
+  readonly format: 'pptx';
+  readonly editor: PptxEditor;
+  readonly path: string | undefined;
+}
+
+export interface OdtOpenDocument {
+  readonly format: 'odt';
+  readonly editor: OdtEditor;
+  readonly path: string | undefined;
+}
+
+export interface OdpOpenDocument {
+  readonly format: 'odp';
+  readonly editor: OdpEditor;
+  readonly path: string | undefined;
+}
+
+export interface OdsOpenDocument {
+  readonly format: 'ods';
+  readonly editor: OdsEditor;
+  readonly path: string | undefined;
+}
+
+export interface OdgOpenDocument {
+  readonly format: 'odg';
+  readonly editor: OdgEditor;
+  readonly path: string | undefined;
+}
+
+// `.odb` carries no editor: documents.js reads its embedded database's tables and offers no write direction at all, so `path` is always known (it was read from disk) and the document is permanently read-only.
+export interface OdbOpenDocument {
+  readonly format: 'odb';
+  readonly tables: readonly HsqldbTable[];
+  readonly path: string;
+}
+
+// A PDF opens as its parsed `LayoutDocument` (positioned glyph/image/vector items), not an editor -- this TUI browses a PDF and converts from it, it never edits one in place.
+export interface PdfOpenDocument {
+  readonly format: 'pdf';
+  readonly layout: LayoutDocument;
+  readonly path: string;
+}
+
+// The six formats that have a live-view editor, and therefore support every mutating action, `editor.toBytes()` saving, undo snapshots, and export to PDF. `odb`/`pdf` are read-only sources.
+export type EditableOpenDocument = DocxOpenDocument | PptxOpenDocument | OdtOpenDocument | OdpOpenDocument | OdsOpenDocument | OdgOpenDocument;
+
+export type OpenDocument = EditableOpenDocument | OdbOpenDocument | PdfOpenDocument;
+
+export type EditableFormat = EditableOpenDocument['format'];
+
+export type OpenDocumentFormat = OpenDocument['format'];
+
+const EDITABLE_FORMATS: Readonly<Record<EditableFormat, true>> = { docx: true, pptx: true, odt: true, odp: true, ods: true, odg: true };
+
+export function isEditableFormat(value: string): value is EditableFormat {
+  return value in EDITABLE_FORMATS;
+}
+
+export function isEditableDocument(document: OpenDocument): document is EditableOpenDocument {
+  return isEditableFormat(document.format);
+}
+
+export type OverlayName = 'commandPalette' | 'search' | 'help' | 'confirmQuit' | 'confirmClose' | 'diagnosticsPanel';
+
+export interface OverlayState {
+  readonly commandPalette: boolean;
+  readonly search: boolean;
+  readonly help: boolean;
+  readonly confirmQuit: boolean;
+  readonly confirmClose: boolean;
+  readonly diagnosticsPanel: boolean;
+}
+
+export interface StatusMessage {
+  readonly severity: 'info' | 'warning' | 'error';
+  readonly text: string;
+  readonly createdAtMs: number;
+}
+
+// Deliberately independent of documents.js's own port `Diagnostic` (which additionally carries a `code`): this one is fed by the raw `onSubstitution`/`PdfDiagnosticSink` callbacks the ergonomic conversion functions expose, not by `DocumentConverter.convert`'s result, and those callbacks have no code to report.
+export interface Diagnostic {
+  readonly severity: 'info' | 'warning';
+  readonly message: string;
+  readonly pageIndex?: number;
+}
+
+// A failure worth showing the user in full: `message` is the one-line summary that also lands in the status bar, `detail` the underlying error text (a stack-free `Error.message`, a documents.js error class's own message listing available tables, and so on).
+export interface ErrorDetail {
+  readonly message: string;
+  readonly detail: string | undefined;
+}
+
+// Cross-screen list cursors, keyed by `selectionKeyFor(screen)` so each screen INSTANCE (slide 3's shape list, slide 4's shape list) keeps its own cursor and navigating back restores where you were. A flat string-keyed map rather than a per-screen-kind union of shapes because the alternative -- a field per screen kind -- would need a reducer case per screen kind for what is one number, and because a screen with per-instance coordinates (slideDetail, cellDetail) needs those coordinates IN the key regardless. Absence means "not visited yet", which reads as index 0; use `selectedIndexFor` rather than indexing directly.
+export type SelectionState = Readonly<Record<string, number>>;
+
+export function selectionKeyFor(screen: Screen): string {
+  switch (screen.kind) {
+    case 'launcher':
+    case 'newDocumentPicker':
+    case 'bodyList':
+    case 'slideList':
+    case 'sheetList':
+    case 'pageList':
+    case 'odbTableList':
+    case 'pdfPageList':
+    case 'exportOptions':
+    case 'saveAsPrompt':
+      return screen.kind;
+    case 'filePicker':
+      return `filePicker:${screen.purpose}:${screen.cwd}`;
+    case 'paragraphDetail':
+    case 'tableView':
+    case 'listEditor':
+      return `${screen.kind}:${screen.blockIndex}`;
+    case 'runEditor':
+      return `runEditor:${screen.blockIndex}:${screen.runIndex}`;
+    case 'tableCellDetail':
+      return `tableCellDetail:${screen.blockIndex}:${screen.row}:${screen.col}`;
+    case 'slideDetail':
+    case 'notesEditor':
+      return `${screen.kind}:${screen.slideIndex}`;
+    case 'shapeEditor':
+      return `shapeEditor:${screen.slideIndex}:${screen.shapeIndex}`;
+    case 'spreadsheetGrid':
+    case 'printSettingsEditor':
+      return `${screen.kind}:${screen.sheetIndex}`;
+    case 'cellDetail':
+      return `cellDetail:${screen.sheetIndex}:${screen.row}:${screen.col}`;
+    case 'pageDetail':
+    case 'pdfPageItems':
+      return `${screen.kind}:${screen.pageIndex}`;
+    case 'shapeOrVectorDetail':
+    case 'pdfItemDetail':
+      return `${screen.kind}:${screen.pageIndex}:${screen.itemIndex}`;
+    case 'odbTableRows':
+      return `odbTableRows:${screen.tableName}`;
+  }
+}
+
+export function selectedIndexFor(selection: SelectionState, key: string): number {
+  const recorded = selection[key];
+  return recorded ?? 0;
+}
+
+export interface AppState {
+  readonly stack: readonly Screen[];
+  readonly openDocument: OpenDocument | undefined;
+  readonly hasUnsavedChanges: boolean;
+  readonly overlays: OverlayState;
+  readonly status: StatusMessage | undefined;
+  readonly diagnostics: readonly Diagnostic[];
+  // Bounded ring buffer of whole-document snapshots (`editor.toBytes()` taken immediately BEFORE each committed mutation), capped at UNDO_STACK_LIMIT in reducer.ts. Whole-package snapshots rather than inverse operations because a live-view mutation leaves nothing behind to invert.
+  readonly undoStack: readonly Uint8Array<ArrayBuffer>[];
+  readonly selection: SelectionState;
+  // The shared search contract: the search overlay writes the query here and each screen filters its OWN visible rows by case-insensitive substring while this is non-empty. Screens keep their row text to themselves; nothing registers rows centrally.
+  readonly searchQuery: string;
+  // Non-undefined means the error-detail overlay is showing. Deliberately not an `overlays` flag: the payload and the visibility are the same fact, and two of them would be able to disagree.
+  readonly errorDetail: ErrorDetail | undefined;
+  // Set by CONFIRM_QUIT (or by REQUEST_QUIT when there is nothing unsaved to confirm); the app shell watches it and calls Ink's `exit()`. A state flag rather than calling `exit()` from the reducer so quitting stays testable without rendering.
+  readonly isExiting: boolean;
+  // The file picker's own starting directory (launcher.tsx reads this rather than calling process.cwd() itself), seeded from RunTuiOptions.cwd at startup -- lets an embedding caller (or a future `document-cli tui --cwd <dir>` flag) launch the picker somewhere other than the real process cwd.
+  readonly cwd: string;
+}
+
+export function rootScreenForFormat(format: OpenDocumentFormat): Screen {
+  switch (format) {
+    case 'docx':
+    case 'odt':
+      return { kind: 'bodyList' };
+    case 'pptx':
+    case 'odp':
+      return { kind: 'slideList' };
+    case 'ods':
+      return { kind: 'sheetList' };
+    case 'odg':
+      return { kind: 'pageList' };
+    case 'odb':
+      return { kind: 'odbTableList' };
+    case 'pdf':
+      return { kind: 'pdfPageList' };
+  }
+}
+
+export function currentScreen(state: AppState): Screen {
+  const screen = state.stack.at(-1);
+  if (screen === undefined) {
+    throw new Error('The screen stack is empty: createInitialState always seeds a launcher screen and POP_SCREEN never removes the last entry, so this cannot happen through the reducer.');
+  }
+  return screen;
+}
+
+// True whenever something layered over the current screen owns the keyboard, INCLUDING the error-detail overlay (which has no `overlays` flag of its own -- `errorDetail` being set is what makes it visible). Every screen must pass `isActive: !anyOverlayOpen(state)` to its own `useInput`/`useNavigationInput` calls, because the app shell keeps the screen mounted underneath an open overlay and both would otherwise react to the same key press.
+export function anyOverlayOpen(state: AppState): boolean {
+  const { overlays } = state;
+  return overlays.commandPalette || overlays.search || overlays.help || overlays.confirmQuit || overlays.confirmClose || overlays.diagnosticsPanel || state.errorDetail !== undefined;
+}

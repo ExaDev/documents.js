@@ -1,0 +1,328 @@
+import { Box, Text } from 'ink';
+import { useState, type Dispatch, type ReactElement } from 'react';
+import type { Box as GeometryBox, ContentStroke } from 'documents.js';
+import { ListView } from '../../../components/list-view.js';
+import { TextField } from '../../../components/text-field.js';
+import { useNavigationInput } from '../../../keybindings/use-navigation-input.js';
+import { describeError } from '../../../errors.js';
+import { readInput } from '../../../../runtime/io.js';
+import type { Action } from '../../../state/actions.js';
+import { useAppDispatch, useAppState } from '../../../state/context.js';
+import { anyOverlayOpen } from '../../../state/types.js';
+import {
+  buildPageItems,
+  defaultTriangleSubpaths,
+  describeFillStroke,
+  describeVectorGeometry,
+  formatFrame,
+  parseColorField,
+  parseNumberField,
+  parseStrokeField,
+  requireFieldValue,
+  requireOdgDocument,
+  requirePageDetailScreen,
+  vectorKindLabel,
+  type PageItem,
+} from './shared.js';
+
+type AddKind = 'rect' | 'ellipse' | 'line' | 'path' | 'textbox' | 'image';
+
+const ADD_KIND_OPTIONS: readonly { readonly kind: AddKind; readonly label: string }[] = [
+  { kind: 'rect', label: 'Rectangle' },
+  { kind: 'ellipse', label: 'Ellipse' },
+  { kind: 'line', label: 'Line' },
+  { kind: 'path', label: 'Path (fixed triangle shape)' },
+  { kind: 'textbox', label: 'Text box' },
+  { kind: 'image', label: 'Image' },
+];
+
+interface FieldSpec {
+  readonly key: string;
+  readonly label: string;
+  readonly defaultValue: string;
+}
+
+const GEOMETRY_FIELDS: readonly FieldSpec[] = [
+  { key: 'xPt', label: 'X (pt)', defaultValue: '40' },
+  { key: 'yPt', label: 'Y (pt)', defaultValue: '40' },
+  { key: 'widthPt', label: 'Width (pt)', defaultValue: '160' },
+  { key: 'heightPt', label: 'Height (pt)', defaultValue: '100' },
+];
+
+const FILL_FIELD: FieldSpec = { key: 'fill', label: 'Fill "r g b" (0-1 each), blank for none', defaultValue: '0.8 0.8 0.8' };
+const STROKE_FIELD: FieldSpec = { key: 'stroke', label: 'Stroke "r g b widthPt" (0-1 colour, pt width), blank for none', defaultValue: '0 0 0 1' };
+
+function fieldsForAddKind(kind: AddKind): readonly FieldSpec[] {
+  switch (kind) {
+    case 'rect':
+    case 'ellipse':
+    case 'path':
+      return [...GEOMETRY_FIELDS, FILL_FIELD, STROKE_FIELD];
+    case 'line':
+      return [
+        { key: 'fromXPt', label: 'From X (pt)', defaultValue: '40' },
+        { key: 'fromYPt', label: 'From Y (pt)', defaultValue: '40' },
+        { key: 'toXPt', label: 'To X (pt)', defaultValue: '200' },
+        { key: 'toYPt', label: 'To Y (pt)', defaultValue: '40' },
+        STROKE_FIELD,
+      ];
+    case 'textbox':
+      return [...GEOMETRY_FIELDS, { key: 'text', label: 'Text', defaultValue: 'Text' }];
+    case 'image':
+      return [...GEOMETRY_FIELDS, { key: 'path', label: 'Image file path (.png/.jpg/.jpeg)', defaultValue: '' }, { key: 'altText', label: 'Alt text, blank for none', defaultValue: '' }];
+  }
+}
+
+function readFrame(values: Readonly<Record<string, string>>): GeometryBox {
+  return {
+    xPt: parseNumberField(requireFieldValue(values, 'xPt'), 0),
+    yPt: parseNumberField(requireFieldValue(values, 'yPt'), 0),
+    widthPt: parseNumberField(requireFieldValue(values, 'widthPt'), 100),
+    heightPt: parseNumberField(requireFieldValue(values, 'heightPt'), 60),
+  };
+}
+
+function warnVectorIsViewOnly(dispatch: Dispatch<Action>, label: string): void {
+  dispatch({ type: 'SET_STATUS', severity: 'info', text: `${label} added -- documents.js exposes no way to enumerate an existing odg vector, so it will show in this list read-only and cannot be edited or removed from the TUI.` });
+}
+
+function inferImageFormat(path: string): 'png' | 'jpeg' | undefined {
+  const extension = path.slice(path.lastIndexOf('.') + 1).toLowerCase();
+  if (extension === 'png') {
+    return 'png';
+  }
+  if (extension === 'jpg' || extension === 'jpeg') {
+    return 'jpeg';
+  }
+  return undefined;
+}
+
+// The one async branch (reading an image file off disk) is why this whole function is async -- every other kind dispatches synchronously and resolves immediately.
+async function applyAddKind(kind: AddKind, pageIndex: number, values: Readonly<Record<string, string>>, dispatch: Dispatch<Action>): Promise<void> {
+  switch (kind) {
+    case 'rect': {
+      const init = { frame: readFrame(values), fill: parseColorField(requireFieldValue(values, 'fill')), stroke: parseStrokeField(requireFieldValue(values, 'stroke')) };
+      dispatch({ type: 'ADD_RECT', pageIndex, init });
+      warnVectorIsViewOnly(dispatch, 'Rectangle');
+      return;
+    }
+    case 'ellipse': {
+      const init = { frame: readFrame(values), fill: parseColorField(requireFieldValue(values, 'fill')), stroke: parseStrokeField(requireFieldValue(values, 'stroke')) };
+      dispatch({ type: 'ADD_ELLIPSE', pageIndex, init });
+      warnVectorIsViewOnly(dispatch, 'Ellipse');
+      return;
+    }
+    case 'line': {
+      const from = { xPt: parseNumberField(requireFieldValue(values, 'fromXPt'), 0), yPt: parseNumberField(requireFieldValue(values, 'fromYPt'), 0) };
+      const to = { xPt: parseNumberField(requireFieldValue(values, 'toXPt'), 100), yPt: parseNumberField(requireFieldValue(values, 'toYPt'), 0) };
+      const stroke: ContentStroke = parseStrokeField(requireFieldValue(values, 'stroke')) ?? { color: { r: 0, g: 0, b: 0 }, widthPt: 1 };
+      dispatch({ type: 'ADD_LINE', pageIndex, init: { from, to, stroke } });
+      warnVectorIsViewOnly(dispatch, 'Line');
+      return;
+    }
+    case 'path': {
+      const frame = readFrame(values);
+      const init = {
+        frame,
+        subpaths: defaultTriangleSubpaths(frame.widthPt, frame.heightPt),
+        fill: parseColorField(requireFieldValue(values, 'fill')),
+        stroke: parseStrokeField(requireFieldValue(values, 'stroke')),
+      };
+      dispatch({ type: 'ADD_PATH', pageIndex, init });
+      warnVectorIsViewOnly(dispatch, 'Path');
+      return;
+    }
+    case 'textbox': {
+      dispatch({ type: 'ADD_TEXTBOX', containerIndex: pageIndex, frame: readFrame(values), text: requireFieldValue(values, 'text') });
+      return;
+    }
+    case 'image': {
+      const frame = readFrame(values);
+      const path = requireFieldValue(values, 'path');
+      const format = inferImageFormat(path);
+      if (format === undefined) {
+        dispatch({ type: 'SET_STATUS', severity: 'warning', text: `${path} is not a .png or .jpg/.jpeg file -- image not added` });
+        return;
+      }
+      try {
+        const bytes = new Uint8Array(await readInput(path));
+        const altTextRaw = requireFieldValue(values, 'altText').trim();
+        dispatch({ type: 'ADD_IMAGE', containerIndex: pageIndex, frame, format, bytes, altText: altTextRaw.length === 0 ? undefined : altTextRaw });
+      } catch (error) {
+        dispatch({ type: 'SET_STATUS', severity: 'error', text: `Could not read ${path}: ${describeError(error)}` });
+      }
+      return;
+    }
+  }
+}
+
+function FieldWizard(props: { readonly fields: readonly FieldSpec[]; readonly onCancel: () => void; readonly onComplete: (values: Readonly<Record<string, string>>) => void }): ReactElement {
+  const [stepIndex, setStepIndex] = useState(0);
+  const [collected, setCollected] = useState<Record<string, string>>({});
+  const initialField = props.fields[0];
+  const [draft, setDraft] = useState(initialField === undefined ? '' : initialField.defaultValue);
+
+  const field = props.fields[stepIndex];
+  if (field === undefined) {
+    throw new Error(`FieldWizard stepIndex ${stepIndex} is out of range for ${props.fields.length} fields -- onComplete always fires before stepIndex can advance past the last field, so this indicates a bug in that advance.`);
+  }
+
+  return (
+    <Box flexDirection="column" borderStyle="round" paddingX={1}>
+      <Text bold>{field.label}</Text>
+      <TextField
+        value={draft}
+        isFocused
+        onChange={setDraft}
+        onCancel={props.onCancel}
+        onSubmit={(value) => {
+          const recorded = { ...collected, [field.key]: value };
+          const nextIndex = stepIndex + 1;
+          const nextField = props.fields[nextIndex];
+          if (nextField === undefined) {
+            props.onComplete(recorded);
+            return;
+          }
+          setCollected(recorded);
+          setDraft(nextField.defaultValue);
+          setStepIndex(nextIndex);
+        }}
+      />
+      <Text dimColor>
+        Step {stepIndex + 1} of {props.fields.length} -- Enter to continue, Esc to cancel
+      </Text>
+    </Box>
+  );
+}
+
+function AddItemFlow(props: { readonly pageIndex: number; readonly isActive: boolean; readonly onCancel: () => void; readonly onCreated: () => void }): ReactElement {
+  const dispatch = useAppDispatch();
+  const [kind, setKind] = useState<AddKind | undefined>(undefined);
+
+  const { selectedIndex } = useNavigationInput({
+    itemCount: ADD_KIND_OPTIONS.length,
+    isActive: props.isActive && kind === undefined,
+    onBack: props.onCancel,
+    onSelect: (index) => {
+      const option = ADD_KIND_OPTIONS[index];
+      if (option === undefined) {
+        return;
+      }
+      setKind(option.kind);
+    },
+  });
+
+  if (kind === undefined) {
+    return (
+      <Box flexDirection="column" borderStyle="round" paddingX={1}>
+        <Text bold>Add item -- choose a kind</Text>
+        {/* A 6-item fixed list inside a 2-row border, so it needs 2 more reserved rows than list-view.tsx's own default (title + status line + blank + slack) already assumes. */}
+        <ListView
+          items={ADD_KIND_OPTIONS}
+          selectedIndex={selectedIndex}
+          reservedRows={6}
+          renderItem={(option, isSelected) => (
+            <Text color={isSelected ? 'cyan' : undefined}>
+              {isSelected ? '> ' : '  '}
+              {option.label}
+            </Text>
+          )}
+        />
+      </Box>
+    );
+  }
+
+  return (
+    <FieldWizard
+      fields={fieldsForAddKind(kind)}
+      onCancel={props.onCancel}
+      onComplete={(values) => {
+        void applyAddKind(kind, props.pageIndex, values, dispatch).then(props.onCreated);
+      }}
+    />
+  );
+}
+
+const MAX_TEXT_PREVIEW_LENGTH = 40;
+
+function previewText(text: string): string {
+  const singleLine = text.replace(/\s+/g, ' ').trim();
+  return singleLine.length > MAX_TEXT_PREVIEW_LENGTH ? `${singleLine.slice(0, MAX_TEXT_PREVIEW_LENGTH)}…` : singleLine;
+}
+
+function describeItem(item: PageItem): string {
+  if (item.kind === 'vector') {
+    return `${vectorKindLabel(item.vector.kind)}  ${describeVectorGeometry(item.vector)}  (${describeFillStroke(item.vector)})`;
+  }
+  const label = item.shapeKind === 'image' ? 'Image' : 'Text';
+  const frame = item.shape.frame;
+  const frameText = frame === undefined ? 'no frame' : formatFrame(frame);
+  const preview = item.shapeKind === 'text' ? previewText(item.shape.text) : '';
+  return `${label}  ${frameText}${preview.length === 0 ? '' : `  "${preview}"`}`;
+}
+
+export function OdgPageDetailScreen(): ReactElement {
+  const state = useAppState();
+  const dispatch = useAppDispatch();
+  const doc = requireOdgDocument(state);
+  const { pageIndex } = requirePageDetailScreen(state);
+  const [isAdding, setIsAdding] = useState(false);
+  const overlayOpen = anyOverlayOpen(state);
+
+  // Fresh every render, never cached: `buildPageItems` reads the live `page.shapes()` accessor plus a fresh `readOdgContent` of the live package, exactly the "call editor accessors fresh on every render" rule this state layer requires of every screen.
+  const items = buildPageItems(doc, pageIndex);
+  const query = state.searchQuery.trim().toLowerCase();
+  const rows = items.map((item, index) => ({ item, index })).filter((row) => query.length === 0 || describeItem(row.item).toLowerCase().includes(query));
+
+  const { selectedIndex } = useNavigationInput({
+    itemCount: rows.length,
+    isActive: !overlayOpen && !isAdding,
+    onBack: () => {
+      dispatch({ type: 'POP_SCREEN' });
+    },
+    onSelect: (index) => {
+      const row = rows[index];
+      if (row === undefined) {
+        return;
+      }
+      dispatch({ type: 'PUSH_SCREEN', screen: { kind: 'shapeOrVectorDetail', pageIndex, itemIndex: row.index } });
+    },
+    onAppend: () => {
+      setIsAdding(true);
+    },
+  });
+
+  if (isAdding) {
+    return (
+      <AddItemFlow
+        pageIndex={pageIndex}
+        isActive={!overlayOpen}
+        onCancel={() => {
+          setIsAdding(false);
+        }}
+        onCreated={() => {
+          setIsAdding(false);
+        }}
+      />
+    );
+  }
+
+  return (
+    <Box flexDirection="column">
+      <Text bold>
+        Page {pageIndex + 1} -- {items.length} item{items.length === 1 ? '' : 's'}
+      </Text>
+      <ListView
+        items={rows}
+        selectedIndex={selectedIndex}
+        emptyMessage="No items yet -- press 'a' to add one"
+        renderItem={(row, isSelected) => (
+          <Text color={isSelected ? 'cyan' : undefined}>
+            {isSelected ? '> ' : '  '}
+            {describeItem(row.item)}
+          </Text>
+        )}
+      />
+    </Box>
+  );
+}
