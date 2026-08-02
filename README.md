@@ -6,6 +6,35 @@
 
 `documents.js` depends on `ooxml.js` for lossless docx/pptx/xlsx ⇄ JSON handling and extends it in two directions `ooxml.js` deliberately does not cover: full PDF support (parsing arbitrary real-world PDFs and generating new ones), and a read-**and-write** manipulation API for docx/pptx content — `ooxml.js`'s own typed readers (`readDocx`/`readPptx`) are one-way and explicitly forbid write-back. PDF reading, writing, and the docx⇄PDF/pptx⇄PDF conversion pipeline are provided by [`pdf-codec`](https://github.com/ExaDev/pdf-codec), a sibling package extracted from this one: a hand-written, dependency-minimal PDF codec with no external PDF library (`pdf-lib`, `pdfjs-dist`, `mupdf`, or any other) as a dependency — see pdf-codec's own README for how it's built and what it embeds (including the vendored STIX Two Math font this package renders formulas through). `src/mathml/` (the MathML typesetting engine) stays in this package and is hand-written too, for the same "no supply-chain surface beyond what's already declared" reason, but consumes pdf-codec's embedded math font through a structurally-typed port rather than any font-parsing code of its own — see [Architecture](#architecture).
 
+```mermaid
+graph TD
+    schema("document-schema.js")
+    ooxml("ooxml.js")
+    odf("odf.js")
+    pdfcodec("pdf-codec")
+    documents("documents.js")
+    cli("document-cli")
+
+    schema --> ooxml
+    schema --> odf
+    schema --> pdfcodec
+    schema --> documents
+    ooxml --> documents
+    odf --> documents
+    pdfcodec --> documents
+    documents --> cli
+    odf --> cli
+
+    click schema "https://github.com/ExaDev/document-schema.js" "document-schema.js"
+    click ooxml "https://github.com/ExaDev/ooxml.js" "ooxml.js"
+    click odf "https://github.com/ExaDev/odf.js" "odf.js"
+    click pdfcodec "https://github.com/ExaDev/pdf-codec" "pdf-codec"
+    click documents "https://github.com/ExaDev/documents.js" "documents.js"
+    click cli "https://github.com/ExaDev/document-cli" "document-cli"
+
+    style documents fill:#f9a825,stroke:#333,stroke-width:3px
+```
+
 ## Why
 
 Converting docx/pptx to PDF and back is usually solved by wrapping a mature third-party PDF library. This package takes the opposite approach for the PDF side of the equation: pdf-codec hand-writes every layer of the PDF format — the object model, the cross-reference table, the content-stream operators, standard-font metrics, the parser's cross-reference/object-stream resolution and content-stream interpreter — against the ISO 32000-1 specification, rather than wrapping one. That is a genuinely large undertaking, and it comes with an honest trade-off spelled out in [Fidelity](#fidelity) below and in pdf-codec's own README: this is not, and does not attempt to be, as robust against adversarial or badly malformed real-world PDFs as a library with 15+ years of hardening. What it buys instead is a dependency-free, fully auditable PDF implementation, with `documents.js`'s own supply-chain surface staying limited to `ooxml.js`, `odf.js`, `document-schema.js`, `pdf-codec`, and `fflate`.
