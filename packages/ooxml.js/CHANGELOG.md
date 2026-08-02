@@ -1,3 +1,10 @@
+# [2.4.0](https://github.com/ExaDev/ooxml.js/compare/v2.3.1...v2.4.0) (2026-08-02)
+
+
+### Features
+
+* ban anything but re-exports in src/index.ts ([6ada89f](https://github.com/ExaDev/ooxml.js/commit/6ada89fc6bb2815b75780ccd7a41d521c752db7f))
+
 ## [2.3.1](https://github.com/ExaDev/ooxml.js/compare/v2.3.0...v2.3.1) (2026-08-02)
 
 
