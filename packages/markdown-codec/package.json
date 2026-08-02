@@ -54,7 +54,7 @@
     "test:coverage": "vitest run --project unit --coverage",
     "test:corpus": "vitest run --project corpus",
     "test:smoke": "tsdown && vitest run --project smoke",
-    "prepare": "husky && tsdown",
+    "prepare": "husky",
     "release": "semantic-release"
   },
   "keywords": [
