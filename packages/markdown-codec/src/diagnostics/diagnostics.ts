@@ -21,12 +21,34 @@ export const NOOP_DIAGNOSTIC_SINK: MarkdownDiagnosticSink = () => {
 };
 
 // Recover tier: markdown that parses under CommonMark/GFM's own grammar without error, but that a real author almost certainly did not intend -- worth flagging, not worth failing over. Non-exhaustive: further recover-tier codes will be added as src/block/src/inline gain more of the constructs each covers.
+//
+// Degrade tier: an individual construct src/lower's ContentDocument mapping (or src/emit's inverse) cannot represent faithfully, named per the mapping table in the repository's own task history -- see src/lower/ and src/emit/'s own top-of-file comments for the read/write side each code belongs to. Every one of these is reachable from real markdown/ContentDocument input; src/lower.test.ts and src/emit.test.ts each exercise the codes their own stage produces, and src/diagnostics/diagnostics.test.ts asserts the whole MarkdownDiagnosticCodes table has no dead entry.
 export const MarkdownDiagnosticCodes = {
   UNCLOSED_FENCE: 'md/unclosed-fence',
   UNTERMINATED_HTML_BLOCK: 'md/unterminated-html-block',
   TABLE_CELL_COUNT_MISMATCH: 'md/table-cell-count-mismatch',
   DUPLICATE_LINK_REFERENCE: 'md/duplicate-link-reference',
   LIST_MARKER_TYPE_CONFLICT: 'md/list-marker-type-conflict',
+  // src/lower (read side: markdown -> ContentDocument)
+  INVENTED_PAGE_GEOMETRY: 'md/invented-page-geometry',
+  NESTED_EMPHASIS_FLATTENED: 'md/nested-emphasis-flattened',
+  LINK_TITLE_DROPPED: 'md/link-title-dropped',
+  CODE_BLOCK_INFO_STRING_DROPPED: 'md/code-block-info-string-dropped',
+  BLOCKQUOTE_NESTED_DEPTH: 'md/blockquote-nested-depth',
+  LIST_ITEM_BLOCK_UNLISTED: 'md/list-item-block-unlisted',
+  LIST_ITEM_MULTI_BLOCK_FLATTENED: 'md/list-item-multi-block-flattened',
+  IMAGE_UNRESOLVED: 'md/image-unresolved',
+  RAW_HTML_PRESERVED_AS_TEXT: 'md/raw-html-preserved-as-text',
+  RAW_HTML_DROPPED: 'md/raw-html-dropped',
+  FRONT_MATTER_KEY_UNMAPPED: 'md/front-matter-key-unmapped',
+  // src/emit (write side: ContentDocument -> markdown)
+  HEADING_LEVEL_CLAMPED: 'md/heading-level-clamped',
+  ADJACENT_LINKS_MERGED: 'md/adjacent-links-merged',
+  CODE_SPAN_AS_MONOSPACE_RUN: 'md/code-span-as-monospace-run',
+  PARAGRAPH_INDENT_DROPPED: 'md/paragraph-indent-dropped',
+  LIST_NUMID_FALLBACK: 'md/list-numid-fallback',
+  TABLE_CELL_FORMATTING_DROPPED: 'md/table-cell-formatting-dropped',
+  TABLE_CELL_MULTI_PARAGRAPH_JOINED: 'md/table-cell-multi-paragraph-joined',
 } as const;
 
 // The throw tier: input this package cannot meaningfully process at all, regardless of what a diagnostic sink could report about it. Carries the same `code` vocabulary as MarkdownDiagnostic so a caller can distinguish failure reasons programmatically, not just by message text.

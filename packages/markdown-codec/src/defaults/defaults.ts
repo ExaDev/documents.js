@@ -10,6 +10,7 @@ import type {
   MarkdownHeadingStyle,
   MarkdownLineEnding,
   MarkdownOrderedListDelimiter,
+  MarkdownThematicBreakChar,
 } from '../options/options';
 
 // The fallback ReadMarkdownOptions.margins populates ContentSection.page with when a caller supplies neither pageSize nor margins -- 1 inch, in points, on every side. 1 inch = 72pt is the standard PostScript/PDF conversion this family already uses throughout (documents.js's units.ts, pdf-codec's own AFM metrics).
@@ -33,4 +34,5 @@ export const DEFAULT_BULLET_LIST_MARKER: MarkdownBulletListMarker = '-';
 export const DEFAULT_ORDERED_LIST_DELIMITER: MarkdownOrderedListDelimiter = '.';
 export const DEFAULT_EMPHASIS_MARKER: MarkdownEmphasisMarker = '_';
 export const DEFAULT_CODE_FENCE_CHAR: MarkdownCodeFenceChar = '`';
+export const DEFAULT_THEMATIC_BREAK_CHAR: MarkdownThematicBreakChar = '-';
 export const DEFAULT_LINE_ENDING: MarkdownLineEnding = 'lf';

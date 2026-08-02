@@ -1,6 +1,6 @@
 // readMarkdown/writeMarkdown's own options types. Plain hand-written interfaces, not Zod schemas -- matching pdf-codec's own ReadPdfOptions/WritePdfOptions precedent (src/read.ts/src/write.ts in that package): an options bag is a same-process call argument, never serialised or round-tripped, so there is nothing here for a schema to validate that the TypeScript type doesn't already guarantee.
 //
-// GFM extension toggles (tables/strikethrough/autolinks/task-list-items) are not yet fields here -- there is no src/block/src/inline implementation yet for any toggle to gate, and adding one now would be configurability with no real behaviour behind it. They belong on both option types once those stages exist and genuinely branch on them.
+// GFM extension toggles (gfmTables/gfmAutolinks/gfmStrikethrough/gfmTaskLists) now have real implementations to gate -- src/block/block.ts's MarkdownParseOptions and src/lower/lower.ts's LowerMarkdownOptions each already carry them, branched on throughout src/block/src/inline/src/lower. They are not yet fields on ReadMarkdownOptions specifically because src/read.ts itself is not yet implemented; whichever of readMarkdown's own future options end up threading through to parseMarkdown is that task's own call to make, not a decision this file should pre-empt.
 
 import type { Margins, PageSize } from 'document-schema.js';
 import type { MarkdownDiagnosticSink } from '../diagnostics/diagnostics';
@@ -28,6 +28,7 @@ export type MarkdownBulletListMarker = '-' | '*' | '+';
 export type MarkdownOrderedListDelimiter = '.' | ')';
 export type MarkdownEmphasisMarker = '_' | '*';
 export type MarkdownCodeFenceChar = '`' | '~';
+export type MarkdownThematicBreakChar = '-' | '_' | '*';
 export type MarkdownLineEnding = 'lf' | 'crlf';
 
 // writeMarkdown's own emit-side style choices -- which of several equally CommonMark/GFM-valid syntaxes to render with. Read separately from the shared sink/signal/images/frontMatter fields below since these have no read-side equivalent (a reader accepts whichever style the source document happens to use; a writer must pick one).
@@ -37,6 +38,7 @@ export interface WriteMarkdownStyleOptions {
   readonly orderedListDelimiter?: MarkdownOrderedListDelimiter;
   readonly emphasisMarker?: MarkdownEmphasisMarker;
   readonly codeFenceChar?: MarkdownCodeFenceChar;
+  readonly thematicBreakChar?: MarkdownThematicBreakChar;
 }
 
 export interface WriteMarkdownOptions extends WriteMarkdownStyleOptions {

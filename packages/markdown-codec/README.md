@@ -8,9 +8,13 @@
 
 ## Status
 
-The parser is complete and passes **every example in the vendored CommonMark 0.31.2 conformance corpus** (`assets/commonmark/spec.json`, all sections), plus every `table`, `strikethrough`, and `autolink` example the GFM spec source tags as an extension. `src/scan/`, `src/block/`, `src/inline/`, and `src/html/` are real implementations; `src/lower/`, `src/emit/`, and the `readMarkdown`/`writeMarkdown`/`markdownCodec` entry points are still placeholder files describing what each will contain (see [Architecture](#architecture)) — nothing yet converts the parsed AST to or from `ContentDocument`. Tooling (build, lint, typecheck, CI, release) is fully wired.
+The parser is complete and passes **every example in the vendored CommonMark 0.31.2 conformance corpus** (`assets/commonmark/spec.json`, all sections), plus every `table`, `strikethrough`, `autolink`, and task-list-item example the GFM spec source tags as an extension (see `src/gfm-conformance.test.ts`'s own top-of-file note on why `disabled` — the literal tag this pinned spec version's two task-list examples carry — is exercised here rather than skipped). `tagfilter` is the one tagged extension deliberately out of scope: an output-sanitisation pass over already-parsed raw HTML, not a parsing rule, and this package's read side has no HTML output to sanitise.
+
+`src/scan/`, `src/block/`, `src/inline/`, `src/html/` (including `src/html/render.ts`, the CommonMark-HTML conformance oracle both suites above render through — internal plumbing, never exported from `src/index.ts`), `src/lower/` (the AST → `ContentDocument` lowering stage), and `src/emit/` (its structural inverse) are all real implementations, exercised by `lowerMarkdown`/`emitMarkdown`. `src/read.ts`/`src/write.ts`/`src/codec.ts` — the public `readMarkdown`/`writeMarkdown`/`markdownCodec` entry points — are still placeholders: front matter extraction, block parsing, and lowering are already composed in one call by `src/lower/lower.ts`'s own `lowerMarkdown`, so wiring `readMarkdown` itself is a thin follow-on, not a rewrite. Tooling (build, lint, typecheck, CI, release) is fully wired.
 
 The conformance suites live at `src/conformance.test.ts` and `src/gfm-conformance.test.ts`, and run as part of `pnpm test`. Any example not yet passing would be named individually in `src/test-support/conformance-exclusions.ts`, which a test asserts is shrink-only: every excluded example must genuinely still fail, so the list can never hide one that already passes. It is currently empty.
+
+Every construct-mapping gap the AST ⇄ `ContentDocument` lowering/emission pair cannot represent losslessly is recorded as a stable, namespaced `MarkdownDiagnosticCodes` entry (`src/diagnostics/diagnostics.ts`) and proven reachable from real input by `src/diagnostics/diagnostics.test.ts`'s own coverage sweep — see `src/lower/lower.ts` and `src/emit/emit.ts`'s own top-of-file tables for the read/write side each code belongs to.
 
 ## Getting started
 
@@ -20,21 +24,44 @@ Requires Node.js `>=20` and pnpm `11.6.0` (pinned via `packageManager` in `packa
 pnpm install
 ```
 
+## Usage
+
+The read and write halves, ahead of `src/read.ts`/`src/write.ts` themselves wiring up `readMarkdown`/`writeMarkdown`:
+
+```ts
+import { lowerMarkdown } from 'markdown-codec/lower/lower';
+import { emitMarkdown } from 'markdown-codec/emit/emit';
+
+const document = lowerMarkdown('# Title\n\nSome **bold** text with a [link](https://example.com).', {
+  frontMatter: true, // parse a leading YAML front matter block into ContentDocument.metadata
+  images: (destination) => undefined, // a synchronous MarkdownImageResolver port for non-data: URI images
+});
+
+const markdown = emitMarkdown(document, {
+  bulletListMarker: '-',
+  emphasisMarker: '_',
+  frontMatter: true, // emit ContentDocument.metadata back out as a leading front matter block
+});
+```
+
+Every construct either side cannot represent losslessly reports through an optional `sink: MarkdownDiagnosticSink` — see [Status](#status) for where each gap's own code is documented.
+
 ## Architecture
 
 Modelled on `pdf-codec`'s own layering (generic primitives outward to the two conversion directions), aimed at CommonMark+GFM instead of PDF:
 
-- **`src/diagnostics/`** — the read-side diagnostic sink, matching `pdf-codec`'s own three-tier `PdfDiagnosticSink` policy (throw for unreadable input, recover-with-diagnostic for malformed-but-salvageable markdown, degrade-with-diagnostic for an individual unsupported construct while the rest of the document still reads).
+- **`src/diagnostics/`** — the read-side diagnostic sink, matching `pdf-codec`'s own three-tier `PdfDiagnosticSink` policy (throw for unreadable input, recover-with-diagnostic for malformed-but-salvageable markdown, degrade-with-diagnostic for an individual unsupported construct while the rest of the document still reads). `MarkdownDiagnosticCodes` names every code either tier can produce, block/inline-phase recover-tier codes alongside src/lower's and src/emit's own degrade-tier construct-mapping gaps.
 - **`src/ast/`** — this package's own markdown AST node types (document/block/inline discriminated union), Zod-first like every other model in this family: every node type inferred from its schema, never hand-written.
-- **`src/options/`** / **`src/defaults/`** — `readMarkdown`/`writeMarkdown`'s own options (GFM extension toggles, a diagnostic sink, an `AbortSignal`) and their default values.
+- **`src/options/`** / **`src/defaults/`** — `readMarkdown`/`writeMarkdown`'s own options (GFM extension toggles, a diagnostic sink, an `AbortSignal`, `writeMarkdown`'s own style choices — heading/bullet/ordered-delimiter/emphasis/code-fence/thematic-break characters, line ending, front matter emission) and their default values.
 - **`src/scan/`** — the hand-written CommonMark line/character scanner feeding block parsing, cross-checked against `assets/commonmark/spec.json`.
-- **`src/block/`** — CommonMark's block-structure algorithm (open-block stack, continuation-line matching): paragraphs, headings, code blocks, block quotes, lists, thematic breaks, link reference definitions, GFM tables.
+- **`src/block/`** — CommonMark's block-structure algorithm (open-block stack, continuation-line matching): paragraphs, headings, code blocks, block quotes, lists (including GFM task-list-item markers), thematic breaks, link reference definitions, GFM tables.
 - **`src/inline/`** — inline-level parsing within a block's own content: emphasis, code spans, links, autolinks, raw inline HTML, GFM strikethrough, line breaks.
-- **`src/html/`** — raw block/inline HTML recognition (CommonMark's own bounded seven-condition block-HTML rules and inline tag syntax — not a general HTML parser).
-- **`src/image/`** — inline and reference-style image resolution against the document's own link-reference-definition table.
-- **`src/lower/`** — the AST → `ContentDocument` lowering stage: the markdown-side counterpart to `ooxml.js`'s `readDocx`/`readPptx` and `odf.js`'s `readOdt`/`readOdp` — a thin adapter from a format-specific parse result onto the shared pivot, not a second parser.
-- **`src/emit/`** — the `ContentDocument` → markdown text emission stage (`writeMarkdown`'s build-side half).
-- **`src/read.ts`** / **`src/write.ts`** / **`src/codec.ts`** — the public `readMarkdown`/`writeMarkdown` entry points and their `z.codec()` pair (`markdownCodec`), matching `pdf-codec`'s own `pdfCodec` convention.
+- **`src/html/`** — raw block/inline HTML recognition (CommonMark's own bounded seven-condition block-HTML rules and inline tag syntax — not a general HTML parser) plus `render.ts`, the real CommonMark-HTML conformance oracle `src/conformance.test.ts`/`src/gfm-conformance.test.ts` render parsed documents through — internal plumbing, never re-exported from `src/index.ts`.
+- **`src/image/`** — a hand-written PNG/JPEG dimension reader plus an isomorphic base64 codec, shared by `src/lower/image.ts`'s data: URI decoding and `src/emit/image.ts`'s re-encoding.
+- **`src/shared/`** — string-shape conventions `src/lower` (mint/read) and `src/emit` (read/write) must agree on exactly: `style-constants.ts` (heading/quote/code-block/rule/HTML-preformatted styleIds, the monospace font family, the blockquote per-level indent unit, the GFM task-checkbox glyph pair) and `list-id.ts` (the opaque `numId` grammar a list's own type/task/tightness is packed into, since `ContentListMembership` itself carries only `{numId, level}`).
+- **`src/lower/`** — the AST → `ContentDocument` lowering stage: the markdown-side counterpart to `ooxml.js`'s `readDocx`/`readPptx` and `odf.js`'s `readOdt`/`readOdp` — a thin adapter from a format-specific parse result onto the shared pivot, not a second parser. `lower.ts`'s own top-of-file table maps every construct (headings, emphasis/links/breaks via `inline.ts`, code blocks, blockquotes, lists via `src/shared/list-id.ts`, GFM tables via `table.ts`, images via `image.ts`'s `MarkdownImageResolver` port, raw HTML, front matter via `front-matter.ts`) onto its own `MarkdownDiagnosticCodes` gap.
+- **`src/emit/`** — the `ContentDocument` → markdown text emission stage (`writeMarkdown`'s build-side half), the structural inverse of `src/lower/` construct for construct — `emit.ts`'s own top-of-file table mirrors `lower.ts`'s.
+- **`src/read.ts`** / **`src/write.ts`** / **`src/codec.ts`** — the public `readMarkdown`/`writeMarkdown` entry points and their `z.codec()` pair (`markdownCodec`), matching `pdf-codec`'s own `pdfCodec` convention. Not yet implemented; `src/lower/lower.ts`'s own `lowerMarkdown`/`src/emit/emit.ts`'s own `emitMarkdown` already do the real work these will wrap.
 
 See `src/read.ts`'s own top-of-file comment for the recorded reconciliation decision on `ContentDocument` shape (full envelope vs. bare `{metadata, sections}`), reasoned from `ooxml.js`'s `readXlsxContent`/`buildXlsxPackage` precedent.
 
