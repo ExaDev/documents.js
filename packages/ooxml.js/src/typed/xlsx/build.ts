@@ -6,12 +6,23 @@ import { encodeXmlText } from '../../xml/entities';
 import { POINTS_PER_INCH } from '../shared/units';
 import { cellReference, rangeReference } from './a1';
 import { buildPrintAreaValue, buildPrintTitlesValue, XLNM_PRINT_AREA, XLNM_PRINT_TITLES } from './defined-names';
+import type { CellNumberFormat } from './number-format';
+import {
+  BOOLEAN_NUMBER_FORMAT,
+  currencyNumberFormat,
+  DATE_NUMBER_FORMAT,
+  DATE_TIME_NUMBER_FORMAT,
+  PERCENTAGE_NUMBER_FORMAT,
+  TIME_NUMBER_FORMAT,
+} from './number-format';
 import { DEFAULT_HEADER_FOOTER_MARGIN_PT } from './print-settings';
+import { isoDateTimeToSerial, isoDateToSerial, isoTimeToSerial } from './serial';
 import { SharedStringTable } from './shared-strings';
+import { CellFormatTable, DEFAULT_CELL_FORMAT_INDEX, GENERAL_NUM_FMT_ID } from './styles';
 import { ptToColumnWidthChars } from './units';
 import { pageSizeToPaperSizeCode, ptToUniversalMeasure, writeXmlBool } from './util';
 
-// ContentDocument (kind: 'spreadsheet') -> Package: the first genuinely NEW xlsx package this ecosystem writes from scratch, rather than decoding/re-encoding an existing one -- every part below (down to xl/styles.xml's own minimal-but-real style table) is constructed directly via xml/fragment.ts's el/txt, matching typed/xlsx/content.ts's own readXlsxContent as its read-side inverse: writing everything that reader reads, honestly re-approximating the lossy conversions it documents on the way in (column-width characters, and this writer's own no-numFmt style table -- see renderCellValue). See typed/xlsx/content.test.ts and typed/xlsx/build.test.ts for the real-LibreOffice round-trip verification this pairing is built and tested against.
+// ContentDocument (kind: 'spreadsheet') -> Package: the first genuinely NEW xlsx package this ecosystem writes from scratch, rather than decoding/re-encoding an existing one -- every part below is constructed directly via xml/fragment.ts's el/txt, matching typed/xlsx/content.ts's own readXlsxContent as its read-side inverse: writing everything that reader reads, through the same number-format vocabulary that reader classifies (see renderCellValue and typed/xlsx/number-format.ts's own write-side section), and honestly re-approximating the one lossy conversion left on the way in (column-width characters). See typed/xlsx/content.test.ts and typed/xlsx/build.test.ts for the real-LibreOffice round-trip verification this pairing is built and tested against.
 
 const SML_NS = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
 const REL_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
@@ -139,19 +150,42 @@ function buildSharedStringsPart(sharedStrings: SharedStringTable): XmlPart {
   return xmlPart(root);
 }
 
-// --- xl/styles.xml: genuinely minimal, the one styles part real Excel/LibreOffice both require to open a file at all ---
+// --- xl/styles.xml: the minimal font/fill/border scaffolding real Excel/LibreOffice require, plus the interned cell formats ---
 
-// Confirmed against multiple independent references (the fills[0]="none"/fills[1]="gray125" reserved-index convention, and cellStyleXfs/cellXfs each needing at least one real <xf> entry, are widely documented as the source of Excel's "we found a problem with some content" repair prompt when a hand-rolled writer omits them) rather than assumed: one font, the two reserved fills, one border, and one cellStyleXfs/cellXfs/cellStyles entry each -- every cell this writer produces references cellXfs index 0 (style attribute s="0"), the sole default format.
-function buildStylesPart(): XmlPart {
-  const root = el('styleSheet', { xmlns: SML_NS }, [
+// Everything except <numFmts> and <cellXfs> here is fixed scaffolding, confirmed against multiple independent references (the fills[0]="none"/fills[1]="gray125" reserved-index convention, and cellStyleXfs/cellXfs each needing at least one real <xf> entry, are widely documented as the source of Excel's "we found a problem with some content" repair prompt when a hand-rolled writer omits them) rather than assumed: one font, the two reserved fills, one border, and one cellStyleXfs/cellStyles entry each.
+//
+// The two variable parts come straight from the CellFormatTable the worksheets filled: one <numFmt> per custom code interned (and NO <numFmts> element at all when nothing was, which is what keeps a workbook of ordinary numbers and strings byte-identical to what this writer produced before number formats existed), and one <xf> per cell-format index, index 0 always being the General default.
+//
+// CT_Stylesheet's own required child element ORDER (ECMA-376 Part 1 SS18.8.39): numFmts?, fonts?, fills?, borders?, cellStyleXfs?, cellXfs?, cellStyles?, ... -- numFmts FIRST, before the fonts element that used to lead this part.
+function buildStylesPart(cellFormats: CellFormatTable): XmlPart {
+  const children: XmlElement[] = [];
+
+  const declarations = cellFormats.declarations();
+  if (declarations.length > 0) {
+    const numFmtElements = declarations.map((declaration) => el('numFmt', { numFmtId: String(declaration.id), formatCode: encodeXmlText(declaration.code) }));
+    children.push(el('numFmts', { count: String(numFmtElements.length) }, numFmtElements));
+  }
+
+  children.push(
     el('fonts', { count: '1' }, [el('font', {}, [el('sz', { val: '11' }), el('name', { val: 'Calibri' })])]),
     el('fills', { count: '2' }, [el('fill', {}, [el('patternFill', { patternType: 'none' })]), el('fill', {}, [el('patternFill', { patternType: 'gray125' })])]),
     el('borders', { count: '1' }, [el('border', {}, [el('left'), el('right'), el('top'), el('bottom'), el('diagonal')])]),
     el('cellStyleXfs', { count: '1' }, [el('xf', { numFmtId: '0', fontId: '0', fillId: '0', borderId: '0' })]),
-    el('cellXfs', { count: '1' }, [el('xf', { numFmtId: '0', fontId: '0', fillId: '0', borderId: '0', xfId: '0' })]),
-    el('cellStyles', { count: '1' }, [el('cellStyle', { name: 'Normal', xfId: '0', builtinId: '0' })]),
-  ]);
-  return xmlPart(root);
+  );
+
+  const xfElements = cellFormats.cellFormats().map((numFmtId) => {
+    const attrs: Record<string, string> = { numFmtId: String(numFmtId), fontId: '0', fillId: '0', borderId: '0', xfId: '0' };
+    if (numFmtId !== GENERAL_NUM_FMT_ID) {
+      // CT_Xf/@applyNumberFormat tells a consumer to honour this xf's OWN numFmtId rather than the one it would otherwise inherit from the cell style it is based on (xfId). Real producers differ here -- Excel writes it on every formatted xf, LibreOffice omits it entirely and relies on numFmtId alone (see this directory's own kitchen-sink fixture, whose six formatted xfs carry no applyNumberFormat at all) -- so this writer emits the explicit form, which cannot be misread by either: LibreOffice 26.2 renders every format below correctly with it present (verified), and Excel's own inheritance rule makes it the unambiguous spelling.
+      attrs.applyNumberFormat = writeXmlBool(true);
+    }
+    return el('xf', attrs);
+  });
+  children.push(el('cellXfs', { count: String(xfElements.length) }, xfElements));
+
+  children.push(el('cellStyles', { count: '1' }, [el('cellStyle', { name: 'Normal', xfId: '0', builtinId: '0' })]));
+
+  return xmlPart(el('styleSheet', { xmlns: SML_NS }, children));
 }
 
 // --- docProps/core.xml and docProps/app.xml -------------------------------------------------------------------
@@ -234,30 +268,35 @@ function buildColsElement(columns: readonly ContentSheetColumn[]): XmlElement | 
 }
 
 interface RenderedCellValue {
+  // ST_CellType, absent for the "this cell holds a number" case (an absent t and t="n" are identical, and every temporal/percentage/currency value below is a number as far as the wire format is concerned).
   type?: string;
   content: string;
+  // The number format this value must be DISPLAYED through, interned by the caller into the workbook's own cell-format table. Absent means General, i.e. cellXfs index 0.
+  format?: CellNumberFormat;
 }
 
-// xlsx has no distinct CELL TYPE for percentage/currency -- both live in a numFmt style instead, which is how typed/xlsx/content.ts recovers them on the way in (see its own top-of-file scope note). This writer's xl/styles.xml is deliberately a single default format with no <numFmts> at all, so both write as a plain numeric cell: the raw numeric value survives losslessly, the percentage/currency semantic does not. A real, asymmetric gap between this pair's read and write halves, not a claim that xlsx cannot express it -- closing it means minting a numFmt per distinct value kind and cellXf per cell, which nothing has asked this writer for yet.
+// xlsx has no distinct CELL TYPE for a percentage, an amount of money, a date, or a time -- every one of them is an ordinary number whose meaning lives entirely in the number format its style points at, which is exactly how typed/xlsx/content.ts recovers them on the way in. So this writer says what it means the same way a real producer does: it renders the value as a bare number and asks for the matching format from typed/xlsx/number-format.ts's own write-side vocabulary, which the CellFormatTable interns into a real <numFmt>/<xf> pair.
+//
+// ST_CellType's rare t="d" ISO-8601 variant is deliberately NOT used for the temporal kinds, even though it would carry their string spelling verbatim: real Excel does not render it as a date at all, and it is a SINGLE combined date-and-time type, so writing all three temporal kinds through it collapses them onto one indistinguishable wire form that reads back as 'dateTime' whatever went in. A serial plus a date/time/dateTime format is both what real files carry and what keeps the three kinds distinguishable.
 function renderCellValue(value: ContentCellValue, isFormulaResult: boolean, sharedStrings: SharedStringTable): RenderedCellValue | undefined {
   switch (value.kind) {
     case 'string':
-      if (isFormulaResult) {
-        // A formula's own cached string result is written literally (t="str"), never shared-string indexed -- shared strings are ECMA-376's own convention for literal, non-formula text cells only; a formula's cached text result is written inline instead, mirroring exactly how typed/xlsx/content.ts's readCellValue reads the two cases apart.
-        return { type: 'str', content: encodeXmlText(value.value) };
-      }
-      return { type: 's', content: String(sharedStrings.intern(value.value)) };
+      return renderString(value.value, isFormulaResult, sharedStrings);
     case 'number':
-    case 'percentage':
-    case 'currency':
       return { content: String(value.value) };
+    case 'percentage':
+      // The stored value stays the raw fraction ContentCellValue carries (0.4256), which is what a percent-formatted cell holds in every real file -- the x100 is the format's job, not the value's.
+      return { content: String(value.value), format: PERCENTAGE_NUMBER_FORMAT };
+    case 'currency':
+      return { content: String(value.value), format: currencyNumberFormat(value.currency) };
     case 'boolean':
-      return { type: 'b', content: value.value ? '1' : '0' };
+      return { type: 'b', content: value.value ? '1' : '0', format: BOOLEAN_NUMBER_FORMAT };
     case 'date':
+      return renderTemporal(isoDateToSerial(value.value), value.value, DATE_NUMBER_FORMAT, isFormulaResult, sharedStrings);
     case 'time':
+      return renderTemporal(isoTimeToSerial(value.value), value.value, TIME_NUMBER_FORMAT, isFormulaResult, sharedStrings);
     case 'dateTime':
-      // ST_CellType's rare "d" variant -- the ISO-8601 string carried verbatim, never shared-string indexed, matching how content.ts's reader treats it symmetrically. xlsx has only this one combined-date-and-time cell type, so a 'date'/'time'/'dateTime'-kind cell from any source all collapse onto the identical t="d" wire representation.
-      return { type: 'd', content: encodeXmlText(value.value) };
+      return renderTemporal(isoDateTimeToSerial(value.value), value.value, DATE_TIME_NUMBER_FORMAT, isFormulaResult, sharedStrings);
     case 'error':
       return { type: 'e', content: encodeXmlText(value.value) };
     case 'empty':
@@ -265,13 +304,36 @@ function renderCellValue(value: ContentCellValue, isFormulaResult: boolean, shar
   }
 }
 
-function buildCellElement(cell: ContentSheetCell, sharedStrings: SharedStringTable): XmlElement {
-  const attrs: Record<string, string> = { r: cellReference(cell.row, cell.column), s: '0' };
+function renderString(text: string, isFormulaResult: boolean, sharedStrings: SharedStringTable): RenderedCellValue {
+  if (isFormulaResult) {
+    // A formula's own cached string result is written literally (t="str"), never shared-string indexed -- shared strings are ECMA-376's own convention for literal, non-formula text cells only; a formula's cached text result is written inline instead, mirroring exactly how typed/xlsx/content.ts's readCellValue reads the two cases apart.
+    return { type: 'str', content: encodeXmlText(text) };
+  }
+  return { type: 's', content: String(sharedStrings.intern(text)) };
+}
+
+// A temporal value whose ISO spelling could not be converted to a serial at all -- a value that is not the canonical ContentCellValue spelling (see typed/xlsx/serial.ts), or one naming a moment with no serial (a date before the epoch, an impossible calendar day, an hour past 23) -- degrades to an ordinary text cell carrying that original string VERBATIM. Writing a fabricated or clamped serial would silently turn an unreadable value into a plausible wrong one; writing the text keeps every character the caller supplied, visibly as text.
+function renderTemporal(
+  serial: number | undefined,
+  iso: string,
+  format: CellNumberFormat,
+  isFormulaResult: boolean,
+  sharedStrings: SharedStringTable,
+): RenderedCellValue {
+  if (serial === undefined) {
+    return renderString(iso, isFormulaResult, sharedStrings);
+  }
+  return { content: String(serial), format };
+}
+
+function buildCellElement(cell: ContentSheetCell, sharedStrings: SharedStringTable, cellFormats: CellFormatTable): XmlElement {
   const children: XmlNode[] = [];
+  const rendered = renderCellValue(cell.value, cell.formula !== undefined, sharedStrings);
+  const styleIndex = rendered?.format === undefined ? DEFAULT_CELL_FORMAT_INDEX : cellFormats.intern(rendered.format);
+  const attrs: Record<string, string> = { r: cellReference(cell.row, cell.column), s: String(styleIndex) };
   if (cell.formula !== undefined) {
     children.push(el('f', {}, [txt(encodeXmlText(cell.formula))]));
   }
-  const rendered = renderCellValue(cell.value, cell.formula !== undefined, sharedStrings);
   if (rendered !== undefined) {
     if (rendered.type !== undefined) {
       attrs.t = rendered.type;
@@ -281,7 +343,7 @@ function buildCellElement(cell: ContentSheetCell, sharedStrings: SharedStringTab
   return el('c', attrs, children);
 }
 
-function buildSheetDataElement(sheet: ContentSheet, sharedStrings: SharedStringTable): XmlElement {
+function buildSheetDataElement(sheet: ContentSheet, sharedStrings: SharedStringTable, cellFormats: CellFormatTable): XmlElement {
   const cellsByRow = new Map<number, ContentSheetCell[]>();
   for (const cell of sheet.cells) {
     const existing = cellsByRow.get(cell.row);
@@ -310,7 +372,7 @@ function buildSheetDataElement(sheet: ContentSheet, sharedStrings: SharedStringT
         attrs.hidden = 'true';
       }
     }
-    return el('row', attrs, cells.map((cell) => buildCellElement(cell, sharedStrings)));
+    return el('row', attrs, cells.map((cell) => buildCellElement(cell, sharedStrings, cellFormats)));
   });
   return el('sheetData', {}, rowElements);
 }
@@ -389,7 +451,7 @@ function buildBreaksElements(settings: ContentSheetPrintSettings): { rowBreaks?:
 }
 
 // CT_Worksheet's own required child element ORDER (ECMA-376 Part 1 SS18.3.1.99): sheetPr?, dimension?, sheetViews?, sheetFormatPr?, cols*, sheetData, ..., mergeCells?, ..., printOptions?, pageMargins?, pageSetup?, headerFooter?, rowBreaks?, colBreaks?, ... -- every element this writer emits follows that relative order (sheetViews and headerFooter are both skipped entirely: pure UI/print-preview state this package's own content model carries no data for).
-function buildWorksheetPart(sheet: ContentSheet, sharedStrings: SharedStringTable): XmlPart {
+function buildWorksheetPart(sheet: ContentSheet, sharedStrings: SharedStringTable, cellFormats: CellFormatTable): XmlPart {
   const children: XmlElement[] = [buildSheetPrElement(sheet.printSettings), el('dimension', { ref: computeDimension(sheet) })];
 
   const colsElement = buildColsElement(sheet.columns);
@@ -397,7 +459,7 @@ function buildWorksheetPart(sheet: ContentSheet, sharedStrings: SharedStringTabl
     children.push(colsElement);
   }
 
-  children.push(buildSheetDataElement(sheet, sharedStrings));
+  children.push(buildSheetDataElement(sheet, sharedStrings, cellFormats));
 
   const mergeCellsElement = buildMergeCellsElement(sheet.cells);
   if (mergeCellsElement !== undefined) {
@@ -427,15 +489,16 @@ export function buildXlsxPackage(document: ContentDocument): Package {
 
   const sheets = document.sheets;
   const sharedStrings = new SharedStringTable();
-  // Building every worksheet part first, before touching xl/sharedStrings.xml, is load-bearing: buildCellElement interns every literal string value into `sharedStrings` as a side effect while it walks each sheet's cells, and buildSharedStringsPart below must see the FULLY populated table.
-  const worksheetParts = sheets.map((sheet) => buildWorksheetPart(sheet, sharedStrings));
+  const cellFormats = new CellFormatTable();
+  // Building every worksheet part first, before touching xl/sharedStrings.xml or xl/styles.xml, is load-bearing: buildCellElement interns every literal string value into `sharedStrings` and every non-General number format into `cellFormats` as a side effect while it walks each sheet's cells, and buildSharedStringsPart/buildStylesPart below must both see the FULLY populated table.
+  const worksheetParts = sheets.map((sheet) => buildWorksheetPart(sheet, sharedStrings, cellFormats));
 
   const parts: Package['parts'] = {
     '[Content_Types].xml': buildContentTypesPart(sheets.length),
     '_rels/.rels': buildPackageRelsPart(),
     'xl/workbook.xml': buildWorkbookPart(sheets),
     'xl/_rels/workbook.xml.rels': buildWorkbookRelsPart(sheets.length),
-    'xl/styles.xml': buildStylesPart(),
+    'xl/styles.xml': buildStylesPart(cellFormats),
     'xl/sharedStrings.xml': buildSharedStringsPart(sharedStrings),
     'docProps/core.xml': buildCorePropertiesPart(document.metadata),
     'docProps/app.xml': buildAppPropertiesPart(document.metadata),

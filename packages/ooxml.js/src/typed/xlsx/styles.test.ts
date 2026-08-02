@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import type { Package } from '../../model/package';
 import { el } from '../../xml/fragment';
 import { parsePackage } from '../../package-io/read';
-import { readCellFormatCodes } from './styles';
+import { CellFormatTable, DEFAULT_CELL_FORMAT_INDEX, GENERAL_NUM_FMT_ID, readCellFormatCodes } from './styles';
 
 const FIXTURES_DIR = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');
 
@@ -63,5 +63,50 @@ describe('readCellFormatCodes: the built-in table, the <numFmts> overlay, and th
   it('reads an empty list for a package with no xl/styles.xml, and for a styleSheet with no <cellXfs>', () => {
     expect(readCellFormatCodes({ parts: {} })).toEqual([]);
     expect(readCellFormatCodes(stylesPackage(el('styleSheet', {}, [])))).toEqual([]);
+  });
+});
+
+describe('CellFormatTable: the write-side interner, mirroring SharedStringTable', () => {
+  it('starts with the General default at index 0 and declares nothing until something is interned', () => {
+    const table = new CellFormatTable();
+    expect(table.cellFormats()).toEqual([GENERAL_NUM_FMT_ID]);
+    expect(table.declarations()).toEqual([]);
+    expect(table.intern({ kind: 'builtin', id: GENERAL_NUM_FMT_ID })).toBe(DEFAULT_CELL_FORMAT_INDEX);
+    expect(table.cellFormats()).toEqual([GENERAL_NUM_FMT_ID]);
+  });
+
+  it('references a built-in format by its own id, declaring no <numFmt> for it', () => {
+    const table = new CellFormatTable();
+    expect(table.intern({ kind: 'builtin', id: 10 })).toBe(1);
+    expect(table.cellFormats()).toEqual([GENERAL_NUM_FMT_ID, 10]);
+    expect(table.declarations()).toEqual([]);
+  });
+
+  it('assigns custom codes ids from 164 upward, the first id a file may declare for itself', () => {
+    const table = new CellFormatTable();
+    expect(table.intern({ kind: 'custom', code: 'yyyy\\-mm\\-dd' })).toBe(1);
+    expect(table.intern({ kind: 'custom', code: '"TRUE";"TRUE";"FALSE"' })).toBe(2);
+    expect(table.declarations()).toEqual([
+      { id: 164, code: 'yyyy\\-mm\\-dd' },
+      { id: 165, code: '"TRUE";"TRUE";"FALSE"' },
+    ]);
+    expect(table.cellFormats()).toEqual([GENERAL_NUM_FMT_ID, 164, 165]);
+  });
+
+  it('hands the same index back for a repeated format, interning one xf per FORMAT rather than one per request', () => {
+    const table = new CellFormatTable();
+    const first = table.intern({ kind: 'custom', code: '[$GBP]#,##0.00' });
+    expect(table.intern({ kind: 'custom', code: '[$GBP]#,##0.00' })).toBe(first);
+    expect(table.intern({ kind: 'builtin', id: 21 })).not.toBe(first);
+    expect(table.intern({ kind: 'builtin', id: 21 })).toBe(2);
+    expect(table.cellFormats()).toEqual([GENERAL_NUM_FMT_ID, 164, 21]);
+    expect(table.declarations()).toHaveLength(1);
+  });
+
+  it('keeps built-in ids and custom codes in separate key spaces, so a code that looks like an id cannot collide with one', () => {
+    const table = new CellFormatTable();
+    expect(table.intern({ kind: 'builtin', id: 4 })).toBe(1);
+    expect(table.intern({ kind: 'custom', code: '4' })).toBe(2);
+    expect(table.cellFormats()).toEqual([GENERAL_NUM_FMT_ID, 4, 164]);
   });
 });
