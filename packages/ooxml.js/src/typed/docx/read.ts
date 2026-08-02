@@ -1,10 +1,10 @@
 import { z } from 'zod';
 import type { Package } from '../../model/package';
 import type { XmlElement, XmlNode } from '../../model/node';
-import type { Color, ContentBlock, ContentImageBlock, ContentListMembership, ContentParagraph, ContentRun, ContentSection, ContentTable, ContentTableCell, Margins, PageSize } from 'document-schema.js';
-import { ContentSectionSchema, PAGE_SIZE_LETTER, rgbHexToColor } from 'document-schema.js';
+import type { Color, ContentBlock, ContentBorder, ContentCellBorders, ContentImageBlock, ContentListMembership, ContentParagraph, ContentRun, ContentSection, ContentStrokeStyle, ContentTable, ContentTableCell, Margins, PageSize } from 'document-schema.js';
+import { COLOR_BLACK, ContentSectionSchema, PAGE_SIZE_LETTER, rgbHexToColor } from 'document-schema.js';
 import { DocumentMetadataSchema, readCoreProperties } from '../shared/metadata';
-import { emuToPt, twipsToPt } from '../shared/units';
+import { eighthPointsToPt, emuToPt, twipsToPt } from '../shared/units';
 import type { DrawingTheme } from '../shared/drawingml';
 import { EMPTY_THEME, readTheme } from '../shared/drawingml';
 import { assignSourcePaths } from '../shared/source-path';
@@ -14,6 +14,7 @@ import type { Relationship } from '../util';
 import { attr, childrenWithTag, elementsWithTag, resolveRelationships, rootElement, textContent } from '../util';
 import type { DocxStyleContext } from './styles';
 import { resolveParagraphProperties, resolveRunProperties } from './styles';
+import { NumberingDefinitionSchema, readNumberingDefinitions } from './numbering';
 
 // Package -> DocxDocument. Walks word/document.xml directly, resolving the full style cascade (docDefaults -> named-style basedOn chains -> paragraph-mark run properties -> character styles -> direct formatting) and DrawingML theme references for each run, so document order, styling, and geometry are all preserved -- unlike a naive reader that flattens paragraphs/tables into separate arrays with no shared ordering. Headers/footers keep their prior flat-text projection; live PAGE/NUMPAGES field substitution is not implemented -- fields resolve to their cached result text (Word already computed it), which is correct for every field except one whose value would change under a different pagination this reader doesn't perform. Ported from documents.js's src/ooxml/docx/read.ts (the section/style-cascade walk) merged with this package's own prior comment/footnote/header/footer reading.
 
@@ -36,6 +37,8 @@ export const DocxDocumentSchema = z.object({
   footnotes: z.array(FootnoteSchema),
   headers: z.array(z.string()),
   footers: z.array(z.string()),
+  // word/numbering.xml's own abstractNum/num definitions, keyed by w:numId -- see numbering.ts's own doc comment for why this sits as a separate top-level field rather than folded into ContentListMembership (the numId/level membership every list paragraph already carries via ContentParagraph.list, read unchanged by readListMembership below).
+  numbering: z.record(z.string(), NumberingDefinitionSchema),
 });
 export type DocxDocument = z.infer<typeof DocxDocumentSchema>;
 
@@ -264,10 +267,76 @@ function readCellShading(tcPr: XmlElement | undefined): Color | undefined {
   return fill === undefined || fill === 'auto' || fill === 'none' ? undefined : rgbHexToColor(fill);
 }
 
+// WordprocessingML's own ST_Border enumeration has several dozen decorative line styles (wave, threeDEmboss, dashDotStroked, ...) that ContentBorder's four-member ContentStrokeStyle can't distinguish individually -- each maps to whichever of solid/dashed/dotted/double it visually resembles most closely, the same "narrow to the closest matching value" convention readAlignment (styles.ts) already applies to w:jc's own both/distribute -> justify. Anything unmapped defaults to 'solid' rather than being dropped, since a border with an unrecognised style is still visually a border.
+const BORDER_STYLE_MAP: ReadonlyMap<string, ContentStrokeStyle> = new Map([
+  ['single', 'solid'],
+  ['thick', 'solid'],
+  ['triple', 'solid'],
+  ['outset', 'solid'],
+  ['inset', 'solid'],
+  ['threeDEmboss', 'solid'],
+  ['threeDEngrave', 'solid'],
+  ['dashed', 'dashed'],
+  ['dashSmallGap', 'dashed'],
+  ['dashDotStroked', 'dashed'],
+  ['dotDash', 'dashed'],
+  ['dotted', 'dotted'],
+  ['dotDotDash', 'dotted'],
+  ['double', 'double'],
+  ['doubleWave', 'double'],
+]);
+
+// ECMA-376's own default border width whenever @w:sz is present on a genuine (non-nil/none) edge but the attribute itself is absent -- 4 eighths of a point, i.e. half a point, the width Word's own UI defaults a newly-applied border to.
+const DEFAULT_BORDER_WIDTH_EIGHTH_POINTS = 4;
+
+// One w:tcBorders child (w:top/w:left/w:right/w:bottom): @w:val is the line style ('nil'/'none' means no border on that edge, mirroring readCellShading's own 'auto'/'none' treatment), @w:sz is the width in eighths of a point (ST_EighthPointMeasure -- see units.ts's own EIGHTH_POINTS_PER_POINT comment for why this isn't the half-point w:sz font-size uses), and @w:color is a 6-hex-digit RGB value or 'auto' (resolved to black, matching real Word rendering of an unspecified/automatic border colour).
+function readCellBorderEdge(tcBorders: XmlElement | undefined, tag: string): ContentBorder | undefined {
+  const edge = tcBorders === undefined ? undefined : childrenWithTag(tcBorders, tag)[0];
+  const val = edge === undefined ? undefined : attr(edge, 'w:val');
+  if (edge === undefined || val === undefined || val === 'nil' || val === 'none') {
+    return undefined;
+  }
+  const sz = attr(edge, 'w:sz');
+  const colorVal = attr(edge, 'w:color');
+  const color = colorVal === undefined || colorVal === 'auto' ? COLOR_BLACK : rgbHexToColor(colorVal);
+  return {
+    color,
+    widthPt: eighthPointsToPt(sz === undefined ? DEFAULT_BORDER_WIDTH_EIGHTH_POINTS : Number(sz)),
+    style: BORDER_STYLE_MAP.get(val) ?? 'solid',
+  };
+}
+
+// w:left/w:right also accept the RTL-neutral w:start/w:end aliases, mirroring resolveParagraphProperties' own w:ind/@w:left-vs-@w:start handling in styles.ts. Returns undefined (rather than an all-undefined object) when the cell declares no w:tcBorders at all, or declares one with every edge nil/none -- distinguishing "no border information present" from "borders explicitly present but empty" isn't meaningful here, so both collapse to the same absent result.
+function readCellBorders(tcPr: XmlElement | undefined): ContentCellBorders | undefined {
+  const tcBorders = tcPr === undefined ? undefined : childrenWithTag(tcPr, 'w:tcBorders')[0];
+  if (tcBorders === undefined) {
+    return undefined;
+  }
+  const borders: ContentCellBorders = {};
+  const left = readCellBorderEdge(tcBorders, 'w:left') ?? readCellBorderEdge(tcBorders, 'w:start');
+  const right = readCellBorderEdge(tcBorders, 'w:right') ?? readCellBorderEdge(tcBorders, 'w:end');
+  const top = readCellBorderEdge(tcBorders, 'w:top');
+  const bottom = readCellBorderEdge(tcBorders, 'w:bottom');
+  if (left !== undefined) {
+    borders.left = left;
+  }
+  if (right !== undefined) {
+    borders.right = right;
+  }
+  if (top !== undefined) {
+    borders.top = top;
+  }
+  if (bottom !== undefined) {
+    borders.bottom = bottom;
+  }
+  return Object.keys(borders).length === 0 ? undefined : borders;
+}
+
 interface RawCell {
   readonly gridSpan: number;
   readonly isVMergeContinuation: boolean;
   readonly background: Color | undefined;
+  readonly borders: ContentCellBorders | undefined;
   readonly blocks: ContentBlock[];
 }
 
@@ -282,6 +351,7 @@ function readRawCell(tc: XmlElement, context: DocxStyleContext, rels: ReadonlyMa
     gridSpan: gridSpanVal === undefined ? 1 : Number(gridSpanVal),
     isVMergeContinuation: vMergeVal === 'continue',
     background: readCellShading(tcPr),
+    borders: readCellBorders(tcPr),
     // readRawCell/readTable and readBodyBlocks are mutually recursive (a cell can contain a nested table) -- both are function declarations, so hoisting makes this forward reference safe.
     blocks: readBodyBlocks(tc.children, context, rels, pkg),
   };
@@ -323,6 +393,7 @@ function readTable(tbl: XmlElement, context: DocxStyleContext, rels: ReadonlyMap
         colSpan: cell.gridSpan > 1 ? cell.gridSpan : undefined,
         rowSpan: rowSpan > 1 ? rowSpan : undefined,
         background: cell.background,
+        borders: cell.borders,
       };
     }),
   }));
@@ -472,7 +543,7 @@ function readHeaderFooterText(pkg: Package, prefix: string): string[] {
   return out;
 }
 
-// Resolves a generic OOXML Package into DocxDocument: the WordprocessingML style cascade, DrawingML theme resolution, ordered sections of paragraphs/tables/page-breaks/images (document order preserved, including inside tables), plus comments, footnotes, and header/footer text. An inline (wp:inline) or floating/anchored (wp:anchor) w:drawing is resolved to a real ContentImageBlock via the containing part's own relationships, sniffed from its actual media-part bytes rather than trusted from any extension/content-type -- but a floating image's own wp:anchor position (page/margin/paragraph-relative offset) is never read, since ContentImageBlock has no absolute positioning field to record it in; it lands in the block flow at the point its w:drawing was encountered, same as an inline image. It is a one-way read, not a round-trip path: information not modelled here is dropped (numbering definitions themselves, table cell borders, section break types other than plain w:sectPr, live PAGE/NUMPAGES field re-evaluation, a floating image's own anchored position, and any image whose bytes don't sniff as PNG/JPEG), and a DocxDocument cannot be written back to a package.
+// Resolves a generic OOXML Package into DocxDocument: the WordprocessingML style cascade, DrawingML theme resolution (including w:themeColor run-colour references, resolved against the theme's own colour scheme), ordered sections of paragraphs/tables/page-breaks/images (document order preserved, including inside tables, with cell background AND border styling read from w:tcBorders), plus comments, footnotes, header/footer text, and word/numbering.xml's own abstractNum/num level definitions (numbering.ts's readNumberingDefinitions). An inline (wp:inline) or floating/anchored (wp:anchor) w:drawing is resolved to a real ContentImageBlock via the containing part's own relationships, sniffed from its actual media-part bytes rather than trusted from any extension/content-type -- but a floating image's own wp:anchor position (page/margin/paragraph-relative offset) is never read, since ContentImageBlock has no absolute positioning field to record it in; it lands in the block flow at the point its w:drawing was encountered, same as an inline image. It is a one-way read, not a round-trip path: information not modelled here is dropped (section break types other than plain w:sectPr -- ContentSection itself has no field to record w:type's nextPage/continuous/evenPage/oddPage distinction, a document-schema.js addition out of this package's own scope; live PAGE/NUMPAGES field re-evaluation; w:themeShade/w:themeTint refinement of a resolved theme colour; a floating image's own anchored position; and any image whose bytes don't sniff as PNG/JPEG), and a DocxDocument cannot be written back to a package.
 export function readDocx(pkg: Package): DocxDocument {
   const documentRoot = rootElement(pkg.parts[DOCUMENT_PART_PATH]);
   if (documentRoot === undefined) {
@@ -493,5 +564,6 @@ export function readDocx(pkg: Package): DocxDocument {
     footnotes: readFootnotes(pkg),
     headers: readHeaderFooterText(pkg, 'word/header'),
     footers: readHeaderFooterText(pkg, 'word/footer'),
+    numbering: readNumberingDefinitions(pkg),
   };
 }

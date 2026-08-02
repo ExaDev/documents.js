@@ -74,6 +74,8 @@ export {
   rgbHexToColor,
   AlignmentSchema,
   ContentBlockSchema,
+  ContentBorderSchema,
+  ContentCellBordersSchema,
   ContentImageBlockSchema,
   ContentListMembershipSchema,
   ContentPageBreakSchema,
@@ -82,6 +84,7 @@ export {
   ContentSectionSchema,
   ContentShapeSchema,
   ContentSlideSchema,
+  ContentStrokeStyleSchema,
   ContentTableCellSchema,
   ContentTableRowSchema,
   ContentTableSchema,
@@ -105,6 +108,8 @@ export type {
   Color,
   Alignment,
   ContentBlock,
+  ContentBorder,
+  ContentCellBorders,
   ContentImageBlock,
   ContentListMembership,
   ContentPageBreak,
@@ -113,6 +118,7 @@ export type {
   ContentSection,
   ContentShape,
   ContentSlide,
+  ContentStrokeStyle,
   ContentTable,
   ContentTableCell,
   ContentTableRow,
@@ -137,9 +143,13 @@ export type { DocumentMetadata } from './typed/shared/metadata';
 export { sniffImageFormat } from './image/sniff';
 export type { ImageFormat } from './image/sniff';
 
-// --- docx: a WordprocessingML reader resolving the full style cascade (docDefaults -> named-style basedOn chains -> paragraph-mark run properties -> character styles -> direct formatting) and DrawingML theme references into ordered sections of paragraphs/tables/page-breaks. ---
+// --- docx: a WordprocessingML reader resolving the full style cascade (docDefaults -> named-style basedOn chains -> paragraph-mark run properties -> character styles -> direct formatting) and DrawingML theme references (including w:themeColor run colours) into ordered sections of paragraphs/tables/page-breaks. ---
 export { readDocx, CommentSchema, DocxDocumentSchema, FootnoteSchema } from './typed/docx/read';
 export type { Comment, DocxDocument, Footnote } from './typed/docx/read';
+
+// word/numbering.xml's own abstractNum/num level definitions (glyph format, start-at value, restart rule) -- a companion to, not a replacement for, ContentListMembership's existing per-paragraph numId/level tracking. See numbering.ts's own doc comment for why this is a separate keyed structure rather than a ContentListMembership field.
+export { NumberingDefinitionSchema, NumberingLevelSchema, readNumberingDefinitions } from './typed/docx/numbering';
+export type { NumberingDefinition, NumberingDefinitions, NumberingLevel } from './typed/docx/numbering';
 
 // --- pptx: a PresentationML reader resolving the placeholder -> layout -> master -> theme inheritance cascade and DrawingML geometry into slides of positioned, styled shapes. ---
 export { readPptx, PptxDocumentSchema } from './typed/pptx/read';

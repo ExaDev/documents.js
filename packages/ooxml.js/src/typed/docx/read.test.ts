@@ -89,7 +89,12 @@ function buildFixturePackage(): Package {
 
   const tabBreakPara = el('w:p', {}, [el('w:r', {}, [el('w:t', {}, [txt('a')]), el('w:tab'), el('w:t', {}, [txt('b')]), el('w:br'), el('w:t', {}, [txt('c')])])]);
 
-  const mergedCell = el('w:tc', {}, [el('w:tcPr', {}, [el('w:gridSpan', { 'w:val': '2' }), el('w:shd', { 'w:fill': 'FF0000' })]), el('w:p', {}, [el('w:r', {}, [el('w:t', {}, [txt('Merged')])])])]);
+  const mergedCellBorders = el('w:tcBorders', {}, [
+    el('w:top', { 'w:val': 'single', 'w:sz': '8', 'w:color': '00FF00' }),
+    el('w:left', { 'w:val': 'nil' }),
+    el('w:bottom', { 'w:val': 'dashed', 'w:color': 'auto' }),
+  ]);
+  const mergedCell = el('w:tc', {}, [el('w:tcPr', {}, [el('w:gridSpan', { 'w:val': '2' }), el('w:shd', { 'w:fill': 'FF0000' }), mergedCellBorders]), el('w:p', {}, [el('w:r', {}, [el('w:t', {}, [txt('Merged')])])])]);
   const vMergeAnchor = el('w:tc', {}, [el('w:tcPr', {}, [el('w:vMerge', { 'w:val': 'restart' })]), el('w:p', {}, [el('w:r', {}, [el('w:t', {}, [txt('Top')])])])]);
   const vMergeContinuation1 = el('w:tc', {}, [el('w:tcPr', {}, [el('w:vMerge')]), el('w:p')]);
   const vMergeContinuation2 = el('w:tc', {}, [el('w:tcPr', {}, [el('w:vMerge')]), el('w:p')]);
@@ -140,12 +145,21 @@ function buildFixturePackage(): Package {
 
   const core = el('cp:coreProperties', {}, [el('dc:title', {}, [txt('Fixture Document')])]);
 
+  const numbering = el('w:numbering', {}, [
+    el('w:abstractNum', { 'w:abstractNumId': '0' }, [
+      el('w:lvl', { 'w:ilvl': '0' }, [el('w:start', { 'w:val': '1' }), el('w:numFmt', { 'w:val': 'decimal' }), el('w:lvlText', { 'w:val': '%1.' })]),
+      el('w:lvl', { 'w:ilvl': '1' }, [el('w:start', { 'w:val': '1' }), el('w:numFmt', { 'w:val': 'lowerRoman' }), el('w:lvlText', { 'w:val': '%2)' })]),
+    ]),
+    el('w:num', { 'w:numId': '5' }, [el('w:abstractNumId', { 'w:val': '0' })]),
+  ]);
+
   return {
     parts: {
       'word/document.xml': { kind: 'xml', nodes: [document] },
       'word/_rels/document.xml.rels': { kind: 'xml', nodes: [documentRels] },
       'word/styles.xml': { kind: 'xml', nodes: [styles] },
       'word/theme/theme1.xml': { kind: 'xml', nodes: [theme] },
+      'word/numbering.xml': { kind: 'xml', nodes: [numbering] },
       'docProps/core.xml': { kind: 'xml', nodes: [core] },
       'word/media/image1.png': { kind: 'binary', base64: TINY_PNG_BASE64 },
       'word/media/image2.png': { kind: 'binary', base64: TINY_PNG_BASE64 },
@@ -240,6 +254,12 @@ describe('readDocx: lists', () => {
     const listBlock = asParagraph(doc.sections[0]?.blocks[8]);
     expect(listBlock.list).toEqual({ numId: '5', level: 1 });
   });
+
+  it('resolves that numId\'s own numbering definition from word/numbering.xml', () => {
+    const doc = readDocx(buildFixturePackage());
+    expect(doc.numbering['5']?.levels['1']).toEqual({ format: 'lowerRoman', text: '%2)', startAt: 1 });
+    expect(doc.numbering['5']?.levels['0']).toEqual({ format: 'decimal', text: '%1.', startAt: 1 });
+  });
 });
 
 describe('readDocx: run text with tab/break', () => {
@@ -257,6 +277,16 @@ describe('readDocx: tables', () => {
     expect(table.columnWidthsPt).toEqual([144, 144]);
     expect(table.rows[0]?.cells[0]?.colSpan).toBe(2);
     expect(table.rows[0]?.cells[0]?.background).toEqual({ r: 1, g: 0, b: 0 });
+  });
+
+  it('reads w:tcBorders into the cell\'s own borders, mapping style keywords and eighth-point widths, skipping a nil edge and resolving an auto colour to black', () => {
+    const doc = readDocx(buildFixturePackage());
+    const table = asTable(doc.sections[0]?.blocks[10]);
+    const borders = table.rows[0]?.cells[0]?.borders;
+    expect(borders?.top).toEqual({ color: { r: 0, g: 1, b: 0 }, widthPt: 1, style: 'solid' });
+    expect(borders?.left).toBeUndefined();
+    expect(borders?.bottom).toEqual({ color: { r: 0, g: 0, b: 0 }, widthPt: 0.5, style: 'dashed' });
+    expect(borders?.right).toBeUndefined();
   });
 
   it('computes a vMerge anchor\'s rowSpan by scanning subsequent continuation rows, leaving them empty', () => {
