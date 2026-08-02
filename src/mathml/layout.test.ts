@@ -173,6 +173,49 @@ describe('layoutFormula: munder/mover/munderover (display style)', () => {
   });
 });
 
+describe('layoutFormula: munder/mover/munderover accent-attachment centring', () => {
+  it('centres a genuine accent="true" overscript at the base glyph\'s own font-declared top-accent-attachment point, not the geometric centre of the combined box', () => {
+    // A classic vector accent: an italic v with a rightwards-arrow accent above it. The arrow (11.376pt wide) is wider than the italic 'v' (6.048pt wide), so geometric centring and attachment-point centring genuinely disagree here -- STIX Two Math's own MathTopAccentAttachment entry for italic v (3.84pt from its own left origin) sits right of that glyph's geometric half-width (3.024pt), because the glyph slants.
+    const construct = el('mover', [mi('v'), mo('→')], [{ name: 'accent', value: 'true' }]);
+    const geometric = el('mover', [mi('v'), mo('→')]); // no accent="true" -- must fall back to plain geometric centring
+
+    const { box: accentBox, diagnostics } = layoutFormula([construct], { metrics: metrics(), sizePt: SIZE_PT, color: BLACK });
+    const { box: geometricBox } = layoutFormula([geometric], { metrics: metrics(), sizePt: SIZE_PT, color: BLACK });
+    expect(diagnostics).toEqual([]);
+
+    const accentRuns = glyphRuns(accentBox.items);
+    const geometricRuns = glyphRuns(geometricBox.items);
+    expect(accentRuns).toHaveLength(2);
+    expect(geometricRuns).toHaveLength(2);
+
+    const accentOver = accentRuns.find((r) => r.text === '→')!;
+    const geometricOver = geometricRuns.find((r) => r.text === '→')!;
+    expect(accentOver).toBeDefined();
+    expect(geometricOver).toBeDefined();
+
+    // Both constructs share an identical combined box width and an identical base position (attachment-point centring never moves the base or changes the box's own overall width), so any difference in the arrow's own x position is attributable entirely to the centring mode, not to some other geometry difference between the two formulas.
+    expect(accentBox.widthPt).toBeCloseTo(geometricBox.widthPt, 6);
+
+    // Geometric centring places the (wider) arrow flush against the combined box's own left edge, at x = 0.
+    expect(geometricOver.xPt).toBeCloseTo(0, 6);
+
+    // Attachment-point centring shifts the arrow right, so its own horizontal centre lands under the italic v's own font-declared attachment point rather than the box's geometric centre.
+    expect(accentOver.xPt).toBeGreaterThan(geometricOver.xPt + 0.5); // a real, non-trivial offset -- not rounding noise
+    expect(accentOver.xPt).toBeCloseTo(0.816, 2); // baseXPt (2.664) + topAccentXPt (3.84) - arrow.widthPt / 2 (5.688)
+  });
+
+  it('falls back to geometric centring when the base is not a single glyph the font has an attachment entry for', () => {
+    // A multi-character mi base ("sin") has no single MathTopAccentAttachment entry to resolve at all, so accent="true" must not change its layout versus the same construct without the attribute.
+    const withAccentAttr = el('mover', [mi('sin'), mo('→')], [{ name: 'accent', value: 'true' }]);
+    const withoutAccentAttr = el('mover', [mi('sin'), mo('→')]);
+    const { box: withAttr } = layoutFormula([withAccentAttr], { metrics: metrics(), sizePt: SIZE_PT, color: BLACK });
+    const { box: withoutAttr } = layoutFormula([withoutAccentAttr], { metrics: metrics(), sizePt: SIZE_PT, color: BLACK });
+    const overWith = glyphRuns(withAttr.items).find((r) => r.text === '→')!;
+    const overWithout = glyphRuns(withoutAttr.items).find((r) => r.text === '→')!;
+    expect(overWith.xPt).toBeCloseTo(overWithout.xPt, 6);
+  });
+});
+
 describe('layoutFormula: mtable', () => {
   it('lays out a 2x2 matrix as a real grid: two distinct row baselines, two distinct column x-positions', () => {
     const table = el('mtable', [

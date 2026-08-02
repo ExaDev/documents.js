@@ -166,8 +166,14 @@ function layoutScripts(base: MathBox, subscript: MathBox | undefined, superscrip
   return { widthPt, ascentPt, descentPt, heightPt: ascentPt + descentPt, items };
 }
 
-// True under/over stacking (munder/mover/munderover, or a movablelimits operator's own limits in displaystyle): centres `over`/`under` horizontally over the widest of the three boxes, and stacks them directly against `base`'s own ascent/descent edges with a fixed minimum gap -- see this module's own README/gotchas note on the deliberate simplification this makes (geometric centring, not accent-attachment-point centring, for accent="true" mover/munder).
-function layoutUnderOver(base: MathBox, under: MathBox | undefined, over: MathBox | undefined, ctx: LayoutContext): MathBox {
+// The absolute (combined-box-local) x-position an over/under script should centre itself at when accent-attachment-point centring applies -- undefined falls back to plain geometric centring against the combined box's own width.
+interface AccentAttachment {
+  readonly overXPt?: number;
+  readonly underXPt?: number;
+}
+
+// True under/over stacking (munder/mover/munderover, or a movablelimits operator's own limits in displaystyle): centres `over`/`under` horizontally over the widest of the three boxes by default, and stacks them directly against `base`'s own ascent/descent edges with a fixed minimum gap. When `accentAttachment` supplies a resolved position for `over`/`under` (a genuine accent="true"/accentunder="true" script over a single-glyph base the font has a MathTopAccentAttachment entry for), that script is instead centred at the base glyph's own font-declared attachment point rather than the combined box's geometric centre -- see layoutUnderOverElement's own resolveTopAccentXPt for how that position is resolved, and this module's own README/gotchas note for the fallback boundary.
+function layoutUnderOver(base: MathBox, under: MathBox | undefined, over: MathBox | undefined, ctx: LayoutContext, accentAttachment: AccentAttachment = {}): MathBox {
   const gapPt = ctx.metrics.stackGapMinPt;
   const overHeightPt = over === undefined ? 0 : gapPt + over.heightPt;
   const underHeightPt = under === undefined ? 0 : gapPt + under.heightPt;
@@ -175,19 +181,52 @@ function layoutUnderOver(base: MathBox, under: MathBox | undefined, over: MathBo
   const descentPt = base.descentPt + underHeightPt;
   const widthPt = Math.max(base.widthPt, under?.widthPt ?? 0, over?.widthPt ?? 0);
 
-  const items: MathLayoutItem[] = [...placeChild(base, (widthPt - base.widthPt) / 2, 0, ascentPt)];
+  const baseXPt = (widthPt - base.widthPt) / 2;
+  const items: MathLayoutItem[] = [...placeChild(base, baseXPt, 0, ascentPt)];
   if (over !== undefined) {
+    const overXPt = accentAttachment.overXPt === undefined ? (widthPt - over.widthPt) / 2 : baseXPt + accentAttachment.overXPt - over.widthPt / 2;
     // The over box's own bottom edge (descent) must land `gapPt` above base's own top edge (ascent above the shared baseline) -- i.e. its baseline sits `base.ascentPt + gapPt + over.descentPt` above the shared baseline.
-    items.push(...placeChild(over, (widthPt - over.widthPt) / 2, -(base.ascentPt + gapPt + over.descentPt), ascentPt));
+    items.push(...placeChild(over, overXPt, -(base.ascentPt + gapPt + over.descentPt), ascentPt));
   }
   if (under !== undefined) {
-    items.push(...placeChild(under, (widthPt - under.widthPt) / 2, base.descentPt + gapPt + under.ascentPt, ascentPt));
+    const underXPt = accentAttachment.underXPt === undefined ? (widthPt - under.widthPt) / 2 : baseXPt + accentAttachment.underXPt - under.widthPt / 2;
+    items.push(...placeChild(under, underXPt, base.descentPt + gapPt + under.ascentPt, ascentPt));
   }
   return { widthPt, ascentPt, descentPt, heightPt: ascentPt + descentPt, items };
 }
 
 function isMovableLimitsOperator(element: MathMlElement): boolean {
   return elementLocalName(element) === 'mo' && operatorProperties(textContent(element).trim()).movablelimits;
+}
+
+// Resolves the font's own MathTopAccentAttachment x-position (metrics.ts's own MathGlyphMetrics.topAccentXPt) for `baseElement`, when it is simple enough for the metric to apply at all: a single token element (mi/mn/mo/mtext) whose own mathvariant-styled content is exactly one code point. Returns undefined for anything else -- a multi-character base, a non-token base (e.g. an mrow or another munder/mover), or a single glyph the embedded font's MATH table has no attachment entry for -- so the caller falls back to plain geometric centring exactly as before.
+function resolveTopAccentXPt(baseElement: MathMlElement, ctx: LayoutContext): number | undefined {
+  const name = elementLocalName(baseElement);
+  let rawText: string;
+  let intrinsicDefault: MathVariant;
+  if (name === 'mi') {
+    rawText = textContent(baseElement);
+    intrinsicDefault = miIntrinsicDefault(rawText);
+  } else if (name === 'mn' || name === 'mtext') {
+    rawText = textContent(baseElement);
+    intrinsicDefault = 'normal';
+  } else if (name === 'mo') {
+    rawText = textContent(baseElement).trim();
+    intrinsicDefault = 'normal';
+  } else {
+    return undefined;
+  }
+
+  const styled = applyMathVariant(rawText, tokenVariant(baseElement, intrinsicDefault, ctx));
+  const codePoints = [...styled];
+  if (codePoints.length !== 1) {
+    return undefined;
+  }
+  const codePoint = codePoints[0]?.codePointAt(0);
+  if (codePoint === undefined) {
+    return undefined;
+  }
+  return ctx.metrics.glyph(codePoint, ctx.sizePt)?.topAccentXPt;
 }
 
 function layoutUnderOverElement(element: MathMlElement, kind: 'munder' | 'mover' | 'munderover', ctx: LayoutContext): MathBox {
@@ -216,17 +255,26 @@ function layoutUnderOverElement(element: MathMlElement, kind: 'munder' | 'mover'
 
   const base = layoutNode(baseElement, ctx);
   const scriptCtx = scriptContext(ctx, false);
+  // accent/accentunder each opt only their own respective script (over for accent, under for accentunder) into attachment-point centring -- munderover's two scripts are independent, so each is resolved against its own flag.
+  const isAccent = attrValue(element, 'accent') === 'true';
+  const isAccentUnder = attrValue(element, 'accentunder') === 'true';
+  const topAccentXPt = isAccent || isAccentUnder ? resolveTopAccentXPt(baseElement, ctx) : undefined;
+  const accentAttachment: AccentAttachment = {
+    overXPt: isAccent ? topAccentXPt : undefined,
+    underXPt: isAccentUnder ? topAccentXPt : undefined,
+  };
+
   if (kind === 'munder') {
     const under = children[1] === undefined ? undefined : layoutNode(children[1], scriptCtx);
-    return layoutUnderOver(base, under, undefined, ctx);
+    return layoutUnderOver(base, under, undefined, ctx, accentAttachment);
   }
   if (kind === 'mover') {
     const over = children[1] === undefined ? undefined : layoutNode(children[1], scriptCtx);
-    return layoutUnderOver(base, undefined, over, ctx);
+    return layoutUnderOver(base, undefined, over, ctx, accentAttachment);
   }
   const under = children[1] === undefined ? undefined : layoutNode(children[1], scriptCtx);
   const over = children[2] === undefined ? undefined : layoutNode(children[2], scriptCtx);
-  return layoutUnderOver(base, under, over, ctx);
+  return layoutUnderOver(base, under, over, ctx, accentAttachment);
 }
 
 function layoutFraction(element: MathMlElement, ctx: LayoutContext): MathBox {
