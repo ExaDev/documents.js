@@ -18,11 +18,11 @@ importers:
         specifier: github:ExaDev/markdown-codec#beda0a89d92fffd153d5dcd05d767b404b721cda
         version: https://codeload.github.com/ExaDev/markdown-codec/tar.gz/beda0a89d92fffd153d5dcd05d767b404b721cda
       odf.js:
-        specifier: ^1.13.2
-        version: 1.13.2
+        specifier: ^2.0.0
+        version: 2.0.0
       ooxml.js:
-        specifier: ^2.5.2
-        version: 2.5.2
+        specifier: ^2.6.1
+        version: 2.6.1
       pdf-codec:
         specifier: ^1.4.2
         version: 1.4.2
@@ -1849,16 +1849,16 @@ packages:
     resolution: {integrity: sha512-4a+OsYv9UktOJKE+l1A4OufDgdRF9PifWj+tJnHURo/P+WOxpG4GzUFL9qCalmWauao6ogiG+QvnCovwPoyAWA==}
     engines: {node: '>=12.20.0'}
 
-  odf.js@1.13.2:
-    resolution: {integrity: sha512-57i7Yph8WEaUIBd3XU3kFbtuX2LkaQiwVWvXKEVRsFiSQ5BqojH+z06QNQYQVxU4wJQgfpEqeoOJQf/xRxM1uw==}
+  odf.js@2.0.0:
+    resolution: {integrity: sha512-3LwKnexa99JCz6IUc4wV3s7PXzKGEUX4afZSwA0EieGRiVaTER8hGC4THO+Jw7YizL6CLTXB5ESY1VA4NUC1xg==}
     engines: {node: '>=20'}
 
   onetime@6.0.0:
     resolution: {integrity: sha512-1FlR+gjXK7X+AsAHso35MnyN5KqGwJRi/31ft6x0M194ht7S+rWAvd7PHss9xSKMzE0asv1pyIHaJYq+BbacAQ==}
     engines: {node: '>=12'}
 
-  ooxml.js@2.5.2:
-    resolution: {integrity: sha512-Mx9IcZPNf83ypkZBFZ5GfFVWMt3dWu5svAo8wdM0u2lyZ7cyyiH5NhNJNoelqD2EZ8x8N4Fjz6TM092Xe7JCDQ==}
+  ooxml.js@2.6.1:
+    resolution: {integrity: sha512-b99MFdlhjS33GDFoaW2fHXbgKoaxp6KxRuoiEEZTYLhNePlJ1qsX05sZ5l89xVYr27jNs9SzAswXk5YMbaR3gg==}
     engines: {node: '>=20'}
 
   optionator@0.9.4:
@@ -4284,7 +4284,7 @@ snapshots:
 
   obug@2.1.4: {}
 
-  odf.js@1.13.2:
+  odf.js@2.0.0:
     dependencies:
       document-schema.js: 2.0.0
       fast-xml-parser: 5.10.1
@@ -4295,7 +4295,7 @@ snapshots:
     dependencies:
       mimic-fn: 4.0.0
 
-  ooxml.js@2.5.2:
+  ooxml.js@2.6.1:
     dependencies:
       document-schema.js: 2.0.0
       fast-xml-parser: 5.10.1
