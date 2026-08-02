@@ -80,6 +80,16 @@ try {
 
 None of these four packages depend on each other for this vocabulary — each depends on `document-schema.js` directly, which is the whole point: one schema, not four independently-maintained, drift-prone copies.
 
+## npm aliases
+
+This package also publishes under the following alternate npm names — the identical build, same version, republished by CI alongside the primary `document-schema.js` package:
+
+- [document-content-model](https://www.npmjs.com/package/document-content-model)
+- [doc-model.js](https://www.npmjs.com/package/doc-model.js)
+- [doc-schema.js](https://www.npmjs.com/package/doc-schema.js)
+- [document-schema](https://www.npmjs.com/package/document-schema)
+- [document-model.js](https://www.npmjs.com/package/document-model.js)
+
 ## License
 
 MIT
