@@ -1,3 +1,11 @@
+# [1.61.0](https://github.com/ExaDev/documents.js/compare/v1.60.3...v1.61.0) (2026-08-02)
+
+
+### Features
+
+* add Greek symbol-variant glyphs to the mathvariant mapping ([cb3e188](https://github.com/ExaDev/documents.js/commit/cb3e1882ea351259b9a48ce2a9872c5e9114b825))
+* centre accented mover/munder using the font's own top-accent-attachment metric ([30e2b17](https://github.com/ExaDev/documents.js/commit/30e2b17fbebb53b522059add7682b794ef39ce16))
+
 ## [1.60.3](https://github.com/ExaDev/documents.js/compare/v1.60.2...v1.60.3) (2026-08-02)
 
 
