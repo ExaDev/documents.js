@@ -96,6 +96,25 @@ describe('resolveRunProperties: colour', () => {
     const { paragraph, run } = paragraphWithRun([], runEl([el('w:color', { 'w:val': 'auto' })]));
     expect(resolveRunProperties(run, paragraph, { stylesRoot: undefined, theme: EMPTY_THEME }).color).toBeUndefined();
   });
+
+  it('resolves w:themeColor against the theme colour scheme, taking precedence over w:val', () => {
+    const themedTheme = { colorScheme: new Map([['accent1', { r: 0.2, g: 0.4, b: 0.6 }]]), majorFont: 'Major Font', minorFont: 'Minor Font' };
+    const { paragraph, run } = paragraphWithRun([], runEl([el('w:color', { 'w:val': 'FF0000', 'w:themeColor': 'accent1' })]));
+    expect(resolveRunProperties(run, paragraph, { stylesRoot: undefined, theme: themedTheme }).color).toEqual({ r: 0.2, g: 0.4, b: 0.6 });
+  });
+
+  it('resolves the background1/text1/background2/text2 logical theme colour names to their dark/light slot pair', () => {
+    const themedTheme = { colorScheme: new Map([['dk1', { r: 0, g: 0, b: 0 }], ['lt1', { r: 1, g: 1, b: 1 }]]), majorFont: 'Major Font', minorFont: 'Minor Font' };
+    const text1 = paragraphWithRun([], runEl([el('w:color', { 'w:themeColor': 'text1' })]));
+    const background1 = paragraphWithRun([], runEl([el('w:color', { 'w:themeColor': 'background1' })]));
+    expect(resolveRunProperties(text1.run, text1.paragraph, { stylesRoot: undefined, theme: themedTheme }).color).toEqual({ r: 0, g: 0, b: 0 });
+    expect(resolveRunProperties(background1.run, background1.paragraph, { stylesRoot: undefined, theme: themedTheme }).color).toEqual({ r: 1, g: 1, b: 1 });
+  });
+
+  it('falls back to w:val when the theme colour reference does not resolve', () => {
+    const { paragraph, run } = paragraphWithRun([], runEl([el('w:color', { 'w:val': '00FF00', 'w:themeColor': 'accent1' })]));
+    expect(resolveRunProperties(run, paragraph, { stylesRoot: undefined, theme: EMPTY_THEME }).color).toEqual({ r: 0, g: 1, b: 0 });
+  });
 });
 
 describe('resolveRunProperties: fonts and size', () => {

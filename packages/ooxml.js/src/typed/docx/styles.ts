@@ -74,10 +74,38 @@ function readUnderline(u: XmlElement | undefined): boolean | undefined {
   return val !== undefined && val !== 'none';
 }
 
-// w:color/@w:val is a 6-hex-digit RGB string or the literal "auto" (the automatic/theme-inherited colour, almost always rendering as black-on-white in practice). "auto" defers to a lower-priority layer rather than asserting black outright, since a lower layer (or the final default) may already resolve to the right colour. w:themeColor (docx's own, DrawingML-independent theme-colour-reference enum) is not resolved -- real-world runs overwhelmingly use direct w:val hex rather than theme references.
-function readRunColor(colorEl: XmlElement | undefined): Color | undefined {
+// w:color/@w:themeColor's own ST_ThemeColor enumeration, mapped to the a:clrScheme slot names DrawingTheme.colorScheme is keyed by (see shared/drawingml.ts's own CLR_SCHEME_SLOTS). background1/text1/background2/text2 are WordprocessingML's logical names for the identical dark1/light1/dark2/light2 pair -- unlike PresentationML, WordprocessingML has no p:clrMap indirection a docx theme reference resolves through, so this mapping is the fixed, direct pairing ECMA-376/real Word output always uses, not a live lookup.
+const THEME_COLOR_SLOT: ReadonlyMap<string, string> = new Map([
+  ['dark1', 'dk1'],
+  ['light1', 'lt1'],
+  ['dark2', 'dk2'],
+  ['light2', 'lt2'],
+  ['accent1', 'accent1'],
+  ['accent2', 'accent2'],
+  ['accent3', 'accent3'],
+  ['accent4', 'accent4'],
+  ['accent5', 'accent5'],
+  ['accent6', 'accent6'],
+  ['hyperlink', 'hlink'],
+  ['followedHyperlink', 'folHlink'],
+  ['background1', 'lt1'],
+  ['text1', 'dk1'],
+  ['background2', 'lt2'],
+  ['text2', 'dk2'],
+]);
+
+// w:color/@w:val is a 6-hex-digit RGB string or the literal "auto" (the automatic/theme-inherited colour, almost always rendering as black-on-white in practice). "auto" defers to a lower-priority layer rather than asserting black outright, since a lower layer (or the final default) may already resolve to the right colour. w:color/@w:themeColor references a theme colour scheme slot instead of a literal value (see THEME_COLOR_SLOT); when present it takes precedence over w:val, per ECMA-376 -- w:val in that case is merely Word's own cached fallback for a consumer that can't resolve the theme, so it's only consulted here if the theme reference itself fails to resolve (an unknown themeColor value, or a theme missing that slot entirely). w:themeShade/w:themeTint (a further shade/tint refinement of the resolved theme colour) are deliberately not applied -- a real, tracked scope narrowing, not a silent approximation: WordprocessingML encodes these as a raw 00-FF byte fraction, a materially different convention from DrawingML's own thousandths-of-a-percent a:shade/a:tint (shared/color.ts's applyColorTransforms), so reusing that module's algorithm without first verifying WordprocessingML's own byte-domain formula against real Word-rendered output would risk silently miscolouring text; the base theme colour itself still resolves correctly, only this secondary refinement is skipped.
+function readRunColor(colorEl: XmlElement | undefined, theme: DrawingTheme): Color | undefined {
   if (colorEl === undefined) {
     return undefined;
+  }
+  const themeColor = attr(colorEl, 'w:themeColor');
+  if (themeColor !== undefined) {
+    const slot = THEME_COLOR_SLOT.get(themeColor);
+    const resolved = slot === undefined ? undefined : theme.colorScheme.get(slot);
+    if (resolved !== undefined) {
+      return resolved;
+    }
   }
   const val = attr(colorEl, 'w:val');
   return val === undefined || val === 'auto' ? undefined : rgbHexToColor(val);
@@ -115,7 +143,7 @@ function readRunPropertiesLayer(rPr: XmlElement | undefined, theme: DrawingTheme
     strike: readToggle(childrenWithTag(rPr, 'w:strike')[0]),
     fontFamily: readRunFontFamily(childrenWithTag(rPr, 'w:rFonts')[0], theme),
     sizePt: szVal === undefined ? undefined : halfPointsToPt(Number(szVal)),
-    color: readRunColor(childrenWithTag(rPr, 'w:color')[0]),
+    color: readRunColor(childrenWithTag(rPr, 'w:color')[0], theme),
   };
 }
 
