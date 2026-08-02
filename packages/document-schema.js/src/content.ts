@@ -3,10 +3,11 @@ import { ColorSchema } from './color';
 import type { Color } from './color';
 import { BoxSchema, MarginsSchema, PageSizeSchema } from './geometry';
 import type { Box } from './geometry';
+import { MathMlNodeSchema } from './mathml';
 import { LayoutMetadataSchema } from './metadata';
 import { AlignmentSchema } from './style';
 
-// The shared block model underlying a wordprocessing document's sections and a presentation document's slides. Ported from ooxml.js's src/typed/shared/content.ts (itself ported from documents.js's src/model/content.ts) -- the canonical home now; ooxml.js and documents.js both import this instead of maintaining their own copy. The ContentDocument envelope below (formatVersion + kind + wordprocessing/presentation/spreadsheet/drawing variants) is this package's own addition on top of that shared vocabulary, matching documents.js's existing model/content.ts shape, since a caller needs a single top-level value to carry through a conversion pipeline.
+// The shared block model underlying a wordprocessing document's sections and a presentation document's slides. Ported from ooxml.js's src/typed/shared/content.ts (itself ported from documents.js's src/model/content.ts) -- the canonical home now; ooxml.js and documents.js both import this instead of maintaining their own copy. The ContentDocument envelope below (formatVersion + kind + wordprocessing/presentation/spreadsheet/drawing/formula variants) is this package's own addition on top of that shared vocabulary, matching documents.js's existing model/content.ts shape, since a caller needs a single top-level value to carry through a conversion pipeline.
 
 // sourcePath is assigned by each format's reader at read time and copied onto emitted LayoutItems by the layout engine; this package only defines the field, it doesn't generate values. Known limitation: sourcePath values are stable within one read+layout pass over a single document, not across edits -- inserting content earlier in a document shifts every later path. This is not a stable identity scheme for incremental re-layout; it exists for tagged/accessible-PDF-style traceability and debugging, not edit-tracking.
 
@@ -85,7 +86,7 @@ export interface ContentTable {
   sourcePath?: string; // deterministic, document-order-derived path assigned by the format reader
 }
 
-// ContentEmbeddedObject is mutually recursive with ContentDocument (an embedded object carries a whole ContentDocument, which can itself contain another embedded object -- e.g. a formula embedded inside a drawing embedded inside a spreadsheet) -- hand-written, mirroring ContentTable/ContentBlock's own recursive-guard-plus-z.custom pattern immediately below, since z.lazy() collapses to `unknown` for recursive children in this pinned Zod version. objectKind names what the embedded thing conceptually is: 'formula' is a short inline equation/OLE-formula object, expected to be short enough that a layout engine can reasonably lay it out and render it; the other four objectKind values name an embedded whole sub-document of that ContentDocument kind (an embedded spreadsheet range, a nested drawing, etc.) and are expected to round-trip through this model losslessly without ever being laid out or rendered -- this package holds schemas only, so no rendering/layout logic lives here regardless of objectKind.
+// ContentEmbeddedObject is mutually recursive with ContentDocument (an embedded object carries a whole ContentDocument, which can itself contain another embedded object -- e.g. a formula embedded inside a drawing embedded inside a spreadsheet) -- hand-written, mirroring ContentTable/ContentBlock's own recursive-guard-plus-z.custom pattern immediately below, since z.lazy() collapses to `unknown` for recursive children in this pinned Zod version. Every objectKind names an embedded whole sub-document of the identically-named ContentDocument kind, 'formula' included now that ContentDocument has a real 'formula' variant of its own (below) -- so an embedded equation carries genuine MathML rather than, as before, a wordprocessing document standing in for one. That pairing is a producer convention, not a constraint this schema enforces: objectKind and document.kind are independently typed, and nothing here rejects a mismatched pair. A 'formula' object is expected to be short enough that a layout engine can reasonably lay it out and render it; the other four are expected to round-trip through this model losslessly without ever being laid out or rendered. This package holds schemas only, so no rendering/layout logic lives here regardless of objectKind.
 export type ContentEmbeddedObjectKind = 'formula' | 'wordprocessing' | 'presentation' | 'spreadsheet' | 'drawing';
 
 export interface ContentEmbeddedObject {
@@ -269,14 +270,17 @@ export type ContentSlide = z.infer<typeof ContentSlideSchema>;
 export const DecimalStringSchema = z.string().regex(/^-?(0|[1-9]\d*)(\.\d+)?$/);
 export type DecimalString = z.infer<typeof DecimalStringSchema>;
 
-// A cell's own computed/typed value, one variant per ODF office:value-type. formula and displayText live on ContentSheetCellSchema itself, not per-variant here, since a formula can produce any of these value kinds and displayText is a per-cell rendering concern, not part of the value's own type. exactValue is an additive-optional sidecar on the number/percentage/currency variants only (the ones a real spreadsheet stores as an arbitrary-precision decimal underneath): value always remains the nearest IEEE-754 double approximation, present and populated exactly as before; exactValue, when present, is the authoritative exact decimal representation, and a producer should only set it when `String(Number(exactValue))` would not round-trip back to `exactValue` exactly -- so it is absent for the overwhelming majority of real cells (anything a double already represents exactly) and adds zero bytes to ordinary documents.
+// A cell's own computed/typed value, one variant per ODF office:value-type, plus a 'dateTime' variant ODF has no separate type for (see below). formula and displayText live on ContentSheetCellSchema itself, not per-variant here, since a formula can produce any of these value kinds and displayText is a per-cell rendering concern, not part of the value's own type. exactValue is an additive-optional sidecar on the number/percentage/currency variants only (the ones a real spreadsheet stores as an arbitrary-precision decimal underneath): value always remains the nearest IEEE-754 double approximation, present and populated exactly as before; exactValue, when present, is the authoritative exact decimal representation, and a producer should only set it when `String(Number(exactValue))` would not round-trip back to `exactValue` exactly -- so it is absent for the overwhelming majority of real cells (anything a double already represents exactly) and adds zero bytes to ordinary documents.
+//
+// -- Canonical date/time wire spelling -- The three temporal variants below each carry their value as a string, and that string has exactly one permitted spelling, stated here once and binding on every producer (odf.js, ooxml.js, and documents.js's own hsqldb/firebird decoders alike): 'date' is an ISO 8601 calendar date, `YYYY-MM-DD`; 'time' is a plain ISO 8601 wall-clock time of day, `HH:MM:SS` (24-hour, zero-padded, seconds always present, no date part, no timezone designator, and NOT ODF's own `PTnHnMnS` duration spelling, which a producer reading `office:time-value` must convert from); 'dateTime' is an ISO 8601 combined date and time, `YYYY-MM-DDTHH:MM:SS`, with a `.sss` fractional-seconds part and/or a `Z`/`+HH:MM` offset appended only when the source genuinely carried one. Anything else -- a locale-formatted rendering, a serial number, a bare `HH:MM` -- belongs in the cell's own displayText, never in `value`. This is a wire-format contract, not a validated one: the schemas below are plain z.string(), since a regex here would reject a real value a producer has not yet been updated to normalise, turning a fidelity bug into a hard parse failure. Producers converge on this spelling in their own later releases; this comment is the definition they converge on.
 export const ContentCellValueSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('number'), value: z.number(), exactValue: DecimalStringSchema.optional() }),
   z.object({ kind: z.literal('percentage'), value: z.number(), exactValue: DecimalStringSchema.optional() }), // the underlying numeric value, e.g. 0.5 for a cell displaying "50%"
   z.object({ kind: z.literal('currency'), value: z.number(), currency: z.string().optional(), exactValue: DecimalStringSchema.optional() }), // currency is the ISO 4217 code (e.g. 'USD'), mirroring ODF's office:currency
   z.object({ kind: z.literal('boolean'), value: z.boolean() }),
-  z.object({ kind: z.literal('date'), value: z.string() }), // ISO-8601 date, e.g. '2026-07-30'
-  z.object({ kind: z.literal('time'), value: z.string() }), // ISO-8601 time, e.g. '13:30:00'
+  z.object({ kind: z.literal('date'), value: z.string() }), // ISO 8601 calendar date, YYYY-MM-DD, e.g. '2026-07-30' -- a date with no time-of-day component; use 'dateTime' when the source carries both
+  z.object({ kind: z.literal('time'), value: z.string() }), // ISO 8601 wall-clock time of day, HH:MM:SS, e.g. '13:30:00' -- never ODF's PTnHnMnS duration spelling
+  z.object({ kind: z.literal('dateTime'), value: z.string() }), // ISO 8601 combined date and time, YYYY-MM-DDTHH:MM:SS, e.g. '2026-07-30T13:30:00' -- a genuine single date+time value (an HSQLDB/Firebird TIMESTAMP column, or xlsx's one t="d" cell type, which covers date and date+time alike), distinct from 'date' rather than collapsed onto it
   z.object({ kind: z.literal('string'), value: z.string() }),
   z.object({ kind: z.literal('error'), value: z.string() }), // the producer's own error text, e.g. '#DIV/0!'
   z.object({ kind: z.literal('empty') }), // a cell that is present (formatted, merged, etc.) but carries no value
@@ -301,16 +305,17 @@ export const ContentSheetCellSchema = z.object({
 });
 export type ContentSheetCell = z.infer<typeof ContentSheetCellSchema>;
 
+// widthPt/heightPt are optional-positive rather than required-nonnegative: an entry exists in these arrays whenever a column/row carries ANY per-axis property (a width, or merely `hidden`), and a real spreadsheet frequently has one without a declared size at all. Making the size required forced such an entry to state an explicit 0, which a consumer then had to treat as authoritative -- rendering a zero-width column instead of the application's own default width, and so producing a zero-size grid from a file that renders perfectly well elsewhere. Absent now means exactly "no declared size, use the application default"; 0 is no longer expressible, which is correct, since a genuinely zero-sized column is `hidden: true`, not a zero width.
 export const ContentSheetColumnSchema = z.object({
   index: z.number().int().nonnegative(),
-  widthPt: z.number().nonnegative(),
+  widthPt: z.number().positive().optional(),
   hidden: z.boolean().optional(),
 });
 export type ContentSheetColumn = z.infer<typeof ContentSheetColumnSchema>;
 
 export const ContentSheetRowSchema = z.object({
   index: z.number().int().nonnegative(),
-  heightPt: z.number().nonnegative(),
+  heightPt: z.number().positive().optional(),
   hidden: z.boolean().optional(),
 });
 export type ContentSheetRow = z.infer<typeof ContentSheetRowSchema>;
@@ -333,7 +338,7 @@ export const ContentSheetPrintSettingsSchema = z.object({
   pageSize: PageSizeSchema,
   margins: MarginsSchema,
   printRange: ContentSheetPrintRangeSchema.optional(), // absent means "print the whole used range"
-  scale: z.number().positive().optional(), // print scale, percentage or fraction depending on the source format's own convention
+  scalePercent: z.number().positive().optional(), // print scale as a percentage: 100 means actual size, 50 means half size. Named for its unit rather than the bare `scale` it replaced, which left percentage-vs-fraction to the source format's own convention and so made 1 ambiguous between "1% of actual size" and "actual size".
   fitToPages: z.object({ width: z.number().int().positive(), height: z.number().int().positive() }).optional(),
   repeatRows: ContentSheetRepeatRangeSchema.optional(), // rows repeated as a header band on every printed page
   repeatColumns: ContentSheetRepeatRangeSchema.optional(), // columns repeated as a header band on every printed page
@@ -451,8 +456,17 @@ export const ContentDrawPageSchema = z.object({
 });
 export type ContentDrawPage = z.infer<typeof ContentDrawPageSchema>;
 
-// Bumped whenever ContentDocumentSchema's shape changes incompatibly.
-export const CONTENT_FORMAT_VERSION = 1;
+// Formula content model: a standalone equation document (an ODF .odf formula document, or the equation an embedded 'formula' object carries). Unlike the other four kinds this has no page/slide/sheet structure at all -- a formula is one expression, positioned by whatever embeds it, so there is nothing here to paginate or place.
+export const ContentFormulaSchema = z.object({
+  // The formula's own MathML presentation-layer tree, carried as raw XML nodes (see src/mathml.ts for why that, rather than a MathML-specific element vocabulary). An array rather than a single root because a real formula part's content is a node list -- an XML declaration and/or whitespace text nodes commonly precede the <math> element itself, and dropping them on the way in would make this model lossy for no gain.
+  mathml: z.array(MathMlNodeSchema),
+  // The equivalent StarMath source, when the producing format carried one alongside the MathML (ODF stores it as the formula's own annotation). Purely informational: MathML is the authoritative content, and a consumer that renders from starMath instead is rendering a secondary encoding of the same expression.
+  starMath: z.string().optional(),
+});
+export type ContentFormula = z.infer<typeof ContentFormulaSchema>;
+
+// Bumped whenever ContentDocumentSchema's shape changes incompatibly. 2 added the 'formula' variant below, renamed ContentSheetPrintSettings.scale to scalePercent, made ContentSheetColumn.widthPt/ContentSheetRow.heightPt optional-positive rather than required-nonnegative, and added the 'dateTime' ContentCellValue kind.
+export const CONTENT_FORMAT_VERSION = 2;
 
 export const ContentDocumentSchema = z.discriminatedUnion('kind', [
   z.object({
@@ -478,6 +492,12 @@ export const ContentDocumentSchema = z.discriminatedUnion('kind', [
     formatVersion: z.literal(CONTENT_FORMAT_VERSION),
     metadata: LayoutMetadataSchema,
     pages: z.array(ContentDrawPageSchema),
+  }),
+  z.object({
+    kind: z.literal('formula'),
+    formatVersion: z.literal(CONTENT_FORMAT_VERSION),
+    metadata: LayoutMetadataSchema,
+    formula: ContentFormulaSchema,
   }),
 ]);
 export type ContentDocument = z.infer<typeof ContentDocumentSchema>;

@@ -9,6 +9,8 @@ import {
   type ContentEmbeddedObject,
   ContentRunSchema,
   ContentShapeSchema,
+  ContentSheetColumnSchema,
+  ContentSheetRowSchema,
   type ContentTable,
   isContentBlock,
 } from './content';
@@ -203,10 +205,16 @@ function spreadsheetDocument(): ContentDocument {
           { row: 2, column: 1, value: { kind: 'boolean', value: true }, displayText: 'TRUE' },
           { row: 3, column: 1, value: { kind: 'date', value: '2026-07-30' }, displayText: '30/07/2026' },
           { row: 4, column: 1, value: { kind: 'time', value: '13:30:00' }, displayText: '1:30 PM' },
-          { row: 5, column: 1, value: { kind: 'error', value: '#DIV/0!' }, displayText: '#DIV/0!' },
-          { row: 6, column: 1, value: { kind: 'empty' }, displayText: '', colSpan: 2 },
           {
-            row: 7,
+            row: 5,
+            column: 1,
+            value: { kind: 'dateTime', value: '2026-07-30T13:30:00' },
+            displayText: '30/07/2026 1:30 PM',
+          },
+          { row: 6, column: 1, value: { kind: 'error', value: '#DIV/0!' }, displayText: '#DIV/0!' },
+          { row: 7, column: 1, value: { kind: 'empty' }, displayText: '', colSpan: 2 },
+          {
+            row: 8,
             column: 0,
             value: { kind: 'string', value: 'Mixed formatting' },
             displayText: 'Mixed formatting',
@@ -216,10 +224,12 @@ function spreadsheetDocument(): ContentDocument {
         columns: [
           { index: 0, widthPt: 120 },
           { index: 1, widthPt: 80, hidden: false },
+          { index: 2, hidden: true }, // an entry carrying no declared width at all -- "use the application default", not a zero-width column
         ],
         rows: [
           { index: 0, heightPt: 15 },
           { index: 1, heightPt: 15, hidden: true },
+          { index: 2 },
         ],
         images: [
           {
@@ -238,7 +248,7 @@ function spreadsheetDocument(): ContentDocument {
           pageSize: { widthPt: 612, heightPt: 792 },
           margins: { topPt: 36, rightPt: 36, bottomPt: 36, leftPt: 36 },
           printRange: { startRow: 0, startColumn: 0, endRow: 10, endColumn: 5 },
-          scale: 100,
+          scalePercent: 100,
           fitToPages: { width: 1, height: 1 },
           repeatRows: { start: 0, end: 0 },
           repeatColumns: { start: 0, end: 0 },
@@ -315,6 +325,125 @@ function drawingDocument(): ContentDocument {
     ],
   };
 }
+
+// A real MathML tree, in the exact node shape an XML parser hands back: an <?xml?> declaration and a whitespace text node ahead of the <math> root, which is why ContentFormulaSchema.mathml is a node list rather than a single element.
+function formulaDocument(): ContentDocument {
+  return {
+    kind: 'formula',
+    formatVersion: CONTENT_FORMAT_VERSION,
+    metadata: { title: 'Pythagoras' },
+    formula: {
+      mathml: [
+        { type: 'declaration', attributes: [{ name: 'version', value: '1.0' }] },
+        { type: 'text', value: '\n' },
+        {
+          type: 'element',
+          tag: 'math',
+          attributes: [{ name: 'xmlns', value: 'http://www.w3.org/1998/Math/MathML' }],
+          children: [
+            {
+              type: 'element',
+              tag: 'msup',
+              attributes: [],
+              children: [
+                { type: 'element', tag: 'mi', attributes: [], children: [{ type: 'text', value: 'a' }] },
+                { type: 'element', tag: 'mn', attributes: [], children: [{ type: 'text', value: '2' }] },
+              ],
+            },
+            { type: 'element', tag: 'mo', attributes: [], children: [{ type: 'text', value: '+' }] },
+            { type: 'comment', value: ' the other leg ' },
+          ],
+        },
+      ],
+      starMath: 'a^2 + b^2 = c^2',
+    },
+  };
+}
+
+describe('ContentDocument formula variant', () => {
+  it('accepts a formula document carrying a real MathML node tree', () => {
+    expect(ContentDocumentSchema.safeParse(formulaDocument()).success).toBe(true);
+  });
+
+  it('deep-equals the original formula document after a JSON round trip, at full MathML depth', () => {
+    const original = formulaDocument();
+    const parsed = ContentDocumentSchema.parse(original);
+    const roundTripped: unknown = JSON.parse(JSON.stringify(parsed));
+    expect(ContentDocumentSchema.parse(roundTripped)).toEqual(original);
+  });
+
+  it('rejects a malformed MathML node buried inside the tree, not just at the outermost element', () => {
+    const malformed: unknown = {
+      kind: 'formula',
+      formatVersion: CONTENT_FORMAT_VERSION,
+      metadata: {},
+      formula: {
+        mathml: [
+          {
+            type: 'element',
+            tag: 'math',
+            attributes: [],
+            // malformed two levels down: an element's children must be nodes, and a node's `type` must be one of the six known kinds.
+            children: [{ type: 'element', tag: 'mi', attributes: [], children: [{ type: 'bogus' }] }],
+          },
+        ],
+      },
+    };
+    expect(ContentDocumentSchema.safeParse(malformed).success).toBe(false);
+  });
+
+  it('parses with starMath omitted, since MathML alone is the authoritative content', () => {
+    const parsed = ContentDocumentSchema.parse({
+      kind: 'formula',
+      formatVersion: CONTENT_FORMAT_VERSION,
+      metadata: {},
+      formula: { mathml: [{ type: 'element', tag: 'math', attributes: [], children: [] }] },
+    });
+    if (parsed.kind !== 'formula') {
+      throw new Error('expected a formula document');
+    }
+    expect(parsed.formula.starMath).toBeUndefined();
+  });
+});
+
+// The formula ContentDocument kind slots straight into the pre-existing ContentEmbeddedObjectKind 'formula' mechanism -- an embedded equation now carries genuine MathML instead of a wordprocessing document standing in for one.
+describe('an embedded formula object carrying a real formula document', () => {
+  it('validates as a ContentBlock and inside a whole document', () => {
+    const embedded: ContentBlock = {
+      kind: 'embeddedObject',
+      objectKind: 'formula',
+      document: formulaDocument(),
+      frame: { xPt: 10, yPt: 10, widthPt: 80, heightPt: 20 },
+    };
+    expect(isContentBlock(embedded)).toBe(true);
+    expect(
+      ContentDocumentSchema.safeParse({
+        kind: 'wordprocessing',
+        formatVersion: CONTENT_FORMAT_VERSION,
+        metadata: {},
+        sections: [
+          {
+            pageSize: { widthPt: 612, heightPt: 792 },
+            margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+            blocks: [embedded],
+          },
+        ],
+      }).success,
+    ).toBe(true);
+  });
+});
+
+describe('ContentSheetColumn/ContentSheetRow sizes', () => {
+  it('accepts an entry with no declared size, meaning "use the application default"', () => {
+    expect(ContentSheetColumnSchema.parse({ index: 3 })).toEqual({ index: 3 });
+    expect(ContentSheetRowSchema.parse({ index: 3, hidden: true })).toEqual({ index: 3, hidden: true });
+  });
+
+  it('rejects an explicit zero size, which previously parsed and was then treated as authoritative', () => {
+    expect(ContentSheetColumnSchema.safeParse({ index: 0, widthPt: 0 }).success).toBe(false);
+    expect(ContentSheetRowSchema.safeParse({ index: 0, heightPt: 0 }).success).toBe(false);
+  });
+});
 
 describe('sourcePath', () => {
   it('survives a JSON round trip when set on every block kind that carries it', () => {
@@ -421,24 +550,11 @@ describe('ContentDocumentSchema round trips', () => {
   });
 });
 
-// Deliberately deep nesting for ContentEmbeddedObjectSchema's own recursive guard, mirroring the discipline already applied to ContentTable's three-level recursion test above: a formula embedded inside a drawing embedded inside a spreadsheet, three levels deep, exercising both anchoring mechanisms (ContentSheetSchema.embeddedObjects at level 1->2, and the ContentBlock 'embeddedObject' variant at level 2->3) in the same structure.
-const formulaDocument: ContentDocument = {
-  kind: 'wordprocessing',
-  formatVersion: CONTENT_FORMAT_VERSION,
-  metadata: { title: 'Formula' },
-  sections: [
-    {
-      pageSize: { widthPt: 200, heightPt: 50 },
-      margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
-      blocks: [{ kind: 'paragraph', runs: [{ text: 'x^2 + y^2 = z^2' }] }],
-    },
-  ],
-};
-
+// Deliberately deep nesting for ContentEmbeddedObjectSchema's own recursive guard, mirroring the discipline already applied to ContentTable's three-level recursion test above: a formula embedded inside a drawing embedded inside a spreadsheet, three levels deep, exercising both anchoring mechanisms (ContentSheetSchema.embeddedObjects at level 1->2, and the ContentBlock 'embeddedObject' variant at level 2->3) in the same structure. The innermost document is a genuine 'formula'-kind ContentDocument (reusing the fixture above), so this also drives the recursion down through the custom MathMlNode guard, not only through the block model.
 const formulaEmbeddedBlock: ContentBlock = {
   kind: 'embeddedObject',
   objectKind: 'formula',
-  document: formulaDocument,
+  document: formulaDocument(),
   frame: { xPt: 10, yPt: 10, widthPt: 80, heightPt: 20 },
 };
 
@@ -525,14 +641,16 @@ describe('ContentEmbeddedObjectSchema deep recursion', () => {
       throw new Error('expected the level-3 block to be an embedded object');
     }
     expect(embeddedFormulaBlock.objectKind).toBe('formula');
-    if (embeddedFormulaBlock.document.kind !== 'wordprocessing') {
-      throw new Error('expected the level-3 embedded document to be wordprocessing');
+    if (embeddedFormulaBlock.document.kind !== 'formula') {
+      throw new Error('expected the level-3 embedded document to be a formula document');
     }
-    const formulaParagraph = embeddedFormulaBlock.document.sections[0]?.blocks[0];
-    if (formulaParagraph?.kind !== 'paragraph') {
-      throw new Error('expected a paragraph');
+    expect(embeddedFormulaBlock.document.formula.starMath).toBe('a^2 + b^2 = c^2');
+    const mathRoot = embeddedFormulaBlock.document.formula.mathml[2];
+    if (mathRoot?.type !== 'element') {
+      throw new Error('expected the third MathML node to be the <math> element');
     }
-    expect(formulaParagraph.runs[0]?.text).toBe('x^2 + y^2 = z^2');
+    expect(mathRoot.tag).toBe('math');
+    expect(mathRoot.children[0]?.type).toBe('element');
   });
 
   it('survives a JSON round trip at full depth', () => {
@@ -585,17 +703,20 @@ describe('ContentEmbeddedObjectSchema deep recursion', () => {
                             objectKind: 'formula',
                             frame: { xPt: 10, yPt: 10, widthPt: 80, heightPt: 20 },
                             document: {
-                              kind: 'wordprocessing',
+                              kind: 'formula',
                               formatVersion: CONTENT_FORMAT_VERSION,
                               metadata: {},
-                              sections: [
-                                {
-                                  pageSize: { widthPt: 200, heightPt: 50 },
-                                  margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
-                                  // malformed: a run's text must be a string, not a number -- must still fail even though every ancestor around it is well-formed.
-                                  blocks: [{ kind: 'paragraph', runs: [{ text: 1 }] }],
-                                },
-                              ],
+                              formula: {
+                                mathml: [
+                                  {
+                                    type: 'element',
+                                    tag: 'math',
+                                    attributes: [],
+                                    // malformed: an element's own attributes must each be a {name, value} string pair -- must still fail even though every ancestor around it is well-formed.
+                                    children: [{ type: 'element', tag: 'mi', attributes: [{ name: 'a' }], children: [] }],
+                                  },
+                                ],
+                              },
                             },
                           },
                         ],

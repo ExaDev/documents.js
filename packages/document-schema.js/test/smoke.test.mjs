@@ -49,11 +49,20 @@ describe('smoke: generated JSON Schema files', () => {
     expect(documentPackage.required).toEqual(expect.arrayContaining(['formatVersion', 'content']));
   });
 
-  it("content-document.schema.json's root is a bare oneOf of the 4 ContentDocument variants, and $defs.ContentBlock has 5 members", () => {
+  it("content-document.schema.json's root is a bare oneOf of the 5 ContentDocument variants, and $defs.ContentBlock has 5 members", () => {
     const contentDocument = readSchema('content-document.schema.json');
     expect(contentDocument).not.toHaveProperty('type');
-    expect(contentDocument.oneOf).toHaveLength(4);
+    expect(contentDocument.oneOf).toHaveLength(5);
     expect(contentDocument.$defs.ContentBlock.oneOf).toHaveLength(5);
+  });
+
+  it("content-document.schema.json's formula variant refs the hand-authored recursive MathMlNode definition", () => {
+    const contentDocument = readSchema('content-document.schema.json');
+    const formula = contentDocument.oneOf.find((variant) => variant.properties.kind.const === 'formula');
+    expect(formula.properties.formula.properties.mathml.items.$ref).toBe('#/$defs/MathMlNode');
+    expect(contentDocument.$defs.MathMlNode.oneOf).toHaveLength(6);
+    // The recursion itself: an element's children point back at the shared MathMlNode definition rather than inlining.
+    expect(contentDocument.$defs.MathMlElement.properties.children.items.$ref).toBe('#/$defs/MathMlNode');
   });
 
   it('layout-document.schema.json has the expected pages/images shape', () => {
