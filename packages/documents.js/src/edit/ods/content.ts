@@ -4,11 +4,13 @@ import type { ContentDocument } from '../../model/content';
 import { createOds } from './editor';
 import type { OdsSheet } from './sheet';
 
-// ContentDocument -> a fresh ods Package, built entirely through the same edit/ods/* live-view primitives a caller would use by hand -- the ods-side counterpart to buildOdtPackage/buildOdpPackage (src/edit/odt/content.ts, src/edit/odp/content.ts). pdfToOds (src/convert/convert.ts) calls this directly, feeding it a best-effort ContentDocument from reconstructSpreadsheet (src/layout/reconstruct.ts) -- the same role buildOdtPackage/buildOdpPackage/buildOdgPackage already play for pdfToOdt/pdfToOdp/pdfToOdg. It is equally usable standalone by any caller holding a spreadsheet ContentDocument from elsewhere (most naturally, one that came from readOdsContent itself).
+// ContentDocument -> a fresh ods Package, built entirely through the same edit/ods/* live-view primitives a caller would use by hand -- the ods-side counterpart to buildOdtPackage/buildOdpPackage (src/edit/odt/content.ts, src/edit/odp/content.ts). pdfToOds (src/convert/convert.ts) calls this directly, feeding it a best-effort ContentDocument from reconstructSpreadsheet (src/layout/reconstruct.ts) -- the same role buildOdtPackage/buildOdpPackage/buildOdgPackage already play for pdfToOdt/pdfToOdp/pdfToOdg. It is equally usable standalone by any caller holding a spreadsheet ContentDocument from elsewhere (most naturally, one that came from readOdsContent itself, or -- since xlsxToOds/xlsxToPdf compose through this exact function -- ooxml.js's readXlsxContent).
 //
 // printSettings.pageSize/margins/gridlines/headers/pageOrder now round-trip for real, via OdsSheet.printSettings (src/edit/ods/print-settings.ts) -- ContentSheetPrintSettingsSchema requires this field on every sheet, and reconstructSpreadsheet's own gridline-lattice detection genuinely needs the recovered gridlines/headers/pageSize signal to survive a real write-then-reread round trip to be verifiable at all. printRange/scale/fitToPages/repeatRows/repeatColumns/manualBreaks (the remaining, all-optional ContentSheetPrintSettings fields, none of which reconstructSpreadsheet ever sets) are still not written, matching print-settings.ts's own documented boundary.
 //
-// ContentSheetColumn/ContentSheetRow (per-column width/hidden, per-row height/hidden), ContentSheetImage, and embeddedObjects are still deliberately NOT written here -- OdsSheet's own scope (address.ts, sheet.ts, print-settings.ts) is cell access, merged ranges, and print settings, with no column-width/row-height/image API of its own to drive from. A documented, bounded gap, mirroring this codebase's own established precedent (buildOdtPackage's identical image/colSpan-write gaps): every cell's own value/formula/displayText, merged ranges (via OdsSheet.mergeCells), and now print settings, all build faithfully; a rebuilt sheet's own column widths/row heights fall back to whatever OdsEditor.addSheet's own scaffolded defaults are, not the source sheet's own.
+// ContentSheetColumn.widthPt/ContentSheetRow.heightPt now round-trip too, via OdsSheet.setColumnWidth/setRowHeight (src/edit/ods/column-row.ts) -- discovered as a genuine, severity-escalating gap while composing xlsxToPdf (src/convert/convert.ts), not merely tidied up in passing: an explicit-but-unstyled column/row (the previous behaviour) reads back at widthPt/heightPt 0, and src/layout/sheets.ts's own resolveAxis treats that explicit zero as authoritative rather than falling back to a sane default, collapsing every cell in a rebuilt sheet onto the same physical position the moment that sheet is ever laid out again (xlsxToPdf's own xlsxToOds -> odsToPdf hop does exactly that) -- a previously "cosmetic when reopened in a real app" gap that becomes real data corruption once buildOdsPackage's own output stops being only ever a terminal deliverable. See column-row.ts's own top-of-file note for the full account.
+//
+// Column/row HIDDEN state, ContentSheetImage, and embeddedObjects are still deliberately NOT written here -- OdsSheet's own scope (address.ts, sheet.ts, print-settings.ts, column-row.ts) has no hidden-state/image API of its own to drive from yet. A documented, bounded gap, mirroring this codebase's own established precedent (buildOdtPackage's identical image/colSpan-write gaps): every cell's own value/formula/displayText, merged ranges (via OdsSheet.mergeCells), print settings, and now column widths/row heights, all build faithfully; a rebuilt sheet's own hidden columns/rows come back visible at their own real (now-correct) size instead.
 export function buildOdsPackage(content: ContentDocument): Package {
   if (content.kind !== 'spreadsheet') {
     throw new Error('buildOdsPackage requires a spreadsheet ContentDocument');
@@ -23,6 +25,12 @@ export function buildOdsPackage(content: ContentDocument): Package {
     odsSheet.printSettings = sheet.printSettings;
     for (const cell of sheet.cells) {
       appendCell(odsSheet, cell);
+    }
+    for (const column of sheet.columns) {
+      odsSheet.setColumnWidth(column.index, column.widthPt);
+    }
+    for (const row of sheet.rows) {
+      odsSheet.setRowHeight(row.index, row.heightPt);
     }
   }
   return editor.toPackage();
