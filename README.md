@@ -2,7 +2,7 @@
 
 [![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/documents.js) [![npm](https://img.shields.io/badge/npm-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/documents.js) [![Release](https://img.shields.io/github/v/release/ExaDev/documents.js)](https://github.com/ExaDev/documents.js/releases/latest) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/documents.js/ci.yml?branch=main)](https://github.com/ExaDev/documents.js/actions)
 
-> Bidirectional docx/pptx/odt/odp/ods/odg ⇄ PDF conversion, a resolver-driven odm (ODF master document) → PDF conversion for multi-chapter documents, six further cross-format bridges (odt⇄docx, odp⇄pptx, ods⇄xlsx) that bypass PDF entirely, `.odb` (ODF database front-end) table extraction to xlsx/CSV from an embedded HSQLDB TEXT script (Tier 1), HSQLDB's own binary CACHED-table row-store format (Tier 2), and an embedded Firebird database's own gbak logical-backup format (Tier 3), a read-and-write live-view editor for docx/pptx/odt/odp/ods/odg content, a hand-written MathML presentation-layer typesetting engine with embedded-font PDF rendering (odf → PDF, plus formulas embedded inside odt/odp), and a fully hand-written PDF codec, built on [ooxml.js](https://github.com/ExaDev/ooxml.js) and [odf.js](https://github.com/ExaDev/odf.js).
+> Converts between any two compatible document formats through a shared content/layout pivot — docx, pptx, odt, odp, ods, odg, and xlsx all read into and build from the same `ContentDocument`/`LayoutDocument` model, with PDF simply the one format every variant can reach (docx/pptx/odt/odp/ods/odg/xlsx ⇄ PDF, thirteen pairs, all round-tripping both ways), plus six further cross-format bridges (odt⇄docx, odp⇄pptx, ods⇄xlsx) that bypass PDF entirely for pairs already sharing a pivot variant directly. Also included: a resolver-driven odm (ODF master document) → PDF conversion for multi-chapter documents, `.odb` (ODF database front-end) table extraction to xlsx/CSV from an embedded HSQLDB TEXT script (Tier 1), HSQLDB's own binary CACHED-table row-store format (Tier 2), and an embedded Firebird database's own gbak logical-backup format (Tier 3), a read-and-write live-view editor for docx/pptx/odt/odp/ods/odg content, a hand-written MathML presentation-layer typesetting engine with embedded-font PDF rendering (odf → PDF, plus formulas embedded inside odt/odp), and a fully hand-written PDF codec, built on [ooxml.js](https://github.com/ExaDev/ooxml.js) and [odf.js](https://github.com/ExaDev/odf.js).
 
 `documents.js` depends on `ooxml.js` for lossless docx/pptx/xlsx ⇄ JSON handling and extends it in two directions `ooxml.js` deliberately does not cover: full PDF support (parsing arbitrary real-world PDFs and generating new ones), and a read-**and-write** manipulation API for docx/pptx content — `ooxml.js`'s own typed readers (`readDocx`/`readPptx`) are one-way and explicitly forbid write-back. PDF reading, writing, and the docx⇄PDF/pptx⇄PDF conversion pipeline are provided by [`pdf-codec`](https://github.com/ExaDev/pdf-codec), a sibling package extracted from this one: a hand-written, dependency-minimal PDF codec with no external PDF library (`pdf-lib`, `pdfjs-dist`, `mupdf`, or any other) as a dependency — see pdf-codec's own README for how it's built and what it embeds (including the vendored STIX Two Math font this package renders formulas through). `src/mathml/` (the MathML typesetting engine) stays in this package and is hand-written too, for the same "no supply-chain surface beyond what's already declared" reason, but consumes pdf-codec's embedded math font through a structurally-typed port rather than any font-parsing code of its own — see [Architecture](#architecture).
 
@@ -59,10 +59,10 @@ npm install documents.js
 
 ## Usage
 
-The twelve round-trip ergonomic conversions (docx/pptx/odt/odp/ods/odg ⇄ PDF, all now round-trip both ways):
+The twelve round-trip ergonomic conversions between the six formats with their own layout engine and PDF (docx/pptx/odt/odp/ods/odg ⇄ PDF, all round-trip both ways), plus a thirteenth pair with the identical ergonomic shape and options — `xlsxToPdf`/`pdfToXlsx`, which composes the ods⇄xlsx bridge with the ods⇄pdf layout pair internally, since xlsx has no layout engine of its own:
 
 ```ts
-import { docxToPdf, odgToPdf, odpToPdf, odsToPdf, odtToPdf, pdfToDocx, pdfToOdg, pdfToOdp, pdfToOds, pdfToOdt, pptxToPdf, pdfToPptx } from 'documents.js';
+import { docxToPdf, odgToPdf, odpToPdf, odsToPdf, odtToPdf, pdfToDocx, pdfToOdg, pdfToOdp, pdfToOds, pdfToOdt, pdfToPptx, pdfToXlsx, pptxToPdf, xlsxToPdf } from 'documents.js';
 
 const pdfBytes = docxToPdf(docxBytes);
 const docxBytes2 = pdfToDocx(pdfBytes);
@@ -81,9 +81,12 @@ const odgBytes2 = pdfToOdg(pdfFromOdg);
 
 const pdfFromOds = odsToPdf(odsBytes);
 const odsBytes2 = pdfToOds(pdfFromOds); // recovers what was printed, not what was entered -- see Fidelity
+
+const pdfFromXlsx = xlsxToPdf(xlsxBytes); // composes xlsxToOds -> odsToPdf internally -- still a real, direct, single-call conversion
+const xlsxBytes2 = pdfToXlsx(pdfFromXlsx); // composes pdfToOds -> odsToXlsx internally
 ```
 
-Each accepts an optional `signal` (`AbortSignal`) and either a `onSubstitution` callback (docx/pptx/odt/odp/ods/odg → PDF, called once per character not representable in a standard-14 font) or a `sink` (PDF → docx/pptx/odt/odp/ods/odg, called once per recoverable parse diagnostic).
+Each accepts an optional `signal` (`AbortSignal`) and either a `onSubstitution` callback (docx/pptx/odt/odp/ods/odg/xlsx → PDF, called once per character not representable in a standard-14 font) or a `sink` (PDF → docx/pptx/odt/odp/ods/odg/xlsx, called once per recoverable parse diagnostic).
 
 Six further conversions bypass PDF entirely: `odtToDocx`/`docxToOdt`, `odpToPptx`/`pptxToOdp`, and `odsToXlsx`/`xlsxToOds` each compose a direct `readXContent` → `buildYPackage` pivot copy, since both sides of each pair already read into and build from the identical `ContentDocument` variant — no layout engine, no font measurement, and no geometry-based reconstruction in between. See [Fidelity](#fidelity) for what that means in practice.
 
@@ -262,7 +265,7 @@ try {
 }
 ```
 
-`odmToPdf` is not one of the twelve round-trip conversions or the six bridges above, has no `z.codec()` pair, and is not wired into the `DocumentConverter` port below — see Gotchas for why.
+`odmToPdf` is not one of the thirteen round-trip conversions or the six bridges above, has no `z.codec()` pair, and is not wired into the `DocumentConverter` port below — see Gotchas for why.
 
 `.odb` (ODF database front-end) support: `readOdbTables` extracts every table an embedded database declares, and `odbToXlsx`/`odbToCsv` turn that straight into xlsx or CSV bytes. Three embedded storage shapes are supported, dispatched automatically from the package's own connection URL and, for HSQLDB, its own per-table storage shape: a MEMORY/TEXT table's rows inline in `database/script` as ordinary TEXT-format SQL (Tier 1, `src/hsqldb/script.ts`), a CACHED table's rows in a separate binary page-cache file, `database/data` (Tier 2, `src/hsqldb/cache.ts`/`rowformat.ts` — LibreOffice's own embedded-HSQLDB default, see Architecture/Gotchas for the exact scope and version pinning), and a Firebird database's own `database/firebird.fbk` part — LibreOffice's modern default embedded engine since 4.1, a genuine gbak logical-backup stream rather than a raw on-disk database file (Tier 3; see the Gotchas entry below for the empirical finding this rests on). A caller never needs to know which shape or engine a given `.odb` used. HSQLDB's own whole-script BINARY/COMPRESSED serialisation is the one embedded shape still out of scope (see Gotchas/Fidelity):
 
@@ -294,7 +297,7 @@ import { odfToPdf } from 'documents.js';
 const pdfBytes = odfToPdf(odfBytes); // a single formula (or small formula document), faithfully typeset -- see Fidelity
 ```
 
-`odfToPdf` is not one of the twelve round-trip conversions above either: there is no `pdfToOdf` (recovering structured MathML from rendered glyphs is a categorically different, OCR-adjacent problem, not a geometry-reconstruction one — see [Fidelity](#fidelity)), no `z.codec()` pair, and — unlike `odmToPdf` — it *is* wired into the `DocumentConverter` port below, as a `DocumentFormat: 'odf'` source with only a `'pdf'` target.
+`odfToPdf` is not one of the thirteen round-trip conversions above either: there is no `pdfToOdf` (recovering structured MathML from rendered glyphs is a categorically different, OCR-adjacent problem, not a geometry-reconstruction one — see [Fidelity](#fidelity)), no `z.codec()` pair, and — unlike `odmToPdf` — it *is* wired into the `DocumentConverter` port below, as a `DocumentFormat: 'odf'` source with only a `'pdf'` target.
 
 Standalone `.odf` files are rare in practice; a formula embedded inside an odt paragraph or an odp slide is the far more common real-world case, and `odtToPdf`/`odpToPdf` already render one automatically wherever `readOdtContent`/`readOdpContent` find a `draw:frame` referencing an embedded formula sub-object — no extra code needed at the call site:
 
