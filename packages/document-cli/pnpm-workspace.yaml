@@ -7,3 +7,7 @@ minimumReleaseAgeExclude:
 
 # documents.js depends on markdown-codec via a pinned git commit, pending that package's own npm trusted-publisher setup (see documents.js's own pnpm-workspace.yaml/README for the full account) -- which makes markdown-codec a git-hosted (exotic) SUBdependency of this project. pnpm blocks exotic subdependencies by default; there is no per-package allowlist for this check the way allowBuilds/minimumReleaseAgeExclude offer, so this is disabled project-wide rather than left unset. Re-enable (remove this line) once markdown-codec is a real, published npm dependency.
 blockExoticSubdeps: false
+
+# markdown-codec's dist/ is committed and ships prebuilt (see that package's own README), so the only lifecycle script pnpm needs to run for it is "prepare": "husky" -- harmless (a no-op outside a real git checkout) but still gated behind allowBuilds like any other git-hosted dependency script, matching documents.js's own identical entry.
+allowBuilds:
+  markdown-codec@https://codeload.github.com/ExaDev/markdown-codec/tar.gz/beda0a89d92fffd153d5dcd05d767b404b721cda: true
