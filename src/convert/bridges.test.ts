@@ -466,7 +466,10 @@ describe('ods <-> xlsx: ods -> xlsx -> ods (double hop, starting from ods)', () 
     expect(cellAt(sheet, 4, 0)?.value).toEqual({ kind: 'string', value: 'Merged Cell' });
   });
 
-  it('documents the real, known losses of a full double-hop cycle: percentage/currency downgrade to a plain number, time collapses into date, and column widths are dropped entirely', () => {
+  it('documents the real, known losses of a full double-hop cycle: percentage/currency downgrade to a plain number and time collapses into date, but column widths now survive within tolerance', () => {
+    const original = odsContentOf(richOdsBytes());
+    const originalSheet = original.sheets[0]!;
+
     const xlsxBytes = odsToXlsx(richOdsBytes());
     const roundTrippedBytes = xlsxToOds(xlsxBytes);
     const sheet = odsContentOf(roundTrippedBytes).sheets[0]!;
@@ -478,10 +481,12 @@ describe('ods <-> xlsx: ods -> xlsx -> ods (double hop, starting from ods)', () 
     // Time: collapses into 'date' on the first hop (xlsx has one combined t="d" type) and STAYS 'date' on the second, since buildOdsPackage's own OdsCell.value setter writes whatever kind it is given -- there is no way back to 'time' once the first hop has already thrown that distinction away.
     expect(cellAt(sheet, 3, 0)?.value).toEqual({ kind: 'date', value: 'PT14H30M00S' });
 
-    // Column widths: NOT a character-width-unit rounding loss (that part round-trips fine, see the one-hop test above) -- buildOdsPackage (src/edit/ods/content.ts) does not write ContentSheetColumn's own widthPt AT ALL, a pre-existing, already-documented gap in that file's own module comment ("ContentSheetColumn/ContentSheetRow ... are still deliberately NOT written here"), not something newly introduced by this bridge. The xlsx hop's own <col> widths ARE read back into the pivot correctly (proven above); buildOdsPackage just never consults sheet.columns at all, so nothing carries their widths into the final ods. Three bare table:table-column elements do still exist in the output (a side effect of OdsSheet.cell's own address-resolution individuating table:table-column entries up to whatever column index a cell write touches, src/edit/ods/address.ts) -- but each one carries no table:style-name, so readOdsContent reads every one of them back at widthPt 0, a real, genuine "no width was ever recorded" reading, not a fabricated default.
+    // Column widths: buildOdsPackage (src/edit/ods/content.ts) now writes ContentSheetColumn.widthPt for real via OdsSheet.setColumnWidth (src/edit/ods/column-row.ts) -- a fix made while composing xlsxToPdf, since an unstyled column previously read back at widthPt 0 there too, and src/layout/sheets.ts's own resolveAxis treats that explicit zero as authoritative rather than falling back to a default (see column-row.ts's own top-of-file note). The tolerance here is COLUMN_WIDTH_TOLERANCE_PT stacked twice, not once -- this is a genuine double hop through the SAME lossy xlsx character-width-unit conversion the one-hop test above already documents (ods pt -> xlsx character-width units on the first hop, xlsx character-width units -> ods pt again on the second), so the accumulated drift can be up to twice the one-hop test's own single-hop bound.
     expect(sheet.columns).toHaveLength(3);
-    sheet.columns.forEach((column) => {
-      expect(column.widthPt).toBe(0);
+    originalSheet.columns.forEach((originalColumn, index) => {
+      const roundTrippedColumn = sheet.columns.find((c) => c.index === index);
+      expect(roundTrippedColumn).toBeDefined();
+      expect(Math.abs((roundTrippedColumn?.widthPt ?? 0) - originalColumn.widthPt)).toBeLessThanOrEqual(COLUMN_WIDTH_TOLERANCE_PT * 2);
     });
   });
 

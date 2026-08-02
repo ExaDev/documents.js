@@ -5,6 +5,7 @@ import type { ContentSheetPrintSettings } from 'document-schema.js';
 import { removeChild, setAttr } from '../../xml/edit';
 import { COVERED_CELL_TAG, resolveCellNode } from './address';
 import { OdsCell } from './cell';
+import { writeColumnWidth, writeRowHeight } from './column-row';
 import { readSheetPrintSettings, writeSheetPrintSettings } from './print-settings';
 
 const NAME_ATTR = 'table:name';
@@ -48,6 +49,16 @@ export class OdsSheet {
 
   set printSettings(value: ContentSheetPrintSettings) {
     writeSheetPrintSettings(this.pkg, this.live(), value);
+  }
+
+  // Mints a fresh style:style[family="table-column"] carrying the given width and repoints the column at `index`'s own table:style-name at it -- see column-row.ts's own top-of-file note for why this exists (an explicit-but-unstyled column reads back at widthPt 0, which src/layout/sheets.ts's own resolveAxis treats as a genuine zero-width reading, not a missing entry). Individuates (or gap-fills) the column the same way cell()/mergeCells already do, so calling this for a column no cell has touched yet is just as safe as calling it after.
+  setColumnWidth(index: number, widthPt: number): void {
+    writeColumnWidth(this.pkg, this.live(), index, widthPt);
+  }
+
+  // The row-height counterpart to setColumnWidth above, mirroring it exactly for style:family="table-row"/style:row-height.
+  setRowHeight(index: number, heightPt: number): void {
+    writeRowHeight(this.pkg, this.live(), index, heightPt);
   }
 
   // Resolves (individuating/gap-filling as needed) the cell at 0-based (row, column) and wraps it as an OdsCell -- rejecting a position covered by another cell's own merged range outright (see OdsCell's own class doc: a table:covered-table-cell is never wrapped), rather than silently handing back something whose value/formula/displayText setters would corrupt the merge.

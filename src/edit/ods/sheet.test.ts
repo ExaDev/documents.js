@@ -172,6 +172,84 @@ describe('OdsSheet.printSettings', () => {
   });
 });
 
+describe('OdsSheet.setColumnWidth / setRowHeight', () => {
+  it('a column/row no cell has touched yet reads back at width/height 0 (the pre-fix behaviour, still true until set)', () => {
+    const editor = createOds();
+    editor.sheets()[0]!.cell(0, 0).value = { kind: 'string', value: 'x' };
+    const content = readOdsContent(openOds(editor.toBytes()).toPackage());
+    if (content.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    expect(content.sheets[0]!.columns[0]?.widthPt).toBe(0);
+    expect(content.sheets[0]!.rows[0]?.heightPt).toBe(0);
+  });
+
+  it('set then get (via a real write -> reread round trip through odf.js\'s own readOds parser) round-trips the width/height', () => {
+    const editor = createOds();
+    const sheet = editor.sheets()[0]!;
+    sheet.cell(0, 0).value = { kind: 'string', value: 'x' };
+    sheet.setColumnWidth(0, 120);
+    sheet.setRowHeight(0, 30);
+
+    const content = readOdsContent(openOds(editor.toBytes()).toPackage());
+    if (content.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    expect(content.sheets[0]!.columns[0]?.widthPt).toBeCloseTo(120, 5);
+    expect(content.sheets[0]!.rows[0]?.heightPt).toBeCloseTo(30, 5);
+  });
+
+  it('individuates (gap-fills) a column/row no cell has ever touched, rather than requiring cell() first', () => {
+    const editor = createOds();
+    const sheet = editor.sheets()[0]!;
+    sheet.setColumnWidth(5, 90);
+    sheet.setRowHeight(5, 25);
+
+    const content = readOdsContent(openOds(editor.toBytes()).toPackage());
+    if (content.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    expect(content.sheets[0]!.columns.find((c) => c.index === 5)?.widthPt).toBeCloseTo(90, 5);
+    expect(content.sheets[0]!.rows.find((r) => r.index === 5)?.heightPt).toBeCloseTo(25, 5);
+  });
+
+  it('mints a fresh style on every call, repointing table:style-name rather than mutating whatever the column/row was pointing at before', () => {
+    const editor = createOds();
+    const sheet = editor.sheets()[0]!;
+    sheet.cell(0, 0).value = { kind: 'string', value: 'x' };
+    sheet.setColumnWidth(0, 100);
+    const table = findTableElement(editor);
+    const firstColumnStyleName = directChild(table, 'table:table-column')?.attributes.find((a) => a.name === 'table:style-name')?.value;
+    sheet.setColumnWidth(0, 200);
+    const secondColumnStyleName = directChild(table, 'table:table-column')?.attributes.find((a) => a.name === 'table:style-name')?.value;
+    expect(firstColumnStyleName).toBeDefined();
+    expect(secondColumnStyleName).toBeDefined();
+    expect(secondColumnStyleName).not.toBe(firstColumnStyleName);
+
+    const content = readOdsContent(openOds(editor.toBytes()).toPackage());
+    if (content.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    expect(content.sheets[0]!.columns[0]?.widthPt).toBeCloseTo(200, 5); // the SECOND set's own value is what's actually in effect
+  });
+
+  it('setting one sheet\'s column width does not perturb another sheet\'s own', () => {
+    const editor = createOds();
+    const sheetA = editor.sheets()[0]!;
+    const sheetB = editor.addSheet('Second');
+    sheetA.cell(0, 0).value = { kind: 'string', value: 'x' };
+    sheetB.cell(0, 0).value = { kind: 'string', value: 'y' };
+    sheetA.setColumnWidth(0, 150);
+
+    const content = readOdsContent(openOds(editor.toBytes()).toPackage());
+    if (content.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    expect(content.sheets[0]!.columns[0]?.widthPt).toBeCloseTo(150, 5);
+    expect(content.sheets[1]!.columns[0]?.widthPt).toBe(0);
+  });
+});
+
 describe('OdsSheet.name', () => {
   it('get/set the sheet name', () => {
     const sheet = createOds().sheets()[0]!;
