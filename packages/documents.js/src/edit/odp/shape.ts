@@ -1,8 +1,9 @@
 import type { Package, XmlElement, XmlNode } from 'odf.js';
-import { applyOdfTransform, formatOdfLength, resolveOdfShapeGeometry } from 'odf.js';
+import { formatOdfLength, resolveOdfShapeGeometry } from 'odf.js';
 import { attr } from 'ooxml.js';
 import type { Box } from '../../model/geometry';
-import { removeAttr, removeChild, setAttr } from '../../xml/edit';
+import { removeChild } from '../../xml/edit';
+import { applyOdfGeometry } from '../geometry';
 import { el } from '../../xml/fragment';
 import { buildList, OdtList } from '../odt/list';
 import type { ParagraphInit } from '../odt/paragraph';
@@ -15,17 +16,6 @@ function directChild(parent: XmlElement, tag: string): XmlElement | undefined {
     }
   }
   return undefined;
-}
-
-// The write-side inverse of odf.js's own resolveOdfShapeGeometry (src/typed/shared/transform.ts): given the shape's own unrotated frame and a target clockwise-on-screen rotationDeg, produces a draw:transform="rotate(angleRad) translate(txPt typPt)" string that, fed back through resolveOdfShapeGeometry, reproduces exactly `frame` and `rotationDeg`. This reuses applyOdfTransform -- the SAME exported function resolveOdfShapeGeometry's own read side uses to fold rotate()/translate() together -- rather than re-deriving the rotation matrix and its sign convention by hand: angleRad is the exact algebraic inverse of transform.ts's own netRotationDeg ("(-totalRad * 180) / Math.PI" for a single rotate()), and the translate offset is computed by asking applyOdfTransform where a bare rotate(angleRad) would place the frame's own local centre, then translating by whatever remains to reach the frame's real centre. See transform.ts's own top-of-file note for how the rotate-then-translate composition order and the clockwise-positive sign convention were empirically verified against real LibreOffice-rendered output -- this function inherits that verification by construction rather than re-deriving it, which is the whole point of building it on applyOdfTransform instead of a hand-rolled rotation matrix.
-function buildTransformAttr(frame: Box, rotationDeg: number): string {
-  const angleRad = (-rotationDeg * Math.PI) / 180;
-  const localCenter = { xPt: frame.widthPt / 2, yPt: frame.heightPt / 2 };
-  const rotatedCenter = applyOdfTransform([{ kind: 'rotate', angleRad }], localCenter);
-  const desiredCenter = { xPt: frame.xPt + frame.widthPt / 2, yPt: frame.yPt + frame.heightPt / 2 };
-  const txPt = desiredCenter.xPt - rotatedCenter.xPt;
-  const tyPt = desiredCenter.yPt - rotatedCenter.yPt;
-  return `rotate(${angleRad}) translate(${formatOdfLength(txPt)} ${formatOdfLength(tyPt)})`;
 }
 
 // A live view over a draw:frame element -- a slide shape, whose content is exactly one of a draw:text-box, a draw:image, or a table:table (this class only builds/reads the first two; buildOdpPackage, src/edit/odp/content.ts, never produces a table shape, mirroring pptx/content.ts's own identical scope). frame/rotationDeg keep ODF's own top-left, y-down convention in points already converted from its length-unit strings -- the Y-flip into PDF space happens exactly once, in src/layout/slides.ts, same as pptx.
@@ -72,20 +62,8 @@ export class OdpShape {
     this.applyGeometry(currentFrame, value);
   }
 
-  // Rewrites the frame's own position/size/rotation attributes together, since ODF ties all three into one representation: an unrotated shape carries plain svg:x/svg:y/svg:width/svg:height, while a rotated one carries svg:width/svg:height plus draw:transform and NO svg:x/svg:y at all -- real ODF never mixes the two (confirmed against a real LibreOffice odp->odp round trip; see transform.ts's own resolveOdfShapeGeometry comment), so setting either frame or rotationDeg alone still needs to rebuild the other's own current value into this same combined representation.
   private applyGeometry(frame: Box, rotationDeg: number | undefined): void {
-    const node = this.live();
-    setAttr(node, 'svg:width', formatOdfLength(frame.widthPt));
-    setAttr(node, 'svg:height', formatOdfLength(frame.heightPt));
-    if (rotationDeg === undefined || rotationDeg === 0) {
-      removeAttr(node, 'draw:transform');
-      setAttr(node, 'svg:x', formatOdfLength(frame.xPt));
-      setAttr(node, 'svg:y', formatOdfLength(frame.yPt));
-    } else {
-      removeAttr(node, 'svg:x');
-      removeAttr(node, 'svg:y');
-      setAttr(node, 'draw:transform', buildTransformAttr(frame, rotationDeg));
-    }
+    applyOdfGeometry(this.live(), frame, rotationDeg);
   }
 
   // draw:text-box's own text:p children use exactly the same content model odt's office:text does -- interned into the same content.xml office:automatic-styles StyleRegistry (src/edit/odt/props.ts) -- so this reuses OdtParagraph/buildParagraph WHOLESALE rather than reimplementing paragraph/run/style-interning a second time for presentations.

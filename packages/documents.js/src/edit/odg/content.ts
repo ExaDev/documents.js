@@ -28,15 +28,20 @@ export function buildOdgPackage(content: ContentDocument): Package {
   return editor.toPackage();
 }
 
+// Rotation carries through for every variant that models one -- rect, ellipse, and path -- set after construction through the returned live view, exactly as appendShape below sets a shape's own rotation. 'line' is the one variant with no rotationDeg on ContentVectorSchema at all (two endpoints already encode any orientation a line can have), so there is nothing to carry there.
 function appendVector(page: OdgPage, vector: ContentVector): void {
-  if (vector.kind === 'rect') {
-    page.addRect({ frame: vector.frame, fill: vector.fill, stroke: vector.stroke });
-  } else if (vector.kind === 'ellipse') {
-    page.addEllipse({ frame: vector.frame, fill: vector.fill, stroke: vector.stroke });
-  } else if (vector.kind === 'line') {
+  if (vector.kind === 'line') {
     page.addLine({ from: vector.from, to: vector.to, stroke: vector.stroke });
-  } else {
-    page.addPath({ frame: vector.frame, subpaths: vector.subpaths, fill: vector.fill, stroke: vector.stroke });
+    return;
+  }
+  const built =
+    vector.kind === 'rect'
+      ? page.addRect({ frame: vector.frame, fill: vector.fill, stroke: vector.stroke })
+      : vector.kind === 'ellipse'
+        ? page.addEllipse({ frame: vector.frame, fill: vector.fill, stroke: vector.stroke })
+        : page.addPath({ frame: vector.frame, subpaths: vector.subpaths, fill: vector.fill, stroke: vector.stroke });
+  if (vector.rotationDeg !== undefined) {
+    built.rotationDeg = vector.rotationDeg;
   }
 }
 
