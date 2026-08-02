@@ -139,3 +139,74 @@ export function embeddedHsqldbCachedOdbPackage(): Package {
 export function embeddedHsqldbCachedOdbBytes(): Uint8Array<ArrayBuffer> {
   return zipPackage(cachedOdbEntries());
 }
+
+// --- Forms/reports: a real, hand-authored db:forms/db:reports declaration plus the two sub-documents they reference ---
+//
+// odf.js 2.0.0's readOdbForm/readOdbReport resolve a named db:component (db:forms/db:reports, each a db:component-collection of db:component entries carrying db:name/xlink:href) to its own sub-document, sliced out of the outer package by that href prefix (odf.js's own subDocumentPackage -- no manifest entry needed per sub-document, since it works directly off pkg.parts rather than pkg.parts plus a validated manifest). CustomerForm's own content.xml is a genuine (if minimal) ODT-shaped document -- readOdbForm feeds it straight through odf.js's own readOdt -- with an office:forms/form:form declaring one bound form:text control; CustomerReport's own content.xml has no ODT equivalent at all (office:report is odb-specific), with a rpt:report-header (one unbound label control) and rpt:detail (one control bound to NAME via rpt:formula="field:[NAME]").
+function formsAndReportsContentXml(): Uint8Array<ArrayBuffer> {
+  return enc(
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
+      '<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:db="urn:oasis:names:tc:opendocument:xmlns:database:1.0" xmlns:xlink="http://www.w3.org/1999/xlink">' +
+      '<office:body><office:database>' +
+      '<db:data-source><db:connection-data><db:connection-resource xlink:href="sdbc:embedded:hsqldb" xlink:type="simple"/></db:connection-data></db:data-source>' +
+      '<db:forms><db:component db:name="CustomerForm" xlink:href="forms/CustomerForm" xlink:type="simple"/></db:forms>' +
+      '<db:reports><db:component db:name="CustomerReport" xlink:href="reports/CustomerReport" xlink:type="simple"/></db:reports>' +
+      '</office:database></office:body></office:document-content>',
+  );
+}
+
+function customerFormContentXml(): Uint8Array<ArrayBuffer> {
+  return enc(
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
+      '<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" xmlns:form="urn:oasis:names:tc:opendocument:xmlns:form:1.0">' +
+      '<office:body><office:text><office:forms>' +
+      '<form:form form:name="CustomerForm" form:command="CUSTOMERS" form:command-type="table">' +
+      '<form:text form:name="NAME" form:data-field="NAME" form:label="Name" form:control-implementation="ooo:com.sun.star.form.component.TextField"/>' +
+      '</form:form>' +
+      '</office:forms></office:text></office:body></office:document-content>',
+  );
+}
+
+function customerReportContentXml(): Uint8Array<ArrayBuffer> {
+  return enc(
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
+      '<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:rpt="http://openoffice.org/2005/report" xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0">' +
+      '<office:body>' +
+      '<office:report rpt:command="CUSTOMERS" rpt:command-type="table" office:caption="Customer Report">' +
+      '<rpt:report-header>' +
+      '<rpt:fixed-content><rpt:report-element><rpt:report-component draw:name="Title"/></rpt:report-element>Customer Report</rpt:fixed-content>' +
+      '</rpt:report-header>' +
+      '<rpt:detail>' +
+      '<rpt:formatted-text rpt:formula="field:[NAME]"><rpt:report-element><rpt:report-component draw:name="NameField"/></rpt:report-element></rpt:formatted-text>' +
+      '</rpt:detail>' +
+      '</office:report>' +
+      '</office:body></office:document-content>',
+  );
+}
+
+function manifestXmlWithFormsAndReports(): Uint8Array<ArrayBuffer> {
+  return enc(
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
+      `<manifest:manifest manifest:version="1.3"><manifest:file-entry manifest:full-path="/" manifest:media-type="${ODF_MEDIA_TYPES.odb}"/><manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/><manifest:file-entry manifest:full-path="database/script" manifest:media-type=""/><manifest:file-entry manifest:full-path="forms/CustomerForm/content.xml" manifest:media-type="text/xml"/><manifest:file-entry manifest:full-path="reports/CustomerReport/content.xml" manifest:media-type="text/xml"/></manifest:manifest>`,
+  );
+}
+
+function formsAndReportsOdbEntries(): (readonly [string, { readonly bytes: Uint8Array<ArrayBuffer>; readonly stored?: boolean }])[] {
+  return [
+    ['mimetype', { bytes: MIMETYPE, stored: true }],
+    ['META-INF/manifest.xml', { bytes: manifestXmlWithFormsAndReports() }],
+    ['content.xml', { bytes: formsAndReportsContentXml() }],
+    ['database/script', { bytes: DATABASE_SCRIPT }],
+    ['forms/CustomerForm/content.xml', { bytes: customerFormContentXml() }],
+    ['reports/CustomerReport/content.xml', { bytes: customerReportContentXml() }],
+  ];
+}
+
+// A structurally authentic embedded-HSQLDB .odb package (the same CUSTOMERS/ORDERS tables as embeddedHsqldbOdbBytes above) that additionally declares one real form and one real report, for src/odb/components.test.ts's own readOdbForms/readOdbReports suite.
+export function odbWithFormsAndReportsPackage(): Package {
+  return decodePackage(odbWithFormsAndReportsBytes());
+}
+
+export function odbWithFormsAndReportsBytes(): Uint8Array<ArrayBuffer> {
+  return zipPackage(formsAndReportsOdbEntries());
+}
