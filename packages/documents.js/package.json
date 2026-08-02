@@ -53,7 +53,7 @@
     "test:watch": "vitest --project unit",
     "test:coverage": "vitest run --project unit --coverage",
     "test:smoke": "tsdown && vitest run --project smoke",
-    "prepare": "husky",
+    "prepare": "husky && tsdown",
     "release": "semantic-release"
   },
   "keywords": [
@@ -73,7 +73,7 @@
   "dependencies": {
     "document-schema.js": "^1.7.0",
     "fflate": "^0.8.3",
-    "markdown-codec": "file:../markdown-codec",
+    "markdown-codec": "github:ExaDev/markdown-codec#77ebf3245608c04d9855e5b340e83293adf2fb6a",
     "odf.js": "^1.10.3",
     "ooxml.js": "^2.2.3",
     "pdf-codec": "^1.1.3",
