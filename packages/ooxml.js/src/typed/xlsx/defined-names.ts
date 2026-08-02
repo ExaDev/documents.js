@@ -10,8 +10,8 @@ export interface SheetDefinedNames {
   printTitles?: string;
 }
 
-const PRINT_AREA_NAME = '_xlnm.Print_Area';
-const PRINT_TITLES_NAME = '_xlnm.Print_Titles';
+export const XLNM_PRINT_AREA = '_xlnm.Print_Area';
+export const XLNM_PRINT_TITLES = '_xlnm.Print_Titles';
 
 // Reads every sheet-scoped _xlnm.Print_Area/_xlnm.Print_Titles defined name in xl/workbook.xml into a Map keyed by localSheetId. A defined name with no localSheetId (workbook-scoped, not sheet-scoped) is out of this reader's scope -- Print_Area/Print_Titles are always written sheet-scoped by every real producer this package targets.
 export function readDefinedNamesBySheet(pkg: Package): Map<number, SheetDefinedNames> {
@@ -30,7 +30,7 @@ export function readDefinedNamesBySheet(pkg: Package): Map<number, SheetDefinedN
     if (name === undefined || localSheetIdRaw === undefined) {
       continue;
     }
-    if (name !== PRINT_AREA_NAME && name !== PRINT_TITLES_NAME) {
+    if (name !== XLNM_PRINT_AREA && name !== XLNM_PRINT_TITLES) {
       continue;
     }
     const sheetIndex = Number.parseInt(localSheetIdRaw, 10);
@@ -39,7 +39,7 @@ export function readDefinedNamesBySheet(pkg: Package): Map<number, SheetDefinedN
     }
     const value = textContent(definedName);
     const existing = map.get(sheetIndex) ?? {};
-    if (name === PRINT_AREA_NAME) {
+    if (name === XLNM_PRINT_AREA) {
       existing.printArea = value;
     } else {
       existing.printTitles = value;
@@ -123,6 +123,3 @@ export function buildPrintTitlesValue(sheetName: string, repeatRows: ContentShee
   }
   return segments.length > 0 ? segments.join(',') : undefined;
 }
-
-export const XLNM_PRINT_AREA = PRINT_AREA_NAME;
-export const XLNM_PRINT_TITLES = PRINT_TITLES_NAME;
