@@ -30,13 +30,13 @@ describe('odbToXlsx', () => {
     expect(header.map((cell) => cell.displayText)).toEqual(['ID', 'NAME', 'EMAIL', 'ACTIVE', 'SIGNUP_DATE']);
 
     const row1 = sheet.cells.filter((cell) => cell.row === 1).sort((a, b) => a.column - b.column);
-    // SIGNUP_DATE (a 'date'-kind ContentCellValue this package's own HSQLDB decoders produce) is written through buildXlsxPackage as xlsx's own single combined date/time serial cell type (t="d"), and ooxml.js's readXlsxContent (2.5.2+) reads every such cell back as 'dateTime', never 'date' -- xlsx cannot itself distinguish the two at the wire level, so the value string survives byte-for-byte but the kind label changes.
+    // SIGNUP_DATE (a 'date'-kind ContentCellValue this package's own HSQLDB decoders produce) is written through buildXlsxPackage as xlsx's own single combined date/time serial cell type (t="d") under a date-only number format. ooxml.js's readXlsxContent (2.6.1+) now carries a full number-format engine and reads the format code back to distinguish date-only from date+time, so a date-only format round-trips as 'date' again -- the value string survives byte-for-byte either way.
     expect(row1.map((cell) => cell.value)).toEqual([
       { kind: 'number', value: 1 },
       { kind: 'string', value: 'Alice Smith' },
       { kind: 'string', value: 'alice@example.com' },
       { kind: 'boolean', value: true },
-      { kind: 'dateTime', value: '2024-01-15' },
+      { kind: 'date', value: '2024-01-15' },
     ]);
 
     // A "kind: 'empty'" cell writes no <c> element at all in real xlsx XML (there is nothing to write for a genuinely empty cell), so buildXlsxPackage/readXlsxContent's own round trip never produces a cell entry for that position -- unlike ContentSheet's own in-memory representation (src/odb/spreadsheet.test.ts), which does carry an explicit { kind: 'empty' } cell for every table position. Columns 2 (EMAIL) and 4 (SIGNUP_DATE) are NULL in this row, so only columns 0/1/3 survive the xlsx hop.
@@ -101,12 +101,12 @@ describe('odbToXlsx / odbToCsv: a real HSQLDB 1.8.0.10 CACHED-table database', (
       throw new Error('expected an EMPLOYEES sheet');
     }
     const row1 = employees.cells.filter((cell) => cell.row === 1).sort((a, b) => a.column - b.column);
-    // See the CUSTOMERS sheet's own note above (odbToXlsx describe block) -- ooxml.js's readXlsxContent (2.5.2+) reads a HIRE_DATE-style 'date' cell back as 'dateTime', xlsx having only the one combined wire type for both.
+    // See the CUSTOMERS sheet's own note above (odbToXlsx describe block) -- ooxml.js's readXlsxContent (2.6.1+) now reads a HIRE_DATE-style date-only-formatted cell back as 'date' again, via its own number-format engine.
     expect(row1.map((cell) => cell.value)).toEqual([
       { kind: 'number', value: 1 },
       { kind: 'string', value: 'Alice Smith' },
       { kind: 'number', value: 75000.5 },
-      { kind: 'dateTime', value: '2020-01-15' },
+      { kind: 'date', value: '2020-01-15' },
       { kind: 'boolean', value: true },
       { kind: 'number', value: 1500.25 },
     ]);
