@@ -1,0 +1,42 @@
+import js from '@eslint/js';
+import reactHooks from 'eslint-plugin-react-hooks';
+import globals from 'globals';
+import tseslint from 'typescript-eslint';
+
+export default tseslint.config(
+  {
+    // test/smoke.test.mjs spawns the built dist/cli.js, deliberately outside tsconfig's "src" program (it tests build output).
+    ignores: ['dist', 'coverage', 'node_modules', 'test'],
+  },
+  {
+    // Pin the TSConfig root so the parser isn't confused by stray tsconfig.json files elsewhere in the tree. Required because lint-staged runs eslint at commit time.
+    //
+    // `projectService` (global -- no `files` filter) powers the type-checked rules below; it must apply to every matched file or the type-checked configs crash on files outside the program.
+    languageOptions: {
+      parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },
+      globals: { ...globals.node },
+    },
+  },
+  js.configs.recommended,
+  ...tseslint.configs.recommended,
+  // Type-checked tier: catches floating promises, misused async handlers, unsafe `any`, and invalid template expressions. Requires the `projectService` parser option set above.
+  ...tseslint.configs.recommendedTypeChecked,
+  ...tseslint.configs.stylisticTypeChecked,
+  {
+    // React Hooks correctness (rules-of-hooks, exhaustive-deps) for the Ink TUI's .tsx files -- the only React code anywhere in this repo family.
+    files: ['src/tui/**/*.tsx'],
+    plugins: { 'react-hooks': reactHooks },
+    rules: reactHooks.configs.recommended.rules,
+  },
+  {
+    // No inline eslint-disable / config comments anywhere -- an exception belongs in this file, scoped to the file or line it actually applies to, not hidden in the source it's disabling a rule for.
+    linterOptions: { noInlineConfig: true },
+  },
+  {
+    rules: {
+      // No type assertions anywhere: narrow with a guard or parse with Zod instead.
+      '@typescript-eslint/consistent-type-assertions': ['error', { assertionStyle: 'never' }],
+      '@typescript-eslint/consistent-type-imports': ['error', { fixStyle: 'inline-type-imports' }],
+    },
+  },
+);
