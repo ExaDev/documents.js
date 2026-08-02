@@ -1,3 +1,10 @@
+# [1.57.0](https://github.com/ExaDev/documents.js/compare/v1.56.1...v1.57.0) (2026-08-02)
+
+
+### Features
+
+* ban anything but re-exports in src/index.ts ([8e39efd](https://github.com/ExaDev/documents.js/commit/8e39efd1ab2710ab42f08a2a6005c5f40c903b6c))
+
 ## [1.56.1](https://github.com/ExaDev/documents.js/compare/v1.56.0...v1.56.1) (2026-08-02)
 
 
