@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ContentDocument, ContentSheet, ContentSheetCell, ContentSheetPrintSettings, LayoutItem, LayoutLine, LayoutText } from 'document-schema.js';
+import type { ContentDocument, ContentSheet, ContentSheetCell, ContentSheetPrintSettings, LayoutItem, LayoutLine, LayoutRect, LayoutText } from 'document-schema.js';
 import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
 import type { TextMeasurer } from 'pdf-codec';
 import { convertSpreadsheetToLayout } from './sheets';
@@ -52,6 +52,12 @@ function textItems(items: readonly LayoutItem[]): LayoutText[] {
 function lineItems(items: readonly LayoutItem[]): LayoutLine[] {
   return items.filter((i): i is LayoutLine => i.kind === 'line');
 }
+function rectItems(items: readonly LayoutItem[]): LayoutRect[] {
+  return items.filter((i): i is LayoutRect => i.kind === 'rect');
+}
+
+const RED = { r: 1, g: 0, b: 0 };
+const BLUE = { r: 0, g: 0, b: 1 };
 
 // --- Step 1: resolve the print range -------------------------------------------------------------
 
@@ -378,6 +384,142 @@ describe('step 7: cell text alignment, overflow, and vertical positioning', () =
     const [text] = textItems(layout.pages[0]!.items);
     // lineHeight = 10*1.2 = 12; lineTopYDown = max(2, 100-2-12) = 86; baselineYDown = 86 + ascent(8) = 94; y = 200 - 94 = 106.
     expect(text!.yPt).toBeCloseTo(106, 5);
+  });
+});
+
+// --- Step 7: per-cell background/borders, and explicit alignment/verticalAlignment overrides -----
+
+describe('step 7: a cell\'s own background paints as a real LayoutRect', () => {
+  it('emits one LayoutRect covering the cell\'s exact frame, attributed to that cell\'s own sourcePath', () => {
+    const s = sheet([stringCell(0, 0, 'A', { background: RED, sourcePath: 'sheets[0].cells[0]' })], {
+      columns: [{ index: 0, widthPt: 50 }],
+      rows: [{ index: 0, heightPt: 20 }],
+    });
+    const rects = rectItems(convert([s]).pages[0]!.items);
+    expect(rects).toHaveLength(1);
+    // Grid origin is (0, 0) y-down with zero margins and no gutter, so the cell's frame is (0, 0, 50, 20) y-down -> (0, 800-0-20, 50, 20) in PDF space.
+    expect(rects[0]).toMatchObject({ xPt: 0, yPt: 780, widthPt: 50, heightPt: 20, fill: RED, sourcePath: 'sheets[0].cells[0]' });
+  });
+
+  it('spans the whole merged region for a colSpan/rowSpan anchor cell, not just its own single row/column', () => {
+    const s = sheet([stringCell(0, 0, 'Merged', { background: RED, colSpan: 2, rowSpan: 2 })], {
+      columns: [
+        { index: 0, widthPt: 30 },
+        { index: 1, widthPt: 40 },
+      ],
+      rows: [
+        { index: 0, heightPt: 10 },
+        { index: 1, heightPt: 15 },
+      ],
+    });
+    const [rect] = rectItems(convert([s]).pages[0]!.items);
+    expect(rect).toMatchObject({ widthPt: 70, heightPt: 25 });
+  });
+
+  it('emits no rect at all for a cell with no background of its own', () => {
+    const s = sheet([stringCell(0, 0, 'A')], { columns: [{ index: 0, widthPt: 50 }], rows: [{ index: 0, heightPt: 20 }] });
+    expect(rectItems(convert([s]).pages[0]!.items)).toHaveLength(0);
+  });
+});
+
+describe('step 7: a cell\'s own borders paint as real LayoutLines, one per declared edge', () => {
+  it('emits exactly one line per DECLARED edge, at that edge\'s own position, with the border\'s own colour and width', () => {
+    const s = sheet([stringCell(0, 0, 'A', { borders: { top: { color: RED, widthPt: 2 }, left: { color: BLUE, widthPt: 3 } } })], {
+      columns: [{ index: 0, widthPt: 50 }],
+      rows: [{ index: 0, heightPt: 20 }],
+    });
+    const lines = lineItems(convert([s]).pages[0]!.items);
+    expect(lines).toHaveLength(2); // top and left only -- right/bottom were never declared
+    // The cell's y-down frame is (0, 0, 50, 20); its top edge is y-down 0 -> PDF y 800, its left edge x 0 running from PDF y 800 down to 780.
+    expect(lines).toContainEqual(expect.objectContaining({ x1Pt: 0, y1Pt: 800, x2Pt: 50, y2Pt: 800, color: RED, widthPt: 2 }));
+    expect(lines).toContainEqual(expect.objectContaining({ x1Pt: 0, y1Pt: 800, x2Pt: 0, y2Pt: 780, color: BLUE, widthPt: 3 }));
+  });
+
+  it('emits all four edges when all four are declared', () => {
+    const border = { color: RED, widthPt: 1 };
+    const s = sheet([stringCell(0, 0, 'A', { borders: { top: border, right: border, bottom: border, left: border } })], {
+      columns: [{ index: 0, widthPt: 50 }],
+      rows: [{ index: 0, heightPt: 20 }],
+    });
+    expect(lineItems(convert([s]).pages[0]!.items)).toHaveLength(4);
+  });
+
+  it('paints a cell border AFTER the generic gridlines, so a declared border wins over the gridline underneath it', () => {
+    const s = sheet([stringCell(0, 0, 'A', { borders: { bottom: { color: RED, widthPt: 2 } } })], {
+      columns: [{ index: 0, widthPt: 50 }],
+      rows: [{ index: 0, heightPt: 20 }],
+      printSettings: { ...basePrintSettings, gridlines: true },
+    });
+    const { items } = convert([s]).pages[0]!;
+    const lines = lineItems(items);
+    const borderLine = lines.find((l) => l.widthPt === 2)!;
+    const gridlineIndices = lines.filter((l) => l.widthPt !== 2).map((l) => items.indexOf(l));
+    expect(gridlineIndices.every((i) => i < items.indexOf(borderLine))).toBe(true);
+  });
+
+  it('paints a cell background BEFORE the gridlines and all cell text AFTER them', () => {
+    const s = sheet([stringCell(0, 0, 'A', { background: RED })], {
+      columns: [{ index: 0, widthPt: 50 }],
+      rows: [{ index: 0, heightPt: 20 }],
+      printSettings: { ...basePrintSettings, gridlines: true },
+    });
+    const { items } = convert([s]).pages[0]!;
+    const backgroundIndex = items.indexOf(rectItems(items)[0]!);
+    const firstGridlineIndex = items.indexOf(lineItems(items)[0]!);
+    const textIndex = items.indexOf(textItems(items)[0]!);
+    expect(backgroundIndex).toBeLessThan(firstGridlineIndex);
+    expect(firstGridlineIndex).toBeLessThan(textIndex);
+  });
+});
+
+describe('step 7: a cell\'s own alignment/verticalAlignment override the defaults', () => {
+  it('honours an explicit alignment instead of the value-kind default (a left-aligned NUMBER sits at the left inset, not the right edge)', () => {
+    const s = sheet([numberCell(0, 0, 42, '42', { alignment: 'left' })], { columns: [{ index: 0, widthPt: 50 }], rows: [{ index: 0, heightPt: 20 }] });
+    const [text] = textItems(convert([s]).pages[0]!.items);
+    expect(text!.xPt).toBeCloseTo(2, 5); // left: xLeft(0) + padding(2) -- the value-kind default would have put it at 46
+  });
+
+  it('honours an explicit alignment on a STRING cell too (right, not the string default of left)', () => {
+    const s = sheet([stringCell(0, 0, 'Str', { alignment: 'right' })], { columns: [{ index: 0, widthPt: 50 }], rows: [{ index: 0, heightPt: 20 }] });
+    const [text] = textItems(convert([s]).pages[0]!.items);
+    expect(text!.xPt).toBeCloseTo(45, 5); // right: padding(2) + (avail(46) - width(3))
+  });
+
+  it('honours verticalAlignment top: the baseline sits near the cell\'s own TOP edge', () => {
+    const s = sheet([stringCell(0, 0, 'X', { verticalAlignment: 'top' })], {
+      rows: [{ index: 0, heightPt: 100 }],
+      columns: [{ index: 0, widthPt: 50 }],
+      printSettings: { ...basePrintSettings, pageSize: { widthPt: 200, heightPt: 200 } },
+    });
+    const [text] = textItems(convert([s]).pages[0]!.items);
+    // lineTopYDown = 0 + padding(2) = 2; baselineYDown = 2 + ascent(8) = 10; y = 200 - 10 = 190.
+    expect(text!.yPt).toBeCloseTo(190, 5);
+  });
+
+  it('honours verticalAlignment middle: the baseline sits centred between the cell\'s own top and bottom', () => {
+    const s = sheet([stringCell(0, 0, 'X', { verticalAlignment: 'middle' })], {
+      rows: [{ index: 0, heightPt: 100 }],
+      columns: [{ index: 0, widthPt: 50 }],
+      printSettings: { ...basePrintSettings, pageSize: { widthPt: 200, heightPt: 200 } },
+    });
+    const [text] = textItems(convert([s]).pages[0]!.items);
+    // lineHeight = 12; lineTopYDown = max(2, (100-12)/2) = 44; baselineYDown = 44 + ascent(8) = 52; y = 200 - 52 = 148.
+    expect(text!.yPt).toBeCloseTo(148, 5);
+  });
+
+  it('still falls back to bottom when the cell declares no verticalAlignment, unchanged from before the field existed', () => {
+    const s = sheet([stringCell(0, 0, 'X')], {
+      rows: [{ index: 0, heightPt: 100 }],
+      columns: [{ index: 0, widthPt: 50 }],
+      printSettings: { ...basePrintSettings, pageSize: { widthPt: 200, heightPt: 200 } },
+    });
+    const [text] = textItems(convert([s]).pages[0]!.items);
+    expect(text!.yPt).toBeCloseTo(106, 5);
+  });
+
+  it('keeps overflow keyed to the VALUE kind, not the resolved alignment: an explicitly left-aligned numeric overflow still renders ###', () => {
+    const s = sheet([numberCell(0, 0, 123456789, '123456789', { alignment: 'left' })], { columns: [{ index: 0, widthPt: 5 }] });
+    expect(textItems(convert([s]).pages[0]!.items).map((t) => t.text).join('')).toBe('###');
   });
 });
 

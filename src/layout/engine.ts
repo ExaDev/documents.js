@@ -5,7 +5,7 @@ import { flipY } from '../model/geometry';
 import type { EmbeddedFormula } from '../model/formula';
 import type { PositionedFormula, TextMeasurer } from 'pdf-codec';
 import { loadMathFont, wrapRunsToWidth } from 'pdf-codec';
-import { alignmentOffsetPt, effectiveStyledRuns, estimateRowHeightPt, lineNaturalHeightPt, registerImage, sumColumnWidthsPt } from './shared';
+import { alignmentOffsetPt, effectiveStyledRuns, estimateRowHeightPt, lineNaturalHeightPt, pushCellBorderLines, registerImage, sumColumnWidthsPt } from './shared';
 
 // ContentDocument (the wordprocessing variant) -> LayoutDocument: docx's hard direction. A docx page isn't a fixed canvas the way a pptx slide is -- content flows and paginates, so this engine tracks a vertical cursor per page and starts a new page whenever the next line (or table row) would overflow the current one, honoring explicit page breaks, w:pageBreakBefore, and a per-section page-size/margin change. Headers/footers and live PAGE/NUMPAGES substitution are not laid out here -- src/ooxml/docx/read.ts doesn't read them either, a deliberate, tracked narrowing from the plan's original scope (see that file's own module doc).
 
@@ -166,10 +166,15 @@ function layoutTableFlow(table: ContentTable, section: ContentSection, pages: La
       const span = cell.colSpan ?? 1;
       const cellWidthPt = sumColumnWidthsPt(table.columnWidthsPt, colIndex, span) * scale;
 
+      // A cell's decoration paints under its own content, in the order a real word processor draws it: background fill first, then the border lines sitting on that same frame's edges, then (below) the cell's paragraphs on top of both. ContentTableCell carries a real sourcePath of its own now, so a cell's rect/lines are attributed to the exact cell that declared them, falling back to the containing table only for a cell that has none.
+      const cellFrameYDown = { xPt: cellXDown, yPt: state.cursorYDown, widthPt: cellWidthPt, heightPt: rowHeightPt };
+      const cellSourcePath = cell.sourcePath ?? table.sourcePath;
       if (cell.background !== undefined) {
-        const cellFrame = flipY({ xPt: cellXDown, yPt: state.cursorYDown, widthPt: cellWidthPt, heightPt: rowHeightPt }, section.pageSize.heightPt);
-        // ContentTableCell has no sourcePath of its own (only ContentTable does -- see document-schema.js), so a per-cell background rect can only be attributed at the table's own granularity, not to the specific cell.
-        state.items.push({ kind: 'rect', xPt: cellFrame.xPt, yPt: cellFrame.yPt, widthPt: cellFrame.widthPt, heightPt: cellFrame.heightPt, fill: cell.background, sourcePath: table.sourcePath });
+        const cellFrame = flipY(cellFrameYDown, section.pageSize.heightPt);
+        state.items.push({ kind: 'rect', xPt: cellFrame.xPt, yPt: cellFrame.yPt, widthPt: cellFrame.widthPt, heightPt: cellFrame.heightPt, fill: cell.background, sourcePath: cellSourcePath });
+      }
+      if (cell.borders !== undefined) {
+        pushCellBorderLines(cell.borders, cellFrameYDown, section.pageSize.heightPt, cellSourcePath, state.items);
       }
 
       let cellCursorYDown = state.cursorYDown;

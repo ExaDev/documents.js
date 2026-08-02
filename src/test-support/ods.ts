@@ -214,3 +214,61 @@ export function richOdsBytes(): Uint8Array<ArrayBuffer> {
 export function richOdsPackage(): Package {
   return decodePackage(richOdsBytes());
 }
+
+// A fourth fixture, purpose-built for the per-cell decoration wiring (ContentSheetCell's background/borders/alignment/verticalAlignment, all four added to document-schema.js's ContentSheetCellSchema and all four genuinely populated by odf.js's own readOds -- see typed/shared/table.ts's readCellStyleDecoration). Deliberately hand-authored ODF XML rather than built through createOds/OdsCell, for the same independent-construction reason this module's other fixtures are: OdsCell has no decoration setter at all today, so the editor could not express this fixture even if it were the right tool.
+//
+// One sheet, "Decorated", one row of two cells: A1 carries a yellow fo:background-color, a full fo:border shorthand, an explicit fo:text-align="right" and style:vertical-align="top"; B1 carries only a red fo:border-bottom, with no background, no alignment, and no vertical alignment of its own -- so a single fixture exercises both the "declares everything" and the "declares exactly one edge and nothing else" branches of the layout wiring at once.
+function buildDecoratedFixturePackage(): Package {
+  const cellA = el('table:table-cell', { 'table:style-name': 'DecoratedA', 'office:value-type': 'string' }, [el('text:p', {}, [txt('A')])]);
+  const cellB = el('table:table-cell', { 'table:style-name': 'DecoratedB', 'office:value-type': 'string' }, [el('text:p', {}, [txt('B')])]);
+  const table = el('table:table', { 'table:name': 'Decorated', 'table:style-name': 'DecoratedTable' }, [
+    el('table:table-column', { 'table:style-name': 'DecoratedCol' }),
+    el('table:table-column', { 'table:style-name': 'DecoratedCol' }),
+    el('table:table-row', { 'table:style-name': 'DecoratedRow' }, [cellA, cellB]),
+  ]);
+
+  const contentXml: Package['parts'][string] = {
+    kind: 'xml',
+    nodes: [
+      el('office:document-content', {}, [
+        el('office:automatic-styles', {}, [
+          el('style:style', { 'style:name': 'DecoratedCol', 'style:family': 'table-column' }, [el('style:table-column-properties', { 'style:column-width': '3cm' })]),
+          el('style:style', { 'style:name': 'DecoratedRow', 'style:family': 'table-row' }, [el('style:table-row-properties', { 'style:row-height': '1cm' })]),
+          el('style:style', { 'style:name': 'DecoratedTable', 'style:family': 'table', 'style:master-page-name': 'DecoratedDefault' }),
+          el('style:style', { 'style:name': 'DecoratedA', 'style:family': 'table-cell' }, [
+            el('style:table-cell-properties', { 'fo:background-color': '#ffff00', 'fo:border': '2pt solid #0000ff', 'style:vertical-align': 'top' }),
+            el('style:paragraph-properties', { 'fo:text-align': 'right' }),
+          ]),
+          el('style:style', { 'style:name': 'DecoratedB', 'style:family': 'table-cell' }, [el('style:table-cell-properties', { 'fo:border-bottom': '1pt solid #ff0000' })]),
+        ]),
+        el('office:body', {}, [el('office:spreadsheet', {}, [table])]),
+      ]),
+    ],
+  };
+
+  const stylesXml: Package['parts'][string] = {
+    kind: 'xml',
+    nodes: [
+      el('office:document-styles', {}, [
+        el('office:automatic-styles', {}, [el('style:page-layout', { 'style:name': 'DecoratedPM1' }, [el('style:page-layout-properties', { 'fo:page-width': '400pt', 'fo:page-height': '300pt' })])]),
+        el('office:master-styles', {}, [el('style:master-page', { 'style:name': 'DecoratedDefault', 'style:page-layout-name': 'DecoratedPM1' })]),
+      ]),
+    ],
+  };
+
+  return {
+    parts: {
+      mimetype: { kind: 'binary', base64: bytesToBase64(enc(ODF_MEDIA_TYPES.ods)) },
+      'content.xml': contentXml,
+      'styles.xml': stylesXml,
+    },
+  };
+}
+
+export function decoratedOdsBytes(): Uint8Array<ArrayBuffer> {
+  return encodePackage(buildDecoratedFixturePackage());
+}
+
+export function decoratedOdsPackage(): Package {
+  return decodePackage(decoratedOdsBytes());
+}

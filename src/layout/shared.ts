@@ -1,5 +1,5 @@
 import { base64ToBytes } from 'ooxml.js';
-import type { ContentImageBlock, ContentRun, ContentTableRow, LayoutImageAsset } from 'document-schema.js';
+import type { Box, ContentBorder, ContentCellBorders, ContentImageBlock, ContentRun, ContentTableRow, LayoutImageAsset, LayoutItem } from 'document-schema.js';
 import { COLOR_BLACK } from '../model/color';
 import type { Alignment, LayoutFont } from '../model/style';
 import { DEFAULT_LAYOUT_FONT } from '../model/style';
@@ -60,6 +60,27 @@ export function alignmentOffsetPt(alignment: Alignment | undefined, contentWidth
     return Math.max(0, contentWidthPt - lineWidthPt);
   }
   return 0;
+}
+
+function pushBorderLine(border: ContentBorder | undefined, x1Pt: number, y1Pt: number, x2Pt: number, y2Pt: number, sourcePath: string | undefined, out: LayoutItem[]): void {
+  if (border === undefined) {
+    return;
+  }
+  out.push({ kind: 'line', x1Pt, y1Pt, x2Pt, y2Pt, color: border.color, widthPt: border.widthPt, sourcePath });
+}
+
+// One LayoutLine per DECLARED border edge of one cell, given that cell's own frame in y-down space (the convention both callers already hold their cell geometry in) and the page height to flip it through. Shared by src/layout/engine.ts (ContentTableCell.borders -- a docx/odt/pptx/odp table cell) and src/layout/sheets.ts (ContentSheetCell.borders -- an ods/xlsx sheet cell): the two places in this package that render a bordered cell at all, and structurally the identical work in both, four independently-optional edges of one rectangle each becoming a straight line at its own edge position. An absent edge emits nothing at all rather than a zero-width line, so a cell declaring only `bottom` paints exactly one line.
+//
+// ContentBorder.style ('solid' | 'dashed' | 'dotted' | 'double') is deliberately NOT expressed here, and this is a real schema gap rather than a shortcut: neither of the two layout kinds able to carry a stroke has anywhere to put it -- LayoutLineSchema is kind/x1/y1/x2/y2/color/widthPt, and LayoutPathSchema's own stroke is color/widthPt (document-schema.js's layout.ts) -- so there is no dash array to write and nothing in pdf-codec's own content-write.ts to read one from if there were. Every border consequently paints solid at its declared colour and width. Rendering 'double' as two hand-offset parallel lines was considered and rejected: the offset distance is nowhere in the model, so it would be an invented constant standing in for information the source never carried.
+export function pushCellBorderLines(borders: ContentCellBorders, frameYDown: Box, pageHeightPt: number, sourcePath: string | undefined, out: LayoutItem[]): void {
+  const leftXPt = frameYDown.xPt;
+  const rightXPt = frameYDown.xPt + frameYDown.widthPt;
+  const topYPt = pageHeightPt - frameYDown.yPt;
+  const bottomYPt = pageHeightPt - (frameYDown.yPt + frameYDown.heightPt);
+  pushBorderLine(borders.top, leftXPt, topYPt, rightXPt, topYPt, sourcePath, out);
+  pushBorderLine(borders.bottom, leftXPt, bottomYPt, rightXPt, bottomYPt, sourcePath, out);
+  pushBorderLine(borders.left, leftXPt, topYPt, leftXPt, bottomYPt, sourcePath, out);
+  pushBorderLine(borders.right, rightXPt, topYPt, rightXPt, bottomYPt, sourcePath, out);
 }
 
 function decodeImageDimensions(format: 'png' | 'jpeg', bytes: Uint8Array<ArrayBuffer>): { widthPx: number; heightPx: number } {
