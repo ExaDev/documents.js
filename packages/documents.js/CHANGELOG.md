@@ -1,3 +1,10 @@
+# [1.55.0](https://github.com/ExaDev/documents.js/compare/v1.54.6...v1.55.0) (2026-08-02)
+
+
+### Features
+
+* re-export document-schema.js's $schema emit/ingest helpers ([7616060](https://github.com/ExaDev/documents.js/commit/7616060d685786b75474fcf17adf7e4803f1e567))
+
 ## [1.54.6](https://github.com/ExaDev/documents.js/compare/v1.54.5...v1.54.6) (2026-08-02)
 
 ## [1.54.5](https://github.com/ExaDev/documents.js/compare/v1.54.4...v1.54.5) (2026-08-01)
