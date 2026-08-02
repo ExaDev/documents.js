@@ -1,3 +1,10 @@
+# [1.7.0](https://github.com/ExaDev/document-schema.js/compare/v1.6.1...v1.7.0) (2026-08-02)
+
+
+### Features
+
+* emit and ingest self-describing JSON via $schema for the pivot types ([335e921](https://github.com/ExaDev/document-schema.js/commit/335e921e914b173d82f766b7356bdafbb320b77c))
+
 ## [1.6.1](https://github.com/ExaDev/document-schema.js/compare/v1.6.0...v1.6.1) (2026-08-01)
 
 
