@@ -1,7 +1,5 @@
 import type { XmlElement } from '../../model/node';
 import type { Package } from '../../model/package';
-import type { ManifestEntry } from '../../manifest';
-import { readManifest } from '../../manifest';
 import { rootElement, findChildElement, childrenWithTag, attrValue } from '../../xml/query';
 import { decodeXmlText } from '../../xml/entities';
 
@@ -10,10 +8,14 @@ import { decodeXmlText } from '../../xml/entities';
 // EMPIRICALLY CONFIRMED against real, unmodified LibreOffice 26.2 output, not assumed: a headless UNO Basic macro (mirroring the same technique src/typed/odm/read.ts's own top-of-file note describes) created a real embedded-Firebird .odb via com.sun.star.sdb.DatabaseContext.createInstance() with URL "sdbc:embedded:firebird", two real tables via a live SQL connection (CREATE TABLE "Customers"/"Orders"), and one real query via the data source's own QueryDefinitions container -- then stored it and unzipped the result directly (src/typed/odb/fixtures/embedded-firebird.odb, checked in alongside this reader, never hand-edited afterwards). Three real findings from that inspection, all load-bearing for this reader's own design, and all genuine corrections to this reader's own design-phase assumptions (which, per the OASIS ODF 1.3 schema's own "Database Front-end Document" chapter table of contents, expected a separate database/connection.xml part):
 //
 // 1. There is NO separate database/connection.xml part at all in real output. office:database (ODF's own database-front-end root, one of office:body's own content alternatives alongside office:text/office:spreadsheet/etc. -- confirmed directly against the real OASIS ODF 1.3 RelaxNG schema's own office-body-content define) lives directly inside the package's ordinary top-level content.xml, wrapped in the exact same office:document-content/office:body shell every other odf.js typed reader already unwraps. This reader's own CONTENT_PART constant is therefore "content.xml", matching every other typed reader in this package, not a database-specific path.
-// 2. The embedded database engine's own storage is a single opaque part under database/ (here, database/firebird.fbk -- a real Firebird backup file) with NO extension and a manifest:media-type of "" (empty) -- exactly the "extensionless, unclassifiable-by-extension" shape this reader's own design brief anticipated for HSQLDB's equivalent database/script text file (an older embedded engine LibreOffice still supports choosing explicitly; this session's own headless HSQLDB attempt hit an unrelated Java classloader fault specific to this sandboxed environment, which is why the genuine fixture ended up Firebird-backed instead). Both shapes share the one property this reader's own part-classification logic actually depends on -- manifest:media-type, never the part's own path or extension, decides whether a manifest-listed part is worth treating as an XML sub-document (see isXmlMediaType and subdocumentNamesUnderPrefix below) -- so this reader is correct for either engine's own opaque storage shape without needing to special-case one over the other.
+// 2. The embedded database engine's own storage is a single opaque part under database/ (here, database/firebird.fbk -- a real Firebird backup file) with NO extension and a manifest:media-type of "" (empty) -- exactly the "extensionless, unclassifiable-by-extension" shape this reader's own design brief anticipated for HSQLDB's equivalent database/script text file (an older embedded engine LibreOffice still supports choosing explicitly; this session's own headless HSQLDB attempt hit an unrelated Java classloader fault specific to this sandboxed environment, which is why the genuine fixture ended up Firebird-backed instead). Neither shape needs special-casing here at all: this reader never classifies package parts by path or extension in the first place -- forms/reports are enumerated from content.xml's own db: registry (see below), so an opaque engine-storage part under database/ is simply never a candidate, whatever it is called.
 // 3. Tables have NO manifest-listed ODF part of their own at all -- confirmed by this exact fixture, which has two genuine, live-created tables and precisely zero manifest entries anywhere under a "tables/" prefix. A real engine's own tables are invisible to the ODF package entirely; the only ODF-level places a table's own NAME can legitimately appear without reading the engine's own binary/script storage (explicitly out of scope) are two optional, inline content.xml elements: db:table-representations/db:table-representation (a user's own saved column-width/style customisation for a table they've already browsed in Base -- present only if the user did that) and db:schema-definition/db:table-definitions/db:table-definition (used by a flat-file-backed data source with no real engine behind it, to describe its own schema since nothing else can). Neither appears in this reader's own genuine fixture (a fresh, uncustomised two-table database), so this reader's own real-fixture test asserts an honestly empty tables array for that file, not a bug -- see readTableNames below and Fidelity-equivalent framing in this module's own test suite.
 //
-// FORMS/REPORTS, by contrast, genuinely are separate manifest sub-document parts: db:forms/db:component and db:reports/db:component (content.xml's own registry of a form/report's NAME, alongside an xlink:href pointing at that form/report's own genuine ODF sub-document, e.g. "forms/CustomerForm/content.xml") share the identical external/embedded-document-reference shape src/manifest.ts's own subdocumentDirectories already recognises generically for ANY embedded ODF sub-document (a real, already-proven mechanism in this exact codebase -- see e.g. the formula reader's own "Object 1/content.xml" embedded-Math-object finding). This reader deliberately sources form/report NAMES from the manifest's own part listing (per this task's own design brief), not from parsing db:forms/db:reports in content.xml, for exactly that reason: the manifest is where a real sub-document's own existence is unambiguously recorded, and reading only its path -- never opening "forms/CustomerForm/content.xml" itself -- is what keeps this reader's own "never their content" promise honest. This session's own live-generation attempt could not get a real form/report to actually persist via headless UNO automation (com.sun.star.sdb.application.XDocumentContainer's own createInstance()/insertByName() sequence returned a null document instance in this specific environment, after several genuinely different argument shapes were tried -- an environment-specific automation gap, not a design uncertainty), so the "forms/<Name>/content.xml" / "reports/<Name>/content.xml" path shape below is grounded in the OASIS RNG schema's own db:component xlink:href mechanism plus this codebase's own already-proven subdocumentDirectories convention, not in a second genuine fixture -- covered instead by a hand-built synthetic manifest in this reader's own test suite, matching src/typed/odm/read.test.ts's own established split between one real base fixture and synthetic scope-boundary packages.
+// FORMS/REPORTS, by contrast, genuinely are separate sub-document parts, registered in content.xml as db:forms/db:component and db:reports/db:component -- each carrying the component's own db:name alongside an xlink:href pointing at its ODF sub-document directory. A SECOND real fixture now grounds this end to end: src/typed/odb/fixtures/form-and-report.odb, a genuine embedded-Firebird .odb with a real SALES table (six rows), a real saved query, a real bound form, and a real Report Builder report, built via LibreOffice's own in-process UNO API and never hand-edited afterwards (see form.ts's and report.ts's own top-of-file notes for the exact structural findings each produced). Two findings from it are load-bearing HERE, and both are genuine corrections to what this reader previously did:
+//
+// A. A form's/report's sub-document directory is NOT named after the form/report. Real output stores them under an opaque PERSISTENT name -- "forms/Obj11", "reports/Obj11" (both Obj11: the counter is per-container, not global) -- while the user-visible name lives ONLY in content.xml's own db:component/@db:name. This reader used to derive form/report names from the manifest's own part paths, which on real output returns "Obj11" for both rather than "SalesForm"/"SalesByRegion". Names and hrefs are consequently now read from db:forms/db:reports themselves, the one place the real name exists at all, and OdbComponentInfo carries the href alongside the name so a caller can actually locate the sub-document (readOdbForm/readOdbReport both resolve through it). B. The generation approach that previously failed here is now known-good, and the recorded failure is worth keeping as the negative result it is: com.sun.star.sdb.application.XDocumentContainer's own no-argument createInstance() genuinely does return null. What works is the same call LibreOffice's OWN bundled Form Wizard makes (basic/FormWizard/FormWizard.xba) -- createInstanceWithArguments("com.sun.star.sdb.DocumentDefinition", { Name, Parent, URL }) against the form/report container, followed by insertByName -- where URL points at an already-saved standalone document to import (a form), or is empty with an added DocumentServiceName of "com.sun.star.report.ReportDefinition" (a report, whose component is then configured in place and stored via the DocumentDefinition's own store()).
+//
+// A db:component-collection (a real folder-like grouping Base offers for both forms and reports) is walked recursively, contributing only its db:component leaves -- never its own db:name, matching how db:query-collection is already treated below. A leaf's name is its own db:name verbatim, NOT a "Folder/Name"-style hierarchical path: the ODF registry itself stores no such composed form, and composing one would be this reader inventing a convention rather than reading one.
 //
 // QUERIES have no manifest part of their own either -- confirmed both by this reader's own real fixture (one query, CustomerList, present in content.xml's db:queries but nowhere in the manifest) and by the RNG schema itself: unlike db:component, db:query/db:query-collection carry no xlink:href at all, only an inline, mandatory db:command (the query's own SQL text) plus an optional db:escape-processing flag. Query definitions are read from content.xml's own db:queries/db:query (and nested db:query-collection) elements. A db:query-collection's OWN db:name (a folder-like grouping, not a runnable query) is never added to the result -- only the db:query leaves nested inside it are.
 //
@@ -36,22 +38,25 @@ export interface OdbQueryInfo {
   escapeProcessing?: boolean;
 }
 
+export interface OdbComponentInfo {
+  // The component's own user-visible name (db:component/@db:name) -- e.g. "SalesForm". NOT its storage directory name, which is an opaque persistent name; see this module's own top-of-file note (finding A).
+  name: string;
+  // The component's own sub-document path (db:component/@xlink:href) -- e.g. "forms/Obj11". Real LibreOffice output writes a package-relative directory path here, with no trailing "/content.xml".
+  href: string;
+  // db:as-template, when the element declares one -- undefined when absent, never defaulted, matching OdbQueryInfo.escapeProcessing's own treatment of an absent optional attribute.
+  asTemplate?: boolean;
+}
+
 export interface OdbInventory {
   connection: OdbConnectionInfo | undefined;
   tables: string[];
   queries: OdbQueryInfo[];
-  forms: string[];
-  reports: string[];
+  forms: OdbComponentInfo[];
+  reports: OdbComponentInfo[];
 }
 
 const CONTENT_PART = 'content.xml';
 const EMBEDDED_URL_PREFIX = 'sdbc:embedded:';
-const SUBDOCUMENT_CONTENT_SUFFIX = '/content.xml';
-
-// The one classification rule this whole reader is built around: a manifest-listed part is worth treating as XML content iff its OWN manifest:media-type says so -- ending in "+xml", or exactly "text/xml"/"application/xml" -- never by pattern-matching its path (a ".xml"-looking suffix) or by sniffing its bytes. This is what correctly leaves an extensionless, media-type-"" part like database/script or database/firebird.fbk untouched by the forms/reports enumeration below, with no special-casing of either engine's own opaque storage shape needed.
-function isXmlMediaType(mediaType: string): boolean {
-  return mediaType === 'text/xml' || mediaType === 'application/xml' || mediaType.endsWith('+xml');
-}
 
 // db:server-database has no single xlink:href of its own (unlike db:connection-resource/db:file-based-database) -- db:type plus either db:hostname[:db:port] or db:local-socket-name, plus an optional db:database-name, describe the connection instead. Never empirically observed (see this module's own top-of-file note); this formats those parts into one descriptive URL-shaped string on a defensible best-effort basis, purely for OdbConnectionInfo.url's own benefit -- it is not a real connection URL any driver would accept verbatim.
 function formatServerDatabaseUrl(serverDatabase: XmlElement): string | undefined {
@@ -162,21 +167,58 @@ function collectTableNames(databaseElement: XmlElement): string[] {
   return names;
 }
 
-// Every manifest entry whose own full path sits under `prefix` and ends in "/content.xml" -- db:forms/db:reports' own real sub-document shape, per this module's own top-of-file note -- AND whose own manifest:media-type is genuinely XML-classified (see isXmlMediaType), names the sub-document by the LAST path segment before "/content.xml" (its own form/report name, correctly ignoring any enclosing db:component-collection group folder the real path may be nested under). The media-type check is what keeps this from ever mistaking a same-path-shaped but non-XML part for a real sub-document -- see this reader's own test suite for the "misclassified part under forms/" regression this guards against, the forms/reports-side analogue of the database/script risk this module's own top-of-file note describes.
-function subdocumentNamesUnderPrefix(entries: readonly ManifestEntry[], prefix: string): string[] {
-  const names: string[] = [];
-  for (const entry of entries) {
-    if (!entry.fullPath.startsWith(prefix) || !entry.fullPath.endsWith(SUBDOCUMENT_CONTENT_SUFFIX) || !isXmlMediaType(entry.mediaType)) {
+// db:forms / db:reports -> OdbComponentInfo[], walking db:component-collection groups recursively and collecting only their db:component leaves (never a collection's own db:name, matching collectQueryDefinitions' treatment of db:query-collection above). A db:component missing either db:name or xlink:href -- both mandatory per the OASIS schema -- is skipped rather than returned half-populated, the same "malformed-but-salvageable degrades, never fabricates" posture this reader applies to a db:query missing its command. The href is entity-decoded like every other projected string value here; a trailing "/" (never emitted by real LibreOffice output, which writes a bare "forms/Obj11") is trimmed so a caller always sees one canonical path shape.
+function collectComponents(container: XmlElement, components: OdbComponentInfo[]): void {
+  for (const child of container.children) {
+    if (child.type !== 'element') {
       continue;
     }
-    const withoutSuffix = entry.fullPath.slice(0, entry.fullPath.length - SUBDOCUMENT_CONTENT_SUFFIX.length);
-    const lastSlash = withoutSuffix.lastIndexOf('/');
-    const name = lastSlash === -1 ? withoutSuffix.slice(prefix.length) : withoutSuffix.slice(lastSlash + 1);
-    if (name.length > 0) {
-      names.push(name);
+    if (child.tag === 'db:component-collection') {
+      collectComponents(child, components);
+      continue;
     }
+    if (child.tag !== 'db:component') {
+      continue;
+    }
+    const name = attrValue(child, 'db:name');
+    const rawHref = attrValue(child, 'xlink:href');
+    if (name === undefined || rawHref === undefined) {
+      continue;
+    }
+    const decodedHref = decodeXmlText(rawHref);
+    const href = decodedHref.endsWith('/') ? decodedHref.slice(0, -1) : decodedHref;
+    if (href.length === 0) {
+      continue;
+    }
+    const asTemplateRaw = attrValue(child, 'db:as-template');
+    components.push(
+      asTemplateRaw === undefined
+        ? { name: decodeXmlText(name), href }
+        : { name: decodeXmlText(name), href, asTemplate: asTemplateRaw === 'true' },
+    );
   }
-  return names;
+}
+
+function readComponents(databaseElement: XmlElement, tag: string): OdbComponentInfo[] {
+  const container = findChildElement(databaseElement.children, tag);
+  if (container === undefined) {
+    return [];
+  }
+  const components: OdbComponentInfo[] = [];
+  collectComponents(container, components);
+  return components;
+}
+
+// Package + which container + a component's own name -> that component's OdbComponentInfo. The shared name-to-href resolution readOdbForm/readOdbReport are both built on, kept here (rather than duplicated in each) because db:forms and db:reports are the same registry shape read the same way. First match wins when a .odb genuinely declares the same name twice across different db:component-collection folders -- ODF stores no composed "Folder/Name" path to disambiguate with (see this module's own top-of-file note), so preferring the first in document order is the only non-inventing choice available.
+export function resolveOdbComponent(pkg: Package, kind: 'form' | 'report', name: string): OdbComponentInfo {
+  const inventory = readOdbInventory(pkg);
+  const components = kind === 'form' ? inventory.forms : inventory.reports;
+  const match = components.find((component) => component.name === name);
+  if (match === undefined) {
+    const available = components.map((component) => component.name).join(', ');
+    throw new Error(`resolveOdbComponent: no ${kind} named "${name}" -- available: ${available === '' ? '(none)' : available}`);
+  }
+  return match;
 }
 
 // Package -> OdbInventory. Throws only when content.xml itself, or its own office:body/office:database element, is missing -- a genuinely unusable package, mirroring every other odf.js typed reader's own "missing required structural element" throw convention (see e.g. readOdt, readOdm). Everything else -- no connection data, no queries, no forms/reports/tables -- degrades to undefined/an empty array rather than throwing, matching this reader's own general "malformed-but-salvageable input degrades gracefully" posture; readOdbInventory has no diagnostics channel to report a partial read through, the same shape readOdt/readOdm/readOdfFormula already establish.
@@ -201,10 +243,8 @@ export function readOdbInventory(pkg: Package): OdbInventory {
   }
 
   const tables = collectTableNames(databaseElement);
-
-  const manifest = readManifest(pkg);
-  const forms = subdocumentNamesUnderPrefix(manifest.entries, 'forms/');
-  const reports = subdocumentNamesUnderPrefix(manifest.entries, 'reports/');
+  const forms = readComponents(databaseElement, 'db:forms');
+  const reports = readComponents(databaseElement, 'db:reports');
 
   return { connection, tables, queries, forms, reports };
 }

@@ -6,9 +6,9 @@ import type { Package } from '../../model/package';
 import type { XmlNode } from '../../model/node';
 import { el, txt } from '../../xml/fragment';
 import { parsePackage } from '../../package-io/read';
-import { readOdbInventory } from './read';
+import { readOdbInventory, resolveOdbComponent } from './read';
 
-// This suite reads a real, unmodified LibreOffice 26.2-generated .odb fixture (src/typed/odb/fixtures/embedded-firebird.odb, built via a headless UNO Basic macro creating a real embedded-Firebird database document with two live SQL tables and one real query -- see read.ts's own top-of-file note for the exact UNO calls and the three genuine findings it produced -- never hand-edited afterwards) for the genuine-producer-shape assertions, mirroring readOdt's and readOdm's own established convention. A handful of synthetic, hand-built packages (via el/txt, per this reader's own task brief) cover shapes the one real fixture can't -- an external connection, the two defensive db:database-description variants (never empirically observed), a fully-populated forms/reports/tables inventory (this session's own headless form/report automation attempt did not succeed -- see read.ts's own top-of-file note), and the part-classification guard the whole reader is built around.
+// This suite reads TWO real, unmodified LibreOffice 26.2-generated .odb fixtures for its genuine-producer-shape assertions, mirroring readOdt's and readOdm's own established convention: src/typed/odb/fixtures/embedded-firebird.odb (an embedded-Firebird database document with two live SQL tables and one real query, and deliberately no forms or reports), and src/typed/odb/fixtures/form-and-report.odb (the same engine, plus a real bound form and a real Report Builder report -- see read.ts's own top-of-file note for how it was generated and for the two findings about real form/report registration it produced). A handful of synthetic, hand-built packages (via el/txt) cover shapes neither real fixture exercises -- an external connection, the two defensive db:database-description variants (never empirically observed), and the db:component-collection grouping and malformed-component paths.
 
 const FIXTURES_DIR = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');
 
@@ -56,6 +56,49 @@ describe('readOdbInventory: embedded-firebird.odb (real LibreOffice output)', ()
   });
 });
 
+describe('readOdbInventory: form-and-report.odb (real LibreOffice output)', () => {
+  const inventory = readOdbInventory(loadFixture('form-and-report.odb'));
+
+  it("reads the form's real user-visible name alongside its opaque persistent storage path -- the two genuinely differ in real output", () => {
+    expect(inventory.forms).toEqual([{ name: 'SalesForm', href: 'forms/Obj11', asTemplate: false }]);
+  });
+
+  it('reads the report the same way, whose persistent name collides with the form\'s because the counter is per-container', () => {
+    expect(inventory.reports).toEqual([{ name: 'SalesByRegion', href: 'reports/Obj11', asTemplate: false }]);
+  });
+
+  it('reads the real saved query with its full WHERE/ORDER BY SQL text', () => {
+    expect(inventory.queries).toEqual([
+      {
+        name: 'HighValueSales',
+        command:
+          'SELECT "SALES"."REGION", "SALES"."QUARTER", "SALES"."CUSTOMER", "SALES"."AMOUNT" FROM "SALES" WHERE "SALES"."AMOUNT" >= 100 ORDER BY "SALES"."REGION" ASC, "SALES"."QUARTER" ASC, "SALES"."AMOUNT" DESC',
+      },
+    ]);
+  });
+
+  it('still reads an honestly empty tables array -- the real SALES table lives only inside the Firebird engine', () => {
+    expect(inventory.tables).toEqual([]);
+  });
+});
+
+describe('resolveOdbComponent', () => {
+  const pkg = loadFixture('form-and-report.odb');
+
+  it('resolves a form and a report by their own user-visible names', () => {
+    expect(resolveOdbComponent(pkg, 'form', 'SalesForm').href).toBe('forms/Obj11');
+    expect(resolveOdbComponent(pkg, 'report', 'SalesByRegion').href).toBe('reports/Obj11');
+  });
+
+  it('throws naming every available component when the name does not resolve', () => {
+    expect(() => resolveOdbComponent(pkg, 'form', 'Nope')).toThrow(/no form named "Nope".*SalesForm/);
+  });
+
+  it('never resolves a form name through the reports container, or the reverse', () => {
+    expect(() => resolveOdbComponent(pkg, 'report', 'SalesForm')).toThrow(/no report named "SalesForm"/);
+  });
+});
+
 describe('readOdbInventory: synthetic fully-populated embedded package', () => {
   const pkg: Package = {
     parts: {
@@ -69,13 +112,13 @@ describe('readOdbInventory: synthetic fully-populated embedded package', () => {
           el('db:table-representation', { 'db:name': 'Customers' }),
           el('db:table-representation', { 'db:name': 'Orders' }),
         ]),
+        el('db:forms', {}, [
+          el('db:component', { 'db:name': 'Form1', 'xlink:href': 'forms/Obj12', 'xlink:type': 'simple', 'db:as-template': 'false' }),
+          el('db:component-collection', { 'db:name': 'Admin' }, [el('db:component', { 'db:name': 'Form2', 'xlink:href': 'forms/Obj15' })]),
+        ]),
+        el('db:reports', {}, [el('db:component', { 'db:name': 'Report1', 'xlink:href': 'reports/Obj9', 'db:as-template': 'true' })]),
       ]),
-      'META-INF/manifest.xml': manifestPart([
-        ...BASE_MANIFEST_ENTRIES,
-        { fullPath: 'forms/Form1/content.xml', mediaType: 'text/xml' },
-        { fullPath: 'forms/Form1/styles.xml', mediaType: 'text/xml' },
-        { fullPath: 'reports/Report1/content.xml', mediaType: 'text/xml' },
-      ]),
+      'META-INF/manifest.xml': manifestPart(BASE_MANIFEST_ENTRIES),
     },
   };
   const inventory = readOdbInventory(pkg);
@@ -95,9 +138,16 @@ describe('readOdbInventory: synthetic fully-populated embedded package', () => {
     expect(inventory.tables).toEqual(['Customers', 'Orders']);
   });
 
-  it('reads form/report names from the manifest\'s own sub-document parts, ignoring the sibling styles.xml part', () => {
-    expect(inventory.forms).toEqual(['Form1']);
-    expect(inventory.reports).toEqual(['Report1']);
+  it('reads both top-level and db:component-collection-nested form components, in document order, without including the collection\'s own name', () => {
+    expect(inventory.forms).toEqual([
+      { name: 'Form1', href: 'forms/Obj12', asTemplate: false },
+      { name: 'Form2', href: 'forms/Obj15' },
+    ]);
+  });
+
+  it('reads db:as-template as a real boolean, and omits the field entirely when the component declares none', () => {
+    expect(inventory.reports).toEqual([{ name: 'Report1', href: 'reports/Obj9', asTemplate: true }]);
+    expect('asTemplate' in (inventory.forms[1] ?? {})).toBe(false);
   });
 });
 
@@ -217,32 +267,39 @@ describe('readOdbInventory: db:database-description variants (RNG-derived, never
   });
 });
 
-describe('readOdbInventory: part-classification guard (the database/script risk, generalised to any manifest-listed sub-document)', () => {
-  it('never misclassifies a non-XML-media-type part under forms/ as a real sub-document, even when its path looks like one', () => {
+describe('readOdbInventory: malformed db:component handling', () => {
+  function formsInventory(children: XmlNode[]) {
     const pkg: Package = {
       parts: {
-        'content.xml': databaseContentPart([]),
-        'database/script': { kind: 'binary', base64: Buffer.from('CREATE SCHEMA PUBLIC AUTHORIZATION DBA\nCREATE MEMORY TABLE "Customers"(...)\n', 'utf-8').toString('base64') },
-        'META-INF/manifest.xml': manifestPart([
-          ...BASE_MANIFEST_ENTRIES,
-          { fullPath: 'database/script', mediaType: '' },
-          { fullPath: 'forms/RealForm/content.xml', mediaType: 'text/xml' },
-          { fullPath: 'forms/NotReallyXml/content.xml', mediaType: '' },
-        ]),
+        'content.xml': databaseContentPart([el('db:forms', {}, children)]),
+        'META-INF/manifest.xml': manifestPart(BASE_MANIFEST_ENTRIES),
       },
     };
-    const inventory = readOdbInventory(pkg);
-    expect(inventory.forms).toEqual(['RealForm']);
+    return readOdbInventory(pkg).forms;
+  }
+
+  it('skips a db:component missing either of its mandatory db:name / xlink:href attributes rather than returning it half-populated', () => {
+    expect(
+      formsInventory([
+        el('db:component', { 'db:name': 'NoHref' }),
+        el('db:component', { 'xlink:href': 'forms/Obj1' }),
+        el('db:component', { 'db:name': 'Good', 'xlink:href': 'forms/Obj2' }),
+      ]),
+    ).toEqual([{ name: 'Good', href: 'forms/Obj2' }]);
   });
 
-  it('treats a manifest media type ending in "+xml" as XML-classified too, not only the literal "text/xml"', () => {
-    const pkg: Package = {
-      parts: {
-        'content.xml': databaseContentPart([]),
-        'META-INF/manifest.xml': manifestPart([...BASE_MANIFEST_ENTRIES, { fullPath: 'reports/Weird/content.xml', mediaType: 'application/vnd.oasis.opendocument.text+xml' }]),
-      },
-    };
-    expect(readOdbInventory(pkg).reports).toEqual(['Weird']);
+  it('trims a trailing slash from an href so a caller always sees one canonical path shape', () => {
+    expect(formsInventory([el('db:component', { 'db:name': 'Slashed', 'xlink:href': 'forms/Obj3/' })])).toEqual([{ name: 'Slashed', href: 'forms/Obj3' }]);
+  });
+
+  it('skips a db:component whose href is empty (or nothing but a slash)', () => {
+    expect(formsInventory([el('db:component', { 'db:name': 'Empty', 'xlink:href': '/' })])).toEqual([]);
+  });
+
+  it('entity-decodes a component name and href, matching how db:command is already treated', () => {
+    expect(formsInventory([el('db:component', { 'db:name': 'Sales &amp; Marketing', 'xlink:href': 'forms/A&amp;B' })])).toEqual([
+      { name: 'Sales & Marketing', href: 'forms/A&B' },
+    ]);
   });
 });
 

@@ -141,5 +141,14 @@ export type { OdfFormulaDocument } from './typed/formula/read';
 export { readOdm } from './typed/odm/read';
 export type { OdmDocument, OdmSection } from './typed/odm/read';
 
-export { readOdbInventory } from './typed/odb/read';
-export type { OdbInventory, OdbConnectionInfo, OdbQueryInfo } from './typed/odb/read';
+export { readOdbInventory, resolveOdbComponent } from './typed/odb/read';
+export type { OdbInventory, OdbConnectionInfo, OdbQueryInfo, OdbComponentInfo } from './typed/odb/read';
+
+export { subDocumentPackage } from './typed/odb/subdocument';
+export type { SubDocumentPackageOptions } from './typed/odb/subdocument';
+
+export { readOdbForm } from './typed/odb/form';
+export type { OdbForm, OdbFormDefinition, OdbFormControl } from './typed/odb/form';
+
+export { readOdbReport } from './typed/odb/report';
+export type { OdbReport, OdbReportBand, OdbReportElement, OdbReportGroup, OdbReportFunction } from './typed/odb/report';
