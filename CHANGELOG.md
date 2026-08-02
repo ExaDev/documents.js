@@ -1,3 +1,10 @@
+## [1.60.2](https://github.com/ExaDev/documents.js/compare/v1.60.1...v1.60.2) (2026-08-02)
+
+
+### Bug Fixes
+
+* delete duplicate ContentDocumentSchema, consume document-schema.js's own directly ([966a0b7](https://github.com/ExaDev/documents.js/commit/966a0b7724484fc7d7d791fa914d6f5e111085c8))
+
 ## [1.60.1](https://github.com/ExaDev/documents.js/compare/v1.60.0...v1.60.1) (2026-08-02)
 
 # [1.60.0](https://github.com/ExaDev/documents.js/compare/v1.59.0...v1.60.0) (2026-08-02)
