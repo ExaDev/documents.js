@@ -54,6 +54,13 @@ describe('createLocalDocumentConverter: shape', () => {
       { source: 'xlsx', target: 'ods' },
     ]);
   });
+
+  // A dedicated, order-independent assertion for the xlsx<->pdf pair specifically, on top of the exact-array assertion above -- this one keeps working even if SUPPORTED_CONVERSIONS' own order ever changes, since it checks only that the pair is present, not where.
+  it('includes the composed xlsx<->pdf pair', () => {
+    const converter = createLocalDocumentConverter();
+    expect(converter.conversions).toContainEqual({ source: 'xlsx', target: 'pdf' });
+    expect(converter.conversions).toContainEqual({ source: 'pdf', target: 'xlsx' });
+  });
 });
 
 describe('createLocalDocumentConverter: convert', () => {

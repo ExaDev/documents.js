@@ -2,13 +2,15 @@ import type { DocumentPackage } from 'document-schema.js';
 import { DOCUMENT_PACKAGE_FORMAT_VERSION } from 'document-schema.js';
 import { decodePackage as decodeOdfPackage } from 'odf.js';
 import { buildXlsxPackage, decodePackage as decodeOoxmlPackage, encodePackage as encodeOoxmlPackage, readXlsxContent } from 'ooxml.js';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { ContentDocument } from '../model/content';
 import { CONTENT_FORMAT_VERSION } from '../model/content';
 import { createDocx } from '../edit/docx/editor';
 import { createOdp } from '../edit/odp/editor';
 import { createOdt } from '../edit/odt/editor';
 import { createPptx } from '../edit/pptx/editor';
+import * as engineModule from '../layout/engine';
+import * as slidesModule from '../layout/slides';
 import { readDocxContent } from '../ooxml/docx/read';
 import { readPptxContent } from '../ooxml/pptx/read';
 import { readOdpContent } from '../odf/odp/read';
@@ -156,6 +158,55 @@ describe('onDocument (DocumentPackage side channel)', () => {
     expect(pkg.formatVersion).toBe(DOCUMENT_PACKAGE_FORMAT_VERSION);
     expect(pkg.content.kind).toBe('wordprocessing');
     expect(pkg.layout).toBeUndefined();
+  });
+});
+
+// Regression guard for the newly-composed xlsx<->PDF pair (convert.ts's own xlsxToPdf/pdfToXlsx, built by composing the ods<->xlsx bridge with the ods<->pdf layout edge): confirms that adding that composed route did NOT change docxToOdt/odtToDocx or pptxToOdp/odpToPptx to route through a PDF pivot instead of their own existing direct bridge functions. convertWordprocessingToLayout (src/layout/engine.ts) and convertPresentationToLayout (src/layout/slides.ts) are the one and only entry points every PDF-pivot conversion in this file (docxToPdf/odtToPdf/pptxToPdf/odpToPdf, and their reverses via reconstructWordprocessing/reconstructPresentation) must pass through to reach a LayoutDocument at all -- so spying on them and asserting zero calls during a bridge conversion is a direct, mechanical proof that no PDF pivot ran, not an inference from timing or byte size.
+describe('docxToOdt/odtToDocx and pptxToOdp/odpToPptx never invoke the layout engine (no PDF-pivot regression)', () => {
+  it('docxToOdt does not call convertWordprocessingToLayout or convertPresentationToLayout', () => {
+    const engineSpy = vi.spyOn(engineModule, 'convertWordprocessingToLayout');
+    const slidesSpy = vi.spyOn(slidesModule, 'convertPresentationToLayout');
+    const docxBytes = odtToDocx(minimalOdtBytes());
+    engineSpy.mockClear();
+    slidesSpy.mockClear();
+
+    docxToOdt(docxBytes);
+
+    expect(engineSpy).not.toHaveBeenCalled();
+    expect(slidesSpy).not.toHaveBeenCalled();
+  });
+
+  it('odtToDocx does not call convertWordprocessingToLayout or convertPresentationToLayout', () => {
+    const engineSpy = vi.spyOn(engineModule, 'convertWordprocessingToLayout');
+    const slidesSpy = vi.spyOn(slidesModule, 'convertPresentationToLayout');
+
+    odtToDocx(minimalOdtBytes());
+
+    expect(engineSpy).not.toHaveBeenCalled();
+    expect(slidesSpy).not.toHaveBeenCalled();
+  });
+
+  it('pptxToOdp does not call convertPresentationToLayout or convertWordprocessingToLayout', () => {
+    const engineSpy = vi.spyOn(engineModule, 'convertWordprocessingToLayout');
+    const slidesSpy = vi.spyOn(slidesModule, 'convertPresentationToLayout');
+    const pptxBytes = odpToPptx(minimalOdpBytes());
+    engineSpy.mockClear();
+    slidesSpy.mockClear();
+
+    pptxToOdp(pptxBytes);
+
+    expect(engineSpy).not.toHaveBeenCalled();
+    expect(slidesSpy).not.toHaveBeenCalled();
+  });
+
+  it('odpToPptx does not call convertPresentationToLayout or convertWordprocessingToLayout', () => {
+    const engineSpy = vi.spyOn(engineModule, 'convertWordprocessingToLayout');
+    const slidesSpy = vi.spyOn(slidesModule, 'convertPresentationToLayout');
+
+    odpToPptx(minimalOdpBytes());
+
+    expect(engineSpy).not.toHaveBeenCalled();
+    expect(slidesSpy).not.toHaveBeenCalled();
   });
 });
 
