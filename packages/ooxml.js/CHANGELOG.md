@@ -1,3 +1,16 @@
+# [2.6.0](https://github.com/ExaDev/ooxml.js/compare/v2.5.2...v2.6.0) (2026-08-02)
+
+
+### Features
+
+* compose pptx shape rotation through rotated/flipped ancestor groups ([df654b5](https://github.com/ExaDev/ooxml.js/commit/df654b599f782dc4eced03e8cc5108d542d47fd4))
+* **docx:** model word/numbering.xml abstractNum/num level definitions ([9720b6d](https://github.com/ExaDev/ooxml.js/commit/9720b6d02c165152fcced15d0f32be0621cad9f1))
+* **docx:** read table cell borders; wire numbering into readDocx ([5f73bef](https://github.com/ExaDev/ooxml.js/commit/5f73bef21c065c0a162355c5e7d25d1a55f9338c))
+* **docx:** resolve w:themeColor run colours against the theme scheme ([34fd0fc](https://github.com/ExaDev/ooxml.js/commit/34fd0fcf56a9812900767e26905b64417ad31a76))
+* read docx inline and floating images into ContentImageBlock ([017e764](https://github.com/ExaDev/ooxml.js/commit/017e76407907be43b36ef9809b88ff161fdb5a9c))
+* read xlsx number formats into percentage/currency/date/time cell kinds ([bfab9f9](https://github.com/ExaDev/ooxml.js/commit/bfab9f9087c03ed6f637996a3ce2273768503820))
+* write real xlsx number formats for percentage/currency/date/time/boolean cells ([abb25d6](https://github.com/ExaDev/ooxml.js/commit/abb25d62d84b1a388f122cf3fd1630c2146529fc))
+
 ## [2.5.2](https://github.com/ExaDev/ooxml.js/compare/v2.5.1...v2.5.2) (2026-08-02)
 
 
