@@ -104,7 +104,9 @@ interface AxisEntry {
 }
 
 // Resolves one size (and hidden-ness) per index across [start, end] from a sparse, run-length-compressed entries array (document order; real producers emit exactly one entry per STARTING index of a repeated run -- see odf.js's own readOds module doc) -- entry N's own size/hidden-ness applies to every index from its own index up to (but not including) the next entry's index, mirroring how the source format itself compresses a run of identically-formatted columns/rows. An index before the first entry, or with no entries at all, falls back to defaultSizePt.
-function resolveAxis(entries: readonly { readonly index: number; readonly sizePt: number; readonly hidden?: boolean }[], start: number, end: number, defaultSizePt: number): AxisEntry[] {
+//
+// entries[i].sizePt is `number | undefined` (ContentSheetColumn.widthPt/ContentSheetRow.heightPt, both optional since document-schema.js 2.0.0) because the two real producers behind this shared field disagree on when a size is knowable at all: odf.js's own readOds always resolves a concrete number for a real column/row element (0 when it carries no explicit style -- see src/edit/ods/column-row.ts's own top-of-file note for why THAT zero is deliberately treated as authoritative below, not defaulted), whereas ooxml.js's readXlsxContent genuinely omits the field outright when an xlsx column has no explicit <col> width. `?? defaultSizePt` below only ever fires for the latter, genuinely-absent case; an ODS-sourced entry's own explicit 0 is a real number, not undefined, so it flows through unchanged exactly as it always has.
+function resolveAxis(entries: readonly { readonly index: number; readonly sizePt: number | undefined; readonly hidden?: boolean }[], start: number, end: number, defaultSizePt: number): AxisEntry[] {
   const sorted = [...entries].sort((a, b) => a.index - b.index);
   const resolved: AxisEntry[] = [];
   let pointer = 0;
@@ -112,7 +114,7 @@ function resolveAxis(entries: readonly { readonly index: number; readonly sizePt
   let currentHidden = false;
   for (let index = start; index <= end; index++) {
     while (pointer < sorted.length && sorted[pointer]!.index <= index) {
-      currentSizePt = sorted[pointer]!.sizePt;
+      currentSizePt = sorted[pointer]!.sizePt ?? defaultSizePt;
       currentHidden = sorted[pointer]!.hidden ?? false;
       pointer++;
     }
@@ -142,10 +144,10 @@ function computeHeaderGutter(printSettings: ContentSheetPrintSettings, range: Co
 
 // --- Step 4: resolve scale -----------------------------------------------------------------------
 
-// Explicit printSettings.scale (a raw percentage, e.g. 150 for "150%" -- odf.js's own readOds reads it this way, confirmed by its own test suite) takes priority; else a non-iterative fit-to-page computed directly from the ratio of available-print-area-across-N-pages to total unscaled content size, clamped to never upscale; else 1. Header-gutter and repeat-row/column space is deliberately NOT scaled (reserved at a fixed size on every page, the same "fixed chrome" treatment a spreadsheet UI itself gives its own row/column address labels) -- only the print range's own bandable cell content scales.
+// Explicit printSettings.scalePercent (a raw percentage, e.g. 150 for "150%" -- odf.js's own readOds reads it this way, confirmed by its own test suite) takes priority; else a non-iterative fit-to-page computed directly from the ratio of available-print-area-across-N-pages to total unscaled content size, clamped to never upscale; else 1. Header-gutter and repeat-row/column space is deliberately NOT scaled (reserved at a fixed size on every page, the same "fixed chrome" treatment a spreadsheet UI itself gives its own row/column address labels) -- only the print range's own bandable cell content scales.
 function resolveScale(printSettings: ContentSheetPrintSettings, availableWidthPt: number, availableHeightPt: number, totalContentWidthPt: number, totalContentHeightPt: number): number {
-  if (printSettings.scale !== undefined) {
-    return Math.max(printSettings.scale / 100, MINIMUM_SCALE);
+  if (printSettings.scalePercent !== undefined) {
+    return Math.max(printSettings.scalePercent / 100, MINIMUM_SCALE);
   }
   if (printSettings.fitToPages !== undefined) {
     const budgetWidthPt = availableWidthPt * printSettings.fitToPages.width;
@@ -196,9 +198,9 @@ function cellStyledRuns(cell: ContentSheetCell): StyledRun[] {
   return [{ text: cell.displayText, font: DEFAULT_LAYOUT_FONT, sizePt: NOMINAL_CELL_TEXT_SIZE_PT, color: COLOR_BLACK }];
 }
 
-// number/percentage/currency/date/time are all numeric-NATURED values (ContentCellValueSchema's own comment: it "mirrors ODF's own office:value-type vocabulary", and ODF itself stores date/time as numeric serial values under the hood) -- the task's own literal list ("numeric/percentage/currency -> right") names the three most common members as a proxy for this whole numeric-natured bucket, not an exhaustive exclusion of date/time; a real spreadsheet application right-aligns and '###'-overflows dates and times exactly the same way it does plain numbers. Extended deliberately, not silently -- see this module's own doc comment.
+// number/percentage/currency/date/time/dateTime are all numeric-NATURED values (ContentCellValueSchema's own comment: it "mirrors ODF's own office:value-type vocabulary", and ODF itself stores date/time/dateTime as numeric serial values under the hood) -- the task's own literal list ("numeric/percentage/currency -> right") names the three most common members as a proxy for this whole numeric-natured bucket, not an exhaustive exclusion of date/time/dateTime; a real spreadsheet application right-aligns and '###'-overflows dates, times, and combined date-times exactly the same way it does plain numbers. dateTime is document-schema.js 2.0.0's own new ContentCellValue kind (a combined office:value-type="date" ISO-8601 dateTime value, distinct from a bare date or bare time) -- included here on the same "numeric-natured" reasoning as its date/time siblings, not left to default to 'string' treatment by omission. Extended deliberately, not silently -- see this module's own doc comment.
 function isNumericLikeValue(kind: ContentCellValue['kind']): boolean {
-  return kind === 'number' || kind === 'percentage' || kind === 'currency' || kind === 'date' || kind === 'time';
+  return kind === 'number' || kind === 'percentage' || kind === 'currency' || kind === 'date' || kind === 'time' || kind === 'dateTime';
 }
 
 function defaultAlignmentForValue(kind: ContentCellValue['kind']): Alignment {

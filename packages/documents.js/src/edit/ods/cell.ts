@@ -109,6 +109,12 @@ export class OdsCell {
         setAttr(this.node, DATE_VALUE_ATTR, value.value);
         this.displayText = value.value;
         break;
+      // ODF's own office:value-type enumeration has no separate "dateTime" wire member -- a combined date-and-time value is still office:value-type="date", with office:date-value carrying the full ISO-8601 datetime string rather than a bare date (the same wire type the 'date' case above writes, per the ODF spec's own office:date-value definition). Written identically to 'date' for exactly that reason -- not a downgrade the way 'error' folding into 'string' below is, since ODF genuinely has no distinct wire representation to lose. odf.js's own reader (readOds) does not yet disambiguate a full-datetime "date"-typed cell back into this kind on the way in (it always reads a "date" wire value-type back as ContentCellValue kind 'date') -- a real, tracked read-side gap in odf.js itself, not this setter: this write path is still correct regardless, since the actual wire bytes are the ODF-standard ones a genuine LibreOffice-written combined date-time cell already uses.
+      case 'dateTime':
+        setAttr(this.node, VALUE_TYPE_ATTR, 'date');
+        setAttr(this.node, DATE_VALUE_ATTR, value.value);
+        this.displayText = value.value;
+        break;
       case 'time':
         setAttr(this.node, VALUE_TYPE_ATTR, 'time');
         setAttr(this.node, TIME_VALUE_ATTR, value.value);
