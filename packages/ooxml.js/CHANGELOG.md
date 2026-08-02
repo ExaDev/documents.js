@@ -1,3 +1,10 @@
+## [2.5.2](https://github.com/ExaDev/ooxml.js/compare/v2.5.1...v2.5.2) (2026-08-02)
+
+
+### Bug Fixes
+
+* adapt xlsx read/write to document-schema.js's breaking schema changes ([03c3155](https://github.com/ExaDev/ooxml.js/commit/03c3155edf4be51b8a0c8bc842ac078ede4c0e9d))
+
 ## [2.5.1](https://github.com/ExaDev/ooxml.js/compare/v2.5.0...v2.5.1) (2026-08-02)
 
 # [2.5.0](https://github.com/ExaDev/ooxml.js/compare/v2.4.1...v2.5.0) (2026-08-02)
