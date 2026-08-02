@@ -114,3 +114,15 @@ export const OdtBytesSchema = odfBytesSchema('odt', ODF_MEDIA_TYPES.odt);
 export const OdsBytesSchema = odfBytesSchema('ods', ODF_MEDIA_TYPES.ods);
 export const OdpBytesSchema = odfBytesSchema('odp', ODF_MEDIA_TYPES.odp);
 export const OdgBytesSchema = odfBytesSchema('odg', ODF_MEDIA_TYPES.odg);
+
+// MarkdownBytesSchema is architecturally different from every schema above: it is the one schema in this file asserting nothing about FORMAT STRUCTURE at all. Docx/pptx/xlsx check the generic ZIP local-file-header signature; PDF checks its own %PDF- magic header; odt/ods/odp/odg check ODF's own declared mimetype entry, byte for byte. Markdown is plain text with no header, no magic bytes, and no reserved byte sequence of its own -- CommonMark's own grammar has no "this is not markdown" rejection path at all (a genuinely unparseable line just becomes an ordinary paragraph), so there is no format-level check to write here, ever. The one thing actually worth validating at the bytes boundary is well-formed UTF-8, matching markdown-codec's own MarkdownBytesSchema (that package's src/codec.ts) exactly, so a malformed byte sequence is caught here, at the schema, rather than surfacing later as silently-mangled U+FFFD replacement characters deep inside readMarkdownContent's own output.
+function isWellFormedUtf8Text(bytes: Uint8Array): boolean {
+  try {
+    new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export const MarkdownBytesSchema = z.instanceof(Uint8Array).refine(isWellFormedUtf8Text, { message: 'not well-formed UTF-8 text' });

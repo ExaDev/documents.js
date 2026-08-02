@@ -1,6 +1,6 @@
 import { ODF_MEDIA_TYPES, zipPackage } from 'odf.js';
 import { describe, expect, it } from 'vitest';
-import { DocxBytesSchema, OdgBytesSchema, OdpBytesSchema, OdsBytesSchema, OdtBytesSchema, PdfBytesSchema, PptxBytesSchema } from './bytes';
+import { DocxBytesSchema, MarkdownBytesSchema, OdgBytesSchema, OdpBytesSchema, OdsBytesSchema, OdtBytesSchema, PdfBytesSchema, PptxBytesSchema } from './bytes';
 
 const zipBytes = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0, 0, 0, 0]);
 const pdfBytes = new TextEncoder().encode('%PDF-1.7\n%\xe2\xe3\xcf\xd3\n');
@@ -75,5 +75,25 @@ describe('bytes', () => {
     const encoder = new TextEncoder();
     const deflated = zipPackage([['mimetype', { bytes: encoder.encode(ODF_MEDIA_TYPES.odt) }]]);
     expect(OdtBytesSchema.safeParse(deflated).success).toBe(false);
+  });
+
+  // MarkdownBytesSchema is architecturally different from every schema above -- it asserts nothing about format structure at all (no header, no magic bytes, no reserved byte sequence exists for markdown), only well-formed UTF-8.
+  it('MarkdownBytesSchema accepts well-formed UTF-8 text, including bytes that would fail every OTHER schema above', () => {
+    const markdownBytes = new TextEncoder().encode('# Hello\n\nSome *markdown* text.');
+    expect(MarkdownBytesSchema.parse(markdownBytes)).toBe(markdownBytes);
+    // Plain text is not a ZIP and has no %PDF- header -- every other schema in this file rejects it, MarkdownBytesSchema is the one exception.
+    expect(DocxBytesSchema.safeParse(markdownBytes).success).toBe(false);
+    expect(PdfBytesSchema.safeParse(markdownBytes).success).toBe(false);
+  });
+
+  it('MarkdownBytesSchema rejects malformed UTF-8', () => {
+    const malformed = new Uint8Array([0xff, 0xfe, 0x00]);
+    expect(MarkdownBytesSchema.safeParse(malformed).success).toBe(false);
+  });
+
+  it('MarkdownBytesSchema accepts real docx/pdf/odt bytes too, since UTF-8 well-formedness says nothing about format structure', () => {
+    // Not a claim that docx/pdf/odt bytes ARE markdown -- only that this schema's one check (well-formed UTF-8) cannot distinguish them, unlike every structure-checking schema above. zipBytes/pdfBytes/odtBytes are all valid UTF-8 byte sequences even though they are binary formats.
+    expect(MarkdownBytesSchema.safeParse(zipBytes).success).toBe(true);
+    expect(MarkdownBytesSchema.safeParse(pdfBytes).success).toBe(true);
   });
 });
