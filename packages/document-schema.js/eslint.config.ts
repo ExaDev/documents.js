@@ -2,6 +2,7 @@ import js from '@eslint/js';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 import noPointlessReassignment from './eslint-rules/no-pointless-reassignment.js';
+import noSideEffectsInIndex from './eslint-rules/no-side-effects-in-index.js';
 
 export default tseslint.config(
   {
@@ -34,9 +35,14 @@ export default tseslint.config(
     },
   },
   {
-    // Local custom rule (eslint-rules/no-pointless-reassignment.ts) -- not published as a package, matching this family's own convention of keeping shared dev-tooling config as identical per-repo copies rather than a shared devDependency.
-    plugins: { local: { rules: { 'no-pointless-reassignment': noPointlessReassignment } } },
+    // Local custom rules (eslint-rules/*.ts) -- not published as a package, matching this family's own convention of keeping shared dev-tooling config as identical per-repo copies rather than a shared devDependency.
+    plugins: { local: { rules: { 'no-pointless-reassignment': noPointlessReassignment, 'no-side-effects-in-index': noSideEffectsInIndex } } },
     rules: { 'local/no-pointless-reassignment': 'error' },
+  },
+  {
+    // The structural counterpart to the re-export ban below: that rule says re-exports belong only in src/index.ts, this one says src/index.ts may contain only re-exports -- together pinning the barrel to exactly one shape, one that can never have a side effect at import time.
+    files: ['src/index.ts'],
+    rules: { 'local/no-side-effects-in-index': 'error' },
   },
   {
     // Re-exports belong only in src/index.ts, the public barrel -- a re-export anywhere else risks silently surfacing the wrong thing under a name a consumer expects to mean something else (e.g. this package's own ContentDocumentSchema colliding conceptually with documents.js's differently-shaped, same-named local schema).
