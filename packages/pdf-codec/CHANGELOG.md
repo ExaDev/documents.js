@@ -1,3 +1,12 @@
+# [1.5.0](https://github.com/ExaDev/pdf-codec/compare/v1.4.2...v1.5.0) (2026-08-02)
+
+
+### Features
+
+* decode CCITT Group 4 fax-encoded images ([15c9dfd](https://github.com/ExaDev/pdf-codec/commit/15c9dfd7de56bbed3b8f944b28a853da2974d8e7))
+* decrypt PDFs with an empty user password (standard security handler) ([62cb7ee](https://github.com/ExaDev/pdf-codec/commit/62cb7eea95ce8cc9ac0c91a521a757713176e2fd))
+* detect stroked rects, ellipses, and lines on general vector-path read ([57d9e5a](https://github.com/ExaDev/pdf-codec/commit/57d9e5aec2587d52b00584c7a412381c6567480c))
+
 ## [1.4.2](https://github.com/ExaDev/pdf-codec/compare/v1.4.1...v1.4.2) (2026-08-02)
 
 ## [1.4.1](https://github.com/ExaDev/pdf-codec/compare/v1.4.0...v1.4.1) (2026-08-02)
