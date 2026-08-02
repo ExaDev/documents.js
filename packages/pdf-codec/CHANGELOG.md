@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/ExaDev/pdf-codec/compare/v1.2.1...v1.3.0) (2026-08-02)
+
+
+### Features
+
+* ban anything but re-exports in src/index.ts ([c502d3c](https://github.com/ExaDev/pdf-codec/commit/c502d3c44d3b0332cfbbea1dba9cf35f65caeeb4))
+
 ## [1.2.1](https://github.com/ExaDev/pdf-codec/compare/v1.2.0...v1.2.1) (2026-08-02)
 
 
