@@ -1,3 +1,10 @@
+# [1.11.0](https://github.com/ExaDev/odf.js/compare/v1.10.5...v1.11.0) (2026-08-02)
+
+
+### Features
+
+* add custom pointless-reassignment autofix rule, ban re-exports outside src/index.ts ([9c7ca19](https://github.com/ExaDev/odf.js/commit/9c7ca199cf6c616680749994444f9d985f4e0780))
+
 ## [1.10.5](https://github.com/ExaDev/odf.js/compare/v1.10.4...v1.10.5) (2026-08-02)
 
 ## [1.10.4](https://github.com/ExaDev/odf.js/compare/v1.10.3...v1.10.4) (2026-08-01)
