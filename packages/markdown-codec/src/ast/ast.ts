@@ -1,0 +1,1 @@
+// Placeholder for this package's own markdown AST node types (document/block/inline node discriminated union) -- the intermediate representation readMarkdown's block/inline parsing stages build and src/lower/ consumes to produce a ContentDocument. Zod-first, matching this family's own convention: every node type will be inferred from its Zod schema, never hand-written.

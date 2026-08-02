@@ -1,0 +1,1 @@
+// Placeholder for the ContentDocument -> markdown text emission stage (writeMarkdown's own build-side half): walks a ContentDocument's blocks/runs and renders CommonMark+GFM syntax back out -- heading marker choice, list marker/indentation, code fence vs indented code, table column alignment markers, escaping literal markdown-significant characters inside plain text runs.

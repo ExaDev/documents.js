@@ -1,0 +1,234 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  commitlint:
+    name: Commitlint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: wagoid/commitlint-github-action@v6
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      code-quality: write # to upload the cobertura coverage report below
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:coverage
+      - name: Upload coverage report
+        # Code Quality requires the org on GitHub Team/Enterprise Cloud, which ExaDev is not yet on, so the upload call itself will fail until that changes -- fail-on-error: false keeps that failure a log annotation instead of gating the release job below on a feature we can't turn on yet. Also guarded against fork PRs, which never hold the code-quality: write permission to upload.
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/upload-code-coverage@v1
+        with:
+          file: coverage/cobertura-coverage.xml
+          language: typescript
+          label: unit
+          fail-on-error: false
+
+  test-smoke:
+    name: Smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:smoke
+
+  release:
+    name: Release
+    needs: [commitlint, lint, typecheck, test, test-smoke]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # to push the release commit/tag and create the GitHub Release
+      issues: write # to comment on released issues
+      pull-requests: write # to comment on released pull requests
+      id-token: write # OIDC identity for npm trusted publishing (no NPM_TOKEN)
+    outputs:
+      published: ${{ steps.before.outputs.version != steps.after.outputs.version }}
+      version: ${{ steps.after.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # semantic-release analyses the full commit history since the last release.
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: pnpm
+          # registry-url is deliberately absent. Setting it makes setup-node write an .npmrc containing an _authToken line, and that line wins over the OIDC token exchange -- so the setting that looks like it configures the registry is exactly the one that would stop trusted publishing working.
+      - run: pnpm install --frozen-lockfile
+      - name: Read pre-release version
+        id: before
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Upgrade npm for OIDC trusted publishing (needs npm CLI >=11.5.1)
+        run: npm install -g npm@latest
+      - name: Release
+        # HUSKY=0 so the commit-msg hook never fires against the automated release commit.
+        run: HUSKY=0 pnpm exec semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Blanked, not omitted -- an inherited NPM_TOKEN/NODE_AUTH_TOKEN from a workflow-level env block, reusable workflow, or composite action would otherwise be used in preference to the OIDC exchange.
+          NPM_TOKEN: ''
+          NODE_AUTH_TOKEN: ''
+      - name: Read post-release version
+        id: after
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+  publish-github-packages:
+    name: Publish alias to GitHub Packages
+    needs: release
+    if: needs.release.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main # the release commit semantic-release just pushed
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: pnpm
+          registry-url: 'https://npm.pkg.github.com'
+          # Explicit, not inferred: setup-node's scope default only matches the scoped package.json name if package.json is already scoped by the time this step runs, and the rewrite below happens after it.
+          scope: '@exadev'
+          # GitHub Packages has no OIDC trusted-publishing exchange, so this job (unlike release above) authenticates with a token -- GITHUB_TOKEN is sufficient and needs no separate secret.
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Rewrite package name and registry for the GitHub Packages scope
+        # GitHub Packages requires the npm package name to be scoped to the repo owner. Rewriting the fields rather than keeping a second package.json means this alias cannot drift away from the real package's metadata. publishConfig.registry has to be overridden too: it takes precedence over the .npmrc registry-url set by setup-node above, so without this the publish silently targets registry.npmjs.org instead -- confirmed failure mode, not a hypothetical (404 on the npmjs.org registry, since GITHUB_TOKEN isn't a credential it recognises).
+        run: |
+          npm pkg set name="@exadev/markdown-codec"
+          npm pkg set publishConfig.registry="https://npm.pkg.github.com"
+      - run: pnpm publish --access public --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-aliases:
+    name: Publish aliases (${{ matrix.name }})
+    needs: release
+    if: needs.release.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write # OIDC identity for npm trusted publishing -- every leg in this job targets npmjs.org. The GitHub Packages alias is a separate job above specifically so it never holds this permission: pnpm attempts an OIDC exchange whenever id-token: write is available regardless of target registry, and GitHub Packages has no such exchange to attempt -- confirmed the hard way in a sibling repo when this leg used to share that job and failed with "401 Unauthorized - authentication token not provided" even with GITHUB_TOKEN correctly set, because the failed OIDC attempt never fell through to it.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: mrkdwn.js, registry: 'https://registry.npmjs.org' }
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main # the release commit semantic-release just pushed
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: pnpm
+          # registry-url is deliberately absent. Setting it makes setup-node write an .npmrc containing an _authToken line, and that line wins over the OIDC exchange -- so the setting that looks like it configures the registry is exactly the one that would break trusted publishing.
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Rewrite package name for this alias
+        # Rewriting the checked-out package.json rather than keeping a package.json per alias means no alias can drift away from the real package's metadata -- each matrix leg gets its own fresh runner and checkout, so there is no cross-contamination between legs.
+        run: npm pkg set name="${{ matrix.name }}"
+      - run: pnpm publish --access public --no-git-checks
+        env:
+          # Blanked, not omitted -- an inherited NODE_AUTH_TOKEN would otherwise be used in preference to the OIDC exchange, matching the release job's own convention above.
+          NODE_AUTH_TOKEN: ''
+
+  attest:
+    name: Attest SBOM and build provenance
+    needs: release
+    if: needs.release.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main # the release commit semantic-release just pushed
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      # Pack into a directory of its own, separate from dist/ (tsdown's raw build output). The attestation subject has to be the artefact that actually ships -- attesting dist/ itself would mix in files that never leave the repo, producing digests that match nothing a consumer can download.
+      - run: pnpm pack --pack-destination release-artifact
+      - run: pnpm sbom --sbom-format spdx --prod > release-artifact/sbom.spdx.json
+      # attest-sbom/attest-build-provenance are deprecated wrappers around actions/attest; called as two steps (sbom-path present vs. absent) rather than one, since actions/attest's docs don't clearly state whether passing both together attests SBOM and provenance in a single call or SBOM only -- two steps is the unambiguous equivalent of what this replaced.
+      - name: Attest SBOM
+        uses: actions/attest@v4
+        with:
+          subject-path: release-artifact/*.tgz
+          sbom-path: release-artifact/sbom.spdx.json
+      - name: Attest build provenance
+        uses: actions/attest@v4
+        with:
+          subject-path: release-artifact/*.tgz

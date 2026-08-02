@@ -1,0 +1,1 @@
+// Placeholder for this package's own default option values (which GFM extensions are enabled by default, default emit-side line-wrap/heading-style choices) -- named constants, never magic literals inlined at each call site.

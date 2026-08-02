@@ -1,0 +1,1 @@
+// Placeholder for block-level parsing (paragraphs, ATX/setext headings, fenced/indented code blocks, block quotes, tight/loose lists, thematic breaks, link reference definitions, GFM tables) -- the CommonMark block-structure algorithm (open-block stack, continuation-line matching) that produces src/ast/'s block node tree, deferring each block's own inline content to src/inline/.

@@ -1,0 +1,1 @@
+// Placeholder for image reference resolution (inline ![alt](src "title") and reference-style ![alt][ref] image syntax, plus GFM's own image sizing conventions where applicable) -- the markdown-side counterpart to document-schema.js's ContentImageBlock, resolving a reference-style image's target against the document's own link-reference-definition table.

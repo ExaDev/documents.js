@@ -1,0 +1,1 @@
+// Public barrel. May contain only re-export statements (enforced by local/no-side-effects-in-index, eslint.config.ts) -- nothing here can have a side effect at import time. Currently empty: readMarkdown/writeMarkdown/markdownCodec are not yet implemented (see src/read.ts, src/write.ts, src/codec.ts).

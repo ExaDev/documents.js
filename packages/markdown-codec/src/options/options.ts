@@ -1,0 +1,1 @@
+// Placeholder for readMarkdown/writeMarkdown's own options types (GFM extension toggles -- tables, strikethrough, autolinks, task lists; a sink for diagnostics; an AbortSignal for cancellation on a large document, matching this family's own "long-running loops check an injected abort port explicitly" convention).

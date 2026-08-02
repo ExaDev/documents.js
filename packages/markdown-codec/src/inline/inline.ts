@@ -1,0 +1,1 @@
+// Placeholder for inline-level parsing (emphasis/strong emphasis, code spans, links, reference links, autolinks, raw inline HTML, GFM strikethrough, hard/soft line breaks) -- consumes src/scan/'s token stream within one block's own inline content, producing src/ast/'s inline node types.
