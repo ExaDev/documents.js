@@ -204,8 +204,8 @@ export function readSolidFillColor(solidFillEl: XmlElement | undefined, colorMap
   return srgbClr === undefined ? undefined : readSrgbColor(srgbClr);
 }
 
-// A group shape's own a:xfrm carries two rectangles: off/ext (the group's position/size in its PARENT's coordinate space) and chOff/chExt (the coordinate space its own children's off/ext values are expressed in, often a completely different scale/origin). Mapping a child's local frame into the parent space is ECMA-376's own group-transform algorithm -- verified against Apache POI's DrawGroupShape (translate to interior-relative coordinates, scale by exterior/interior size ratio, translate to the exterior position), a mature, independent OOXML rendering implementation.
-export interface GroupChildTransform {
+// A group shape's own a:xfrm carries two rectangles: off/ext (the group's position/size in its PARENT's coordinate space) and chOff/chExt (the coordinate space its own children's off/ext values are expressed in, often a completely different scale/origin), plus the group's own rotation and flip flags -- all four of which a nested child must be composed through correctly. The off/ext/chOff/chExt half of this is verified against Apache POI's DrawGroupShape (translate to interior-relative coordinates, scale by exterior/interior size ratio, translate to the exterior position); the rot/flipH/flipV half follows the same "flip about centre, then rotate about that same centre, then translate to off" model an ordinary (non-group) shape's own a:xfrm/@rot/@flipH/@flipV already uses -- see composeGroupTransform and applyGroupTransform below for the derivation and the reflection/rotation identities it rests on.
+export interface GroupOwnXfrm {
   readonly offXPt: number;
   readonly offYPt: number;
   readonly extWidthPt: number;
@@ -214,10 +214,14 @@ export interface GroupChildTransform {
   readonly childOffYPt: number;
   readonly childExtWidthPt: number;
   readonly childExtHeightPt: number;
+  // This group's own a:xfrm/@rot/@flipH/@flipV, unmodified by any ancestor group.
+  readonly rotationDeg: number;
+  readonly flipH: boolean;
+  readonly flipV: boolean;
 }
 
-// Reads a group shape's a:xfrm (its own off/ext plus its chOff/chExt), all converted to points. Undefined if `xfrm` lacks a chOff/chExt pair -- a regular (non-group) shape's a:xfrm never has one, so this doubles as "is this actually a group transform".
-export function readGroupXfrm(xfrm: XmlElement | undefined): GroupChildTransform | undefined {
+// Reads a group shape's a:xfrm: its own off/ext/rot/flipH/flipV plus its chOff/chExt, all converted to points/degrees. Undefined if `xfrm` lacks a chOff/chExt pair -- a regular (non-group) shape's a:xfrm never has one, so this doubles as "is this actually a group transform".
+export function readGroupXfrm(xfrm: XmlElement | undefined): GroupOwnXfrm | undefined {
   const base = readXfrm(xfrm);
   if (base === undefined || xfrm === undefined) {
     return undefined;
@@ -243,17 +247,124 @@ export function readGroupXfrm(xfrm: XmlElement | undefined): GroupChildTransform
     childOffYPt: emuToPt(Number(cy)),
     childExtWidthPt: emuToPt(Number(ccx)),
     childExtHeightPt: emuToPt(Number(ccy)),
+    rotationDeg: base.rotationDeg,
+    flipH: base.flipH,
+    flipV: base.flipV,
   };
 }
 
-// Maps a child shape's own local (chOff/chExt-relative) frame into the group's parent coordinate space.
+// The fully composed transform needed to place a shape or nested group sitting directly in THIS group's own child (chOff/chExt) coordinate space into whatever coordinate space `offXPt`/`offYPt`/`extWidthPt`/`extHeightPt` are themselves already expressed in (the slide's space, once composed all the way up). `compositeRotationDeg`/`compositeMirrored` fold this group's own a:xfrm/@rot/@flipH/@flipV together with everything contributed by this group's own ancestor groups -- see composeGroupTransform's doc comment.
+export interface GroupChildTransform {
+  readonly offXPt: number;
+  readonly offYPt: number;
+  readonly extWidthPt: number;
+  readonly extHeightPt: number;
+  readonly childOffXPt: number;
+  readonly childOffYPt: number;
+  readonly childExtWidthPt: number;
+  readonly childExtHeightPt: number;
+  readonly compositeRotationDeg: number;
+  readonly compositeMirrored: boolean;
+}
+
+function normalizeDeg(deg: number): number {
+  const mod = deg % 360;
+  return mod < 0 ? mod + 360 : mod;
+}
+
+// Canonicalises a group's own (rotationDeg, flipH, flipV) into a single (angleDeg, mirrored) pair representing the linear map M = R(angleDeg) . (Fh if mirrored else I), where R(theta) is ECMA-376's own clockwise rotation and Fh = diag(-1, 1) (a mirror across the vertical axis). Two flips cancel to a pure rotation rather than compounding into a further mirror, since Fh . Fv = diag(-1,-1) = R(180 deg); a lone flipV is restated in terms of the canonical Fh axis via the identity Fv = R(180 deg) . Fh (both verified by direct 2x2 matrix multiplication): flipH && flipV -> R(rot).Fh.Fv = R(rot).R(180) = R(rot+180), no residual mirror; flipV only -> R(rot).Fv = R(rot).R(180).Fh = R(rot+180).Fh, mirrored; flipH only -> R(rot).Fh, mirrored; neither -> R(rot), not mirrored.
+function canonicalizeGroupRotation(rotationDeg: number, flipH: boolean, flipV: boolean): { readonly angleDeg: number; readonly mirrored: boolean } {
+  if (flipH && flipV) {
+    return { angleDeg: rotationDeg + 180, mirrored: false };
+  }
+  if (flipV) {
+    return { angleDeg: rotationDeg + 180, mirrored: true };
+  }
+  if (flipH) {
+    return { angleDeg: rotationDeg, mirrored: true };
+  }
+  return { angleDeg: rotationDeg, mirrored: false };
+}
+
+// Composes an OUTER linear map A = R(outer.angleDeg) . (Fh if outer.mirrored) with an INNER linear map B = R(inner.angleDeg) . (Fh if inner.mirrored) that is applied FIRST, giving C = A . B, decomposed back into the same (angleDeg, mirrored) representation. Derived from the reflection/rotation commutation identity Fh . R(theta) = R(-theta) . Fh (verified by direct 2x2 matrix multiplication: both sides equal [[-cos(theta), sin(theta)], [sin(theta), cos(theta)]]): outer not mirrored -> C = R(outerAngle).R(innerAngle).F_inner = R(outerAngle+innerAngle).F_inner; outer mirrored -> C = R(outerAngle).Fh.R(innerAngle).F_inner = R(outerAngle).R(-innerAngle).Fh.F_inner [since Fh.R(innerAngle) = R(-innerAngle).Fh] = R(outerAngle-innerAngle).(Fh.F_inner), so a mirrored outer flips whether the result is mirrored (Fh.Fh=I cancels; Fh.I stays mirrored) AND subtracts the inner angle instead of adding it -- this is the concrete "an ancestor group's flip negates the sense of a descendant's own rotation" rule.
+function composeRotation(
+  outer: { readonly angleDeg: number; readonly mirrored: boolean },
+  inner: { readonly angleDeg: number; readonly mirrored: boolean },
+): { readonly angleDeg: number; readonly mirrored: boolean } {
+  if (!outer.mirrored) {
+    return { angleDeg: normalizeDeg(outer.angleDeg + inner.angleDeg), mirrored: inner.mirrored };
+  }
+  return { angleDeg: normalizeDeg(outer.angleDeg - inner.angleDeg), mirrored: !inner.mirrored };
+}
+
+// Folds a nested group's own raw xfrm (`own`) into whatever composite transform its enclosing group already carries (`parent`, undefined at the top of the shape tree, in which case `own`'s off/ext are already expressed in slide space and its own rotation/flip is the entire composite). `own`'s off/ext live in `parent`'s own child coordinate space, so they are mapped through `applyGroupTransform` exactly like an ordinary child would be -- position AND rotation/mirror both compose, since `own` is the INNER map (applied first, being the group closer to the eventual shape) and `parent`'s already-composed compositeRotationDeg/compositeMirrored is the OUTER map (composeRotation's own `outer` parameter).
+export function composeGroupTransform(own: GroupOwnXfrm | undefined, parent: GroupChildTransform | undefined): GroupChildTransform | undefined {
+  if (own === undefined) {
+    return undefined;
+  }
+  const ownRotation = canonicalizeGroupRotation(own.rotationDeg, own.flipH, own.flipV);
+  if (parent === undefined) {
+    return {
+      offXPt: own.offXPt,
+      offYPt: own.offYPt,
+      extWidthPt: own.extWidthPt,
+      extHeightPt: own.extHeightPt,
+      childOffXPt: own.childOffXPt,
+      childOffYPt: own.childOffYPt,
+      childExtWidthPt: own.childExtWidthPt,
+      childExtHeightPt: own.childExtHeightPt,
+      compositeRotationDeg: normalizeDeg(ownRotation.angleDeg),
+      compositeMirrored: ownRotation.mirrored,
+    };
+  }
+  const mapped = applyGroupTransform(parent, { xPt: own.offXPt, yPt: own.offYPt, widthPt: own.extWidthPt, heightPt: own.extHeightPt });
+  const composite = composeRotation({ angleDeg: parent.compositeRotationDeg, mirrored: parent.compositeMirrored }, ownRotation);
+  return {
+    offXPt: mapped.xPt,
+    offYPt: mapped.yPt,
+    extWidthPt: mapped.widthPt,
+    extHeightPt: mapped.heightPt,
+    childOffXPt: own.childOffXPt,
+    childOffYPt: own.childOffYPt,
+    childExtWidthPt: own.childExtWidthPt,
+    childExtHeightPt: own.childExtHeightPt,
+    compositeRotationDeg: composite.angleDeg,
+    compositeMirrored: composite.mirrored,
+  };
+}
+
+// Maps a child's local (chOff/chExt-relative) frame into the group's parent coordinate space -- position AND, when the group carries a non-zero composite rotation or mirror (this group's own a:xfrm/@rot/@flipH/@flipV composed with its own ancestors, see composeGroupTransform), rotates/mirrors the mapped box's CENTRE about the group's own centre. Width/height are only ever scaled, never rotated: exactly like ContentShape.frame/rotationDeg elsewhere in this codebase, the returned Box is the shape's own UNROTATED extents, with orientation carried separately by whichever caller combines this group's own composite with the shape's local rotation (composeShapeRotationDeg, in src/typed/pptx/read.ts).
 export function applyGroupTransform(group: GroupChildTransform, childFrame: Box): Box {
   const scaleX = group.childExtWidthPt === 0 ? 1 : group.extWidthPt / group.childExtWidthPt;
   const scaleY = group.childExtHeightPt === 0 ? 1 : group.extHeightPt / group.childExtHeightPt;
-  return {
-    xPt: group.offXPt + (childFrame.xPt - group.childOffXPt) * scaleX,
-    yPt: group.offYPt + (childFrame.yPt - group.childOffYPt) * scaleY,
-    widthPt: childFrame.widthPt * scaleX,
-    heightPt: childFrame.heightPt * scaleY,
-  };
+  const widthPt = childFrame.widthPt * scaleX;
+  const heightPt = childFrame.heightPt * scaleY;
+  const canonicalX = group.offXPt + (childFrame.xPt - group.childOffXPt) * scaleX;
+  const canonicalY = group.offYPt + (childFrame.yPt - group.childOffYPt) * scaleY;
+  if (group.compositeRotationDeg === 0 && !group.compositeMirrored) {
+    return { xPt: canonicalX, yPt: canonicalY, widthPt, heightPt };
+  }
+  const groupCenterX = group.offXPt + group.extWidthPt / 2;
+  const groupCenterY = group.offYPt + group.extHeightPt / 2;
+  const boxCenterX = canonicalX + widthPt / 2;
+  const boxCenterY = canonicalY + heightPt / 2;
+  let dx = boxCenterX - groupCenterX;
+  const dy = boxCenterY - groupCenterY;
+  if (group.compositeMirrored) {
+    dx = -dx; // mirror across the canonical Fh axis, matching canonicalizeGroupRotation's own convention
+  }
+  const rad = (group.compositeRotationDeg * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const rotatedX = dx * cos - dy * sin;
+  const rotatedY = dx * sin + dy * cos;
+  return { xPt: groupCenterX + rotatedX - widthPt / 2, yPt: groupCenterY + rotatedY - heightPt / 2, widthPt, heightPt };
+}
+
+// Resolves a shape or graphic frame's own final rotation (clockwise degrees) given its own local a:xfrm/@rot and the (possibly undefined) composite transform of whichever group encloses it. The shape's own rotation is the INNER map (applied first, with no mirror of its own to compose -- a shape's own flipH/flipV isn't folded into ContentShape's rotationDeg output either, a separate, pre-existing simplification this function doesn't change); the enclosing group's composite is the OUTER map.
+export function composeShapeRotationDeg(parentTransform: GroupChildTransform | undefined, ownRotationDeg: number): number {
+  if (parentTransform === undefined) {
+    return normalizeDeg(ownRotationDeg);
+  }
+  return composeRotation({ angleDeg: parentTransform.compositeRotationDeg, mirrored: parentTransform.compositeMirrored }, { angleDeg: ownRotationDeg, mirrored: false }).angleDeg;
 }

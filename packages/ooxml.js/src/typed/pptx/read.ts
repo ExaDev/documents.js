@@ -6,7 +6,7 @@ import { ContentSlideSchema, SLIDE_SIZE_WIDESCREEN } from 'document-schema.js';
 import { drawingMlFontSizeToPt, emuToPt } from '../shared/units';
 import { sniffImageFormat } from '../../image/sniff';
 import type { GroupChildTransform } from '../shared/drawingml';
-import { applyGroupTransform, readGroupXfrm, readSolidFillColor, readXfrm } from '../shared/drawingml';
+import { applyGroupTransform, composeGroupTransform, composeShapeRotationDeg, readGroupXfrm, readSolidFillColor, readXfrm } from '../shared/drawingml';
 import { DocumentMetadataSchema, readCoreProperties } from '../shared/metadata';
 import { assignSourcePaths } from '../shared/source-path';
 import type { Relationship } from '../util';
@@ -236,10 +236,11 @@ function resolveShapeFrame(shape: XmlElement, context: SlideInheritanceContext, 
     return undefined;
   }
   const localFrame: Box = { xPt: xfrm.xPt, yPt: xfrm.yPt, widthPt: xfrm.widthPt, heightPt: xfrm.heightPt };
-  // Rotation deliberately passes through from the shape's own local a:xfrm@rot unchanged, never composed with a parent group's own rotation -- ECMA-376's real composition rule for rotated shapes inside a rotated/flipped group is one of DrawingML's more arcane corners, and a documented pass-through is more honest than a plausible-looking wrong composition.
+  // The shape's own local a:xfrm@rot is composed with every enclosing group's own rotation/flip via composeShapeRotationDeg (src/typed/shared/drawingml.ts), which also documents the ECMA-376 composition rule itself: a group's flip mirrors the shape's position AND negates the sense of its own rotation, since a reflection reverses the handedness that further rotation is measured against.
+  const rotationDeg = composeShapeRotationDeg(parentTransform, xfrm.rotationDeg);
   return {
     frame: parentTransform === undefined ? localFrame : applyGroupTransform(parentTransform, localFrame),
-    rotationDeg: xfrm.rotationDeg === 0 ? undefined : xfrm.rotationDeg,
+    rotationDeg: rotationDeg === 0 ? undefined : rotationDeg,
   };
 }
 
@@ -317,7 +318,9 @@ function readGraphicFrameShape(gf: XmlElement, context: SlideInheritanceContext,
   }
   const localFrame: Box = { xPt: xfrm.xPt, yPt: xfrm.yPt, widthPt: xfrm.widthPt, heightPt: xfrm.heightPt };
   const frame = parentTransform === undefined ? localFrame : applyGroupTransform(parentTransform, localFrame);
-  const rotationDeg = xfrm.rotationDeg === 0 ? undefined : xfrm.rotationDeg;
+  // Composed the same way resolveShapeFrame composes a p:sp/p:pic's own rotation -- see composeShapeRotationDeg's own doc comment.
+  const composedRotationDeg = composeShapeRotationDeg(parentTransform, xfrm.rotationDeg);
+  const rotationDeg = composedRotationDeg === 0 ? undefined : composedRotationDeg;
 
   const graphic = childrenWithTag(gf, 'a:graphic')[0];
   const graphicData = graphic === undefined ? undefined : childrenWithTag(graphic, 'a:graphicData')[0];
@@ -357,18 +360,6 @@ function walkShapeTreeChildren(children: readonly XmlNode[], parentTransform: Gr
       walkShapeTreeChildren(node.children, composed, context, slideRels, pkg, out);
     }
   }
-}
-
-// A nested group's own off/ext is itself expressed in the OUTER group's child coordinate space, so it must be mapped through the outer transform before it can anchor the inner group's own children.
-function composeGroupTransform(own: GroupChildTransform | undefined, parent: GroupChildTransform | undefined): GroupChildTransform | undefined {
-  if (own === undefined) {
-    return undefined;
-  }
-  if (parent === undefined) {
-    return own;
-  }
-  const absolute = applyGroupTransform(parent, { xPt: own.offXPt, yPt: own.offYPt, widthPt: own.extWidthPt, heightPt: own.extHeightPt });
-  return { ...own, offXPt: absolute.xPt, offYPt: absolute.yPt, extWidthPt: absolute.widthPt, extHeightPt: absolute.heightPt };
 }
 
 const NOTES_SLIDE_REL_SUFFIX = '/notesSlide';

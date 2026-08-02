@@ -378,6 +378,106 @@ describe('readPptx: rotation', () => {
   });
 });
 
+// Real ECMA-376 composition through rotated/flipped ancestor groups (see composeGroupTransform/applyGroupTransform/composeShapeRotationDeg in src/typed/shared/drawingml.ts for the derivation these fixtures exercise end to end, through actual XML parsing rather than calling the helpers directly).
+function rotationCompositionFixturePackage(): Package {
+  // Group A: off=(100,100)pt ext=(200,200)pt chOff=(0,0)pt chExt=(200,200)pt (scale 1:1) rot=90deg, no flip. Child shape (unrotated) at local off=(150,50)pt ext=(20,20)pt. Group centre = (200,200); child's canonical (unrotated) box centre = (260,160), i.e. (60,-40) from the group centre. Rotating 90deg clockwise (verified: east (1,0) -> south (0,1)) sends (60,-40) = 60*east + 40*north to 60*south + 40*east = (40,60). Final centre (240,260), top-left (230,250). Rotation: shape's own rot (0) composed with the group's unmirrored composite (90) = 90.
+  const rotGroupChild = el('p:sp', {}, [
+    el('p:nvSpPr', {}, [el('p:cNvPr', { id: '101', name: 'InRotGroup' }), el('p:cNvSpPr'), el('p:nvPr')]),
+    el('p:spPr', {}, [el('a:xfrm', {}, [el('a:off', { x: '1905000', y: '635000' }), el('a:ext', { cx: '254000', cy: '254000' })])]),
+    el('p:txBody', {}, [el('a:p', {}, [el('a:r', {}, [el('a:t', {}, [txt('In rotated group')])])])]),
+  ]);
+  const rotGroup = el('p:grpSp', {}, [
+    el('p:nvGrpSpPr', {}, [el('p:cNvPr', { id: '100', name: 'RotGroup' })]),
+    el('p:grpSpPr', {}, [
+      el('a:xfrm', { rot: '5400000' }, [el('a:off', { x: '1270000', y: '1270000' }), el('a:ext', { cx: '2540000', cy: '2540000' }), el('a:chOff', { x: '0', y: '0' }), el('a:chExt', { cx: '2540000', cy: '2540000' })]),
+    ]),
+    rotGroupChild,
+  ]);
+
+  // Group B: identical geometry to Group A, but rot=90deg AND flipH=1. Child shape carries its OWN rot=30deg, to prove the flip negates the sense of that own rotation (composeShapeRotationDeg: mirrored parent -> 90 - 30 = 60, not 90 + 30 = 120). Position: the group's flip mirrors dx across the vertical axis before rotating: 60 -> -60, dy stays -40. Rotating 90deg clockwise sends (-60,-40) = 60*west + 40*north to 60*north + 40*east = (40,-60). Final centre (240,140), top-left (230,130).
+  const rotFlipGroupChild = el('p:sp', {}, [
+    el('p:nvSpPr', {}, [el('p:cNvPr', { id: '111', name: 'InRotFlipGroup' }), el('p:cNvSpPr'), el('p:nvPr')]),
+    el('p:spPr', {}, [el('a:xfrm', { rot: '1800000' }, [el('a:off', { x: '1905000', y: '635000' }), el('a:ext', { cx: '254000', cy: '254000' })])]),
+    el('p:txBody', {}, [el('a:p', {}, [el('a:r', {}, [el('a:t', {}, [txt('In rotated and flipped group')])])])]),
+  ]);
+  const rotFlipGroup = el('p:grpSp', {}, [
+    el('p:nvGrpSpPr', {}, [el('p:cNvPr', { id: '110', name: 'RotFlipGroup' })]),
+    el('p:grpSpPr', {}, [
+      el('a:xfrm', { rot: '5400000', flipH: '1' }, [
+        el('a:off', { x: '1270000', y: '1270000' }),
+        el('a:ext', { cx: '2540000', cy: '2540000' }),
+        el('a:chOff', { x: '0', y: '0' }),
+        el('a:chExt', { cx: '2540000', cy: '2540000' }),
+      ]),
+    ]),
+    rotFlipGroupChild,
+  ]);
+
+  // Two-level nesting: outer group off=(0,0)pt ext=(400,400)pt chOff=(0,0)pt chExt=(400,400)pt rot=90deg, no flip; inner group nested inside it at off=(200,0)pt ext=(200,200)pt chOff=(0,0)pt chExt=(200,200)pt rot=90deg, no flip; shape inside the inner group at local off=(50,50)pt ext=(20,20)pt, unrotated. Inner group's own off/ext, mapped through the outer group's 90deg rotation about its centre (200,200): canonical box centre (300,100) -> (100,-100) from outer centre -> rotated to (100,100) -> final centre (300,300), top-left (200,200); composite rotation = 90+90 = 180 (outer unmirrored, so angles add). Shape's canonical box centre inside the inner group's own (200,200)-centred, 180deg-composite frame: local centre (60,60) -> canonical (260,260) -> (-40,-40) from inner centre (300,300) -> rotating 180deg negates both -> (40,40) -> final centre (340,340), top-left (330,330). Rotation: shape's own rot (0) composed with the (unmirrored) 180deg composite = 180.
+  const nestedInnerChild = el('p:sp', {}, [
+    el('p:nvSpPr', {}, [el('p:cNvPr', { id: '122', name: 'InNestedGroups' }), el('p:cNvSpPr'), el('p:nvPr')]),
+    el('p:spPr', {}, [el('a:xfrm', {}, [el('a:off', { x: '635000', y: '635000' }), el('a:ext', { cx: '254000', cy: '254000' })])]),
+    el('p:txBody', {}, [el('a:p', {}, [el('a:r', {}, [el('a:t', {}, [txt('In nested rotated groups')])])])]),
+  ]);
+  const nestedInnerGroup = el('p:grpSp', {}, [
+    el('p:nvGrpSpPr', {}, [el('p:cNvPr', { id: '121', name: 'InnerRotGroup' })]),
+    el('p:grpSpPr', {}, [
+      el('a:xfrm', { rot: '5400000' }, [el('a:off', { x: '2540000', y: '0' }), el('a:ext', { cx: '2540000', cy: '2540000' }), el('a:chOff', { x: '0', y: '0' }), el('a:chExt', { cx: '2540000', cy: '2540000' })]),
+    ]),
+    nestedInnerChild,
+  ]);
+  const nestedOuterGroup = el('p:grpSp', {}, [
+    el('p:nvGrpSpPr', {}, [el('p:cNvPr', { id: '120', name: 'OuterRotGroup' })]),
+    el('p:grpSpPr', {}, [
+      el('a:xfrm', { rot: '5400000' }, [el('a:off', { x: '0', y: '0' }), el('a:ext', { cx: '5080000', cy: '5080000' }), el('a:chOff', { x: '0', y: '0' }), el('a:chExt', { cx: '5080000', cy: '5080000' })]),
+    ]),
+    nestedInnerGroup,
+  ]);
+
+  const spTree = el('p:spTree', {}, [rotGroup, rotFlipGroup, nestedOuterGroup]);
+  const slide = el('p:sld', {}, [el('p:cSld', {}, [spTree])]);
+  const presentation = el('p:presentation', {}, [el('p:sldIdLst', {}, [el('p:sldId', { id: '256', 'r:id': 'rId1' })])]);
+  const presentationRels = rels([{ id: 'rId1', type: SLIDE_REL, target: 'slides/slide1.xml' }]);
+
+  return {
+    parts: {
+      'ppt/presentation.xml': { kind: 'xml', nodes: [presentation] },
+      'ppt/_rels/presentation.xml.rels': { kind: 'xml', nodes: [presentationRels] },
+      'ppt/slides/slide1.xml': { kind: 'xml', nodes: [slide] },
+    },
+  };
+}
+
+describe('readPptx: rotation composed through rotated/flipped ancestor groups', () => {
+  it('composes an unrotated shape\'s position and rotation through a single rotated (unflipped) group', () => {
+    const doc = readPptx(rotationCompositionFixturePackage());
+    const shape = doc.slides[0]?.shapes.find((s) => s.name === 'InRotGroup');
+    expect(shape?.frame.xPt).toBeCloseTo(230, 9);
+    expect(shape?.frame.yPt).toBeCloseTo(250, 9);
+    expect(shape?.frame.widthPt).toBe(20);
+    expect(shape?.frame.heightPt).toBe(20);
+    expect(shape?.rotationDeg).toBe(90);
+  });
+
+  it('composes a shape\'s own rotation through a rotated AND flipped group, negating the sense of the shape\'s own rotation', () => {
+    const doc = readPptx(rotationCompositionFixturePackage());
+    const shape = doc.slides[0]?.shapes.find((s) => s.name === 'InRotFlipGroup');
+    expect(shape?.frame.xPt).toBeCloseTo(230, 9);
+    expect(shape?.frame.yPt).toBeCloseTo(130, 9);
+    // 90 (group) - 30 (own) = 60, not 90 + 30 = 120 -- the group's flipH negates the sign of the shape's own rotation.
+    expect(shape?.rotationDeg).toBe(60);
+  });
+
+  it('composes position and rotation through two levels of nested rotated groups', () => {
+    const doc = readPptx(rotationCompositionFixturePackage());
+    const shape = doc.slides[0]?.shapes.find((s) => s.name === 'InNestedGroups');
+    expect(shape?.frame.xPt).toBeCloseTo(330, 9);
+    expect(shape?.frame.yPt).toBeCloseTo(330, 9);
+    // 90 (outer) + 90 (inner) + 0 (own) = 180.
+    expect(shape?.rotationDeg).toBe(180);
+  });
+});
+
 describe('readPptx: sourcePath', () => {
   it('assigns slides[N].shapes[N] to each shape, in the flattened document order', () => {
     const doc = readPptx(buildFixturePackage());
