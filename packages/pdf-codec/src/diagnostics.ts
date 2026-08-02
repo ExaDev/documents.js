@@ -28,10 +28,18 @@ export class PdfParseError extends Error {
   }
 }
 
-// /Encrypt present -- thrown rather than attempting decryption, even for the common empty-user-password case (a genuine v1.1+ project: MD5/RC4/SHA-256/AES-CBC plus the PDF standard security handler's own key-derivation algorithms). A distinct subclass so a caller can catch this specific, expected case (and say so plainly to a user) without conflating it with a genuinely malformed file.
+// /Encrypt present, and encrypted in a way this codec cannot read at all: a non-standard security handler (/Filter other than /Standard, e.g. a public-key one), an unpublished or unrecognised /V, or a crypt filter naming a /CFM this codec does not implement. Distinct from PdfPasswordRequiredError below, which means the encryption itself IS supported and the file simply needs a password we do not have.
 export class PdfEncryptedError extends PdfParseError {
   constructor(message = 'this PDF is encrypted and unsupported') {
     super('pdf/encrypted', message);
     this.name = 'PdfEncryptedError';
+  }
+}
+
+// The empty user password did not verify against the /Encrypt dictionary's own /U entry, so this file genuinely requires a password to open. Deliberately its own error rather than a generic PdfEncryptedError: "this file needs a password you have not supplied" is a completely different thing to tell a user than "this file is encrypted in a way this tool cannot read", and only one of the two can be fixed by the person holding the file. Nothing in this codec accepts, prompts for, or guesses a password -- see src/encrypt.ts's own header.
+export class PdfPasswordRequiredError extends PdfParseError {
+  constructor(message = 'this PDF is protected by a user password, which this codec does not accept; only PDFs that open without a password (the common permissions-only case) can be read') {
+    super('pdf/password-required', message);
+    this.name = 'PdfPasswordRequiredError';
   }
 }

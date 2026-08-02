@@ -6,7 +6,7 @@ export { readPdf } from './read';
 export type { WritePdfOptions } from './write';
 export { writePdf } from './write';
 export type { PdfDiagnostic, PdfDiagnosticSeverity, PdfDiagnosticSink } from './diagnostics';
-export { NOOP_DIAGNOSTIC_SINK, PdfEncryptedError, PdfParseError } from './diagnostics';
+export { NOOP_DIAGNOSTIC_SINK, PdfEncryptedError, PdfParseError, PdfPasswordRequiredError } from './diagnostics';
 export type { WinAnsiSubstitution } from './winansi';
 export { PdfBytesSchema, pdfCodec } from './codec';
 

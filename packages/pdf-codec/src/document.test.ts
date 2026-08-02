@@ -1,15 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
-  encryptedPdf,
   incrementalUpdatePdf,
   inheritedPageAttributesPdf,
   minimalClassicXrefPdf,
+  unsupportedSecurityHandlerPdf,
   xrefStreamWithObjectStreamPdf,
 } from './test-support/pdf';
+import { ENCRYPTED_FIXTURE_TITLE, aes256EmptyUserPasswordPdf, aes256RealUserPasswordPdf } from './test-support/encrypted-pdfs';
 import { openPdfDocument } from './document';
-import { PdfEncryptedError, PdfParseError } from './diagnostics';
+import { PdfEncryptedError, PdfParseError, PdfPasswordRequiredError } from './diagnostics';
 import type { PdfDiagnostic, PdfDiagnosticSink } from './diagnostics';
-import { dictGet } from './objects';
+import { asName, asNumber, dictGet } from './objects';
 
 function collectDiagnostics(): { sink: PdfDiagnosticSink; diagnostics: PdfDiagnostic[] } {
   const diagnostics: PdfDiagnostic[] = [];
@@ -81,9 +82,34 @@ describe('openPdfDocument: page-tree attribute inheritance', () => {
 });
 
 describe('openPdfDocument: encryption', () => {
-  it('throws PdfEncryptedError rather than attempting to parse further', () => {
+  it('throws PdfEncryptedError rather than attempting to parse further, for a handler no password could open', () => {
     const { sink } = collectDiagnostics();
-    expect(() => openPdfDocument(encryptedPdf(), sink)).toThrow(PdfEncryptedError);
+    expect(() => openPdfDocument(unsupportedSecurityHandlerPdf(), sink)).toThrow(PdfEncryptedError);
+  });
+
+  it('throws PdfPasswordRequiredError for a file that genuinely needs a user password', () => {
+    const { sink } = collectDiagnostics();
+    expect(() => openPdfDocument(aes256RealUserPasswordPdf(), sink)).toThrow(PdfPasswordRequiredError);
+  });
+
+  // Decryption is transparent below this layer: an object fetched from an encrypted document comes back in the clear, strings included, so nothing downstream of the object store needs to know the file was encrypted at all.
+  it('resolves objects from an encrypted document with their strings already decrypted', () => {
+    const { sink, diagnostics } = collectDiagnostics();
+    const doc = openPdfDocument(aes256EmptyUserPasswordPdf(), sink);
+    const info = doc.resolveDict(dictGet(doc.trailer, 'Info'));
+    const title = dictGet(info!, 'Title');
+    expect(title?.kind).toBe('string');
+    expect(title?.kind === 'string' ? new TextDecoder('latin1').decode(title.bytes) : undefined).toBe(ENCRYPTED_FIXTURE_TITLE);
+    expect(diagnostics).toEqual([]);
+  });
+
+  // A file's own /Encrypt dictionary is stored unencrypted (ISO 32000-1 7.6.1), so it must be fetched with decryption still off -- a bug here would corrupt /O and /U and make every supported file look password-protected.
+  it('reads the /Encrypt dictionary itself without trying to decrypt it', () => {
+    const { sink } = collectDiagnostics();
+    const doc = openPdfDocument(aes256EmptyUserPasswordPdf(), sink);
+    const encryptDict = doc.resolveDict(dictGet(doc.trailer, 'Encrypt'));
+    expect(asName(dictGet(encryptDict!, 'Filter'))).toBe('Standard');
+    expect(asNumber(dictGet(encryptDict!, 'V'))).toBe(5);
   });
 });
 

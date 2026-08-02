@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   brokenStartxrefPdf,
-  encryptedPdf,
   formXObjectPdf,
   inheritedPageAttributesPdf,
   inlineImagePdf,
@@ -10,10 +9,25 @@ import {
   nonZeroOriginMediaBoxPdf,
   pdfWithForeignHiddenAnnotationPdf,
   rotatedPagePdf,
+  unsupportedSecurityHandlerPdf,
   withInfoDictPdf,
   xrefStreamWithObjectStreamPdf,
 } from './test-support/pdf';
-import { PdfEncryptedError, PdfParseError } from './diagnostics';
+import {
+  ENCRYPTED_FIXTURE_AUTHOR,
+  ENCRYPTED_FIXTURE_PAGE_TEXT,
+  ENCRYPTED_FIXTURE_TITLE,
+  aes128CleartextMetadataPdf,
+  aes128EmptyUserPasswordPdf,
+  aes256EmptyUserPasswordPdf,
+  aes256ObjectStreamsPdf,
+  aes256RealUserPasswordPdf,
+  rc4Bits128EmptyUserPasswordPdf,
+  rc4Bits128RealUserPasswordPdf,
+  rc4Bits40EmptyUserPasswordPdf,
+} from './test-support/encrypted-pdfs';
+import type { PdfDiagnostic } from './diagnostics';
+import { PdfEncryptedError, PdfParseError, PdfPasswordRequiredError } from './diagnostics';
 import { decodePdfString, normalizeRotation, pageRotationTransform, readPdf } from './read';
 
 function textLayoutItems(items: readonly { kind: string }[]): { kind: string }[] {
@@ -62,9 +76,48 @@ describe('readPdf: cross-reference variants', () => {
   });
 });
 
-describe('readPdf: encryption and malformed input', () => {
-  it('throws PdfEncryptedError for an encrypted PDF', () => {
-    expect(() => readPdf(encryptedPdf())).toThrow(PdfEncryptedError);
+// Every fixture below is a real PDF encrypted by qpdf, not by this package -- see src/test-support/encrypted-pdfs.ts. Each is an encrypted copy of the same one-page document, so one shared assertion covers every cipher: the page's content *stream* has to decrypt (the text) and so do the /Info *strings* (title and author), which under /V 4 and /V 5 travel through separately-named crypt filters and would not both come back if only one path were right.
+describe('readPdf: PDFs that open without a password', () => {
+  const fixtures: readonly (readonly [string, () => Uint8Array<ArrayBuffer>])[] = [
+    ['40-bit RC4 (/V 1 /R 2)', rc4Bits40EmptyUserPasswordPdf],
+    ['128-bit RC4 (/V 2 /R 3)', rc4Bits128EmptyUserPasswordPdf],
+    ['AES-128 (/V 4 /R 4, /CFM /AESV2)', aes128EmptyUserPasswordPdf],
+    ['AES-128 with /EncryptMetadata false', aes128CleartextMetadataPdf],
+    ['AES-256 (/V 5 /R 6, /CFM /AESV3)', aes256EmptyUserPasswordPdf],
+    ['AES-256 with its objects packed into a compressed object stream', aes256ObjectStreamsPdf],
+  ];
+
+  for (const [label, fixture] of fixtures) {
+    it(`decrypts and reads a permissions-only PDF encrypted with ${label}`, () => {
+      const doc = readPdf(fixture());
+      expect(doc.pages).toHaveLength(1);
+      expect(doc.pages[0]).toMatchObject({ widthPt: 200, heightPt: 100 });
+      expect(textLayoutItems(doc.pages[0]!.items)).toMatchObject([{ text: ENCRYPTED_FIXTURE_PAGE_TEXT }]);
+      expect(doc.metadata.title).toBe(ENCRYPTED_FIXTURE_TITLE);
+      expect(doc.metadata.author).toBe(ENCRYPTED_FIXTURE_AUTHOR);
+    });
+  }
+
+  it('reports no diagnostics at all while decrypting', () => {
+    const diagnostics: PdfDiagnostic[] = [];
+    readPdf(aes256EmptyUserPasswordPdf(), { sink: (diagnostic) => diagnostics.push(diagnostic) });
+    expect(diagnostics).toEqual([]);
+  });
+});
+
+describe('readPdf: PDFs it refuses to open', () => {
+  // A file that genuinely needs a user password gets its own error, distinct from PdfEncryptedError: one of the two can be resolved by whoever holds the password, and the other never can.
+  it('throws PdfPasswordRequiredError for an RC4 file with a real user password', () => {
+    expect(() => readPdf(rc4Bits128RealUserPasswordPdf())).toThrow(PdfPasswordRequiredError);
+  });
+
+  it('throws PdfPasswordRequiredError for an AES-256 file with a real user password', () => {
+    expect(() => readPdf(aes256RealUserPasswordPdf())).toThrow(PdfPasswordRequiredError);
+  });
+
+  it('throws PdfEncryptedError, not PdfPasswordRequiredError, for a security handler no password could open', () => {
+    expect(() => readPdf(unsupportedSecurityHandlerPdf())).toThrow(PdfEncryptedError);
+    expect(() => readPdf(unsupportedSecurityHandlerPdf())).not.toThrow(PdfPasswordRequiredError);
   });
 
   it('throws a PdfParseError when there is no "%PDF-" header at all', () => {

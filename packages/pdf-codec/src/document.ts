@@ -1,6 +1,8 @@
 import { ByteReader } from './bytes/reader';
 import { PdfEncryptedError, PdfParseError } from './diagnostics';
 import type { PdfDiagnosticSink } from './diagnostics';
+import type { PdfDecryptor } from './encrypt';
+import { createStandardDecryptor } from './encrypt';
 import { decodeStream } from './filters';
 import { nextToken } from './lexer';
 import type { PdfDict, PdfObject } from './objects';
@@ -24,14 +26,42 @@ const MAX_RESOLVE_DEPTH = 64;
 // A Page node's own inheritable attributes, per ISO 32000-1 Table 30 -- the set every mainstream producer actually relies on (most titles/body text never repeat /MediaBox or /Resources on every single page, inheriting the deck-wide value from an ancestor Pages node instead).
 const INHERITABLE_PAGE_KEYS = ['Resources', 'MediaBox', 'CropBox', 'Rotate'] as const;
 
+// The first element of the trailer's /ID array, which every pre-revision-5 key derivation mixes in. A file with no /ID at all is malformed, but every mainstream reader carries on with an empty value rather than refusing it, and so does this one -- the /U verification below is what actually decides whether the derived key is right.
+function firstFileId(trailer: PdfDict): Uint8Array<ArrayBuffer> {
+  const id = asArray(dictGet(trailer, 'ID'));
+  const first = id?.[0];
+  return first?.kind === 'string' ? first.bytes : new Uint8Array(0);
+}
+
+function decryptDict(dict: PdfDict, num: number, gen: number, decryptor: PdfDecryptor): PdfDict {
+  return { kind: 'dict', entries: new Map(Array.from(dict.entries, ([key, entry]) => [key, decryptObject(entry, num, gen, decryptor)])) };
+}
+
+// Walks one indirect object applying the document's decryptor to every string and stream inside it. ISO 32000-1 7.5.7 is why nothing equivalent runs on an object stream's *contents*: an object stream is decrypted whole, as a stream, and the objects unpacked from it are then already in the clear -- decrypting their strings a second time would corrupt them.
+function decryptObject(value: PdfObject, num: number, gen: number, decryptor: PdfDecryptor): PdfObject {
+  if (value.kind === 'string') {
+    return { kind: 'string', bytes: decryptor.decryptString(value.bytes, num, gen), hex: value.hex };
+  }
+  if (value.kind === 'array') {
+    return { kind: 'array', items: value.items.map((item) => decryptObject(item, num, gen, decryptor)) };
+  }
+  if (value.kind === 'dict') {
+    return decryptDict(value, num, gen, decryptor);
+  }
+  if (value.kind === 'stream') {
+    // decryptStream is handed the source dictionary, not the decrypted copy: all it reads from it is /Type, deciding whether this is the metadata stream an /EncryptMetadata false document leaves in the clear. A name is never encrypted, so the two dictionaries agree on that key either way.
+    return { kind: 'stream', dict: decryptDict(value.dict, num, gen, decryptor), raw: decryptor.decryptStream(value.raw, value.dict, num, gen) };
+  }
+  return value;
+}
+
 export function openPdfDocument(bytes: Uint8Array<ArrayBuffer>, sink: PdfDiagnosticSink): PdfDocument {
   const xref = readXref(bytes, sink);
-  if (dictGet(xref.trailer, 'Encrypt') !== undefined) {
-    throw new PdfEncryptedError();
-  }
 
   const objectCache = new Map<number, PdfObject>();
   const objStmCache = new Map<number, PdfObject[]>();
+  // Assigned once, below, after the /Encrypt dictionary itself has been resolved -- it cannot be a `const` initialised at its own declaration, because resolving that dictionary goes through fetchDirect, which reads this very binding. Reading it there while still `undefined` is exactly right: ISO 32000-1 7.6.1 leaves the encryption dictionary's own strings unencrypted, so it must be fetched with decryption off.
+  let decryptor: PdfDecryptor | undefined;
 
   function fetchDirect(num: number, entry: Extract<XrefEntry, { type: 'offset' }>): PdfObject {
     const reader = new ByteReader(bytes);
@@ -41,7 +71,11 @@ export function openPdfDocument(bytes: Uint8Array<ArrayBuffer>, sink: PdfDiagnos
       sink({ code: 'pdf/object-missing-value', severity: 'warning', message: `object ${String(num)} could not be parsed at its recorded offset` });
       return pdfNull();
     }
-    return indirect.value;
+    if (decryptor === undefined) {
+      return indirect.value;
+    }
+    // The generation number comes from the object's own header rather than the cross-reference entry: it is the value the producer's own encryptor keyed on, and the two can disagree in a file whose xref has been rebuilt by recovery.
+    return decryptObject(indirect.value, num, indirect.gen, decryptor);
   }
 
   function decodeObjectStream(streamObjNum: number): PdfObject[] {
@@ -118,6 +152,16 @@ export function openPdfDocument(bytes: Uint8Array<ArrayBuffer>, sink: PdfDiagnos
       throw new PdfParseError('pdf/no-root', 'no resolvable /Root catalog was found, even after cross-reference recovery');
     }
     return dict;
+  }
+
+  // Decryption is installed here, before anything else is resolved, so every fetch after this point -- catalog, page tree, content streams, /Info strings -- comes back in the clear. The one resolve() below runs while `decryptor` is still undefined, which is what ISO 32000-1 7.6.1 requires: an encryption dictionary's own strings are never encrypted, so the object cached for it is correct exactly as read.
+  const encryptEntry = dictGet(xref.trailer, 'Encrypt');
+  if (encryptEntry !== undefined) {
+    const encryptDict = resolveDict(encryptEntry);
+    if (encryptDict === undefined) {
+      throw new PdfEncryptedError('the trailer names an /Encrypt dictionary that does not resolve to a dictionary at all');
+    }
+    decryptor = createStandardDecryptor(encryptDict, firstFileId(xref.trailer), sink);
   }
 
   const catalog = requireCatalog(resolveDict(dictGet(xref.trailer, 'Root')));

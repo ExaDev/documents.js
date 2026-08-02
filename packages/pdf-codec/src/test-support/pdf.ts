@@ -182,12 +182,12 @@ export function incrementalUpdatePdf(): Uint8Array<ArrayBuffer> {
   return b.bytes();
 }
 
-// /Encrypt present -- readPdf must throw a clear, specific "this PDF is encrypted and unsupported" error rather than a generic parse failure, even for the common empty-user-password case this fixture represents (a real /Encrypt dict would carry /Filter /Standard /V /R /O /U /P; this fixture only needs the key the reader is required to notice).
-export function encryptedPdf(): Uint8Array<ArrayBuffer> {
+// /Encrypt present, naming a security handler other than /Standard (this one is the public-key handler, the only other one ISO 32000-1 defines). Nothing derived from a password can open it, so readPdf must say so with a clear PdfEncryptedError rather than a generic parse failure -- distinct from a /Standard-handler file that merely needs a password, which src/test-support/encrypted-pdfs.ts covers with real qpdf-encrypted bytes.
+export function unsupportedSecurityHandlerPdf(): Uint8Array<ArrayBuffer> {
   const b = new FixtureBuilder().header('1.4');
   catalogPagesPageFontObjects(b, 5);
   b.stream(5, '<< >>', enc(HELLO_CONTENT));
-  b.object(6, '<< /Filter /Standard /V 1 /R 2 /O <00> /U <00> /P -4 >>');
+  b.object(6, '<< /Filter /Adobe.PubSec /SubFilter /adbe.pkcs7.s5 /V 4 /R 4 >>');
   b.classicXrefAndTrailer(6, '/Root 1 0 R /Encrypt 6 0 R');
   return b.bytes();
 }

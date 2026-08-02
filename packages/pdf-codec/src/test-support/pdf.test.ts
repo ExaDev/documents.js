@@ -2,7 +2,6 @@ import { unzlibSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
 import {
   brokenStartxrefPdf,
-  encryptedPdf,
   formXObjectPdf,
   incrementalUpdatePdf,
   inheritedPageAttributesPdf,
@@ -10,6 +9,7 @@ import {
   minimalClassicXrefPdf,
   nonZeroOriginMediaBoxPdf,
   rotatedPagePdf,
+  unsupportedSecurityHandlerPdf,
   withInfoDictPdf,
   xrefStreamWithObjectStreamPdf,
 } from './pdf';
@@ -153,14 +153,15 @@ describe('incrementalUpdatePdf', () => {
   });
 });
 
-describe('encryptedPdf', () => {
-  it('is well-formed and its trailer references an /Encrypt dictionary', () => {
-    const bytes = encryptedPdf();
+describe('unsupportedSecurityHandlerPdf', () => {
+  it('is well-formed and its trailer references an /Encrypt dictionary naming a non-standard handler', () => {
+    const bytes = unsupportedSecurityHandlerPdf();
     expectWellFormedHeaderAndTrailer(bytes);
     verifyFullClassicXref(bytes);
     const text = decode(bytes);
     expect(text).toMatch(/trailer\n<<[^>]*\/Encrypt 6 0 R/);
-    expect(text).toContain('/Filter /Standard');
+    expect(text).toContain('/Filter /Adobe.PubSec');
+    expect(text).not.toContain('/Filter /Standard');
   });
 });
 

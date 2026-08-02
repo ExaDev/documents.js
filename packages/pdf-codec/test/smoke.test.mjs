@@ -31,6 +31,7 @@ const FUNCTIONS = [
   'ByteWriter',
   'PdfParseError',
   'PdfEncryptedError',
+  'PdfPasswordRequiredError',
 ];
 const OBJECTS = ['pdfCodec', 'PdfBytesSchema', 'STANDARD_METRICS', 'MAX_INFLATE_OUTPUT_BYTES'];
 
