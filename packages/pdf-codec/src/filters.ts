@@ -1,13 +1,14 @@
 import { inflateTolerant } from './bytes/flate';
 import { isAsciiWhitespace } from './bytes/reader';
 import type { PdfDiagnosticSink } from './diagnostics';
-import type { PdfDict } from './objects';
-import { asArray, asDict, asName, asNumber, dictGet } from './objects';
+import { decodeCcittFax } from './image/ccitt';
+import type { PdfDict, PdfObject } from './objects';
+import { asArray, asBool, asDict, asName, asNumber, dictGet } from './objects';
 import { applyPredictor, readPredictorParams } from './predictors';
 
 export interface DecodedStream {
   readonly bytes: Uint8Array<ArrayBuffer>;
-  // Set when decoding stopped before exhausting the /Filter chain: either DCTDecode's deliberate JPEG passthrough (the encoded bytes ARE the deliverable -- see src/image/*'s own module docs) or a filter this codec doesn't implement (CCITTFaxDecode/JBIG2Decode/JPXDecode/Crypt). `bytes` is still encoded per this filter name either way.
+  // Set when decoding stopped before exhausting the /Filter chain: either DCTDecode's deliberate JPEG passthrough (the encoded bytes ARE the deliverable -- see src/image/*'s own module docs) or a filter this codec doesn't implement (JBIG2Decode/JPXDecode/Crypt). `bytes` is still encoded per this filter name either way.
   readonly remainingFilter?: string;
 }
 
@@ -30,6 +31,8 @@ export function decodeStream(raw: Uint8Array<ArrayBuffer>, dict: PdfDict, sink: 
       bytes = asciiHexDecode(bytes);
     } else if (filter === 'RunLengthDecode' || filter === 'RL') {
       bytes = runLengthDecode(bytes);
+    } else if (filter === 'CCITTFaxDecode' || filter === 'CCF') {
+      bytes = ccittFaxDecode(bytes, parm, dict, sink);
     } else if (filter === 'DCTDecode' || filter === 'DCT') {
       return { bytes, remainingFilter: 'DCTDecode' };
     } else {
@@ -42,6 +45,24 @@ export function decodeStream(raw: Uint8Array<ArrayBuffer>, dict: PdfDict, sink: 
 
 function applyPredictorIfPresent(data: Uint8Array<ArrayBuffer>, parm: PdfDict | undefined, sink: PdfDiagnosticSink): Uint8Array<ArrayBuffer> {
   return applyPredictor(data, readPredictorParams(parm), sink);
+}
+
+// CCITTFaxDecode (ISO 32000-1 7.4.6): the /DecodeParms entries in Table 11 map one-to-one onto src/image/ccitt.ts's own options, which is the whole of this codec's PDF knowledge about fax coding.
+//
+// /Rows falls back to the stream dictionary's own /Height because Table 11 defaults /Rows to 0 ("decode until the data runs out"), and a real producer very often leaves it there and lets the image dictionary carry the row count -- resolving it here means the decoder gets a definite row count and stops on it rather than reading whatever trailing bits an encoder left behind.
+//
+// /EndOfLine, /EndOfBlock, and /DamagedRowsBeforeError are deliberately not consulted: the decoder handles an EOL wherever one actually appears rather than being told in advance whether to expect one, stops at an end-of-block marker or at the declared row count whichever comes first, and reports damage through the diagnostic sink rather than switching between "throw" and "keep going" on a per-document count.
+function ccittFaxDecode(data: Uint8Array<ArrayBuffer>, parm: PdfDict | undefined, dict: PdfDict, sink: PdfDiagnosticSink): Uint8Array<ArrayBuffer> {
+  const parmGet = (key: string): PdfObject | undefined => (parm !== undefined ? dictGet(parm, key) : undefined);
+  const rows = asNumber(parmGet('Rows')) ?? asNumber(dictGet(dict, 'Height') ?? dictGet(dict, 'H'));
+  return decodeCcittFax(data, {
+    k: asNumber(parmGet('K')),
+    columns: asNumber(parmGet('Columns')),
+    rows,
+    blackIs1: asBool(parmGet('BlackIs1')),
+    encodedByteAlign: asBool(parmGet('EncodedByteAlign')),
+    onWarning: (message) => sink({ code: 'pdf/ccitt-fax-degraded', severity: 'warning', message }),
+  }).bytes;
 }
 
 function filterNames(dict: PdfDict): string[] {

@@ -2,7 +2,8 @@ import { zlibSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
 import type { PdfDiagnostic, PdfDiagnosticSink } from './diagnostics';
 import { ascii85Decode, asciiHexDecode, decodeStream, lzwDecode, runLengthDecode } from './filters';
-import { pdfArray, pdfDict, pdfName, pdfNull, pdfNum } from './objects';
+import { pdfArray, pdfBool, pdfDict, pdfName, pdfNull, pdfNum } from './objects';
+import { CCITT_FAX_FIXTURES, ccittFixtureBytes } from './test-support/ccitt-fax';
 
 function collectDiagnostics(): { sink: PdfDiagnosticSink; diagnostics: PdfDiagnostic[] } {
   const diagnostics: PdfDiagnostic[] = [];
@@ -270,5 +271,60 @@ describe('decodeStream', () => {
     const raw = textBytes('plain');
     const result = decodeStream(raw, pdfDict({}), sink);
     expect(Array.from(result.bytes)).toEqual(Array.from(raw));
+  });
+});
+
+describe('decodeStream: CCITTFaxDecode', () => {
+  const fixture = CCITT_FAX_FIXTURES.find((f) => f.name === 'box')!;
+
+  function expectedBits(blackIs1: boolean): number[] {
+    const bytesPerRow = Math.ceil(fixture.columns / 8);
+    const bytes = new Uint8Array(bytesPerRow * fixture.rows);
+    for (let y = 0; y < fixture.rows; y++) {
+      for (let x = 0; x < fixture.columns; x++) {
+        const black = fixture.isBlack(x, y);
+        if (black === blackIs1) {
+          const index = y * bytesPerRow + (x >> 3);
+          bytes[index] = (bytes[index] ?? 0) | (0x80 >> (x & 7));
+        }
+      }
+    }
+    return Array.from(bytes);
+  }
+
+  it('decodes a Group 4 stream into a packed 1-bit bitmap, taking /Rows from the image /Height', () => {
+    const { sink, diagnostics } = collectDiagnostics();
+    // No /Rows in /DecodeParms: Table 11 defaults it to 0, so the row count has to come from the image dictionary itself.
+    const dict = pdfDict({
+      Filter: pdfName('CCITTFaxDecode'),
+      DecodeParms: pdfDict({ K: pdfNum(-1), Columns: pdfNum(fixture.columns) }),
+      Width: pdfNum(fixture.columns),
+      Height: pdfNum(fixture.rows),
+    });
+    const result = decodeStream(ccittFixtureBytes(fixture.encodings.group4), dict, sink);
+    expect(diagnostics).toEqual([]);
+    expect(result.remainingFilter).toBeUndefined();
+    expect(Array.from(result.bytes)).toEqual(expectedBits(false));
+  });
+
+  it('honours /BlackIs1 and the /CCF abbreviation', () => {
+    const { sink } = collectDiagnostics();
+    const dict = pdfDict({
+      F: pdfName('CCF'),
+      DP: pdfDict({ K: pdfNum(-1), Columns: pdfNum(fixture.columns), Rows: pdfNum(fixture.rows), BlackIs1: pdfBool(true) }),
+    });
+    const result = decodeStream(ccittFixtureBytes(fixture.encodings.group4), dict, sink);
+    expect(Array.from(result.bytes)).toEqual(expectedBits(true));
+  });
+
+  it('reports a damaged stream through the diagnostic sink rather than throwing', () => {
+    const { sink, diagnostics } = collectDiagnostics();
+    const dict = pdfDict({
+      Filter: pdfName('CCITTFaxDecode'),
+      DecodeParms: pdfDict({ K: pdfNum(-1), Columns: pdfNum(8), Rows: pdfNum(4) }),
+    });
+    const result = decodeStream(new Uint8Array([0x80, 0x02, 0x00, 0x00]), dict, sink);
+    expect(result.bytes.length).toBe(4); // one byte per row, the undecodable rows padded white
+    expect(diagnostics.map((d) => d.code)).toContain('pdf/ccitt-fax-degraded');
   });
 });

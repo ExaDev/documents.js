@@ -74,6 +74,10 @@ export function asName(obj: PdfObject | undefined): string | undefined {
   return obj?.kind === 'name' ? obj.name : undefined;
 }
 
+export function asBool(obj: PdfObject | undefined): boolean | undefined {
+  return obj?.kind === 'bool' ? obj.value : undefined;
+}
+
 export function asArray(obj: PdfObject | undefined): PdfObject[] | undefined {
   return obj?.kind === 'array' ? obj.items : undefined;
 }

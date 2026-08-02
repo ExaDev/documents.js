@@ -6,7 +6,7 @@ import type { PdfDiagnosticSink } from './diagnostics';
 import { decodeStream } from './filters';
 import type { PdfObjectResolver } from './interpret';
 import type { PdfDict, PdfObject } from './objects';
-import { asArray, asName, asNumber, dictGet } from './objects';
+import { asArray, asBool, asName, asNumber, dictGet } from './objects';
 
 // Turns an Image XObject (or an inline image's dict+data) into bytes ready to store as a LayoutImageAsset. A DCTDecode (JPEG) image passes through completely undecoded -- its compressed bytes ARE the deliverable, exactly mirroring the write path's own lossless JPEG passthrough. Everything else is decoded to raw samples and re-encoded as PNG via image/png-encode.ts, since LayoutImageAsset only ever stores 'png' or 'jpeg'.
 
@@ -200,12 +200,8 @@ function readSoftMaskAlpha(dict: PdfDict, width: number, height: number, resolve
   return decoded.bytes.subarray(0, width * height);
 }
 
-function isTrue(obj: PdfObject | undefined): boolean {
-  return obj?.kind === 'bool' && obj.value;
-}
-
 export function readImageXObject(dict: PdfDict, raw: Uint8Array<ArrayBuffer>, resolver: PdfObjectResolver, sink: PdfDiagnosticSink): ExtractedPdfImage | undefined {
-  if (isTrue(dictGet(dict, 'ImageMask') ?? dictGet(dict, 'IM'))) {
+  if (asBool(dictGet(dict, 'ImageMask') ?? dictGet(dict, 'IM')) === true) {
     sink({ code: 'image/mask-unsupported', severity: 'info', message: 'an /ImageMask stencil paints with the current fill colour rather than standing alone as an image; skipping' });
     return undefined;
   }

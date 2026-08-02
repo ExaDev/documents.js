@@ -40,7 +40,9 @@ export { MAX_INFLATE_OUTPUT_BYTES, deflate, inflate, inflateTolerant } from './b
 export { ByteReader, isAsciiWhitespace } from './bytes/reader';
 export { ByteWriter, concatBytes } from './bytes/writer';
 
-// Image: JPEG marker scanning (dimensions only, compressed bytes untouched) and a hand-written PNG codec (palette/gray/RGB/alpha, multi-IDAT, all five scanline filters).
+// Image: JPEG marker scanning (dimensions only, compressed bytes untouched), a hand-written PNG codec (palette/gray/RGB/alpha, multi-IDAT, all five scanline filters), and a hand-written CCITT Group 3/Group 4 fax decoder.
+export type { CcittFaxImage, CcittFaxOptions } from './image/ccitt';
+export { decodeCcittFax } from './image/ccitt';
 export type { JpegInfo } from './image/jpeg-info';
 export { readJpegInfo } from './image/jpeg-info';
 export type { PngDecodeOptions, RawImage } from './image/png-decode';
