@@ -351,14 +351,13 @@ function layoutTable(element: MathMlElement, ctx: LayoutContext): MathBox {
     cursorYTopPt += rowAscentPt + rowDescentPt + (rowIndex < rowCells.length - 1 ? rowGapPt : 0);
   });
 
-  const totalHeightPt = cursorYTopPt;
   const widthPt = columnWidthsPt.reduce((sum, w) => sum + w, 0) + columnGapPt * Math.max(0, columnCount - 1);
-  let descentPt = totalHeightPt - (totalHeightPt / 2 + ctx.metrics.axisHeightPt);
+  let descentPt = cursorYTopPt - (cursorYTopPt / 2 + ctx.metrics.axisHeightPt);
   if (descentPt < 0) {
     descentPt = 0;
   }
-  const ascentPt = totalHeightPt - descentPt;
-  return { widthPt, ascentPt, descentPt, heightPt: totalHeightPt, items };
+  const ascentPt = cursorYTopPt - descentPt;
+  return { widthPt, ascentPt, descentPt, heightPt: cursorYTopPt, items };
 }
 
 function layoutSpace(element: MathMlElement, ctx: LayoutContext): MathBox {

@@ -1,6 +1,7 @@
 import js from '@eslint/js';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
+import noPointlessReassignment from './eslint-rules/no-pointless-reassignment.js';
 
 export default tseslint.config(
   {
@@ -30,6 +31,29 @@ export default tseslint.config(
       // No type assertions anywhere: narrow with a guard or parse with Zod instead. The hand-written PDF codec (now the external pdf-codec dependency, formerly src/pdf/) established this pattern by narrowing third-party-shaped values (raw bytes, loosely-typed parsed tokens) through PdfObject's own `kind` discriminant rather than a cast; every other module in this package follows the same convention.
       '@typescript-eslint/consistent-type-assertions': ['error', { assertionStyle: 'never' }],
       '@typescript-eslint/consistent-type-imports': ['error', { fixStyle: 'inline-type-imports' }],
+    },
+  },
+  {
+    // Local custom rule (eslint-rules/no-pointless-reassignment.ts) -- not published as a package, matching this family's own convention of keeping shared dev-tooling config as identical per-repo copies rather than a shared devDependency.
+    plugins: { local: { rules: { 'no-pointless-reassignment': noPointlessReassignment } } },
+    rules: { 'local/no-pointless-reassignment': 'error' },
+  },
+  {
+    // Re-exports belong only in src/index.ts, the public barrel -- a re-export anywhere else risks silently surfacing the wrong thing under a name a consumer expects to mean something else.
+    files: ['src/**/*.ts'],
+    ignores: [
+      'src/index.ts',
+      'src/odf-package/manifest.ts', // deliberate pure re-export of odf.js's own manifest read/build/write/sync/validate functions -- odf.js already owns META-INF/manifest.xml end to end (see this file's own top comment)
+      'src/model/geometry.ts', // deliberate re-export of document-schema.js's Box/Margins/PageSize under documents.js's own established names, so every existing local caller keeps resolving them unchanged
+      'src/model/style.ts', // deliberate re-export of document-schema.js's Alignment/LayoutFont under documents.js's own established names, for the same reason as geometry.ts above
+      'src/model/color.ts', // deliberate re-export/alias of document-schema.js's Color as documents.js's own established LayoutColor name, for the same reason as geometry.ts above
+    ],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        { selector: 'ExportAllDeclaration', message: 'Re-exports belong only in src/index.ts (the public barrel). Define or import this locally instead.' },
+        { selector: 'ExportNamedDeclaration[source]', message: 'Re-exports belong only in src/index.ts (the public barrel). Define or import this locally instead.' },
+      ],
     },
   },
 );

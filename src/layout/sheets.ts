@@ -14,7 +14,7 @@ import { LAYOUT_FORMAT_VERSION } from 'document-schema.js';
 import type { LayoutColor } from '../model/color';
 import { COLOR_BLACK, rgbHexToColor } from '../model/color';
 import type { ContentDocument } from '../model/content';
-import type { Alignment, LayoutFont } from '../model/style';
+import type { Alignment } from '../model/style';
 import { DEFAULT_LAYOUT_FONT } from '../model/style';
 import { throwIfAborted } from '../ports/abort';
 import type { StyledFragment, StyledRun, TextMeasurer } from 'pdf-codec';
@@ -361,27 +361,26 @@ function renderCellText(
 // --- Header-gutter labels and gridlines -------------------------------------------------------
 
 function renderHeaderLabels(gutter: HeaderGutter, columnAxis: PositionedAxis, rowAxis: PositionedAxis, gridLeftXPt: number, gridTopYDownPt: number, pageHeightPt: number, measurer: TextMeasurer, out: LayoutItem[]): void {
-  const labelFont: LayoutFont = DEFAULT_LAYOUT_FONT;
-  const lineHeightPt = measurer.lineHeightAtSize(labelFont, HEADER_LABEL_SIZE_PT);
-  const ascentPt = measurer.ascenderAtSize(labelFont, HEADER_LABEL_SIZE_PT);
+  const lineHeightPt = measurer.lineHeightAtSize(DEFAULT_LAYOUT_FONT, HEADER_LABEL_SIZE_PT);
+  const ascentPt = measurer.ascenderAtSize(DEFAULT_LAYOUT_FONT, HEADER_LABEL_SIZE_PT);
 
   columnAxis.indices.forEach((columnIndex, position) => {
     const label = columnLetters(columnIndex);
     const widthPt = columnAxis.sizesPt[position]!;
-    const labelWidthPt = measurer.widthOfTextAtSize(label, labelFont, HEADER_LABEL_SIZE_PT);
+    const labelWidthPt = measurer.widthOfTextAtSize(label, DEFAULT_LAYOUT_FONT, HEADER_LABEL_SIZE_PT);
     const xPt = gridLeftXPt + columnAxis.offsetsPt[position]! + alignmentOffsetPt('center', widthPt, labelWidthPt);
     const baselineYDownPt = gridTopYDownPt - gutter.heightPt + (gutter.heightPt - lineHeightPt) / 2 + ascentPt;
-    out.push({ kind: 'text', text: label, xPt, yPt: pageHeightPt - baselineYDownPt, font: labelFont, sizePt: HEADER_LABEL_SIZE_PT, color: HEADER_LABEL_COLOR });
+    out.push({ kind: 'text', text: label, xPt, yPt: pageHeightPt - baselineYDownPt, font: DEFAULT_LAYOUT_FONT, sizePt: HEADER_LABEL_SIZE_PT, color: HEADER_LABEL_COLOR });
   });
 
   rowAxis.indices.forEach((rowIndex, position) => {
     const label = String(rowIndex + 1);
     const heightPt = rowAxis.sizesPt[position]!;
-    const labelWidthPt = measurer.widthOfTextAtSize(label, labelFont, HEADER_LABEL_SIZE_PT);
+    const labelWidthPt = measurer.widthOfTextAtSize(label, DEFAULT_LAYOUT_FONT, HEADER_LABEL_SIZE_PT);
     const xPt = gridLeftXPt - gutter.widthPt + Math.max(HEADER_LABEL_PADDING_PT, gutter.widthPt - HEADER_LABEL_PADDING_PT - labelWidthPt);
     const rowTopYDownPt = gridTopYDownPt + rowAxis.offsetsPt[position]!;
     const baselineYDownPt = rowTopYDownPt + Math.max(0, (heightPt - lineHeightPt) / 2) + ascentPt;
-    out.push({ kind: 'text', text: label, xPt, yPt: pageHeightPt - baselineYDownPt, font: labelFont, sizePt: HEADER_LABEL_SIZE_PT, color: HEADER_LABEL_COLOR });
+    out.push({ kind: 'text', text: label, xPt, yPt: pageHeightPt - baselineYDownPt, font: DEFAULT_LAYOUT_FONT, sizePt: HEADER_LABEL_SIZE_PT, color: HEADER_LABEL_COLOR });
   });
 }
 

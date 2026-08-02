@@ -11,7 +11,7 @@ import { buildOdsPackage } from '../edit/ods/content';
 import { buildOdtPackage } from '../edit/odt/content';
 import { buildPptxPackage } from '../edit/pptx/content';
 import { openPptx } from '../edit/pptx/editor';
-import { layoutFormula } from '../mathml';
+import { layoutFormula } from '../mathml/layout';
 import { convertDrawingToLayout } from '../layout/drawing';
 import { convertWordprocessingToLayout } from '../layout/engine';
 import { reconstructDrawing, reconstructPresentation, reconstructSpreadsheet, reconstructWordprocessing } from '../layout/reconstruct';
