@@ -16,12 +16,13 @@ import type { XmlElement } from '../../model/node';
 import type { Package } from '../../model/package';
 import { attrValue, childrenWithTag, findChildElement, rootElement } from '../../xml/query';
 import { TableCursor, parseCellReference } from '../shared/a1';
-import { findStyleElement } from '../shared/cascade';
+import { findStyleElement, resolveStyleElementChain } from '../shared/cascade';
 import { readOdfMetadata } from '../shared/metadata';
 import { resolvePageLayoutProperties } from '../shared/masterpage';
 import { parseMargins, parsePageSize } from '../shared/geometry';
 import { parseOdfLength } from '../shared/units';
 import { readOdfParagraph } from '../shared/paragraph';
+import { readCellStyleDecoration } from '../shared/table';
 
 // Package -> OdsDocument: a spreadsheet reader deliberately built GEOMETRY- and PRINT-SETTINGS-rich rather than a minimal cell-values-only reader (a real requirement from this reader's own design brief, not optional polish) -- real column widths/row heights, hidden rows/columns, merged ranges, every office:value-type variant with its own OpenFormula string carried verbatim, and a genuinely populated ContentSheetPrintSettings (page geometry, print range, scale/fit-to-page, repeat rows/columns, gridlines/headers, page order, manual breaks). Every ODF attribute name and structural shape below was confirmed against real LibreOffice 26.2 output (a headless UNO Basic macro building a real .ods with every one of these features actually configured through the same UNO calls the Calc UI itself uses -- Format > Columns > Width, Format > Rows > Height, Format > Print Areas, Format > Page Style's Sheet tab, a real merged range, a real cross-sheet SUM formula, every value-type including a GBP currency cell and a genuine #DIV/0! formula error -- then the resulting content.xml/styles.xml inspected directly), not assumed from memory or from xlsx's own different mechanisms. See this module's own inline notes at each surprising point (table:table-header-rows/columns as the REAL repeat-row/column mechanism, NOT a named range; style:master-page-name living on the table:table's own style:style[family="table"], NOT on table:table itself; the UNO API's own PageScale-vs-ScaleToPagesX/Y mutual-exclusivity quirk that shaped nothing in the READER but is worth knowing when re-deriving a fixture) for the exact evidence.
 //
@@ -253,6 +254,24 @@ function readTable(tableElement: XmlElement, pkg: Package): TableWalkResult {
         if (rowSpan !== undefined) {
           cell.rowSpan = rowSpan;
         }
+
+        // background/borders/alignment/verticalAlignment resolve through the SAME table:style-name -> table-cell family cascade readColumnLayout/readRowLayout resolve their own dimensional properties through -- but via resolveStyleElementChain's full root-to-target chain (family default-style, then each style:parent-style-name ancestor, then the cell's own referenced style last), not findStyleElement's single-level lookup: real-world spreadsheet cell styles routinely DO chain via style:parent-style-name (confirmed against this package's own kitchen-sink.ods fixture -- every table-cell style there sets style:parent-style-name="Default", and styles.xml's own style:default-style style:family="table-cell" carries a real style:paragraph-properties child), unlike the "standalone in practice" convention typed/shared/table.ts documents for odt/odp table-cell styles. readCellStyleDecoration (typed/shared/table.ts) does the actual fold; see that module's own top-of-file note for the loext:/vertical-align/fo:text-align caveats -- the loext: cell-fill quirk documented there is specific to presentation tables, not spreadsheets, and was NOT observed in this reader's own real fixture.
+        const cellStyleName = attrValue(child, 'table:style-name');
+        const { elements: cellStyleChain } = resolveStyleElementChain(cellStyleName, 'table-cell', pkg);
+        const decoration = readCellStyleDecoration(cellStyleChain);
+        if (decoration.background !== undefined) {
+          cell.background = decoration.background;
+        }
+        if (decoration.borders !== undefined) {
+          cell.borders = decoration.borders;
+        }
+        if (decoration.alignment !== undefined) {
+          cell.alignment = decoration.alignment;
+        }
+        if (decoration.verticalAlignment !== undefined) {
+          cell.verticalAlignment = decoration.verticalAlignment;
+        }
+
         cells.push(cell);
       }
     }

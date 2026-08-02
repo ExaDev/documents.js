@@ -22,6 +22,10 @@ function cellStyle(name: string, backgroundHex: string): XmlElement {
   return el('style:style', { 'style:name': name, 'style:family': 'table-cell' }, [el('style:table-cell-properties', { 'fo:background-color': backgroundHex })]);
 }
 
+function cellBorderStyle(name: string, cellPropertyAttrs: Record<string, string>): XmlElement {
+  return el('style:style', { 'style:name': name, 'style:family': 'table-cell' }, [el('style:table-cell-properties', cellPropertyAttrs)]);
+}
+
 function cell(text: string, extraAttrs: Record<string, string> = {}): XmlElement {
   return el('table:table-cell', extraAttrs, [el('text:p', {}, [txt(text)])]);
 }
@@ -121,6 +125,53 @@ describe('readOdfTable: cell background', () => {
   it('leaves background undefined for a cell with no style-name', () => {
     const table = el('table:table', {}, [el('table:table-row', {}, [cell('plain')])]);
     expect(readOdfTable(table, { parts: {} }).rows[0]?.cells[0]?.background).toBeUndefined();
+  });
+});
+
+describe('readOdfTable: cell borders (odt/odp -- single-level table:style-name -> table-cell family style, matching background\'s own established lookup)', () => {
+  it('expands the fo:border shorthand onto all four edges', () => {
+    const ce1 = cellBorderStyle('ce1', { 'fo:border': '1pt solid #ff0000' });
+    const table = el('table:table', {}, [el('table:table-row', {}, [cell('bordered', { 'table:style-name': 'ce1' })])]);
+    const pkg: Package = { parts: { 'content.xml': contentPackage([ce1]) } };
+    const borders = readOdfTable(table, pkg).rows[0]?.cells[0]?.borders;
+    const expectedEdge = { color: { r: 1, g: 0, b: 0 }, widthPt: 1, style: 'solid' };
+    expect(borders).toEqual({ left: expectedEdge, right: expectedEdge, top: expectedEdge, bottom: expectedEdge });
+  });
+
+  it('lets a per-edge fo:border-top override just that one edge, leaving the other three at the shorthand value', () => {
+    const ce1 = cellBorderStyle('ce1', { 'fo:border': '1pt solid #000000', 'fo:border-top': '2pt dashed #00ff00' });
+    const table = el('table:table', {}, [el('table:table-row', {}, [cell('bordered', { 'table:style-name': 'ce1' })])]);
+    const pkg: Package = { parts: { 'content.xml': contentPackage([ce1]) } };
+    const borders = readOdfTable(table, pkg).rows[0]?.cells[0]?.borders;
+    expect(borders?.top).toEqual({ color: { r: 0, g: 1, b: 0 }, widthPt: 2, style: 'dashed' });
+    expect(borders?.left).toEqual({ color: { r: 0, g: 0, b: 0 }, widthPt: 1, style: 'solid' });
+    expect(borders?.right).toEqual({ color: { r: 0, g: 0, b: 0 }, widthPt: 1, style: 'solid' });
+    expect(borders?.bottom).toEqual({ color: { r: 0, g: 0, b: 0 }, widthPt: 1, style: 'solid' });
+  });
+
+  it('reads a border style ODF allows but ContentBorderSchema has no member for (e.g. "groove") as a real border with width/colour, but no style field', () => {
+    const ce1 = cellBorderStyle('ce1', { 'fo:border-left': '0.5pt groove #123456' });
+    const table = el('table:table', {}, [el('table:table-row', {}, [cell('grooved', { 'table:style-name': 'ce1' })])]);
+    const pkg: Package = { parts: { 'content.xml': contentPackage([ce1]) } };
+    const borders = readOdfTable(table, pkg).rows[0]?.cells[0]?.borders;
+    expect(borders?.left).toEqual({ color: { r: 0x12 / 255, g: 0x34 / 255, b: 0x56 / 255 }, widthPt: 0.5 });
+    expect(borders?.right).toBeUndefined();
+  });
+
+  it('treats a "none" border-style token as genuinely no border on that edge, not a real border', () => {
+    const ce1 = cellBorderStyle('ce1', { 'fo:border': '1pt solid #000000', 'fo:border-bottom': '1pt none #000000' });
+    const table = el('table:table', {}, [el('table:table-row', {}, [cell('partial', { 'table:style-name': 'ce1' })])]);
+    const pkg: Package = { parts: { 'content.xml': contentPackage([ce1]) } };
+    const borders = readOdfTable(table, pkg).rows[0]?.cells[0]?.borders;
+    expect(borders?.bottom).toBeUndefined();
+    expect(borders?.top).toBeDefined();
+  });
+
+  it('leaves borders undefined entirely for a cell whose style carries no fo:border(-*) attributes at all', () => {
+    const ce1 = cellStyle('ce1', '#ff0000');
+    const table = el('table:table', {}, [el('table:table-row', {}, [cell('red', { 'table:style-name': 'ce1' })])]);
+    const pkg: Package = { parts: { 'content.xml': contentPackage([ce1]) } };
+    expect(readOdfTable(table, pkg).rows[0]?.cells[0]?.borders).toBeUndefined();
   });
 });
 
