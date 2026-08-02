@@ -20,11 +20,8 @@ export const DEFAULT_MARGINS: Margins = { topPt: POINTS_PER_INCH, rightPt: POINT
 // Matches cmark's own reference-implementation nesting cap: a guard against pathological/adversarial input (thousands of nested blockquotes or list items) causing unbounded recursion in the block-structure algorithm's open-block stack, not a limit any well-formed real-world document approaches.
 export const DEFAULT_MAX_BLOCK_NESTING = 250;
 
-// Resolve embedded image dimensions by default (ReadMarkdownOptions.images) -- the common case; a caller with a large document and no need for image dimensions can opt out.
-export const DEFAULT_RESOLVE_IMAGES = true;
-
 // Preserve raw HTML verbatim by default (ReadMarkdownOptions.rawHtml), matching CommonMark's own "HTML blocks/inline HTML are recognised and passed through" default behaviour rather than stripping it.
-export const DEFAULT_PRESERVE_RAW_HTML = true;
+export const DEFAULT_RAW_HTML_MODE: 'preserve' | 'drop' = 'preserve';
 
 // Front matter parsing is opt-in, not on by default (ReadMarkdownOptions.frontMatter/WriteMarkdownOptions.frontMatter) -- it is not part of CommonMark or GFM proper, so a caller that wants it asks for it explicitly rather than this package silently reinterpreting a leading '---' thematic break as metadata.
 export const DEFAULT_FRONT_MATTER = false;

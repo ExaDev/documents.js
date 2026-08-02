@@ -1,6 +1,6 @@
 // The AST -> ContentDocument lowering stage: this package's own counterpart to ooxml.js's readDocx/readPptx and odf.js's readOdt/readOdp -- a thin adapter from parseMarkdown's own AST onto document-schema.js's shared ContentDocument pivot, not a second parser. Every mapping below, and the stable diagnostic code its own gap is recorded under (MarkdownDiagnosticCodes, src/diagnostics/diagnostics.ts), mirrors this package's own construct-by-construct design table:
 //
-//  - document envelope -> one ContentSection, A4 + 1in default page geometry, overridable via LowerMarkdownOptions.pageSize/margins -- MarkdownDiagnosticCodes.INVENTED_PAGE_GEOMETRY (markdown has no page concept of its own; this ALWAYS fires, once per lowered document).
+//  - document envelope -> one ContentSection, A4 + 1in default page geometry, overridable via ReadMarkdownOptions.pageSize/margins -- MarkdownDiagnosticCodes.INVENTED_PAGE_GEOMETRY (markdown has no page concept of its own; this ALWAYS fires, once per lowered document).
 //  - ATX/setext heading -> styleId "Heading1".."Heading6", mirroring odf.js's readOdt convention exactly (src/shared/style-constants.ts's headingStyleId).
 //  - emphasis/strong/strikethrough -> italic/bold/strike ContentRun fields; links/autolinks -> ContentRun.hyperlink; code spans -> a Courier New run; hard/soft breaks -> literal '\n'/' ' -- all in src/lower/inline.ts, alongside MarkdownDiagnosticCodes.NESTED_EMPHASIS_FLATTENED and LINK_TITLE_DROPPED.
 //  - fenced/indented code block -> one paragraph, styleId 'CodeBlock', '\n'-joined literal, monospace -- MarkdownDiagnosticCodes.CODE_BLOCK_INFO_STRING_DROPPED when a fence's own info string is non-empty.
@@ -12,14 +12,15 @@
 //  - raw HTML -> preserved as literal text by default (styleId 'HTMLPreformatted' for block-level HTML), a rawHtml: 'drop' option available -- MarkdownDiagnosticCodes.RAW_HTML_PRESERVED_AS_TEXT / RAW_HTML_DROPPED.
 //  - front matter (src/lower/front-matter.ts) -> a flat-scalar-only LayoutMetadata subset -- MarkdownDiagnosticCodes.FRONT_MATTER_KEY_UNMAPPED.
 
-import type { ContentBlock, ContentDocument, ContentParagraph, ContentRun, LayoutMetadata, Margins, PageSize } from 'document-schema.js';
+import type { ContentBlock, ContentDocument, ContentParagraph, ContentRun, LayoutMetadata } from 'document-schema.js';
 import { CONTENT_FORMAT_VERSION, PAGE_SIZE_A4 } from 'document-schema.js';
 import type { MarkdownBlockNode, MarkdownHeadingNode, MarkdownListItemNode, MarkdownListNode, MarkdownParagraphNode } from '../ast/ast';
 import type { MarkdownParseOptions, ParsedMarkdown } from '../block/block';
 import { parseMarkdown } from '../block/block';
-import { DEFAULT_MARGINS } from '../defaults/defaults';
+import { DEFAULT_FRONT_MATTER, DEFAULT_MARGINS, DEFAULT_RAW_HTML_MODE } from '../defaults/defaults';
 import type { MarkdownDiagnosticSink } from '../diagnostics/diagnostics';
-import { MarkdownDiagnosticCodes, NOOP_DIAGNOSTIC_SINK } from '../diagnostics/diagnostics';
+import { MarkdownDiagnosticCodes, MarkdownInputTooLargeError, NOOP_MARKDOWN_DIAGNOSTIC_SINK } from '../diagnostics/diagnostics';
+import type { ReadMarkdownOptions } from '../options/options';
 import type { NumIdMintState } from '../shared/list-id';
 import { createNumIdMintState, mintedListType, mintListNumId } from '../shared/list-id';
 import { CODE_BLOCK_STYLE_ID, HORIZONTAL_RULE_STYLE_ID, HTML_PREFORMATTED_STYLE_ID, QUOTE_INDENT_PT, QUOTE_STYLE_ID, TASK_CHECKBOX_CHECKED, TASK_CHECKBOX_UNCHECKED, headingStyleId } from '../shared/style-constants';
@@ -30,18 +31,7 @@ import type { InlineLowerContext } from './inline';
 import { lowerCodeBlockRun, lowerInlineNodes } from './inline';
 import { lowerTable } from './table';
 
-export interface LowerMarkdownOptions {
-  readonly sink?: MarkdownDiagnosticSink;
-  readonly pageSize?: PageSize;
-  readonly margins?: Margins;
-  readonly images?: MarkdownImageResolver;
-  readonly rawHtml?: 'preserve' | 'drop';
-  readonly frontMatter?: boolean;
-  readonly gfmTables?: boolean;
-  readonly gfmAutolinks?: boolean;
-  readonly gfmStrikethrough?: boolean;
-  readonly gfmTaskLists?: boolean;
-}
+// lowerMarkdown/lowerParsedMarkdown accept ReadMarkdownOptions (src/options/options.ts) directly -- the same relationship src/emit/emit.ts's emitMarkdown already has with WriteMarkdownOptions, rather than a second, drift-prone options type of this module's own. src/read.ts's readMarkdown is consequently a thin wrapper over lowerMarkdown: diagnostics collection plus a signal check over this function's own real work.
 
 interface ListMembership {
   readonly numId: string;
@@ -153,7 +143,12 @@ function lowerBlockquote(node: Extract<MarkdownBlockNode, { type: 'blockquote' }
     context.sink({ code: MarkdownDiagnosticCodes.BLOCKQUOTE_NESTED_DEPTH, severity: 'info', message: `blockquote nesting beyond level 1 is represented only as a larger indentLeftPt (${String((context.quoteDepth + 1) * QUOTE_INDENT_PT)}pt); recovering the exact nesting depth back out is an approximation, not an exact inverse` });
   }
   const nested: BlockLowerContext = { ...context, quoteDepth: context.quoteDepth + 1 };
-  return node.children.flatMap((child) => lowerBlock(child, nested, contentWidthPt));
+  const blocks = node.children.flatMap((child) => lowerBlock(child, nested, contentWidthPt));
+  if (blocks.length === 0) {
+    // An otherwise-empty blockquote (every child consumed away -- most commonly a lone link reference definition, which src/block/definitions.ts strips out entirely, leaving no paragraph behind) still needs a placeholder: there is no ContentBlock shape for "a bare blockquote container with nothing in it" other than an empty, indented paragraph.
+    return [decorateParagraph({ kind: 'paragraph', runs: [] }, nested)];
+  }
+  return blocks;
 }
 
 // Prepends a GFM task-list checkbox glyph to the first block among `blocks` that is a ContentParagraph -- the item's own leading task-list-item marker was already stripped from the source text by src/block/block.ts's own extractTaskListMarker, so this is the only place that state (MarkdownListItemNode.checked) still needs to be represented. Returns whether a paragraph was found to apply it to; a `false` result (the item's own first block is a table or a resolved image, neither of which can carry a leading run at all) leaves the checkbox state unrepresented entirely -- a narrower, more severe version of the same LIST_ITEM_BLOCK_UNLISTED gap already reported for that block.
@@ -177,16 +172,26 @@ function lowerListItem(item: MarkdownListItemNode, numId: string, level: number,
   const itemContext: BlockLowerContext = { ...context, list: { numId, level } };
   const blocks: ContentBlock[] = [];
   let checkboxApplied = item.checked === undefined;
+  let ownLevelBlockCount = 0;
   for (const child of item.children) {
     if (child.type === 'list') {
       blocks.push(...lowerList(child, numId, level + 1, context, contentWidthPt));
       continue;
     }
     const childBlocks = lowerBlock(child, itemContext, contentWidthPt);
+    ownLevelBlockCount += childBlocks.length;
     if (!checkboxApplied) {
       checkboxApplied = applyTaskCheckbox(childBlocks, item.checked === true);
     }
     blocks.push(...childBlocks);
+  }
+  if (ownLevelBlockCount === 0) {
+    // A truly empty item (no children at all), or one whose sole content is a nested list, has nothing of its own to carry ContentListMembership(numId, level) on -- without a placeholder paragraph here, the item's own existence (and, when a nested list follows, that list's own nesting anchor) is lost entirely rather than degraded.
+    const placeholder: ContentBlock[] = [decorateParagraph({ kind: 'paragraph', runs: [] }, itemContext)];
+    if (!checkboxApplied) {
+      applyTaskCheckbox(placeholder, item.checked === true);
+    }
+    blocks.unshift(...placeholder);
   }
   return blocks;
 }
@@ -238,9 +243,9 @@ function lowerBlock(node: MarkdownBlockNode, context: BlockLowerContext, content
   }
 }
 
-export function lowerParsedMarkdown(parsed: ParsedMarkdown, options: LowerMarkdownOptions = {}, metadata: LayoutMetadata = {}): ContentDocument {
-  const sink = options.sink ?? NOOP_DIAGNOSTIC_SINK;
-  sink({ code: MarkdownDiagnosticCodes.INVENTED_PAGE_GEOMETRY, severity: 'info', message: 'markdown carries no page geometry of its own; the resulting ContentSection uses a synthesised page size and margins (LowerMarkdownOptions.pageSize/margins, or document-schema.js\'s own PAGE_SIZE_A4 default)' });
+export function lowerParsedMarkdown(parsed: ParsedMarkdown, options: ReadMarkdownOptions = {}, metadata: LayoutMetadata = {}): ContentDocument {
+  const sink = options.sink ?? NOOP_MARKDOWN_DIAGNOSTIC_SINK;
+  sink({ code: MarkdownDiagnosticCodes.INVENTED_PAGE_GEOMETRY, severity: 'info', message: 'markdown carries no page geometry of its own; the resulting ContentSection uses a synthesised page size and margins (ReadMarkdownOptions.pageSize/margins, or document-schema.js\'s own PAGE_SIZE_A4 default)' });
 
   const pageSize = options.pageSize ?? PAGE_SIZE_A4;
   const margins = options.margins ?? DEFAULT_MARGINS;
@@ -249,7 +254,7 @@ export function lowerParsedMarkdown(parsed: ParsedMarkdown, options: LowerMarkdo
   const context: BlockLowerContext = {
     sink,
     images: options.images,
-    rawHtmlMode: options.rawHtml ?? 'preserve',
+    rawHtmlMode: options.rawHtml ?? DEFAULT_RAW_HTML_MODE,
     numIdState: createNumIdMintState(),
     quoteDepth: 0,
     list: undefined,
@@ -265,15 +270,23 @@ export function lowerParsedMarkdown(parsed: ParsedMarkdown, options: LowerMarkdo
   };
 }
 
-// The convenience, read.ts-independent entry point this package's own test suite (and, later, src/read.ts's real readMarkdown) drives: front matter extraction (when requested), block parsing, and lowering, composed in one call over raw markdown TEXT rather than an already-parsed AST.
-export function lowerMarkdown(source: string, options: LowerMarkdownOptions = {}): ContentDocument {
-  const sink = options.sink ?? NOOP_DIAGNOSTIC_SINK;
-  const { metadata, rest } = options.frontMatter === true ? extractFrontMatter(source, sink) : { metadata: {}, rest: source };
+// The convenience, read.ts-independent entry point this package's own test suite (and src/read.ts's real readMarkdown) drives: input-size enforcement, front matter extraction (when requested), block parsing, and lowering, composed in one call over raw markdown TEXT rather than an already-parsed AST.
+export function lowerMarkdown(source: string, options: ReadMarkdownOptions = {}): ContentDocument {
+  if (options.maxInputBytes !== undefined) {
+    const actualBytes = new TextEncoder().encode(source).length;
+    if (actualBytes > options.maxInputBytes) {
+      throw new MarkdownInputTooLargeError(options.maxInputBytes, actualBytes);
+    }
+  }
+
+  const sink = options.sink ?? NOOP_MARKDOWN_DIAGNOSTIC_SINK;
+  const { metadata, rest } = (options.frontMatter ?? DEFAULT_FRONT_MATTER) ? extractFrontMatter(source, sink) : { metadata: {}, rest: source };
   const parseOptions: MarkdownParseOptions = {
     gfmTables: options.gfmTables,
     gfmAutolinks: options.gfmAutolinks,
     gfmStrikethrough: options.gfmStrikethrough,
     gfmTaskLists: options.gfmTaskLists,
+    maxNesting: options.maxBlockNesting,
     sink,
   };
   const parsed = parseMarkdown(rest, parseOptions);

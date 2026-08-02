@@ -16,7 +16,8 @@ export interface MarkdownDiagnostic {
 // Recover/degrade-tier issues are reported through a sink rather than thrown, so a single unclosed fence or unsupported construct degrades that one element rather than aborting the whole document. A no-op sink is a legitimate choice for a caller that doesn't want diagnostics.
 export type MarkdownDiagnosticSink = (diagnostic: MarkdownDiagnostic) => void;
 
-export const NOOP_DIAGNOSTIC_SINK: MarkdownDiagnosticSink = () => {
+// Deliberately prefixed (NOT the bare "NOOP_DIAGNOSTIC_SINK" pdf-codec's own src/diagnostics.ts already uses) -- documents.js will import both this package's and pdf-codec's own no-op sink into the same modules once it composes markdown alongside docx/pptx/odt/pdf conversions, and an unprefixed name here would collide on import.
+export const NOOP_MARKDOWN_DIAGNOSTIC_SINK: MarkdownDiagnosticSink = () => {
   /* discards every diagnostic -- the deliberate default for a caller that doesn't want them */
 };
 
@@ -94,8 +95,19 @@ export class MarkdownNestingLimitExceededError extends MarkdownParseError {
   }
 }
 
-// Thrown by writeMarkdown when handed a ContentDocument whose kind is not 'wordprocessing' -- markdown has no presentation/spreadsheet/drawing equivalent to render, matching ooxml.js's buildXlsxPackage's own "throw outright for the wrong document kind" convention (see documents.js's src/ooxml/xlsx precedent) rather than accepting a value a caller would need to pre-check themselves.
-export class MarkdownUnsupportedDocumentKindError extends MarkdownParseError {
+// The write-side counterpart to MarkdownParseError -- input this package's writeMarkdown cannot meaningfully render at all, regardless of what a diagnostic sink could report about it. Carries the same `code` vocabulary convention.
+export class MarkdownWriteError extends Error {
+  readonly code: string;
+
+  constructor(code: string, message: string) {
+    super(message);
+    this.name = 'MarkdownWriteError';
+    this.code = code;
+  }
+}
+
+// Thrown by writeMarkdown when handed a ContentDocument whose kind is not 'wordprocessing' -- markdown has no presentation/spreadsheet/drawing equivalent to render, matching ooxml.js's buildXlsxPackage's own "throw outright for the wrong document kind" convention (see documents.js's src/ooxml/xlsx precedent) rather than accepting a value a caller would need to pre-check themselves. Extends MarkdownWriteError, not MarkdownParseError -- this is a write-time failure (writeMarkdown's own entry point), never reachable from readMarkdown at all.
+export class MarkdownUnsupportedDocumentKindError extends MarkdownWriteError {
   readonly kind: string;
 
   constructor(kind: string) {

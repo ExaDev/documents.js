@@ -5,7 +5,7 @@
 // The resulting table is document-global and forward-visible -- `[foo]` in the first paragraph resolves against a `[foo]: /url` on the last line, including one nested inside a block quote or a list item -- so it must be complete before any block's inlines are parsed. src/block/block.ts guarantees that structurally by parsing every block first and every inline second, rather than by ordering the two carefully.
 
 import type { MarkdownDiagnosticSink } from '../diagnostics/diagnostics';
-import { MarkdownDiagnosticCodes, NOOP_DIAGNOSTIC_SINK } from '../diagnostics/diagnostics';
+import { MarkdownDiagnosticCodes, NOOP_MARKDOWN_DIAGNOSTIC_SINK } from '../diagnostics/diagnostics';
 import type { LinkReferenceDefinition } from '../inline/link';
 import { isBlankRemainderOfLine, matchLinkLabel, normalizeLinkLabel, parseLinkDestination, parseLinkTitle, skipInlineWhitespace } from '../inline/link';
 
@@ -63,7 +63,7 @@ function parseDefinition(content: string, start: number): ParsedDefinition | und
 }
 
 // Consumes every definition at the front of `content`, recording each in `references`, and returns what is left to parse as inline content. spec 0.31.2: "If there are multiple matching reference link definitions, the one that comes first in the document is used" -- so a later duplicate never overwrites an earlier one, and the sink is told about the one that lost, as a recover-tier diagnostic (this is spec-legal markdown, not a parse error).
-export function extractDefinitions(content: string, references: Map<string, LinkReferenceDefinition>, sink: MarkdownDiagnosticSink = NOOP_DIAGNOSTIC_SINK, startLine = 0): string {
+export function extractDefinitions(content: string, references: Map<string, LinkReferenceDefinition>, sink: MarkdownDiagnosticSink = NOOP_MARKDOWN_DIAGNOSTIC_SINK, startLine = 0): string {
   let cursor = 0;
   for (;;) {
     const parsed = parseDefinition(content, cursor);

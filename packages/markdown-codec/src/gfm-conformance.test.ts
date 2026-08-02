@@ -9,13 +9,19 @@
 import { describe, expect, it } from 'vitest';
 import { parseMarkdown } from './block/block';
 import { renderDocumentToHtml } from './html/render';
+import { readMarkdown } from './read';
+import { GFM_EXCLUSIONS } from './test-support/conformance-exclusions';
 import type { SpecExample } from './test-support/spec-corpus';
 import { loadGfmExtensionExamples } from './test-support/spec-corpus';
+import { writeMarkdown } from './write';
 
 const GFM_EXTENSIONS = ['table', 'strikethrough', 'autolink', 'disabled'];
 
+// read -> write -> reparse -> render, all through this package's real public surface -- the identical bar src/conformance.test.ts holds the CommonMark corpus to, applied here to the GFM extensions (all four toggles default on, matching this package's own CommonMark+GFM target). See that file's own top-of-file note for the full rationale.
 function render(example: SpecExample): string {
-  return renderDocumentToHtml(parseMarkdown(example.markdown).document);
+  const { document } = readMarkdown(example.markdown);
+  const rewritten = writeMarkdown(document);
+  return renderDocumentToHtml(parseMarkdown(rewritten).document);
 }
 
 describe.each(GFM_EXTENSIONS)('GFM %s extension conformance', (extension) => {
@@ -25,7 +31,14 @@ describe.each(GFM_EXTENSIONS)('GFM %s extension conformance', (extension) => {
     expect(examples.length).toBeGreaterThan(0);
   });
 
-  it.each(examples.map((example) => [`example ${String(example.example)} (${example.section})`, example] as const))('%s', (_name, example) => {
+  const covered = examples.filter((example) => !GFM_EXCLUSIONS.has(example.example));
+  it.each(covered.map((example) => [`example ${String(example.example)} (${example.section})`, example] as const))('%s', (_name, example) => {
     expect(render(example)).toBe(example.html);
+  });
+
+  // The shrink-only guarantee, mirroring src/conformance.test.ts's own -- an excluded example that starts passing must be removed from the list in the same change that fixes it.
+  const excluded = examples.filter((example) => GFM_EXCLUSIONS.has(example.example));
+  it.each(excluded.map((example) => [`example ${String(example.example)} (${example.section})`, example] as const))('excluded %s still fails', (_name, example) => {
+    expect(render(example)).not.toBe(example.html);
   });
 });

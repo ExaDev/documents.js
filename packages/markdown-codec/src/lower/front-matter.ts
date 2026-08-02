@@ -2,7 +2,7 @@
 
 import type { LayoutMetadata } from 'document-schema.js';
 import type { MarkdownDiagnosticSink } from '../diagnostics/diagnostics';
-import { MarkdownDiagnosticCodes, NOOP_DIAGNOSTIC_SINK } from '../diagnostics/diagnostics';
+import { MarkdownDiagnosticCodes, NOOP_MARKDOWN_DIAGNOSTIC_SINK } from '../diagnostics/diagnostics';
 
 const LEADING_DELIMITER_PATTERN = /^---[ \t]*$/;
 const CLOSING_DELIMITER_PATTERN = /^(?:---|\.\.\.)[ \t]*$/;
@@ -32,7 +32,7 @@ function parseKeywordList(raw: string): readonly string[] {
 }
 
 // Extracts a leading front matter block from `source`, returning the flat-scalar subset it maps and the remainder of the document for parseMarkdown to read as ordinary CommonMark/GFM. Returns an empty metadata object and the source UNCHANGED when there is no leading '---' line, or when a leading '---' line has no matching closing delimiter at all (a bare '---' with nothing closing it is CommonMark's own thematic-break-then-paragraph reading of the same bytes, not front matter).
-export function extractFrontMatter(source: string, sink: MarkdownDiagnosticSink = NOOP_DIAGNOSTIC_SINK): FrontMatterResult {
+export function extractFrontMatter(source: string, sink: MarkdownDiagnosticSink = NOOP_MARKDOWN_DIAGNOSTIC_SINK): FrontMatterResult {
   const lines = source.split(LINE_ENDING_PATTERN);
   const firstLine = lines[0];
   if (firstLine === undefined || !LEADING_DELIMITER_PATTERN.test(firstLine)) {

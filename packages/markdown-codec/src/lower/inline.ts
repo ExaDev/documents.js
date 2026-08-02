@@ -70,7 +70,9 @@ export function lowerInlineNode(node: MarkdownInlineNode, style: RunStyle, conte
         context.sink({ code: MarkdownDiagnosticCodes.LINK_TITLE_DROPPED, severity: 'info', message: `link title "${node.title}" has no ContentRun equivalent and was dropped` });
       }
       const childStyle: RunStyle = { ...style, hyperlink: node.destination };
-      return node.children.flatMap((child) => lowerInlineNode(child, childStyle, context));
+      const runs = node.children.flatMap((child) => lowerInlineNode(child, childStyle, context));
+      // A link with no visible text at all ("[](/url)") produces no child runs to carry the hyperlink on -- ContentRun is the only place `hyperlink` can live, so an empty-text link still needs one run (empty text, the hyperlink set) or the link itself silently disappears rather than degrading.
+      return runs.length > 0 ? runs : [buildRun('', childStyle)];
     }
     case 'image':
       if (node.title !== undefined) {

@@ -29,7 +29,8 @@ import type {
   MarkdownTableRowNode,
 } from '../ast/ast';
 import type { MarkdownDiagnosticSink } from '../diagnostics/diagnostics';
-import { MarkdownDiagnosticCodes, NOOP_DIAGNOSTIC_SINK } from '../diagnostics/diagnostics';
+import { DEFAULT_MAX_BLOCK_NESTING } from '../defaults/defaults';
+import { MarkdownDiagnosticCodes, MarkdownNestingLimitExceededError, NOOP_MARKDOWN_DIAGNOSTIC_SINK } from '../diagnostics/diagnostics';
 import { matchHtmlBlockStart, matchesHtmlBlockEnd } from '../html/html';
 import { unescapeString } from '../inline/entity';
 import type { InlineParseOptions } from '../inline/inline';
@@ -91,6 +92,8 @@ export interface MarkdownParseOptions extends InlineParseOptions {
   readonly gfmTables?: boolean;
   // GFM's task-list-item extension (`- [ ] foo` / `- [x] bar`). Enabled by default for the same reason; with it off, a leading `[ ]`/`[x]` is ordinary paragraph text, matching CommonMark's own reading (task lists are not part of CommonMark proper).
   readonly gfmTaskLists?: boolean;
+  // Throws MarkdownNestingLimitExceededError (src/diagnostics) rather than opening a block past this many levels deep in the open-block stack -- defaults to DEFAULT_MAX_BLOCK_NESTING (src/defaults), matching cmark's own reference-implementation guard against pathological/adversarial nesting.
+  readonly maxNesting?: number;
   readonly sink?: MarkdownDiagnosticSink;
 }
 
@@ -126,6 +129,7 @@ class BlockParser {
   private readonly document = new BlockNode('document', 1);
   private readonly tables: boolean;
   private readonly sink: MarkdownDiagnosticSink;
+  private readonly maxNesting: number;
   private tip: BlockNode = this.document;
   // The tip as it stood before the current line was processed, and the deepest block that line matched -- together they say exactly which blocks the line failed to continue, which closeUnmatchedBlocks then closes.
   private oldTip: BlockNode = this.document;
@@ -133,10 +137,13 @@ class BlockParser {
   private allClosed = true;
   private line = new LineCursor('');
   private lineNumber = 0;
+  // Depth of `this.tip` below `this.document` -- maintained incrementally (incremented in addChild, decremented in finalize) rather than walked from `parent` on every check, so the guard costs nothing per line for ordinary, shallow documents.
+  private nestingDepth = 0;
 
   constructor(options: MarkdownParseOptions) {
     this.tables = options.gfmTables ?? true;
-    this.sink = options.sink ?? NOOP_DIAGNOSTIC_SINK;
+    this.sink = options.sink ?? NOOP_MARKDOWN_DIAGNOSTIC_SINK;
+    this.maxNesting = options.maxNesting ?? DEFAULT_MAX_BLOCK_NESTING;
   }
 
   parse(source: string): BlockNode {
@@ -549,9 +556,13 @@ class BlockParser {
     while (!canContain(this.tip.kind, kind)) {
       this.finalize(this.tip);
     }
+    if (this.nestingDepth >= this.maxNesting) {
+      throw new MarkdownNestingLimitExceededError(this.maxNesting);
+    }
     const node = new BlockNode(kind, this.lineNumber);
     this.tip.appendChild(node);
     this.tip = node;
+    this.nestingDepth += 1;
     return node;
   }
 
@@ -574,6 +585,10 @@ class BlockParser {
     const above = node.parent;
     node.open = false;
     this.finalizeContent(node);
+    // The document itself is never pushed through addChild, so it never incremented nestingDepth -- only a real child's own close pays back the push that opened it.
+    if (node !== this.document) {
+      this.nestingDepth -= 1;
+    }
     // The document has no parent: closing it leaves the tip on the now-closed root, which is exactly the terminating condition parse()'s own close-everything loop tests.
     this.tip = above ?? this.document;
   }
@@ -659,7 +674,7 @@ function toTableRow(cells: readonly string[], header: boolean, references: LinkR
 }
 
 function toTableNode(node: BlockNode, references: LinkReferenceMap, options: MarkdownParseOptions): MarkdownTableNode {
-  const sink = options.sink ?? NOOP_DIAGNOSTIC_SINK;
+  const sink = options.sink ?? NOOP_MARKDOWN_DIAGNOSTIC_SINK;
   const columnCount = node.alignments.length;
   const rows: MarkdownTableRowNode[] = [toTableRow(fitRowToColumns(splitTableRow(node.headerLine), columnCount), true, references, options)];
   for (const rowLine of node.content.split('\n')) {

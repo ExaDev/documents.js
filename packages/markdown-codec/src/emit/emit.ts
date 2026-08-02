@@ -13,7 +13,7 @@
 import type { ContentBlock, ContentDocument, ContentParagraph } from 'document-schema.js';
 import { MarkdownUnsupportedDocumentKindError } from '../diagnostics/diagnostics';
 import type { MarkdownDiagnosticSink } from '../diagnostics/diagnostics';
-import { MarkdownDiagnosticCodes, NOOP_DIAGNOSTIC_SINK } from '../diagnostics/diagnostics';
+import { MarkdownDiagnosticCodes, NOOP_MARKDOWN_DIAGNOSTIC_SINK } from '../diagnostics/diagnostics';
 import { DEFAULT_BULLET_LIST_MARKER, DEFAULT_CODE_FENCE_CHAR, DEFAULT_EMPHASIS_MARKER, DEFAULT_HEADING_STYLE, DEFAULT_LINE_ENDING, DEFAULT_ORDERED_LIST_DELIMITER, DEFAULT_THEMATIC_BREAK_CHAR } from '../defaults/defaults';
 import type { MarkdownHeadingStyle, WriteMarkdownOptions } from '../options/options';
 import type { ListNumIdInfo } from '../shared/list-id';
@@ -51,6 +51,27 @@ function renderSetextHeading(level: number, text: string): string {
   return `${text}\n${underline}`;
 }
 
+// A fenced code block's own closing condition (spec 0.31.2, "Fenced code blocks") is "a code fence of the same type as the code block that opened it, of length AT LEAST as great as the opening fence" -- so a fence of exactly 3 characters closes prematurely the moment the code block's own literal content happens to contain a run of 3-or-more of that same character on its own line (a real, common case: this package always re-renders a code block as fenced regardless of whether it was originally fenced or indented, so an indented block whose own text happens to contain a backtick fence is exactly the scenario this guards). The fix real fenced-code-block writers already use: pick a fence one character longer than the longest run of the fence character anywhere in the content, so no line inside the block can ever be mistaken for the closing fence.
+const MIN_CODE_FENCE_LENGTH = 3;
+
+function longestRunLength(text: string, char: string): number {
+  let longest = 0;
+  let current = 0;
+  for (const candidate of text) {
+    if (candidate === char) {
+      current += 1;
+      longest = Math.max(longest, current);
+    } else {
+      current = 0;
+    }
+  }
+  return longest;
+}
+
+function codeFenceFor(literal: string, fenceChar: string): string {
+  return fenceChar.repeat(Math.max(MIN_CODE_FENCE_LENGTH, longestRunLength(literal, fenceChar) + 1));
+}
+
 const QUOTABLE_STYLE_IDS: ReadonlySet<string> = new Set([QUOTE_STYLE_ID, CODE_BLOCK_STYLE_ID, HORIZONTAL_RULE_STYLE_ID, HTML_PREFORMATTED_STYLE_ID]);
 
 function isQuotableStyle(styleId: string | undefined): boolean {
@@ -74,8 +95,9 @@ function renderParagraphBody(paragraph: ContentParagraph, context: EmitContext):
   }
   if (paragraph.styleId === CODE_BLOCK_STYLE_ID) {
     const literal = paragraph.runs.map((run) => run.text).join('');
-    const fence = context.codeFenceChar.repeat(3);
-    return `${fence}\n${literal}\n${fence}`;
+    const fence = codeFenceFor(literal, context.codeFenceChar);
+    // An empty code block ("```\n```\n", zero content lines) must not gain a spurious blank content line here -- the middle `\n${literal}\n` template below would otherwise insert one, which a reparse reads back as ONE literal blank line of content rather than none at all.
+    return literal.length === 0 ? `${fence}\n${fence}` : `${fence}\n${literal}\n${fence}`;
   }
   if (paragraph.styleId === HTML_PREFORMATTED_STYLE_ID) {
     return paragraph.runs.map((run) => run.text).join('');
@@ -168,15 +190,24 @@ function stripCheckboxRun(item: ContentParagraph, checkboxPrefix: string | undef
   return { ...item, runs };
 }
 
-function renderListItemMarker(numId: string, info: ListNumIdInfo | undefined, item: ContentParagraph, context: EmitContext): string {
+interface RenderedListMarker {
+  // The visible marker text prepended to the item's own first line -- bullet/ordinal glyph AND, for a task item, its checkbox text.
+  readonly full: string;
+  // The bullet/ordinal glyph's own width alone (glyph + one space), EXCLUDING any checkbox text -- what CommonMark's own list-item continuation rule actually measures (spec 0.31.2, "List items": the marker plus its own padding, not whatever content happens to follow on the first line). Using `full.length` for a nested list's own indent would over-indent it past what a real reparse recognises as still belonging to this item, since a task item's checkbox glyph is ordinary FIRST-LINE CONTENT, not part of the marker.
+  readonly bareLength: number;
+}
+
+function renderListItemMarker(numId: string, info: ListNumIdInfo | undefined, item: ContentParagraph, context: EmitContext): RenderedListMarker {
   const checkboxPrefix = info?.task === true ? checkboxPrefixFor(item) : undefined;
   const checkboxText = checkboxPrefix ?? '';
   if (info?.type === 'ordered') {
     const next = context.orderedCounters.get(numId) ?? (info.start ?? 1);
     context.orderedCounters.set(numId, next + 1);
-    return `${String(next)}${context.orderedDelimiter} ${checkboxText}`;
+    const bare = `${String(next)}${context.orderedDelimiter} `;
+    return { full: `${bare}${checkboxText}`, bareLength: bare.length };
   }
-  return `${context.bulletMarker} ${checkboxText}`;
+  const bare = `${context.bulletMarker} `;
+  return { full: `${bare}${checkboxText}`, bareLength: bare.length };
 }
 
 interface ListItemPart {
@@ -205,9 +236,9 @@ function renderListRegion(items: readonly ContentParagraph[], context: EmitConte
     const checkboxPrefix = info?.task === true ? checkboxPrefixFor(item) : undefined;
     const marker = renderListItemMarker(numId, info, item, context);
     const bodyLines = renderParagraphBody(stripCheckboxRun(item, checkboxPrefix), context).split('\n');
-    const indent = ' '.repeat(marker.length);
+    const indent = ' '.repeat(marker.bareLength);
     const [firstLine = '', ...restLines] = bodyLines;
-    let text = [`${marker}${firstLine}`, ...restLines.map((line) => `${indent}${line}`)].join('\n');
+    let text = [`${marker.full}${firstLine}`, ...restLines.map((line) => `${indent}${line}`)].join('\n');
     if (nestedItems.length > 0) {
       const nested = renderListRegion(nestedItems, context)
         .split('\n')
@@ -233,6 +264,7 @@ function renderListRegion(items: readonly ContentParagraph[], context: EmitConte
   return out;
 }
 
+// A consecutive run of quoted top-level blocks at the SAME depth is genuinely ambiguous once lowered -- ContentParagraph.indentLeftPt has no field distinguishing "one blockquote containing several blocks" from "several independent blockquotes back to back at the same depth" (document-schema.js carries no ContentBlockquote container of its own; src/lower/lower.ts flattens both shapes identically). Joining every top-level block with a bare blank line, as below, resolves that ambiguity by always choosing the "independent blockquotes" reading -- the correctness-preserving default, since re-joining two ADJACENT SAME-depth quoted blocks into one blockquote (tried and reverted here) fixed no example this package's own soft-line-break handling (src/lower/inline.ts's own softBreak -> ' ' mapping, see src/test-support/conformance-exclusions.ts) did not already fail on for an unrelated reason, while genuinely breaking two real cases (two independent same-depth blockquotes with nothing between them) that this simpler join gets right.
 function emitBlocks(blocks: readonly ContentBlock[], context: EmitContext): string {
   const parts: string[] = [];
   let index = 0;
@@ -266,7 +298,7 @@ export function emitMarkdown(document: ContentDocument, options: WriteMarkdownOp
     throw new MarkdownUnsupportedDocumentKindError(document.kind);
   }
 
-  const sink: MarkdownDiagnosticSink = options.sink ?? NOOP_DIAGNOSTIC_SINK;
+  const sink: MarkdownDiagnosticSink = options.sink ?? NOOP_MARKDOWN_DIAGNOSTIC_SINK;
   const inlineContext: InlineEmitContext = { sink, emphasisMarker: options.emphasisMarker ?? DEFAULT_EMPHASIS_MARKER };
   const context: EmitContext = {
     ...inlineContext,

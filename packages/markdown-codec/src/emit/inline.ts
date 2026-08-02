@@ -48,6 +48,7 @@ export function escapeMarkdownText(text: string): string {
   return out;
 }
 
+// CommonMark's own code-span padding rule (spec 0.31.2, "Code spans"): a span whose content begins AND ends with a space, but is not ENTIRELY spaces, has exactly one space stripped from each end on read -- this function has to add that one layer of padding back so the content survives a read -> write -> reparse round trip unchanged, but ONLY in that one exact case. A content string that is entirely spaces is explicitly EXEMPT from stripping (the rule's own "doesn't consist entirely of space characters" clause), so it must be written back verbatim with no padding at all -- adding padding there (as a single `text.trim().length === 0` check would) inserts spaces the reparse will never strip back out, corrupting a one-space span into three.
 function renderCodeSpan(text: string): string {
   let longestBacktickRun = 0;
   let current = 0;
@@ -60,7 +61,10 @@ function renderCodeSpan(text: string): string {
     }
   }
   const fence = '`'.repeat(longestBacktickRun + 1);
-  const needsPadding = text.length > 0 && (text.startsWith('`') || text.endsWith('`') || text.trim().length === 0);
+  const isAllSpaces = text.length > 0 && text.trim().length === 0;
+  const risksFenceCollision = text.startsWith('`') || text.endsWith('`');
+  const wouldBeStrippedOnReparse = !isAllSpaces && text.startsWith(' ') && text.endsWith(' ');
+  const needsPadding = risksFenceCollision || wouldBeStrippedOnReparse;
   return needsPadding ? `${fence} ${text} ${fence}` : `${fence}${text}${fence}`;
 }
 
@@ -80,15 +84,46 @@ function styleActive(run: ContentRun, key: StyleKey): boolean {
   return run[key] === true;
 }
 
-function wrapForStyle(body: string, key: StyleKey, context: InlineEmitContext): string {
+// CommonMark's own emphasis rule (spec 0.31.2, "Emphasis and strong emphasis", rules 1-4): a `*` delimiter run may open/close emphasis regardless of what is adjacent to it on the inner side, but a `_` run may NOT do so "intraword" -- immediately adjacent, with no separating whitespace, to a letter or digit on the inner side. `foo*bar*` is `foo<em>bar</em>`, but the underscore spelling `foo_bar_` is not emphasis at all: the intraword restriction only exists for `_`, so writing an intraword-adjacent emphasis span back out with the configured emphasisMarker when that marker is `_` would silently produce LITERAL underscores on reparse rather than emphasis -- a real correctness bug, not a style nit.
+const WORD_CHAR_PATTERN = /[\p{L}\p{N}]/u;
+
+function isIntrawordRisk(body: string): boolean {
+  if (body.length === 0) {
+    return false;
+  }
+  return WORD_CHAR_PATTERN.test(body.charAt(0)) || WORD_CHAR_PATTERN.test(body.charAt(body.length - 1));
+}
+
+// A second, distinct hazard from intraword adjacency: two delimiter occurrences that are logically separate (this wrap's own opening delimiter and whatever character sits immediately before it -- either plain preceding text in the same sibling sequence, or a directly-touching PARENT wrap's own delimiter one level further wrap, or a nested CHILD wrap's own delimiter sitting right at this body's edge) merge into one longer, differently-parsed delimiter run once concatenated with no separator between them. `candidate` collides when it is the same character as `precedingText`'s own trailing character (a sibling or enclosing wrap immediately to the left), or the same character as `body`'s own leading/trailing character (an immediately nested wrap touching this one's edge with nothing between).
+function hasMarkerConflict(body: string, candidate: string, precedingText: string): boolean {
+  if (candidate === '_' && isIntrawordRisk(body)) {
+    return true;
+  }
+  if (body.length > 0 && (body.startsWith(candidate) || body.endsWith(candidate))) {
+    return true;
+  }
+  return precedingText.endsWith(candidate);
+}
+
+// Tries the configured marker first, falls back to the other one when the configured choice would collide (either hazard above), and -- when NEITHER of the only two delimiter characters CommonMark offers is collision-free (a rare, adversarial-looking construct: several directly-touching nested/sibling emphasis spans with no separating text anywhere) -- falls back to the configured marker regardless, a genuine, bounded gap rather than a silent wrong answer; see src/test-support/conformance-exclusions.ts for the specific corpus examples this still cannot round-trip.
+function pickEmphasisMarker(body: string, configured: string, precedingText: string): string {
+  if (!hasMarkerConflict(body, configured, precedingText)) {
+    return configured;
+  }
+  const alternate = configured === '_' ? '*' : '_';
+  return hasMarkerConflict(body, alternate, precedingText) ? configured : alternate;
+}
+
+function wrapForStyle(body: string, key: StyleKey, context: InlineEmitContext, precedingText: string): string {
   if (key === 'strike') {
     return `~~${body}~~`;
   }
-  const marker = key === 'bold' ? context.emphasisMarker.repeat(2) : context.emphasisMarker;
-  return `${marker}${body}${marker}`;
+  const marker = pickEmphasisMarker(body, context.emphasisMarker, precedingText);
+  const delimiter = key === 'bold' ? marker.repeat(2) : marker;
+  return `${delimiter}${body}${delimiter}`;
 }
 
-// Groups `runs` hierarchically -- first by bold, then (within each bold/non-bold group) by italic, then by strike -- rendering each group's own inner content recursively before wrapping it, so a bold span containing an italic sub-span comes out as a single, properly nested `**bold *nested***`-shaped wrap rather than two independently-wrapped, directly-concatenated spans.
+// Groups `runs` hierarchically -- first by bold, then (within each bold/non-bold group) by italic, then by strike -- rendering each group's own inner content recursively before wrapping it, so a bold span containing an italic sub-span comes out as a single, properly nested `**bold *nested***`-shaped wrap rather than two independently-wrapped, directly-concatenated spans. `out`, threaded into wrapForStyle as `precedingText`, is what lets pickEmphasisMarker see the immediately preceding sibling's own trailing character.
 function renderNestedStyles(runs: readonly ContentRun[], depth: number, context: InlineEmitContext): string {
   if (depth >= STYLE_KEYS.length) {
     return runs.map((run) => renderLeaf(run, context)).join('');
@@ -107,14 +142,15 @@ function renderNestedStyles(runs: readonly ContentRun[], depth: number, context:
       end += 1;
     }
     const inner = renderNestedStyles(runs.slice(index, end), depth + 1, context);
-    out += active ? wrapForStyle(inner, key, context) : inner;
+    out += active ? wrapForStyle(inner, key, context, out) : inner;
     index = end;
   }
   return out;
 }
 
 function isPlainAutolink(run: ContentRun): boolean {
-  if (run.hyperlink === undefined || run.bold === true || run.italic === true || run.strike === true || run.fontFamily === MONOSPACE_FONT_FAMILY) {
+  // An autolink's own <...> form can never be empty (CommonMark's own URI/email autolink grammar both require at least one character between the brackets) -- `<>` is not valid autolink syntax at all and would reparse as literal text, so an empty destination (only reachable via a `[](/url)`-shaped empty-text link whose text happens to equal its own empty destination) must fall through to the ordinary `[text](dest)` form instead.
+  if (run.hyperlink === undefined || run.hyperlink.length === 0 || run.bold === true || run.italic === true || run.strike === true || run.fontFamily === MONOSPACE_FONT_FAMILY) {
     return false;
   }
   return run.text === run.hyperlink || run.hyperlink === `mailto:${run.text}`;

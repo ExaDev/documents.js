@@ -30,6 +30,28 @@ function delimiterCell(alignment: MarkdownTableAlignment): string {
   }
 }
 
+// The write-side inverse of src/block/table.ts's own splitTableRow scanning: that reader treats `\|` as an escaped pipe ANYWHERE in a row's raw source text -- deliberately not code-span aware, per its own top-of-file note, since GFM's own spec example escapes a pipe inside a code span too. A rendered cell's own text can contain a pipe two different ways: already backslash-escaped by ordinary text escaping (escapeMarkdownText, src/emit/inline.ts, which escapes '|' as ASCII punctuation), or entirely unescaped inside a code span's own literal (renderCodeSpan never escapes its content at all). This scans the same way the reader does -- an already-escaped `\|` pair is left untouched, a bare `|` gets escaped -- so it never double-escapes the first case while still fixing the second.
+function escapeUnescapedPipes(text: string): string {
+  let out = '';
+  let index = 0;
+  while (index < text.length) {
+    const char = text.charAt(index);
+    if (char === '\\' && index + 1 < text.length) {
+      out += char + text.charAt(index + 1);
+      index += 2;
+      continue;
+    }
+    if (char === '|') {
+      out += '\\|';
+      index += 1;
+      continue;
+    }
+    out += char;
+    index += 1;
+  }
+  return out;
+}
+
 function renderCellText(cell: ContentTableCell, context: TableEmitContext): string {
   if (cell.colSpan !== undefined || cell.rowSpan !== undefined || cell.background !== undefined) {
     context.sink({ code: MarkdownDiagnosticCodes.TABLE_CELL_FORMATTING_DROPPED, severity: 'info', message: 'a table cell\'s own colSpan/rowSpan/background has no GFM table equivalent; the cell renders as an ordinary unmerged, unstyled cell' });
@@ -48,7 +70,7 @@ function renderCellText(cell: ContentTableCell, context: TableEmitContext): stri
       parts.push(text);
     }
   }
-  return parts.join(' ').replaceAll('|', '\\|');
+  return escapeUnescapedPipes(parts.join(' '));
 }
 
 export function emitTable(table: ContentTable, context: TableEmitContext): string {

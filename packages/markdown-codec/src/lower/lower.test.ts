@@ -132,11 +132,11 @@ describe('lists', () => {
 });
 
 describe('GFM tables', () => {
-  it('distributes column widths evenly and bolds the header row', () => {
+  it('distributes column widths evenly and reads alignment from the delimiter row, without forcing the header row bold', () => {
     const [table] = blocks('| a | bb |\n| :- | -: |\n| 1 | 2 |');
     if (table?.kind !== 'table') throw new Error('expected a table block');
     expect(table.columnWidthsPt[0]).toBeCloseTo(table.columnWidthsPt[1] ?? 0);
-    expect(table.rows[0]?.cells[0]?.blocks[0]).toMatchObject({ runs: [{ text: 'a', bold: true }], alignment: 'left' });
+    expect(table.rows[0]?.cells[0]?.blocks[0]).toMatchObject({ runs: [{ text: 'a' }], alignment: 'left' });
     expect(table.rows[0]?.cells[1]?.blocks[0]).toMatchObject({ alignment: 'right' });
     expect(table.rows[1]?.cells[0]?.blocks[0]).toMatchObject({ runs: [{ text: '1' }] });
   });
