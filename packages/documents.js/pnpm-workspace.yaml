@@ -1,6 +1,8 @@
+# minimumReleaseAgeExclude is NOT honoured by `pnpm install --frozen-lockfile` (what CI runs) -- only minimumReleaseAge itself gates that path. Set low enough here that a same-day sibling-package release (ooxml.js/document-schema.js/odf.js/pdf-codec) never blocks CI, matching ooxml.js's own existing pnpm-workspace.yaml precedent.
+minimumReleaseAge: 60
+# Bare package names (no @version), per pnpm's own documented syntax (https://pnpm.io/settings#minimumreleaseageexclude -- "webpack" exempts every version, not just one) -- these four are this org's own sibling packages, published only via their own semantic-release CI with npm OIDC trusted publishing, so a version-agnostic exemption is a deliberate, low-risk carry-forward rather than the version-pinned entries this file used to need updating on every single release.
 minimumReleaseAgeExclude:
-  # All versions belong in ONE entry, versions joined by "||" -- pnpm's exclude-policy matcher returns on the first rule whose package name matches, so a second separate entry for the same package name is silently never reached.
-  - ooxml.js@2.1.0||2.2.0||2.2.3
-  - document-schema.js@1.5.3
-  - odf.js@1.8.0||1.9.0||1.10.0||1.10.3
-  - pdf-codec@1.0.0||1.1.3
+  - ooxml.js
+  - document-schema.js
+  - odf.js
+  - pdf-codec

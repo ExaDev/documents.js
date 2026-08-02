@@ -102,6 +102,20 @@ const { document, package: pkg } = await converter.convert(
 
 For the six PDF-bypassing bridges, `pkg.layout` is always `undefined` — a bridge never runs a layout engine, so there is nothing to populate it with; running one purely to fill this field would be wasted work no caller asked for.
 
+Turning that `DocumentPackage` into self-describing JSON — re-exported from `document-schema.js`, which owns the pivot schemas and the published `.schema.json` files (see that package's own README) — via `documentPackageWithSchema`, which stamps a `$schema` property pointing at the matching schema file for the currently installed `document-schema.js` version, and reading one back via `documentFromJson`, which uses that same `$schema` property to work out which of `DocumentPackage`/`ContentDocument`/`LayoutDocument` a value is before validating it:
+
+```ts
+import { documentFromJson, documentPackageWithSchema } from 'documents.js';
+
+const tagged = documentPackageWithSchema(pkg);
+writeFileSync('converted.doc.json', JSON.stringify(tagged, null, 2));
+
+const { kind, value } = documentFromJson(JSON.parse(readFileSync('converted.doc.json', 'utf8')));
+// kind: 'DocumentPackage' (here) | 'ContentDocument' | 'LayoutDocument'
+```
+
+`contentDocumentWithSchema`/`layoutDocumentWithSchema` are the `ContentDocument`/`LayoutDocument` equivalents — note these operate on `document-schema.js`'s own `ContentDocument` shape, not this package's own, differently-shaped `ContentDocument`/`ContentDocumentSchema` (a thinner per-conversion envelope wrapping `ContentSection`/`ContentSlide`/`ContentSheet`/`ContentDrawPage`, exported above); import `ContentDocument`/`ContentDocumentSchema` directly from `document-schema.js` if you need to construct one for `contentDocumentWithSchema`.
+
 Reading and editing docx/pptx content directly, without going through PDF at all:
 
 ```ts

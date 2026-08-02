@@ -63,7 +63,7 @@
   "license": "MIT",
   "packageManager": "pnpm@11.6.0",
   "dependencies": {
-    "document-schema.js": "^1.5.3",
+    "document-schema.js": "^1.7.0",
     "fflate": "^0.8.3",
     "odf.js": "^1.10.3",
     "ooxml.js": "^2.2.3",
