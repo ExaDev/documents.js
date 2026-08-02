@@ -259,15 +259,15 @@ export { convertDrawingToLayout } from './layout/drawing';
 export type { ReconstructOptions } from './layout/reconstruct';
 export { reconstructDrawing, reconstructPresentation, reconstructSpreadsheet, reconstructWordprocessing } from './layout/reconstruct';
 
-// --- Twelve ergonomic conversions (docx/pptx/odt/odp/ods/odg <-> PDF, all round-trip both ways). ---
+// --- Thirteen ergonomic conversions (docx/pptx/odt/odp/ods/odg/xlsx <-> PDF, all round-trip both ways). xlsx<->pdf (xlsxToPdf/pdfToXlsx) composes the ods<->xlsx bridge with the ods<->pdf layout pair internally -- xlsx has no layout engine of its own -- but is a real, direct, single-call conversion pair from a caller's own point of view, matching the other twelve's own options shape exactly. ---
 export type { DocumentToPdfOptions, PdfToDocumentOptions } from './convert/convert';
-export { docxToPdf, odgToPdf, odpToPdf, odsToPdf, odtToPdf, pdfToDocx, pdfToOdg, pdfToOdp, pdfToOds, pdfToOdt, pdfToPptx, pptxToPdf } from './convert/convert';
+export { docxToPdf, odgToPdf, odpToPdf, odsToPdf, odtToPdf, pdfToDocx, pdfToOdg, pdfToOdp, pdfToOds, pdfToOdt, pdfToPptx, pdfToXlsx, pptxToPdf, xlsxToPdf } from './convert/convert';
 
-// --- odf (a standalone ODF formula document) -> PDF: not one of the twelve round-trip conversions above (there is no pdfToOdf -- see convert.ts's own module comment on odfToPdf for why: recovering structured MathML from rendered glyphs is a categorically different, OCR-adjacent problem, not a geometry-reconstruction one). Renders via src/mathml's layoutFormula and the embedded STIX Two Math font, the same pipeline the odt/odp embedded-formula paths use. ---
+// --- odf (a standalone ODF formula document) -> PDF: not one of the thirteen round-trip conversions above (there is no pdfToOdf -- see convert.ts's own module comment on odfToPdf for why: recovering structured MathML from rendered glyphs is a categorically different, OCR-adjacent problem, not a geometry-reconstruction one). Renders via src/mathml's layoutFormula and the embedded STIX Two Math font, the same pipeline the odt/odp embedded-formula paths use. ---
 export { odfToPdf } from './convert/convert';
 
-// Schema-validated z.codec() pairs over the conversions above (docx/pptx/odt/odp/ods/odg bytes <-> PDF bytes), the no-extra-options form -- use docxToPdf/pdfToDocx/pptxToPdf/pdfToPptx/odtToPdf/pdfToOdt/odpToPdf/pdfToOdp/odsToPdf/pdfToOds/odgToPdf/pdfToOdg directly for cancellation or diagnostics.
-export { docxPdfCodec, odgPdfCodec, odpPdfCodec, odsPdfCodec, odtPdfCodec, pptxPdfCodec } from './convert/codec';
+// Schema-validated z.codec() pairs over the conversions above (docx/pptx/odt/odp/ods/odg/xlsx bytes <-> PDF bytes), the no-extra-options form -- use docxToPdf/pdfToDocx/pptxToPdf/pdfToPptx/odtToPdf/pdfToOdt/odpToPdf/pdfToOdp/odsToPdf/pdfToOds/odgToPdf/pdfToOdg/xlsxToPdf/pdfToXlsx directly for cancellation or diagnostics.
+export { docxPdfCodec, odgPdfCodec, odpPdfCodec, odsPdfCodec, odtPdfCodec, pptxPdfCodec, xlsxPdfCodec } from './convert/codec';
 
 // --- Six cross-format bridges (odt<->docx, odp<->pptx, ods<->xlsx), bypassing PDF entirely -- see convert.ts's own module comment on this section for why these carry substantially higher fidelity than the twelve PDF-pivot conversions above. ---
 export type { DocumentBridgeOptions } from './convert/convert';

@@ -7,6 +7,7 @@ import { minimalOdgBytes } from '../test-support/odg';
 import { minimalOdpBytes } from '../test-support/odp';
 import { minimalOdsBytes } from '../test-support/ods';
 import { minimalOdtBytes } from '../test-support/odt';
+import { odsToXlsx } from './convert';
 import { createLocalDocumentConverter } from './local';
 
 function pdfHeader(bytes: Uint8Array<ArrayBuffer>): string {
@@ -37,12 +38,14 @@ describe('createLocalDocumentConverter: shape', () => {
       { source: 'ods', target: 'pdf' },
       { source: 'odg', target: 'pdf' },
       { source: 'odf', target: 'pdf' },
+      { source: 'xlsx', target: 'pdf' },
       { source: 'pdf', target: 'docx' },
       { source: 'pdf', target: 'pptx' },
       { source: 'pdf', target: 'odt' },
       { source: 'pdf', target: 'odp' },
       { source: 'pdf', target: 'ods' },
       { source: 'pdf', target: 'odg' },
+      { source: 'pdf', target: 'xlsx' },
       { source: 'odt', target: 'docx' },
       { source: 'docx', target: 'odt' },
       { source: 'odp', target: 'pptx' },
@@ -103,6 +106,14 @@ describe('createLocalDocumentConverter: convert', () => {
     expect(pdfHeader(result.document.bytes)).toBe('%PDF-');
   });
 
+  it('converts xlsx to pdf', async () => {
+    const converter = createLocalDocumentConverter();
+    const xlsxBytes = odsToXlsx(minimalOdsBytes());
+    const result = await converter.convert({ source: { format: 'xlsx', bytes: xlsxBytes }, targetFormat: 'pdf' }, { signal: new AbortController().signal });
+    expect(result.document.format).toBe('pdf');
+    expect(pdfHeader(result.document.bytes)).toBe('%PDF-');
+  });
+
   it('converts pdf to docx', async () => {
     const converter = createLocalDocumentConverter();
     const docxToPdfResult = await converter.convert({ source: { format: 'docx', bytes: buildSampleDocx('Hi') }, targetFormat: 'pdf' }, { signal: new AbortController().signal });
@@ -148,6 +159,15 @@ describe('createLocalDocumentConverter: convert', () => {
     const odgToPdfResult = await converter.convert({ source: { format: 'odg', bytes: minimalOdgBytes() }, targetFormat: 'pdf' }, { signal: new AbortController().signal });
     const result = await converter.convert({ source: odgToPdfResult.document, targetFormat: 'odg' }, { signal: new AbortController().signal });
     expect(result.document.format).toBe('odg');
+    expect(result.document.bytes.length).toBeGreaterThan(0);
+  });
+
+  it('converts pdf to xlsx', async () => {
+    const converter = createLocalDocumentConverter();
+    const xlsxBytes = odsToXlsx(minimalOdsBytes());
+    const xlsxToPdfResult = await converter.convert({ source: { format: 'xlsx', bytes: xlsxBytes }, targetFormat: 'pdf' }, { signal: new AbortController().signal });
+    const result = await converter.convert({ source: xlsxToPdfResult.document, targetFormat: 'xlsx' }, { signal: new AbortController().signal });
+    expect(result.document.format).toBe('xlsx');
     expect(result.document.bytes.length).toBeGreaterThan(0);
   });
 

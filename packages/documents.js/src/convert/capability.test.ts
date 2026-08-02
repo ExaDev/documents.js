@@ -50,32 +50,48 @@ describe('resolveConversionPath', () => {
     }
   });
 
-  it('composes the one-hop xlsx -> ods -> pdf path today, even though it is not yet a direct edge', () => {
-    const strategy = resolveConversionPath('xlsx', 'pdf');
-    expect(strategy?.kind).toBe('composed');
-    if (strategy?.kind !== 'composed') {
-      throw new Error('expected a composed strategy');
-    }
-    expect(strategy.via).toBe('ods');
-    expect(strategy.first).toEqual({ kind: 'bridge', source: 'xlsx', target: 'ods', convert: strategy.first.convert });
-    expect(strategy.second).toEqual({ kind: 'toPdf', source: 'ods', target: 'pdf', convert: strategy.second.convert });
+  it('resolves a direct strategy for xlsx <-> pdf now that xlsxToPdf/pdfToXlsx exist, even though those functions compose ods<->xlsx + ods<->pdf internally', () => {
+    expect(resolveConversionPath('xlsx', 'pdf')).toEqual({ kind: 'direct', edge: DIRECT_EDGES.find((edge) => edge.source === 'xlsx' && edge.target === 'pdf') });
+    expect(resolveConversionPath('pdf', 'xlsx')).toEqual({ kind: 'direct', edge: DIRECT_EDGES.find((edge) => edge.source === 'pdf' && edge.target === 'xlsx') });
   });
 
-  it('composes the one-hop pdf -> ods -> xlsx path today, even though it is not yet a direct edge', () => {
-    const strategy = resolveConversionPath('pdf', 'xlsx');
-    expect(strategy?.kind).toBe('composed');
-    if (strategy?.kind !== 'composed') {
+  it('still composes the one-hop xlsx -> ods -> pdf path over an edge set with no direct xlsx<->pdf edge, proving the resolver\'s own composition mechanism independently of whether a direct edge happens to exist today', () => {
+    const edgesWithoutDirectXlsxPdf = DIRECT_EDGES.filter((edge) => !(edge.source === 'xlsx' && edge.target === 'pdf') && !(edge.source === 'pdf' && edge.target === 'xlsx'));
+
+    const toPdf = resolveConversionPath('xlsx', 'pdf', edgesWithoutDirectXlsxPdf);
+    expect(toPdf?.kind).toBe('composed');
+    if (toPdf?.kind !== 'composed') {
       throw new Error('expected a composed strategy');
     }
-    expect(strategy.via).toBe('ods');
-    expect(strategy.first).toEqual({ kind: 'fromPdf', source: 'pdf', target: 'ods', convert: strategy.first.convert });
-    expect(strategy.second).toEqual({ kind: 'bridge', source: 'ods', target: 'xlsx', convert: strategy.second.convert });
+    expect(toPdf.via).toBe('ods');
+    expect(toPdf.first).toEqual({ kind: 'bridge', source: 'xlsx', target: 'ods', convert: toPdf.first.convert });
+    expect(toPdf.second).toEqual({ kind: 'toPdf', source: 'ods', target: 'pdf', convert: toPdf.second.convert });
+
+    const fromPdf = resolveConversionPath('pdf', 'xlsx', edgesWithoutDirectXlsxPdf);
+    expect(fromPdf?.kind).toBe('composed');
+    if (fromPdf?.kind !== 'composed') {
+      throw new Error('expected a composed strategy');
+    }
+    expect(fromPdf.via).toBe('ods');
+    expect(fromPdf.first).toEqual({ kind: 'fromPdf', source: 'pdf', target: 'ods', convert: fromPdf.first.convert });
+    expect(fromPdf.second).toEqual({ kind: 'bridge', source: 'ods', target: 'xlsx', convert: fromPdf.second.convert });
   });
 
-  it('finds no path at all between two formats with no direct edge and no shared intermediate', () => {
-    // No edge in DIRECT_EDGES ever targets 'odf' -- odf's own edge is one-way (odf -> pdf only, see FORMAT_CAPABILITIES.odf) -- so nothing can reach it, composed or otherwise.
+  it('finds no path at all when the target is odf -- no edge in DIRECT_EDGES ever targets it, so nothing can reach it, composed or otherwise', () => {
+    // odf's own edge is one-way (odf -> pdf only, see FORMAT_CAPABILITIES.odf) -- so 'odf' never appears as a target anywhere in DIRECT_EDGES.
     expect(resolveConversionPath('pdf', 'odf')).toBeUndefined();
-    // odg's only edge is odg -> pdf, and pdf has no edge to xlsx (only ods bridges to xlsx) -- so odg -> xlsx has no direct edge and no shared one-hop intermediate either.
-    expect(resolveConversionPath('odg', 'xlsx')).toBeUndefined();
+    expect(resolveConversionPath('docx', 'odf')).toBeUndefined();
+    expect(resolveConversionPath('xlsx', 'odf')).toBeUndefined();
+  });
+
+  it('now composes odg -> xlsx via pdf, now that pdf has a direct edge to xlsx (pdfToXlsx) -- this pair had no path at all before that edge existed', () => {
+    const strategy = resolveConversionPath('odg', 'xlsx');
+    expect(strategy?.kind).toBe('composed');
+    if (strategy?.kind !== 'composed') {
+      throw new Error('expected a composed strategy');
+    }
+    expect(strategy.via).toBe('pdf');
+    expect(strategy.first).toEqual({ kind: 'toPdf', source: 'odg', target: 'pdf', convert: strategy.first.convert });
+    expect(strategy.second).toEqual({ kind: 'fromPdf', source: 'pdf', target: 'xlsx', convert: strategy.second.convert });
   });
 });
