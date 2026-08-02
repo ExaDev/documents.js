@@ -1,4 +1,5 @@
 import { inflateSync } from 'fflate';
+import { CALADEA_ITALIC_FONT_DEFLATED_BASE64 } from '../assets/caladea-italic';
 import { CALADEA_REGULAR_FONT_DEFLATED_BASE64 } from '../assets/caladea-regular';
 import { CARLITO_BOLD_FONT_DEFLATED_BASE64 } from '../assets/carlito-bold';
 import { CARLITO_ITALIC_FONT_DEFLATED_BASE64 } from '../assets/carlito-italic';
@@ -37,4 +38,8 @@ export function carlitoItalicBytes(): Uint8Array<ArrayBuffer> {
 
 export function caladeaRegularBytes(): Uint8Array<ArrayBuffer> {
   return loadFace('Caladea-Regular', CALADEA_REGULAR_FONT_DEFLATED_BASE64);
+}
+
+export function caladeaItalicBytes(): Uint8Array<ArrayBuffer> {
+  return loadFace('Caladea-Italic', CALADEA_ITALIC_FONT_DEFLATED_BASE64);
 }

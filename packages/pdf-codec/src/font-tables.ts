@@ -66,6 +66,8 @@ export interface Os2Table {
   readonly version: number;
   // The style/selection bit field (clause 5.2.8 "fsSelection"): bit 0 ITALIC, bit 5 BOLD, bit 6 REGULAR, bit 7 USE_TYPO_METRICS, bit 8 WWS, bit 9 OBLIQUE. Exposed raw rather than decoded, since which bits a consumer cares about depends entirely on what it is matching on.
   readonly fsSelection: number;
+  // The ten-byte PANOSE design classification (clause 5.2.8 "panose"), exposed raw: byte 0 is the family kind, byte 1 the serif style for a Latin text family, and the remaining eight weight/proportion/contrast traits nothing here interprets. A font's own answer to "is this a serif design", which is otherwise only guessable from its name.
+  readonly panose: readonly number[];
   readonly sTypoAscender: number;
   readonly sTypoDescender: number;
   readonly sTypoLineGap: number;
@@ -78,6 +80,8 @@ export interface Os2Table {
 const OS2_VERSION_0_SIZE = 78; // through usWinDescent, the last field every version carries
 const OS2_VERSION_2_SIZE = 96; // through usMaxContext, covering sxHeight/sCapHeight
 const OS2_VERSION_WITH_HEIGHTS = 2;
+const OS2_PANOSE_OFFSET = 32;
+const OS2_PANOSE_SIZE = 10;
 
 export function parseOs2(font: SfntFont): Os2Table | undefined {
   const bytes = sfntTableBytes(font, 'OS/2');
@@ -89,6 +93,7 @@ export function parseOs2(font: SfntFont): Os2Table | undefined {
   return {
     version,
     fsSelection: u16(bytes, 62),
+    panose: [...bytes.subarray(OS2_PANOSE_OFFSET, OS2_PANOSE_OFFSET + OS2_PANOSE_SIZE)],
     sTypoAscender: i16(bytes, 68),
     sTypoDescender: i16(bytes, 70),
     sTypoLineGap: i16(bytes, 72),
