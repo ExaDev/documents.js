@@ -59,13 +59,16 @@ importers:
         version: 25.0.8(typescript@6.0.3)
       tsdown:
         specifier: ^0.22.13
-        version: 0.22.14(@arethetypeswrong/core@0.18.5)(publint@0.3.22)(typescript@6.0.3)
+        version: 0.22.14(@arethetypeswrong/core@0.18.5)(publint@0.3.22)(typescript@6.0.3)(unrun@0.3.1)
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
       typescript-eslint:
         specifier: ^8.65.0
         version: 8.65.0(eslint@10.8.0(jiti@2.6.1))(typescript@6.0.3)
+      unrun:
+        specifier: ^0.3.1
+        version: 0.3.1
       vitest:
         specifier: ^4.1.10
         version: 4.1.10(@types/node@26.1.2)(@vitest/coverage-v8@4.1.10)(vite@8.2.0(@types/node@26.1.2)(jiti@2.6.1)(yaml@2.9.0))
@@ -2381,6 +2384,16 @@ packages:
     resolution: {integrity: sha512-gptHNQghINnc/vTGIk0SOFGFNXw7JVrlRUtConJRlvaw6DuX0wO5Jeko9sWrMBhh+PsYAZ7oXAiOnf/UKogyiw==}
     engines: {node: '>= 10.0.0'}
 
+  unrun@0.3.1:
+    resolution: {integrity: sha512-onIck/oNnCaytwths1ZVp1LK2Gq2hPoyFhiHebObuUXqR3S0uHuLLaBK8K6mRRgV7Ptip8AnNvaUsgzwWwBZuA==}
+    engines: {node: ^22.13.0 || >=24.0.0}
+    hasBin: true
+    peerDependencies:
+      synckit: ^0.11.11
+    peerDependenciesMeta:
+      synckit:
+        optional: true
+
   uri-js@4.4.1:
     resolution: {integrity: sha512-7rKUyy33Q1yc98pQ1DAmLtwX109F7TIfWlW1Ydo8Wl1ii1SeHieeh0HHfPeL2fMXK6z0s8ecKs9frCuLJvndBg==}
 
@@ -4656,7 +4669,7 @@ snapshots:
     dependencies:
       typescript: 6.0.3
 
-  tsdown@0.22.14(@arethetypeswrong/core@0.18.5)(publint@0.3.22)(typescript@6.0.3):
+  tsdown@0.22.14(@arethetypeswrong/core@0.18.5)(publint@0.3.22)(typescript@6.0.3)(unrun@0.3.1):
     dependencies:
       ansis: 4.3.1
       cac: 7.0.0
@@ -4677,6 +4690,7 @@ snapshots:
       '@arethetypeswrong/core': 0.18.5
       publint: 0.3.22
       typescript: 6.0.3
+      unrun: 0.3.1
     transitivePeerDependencies:
       - '@typescript/native-preview'
       - '@volar/typescript'
@@ -4746,6 +4760,10 @@ snapshots:
   universal-user-agent@7.0.3: {}
 
   universalify@2.0.1: {}
+
+  unrun@0.3.1:
+    dependencies:
+      rolldown: 1.2.1
 
   uri-js@4.4.1:
     dependencies:
