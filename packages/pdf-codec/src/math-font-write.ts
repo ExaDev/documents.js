@@ -2,6 +2,7 @@ import { deflate } from './bytes/flate';
 import type { MathFont } from './math-font';
 import type { PdfDict, PdfObject } from './objects';
 import { pdfArray, pdfDict, pdfHexString, pdfName, pdfNum, pdfStream } from './objects';
+import { buildToUnicodeCMap } from './tounicode';
 
 // The FontDescriptor /Flags bit for "font contains glyphs outside the Adobe standard Latin character set" (ISO 32000-1 Table 123, bit position 3, value 4) -- true of essentially every glyph a math font contributes (operators, Greek, blackboard-bold letters, ...), unlike src/pdf/write.ts's own standard-14 FLAG_NONSYMBOLIC.
 const FLAG_SYMBOLIC = 4;
@@ -52,44 +53,6 @@ function buildFontFileStream(font: MathFont, compress: boolean): PdfObject {
   // The embedded font program: the ENTIRE 'CFF ' table, unmodified -- see math-font.ts's own module comment for why this is a documented, deliberate simplification rather than a genuine glyph subset. /Subtype /CIDFontType0C is the PDF spec's own name (ISO 32000-1 9.9) for exactly this shape: a bare (non-sfnt-wrapped) CFF program, embedded for a /CIDFontType0 descendant font.
   const dict = pdfDict(compress ? { Subtype: pdfName('CIDFontType0C'), Filter: pdfName('FlateDecode') } : { Subtype: pdfName('CIDFontType0C') });
   return pdfStream(dict, compress ? deflate(font.cffBytes) : font.cffBytes);
-}
-
-// A codepoint above U+FFFF (every Mathematical Alphanumeric Symbols character this package's own mathvariant mapping produces) needs a genuine UTF-16BE surrogate pair in a ToUnicode CMap's own bfchar target -- JS's String.fromCodePoint + charCodeAt already does exactly this encoding, so this reuses it rather than hand-rolling the surrogate math.
-function codePointToUtf16BEHex(codePoint: number): string {
-  const text = String.fromCodePoint(codePoint);
-  let hex = '';
-  for (let i = 0; i < text.length; i++) {
-    hex += text.charCodeAt(i).toString(16).padStart(4, '0');
-  }
-  return hex;
-}
-
-// A standard bfchar ToUnicode CMap (ISO 32000-1 9.10.3): a plain-text PostScript-syntax resource mapping each used CID (= glyph ID, Identity-H) back to the Unicode text it represents, so copy/paste and screen readers recover real characters from an embedded font's own arbitrary glyph numbering.
-function buildToUnicodeCMap(usedGlyphs: ReadonlyMap<number, number>): PdfObject {
-  const sortedGids = [...usedGlyphs.keys()].sort((a, b) => a - b);
-  const lines: string[] = [
-    '/CIDInit /ProcSet findresource begin',
-    '12 dict begin',
-    'begincmap',
-    '/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def',
-    '/CMapName /Adobe-Identity-UCS def',
-    '/CMapType 2 def',
-    '1 begincodespacerange',
-    '<0000> <FFFF>',
-    'endcodespacerange',
-    `${sortedGids.length} beginbfchar`,
-  ];
-  for (const gid of sortedGids) {
-    const codePoint = usedGlyphs.get(gid);
-    if (codePoint === undefined) {
-      continue;
-    }
-    lines.push(`<${gid.toString(16).padStart(4, '0')}> <${codePointToUtf16BEHex(codePoint)}>`);
-  }
-  lines.push('endbfchar', 'endcmap', 'CMapName currentdict /CMap defineresource pop', 'end', 'end');
-  const text = `${lines.join('\n')}\n`;
-  const bytes = new TextEncoder().encode(text);
-  return pdfStream(pdfDict({}), bytes);
 }
 
 // Builds the five PDF objects a single embedded math composite font needs (/Type0, /CIDFontType0 descendant, /FontDescriptor, /FontFile3, ToUnicode CMap) -- write.ts allocates the five object numbers up front (matching its own existing font/image allocation pattern) and passes the resulting refs in so each object can point at the others; this function's own job is purely to build the dict/stream VALUES, not to decide numbering or write bytes to the file.
