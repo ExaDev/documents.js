@@ -1,3 +1,5 @@
+# minimumReleaseAgeExclude is NOT honoured by `pnpm install --frozen-lockfile` (the mode CI runs) -- only minimumReleaseAge itself gates that path; the entries below are for local `pnpm add`/`pnpm update` convenience only.
 minimumReleaseAge: 60
+# Bare package name (no @version), per pnpm's own documented syntax (https://pnpm.io/settings#minimumreleaseageexclude -- "webpack" exempts every version, not just one) -- document-schema.js is this org's own sibling package, published only via its own semantic-release CI with npm OIDC trusted publishing, so a version-agnostic exemption is a deliberate, low-risk carry-forward rather than an entry this file needs updating on every single document-schema.js release.
 minimumReleaseAgeExclude:
   - document-schema.js
