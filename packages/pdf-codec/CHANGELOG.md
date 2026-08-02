@@ -1,3 +1,10 @@
+## [1.2.1](https://github.com/ExaDev/pdf-codec/compare/v1.2.0...v1.2.1) (2026-08-02)
+
+
+### Bug Fixes
+
+* don't flag or fix an alias whose source is mutated elsewhere ([3115925](https://github.com/ExaDev/pdf-codec/commit/31159259b4a6250c96921bcc5c076b9e4c0100a9))
+
 # [1.2.0](https://github.com/ExaDev/pdf-codec/compare/v1.1.6...v1.2.0) (2026-08-02)
 
 
