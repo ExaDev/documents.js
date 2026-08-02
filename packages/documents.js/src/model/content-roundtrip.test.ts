@@ -43,7 +43,7 @@ describe('docx: readDocxContent/buildDocxPackage read -> build -> read stability
     table.cell(1, 0).paragraphs()[0]!.appendRun({ text: 'A2' });
     table.cell(1, 1).paragraphs()[0]!.appendRun({ text: 'B2' });
 
-    // readDocxContent never produces a ContentImageBlock for docx at all -- ooxml.js's readDocx (this package's own adapter around it) walks w:p/w:tbl content but has no handling for w:drawing anywhere in its paragraph-run reader, a documented, deliberate scope narrowing (see this repo's CLAUDE.md: "docx headers/footers, live PAGE/NUMPAGES field substitution, and inline images are not read by readDocxContent"). The image below is still inserted, for realistic content and to prove that its presence doesn't corrupt anything else in the read -> build -> read cycle -- but it cannot be asserted to survive with content intact, only that neither read conjures a spurious image block from it (asserted below).
+    // ooxml.js's readDocx (2.6.1+) now reads a real ContentImageBlock for an inline w:drawing -- readDocxContent (this package's own thin adapter over it) inherits that for free, with zero code change on this package's side. readDocx represents the image as TWO adjacent blocks sourced from the one physical <w:p>: a paragraph block carrying that paragraph's own (here all-empty) runs, immediately followed by the image block -- buildDocxPackage's appendBlocks (src/edit/docx/content.ts) recognises exactly that pattern and writes it back as the single physical paragraph it came from, which is what makes the full expect(roundTripped).toEqual(original) below hold byte-for-byte rather than accumulating a spurious empty paragraph before every image on every round trip.
     editor.body.appendParagraph().insertImageAfter({ format: 'png', bytes: PNG_BYTES, widthPt: 40, heightPt: 40 });
 
     editor.body.appendParagraph().appendRun({ text: 'Closing paragraph.' });
@@ -78,9 +78,15 @@ describe('docx: readDocxContent/buildDocxPackage read -> build -> read stability
     expect(roundTrippedTable?.rows[0]?.cells.map((c) => (c.blocks[0]?.kind === 'paragraph' ? c.blocks[0].runs[0]?.text : undefined))).toEqual(['A1', 'B1']);
     expect(roundTrippedTable?.rows[1]?.cells.map((c) => (c.blocks[0]?.kind === 'paragraph' ? c.blocks[0].runs[0]?.text : undefined))).toEqual(['A2', 'B2']);
 
-    // Confirms the documented gap above: no image block anywhere, in either read.
-    const allBlocks = [...original.sections.flatMap((s) => s.blocks), ...roundTripped.sections.flatMap((s) => s.blocks)];
-    expect(allBlocks.some(isImage)).toBe(false);
+    // Confirms the top comment above: a real image block now survives in both reads, with its bytes/dimensions intact.
+    const originalImage = original.sections.flatMap((s) => s.blocks).find(isImage);
+    const roundTrippedImage = roundTripped.sections.flatMap((s) => s.blocks).find(isImage);
+    expect(originalImage).toBeDefined();
+    expect(originalImage?.format).toBe('png');
+    expect(originalImage?.widthPt).toBe(40);
+    expect(originalImage?.heightPt).toBe(40);
+    expect(typeof originalImage?.base64).toBe('string');
+    expect(roundTrippedImage).toEqual(originalImage);
   });
 });
 

@@ -20,11 +20,36 @@ export function buildDocxPackage(content: ContentDocument): Package {
       // A section boundary becomes a page break -- distinct per-section page size/margins (w:sectPr per section) isn't modelled by this bridge yet, since createDocx()'s single scaffolded section covers every caller this function currently has.
       editor.body.appendPageBreak();
     }
-    for (const block of section.blocks) {
-      appendBlock(editor.body, block);
-    }
+    appendBlocks(editor.body, section.blocks);
   });
   return editor.toPackage();
+}
+
+// ooxml.js's readDocx (real docx image reading, 2.6.1+) always represents an inline image as TWO adjacent ContentBlocks sourced from the one physical <w:p>: a paragraph block carrying that paragraph's own (possibly all-empty) text runs, immediately followed by an image block for the w:drawing found inside it -- there is no signal in ContentDocument distinguishing that pairing from a genuinely separate, intentionally-blank paragraph that happens to sit immediately before an unrelated image. Writing both blocks back as two independent paragraphs (the naive per-block loop) is round-trip-safe for the rare separate-blank-paragraph case but wrong for the overwhelmingly common inline-image case, inserting a spurious extra empty paragraph before every image on every docx round trip. isMergeableImageParagraph/appendBlocks instead special-case exactly the pattern readDocx always produces for a genuine inline image (a paragraph whose runs are all empty text, directly followed by an image block) and write it back as the single physical paragraph it came from, by populating the paragraph's own properties/runs and then calling insertImageAfter on that SAME paragraph rather than a fresh one -- consuming both ContentBlocks in one step. A paragraph with any non-empty run text is never merged, since ooxml.js's own reader only ever emits the image as a trailing sibling of an all-empty-runs paragraph (confirmed against real readDocx output: a drawing inside a paragraph that also carries real text produces the drawing's own empty-text run inline within that SAME paragraph block, never as a separate block at all -- see this repo's README Gotchas).
+function isMergeableImageParagraph(block: ContentBlock): block is ContentParagraph {
+  return block.kind === 'paragraph' && block.runs.every((run) => run.text === '');
+}
+
+function appendBlocks(body: DocxBody, blocks: readonly ContentBlock[]): void {
+  let index = 0;
+  while (index < blocks.length) {
+    const block = blocks[index];
+    const next = blocks[index + 1];
+    if (block !== undefined && isMergeableImageParagraph(block) && next?.kind === 'image') {
+      // Only the paragraph's own properties are written here, never its runs -- every run.text in a mergeable paragraph is an empty placeholder for the drawing's own run position (see this function's own top comment), and writing it via populateParagraph would add a real, spurious empty-text run alongside the one insertImageAfter is about to add for the drawing itself, doubling up on the re-read.
+      const paragraph = body.appendParagraph();
+      paragraph.styleId = block.styleId;
+      paragraph.alignment = block.alignment;
+      paragraph.list = block.list;
+      paragraph.insertImageAfter({ format: next.format, bytes: base64ToBytes(next.base64), widthPt: next.widthPt, heightPt: next.heightPt, altText: next.altText });
+      index += 2;
+      continue;
+    }
+    if (block !== undefined) {
+      appendBlock(body, block);
+    }
+    index += 1;
+  }
 }
 
 function populateParagraph(paragraph: DocxParagraph, block: ContentParagraph): void {
