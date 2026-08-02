@@ -3,6 +3,7 @@ import type { Package } from '../../model/package';
 import type { ManifestEntry } from '../../manifest';
 import { readManifest } from '../../manifest';
 import { rootElement, findChildElement, childrenWithTag, attrValue } from '../../xml/query';
+import { decodeXmlText } from '../../xml/entities';
 
 // Package -> OdbInventory: connection info plus the NAMES of forms/queries/reports/tables in a .odb (application/vnd.oasis.opendocument.base) database front-end package -- never their content, and never the embedded/external database engine's own binary or script storage. This is deliberately NOT a typed content reader in the sense readOdt/readOdp/readOds/readOdg are: a .odb's real "content" -- table rows, query result sets, form/report layout and logic -- lives either inside a real database engine (HSQLDB, Firebird, or an external server) this reader does not and will not parse, or inside each form's/report's own genuine ODF sub-document (a real, separately-readable office:document-content the existing readOdt-style machinery could open on its own merit, but which this reader deliberately never opens, matching the "never their content" mandate). HSQLDB/Firebird binary parsing is separate, later work in the documents.js repo, not here.
 //
@@ -14,7 +15,9 @@ import { rootElement, findChildElement, childrenWithTag, attrValue } from '../..
 //
 // FORMS/REPORTS, by contrast, genuinely are separate manifest sub-document parts: db:forms/db:component and db:reports/db:component (content.xml's own registry of a form/report's NAME, alongside an xlink:href pointing at that form/report's own genuine ODF sub-document, e.g. "forms/CustomerForm/content.xml") share the identical external/embedded-document-reference shape src/manifest.ts's own subdocumentDirectories already recognises generically for ANY embedded ODF sub-document (a real, already-proven mechanism in this exact codebase -- see e.g. the formula reader's own "Object 1/content.xml" embedded-Math-object finding). This reader deliberately sources form/report NAMES from the manifest's own part listing (per this task's own design brief), not from parsing db:forms/db:reports in content.xml, for exactly that reason: the manifest is where a real sub-document's own existence is unambiguously recorded, and reading only its path -- never opening "forms/CustomerForm/content.xml" itself -- is what keeps this reader's own "never their content" promise honest. This session's own live-generation attempt could not get a real form/report to actually persist via headless UNO automation (com.sun.star.sdb.application.XDocumentContainer's own createInstance()/insertByName() sequence returned a null document instance in this specific environment, after several genuinely different argument shapes were tried -- an environment-specific automation gap, not a design uncertainty), so the "forms/<Name>/content.xml" / "reports/<Name>/content.xml" path shape below is grounded in the OASIS RNG schema's own db:component xlink:href mechanism plus this codebase's own already-proven subdocumentDirectories convention, not in a second genuine fixture -- covered instead by a hand-built synthetic manifest in this reader's own test suite, matching src/typed/odm/read.test.ts's own established split between one real base fixture and synthetic scope-boundary packages.
 //
-// QUERIES have no manifest part of their own either -- confirmed both by this reader's own real fixture (one query, CustomerList, present in content.xml's db:queries but nowhere in the manifest) and by the RNG schema itself: unlike db:component, db:query/db:query-collection carry no xlink:href at all, only an inline, mandatory db:command (the query's own SQL text). Query NAMES are therefore read from content.xml's own db:queries/db:query (and nested db:query-collection) db:name attributes -- this reader reads ONLY that attribute, never db:command, keeping the same "name, never content" promise the manifest-driven forms/reports enumeration keeps by construction. A db:query-collection's OWN db:name (a folder-like grouping, not a runnable query) is never added to the result -- only the db:query leaves nested inside it are.
+// QUERIES have no manifest part of their own either -- confirmed both by this reader's own real fixture (one query, CustomerList, present in content.xml's db:queries but nowhere in the manifest) and by the RNG schema itself: unlike db:component, db:query/db:query-collection carry no xlink:href at all, only an inline, mandatory db:command (the query's own SQL text) plus an optional db:escape-processing flag. Query definitions are read from content.xml's own db:queries/db:query (and nested db:query-collection) elements. A db:query-collection's OWN db:name (a folder-like grouping, not a runnable query) is never added to the result -- only the db:query leaves nested inside it are.
+//
+// POLICY CHANGE: this reader used to discard db:command entirely, on the grounds that it was query CONTENT rather than a NAME, matching the same "never their content" mandate this module's top-of-file note states for forms/reports/tables. That blanket treatment does not actually hold for a query the way it holds for a form/report: a form/report's real content is a genuine separate ODF sub-document (layout, script, the works) this reader deliberately never opens; a query's "content" is a single SQL string already sitting inline in content.xml, no sub-document read required to get it. The design work for Report Builder (rpt:) support found a concrete need for that string: a rpt:report's own data source references a query BY NAME, and there is no way to know what a report actually renders without the query's real command text alongside its name. db:command and db:escape-processing are consequently now read and returned via OdbQueryInfo; forms/reports/tables keep the original "name only" mandate unchanged, since their own content genuinely does live in a separate sub-document this reader still never opens.
 //
 // driverClass, present in this reader's own design brief's illustrative return shape, is deliberately never populated: a full read of the OASIS ODF 1.3 RelaxNG schema's entire db: namespace (every db-* define -- the real database/connection element vocabulary) turns up no driver-class-equivalent attribute anywhere. db:driver-settings carries db:system-driver-settings/db:base-dn/db:parameter-name-substitution/db:show-deleted/db:is-first-row-header-line, none of which name a JDBC driver class. Kept in OdbConnectionInfo's own type as optional -- matching src/typed/odm/read.ts's own OdmSection.inlineContent precedent, a field the design brief asked for and kept ready rather than dropped, in case a future ODF revision or a non-LibreOffice producer's own extension attribute does carry one -- but never set by this reader, since ODF itself has nowhere to source it from.
 
@@ -25,10 +28,18 @@ export interface OdbConnectionInfo {
   url?: string;
 }
 
+export interface OdbQueryInfo {
+  name: string;
+  // The query's real SQL text, read from db:command -- see this module's own top-of-file note on the POLICY CHANGE that started reading it.
+  command: string;
+  // db:escape-processing (whether JDBC/ODBC escape syntax in db:command should be processed before running it), when the element declares one -- undefined when absent, never defaulted, since the ODF schema's own default for an absent attribute is a driver/engine concern this reader has no business guessing at.
+  escapeProcessing?: boolean;
+}
+
 export interface OdbInventory {
   connection: OdbConnectionInfo | undefined;
   tables: string[];
-  queries: string[];
+  queries: OdbQueryInfo[];
   forms: string[];
   reports: string[];
 }
@@ -97,19 +108,27 @@ function readConnectionInfo(databaseElement: XmlElement): OdbConnectionInfo | un
   return undefined;
 }
 
-// Walks db:queries' own db:query/db:query-collection children (recursively, since a query can sit inside an arbitrarily nested named group -- per the OASIS schema's own db-queries define), collecting only db:query's own db:name -- never db:command, its actual SQL text, matching this reader's "name, never content" mandate. A db:query-collection's own db:name (a folder-like grouping) is never itself collected as a query name.
-function collectQueryNames(container: XmlElement, names: string[]): void {
+// Walks db:queries' own db:query/db:query-collection children (recursively, since a query can sit inside an arbitrarily nested named group -- per the OASIS schema's own db-queries define), collecting each db:query's own db:name, db:command, and (when present) db:escape-processing -- see this module's own top-of-file note on why db:command is read now. db:command is entity-decoded (xml/entities.ts's decodeXmlText) before being returned, the same "projected plain-text content" treatment every other typed reader in this package already gives a real XML text value -- odf.js's own lossless model keeps entities raw for round-trip fidelity (processEntities:false), and OdbQueryInfo.command is exactly the boundary where that raw encoding needs to be undone (real SQL like `SELECT * FROM "Customers"` is stored in content.xml as `&quot;Customers&quot;`). A query missing either its name or its command (malformed -- both are mandatory per the schema) is skipped rather than returned half-populated, matching this reader's general "malformed-but-salvageable degrades, never fabricates" posture. A db:query-collection's own db:name (a folder-like grouping) is never itself collected as a query definition.
+function collectQueryDefinitions(container: XmlElement, definitions: OdbQueryInfo[]): void {
   for (const child of container.children) {
     if (child.type !== 'element') {
       continue;
     }
     if (child.tag === 'db:query') {
       const name = attrValue(child, 'db:name');
-      if (name !== undefined) {
-        names.push(name);
+      const command = attrValue(child, 'db:command');
+      if (name === undefined || command === undefined) {
+        continue;
       }
+      const decodedCommand = decodeXmlText(command);
+      const escapeProcessingRaw = attrValue(child, 'db:escape-processing');
+      definitions.push(
+        escapeProcessingRaw === undefined
+          ? { name, command: decodedCommand }
+          : { name, command: decodedCommand, escapeProcessing: escapeProcessingRaw === 'true' },
+      );
     } else if (child.tag === 'db:query-collection') {
-      collectQueryNames(child, names);
+      collectQueryDefinitions(child, definitions);
     }
   }
 }
@@ -175,10 +194,10 @@ export function readOdbInventory(pkg: Package): OdbInventory {
 
   const connection = readConnectionInfo(databaseElement);
 
-  const queries: string[] = [];
+  const queries: OdbQueryInfo[] = [];
   const queriesElement = findChildElement(databaseElement.children, 'db:queries');
   if (queriesElement !== undefined) {
-    collectQueryNames(queriesElement, queries);
+    collectQueryDefinitions(queriesElement, queries);
   }
 
   const tables = collectTableNames(databaseElement);

@@ -42,8 +42,8 @@ describe('readOdbInventory: embedded-firebird.odb (real LibreOffice output)', ()
     expect('driverClass' in (inventory.connection ?? {})).toBe(false);
   });
 
-  it('reads the one real query name, never its db:command SQL text', () => {
-    expect(inventory.queries).toEqual(['CustomerList']);
+  it('reads the one real query, including its db:command SQL text', () => {
+    expect(inventory.queries).toEqual([{ name: 'CustomerList', command: 'SELECT * FROM "Customers"' }]);
   });
 
   it('reads an honestly empty tables array -- the two real tables (Customers, Orders) exist only inside the live Firebird engine, invisible to the ODF package itself', () => {
@@ -84,8 +84,11 @@ describe('readOdbInventory: synthetic fully-populated embedded package', () => {
     expect(inventory.connection).toEqual({ type: 'embedded', url: 'sdbc:embedded:hsqldb' });
   });
 
-  it('reads both top-level and nested db:query-collection query names, in document order, without including the collection\'s own name', () => {
-    expect(inventory.queries).toEqual(['Q1', 'Q2']);
+  it('reads both top-level and nested db:query-collection query definitions, in document order, without including the collection\'s own name', () => {
+    expect(inventory.queries).toEqual([
+      { name: 'Q1', command: 'SELECT * FROM "Customers"' },
+      { name: 'Q2', command: 'SELECT * FROM "Orders"' },
+    ]);
   });
 
   it('reads table names from db:table-representations, deduplicated and in document order', () => {
@@ -95,6 +98,38 @@ describe('readOdbInventory: synthetic fully-populated embedded package', () => {
   it('reads form/report names from the manifest\'s own sub-document parts, ignoring the sibling styles.xml part', () => {
     expect(inventory.forms).toEqual(['Form1']);
     expect(inventory.reports).toEqual(['Report1']);
+  });
+});
+
+describe('readOdbInventory: query definitions', () => {
+  it('reads db:escape-processing when present, as a real boolean, and omits the field entirely when absent', () => {
+    const pkg: Package = {
+      parts: {
+        'content.xml': databaseContentPart([
+          el('db:queries', {}, [
+            el('db:query', { 'db:name': 'WithFlag', 'db:command': 'SELECT 1', 'db:escape-processing': 'false' }),
+            el('db:query', { 'db:name': 'NoFlag', 'db:command': 'SELECT 2' }),
+          ]),
+        ]),
+        'META-INF/manifest.xml': manifestPart(BASE_MANIFEST_ENTRIES),
+      },
+    };
+    const inventory = readOdbInventory(pkg);
+    expect(inventory.queries).toEqual([
+      { name: 'WithFlag', command: 'SELECT 1', escapeProcessing: false },
+      { name: 'NoFlag', command: 'SELECT 2' },
+    ]);
+    expect('escapeProcessing' in (inventory.queries[1] ?? {})).toBe(false);
+  });
+
+  it('skips a db:query missing its mandatory db:command rather than returning it half-populated', () => {
+    const pkg: Package = {
+      parts: {
+        'content.xml': databaseContentPart([el('db:queries', {}, [el('db:query', { 'db:name': 'Broken' })])]),
+        'META-INF/manifest.xml': manifestPart(BASE_MANIFEST_ENTRIES),
+      },
+    };
+    expect(readOdbInventory(pkg).queries).toEqual([]);
   });
 });
 

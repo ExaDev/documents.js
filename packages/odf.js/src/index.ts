@@ -142,4 +142,4 @@ export { readOdm } from './typed/odm/read';
 export type { OdmDocument, OdmSection } from './typed/odm/read';
 
 export { readOdbInventory } from './typed/odb/read';
-export type { OdbInventory, OdbConnectionInfo } from './typed/odb/read';
+export type { OdbInventory, OdbConnectionInfo, OdbQueryInfo } from './typed/odb/read';
