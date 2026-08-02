@@ -2,5 +2,8 @@
 minimumReleaseAge: 60
 minimumReleaseAgeExclude:
   # All versions belong in ONE entry, versions joined by "||" -- pnpm's exclude-policy matcher returns on the first rule whose package name matches, so a second separate entry for the same package name is silently never reached.
-  - documents.js@1.54.5
+  - documents.js@1.54.5||1.60.0
   - odf.js@1.10.4
+
+# documents.js depends on markdown-codec via a pinned git commit, pending that package's own npm trusted-publisher setup (see documents.js's own pnpm-workspace.yaml/README for the full account) -- which makes markdown-codec a git-hosted (exotic) SUBdependency of this project. pnpm blocks exotic subdependencies by default; there is no per-package allowlist for this check the way allowBuilds/minimumReleaseAgeExclude offer, so this is disabled project-wide rather than left unset. Re-enable (remove this line) once markdown-codec is a real, published npm dependency.
+blockExoticSubdeps: false

@@ -12,8 +12,8 @@ importers:
         specifier: ^15.0.0
         version: 15.0.0
       documents.js:
-        specifier: ^1.59.0
-        version: 1.59.0
+        specifier: ^1.60.0
+        version: 1.60.0
       ink:
         specifier: ^7.1.1
         version: 7.1.1(@types/react@19.2.18)(react@19.2.8)
@@ -1188,8 +1188,8 @@ packages:
     resolution: {integrity: sha512-u8LCSDOY98frHh6qZFUeh6g/F4oRwu6ZeWrGEnA9TYsbLULIX6u/4hbUhNPFInj5PpC0HeZjJ7fSu5JTjEPntQ==}
     engines: {node: '>=20'}
 
-  documents.js@1.59.0:
-    resolution: {integrity: sha512-1oYDkE7ehLnRjAJGXqmjfnwY1ajyRk00aZz6i3sD8EYoxzsHOnLiYzg0XIcEPGdFDgrWW2JNxIYMFt5YtM5oIQ==}
+  documents.js@1.60.0:
+    resolution: {integrity: sha512-xA5NN3G8brOExmb9dd0HccmLVN9XG1pPtlqft78xH40Uotz1IFOyWPszaHZgFhSo88kytTGKf7glPTGvn88eDA==}
     engines: {node: '>=20'}
 
   dot-prop@5.3.0:
@@ -1866,6 +1866,11 @@ packages:
   make-dir@4.0.0:
     resolution: {integrity: sha512-hXdUTZYIVOt1Ex//jAQi+wTZZpUpwBj/0QsOzqegb3rGMMeJiSEu5xLHnYfBrRV4RH2+OCSOO95Is/7x1WJ4bw==}
     engines: {node: '>=10'}
+
+  markdown-codec@https://codeload.github.com/ExaDev/markdown-codec/tar.gz/beda0a89d92fffd153d5dcd05d767b404b721cda:
+    resolution: {gitHosted: true, tarball: https://codeload.github.com/ExaDev/markdown-codec/tar.gz/beda0a89d92fffd153d5dcd05d767b404b721cda}
+    version: 0.0.0
+    engines: {node: '>=20'}
 
   marked-terminal@7.3.0:
     resolution: {integrity: sha512-t4rBvPsHc57uE/2nJOLmMbZCQ4tgAccAED3ngXQqW6g+TxA488JzJ+FK3lQkzBQOI1mRV/r/Kq+1ZlJ4D0owQw==}
@@ -4038,10 +4043,11 @@ snapshots:
     dependencies:
       zod: 4.4.3
 
-  documents.js@1.59.0:
+  documents.js@1.60.0:
     dependencies:
       document-schema.js: 1.10.0
       fflate: 0.8.3
+      markdown-codec: https://codeload.github.com/ExaDev/markdown-codec/tar.gz/beda0a89d92fffd153d5dcd05d767b404b721cda
       odf.js: 1.10.4
       ooxml.js: 2.5.0
       pdf-codec: 1.4.0
@@ -4690,6 +4696,11 @@ snapshots:
     dependencies:
       semver: 7.8.5
 
+  markdown-codec@https://codeload.github.com/ExaDev/markdown-codec/tar.gz/beda0a89d92fffd153d5dcd05d767b404b721cda:
+    dependencies:
+      document-schema.js: 1.10.0
+      zod: 4.4.3
+
   marked-terminal@7.3.0(marked@15.0.12):
     dependencies:
       ansi-escapes: 7.3.0
@@ -4810,7 +4821,7 @@ snapshots:
 
   ooxml.js@2.5.0:
     dependencies:
-      document-schema.js: 1.6.1
+      document-schema.js: 1.10.0
       fast-xml-parser: 5.10.1
       fflate: 0.8.3
       zod: 4.4.3
@@ -4910,7 +4921,7 @@ snapshots:
 
   pdf-codec@1.4.0:
     dependencies:
-      document-schema.js: 1.6.1
+      document-schema.js: 1.10.0
       fflate: 0.8.3
       zod: 4.4.3
 
