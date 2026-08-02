@@ -1,3 +1,10 @@
+# [1.12.0](https://github.com/ExaDev/odf.js/compare/v1.11.1...v1.12.0) (2026-08-02)
+
+
+### Features
+
+* ban anything but re-exports in src/index.ts ([058ec10](https://github.com/ExaDev/odf.js/commit/058ec10b3dee943b57ef6311709ef02ddd366cc8))
+
 ## [1.11.1](https://github.com/ExaDev/odf.js/compare/v1.11.0...v1.11.1) (2026-08-02)
 
 
