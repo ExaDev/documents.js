@@ -56,6 +56,46 @@ describe('docxToPdf', () => {
     expect(pdfHeader(pdfBytes)).toBe('%PDF-');
   });
 
+  // ooxml.js's readDocx (2.6.1+) now reads a real ContentImageBlock for an inline w:drawing -- readDocxContent inherits that for free (see src/edit/docx/content.ts's own appendBlocks for the round-trip-fidelity half of this). This proves the OTHER half: a docx image now actually flows all the way through this package's own docxToPdf pipeline (readDocxContent -> convertWordprocessingToLayout -> writePdf) and appears as a real, positioned LayoutImage in the produced PDF, where before this bump readDocxContent produced no image block at all and the picture would have silently vanished.
+  it('carries a real docx image all the way through to the produced PDF', () => {
+    const docxEditor = createDocx();
+    docxEditor.body.appendParagraph().appendRun({ text: 'Before the image.' });
+    // Real PNG magic bytes (this repo's own PDF codec sniffs the format from these, not a file extension) followed by a minimal but genuine 1x1 PNG payload.
+    const pngBytes = new Uint8Array([
+      137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68, 65, 84, 120, 156, 99, 250, 207, 192, 240, 31, 0, 5,
+      1, 2, 1, 233, 54, 244, 208, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+    ]);
+    docxEditor.body.appendParagraph().insertImageAfter({ format: 'png', bytes: pngBytes, widthPt: 96, heightPt: 48 });
+    docxEditor.body.appendParagraph().appendRun({ text: 'After the image.' });
+
+    let captured: DocumentPackage | undefined;
+    const pdfBytes = docxToPdf(docxEditor.toBytes(), { onDocument: (pkg) => { captured = pkg; } });
+    expect(pdfHeader(pdfBytes)).toBe('%PDF-');
+
+    // The ContentDocument this conversion built internally really did read the image as a ContentImageBlock, not drop it.
+    expect(captured?.content.kind).toBe('wordprocessing');
+    if (captured?.content.kind !== 'wordprocessing') {
+      throw new Error('expected a wordprocessing ContentDocument');
+    }
+    const contentImage = captured.content.sections.flatMap((s) => s.blocks).find((b) => b.kind === 'image');
+    expect(contentImage).toMatchObject({ kind: 'image', format: 'png', widthPt: 96, heightPt: 48 });
+
+    // The LayoutDocument this conversion built internally placed a real, positioned LayoutImage on the page, sized in points, distinct from the two text paragraphs either side of it.
+    const layoutImage = captured.layout?.pages[0]?.items.find((item): item is Extract<LayoutItem, { kind: 'image' }> => item.kind === 'image');
+    expect(layoutImage).toBeDefined();
+    expect(layoutImage?.widthPt).toBe(96);
+    expect(layoutImage?.heightPt).toBe(48);
+    expect(captured.layout?.images[layoutImage!.imageId]).toMatchObject({ format: 'png' });
+
+    // The PRODUCED PDF BYTES THEMSELVES actually embed the image as a real XObject, not just the intermediate LayoutDocument -- readPdf (this repo's own PDF reader) parses the PDF back and recovers the identical positioned image, proving the picture survived the full write path into genuine PDF content, not merely the layout stage.
+    const reparsed = readPdf(pdfBytes);
+    const reparsedImage = reparsed.pages[0]?.items.find((item): item is Extract<LayoutItem, { kind: 'image' }> => item.kind === 'image');
+    expect(reparsedImage).toBeDefined();
+    expect(reparsedImage?.widthPt).toBeCloseTo(96, 5);
+    expect(reparsedImage?.heightPt).toBeCloseTo(48, 5);
+    expect(reparsed.images[reparsedImage!.imageId]).toMatchObject({ format: 'png' });
+  });
+
   it('throws when the signal is already aborted', () => {
     const controller = new AbortController();
     controller.abort();
