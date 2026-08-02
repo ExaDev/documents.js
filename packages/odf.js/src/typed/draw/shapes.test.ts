@@ -568,3 +568,48 @@ describe('readDrawPageContent: vector rotation via draw:transform -- reuses the 
     expect(vector.rotationDeg).toBeUndefined();
   });
 });
+
+describe('readDrawPageContent / walkDrawShapes: paintOrder stamping', () => {
+  it('stamps the resolved zIndex onto each ContentVector, in addition to using it to sort the vectors array', () => {
+    const rectA = el('draw:rect', { 'draw:z-index': '5', 'svg:x': '0pt', 'svg:y': '0pt', 'svg:width': '10pt', 'svg:height': '10pt' });
+    const rectB = el('draw:rect', { 'draw:z-index': '1', 'svg:x': '0pt', 'svg:y': '0pt', 'svg:width': '10pt', 'svg:height': '10pt' });
+    const { vectors } = readDrawPageContent([rectA, rectB], { parts: {} });
+    expect(vectors.map((v) => v.paintOrder)).toEqual([1, 5]);
+  });
+
+  it('stamps a document-encounter fallback index (not just undefined) when draw:z-index is absent', () => {
+    const rectA = el('draw:rect', { 'svg:x': '0pt', 'svg:y': '0pt', 'svg:width': '10pt', 'svg:height': '10pt' });
+    const rectB = el('draw:rect', { 'svg:x': '0pt', 'svg:y': '0pt', 'svg:width': '10pt', 'svg:height': '10pt' });
+    const { vectors } = readDrawPageContent([rectA, rectB], { parts: {} });
+    expect(vectors.map((v) => v.paintOrder)).toEqual([0, 1]);
+  });
+
+  it('stamps ONE shared monotonic paintOrder across shapes AND vectors, so cross-array relative paint order is recoverable by comparing the stamped values directly', () => {
+    const frame = el('draw:frame', { 'draw:z-index': '0', 'svg:x': '0pt', 'svg:y': '0pt', 'svg:width': '10pt', 'svg:height': '10pt' }, [
+      el('draw:text-box', {}, [el('text:p', {}, [txt('hi')])]),
+    ]);
+    const rect = el('draw:rect', { 'draw:z-index': '1', 'svg:x': '0pt', 'svg:y': '0pt', 'svg:width': '10pt', 'svg:height': '10pt' });
+    const { shapes, vectors } = readDrawPageContent([frame, rect], { parts: {} });
+    expect(shapes[0]?.paintOrder).toBe(0);
+    expect(vectors[0]?.paintOrder).toBe(1);
+  });
+
+  it('walkDrawShapes (odp) stamps the identical paintOrder value onto each ContentShape it produces, without reordering its own output array', () => {
+    const frameA = el('draw:frame', { 'draw:name': 'A', 'draw:z-index': '5', 'svg:x': '0pt', 'svg:y': '0pt', 'svg:width': '10pt', 'svg:height': '10pt' });
+    const frameB = el('draw:frame', { 'draw:name': 'B', 'draw:z-index': '1', 'svg:x': '20pt', 'svg:y': '0pt', 'svg:width': '10pt', 'svg:height': '10pt' });
+    const out: ContentShape[] = [];
+    walkDrawShapes([frameA, frameB], [], { parts: {} }, out);
+    // Document order is unchanged (A then B) -- only the stamped value reflects the real z-index.
+    expect(out.map((s) => s.name)).toEqual(['A', 'B']);
+    expect(out.map((s) => s.paintOrder)).toEqual([5, 1]);
+  });
+
+  it('walkDrawShapes threads its own indexState across a recursive draw:g walk, keeping the document-encounter fallback monotonic', () => {
+    const frameA = el('draw:frame', { 'draw:name': 'A', 'svg:x': '0pt', 'svg:y': '0pt', 'svg:width': '10pt', 'svg:height': '10pt' });
+    const frameB = el('draw:frame', { 'draw:name': 'B', 'svg:x': '20pt', 'svg:y': '0pt', 'svg:width': '10pt', 'svg:height': '10pt' });
+    const group = el('draw:g', {}, [frameB]);
+    const out: ContentShape[] = [];
+    walkDrawShapes([frameA, group], [], { parts: {} }, out);
+    expect(out.map((s) => s.paintOrder)).toEqual([0, 1]);
+  });
+});

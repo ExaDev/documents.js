@@ -108,20 +108,23 @@ function readOwnTransformFunctions(element: XmlElement): OdfTransformFunction[] 
 }
 
 // Walks a shape container's direct children (a draw:page, or a draw:g's own children) in document order, flattening any draw:g group into `out`'s own flat ContentShape list: `groupFunctions` accumulates each enclosing group's own draw:transform, INNERMOST first (a nested group's own functions are prepended ahead of whatever its own parent already accumulated), so composeOdfGroupTransform at the leaf applies them in the correct innermost-to-outermost order -- mirroring ooxml.js's own p:grpSp flattening (src/typed/pptx/read.ts's walkShapeTreeChildren/composeGroupTransform), adapted to ODF's own transform-function-list model instead of OOXML's chOff/chExt scaling. See this file's own top-of-file note on why a bare vector-primitive shape (not wrapped in a draw:frame) is silently skipped here.
-export function walkDrawShapes(children: readonly XmlNode[], groupFunctions: readonly OdfTransformFunction[], pkg: Package, out: ContentShape[]): void {
+//
+// `indexState` reuses the EXACT SAME paintOrderKey/DocumentIndexState machinery walkDrawPageContent (odg, further down this file) uses -- ContentShapeSchema carries the identical optional `paintOrder` field ContentSlideSchema's own shapes already declare, so a presentation shape gets the same real, spec-aware (draw:z-index-honouring, falling back to document-encounter order) paint-order value an odg drawing's shapes get, even though odp's own output array is never reordered by it (matching this walker's own pre-existing document-order-only behaviour -- only the STAMPED VALUE is new, not a new sort). Defaults to a fresh counter so every existing external call site (a single top-level call per slide, with no indexState argument) keeps working unchanged; recursion into a nested draw:g threads the SAME state onward so the counter stays monotonic across the whole slide, matching walkDrawPageContent's own threading discipline exactly.
+export function walkDrawShapes(children: readonly XmlNode[], groupFunctions: readonly OdfTransformFunction[], pkg: Package, out: ContentShape[], indexState: DocumentIndexState = { next: 0 }): void {
   for (const node of children) {
     if (node.type !== 'element') {
       continue;
     }
     if (node.tag === 'draw:frame') {
+      const zIndex = paintOrderKey(node, indexState);
       const shape = readDrawFrame(node, groupFunctions, pkg);
       if (shape !== undefined) {
-        out.push(shape);
+        out.push({ ...shape, paintOrder: zIndex });
       }
     } else if (node.tag === 'draw:g') {
       const ownFunctions = readOwnTransformFunctions(node);
       const nested = ownFunctions.length === 0 ? groupFunctions : [...ownFunctions, ...groupFunctions];
-      walkDrawShapes(node.children, nested, pkg, out);
+      walkDrawShapes(node.children, nested, pkg, out, indexState);
     }
   }
 }
@@ -321,7 +324,7 @@ function byPaintOrder<T>(items: readonly PaintOrdered<T>[]): T[] {
     .map((item) => item.value);
 }
 
-// Walks a draw:page's (or a nested draw:g's) own direct children, producing TWO paint-ordered lists -- shapes (draw:frame content, plus any unrecognised draw:custom-shape salvaged as text) and vectors (every recognised vector primitive) -- mirroring walkDrawShapes' own draw:frame/draw:g flattening exactly (indexState is threaded by reference so z-index fallback stays monotonic across the WHOLE recursive walk, not reset per group) but additionally recognising the vector-primitive element kinds odp's own walkDrawShapes deliberately does not (see this file's own top-of-file note). NOTE: ContentDrawPageSchema keeps `shapes` and `vectors` as two SEPARATE arrays with no shared ordering field between them (document-schema.js's own content.ts) -- paint order is therefore only preserved WITHIN each array, not relative to each other across the two; a shape and a vector that overlap on a real page have no way to record which one paints on top of the other in the CURRENT ContentDrawPageSchema shape. This is a real, tracked modelling gap in the shared schema, not something this reader can work around unilaterally.
+// Walks a draw:page's (or a nested draw:g's) own direct children, producing TWO paint-ordered lists -- shapes (draw:frame content, plus any unrecognised draw:custom-shape salvaged as text) and vectors (every recognised vector primitive) -- mirroring walkDrawShapes' own draw:frame/draw:g flattening exactly (indexState is threaded by reference so z-index fallback stays monotonic across the WHOLE recursive walk, not reset per group) but additionally recognising the vector-primitive element kinds odp's own walkDrawShapes deliberately does not (see this file's own top-of-file note). Every produced ContentShape/ContentVector is stamped with its own resolved `paintOrder: zIndex` (not merely sorted by it and then discarded) -- ContentDrawPageSchema still keeps `shapes` and `vectors` as two SEPARATE arrays with no shared field connecting them, but since BOTH now carry the real zIndex value from the SAME single monotonic indexState counter threaded across the whole walk, a caller CAN recover their true relative paint order by comparing `paintOrder` directly across the two arrays -- the cross-array ordering gap this comment used to describe as unrecoverable is closed by this stamping, even though the schema's own two-array shape is unchanged.
 function walkDrawPageContent(
   children: readonly XmlNode[],
   groupFunctions: readonly OdfTransformFunction[],
@@ -338,7 +341,7 @@ function walkDrawPageContent(
       const zIndex = paintOrderKey(node, indexState);
       const shape = readDrawFrame(node, groupFunctions, pkg);
       if (shape !== undefined) {
-        shapesOut.push({ value: shape, zIndex });
+        shapesOut.push({ value: { ...shape, paintOrder: zIndex }, zIndex });
       }
     } else if (node.tag === 'draw:g') {
       const ownFunctions = readOwnTransformFunctions(node);
@@ -348,35 +351,35 @@ function walkDrawPageContent(
       const zIndex = paintOrderKey(node, indexState);
       const vector = readDrawRectVector(node, groupFunctions, pkg);
       if (vector !== undefined) {
-        vectorsOut.push({ value: vector, zIndex });
+        vectorsOut.push({ value: { ...vector, paintOrder: zIndex }, zIndex });
       }
     } else if (node.tag === 'draw:ellipse' || node.tag === 'draw:circle') {
       const zIndex = paintOrderKey(node, indexState);
       const vector = readDrawEllipseVector(node, groupFunctions, pkg);
       if (vector !== undefined) {
-        vectorsOut.push({ value: vector, zIndex });
+        vectorsOut.push({ value: { ...vector, paintOrder: zIndex }, zIndex });
       }
     } else if (node.tag === 'draw:line') {
       const zIndex = paintOrderKey(node, indexState);
       const vector = readDrawLineVector(node, groupFunctions, pkg);
       if (vector !== undefined) {
-        vectorsOut.push({ value: vector, zIndex });
+        vectorsOut.push({ value: { ...vector, paintOrder: zIndex }, zIndex });
       }
     } else if (node.tag === 'draw:path' || node.tag === 'draw:polygon' || node.tag === 'draw:polyline') {
       const zIndex = paintOrderKey(node, indexState);
       const vector = readDrawPathVector(node, groupFunctions, pkg);
       if (vector !== undefined) {
-        vectorsOut.push({ value: vector, zIndex });
+        vectorsOut.push({ value: { ...vector, paintOrder: zIndex }, zIndex });
       }
     } else if (node.tag === 'draw:custom-shape') {
       const zIndex = paintOrderKey(node, indexState);
       const vector = readCustomShapeVector(node, groupFunctions, pkg);
       if (vector !== undefined) {
-        vectorsOut.push({ value: vector, zIndex });
+        vectorsOut.push({ value: { ...vector, paintOrder: zIndex }, zIndex });
       } else {
         const shape = readCustomShapeAsTextShape(node, groupFunctions, pkg);
         if (shape !== undefined) {
-          shapesOut.push({ value: shape, zIndex });
+          shapesOut.push({ value: { ...shape, paintOrder: zIndex }, zIndex });
         }
       }
     }
