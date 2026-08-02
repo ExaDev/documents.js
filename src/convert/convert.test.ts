@@ -1,6 +1,7 @@
 import type { ContentVector, DocumentPackage, LayoutItem, LayoutPath, LayoutRect, LayoutText } from 'document-schema.js';
 import { DOCUMENT_PACKAGE_FORMAT_VERSION } from 'document-schema.js';
 import { decodePackage, el, txt } from 'odf.js';
+import { decodePackage as decodeOoxmlPackage, readXlsxContent } from 'ooxml.js';
 import { describe, expect, it } from 'vitest';
 import { createDocx, openDocx } from '../edit/docx/editor';
 import { openOdp } from '../edit/odp/editor';
@@ -15,7 +16,7 @@ import { chapterOdtBytes, odmBytes, odmPackage } from '../test-support/odm';
 import { minimalOdpBytes } from '../test-support/odp';
 import { gridOdsBytes, minimalOdsBytes } from '../test-support/ods';
 import { minimalOdtBytes } from '../test-support/odt';
-import { docxToPdf, inlineOdmSectionToContentSection, odgToPdf, odmToPdf, OdmUnresolvedSectionError, odpToPdf, odsToPdf, odtToPdf, pdfToDocx, pdfToOdg, pdfToOdp, pdfToOds, pdfToOdt, pdfToPptx, pptxToPdf } from './convert';
+import { docxToPdf, inlineOdmSectionToContentSection, odgToPdf, odmToPdf, OdmUnresolvedSectionError, odpToPdf, odsToPdf, odsToXlsx, odtToPdf, pdfToDocx, pdfToOdg, pdfToOdp, pdfToOds, pdfToOdt, pdfToPptx, pdfToXlsx, pptxToPdf, xlsxToPdf } from './convert';
 
 // Builds the same intermediate LayoutDocument odgToPdf itself builds internally (readOdgContent -> convertDrawingToLayout), so a test can assert on 'path'/'rect' LayoutItem kinds directly -- readPdf's own content-stream interpreter does not reconstruct 'path'/'line'/'ellipse' items at all (pdf-codec's interpret.ts), so round-tripping the fixture's curve/z-order back through readPdf is not possible; this is the direct way to prove them.
 function layoutFromMinimalOdg() {
@@ -394,6 +395,54 @@ describe('pdfToOds', () => {
     const controller = new AbortController();
     controller.abort();
     expect(() => pdfToOds(pdfBytes, { signal: controller.signal })).toThrow();
+  });
+});
+
+describe('xlsxToPdf / pdfToXlsx', () => {
+  // xlsxToPdf/pdfToXlsx have no layout engine or reconstruction algorithm of their own (see convert.ts's own module comment on this pair) -- each composes the existing ods<->xlsx bridge with the existing ods<->pdf layout edge. The starting xlsx bytes here are real, ooxml.js-written bytes built via odsToXlsx over gridOdsBytes (the same fixture pdfToOds's own gridline-lattice test above uses), not a hand-fabricated ContentDocument, so this is a genuine xlsx -> PDF -> xlsx cycle through the full composed pipeline on both hops.
+  it('round-trips real xlsx bytes through xlsxToPdf then pdfToXlsx into a valid spreadsheet ContentDocument', () => {
+    const xlsxBytes = odsToXlsx(gridOdsBytes());
+
+    const pdfBytes = xlsxToPdf(xlsxBytes);
+    expect(pdfHeader(pdfBytes)).toBe('%PDF-');
+
+    const roundTrippedBytes = pdfToXlsx(pdfBytes);
+    const roundTripped = readXlsxContent(decodeOoxmlPackage(roundTrippedBytes)); // reread via ooxml.js's own real readXlsxContent parser, not this package's own writer echoing its input back
+    expect(roundTripped.kind).toBe('spreadsheet');
+    if (roundTripped.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+
+    const [sheet] = roundTripped.sheets;
+    expect(sheet).toBeDefined();
+    expect(sheet!.cells.length).toBeGreaterThan(0);
+
+    // pdfToOds's own honest-recovery guarantee (a bare string, never re-parsed into number/date/boolean, never claimed as a formula) survives the extra xlsx hop on each side unchanged, since neither xlsxToOds nor odsToXlsx reinterprets a cell's own value kind.
+    for (const cell of sheet!.cells) {
+      expect(cell.value).toEqual({ kind: 'string', value: cell.displayText });
+    }
+
+    const byRow = new Map<number, string[]>();
+    for (const cell of sheet!.cells) {
+      const row = byRow.get(cell.row) ?? [];
+      row[cell.column] = cell.displayText;
+      byRow.set(cell.row, row);
+    }
+    const rows = [...byRow.keys()].sort((a, b) => a - b).map((r) => byRow.get(r));
+    expect(rows).toEqual([
+      ['Alpha', 'Beta', 'Gamma'],
+      ['One', 'Two', 'Three'],
+      ['Four', 'Five', 'Six'],
+    ]);
+  });
+
+  it('throws when the signal is already aborted, on both hops', () => {
+    const xlsxBytes = odsToXlsx(gridOdsBytes());
+    const pdfBytes = xlsxToPdf(xlsxBytes);
+    const controller = new AbortController();
+    controller.abort();
+    expect(() => xlsxToPdf(xlsxBytes, { signal: controller.signal })).toThrow();
+    expect(() => pdfToXlsx(pdfBytes, { signal: controller.signal })).toThrow();
   });
 });
 
