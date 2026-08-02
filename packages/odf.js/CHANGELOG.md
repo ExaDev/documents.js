@@ -1,3 +1,44 @@
+# [2.0.0](https://github.com/ExaDev/odf.js/compare/v1.13.2...v2.0.0) (2026-08-02)
+
+
+* feat!: read .odb form and report structure from their own ODF sub-documents ([6b31d67](https://github.com/ExaDev/odf.js/commit/6b31d67885d10cf3da0abc53c721b264b26d0f09))
+
+
+### Features
+
+* add readOdfFormulaDocument producing a real ContentDocument formula kind ([1f45d01](https://github.com/ExaDev/odf.js/commit/1f45d01d00b44327f1449f9df9463e26997bf508))
+* read rotationDeg for draw:rect/ellipse/path/custom-shape vectors ([26d42a8](https://github.com/ExaDev/odf.js/commit/26d42a876cdbbdeb3d6c00452360a04ec9de726b))
+* read sheet and table cell background/borders/alignment from the ODF style cascade ([a6b80a9](https://github.com/ExaDev/odf.js/commit/a6b80a9c7c593c16e63bf8988f8629c68d8ed96c))
+* read svg:fill-rule and map draw:stroke to ContentStrokeSchema style ([d28155f](https://github.com/ExaDev/odf.js/commit/d28155f23de252915c2a721c20215a7c6461d520))
+* register the rpt: (Report Builder) ODF namespace ([503d92f](https://github.com/ExaDev/odf.js/commit/503d92f9bab2f08b2e34600e98d9e7e862ed7463))
+* stamp resolved paintOrder onto every ContentShape/ContentVector ([925ddb0](https://github.com/ExaDev/odf.js/commit/925ddb03b1cea07d1ea8a18aa173c226cbd50bb1))
+
+
+### BREAKING CHANGES
+
+* OdbInventory.forms and .reports are now OdbComponentInfo[]
+({ name, href, asTemplate? }) rather than string[], and their names come from
+content.xml's db:forms/db:reports registry rather than from manifest part paths.
+A form's or report's storage directory is named after an opaque persistent name
+(forms/Obj11), not after the form or report, so deriving names from part paths
+returned "Obj11" on real output instead of "SalesForm"; db:component is the only
+place the user-visible name exists, and it carries the href alongside it.
+
+All of this is grounded in a new real fixture,
+src/typed/odb/fixtures/form-and-report.odb: an embedded-Firebird .odb with a
+live SALES table, a saved query, a bound form with a label, a list box and a
+nested sub-form, and a Report Builder report with two nested groups, per-group
+SUM footers and a grand total. It was generated through LibreOffice's own
+in-process UNO API and never hand-edited, then reopened from disk by LibreOffice
+to confirm it reads back correctly.
+
+Two shapes in it contradict what the schema alone suggests, and both would have
+been got wrong by assumption: rpt:detail is nested inside the innermost
+rpt:group rather than sitting beside the other bands, and a group's key is a
+formula (rpt:HASCHANGED("REGION")) rather than a bare column name, with
+prefix-character grouping expressed through a generated report-level
+rpt:function instead of any group attribute.
+
 ## [1.13.2](https://github.com/ExaDev/odf.js/compare/v1.13.1...v1.13.2) (2026-08-02)
 
 
