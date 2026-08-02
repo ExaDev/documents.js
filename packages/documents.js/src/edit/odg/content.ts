@@ -1,6 +1,7 @@
 import type { ContentDocument, ContentShape, ContentVector } from 'document-schema.js';
 import type { Package } from 'odf.js';
 import { base64ToBytes } from 'odf.js';
+import { mergeByPaintOrder } from '../../model/paint-order';
 import { populateParagraph } from '../odt/content';
 import { createOdg } from './editor';
 import type { OdgPage } from './page';
@@ -17,12 +18,13 @@ export function buildOdgPackage(content: ContentDocument): Package {
   }
   for (const page of content.pages) {
     const odgPage = editor.addPage();
-    // Vectors are appended before shapes, matching src/layout/drawing.ts's own convertDrawingToLayout convention (its own top-of-file note: "every vector paints first, every shape paints after" -- the fixed, documented choice for the one real gap in ContentDrawPageSchema, which keeps shapes/vectors as two independently paint-ordered arrays with no shared ordering field between them). Appending in this same order here keeps a rebuilt-from-Content odg page painting identically to how convertDrawingToLayout would already lay the SAME content out.
-    for (const vector of page.vectors) {
-      appendVector(odgPage, vector);
-    }
-    for (const shape of page.shapes) {
-      appendShape(odgPage, shape);
+    // Appended in true paint order, merged across the page's two arrays through the shared paintOrder field (src/model/paint-order.ts) -- the identical merge src/layout/drawing.ts's own convertDrawingToLayout applies when laying the SAME content out, so a rebuilt-from-Content odg page paints exactly as its layout would. Document order IS paint order in a written .odg (no draw:z-index is ever emitted -- see OdgPage's own note), so appending in merged order is the whole of what is needed here.
+    for (const entry of mergeByPaintOrder(page.vectors, page.shapes)) {
+      if (entry.kind === 'vector') {
+        appendVector(odgPage, entry.value);
+      } else {
+        appendShape(odgPage, entry.value);
+      }
     }
   }
   return editor.toPackage();
