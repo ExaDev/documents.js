@@ -15,8 +15,8 @@ importers:
         specifier: ^0.8.3
         version: 0.8.3
       markdown-codec:
-        specifier: github:ExaDev/markdown-codec#11342229e6e6b7c0a773af199b1d0352611c9c6b
-        version: https://codeload.github.com/ExaDev/markdown-codec/tar.gz/11342229e6e6b7c0a773af199b1d0352611c9c6b
+        specifier: github:ExaDev/markdown-codec#beda0a89d92fffd153d5dcd05d767b404b721cda
+        version: https://codeload.github.com/ExaDev/markdown-codec/tar.gz/beda0a89d92fffd153d5dcd05d767b404b721cda
       odf.js:
         specifier: ^1.10.3
         version: 1.10.3
@@ -1670,8 +1670,8 @@ packages:
     resolution: {integrity: sha512-hXdUTZYIVOt1Ex//jAQi+wTZZpUpwBj/0QsOzqegb3rGMMeJiSEu5xLHnYfBrRV4RH2+OCSOO95Is/7x1WJ4bw==}
     engines: {node: '>=10'}
 
-  markdown-codec@https://codeload.github.com/ExaDev/markdown-codec/tar.gz/11342229e6e6b7c0a773af199b1d0352611c9c6b:
-    resolution: {gitHosted: true, integrity: sha512-UsMhsETVkafySx1/B/5d+/NJoNFlyEutQdQBuK4jg8hTAXnEz43nsMSilRcmIeVMtJGGWFljCLut/Cp+qSRrkg==, tarball: https://codeload.github.com/ExaDev/markdown-codec/tar.gz/11342229e6e6b7c0a773af199b1d0352611c9c6b}
+  markdown-codec@https://codeload.github.com/ExaDev/markdown-codec/tar.gz/beda0a89d92fffd153d5dcd05d767b404b721cda:
+    resolution: {gitHosted: true, integrity: sha512-plymcEzOr7cUt/XLd4b5tzvVeJ6CYgBzvLXOtXHPnRT7UdLfAk1YXS4rupEvp31qs1tvxHKflEmSJjLqsWzYPw==, tarball: https://codeload.github.com/ExaDev/markdown-codec/tar.gz/beda0a89d92fffd153d5dcd05d767b404b721cda}
     version: 0.0.0
     engines: {node: '>=20'}
 
@@ -4172,7 +4172,7 @@ snapshots:
     dependencies:
       semver: 7.8.5
 
-  markdown-codec@https://codeload.github.com/ExaDev/markdown-codec/tar.gz/11342229e6e6b7c0a773af199b1d0352611c9c6b:
+  markdown-codec@https://codeload.github.com/ExaDev/markdown-codec/tar.gz/beda0a89d92fffd153d5dcd05d767b404b721cda:
     dependencies:
       document-schema.js: 1.7.0
       zod: 4.4.3

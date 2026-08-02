@@ -7,6 +7,6 @@ minimumReleaseAgeExclude:
   - odf.js
   - pdf-codec
 
-# markdown-codec is temporarily consumed via a pinned git commit (package.json's own "markdown-codec": "github:ExaDev/markdown-codec#<sha>" dependency) rather than a published npm version, pending that package's own npm trusted-publisher setup -- a git-hosted dependency needs its own "prepare" script (husky && tsdown --config-loader unrun) to produce dist/, which pnpm refuses to run automatically unless explicitly allowlisted here.
+# markdown-codec is temporarily consumed via a pinned git commit (package.json's own "markdown-codec": "github:ExaDev/markdown-codec#<sha>" dependency) rather than a published npm version, pending that package's own npm trusted-publisher setup. Its dist/ is committed and ships prebuilt in the git tarball (see that package's own README), so the only lifecycle script pnpm needs to run for it is "prepare": "husky" -- harmless (a no-op outside a real git checkout) but still gated behind allowBuilds like any other git-hosted dependency script.
 allowBuilds:
-  markdown-codec@https://codeload.github.com/ExaDev/markdown-codec/tar.gz/11342229e6e6b7c0a773af199b1d0352611c9c6b: true
+  markdown-codec@https://codeload.github.com/ExaDev/markdown-codec/tar.gz/beda0a89d92fffd153d5dcd05d767b404b721cda: true
