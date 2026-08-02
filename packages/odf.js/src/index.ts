@@ -135,7 +135,7 @@ export type { OdgDocument } from './typed/odg/read';
 export { readOds } from './typed/ods/read';
 export type { OdsDocument } from './typed/ods/read';
 
-export { readOdfFormula } from './typed/formula/read';
+export { readOdfFormula, readOdfFormulaDocument } from './typed/formula/read';
 export type { OdfFormulaDocument } from './typed/formula/read';
 
 export { readOdm } from './typed/odm/read';

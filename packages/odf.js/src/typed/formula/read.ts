@@ -1,4 +1,5 @@
-import type { LayoutMetadata } from 'document-schema.js';
+import type { ContentDocument, LayoutMetadata } from 'document-schema.js';
+import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
 import type { XmlElement, XmlNode } from '../../model/node';
 import type { Package } from '../../model/package';
 import { attrValue, elementsWithTag, rootElement } from '../../xml/query';
@@ -74,7 +75,7 @@ function findStarMathAnnotation(mathRoot: XmlElement): string | undefined {
   return undefined;
 }
 
-// Package -> OdfFormulaDocument. Throws only when content.xml itself, or a MathML root within it (see findMathRoot), is missing -- a genuinely unusable package, mirroring every other odf.js typed reader's own "missing required structural element" throw convention. `mathml` is the MathML root's own children (its real content -- typically a single <semantics> element wrapping the presentation MathML plus any <annotation>s, per real LibreOffice output; occasionally, for hand-authored presentation-only MathML with no <semantics> wrapper, the presentation elements directly), returned as the raw, lossless XmlNode[] this reader read them as -- there is no document-schema.js pivot type for MathML content to project into, and none is needed: MathML is already a standalone, well-defined external standard a future MathML-consuming layout engine can walk directly.
+// Package -> OdfFormulaDocument. Throws only when content.xml itself, or a MathML root within it (see findMathRoot), is missing -- a genuinely unusable package, mirroring every other odf.js typed reader's own "missing required structural element" throw convention. `mathml` is the MathML root's own children (its real content -- typically a single <semantics> element wrapping the presentation MathML plus any <annotation>s, per real LibreOffice output; occasionally, for hand-authored presentation-only MathML with no <semantics> wrapper, the presentation elements directly), returned as the raw, lossless XmlNode[] this reader read them as -- see readOdfFormulaDocument below for the document-schema.js-pivot-shaped alternative built on top of this same result.
 export function readOdfFormula(pkg: Package): OdfFormulaDocument {
   const contentPart = pkg.parts[CONTENT_PART];
   if (contentPart?.kind !== 'xml') {
@@ -89,4 +90,18 @@ export function readOdfFormula(pkg: Package): OdfFormulaDocument {
   const starMath = findStarMathAnnotation(mathRoot);
 
   return starMath === undefined ? { mathml: mathRoot.children, metadata } : { starMath, mathml: mathRoot.children, metadata };
+}
+
+// Package -> a real document-schema.js ContentDocument of kind 'formula'. Built directly on readOdfFormula's own result -- same throw behaviour, same metadata, same raw mathml/starMath -- just reshaped into the ContentDocumentSchema 'formula' variant document-schema.js 2.0.0 now defines, for a caller that wants the shared pivot type rather than this reader's own bespoke OdfFormulaDocument shape. readOdfFormula itself is unchanged and remains the right call for a caller that wants the raw, lossless data with no pivot-schema shaping at all.
+//
+// `mathml` here is odf.js's own XmlNode[] (this package's local, hand-written recursive element type); the object literal below assigns it straight into ContentFormula's own `mathml: MathMlNode[]` field, checked structurally against this function's own `ContentDocument` return type, with NO cast anywhere. XmlNode and MathMlNode are independently-defined structural mirrors of each other (see this module's own top-of-file note and src/interop.test.ts-style guards elsewhere in this family), not a shared class or branded type, so this return statement compiling unmodified is itself the live proof that document-schema.js's MathMlNode transcription is a genuine structural supertype of XmlNode.
+export function readOdfFormulaDocument(pkg: Package): ContentDocument {
+  const { mathml, starMath, metadata } = readOdfFormula(pkg);
+
+  return {
+    kind: 'formula',
+    formatVersion: CONTENT_FORMAT_VERSION,
+    metadata,
+    formula: starMath === undefined ? { mathml } : { mathml, starMath },
+  };
 }

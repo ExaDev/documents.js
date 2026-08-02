@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Package } from '../../model/package';
 import type { XmlElement } from '../../model/node';
 import { el, txt } from '../../xml/fragment';
-import { readOdfFormula } from './read';
+import { readOdfFormula, readOdfFormulaDocument } from './read';
 
 // The math root below is copied, element-for-element, from a GENUINE LibreOffice 26.2 .odf's own content.xml -- built via a headless UNO Basic macro (private:factory/smath, Formula set to "f(x) = {x^2} over {2} + sqrt {x}", saved with the "math8" filter) and inspected directly after unzipping the result. It is deliberately NOT hand-simplified: the real fence/stretchy/form attributes on the parenthesis <mo> elements, the nested <mrow> wrapping, and the exact <semantics>/<annotation> shape are all real LibreOffice output, confirming both (a) a bare "math" root tag with a DEFAULT xmlns (not a "math:" prefix -- see read.ts's own top-of-file note) and (b) a real StarMath annotation nested two levels down (<math><semantics><annotation>).
 function realFormulaMathRoot(): XmlElement {
@@ -129,5 +129,33 @@ describe('readOdfFormula', () => {
     const mathRoot = el('math', { xmlns: 'http://www.w3.org/1998/Math/MathML' }, [el('mi', {}, [txt('y')])]);
     const pkg: Package = { parts: { 'content.xml': { kind: 'xml', nodes: [el('office:document-content', {}, [el('office:body', {}, [mathRoot])])] } } };
     expect(readOdfFormula(pkg).mathml).toEqual([el('mi', {}, [txt('y')])]);
+  });
+});
+
+describe('readOdfFormulaDocument', () => {
+  it('wraps a genuine LibreOffice-produced formula into a real ContentDocument of kind \'formula\', carrying the identical mathml/starMath/metadata readOdfFormula itself reads', () => {
+    const document = readOdfFormulaDocument(realFormulaPackage());
+    expect(document.kind).toBe('formula');
+    if (document.kind !== 'formula') {
+      throw new Error('expected a formula-kind ContentDocument');
+    }
+    expect(document.formatVersion).toBe(2);
+    expect(document.metadata.title).toBe('Pythagoras');
+    expect(document.formula.starMath).toBe('f(x) = {x^2} over {2} + sqrt {x}');
+    expect(document.formula.mathml).toEqual(readOdfFormula(realFormulaPackage()).mathml);
+  });
+
+  it('omits starMath from the formula field when readOdfFormula itself found none', () => {
+    const pkg: Package = { parts: { 'content.xml': { kind: 'xml', nodes: [el('math', { xmlns: 'http://www.w3.org/1998/Math/MathML' }, [el('mi', {}, [txt('x')])])] } } };
+    const document = readOdfFormulaDocument(pkg);
+    if (document.kind !== 'formula') {
+      throw new Error('expected a formula-kind ContentDocument');
+    }
+    expect('starMath' in document.formula).toBe(false);
+  });
+
+  it('throws the identical readOdfFormula error for a package with no MathML root, since it is built directly on readOdfFormula', () => {
+    const pkg: Package = { parts: { 'content.xml': { kind: 'xml', nodes: [el('office:document-content', {}, [el('office:body')])] } } };
+    expect(() => readOdfFormulaDocument(pkg)).toThrow(/MathML/);
   });
 });
