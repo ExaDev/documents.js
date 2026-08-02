@@ -1,3 +1,12 @@
+## [1.60.3](https://github.com/ExaDev/documents.js/compare/v1.60.2...v1.60.3) (2026-08-02)
+
+
+### Bug Fixes
+
+* adapt spreadsheet layout and ods editing to document-schema.js 2.0.0 ([0466c2b](https://github.com/ExaDev/documents.js/commit/0466c2b8073ddd6e86418c8d0ef9fa0853ceca4c))
+* bridge ContentDocument across markdown-codec's older document-schema.js ([6ec001b](https://github.com/ExaDev/documents.js/commit/6ec001bd7a0434ae7f3dea4ff21032a1871d09da))
+* use CONTENT_FORMAT_VERSION 2 in editor tests, document formula-kind scope ([1300e55](https://github.com/ExaDev/documents.js/commit/1300e55e8b209d1646a48078b845e11888d9fbbf))
+
 ## [1.60.2](https://github.com/ExaDev/documents.js/compare/v1.60.1...v1.60.2) (2026-08-02)
 
 
