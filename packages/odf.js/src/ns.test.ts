@@ -30,12 +30,17 @@ describe('ODF_NAMESPACES', () => {
     expect(ODF_NAMESPACES.presentation).toBe('urn:oasis:names:tc:opendocument:xmlns:presentation:1.0');
   });
 
-  it('every namespace URI is version-pinned at ":1.0" or a fixed "-compatible" suffix, never a document-version-dependent number', () => {
+  it('every namespace URI is version-pinned at ":1.0" or a fixed "-compatible" suffix, never a document-version-dependent number -- except rpt:, which predates OASIS standardisation and keeps its own openoffice.org-hosted URI unchanged', () => {
     for (const [prefix, uri] of Object.entries(ODF_NAMESPACES)) {
-      expect(uri.endsWith(':1.0') || uri.startsWith('http://www.w3.org/') || uri.startsWith('http://purl.org/'), `${prefix} -> ${uri}`).toBe(
-        true,
-      );
+      expect(
+        uri.endsWith(':1.0') || uri.startsWith('http://www.w3.org/') || uri.startsWith('http://purl.org/') || uri.startsWith('http://openoffice.org/'),
+        `${prefix} -> ${uri}`,
+      ).toBe(true);
     }
+  });
+
+  it('pins rpt: (OpenOffice.org Report Builder) to its real, non-OASIS namespace, verified from LibreOffice\'s own bundled reportbuilder.jar class constant pool strings', () => {
+    expect(ODF_NAMESPACES.rpt).toBe('http://openoffice.org/2005/report');
   });
 });
 

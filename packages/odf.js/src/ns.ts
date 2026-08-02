@@ -39,6 +39,8 @@ export const ODF_NAMESPACES = Object.freeze({
   manifest: 'urn:oasis:names:tc:opendocument:xmlns:manifest:1.0',
   // Confirmed against the real OASIS ODF 1.3 RelaxNG schema (docs.oasis-open.org/office/OpenDocument/v1.3/csprd02/schemas/OpenDocument-schema-v1.3.rng), not pattern-matched -- follows the same "...:<name>:1.0" convention as chart:/form:/presentation:, unlike the fo:/svg:/smil: "-compatible" traps above.
   db: 'urn:oasis:names:tc:opendocument:xmlns:database:1.0',
+  // TRAP: this is NOT an OASIS-minted "urn:oasis:names:tc:opendocument:xmlns:report:1.0"-shaped URI like every db:/chart:/form: entry above -- rpt: (OpenOffice.org Report Builder, the Pentaho-derived report-definition vocabulary LibreOffice still bundles as its embedded report designer) predates its own OASIS standardisation and keeps its original openoffice.org-hosted namespace unchanged. Confirmed directly from the real Java class-file constant pool strings inside LibreOffice's own bundled `reportbuilder.jar` (`/Applications/LibreOffice.app/Contents/Resources/java/reportbuilder.jar`), not pattern-matched or guessed from the prefix name.
+  rpt: 'http://openoffice.org/2005/report',
 }) satisfies Readonly<Record<string, string>>;
 
 export type OdfNamespacePrefix = keyof typeof ODF_NAMESPACES;
