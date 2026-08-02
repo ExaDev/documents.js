@@ -1,3 +1,10 @@
+## [1.8.1](https://github.com/ExaDev/document-schema.js/compare/v1.8.0...v1.8.1) (2026-08-02)
+
+
+### Bug Fixes
+
+* don't flag or fix an alias whose source is mutated elsewhere ([5802704](https://github.com/ExaDev/document-schema.js/commit/58027045e666135b6e52ffdfb411244d7cdc435d))
+
 # [1.8.0](https://github.com/ExaDev/document-schema.js/compare/v1.7.1...v1.8.0) (2026-08-02)
 
 
