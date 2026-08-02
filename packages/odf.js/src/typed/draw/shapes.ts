@@ -1,4 +1,4 @@
-import type { Box, Color, ContentBlock, ContentImageBlock, ContentShape, ContentStroke, ContentVector } from 'document-schema.js';
+import type { Box, Color, ContentBlock, ContentImageBlock, ContentShape, ContentStroke, ContentStrokeStyle, ContentVector } from 'document-schema.js';
 import type { XmlElement, XmlNode } from '../../model/node';
 import type { Package } from '../../model/package';
 import { attrValue, childrenWithTag, elementsWithTag } from '../../xml/query';
@@ -134,18 +134,26 @@ export function walkDrawShapes(children: readonly XmlNode[], groupFunctions: rea
 //
 // FILL/STROKE reading (readOdfFillAndStroke) was verified against real LibreOffice 26.2 .odg output (same macro-built fixtures as typed/shared/path.ts's own top-of-file note): a shape's fill/stroke live on its OWN graphic-family automatic style, walked via the SAME resolveStyleElementChain root-first cascade readFrameInsets above already uses (a shape can inherit fill/stroke from its style:parent-style-name chain exactly as it can inherit padding). draw:fill-color / svg:stroke-color+svg:stroke-width being ABSENT means "no fill"/"no stroke" (confirmed: a plain draw:line's own automatic style carries svg:stroke-* but no draw:fill-color at all -- lines have no area). An EXPLICIT draw:fill="none" / draw:stroke="none" was also confirmed (a rectangle with FillStyle/LineStyle set to NONE via the UNO API round-trips with literal draw:graphic-properties draw:fill="none" draw:stroke="none") and overrides any color/width also present in an earlier, less specific link of the cascade.
 //
+// FILL-RULE: svg:fill-rule is real, spec-defined ODF vocabulary (confirmed against the OASIS schema reference -- style:graphic-properties carries it via the text:style-graphic-fill-properties-attlist attribute group, enumerated to exactly "nonzero"/"evenodd", the same two values ContentVectorSchema's own path-variant fillRule field models) -- read directly here, the same one-to-one mapping this file already applies elsewhere (e.g. a custom-shape preset's own draw:type). Whether real LibreOffice output ever actually emits it (as opposed to always leaving self-intersecting paths on the nonzero default) was not re-verified against a live headless LibreOffice render for this change -- the same headless-soffice-hang constraint documented in the sibling documents.js package's own README blocked that -- but it is unambiguous, real, spec-valid vocabulary regardless of how often a given producer chooses to emit it, exactly like this file's own draw:z-index handling below.
+//
+// STROKE STYLE: draw:stroke itself is enumerated to exactly "none"/"solid"/"dash" (confirmed against the OASIS schema reference) -- there is no "dotted" or "double" value at the ODF attribute level at all. "dash" maps onto ContentStrokeStyleSchema's own 'dashed' member directly and unambiguously; that mapping is implemented here. Distinguishing a genuinely DOTTED pattern from a DASHED one would need inspecting the style's own referenced draw:stroke-dash element (draw:dots1/draw:dots1-length/draw:dots2/draw:dots2-length/draw:distance -- a repeating dot/dash run-length pattern, not a simple flag) and classifying short lengths as dots versus long ones as dashes: there is no ODF-declared threshold for that split, so any cutoff this reader picked would be an invented magic number, not a value read from the format -- left unresolved, deliberately, rather than guessed. "double" is not merely unread here: ODF's own vector-stroke model has no double-line rendering concept at all (unlike ContentBorderSchema's border context, where "double" is a genuine, distinct border style) -- a real, permanent model boundary, not a gap this reader could close by reading a different attribute.
+//
 // OUT OF SCOPE, named explicitly per this task's own brief -- none of these are silently dropped, they are documented, bounded approximations:
 // - gradient/bitmap/hatch fills (draw:fill="gradient"/"bitmap"/"hatch") render as a flat colour: if the style
 // ALSO carries a direct draw:fill-color (real LibreOffice output sometimes does, as a fallback swatch), that is used; otherwise fill resolves to undefined rather than resolving the actual gradient/bitmap/hatch definition (a whole separate style-part lookup this reader does not attempt).
-// - dashed/dotted strokes (draw:stroke="dash") are read/rendered as an ordinary SOLID stroke of the same
-//   colour/width -- the dash pattern itself (style:stroke-dash) is not resolved.
+// - the exact dash/dot run-length pattern of a "dash"-mode stroke (style:stroke-dash) is still not resolved --
+//   only the solid/dashed distinction itself is (see STROKE STYLE above).
 // - transparency/opacity (draw:opacity, svg:stroke-opacity) is not read at all; every fill/stroke is treated as
 //   fully opaque, matching Color's own plain-RGB shape (no alpha channel).
-function readOdfFillAndStroke(element: XmlElement, pkg: Package): { fill: Color | undefined; stroke: ContentStroke | undefined } {
+type OdfFillRule = 'nonzero' | 'evenodd';
+
+function readOdfFillAndStroke(element: XmlElement, pkg: Package): { fill: Color | undefined; fillRule: OdfFillRule | undefined; stroke: ContentStroke | undefined } {
   const styleName = attrValue(element, 'draw:style-name');
   const { elements } = resolveStyleElementChain(styleName, 'graphic', pkg);
   let fill: Color | undefined;
+  let fillRule: OdfFillRule | undefined;
   let stroke: ContentStroke | undefined;
+  let strokeStyle: ContentStrokeStyle | undefined;
   for (const styleElement of elements) {
     const props = childrenWithTag(styleElement, 'style:graphic-properties')[0];
     if (props === undefined) {
@@ -161,10 +169,20 @@ function readOdfFillAndStroke(element: XmlElement, pkg: Package): { fill: Color 
         fill = parsedFill;
       }
     }
+    const fillRuleValue = attrValue(props, 'svg:fill-rule');
+    if (fillRuleValue === 'nonzero' || fillRuleValue === 'evenodd') {
+      fillRule = fillRuleValue;
+    }
     const strokeMode = attrValue(props, 'draw:stroke');
     if (strokeMode === 'none') {
       stroke = undefined;
+      strokeStyle = undefined;
     } else {
+      if (strokeMode === 'dash') {
+        strokeStyle = 'dashed';
+      } else if (strokeMode === 'solid') {
+        strokeStyle = 'solid';
+      }
       const strokeColorValue = attrValue(props, 'svg:stroke-color');
       const strokeWidthValue = attrValue(props, 'svg:stroke-width');
       const strokeColor = strokeColorValue === undefined ? undefined : parseOdfColor(strokeColorValue);
@@ -174,7 +192,7 @@ function readOdfFillAndStroke(element: XmlElement, pkg: Package): { fill: Color 
       }
     }
   }
-  return { fill, stroke };
+  return { fill, fillRule, stroke: stroke === undefined || strokeStyle === undefined ? stroke : { ...stroke, style: strokeStyle } };
 }
 
 // Resolves a vector primitive's own geometry -- frame (svg:x/y/width/height) AND rotationDeg (draw:transform's rotate()+translate()) -- reusing the EXACT SAME transform machinery (resolveOdfShapeGeometry, composeOdfGroupTransform) readDrawFrame above already uses for a draw:frame, composed with any enclosing draw:g's own transform. Nothing about ContentVectorSchema's own rect/ellipse/path variants makes this a smaller problem than the ContentShape case: each already carries a rotationDeg field of its own, so there is no separate rotation-resolution logic to write -- this is a direct extension of what already resolves rotation correctly, not a reimplementation.
@@ -248,8 +266,8 @@ function readDrawPathVector(element: XmlElement, groupFunctions: readonly OdfTra
   }
 
   const subpaths = buildOdfSubpaths(rawSubpaths, viewBox, frame);
-  const { fill, stroke } = readOdfFillAndStroke(element, pkg);
-  return { kind: 'path', frame, rotationDeg: geometry.rotationDeg, subpaths, fill, stroke };
+  const { fill, fillRule, stroke } = readOdfFillAndStroke(element, pkg);
+  return { kind: 'path', frame, rotationDeg: geometry.rotationDeg, subpaths, fill, fillRule, stroke };
 }
 
 // A small, deliberately narrow subset of draw:custom-shape presets, identified by draw:enhanced-geometry's own draw:type attribute -- verified against real LibreOffice 26.2 output (the same macro-built fixtures as typed/shared/path.ts's own top-of-file note; LibreOffice's "Basic Shapes" gallery rectangle/rounded rectangle/ellipse each round-trip with draw:type="rectangle"/"round-rectangle"/"ellipse" respectively). Their OWN draw:enhanced-path (a "M ?f7 0 X 0 ?f8 L ..." formula-driven mini-language with ?fN/$N expression references and ODF-specific commands like X/Y/U that are NOT part of plain SVG at all) is deliberately never parsed -- evaluating draw:enhanced-geometry's formula language is explicitly out of scope for this reader (a v1.5+ gap, tracked, not attempted here) -- instead, each recognised preset maps to the CLOSEST ContentVector approximation built from the shape's own frame alone: 'ellipse' maps to the ellipse variant; 'rectangle' AND 'round-rectangle' both map to the plain rect variant (ContentVectorSchema has no rounded-corner concept at all, so a rounded rectangle reads with sharp corners -- a documented, bounded approximation, not a silent one).

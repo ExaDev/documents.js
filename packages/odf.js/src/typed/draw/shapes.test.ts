@@ -613,3 +613,98 @@ describe('readDrawPageContent / walkDrawShapes: paintOrder stamping', () => {
     expect(out.map((s) => s.paintOrder)).toEqual([0, 1]);
   });
 });
+
+describe('readDrawPageContent: svg:fill-rule (path vectors only -- rect/ellipse have no fillRule field at all)', () => {
+  function pathWithProps(extra: Record<string, string> = {}, styleAttrs: Record<string, string> = {}): { path: XmlElement; pkg: Package } {
+    const gr1 = graphicStyle('gr1', { 'draw:fill-color': '#ff0000', ...styleAttrs });
+    const pkg: Package = { parts: { 'content.xml': contentPackage([gr1]) } };
+    const path = el('draw:path', {
+      'draw:style-name': 'gr1',
+      'svg:x': '0pt', 'svg:y': '0pt', 'svg:width': '100pt', 'svg:height': '100pt',
+      'svg:viewBox': '0 0 4000 4000',
+      'svg:d': 'M0 4000h3000c1000 0 1000-4000-1000-4000z',
+      ...extra,
+    });
+    return { path, pkg };
+  }
+
+  it('reads svg:fill-rule="evenodd" from the path\'s own graphic-family style', () => {
+    const { path, pkg } = pathWithProps({}, { 'svg:fill-rule': 'evenodd' });
+    const { vectors } = readDrawPageContent([path], pkg);
+    const vector = vectors[0];
+    if (vector?.kind !== 'path') {
+      throw new Error('expected a path vector');
+    }
+    expect(vector.fillRule).toBe('evenodd');
+  });
+
+  it('reads svg:fill-rule="nonzero" explicitly too, not just treating its absence as nonzero', () => {
+    const { path, pkg } = pathWithProps({}, { 'svg:fill-rule': 'nonzero' });
+    const { vectors } = readDrawPageContent([path], pkg);
+    const vector = vectors[0];
+    if (vector?.kind !== 'path') {
+      throw new Error('expected a path vector');
+    }
+    expect(vector.fillRule).toBe('nonzero');
+  });
+
+  it('leaves fillRule undefined when the style carries no svg:fill-rule at all -- defaults to nonzero downstream, but is not fabricated here', () => {
+    const { path, pkg } = pathWithProps();
+    const { vectors } = readDrawPageContent([path], pkg);
+    const vector = vectors[0];
+    if (vector?.kind !== 'path') {
+      throw new Error('expected a path vector');
+    }
+    expect(vector.fillRule).toBeUndefined();
+  });
+});
+
+describe('readDrawPageContent: stroke style (solid/dashed) from draw:stroke', () => {
+  it('maps draw:stroke="dash" onto ContentStrokeSchema\'s own "dashed" member', () => {
+    const gr1 = graphicStyle('gr1', { 'svg:stroke-color': '#000000', 'svg:stroke-width': '1pt', 'draw:stroke': 'dash' });
+    const pkg: Package = { parts: { 'content.xml': contentPackage([gr1]) } };
+    const rect = el('draw:rect', { 'draw:style-name': 'gr1', 'svg:x': '0pt', 'svg:y': '0pt', 'svg:width': '10pt', 'svg:height': '10pt' });
+    const { vectors } = readDrawPageContent([rect], pkg);
+    const vector = vectors[0];
+    if (vector?.kind !== 'rect') {
+      throw new Error('expected a rect vector');
+    }
+    expect(vector.stroke?.style).toBe('dashed');
+  });
+
+  it('maps an explicit draw:stroke="solid" onto ContentStrokeSchema\'s own "solid" member', () => {
+    const gr1 = graphicStyle('gr1', { 'svg:stroke-color': '#000000', 'svg:stroke-width': '1pt', 'draw:stroke': 'solid' });
+    const pkg: Package = { parts: { 'content.xml': contentPackage([gr1]) } };
+    const rect = el('draw:rect', { 'draw:style-name': 'gr1', 'svg:x': '0pt', 'svg:y': '0pt', 'svg:width': '10pt', 'svg:height': '10pt' });
+    const { vectors } = readDrawPageContent([rect], pkg);
+    const vector = vectors[0];
+    if (vector?.kind !== 'rect') {
+      throw new Error('expected a rect vector');
+    }
+    expect(vector.stroke?.style).toBe('solid');
+  });
+
+  it('leaves style undefined when draw:stroke is absent -- no fabricated default', () => {
+    const gr1 = graphicStyle('gr1', { 'svg:stroke-color': '#000000', 'svg:stroke-width': '1pt' });
+    const pkg: Package = { parts: { 'content.xml': contentPackage([gr1]) } };
+    const rect = el('draw:rect', { 'draw:style-name': 'gr1', 'svg:x': '0pt', 'svg:y': '0pt', 'svg:width': '10pt', 'svg:height': '10pt' });
+    const { vectors } = readDrawPageContent([rect], pkg);
+    const vector = vectors[0];
+    if (vector?.kind !== 'rect') {
+      throw new Error('expected a rect vector');
+    }
+    expect(vector.stroke?.style).toBeUndefined();
+  });
+
+  it('applies to draw:line strokes too, since readOdfFillAndStroke is shared -- not just rect/ellipse/path', () => {
+    const gr1 = graphicStyle('gr1', { 'svg:stroke-color': '#000000', 'svg:stroke-width': '1pt', 'draw:stroke': 'dash' });
+    const pkg: Package = { parts: { 'content.xml': contentPackage([gr1]) } };
+    const line = el('draw:line', { 'draw:style-name': 'gr1', 'svg:x1': '0pt', 'svg:y1': '0pt', 'svg:x2': '10pt', 'svg:y2': '10pt' });
+    const { vectors } = readDrawPageContent([line], pkg);
+    const vector = vectors[0];
+    if (vector?.kind !== 'line') {
+      throw new Error('expected a line vector');
+    }
+    expect(vector.stroke.style).toBe('dashed');
+  });
+});
