@@ -28,6 +28,8 @@ import type {
   MarkdownTableNode,
   MarkdownTableRowNode,
 } from '../ast/ast';
+import type { MarkdownDiagnosticSink } from '../diagnostics/diagnostics';
+import { MarkdownDiagnosticCodes, NOOP_DIAGNOSTIC_SINK } from '../diagnostics/diagnostics';
 import { matchHtmlBlockStart, matchesHtmlBlockEnd } from '../html/html';
 import { unescapeString } from '../inline/entity';
 import type { InlineParseOptions } from '../inline/inline';
@@ -39,6 +41,9 @@ import { finalizeListTightness, listsMatch, parseListMarker } from './list';
 import type { BlockHeadingLevel, BlockNodeKind } from './node';
 import { BlockNode, acceptsLines, canContain } from './node';
 import { fitRowToColumns, parseTableDelimiterRow, splitTableRow } from './table';
+
+// GFM 'Task list items (extension)': a list item is a task item when the first block directly inside it is a paragraph whose raw content begins with a task-list-item marker -- an optional-content left bracket, a space or `x`/`X`, a right bracket, then at least one space or tab before anything else. Matched against the paragraph's own accumulated raw content (leading indentation already stripped by the block phase), never against already-parsed inline nodes.
+const TASK_LIST_MARKER_PATTERN = /^\[([ xX])\][ \t]/;
 
 // spec 0.31.2, "Insecure characters": U+0000 must be replaced with U+FFFD.
 const NUL_REPLACEMENT = '�';
@@ -84,6 +89,9 @@ type ContinueResult = 'matched' | 'not-matched' | 'finished';
 export interface MarkdownParseOptions extends InlineParseOptions {
   // GFM's table extension. Enabled by default, matching this package's CommonMark+GFM target; the CommonMark conformance suite switches it off along with the other GFM toggles, since a delimiter row is ordinary paragraph text under CommonMark alone.
   readonly gfmTables?: boolean;
+  // GFM's task-list-item extension (`- [ ] foo` / `- [x] bar`). Enabled by default for the same reason; with it off, a leading `[ ]`/`[x]` is ordinary paragraph text, matching CommonMark's own reading (task lists are not part of CommonMark proper).
+  readonly gfmTaskLists?: boolean;
+  readonly sink?: MarkdownDiagnosticSink;
 }
 
 export interface ParsedMarkdown {
@@ -117,6 +125,7 @@ class BlockParser {
   readonly references = new Map<string, LinkReferenceDefinition>();
   private readonly document = new BlockNode('document', 1);
   private readonly tables: boolean;
+  private readonly sink: MarkdownDiagnosticSink;
   private tip: BlockNode = this.document;
   // The tip as it stood before the current line was processed, and the deepest block that line matched -- together they say exactly which blocks the line failed to continue, which closeUnmatchedBlocks then closes.
   private oldTip: BlockNode = this.document;
@@ -127,6 +136,7 @@ class BlockParser {
 
   constructor(options: MarkdownParseOptions) {
     this.tables = options.gfmTables ?? true;
+    this.sink = options.sink ?? NOOP_DIAGNOSTIC_SINK;
   }
 
   parse(source: string): BlockNode {
@@ -140,9 +150,21 @@ class BlockParser {
       }
     }
     while (this.tip.open) {
+      this.reportUnterminatedAtEof(this.tip);
       this.finalize(this.tip);
     }
     return this.document;
+  }
+
+  // Recover-tier diagnostics for a leaf block that reached end-of-input without ever meeting its own proper closing condition: a fenced code block whose closing fence never arrived, or an HTML block of type 1-5 (whose end condition is a pattern in the line's own text, not a blank line) that reached EOF without ever matching it. Types 6/7 end at a blank line OR at EOF alike -- both are the block's own ordinary, spec-legal end condition, so EOF is not a diagnostic there.
+  private reportUnterminatedAtEof(node: BlockNode): void {
+    if (node.kind === 'codeBlock' && node.fenced) {
+      this.sink({ code: MarkdownDiagnosticCodes.UNCLOSED_FENCE, severity: 'warning', message: `fenced code block starting at line ${String(node.startLine)} was never closed by a matching closing fence before the end of the document`, line: node.startLine });
+      return;
+    }
+    if (node.kind === 'htmlBlock' && !HTML_BLOCK_BLANK_LINE_END_TYPES.includes(node.htmlBlockType)) {
+      this.sink({ code: MarkdownDiagnosticCodes.UNTERMINATED_HTML_BLOCK, severity: 'warning', message: `HTML block (type ${String(node.htmlBlockType)}) starting at line ${String(node.startLine)} never met its own end condition before the end of the document`, line: node.startLine });
+    }
   }
 
   private incorporateLine(rawText: string): void {
@@ -401,7 +423,7 @@ class BlockParser {
     }
     this.closeUnmatchedBlocks();
     // Definitions at the front of the paragraph are consumed here rather than at paragraph finalisation, since what is left decides whether there is a heading at all: `[foo]: /url` followed by `---` is a definition and a thematic break, not an empty heading.
-    paragraph.content = extractDefinitions(paragraph.content, this.references);
+    paragraph.content = extractDefinitions(paragraph.content, this.references, this.sink, paragraph.startLine);
     if (isBlankContent(paragraph.content)) {
       return 'none';
     }
@@ -559,7 +581,7 @@ class BlockParser {
   private finalizeContent(node: BlockNode): void {
     switch (node.kind) {
       case 'paragraph':
-        node.content = extractDefinitions(node.content, this.references);
+        node.content = extractDefinitions(node.content, this.references, this.sink, node.startLine);
         // A paragraph that held nothing but link reference definitions leaves no block behind at all. The same is true of one truncated to nothing by a table promotion, which is why this tests the remaining content rather than whether any definition was found.
         if (isBlankContent(node.content)) {
           node.unlink();
@@ -600,8 +622,30 @@ function toHeadingNode(node: BlockNode, references: LinkReferenceMap, options: M
   return { type: 'heading', level: node.level, style: node.setext ? 'setext' : 'atx', children: toInlineChildren(node.content, references, options) };
 }
 
+// Extracts a task-list-item marker from the FIRST child of a list item, mutating that child's own raw content in place to strip the marker (so the paragraph's own inline content, parsed afterwards, never sees it). Returns undefined -- never a false/absent sentinel -- when the item is not a task item at all, matching MarkdownListItemNode.checked's own "absent, not false" convention.
+function extractTaskListMarker(itemChildren: readonly BlockNode[]): boolean | undefined {
+  const first = itemChildren[0];
+  if (first?.kind !== 'paragraph') {
+    return undefined;
+  }
+  const match = TASK_LIST_MARKER_PATTERN.exec(first.content);
+  if (match === null) {
+    return undefined;
+  }
+  first.content = first.content.slice(match[0].length);
+  return match[1] !== ' ';
+}
+
+function toListItemNode(item: BlockNode, references: LinkReferenceMap, options: MarkdownParseOptions): MarkdownListItemNode {
+  const taskLists = options.gfmTaskLists ?? true;
+  const checked = taskLists ? extractTaskListMarker(item.children) : undefined;
+  return checked === undefined
+    ? { type: 'listItem', children: toAstBlocks(item.children, references, options) }
+    : { type: 'listItem', checked, children: toAstBlocks(item.children, references, options) };
+}
+
 function toListNode(node: BlockNode, references: LinkReferenceMap, options: MarkdownParseOptions): MarkdownListNode {
-  const children: MarkdownListItemNode[] = node.children.map((item) => ({ type: 'listItem', children: toAstBlocks(item.children, references, options) }));
+  const children: MarkdownListItemNode[] = node.children.map((item) => toListItemNode(item, references, options));
   const data = node.listData;
   if (data?.type === 'ordered') {
     return { type: 'list', markerType: 'ordered', orderedDelimiter: data.delimiter, start: data.start, tight: node.tight, children };
@@ -615,13 +659,18 @@ function toTableRow(cells: readonly string[], header: boolean, references: LinkR
 }
 
 function toTableNode(node: BlockNode, references: LinkReferenceMap, options: MarkdownParseOptions): MarkdownTableNode {
+  const sink = options.sink ?? NOOP_DIAGNOSTIC_SINK;
   const columnCount = node.alignments.length;
   const rows: MarkdownTableRowNode[] = [toTableRow(fitRowToColumns(splitTableRow(node.headerLine), columnCount), true, references, options)];
   for (const rowLine of node.content.split('\n')) {
     if (rowLine.trim().length === 0) {
       continue;
     }
-    rows.push(toTableRow(fitRowToColumns(splitTableRow(rowLine), columnCount), false, references, options));
+    const cells = splitTableRow(rowLine);
+    if (cells.length !== columnCount) {
+      sink({ code: MarkdownDiagnosticCodes.TABLE_CELL_COUNT_MISMATCH, severity: 'warning', message: `table row has ${String(cells.length)} cell(s), but the header row declares ${String(columnCount)}; the row is padded with empty cells or truncated to fit`, line: node.startLine });
+    }
+    rows.push(toTableRow(fitRowToColumns(cells, columnCount), false, references, options));
   }
   return { type: 'table', alignments: node.alignments, children: rows };
 }

@@ -4,6 +4,8 @@
 //
 // The resulting table is document-global and forward-visible -- `[foo]` in the first paragraph resolves against a `[foo]: /url` on the last line, including one nested inside a block quote or a list item -- so it must be complete before any block's inlines are parsed. src/block/block.ts guarantees that structurally by parsing every block first and every inline second, rather than by ordering the two carefully.
 
+import type { MarkdownDiagnosticSink } from '../diagnostics/diagnostics';
+import { MarkdownDiagnosticCodes, NOOP_DIAGNOSTIC_SINK } from '../diagnostics/diagnostics';
 import type { LinkReferenceDefinition } from '../inline/link';
 import { isBlankRemainderOfLine, matchLinkLabel, normalizeLinkLabel, parseLinkDestination, parseLinkTitle, skipInlineWhitespace } from '../inline/link';
 
@@ -60,17 +62,29 @@ function parseDefinition(content: string, start: number): ParsedDefinition | und
   };
 }
 
-// Consumes every definition at the front of `content`, recording each in `references`, and returns what is left to parse as inline content. spec 0.31.2: "If there are multiple matching reference link definitions, the one that comes first in the document is used" -- so a later duplicate never overwrites an earlier one.
-export function extractDefinitions(content: string, references: Map<string, LinkReferenceDefinition>): string {
+// Consumes every definition at the front of `content`, recording each in `references`, and returns what is left to parse as inline content. spec 0.31.2: "If there are multiple matching reference link definitions, the one that comes first in the document is used" -- so a later duplicate never overwrites an earlier one, and the sink is told about the one that lost, as a recover-tier diagnostic (this is spec-legal markdown, not a parse error).
+export function extractDefinitions(content: string, references: Map<string, LinkReferenceDefinition>, sink: MarkdownDiagnosticSink = NOOP_DIAGNOSTIC_SINK, startLine = 0): string {
   let cursor = 0;
   for (;;) {
     const parsed = parseDefinition(content, cursor);
     if (parsed === undefined) {
       return content.slice(cursor);
     }
-    if (!references.has(parsed.label)) {
+    if (references.has(parsed.label)) {
+      sink({ code: MarkdownDiagnosticCodes.DUPLICATE_LINK_REFERENCE, severity: 'warning', message: `link reference definition "${parsed.label}" was already defined earlier in the document; this later definition is ignored`, line: startLine + countNewlines(content, cursor) });
+    } else {
       references.set(parsed.label, parsed.definition);
     }
     cursor = parsed.end;
   }
+}
+
+function countNewlines(content: string, upTo: number): number {
+  let count = 0;
+  for (let index = 0; index < upTo && index < content.length; index += 1) {
+    if (content.charAt(index) === '\n') {
+      count += 1;
+    }
+  }
+  return count;
 }

@@ -4,6 +4,8 @@
 
 import { describe, expect, it } from 'vitest';
 import type { MarkdownBlockNode } from '../ast/ast';
+import { MarkdownDiagnosticCodes } from '../diagnostics/diagnostics';
+import { createDiagnosticCollector } from '../test-support/diagnostics';
 import { parseMarkdown } from './block';
 
 function parse(source: string): MarkdownBlockNode[] {
@@ -154,5 +156,62 @@ describe('HTML blocks', () => {
 describe('GFM extension toggles', () => {
   it('reads a delimiter row as ordinary paragraph text when tables are disabled', () => {
     expect(parseMarkdown('| a |\n| - |', { gfmTables: false }).document.children).toMatchObject([{ type: 'paragraph' }]);
+  });
+});
+
+describe('GFM task list items', () => {
+  it('reads [ ] and [x] as an unchecked/checked task list item, stripping the marker from the item\'s own text', () => {
+    expect(parse('- [ ] todo\n- [x] done')).toEqual([
+      {
+        type: 'list',
+        markerType: 'bullet',
+        bulletMarker: '-',
+        tight: true,
+        children: [
+          { type: 'listItem', checked: false, children: [{ type: 'paragraph', children: [{ type: 'text', value: 'todo' }] }] },
+          { type: 'listItem', checked: true, children: [{ type: 'paragraph', children: [{ type: 'text', value: 'done' }] }] },
+        ],
+      },
+    ]);
+  });
+
+  it('leaves an ordinary item with no checked field at all, not false', () => {
+    const [list] = parse('- foo');
+    expect(list).toMatchObject({ children: [{ type: 'listItem' }] });
+    if (list?.type !== 'list') throw new Error('expected a list node');
+    expect(list.children[0]?.checked).toBeUndefined();
+  });
+
+  it('reads a leading [ ]/[x] as ordinary text when task lists are disabled', () => {
+    const [list] = parseMarkdown('- [ ] foo', { gfmTaskLists: false }).document.children;
+    expect(list).toMatchObject({ type: 'list', children: [{ type: 'listItem', children: [{ type: 'paragraph', children: [{ type: 'text', value: '[ ] foo' }] }] }] });
+    if (list?.type !== 'list') throw new Error('expected a list node');
+    expect(list.children[0]?.checked).toBeUndefined();
+  });
+});
+
+describe('recover-tier diagnostics', () => {
+  it('reports an unclosed fenced code block reaching end-of-input', () => {
+    const collector = createDiagnosticCollector();
+    parseMarkdown('```js\ncode', { sink: collector.sink });
+    expect(collector.has(MarkdownDiagnosticCodes.UNCLOSED_FENCE)).toBe(true);
+  });
+
+  it('reports an HTML comment block that never meets its own closing "-->" before end-of-input', () => {
+    const collector = createDiagnosticCollector();
+    parseMarkdown('<!-- comment\nmore text', { sink: collector.sink });
+    expect(collector.has(MarkdownDiagnosticCodes.UNTERMINATED_HTML_BLOCK)).toBe(true);
+  });
+
+  it('reports a table row whose cell count does not match the header row', () => {
+    const collector = createDiagnosticCollector();
+    parseMarkdown('| a | b |\n| - | - |\n| 1 | 2 | 3 |', { sink: collector.sink });
+    expect(collector.has(MarkdownDiagnosticCodes.TABLE_CELL_COUNT_MISMATCH)).toBe(true);
+  });
+
+  it('reports a second link reference definition sharing an already-defined label', () => {
+    const collector = createDiagnosticCollector();
+    parseMarkdown('[foo]: /first\n[foo]: /second', { sink: collector.sink });
+    expect(collector.has(MarkdownDiagnosticCodes.DUPLICATE_LINK_REFERENCE)).toBe(true);
   });
 });

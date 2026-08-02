@@ -1,18 +1,18 @@
 // The whole parser -- block phase and inline phase together -- measured against the REAL CommonMark 0.31.2 conformance corpus (assets/commonmark/spec.json), every example in every section, not a subset.
 //
-// Each example is parsed by parseMarkdown (src/block/block.ts) and rendered back to HTML by src/test-support/render-html.ts, then compared byte for byte against the corpus's own `html` field. GFM's own extensions are switched OFF here: a bare `http://example.com` in paragraph text is plain text under CommonMark and a link under GFM, a `~~x~~` is literal tildes, and a delimiter row is ordinary paragraph text -- this suite measures CommonMark, and src/gfm-conformance.test.ts measures the extensions against their own corpus.
+// Each example is parsed by parseMarkdown (src/block/block.ts) and rendered back to HTML by src/html/render.ts (the real CommonMark-HTML conformance oracle), then compared byte for byte against the corpus's own `html` field. GFM's own extensions are switched OFF here: a bare `http://example.com` in paragraph text is plain text under CommonMark and a link under GFM, a `~~x~~` is literal tildes, a delimiter row is ordinary paragraph text, and a leading `[ ]`/`[x]` is ordinary paragraph text rather than a task-list marker -- this suite measures CommonMark, and src/gfm-conformance.test.ts measures the extensions against their own corpus.
 //
 // Anything not yet passing is named individually in src/test-support/conformance-exclusions.ts, with a test below asserting that every excluded example genuinely still fails -- see that file for why the list can only shrink.
 
 import { describe, expect, it } from 'vitest';
 import { parseMarkdown } from './block/block';
+import { renderDocumentToHtml } from './html/render';
 import { COMMONMARK_EXCLUSIONS } from './test-support/conformance-exclusions';
-import { renderDocumentToHtml } from './test-support/render-html';
 import type { SpecExample } from './test-support/spec-corpus';
 import { loadSpecExamples } from './test-support/spec-corpus';
 
 // CommonMark, not CommonMark+GFM -- see this file's own top-of-file note.
-const COMMONMARK_ONLY = { gfmAutolinks: false, gfmStrikethrough: false, gfmTables: false };
+const COMMONMARK_ONLY = { gfmAutolinks: false, gfmStrikethrough: false, gfmTables: false, gfmTaskLists: false };
 
 function render(example: SpecExample): string {
   return renderDocumentToHtml(parseMarkdown(example.markdown, COMMONMARK_ONLY).document);
