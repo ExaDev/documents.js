@@ -73,7 +73,7 @@
   "dependencies": {
     "document-schema.js": "^1.7.0",
     "fflate": "^0.8.3",
-    "markdown-codec": "file:../markdown-codec",
+    "markdown-codec": "github:ExaDev/markdown-codec#11342229e6e6b7c0a773af199b1d0352611c9c6b",
     "odf.js": "^1.10.3",
     "ooxml.js": "^2.2.3",
     "pdf-codec": "^1.1.3",
