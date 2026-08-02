@@ -1,5 +1,6 @@
 import type {
   ContentCellValue,
+  ContentDocument,
   ContentSheet,
   ContentSheetCell,
   ContentSheetPrintRange,
@@ -13,7 +14,6 @@ import type {
 import { LAYOUT_FORMAT_VERSION } from 'document-schema.js';
 import type { LayoutColor } from '../model/color';
 import { COLOR_BLACK, rgbHexToColor } from '../model/color';
-import type { ContentDocument } from '../model/content';
 import type { Alignment } from '../model/style';
 import { DEFAULT_LAYOUT_FONT } from '../model/style';
 import { throwIfAborted } from '../ports/abort';

@@ -1,10 +1,9 @@
 import { bytesToBase64 } from 'ooxml.js';
 import { describe, expect, it } from 'vitest';
-import type { ContentImageBlock, ContentParagraph, ContentRun, ContentSection, ContentShape, ContentSlide, ContentTable, LayoutImage, LayoutItem, LayoutLink, LayoutRect, LayoutText } from 'document-schema.js';
+import type { ContentDocument, ContentImageBlock, ContentParagraph, ContentRun, ContentSection, ContentShape, ContentSlide, ContentTable, LayoutImage, LayoutItem, LayoutLink, LayoutRect, LayoutText } from 'document-schema.js';
+import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
 import { createDocx } from '../edit/docx/editor';
 import { createPptx } from '../edit/pptx/editor';
-import { CONTENT_FORMAT_VERSION } from '../model/content';
-import type { ContentDocument } from '../model/content';
 import { readDocxContent } from '../ooxml/docx/read';
 import { readPptxContent } from '../ooxml/pptx/read';
 import type { TextMeasurer } from 'pdf-codec';

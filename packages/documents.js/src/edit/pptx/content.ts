@@ -1,7 +1,6 @@
+import type { ContentDocument, ContentShape } from 'document-schema.js';
 import type { Package } from 'ooxml.js';
 import { base64ToBytes } from 'ooxml.js';
-import type { ContentShape } from 'document-schema.js';
-import type { ContentDocument } from '../../model/content';
 import type { DrawingParagraphInit } from './shape';
 import { createPptx } from './editor';
 import type { PptxSlide } from './slide';

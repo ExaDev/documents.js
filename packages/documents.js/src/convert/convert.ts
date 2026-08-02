@@ -1,5 +1,5 @@
-import type { ContentBlock, ContentSection, DocumentPackage, LayoutDocument } from 'document-schema.js';
-import { COLOR_BLACK, DOCUMENT_PACKAGE_FORMAT_VERSION, LAYOUT_FORMAT_VERSION } from 'document-schema.js';
+import type { ContentBlock, ContentDocument, ContentSection, DocumentPackage, LayoutDocument } from 'document-schema.js';
+import { COLOR_BLACK, CONTENT_FORMAT_VERSION, DOCUMENT_PACKAGE_FORMAT_VERSION, LAYOUT_FORMAT_VERSION } from 'document-schema.js';
 import type { OdmSection, Package } from 'odf.js';
 import { decodePackage, encodePackage as encodeOdfPackage, readOdfMetadata, readOdfParagraph, readOdfTable, readOdm } from 'odf.js';
 import { buildXlsxPackage, decodePackage as decodeOoxmlPackage, encodePackage, readXlsxContent } from 'ooxml.js';
@@ -17,8 +17,6 @@ import { convertWordprocessingToLayout } from '../layout/engine';
 import { reconstructDrawing, reconstructPresentation, reconstructSpreadsheet, reconstructWordprocessing } from '../layout/reconstruct';
 import { convertSpreadsheetToLayout } from '../layout/sheets';
 import { convertPresentationToLayout } from '../layout/slides';
-import type { ContentDocument } from '../model/content';
-import { CONTENT_FORMAT_VERSION } from '../model/content';
 import type { Margins } from '../model/geometry';
 import { flipY, PAGE_SIZE_A4 } from '../model/geometry';
 import { readOdfFormulaContent } from '../odf/formula/read';
@@ -294,7 +292,7 @@ export function odsToXlsx(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBrid
   return encodePackage(buildXlsxPackage(content)); // ooxml.js's own encodePackage -- buildXlsxPackage produces an OOXML package.
 }
 
-// xlsx bytes -> ods bytes, the reverse of odsToXlsx: readXlsxContent(decodePackage(xlsxBytes)) -> buildOdsPackage -> odf.js's encodePackage. readXlsxContent's declared return type is document-schema.js's own ContentDocument union (ooxml.js re-exports it, rather than documents.js's local, independently-versioned equivalent -- see src/model/content.ts's own module comment on why the two stay separate types), but the two are structurally identical schemas, so the narrowed value passes straight into buildOdsPackage without any conversion step.
+// xlsx bytes -> ods bytes, the reverse of odsToXlsx: readXlsxContent(decodePackage(xlsxBytes)) -> buildOdsPackage -> odf.js's encodePackage. readXlsxContent's declared return type is document-schema.js's own ContentDocument union (ooxml.js re-exports it), the exact same type this package imports directly, so the narrowed value passes straight into buildOdsPackage without any conversion step.
 export function xlsxToOds(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBridgeOptions): Uint8Array<ArrayBuffer> {
   throwIfAborted(options?.signal);
   const pkg = decodeOoxmlPackage(bytes); // ooxml.js's own decodePackage -- xlsx is an OOXML package.

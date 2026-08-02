@@ -1,7 +1,6 @@
-import type { Box, ContentDrawPage, ContentPathPoint, ContentVector, LayoutDocument, LayoutImageAsset, LayoutItem, LayoutPage, LayoutSubpath } from 'document-schema.js';
+import type { Box, ContentDocument, ContentDrawPage, ContentPathPoint, ContentVector, LayoutDocument, LayoutImageAsset, LayoutItem, LayoutPage, LayoutSubpath } from 'document-schema.js';
 import { LAYOUT_FORMAT_VERSION } from 'document-schema.js';
 import { flipY } from '../model/geometry';
-import type { ContentDocument } from '../model/content';
 import type { TextMeasurer } from 'pdf-codec';
 import { convertShape } from './slides';
 

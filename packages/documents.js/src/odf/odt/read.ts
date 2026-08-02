@@ -1,7 +1,7 @@
+import type { ContentDocument } from 'document-schema.js';
+import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
 import type { Package } from 'odf.js';
 import { findChildElement, readOdt, rootElement } from 'odf.js';
-import type { ContentDocument } from '../../model/content';
-import { CONTENT_FORMAT_VERSION } from '../../model/content';
 import type { EmbeddedFormula } from '../../model/formula';
 import { detectEmbeddedFormulaFrames } from '../formula/detect';
 import { buildFormulaPlaceholderBlock } from '../formula/placeholder';

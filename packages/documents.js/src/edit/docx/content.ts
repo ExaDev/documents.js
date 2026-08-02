@@ -1,7 +1,6 @@
+import type { ContentBlock, ContentDocument, ContentParagraph, ContentTable } from 'document-schema.js';
 import type { Package } from 'ooxml.js';
 import { base64ToBytes } from 'ooxml.js';
-import type { ContentBlock, ContentParagraph, ContentTable } from 'document-schema.js';
-import type { ContentDocument } from '../../model/content';
 import { ptToTwips } from '../../model/units';
 import type { DocxBody } from './editor';
 import { createDocx } from './editor';

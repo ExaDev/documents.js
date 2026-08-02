@@ -1,6 +1,5 @@
+import type { ContentDocument, ContentSheetCell } from 'document-schema.js';
 import type { Package } from 'odf.js';
-import type { ContentSheetCell } from 'document-schema.js';
-import type { ContentDocument } from '../../model/content';
 import { createOds } from './editor';
 import type { OdsSheet } from './sheet';
 

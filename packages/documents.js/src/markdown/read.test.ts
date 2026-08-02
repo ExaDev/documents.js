@@ -1,10 +1,10 @@
+import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
 import { describe, expect, it } from 'vitest';
-import { CONTENT_FORMAT_VERSION } from '../model/content';
 import { richMarkdownText, richMarkdownTextWithFrontMatter } from '../test-support/markdown';
 import { readMarkdownContent } from './read';
 
 describe('readMarkdownContent', () => {
-  it('produces a wordprocessing ContentDocument re-stamped with documents.js\'s own CONTENT_FORMAT_VERSION', () => {
+  it('produces a wordprocessing ContentDocument at the current CONTENT_FORMAT_VERSION', () => {
     const content = readMarkdownContent(richMarkdownText());
     expect(content.kind).toBe('wordprocessing');
     expect(content.formatVersion).toBe(CONTENT_FORMAT_VERSION);
