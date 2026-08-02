@@ -148,3 +148,72 @@ describe('OdgPathVector (draw:path)', () => {
     expect(() => vector.frame).toThrow(/removed/);
   });
 });
+
+// --- Rotation: the write-side inverse of odf.js's own resolveOdfShapeGeometry, mirroring OdpShape.rotationDeg ---
+
+describe('vector rotation', () => {
+  it('round-trips a rect\'s own rotationDeg and frame back through odf.js\'s own geometry resolver', () => {
+    const pkg = createEmptyOdgPackage();
+    const frame = { xPt: 10, yPt: 20, widthPt: 100, heightPt: 50 };
+    const element = buildRectElement(pkg, { frame, fill: RED });
+    const vector = new OdgBoxVector([element], element, pkg);
+    expect(vector.rotationDeg).toBeUndefined();
+
+    vector.rotationDeg = 30;
+    // Read back through resolveOdfShapeGeometry (what OdgBoxVector.frame/rotationDeg both consult, and what odf.js's own readDrawRectVector uses), not through the raw attributes -- a rotated element carries draw:transform and no svg:x/svg:y at all.
+    expect(vector.rotationDeg).toBeCloseTo(30, 6);
+    expect(vector.frame?.xPt).toBeCloseTo(frame.xPt, 6);
+    expect(vector.frame?.yPt).toBeCloseTo(frame.yPt, 6);
+    expect(vector.frame?.widthPt).toBeCloseTo(frame.widthPt, 6);
+    expect(vector.frame?.heightPt).toBeCloseTo(frame.heightPt, 6);
+  });
+
+  it('writes a real draw:transform and drops svg:x/svg:y when rotated, restoring them when the rotation is cleared', () => {
+    const pkg = createEmptyOdgPackage();
+    const element = buildEllipseElement(pkg, { frame: { xPt: 10, yPt: 20, widthPt: 100, heightPt: 50 } });
+    const vector = new OdgBoxVector([element], element, pkg);
+
+    vector.rotationDeg = 45;
+    expect(element.attributes.some((a) => a.name === 'draw:transform')).toBe(true);
+    expect(element.attributes.some((a) => a.name === 'svg:x')).toBe(false);
+
+    vector.rotationDeg = undefined;
+    expect(element.attributes.some((a) => a.name === 'draw:transform')).toBe(false);
+    expect(element.attributes.some((a) => a.name === 'svg:x')).toBe(true);
+    expect(vector.frame).toEqual({ xPt: 10, yPt: 20, widthPt: 100, heightPt: 50 });
+  });
+
+  it('keeps a rotation in place when only the frame is later changed', () => {
+    const pkg = createEmptyOdgPackage();
+    const element = buildRectElement(pkg, { frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 } });
+    const vector = new OdgBoxVector([element], element, pkg);
+    vector.rotationDeg = 20;
+    vector.frame = { xPt: 50, yPt: 60, widthPt: 300, heightPt: 150 };
+    expect(vector.rotationDeg).toBeCloseTo(20, 6);
+    expect(vector.frame?.xPt).toBeCloseTo(50, 6);
+    expect(vector.frame?.yPt).toBeCloseTo(60, 6);
+  });
+
+  it('round-trips a path vector\'s own rotationDeg, and still reparses its subpaths against the rotated frame', () => {
+    const pkg = createEmptyOdgPackage();
+    const frame = { xPt: 10, yPt: 20, widthPt: 80, heightPt: 40 };
+    const subpaths = [{ start: { xPt: 0, yPt: 0 }, closed: true, segments: [{ kind: 'line' as const, to: { xPt: 80, yPt: 0 } }, { kind: 'line' as const, to: { xPt: 80, yPt: 40 } }] }];
+    const element = buildPathElement(pkg, { frame, subpaths, fill: RED });
+    const vector = new OdgPathVector([element], element, pkg);
+
+    vector.rotationDeg = 15;
+    expect(vector.rotationDeg).toBeCloseTo(15, 6);
+    // subpaths re-derive from svg:viewBox + svg:d scaled against the resolved frame -- rotation lives on the frame, not in svg:d, so the local points are unchanged.
+    const [subpath] = vector.subpaths;
+    expect(subpath?.start).toEqual({ xPt: 0, yPt: 0 });
+    expect(subpath?.segments).toHaveLength(2);
+  });
+
+  it('throws rather than silently doing nothing when the element has no resolvable frame', () => {
+    const pkg = createEmptyOdgPackage();
+    const element = buildRectElement(pkg, { frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 } });
+    element.attributes = element.attributes.filter((a) => a.name !== 'svg:width' && a.name !== 'svg:height');
+    const vector = new OdgBoxVector([element], element, pkg);
+    expect(() => { vector.rotationDeg = 10; }).toThrow(/no resolvable frame/);
+  });
+});

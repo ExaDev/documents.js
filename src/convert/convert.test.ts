@@ -4,6 +4,7 @@ import { decodePackage, el, txt } from 'odf.js';
 import { decodePackage as decodeOoxmlPackage, readXlsxContent } from 'ooxml.js';
 import { describe, expect, it } from 'vitest';
 import { createDocx, openDocx } from '../edit/docx/editor';
+import { createOdg } from '../edit/odg/editor';
 import { openOdp } from '../edit/odp/editor';
 import { openOdt } from '../edit/odt/editor';
 import { createPptx, openPptx } from '../edit/pptx/editor';
@@ -664,6 +665,40 @@ describe('pdfToOdg', () => {
     expect(afterParagraph.runs.map((r) => r.text).join('')).toContain('Label');
     expect(Math.abs(afterShape!.frame.xPt - beforeShape!.frame.xPt)).toBeLessThan(20); // approximate: AFM-estimated, not the original explicit ODF frame
     expect(Math.abs(afterShape!.frame.yPt - beforeShape!.frame.yPt)).toBeLessThan(20);
+  });
+
+  // A rotated vector's own rotation genuinely reaches the page and comes back: convertDrawingToLayout resolves it into a LayoutPath of rotated corners (LayoutRect carries no rotation field of its own), writePath emits those as real PDF path operators, readPdf recovers them, and reconstructDrawing maps them back onto a ContentVector. What survives is the rotated GEOMETRY, not the rotationDeg field -- a PDF path records where the corners ended up, never that a right-angled box was turned to get there -- so the recovered vector is an unrotated 'path' whose four corners sit exactly where the rotation put them. That is the honest limit of the round trip, and it is checkable exactly, because a 90-degree turn of a wide rect about its own centre swaps that rect's width and height.
+  it('carries a rotated odg vector\'s rotation through odgToPdf then pdfToOdg as genuinely rotated recovered geometry', () => {
+    const editor = createOdg();
+    editor.pageSize = { widthPt: 400, heightPt: 300 };
+    const drawPage = editor.addPage();
+    drawPage.addRect({ frame: { xPt: 100, yPt: 100, widthPt: 120, heightPt: 40 }, fill: { r: 1, g: 0, b: 0 } }).rotationDeg = 90;
+
+    // The rotation survives a plain odg -> ContentDocument read first, as a real rotationDeg field.
+    const source = readOdgContent(editor.toPackage());
+    if (source.kind !== 'drawing') {
+      throw new Error('expected a drawing ContentDocument');
+    }
+    const sourceVector = source.pages[0]!.vectors[0]!;
+    expect(sourceVector.kind).toBe('rect');
+    if (sourceVector.kind !== 'rect') {
+      throw new Error('expected a rect vector');
+    }
+    expect(sourceVector.rotationDeg).toBeCloseTo(90, 4);
+
+    const roundTripped = readOdgContent(decodePackage(pdfToOdg(odgToPdf(editor.toBytes()))));
+    if (roundTripped.kind !== 'drawing') {
+      throw new Error('expected a drawing ContentDocument');
+    }
+    const recovered = roundTripped.pages[0]!.vectors[0]!;
+    expect(recovered.kind).toBe('path'); // a rotated rect is no longer an axis-aligned rect, so PDF can only carry it as a path
+
+    // The rotated rect's own bounding box is the source frame's width and height SWAPPED, still centred on the same point -- exactly what a 90-degree turn produces, and nothing an unrotated round trip could ever produce.
+    const box = vectorBoundingBox(recovered);
+    expect(closeTo(box.widthPt, 40, GEOMETRY_TOLERANCE_PT)).toBe(true);
+    expect(closeTo(box.heightPt, 120, GEOMETRY_TOLERANCE_PT)).toBe(true);
+    expect(closeTo(box.xPt + box.widthPt / 2, 160, GEOMETRY_TOLERANCE_PT)).toBe(true); // 100 + 120/2
+    expect(closeTo(box.yPt + box.heightPt / 2, 120, GEOMETRY_TOLERANCE_PT)).toBe(true); // 100 + 40/2
   });
 
   it('throws when the signal is already aborted', () => {

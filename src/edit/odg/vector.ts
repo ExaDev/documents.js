@@ -1,13 +1,16 @@
 import type { Package, XmlElement, XmlNode } from 'odf.js';
-import { buildOdfSubpaths, formatOdfLength, parseBox, parseLinePoints, parseOdfPathData, parseOdfViewBox } from 'odf.js';
+import { buildOdfSubpaths, formatOdfLength, parseLinePoints, parseOdfPathData, parseOdfViewBox, resolveOdfShapeGeometry } from 'odf.js';
 import type { Box, Color, ContentPathPoint, ContentStroke, ContentSubpath } from 'document-schema.js';
 import { attr } from 'ooxml.js';
 import { removeChild, setAttr } from '../../xml/edit';
 import { el } from '../../xml/fragment';
+import { applyOdfGeometry } from '../geometry';
 import { buildGraphicStyle, readGraphicFill, readGraphicStroke, setGraphicFill, setGraphicStroke } from './style';
 import { buildSvgPathData, buildSvgViewBox } from './svg-path';
 
-// Live-view classes over odg's own vector-primitive elements -- draw:rect/draw:ellipse/draw:line/draw:path, the geometry a drawing carries that a presentation typically doesn't (see odf.js's own typed/draw/shapes.ts top-of-file note, which this module's builders are the write-side counterpart to). Unlike OdpShape's draw:frame, NONE of these ever carry a draw:transform/rotation -- ContentVectorSchema's own rect/ellipse/path variants have no rotationDeg field at all (document-schema.js's content.ts; see shapes.ts's own resolveVectorFrame comment for why the reader discards it), so frame get/set here is always plain svg:x/y/width/height, never draw:transform.
+// Live-view classes over odg's own vector-primitive elements -- draw:rect/draw:ellipse/draw:line/draw:path, the geometry a drawing carries that a presentation typically doesn't (see odf.js's own typed/draw/shapes.ts top-of-file note, which this module's builders are the write-side counterpart to).
+//
+// ROTATION: a rect/ellipse/path vector carries a genuine rotationDeg, exactly as a draw:frame does. ContentVectorSchema models one on all three variants, odf.js's own readDrawRectVector/readDrawEllipseVector/readDrawPathVector each resolve one through resolveOdfShapeGeometry (the identical function readDrawFrame uses), and this module writes one back through applyOdfGeometry (src/edit/geometry.ts) -- the same shared write-side inverse OdpShape's own rotationDeg setter uses, rather than a second, independently-derived rotation convention. Frame get/set consequently goes through resolveOdfShapeGeometry too, never a bare svg:x/y read: a rotated element carries draw:transform and NO svg:x/svg:y at all, so reading the box attributes directly would silently report a rotated vector as having no frame. draw:line is the exception on every count -- two endpoints rather than a box, no draw:transform in odf.js's own reader, and no rotationDeg field on ContentVectorSchema's 'line' variant to carry one.
 //
 // Every constructed vector element carries an empty <text:p/> child, matching real LibreOffice output for every vector-primitive kind (confirmed against odf.js's own typed/shared/path.ts and typed/odg/read.test.ts ground-truth fixtures, and this package's own test-support/odg.ts) even though odf.js's own reader never actually reads it back for any ContentVector variant -- it is schema-valid, harmless, and keeps a freshly written .odg indistinguishable in shape from a real LibreOffice-authored one.
 
@@ -77,15 +80,23 @@ export class OdgBoxVector {
   }
 
   get frame(): Box | undefined {
-    return parseBox(this.live());
+    return resolveOdfShapeGeometry(this.live())?.frame;
   }
 
   set frame(value: Box) {
-    const node = this.live();
-    setAttr(node, 'svg:x', formatOdfLength(value.xPt));
-    setAttr(node, 'svg:y', formatOdfLength(value.yPt));
-    setAttr(node, 'svg:width', formatOdfLength(value.widthPt));
-    setAttr(node, 'svg:height', formatOdfLength(value.heightPt));
+    applyOdfGeometry(this.live(), value, this.rotationDeg);
+  }
+
+  get rotationDeg(): number | undefined {
+    return resolveOdfShapeGeometry(this.live())?.rotationDeg;
+  }
+
+  set rotationDeg(value: number | undefined) {
+    const currentFrame = this.frame;
+    if (currentFrame === undefined) {
+      throw new Error('cannot set rotationDeg on a vector with no resolvable frame (missing svg:width/svg:height)');
+    }
+    applyOdfGeometry(this.live(), currentFrame, value);
   }
 
   get fill(): Color | undefined {
@@ -242,15 +253,23 @@ export class OdgPathVector {
   }
 
   get frame(): Box | undefined {
-    return parseBox(this.live());
+    return resolveOdfShapeGeometry(this.live())?.frame;
   }
 
   set frame(value: Box) {
-    const node = this.live();
-    setAttr(node, 'svg:x', formatOdfLength(value.xPt));
-    setAttr(node, 'svg:y', formatOdfLength(value.yPt));
-    setAttr(node, 'svg:width', formatOdfLength(value.widthPt));
-    setAttr(node, 'svg:height', formatOdfLength(value.heightPt));
+    applyOdfGeometry(this.live(), value, this.rotationDeg);
+  }
+
+  get rotationDeg(): number | undefined {
+    return resolveOdfShapeGeometry(this.live())?.rotationDeg;
+  }
+
+  set rotationDeg(value: number | undefined) {
+    const currentFrame = this.frame;
+    if (currentFrame === undefined) {
+      throw new Error('cannot set rotationDeg on a vector with no resolvable frame (missing svg:width/svg:height)');
+    }
+    applyOdfGeometry(this.live(), currentFrame, value);
   }
 
   get fill(): Color | undefined {
@@ -274,7 +293,7 @@ export class OdgPathVector {
     const node = this.live();
     const viewBoxValue = attr(node, 'svg:viewBox');
     const dValue = attr(node, 'svg:d');
-    const frame = parseBox(node);
+    const frame = resolveOdfShapeGeometry(node)?.frame;
     if (viewBoxValue === undefined || dValue === undefined || frame === undefined) {
       return [];
     }

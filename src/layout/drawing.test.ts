@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ContentDocument, ContentDrawPage, ContentRun, ContentShape, ContentVector } from 'document-schema.js';
+import type { ContentDocument, ContentDrawPage, ContentRun, ContentShape, ContentVector, LayoutItem, LayoutPath } from 'document-schema.js';
 import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
 import type { TextMeasurer } from 'pdf-codec';
 import { convertDrawingToLayout } from './drawing';
@@ -179,5 +179,91 @@ describe('convertDrawingToLayout: multiple pages', () => {
     expect(layout.pages).toHaveLength(2);
     expect(layout.pages[0]).toMatchObject({ widthPt: 200, heightPt: 100 });
     expect(layout.pages[1]).toMatchObject({ widthPt: 300, heightPt: 150 });
+  });
+});
+
+// Narrows a recovered LayoutItem to a LayoutPath, failing the test loudly rather than asserting the type -- this repo forbids type assertions anywhere, tests included.
+function expectPath(item: LayoutItem | undefined): LayoutPath {
+  if (item?.kind !== 'path') {
+    throw new Error(`expected a LayoutPath item, got ${item?.kind ?? 'nothing'}`);
+  }
+  return item;
+}
+
+// --- Rotation: a rotated vector resolves into a LayoutPath, since LayoutRect/LayoutEllipse carry no rotation field ---
+
+describe('convertDrawingToLayout: vector rotation', () => {
+  // A 90-degree clockwise rotation of a square about its own centre lands every corner exactly on another corner's position, so the rotated result is checkable against exact coordinates rather than a tolerance on arbitrary trigonometry.
+  it('turns a rotated rect into a closed four-point LayoutPath whose corners are genuinely rotated about the frame centre', () => {
+    const vector: ContentVector = { kind: 'rect', frame: { xPt: 100, yPt: 100, widthPt: 40, heightPt: 20 }, rotationDeg: 90, fill: RED };
+    const [item] = convert([page({ vectors: [vector] })]).pages[0]!.items;
+    const [subpath] = expectPath(item).subpaths;
+    expect(subpath?.closed).toBe(true);
+    expect(subpath?.segments).toHaveLength(3); // start point + three line segments == four corners
+
+    // Unrotated PDF-space box is (100, 300-100-20=180, 40, 20), centre (120, 190). Rotating its bottom-left corner (100, 180) 90 degrees clockwise on screen about that centre gives (110, 210).
+    expect(subpath?.startXPt).toBeCloseTo(110, 6);
+    expect(subpath?.startYPt).toBeCloseTo(210, 6);
+    const corners = [{ x: subpath!.startXPt, y: subpath!.startYPt }, ...subpath!.segments.map((s) => ({ x: s.xPt, y: s.yPt }))];
+    // Rotation preserves the centroid, and a 90-degree turn swaps the box's own extents.
+    expect(corners.reduce((sum, c) => sum + c.x, 0) / 4).toBeCloseTo(120, 6);
+    expect(corners.reduce((sum, c) => sum + c.y, 0) / 4).toBeCloseTo(190, 6);
+    expect(Math.max(...corners.map((c) => c.x)) - Math.min(...corners.map((c) => c.x))).toBeCloseTo(20, 6);
+    expect(Math.max(...corners.map((c) => c.y)) - Math.min(...corners.map((c) => c.y))).toBeCloseTo(40, 6);
+  });
+
+  it('keeps the plain LayoutRect fast path for an unrotated rect, and for an explicit rotationDeg of 0', () => {
+    const unrotated: ContentVector = { kind: 'rect', frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 }, fill: RED };
+    const zero: ContentVector = { kind: 'rect', frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 }, rotationDeg: 0, fill: RED };
+    expect(convert([page({ vectors: [unrotated, zero] })]).pages[0]!.items.map((i) => i.kind)).toEqual(['rect', 'rect']);
+  });
+
+  it('turns a rotated ellipse into a LayoutPath of four cubics, still centred on its own frame centre', () => {
+    const vector: ContentVector = { kind: 'ellipse', frame: { xPt: 100, yPt: 100, widthPt: 40, heightPt: 20 }, rotationDeg: 30, fill: BLUE };
+    const [item] = convert([page({ vectors: [vector] })]).pages[0]!.items;
+    const [subpath] = expectPath(item).subpaths;
+    expect(subpath?.closed).toBe(true);
+    expect(subpath?.segments).toHaveLength(4);
+    expect(subpath?.segments.every((s) => s.kind === 'cubic')).toBe(true);
+
+    // The four on-curve axis endpoints stay symmetric about the centre under any rotation, so their own mean is exactly the centre.
+    const onCurve = subpath!.segments.map((s) => ({ x: s.xPt, y: s.yPt }));
+    expect(onCurve.reduce((sum, p) => sum + p.x, 0) / 4).toBeCloseTo(120, 6);
+    expect(onCurve.reduce((sum, p) => sum + p.y, 0) / 4).toBeCloseTo(190, 6);
+    // A rotated ellipse's own major axis is still its unrotated one, just turned: the start point sits exactly rx from the centre.
+    expect(Math.hypot(subpath!.startXPt - 120, subpath!.startYPt - 190)).toBeCloseTo(20, 6);
+  });
+
+  it('keeps the plain LayoutEllipse fast path for an unrotated ellipse', () => {
+    const vector: ContentVector = { kind: 'ellipse', frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 }, fill: BLUE };
+    expect(convert([page({ vectors: [vector] })]).pages[0]!.items.map((i) => i.kind)).toEqual(['ellipse']);
+  });
+
+  it('rotates a path vector\'s own points about its frame centre, still emitting one LayoutPath', () => {
+    const subpaths = [{ start: { xPt: 0, yPt: 0 }, closed: true, segments: [{ kind: 'line' as const, to: { xPt: 40, yPt: 0 } }, { kind: 'line' as const, to: { xPt: 40, yPt: 20 } }] }];
+    const plain: ContentVector = { kind: 'path', frame: { xPt: 100, yPt: 100, widthPt: 40, heightPt: 20 }, subpaths, fill: RED };
+    const rotated: ContentVector = { ...plain, rotationDeg: 90 };
+    const plainPath = expectPath(convert([page({ vectors: [plain] })]).pages[0]!.items[0]);
+    const rotatedPath = expectPath(convert([page({ vectors: [rotated] })]).pages[0]!.items[0]);
+
+    // The unrotated path's own start is at the frame's top-left in y-down space -> (100, 300-100=200) in PDF space. Rotating 90 degrees clockwise on screen is a 90-degree clockwise turn in PDF's y-up space too, i.e. (dx, dy) -> (dy, -dx) about the centre (120, 190): (-20, 10) -> (10, 20) -> (130, 210).
+    expect(plainPath.subpaths[0]?.startXPt).toBeCloseTo(100, 6);
+    expect(plainPath.subpaths[0]?.startYPt).toBeCloseTo(200, 6);
+    expect(rotatedPath.subpaths[0]?.startXPt).toBeCloseTo(130, 6);
+    expect(rotatedPath.subpaths[0]?.startYPt).toBeCloseTo(210, 6);
+  });
+
+  it('rotates a cubic segment\'s control points too, not only its endpoints', () => {
+    const subpaths = [{ start: { xPt: 0, yPt: 0 }, closed: false, segments: [{ kind: 'cubic' as const, control1: { xPt: 10, yPt: 0 }, control2: { xPt: 30, yPt: 20 }, to: { xPt: 40, yPt: 20 } }] }];
+    const rotated: ContentVector = { kind: 'path', frame: { xPt: 100, yPt: 100, widthPt: 40, heightPt: 20 }, rotationDeg: 90, subpaths, fill: RED };
+    const path = expectPath(convert([page({ vectors: [rotated] })]).pages[0]!.items[0]);
+    const [segment] = path.subpaths[0]!.segments;
+    expect(segment?.kind).toBe('cubic');
+    // control1 is at frame-local (10, 0) -> PDF (110, 200); rotated 90 degrees clockwise about (120, 190): (-10, 10) -> (10, 10) -> (130, 200).
+    expect(segment).toMatchObject({ kind: 'cubic' });
+    if (segment?.kind === 'cubic') {
+      expect(segment.c1xPt).toBeCloseTo(130, 6);
+      expect(segment.c1yPt).toBeCloseTo(200, 6);
+    }
   });
 });
