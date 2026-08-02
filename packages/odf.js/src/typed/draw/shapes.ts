@@ -11,7 +11,7 @@ import { readOdfParagraph } from '../shared/paragraph';
 import { readOdfTable } from '../shared/table';
 import { parseOdfLength } from '../shared/units';
 import { buildOdfSubpaths, parseOdfPathData, parseOdfPointsList, parseOdfViewBox, rawSubpathFromPoints } from '../shared/path';
-import type { OdfTransformFunction } from '../shared/transform';
+import type { OdfShapeGeometry, OdfTransformFunction } from '../shared/transform';
 import { applyOdfTransform, composeOdfGroupTransform, parseOdfTransform, resolveOdfShapeGeometry } from '../shared/transform';
 
 // The shape vocabulary shared between odp (draw:frame/draw:g -- a positioned container for text/image/table content, and group flattening) and odg (this file's own later extension: the vector-primitive kinds a drawing needs that a presentation typically doesn't -- draw:rect/draw:ellipse/draw:circle/draw:line/draw:path/draw:polygon/draw:polyline/draw:custom-shape). A vector-primitive draw: element that is NOT wrapped in a draw:frame (a plain draw:rect/draw:ellipse/draw:custom-shape sitting directly under a draw:page or draw:g -- valid, real ODF, both Impress and Draw allow it) was a deliberate, documented scope boundary for odp's own walkDrawShapes (below, UNCHANGED by this extension -- odp's own ContentSlide has no `vectors` array to put one in), exactly mirroring how ooxml.js's own pptx shape-tree walker skips p:cxnSp connector shapes for the same "no vector-primitive recovery in THAT reader" reason. readDrawPageContent (this file's own odg-facing addition, further down) is the one that DOES walk vector primitives, for a ContentDrawPageSchema target that has somewhere to put them.
@@ -174,32 +174,32 @@ function readOdfFillAndStroke(element: XmlElement, pkg: Package): { fill: Color 
   return { fill, stroke };
 }
 
-// Resolves a vector primitive's own frame (svg:x/y/width/height, or draw:transform's rotate()+translate() for position -- the exact same geometry resolveOdfShapeGeometry already provides for draw:frame), composed with any enclosing draw:g's own transform. Deliberately DISCARDS rotationDeg: unlike ContentShapeSchema, NONE of ContentVectorSchema's variants (rect/ellipse/path) carry a rotation field at all (document-schema.js's content.ts) -- a real, tracked model limitation, not an oversight in this reader. A rotated draw:rect/ draw:ellipse/draw:custom-shape therefore reads at its own UNROTATED bounding frame.
-function resolveVectorFrame(element: XmlElement, groupFunctions: readonly OdfTransformFunction[]): Box | undefined {
+// Resolves a vector primitive's own geometry -- frame (svg:x/y/width/height) AND rotationDeg (draw:transform's rotate()+translate()) -- reusing the EXACT SAME transform machinery (resolveOdfShapeGeometry, composeOdfGroupTransform) readDrawFrame above already uses for a draw:frame, composed with any enclosing draw:g's own transform. Nothing about ContentVectorSchema's own rect/ellipse/path variants makes this a smaller problem than the ContentShape case: each already carries a rotationDeg field of its own, so there is no separate rotation-resolution logic to write -- this is a direct extension of what already resolves rotation correctly, not a reimplementation.
+function resolveVectorGeometry(element: XmlElement, groupFunctions: readonly OdfTransformFunction[]): OdfShapeGeometry | undefined {
   const geometry = resolveOdfShapeGeometry(element);
   if (geometry === undefined) {
     return undefined;
   }
-  return composeOdfGroupTransform(groupFunctions, geometry).frame;
+  return composeOdfGroupTransform(groupFunctions, geometry);
 }
 
 function readDrawRectVector(element: XmlElement, groupFunctions: readonly OdfTransformFunction[], pkg: Package): ContentVector | undefined {
-  const frame = resolveVectorFrame(element, groupFunctions);
-  if (frame === undefined) {
+  const geometry = resolveVectorGeometry(element, groupFunctions);
+  if (geometry === undefined) {
     return undefined;
   }
   const { fill, stroke } = readOdfFillAndStroke(element, pkg);
-  return { kind: 'rect', frame, fill, stroke };
+  return { kind: 'rect', frame: geometry.frame, rotationDeg: geometry.rotationDeg, fill, stroke };
 }
 
 // draw:ellipse and draw:circle share an identical attribute shape (svg:x/y/width/height) -- confirmed against real LibreOffice output: an ellipse whose width and height happen to be EQUAL is written as draw:circle instead of draw:ellipse (a real, distinct ODF element the OASIS schema defines specifically for this case), with no attribute-shape difference otherwise. Both map to ContentVectorSchema's single 'ellipse' variant.
 function readDrawEllipseVector(element: XmlElement, groupFunctions: readonly OdfTransformFunction[], pkg: Package): ContentVector | undefined {
-  const frame = resolveVectorFrame(element, groupFunctions);
-  if (frame === undefined) {
+  const geometry = resolveVectorGeometry(element, groupFunctions);
+  if (geometry === undefined) {
     return undefined;
   }
   const { fill, stroke } = readOdfFillAndStroke(element, pkg);
-  return { kind: 'ellipse', frame, fill, stroke };
+  return { kind: 'ellipse', frame: geometry.frame, rotationDeg: geometry.rotationDeg, fill, stroke };
 }
 
 // draw:line carries no svg:x/y/width/height box at all -- see geometry.ts's own parseLinePoints note. Its two endpoints are transformed through any enclosing draw:g's own function list directly (no center-pivot geometry needed the way a box has: applyOdfTransform maps each raw point through rotate()/translate() on its own, which is exactly right for a two-point line with no orientation ambiguity). ContentVectorSchema's 'line' variant requires a stroke (an invisible line has nothing to paint) -- this reader returns undefined rather than fabricating a default stroke when the source line genuinely has none.
@@ -219,10 +219,11 @@ function readDrawLineVector(element: XmlElement, groupFunctions: readonly OdfTra
 
 // draw:path (svg:d, a real curve) and draw:polygon/draw:polyline (draw:points, straight lines only) are deliberately handled together: both express their raw geometry in the SAME svg:viewBox-scaled local coordinate system, and both produce ContentVectorSchema's single 'path' variant (which has no separate "polygon"/"polyline" kind) -- see typed/shared/path.ts's own top-of-file note for the verified grammar difference between the two attributes themselves. Without a resolvable svg:viewBox there is no way to scale either grammar's raw numbers into the frame's own point space, so a missing/malformed viewBox is "no resolvable geometry" (undefined), exactly like a missing box elsewhere in this module.
 function readDrawPathVector(element: XmlElement, groupFunctions: readonly OdfTransformFunction[], pkg: Package): ContentVector | undefined {
-  const frame = resolveVectorFrame(element, groupFunctions);
-  if (frame === undefined) {
+  const geometry = resolveVectorGeometry(element, groupFunctions);
+  if (geometry === undefined) {
     return undefined;
   }
+  const frame = geometry.frame;
   const viewBoxValue = attrValue(element, 'svg:viewBox');
   const viewBox = viewBoxValue === undefined ? undefined : parseOdfViewBox(viewBoxValue);
   if (viewBox === undefined) {
@@ -245,7 +246,7 @@ function readDrawPathVector(element: XmlElement, groupFunctions: readonly OdfTra
 
   const subpaths = buildOdfSubpaths(rawSubpaths, viewBox, frame);
   const { fill, stroke } = readOdfFillAndStroke(element, pkg);
-  return { kind: 'path', frame, subpaths, fill, stroke };
+  return { kind: 'path', frame, rotationDeg: geometry.rotationDeg, subpaths, fill, stroke };
 }
 
 // A small, deliberately narrow subset of draw:custom-shape presets, identified by draw:enhanced-geometry's own draw:type attribute -- verified against real LibreOffice 26.2 output (the same macro-built fixtures as typed/shared/path.ts's own top-of-file note; LibreOffice's "Basic Shapes" gallery rectangle/rounded rectangle/ellipse each round-trip with draw:type="rectangle"/"round-rectangle"/"ellipse" respectively). Their OWN draw:enhanced-path (a "M ?f7 0 X 0 ?f8 L ..." formula-driven mini-language with ?fN/$N expression references and ODF-specific commands like X/Y/U that are NOT part of plain SVG at all) is deliberately never parsed -- evaluating draw:enhanced-geometry's formula language is explicitly out of scope for this reader (a v1.5+ gap, tracked, not attempted here) -- instead, each recognised preset maps to the CLOSEST ContentVector approximation built from the shape's own frame alone: 'ellipse' maps to the ellipse variant; 'rectangle' AND 'round-rectangle' both map to the plain rect variant (ContentVectorSchema has no rounded-corner concept at all, so a rounded rectangle reads with sharp corners -- a documented, bounded approximation, not a silent one).
@@ -257,12 +258,12 @@ function readCustomShapeVector(element: XmlElement, groupFunctions: readonly Odf
   if (type === undefined || !RECOGNIZED_CUSTOM_SHAPE_PRESETS.has(type)) {
     return undefined;
   }
-  const frame = resolveVectorFrame(element, groupFunctions);
-  if (frame === undefined) {
+  const geometry = resolveVectorGeometry(element, groupFunctions);
+  if (geometry === undefined) {
     return undefined;
   }
   const { fill, stroke } = readOdfFillAndStroke(element, pkg);
-  return { kind: type === 'ellipse' ? 'ellipse' : 'rect', frame, fill, stroke };
+  return { kind: type === 'ellipse' ? 'ellipse' : 'rect', frame: geometry.frame, rotationDeg: geometry.rotationDeg, fill, stroke };
 }
 
 // The fallback for an UNRECOGNISED draw:custom-shape preset (or one with no draw:enhanced-geometry/draw:type at all): produce text-only content -- a plain ContentShape carrying whatever real text:p runs the shape has, read exactly like readDrawFrameContent's own draw:text-box case above -- rather than a vector primitive this reader cannot correctly derive without evaluating draw:enhanced-path's own formula language (see RECOGNIZED_CUSTOM_SHAPE_PRESETS' own note). A custom-shape's text:p children sit DIRECTLY under draw:custom-shape itself (confirmed against real LibreOffice output -- unlike draw:frame's own draw:text-box wrapper), so elementsWithTag is used the same deep-search way readDrawFrameContent already uses it for a listed text box. An unrecognised preset with NO real text content at all (every run empty, matching this reader's own hand-built fixtures, which never populate a placeholder shape's own text) has nothing worth preserving and is skipped entirely -- this IS the "diagnostic-worthy note" this task's brief asks for: this comment IS that note, since neither this reader nor readOdg below has a diagnostics sink to report it through (matching readOdp/readOdt's own established "no diagnostics channel" posture elsewhere in this package).

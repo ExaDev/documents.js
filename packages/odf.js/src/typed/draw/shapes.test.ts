@@ -507,3 +507,64 @@ describe('readDrawPageContent: unhandled node kinds', () => {
     expect(readDrawPageContent([], vectorPackage())).toEqual({ shapes: [], vectors: [] });
   });
 });
+
+describe('readDrawPageContent: vector rotation via draw:transform -- reuses the SAME geometry machinery draw:frame already resolves rotation through', () => {
+  it('reads a rotated draw:rect\'s own rotationDeg, not just its unrotated frame', () => {
+    const rect = el('draw:rect', { 'svg:width': '200pt', 'svg:height': '60pt', 'draw:transform': 'rotate(1.5707963267948966) translate(100pt 100pt)' });
+    const { vectors } = readDrawPageContent([rect], { parts: {} });
+    const vector = vectors[0];
+    if (vector?.kind !== 'rect') {
+      throw new Error('expected a rect vector');
+    }
+    expect(vector.frame.xPt).toBeCloseTo(30, 6);
+    expect(vector.frame.yPt).toBeCloseTo(-30, 6);
+    expect(vector.rotationDeg).toBeCloseTo(-90, 6);
+  });
+
+  it('reads a rotated draw:ellipse\'s own rotationDeg', () => {
+    const ellipse = el('draw:ellipse', { 'svg:width': '200pt', 'svg:height': '60pt', 'draw:transform': 'rotate(1.5707963267948966) translate(100pt 100pt)' });
+    const { vectors } = readDrawPageContent([ellipse], { parts: {} });
+    const vector = vectors[0];
+    if (vector?.kind !== 'ellipse') {
+      throw new Error('expected an ellipse vector');
+    }
+    expect(vector.rotationDeg).toBeCloseTo(-90, 6);
+  });
+
+  it('reads a rotated draw:path\'s own rotationDeg alongside its normally-scaled subpaths', () => {
+    const path = el('draw:path', {
+      'svg:width': '100pt', 'svg:height': '100pt',
+      'svg:viewBox': '0 0 4000 4000',
+      'svg:d': 'M0 4000h3000c1000 0 1000-4000-1000-4000z',
+      'draw:transform': 'rotate(1.5707963267948966) translate(100pt 100pt)',
+    });
+    const { vectors } = readDrawPageContent([path], { parts: {} });
+    const vector = vectors[0];
+    if (vector?.kind !== 'path') {
+      throw new Error('expected a path vector');
+    }
+    expect(vector.rotationDeg).toBeCloseTo(-90, 6);
+    expect(vector.subpaths).toHaveLength(1);
+  });
+
+  it('composes an enclosing draw:g\'s own rotation onto a vector primitive\'s rotationDeg, exactly like it already does for draw:frame', () => {
+    const rect = el('draw:rect', { 'svg:x': '50pt', 'svg:y': '50pt', 'svg:width': '80pt', 'svg:height': '40pt' });
+    const group = el('draw:g', { 'draw:transform': 'rotate(1.5707963267948966) translate(100pt 100pt)' }, [rect]);
+    const { vectors } = readDrawPageContent([group], { parts: {} });
+    const vector = vectors[0];
+    if (vector?.kind !== 'rect') {
+      throw new Error('expected a rect vector');
+    }
+    expect(vector.rotationDeg).toBeCloseTo(-90, 6);
+  });
+
+  it('leaves rotationDeg undefined for an unrotated vector, matching draw:frame\'s own convention', () => {
+    const rect = el('draw:rect', { 'svg:x': '0pt', 'svg:y': '0pt', 'svg:width': '10pt', 'svg:height': '10pt' });
+    const { vectors } = readDrawPageContent([rect], { parts: {} });
+    const vector = vectors[0];
+    if (vector?.kind !== 'rect') {
+      throw new Error('expected a rect vector');
+    }
+    expect(vector.rotationDeg).toBeUndefined();
+  });
+});
