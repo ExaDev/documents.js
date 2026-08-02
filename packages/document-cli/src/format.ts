@@ -1,5 +1,6 @@
 import type { DocumentFormat } from 'documents.js';
 
+// 'md' and 'markdown' both read as the 'markdown' DocumentFormat -- the first many-to-one entry this table has ever had, deliberately breaking what was previously a perfect mirror between EXTENSION_TO_FORMAT and FORMAT_TO_EXTENSION (every other format's own extension is also its only recognised one). FORMAT_TO_EXTENSION below still names exactly one extension per format, so writing a markdown document always picks 'md' -- the shorter, far more common of the two on disk -- as canonical.
 const EXTENSION_TO_FORMAT: Readonly<Record<string, DocumentFormat>> = {
   docx: 'docx',
   pptx: 'pptx',
@@ -9,6 +10,8 @@ const EXTENSION_TO_FORMAT: Readonly<Record<string, DocumentFormat>> = {
   ods: 'ods',
   odg: 'odg',
   odf: 'odf',
+  markdown: 'markdown',
+  md: 'markdown',
   pdf: 'pdf',
 };
 
@@ -21,6 +24,7 @@ const FORMAT_TO_EXTENSION: Readonly<Record<DocumentFormat, string>> = {
   ods: 'ods',
   odg: 'odg',
   odf: 'odf',
+  markdown: 'md',
   pdf: 'pdf',
 };
 

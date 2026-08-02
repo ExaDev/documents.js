@@ -10,6 +10,7 @@ import { StatusLine } from './components/status-line.js';
 import { describeError } from './errors.js';
 import { openDocumentAtPath } from './format/open-document.js';
 import { DocxBodyListScreen, ParagraphDetailScreen, RunEditorScreen, TableCellDetailScreen, TableViewScreen } from './screens/editors/docx/index.js';
+import { MarkdownLineEditorScreen, MarkdownLineListScreen } from './screens/editors/markdown/index.js';
 import { OdbTableListScreen } from './screens/editors/odb/table-list.js';
 import { OdbTableRowsScreen } from './screens/editors/odb/table-rows.js';
 import { OdgPageListScreen } from './screens/editors/odg/page-list.js';
@@ -91,6 +92,10 @@ function ScreenBody({ screen }: { readonly screen: Screen }): ReactElement {
       return <OdbTableListScreen />;
     case 'odbTableRows':
       return <OdbTableRowsScreen />;
+    case 'markdownLineList':
+      return <MarkdownLineListScreen />;
+    case 'markdownLineEditor':
+      return <MarkdownLineEditorScreen />;
     case 'pdfPageList':
       return <PdfPageListScreen />;
     case 'pdfPageItems':

@@ -10,7 +10,7 @@ import { exportToPdf } from '../format/export-pdf.js';
 import { openDocumentAtPath, saveDocumentTo } from '../format/open-document.js';
 import { useNavigationInput } from '../keybindings/use-navigation-input.js';
 import { useAppDispatch, useAppState } from '../state/context.js';
-import { anyOverlayOpen, currentScreen, isEditableDocument, type OpenDocument } from '../state/types.js';
+import { anyOverlayOpen, currentScreen, isWritableDocument, type OpenDocument } from '../state/types.js';
 
 interface FileEntry {
   readonly name: string;
@@ -45,7 +45,7 @@ function defaultBasenameFor(purpose: 'saveAs' | 'exportTarget', document: OpenDo
   if (purpose === 'exportTarget') {
     return `${stem}.pdf`;
   }
-  return document !== undefined && isEditableDocument(document) ? `${stem}.${formatToExtension(document.format)}` : stem;
+  return document !== undefined && isWritableDocument(document) ? `${stem}.${formatToExtension(document.format)}` : stem;
 }
 
 function titleFor(purpose: 'open' | 'saveAs' | 'exportTarget'): string {

@@ -5,11 +5,11 @@ import { formatToExtension } from '../../format.js';
 import { TextField } from '../components/text-field.js';
 import { useAppDispatch, useAppState } from '../state/context.js';
 import { saveOpenDocumentAction } from '../state/save-document.js';
-import { anyOverlayOpen, isEditableDocument, type OpenDocument } from '../state/types.js';
+import { anyOverlayOpen, isWritableDocument, type OpenDocument } from '../state/types.js';
 
 // The suggested destination: the app's own current working directory (state.cwd, seeded from RunTuiOptions.cwd at startup) plus a sensible, extension-matched filename -- the document's own basename if it already has one (an `.odb`/`.pdf` document opened read-only always does; an editable one might not, if it was created fresh and never saved), otherwise "untitled" with the open document's own format extension.
 function defaultDestinationFor(document: OpenDocument, cwd: string): string {
-  const extension = isEditableDocument(document) ? formatToExtension(document.format) : 'bin';
+  const extension = isWritableDocument(document) ? formatToExtension(document.format) : 'bin';
   const suggestedName = document.path === undefined ? `untitled.${extension}` : basename(document.path);
   return join(cwd, suggestedName);
 }

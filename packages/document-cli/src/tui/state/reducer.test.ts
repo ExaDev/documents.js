@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Action } from './actions.js';
 import { appReducer, createInitialState } from './reducer.js';
-import type { AppState, DocxOpenDocument, OdsOpenDocument } from './types.js';
+import type { AppState, DocxOpenDocument, MarkdownOpenDocument, OdsOpenDocument } from './types.js';
 
 function applyAll(actions: readonly Action[], from: AppState = createInitialState()): AppState {
   return actions.reduce<AppState>(appReducer, from);
@@ -21,6 +21,19 @@ function odsDocument(state: AppState): OdsOpenDocument {
     throw new Error('expected an open ods document');
   }
   return doc;
+}
+
+function markdownDocument(state: AppState): MarkdownOpenDocument {
+  const doc = state.openDocument;
+  if (doc?.format !== 'markdown') {
+    throw new Error('expected an open markdown document');
+  }
+  return doc;
+}
+
+// There is no CREATE_DOCUMENT path for markdown (documents.js has no createMarkdown()) -- a MarkdownOpenDocument only ever comes from opening a real file, so tests seed one directly through OPEN_FILE_SUCCESS, the same action openDocumentAtPath's own real caller dispatches.
+function openMarkdownDocument(source: string, path = '/tmp/notes.md'): AppState {
+  return appReducer(createInitialState(), { type: 'OPEN_FILE_SUCCESS', path, doc: { format: 'markdown', source, path } });
 }
 
 describe('appReducer navigation', () => {
@@ -139,7 +152,41 @@ describe('appReducer ods mutations', () => {
   });
 });
 
+describe('appReducer markdown mutations', () => {
+  it('lands an opened markdown document on the line-list root screen', () => {
+    const state = openMarkdownDocument('# Title\n\nBody text');
+    expect(state.stack.map((screen) => screen.kind)).toEqual(['markdownLineList']);
+    expect(markdownDocument(state).source).toBe('# Title\n\nBody text');
+  });
+
+  it('replaces the whole source on SET_MARKDOWN_SOURCE and marks the document dirty', () => {
+    const state = openMarkdownDocument('one\ntwo\nthree');
+    const edited = appReducer(state, { type: 'SET_MARKDOWN_SOURCE', source: 'one\nTWO\nthree' });
+    expect(markdownDocument(edited).source).toBe('one\nTWO\nthree');
+    expect(edited.hasUnsavedChanges).toBe(true);
+    expect(edited.undoStack).toHaveLength(1);
+  });
+
+  it('warns instead of mutating when the open document is the wrong format', () => {
+    const state = appReducer(createInitialState(), { type: 'CREATE_DOCUMENT', format: 'docx' });
+    const warned = appReducer(state, { type: 'SET_MARKDOWN_SOURCE', source: 'x' });
+    expect(warned.status?.severity).toBe('warning');
+    expect(warned.hasUnsavedChanges).toBe(false);
+  });
+});
+
 describe('appReducer undo', () => {
+  it('restores a markdown document to its source before the last SET_MARKDOWN_SOURCE', () => {
+    const opened = openMarkdownDocument('one\ntwo');
+    const edited = appReducer(opened, { type: 'SET_MARKDOWN_SOURCE', source: 'one\nTWO' });
+    expect(edited.undoStack).toHaveLength(1);
+
+    const undone = appReducer(edited, { type: 'UNDO' });
+    expect(undone.undoStack).toHaveLength(0);
+    expect(markdownDocument(undone).source).toBe('one\ntwo');
+    expect(undone.hasUnsavedChanges).toBe(true);
+  });
+
   it('restores the snapshot taken before the last mutation', () => {
     const created = appReducer(createInitialState(), { type: 'CREATE_DOCUMENT', format: 'docx' });
     const paragraphsBefore = docxDocument(created).editor.paragraphs().length;

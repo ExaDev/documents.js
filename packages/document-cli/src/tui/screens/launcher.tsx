@@ -25,7 +25,7 @@ export function LauncherScreen(): ReactElement {
   return (
     <Box flexDirection="column">
       <Text bold>document-cli</Text>
-      <Text dimColor>A terminal editor for docx, pptx, odt, odp, ods, odg, odb and pdf.</Text>
+      <Text dimColor>A terminal editor for docx, pptx, odt, odp, ods, odg, markdown, odb and pdf.</Text>
       <Text> </Text>
       <Text>
         <Text color="cyan">o</Text> Open a document

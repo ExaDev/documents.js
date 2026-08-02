@@ -1,5 +1,5 @@
 import { writeFile } from 'node:fs/promises';
-import { docxToPdf, odgToPdf, odpToPdf, odsToPdf, odtToPdf, pptxToPdf, type DocumentToPdfOptions } from 'documents.js';
+import { docxToPdf, encodeMarkdownText, markdownToPdf, odgToPdf, odpToPdf, odsToPdf, odtToPdf, pptxToPdf, type DocumentToPdfOptions } from 'documents.js';
 import type { Diagnostic, OpenDocument } from '../state/types.js';
 
 export interface ExportToPdfOptions {
@@ -21,8 +21,14 @@ export async function exportToPdf(openDocument: OpenDocument, destinationPath: s
   if (openDocument.format === 'odb' || openDocument.format === 'pdf') {
     throw new Error(`A ${openDocument.format} document is already a read-only source; there is no export-to-PDF path for it`);
   }
-  const bytes = openDocument.editor.toBytes();
   const pdfOptions = toPdfOptions(options);
+  // The one place the ContentDocument pivot ever touches a markdown document in this TUI -- markdownToPdf runs directly on the raw source text, never on edit or save.
+  if (openDocument.format === 'markdown') {
+    const pdfBytes = markdownToPdf(encodeMarkdownText(openDocument.source), pdfOptions);
+    await writeFile(destinationPath, pdfBytes);
+    return;
+  }
+  const bytes = openDocument.editor.toBytes();
   const pdfBytes = convert(openDocument.format, bytes, pdfOptions);
   await writeFile(destinationPath, pdfBytes);
 }

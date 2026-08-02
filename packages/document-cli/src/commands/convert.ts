@@ -25,7 +25,7 @@ function toConversionCommandOptions(options: ConvertCliOptions): ConversionComma
   };
 }
 
-const KNOWN_FORMATS = 'docx, pptx, xlsx, odt, odp, ods, odg, odf, pdf';
+const KNOWN_FORMATS = 'docx, pptx, xlsx, odt, odp, ods, odg, odf, markdown, pdf';
 
 // Resolves the generic `convert` command's own target format: an explicit --to always wins over an inferred one (an explicit flag is the caller stating intent unambiguously), falling back to the output path's own extension, and finally failing with a usage error naming exactly what is missing.
 function resolveGenericTarget(output: string | undefined, options: GenericConvertCliOptions): { readonly format: DocumentFormat } | { readonly errorMessage: string } {

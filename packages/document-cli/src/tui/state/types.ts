@@ -25,6 +25,8 @@ export type Screen =
   | { readonly kind: 'shapeOrVectorDetail'; readonly pageIndex: number; readonly itemIndex: number }
   | { readonly kind: 'odbTableList' }
   | { readonly kind: 'odbTableRows'; readonly tableName: string }
+  | { readonly kind: 'markdownLineList' }
+  | { readonly kind: 'markdownLineEditor'; readonly lineIndex: number }
   | { readonly kind: 'pdfPageList' }
   | { readonly kind: 'pdfPageItems'; readonly pageIndex: number }
   | { readonly kind: 'pdfItemDetail'; readonly pageIndex: number; readonly itemIndex: number }
@@ -76,6 +78,13 @@ export interface OdbOpenDocument {
   readonly path: string;
 }
 
+// Markdown carries no live-view editor either -- there is no `MarkdownEditor` the way there is a `DocxEditor`/`OdtEditor`, since documents.js's own markdown support is a thin read/write pair over a plain string, not an XmlElement tree to hold a mutable reference into (see documents.js's own README, "src/markdown/" architecture entry). Unlike `OdbOpenDocument`/`PdfOpenDocument`, though, a markdown document IS writable: `.source` is a real value this TUI edits and saves back to disk verbatim as UTF-8 text. `path` is always known because there is no "create a new markdown document" flow (documents.js has no createMarkdown() to call) -- a MarkdownOpenDocument only ever comes from opening a real .md/.markdown file.
+export interface MarkdownOpenDocument {
+  readonly format: 'markdown';
+  readonly source: string;
+  readonly path: string;
+}
+
 // A PDF opens as its parsed `LayoutDocument` (positioned glyph/image/vector items), not an editor -- this TUI browses a PDF and converts from it, it never edits one in place.
 export interface PdfOpenDocument {
   readonly format: 'pdf';
@@ -86,13 +95,20 @@ export interface PdfOpenDocument {
 // The six formats that have a live-view editor, and therefore support every mutating action, `editor.toBytes()` saving, undo snapshots, and export to PDF. `odb`/`pdf` are read-only sources.
 export type EditableOpenDocument = DocxOpenDocument | PptxOpenDocument | OdtOpenDocument | OdpOpenDocument | OdsOpenDocument | OdgOpenDocument;
 
-export type OpenDocument = EditableOpenDocument | OdbOpenDocument | PdfOpenDocument;
+// Every format that can be written back to disk at all: the six live-view-editor formats above, plus markdown through its own plain `.source` string. This is a strictly broader question than "does this have a `.editor` object" -- every EditableOpenDocument call site (`mutate`/`reopenEditable` in reducer.ts, the `.editor.toBytes()` branches in exportToPdf/saveDocumentTo) assumes `.editor` exists, which is exactly why markdown is NOT folded into EditableOpenDocument itself despite also being writable. Screens that only need "can this be saved, and what extension does it get" (file-picker.tsx, save-as-prompt.tsx) should check WritableOpenDocument/isWritableDocument instead of EditableOpenDocument/isEditableDocument.
+export type WritableOpenDocument = EditableOpenDocument | MarkdownOpenDocument;
+
+export type OpenDocument = WritableOpenDocument | OdbOpenDocument | PdfOpenDocument;
 
 export type EditableFormat = EditableOpenDocument['format'];
+
+export type WritableFormat = WritableOpenDocument['format'];
 
 export type OpenDocumentFormat = OpenDocument['format'];
 
 const EDITABLE_FORMATS: Readonly<Record<EditableFormat, true>> = { docx: true, pptx: true, odt: true, odp: true, ods: true, odg: true };
+
+const WRITABLE_FORMATS: Readonly<Record<WritableFormat, true>> = { ...EDITABLE_FORMATS, markdown: true };
 
 export function isEditableFormat(value: string): value is EditableFormat {
   return value in EDITABLE_FORMATS;
@@ -100,6 +116,14 @@ export function isEditableFormat(value: string): value is EditableFormat {
 
 export function isEditableDocument(document: OpenDocument): document is EditableOpenDocument {
   return isEditableFormat(document.format);
+}
+
+export function isWritableFormat(value: string): value is WritableFormat {
+  return value in WRITABLE_FORMATS;
+}
+
+export function isWritableDocument(document: OpenDocument): document is WritableOpenDocument {
+  return isWritableFormat(document.format);
 }
 
 export type OverlayName = 'commandPalette' | 'search' | 'help' | 'confirmQuit' | 'confirmClose' | 'diagnosticsPanel';
@@ -147,6 +171,7 @@ export function selectionKeyFor(screen: Screen): string {
     case 'pdfPageList':
     case 'exportOptions':
     case 'saveAsPrompt':
+    case 'markdownLineList':
       return screen.kind;
     case 'filePicker':
       return `filePicker:${screen.purpose}:${screen.cwd}`;
@@ -176,6 +201,8 @@ export function selectionKeyFor(screen: Screen): string {
       return `${screen.kind}:${screen.pageIndex}:${screen.itemIndex}`;
     case 'odbTableRows':
       return `odbTableRows:${screen.tableName}`;
+    case 'markdownLineEditor':
+      return `markdownLineEditor:${screen.lineIndex}`;
   }
 }
 
@@ -218,6 +245,8 @@ export function rootScreenForFormat(format: OpenDocumentFormat): Screen {
       return { kind: 'pageList' };
     case 'odb':
       return { kind: 'odbTableList' };
+    case 'markdown':
+      return { kind: 'markdownLineList' };
     case 'pdf':
       return { kind: 'pdfPageList' };
   }

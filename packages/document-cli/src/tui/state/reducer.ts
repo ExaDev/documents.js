@@ -1,7 +1,27 @@
-import { openDocx, openOdg, openOdp, openOds, openOdt, openPptx, type DocxParagraph, type DocxRun, type DocxTable, type DocxTableCell, type OdpShape, type OdsSheet, type OdtParagraph, type OdtRun, type OdtTable, type OdtTableCell, type PptxShape } from 'documents.js';
+import {
+  decodeMarkdownText,
+  encodeMarkdownText,
+  openDocx,
+  openOdg,
+  openOdp,
+  openOds,
+  openOdt,
+  openPptx,
+  type DocxParagraph,
+  type DocxRun,
+  type DocxTable,
+  type DocxTableCell,
+  type OdpShape,
+  type OdsSheet,
+  type OdtParagraph,
+  type OdtRun,
+  type OdtTable,
+  type OdtTableCell,
+  type PptxShape,
+} from 'documents.js';
 import { createNewDocument } from '../format/open-document.js';
 import type { Action } from './actions.js';
-import { rootScreenForFormat, type AppState, type DocxOpenDocument, type EditableOpenDocument, type OdgOpenDocument, type OdpOpenDocument, type OdsOpenDocument, type OdtOpenDocument, type OpenDocument, type OverlayName, type OverlayState, type PptxOpenDocument, type StatusMessage } from './types.js';
+import { rootScreenForFormat, type AppState, type DocxOpenDocument, type EditableOpenDocument, type MarkdownOpenDocument, type OdgOpenDocument, type OdpOpenDocument, type OdsOpenDocument, type OdtOpenDocument, type OpenDocument, type OverlayName, type OverlayState, type PptxOpenDocument, type StatusMessage } from './types.js';
 
 // THIS REDUCER IS DELIBERATELY IMPURE FOR EVERY MUTATING ACTION, AND THAT IS THE DESIGN, NOT AN OVERSIGHT.
 //
@@ -70,6 +90,8 @@ function documentWithPath(doc: OpenDocument, path: string): OpenDocument {
       return { format: 'odg', editor: doc.editor, path };
     case 'odb':
       return { format: 'odb', tables: doc.tables, path };
+    case 'markdown':
+      return { format: 'markdown', source: doc.source, path };
     case 'pdf':
       return { format: 'pdf', layout: doc.layout, path };
   }
@@ -97,6 +119,17 @@ function mutate(state: AppState, doc: EditableOpenDocument, apply: () => void): 
   const snapshot = doc.editor.toBytes();
   apply();
   return { ...state, hasUnsavedChanges: true, undoStack: pushSnapshot(state.undoStack, snapshot) };
+}
+
+// Markdown's own counterpart to `mutate` above -- but genuinely pure, unlike every other mutating case in this reducer. A markdown document is a plain string value, not a live view over a mutable XmlElement tree, so there is nothing to `apply()` in place: this just returns a new outer state with `.source` replaced and the PREVIOUS source pushed onto the same undoStack the live-editor formats already share, encoded through the identical byte<->text boundary (`encodeMarkdownText`/`decodeMarkdownText`) markdownToPdf/markdownToDocx/markdownToOdt already use -- so UNDO's own restore step needs no markdown-specific stack at all, just a markdown-specific decode of whichever snapshot it pops.
+function mutateMarkdown(state: AppState, doc: MarkdownOpenDocument, source: string): AppState {
+  const snapshot = encodeMarkdownText(doc.source);
+  return {
+    ...state,
+    openDocument: { ...doc, source },
+    hasUnsavedChanges: true,
+    undoStack: pushSnapshot(state.undoStack, snapshot),
+  };
 }
 
 function wrongDocument(state: AppState, expected: string): AppState {
@@ -146,6 +179,14 @@ function drawingDocument(state: AppState): OdgOpenDocument | undefined {
     return undefined;
   }
   return doc.format === 'odg' ? doc : undefined;
+}
+
+function markdownDocument(state: AppState): MarkdownOpenDocument | undefined {
+  const doc = state.openDocument;
+  if (doc === undefined) {
+    return undefined;
+  }
+  return doc.format === 'markdown' ? doc : undefined;
 }
 
 function paragraphAt(doc: WordprocessingOpenDocument, blockIndex: number): DocxParagraph | OdtParagraph | undefined {
@@ -626,6 +667,14 @@ export function appReducer(state: AppState, action: Action): AppState {
       });
     }
 
+    case 'SET_MARKDOWN_SOURCE': {
+      const doc = markdownDocument(state);
+      if (doc === undefined) {
+        return wrongDocument(state, 'a markdown document');
+      }
+      return mutateMarkdown(state, doc, action.source);
+    }
+
     case 'APPEND_DIAGNOSTIC':
       return { ...state, diagnostics: [...state.diagnostics, action.diagnostic] };
 
@@ -659,10 +708,11 @@ export function appReducer(state: AppState, action: Action): AppState {
       if (snapshot === undefined) {
         return withStatus(state, 'info', 'There is nothing to undo');
       }
+      const restored: OpenDocument = doc.format === 'markdown' ? { ...doc, source: decodeMarkdownText(snapshot) } : reopenEditable(doc, snapshot);
       return withStatus(
         {
           ...state,
-          openDocument: reopenEditable(doc, snapshot),
+          openDocument: restored,
           undoStack: state.undoStack.slice(0, -1),
           hasUnsavedChanges: true,
         },

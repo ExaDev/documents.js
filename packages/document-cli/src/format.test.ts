@@ -3,7 +3,7 @@ import { formatToExtension, inferFormatFromExtension, isDocumentFormat } from '.
 
 describe('isDocumentFormat', () => {
   it('accepts every recognised format string', () => {
-    for (const format of ['docx', 'pptx', 'xlsx', 'odt', 'odp', 'ods', 'odg', 'odf', 'pdf']) {
+    for (const format of ['docx', 'pptx', 'xlsx', 'odt', 'odp', 'ods', 'odg', 'odf', 'markdown', 'pdf']) {
       expect(isDocumentFormat(format)).toBe(true);
     }
   });
@@ -48,12 +48,30 @@ describe('inferFormatFromExtension', () => {
     expect(inferFormatFromExtension('book.odm')).toBeUndefined();
     expect(inferFormatFromExtension('database.odb')).toBeUndefined();
   });
+
+  it('infers markdown from both its recognised extensions', () => {
+    expect(inferFormatFromExtension('notes.md')).toBe('markdown');
+    expect(inferFormatFromExtension('notes.markdown')).toBe('markdown');
+  });
 });
 
 describe('formatToExtension', () => {
-  it('round-trips every recognised format back to its own extension', () => {
-    for (const format of ['docx', 'pptx', 'xlsx', 'odt', 'odp', 'ods', 'odg', 'odf', 'pdf'] as const) {
-      expect(formatToExtension(format)).toBe(format);
+  // Not `formatToExtension(format) === format` any more: markdown breaks that identity (two extensions read as 'markdown', but only one -- 'md' -- is written), so this is an explicit lookup table instead, matching FORMAT_TO_EXTENSION's own canonical choice one entry at a time rather than asserting a shortcut that no longer holds for every format. A typed tuple array, not `Object.entries` over a Record, so each format literal narrows on its own -- no type assertion needed to hand it back to formatToExtension.
+  it('maps every recognised format to its own canonical extension', () => {
+    const cases: readonly (readonly [Parameters<typeof formatToExtension>[0], string])[] = [
+      ['docx', 'docx'],
+      ['pptx', 'pptx'],
+      ['xlsx', 'xlsx'],
+      ['odt', 'odt'],
+      ['odp', 'odp'],
+      ['ods', 'ods'],
+      ['odg', 'odg'],
+      ['odf', 'odf'],
+      ['markdown', 'md'],
+      ['pdf', 'pdf'],
+    ];
+    for (const [format, extension] of cases) {
+      expect(formatToExtension(format)).toBe(extension);
     }
   });
 });

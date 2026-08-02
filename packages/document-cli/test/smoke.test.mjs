@@ -43,7 +43,8 @@ describe('dist/cli.js --help', () => {
     const { code, stdout } = await spawnCli(['--help']);
     expect(code).toBe(EXIT_SUCCESS);
     const text = stdout.toString('utf8');
-    for (const name of ['docx-to-pdf', 'convert', 'formats', 'odm-to-pdf', 'odb-tables', 'pdf-inspect', 'tui']) {
+    // markdown-to-pdf is not registered by any code in this package -- it exists only because documents.js's own createLocalDocumentConverter().conversions now includes a markdown edge, and registerConversionCommands (src/commands/convert.ts) loops over that array unmodified. Its presence here is the end-to-end proof that registering a new format entirely inside documents.js is enough.
+    for (const name of ['docx-to-pdf', 'markdown-to-pdf', 'convert', 'formats', 'odm-to-pdf', 'odb-tables', 'pdf-inspect', 'tui']) {
       expect(text).toContain(name);
     }
   });
@@ -105,6 +106,50 @@ describe('dist/cli.js docx-to-pdf -: stdin/stdout piping', () => {
     const summaryMatch = /wrote (\d+) bytes to -/.exec(stderrText);
     expect(summaryMatch).not.toBeNull();
     expect(stdout.length).toBe(Number(summaryMatch[1]));
+  });
+});
+
+const MARKDOWN_FIXTURE = '# Hello\n\nThis is **markdown** from the document-cli smoke test.\n';
+
+describe('dist/cli.js markdown-to-pdf: real file round trip', () => {
+  it('converts a genuine markdown fixture on disk to a real PDF', async () => {
+    const tmpDir = await mkdtemp(join(tmpdir(), 'document-cli-smoke-'));
+    try {
+      const inputPath = join(tmpDir, 'fixture.md');
+      const outputPath = join(tmpDir, 'fixture.pdf');
+      await writeFile(inputPath, MARKDOWN_FIXTURE, 'utf8');
+
+      const { code } = await spawnCli(['markdown-to-pdf', inputPath, outputPath]);
+      expect(code).toBe(EXIT_SUCCESS);
+
+      const outputBytes = await readFile(outputPath);
+      expect(outputBytes.length).toBeGreaterThan(0);
+      expect(isPdfBytes(outputBytes)).toBe(true);
+    } finally {
+      await rm(tmpDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('dist/cli.js docx-to-markdown: real file round trip', () => {
+  it("converts a genuine docx fixture to markdown whose output text contains the fixture's own known string", async () => {
+    const tmpDir = await mkdtemp(join(tmpdir(), 'document-cli-smoke-'));
+    try {
+      const inputPath = join(tmpDir, 'fixture.docx');
+      const outputPath = join(tmpDir, 'fixture.md');
+      const editor = createDocx();
+      editor.body.appendParagraph().appendRun({ text: 'DocxToMarkdownSmokeMarker' });
+      await writeFile(inputPath, editor.toBytes());
+
+      const { code } = await spawnCli(['docx-to-markdown', inputPath, outputPath]);
+      expect(code).toBe(EXIT_SUCCESS);
+
+      // Markdown is the one directly human-readable target format in this whole family -- unlike a PDF or an OOXML/ODF zip, the output can be asserted on as plain text, so this is the one round-trip test in this file that checks the actual converted CONTENT rather than only a byte-signature/length check.
+      const outputText = await readFile(outputPath, 'utf8');
+      expect(outputText).toContain('DocxToMarkdownSmokeMarker');
+    } finally {
+      await rm(tmpDir, { recursive: true, force: true });
+    }
   });
 });
 

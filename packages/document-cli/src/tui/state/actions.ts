@@ -58,6 +58,8 @@ export type Action =
   | { readonly type: 'ADD_PATH'; readonly pageIndex: number; readonly init: OdgPathVectorInit }
   | { readonly type: 'SET_VECTOR_FILL'; readonly vector: OdgBoxVector | OdgPathVector; readonly fill: LayoutColor | undefined }
   | { readonly type: 'SET_VECTOR_STROKE'; readonly vector: OdgBoxVector | OdgLineVector | OdgPathVector; readonly stroke: ContentStroke }
+  // Markdown has no live editor object to mutate in place (see MarkdownOpenDocument's own doc comment) -- the whole rejoined source is dispatched at once, rather than one action per line, so the reducer's own mutateMarkdown helper stays a single, genuinely pure "replace the string, push an undo snapshot" step.
+  | { readonly type: 'SET_MARKDOWN_SOURCE'; readonly source: string }
   | { readonly type: 'APPEND_DIAGNOSTIC'; readonly diagnostic: Diagnostic }
   | { readonly type: 'DISMISS_DIAGNOSTIC'; readonly index: number }
   | { readonly type: 'CLEAR_DIAGNOSTICS' }
