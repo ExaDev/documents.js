@@ -1,3 +1,10 @@
+# [1.4.0](https://github.com/ExaDev/pdf-codec/compare/v1.3.1...v1.4.0) (2026-08-02)
+
+
+### Features
+
+* build one file per module, add wildcard deep-import exports ([afdd1c8](https://github.com/ExaDev/pdf-codec/commit/afdd1c875b11581bc75deaa6293162cc36d924c1))
+
 ## [1.3.1](https://github.com/ExaDev/pdf-codec/compare/v1.3.0...v1.3.1) (2026-08-02)
 
 # [1.3.0](https://github.com/ExaDev/pdf-codec/compare/v1.2.1...v1.3.0) (2026-08-02)
