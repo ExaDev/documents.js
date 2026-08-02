@@ -71,6 +71,30 @@ const CONTENT_DEFS = {
     type: 'string',
     enum: ['left', 'center', 'right', 'justify'],
   },
+  ContentStrokeStyle: {
+    type: 'string',
+    enum: ['solid', 'dashed', 'dotted', 'double'],
+  },
+  ContentBorder: {
+    type: 'object',
+    properties: {
+      color: { $ref: '#/$defs/Color' },
+      widthPt: { type: 'number', exclusiveMinimum: 0 },
+      style: { $ref: '#/$defs/ContentStrokeStyle' }, // absent means 'solid'
+    },
+    required: ['color', 'widthPt'],
+    additionalProperties: false,
+  },
+  ContentCellBorders: {
+    type: 'object',
+    properties: {
+      left: { $ref: '#/$defs/ContentBorder' },
+      right: { $ref: '#/$defs/ContentBorder' },
+      top: { $ref: '#/$defs/ContentBorder' },
+      bottom: { $ref: '#/$defs/ContentBorder' },
+    },
+    additionalProperties: false,
+  },
   ContentListMembership: {
     type: 'object',
     properties: {
@@ -146,6 +170,8 @@ const CONTENT_DEFS = {
       colSpan: { type: 'integer', exclusiveMinimum: 0, maximum: MAX_SAFE_INTEGER },
       rowSpan: { type: 'integer', exclusiveMinimum: 0, maximum: MAX_SAFE_INTEGER },
       background: { $ref: '#/$defs/Color' },
+      borders: { $ref: '#/$defs/ContentCellBorders' },
+      sourcePath: { type: 'string' },
     },
     required: ['blocks'],
     additionalProperties: false,

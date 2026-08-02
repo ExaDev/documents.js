@@ -68,6 +68,8 @@ export interface ContentTableCell {
   colSpan?: number;
   rowSpan?: number;
   background?: Color;
+  borders?: ContentCellBorders;
+  sourcePath?: string;
 }
 
 export interface ContentTableRow {
@@ -187,11 +189,34 @@ export const ContentEmbeddedObjectSchema = z.custom<ContentEmbeddedObject>(isCon
 // Standalone schema for the ContentBlock 'embeddedObject' variant, matching the sibling per-kind block schemas above (ContentParagraphSchema, ContentImageBlockSchema, ContentPageBreakSchema) even though ContentBlockSchema itself validates every kind, embeddedObject included, through the single custom guard above.
 export const ContentEmbeddedObjectBlockSchema = z.custom<ContentEmbeddedObjectBlock>(isContentEmbeddedObjectBlock);
 
+// Shared stroke/border style vocabulary -- reused by ContentStrokeSchema (drawing vector primitives, defined further down alongside them) and by ContentTableCellSchema/ContentSheetCellSchema's own per-side border fields immediately below, so a border always carries the same solid/dashed/dotted/double vocabulary regardless of which content leaf it decorates. Absent means 'solid' wherever this is optional.
+export const ContentStrokeStyleSchema = z.enum(['solid', 'dashed', 'dotted', 'double']);
+export type ContentStrokeStyle = z.infer<typeof ContentStrokeStyleSchema>;
+
+// A single border edge -- distinct from ContentStrokeSchema only in that a border is always exactly one side of a rectangular cell, never a freestanding line/path stroke; both share the same colour/width/style vocabulary.
+export const ContentBorderSchema = z.object({
+  color: ColorSchema,
+  widthPt: z.number().positive(),
+  style: ContentStrokeStyleSchema.optional(), // absent means 'solid'
+});
+export type ContentBorder = z.infer<typeof ContentBorderSchema>;
+
+// Per-side borders for a rectangular cell (table or sheet) -- each side independently optional, since a real cell frequently has some sides bordered and others not.
+export const ContentCellBordersSchema = z.object({
+  left: ContentBorderSchema.optional(),
+  right: ContentBorderSchema.optional(),
+  top: ContentBorderSchema.optional(),
+  bottom: ContentBorderSchema.optional(),
+});
+export type ContentCellBorders = z.infer<typeof ContentCellBordersSchema>;
+
 export const ContentTableCellSchema = z.object({
   blocks: z.array(ContentBlockSchema),
   colSpan: z.number().int().positive().optional(),
   rowSpan: z.number().int().positive().optional(),
   background: ColorSchema.optional(),
+  borders: ContentCellBordersSchema.optional(),
+  sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
 });
 
 export const ContentTableRowSchema = z.object({
@@ -214,7 +239,7 @@ export const ContentSectionSchema = z.object({
 });
 export type ContentSection = z.infer<typeof ContentSectionSchema>;
 
-// A pptx or odp shape's frame, in the pivot's own convention: top-left origin, y down, in points -- a pptx reader converts from EMU (a:xfrm), an odp reader converts from ODF's own unit-suffixed lengths (svg:x/y/width/height) and radians (draw:transform's rotate()), but both land in this one shape. rotationDeg is clockwise about the frame's own centre and undefined rather than 0 for an unrotated shape -- keeping the common case field-free rather than a stored, always-present zero. insetLeftPt/insetTopPt/insetRightPt/insetBottomPt are always present (never optional): every shape has SOME inset, whether from an explicit source-format attribute or that format's own documented default, and a picture/table (which has no text body at all) resolves to zero rather than leaving the field absent. fontScale/lineSpacingReduction are OOXML-specific (from DrawingML's a:normAutofit, present only when the source shape actually has autofit-shrunk text) and stay undefined for shapes read from any other format.
+// A pptx or odp shape's frame, in the pivot's own convention: top-left origin, y down, in points -- a pptx reader converts from EMU (a:xfrm), an odp reader converts from ODF's own unit-suffixed lengths (svg:x/y/width/height) and radians (draw:transform's rotate()), but both land in this one shape. rotationDeg is clockwise about the frame's own centre and undefined rather than 0 for an unrotated shape -- keeping the common case field-free rather than a stored, always-present zero. insetLeftPt/insetTopPt/insetRightPt/insetBottomPt are always present (never optional): every shape has SOME inset, whether from an explicit source-format attribute or that format's own documented default, and a picture/table (which has no text body at all) resolves to zero rather than leaving the field absent. fontScale/lineSpacingReduction are OOXML-specific (from DrawingML's a:normAutofit, present only when the source shape actually has autofit-shrunk text) and stay undefined for shapes read from any other format. paintOrder is a shared, cross-array z-ordering hint (also on every ContentVectorSchema variant) for a page that mixes shapes and vectors -- deliberately a plain z.number() rather than an integer, to allow fractional insertion between two existing values later; harmless and unused on a ContentSlide, which has no sibling vectors array to order against.
 export const ContentShapeSchema = z.object({
   name: z.string().optional(),
   frame: BoxSchema,
@@ -225,6 +250,7 @@ export const ContentShapeSchema = z.object({
   insetBottomPt: z.number().nonnegative(),
   fontScale: z.number().positive().optional(),
   lineSpacingReduction: z.number().nonnegative().optional(),
+  paintOrder: z.number().optional(),
   sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
   blocks: z.array(ContentBlockSchema),
 });
@@ -253,7 +279,7 @@ export const ContentCellValueSchema = z.discriminatedUnion('kind', [
 ]);
 export type ContentCellValue = z.infer<typeof ContentCellValueSchema>;
 
-// row/column are the cell's own position, not implied by array index -- ContentSheetSchema.cells is sparse, since real sheets are sparse. displayText is the producer's own rendered string for `value` (its number-format/locale/currency-symbol applied already) and is required on every cell that exists in this array, since a cell with nothing to display simply isn't included; it is what makes spreadsheet-to-PDF rendering tractable without this package reimplementing a number-format/locale engine. formula, if present, is carried verbatim in whatever syntax the source format used. colSpan/rowSpan are set on the anchor cell only, matching how ContentTableCell already handles merged cells.
+// row/column are the cell's own position, not implied by array index -- ContentSheetSchema.cells is sparse, since real sheets are sparse. displayText is the producer's own rendered string for `value` (its number-format/locale/currency-symbol applied already) and is required on every cell that exists in this array, since a cell with nothing to display simply isn't included; it is what makes spreadsheet-to-PDF rendering tractable without this package reimplementing a number-format/locale engine. formula, if present, is carried verbatim in whatever syntax the source format used. colSpan/rowSpan are set on the anchor cell only, matching how ContentTableCell already handles merged cells. alignment is an override of the existing value-kind default (numeric right, boolean/error centre, string left); absent means that default still applies. verticalAlignment has no value-kind default to fall back to, so its own absence means 'bottom' outright, matching a real spreadsheet's own typical default.
 export const ContentSheetCellSchema = z.object({
   row: z.number().int().nonnegative(),
   column: z.number().int().nonnegative(),
@@ -263,6 +289,11 @@ export const ContentSheetCellSchema = z.object({
   runs: z.array(ContentRunSchema).optional(), // the rare case of genuinely mixed inline formatting within one cell's text; absent when the cell's formatting is uniform
   colSpan: z.number().int().positive().optional(),
   rowSpan: z.number().int().positive().optional(),
+  background: ColorSchema.optional(),
+  borders: ContentCellBordersSchema.optional(),
+  alignment: AlignmentSchema.optional(), // override; absent means the existing value-kind default
+  verticalAlignment: z.enum(['top', 'middle', 'bottom']).optional(), // absent means 'bottom'
+  sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
 });
 export type ContentSheetCell = z.infer<typeof ContentSheetCellSchema>;
 
@@ -337,6 +368,7 @@ export type ContentSheet = z.infer<typeof ContentSheetSchema>;
 export const ContentStrokeSchema = z.object({
   color: ColorSchema,
   widthPt: z.number().positive(),
+  style: ContentStrokeStyleSchema.optional(), // absent means 'solid'
 });
 export type ContentStroke = z.infer<typeof ContentStrokeSchema>;
 
@@ -365,19 +397,24 @@ export const ContentSubpathSchema = z.object({
 });
 export type ContentSubpath = z.infer<typeof ContentSubpathSchema>;
 
+// rotationDeg is deliberately not added to the 'line' variant: a line's rotation is already fully expressible via its own two endpoints, so a separate rotation field there would create two ways to say one thing with no defined pivot for it to rotate about. Where present, rotationDeg matches ContentShapeSchema's own documented semantics exactly: clockwise-on-screen degrees about the frame's own centre, undefined rather than 0 for an unrotated vector. paintOrder is the same shared, cross-array z-ordering hint ContentShapeSchema carries -- see that schema's own comment.
 export const ContentVectorSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('rect'),
     frame: BoxSchema,
+    rotationDeg: z.number().optional(),
     fill: ColorSchema.optional(),
     stroke: ContentStrokeSchema.optional(),
+    paintOrder: z.number().optional(),
     sourcePath: z.string().optional(),
   }),
   z.object({
     kind: z.literal('ellipse'),
     frame: BoxSchema,
+    rotationDeg: z.number().optional(),
     fill: ColorSchema.optional(),
     stroke: ContentStrokeSchema.optional(),
+    paintOrder: z.number().optional(),
     sourcePath: z.string().optional(),
   }),
   z.object({
@@ -385,15 +422,18 @@ export const ContentVectorSchema = z.discriminatedUnion('kind', [
     from: ContentPathPointSchema,
     to: ContentPathPointSchema,
     stroke: ContentStrokeSchema,
+    paintOrder: z.number().optional(),
     sourcePath: z.string().optional(),
   }),
   z.object({
     kind: z.literal('path'),
     frame: BoxSchema, // page-space placement and the size of the path's own local coordinate space, distinct from the subpaths' local-space points below
+    rotationDeg: z.number().optional(),
     subpaths: z.array(ContentSubpathSchema),
     fill: ColorSchema.optional(),
     fillRule: z.enum(['nonzero', 'evenodd']).optional(),
     stroke: ContentStrokeSchema.optional(),
+    paintOrder: z.number().optional(),
     sourcePath: z.string().optional(),
   }),
 ]);
