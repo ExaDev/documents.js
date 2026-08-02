@@ -39,6 +39,7 @@ describe('createLocalDocumentConverter: shape', () => {
       { source: 'odg', target: 'pdf' },
       { source: 'odf', target: 'pdf' },
       { source: 'xlsx', target: 'pdf' },
+      { source: 'markdown', target: 'pdf' },
       { source: 'pdf', target: 'docx' },
       { source: 'pdf', target: 'pptx' },
       { source: 'pdf', target: 'odt' },
@@ -46,12 +47,17 @@ describe('createLocalDocumentConverter: shape', () => {
       { source: 'pdf', target: 'ods' },
       { source: 'pdf', target: 'odg' },
       { source: 'pdf', target: 'xlsx' },
+      { source: 'pdf', target: 'markdown' },
       { source: 'odt', target: 'docx' },
       { source: 'docx', target: 'odt' },
       { source: 'odp', target: 'pptx' },
       { source: 'pptx', target: 'odp' },
       { source: 'ods', target: 'xlsx' },
       { source: 'xlsx', target: 'ods' },
+      { source: 'markdown', target: 'docx' },
+      { source: 'docx', target: 'markdown' },
+      { source: 'markdown', target: 'odt' },
+      { source: 'odt', target: 'markdown' },
     ]);
   });
 

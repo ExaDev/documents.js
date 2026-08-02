@@ -7,12 +7,14 @@ import { openOdp } from '../edit/odp/editor';
 import { openOds } from '../edit/ods/editor';
 import { openOdt } from '../edit/odt/editor';
 import { createPptx, openPptx } from '../edit/pptx/editor';
+import { decodeMarkdownText, encodeMarkdownText } from '../markdown/text';
+import { richMarkdownText } from '../test-support/markdown';
 import { minimalOdgBytes } from '../test-support/odg';
 import { minimalOdpBytes } from '../test-support/odp';
 import { gridOdsBytes } from '../test-support/ods';
 import { minimalOdtBytes } from '../test-support/odt';
 import { odsToXlsx } from './convert';
-import { docxPdfCodec, odgPdfCodec, odpPdfCodec, odsPdfCodec, odtPdfCodec, pptxPdfCodec, xlsxPdfCodec } from './codec';
+import { docxPdfCodec, markdownDocxCodec, markdownOdtCodec, markdownPdfCodec, odgPdfCodec, odpPdfCodec, odsPdfCodec, odtPdfCodec, pptxPdfCodec, xlsxPdfCodec } from './codec';
 
 function pdfHeader(bytes: Uint8Array<ArrayBuffer>): string {
   return new TextDecoder('latin1').decode(bytes.subarray(0, 5));
@@ -213,5 +215,70 @@ describe('xlsxPdfCodec', () => {
 
   it('rejects encode input with no %PDF- header before ever reaching pdfToXlsx', () => {
     expect(() => z.encode(xlsxPdfCodec, new TextEncoder().encode('not a pdf'))).toThrow(z.core.$ZodError);
+  });
+});
+
+describe('markdownPdfCodec', () => {
+  it('z.decode produces valid PDF bytes from markdown bytes', () => {
+    const pdfBytes = z.decode(markdownPdfCodec, encodeMarkdownText('# Hello from markdown'));
+    expect(pdfHeader(pdfBytes)).toBe('%PDF-');
+  });
+
+  it('z.encode then z.decode round-trips text content, like markdownToPdf/pdfToMarkdown', () => {
+    const pdfBytes = z.decode(markdownPdfCodec, encodeMarkdownText('Round trip content'));
+    const markdownBytes = z.encode(markdownPdfCodec, pdfBytes);
+    expect(decodeMarkdownText(markdownBytes)).toContain('Round trip content');
+  });
+
+  it('rejects decode input with malformed UTF-8 before ever reaching markdownToPdf', () => {
+    expect(() => z.decode(markdownPdfCodec, new Uint8Array([0xff, 0xfe, 0x00]))).toThrow(z.core.$ZodError);
+  });
+
+  it('rejects encode input with no %PDF- header before ever reaching pdfToMarkdown', () => {
+    expect(() => z.encode(markdownPdfCodec, new TextEncoder().encode('not a pdf'))).toThrow(z.core.$ZodError);
+  });
+});
+
+describe('markdownDocxCodec', () => {
+  it('z.decode produces valid docx bytes from markdown bytes', () => {
+    const docxBytes = z.decode(markdownDocxCodec, encodeMarkdownText(richMarkdownText()));
+    const text = openDocx(docxBytes).paragraphs().map((p) => p.text).join(' ');
+    expect(text).toContain('Report Title');
+  });
+
+  it('z.encode then z.decode round-trips text content, like markdownToDocx/docxToMarkdown', () => {
+    const docxBytes = z.decode(markdownDocxCodec, encodeMarkdownText(richMarkdownText()));
+    const markdownBytes = z.encode(markdownDocxCodec, docxBytes);
+    expect(decodeMarkdownText(markdownBytes)).toContain('Report Title');
+  });
+
+  it('rejects decode input with malformed UTF-8 before ever reaching markdownToDocx', () => {
+    expect(() => z.decode(markdownDocxCodec, new Uint8Array([0xff, 0xfe, 0x00]))).toThrow(z.core.$ZodError);
+  });
+
+  it('rejects encode input with no ZIP local-file-header before ever reaching docxToMarkdown', () => {
+    expect(() => z.encode(markdownDocxCodec, new TextEncoder().encode('not a docx'))).toThrow(z.core.$ZodError);
+  });
+});
+
+describe('markdownOdtCodec', () => {
+  it('z.decode produces valid odt bytes from markdown bytes', () => {
+    const odtBytes = z.decode(markdownOdtCodec, encodeMarkdownText(richMarkdownText()));
+    const text = openOdt(odtBytes).paragraphs().map((p) => p.text).join(' ');
+    expect(text).toContain('Report Title');
+  });
+
+  it('z.encode then z.decode round-trips text content, like markdownToOdt/odtToMarkdown', () => {
+    const odtBytes = z.decode(markdownOdtCodec, encodeMarkdownText(richMarkdownText()));
+    const markdownBytes = z.encode(markdownOdtCodec, odtBytes);
+    expect(decodeMarkdownText(markdownBytes)).toContain('Report Title');
+  });
+
+  it('rejects decode input with malformed UTF-8 before ever reaching markdownToOdt', () => {
+    expect(() => z.decode(markdownOdtCodec, new Uint8Array([0xff, 0xfe, 0x00]))).toThrow(z.core.$ZodError);
+  });
+
+  it('rejects encode input whose first zip entry is not a stored odt mimetype part before ever reaching odtToMarkdown', () => {
+    expect(() => z.encode(markdownOdtCodec, new TextEncoder().encode('not an odt'))).toThrow(z.core.$ZodError);
   });
 });

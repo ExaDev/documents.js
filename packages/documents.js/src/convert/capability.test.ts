@@ -14,7 +14,7 @@ describe('FORMAT_CAPABILITIES', () => {
       byVariant.set(capability.variant, formats);
     }
 
-    expect(new Set(byVariant.get('wordprocessing'))).toEqual(new Set(['docx', 'odt']));
+    expect(new Set(byVariant.get('wordprocessing'))).toEqual(new Set(['docx', 'odt', 'markdown']));
     expect(new Set(byVariant.get('presentation'))).toEqual(new Set(['pptx', 'odp']));
     expect(new Set(byVariant.get('spreadsheet'))).toEqual(new Set(['xlsx', 'ods']));
     expect(new Set(byVariant.get('drawing'))).toEqual(new Set(['odg']));
