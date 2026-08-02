@@ -293,6 +293,10 @@ export { HsqldbRowFormatError } from './hsqldb/rowformat';
 export type { OdbUnsupportedFormat } from './odb/read';
 export { OdbNoEmbeddedDataSourceError, OdbUnsupportedFormatError, readOdbTables } from './odb/read';
 export { odbTablesToSpreadsheetDocument } from './odb/spreadsheet';
+// A .odb's own Form/Report STRUCTURE (as opposed to readOdbTables' table DATA): odf.js 2.0.0's OdbInventory.forms/.reports are now OdbComponentInfo[] (name + href, a breaking change from 1.x's plain string[]), and its own readOdbForm/readOdbReport resolve one named component into its real static structure -- a form's bound controls (readOdt's own document plus form:form/form:control-implementation definitions) or a report's bands/groups/functions (rpt:report-header/rpt:group/rpt:detail, parsed directly from the report sub-document). Both are re-exported here unmodified, matching the "each pipeline stage independently usable" convention readOdbTables/decodeHsqldbCachedTables/readFirebirdBackup already follow; readOdbForms/readOdbReports (src/odb/components.ts) are this package's own "read every declared one at once" convenience, calling readOdbForm/readOdbReport once per name discovered via readOdbInventory -- the readOdbTables-shaped one-call ergonomic this data did not have until odf.js 2.0.0 made forms/reports real.
+export type { OdbComponentInfo, OdbConnectionInfo, OdbForm, OdbFormControl, OdbFormDefinition, OdbInventory, OdbQueryInfo, OdbReport, OdbReportBand, OdbReportElement, OdbReportFunction, OdbReportGroup } from 'odf.js';
+export { readOdbForm, readOdbInventory, readOdbReport, resolveOdbComponent } from 'odf.js';
+export { readOdbForms, readOdbReports } from './odb/components';
 export { OdbTableNotFoundError, OdbTableNotSpecifiedError } from './odb/csv';
 export type { OdbToCsvOptions } from './convert/convert';
 export { odbToCsv, odbToXlsx } from './convert/convert';
