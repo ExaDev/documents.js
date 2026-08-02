@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/ExaDev/pdf-codec/compare/v1.1.6...v1.2.0) (2026-08-02)
+
+
+### Features
+
+* add custom pointless-reassignment autofix rule, ban re-exports outside src/index.ts ([d5ba949](https://github.com/ExaDev/pdf-codec/commit/d5ba949e390d5bd81517d401d8c030122d2dab6e))
+
 ## [1.1.6](https://github.com/ExaDev/pdf-codec/compare/v1.1.5...v1.1.6) (2026-08-02)
 
 ## [1.1.5](https://github.com/ExaDev/pdf-codec/compare/v1.1.4...v1.1.5) (2026-08-02)
