@@ -470,11 +470,11 @@ describe('ods <-> xlsx: ods -> xlsx (one hop, the character-width-unit conversio
     // xlsx has no percentage/currency cell type (ooxml.js's own build.ts: "both write as a plain numeric cell") -- the kind downgrades to 'number', but the underlying numeric VALUE survives exactly.
     expect(cellAt(sheet, 2, 0)?.value).toEqual({ kind: 'number', value: 0.15 });
     expect(cellAt(sheet, 2, 1)?.value).toEqual({ kind: 'number', value: 9.99 });
-    // date DOES survive as a distinct kind (xlsx's own rare t="d" cell type) -- unlike percentage/currency/time.
-    expect(cellAt(sheet, 2, 2)?.value).toEqual({ kind: 'date', value: '2026-01-15' });
+    // ooxml.js's readXlsxContent (2.5.2+) reads every xlsx t="d" cell as document-schema.js 2.0.0's own 'dateTime' kind, never 'date' -- xlsx has only the one combined date/time serial cell type at the wire level, so the reader can no longer claim a narrower 'date' kind it cannot actually verify; the VALUE STRING still survives byte-for-byte.
+    expect(cellAt(sheet, 2, 2)?.value).toEqual({ kind: 'dateTime', value: '2026-01-15' });
 
-    // xlsx's t="d" cell type has no separate date/time distinction the way ODS's own office:value-type="time" does -- a time cell also downgrades to kind 'date', carrying its original ISO-8601-duration VALUE STRING verbatim but now under the wrong kind label.
-    expect(cellAt(sheet, 3, 0)?.value).toEqual({ kind: 'date', value: 'PT14H30M00S' });
+    // A source ODS 'time' cell shares the identical xlsx t="d" wire type as 'date' above, so it reads back under the same 'dateTime' kind too, carrying its original ISO-8601-duration VALUE STRING verbatim but under a different kind label than it started with.
+    expect(cellAt(sheet, 3, 0)?.value).toEqual({ kind: 'dateTime', value: 'PT14H30M00S' });
 
     // Formula: written verbatim into <f>, never parsed, translated, or evaluated -- the exact OpenFormula-syntax string ODS carried survives byte-for-byte, even though it is not valid Excel A1 syntax (a real Excel opening this file would show a formula error; this bridge makes no claim about cross-application formula semantics, only about byte preservation).
     const formulaCell = cellAt(sheet, 3, 1);
@@ -491,7 +491,7 @@ describe('ods <-> xlsx: ods -> xlsx (one hop, the character-width-unit conversio
     originalSheet.columns.forEach((originalColumn, index) => {
       const xlsxColumn = sheet.columns.find((c) => c.index === index);
       expect(xlsxColumn).toBeDefined();
-      expect(Math.abs((xlsxColumn?.widthPt ?? 0) - originalColumn.widthPt)).toBeLessThanOrEqual(COLUMN_WIDTH_TOLERANCE_PT);
+      expect(Math.abs((xlsxColumn?.widthPt ?? 0) - (originalColumn.widthPt ?? 0))).toBeLessThanOrEqual(COLUMN_WIDTH_TOLERANCE_PT);
     });
   });
 
@@ -537,7 +537,7 @@ describe('ods <-> xlsx: ods -> xlsx -> ods (double hop, starting from ods)', () 
     originalSheet.columns.forEach((originalColumn, index) => {
       const roundTrippedColumn = sheet.columns.find((c) => c.index === index);
       expect(roundTrippedColumn).toBeDefined();
-      expect(Math.abs((roundTrippedColumn?.widthPt ?? 0) - originalColumn.widthPt)).toBeLessThanOrEqual(COLUMN_WIDTH_TOLERANCE_PT * 2);
+      expect(Math.abs((roundTrippedColumn?.widthPt ?? 0) - (originalColumn.widthPt ?? 0))).toBeLessThanOrEqual(COLUMN_WIDTH_TOLERANCE_PT * 2);
     });
   });
 

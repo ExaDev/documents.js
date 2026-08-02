@@ -45,6 +45,7 @@ export function displayTextFor(value: ContentCellValue): string {
       return value.value ? 'TRUE' : 'FALSE';
     case 'date':
     case 'time':
+    case 'dateTime':
     case 'string':
     case 'error':
       return value.value;

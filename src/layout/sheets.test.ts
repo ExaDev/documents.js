@@ -173,13 +173,13 @@ describe('step 3: header-gutter and repeat-row/column reservation', () => {
 // --- Step 4: resolve scale -------------------------------------------------------------------------
 
 describe('step 4: resolve scale', () => {
-  it('applies an explicit printSettings.scale as a raw percentage', () => {
+  it('applies an explicit printSettings.scalePercent as a raw percentage', () => {
     const s = sheet([stringCell(0, 0, 'A'), stringCell(0, 1, 'B')], {
       columns: [
         { index: 0, widthPt: 50 },
         { index: 1, widthPt: 50 },
       ],
-      printSettings: { ...basePrintSettings, scale: 200 },
+      printSettings: { ...basePrintSettings, scalePercent: 200 },
     });
     const layout = convert([s]);
     const texts = textItems(layout.pages[0]!.items);
