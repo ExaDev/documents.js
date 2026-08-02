@@ -327,6 +327,15 @@ const { box, diagnostics } = layoutFormula(mathml, { metrics: metricsAt(12), siz
 // diagnostics: a 'missing-glyph' or 'unsupported-element' entry for anything this engine couldn't render faithfully -- see Fidelity
 ```
 
+Every module under `src/` is also directly deep-importable by its package-relative path, without going through the barrel — useful for a caller that wants exactly one conversion function and nothing else pulled in:
+
+```ts
+import { emuToPt } from 'documents.js/model/units';
+import { buildOdtPackage } from 'documents.js/edit/odt/content';
+```
+
+This works via a `"./*"` wildcard entry in `package.json`'s `exports` map, resolving any subpath to the correspondingly-named file under `dist/` — the same directory structure `src/` has, one output file per source module, so `src/edit/odt/content.ts` becomes `dist/edit/odt/content.js`/`.cjs`/`.d.ts`/`.d.cts`.
+
 ## Architecture
 
 The package is layered from generic primitives outward to the two conversion directions:
