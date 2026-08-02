@@ -119,7 +119,7 @@ export function readPrintSettings(worksheet: XmlElement, sheetIndex: number, def
     if (scaleRaw !== undefined) {
       const scale = Number(scaleRaw);
       if (Number.isFinite(scale)) {
-        settings.scale = scale;
+        settings.scalePercent = scale;
       }
     }
   }

@@ -69,9 +69,15 @@ function readColumns(worksheet: XmlElement): ContentSheetColumn[] {
     if (min === undefined || !Number.isInteger(min) || min < 1) {
       continue;
     }
+    const column: ContentSheetColumn = { index: min - 1 };
     const widthRaw = attr(col, 'width');
-    const widthPt = widthRaw === undefined ? 0 : columnWidthCharsToPt(Number(widthRaw));
-    const column: ContentSheetColumn = { index: min - 1, widthPt: Number.isFinite(widthPt) ? widthPt : 0 };
+    if (widthRaw !== undefined) {
+      const widthPt = columnWidthCharsToPt(Number(widthRaw));
+      // widthPt is optional -- absent means "no declared width, use the application default" (document-schema.js's own ContentSheetColumn doc comment), not a fabricated 0; a <col> element with no width attribute at all (e.g. one that exists purely to declare `hidden`) must not report a zero-width column.
+      if (Number.isFinite(widthPt)) {
+        column.widthPt = widthPt;
+      }
+    }
     if (readXmlBool(attr(col, 'hidden'))) {
       column.hidden = true;
     }
@@ -130,6 +136,7 @@ function deriveDisplayText(value: ContentCellValue): string {
     case 'error':
     case 'date':
     case 'time':
+    case 'dateTime':
       return value.value;
     case 'percentage':
     case 'currency':
@@ -169,8 +176,8 @@ function readCellValue(cell: XmlElement, sharedStrings: readonly string[]): Reso
     return { value: { kind: 'error', value: raw }, displayText: raw };
   }
   if (type === 'd') {
-    // ST_CellType's rare ISO-8601 date variant -- carried verbatim, unparsed, matching readOds's own established convention for office:date-value/office:time-value.
-    return { value: { kind: 'date', value: raw }, displayText: raw };
+    // ST_CellType's rare ISO-8601 variant is xlsx's ONE combined date-and-time cell type (no separate date-only/time-only kind the way ODF's office:date-value/office:time-value distinguishes) -- reads as ContentCellValue's own 'dateTime' kind for exactly this reason, carried verbatim and unparsed.
+    return { value: { kind: 'dateTime', value: raw }, displayText: raw };
   }
   const num = Number(raw);
   if (Number.isNaN(num)) {

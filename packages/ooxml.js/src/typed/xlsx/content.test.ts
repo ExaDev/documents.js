@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { PAGE_SIZE_A4 } from 'document-schema.js';
+import { CONTENT_FORMAT_VERSION, PAGE_SIZE_A4 } from 'document-schema.js';
 import type { Package } from '../../model/package';
 import { el, txt } from '../../xml/fragment';
 import { parsePackage } from '../../package-io/read';
@@ -36,7 +36,7 @@ describe('readXlsxContent: kitchen-sink.xlsx (real LibreOffice output)', () => {
 
   it('produces a ContentDocument envelope directly (kind, formatVersion, metadata, sheets)', () => {
     expect(document.kind).toBe('spreadsheet');
-    expect(document.formatVersion).toBe(1);
+    expect(document.formatVersion).toBe(CONTENT_FORMAT_VERSION);
   });
 
   it('reads document metadata via docProps/core.xml -- this fixture never had a title set', () => {
@@ -162,13 +162,13 @@ describe('readXlsxContent: kitchen-sink.xlsx (real LibreOffice output)', () => {
     });
 
     it('reads a percentage scale from pageSetup@scale="150" when sheetPr/pageSetUpPr@fitToPage is "false"', () => {
-      expect(data.printSettings.scale).toBe(150);
+      expect(data.printSettings.scalePercent).toBe(150);
       expect(data.printSettings.fitToPages).toBeUndefined();
     });
 
     it('reads a fit-to-N-pages scale from pageSetup@fitToWidth/@fitToHeight on the Summary sheet, whose sheetPr/pageSetUpPr@fitToPage is "true"', () => {
       expect(summary.printSettings.fitToPages).toEqual({ width: 1, height: 2 });
-      expect(summary.printSettings.scale).toBeUndefined();
+      expect(summary.printSettings.scalePercent).toBeUndefined();
     });
 
     it('parses _xlnm.Print_Titles ("Data!$A:$A,Data!$1:$1") into repeatColumns/repeatRows', () => {
@@ -227,7 +227,7 @@ describe('readXlsxContent: minimal.xlsx (real LibreOffice output, default/unmodi
     expect(sheet.printSettings.gridlines).toBe(false);
     expect(sheet.printSettings.headers).toBe(false);
     expect(sheet.printSettings.pageOrder).toBe('downThenOver');
-    expect(sheet.printSettings.scale).toBe(100);
+    expect(sheet.printSettings.scalePercent).toBe(100);
     expect(sheet.printSettings.fitToPages).toBeUndefined();
     expect(sheet.printSettings.printRange).toBeUndefined();
     expect(sheet.printSettings.repeatRows).toBeUndefined();
@@ -305,9 +305,9 @@ describe('readXlsxContent: scope boundaries and error/fallback paths (synthetic 
     expect(cells[0]).toMatchObject({ formula: 'CONCATENATE("a","b")', value: { kind: 'string', value: 'ab' }, displayText: 'ab' });
   });
 
-  it('reads the rare t="d" ISO-8601 date cell type verbatim, unparsed', () => {
+  it('reads the rare t="d" ISO-8601 combined date-and-time cell type verbatim, unparsed, as ContentCellValue\'s own dateTime kind', () => {
     const worksheet = el('worksheet', {}, [el('sheetData', {}, [el('row', { r: '1' }, [el('c', { r: 'A1', t: 'd' }, [el('v', {}, [txt('2026-07-31T00:00:00Z')])])])])]);
     const { cells } = readFirstCell(worksheet);
-    expect(cells[0]).toMatchObject({ value: { kind: 'date', value: '2026-07-31T00:00:00Z' }, displayText: '2026-07-31T00:00:00Z' });
+    expect(cells[0]).toMatchObject({ value: { kind: 'dateTime', value: '2026-07-31T00:00:00Z' }, displayText: '2026-07-31T00:00:00Z' });
   });
 });

@@ -39,7 +39,7 @@ const KITCHEN_SINK_SHEET: ContentSheet = {
     pageSize: PAGE_SIZE_A4,
     margins: { topPt: 54, rightPt: 50.4, bottomPt: 54, leftPt: 50.4 },
     printRange: { startRow: 0, startColumn: 0, endRow: 9, endColumn: 1 },
-    scale: 125,
+    scalePercent: 125,
     repeatRows: { start: 0, end: 0 },
     repeatColumns: { start: 0, end: 0 },
     gridlines: true,
@@ -176,7 +176,7 @@ describe('readXlsxContent(buildXlsxPackage(x)) round-trips real content', () => 
 
   it('preserves print settings: page size, scale, gridlines/headers, page order, print range, repeat rows/columns, manual breaks', () => {
     expect(data.printSettings.pageSize).toEqual(PAGE_SIZE_A4);
-    expect(data.printSettings.scale).toBe(125);
+    expect(data.printSettings.scalePercent).toBe(125);
     expect(data.printSettings.fitToPages).toBeUndefined();
     expect(data.printSettings.gridlines).toBe(true);
     expect(data.printSettings.headers).toBe(true);
@@ -190,7 +190,7 @@ describe('readXlsxContent(buildXlsxPackage(x)) round-trips real content', () => 
   it('preserves the Summary sheet\'s fit-to-page settings and Letter page size', () => {
     expect(summary.printSettings.pageSize).toEqual(PAGE_SIZE_LETTER);
     expect(summary.printSettings.fitToPages).toEqual({ width: 1, height: 3 });
-    expect(summary.printSettings.scale).toBeUndefined();
+    expect(summary.printSettings.scalePercent).toBeUndefined();
     expect(summary.cells.find((cell) => cell.row === 0 && cell.column === 0)?.value).toEqual({ kind: 'number', value: 42 });
   });
 

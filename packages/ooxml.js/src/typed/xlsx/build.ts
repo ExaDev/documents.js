@@ -215,14 +215,16 @@ function buildColsElement(columns: readonly ContentSheetColumn[]): XmlElement | 
   if (columns.length === 0) {
     return undefined;
   }
-  // One <col min max> range per ContentSheetColumn, min=max=that single column -- the honest inverse of readColumns' own "one entry per <col> element, never per repeated position" policy: this writer never attempts to re-merge adjacent same-width columns back into a wider range, which would be a real optimization but isn't needed for a correct, valid file.
+  // One <col min max> range per ContentSheetColumn, min=max=that single column -- the honest inverse of readColumns' own "one entry per <col> element, never per repeated position" policy: this writer never attempts to re-merge adjacent same-width columns back into a wider range, which would be a real optimization but isn't needed for a correct, valid file. widthPt is optional (a column entry can exist purely to declare `hidden`, with no declared size at all) -- width/customWidth are only written when a real width is present, matching ECMA-376's own optional CT_Col@width/@customWidth rather than fabricating a zero-width column.
   const colElements = columns.map((column) => {
     const attrs: Record<string, string> = {
       min: String(column.index + 1),
       max: String(column.index + 1),
-      width: ptToColumnWidthChars(column.widthPt).toFixed(2),
-      customWidth: 'true',
     };
+    if (column.widthPt !== undefined) {
+      attrs.width = ptToColumnWidthChars(column.widthPt).toFixed(2);
+      attrs.customWidth = 'true';
+    }
     if (column.hidden === true) {
       attrs.hidden = 'true';
     }
@@ -253,7 +255,8 @@ function renderCellValue(value: ContentCellValue, isFormulaResult: boolean, shar
       return { type: 'b', content: value.value ? '1' : '0' };
     case 'date':
     case 'time':
-      // ST_CellType's rare "d" variant -- the ISO-8601 string carried verbatim, never shared-string indexed, matching how content.ts's reader treats it symmetrically.
+    case 'dateTime':
+      // ST_CellType's rare "d" variant -- the ISO-8601 string carried verbatim, never shared-string indexed, matching how content.ts's reader treats it symmetrically. xlsx has only this one combined-date-and-time cell type, so a 'date'/'time'/'dateTime'-kind cell from any source all collapse onto the identical t="d" wire representation.
       return { type: 'd', content: encodeXmlText(value.value) };
     case 'error':
       return { type: 'e', content: encodeXmlText(value.value) };
@@ -299,8 +302,10 @@ function buildSheetDataElement(sheet: ContentSheet, sharedStrings: SharedStringT
     const rowInfo = rowInfoByIndex.get(rowIndex);
     const attrs: Record<string, string> = { r: String(rowIndex + 1) };
     if (rowInfo !== undefined) {
-      attrs.ht = String(rowInfo.heightPt);
-      attrs.customHeight = 'true';
+      if (rowInfo.heightPt !== undefined) {
+        attrs.ht = String(rowInfo.heightPt);
+        attrs.customHeight = 'true';
+      }
       if (rowInfo.hidden === true) {
         attrs.hidden = 'true';
       }
@@ -357,7 +362,7 @@ function buildPageSetupElement(settings: ContentSheetPrintSettings): XmlElement 
     attrs.paperHeight = ptToUniversalMeasure(settings.pageSize.heightPt);
   }
   // scale/fitToWidth/fitToHeight are written together regardless of which mode sheetPr/pageSetUpPr@fitToPage actually selects -- matching real producer output (see this directory's own kitchen-sink fixture, where LibreOffice writes all three unconditionally, only one pair of them ever meaningfully honoured).
-  attrs.scale = String(settings.scale ?? 100);
+  attrs.scale = String(settings.scalePercent ?? 100);
   attrs.fitToWidth = String(settings.fitToPages?.width ?? 1);
   attrs.fitToHeight = String(settings.fitToPages?.height ?? 1);
   attrs.pageOrder = settings.pageOrder;
