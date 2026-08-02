@@ -97,6 +97,16 @@ syncManifest(pkg); // rebuilds manifest.xml to exactly match pkg's current parts
 readMimetype(pkg); // 'application/vnd.oasis.opendocument.text'
 ```
 
+Every module is also importable directly by its own subpath, without going through the barrel — useful for a caller that wants one narrow piece of the package (e.g. a bundler doing tree-shaking, or a script that only needs the length-unit parser) without pulling in the rest:
+
+```ts
+import { parseOdfLength } from 'odf.js/typed/shared/units';
+
+parseOdfLength('2.5cm'); // 70.86614173228347
+```
+
+Any `src/**/*.ts` module (excluding tests and internal `test-support/` fixtures) resolves this way, at its path relative to `src/` — `src/manifest.ts` as `odf.js/manifest`, `src/typed/odt/read.ts` as `odf.js/typed/odt/read`, and so on.
+
 ## Architecture
 
 Layered from a lossless core outward, mirroring `ooxml.js`'s own structure:
