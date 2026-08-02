@@ -8,7 +8,9 @@
 
 ## Status
 
-This repository is a fresh scaffold. `src/` currently holds the planned module skeleton (see [Architecture](#architecture)) as placeholder files describing what each will contain; `readMarkdown`, `writeMarkdown`, and `markdownCodec` are not yet implemented. Tooling (build, lint, typecheck, CI, release) is fully wired and working against this skeleton.
+The parser is complete and passes **every example in the vendored CommonMark 0.31.2 conformance corpus** (`assets/commonmark/spec.json`, all sections), plus every `table`, `strikethrough`, and `autolink` example the GFM spec source tags as an extension. `src/scan/`, `src/block/`, `src/inline/`, and `src/html/` are real implementations; `src/lower/`, `src/emit/`, and the `readMarkdown`/`writeMarkdown`/`markdownCodec` entry points are still placeholder files describing what each will contain (see [Architecture](#architecture)) — nothing yet converts the parsed AST to or from `ContentDocument`. Tooling (build, lint, typecheck, CI, release) is fully wired.
+
+The conformance suites live at `src/conformance.test.ts` and `src/gfm-conformance.test.ts`, and run as part of `pnpm test`. Any example not yet passing would be named individually in `src/test-support/conformance-exclusions.ts`, which a test asserts is shrink-only: every excluded example must genuinely still fail, so the list can never hide one that already passes. It is currently empty.
 
 ## Getting started
 
