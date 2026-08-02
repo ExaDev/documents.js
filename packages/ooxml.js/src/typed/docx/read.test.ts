@@ -1,7 +1,7 @@
 import type { Package } from '../../model/package';
 import type { XmlElement } from '../../model/node';
 import { describe, expect, it } from 'vitest';
-import type { ContentBlock, ContentParagraph, ContentTable } from 'document-schema.js';
+import type { ContentBlock, ContentImageBlock, ContentParagraph, ContentTable } from 'document-schema.js';
 import { el, txt } from '../../xml/fragment';
 import { readDocx } from './read';
 
@@ -9,6 +9,24 @@ import { readDocx } from './read';
 
 const HYPERLINK_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink';
 const THEME_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme';
+const IMAGE_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image';
+const PICTURE_GRAPHIC_URI = 'http://schemas.openxmlformats.org/drawingml/2006/picture';
+
+// A genuine, minimal 1x1 transparent PNG -- real magic bytes, so sniffImageFormat actually recognises it, not a placeholder string.
+const TINY_PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+
+// wp:inline and wp:anchor share the identical wp:extent/wp:docPr/a:graphic/a:graphicData/pic:pic/pic:blipFill/a:blip shape -- only the outer container tag (and, for wp:anchor, the positioning elements readDrawingImage deliberately never reads) differs.
+function drawingElement(containerTag: 'wp:inline' | 'wp:anchor', rId: string, altText: string): XmlElement {
+  return el('w:drawing', {}, [
+    el(containerTag, {}, [
+      el('wp:extent', { cx: '914400', cy: '457200' }), // 1in x 0.5in -> 72pt x 36pt
+      el('wp:docPr', { id: '1', name: 'Picture 1', descr: altText }),
+      el('a:graphic', {}, [
+        el('a:graphicData', { uri: PICTURE_GRAPHIC_URI }, [el('pic:pic', {}, [el('pic:blipFill', {}, [el('a:blip', { 'r:embed': rId })])])]),
+      ]),
+    ]),
+  ]);
+}
 
 function rels(entries: { id: string; type: string; target: string; external?: boolean }[]): XmlElement {
   return el(
@@ -87,6 +105,8 @@ function buildFixturePackage(): Package {
     el('w:pPr', {}, [el('w:sectPr', {}, [el('w:pgSz', { 'w:w': '11906', 'w:h': '16838' }), el('w:pgMar', { 'w:top': '1440', 'w:right': '1440', 'w:bottom': '1440', 'w:left': '1440' })])]),
   ]);
   const secondSectionPara = el('w:p', {}, [el('w:r', {}, [el('w:t', {}, [txt('Second section')])])]);
+  const inlineImagePara = el('w:p', {}, [el('w:r', {}, [drawingElement('wp:inline', 'rIdInlineImage', 'Inline alt text')])]);
+  const floatingImagePara = el('w:p', {}, [el('w:r', {}, [drawingElement('wp:anchor', 'rIdFloatingImage', 'Floating alt text')])]);
   const finalSectPr = el('w:sectPr', {}, [el('w:pgSz', { 'w:w': '12240', 'w:h': '15840' }), el('w:pgMar', { 'w:top': '720', 'w:right': '720', 'w:bottom': '720', 'w:left': '720' })]);
 
   const body = el('w:body', {}, [
@@ -103,6 +123,8 @@ function buildFixturePackage(): Package {
     table,
     sectionBreakPara,
     secondSectionPara,
+    inlineImagePara,
+    floatingImagePara,
     finalSectPr,
   ]);
   const document = el('w:document', {}, [body]);
@@ -112,6 +134,8 @@ function buildFixturePackage(): Package {
   const documentRels = rels([
     { id: 'rIdHlink', type: HYPERLINK_REL, target: 'https://example.com', external: true },
     { id: 'rIdTheme', type: THEME_REL, target: 'theme/theme1.xml' },
+    { id: 'rIdInlineImage', type: IMAGE_REL, target: 'media/image1.png' },
+    { id: 'rIdFloatingImage', type: IMAGE_REL, target: 'media/image2.png' },
   ]);
 
   const core = el('cp:coreProperties', {}, [el('dc:title', {}, [txt('Fixture Document')])]);
@@ -123,6 +147,8 @@ function buildFixturePackage(): Package {
       'word/styles.xml': { kind: 'xml', nodes: [styles] },
       'word/theme/theme1.xml': { kind: 'xml', nodes: [theme] },
       'docProps/core.xml': { kind: 'xml', nodes: [core] },
+      'word/media/image1.png': { kind: 'binary', base64: TINY_PNG_BASE64 },
+      'word/media/image2.png': { kind: 'binary', base64: TINY_PNG_BASE64 },
     },
   };
 }
@@ -287,6 +313,38 @@ describe('readDocx: multi-section support', () => {
     expect(doc.sections[1]?.pageSize).toEqual({ widthPt: 612, heightPt: 792 }); // US Letter, twips->pt
     expect(doc.sections[1]?.margins).toEqual({ topPt: 36, rightPt: 36, bottomPt: 36, leftPt: 36 });
     expect(asParagraph(doc.sections[1]?.blocks[0]).runs[0]?.text).toBe('Second section');
+  });
+});
+
+function asImage(block: ContentBlock | undefined): ContentImageBlock {
+  if (block?.kind !== 'image') {
+    throw new Error('expected an image block');
+  }
+  return block;
+}
+
+describe('readDocx: images', () => {
+  it('reads an inline (wp:inline) w:drawing as a real ContentImageBlock, sized from wp:extent EMU converted to points', () => {
+    const doc = readDocx(buildFixturePackage());
+    // section 1 blocks: [0] secondSectionPara, [1] inlineImagePara (empty text), [2] its image, [3] floatingImagePara, [4] its image.
+    const image = asImage(doc.sections[1]?.blocks[2]);
+    expect(image.format).toBe('png');
+    expect(image.widthPt).toBe(72); // 914400 EMU -> 1in -> 72pt
+    expect(image.heightPt).toBe(36); // 457200 EMU -> 0.5in -> 36pt
+    expect(image.altText).toBe('Inline alt text');
+    expect(image.base64).toBe('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=');
+  });
+
+  it('reads a floating/anchored (wp:anchor) w:drawing as a real ContentImageBlock too, falling back to inline block-flow placement since ContentImageBlock has no absolute position field', () => {
+    const doc = readDocx(buildFixturePackage());
+    const image = asImage(doc.sections[1]?.blocks[4]);
+    expect(image.format).toBe('png');
+    expect(image.altText).toBe('Floating alt text');
+  });
+
+  it('assigns the image its own sourcePath alongside its containing paragraph', () => {
+    const doc = readDocx(buildFixturePackage());
+    expect(doc.sections[1]?.blocks[2]?.sourcePath).toBe('sections[1].blocks[2]');
   });
 });
 

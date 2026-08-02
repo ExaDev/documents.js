@@ -1,13 +1,15 @@
 import { z } from 'zod';
 import type { Package } from '../../model/package';
 import type { XmlElement, XmlNode } from '../../model/node';
-import type { Color, ContentBlock, ContentListMembership, ContentParagraph, ContentRun, ContentSection, ContentTable, ContentTableCell, Margins, PageSize } from 'document-schema.js';
+import type { Color, ContentBlock, ContentImageBlock, ContentListMembership, ContentParagraph, ContentRun, ContentSection, ContentTable, ContentTableCell, Margins, PageSize } from 'document-schema.js';
 import { ContentSectionSchema, PAGE_SIZE_LETTER, rgbHexToColor } from 'document-schema.js';
 import { DocumentMetadataSchema, readCoreProperties } from '../shared/metadata';
-import { twipsToPt } from '../shared/units';
+import { emuToPt, twipsToPt } from '../shared/units';
 import type { DrawingTheme } from '../shared/drawingml';
 import { EMPTY_THEME, readTheme } from '../shared/drawingml';
 import { assignSourcePaths } from '../shared/source-path';
+import { sniffImageFormat } from '../../image/sniff';
+import { base64ToBytes } from '../../util/base64';
 import type { Relationship } from '../util';
 import { attr, childrenWithTag, elementsWithTag, resolveRelationships, rootElement, textContent } from '../util';
 import type { DocxStyleContext } from './styles';
@@ -115,6 +117,70 @@ function readRunText(run: XmlElement): string {
   return text;
 }
 
+// A w:drawing wraps exactly one wp:inline (in-flow) or wp:anchor (floating/wrapped) container, both of which share the same wp:extent (EMU size) and wp:docPr (name/alt-text) children, and both of which reach the actual picture through an identical a:graphic/a:graphicData/pic:pic/pic:blipFill/a:blip chain -- so both placements resolve through one function. wp:anchor's own wp:positionH/wp:positionV (page/margin/paragraph-relative offset) is read by nothing here: ContentImageBlock has no absolute x/y positioning field at all (unlike ContentShape's frame), so a floating image has nowhere to record its real anchored position -- it is deliberately placed in the block flow at the point its own w:drawing was encountered, i.e. exactly where an inline image would land. This is a real, honest scope narrowing (a floating image's on-page position is lost, not silently wrong), not an attempt at true anchored placement.
+function readDrawingImage(drawing: XmlElement, rels: ReadonlyMap<string, Relationship>, pkg: Package): ContentImageBlock | undefined {
+  const container = childrenWithTag(drawing, 'wp:inline')[0] ?? childrenWithTag(drawing, 'wp:anchor')[0];
+  if (container === undefined) {
+    return undefined;
+  }
+  const extent = childrenWithTag(container, 'wp:extent')[0];
+  const cx = extent === undefined ? undefined : attr(extent, 'cx');
+  const cy = extent === undefined ? undefined : attr(extent, 'cy');
+  if (cx === undefined || cy === undefined) {
+    return undefined;
+  }
+  const docPr = childrenWithTag(container, 'wp:docPr')[0];
+  const altText = docPr === undefined ? undefined : (attr(docPr, 'descr') ?? attr(docPr, 'title'));
+  const blip = elementsWithTag(container.children, 'a:blip')[0];
+  const rId = blip === undefined ? undefined : attr(blip, 'r:embed');
+  const rel = rId === undefined ? undefined : rels.get(rId);
+  const mediaPart = rel === undefined ? undefined : pkg.parts[rel.target];
+  if (mediaPart?.kind !== 'binary') {
+    return undefined;
+  }
+  const bytes = base64ToBytes(mediaPart.base64);
+  const format = sniffImageFormat(bytes);
+  if (format === undefined) {
+    return undefined;
+  }
+  const image: ContentImageBlock = { kind: 'image', format, base64: mediaPart.base64, widthPt: emuToPt(Number(cx)), heightPt: emuToPt(Number(cy)) };
+  if (altText !== undefined) {
+    image.altText = altText;
+  }
+  return image;
+}
+
+// Collects every w:drawing found anywhere inside a paragraph's own content (nested inside w:r, w:hyperlink, w:ins, w:fldSimple), in document order, while excluding w:del subtrees entirely -- mirroring readParagraphRuns' own tracked-changes handling, since a deleted drawing's own w:r sits inside w:del alongside w:delText runs.
+function collectDrawings(nodes: readonly XmlNode[], out: XmlElement[]): void {
+  for (const node of nodes) {
+    if (node.type !== 'element') {
+      continue;
+    }
+    if (node.tag === 'w:del') {
+      continue;
+    }
+    if (node.tag === 'w:drawing') {
+      out.push(node);
+      continue;
+    }
+    collectDrawings(node.children, out);
+  }
+}
+
+// ContentRun has no field to carry an inline image (unlike ContentShape's blocks list in pptx) -- an image found inside a paragraph's own runs is therefore surfaced as its own sibling ContentImageBlock, appended immediately after that paragraph's block, rather than nested inside it. This preserves block-level document order (the image still appears right after the paragraph that contained it) at the cost of losing the image's exact character-level position within that paragraph's text -- a real, bounded scope narrowing forced by ContentParagraph's own shape, not a silent drop.
+function readParagraphImages(paragraph: XmlElement, rels: ReadonlyMap<string, Relationship>, pkg: Package): ContentImageBlock[] {
+  const drawings: XmlElement[] = [];
+  collectDrawings(paragraph.children, drawings);
+  const images: ContentImageBlock[] = [];
+  for (const drawing of drawings) {
+    const image = readDrawingImage(drawing, rels, pkg);
+    if (image !== undefined) {
+      images.push(image);
+    }
+  }
+  return images;
+}
+
 function readRun(run: XmlElement, paragraph: XmlElement, context: DocxStyleContext): ContentRun {
   const props = resolveRunProperties(run, paragraph, context);
   return {
@@ -206,7 +272,7 @@ interface RawCell {
 }
 
 // w:vMerge's own presence-without-@w:val means "continue" (per ECMA-376, "restart" must be explicit) -- distinct from no w:vMerge element at all, which means this cell isn't part of any vertical merge.
-function readRawCell(tc: XmlElement, context: DocxStyleContext, rels: ReadonlyMap<string, Relationship>): RawCell {
+function readRawCell(tc: XmlElement, context: DocxStyleContext, rels: ReadonlyMap<string, Relationship>, pkg: Package): RawCell {
   const tcPr = childrenWithTag(tc, 'w:tcPr')[0];
   const gridSpanEl = tcPr === undefined ? undefined : childrenWithTag(tcPr, 'w:gridSpan')[0];
   const gridSpanVal = gridSpanEl === undefined ? undefined : attr(gridSpanEl, 'w:val');
@@ -217,16 +283,16 @@ function readRawCell(tc: XmlElement, context: DocxStyleContext, rels: ReadonlyMa
     isVMergeContinuation: vMergeVal === 'continue',
     background: readCellShading(tcPr),
     // readRawCell/readTable and readBodyBlocks are mutually recursive (a cell can contain a nested table) -- both are function declarations, so hoisting makes this forward reference safe.
-    blocks: readBodyBlocks(tc.children, context, rels),
+    blocks: readBodyBlocks(tc.children, context, rels, pkg),
   };
 }
 
 // Column indices account for preceding cells' own gridSpan (a spanned cell occupies multiple grid columns); a vMerge-restart anchor's rowSpan is computed by scanning subsequent rows for a "continue" cell at the same column index, matching the anchor's own gridSpan -- ECMA-376 doesn't store the span count directly the way pptx's a:tc/@rowSpan does, so it must be derived.
-function readTable(tbl: XmlElement, context: DocxStyleContext, rels: ReadonlyMap<string, Relationship>): ContentTable {
+function readTable(tbl: XmlElement, context: DocxStyleContext, rels: ReadonlyMap<string, Relationship>, pkg: Package): ContentTable {
   const tblGrid = childrenWithTag(tbl, 'w:tblGrid')[0];
   const columnWidthsPt = tblGrid === undefined ? [] : childrenWithTag(tblGrid, 'w:gridCol').map((col) => twipsToPt(Number(attr(col, 'w:w') ?? '0')));
 
-  const rawRows: RawCell[][] = childrenWithTag(tbl, 'w:tr').map((tr) => childrenWithTag(tr, 'w:tc').map((tc) => readRawCell(tc, context, rels)));
+  const rawRows: RawCell[][] = childrenWithTag(tbl, 'w:tr').map((tr) => childrenWithTag(tr, 'w:tc').map((tc) => readRawCell(tc, context, rels, pkg)));
   const rowColumnIndices: number[][] = rawRows.map((row) => {
     const indices: number[] = [];
     let col = 0;
@@ -264,8 +330,8 @@ function readTable(tbl: XmlElement, context: DocxStyleContext, rels: ReadonlyMap
   return { kind: 'table', columnWidthsPt, rows };
 }
 
-// Walks block-level content (w:p, w:tbl), recursing into w:sdt (content controls), w:ins (inserted content), and mc:AlternateContent (Fallback preferred, else the first Choice). w:del is skipped at the block level too (a whole deleted paragraph/table).
-function readBodyBlocks(nodes: readonly XmlNode[], context: DocxStyleContext, rels: ReadonlyMap<string, Relationship>): ContentBlock[] {
+// Walks block-level content (w:p, w:tbl), recursing into w:sdt (content controls), w:ins (inserted content), and mc:AlternateContent (Fallback preferred, else the first Choice). w:del is skipped at the block level too (a whole deleted paragraph/table). Any w:drawing found inside a paragraph is surfaced as a sibling ContentImageBlock immediately following that paragraph's own block -- see readParagraphImages.
+function readBodyBlocks(nodes: readonly XmlNode[], context: DocxStyleContext, rels: ReadonlyMap<string, Relationship>, pkg: Package): ContentBlock[] {
   const blocks: ContentBlock[] = [];
   for (const node of nodes) {
     if (node.type !== 'element') {
@@ -276,19 +342,20 @@ function readBodyBlocks(nodes: readonly XmlNode[], context: DocxStyleContext, re
         blocks.push({ kind: 'pageBreak' });
       }
       blocks.push(readParagraph(node, context, rels));
+      blocks.push(...readParagraphImages(node, rels, pkg));
     } else if (node.tag === 'w:tbl') {
-      blocks.push(readTable(node, context, rels));
+      blocks.push(readTable(node, context, rels, pkg));
     } else if (node.tag === 'w:sdt') {
       const sdtContent = childrenWithTag(node, 'w:sdtContent')[0];
       if (sdtContent !== undefined) {
-        blocks.push(...readBodyBlocks(sdtContent.children, context, rels));
+        blocks.push(...readBodyBlocks(sdtContent.children, context, rels, pkg));
       }
     } else if (node.tag === 'w:ins') {
-      blocks.push(...readBodyBlocks(node.children, context, rels));
+      blocks.push(...readBodyBlocks(node.children, context, rels, pkg));
     } else if (node.tag === 'mc:AlternateContent') {
       const target = childrenWithTag(node, 'mc:Fallback')[0] ?? childrenWithTag(node, 'mc:Choice')[0];
       if (target !== undefined) {
-        blocks.push(...readBodyBlocks(target.children, context, rels));
+        blocks.push(...readBodyBlocks(target.children, context, rels, pkg));
       }
     }
   }
@@ -296,7 +363,7 @@ function readBodyBlocks(nodes: readonly XmlNode[], context: DocxStyleContext, re
 }
 
 // A mid-document section break is an otherwise-ordinary w:p whose w:pPr carries its own w:sectPr, describing the section that paragraph (and everything since the previous break) belongs to; the body's own trailing w:sectPr (a direct child, not nested in any paragraph) closes the final section. Multi-section support falls out of this directly: each section break just starts a fresh blocks accumulator.
-function readSections(body: XmlElement, context: DocxStyleContext, rels: ReadonlyMap<string, Relationship>): ContentSection[] {
+function readSections(body: XmlElement, context: DocxStyleContext, rels: ReadonlyMap<string, Relationship>, pkg: Package): ContentSection[] {
   const sections: ContentSection[] = [];
   let currentBlocks: ContentBlock[] = [];
 
@@ -316,13 +383,14 @@ function readSections(body: XmlElement, context: DocxStyleContext, rels: Readonl
         currentBlocks.push({ kind: 'pageBreak' });
       }
       currentBlocks.push(readParagraph(node, context, rels));
+      currentBlocks.push(...readParagraphImages(node, rels, pkg));
       if (sectPr !== undefined) {
         sections.push({ pageSize: readPageSize(sectPr), margins: readMargins(sectPr), blocks: currentBlocks });
         currentBlocks = [];
       }
       continue;
     }
-    currentBlocks.push(...readBodyBlocks([node], context, rels));
+    currentBlocks.push(...readBodyBlocks([node], context, rels, pkg));
   }
 
   if (currentBlocks.length > 0 || sections.length === 0) {
@@ -404,7 +472,7 @@ function readHeaderFooterText(pkg: Package, prefix: string): string[] {
   return out;
 }
 
-// Resolves a generic OOXML Package into DocxDocument: the WordprocessingML style cascade, DrawingML theme resolution, ordered sections of paragraphs/tables/page-breaks (document order preserved, including inside tables), plus comments, footnotes, and header/footer text. It is a one-way read, not a round-trip path: information not modelled here is dropped (numbering definitions themselves, table cell borders, section break types other than plain w:sectPr, live PAGE/NUMPAGES field re-evaluation), and a DocxDocument cannot be written back to a package.
+// Resolves a generic OOXML Package into DocxDocument: the WordprocessingML style cascade, DrawingML theme resolution, ordered sections of paragraphs/tables/page-breaks/images (document order preserved, including inside tables), plus comments, footnotes, and header/footer text. An inline (wp:inline) or floating/anchored (wp:anchor) w:drawing is resolved to a real ContentImageBlock via the containing part's own relationships, sniffed from its actual media-part bytes rather than trusted from any extension/content-type -- but a floating image's own wp:anchor position (page/margin/paragraph-relative offset) is never read, since ContentImageBlock has no absolute positioning field to record it in; it lands in the block flow at the point its w:drawing was encountered, same as an inline image. It is a one-way read, not a round-trip path: information not modelled here is dropped (numbering definitions themselves, table cell borders, section break types other than plain w:sectPr, live PAGE/NUMPAGES field re-evaluation, a floating image's own anchored position, and any image whose bytes don't sniff as PNG/JPEG), and a DocxDocument cannot be written back to a package.
 export function readDocx(pkg: Package): DocxDocument {
   const documentRoot = rootElement(pkg.parts[DOCUMENT_PART_PATH]);
   if (documentRoot === undefined) {
@@ -420,7 +488,7 @@ export function readDocx(pkg: Package): DocxDocument {
 
   return {
     metadata: readCoreProperties(pkg),
-    sections: readSections(body, context, docRels),
+    sections: readSections(body, context, docRels, pkg),
     comments: readComments(pkg),
     footnotes: readFootnotes(pkg),
     headers: readHeaderFooterText(pkg, 'word/header'),
