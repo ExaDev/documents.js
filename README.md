@@ -423,6 +423,12 @@ Commits follow Conventional Commits (`feat:`, `fix:`, `test:`, `chore:`, …), e
 - [STIX Two Math](https://github.com/stipub/stixfonts) — the embedded math font `odfToPdf` (and the odt/odp embedded-formula paths) render through. Vendored, parsed, and embedded entirely within `pdf-codec` now (this repository no longer carries the font asset directly) — see that package's own README for the exact source commit/version and licensing (OFL-1.1) provenance.
 - [firebirdsql/firebird](https://github.com/FirebirdSQL/firebird) — the ground truth `src/firebird/` is built against, since Firebird's own gbak backup format has no ratified public specification: `src/burp/burp.h` (the `rec_type`/`att_type` enumerations and their own per-block numbering, and the backup-format version history), `src/burp/backup.epp`/`restore.epp` (the write/read reference implementation `src/firebird/reader.ts`'s attribute framing and RLE decompression are restated from), `src/burp/canonical.cpp` (the per-SQL-type XDR shape a row's own field values use), `src/burp/mvol.cpp` (the backup-header attributes and their own presence-means-true encoding), `src/common/xdr.cpp` (the underlying big-endian XDR primitive encodings, including the `xdr_hyper` high-word-first ordering this reader's own construction initially got backwards), `src/jrd/align.h`/`src/include/firebird/impl/blr.h` (the BLR-type-opcode-to-physical-storage-type mapping), and `src/common/classes/NoThrowTimeStamp.cpp` (the DATE/TIME encoding algorithms). Not a dependency of this package at build or runtime — read and cited as source material only, per commit state at the time `src/firebird/` was built.
 
+## npm aliases
+
+This package also publishes under the following alternate npm names — the identical build, same version, republished by CI alongside the primary `documents.js` package:
+
+- [js.documents](https://www.npmjs.com/package/js.documents)
+
 ## License
 
 MIT
