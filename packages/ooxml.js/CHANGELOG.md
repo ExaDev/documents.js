@@ -1,3 +1,10 @@
+# [2.3.0](https://github.com/ExaDev/ooxml.js/compare/v2.2.5...v2.3.0) (2026-08-02)
+
+
+### Features
+
+* add custom pointless-reassignment autofix rule, ban re-exports outside src/index.ts ([266cb37](https://github.com/ExaDev/ooxml.js/commit/266cb3785946d3c16f60683c0316b8bc6eb247af))
+
 ## [2.2.5](https://github.com/ExaDev/ooxml.js/compare/v2.2.4...v2.2.5) (2026-08-02)
 
 ## [2.2.4](https://github.com/ExaDev/ooxml.js/compare/v2.2.3...v2.2.4) (2026-08-01)
