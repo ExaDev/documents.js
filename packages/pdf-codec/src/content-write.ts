@@ -4,7 +4,7 @@ import type { LayoutFont } from 'document-schema.js';
 import type { StandardFontName } from './afm-widths';
 import { ByteWriter } from './bytes/writer';
 import type { Matrix } from './matrix';
-import { multiplyMatrices, rotationMatrix, scaleMatrix, translationMatrix } from './matrix';
+import { BEZIER_KAPPA, multiplyMatrices, rotationMatrix, scaleMatrix, translationMatrix } from './matrix';
 import type { TextMeasurer } from './measure';
 import { pdfHexString } from './objects';
 import { formatNumber, writeObject } from './serialize';
@@ -32,9 +32,6 @@ export interface ContentStreamResult {
   // Every WinAnsi substitution made while emitting text, in item order -- content-write.ts has no Diagnostic schema of its own to turn these into, so it hands back the raw substitutions and leaves that translation to whichever layer owns diagnostics.
   readonly substitutions: readonly WinAnsiSubstitution[];
 }
-
-// 4/3 * (sqrt(2) - 1): the standard cubic-Bezier approximation of a quarter circle, used since PDF has no native ellipse (or even circle) path operator.
-const BEZIER_KAPPA = 0.5522847498;
 
 function writeRgbOperator(writer: ByteWriter, color: LayoutColor, operator: 'rg' | 'RG'): void {
   writer.writeAscii(`${formatNumber(color.r)} ${formatNumber(color.g)} ${formatNumber(color.b)} ${operator}\n`);

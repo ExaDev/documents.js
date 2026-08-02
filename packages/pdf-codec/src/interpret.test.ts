@@ -134,7 +134,7 @@ describe('interpretContentStream: text', () => {
   });
 });
 
-describe('interpretContentStream: axis-aligned rectangles (the rect fast path)', () => {
+describe('interpretContentStream: axis-aligned rectangles', () => {
   it('recovers a rectangle painted under a non-rotated CTM', () => {
     const { sink } = collectDiagnostics();
     const items = interpretContentStream(textBytes('1 0 0 rg 10 10 50 20 re f'), EMPTY_RESOURCES, {
@@ -142,41 +142,74 @@ describe('interpretContentStream: axis-aligned rectangles (the rect fast path)',
       resolver: makeResolver(new Map()),
       sink,
     });
-    expect(items).toEqual([{ kind: 'rect', xPt: 10, yPt: 10, widthPt: 50, heightPt: 20, color: { r: 1, g: 0, b: 0 } }]);
+    expect(items).toEqual([{ kind: 'rect', xPt: 10, yPt: 10, widthPt: 50, heightPt: 20, fill: { r: 1, g: 0, b: 0 }, stroke: undefined }]);
   });
 
-  // Previously this fell entirely outside v1 scope (general path/curve/stroke recovery didn't exist yet) and produced nothing at all -- isAxisAligned still correctly excludes a rotated CTM from the rect fast path, but the same `re` now contributes a real 4-point subpath to the general path machinery below, which does recover it.
-  it('falls through to a general path -- not the rect fast path -- when the CTM is rotated', () => {
+  it('recovers a stroke-only rectangle, not just a filled one', () => {
+    const { sink } = collectDiagnostics();
+    const items = interpretContentStream(textBytes('0 0 1 RG 3 w 10 10 50 20 re S'), EMPTY_RESOURCES, {
+      fontMetrics: fixedWidthFontMetrics(),
+      resolver: makeResolver(new Map()),
+      sink,
+    });
+    expect(items).toEqual([{ kind: 'rect', xPt: 10, yPt: 10, widthPt: 50, heightPt: 20, fill: undefined, stroke: { color: { r: 0, g: 0, b: 1 }, widthPt: 3 } }]);
+  });
+
+  it('recovers a rectangle painted with both fill and stroke by one B operator', () => {
+    const { sink } = collectDiagnostics();
+    const items = interpretContentStream(textBytes('1 0 0 rg 0 0 1 RG 2 w 10 10 50 20 re B'), EMPTY_RESOURCES, {
+      fontMetrics: fixedWidthFontMetrics(),
+      resolver: makeResolver(new Map()),
+      sink,
+    });
+    expect(items).toEqual([{ kind: 'rect', xPt: 10, yPt: 10, widthPt: 50, heightPt: 20, fill: { r: 1, g: 0, b: 0 }, stroke: { color: { r: 0, g: 0, b: 1 }, widthPt: 2 } }]);
+  });
+
+  // The same four corners a `re` would have produced, drawn by hand instead -- a producer that constructs its rectangles corner by corner gets the same LayoutRect as one that uses the shape operator, because detection works on recovered geometry rather than on which operator built it.
+  it('recovers a rectangle constructed corner by corner with m/l/l/l/h, not just one from a re operator', () => {
+    const { sink } = collectDiagnostics();
+    const items = interpretContentStream(textBytes('1 0 0 rg 10 10 m 60 10 l 60 30 l 10 30 l h f'), EMPTY_RESOURCES, {
+      fontMetrics: fixedWidthFontMetrics(),
+      resolver: makeResolver(new Map()),
+      sink,
+    });
+    expect(items).toEqual([{ kind: 'rect', xPt: 10, yPt: 10, widthPt: 50, heightPt: 20, fill: { r: 1, g: 0, b: 0 }, stroke: undefined }]);
+  });
+
+  // Same rectangle again, but with the closing edge drawn explicitly before `h` rather than left implicit -- five points where the last repeats the first, which closedPolygonCorners collapses back to four.
+  it('recovers a rectangle whose closing edge is drawn explicitly as well as closed', () => {
+    const { sink } = collectDiagnostics();
+    const items = interpretContentStream(textBytes('1 0 0 rg 10 10 m 60 10 l 60 30 l 10 30 l 10 10 l h f'), EMPTY_RESOURCES, {
+      fontMetrics: fixedWidthFontMetrics(),
+      resolver: makeResolver(new Map()),
+      sink,
+    });
+    expect(items).toEqual([{ kind: 'rect', xPt: 10, yPt: 10, widthPt: 50, heightPt: 20, fill: { r: 1, g: 0, b: 0 }, stroke: undefined }]);
+  });
+
+  // A 90-degree rotation maps an axis-aligned rectangle onto another axis-aligned rectangle, so the recovered corners still describe a real rect -- with the CTM's own width/height swap applied.
+  it('still recovers a rectangle under a 90-degree CTM rotation, with its sides swapped', () => {
     const { sink } = collectDiagnostics();
     const items = interpretContentStream(textBytes('0 1 -1 0 0 0 cm 10 10 50 20 re f'), EMPTY_RESOURCES, {
       fontMetrics: fixedWidthFontMetrics(),
       resolver: makeResolver(new Map()),
       sink,
     });
-    expect(items).toEqual([
-      {
-        kind: 'path',
-        subpaths: [
-          {
-            startXPt: -10,
-            startYPt: 10,
-            closed: true,
-            segments: [
-              { kind: 'line', xPt: -10, yPt: 60 },
-              { kind: 'line', xPt: -30, yPt: 60 },
-              { kind: 'line', xPt: -30, yPt: 10 },
-            ],
-          },
-        ],
-        fillRule: 'nonzero',
-        fill: { r: 0, g: 0, b: 0 },
-        stroke: undefined,
-      },
-    ]);
+    expect(items).toEqual([{ kind: 'rect', xPt: -30, yPt: 10, widthPt: 20, heightPt: 50, fill: { r: 0, g: 0, b: 0 }, stroke: undefined }]);
   });
 
-  // Previously "discarding the pending rect" meant producing nothing at all, since general path/stroke recovery didn't exist yet -- pendingRect is still correctly discarded (no 'rect' item), but the `re` and the `m`/`l` that follow it now both contribute subpaths to one recovered general path, painted here by the stroke operator.
-  it('discards the pending rect fast path once another path-construction operator intervenes, but still recovers the resulting general path', () => {
+  // 30 degrees leaves no pair of edges axis-aligned, so there is no LayoutRect that could describe the result -- the general path is the only honest recovery.
+  it('falls through to a general path when the CTM rotation is not a multiple of 90 degrees', () => {
+    const { sink } = collectDiagnostics();
+    const items = interpretContentStream(textBytes('0.866 0.5 -0.5 0.866 0 0 cm 0 0 10 10 re f'), EMPTY_RESOURCES, {
+      fontMetrics: fixedWidthFontMetrics(),
+      resolver: makeResolver(new Map()),
+      sink,
+    });
+    expect(items[0]?.kind).toBe('path');
+  });
+
+  it('leaves a rectangle mixed with another subpath as one general path, since no single rect describes both', () => {
     const { sink } = collectDiagnostics();
     const items = interpretContentStream(textBytes('10 10 50 20 re 0 0 m 1 1 l S f'), EMPTY_RESOURCES, {
       fontMetrics: fixedWidthFontMetrics(),
@@ -198,10 +231,108 @@ describe('interpretContentStream: axis-aligned rectangles (the rect fast path)',
   });
 });
 
-describe('interpretContentStream: general paths', () => {
-  it('recovers an open path with just a stroke, no fill', () => {
+describe('interpretContentStream: ellipses', () => {
+  // The exact four-quadrant Bezier construction content-write.ts's writeEllipse emits, spelled out here as literal operators so this detector is pinned against the pattern itself rather than only against that writer's current output: centre (40,40), rx 30, ry 20, kx 16.5685, ky 11.0457.
+  const ELLIPSE_OPERATORS = [
+    '70 40 m',
+    '70 51.0457 56.5685 60 40 60 c',
+    '23.4315 60 10 51.0457 10 40 c',
+    '10 28.9543 23.4315 20 40 20 c',
+    '56.5685 20 70 28.9543 70 40 c',
+    'h',
+  ].join(' ');
+
+  it('recovers a filled ellipse from the four-quadrant Bezier construction', () => {
+    const { sink } = collectDiagnostics();
+    const items = interpretContentStream(textBytes(`1 0 0 rg ${ELLIPSE_OPERATORS} f`), EMPTY_RESOURCES, {
+      fontMetrics: fixedWidthFontMetrics(),
+      resolver: makeResolver(new Map()),
+      sink,
+    });
+    expect(items).toEqual([{ kind: 'ellipse', xPt: 10, yPt: 20, widthPt: 60, heightPt: 40, fill: { r: 1, g: 0, b: 0 }, stroke: undefined }]);
+  });
+
+  it('recovers an ellipse painted with both fill and stroke', () => {
+    const { sink } = collectDiagnostics();
+    const items = interpretContentStream(textBytes(`1 0 0 rg 0 0 1 RG 2 w ${ELLIPSE_OPERATORS} B`), EMPTY_RESOURCES, {
+      fontMetrics: fixedWidthFontMetrics(),
+      resolver: makeResolver(new Map()),
+      sink,
+    });
+    expect(items).toEqual([{ kind: 'ellipse', xPt: 10, yPt: 20, widthPt: 60, heightPt: 40, fill: { r: 1, g: 0, b: 0 }, stroke: { color: { r: 0, g: 0, b: 1 }, widthPt: 2 } }]);
+  });
+
+  // Same four cardinal on-curve points, but the control points pulled well off the kappa ratio -- a genuinely different curve, so it must stay a general path rather than being rounded off to the nearest ellipse.
+  it('rejects a four-cubic path whose control points do not match the kappa ratio', () => {
+    const { sink } = collectDiagnostics();
+    const squarish = ['70 40 m', '70 60 60 60 40 60 c', '20 60 10 60 10 40 c', '10 20 20 20 40 20 c', '60 20 70 20 70 40 c', 'h'].join(' ');
+    const items = interpretContentStream(textBytes(`1 0 0 rg ${squarish} f`), EMPTY_RESOURCES, {
+      fontMetrics: fixedWidthFontMetrics(),
+      resolver: makeResolver(new Map()),
+      sink,
+    });
+    expect(items[0]?.kind).toBe('path');
+  });
+
+  // Without `h` the subpath is open, and an open four-arc curve is not the closed shape a LayoutEllipse describes.
+  it('rejects the same four arcs when the subpath is never closed', () => {
+    const { sink } = collectDiagnostics();
+    const items = interpretContentStream(textBytes(`1 0 0 rg ${ELLIPSE_OPERATORS.replace(' h', '')} f`), EMPTY_RESOURCES, {
+      fontMetrics: fixedWidthFontMetrics(),
+      resolver: makeResolver(new Map()),
+      sink,
+    });
+    expect(items[0]?.kind).toBe('path');
+  });
+});
+
+describe('interpretContentStream: lines', () => {
+  it('recovers a single stroked segment as a line', () => {
     const { sink } = collectDiagnostics();
     const items = interpretContentStream(textBytes('0 0 1 RG 2 w 0 0 m 10 10 l S'), EMPTY_RESOURCES, {
+      fontMetrics: fixedWidthFontMetrics(),
+      resolver: makeResolver(new Map()),
+      sink,
+    });
+    expect(items).toEqual([{ kind: 'line', x1Pt: 0, y1Pt: 0, x2Pt: 10, y2Pt: 10, color: { r: 0, g: 0, b: 1 }, widthPt: 2 }]);
+  });
+
+  it('uses the PDF default line width of 1 when no w operator has set one', () => {
+    const { sink } = collectDiagnostics();
+    const items = interpretContentStream(textBytes('0 0 m 10 10 l S'), EMPTY_RESOURCES, {
+      fontMetrics: fixedWidthFontMetrics(),
+      resolver: makeResolver(new Map()),
+      sink,
+    });
+    expect(items).toEqual([{ kind: 'line', x1Pt: 0, y1Pt: 0, x2Pt: 10, y2Pt: 10, color: { r: 0, g: 0, b: 0 }, widthPt: 1 }]);
+  });
+
+  // A two-point path encloses no area, so a producer that filled one meant something other than a line -- detectLine declines rather than guessing, and the fill survives on the general path.
+  it('declines to call a filled two-point path a line', () => {
+    const { sink } = collectDiagnostics();
+    const items = interpretContentStream(textBytes('1 0 0 rg 0 0 m 10 10 l f'), EMPTY_RESOURCES, {
+      fontMetrics: fixedWidthFontMetrics(),
+      resolver: makeResolver(new Map()),
+      sink,
+    });
+    expect(items[0]?.kind).toBe('path');
+  });
+
+  it('declines to call a two-segment stroked polyline a line', () => {
+    const { sink } = collectDiagnostics();
+    const items = interpretContentStream(textBytes('0 0 m 10 10 l 20 0 l S'), EMPTY_RESOURCES, {
+      fontMetrics: fixedWidthFontMetrics(),
+      resolver: makeResolver(new Map()),
+      sink,
+    });
+    expect(items[0]?.kind).toBe('path');
+  });
+});
+
+describe('interpretContentStream: general paths', () => {
+  it('recovers an open multi-segment path with just a stroke, no fill', () => {
+    const { sink } = collectDiagnostics();
+    const items = interpretContentStream(textBytes('0 0 1 RG 2 w 0 0 m 10 10 l 20 0 l S'), EMPTY_RESOURCES, {
       fontMetrics: fixedWidthFontMetrics(),
       resolver: makeResolver(new Map()),
       sink,
@@ -209,7 +340,7 @@ describe('interpretContentStream: general paths', () => {
     expect(items).toEqual([
       {
         kind: 'path',
-        subpaths: [{ startXPt: 0, startYPt: 0, closed: false, segments: [{ kind: 'line', xPt: 10, yPt: 10 }] }],
+        subpaths: [{ startXPt: 0, startYPt: 0, closed: false, segments: [{ kind: 'line', xPt: 10, yPt: 10 }, { kind: 'line', xPt: 20, yPt: 0 }] }],
         fillRule: 'nonzero',
         fill: undefined,
         stroke: { color: { r: 0, g: 0, b: 1 }, widthPt: 2 },
@@ -296,7 +427,7 @@ describe('interpretContentStream: general paths', () => {
 
   it('uses the PDF default line width of 1 when no w operator has set one', () => {
     const { sink } = collectDiagnostics();
-    const items = interpretContentStream(textBytes('0 0 m 10 10 l S'), EMPTY_RESOURCES, {
+    const items = interpretContentStream(textBytes('0 0 m 10 10 l 20 0 l S'), EMPTY_RESOURCES, {
       fontMetrics: fixedWidthFontMetrics(),
       resolver: makeResolver(new Map()),
       sink,
@@ -318,8 +449,8 @@ describe('interpretContentStream: save/restore', () => {
       sink,
     });
     expect(items).toHaveLength(2);
-    expect(items[0]).toMatchObject({ color: { r: 0, g: 1, b: 0 } });
-    expect(items[1]).toMatchObject({ color: { r: 1, g: 0, b: 0 } });
+    expect(items[0]).toMatchObject({ fill: { r: 0, g: 1, b: 0 } });
+    expect(items[1]).toMatchObject({ fill: { r: 1, g: 0, b: 0 } });
   });
 });
 
@@ -350,7 +481,7 @@ describe('interpretContentStream: XObjects', () => {
       resolver: makeResolver(objects),
       sink,
     });
-    expect(items).toEqual([{ kind: 'rect', xPt: 2, yPt: 3, widthPt: 10, heightPt: 10, color: { r: 1, g: 0, b: 0 } }]);
+    expect(items).toEqual([{ kind: 'rect', xPt: 2, yPt: 3, widthPt: 10, heightPt: 10, fill: { r: 1, g: 0, b: 0 }, stroke: undefined }]);
   });
 
   it('stops a self-referential chain of forms at the recursion depth limit, with a diagnostic', () => {

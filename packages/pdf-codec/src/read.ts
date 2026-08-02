@@ -1,9 +1,9 @@
 import { bytesToBase64 } from './util/base64';
 import { crc32 } from './bytes/crc32';
 import { concatBytes } from './bytes/writer';
-import type { LayoutDocument, LayoutImageAsset, LayoutItem, LayoutLink, LayoutMetadata, LayoutPage, LayoutPath, LayoutPathSegment, LayoutRect, LayoutSubpath, LayoutText } from 'document-schema.js';
+import type { LayoutDocument, LayoutEllipse, LayoutImageAsset, LayoutItem, LayoutLine, LayoutLink, LayoutMetadata, LayoutPage, LayoutPath, LayoutPathSegment, LayoutRect, LayoutSubpath, LayoutText } from 'document-schema.js';
 import { LAYOUT_FORMAT_VERSION } from 'document-schema.js';
-import type { LayoutFont } from 'document-schema.js';
+import type { Color as LayoutColor, LayoutFont } from 'document-schema.js';
 import { openPdfDocument } from './document';
 import type { PdfDiagnosticSink } from './diagnostics';
 import { NOOP_DIAGNOSTIC_SINK, PdfParseError } from './diagnostics';
@@ -12,7 +12,7 @@ import { throwIfAborted } from './util/abort';
 import type { FontResolverService } from './font-read';
 import { createFontResolver } from './font-read';
 import { readImageXObject } from './images-read';
-import type { ExtractedImage, ExtractedInlineImage, ExtractedItem, ExtractedPath, ExtractedRect, ExtractedSubpath, ExtractedTextRun, PdfObjectResolver } from './interpret';
+import type { ExtractedEllipse, ExtractedImage, ExtractedInlineImage, ExtractedItem, ExtractedLine, ExtractedPaint, ExtractedPath, ExtractedRect, ExtractedSubpath, ExtractedTextRun, PdfObjectResolver } from './interpret';
 import { interpretContentStream } from './interpret';
 import type { Matrix } from './matrix';
 import { applyMatrix, matrixRotationDegrees, matrixScaleX, matrixScaleY, multiplyMatrices, translationMatrix } from './matrix';
@@ -176,6 +176,12 @@ function convertExtractedItem(item: ExtractedItem, pageMatrix: Matrix, fontResol
   if (item.kind === 'rect') {
     return convertRect(item, pageMatrix);
   }
+  if (item.kind === 'ellipse') {
+    return convertEllipse(item, pageMatrix);
+  }
+  if (item.kind === 'line') {
+    return convertLine(item, pageMatrix);
+  }
   if (item.kind === 'path') {
     return convertPath(item, pageMatrix);
   }
@@ -215,18 +221,39 @@ function convertText(item: ExtractedTextRun, pageMatrix: Matrix, fontResolver: F
   };
 }
 
-// A CTM composed only of 90-degree-multiple rotations (the only kind pageMatrix ever carries) maps an axis-aligned rectangle to another axis-aligned rectangle -- transforming just the two opposite corners and re-deriving min/max is enough, no general polygon handling needed.
-function convertRect(item: ExtractedRect, pageMatrix: Matrix): LayoutRect {
+// fill/stroke are each omitted rather than written as an explicit `undefined`, matching convertPath's own convention and keeping a recovered item structurally identical to the LayoutRect/LayoutEllipse a caller would have written by hand.
+function paintFields(paint: ExtractedPaint): { fill?: LayoutColor; stroke?: { readonly color: LayoutColor; readonly widthPt: number } } {
+  return {
+    ...(paint.fill !== undefined ? { fill: paint.fill } : {}),
+    ...(paint.stroke !== undefined ? { stroke: paint.stroke } : {}),
+  };
+}
+
+// A CTM composed only of 90-degree-multiple rotations (the only kind pageMatrix ever carries) maps an axis-aligned box to another axis-aligned box -- transforming just the two opposite corners and re-deriving min/max is enough, no general polygon handling needed. An ellipse's bounding box transforms by exactly the same rule (a 90-degree rotation swaps its two radii and leaves it axis-aligned), so both kinds share this helper.
+function transformBox(item: { xPt: number; yPt: number; widthPt: number; heightPt: number }, pageMatrix: Matrix): { xPt: number; yPt: number; widthPt: number; heightPt: number } {
   const p1 = applyMatrix(pageMatrix, { x: item.xPt, y: item.yPt });
   const p2 = applyMatrix(pageMatrix, { x: item.xPt + item.widthPt, y: item.yPt + item.heightPt });
   return {
-    kind: 'rect',
     xPt: Math.min(p1.x, p2.x),
     yPt: Math.min(p1.y, p2.y),
     widthPt: Math.abs(p2.x - p1.x),
     heightPt: Math.abs(p2.y - p1.y),
-    fill: item.color,
   };
+}
+
+function convertRect(item: ExtractedRect, pageMatrix: Matrix): LayoutRect {
+  return { kind: 'rect', ...transformBox(item, pageMatrix), ...paintFields(item) };
+}
+
+function convertEllipse(item: ExtractedEllipse, pageMatrix: Matrix): LayoutEllipse {
+  return { kind: 'ellipse', ...transformBox(item, pageMatrix), ...paintFields(item) };
+}
+
+// Both endpoints transform individually: unlike a box, a line has no axis-alignment to preserve, and its two ends are exactly the two points that define it.
+function convertLine(item: ExtractedLine, pageMatrix: Matrix): LayoutLine {
+  const p1 = applyMatrix(pageMatrix, { x: item.x1Pt, y: item.y1Pt });
+  const p2 = applyMatrix(pageMatrix, { x: item.x2Pt, y: item.y2Pt });
+  return { kind: 'line', x1Pt: p1.x, y1Pt: p1.y, x2Pt: p2.x, y2Pt: p2.y, color: item.color, widthPt: item.widthPt };
 }
 
 // Unlike convertRect, a general path carries no axis-aligned-only assumption, so every point of every subpath (start point, and each segment's own endpoint plus, for a cubic, both control points) is transformed individually through pageMatrix -- correct under rotation because an affine transform distributes over a Bezier curve's control points exactly as it does over a straight line's endpoints.

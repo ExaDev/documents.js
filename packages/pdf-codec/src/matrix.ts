@@ -35,6 +35,9 @@ export function scaleMatrix(sx: number, sy: number): Matrix {
   return [sx, 0, 0, sy, 0, 0];
 }
 
+// 4/3 * (sqrt(2) - 1): the standard cubic-Bezier approximation of a quarter circle, the control-point offset every ellipse-as-Beziers construction uses since neither PDF nor PostScript has a native ellipse (or even circle) path operator. It lives here, in the shared pure-geometry module, rather than in either half of the codec, because both halves genuinely need it: content-write.ts's writeEllipse emits an ellipse with it, and interpret.ts's read-side ellipse detection recognises one by it.
+export const BEZIER_KAPPA = 0.5522847498;
+
 // A rotation matrix for `degrees` measured counter-clockwise (the PDF/PostScript convention).
 export function rotationMatrix(degrees: number): Matrix {
   const radians = (degrees * Math.PI) / 180;
