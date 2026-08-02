@@ -1,3 +1,10 @@
+# [1.8.0](https://github.com/ExaDev/document-schema.js/compare/v1.7.1...v1.8.0) (2026-08-02)
+
+
+### Features
+
+* add custom pointless-reassignment autofix rule, ban re-exports outside src/index.ts ([0dd5dd9](https://github.com/ExaDev/document-schema.js/commit/0dd5dd9a750437a063603a8907beb74289adf8c8))
+
 ## [1.7.1](https://github.com/ExaDev/document-schema.js/compare/v1.7.0...v1.7.1) (2026-08-02)
 
 # [1.7.0](https://github.com/ExaDev/document-schema.js/compare/v1.6.1...v1.7.0) (2026-08-02)
