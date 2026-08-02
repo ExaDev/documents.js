@@ -1,3 +1,10 @@
+# [1.13.0](https://github.com/ExaDev/odf.js/compare/v1.12.1...v1.13.0) (2026-08-02)
+
+
+### Features
+
+* build one file per module, add wildcard deep-import exports ([90e16ad](https://github.com/ExaDev/odf.js/commit/90e16ad46c11192d64da5b6c65e9655c80b2570d))
+
 ## [1.12.1](https://github.com/ExaDev/odf.js/compare/v1.12.0...v1.12.1) (2026-08-02)
 
 # [1.12.0](https://github.com/ExaDev/odf.js/compare/v1.11.1...v1.12.0) (2026-08-02)
