@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
 import type { ContentDocument } from 'document-schema.js';
 import { bytesToBase64 } from 'odf.js';
 import { buildOdgPackage } from './content';
 import { OdgEditor } from './editor';
 
 function drawingDoc(pages: Extract<ContentDocument, { kind: 'drawing' }>['pages']): ContentDocument {
-  return { kind: 'drawing', formatVersion: 1, metadata: {}, pages };
+  return { kind: 'drawing', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, pages };
 }
 
 const ZERO_INSETS = { insetLeftPt: 0, insetTopPt: 0, insetRightPt: 0, insetBottomPt: 0 };
@@ -14,7 +15,7 @@ const BLACK = { r: 0, g: 0, b: 0 };
 
 describe('buildOdgPackage', () => {
   it('throws for a presentation ContentDocument', () => {
-    expect(() => buildOdgPackage({ kind: 'presentation', formatVersion: 1, metadata: {}, slides: [] })).toThrow(/drawing/);
+    expect(() => buildOdgPackage({ kind: 'presentation', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, slides: [] })).toThrow(/drawing/);
   });
 
   it('sets the deck-wide page size from the first page', () => {

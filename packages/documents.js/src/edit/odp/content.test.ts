@@ -1,18 +1,19 @@
 import { describe, expect, it } from 'vitest';
+import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
 import type { ContentDocument } from 'document-schema.js';
 import { bytesToBase64 } from 'odf.js';
 import { buildOdpPackage } from './content';
 import { OdpEditor } from './editor';
 
 function presentationDoc(slides: Extract<ContentDocument, { kind: 'presentation' }>['slides']): ContentDocument {
-  return { kind: 'presentation', formatVersion: 1, metadata: {}, slides };
+  return { kind: 'presentation', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, slides };
 }
 
 const ZERO_INSETS = { insetLeftPt: 0, insetTopPt: 0, insetRightPt: 0, insetBottomPt: 0 };
 
 describe('buildOdpPackage', () => {
   it('throws for a wordprocessing ContentDocument', () => {
-    expect(() => buildOdpPackage({ kind: 'wordprocessing', formatVersion: 1, metadata: {}, sections: [] })).toThrow(/presentation/);
+    expect(() => buildOdpPackage({ kind: 'wordprocessing', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, sections: [] })).toThrow(/presentation/);
   });
 
   it('sets the deck-wide slide size from the first slide', () => {
