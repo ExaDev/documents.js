@@ -1,3 +1,10 @@
+# [1.58.0](https://github.com/ExaDev/documents.js/compare/v1.57.1...v1.58.0) (2026-08-02)
+
+
+### Features
+
+* build one file per module, add wildcard deep-import exports ([f3cef55](https://github.com/ExaDev/documents.js/commit/f3cef55a8aa1ec0d9bca4e60605ce839912366c9))
+
 ## [1.57.1](https://github.com/ExaDev/documents.js/compare/v1.57.0...v1.57.1) (2026-08-02)
 
 # [1.57.0](https://github.com/ExaDev/documents.js/compare/v1.56.1...v1.57.0) (2026-08-02)
