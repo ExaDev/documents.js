@@ -224,27 +224,16 @@ export type { LoadedMathFont, MathFont, MathFontDescriptorMetrics } from 'pdf-co
 export { loadMathFont } from 'pdf-codec';
 
 // --- MathML presentation-layer typesetting: a pure box-model layout engine (no PDF or ODF knowledge of its own -- see src/mathml/'s own module comments), consuming odf.js's readOdfFormula's own raw MathML tree via a locally-defined, structurally-compatible node type. odfToPdf (below) and the odt/odp embedded-formula layout paths (src/layout/engine.ts, src/layout/slides.ts) are its two real callers; exported directly too, for a caller that wants to lay out a formula (e.g. onto a custom page layout) without going through either. ---
-export type {
-  LayoutFormulaOptions,
-  MathBox,
-  MathColor,
-  MathDiagnostic,
-  MathDiagnosticKind,
-  MathFontMetrics,
-  MathGlyphMetrics,
-  MathGlyphRun,
-  MathLayoutItem,
-  MathLayoutResult,
-  MathMlAttribute,
-  MathMlElement,
-  MathMlNode,
-  MathMlText,
-  MathRule,
-  MathStroke,
-  MathVariant,
-  OperatorProperties,
-} from './mathml';
-export { applyMathVariant, elementChildren, elementLocalName, firstChildByLocalName, isMathMlElement, isMathVariant, layoutFormula, localName, mapMathVariant, operatorProperties, textContent as mathMlTextContent } from './mathml';
+export type { LayoutFormulaOptions } from './mathml/layout';
+export { layoutFormula } from './mathml/layout';
+export type { MathBox, MathColor, MathDiagnostic, MathDiagnosticKind, MathGlyphRun, MathLayoutItem, MathLayoutResult, MathRule, MathStroke } from './mathml/layout-types';
+export type { MathFontMetrics, MathGlyphMetrics } from './mathml/metrics';
+export type { MathMlAttribute, MathMlElement, MathMlNode, MathMlText } from './mathml/nodes';
+export { elementChildren, elementLocalName, firstChildByLocalName, isMathMlElement, localName, textContent as mathMlTextContent } from './mathml/nodes';
+export type { OperatorProperties } from './mathml/operators';
+export { operatorProperties } from './mathml/operators';
+export type { MathVariant } from './mathml/variant';
+export { applyMathVariant, isMathVariant, mapMathVariant } from './mathml/variant';
 
 // --- Format <-> ContentDocument readers and layout algorithms, each independently usable rather than only reachable through the ergonomic conversions below. ---
 export { readDocxContent } from './ooxml/docx/read';

@@ -17,6 +17,7 @@
   },
   "include": [
     "src",
+    "eslint-rules",
     "tsdown.config.ts",
     "vitest.config.ts",
     "commitlint.config.ts",
