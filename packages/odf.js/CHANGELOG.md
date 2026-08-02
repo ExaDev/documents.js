@@ -1,3 +1,10 @@
+## [1.11.1](https://github.com/ExaDev/odf.js/compare/v1.11.0...v1.11.1) (2026-08-02)
+
+
+### Bug Fixes
+
+* don't flag or fix an alias whose source is mutated elsewhere ([2908f46](https://github.com/ExaDev/odf.js/commit/2908f465255481f5a641b78e6b1c6c43ba2fd265))
+
 # [1.11.0](https://github.com/ExaDev/odf.js/compare/v1.10.5...v1.11.0) (2026-08-02)
 
 
