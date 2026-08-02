@@ -98,6 +98,13 @@ const content = readXlsxContent(decodePackage(bytes)); // ContentDocument, kind:
 const pkg = buildXlsxPackage(content); // a fresh Package built from scratch, not a write-back into `pkg`
 ```
 
+Every module under `src/` is also importable directly, by the same path it has relative to `src/`, without going through the barrel — useful for a caller that only needs one small piece and wants to avoid pulling in the rest:
+
+```ts
+import { bytesToBase64, base64ToBytes } from 'ooxml.js/util/base64';
+import { readXlsxContent } from 'ooxml.js/typed/xlsx/content';
+```
+
 ## The ooxml.js format
 
 The verbose `Package` JSON is faithful but repetitive: every node repeats its `type`/`tag`/`attributes`/`children` keys, and tag and namespace strings recur thousands of times across a real document. **The ooxml.js format** is a compact, still-plain-JSON alternative — tuple-encoded nodes plus a single interned string table — that composes on top of `packageCodec` without changing what it guarantees:
@@ -181,7 +188,7 @@ const out = encodeCompactPackage(compact); // CompactPackage -> OOXML bytes dire
 ## Build, test, and lint
 
 ```sh
-pnpm build          # tsdown -> dist/ (ESM + CJS + .d.ts, via tsdown.config.ts)
+pnpm build          # tsdown -> dist/ (one ESM + CJS + .d.ts set per source module, via tsdown.config.ts)
 pnpm lint           # eslint . --max-warnings 0
 pnpm typecheck      # tsc --noEmit
 pnpm test           # vitest run
@@ -191,7 +198,9 @@ pnpm test:smoke     # builds dist/, then runs test/smoke.test.mjs to verify the 
 
 `pnpm prepublishOnly` runs `lint`, `typecheck`, `tsdown`, `publint`, and `@arethetypeswrong/cli` (`attw --pack`) — the full publish-readiness check — before a release.
 
-`test/smoke.test.mjs` loads the actual built `dist/index.js` (ESM) and `dist/index.cjs` (CJS) artifacts and checks they load and behave identically — a check none of `vitest`'s normal run, `tsc`, `publint`, or `attw` can do, since those either run against source or statically analyse package metadata without executing the compiled output. `vitest.config.ts` defines it as its own `smoke` project (vitest's `test.projects`), separate from the `unit` project (`src/**/*.test.ts`); `pnpm test`/`test:watch` pass `--project unit` and `pnpm test:smoke` passes `--project smoke` after `tsdown` rebuilds `dist/`, so neither run touches the other project's files.
+`test/smoke.test.mjs` loads the actual built `dist/index.js` (ESM) and `dist/index.cjs` (CJS) barrel artifacts and checks they load and behave identically — a check none of `vitest`'s normal run, `tsc`, `publint`, or `attw` can do, since those either run against source or statically analyse package metadata without executing the compiled output. `vitest.config.ts` defines it as its own `smoke` project (vitest's `test.projects`), separate from the `unit` project (`src/**/*.test.ts`); `pnpm test`/`test:watch` pass `--project unit` and `pnpm test:smoke` passes `--project smoke` after `tsdown` rebuilds `dist/`, so neither run touches the other project's files.
+
+`tsdown.config.ts`'s `entry` is a glob (`src/**/*.ts`, excluding tests and `.d.ts` files) rather than a single `src/index.ts` bundle, so `dist/` holds one ESM/CJS/`.d.ts`/`.d.cts` set per source module, laid out under `dist/` at the same relative path each module has under `src/` (pinned via the sibling `root: 'src'` option). `dist/index.js`/`dist/index.cjs` are just the file `tsdown` produces for `src/index.ts`, matched by that same glob — they still re-export everything the barrel always has. `package.json`'s `exports` map adds a `"./*"` wildcard alongside `"."`, so any module is importable by its own path, not only through the barrel.
 
 To run a single test file: `pnpm vitest run src/typed/docx.test.ts`.
 
