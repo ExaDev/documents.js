@@ -42,6 +42,35 @@ node_modules/document-schema.js/schemas/layout-document.schema.json
 
 Each file's `$id` is a `https://cdn.jsdelivr.net/npm/document-schema.js@<version>/schemas/<file>` URL, pinned to the exact npm version that generated it -- immutable (jsdelivr serves each version's own published tarball contents forever, with an immutable cache header) and genuinely live the moment that version is published, unlike a commit-SHA-pinned raw GitHub URL would be: a gitignored, generated file can never actually be committed at the commit whose SHA it would need to embed, since committing it changes the tree and thus the hash. The three files are cross-referenced via real `$ref`s (e.g. `document-package.schema.json`'s `content`/`layout` properties `$ref` the other two files directly, at that same version), so a JSON Schema validator that resolves `$ref`s over HTTP (or against local copies of all three files) can validate a whole `DocumentPackage` value. `content-document.schema.json` additionally carries a `$defs` block for the recursive paragraph/table/embedded-object block model, which Zod's own converter can't express directly (see that script's own top-of-file comment for why).
 
+### Self-describing JSON
+
+`documentPackageWithSchema`/`contentDocumentWithSchema`/`layoutDocumentWithSchema` each take a real `DocumentPackage`/`ContentDocument`/`LayoutDocument` value and return the same value with a `$schema` property added, pointing at the `.schema.json` file above for the *currently installed* package version:
+
+```ts
+import { documentPackageWithSchema } from 'document-schema.js';
+
+const tagged = documentPackageWithSchema(pkg);
+// { $schema: 'https://cdn.jsdelivr.net/npm/document-schema.js@1.6.1/schemas/document-package.schema.json', formatVersion: 1, content: {...}, layout: {...} }
+writeFileSync('package.json.doc', JSON.stringify(tagged, null, 2));
+```
+
+A caller who already knows the kind can keep ingesting with the existing schemas directly -- `DocumentPackageSchema.parse(value)` (etc.) already tolerates and silently strips an incoming `$schema` property, since none of these schemas are `.strict()`. `documentFromJson` exists for the "don't yet know the kind" case: it reads `$schema` to decide which of the three schemas to run, then that schema does the real structural validation:
+
+```ts
+import { documentFromJson, UnrecognizedDocumentSchemaError } from 'document-schema.js';
+
+try {
+  const { kind, value } = documentFromJson(JSON.parse(readFileSync('some-file.json', 'utf8')));
+  // kind: 'DocumentPackage' | 'ContentDocument' | 'LayoutDocument'
+} catch (error) {
+  if (error instanceof UnrecognizedDocumentSchemaError) {
+    console.error('not a document-schema.js value:', error.schema);
+  }
+}
+```
+
+`documentSchemaKindOf(value)` is the lower-level building block `documentFromJson` uses internally -- exported on its own for a caller that only wants to know which kind a value claims to be (version-agnostically: a `$schema` from an older or newer installed version still resolves), without also parsing it. `schemaUriFor(kind)` is the URL builder itself, also exported directly. Deliberately not added: a JSON-Schema-validator dependency (e.g. `ajv`) for ingest -- the generated `.schema.json` files are already a strictly *weaker* approximation of the real Zod schemas (see the two hand-authored `$defs` fragments above), so re-validating against them on ingest would be a fidelity regression, not an improvement.
+
 ## Used by
 
 - [ooxml.js](https://github.com/ExaDev/ooxml.js) — its `readDocx`/`readPptx`/`readXlsxContent` return `ContentSection[]`/`ContentSlide[]`/spreadsheet `ContentSheet[]` typed against this package's own schemas, not a locally-defined lookalike.

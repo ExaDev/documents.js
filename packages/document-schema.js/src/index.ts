@@ -5,3 +5,4 @@ export * from './metadata';
 export * from './content';
 export * from './layout';
 export * from './package';
+export * from './schema-io';

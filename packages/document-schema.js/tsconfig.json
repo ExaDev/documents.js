@@ -19,6 +19,8 @@
     "src",
     "tsdown.config.ts",
     "vitest.config.ts",
+    "vitest.unit.config.ts",
+    "vitest.smoke.config.ts",
     "commitlint.config.ts",
     "release.config.ts",
     "eslint.config.ts",

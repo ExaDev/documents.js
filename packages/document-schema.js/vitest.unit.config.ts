@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { defineConfig } from 'tsdown';
+import { defineConfig } from 'vitest/config';
 
 function isPackageJsonWithVersion(value: unknown): value is { version: string } {
   if (typeof value !== 'object' || value === null) return false;
@@ -7,7 +7,7 @@ function isPackageJsonWithVersion(value: unknown): value is { version: string } 
   return typeof value.version === 'string';
 }
 
-// Bakes this package's own published version into dist/index.js/dist/index.cjs as a literal string constant (via tsdown/rolldown's esbuild-style `define`, plain text replacement at bundle time) -- so src/schema-io.ts's schemaUriFor() needs no runtime fs read to know its own version. vitest.config.ts's own `define` must stay in sync with this so `pnpm test` (which runs directly against src/, not dist/) sees the identical literal.
+// Mirrors tsdown.config.ts's own `define` exactly -- this project runs vitest directly against src/**/*.test.ts (never through tsdown), so __PACKAGE_VERSION__ needs the identical injection here or src/schema-io.ts's schemaUriFor() would hit a bare, undefined identifier under `pnpm test`. Needs its own real config file (not an inline entry in vitest.config.ts's `projects` array) -- see that file's own comment for why.
 const packageJson: unknown = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
 if (!isPackageJsonWithVersion(packageJson)) {
   throw new Error('package.json is missing a string "version" field');
@@ -15,12 +15,11 @@ if (!isPackageJsonWithVersion(packageJson)) {
 const { version } = packageJson;
 
 export default defineConfig({
-  entry: ['src/index.ts'],
-  format: ['esm', 'cjs'],
-  dts: true,
-  platform: 'neutral',
-  clean: true,
   define: {
     __PACKAGE_VERSION__: JSON.stringify(version),
+  },
+  test: {
+    name: 'unit',
+    include: ['src/**/*.test.ts'],
   },
 });
