@@ -1,4 +1,4 @@
-// Generated from Unicode's own UnicodeData.txt (https://www.unicode.org/Public/UCD/latest/ucd/UnicodeData.txt) by cross-referencing every "MATHEMATICAL <STYLE> CAPITAL/SMALL <LETTER>" codepoint name in the Mathematical Alphanumeric Symbols block (U+1D400-U+1D7FF), then filling the block's own well-known holes (italic small h, and eleven Script/Fraktur/Double-struck capitals plus three Script smalls) with the older Letterlike Symbols block's own matching codepoints (U+2100-U+214F, e.g. PLANCK CONSTANT for italic small h) by cross-referencing THEIR names the same way. Every mapping below was verified against the authoritative Unicode data file, not transcribed from memory; the exact 24 hole substitutions are the ones this module's own generation script hard-codes.
+// Generated from Unicode's own UnicodeData.txt (https://www.unicode.org/Public/UCD/latest/ucd/UnicodeData.txt) by cross-referencing every "MATHEMATICAL <STYLE> CAPITAL/SMALL <LETTER>" codepoint name in the Mathematical Alphanumeric Symbols block (U+1D400-U+1D7FF), then filling the block's own well-known holes (italic small h, and eleven Script/Fraktur/Double-struck capitals plus three Script smalls) with the older Letterlike Symbols block's own matching codepoints (U+2100-U+214F, e.g. PLANCK CONSTANT for italic small h) by cross-referencing THEIR names the same way. Every mapping below was verified against the authoritative Unicode data file, not transcribed from memory; the exact 24 hole substitutions are the ones this module's own generation script hard-codes. The six Greek "symbol variant" base characters (GREEK LUNATE EPSILON SYMBOL U+03F5, GREEK THETA SYMBOL U+03D1, GREEK KAPPA SYMBOL U+03F0, GREEK PHI SYMBOL U+03D5, GREEK RHO SYMBOL U+03F1, GREEK PI SYMBOL U+03D6) and their five styled Mathematical Alphanumeric Symbols forms (bold, italic, bold-italic, bold-sans-serif, sans-serif-bold-italic -- the same five variants the rest of the Greek table covers, since Unicode never assigned symbol-variant glyphs for plain sans-serif, script, fraktur, or double-struck) were verified the identical way: downloading UnicodeData.txt directly and reading the "MATHEMATICAL <STYLE> <NAME> SYMBOL" entries at U+1D6DC-U+1D6E1 (bold), U+1D716-U+1D71B (italic), U+1D750-U+1D755 (bold-italic), U+1D78A-U+1D78F (bold-sans-serif), and U+1D7C4-U+1D7C9 (sans-serif-bold-italic) -- each range confirmed to contain exactly EPSILON/THETA/KAPPA/PHI/RHO/PI SYMBOL in that order, immediately following that style's own "partial differential" codepoint and immediately preceding the next style's capital-alpha codepoint (or, for sans-serif-bold-italic, MATHEMATICAL BOLD CAPITAL/SMALL DIGAMMA at U+1D7CA-U+1D7CB followed by two genuinely unassigned codepoints at U+1D7CC-U+1D7CD).
 
 export type MathVariant =
   | 'normal'
@@ -80,41 +80,88 @@ interface GreekVariantEntry {
   readonly lower: readonly number[]; // index-aligned with GREEK_LOWER_BASE
   readonly nabla: number;
   readonly partial: number;
+  // The five OpenType/Unicode Greek "symbol variant" glyphs Unicode actually styled in this block -- lunate epsilon (U+03F5), theta (U+03D1), kappa (U+03F0), phi (U+03D5), rho (U+03F1), and pi (U+03D6) symbols. Every one of the five variants below carries all six; Unicode never assigned styled symbol-variant glyphs for the other Greek-bearing variants (plain sans-serif, script, fraktur, double-struck all lack a Greek table entirely, so the question doesn't arise for them).
+  readonly epsilon: number;
+  readonly theta: number;
+  readonly kappa: number;
+  readonly phi: number;
+  readonly rho: number;
+  readonly pi: number;
 }
 
-// variant -> Greek uppercase/lowercase codepoints plus nabla (U+2207) and partial differential (U+2202) -- the two symbol-variant codepoints common enough in real formulas (gradients, partial derivatives) to bother mapping. The rest of the OpenType/Unicode Greek "symbol variant" set (epsilon/theta/kappa/phi/rho/pi symbol glyphs) is deliberately out of scope -- see this module's own README/gotchas note.
+// variant -> Greek uppercase/lowercase codepoints, nabla (U+2207), partial differential (U+2202), and the six Greek "symbol variant" codepoints (lunate epsilon/theta/kappa/phi/rho/pi symbols) -- every one confirmed against UnicodeData.txt directly (see this module's own top-of-file generation note for the exact ranges and cross-check).
 const GREEK_VARIANTS: Partial<Record<MathVariant, GreekVariantEntry>> = {
   bold: {
     upper: [0x1d6a8, 0x1d6a9, 0x1d6aa, 0x1d6ab, 0x1d6ac, 0x1d6ad, 0x1d6ae, 0x1d6af, 0x1d6b0, 0x1d6b1, 0x1d6b2, 0x1d6b3, 0x1d6b4, 0x1d6b5, 0x1d6b6, 0x1d6b7, 0x1d6b8, 0x1d6ba, 0x1d6bb, 0x1d6bc, 0x1d6bd, 0x1d6be, 0x1d6bf, 0x1d6c0],
     lower: [0x1d6c2, 0x1d6c3, 0x1d6c4, 0x1d6c5, 0x1d6c6, 0x1d6c7, 0x1d6c8, 0x1d6c9, 0x1d6ca, 0x1d6cb, 0x1d6cc, 0x1d6cd, 0x1d6ce, 0x1d6cf, 0x1d6d0, 0x1d6d1, 0x1d6d2, 0x1d6d4, 0x1d6d5, 0x1d6d6, 0x1d6d7, 0x1d6d8, 0x1d6d9, 0x1d6da],
     nabla: 0x1d6c1,
     partial: 0x1d6db,
+    epsilon: 0x1d6dc,
+    theta: 0x1d6dd,
+    kappa: 0x1d6de,
+    phi: 0x1d6df,
+    rho: 0x1d6e0,
+    pi: 0x1d6e1,
   },
   italic: {
     upper: [0x1d6e2, 0x1d6e3, 0x1d6e4, 0x1d6e5, 0x1d6e6, 0x1d6e7, 0x1d6e8, 0x1d6e9, 0x1d6ea, 0x1d6eb, 0x1d6ec, 0x1d6ed, 0x1d6ee, 0x1d6ef, 0x1d6f0, 0x1d6f1, 0x1d6f2, 0x1d6f4, 0x1d6f5, 0x1d6f6, 0x1d6f7, 0x1d6f8, 0x1d6f9, 0x1d6fa],
     lower: [0x1d6fc, 0x1d6fd, 0x1d6fe, 0x1d6ff, 0x1d700, 0x1d701, 0x1d702, 0x1d703, 0x1d704, 0x1d705, 0x1d706, 0x1d707, 0x1d708, 0x1d709, 0x1d70a, 0x1d70b, 0x1d70c, 0x1d70e, 0x1d70f, 0x1d710, 0x1d711, 0x1d712, 0x1d713, 0x1d714],
     nabla: 0x1d6fb,
     partial: 0x1d715,
+    epsilon: 0x1d716,
+    theta: 0x1d717,
+    kappa: 0x1d718,
+    phi: 0x1d719,
+    rho: 0x1d71a,
+    pi: 0x1d71b,
   },
   'bold-italic': {
     upper: [0x1d71c, 0x1d71d, 0x1d71e, 0x1d71f, 0x1d720, 0x1d721, 0x1d722, 0x1d723, 0x1d724, 0x1d725, 0x1d726, 0x1d727, 0x1d728, 0x1d729, 0x1d72a, 0x1d72b, 0x1d72c, 0x1d72e, 0x1d72f, 0x1d730, 0x1d731, 0x1d732, 0x1d733, 0x1d734],
     lower: [0x1d736, 0x1d737, 0x1d738, 0x1d739, 0x1d73a, 0x1d73b, 0x1d73c, 0x1d73d, 0x1d73e, 0x1d73f, 0x1d740, 0x1d741, 0x1d742, 0x1d743, 0x1d744, 0x1d745, 0x1d746, 0x1d748, 0x1d749, 0x1d74a, 0x1d74b, 0x1d74c, 0x1d74d, 0x1d74e],
     nabla: 0x1d735,
     partial: 0x1d74f,
+    epsilon: 0x1d750,
+    theta: 0x1d751,
+    kappa: 0x1d752,
+    phi: 0x1d753,
+    rho: 0x1d754,
+    pi: 0x1d755,
   },
   'bold-sans-serif': {
     upper: [0x1d756, 0x1d757, 0x1d758, 0x1d759, 0x1d75a, 0x1d75b, 0x1d75c, 0x1d75d, 0x1d75e, 0x1d75f, 0x1d760, 0x1d761, 0x1d762, 0x1d763, 0x1d764, 0x1d765, 0x1d766, 0x1d768, 0x1d769, 0x1d76a, 0x1d76b, 0x1d76c, 0x1d76d, 0x1d76e],
     lower: [0x1d770, 0x1d771, 0x1d772, 0x1d773, 0x1d774, 0x1d775, 0x1d776, 0x1d777, 0x1d778, 0x1d779, 0x1d77a, 0x1d77b, 0x1d77c, 0x1d77d, 0x1d77e, 0x1d77f, 0x1d780, 0x1d782, 0x1d783, 0x1d784, 0x1d785, 0x1d786, 0x1d787, 0x1d788],
     nabla: 0x1d76f,
     partial: 0x1d789,
+    epsilon: 0x1d78a,
+    theta: 0x1d78b,
+    kappa: 0x1d78c,
+    phi: 0x1d78d,
+    rho: 0x1d78e,
+    pi: 0x1d78f,
   },
   'sans-serif-bold-italic': {
     upper: [0x1d790, 0x1d791, 0x1d792, 0x1d793, 0x1d794, 0x1d795, 0x1d796, 0x1d797, 0x1d798, 0x1d799, 0x1d79a, 0x1d79b, 0x1d79c, 0x1d79d, 0x1d79e, 0x1d79f, 0x1d7a0, 0x1d7a2, 0x1d7a3, 0x1d7a4, 0x1d7a5, 0x1d7a6, 0x1d7a7, 0x1d7a8],
     lower: [0x1d7aa, 0x1d7ab, 0x1d7ac, 0x1d7ad, 0x1d7ae, 0x1d7af, 0x1d7b0, 0x1d7b1, 0x1d7b2, 0x1d7b3, 0x1d7b4, 0x1d7b5, 0x1d7b6, 0x1d7b7, 0x1d7b8, 0x1d7b9, 0x1d7ba, 0x1d7bc, 0x1d7bd, 0x1d7be, 0x1d7bf, 0x1d7c0, 0x1d7c1, 0x1d7c2],
     nabla: 0x1d7a9,
     partial: 0x1d7c3,
+    epsilon: 0x1d7c4,
+    theta: 0x1d7c5,
+    kappa: 0x1d7c6,
+    phi: 0x1d7c7,
+    rho: 0x1d7c8,
+    pi: 0x1d7c9,
   },
 };
+
+// Base Greek "symbol variant" codepoints -> the GreekVariantEntry field carrying their styled Mathematical Alphanumeric Symbols form. GREEK LUNATE EPSILON SYMBOL (U+03F5), GREEK THETA SYMBOL (U+03D1), GREEK KAPPA SYMBOL (U+03F0), GREEK PHI SYMBOL (U+03D5), GREEK RHO SYMBOL (U+03F1), GREEK PI SYMBOL (U+03D6) -- confirmed against UnicodeData.txt's own character names, not the ordinary (non-symbol) Greek letters GREEK_UPPER_BASE/GREEK_LOWER_BASE already cover.
+const GREEK_SYMBOL_BASES: ReadonlyMap<number, keyof Pick<GreekVariantEntry, 'epsilon' | 'theta' | 'kappa' | 'phi' | 'rho' | 'pi'>> = new Map([
+  [0x3f5, 'epsilon'],
+  [0x3d1, 'theta'],
+  [0x3f0, 'kappa'],
+  [0x3d5, 'phi'],
+  [0x3f1, 'rho'],
+  [0x3d6, 'pi'],
+]);
 
 // variant -> [10 digit codepoints 0-9]. No 'italic' entry: Unicode defines no distinct math-italic digit codepoints (MathML mathvariant='italic' on <mn> has no glyph to map to), so italic digits fall back to the plain ASCII digit like 'normal' does -- the same "no mapping -> use the base character" rule this module applies uniformly.
 const DIGIT_VARIANTS: Partial<Record<MathVariant, readonly number[]>> = {
@@ -154,6 +201,12 @@ export function mapMathVariant(codePoint: number, variant: MathVariant): number 
   }
   if (codePoint === 0x2202) {
     return GREEK_VARIANTS[variant]?.partial ?? codePoint;
+  }
+
+  const symbolField = GREEK_SYMBOL_BASES.get(codePoint);
+  if (symbolField !== undefined) {
+    const entry = GREEK_VARIANTS[variant];
+    return entry === undefined ? codePoint : entry[symbolField];
   }
 
   return codePoint;
