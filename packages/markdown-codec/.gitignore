@@ -1,5 +1,5 @@
 node_modules/
-dist/
+# dist/ is deliberately tracked, not ignored, as a temporary measure pending this package's own npm trusted-publisher setup -- see the "Getting started" section of the README for why.
 *.tsbuildinfo
 .DS_Store
 coverage/

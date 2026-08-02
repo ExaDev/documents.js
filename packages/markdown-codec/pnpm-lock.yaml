@@ -66,9 +66,6 @@ importers:
       typescript-eslint:
         specifier: ^8.65.0
         version: 8.65.0(eslint@10.8.0(jiti@2.6.1))(typescript@6.0.3)
-      unrun:
-        specifier: ^0.3.1
-        version: 0.3.1
       vitest:
         specifier: ^4.1.10
         version: 4.1.10(@types/node@26.1.2)(@vitest/coverage-v8@4.1.10)(vite@8.2.0(@types/node@26.1.2)(jiti@2.6.1)(yaml@2.9.0))
@@ -4764,6 +4761,7 @@ snapshots:
   unrun@0.3.1:
     dependencies:
       rolldown: 1.2.1
+    optional: true
 
   uri-js@4.4.1:
     dependencies:

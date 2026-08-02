@@ -61,6 +61,8 @@ pnpm add markdown-codec
 npm install markdown-codec
 ```
 
+This package is not yet published to npm, pending its own npm trusted-publisher configuration (the `Release` CI job runs and fails at the "no npm token" verification step until that is set up — every other job, including `Test`/`Smoke test`/`Lint`/`Typecheck`, is green). Until then, [`documents.js`](https://github.com/ExaDev/documents.js) consumes this package via a pinned git commit (`markdown-codec@github:ExaDev/markdown-codec#<commit>`) instead of a semver range, and `dist/` is deliberately committed rather than gitignored, so a git-tarball install has a working build with no install-time compile step: pnpm's own git-dependency preparation sandbox proved unreliable at running a `tsdown` build reliably in CI (two independent, environment-specific failures surfaced while chasing this — a Node.js ESM-loader bug in tsdown's default config loader, then dts generation silently producing zero output under the same sandbox even after routing around the first bug), so shipping the build output directly sidesteps the whole class of problem rather than chasing a third variant of it. Both `dist/` and this note should be removed once a real npm release makes them unnecessary.
+
 ## Usage
 
 Reading and writing markdown text:
