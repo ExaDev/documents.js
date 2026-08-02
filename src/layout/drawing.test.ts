@@ -3,6 +3,7 @@ import type { ContentDocument, ContentDrawPage, ContentRun, ContentShape, Conten
 import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
 import type { TextMeasurer } from 'pdf-codec';
 import { convertDrawingToLayout } from './drawing';
+import { reconstructDrawing } from './reconstruct';
 
 const BLACK = { r: 0, g: 0, b: 0 };
 const RED = { r: 1, g: 0, b: 0 };
@@ -265,5 +266,65 @@ describe('convertDrawingToLayout: vector rotation', () => {
       expect(segment.c1xPt).toBeCloseTo(130, 6);
       expect(segment.c1yPt).toBeCloseTo(200, 6);
     }
+  });
+});
+
+// --- Paint order: the shared paintOrder field merges the page's two arrays back into one true order ---
+
+describe('convertDrawingToLayout: shared paintOrder', () => {
+  function rect(fill: { r: number; g: number; b: number }, paintOrder?: number): ContentVector {
+    return { kind: 'rect', frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 }, fill, paintOrder };
+  }
+
+  it('interleaves shapes and vectors by paintOrder rather than painting every vector first', () => {
+    const back = rect(RED, 0);
+    const front = rect(BLUE, 2);
+    const middle: ContentShape = { ...textShape('Between'), paintOrder: 1 };
+    const layout = convert([page({ shapes: [middle], vectors: [back, front] })]);
+    expect(layout.pages[0]?.items.map((item) => item.kind)).toEqual(['rect', 'text', 'rect']);
+  });
+
+  it('puts a shape genuinely behind a vector when its own paintOrder says so', () => {
+    const behind: ContentShape = { ...textShape('Behind'), paintOrder: 0 };
+    const over = rect(RED, 1);
+    const layout = convert([page({ shapes: [behind], vectors: [over] })]);
+    expect(layout.pages[0]?.items.map((item) => item.kind)).toEqual(['text', 'rect']);
+  });
+
+  it('falls back to the historical vectors-then-shapes order when any item on the page carries no paintOrder', () => {
+    const stamped = rect(RED, 5);
+    const unstamped: ContentShape = textShape('Unstamped'); // no paintOrder at all
+    const layout = convert([page({ shapes: [unstamped], vectors: [stamped] })]);
+    expect(layout.pages[0]?.items.map((item) => item.kind)).toEqual(['rect', 'text']);
+  });
+
+  it('keeps each array\'s own relative order for items sharing a paintOrder value', () => {
+    const first = rect(RED, 3);
+    const second = rect(BLUE, 3);
+    const layout = convert([page({ vectors: [first, second] })]);
+    const items = layout.pages[0]?.items ?? [];
+    expect(items.map((item) => (item.kind === 'rect' ? item.fill : undefined))).toEqual([RED, BLUE]);
+  });
+});
+
+// The full drawing round trip for paint order specifically: a genuinely interleaved page (vector, shape, vector) survives convertDrawingToLayout -> reconstructDrawing with its interleaving intact, which is only possible because both halves now speak through the shared paintOrder field. Before it existed, the layout pass flattened every page to vectors-then-shapes and the reconstruction bucketed it back the same way, so this exact ordering could not survive at all.
+describe('convertDrawingToLayout -> reconstructDrawing: paint order survives the round trip', () => {
+  it('preserves a genuinely interleaved vector/shape/vector stack rather than collapsing it to vectors-then-shapes', () => {
+    const back: ContentVector = { kind: 'rect', frame: { xPt: 0, yPt: 0, widthPt: 40, heightPt: 40 }, fill: RED, paintOrder: 0 };
+    const middle: ContentShape = { ...textShape('Between'), paintOrder: 1 };
+    const front: ContentVector = { kind: 'rect', frame: { xPt: 20, yPt: 20, widthPt: 40, heightPt: 40 }, fill: BLUE, paintOrder: 2 };
+    const layout = convert([page({ shapes: [middle], vectors: [back, front] })]);
+
+    const recovered = reconstructDrawing(layout);
+    if (recovered.kind !== 'drawing') {
+      throw new Error('expected a drawing ContentDocument');
+    }
+    const recoveredPage = recovered.pages[0]!;
+    expect(recoveredPage.vectors.map((v) => v.paintOrder)).toEqual([0, 2]);
+    expect(recoveredPage.shapes.map((s) => s.paintOrder)).toEqual([1]);
+
+    // And laying the RECOVERED page out again reproduces the identical interleaving, rather than drifting back to vectors-then-shapes.
+    const relaid = convertDrawingToLayout(recovered, { measurer: fakeMeasurer() });
+    expect(relaid.pages[0]?.items.map((item) => item.kind)).toEqual(['rect', 'text', 'rect']);
   });
 });

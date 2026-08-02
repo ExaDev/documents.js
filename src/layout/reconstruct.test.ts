@@ -273,21 +273,21 @@ describe('reconstructDrawing: vector mapping', () => {
     const item: LayoutItem = { kind: 'rect', xPt: 20, yPt: 30, widthPt: 100, heightPt: 40, fill: RED };
     const doc = reconstructDrawing(docFrom([page(400, 300, [item])]));
     const [pg] = drawPages(doc);
-    expect(pg!.vectors).toEqual([{ kind: 'rect', frame: { xPt: 20, yPt: 230, widthPt: 100, heightPt: 40 }, fill: RED, stroke: undefined, sourcePath: undefined }]); // yPt = 300 - 30 - 40
+    expect(pg!.vectors).toEqual([{ kind: 'rect', frame: { xPt: 20, yPt: 230, widthPt: 100, heightPt: 40 }, fill: RED, stroke: undefined, sourcePath: undefined, paintOrder: 0 }]); // yPt = 300 - 30 - 40
   });
 
   it('maps a LayoutEllipse to an ellipse ContentVector via the exact flipY inverse', () => {
     const item: LayoutItem = { kind: 'ellipse', xPt: 50, yPt: 60, widthPt: 80, heightPt: 20, stroke: { color: BLACK, widthPt: 1 } };
     const doc = reconstructDrawing(docFrom([page(400, 300, [item])]));
     const [pg] = drawPages(doc);
-    expect(pg!.vectors).toEqual([{ kind: 'ellipse', frame: { xPt: 50, yPt: 220, widthPt: 80, heightPt: 20 }, fill: undefined, stroke: { color: BLACK, widthPt: 1 }, sourcePath: undefined }]); // yPt = 300 - 60 - 20
+    expect(pg!.vectors).toEqual([{ kind: 'ellipse', frame: { xPt: 50, yPt: 220, widthPt: 80, heightPt: 20 }, fill: undefined, stroke: { color: BLACK, widthPt: 1 }, sourcePath: undefined, paintOrder: 0 }]); // yPt = 300 - 60 - 20
   });
 
   it('maps a LayoutLine to a line ContentVector with a synthesized stroke object', () => {
     const item: LayoutItem = { kind: 'line', x1Pt: 10, y1Pt: 20, x2Pt: 90, y2Pt: 60, color: BLACK, widthPt: 2 };
     const doc = reconstructDrawing(docFrom([page(400, 300, [item])]));
     const [pg] = drawPages(doc);
-    expect(pg!.vectors).toEqual([{ kind: 'line', from: { xPt: 10, yPt: 280 }, to: { xPt: 90, yPt: 240 }, stroke: { color: BLACK, widthPt: 2 }, sourcePath: undefined }]); // yPt = 300 - y1Pt/y2Pt
+    expect(pg!.vectors).toEqual([{ kind: 'line', from: { xPt: 10, yPt: 280 }, to: { xPt: 90, yPt: 240 }, stroke: { color: BLACK, widthPt: 2 }, sourcePath: undefined, paintOrder: 0 }]); // yPt = 300 - y1Pt/y2Pt
   });
 
   it('maps a LayoutPath to a path ContentVector with a tight bounding-box frame and localized subpath points', () => {
@@ -307,6 +307,7 @@ describe('reconstructDrawing: vector mapping', () => {
         fillRule: undefined,
         stroke: undefined,
         sourcePath: undefined,
+        paintOrder: 0,
       },
     ]);
   });
@@ -592,5 +593,30 @@ describe('reconstructSpreadsheet: empty input and cancellation', () => {
     const controller = new AbortController();
     controller.abort();
     expect(() => reconstructSpreadsheet(docFrom([page(400, 300, [])]), { signal: controller.signal })).toThrow();
+  });
+});
+
+// --- Paint order: reconstructDrawPage stamps the walk position, so an interleaved page survives the round trip ---
+
+describe('reconstructDrawing: shared paintOrder', () => {
+  it('stamps a dense, monotonic paintOrder across BOTH arrays in the page\'s own recovered paint order', () => {
+    const items: LayoutItem[] = [
+      { kind: 'rect', xPt: 0, yPt: 0, widthPt: 10, heightPt: 10, fill: RED },
+      text({ text: 'Middle', xPt: 5, yPt: 5, widthPt: 30 }),
+      { kind: 'rect', xPt: 20, yPt: 0, widthPt: 10, heightPt: 10, fill: RED },
+    ];
+    const [pg] = drawPages(reconstructDrawing(docFrom([page(400, 300, items)])));
+    expect(pg!.vectors.map((v) => v.paintOrder)).toEqual([0, 2]);
+    expect(pg!.shapes.map((s) => s.paintOrder)).toEqual([1]);
+  });
+
+  it('skips no slot for a dropped link item, keeping the stamped values a dense run over what was actually recovered', () => {
+    const items: LayoutItem[] = [
+      { kind: 'rect', xPt: 0, yPt: 0, widthPt: 10, heightPt: 10, fill: RED },
+      { kind: 'link', xPt: 0, yPt: 0, widthPt: 10, heightPt: 10, uri: 'https://example.invalid' },
+      { kind: 'rect', xPt: 20, yPt: 0, widthPt: 10, heightPt: 10, fill: RED },
+    ];
+    const [pg] = drawPages(reconstructDrawing(docFrom([page(400, 300, items)])));
+    expect(pg!.vectors.map((v) => v.paintOrder)).toEqual([0, 1]);
   });
 });

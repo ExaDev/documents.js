@@ -441,25 +441,26 @@ export function reconstructDrawing(doc: LayoutDocument, options?: ReconstructOpt
   return { kind: 'drawing', formatVersion: CONTENT_FORMAT_VERSION, metadata: doc.metadata, pages };
 }
 
-// ContentDrawPageSchema keeps shapes and vectors as two independently paint-ordered arrays with no field recording their relative order -- the same documented gap drawing.ts's own convertDrawingToLayout resolves one way (vectors always paint before shapes) when going the other direction. reconstructDrawPage resolves it in reverse identically: walk page.items in original paint order once, bucketing each item into whichever array its own kind belongs to, so each array keeps the relative order its own items appeared in overall. A page built by convertDrawingToLayout itself (vectors-then-shapes, by construction) round-trips its own paint order exactly this way; a LayoutDocument from any other producer gets the same bucketing, the only ordering ContentDrawPageSchema's own shape is able to express at all. 'link' items have no drawing-page equivalent and are dropped, matching reconstructPageBlocks/reconstructSlide's own existing precedent above of ignoring link items entirely.
+// ContentDrawPageSchema still keeps shapes and vectors as two separate arrays, but both ContentVector and ContentShape carry a shared `paintOrder` recording their true relative position -- the field drawing.ts's own convertDrawingToLayout merges by when going the other direction. reconstructDrawPage produces exactly that field here: it already walked page.items once in real paint order (a LayoutPage's items ARE its paint order, front-to-back by array position) and bucketed each into whichever array its own kind belongs to, so recording the walk position as it goes is all that is needed for the relative order between the two arrays to survive at all. A page that genuinely interleaves the two consequently round-trips its interleaving exactly, rather than collapsing to all-vectors-then-all-shapes the way it had to before the schema carried the field. 'link' items have no drawing-page equivalent and are dropped, matching reconstructPageBlocks/reconstructSlide's own existing precedent above of ignoring link items entirely -- a dropped item consumes no paintOrder slot either, so the stamped values stay a dense 0..n-1 run over what was actually recovered.
 function reconstructDrawPage(page: LayoutPage, images: Record<string, LayoutImageAsset>): ContentDrawPage {
   const vectors: ContentVector[] = [];
   const shapes: ContentShape[] = [];
+  let paintOrder = 0;
   for (const item of page.items) {
     if (item.kind === 'rect') {
-      vectors.push(layoutRectToVector(item, page.heightPt));
+      vectors.push({ ...layoutRectToVector(item, page.heightPt), paintOrder: paintOrder++ });
     } else if (item.kind === 'ellipse') {
-      vectors.push(layoutEllipseToVector(item, page.heightPt));
+      vectors.push({ ...layoutEllipseToVector(item, page.heightPt), paintOrder: paintOrder++ });
     } else if (item.kind === 'line') {
-      vectors.push(layoutLineToVector(item, page.heightPt));
+      vectors.push({ ...layoutLineToVector(item, page.heightPt), paintOrder: paintOrder++ });
     } else if (item.kind === 'path') {
-      vectors.push(layoutPathToVector(item, page.heightPt));
+      vectors.push({ ...layoutPathToVector(item, page.heightPt), paintOrder: paintOrder++ });
     } else if (item.kind === 'text') {
-      shapes.push(layoutTextToShape(item, page.heightPt));
+      shapes.push({ ...layoutTextToShape(item, page.heightPt), paintOrder: paintOrder++ });
     } else if (item.kind === 'image') {
       const shape = imageToShape(item, page.heightPt, images);
       if (shape !== undefined) {
-        shapes.push(shape);
+        shapes.push({ ...shape, paintOrder: paintOrder++ });
       }
     }
   }
