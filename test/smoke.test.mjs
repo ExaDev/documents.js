@@ -46,6 +46,12 @@ const FUNCTIONS = [
   'readOdfFormulaContent',
   'layoutFormula',
   'loadMathFont',
+  'readMarkdownContent',
+  'buildMarkdownText',
+  'markdownToPdf',
+  'pdfToMarkdown',
+  'markdownToDocx',
+  'docxToMarkdown',
   'createLocalDocumentConverter',
   'documentPackageWithSchema',
   'contentDocumentWithSchema',
@@ -364,5 +370,39 @@ describe('dist/ end-to-end: odfToPdf, from the CJS build', () => {
     expect(raw).toContain('/Subtype /Type0');
     expect(raw).toContain('/Encoding /Identity-H');
     expect(raw).toContain('/Subtype /CIDFontType0C');
+  });
+});
+
+// markdownToPdf then pdfToMarkdown, plus the markdownToDocx bridge: the concrete, from-the-built-artifact proof that markdown-codec's own readMarkdown, wrapped by this package's readMarkdownContent, reaches convertWordprocessingToLayout (via markdownToPdf) and buildDocxPackage (via markdownToDocx) unmodified, the identical pipeline docxToPdf's own smoke test above already proves for docx -- markdown is a third, real caller of that same engine, not just a src/ unit-test claim.
+describe('dist/ end-to-end: markdownToPdf then pdfToMarkdown, and markdownToDocx, from the CJS build', () => {
+  it('produces a real PDF from markdown bytes, reconstructs back to markdown, and bridges directly to a real docx package', () => {
+    const markdownBytes = new TextEncoder().encode('# Smoke Test Heading\n\nHello from the **markdown** smoke test.\n');
+
+    const pdfBytes = cjs.markdownToPdf(markdownBytes);
+    expect(pdfBytes.length).toBeGreaterThan(0);
+    expect(new TextDecoder('latin1').decode(pdfBytes.subarray(0, 5))).toBe('%PDF-');
+
+    const layout = cjs.readPdf(pdfBytes);
+    const text = layout.pages[0]?.items
+      .filter((item) => item.kind === 'text')
+      .map((item) => item.text)
+      .join(' ');
+    expect(text).toContain('Smoke');
+    expect(text).toContain('markdown');
+
+    const roundTrippedMarkdownBytes = cjs.pdfToMarkdown(pdfBytes);
+    expect(roundTrippedMarkdownBytes.length).toBeGreaterThan(0);
+    expect(new TextDecoder().decode(roundTrippedMarkdownBytes)).toContain('markdown');
+
+    // markdownToDocx: no PDF pivot at all -- readMarkdownContent feeds buildDocxPackage directly (see convert.ts's own module comment), proving the bridge functions reach the built dist/ artifact too, not just the PDF-pivot conversions above.
+    const docxBytes = cjs.markdownToDocx(markdownBytes);
+    expect(docxBytes.length).toBeGreaterThan(0);
+    const docxText = cjs
+      .openDocx(docxBytes)
+      .paragraphs()
+      .map((p) => p.text)
+      .join(' ');
+    expect(docxText).toContain('Smoke Test Heading');
+    expect(docxText).toContain('markdown');
   });
 });
