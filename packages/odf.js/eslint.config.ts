@@ -39,11 +39,6 @@ export default tseslint.config(
     rules: { 'local/no-pointless-reassignment': 'error' },
   },
   {
-    // Genuine bailout the rule's own mutation-check can't detect: it only checks whether the ALIAS itself (startIndex) is ever reassigned, not whether the origin variable (columnCursor) is mutated between the const's declaration and a later read of the alias. readTable's own table:table-header-columns branch declares `const startIndex = columnCursor` specifically to snapshot the cursor's value BEFORE the header-column loop mutates it via processColumn's own `columnCursor += ...`, then compares the two afterwards (`if (columnCursor > startIndex)`). Auto-fixing this the way the rule normally would -- rewriting every read of startIndex to columnCursor -- silently turns that comparison into `columnCursor > columnCursor`, always false. Scoped to this one file rather than disabled globally, since this file's other pointless-reassignment case (a since-removed DEFAULT_PAGE_SIZE alias) was a genuine, correctly auto-fixed hit.
-    files: ['src/typed/ods/read.ts'],
-    rules: { 'local/no-pointless-reassignment': 'off' },
-  },
-  {
     // Re-exports belong only in src/index.ts, the public barrel -- a re-export anywhere else risks silently surfacing the wrong thing under a name a consumer expects to mean something else.
     files: ['src/**/*.ts'],
     ignores: [
