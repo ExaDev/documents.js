@@ -1,3 +1,24 @@
+# [2.0.0](https://github.com/ExaDev/document-schema.js/compare/v1.10.1...v2.0.0) (2026-08-02)
+
+
+* feat!: add a real MathML ContentDocument kind and fix several breaking schema issues ([a73415e](https://github.com/ExaDev/document-schema.js/commit/a73415eaf174737ccc15646f4be4a88d25fea8f3))
+
+
+### Features
+
+* add an exactValue decimal-string sidecar for arbitrary-precision cell values ([2a5a616](https://github.com/ExaDev/document-schema.js/commit/2a5a616880d309b13b11b6bc3e57e79771eb4899))
+* add vector rotation, stroke style, cell borders/alignment, and shared paint order ([cd96e21](https://github.com/ExaDev/document-schema.js/commit/cd96e217177026de046775bfcc9da6047aa4bbfe))
+
+
+### BREAKING CHANGES
+
+* CONTENT_FORMAT_VERSION bumped from 1 to 2;
+ContentDocument has a fifth 'formula' variant,
+so an exhaustive switch over its kinds no longer compiles;
+ContentSheetPrintSettings.scale renamed to scalePercent;
+ContentSheetColumn.widthPt/ContentSheetRow.heightPt are now optional and reject an explicit 0;
+ContentCellValue has a new 'dateTime' kind.
+
 ## [1.10.1](https://github.com/ExaDev/document-schema.js/compare/v1.10.0...v1.10.1) (2026-08-02)
 
 # [1.10.0](https://github.com/ExaDev/document-schema.js/compare/v1.9.1...v1.10.0) (2026-08-02)
