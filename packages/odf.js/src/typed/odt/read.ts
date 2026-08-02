@@ -103,8 +103,6 @@ function parseKnownOdfLength(value: string): number {
   return parsed;
 }
 
-// ODF/LibreOffice's own out-of-the-box defaults for a freshly created, unmodified text document -- confirmed directly against a real Writer document's own style:page-layout-properties (21cm x 29.7cm page, 2cm margins on every side) -- used only when a package's styles.xml is missing, malformed, or (see readFirstMasterPageGeometry) has no master page/page layout this reader can resolve. Deliberately A4-based rather than reusing document-schema.js's own PAGE_SIZE_LETTER convention (which ooxml.js's docx reader falls back to): Word's real default is genuinely Letter-sized, but ODF/LibreOffice's real default is genuinely A4-sized, so each reader's own fallback should reflect the format it actually reads, not a single cross-format constant -- mirroring readOdp's own SLIDE_SIZE_WIDESCREEN fallback choice for the same reason.
-const DEFAULT_PAGE_SIZE: PageSize = PAGE_SIZE_A4;
 const DEFAULT_MARGIN_PT = parseKnownOdfLength('2cm');
 const DEFAULT_MARGINS: Margins = { topPt: DEFAULT_MARGIN_PT, rightPt: DEFAULT_MARGIN_PT, bottomPt: DEFAULT_MARGIN_PT, leftPt: DEFAULT_MARGIN_PT };
 
@@ -132,6 +130,8 @@ function findPageLayoutElement(pkg: Package, pageLayoutName: string | undefined)
 }
 
 // Reads the FIRST style:master-page (styles.xml's office:master-styles, in document order) and its associated style:page-layout into PageSize/Margins, via geometry.ts's own parsing helpers. A document with more than one master page (a mid-document page-style change, e.g. switching to a landscape layout partway through) has every master page AFTER the first silently ignored -- a deliberate, tracked scope gap, not an oversight: ODF's own multi-master-page mechanism doesn't correspond to anything ContentSection currently models (one ContentSection carries exactly one pageSize/margins pair for its own blocks), and building that mapping is genuinely separate, larger work from this reader's own current job of proving the single-section, single-page-layout path end to end.
+//
+// ODF/LibreOffice's own out-of-the-box defaults for a freshly created, unmodified text document -- confirmed directly against a real Writer document's own style:page-layout-properties (21cm x 29.7cm page, 2cm margins on every side) -- used only when a package's styles.xml is missing, malformed, or has no master page/page layout this reader can resolve. Deliberately A4-based rather than reusing document-schema.js's own PAGE_SIZE_LETTER convention (which ooxml.js's docx reader falls back to): Word's real default is genuinely Letter-sized, but ODF/LibreOffice's real default is genuinely A4-sized, so each reader's own fallback should reflect the format it actually reads, not a single cross-format constant -- mirroring readOdp's own SLIDE_SIZE_WIDESCREEN fallback choice for the same reason.
 function readFirstMasterPageGeometry(pkg: Package): { pageSize: PageSize; margins: Margins } {
   const stylesPart = pkg.parts[STYLES_PART];
   const stylesRoot = stylesPart?.kind === 'xml' ? rootElement(stylesPart.nodes) : undefined;
@@ -145,7 +145,7 @@ function readFirstMasterPageGeometry(pkg: Package): { pageSize: PageSize; margin
   const margins = properties === undefined ? undefined : parseMargins(properties);
 
   return {
-    pageSize: pageSize ?? DEFAULT_PAGE_SIZE,
+    pageSize: pageSize ?? PAGE_SIZE_A4,
     margins: margins ?? DEFAULT_MARGINS,
   };
 }

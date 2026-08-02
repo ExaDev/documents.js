@@ -83,8 +83,8 @@ function attributeMap(element: XmlElement): Map<string, string> {
   return map;
 }
 
-// The canonical ODF length parse/format pair now lives in ../typed/shared/units.ts, shared with every other reader in this package (and future odt/ods/odp/odg readers) rather than duplicated here -- see that module's own top-of-file note for the unit-conversion constants and their verification. parseLength/formatPt are kept as this module's own public names (both re-exported from index.ts and covered by this module's existing test suite) purely as stable aliases: parseLength is units.ts's parseOdfLength unchanged, and formatPt is formatOdfLength pinned to "pt" -- this package's own writers' one and only output unit (see the top-of-file note above).
-export const parseLength = parseOdfLength;
+// The canonical ODF length parse/format pair now lives in ../typed/shared/units.ts, shared with every other reader in this package (and future odt/ods/odp/odg readers) rather than duplicated here -- see that module's own top-of-file note for the unit-conversion constants and their verification. parseLength/formatPt are kept as this module's own public names (both re-exported from index.ts and covered by this module's existing test suite) purely as stable aliases: parseLength is units.ts's parseOdfLength unchanged, and formatPt is formatOdfLength pinned to "pt" -- this package's own writers' one and only output unit (see the top-of-file note above). Expressed as a rename-export rather than a `const parseLength = parseOdfLength` local alias, since this module's own code never calls it by that name internally (see parseTextProperties/parseParagraphProperties below, which call parseOdfLength directly) -- the name only needs to survive as this module's public surface.
+export { parseOdfLength as parseLength };
 
 export function formatPt(valuePt: number): string {
   return formatOdfLength(valuePt, 'pt');
@@ -109,9 +109,7 @@ export function formatPercentageMultiplier(multiplier: number): string {
   return `${multiplier * 100}%`;
 }
 
-// The canonical ODF colour parse/format pair now lives in ../typed/shared/color.ts, shared with every other reader in this package rather than duplicated here -- see that module's own top-of-file note on the text:color datatype. Kept as local aliases so the rest of this file (and its existing tests) can keep calling parseColor/formatColor unchanged.
-const parseColor = parseOdfColor;
-const formatColor = formatOdfColor;
+// The canonical ODF colour parse/format pair now lives in ../typed/shared/color.ts, shared with every other reader in this package rather than duplicated here -- see that module's own top-of-file note on the text:color datatype. This module calls parseOdfColor/formatOdfColor directly (see parseTextProperties/textPropertiesToAttributes below) rather than through a local alias.
 
 // Reads a boolean tri-state (true/false/absent) plus an "unrecognised combination" outcome from ODF's compound line-decoration attributes (underline: style+width+color; strike: style+type). Ground truth (LibreOffice 26.2): underline "on" is `style:text-underline-style="solid" style:text-underline-width="auto" style:text-underline-color="font-color"`; strike "on" is `style:text-line-through-style="solid" style:text-line-through-type="single"`. Only that exact canonical "on" shape, or a plain "none" with no companion attributes, parses cleanly -- anything else (a custom underline colour, a dotted style, a companion attribute present alongside "none") is real formatting information this boolean model cannot represent, so it comes back as 'unknown' rather than being silently approximated.
 function parseLineDecoration(
@@ -192,7 +190,7 @@ export function parseTextProperties(element: XmlElement): ParsedProperties {
 
   const fontSize = attrs.get(ATTR.fontSize);
   if (fontSize !== undefined) {
-    const pt = parseLength(fontSize);
+    const pt = parseOdfLength(fontSize);
     if (pt === undefined) {
       hasUnknown = true;
     } else {
@@ -202,7 +200,7 @@ export function parseTextProperties(element: XmlElement): ParsedProperties {
 
   const color = attrs.get(ATTR.color);
   if (color !== undefined) {
-    const parsed = parseColor(color);
+    const parsed = parseOdfColor(color);
     if (parsed === undefined) {
       hasUnknown = true;
     } else {
@@ -233,7 +231,7 @@ export function parseParagraphProperties(element: XmlElement): ParsedProperties 
 
   const marginTop = attrs.get(ATTR.marginTop);
   if (marginTop !== undefined) {
-    const pt = parseLength(marginTop);
+    const pt = parseOdfLength(marginTop);
     if (pt === undefined) {
       hasUnknown = true;
     } else {
@@ -243,7 +241,7 @@ export function parseParagraphProperties(element: XmlElement): ParsedProperties 
 
   const marginBottom = attrs.get(ATTR.marginBottom);
   if (marginBottom !== undefined) {
-    const pt = parseLength(marginBottom);
+    const pt = parseOdfLength(marginBottom);
     if (pt === undefined) {
       hasUnknown = true;
     } else {
@@ -253,7 +251,7 @@ export function parseParagraphProperties(element: XmlElement): ParsedProperties 
 
   const marginLeft = attrs.get(ATTR.marginLeft);
   if (marginLeft !== undefined) {
-    const pt = parseLength(marginLeft);
+    const pt = parseOdfLength(marginLeft);
     if (pt === undefined) {
       hasUnknown = true;
     } else {
@@ -263,7 +261,7 @@ export function parseParagraphProperties(element: XmlElement): ParsedProperties 
 
   const textIndent = attrs.get(ATTR.textIndent);
   if (textIndent !== undefined) {
-    const pt = parseLength(textIndent);
+    const pt = parseOdfLength(textIndent);
     if (pt === undefined) {
       hasUnknown = true;
     } else {
@@ -352,7 +350,7 @@ export function textPropertiesToAttributes(properties: StyleProperties): Attribu
     attributes.push({ name: ATTR.fontSize, value: formatPt(properties.sizePt) });
   }
   if (properties.color !== undefined) {
-    attributes.push({ name: ATTR.color, value: formatColor(properties.color) });
+    attributes.push({ name: ATTR.color, value: formatOdfColor(properties.color) });
   }
   return attributes;
 }

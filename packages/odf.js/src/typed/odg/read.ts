@@ -13,11 +13,9 @@ import { readDrawPageContent } from '../draw/shapes';
 
 const CONTENT_PART = 'content.xml';
 
-// LibreOffice Draw's own out-of-the-box default page size for a freshly created, unmodified .odg (confirmed directly against a real Draw document's own style:page-layout-properties: 21cm x 29.7cm portrait, i.e. A4) -- used only when a page's own master-page/page-layout chain doesn't resolve. Deliberately A4-based, matching readOdt's own DEFAULT_PAGE_SIZE choice and reasoning (each reader's own fallback should reflect the format it actually reads) rather than reusing readOdp's own SLIDE_SIZE_WIDESCREEN, which is Impress's default, not Draw's.
-const DEFAULT_PAGE_SIZE = PAGE_SIZE_A4;
-
 function readPage(page: XmlElement, pkg: Package): ContentDrawPage {
-  const size = resolveDrawPageSize(page, pkg) ?? DEFAULT_PAGE_SIZE;
+  // LibreOffice Draw's own out-of-the-box default page size for a freshly created, unmodified .odg (confirmed directly against a real Draw document's own style:page-layout-properties: 21cm x 29.7cm portrait, i.e. A4) -- used only when a page's own master-page/page-layout chain doesn't resolve. Deliberately A4-based, matching readOdt's own fallback choice and reasoning (each reader's own fallback should reflect the format it actually reads) rather than reusing readOdp's own SLIDE_SIZE_WIDESCREEN, which is Impress's default, not Draw's.
+  const size = resolveDrawPageSize(page, pkg) ?? PAGE_SIZE_A4;
   const { shapes, vectors } = readDrawPageContent(page.children, pkg);
   return { size, shapes, vectors };
 }

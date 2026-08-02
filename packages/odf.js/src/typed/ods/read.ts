@@ -10,7 +10,6 @@ import type {
   ContentSheetRow,
   LayoutMetadata,
   Margins,
-  PageSize,
 } from 'document-schema.js';
 import { PAGE_SIZE_A4 } from 'document-schema.js';
 import type { XmlElement } from '../../model/node';
@@ -40,8 +39,7 @@ function parseKnownOdfLength(value: string): number {
   return parsed;
 }
 
-// LibreOffice Calc's own real out-of-the-box default page geometry for an untouched page style (confirmed directly via the UNO API's own PageStyle.Width/Height/*Margin properties on a freshly created, unmodified Calc document -- 21.001cm x 29.7cm, 2cm margins on every side -- even though a truly untouched style:page-layout-properties element omits fo:page-width/height/margin-* from the SAVED XML entirely, per real LibreOffice output). Numerically identical to readOdt's own DEFAULT_PAGE_SIZE/DEFAULT_MARGINS choice (PAGE_SIZE_A4 + 2cm), which is not a coincidence: Calc and Writer share the same locale-driven default page geometry, and both readers' own fallback should reflect the real, confirmed default rather than an assumed one.
-const DEFAULT_PAGE_SIZE: PageSize = PAGE_SIZE_A4;
+// LibreOffice Calc's own real out-of-the-box default page geometry for an untouched page style (confirmed directly via the UNO API's own PageStyle.Width/Height/*Margin properties on a freshly created, unmodified Calc document -- 21.001cm x 29.7cm, 2cm margins on every side -- even though a truly untouched style:page-layout-properties element omits fo:page-width/height/margin-* from the SAVED XML entirely, per real LibreOffice output). Numerically identical to readOdt's own default page size/margins choice (PAGE_SIZE_A4 + 2cm), which is not a coincidence: Calc and Writer share the same locale-driven default page geometry, and both readers' own fallback should reflect the real, confirmed default rather than an assumed one.
 const DEFAULT_MARGIN_PT = parseKnownOdfLength('2cm');
 const DEFAULT_MARGINS: Margins = { topPt: DEFAULT_MARGIN_PT, rightPt: DEFAULT_MARGIN_PT, bottomPt: DEFAULT_MARGIN_PT, leftPt: DEFAULT_MARGIN_PT };
 
@@ -210,11 +208,10 @@ function readTable(tableElement: XmlElement, pkg: Package): TableWalkResult {
   const cursor = new TableCursor();
 
   function processColumn(columnElement: XmlElement): void {
-    const startIndex = columnCursor;
     const { widthPt, manualBreak } = readColumnLayout(columnElement, pkg);
-    columns.push({ index: startIndex, widthPt, hidden: isHidden(columnElement) ? true : undefined });
+    columns.push({ index: columnCursor, widthPt, hidden: isHidden(columnElement) ? true : undefined });
     if (manualBreak) {
-      manualBreakColumns.push(startIndex);
+      manualBreakColumns.push(columnCursor);
     }
     columnCursor += readRepeatCount(columnElement, 'table:number-columns-repeated');
   }
@@ -343,7 +340,7 @@ function readPrintSettings(
   const manualBreaks = manualBreakRows.length > 0 || manualBreakColumns.length > 0 ? { rows: manualBreakRows, columns: manualBreakColumns } : undefined;
 
   const settings: ContentSheetPrintSettings = {
-    pageSize: pageSize ?? DEFAULT_PAGE_SIZE,
+    pageSize: pageSize ?? PAGE_SIZE_A4,
     margins: margins ?? DEFAULT_MARGINS,
     gridlines: printTokens.has('grid'),
     headers: printTokens.has('headers'),
