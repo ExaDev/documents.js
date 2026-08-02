@@ -6,6 +6,35 @@
 
 An OOXML file is a ZIP archive of parts (an OPC "package"): `[Content_Types].xml`, relationships (`*.rels`), XML content parts, and binary parts (images, embedded objects). `ooxml.js` decodes the **whole package** into a faithful JSON model and encodes it back — part for part — so `encode(decode(file))` reproduces the original content.
 
+```mermaid
+graph TD
+    schema("document-schema.js")
+    ooxml("ooxml.js")
+    odf("odf.js")
+    pdfcodec("pdf-codec")
+    documents("documents.js")
+    cli("document-cli")
+
+    schema --> ooxml
+    schema --> odf
+    schema --> pdfcodec
+    schema --> documents
+    ooxml --> documents
+    odf --> documents
+    pdfcodec --> documents
+    documents --> cli
+    odf --> cli
+
+    click schema "https://github.com/ExaDev/document-schema.js" "document-schema.js"
+    click ooxml "https://github.com/ExaDev/ooxml.js" "ooxml.js"
+    click odf "https://github.com/ExaDev/odf.js" "odf.js"
+    click pdfcodec "https://github.com/ExaDev/pdf-codec" "pdf-codec"
+    click documents "https://github.com/ExaDev/documents.js" "documents.js"
+    click cli "https://github.com/ExaDev/document-cli" "document-cli"
+
+    style ooxml fill:#f9a825,stroke:#333,stroke-width:3px
+```
+
 ## Why
 
 Semantic, typed document models are lossy and one-directional: they cannot round-trip. True round-trip requires capturing every part, relationship, and binary byte-for-byte at the content level. `ooxml.js` provides that lossless generic foundation, with ergonomic typed reading views (`Document`, `Presentation`, `Workbook`) layered on top for convenient access.
