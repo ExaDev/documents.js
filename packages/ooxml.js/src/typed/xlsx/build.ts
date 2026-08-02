@@ -11,7 +11,7 @@ import { SharedStringTable } from './shared-strings';
 import { ptToColumnWidthChars } from './units';
 import { pageSizeToPaperSizeCode, ptToUniversalMeasure, writeXmlBool } from './util';
 
-// ContentDocument (kind: 'spreadsheet') -> Package: the first genuinely NEW xlsx package this ecosystem writes from scratch, rather than decoding/re-encoding an existing one -- every part below (down to xl/styles.xml's own minimal-but-real style table) is constructed directly via xml/fragment.ts's el/txt, matching typed/xlsx/content.ts's own readXlsxContent as its read-side inverse: writing everything that reader reads, honestly re-approximating the two lossy conversions (column-width characters, and the "no number-format engine" cell-value scope) it already documents on the way in. See typed/xlsx/content.test.ts and typed/xlsx/build.test.ts for the real-LibreOffice round-trip verification this pairing is built and tested against.
+// ContentDocument (kind: 'spreadsheet') -> Package: the first genuinely NEW xlsx package this ecosystem writes from scratch, rather than decoding/re-encoding an existing one -- every part below (down to xl/styles.xml's own minimal-but-real style table) is constructed directly via xml/fragment.ts's el/txt, matching typed/xlsx/content.ts's own readXlsxContent as its read-side inverse: writing everything that reader reads, honestly re-approximating the lossy conversions it documents on the way in (column-width characters, and this writer's own no-numFmt style table -- see renderCellValue). See typed/xlsx/content.test.ts and typed/xlsx/build.test.ts for the real-LibreOffice round-trip verification this pairing is built and tested against.
 
 const SML_NS = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
 const REL_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
@@ -238,7 +238,7 @@ interface RenderedCellValue {
   content: string;
 }
 
-// xlsx has no distinct value-type for percentage/currency (see typed/xlsx/content.ts's own top-of-file scope note) -- both write as a plain numeric cell, carrying the raw numeric value through losslessly while the percentage/currency SEMANTIC (which would normally live in a numFmt style) is dropped, matching this writer's own genuinely-minimal xl/styles.xml (no custom number formats at all).
+// xlsx has no distinct CELL TYPE for percentage/currency -- both live in a numFmt style instead, which is how typed/xlsx/content.ts recovers them on the way in (see its own top-of-file scope note). This writer's xl/styles.xml is deliberately a single default format with no <numFmts> at all, so both write as a plain numeric cell: the raw numeric value survives losslessly, the percentage/currency semantic does not. A real, asymmetric gap between this pair's read and write halves, not a claim that xlsx cannot express it -- closing it means minting a numFmt per distinct value kind and cellXf per cell, which nothing has asked this writer for yet.
 function renderCellValue(value: ContentCellValue, isFormulaResult: boolean, sharedStrings: SharedStringTable): RenderedCellValue | undefined {
   switch (value.kind) {
     case 'string':

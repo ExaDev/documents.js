@@ -102,15 +102,31 @@ describe('readXlsxContent: kitchen-sink.xlsx (real LibreOffice output)', () => {
       expect(cellAt(0).displayText).toBe('Acme Corp');
     });
 
-    it('reads a plain numeric cell (t="n") -- including one carrying a date/time/percentage/currency NUMBER FORMAT STYLE, since xlsx has no distinct value-type for those (see this module\'s own scope note): all four still read as kind "number", not date/time/percentage/currency', () => {
-      expect(cellAt(1).value).toEqual({ kind: 'number', value: 1234.56 }); // Amount
-      expect(cellAt(3).value).toEqual({ kind: 'number', value: 46234 }); // Due Date, a date-formatted serial number
-      expect(cellAt(4).value).toEqual({ kind: 'number', value: 0.604166666666667 }); // Due Time, a time-formatted fraction of a day
-      expect(cellAt(5).value).toEqual({ kind: 'number', value: 0.4256 }); // Rate, a percentage-formatted fraction
-      expect(cellAt(6).value).toEqual({ kind: 'number', value: 99.99 }); // Fee, a currency-formatted number
+    it('reads a plain numeric cell (t="n") whose format is General as kind "number"', () => {
+      expect(cellAt(1).value).toEqual({ kind: 'number', value: 1234.56 }); // Amount, formatted through this fixture's own redefined numFmtId 164 ("General")
+      expect(cellAt(1).displayText).toBe('1234.56');
     });
 
-    it('reads a boolean cell (t="b") and derives an Excel-style TRUE/FALSE displayText', () => {
+    // Cross-checked against an INDEPENDENT oracle, not just against this reader's own view of the format codes: the source these fixtures were exported from, odf.js's own src/typed/ods/fixtures/kitchen-sink.ods, declares these same four cells explicitly typed -- office:value-type="date" office:date-value="2026-07-31", office:value-type="time" office:time-value="PT14H30M00S", office:value-type="percentage" office:value="0.4256", and office:value-type="currency" office:currency="GBP" office:value="99.99". Every kind, value, and the ISO 4217 code recovered below matches what the author originally entered, recovered from nothing but a style index and a numFmt string.
+    it('recovers the date/time/percentage/currency kinds xlsx itself has no cell type for, from the numFmt code each cell\'s own style points at', () => {
+      // Due Date: numFmtId 166, "[$-809]yyyy\\-mm\\-dd" -- a locale-only bracket (NOT currency) plus real y/m/d codes; serial 46234 in this workbook's 1900 date system (workbookPr@date1904="false").
+      expect(cellAt(3).value).toEqual({ kind: 'date', value: '2026-07-31' });
+      // Due Time: numFmtId 167, "[$-809]hh:mm:ss" -- the 'mm' resolves to MINUTES here (nearest preceding code is 'hh'), unlike the identical 'mm' in the date format above, where it resolves to a month.
+      expect(cellAt(4).value).toEqual({ kind: 'time', value: '14:30:00' });
+      // Rate: numFmtId 168, "[$-809]0.00%" -- the value stays the raw stored fraction, not the 42.56 Excel displays.
+      expect(cellAt(5).value).toEqual({ kind: 'percentage', value: 0.4256 });
+      // Fee: numFmtId 169, "[$GBP-809]#,##0.00" -- an ISO 4217 code between the '$' and the '-', so `currency` is populated rather than left honestly absent.
+      expect(cellAt(6).value).toEqual({ kind: 'currency', value: 99.99, currency: 'GBP' });
+    });
+
+    it('leaves displayText as the plain typed-value spelling -- this reader classifies a number format, it does not render through one', () => {
+      expect(cellAt(3).displayText).toBe('2026-07-31');
+      expect(cellAt(4).displayText).toBe('14:30:00');
+      expect(cellAt(5).displayText).toBe('0.4256'); // not "42.56%"
+      expect(cellAt(6).displayText).toBe('99.99'); // not "£99.99"
+    });
+
+    it('reads a boolean cell (t="b") and derives an Excel-style TRUE/FALSE displayText -- its own numFmtId 165 ("TRUE";"TRUE";"FALSE") style never gets a say, since only numeric cells are classified', () => {
       expect(cellAt(2).value).toEqual({ kind: 'boolean', value: true });
       expect(cellAt(2).displayText).toBe('TRUE');
     });
@@ -309,5 +325,84 @@ describe('readXlsxContent: scope boundaries and error/fallback paths (synthetic 
     const worksheet = el('worksheet', {}, [el('sheetData', {}, [el('row', { r: '1' }, [el('c', { r: 'A1', t: 'd' }, [el('v', {}, [txt('2026-07-31T00:00:00Z')])])])])]);
     const { cells } = readFirstCell(worksheet);
     expect(cells[0]).toMatchObject({ value: { kind: 'dateTime', value: '2026-07-31T00:00:00Z' }, displayText: '2026-07-31T00:00:00Z' });
+  });
+});
+
+// The number format governs only what a NUMERIC cell holds. These build a package carrying a real xl/styles.xml so a cell's own s attribute resolves to a genuine format code, exercising the boundaries the kitchen-sink fixture has no cell for.
+function buildStyledPackage(formatCode: string, cell: ReturnType<typeof el>, date1904?: string): Package {
+  const workbookChildren = [
+    ...(date1904 === undefined ? [] : [el('workbookPr', { date1904 })]),
+    el('sheets', {}, [el('sheet', { name: 'Sheet1', 'r:id': 'rId1' })]),
+  ];
+  return {
+    parts: {
+      'xl/workbook.xml': { kind: 'xml', nodes: [el('workbook', {}, workbookChildren)] },
+      'xl/_rels/workbook.xml.rels': {
+        kind: 'xml',
+        nodes: [
+          el('Relationships', {}, [
+            el('Relationship', { Id: 'rId1', Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet', Target: 'worksheets/sheet1.xml' }),
+          ]),
+        ],
+      },
+      'xl/styles.xml': {
+        kind: 'xml',
+        nodes: [
+          el('styleSheet', {}, [
+            el('numFmts', {}, [el('numFmt', { numFmtId: '164', formatCode })]),
+            el('cellXfs', {}, [el('xf', { numFmtId: '0' }), el('xf', { numFmtId: '164' })]),
+          ]),
+        ],
+      },
+      'xl/worksheets/sheet1.xml': { kind: 'xml', nodes: [el('worksheet', {}, [el('sheetData', {}, [el('row', { r: '1' }, [cell])])])] },
+    },
+  };
+}
+
+function readStyledCell(formatCode: string, cell: ReturnType<typeof el>, date1904?: string) {
+  const result = readXlsxContent(buildStyledPackage(formatCode, cell, date1904));
+  if (result.kind !== 'spreadsheet') {
+    throw new Error('expected a spreadsheet ContentDocument');
+  }
+  return result.sheets[0]?.cells[0];
+}
+
+// A styled numeric cell -- s="1" points at the numFmts-declared format; s="0" at General.
+function numericCell(value: string): ReturnType<typeof el> {
+  return el('c', { r: 'A1', s: '1' }, [el('v', {}, [txt(value)])]);
+}
+
+describe('readXlsxContent: the number format governs numeric cells only (synthetic packages)', () => {
+  it('never reclassifies a cell that already carries its own type -- a currency-formatted string, boolean, or error stays what the file says it is', () => {
+    expect(readStyledCell('[$GBP-809]#,##0.00', el('c', { r: 'A1', s: '1', t: 'str' }, [el('v', {}, [txt('99.99')])]))?.value).toEqual({ kind: 'string', value: '99.99' });
+    expect(readStyledCell('[$-809]yyyy-mm-dd', el('c', { r: 'A1', s: '1', t: 'b' }, [el('v', {}, [txt('1')])]))?.value).toEqual({ kind: 'boolean', value: true });
+    expect(readStyledCell('0.00%', el('c', { r: 'A1', s: '1', t: 'e' }, [el('v', {}, [txt('#N/A')])]))?.value).toEqual({ kind: 'error', value: '#N/A' });
+  });
+
+  it('reads a numeric cell with no s attribute at all through cell format 0 (CT_Cell/@s\'s own schema default)', () => {
+    expect(readStyledCell('0.00%', el('c', { r: 'A1' }, [el('v', {}, [txt('0.5')])]))?.value).toEqual({ kind: 'number', value: 0.5 });
+  });
+
+  it('honours the workbook\'s own 1904 date system, shifting the same serial by 1462 days', () => {
+    expect(readStyledCell('yyyy-mm-dd', numericCell('46234'), 'false')?.value).toEqual({ kind: 'date', value: '2026-07-31' });
+    expect(readStyledCell('yyyy-mm-dd', numericCell('46234'), 'true')?.value).toEqual({ kind: 'date', value: '2030-08-01' });
+  });
+
+  it('degrades a date-formatted serial that names no real date to the plain number it literally is', () => {
+    expect(readStyledCell('yyyy-mm-dd', numericCell('60'))?.value).toEqual({ kind: 'number', value: 60 });
+    expect(readStyledCell('yyyy-mm-dd', numericCell('-5'))?.value).toEqual({ kind: 'number', value: -5 });
+  });
+
+  it('keeps an elapsed-time cell as a raw number -- ContentCellValue has no duration kind, and [h]:mm:ss may exceed 24 hours', () => {
+    expect(readStyledCell('[h]:mm:ss', numericCell('2.5'))?.value).toEqual({ kind: 'number', value: 2.5 });
+  });
+
+  it('omits `currency` entirely when the format identifies money by symbol rather than by ISO code', () => {
+    expect(readStyledCell('[$£-809]#,##0.00', numericCell('99.99'))?.value).toEqual({ kind: 'currency', value: 99.99 });
+    expect(readStyledCell('[$USD-409]#,##0.00', numericCell('99.99'))?.value).toEqual({ kind: 'currency', value: 99.99, currency: 'USD' });
+  });
+
+  it('reads a combined date-and-time format as the dateTime kind, not as a date that silently drops its time', () => {
+    expect(readStyledCell('yyyy-mm-dd hh:mm:ss', numericCell('46234.604166666666667'))?.value).toEqual({ kind: 'dateTime', value: '2026-07-31T14:30:00' });
   });
 });
