@@ -20,9 +20,15 @@
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
     },
-    "./schemas/document-package.schema.json": "./schemas/document-package.schema.json",
-    "./schemas/content-document.schema.json": "./schemas/content-document.schema.json",
-    "./schemas/layout-document.schema.json": "./schemas/layout-document.schema.json"
+    "./*": {
+      "types": {
+        "import": "./dist/*.d.ts",
+        "require": "./dist/*.d.cts"
+      },
+      "import": "./dist/*.js",
+      "require": "./dist/*.cjs"
+    },
+    "./schemas/*.schema.json": "./schemas/*.schema.json"
   },
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",

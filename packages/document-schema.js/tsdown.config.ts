@@ -15,7 +15,9 @@ if (!isPackageJsonWithVersion(packageJson)) {
 const { version } = packageJson;
 
 export default defineConfig({
-  entry: ['src/index.ts'],
+  // Glob-expanded by tsdown/tinyglobby (not just typed as a string, genuinely resolved via glob() at build time) into one entry per matched file, keyed by its path relative to `root` -- so e.g. src/schema-io.ts becomes dist/schema-io.js, and src/index.ts keeps producing dist/index.js exactly as it always has, since it's just another file this same glob matches. `root: 'src'` pins the relative-path base explicitly: left to its default, it's computed as the common ancestor of whatever the glob currently matches, which can silently shift if the matched file set ever changes.
+  entry: ['src/**/*.ts', '!src/**/*.test.ts', '!src/**/*.d.ts'],
+  root: 'src',
   format: ['esm', 'cjs'],
   dts: true,
   platform: 'neutral',

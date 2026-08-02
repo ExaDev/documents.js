@@ -51,6 +51,13 @@ const layout = LayoutDocumentSchema.parse(somePageLayoutValue);
 const pkg = DocumentPackageSchema.parse({ formatVersion: 1, content, layout });
 ```
 
+Every module is also importable directly, without going through the barrel above -- `tsdown` builds one file per source module rather than a single bundle, and `package.json`'s `"./*"` export makes each one individually resolvable by name:
+
+```ts
+import { schemaUriFor } from 'document-schema.js/schema-io';
+import { ColorSchema } from 'document-schema.js/color';
+```
+
 ## JSON Schema
 
 Alongside the Zod schemas/types above, the package publishes three plain [JSON Schema](https://json-schema.org) files -- generated from the same Zod definitions via [`z.toJSONSchema()`](https://zod.dev/json-schema) at build time (`scripts/generate-json-schemas.mjs`) -- for non-TypeScript consumers that want to validate against or generate types from these shapes without depending on Zod at all:
