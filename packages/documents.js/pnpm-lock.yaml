@@ -15,8 +15,8 @@ importers:
         specifier: ^0.8.3
         version: 0.8.3
       markdown-codec:
-        specifier: github:ExaDev/markdown-codec#77ebf3245608c04d9855e5b340e83293adf2fb6a
-        version: https://codeload.github.com/ExaDev/markdown-codec/tar.gz/77ebf3245608c04d9855e5b340e83293adf2fb6a
+        specifier: file:../markdown-codec
+        version: file:../markdown-codec
       odf.js:
         specifier: ^1.10.3
         version: 1.10.3
@@ -1670,9 +1670,8 @@ packages:
     resolution: {integrity: sha512-hXdUTZYIVOt1Ex//jAQi+wTZZpUpwBj/0QsOzqegb3rGMMeJiSEu5xLHnYfBrRV4RH2+OCSOO95Is/7x1WJ4bw==}
     engines: {node: '>=10'}
 
-  markdown-codec@https://codeload.github.com/ExaDev/markdown-codec/tar.gz/77ebf3245608c04d9855e5b340e83293adf2fb6a:
-    resolution: {gitHosted: true, integrity: sha512-vghluqzar0An2QFFFDNfu193viSRRjT/Jp7hgeYRwOegmxFrW7lWVmHy6j8iGu6oKgVE42FhA8ylwfIebenJSA==, tarball: https://codeload.github.com/ExaDev/markdown-codec/tar.gz/77ebf3245608c04d9855e5b340e83293adf2fb6a}
-    version: 0.0.0
+  markdown-codec@file:../markdown-codec:
+    resolution: {directory: ../markdown-codec, type: directory}
     engines: {node: '>=20'}
 
   marked-terminal@7.3.0:
@@ -4172,7 +4171,7 @@ snapshots:
     dependencies:
       semver: 7.8.5
 
-  markdown-codec@https://codeload.github.com/ExaDev/markdown-codec/tar.gz/77ebf3245608c04d9855e5b340e83293adf2fb6a:
+  markdown-codec@file:../markdown-codec:
     dependencies:
       document-schema.js: 1.7.0
       zod: 4.4.3
