@@ -4,7 +4,7 @@
 //
 // An extended autolink becomes a LINK node with an explicit text child, not a MarkdownAutolinkNode. That is deliberate and follows cmark-gfm's own choice: a `www.example.com` autolink's displayed text and its resolved destination genuinely differ (`http://` is prepended to the destination only), and MarkdownAutolinkNode carries a single `destination` field precisely because a CommonMark `<...>` autolink's text and destination are by definition the same string. Forcing the extension through that node type would need a second field on it that no CommonMark autolink ever uses.
 //
-// Off by default is NOT the choice here: this package targets CommonMark *and* GFM, so InlineParseOptions.gfmAutolinks defaults to true. The CommonMark conformance suite (src/inline/conformance.test.ts) disables it explicitly, because a bare `http://foo.bar` in paragraph text is plain text under CommonMark and a link under GFM -- a genuine specification fork, not a bug in either mode.
+// Off by default is NOT the choice here: this package targets CommonMark *and* GFM, so InlineParseOptions.gfmAutolinks defaults to true. The CommonMark conformance suite (src/conformance.test.ts) disables it explicitly, because a bare `http://foo.bar` in paragraph text is plain text under CommonMark and a link under GFM -- a genuine specification fork, not a bug in either mode.
 
 import { InlineNode, createTextNode } from './node';
 
@@ -19,11 +19,14 @@ const VALID_PRECEDING_CHARACTERS: ReadonlySet<string> = new Set(['*', '_', '~', 
 // GFM: "Trailing punctuation (specifically, ?, !, ., ,, :, *, _, and ~) will not be considered part of the autolink, though they may be included in the interior of the link."
 const TRAILING_PUNCTUATION: ReadonlySet<string> = new Set(['?', '!', '.', ',', ':', '*', '_', '~']);
 
+// GFM: an email address is "one or more characters which are alphanumeric, or `.`, `-`, `_`, or `+`", an `@`, then "one or more characters which are alphanumeric, or `-` or `_`, separated by periods". Note `+` is admitted before the `@` and not after.
 const EMAIL_LOCAL_PART_PATTERN = /[A-Za-z0-9._+-]/;
+const EMAIL_DOMAIN_PATTERN = /[A-Za-z0-9._-]/;
 const ENTITY_TAIL_PATTERN = /&[A-Za-z0-9]+;$/;
 
 const WWW_PREFIX = 'www.';
-const HTTP_PREFIXES = ['http://', 'https://'];
+// GFM: "An extended url autolink will be recognised when one of the schemes `http://`, `https://`, or `ftp://`, followed by a valid domain".
+const URL_SCHEME_PREFIXES = ['http://', 'https://', 'ftp://'];
 const PROTOCOL_PREFIXES = ['mailto:', 'xmpp:'];
 
 // Node kinds an extended autolink may never appear inside: a real link or image (GFM inherits CommonMark's "no links inside links"), a code span or raw HTML tag (both literal text by definition), and an existing autolink.
@@ -110,6 +113,14 @@ function matchPrefixed(text: string, index: number, prefixLength: number, destin
   return { text: trimmed, destination: destinationPrefix + trimmed, start: index };
 }
 
+function scanEmailDomain(text: string, start: number): string {
+  let end = start;
+  while (end < text.length && EMAIL_DOMAIN_PATTERN.test(text.charAt(end))) {
+    end += 1;
+  }
+  return text.slice(start, end);
+}
+
 // A bare email address. Anchored on the `@` rather than scanned forward from a start boundary, because the local part is only recognisable in retrospect -- there is no prefix to dispatch on.
 function matchEmailAt(text: string, atIndex: number): AutolinkMatch | undefined {
   let start = atIndex;
@@ -124,9 +135,9 @@ function matchEmailAt(text: string, atIndex: number): AutolinkMatch | undefined 
   if (local.startsWith('.') || local.endsWith('.')) {
     return undefined;
   }
-  // GFM trims a trailing `-` or `_` from an email domain as well as the shared trailing punctuation.
-  const domain = trimTrailingPunctuation(scanRawCandidate(text, atIndex + 1)).replace(/[-_]+$/, '');
-  if (!isValidDomain(domain)) {
+  // An email's own domain is scanned against its own character set rather than through the shared trailing-punctuation trimming, because the two disagree on `_`: that trimming strips a trailing underscore (GFM lists `_` as trailing punctuation for a url autolink), whereas GFM says of an email address that "the last character must not be one of `-` or `_`" -- which invalidates the whole address rather than shortening it. Only a trailing `.` is dropped, per "only `.` may occur at the end of the email address, in which case it will not be considered part of the address".
+  const domain = scanEmailDomain(text, atIndex + 1).replace(/\.+$/, '');
+  if (domain.endsWith('-') || domain.endsWith('_') || !isValidDomain(domain)) {
     return undefined;
   }
   const address = `${local}@${domain}`;
@@ -147,7 +158,7 @@ function findAutolinkAt(text: string, index: number): AutolinkMatch | undefined 
   if (startsWithIgnoringCase(text, index, WWW_PREFIX)) {
     return matchPrefixed(text, index, WWW_PREFIX.length, 'http://', true);
   }
-  for (const prefix of HTTP_PREFIXES) {
+  for (const prefix of URL_SCHEME_PREFIXES) {
     if (startsWithIgnoringCase(text, index, prefix)) {
       return matchPrefixed(text, index, prefix.length, '', true);
     }

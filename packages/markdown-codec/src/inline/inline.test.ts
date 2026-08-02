@@ -1,4 +1,4 @@
-// AST-level tests for the inline phase. These assert the NODE SHAPE parseInlines produces, which the CommonMark conformance suite (src/inline/conformance.test.ts) cannot: that suite compares rendered HTML, so it is blind to everything the AST records for the write side's benefit but HTML discards -- which of `*`/`_` an emphasis was written with, an entity's original source spelling, an autolink's email flag. It is also where GFM's own extensions are covered, since the CommonMark corpus by definition does not test them.
+// AST-level tests for the inline phase. These assert the NODE SHAPE parseInlines produces, which the CommonMark conformance suite (src/conformance.test.ts) cannot: that suite compares rendered HTML, so it is blind to everything the AST records for the write side's benefit but HTML discards -- which of `*`/`_` an emphasis was written with, an entity's original source spelling, an autolink's email flag. It is also where GFM's own extensions are covered, since the CommonMark corpus by definition does not test them.
 
 import { describe, expect, it } from 'vitest';
 import type { MarkdownInlineNode } from '../ast/ast';
@@ -215,6 +215,21 @@ describe('GFM extended autolinks', () => {
 
   it('rejects a domain with no dot', () => {
     expect(parseInlines('www.example', NO_REFERENCES)).toEqual([{ type: 'text', value: 'www.example' }]);
+  });
+
+  it('links a bare ftp run, the third scheme GFM recognises alongside http and https', () => {
+    expect(parseInlines('ftp://foo.bar.baz', NO_REFERENCES)).toEqual([
+      { type: 'link', destination: 'ftp://foo.bar.baz', children: [{ type: 'text', value: 'ftp://foo.bar.baz' }] },
+    ]);
+  });
+
+  it('drops a trailing dot from an email address but rejects one ending in a hyphen or underscore outright', () => {
+    expect(parseInlines('a.b-c_d@a.b.', NO_REFERENCES)).toEqual([
+      { type: 'link', destination: 'mailto:a.b-c_d@a.b', children: [{ type: 'text', value: 'a.b-c_d@a.b' }] },
+      { type: 'text', value: '.' },
+    ]);
+    expect(parseInlines('a.b-c_d@a.b-', NO_REFERENCES)).toEqual([{ type: 'text', value: 'a.b-c_d@a.b-' }]);
+    expect(parseInlines('a.b-c_d@a.b_', NO_REFERENCES)).toEqual([{ type: 'text', value: 'a.b-c_d@a.b_' }]);
   });
 
   it('never creates an autolink inside an existing link or code span', () => {
