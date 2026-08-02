@@ -226,8 +226,8 @@ describe('writePdf: cross-reference table', () => {
     const lines = xrefBlock.split('\n').filter((line) => line.length > 0);
     // First line is "xref", second is the subsection header "0 N", the rest are 20-byte entries (each ending with a space before the split-away '\n').
     const entryLines = lines.slice(2);
+    // object 0 is the free-list head; object N's entry is at index N
     for (const [index, line] of entryLines.entries()) {
-      const objNum = index; // object 0 is the free-list head; object N's entry is at index N
       const match = /^(\d{10}) (\d{5}) ([nf]) $/.exec(line);
       expect(match).not.toBeNull();
       const [, offsetStr, , type] = match!;
@@ -235,8 +235,8 @@ describe('writePdf: cross-reference table', () => {
         continue;
       }
       const offset = Number(offsetStr);
-      const header = decode(bytes.subarray(offset, offset + `${objNum} 0 obj`.length));
-      expect(header).toBe(`${objNum} 0 obj`);
+      const header = decode(bytes.subarray(offset, offset + `${index} 0 obj`.length));
+      expect(header).toBe(`${index} 0 obj`);
     }
   });
 });

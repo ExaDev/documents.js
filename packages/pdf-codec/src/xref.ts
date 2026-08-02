@@ -219,8 +219,8 @@ function readXrefStreamSection(dict: PdfDict, raw: Uint8Array<ArrayBuffer>, sink
   let rowOffset = 0;
   for (const [start, count] of ranges) {
     for (let i = 0; i < count; i++) {
-      const base = rowOffset;
       rowOffset += rowLength;
+      const base = rowOffset - rowLength;
       if (rowLength === 0 || base + rowLength > decoded.bytes.length) {
         sink({ code: 'pdf/xref-entry-invalid', severity: 'warning', message: `xref stream ran out of data before object ${String(start + i)}` });
         break;
@@ -280,28 +280,24 @@ function isDigitByte(byte: number | undefined): boolean {
   return byte !== undefined && byte >= 0x30 && byte <= 0x39;
 }
 
+// Walks `bytes` backward from `end`, stopping at the first byte (from the right) that fails `predicate` -- e.g. skipping a run of trailing whitespace or trailing digits. Returns the index just past that stopping point, i.e. the start of the run that satisfied `predicate`.
+function scanBackWhile(bytes: Uint8Array<ArrayBuffer>, end: number, predicate: (byte: number | undefined) => boolean): number {
+  let i = end;
+  while (i > 0 && predicate(bytes[i - 1])) {
+    i--;
+  }
+  return i;
+}
+
 // Scans backward from just before a recovered "obj" keyword occurrence to recover its "N G" header -- the header is always exactly two whitespace-separated non-negative integers immediately preceding "obj", so a dedicated backward scan is simpler and more direct here than pressing the forward-only tokenizer into service.
 function scanObjectHeaderBackward(bytes: Uint8Array<ArrayBuffer>, objKeywordStart: number): { num: number; gen: number; headerStart: number } | undefined {
-  let i = objKeywordStart;
-  while (i > 0 && isAsciiWhitespace(bytes[i - 1])) {
-    i--;
-  }
-  const genEnd = i;
-  while (i > 0 && isDigitByte(bytes[i - 1])) {
-    i--;
-  }
-  const genStart = i;
+  const genEnd = scanBackWhile(bytes, objKeywordStart, isAsciiWhitespace);
+  const genStart = scanBackWhile(bytes, genEnd, isDigitByte);
   if (genStart === genEnd) {
     return undefined;
   }
-  while (i > 0 && isAsciiWhitespace(bytes[i - 1])) {
-    i--;
-  }
-  const numEnd = i;
-  while (i > 0 && isDigitByte(bytes[i - 1])) {
-    i--;
-  }
-  const numStart = i;
+  const numEnd = scanBackWhile(bytes, genStart, isAsciiWhitespace);
+  const numStart = scanBackWhile(bytes, numEnd, isDigitByte);
   if (numStart === numEnd) {
     return undefined;
   }

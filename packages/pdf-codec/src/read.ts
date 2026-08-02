@@ -54,19 +54,18 @@ export function readPdf(bytes: Uint8Array<ArrayBuffer>, options?: ReadPdfOptions
     throw new PdfParseError('pdf/no-header', 'no "%PDF-" header found within the first bytes of the file; this does not look like a PDF at all');
   }
   const doc = openPdfDocument(bytes, sink);
-  const resolver: PdfObjectResolver = doc;
-  const fontResolver = createFontResolver({ resolver, sink });
+  const fontResolver = createFontResolver({ resolver: doc, sink });
   const images: Record<string, LayoutImageAsset> = {};
   const imageIdCache = new Map<PdfDict, string | null>();
 
   const pages = doc.pages().map((pageDict) => {
     throwIfAborted(signal);
-    return readPage(pageDict, resolver, fontResolver, images, imageIdCache, sink);
+    return readPage(pageDict, doc, fontResolver, images, imageIdCache, sink);
   });
 
   return {
     formatVersion: LAYOUT_FORMAT_VERSION,
-    metadata: readMetadata(doc.trailer, resolver),
+    metadata: readMetadata(doc.trailer, doc),
     pages,
     images,
   };

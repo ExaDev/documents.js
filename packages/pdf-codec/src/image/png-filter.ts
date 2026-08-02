@@ -55,7 +55,6 @@ export function unfilterScanlines(
     if (filterByte === undefined || !isPngFilterType(filterByte)) {
       throw new Error(`unknown PNG filter type: ${String(filterByte)}`);
     }
-    const filterType = filterByte;
     const rowStart = y * stride + 1;
     const outRowStart = y * bytesPerRow;
     const prevOutRowStart = y > 0 ? outRowStart - bytesPerRow : undefined;
@@ -64,7 +63,7 @@ export function unfilterScanlines(
       const a = x >= bpp ? out[outRowStart + x - bpp]! : 0;
       const b = prevOutRowStart === undefined ? 0 : out[prevOutRowStart + x]!;
       const c = x >= bpp && prevOutRowStart !== undefined ? out[prevOutRowStart + x - bpp]! : 0;
-      out[outRowStart + x] = (raw + predictorValue(filterType, a, b, c)) & 0xff;
+      out[outRowStart + x] = (raw + predictorValue(filterByte, a, b, c)) & 0xff;
     }
   }
   return out;

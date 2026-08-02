@@ -112,12 +112,15 @@ export function openPdfDocument(bytes: Uint8Array<ArrayBuffer>, sink: PdfDiagnos
     return asDict(resolve(obj));
   }
 
-  const resolvedRoot = resolveDict(dictGet(xref.trailer, 'Root'));
-  if (resolvedRoot === undefined || !isName(dictGet(resolvedRoot, 'Type'), 'Catalog')) {
-    throw new PdfParseError('pdf/no-root', 'no resolvable /Root catalog was found, even after cross-reference recovery');
+  // Returns its own type narrowed to PdfDict (never undefined) via the function's declared return type -- unlike a bare `if (x === undefined) throw; ` guard on a local, this narrowing is a real declared type, so it still holds inside the nested `pages()` closure below, which TypeScript's control-flow analysis would not otherwise carry across a function boundary.
+  function requireCatalog(dict: PdfDict | undefined): PdfDict {
+    if (dict === undefined || !isName(dictGet(dict, 'Type'), 'Catalog')) {
+      throw new PdfParseError('pdf/no-root', 'no resolvable /Root catalog was found, even after cross-reference recovery');
+    }
+    return dict;
   }
-  // A fresh, explicitly-typed binding: TypeScript's control-flow narrowing of `resolvedRoot` above does not persist into the nested `pages()` closure below, since the closure may be invoked long after this guard runs.
-  const catalog: PdfDict = resolvedRoot;
+
+  const catalog = requireCatalog(resolveDict(dictGet(xref.trailer, 'Root')));
 
   function pages(): PdfDict[] {
     const pagesRoot = resolveDict(dictGet(catalog, 'Pages'));

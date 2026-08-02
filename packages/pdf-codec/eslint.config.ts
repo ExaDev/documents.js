@@ -1,6 +1,7 @@
 import js from '@eslint/js';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
+import noPointlessReassignment from './eslint-rules/no-pointless-reassignment.js';
 
 export default tseslint.config(
   {
@@ -30,6 +31,23 @@ export default tseslint.config(
       // No type assertions anywhere: this codec narrows raw PDF bytes and parsed tokens through PdfObject's own `kind` discriminant (or a type guard) instead -- never `as`. Use a guard or a Zod parse at the boundary rather than asserting.
       '@typescript-eslint/consistent-type-assertions': ['error', { assertionStyle: 'never' }],
       '@typescript-eslint/consistent-type-imports': ['error', { fixStyle: 'inline-type-imports' }],
+    },
+  },
+  {
+    // Local custom rule (eslint-rules/no-pointless-reassignment.ts) -- not published as a package, matching this family's own convention of keeping shared dev-tooling config as identical per-repo copies rather than a shared devDependency.
+    plugins: { local: { rules: { 'no-pointless-reassignment': noPointlessReassignment } } },
+    rules: { 'local/no-pointless-reassignment': 'error' },
+  },
+  {
+    // Re-exports belong only in src/index.ts, the public barrel -- a re-export anywhere else risks silently surfacing the wrong thing under a name a consumer expects to mean something else.
+    files: ['src/**/*.ts'],
+    ignores: ['src/index.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        { selector: 'ExportAllDeclaration', message: 'Re-exports belong only in src/index.ts (the public barrel). Define or import this locally instead.' },
+        { selector: 'ExportNamedDeclaration[source]', message: 'Re-exports belong only in src/index.ts (the public barrel). Define or import this locally instead.' },
+      ],
     },
   },
 );
