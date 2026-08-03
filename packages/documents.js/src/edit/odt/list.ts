@@ -46,6 +46,35 @@ export class OdtListItem {
     this.pkg = pkg;
   }
 
+  // Direct text:p children of this item, as live views -- the read counterpart to appendParagraph, mirroring OdtTableCell.paragraphs (table.ts) and OdtBody.paragraphs (editor.ts) exactly, including their shared, documented text:h scope gap (a heading is a distinct ODF tag this editor surfaces nowhere yet; it stays byte-preserved either way). A paragraph belonging to a FURTHER-nested list is deliberately not reached here -- ODF nests lists structurally, so it belongs to that nested list's own item, reached through nestedLists() below.
+  paragraphs(): OdtParagraph[] {
+    const out: OdtParagraph[] = [];
+    for (const child of this.node.children) {
+      if (child.type === 'element' && child.tag === 'text:p') {
+        out.push(new OdtParagraph(this.node.children, child, this.pkg));
+      }
+    }
+    return out;
+  }
+
+  // This item's own paragraph text, newline-joined between paragraphs -- the same convention OdtTableCell.text (table.ts) and OdpShape.text (../odp/shape.ts) already use, and reading through OdtParagraph.text means it inherits that getter's decodeOdfText handling of text:s/text:tab/text:line-break rather than restating it. Excludes nested-list text for the same structural reason paragraphs() does.
+  get text(): string {
+    return this.paragraphs()
+      .map((p) => p.text)
+      .join('\n');
+  }
+
+  // Live views on the text:list elements nested directly inside this item -- the read counterpart to addNestedList. Returns every one in document order rather than only the first: a text:list-item's own content model is a sequence, so two sibling nested lists inside one item is valid ODF, and odf.js's own readListItems walks each of them.
+  nestedLists(): OdtList[] {
+    const out: OdtList[] = [];
+    for (const child of this.node.children) {
+      if (child.type === 'element' && child.tag === 'text:list') {
+        out.push(new OdtList(this.node.children, child, this.pkg));
+      }
+    }
+    return out;
+  }
+
   appendParagraph(init?: ParagraphInit): OdtParagraph {
     const paragraphElement = buildParagraph(this.pkg, init);
     this.node.children.push(paragraphElement);
