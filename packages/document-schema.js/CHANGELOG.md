@@ -1,3 +1,10 @@
+# [2.2.0](https://github.com/ExaDev/document-schema.js/compare/v2.1.0...v2.2.0) (2026-08-03)
+
+
+### Features
+
+* add a cell-anchor position to ContentEmbeddedObject for sheet-anchored content ([258e032](https://github.com/ExaDev/document-schema.js/commit/258e032cfefddada72fd0e28ec28dc849ff1e6c9))
+
 # [2.1.0](https://github.com/ExaDev/document-schema.js/compare/v2.0.0...v2.1.0) (2026-08-03)
 
 
