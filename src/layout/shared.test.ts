@@ -2,8 +2,8 @@ import { bytesToBase64 } from 'ooxml.js';
 import { describe, expect, it } from 'vitest';
 import type { ContentRun, ContentTableRow, LayoutImageAsset } from 'document-schema.js';
 import type { TextMeasurer } from 'pdf-codec';
-import { encodePng } from 'pdf-codec';
-import { alignmentOffsetPt, effectiveStyledRuns, estimateRowHeightPt, lineNaturalHeightPt, NOMINAL_TEXT_SIZE_PT, registerImage, runFont, sumColumnWidthsPt, toStyledRuns } from './shared';
+import { encodePng, wrapRunsToWidth } from 'pdf-codec';
+import { alignmentOffsetPt, effectiveStyledRuns, estimateRowHeightPt, justifyLineGapsPt, lineNaturalHeightPt, NOMINAL_TEXT_SIZE_PT, registerImage, runFont, sumColumnWidthsPt, toStyledRuns } from './shared';
 
 function fakeMeasurer(): TextMeasurer {
   return {
@@ -92,7 +92,7 @@ describe('lineNaturalHeightPt', () => {
 });
 
 describe('alignmentOffsetPt', () => {
-  it('centers, right-aligns, and defaults to left (including justify, not yet implemented)', () => {
+  it('centers, right-aligns, and defaults to left -- justify\'s own whole-line offset is 0 too, since its real stretching is a per-fragment concern handled by justifyLineGapsPt, not this function', () => {
     expect(alignmentOffsetPt('center', 100, 20)).toBe(40);
     expect(alignmentOffsetPt('right', 100, 20)).toBe(80);
     expect(alignmentOffsetPt('left', 100, 20)).toBe(0);
@@ -103,6 +103,44 @@ describe('alignmentOffsetPt', () => {
   it('never returns a negative offset for a line wider than the content area', () => {
     expect(alignmentOffsetPt('center', 10, 20)).toBe(0);
     expect(alignmentOffsetPt('right', 10, 20)).toBe(0);
+  });
+});
+
+describe('justifyLineGapsPt', () => {
+  const font = { family: 'Helvetica', weight: 'normal', style: 'normal' } as const;
+  const color = { r: 0, g: 0, b: 0 };
+
+  it('distributes slack evenly across every inter-word gap, leaving the first fragment unshifted and each later one offset by its own share of every gap before it', () => {
+    const measurer = fakeMeasurer();
+    const [line] = wrapRunsToWidth([{ text: 'aa bb cc', font, sizePt: 10, color }], measurer, Number.POSITIVE_INFINITY);
+    // Natural layout: aa@0 (w2), bb@3 (w2), cc@6 (w2) -- natural width 8. Target 14 -> 6pt of slack across 2 gaps -> 3pt each.
+    expect(justifyLineGapsPt(line!, 14, measurer)).toEqual([0, 3, 6]);
+  });
+
+  it('never shifts anything on a single-word line -- there is no gap to distribute slack across', () => {
+    const measurer = fakeMeasurer();
+    const [line] = wrapRunsToWidth([{ text: 'aaaa', font, sizePt: 10, color }], measurer, Number.POSITIVE_INFINITY);
+    expect(justifyLineGapsPt(line!, 20, measurer)).toEqual([0]);
+  });
+
+  it('never shifts anything when the line\'s own natural width already meets or exceeds the target -- this function only ever adds space, never compresses', () => {
+    const measurer = fakeMeasurer();
+    const [line] = wrapRunsToWidth([{ text: 'aa bb', font, sizePt: 10, color }], measurer, Number.POSITIVE_INFINITY);
+    expect(justifyLineGapsPt(line!, 5, measurer)).toEqual([0, 0]); // natural width is already exactly 5
+  });
+
+  it('treats two fragments of one run-split word (no space between them) as ungapped, not stretching between them', () => {
+    const measurer = fakeMeasurer();
+    // A word split across a run boundary (bold change mid-word) stays one unbreakable box atom with two touching fragments and zero gap -- see text-layout.ts's own atomizeRuns.
+    const [line] = wrapRunsToWidth(
+      [
+        { text: 'ab', font, sizePt: 10, color },
+        { text: 'cd', font: { ...font, weight: 'bold' }, sizePt: 10, color },
+      ],
+      measurer,
+      Number.POSITIVE_INFINITY,
+    );
+    expect(justifyLineGapsPt(line!, 20, measurer)).toEqual([0, 0]);
   });
 });
 

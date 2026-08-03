@@ -5,7 +5,7 @@ import { flipY } from '../model/geometry';
 import { formulaOfBlock, formulaPlaceholderText } from '../model/formula';
 import type { PositionedFormula, TextMeasurer } from 'pdf-codec';
 import { loadMathFont, wrapRunsToWidth } from 'pdf-codec';
-import { alignmentOffsetPt, effectiveStyledRuns, estimateRowHeightPt, lineNaturalHeightPt, pushCellBorderLines, registerImage, sumColumnWidthsPt } from './shared';
+import { alignmentOffsetPt, effectiveStyledRuns, estimateRowHeightPt, justifyLineGapsPt, lineNaturalHeightPt, pushCellBorderLines, registerImage, sumColumnWidthsPt } from './shared';
 
 // ContentDocument (the wordprocessing variant) -> LayoutDocument: docx's hard direction. A docx page isn't a fixed canvas the way a pptx slide is -- content flows and paginates, so this engine tracks a vertical cursor per page and starts a new page whenever the next line (or table row) would overflow the current one, honoring explicit page breaks, w:pageBreakBefore, and a per-section page-size/margin change. Headers/footers and live PAGE/NUMPAGES substitution are not laid out here -- src/ooxml/docx/read.ts doesn't read them either, a deliberate, tracked narrowing from the plan's original scope (see that file's own module doc).
 
@@ -79,9 +79,11 @@ function layoutParagraphFlow(
     // First-line indent shifts only where the first line starts, not its wrap point -- see src/layout/slides.ts's identical note on the same simplification.
     const firstLineIndentPt = lineIndex === 0 ? (paragraph.indentFirstLinePt ?? 0) : 0;
     const alignOffsetPt = alignmentOffsetPt(paragraph.alignment, paragraphWidthPt, line.widthPt);
+    // Only a WRAPPED, non-final line of a justified paragraph gets its inter-word gaps stretched -- the paragraph's own final line (or a paragraph that never wraps at all, i.e. lines.length === 1) renders left-aligned instead, the standard justification convention Word/LibreOffice both follow.
+    const justifyGapsPt = paragraph.alignment === 'justify' && lineIndex < lines.length - 1 ? justifyLineGapsPt(line, paragraphWidthPt, measurer) : undefined;
 
-    for (const fragment of line.fragments) {
-      const xPt = paragraphLeftXDown + firstLineIndentPt + alignOffsetPt + fragment.xOffsetPt;
+    line.fragments.forEach((fragment, fragmentIndex) => {
+      const xPt = paragraphLeftXDown + firstLineIndentPt + alignOffsetPt + fragment.xOffsetPt + (justifyGapsPt?.[fragmentIndex] ?? 0);
       const yPt = section.pageSize.heightPt - baselineYDown;
       const textItem: LayoutText = {
         kind: 'text',
@@ -109,7 +111,7 @@ function layoutParagraphFlow(
         };
         state.items.push(link);
       }
-    }
+    });
     state.cursorYDown += lineHeightPt;
   });
 
@@ -130,11 +132,13 @@ function layoutParagraphInCell(paragraph: ContentParagraph, cellLeftXDown: numbe
     const baselineYDown = cursorYDown + line.ascentPt;
     const firstLineIndentPt = lineIndex === 0 ? (paragraph.indentFirstLinePt ?? 0) : 0;
     const alignOffsetPt = alignmentOffsetPt(paragraph.alignment, paragraphWidthPt, line.widthPt);
-    for (const fragment of line.fragments) {
+    // See layoutParagraphFlow's identical note: only a wrapped, non-final line of a justified paragraph gets stretched.
+    const justifyGapsPt = paragraph.alignment === 'justify' && lineIndex < lines.length - 1 ? justifyLineGapsPt(line, paragraphWidthPt, measurer) : undefined;
+    line.fragments.forEach((fragment, fragmentIndex) => {
       out.push({
         kind: 'text',
         text: fragment.text,
-        xPt: paragraphLeftXDown + firstLineIndentPt + alignOffsetPt + fragment.xOffsetPt,
+        xPt: paragraphLeftXDown + firstLineIndentPt + alignOffsetPt + fragment.xOffsetPt + (justifyGapsPt?.[fragmentIndex] ?? 0),
         yPt: pageHeightPt - baselineYDown,
         font: fragment.font,
         sizePt: fragment.sizePt,
@@ -142,7 +146,7 @@ function layoutParagraphInCell(paragraph: ContentParagraph, cellLeftXDown: numbe
         underline: fragment.underline,
         sourcePath: fragment.sourcePath,
       });
-    }
+    });
     cursorYDown += lineHeightPt;
   });
 
