@@ -1,3 +1,10 @@
+## [1.0.8](https://github.com/ExaDev/markdown-codec/compare/v1.0.7...v1.0.8) (2026-08-03)
+
+
+### Bug Fixes
+
+* **ci:** wait for a real check-run to register before requesting auto-merge ([bdd906d](https://github.com/ExaDev/markdown-codec/commit/bdd906d31a16c2eaaf68bbee1d63e44fa638098b))
+
 ## [1.0.7](https://github.com/ExaDev/markdown-codec/compare/v1.0.6...v1.0.7) (2026-08-03)
 
 
