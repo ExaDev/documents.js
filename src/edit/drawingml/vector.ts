@@ -1,7 +1,8 @@
-import type { Box, Color, ContentStroke, ContentSubpath, ContentVector } from 'document-schema.js';
-import { colorToRgbHex } from 'document-schema.js';
+import type { Box, Color, ContentPathPoint, ContentStroke, ContentSubpath, ContentVector } from 'document-schema.js';
+import { colorToRgbHex, rgbHexToColor } from 'document-schema.js';
 import type { XmlElement, XmlNode } from 'ooxml.js';
-import { ptToEmu } from '../../model/units';
+import { attr, childrenWithTag } from 'ooxml.js';
+import { emuToPt, ptToEmu } from '../../model/units';
 import { el } from '../../xml/fragment';
 
 // The DrawingML vector-primitive vocabulary shared by docx and pptx -- the OOXML counterpart to src/edit/odg/vector.ts, and shared for exactly the same reason that module is shared across odt/odp/odg: a rect/ellipse/line/path is expressed identically in both formats. WordprocessingML and PresentationML differ only in the wrapper element the geometry hangs off (wps:wsp inside a w:drawing/wp:anchor for docx, p:sp on a slide's p:spTree for pptx); everything inside the shape-properties element -- a:xfrm, a:prstGeom/a:custGeom, a:solidFill, a:ln -- is one vocabulary, defined once here and used by both (src/edit/docx/vector.ts and src/edit/pptx/vector.ts).
@@ -124,4 +125,154 @@ export function vectorPlacementBox(vector: ContentVector): Box {
 // A human-readable shape name, matching the "TextBox N"/"Picture N" convention src/edit/pptx/shape.ts and src/edit/docx/image.ts already use for their own generated shapes.
 export function vectorShapeName(vector: ContentVector, id: number): string {
   return `${vector.kind.charAt(0).toUpperCase()}${vector.kind.slice(1)} ${id}`;
+}
+
+// ---------------------------------------------------------------------------
+// READER: the production, non-throwing inverse of buildVectorShapeProperties above -- promoted from what was originally a test-only oracle (src/test-support/drawingml-vector.ts, which now delegates to this function and throws only when it returns undefined, so there is exactly one real implementation of this reading logic rather than two that could drift). Used by src/ooxml/docx/vector.ts and src/ooxml/pptx/vector.ts to recover a vector-only w:drawing/p:sp back into a ContentVector when reading a real docx/pptx file, where an unrecognised shape must be left alone rather than abort the whole document read.
+// ---------------------------------------------------------------------------
+
+function requireChild(parent: XmlElement, tag: string): XmlElement {
+  const [child] = childrenWithTag(parent, tag);
+  if (child === undefined) {
+    throw new Error(`expected a ${tag} child of ${parent.tag}`);
+  }
+  return child;
+}
+
+function requireAttrNumber(element: XmlElement, name: string): number {
+  const value = attr(element, name);
+  if (value === undefined) {
+    throw new Error(`expected a ${name} attribute on ${element.tag}`);
+  }
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isNaN(parsed)) {
+    throw new Error(`${element.tag}/@${name} is not an integer: ${value}`);
+  }
+  return parsed;
+}
+
+function readSrgbColor(parent: XmlElement): Color {
+  const value = attr(requireChild(parent, 'a:srgbClr'), 'val');
+  if (value === undefined) {
+    throw new Error('expected a val attribute on a:srgbClr');
+  }
+  return rgbHexToColor(value);
+}
+
+// a:noFill and a:solidFill are the only two buildVectorShapeProperties above ever writes, at shape level and inside a:ln alike.
+function readFill(parent: XmlElement): Color | undefined {
+  if (childrenWithTag(parent, 'a:noFill').length > 0) {
+    return undefined;
+  }
+  return readSrgbColor(requireChild(parent, 'a:solidFill'));
+}
+
+function readOutline(spPr: XmlElement): ContentStroke | undefined {
+  const ln = requireChild(spPr, 'a:ln');
+  const color = readFill(ln);
+  if (color === undefined) {
+    return undefined;
+  }
+  return { color, widthPt: emuToPt(requireAttrNumber(ln, 'w')) };
+}
+
+interface ReadPlacement {
+  readonly frame: Box;
+  readonly rotationDeg: number | undefined;
+  readonly flipH: boolean;
+  readonly flipV: boolean;
+}
+
+function readPlacement(spPr: XmlElement): ReadPlacement {
+  const xfrm = requireChild(spPr, 'a:xfrm');
+  const off = requireChild(xfrm, 'a:off');
+  const ext = requireChild(xfrm, 'a:ext');
+  const rot = attr(xfrm, 'rot');
+  return {
+    frame: {
+      xPt: emuToPt(requireAttrNumber(off, 'x')),
+      yPt: emuToPt(requireAttrNumber(off, 'y')),
+      widthPt: emuToPt(requireAttrNumber(ext, 'cx')),
+      heightPt: emuToPt(requireAttrNumber(ext, 'cy')),
+    },
+    rotationDeg: rot === undefined ? undefined : Number.parseInt(rot, 10) / ROTATION_UNITS_PER_DEGREE,
+    flipH: attr(xfrm, 'flipH') === '1',
+    flipV: attr(xfrm, 'flipV') === '1',
+  };
+}
+
+function readPoint(container: XmlElement, index: number): ContentPathPoint {
+  const point = childrenWithTag(container, 'a:pt')[index];
+  if (point === undefined) {
+    throw new Error(`expected an a:pt at index ${index} of ${container.tag}`);
+  }
+  return { xPt: emuToPt(requireAttrNumber(point, 'x')), yPt: emuToPt(requireAttrNumber(point, 'y')) };
+}
+
+function readSubpaths(custGeom: XmlElement): ContentSubpath[] {
+  return childrenWithTag(requireChild(custGeom, 'a:pathLst'), 'a:path').map((path) => {
+    const segments: ContentSubpath['segments'] = [];
+    let start: ContentPathPoint | undefined;
+    let closed = false;
+    for (const command of path.children) {
+      if (command.type !== 'element') {
+        continue;
+      }
+      switch (command.tag) {
+        case 'a:moveTo':
+          start = readPoint(command, 0);
+          break;
+        case 'a:lnTo':
+          segments.push({ kind: 'line', to: readPoint(command, 0) });
+          break;
+        case 'a:cubicBezTo':
+          segments.push({ kind: 'cubic', control1: readPoint(command, 0), control2: readPoint(command, 1), to: readPoint(command, 2) });
+          break;
+        case 'a:close':
+          closed = true;
+          break;
+        default:
+          throw new Error(`unrecognised a:path command: ${command.tag}`);
+      }
+    }
+    if (start === undefined) {
+      throw new Error('an a:path carried no a:moveTo');
+    }
+    return { start, segments, closed };
+  });
+}
+
+// A shape-properties element (pptx's p:spPr, docx's wps:spPr -- CT_ShapeProperties in both) back into its ContentVector, throwing for anything this vocabulary does not recognise. `frameOverride`, when supplied, replaces the frame this function would otherwise read from the shape's own a:xfrm -- needed for docx, where a page-anchored shape's true position lives on the wrapping wp:anchor's own wp:positionH/wp:positionV rather than on wps:spPr's a:xfrm (this package's own writer, src/edit/docx/vector.ts, happens to leave the two agreeing, but a real file is not obliged to, and the anchor is the authoritative one). rotationDeg/flipH/flipV still come from the shape's own a:xfrm regardless, since the anchor carries no rotation or direction of its own.
+function readDrawingMlVectorOrThrow(spPr: XmlElement, frameOverride: Box | undefined): ContentVector {
+  const rawPlacement = readPlacement(spPr);
+  const placement = frameOverride === undefined ? rawPlacement : { ...rawPlacement, frame: frameOverride };
+  const stroke = readOutline(spPr);
+  const [custGeom] = childrenWithTag(spPr, 'a:custGeom');
+  if (custGeom !== undefined) {
+    return { kind: 'path', frame: placement.frame, rotationDeg: placement.rotationDeg, subpaths: readSubpaths(custGeom), fill: readFill(spPr), stroke };
+  }
+  const preset = attr(requireChild(spPr, 'a:prstGeom'), 'prst');
+  if (preset === 'line') {
+    if (stroke === undefined) {
+      throw new Error("a line preset with no outline: ContentVector's own line variant requires a stroke");
+    }
+    const { xPt, yPt, widthPt, heightPt } = placement.frame;
+    // The inverse of placementOf's own min-corner-plus-flips encoding above: each flip says the endpoint on that axis is the far edge rather than the near one.
+    const from = { xPt: placement.flipH ? xPt + widthPt : xPt, yPt: placement.flipV ? yPt + heightPt : yPt };
+    const to = { xPt: placement.flipH ? xPt : xPt + widthPt, yPt: placement.flipV ? yPt : yPt + heightPt };
+    return { kind: 'line', from, to, stroke };
+  }
+  if (preset === 'rect' || preset === 'ellipse') {
+    return { kind: preset, frame: placement.frame, rotationDeg: placement.rotationDeg, fill: readFill(spPr), stroke };
+  }
+  throw new Error(`unrecognised a:prstGeom preset: ${String(preset)}`);
+}
+
+// The non-throwing production entry point: undefined for anything this vocabulary does not recognise (a shape this package's own writer did not produce, or one missing a required child/attribute), rather than aborting the whole document read over one unrecognised shape -- see src/ooxml/docx/vector.ts and src/ooxml/pptx/vector.ts, whose own callers already tolerate "no vector recovered here" as an ordinary, silent outcome.
+export function readDrawingMlVector(spPr: XmlElement, frameOverride?: Box): ContentVector | undefined {
+  try {
+    return readDrawingMlVectorOrThrow(spPr, frameOverride);
+  } catch {
+    return undefined;
+  }
 }

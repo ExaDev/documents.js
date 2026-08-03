@@ -204,6 +204,30 @@ describe('buildDocxPackage', () => {
     expect(new DocxEditor(pkg).paragraphs().map((p) => p.text)).toEqual(['Before', '', 'After']);
   });
 
+  it('recovers a written drawing block back out through readDocxContent, not just through the test-support oracle', () => {
+    const content = wordDoc([
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+        blocks: [{ kind: 'paragraph', runs: [{ text: 'Before' }] }, vectorDrawingBlock({ widthPt: 612, heightPt: 792 }), { kind: 'paragraph', runs: [{ text: 'After' }] }],
+      },
+    ]);
+    const pkg = decodePackage(encodePackage(buildDocxPackage(content)));
+    const roundTripped = readDocxContent(pkg);
+    if (roundTripped.kind !== 'wordprocessing') {
+      throw new Error('expected a wordprocessing ContentDocument');
+    }
+    const blocks = roundTripped.sections[0]!.blocks;
+    expect(blocks.map((block) => block.kind)).toEqual(['paragraph', 'embeddedObject', 'paragraph']);
+    const drawingBlock = blocks[1];
+    if (drawingBlock?.kind !== 'embeddedObject' || drawingBlock.document.kind !== 'drawing') {
+      throw new Error('expected a drawing-kind embeddedObject block');
+    }
+    expect(drawingBlock.document.pages[0]?.vectors).toEqual(VECTOR_FIXTURE);
+    expect(blocks[0]?.kind === 'paragraph' ? blocks[0].runs.map((r) => r.text).join('') : undefined).toBe('Before');
+    expect(blocks[2]?.kind === 'paragraph' ? blocks[2].runs.map((r) => r.text).join('') : undefined).toBe('After');
+  });
+
   // Pins the actual markup, not just this package's own oracle round-tripping against itself: the DrawingML reader in test-support is written alongside the writer, so at least one test has to assert the literal attribute values a real Word/LibreOffice would read.
   it('anchors each vector shape to the page at its own recovered coordinates, behind the text', () => {
     const content = wordDoc([

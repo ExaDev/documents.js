@@ -3,6 +3,7 @@ import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
 import type { ContentDocument } from 'document-schema.js';
 import type { Package, XmlElement } from 'ooxml.js';
 import { attr, bytesToBase64, decodePackage, encodePackage, rootElement } from 'ooxml.js';
+import { readPptxContent } from '../../ooxml/pptx/read';
 import { collectDrawingMlVectors } from '../../test-support/drawingml-vector';
 import { VECTOR_FIXTURE, vectorDrawingBlock } from '../../test-support/vectors';
 import { walkElements } from '../../xml/query';
@@ -95,6 +96,34 @@ describe('buildPptxPackage', () => {
     // Re-encoded and re-decoded, so what is read back has genuinely been through the zip/XML serialiser rather than being the same in-memory tree the writer produced.
     const pkg = decodePackage(encodePackage(buildPptxPackage(content)));
     expect(collectDrawingMlVectors(firstSlideRoot(pkg), 'p:spPr')).toEqual(VECTOR_FIXTURE);
+  });
+
+  it('recovers a written drawing block back out through readPptxContent, not just through the test-support oracle', () => {
+    const content = presentationDoc([
+      {
+        size: SLIDE_SIZE,
+        notes: '',
+        shapes: [
+          { frame: { xPt: 10, yPt: 10, widthPt: 200, heightPt: 50 }, ...ZERO_INSETS, blocks: [{ kind: 'paragraph', runs: [{ text: 'Before' }] }] },
+          { frame: { xPt: 0, yPt: 0, ...SLIDE_SIZE }, ...ZERO_INSETS, blocks: [vectorDrawingBlock(SLIDE_SIZE)] },
+          { frame: { xPt: 10, yPt: 500, widthPt: 200, heightPt: 50 }, ...ZERO_INSETS, blocks: [{ kind: 'paragraph', runs: [{ text: 'After' }] }] },
+        ],
+      },
+    ]);
+    const pkg = decodePackage(encodePackage(buildPptxPackage(content)));
+    const roundTripped = readPptxContent(pkg);
+    if (roundTripped.kind !== 'presentation') {
+      throw new Error('expected a presentation ContentDocument');
+    }
+    const shapes = roundTripped.slides[0]!.shapes;
+    // The five bare vector shapes this package's own writer emits (no wrapper) collapse back into ONE synthetic drawing shape, at the position they occupied among the slide's real shapes.
+    expect(shapes.map((shape) => shape.blocks[0]?.kind)).toEqual(['paragraph', 'embeddedObject', 'paragraph']);
+    const drawingShape = shapes[1];
+    const drawingBlock = drawingShape?.blocks[0];
+    if (drawingBlock?.kind !== 'embeddedObject' || drawingBlock.document.kind !== 'drawing') {
+      throw new Error('expected a drawing-kind embeddedObject block');
+    }
+    expect(drawingBlock.document.pages[0]?.vectors).toEqual(VECTOR_FIXTURE);
   });
 
   it('translates a recovered drawing by its containing shape\'s own frame, and adds no empty text box for it', () => {

@@ -228,6 +228,29 @@ describe('buildOdtPackage', () => {
     expect(new OdtEditor(pkg).paragraphs().map((p) => p.text)).toEqual(['Before', '', 'After']);
   });
 
+  it('recovers a written drawing block back out through readOdtContent, not just through odf.js\'s own readDrawPageContent', () => {
+    const content = wordDoc([
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+        blocks: [{ kind: 'paragraph', runs: [{ text: 'Before' }] }, vectorDrawingBlock({ widthPt: 612, heightPt: 792 }), { kind: 'paragraph', runs: [{ text: 'After' }] }],
+      },
+    ]);
+    const pkg = decodePackage(encodePackage(buildOdtPackage(content)));
+    const roundTripped = readOdtContent(pkg);
+    if (roundTripped.kind !== 'wordprocessing') {
+      throw new Error('expected a wordprocessing ContentDocument');
+    }
+    const blocks = roundTripped.sections[0]!.blocks;
+    expect(blocks.map((block) => block.kind)).toEqual(['paragraph', 'embeddedObject', 'paragraph']);
+    const drawingBlock = blocks[1];
+    if (drawingBlock?.kind !== 'embeddedObject' || drawingBlock.document.kind !== 'drawing') {
+      throw new Error('expected a drawing-kind embeddedObject block');
+    }
+    expect(withoutRotation(drawingBlock.document.pages[0]?.vectors ?? [])).toEqual(withoutRotation(VECTOR_FIXTURE));
+    expect(rotationsOf(drawingBlock.document.pages[0]?.vectors ?? [])).toEqual([undefined, undefined, undefined, undefined, expect.closeTo(30, 4)]);
+  });
+
   // A vector's coordinates are page-absolute (that is what reconstructWordprocessing recovers), so an anchor paragraph is not enough on its own: without style:vertical-rel="page" every shape would be measured from wherever its anchor paragraph flowed to instead.
   it('anchors each vector to its paragraph but positions it against the page, behind the text', () => {
     const content = wordDoc([
