@@ -95,7 +95,7 @@ export function decodeBlrType(blrType: number): FirebirdPhysicalType {
 }
 
 // A human-readable SQL-shaped type label for HsqldbColumn.type -- see that field's own doc comment: "kept whole rather than parsed into a structured type ... nothing here models SQL constraints". Synthesised from the field's own binary metadata (BLR type + length + scale + sub-type) rather than lifted verbatim from source SQL text (there IS no source SQL text in a gbak backup -- see the README's .odb Tier 3 Gotchas entry), but serves the identical purpose: a readable label, not a re-parseable declaration. scale is Firebird's own convention: 0 or negative, where the field's underlying integer value is multiplied by 10^scale to get the true numeric value (a DECIMAL(10,2) column carries scale -2).
-export function describeFieldType(physical: FirebirdPhysicalType, lengthBytes: number, scale: number, characterLength: number | undefined): string {
+export function describeFieldType(physical: FirebirdPhysicalType, lengthBytes: number, scale: number, characterLength: number | undefined, subType: number): string {
   switch (physical) {
     case 'short':
       return scale === 0 ? 'SMALLINT' : `NUMERIC(4,${-scale})`;
@@ -122,7 +122,8 @@ export function describeFieldType(physical: FirebirdPhysicalType, lengthBytes: n
     case 'boolean':
       return 'BOOLEAN';
     case 'blob':
-      return 'BLOB';
+      // A blob's own sub-type is part of its declared type in real Firebird DDL (`BLOB SUB_TYPE 1` is a text blob, `SUB_TYPE 0` a binary one), and is what decides how src/firebird/data.ts records the recovered content -- so it belongs in the label rather than being flattened away.
+      return `BLOB SUB_TYPE ${subType}`;
     case 'quad':
       return 'ARRAY';
     case 'int128':

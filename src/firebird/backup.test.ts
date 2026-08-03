@@ -1,6 +1,6 @@
 import { base64ToBytes } from 'odf.js';
 import { describe, expect, it } from 'vitest';
-import { ORIGINAL_FIXTURE_FBK_BASE64, RICH_FIXTURE_FBK_BASE64 } from '../test-support/firebird';
+import { BLOB_FIXTURE_FBK_BASE64, ORIGINAL_FIXTURE_FBK_BASE64, RICH_FIXTURE_FBK_BASE64 } from '../test-support/firebird';
 import { FirebirdBackupFormatError, FirebirdCompositeRecordUnsupportedError, readFirebirdBackup, SUPPORTED_BACKUP_FORMAT_VERSION } from './backup';
 
 // Tests against two genuinely LibreOffice-generated Firebird embedded-database backup streams (src/test-support/firebird.ts documents exactly how each was produced and verified) -- not hand-authored gbak bytes, since the whole value of this reader is that it decodes REAL output correctly, not output shaped to match this reader's own assumptions.
@@ -145,6 +145,84 @@ describe('readFirebirdBackup: the odf.js original fixture (two empty tables, no 
     expect(tables).toEqual([
       { tableName: 'Customers', columns: [{ name: 'ID', type: 'INTEGER' }, { name: 'Name', type: 'VARCHAR(400)' }], rows: [] },
       { tableName: 'Orders', columns: [{ name: 'ID', type: 'INTEGER' }, { name: 'CustomerID', type: 'INTEGER' }], rows: [] },
+    ]);
+  });
+});
+
+describe('readFirebirdBackup: the blob fixture (a text blob, a binary blob, and NULL blobs)', () => {
+  const bytes = base64ToBytes(BLOB_FIXTURE_FBK_BASE64);
+
+  // Every expectation below matched LibreOffice's own SDBC SELECT * over this exact saved file, run in a separate process that reopened it fresh from disk -- see src/test-support/firebird.ts's own doc comment.
+  function blobTestRows() {
+    const { tables } = readFirebirdBackup(bytes);
+    const table = tables.find((entry) => entry.tableName === 'BLOB_TEST');
+    if (table === undefined) {
+      throw new Error('fixture has no BLOB_TEST table');
+    }
+    const columnIndex = (name: string) => table.columns.findIndex((column) => column.name === name);
+    return { table, columnIndex };
+  }
+
+  it('labels a blob column with its own declared sub-type', () => {
+    const { table } = blobTestRows();
+    const byName = new Map(table.columns.map((column) => [column.name, column.type]));
+    expect(byName.get('NOTES')).toBe('BLOB SUB_TYPE 1');
+    expect(byName.get('PAYLOAD')).toBe('BLOB SUB_TYPE 0');
+  });
+
+  it('recovers a text blob\'s full content as an ordinary string', () => {
+    const { table, columnIndex } = blobTestRows();
+    const expected = 'The quick brown fox jumps over the lazy dog. '.repeat(3).trimEnd();
+    expect(table.rows[0]?.[columnIndex('NOTES')]).toEqual({ kind: 'string', value: expected });
+    expect(table.rows[2]?.[columnIndex('NOTES')]).toEqual({ kind: 'string', value: 'short' });
+  });
+
+  it('recovers a binary blob byte-for-byte, as a base64 data URI', () => {
+    const { table, columnIndex } = blobTestRows();
+    const value = table.rows[0]?.[columnIndex('PAYLOAD')];
+    expect(value?.kind).toBe('string');
+    if (value?.kind !== 'string') {
+      return;
+    }
+    const prefix = 'data:application/octet-stream;base64,';
+    expect(value.value.startsWith(prefix)).toBe(true);
+    const decoded = base64ToBytes(value.value.slice(prefix.length));
+    // The fixture's own binary blob is every byte value 0x00..0xFF in order.
+    expect(Array.from(decoded)).toEqual(Array.from({ length: 256 }, (_unused, index) => index));
+  });
+
+  it('leaves a NULL blob empty, since gbak writes no blob record at all for one', () => {
+    const { table, columnIndex } = blobTestRows();
+    expect(table.rows[1]?.[columnIndex('NOTES')]).toEqual({ kind: 'empty' });
+    expect(table.rows[1]?.[columnIndex('PAYLOAD')]).toEqual({ kind: 'empty' });
+    expect(table.rows[2]?.[columnIndex('PAYLOAD')]).toEqual({ kind: 'empty' });
+  });
+
+  it('keeps every non-blob column of a blob-bearing row correct', () => {
+    const { table, columnIndex } = blobTestRows();
+    expect(table.rows.map((row) => row[columnIndex('ID')])).toEqual([
+      { kind: 'number', value: 1 },
+      { kind: 'number', value: 2 },
+      { kind: 'number', value: 3 },
+    ]);
+    expect(table.rows.map((row) => row[columnIndex('LABEL')])).toEqual([
+      { kind: 'string', value: 'first' },
+      { kind: 'string', value: 'second' },
+      { kind: 'string', value: 'third' },
+    ]);
+    expect(table.rows.map((row) => row[columnIndex('AMOUNT')])).toEqual([
+      { kind: 'number', value: 42 },
+      { kind: 'number', value: 7 },
+      { kind: 'number', value: 0 },
+    ]);
+  });
+
+  it('stays aligned past the blob-bearing table, decoding the ordinary table that follows it', () => {
+    const { tables } = readFirebirdBackup(bytes);
+    const plain = tables.find((entry) => entry.tableName === 'PLAIN');
+    expect(plain?.rows).toEqual([
+      [{ kind: 'number', value: 1 }, { kind: 'string', value: 'alpha' }],
+      [{ kind: 'number', value: 2 }, { kind: 'string', value: 'beta' }],
     ]);
   });
 });

@@ -16,6 +16,10 @@ export interface FirebirdField {
   // Firebird's own convention: 0 or negative; the field's underlying stored integer is multiplied by 10^scale to recover the true value. Only meaningful for 'short'/'long'/'int64'/'int128' (a DECIMAL/NUMERIC column); 0 for every other physical type.
   readonly scale: number;
   readonly characterLength: number | undefined;
+  // att_field_sub_type. Only interpreted for a BLOB column, where Firebird's own convention is 0 = binary and 1 = text -- which is what decides whether src/firebird/data.ts records a recovered blob's bytes as decoded text or as a base64 data URI. 0 for every other physical type.
+  readonly subType: number;
+  // att_field_number -- burp.h's own comment for it is literally "Field number to match up blobs", and it is the value a rec_blob record's own att_blob_field_number carries (backup.epp's put_blob: `put_int32(att_blob_field_number, field->fld_number)`). Deliberately NOT the field's position in the relation (that is att_field_position, a separate attribute this reader has no use for) and NOT its index in this record's own field sequence -- the two coincide in some real files and differ in others, which is exactly why this is read rather than inferred.
+  readonly fieldNumber: number | undefined;
   readonly typeLabel: string;
   // True for a computed (non-stored) column -- gbak's own put_data explicitly skips these when writing row data (backup.epp: `if (field->fld_flags & FLD_computed) continue;`), so a row's own field-value sequence never includes one. Kept on the field record purely so data.ts's row decoder can apply gbak's identical skip rule when walking the same field list.
   readonly computed: boolean;
@@ -39,9 +43,12 @@ const ATT_RELATION_NAME = 1;
 // att_type values relevant to a rec_field's own attribute list (restore.epp's get_field switch, restricted to the subset this reader interprets). Indices recounted directly against burp.h's own field-attribute enum block (att_field_name=SERIES=1 through att_field_schema_name=48) rather than trusted from a first-pass read -- att_field_type is 8 (att_field_sub_type, not att_field_type, is 9), att_field_computed_flag is 23 (att_field_number is 22), att_field_character_length is 41 (att_field_character_set, not character_length, is 42): three genuine off-by-one mistakes this reader's own construction caught and fixed before ever touching a real fixture.
 const ATT_FIELD_NAME = 1;
 const ATT_FIELD_TYPE = 8;
-// att_field_sub_type (index 9) is read but not currently interpreted -- kept as a named constant for the day BLOB sub-type (text vs binary) or NUMERIC/DECIMAL-vs-plain disambiguation is needed; skipped generically today via the field-attribute default case.
+// att_field_sub_type: for a BLOB column, 0 = binary and 1 = text, which is what decides how src/firebird/data.ts records a recovered blob's own bytes. Still not interpreted for anything else (NUMERIC/DECIMAL-vs-plain disambiguation would use it too, but typeLabel already derives that from scale).
+const ATT_FIELD_SUB_TYPE = 9;
 const ATT_FIELD_LENGTH = 10;
 const ATT_FIELD_SCALE = 11;
+// burp.h: "Field number to match up blobs" -- see FirebirdField.fieldNumber.
+const ATT_FIELD_NUMBER = 22;
 const ATT_FIELD_COMPUTED_FLAG = 23;
 const ATT_FIELD_CHARACTER_LENGTH = 41;
 
@@ -52,6 +59,8 @@ function readField(reader: FirebirdBackupReader): FirebirdField {
   let lengthBytes = 0;
   let scale = 0;
   let characterLength: number | undefined;
+  let subType = 0;
+  let fieldNumber: number | undefined;
   let computed = false;
 
   for (;;) {
@@ -66,8 +75,14 @@ function readField(reader: FirebirdBackupReader): FirebirdField {
       case ATT_FIELD_TYPE:
         blrType = reader.readInt32Attribute();
         break;
+      case ATT_FIELD_SUB_TYPE:
+        subType = reader.readInt32Attribute();
+        break;
       case ATT_FIELD_LENGTH:
         lengthBytes = reader.readInt32Attribute();
+        break;
+      case ATT_FIELD_NUMBER:
+        fieldNumber = reader.readInt32Attribute();
         break;
       case ATT_FIELD_SCALE:
         scale = reader.readInt32Attribute();
@@ -92,8 +107,8 @@ function readField(reader: FirebirdBackupReader): FirebirdField {
   }
 
   const physicalType = decodeBlrType(blrType);
-  const typeLabel = describeFieldType(physicalType, lengthBytes, scale, characterLength);
-  return { name, physicalType, lengthBytes, scale, characterLength, typeLabel, computed };
+  const typeLabel = describeFieldType(physicalType, lengthBytes, scale, characterLength, subType);
+  return { name, physicalType, lengthBytes, scale, characterLength, subType, fieldNumber, typeLabel, computed };
 }
 
 // Reads one rec_relation's own attribute list, then loops over its nested rec_field records until rec_relation_end (the tag itself already consumed by the caller). Throws FirebirdCompositeRecordUnsupportedError (via the caller-supplied onUnhandledNested callback) for a rec_view child -- a view has no rows of its own to back up and this reader has not verified its own attribute shape against a real fixture; see the README's .odb Tier 3 Gotchas entry.

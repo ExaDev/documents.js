@@ -40,33 +40,94 @@ export class FirebirdCompositeRecordUnsupportedError extends Error {
   }
 }
 
-// Skips one blob record's own body (rec_blob tag already consumed by the caller) -- field number/max-segment/segment-count/type attributes, then that many length-prefixed segments. This reader has no BLOB decode of its own (see the README's .odb Tier 3 Fidelity note); a blob-bearing row's blob column is always recorded as an 'empty' ContentCellValue by decodeRowValues below.
-function skipBlobRecord(reader: FirebirdBackupReader): void {
-  let segmentCount: number | undefined;
+interface FirebirdBlob {
+  // att_blob_field_number: the value of the owning field's own att_field_number (burp.h names that attribute "Field number to match up blobs"), NOT the field's position in the relation and NOT its index in the rec_field sequence -- see FirebirdField.fieldNumber.
+  readonly fieldNumber: number;
+  readonly bytes: Uint8Array<ArrayBuffer>;
+}
+
+// Reads one blob record in full (rec_blob tag already consumed by the caller), concatenating every segment of its content. The record's exact shape is backup.epp's own put_blob, confirmed byte-for-byte against a real LibreOffice-generated blob-bearing fixture: `rec_blob att_blob_field_number <int32> att_blob_max_segment <int32> att_blob_number_segments <int32> att_blob_type <int32> att_blob_data (<2-byte little-endian segment length> <that many raw bytes>)*`.
+//
+// Two things about that shape are load-bearing and were BOTH got wrong by this module's first implementation, which is why a blob-bearing .odb previously failed outright rather than merely losing its blob content. (1) There is NO att_end terminator: put_blob returns straight after its last segment, and restore.epp's own get_blob correspondingly reads attributes only until it sees att_blob_data (`while (get_attribute(&attribute, tdgbl) != att_blob_data)`), never looking for att_end. Reading on past the segments therefore consumed the NEXT record's own tag as an attribute and desynchronised the whole stream. (2) A NULL blob writes no rec_blob record at all ("If the blob is null, don't store it. It will be restored as null." -- put_blob's own comment), so a field with no matching record here is genuinely null, not missing data.
+//
+// A third thing is worth stating explicitly because it is a genuine asymmetry rather than an omission: a blob's own segments are ALWAYS raw, never RLE-compressed, even when the whole backup sets att_backup_compress (as every real fixture this reader was built against does). backup.epp calls its own compress() at exactly one site -- put_data's row payload, guarded by `if (tdgbl->gbl_sw_compress) compress(p, record_length);` -- while put_blob writes every segment through plain put_block with no such guard anywhere in it. Hence readRawPayload below rather than the readCompressedPayload readRowGroup uses for the row itself; the blob fixture's own 256-byte 0x00..0xFF payload is what proves it empirically, since any compression assumption either way would corrupt those exact bytes and desynchronise the records after them.
+function readBlobRecord(reader: FirebirdBackupReader): FirebirdBlob {
+  // Blob-record attributes (burp.h): att_blob_field_number = SERIES+2 = 3, att_blob_type = 4, att_blob_number_segments = 5, att_blob_max_segment = 6, att_blob_data = 7 (a bare tag with no length prefix -- see reader.ts's own top-of-file note).
+  const ATT_BLOB_FIELD_NUMBER = 3;
+  const ATT_BLOB_NUMBER_SEGMENTS = 5;
+  const ATT_BLOB_DATA = 7;
+
+  let fieldNumber: number | undefined;
+  let segmentCount = 0;
   for (;;) {
     const attribute = reader.readTag();
-    if (attribute === 0) {
+    if (attribute === ATT_BLOB_DATA) {
       break;
     }
-    // Blob-record attributes (burp.h): att_blob_field_number = SERIES+2 = 3, att_blob_type = 4, att_blob_number_segments = 5, att_blob_max_segment = 6, att_blob_data = 7 (a bare tag with no length prefix -- see reader.ts's own top-of-file note). This module needs only the segment count and the bare data tag.
-    if (attribute === 5) {
+    if (attribute === ATT_BLOB_FIELD_NUMBER) {
+      fieldNumber = reader.readInt32Attribute();
+    } else if (attribute === ATT_BLOB_NUMBER_SEGMENTS) {
       segmentCount = reader.readInt32Attribute();
-    } else if (attribute === 7) {
-      // att_blob_data: a bare tag with no length prefix -- see reader.ts's own top-of-file note. What follows is `segmentCount` individually length-prefixed segments, each a 2-byte length then that many raw bytes.
-      const count = segmentCount ?? 0;
-      for (let i = 0; i < count; i++) {
-        const length = reader.readBlobSegmentLength();
-        reader.readRawPayload(length);
-      }
     } else {
       reader.skipAttributeValue();
     }
   }
+  if (fieldNumber === undefined) {
+    throw new FirebirdDataParseError('a rec_blob record had no att_blob_field_number attribute, so its content cannot be attributed to a column');
+  }
+
+  const segments: Uint8Array<ArrayBuffer>[] = [];
+  let total = 0;
+  for (let i = 0; i < segmentCount; i++) {
+    const length = reader.readBlobSegmentLength();
+    const segment = reader.readRawPayload(length);
+    segments.push(segment);
+    total += segment.length;
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const segment of segments) {
+    bytes.set(segment, offset);
+    offset += segment.length;
+  }
+  return { fieldNumber, bytes };
+}
+
+// document-schema.js's ContentCellValue union has no binary kind at all (number/percentage/currency/boolean/date/time/dateTime/string/error/empty), so a recovered blob has to arrive as one of those or not at all. A TEXT blob (Firebird's own att_field_sub_type 1) is genuinely text and becomes an ordinary string, decoded as UTF-8 -- the same assumption every other character-typed column in this module already makes, and the charset a LibreOffice-created embedded Firebird database actually declares. A BINARY blob (any other sub-type) has no honest plain-string reading, so it becomes a base64 `data:` URI: self-describing, standard, losslessly decodable, and distinguishable from a string a column could genuinely have held, rather than a bare base64 run that would be indistinguishable from real text. This is a real, tracked schema gap rather than a decoding limit -- the bytes are fully recovered either way; what is missing is a `ContentCellValue` variant able to say "these are bytes", which belongs in document-schema.js rather than being invented here.
+const BINARY_BLOB_DATA_URI_PREFIX = 'data:application/octet-stream;base64,';
+const BLOB_SUB_TYPE_TEXT = 1;
+const BASE64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+// Standard RFC 4648 base64, hand-rolled rather than reached for from odf.js's own bytesToBase64: src/firebird/ deliberately imports nothing but document-schema.js's ContentCellValue type and src/hsqldb's own table shape (see this package's README on that isolation), and a dozen lines of alphabet indexing is a smaller price than making a byte-level backup-format decoder depend on an ODF package.
+function bytesToBase64(bytes: Uint8Array<ArrayBuffer>): string {
+  let result = '';
+  for (let i = 0; i < bytes.length; i += 3) {
+    const b0 = bytes[i] ?? 0;
+    const b1 = bytes[i + 1];
+    const b2 = bytes[i + 2];
+    const triple = (b0 << 16) | ((b1 ?? 0) << 8) | (b2 ?? 0);
+    result += BASE64_ALPHABET[(triple >> 18) & 0x3f] ?? '';
+    result += BASE64_ALPHABET[(triple >> 12) & 0x3f] ?? '';
+    result += b1 === undefined ? '=' : (BASE64_ALPHABET[(triple >> 6) & 0x3f] ?? '');
+    result += b2 === undefined ? '=' : (BASE64_ALPHABET[triple & 0x3f] ?? '');
+  }
+  return result;
+}
+
+function blobCellValue(field: FirebirdField, bytes: Uint8Array<ArrayBuffer>): ContentCellValue {
+  if (field.subType === BLOB_SUB_TYPE_TEXT) {
+    return { kind: 'string', value: new TextDecoder('utf-8').decode(bytes) };
+  }
+  return { kind: 'string', value: `${BINARY_BLOB_DATA_URI_PREFIX}${bytesToBase64(bytes)}` };
 }
 
 // Decodes exactly one row's own XDR-encoded field-value sequence (canonical.cpp's CAN_encode_decode, direction=DECODE) into ContentCellValue[], one entry per NON-computed field in the relation's own declared order -- matching gbak's own put_data field loop (`if (field->fld_flags & FLD_computed) continue;`). Trailing null-flag shorts (one per non-computed field, same order) are read immediately after every field value per canonical.cpp's own two-pass shape ("Next, get null flags") and applied retroactively: a non-zero null flag replaces whatever value was just decoded with ContentCellValue's 'empty' kind, mirroring src/hsqldb/script.ts's own NULL handling.
+function storedFieldsOf(fields: readonly FirebirdField[]): readonly FirebirdField[] {
+  return fields.filter((field) => !field.computed);
+}
+
 function decodeRowValues(fields: readonly FirebirdField[], payload: Uint8Array<ArrayBuffer>): ContentCellValue[] {
-  const storedFields = fields.filter((field) => !field.computed);
+  const storedFields = storedFieldsOf(fields);
   const xdr = new XdrReader(payload);
   const rawValues: (ContentCellValue | undefined)[] = [];
 
@@ -129,7 +190,7 @@ function decodeRowValues(fields: readonly FirebirdField[], payload: Uint8Array<A
         break;
       }
       case 'blob':
-        // The blob's own quad (two 32-bit halves: a blob ID, not its content) still occupies the row's own fixed field slot and must be consumed to keep the XDR cursor aligned with every field after it -- but this reader has no blob-body decode (see the README's .odb Tier 3 Fidelity note), so the column's own value is always recorded as empty regardless of whether the blob ID is null.
+        // The blob's own quad (two 32-bit halves: a blob ID, not its content) still occupies the row's own fixed field slot and must be consumed to keep the XDR cursor aligned with every field after it. The CONTENT lives in the separate rec_blob records that follow this row -- readRowGroup below reads them and overwrites this placeholder for every field one arrives for; a field with no rec_blob of its own is genuinely null (put_blob writes nothing at all for a null blob) and correctly keeps this value.
         xdr.readInt32();
         xdr.readInt32();
         rawValues.push({ kind: 'empty' });
@@ -187,11 +248,20 @@ function readRowGroup(reader: FirebirdBackupReader, relation: FirebirdRelation, 
     }
 
     const payload = compressed ? reader.readCompressedPayload(xdrLength) : reader.readRawPayload(xdrLength);
-    rows.push(decodeRowValues(relation.fields, payload));
+    const values = decodeRowValues(relation.fields, payload);
+    rows.push(values);
 
+    // Every rec_blob record between this row and the next belongs to THIS row (backup.epp's put_data writes a row's blob records immediately after the row itself), so each one's content replaces the placeholder decodeRowValues left in that column.
     let next = reader.readTag();
     while (next === REC_BLOB) {
-      skipBlobRecord(reader);
+      const blob = readBlobRecord(reader);
+      const storedFields = storedFieldsOf(relation.fields);
+      const columnIndex = storedFields.findIndex((field) => field.fieldNumber === blob.fieldNumber);
+      const field = storedFields[columnIndex];
+      if (field === undefined) {
+        throw new FirebirdDataParseError(`relation "${relation.name}": a rec_blob record names att_blob_field_number ${blob.fieldNumber}, which matches no field's own att_field_number in this relation`);
+      }
+      values[columnIndex] = blobCellValue(field, blob.bytes);
       next = reader.readTag();
     }
 
