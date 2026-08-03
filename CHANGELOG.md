@@ -1,3 +1,10 @@
+## [1.67.2](https://github.com/ExaDev/documents.js/compare/v1.67.1...v1.67.2) (2026-08-03)
+
+
+### Bug Fixes
+
+* consume markdown-codec from npm instead of a pinned git commit ([a722a9d](https://github.com/ExaDev/documents.js/commit/a722a9d8940a01a8e8f412b923e2cce8f87a8123))
+
 ## [1.67.1](https://github.com/ExaDev/documents.js/compare/v1.67.0...v1.67.1) (2026-08-03)
 
 # [1.67.0](https://github.com/ExaDev/documents.js/compare/v1.66.0...v1.67.0) (2026-08-03)
