@@ -4,8 +4,10 @@ updates:
     directory: "/"
     schedule:
       interval: "daily"
-    allow:
-      - dependency-name: "document-schema.js"
+    cooldown:
+      default-days: 7
+      exclude:
+        - "document-schema.js"
     commit-message:
       prefix: "build"
       include: "scope"
