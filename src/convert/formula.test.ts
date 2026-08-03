@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { FRACTION_FORMULA, MATRIX_FORMULA, odfFormulaBytes, SQRT_FORMULA, SUBSUP_FORMULA } from '../test-support/odf';
 import { minimalOdpBytes } from '../test-support/odp';
 import { minimalOdtBytes } from '../test-support/odt';
-import type { DocumentPackage } from 'document-schema.js';
+import type { ContentBlock, DocumentPackage } from 'document-schema.js';
 import { decodePackage } from 'odf.js';
 import { decodePackage as decodeOoxmlPackage } from 'ooxml.js';
 import { readPdf } from 'pdf-codec';
@@ -108,34 +108,85 @@ function enc(s: string): Uint8Array<ArrayBuffer> {
   return new TextEncoder().encode(s);
 }
 
-function odtWithEmbeddedFormulaBytes(): Uint8Array<ArrayBuffer> {
-  const contentXml = enc(
-    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<office:document-content ${OFFICE_NS} ${TEXT_NS} ${DRAW_NS} ${XLINK_NS} ${SVG_NS}><office:body><office:text><text:p>Before the formula</text:p><draw:frame svg:x="2cm" svg:y="2cm" svg:width="4cm" svg:height="1.5cm"><draw:object xlink:href="./Object 1"/></draw:frame></office:text></office:body></office:document-content>`,
+// The embedded sub-object's own content.xml, addressed as "<name>/content.xml" inside the OUTER package -- the same office:body > office:math > math:math structure odfFormulaBytes builds for a standalone .odf, just package-relative rather than a whole separate zip (see src/odf/formula/detect.ts's own subPackagePathFromHref for the "./Object 1" -> "Object 1" convention this exercises).
+function embeddedFormulaObjectBytes(mathMlInner: string): Uint8Array<ArrayBuffer> {
+  return enc(
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<office:document-content ${OFFICE_NS} xmlns:math="http://www.w3.org/1998/Math/MathML"><office:body><office:math><math:math xmlns:math="http://www.w3.org/1998/Math/MathML">${mathMlInner}</math:math></office:math></office:body></office:document-content>`,
   );
-  // The embedded sub-object's own content.xml, at "Object 1/content.xml" inside the OUTER package -- the same office:body > office:math > math:math structure odfFormulaBytes builds for a standalone .odf, just addressed as a package-relative part rather than a whole separate zip (see src/odf/formula/detect.ts's own subPackagePathFromHref for the "./Object 1" -> "Object 1" convention this exercises).
-  const objectContentBytes = enc(
-    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<office:document-content ${OFFICE_NS} xmlns:math="http://www.w3.org/1998/Math/MathML"><office:body><office:math><math:math xmlns:math="http://www.w3.org/1998/Math/MathML"><math:mfrac><math:mi>a</math:mi><math:mi>b</math:mi></math:mfrac></math:math></office:math></office:body></office:document-content>`,
-  );
+}
 
+function odtBodyBytes(bodyInner: string): Uint8Array<ArrayBuffer> {
+  return enc(
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<office:document-content ${OFFICE_NS} ${TEXT_NS} ${DRAW_NS} ${XLINK_NS} ${SVG_NS}><office:body><office:text>${bodyInner}</office:text></office:body></office:document-content>`,
+  );
+}
+
+function odtZip(bodyInner: string, objects: readonly (readonly [string, string])[]): Uint8Array<ArrayBuffer> {
   return zipPackage([
     ['mimetype', { bytes: enc('application/vnd.oasis.opendocument.text'), stored: true }],
-    ['content.xml', { bytes: contentXml }],
-    ['Object 1/content.xml', { bytes: objectContentBytes }],
+    ['content.xml', { bytes: odtBodyBytes(bodyInner) }],
+    ...objects.map(([name, mathMlInner]) => [`${name}/content.xml`, { bytes: embeddedFormulaObjectBytes(mathMlInner) }] as const),
   ]);
 }
 
-function odpWithEmbeddedFormulaBytes(): Uint8Array<ArrayBuffer> {
-  const contentXml = enc(
-    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<office:document-content ${OFFICE_NS} ${DRAW_NS} ${XLINK_NS} ${SVG_NS} ${STYLE_NS}><office:automatic-styles><style:style style:name="PM1" style:family="drawing-page"/></office:automatic-styles><office:body><office:presentation><draw:page draw:style-name="PM1"><draw:frame svg:x="2cm" svg:y="2cm" svg:width="4cm" svg:height="1.5cm"><draw:object xlink:href="./Object 1"/></draw:frame></draw:page></office:presentation></office:body></office:document-content>`,
+// A formula frame sitting as a DIRECT child of office:text -- the absolutely-positioned (non-inline) shape, and the only one this package detected before.
+function odtWithEmbeddedFormulaBytes(): Uint8Array<ArrayBuffer> {
+  return odtZip(
+    '<text:p>Before the formula</text:p><draw:frame svg:x="2cm" svg:y="2cm" svg:width="4cm" svg:height="1.5cm"><draw:object xlink:href="./Object 1"/></draw:frame>',
+    [['Object 1', '<math:mfrac><math:mi>a</math:mi><math:mi>b</math:mi></math:mfrac>']],
   );
-  const objectContentBytes = enc(
-    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<office:document-content ${OFFICE_NS} xmlns:math="http://www.w3.org/1998/Math/MathML"><office:body><office:math><math:math xmlns:math="http://www.w3.org/1998/Math/MathML"><math:msqrt><math:mi>x</math:mi></math:msqrt></math:math></office:math></office:body></office:document-content>`,
+}
+
+// A formula anchored INLINE inside a paragraph's own run content -- the shape LibreOffice writes for a formula typed into a sentence: text:anchor-type="as-char", carrying svg:width/svg:height but deliberately NO svg:x, since its horizontal position comes from the text flow rather than from the frame (see src/odf/formula/detect.ts's own flowAnchoredFrameBox).
+function odtWithInlineFormulaBytes(): Uint8Array<ArrayBuffer> {
+  return odtZip(
+    '<text:p>First paragraph</text:p><text:p>Second paragraph with <draw:frame text:anchor-type="as-char" svg:width="1cm" svg:height="0.5cm"><draw:object xlink:href="./Object 1"/></draw:frame> inline.</text:p><text:p>Third paragraph</text:p>',
+    [['Object 1', '<math:msqrt><math:mi>x</math:mi></math:msqrt>']],
+  );
+}
+
+// A formula frame nested inside a draw:g group at the top level of office:text -- neither a direct child of office:text nor inside a paragraph.
+function odtWithGroupedFormulaBytes(): Uint8Array<ArrayBuffer> {
+  return odtZip(
+    '<text:p>Before the group</text:p><draw:g><draw:frame svg:x="2cm" svg:y="2cm" svg:width="4cm" svg:height="1.5cm"><draw:object xlink:href="./Object 1"/></draw:frame></draw:g><text:p>After the group</text:p>',
+    [['Object 1', '<math:mfrac><math:mi>a</math:mi><math:mi>b</math:mi></math:mfrac>']],
+  );
+}
+
+// A formula inside a list item's own paragraph: the case where "one raw XML child = one block" genuinely fails, since a single text:list unwraps into one ContentParagraph per item.
+function odtWithListItemFormulaBytes(): Uint8Array<ArrayBuffer> {
+  return odtZip(
+    '<text:list><text:list-item><text:p>Item one</text:p></text:list-item><text:list-item><text:p>Item two <draw:frame text:anchor-type="as-char" svg:width="1cm" svg:height="0.5cm"><draw:object xlink:href="./Object 1"/></draw:frame></text:p></text:list-item></text:list><text:p>After the list</text:p>',
+    [['Object 1', '<math:mn>7</math:mn>']],
+  );
+}
+
+function odpZip(pageInner: string, objects: readonly (readonly [string, string])[]): Uint8Array<ArrayBuffer> {
+  const contentXml = enc(
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<office:document-content ${OFFICE_NS} ${TEXT_NS} ${DRAW_NS} ${XLINK_NS} ${SVG_NS} ${STYLE_NS}><office:automatic-styles><style:style style:name="PM1" style:family="drawing-page"/></office:automatic-styles><office:body><office:presentation><draw:page draw:style-name="PM1">${pageInner}</draw:page></office:presentation></office:body></office:document-content>`,
   );
   return zipPackage([
     ['mimetype', { bytes: enc('application/vnd.oasis.opendocument.presentation'), stored: true }],
     ['content.xml', { bytes: contentXml }],
-    ['Object 1/content.xml', { bytes: objectContentBytes }],
+    ...objects.map(([name, mathMlInner]) => [`${name}/content.xml`, { bytes: embeddedFormulaObjectBytes(mathMlInner) }] as const),
   ]);
+}
+
+const FORMULA_FRAME = '<draw:frame svg:x="2cm" svg:y="2cm" svg:width="4cm" svg:height="1.5cm"><draw:object xlink:href="./Object 1"/></draw:frame>';
+const TEXT_BOX_FRAME = '<draw:frame svg:x="1cm" svg:y="1cm" svg:width="3cm" svg:height="1cm"><draw:text-box><text:p>A label</text:p></draw:text-box></draw:frame>';
+
+function odpWithEmbeddedFormulaBytes(): Uint8Array<ArrayBuffer> {
+  return odpZip(FORMULA_FRAME, [['Object 1', '<math:msqrt><math:mi>x</math:mi></math:msqrt>']]);
+}
+
+// A slide carrying BOTH a draw:g group and a formula frame -- the exact shape that previously disabled formula detection for the whole slide, because a group's own frames are spliced into readOdp's flat shapes array at the group's own position, breaking any "Nth top-level frame = shapes[N]" correspondence.
+function odpWithGroupAndFormulaBytes(): Uint8Array<ArrayBuffer> {
+  return odpZip(`<draw:g>${TEXT_BOX_FRAME}</draw:g>${FORMULA_FRAME}`, [['Object 1', '<math:msqrt><math:mi>x</math:mi></math:msqrt>']]);
+}
+
+// The mirror case: the formula itself lives INSIDE the group, after an ungrouped shape.
+function odpWithFormulaInsideGroupBytes(): Uint8Array<ArrayBuffer> {
+  return odpZip(`${TEXT_BOX_FRAME}<draw:g>${FORMULA_FRAME}</draw:g>`, [['Object 1', '<math:mfrac><math:mi>a</math:mi><math:mi>b</math:mi></math:mfrac>']]);
 }
 
 describe('odtToPdf: an embedded formula inside a real odt document', () => {
@@ -222,6 +273,103 @@ describe('a formula as a real ContentDocument, not a side-channel map', () => {
     }
     const block = captured.content.sections[0]!.blocks.find((b) => b.kind === 'embeddedObject');
     expect(block?.kind === 'embeddedObject' && block.document.kind === 'formula').toBe(true);
+  });
+});
+
+// --- Where a formula frame actually IS: inline in a paragraph's run content, inside a group, inside a list item -- and where its block lands as a result ---
+
+function wordprocessingBlocks(bytes: Uint8Array<ArrayBuffer>): readonly ContentBlock[] {
+  const content = readOdtContent(decodePackage(bytes));
+  if (content.kind !== 'wordprocessing') {
+    throw new Error('expected a wordprocessing ContentDocument');
+  }
+  return content.sections[0]!.blocks;
+}
+
+function blockSummary(blocks: readonly ContentBlock[]): string[] {
+  return blocks.map((block) => (block.kind === 'paragraph' ? block.runs.map((run) => run.text).join('') : block.kind));
+}
+
+function formulaRootTag(block: ContentBlock | undefined): string | undefined {
+  if (block?.kind !== 'embeddedObject' || block.document.kind !== 'formula') {
+    return undefined;
+  }
+  const [root] = block.document.formula.mathml;
+  return root?.type === 'element' ? root.tag : undefined;
+}
+
+describe('embedded-formula detection: a formula anchored inline inside a paragraph', () => {
+  it('detects a formula in a paragraph\'s own run content and places its block immediately after that paragraph', () => {
+    const blocks = wordprocessingBlocks(odtWithInlineFormulaBytes());
+    expect(blockSummary(blocks)).toEqual(['First paragraph', 'Second paragraph with  inline.', 'embeddedObject', 'Third paragraph']);
+    expect(formulaRootTag(blocks[2])).toBe('math:msqrt');
+  });
+
+  it('sizes an inline frame from its own declared svg:width/svg:height, which odf.js\'s own readDrawFrame resolves nothing for (an as-char frame carries no svg:x)', () => {
+    const block = wordprocessingBlocks(odtWithInlineFormulaBytes())[2];
+    if (block?.kind !== 'embeddedObject') {
+      throw new Error('expected an embeddedObject block');
+    }
+    // 1cm x 0.5cm, in points, at the zero origin the text flow replaces.
+    expect(block.frame.widthPt).toBeCloseTo(28.35, 1);
+    expect(block.frame.heightPt).toBeCloseTo(14.17, 1);
+    expect(block.frame.xPt).toBe(0);
+  });
+
+  it('numbers the formula block\'s own sourcePath by its FINAL position in the combined block list', () => {
+    const block = wordprocessingBlocks(odtWithInlineFormulaBytes())[2];
+    expect(block?.kind === 'embeddedObject' ? block.sourcePath : undefined).toBe('sections[0].blocks[2]');
+  });
+
+  it('renders that inline formula as real MathML through odtToPdf, not as its own plain-text stand-in', () => {
+    const pdfBytes = odtToPdf(odtWithInlineFormulaBytes());
+    expect(new TextDecoder('latin1').decode(pdfBytes)).toContain('CIDFontType0C');
+  });
+});
+
+describe('embedded-formula detection: a formula nested inside a draw:g group', () => {
+  it('detects a grouped formula at the top level of office:text and places its block between the surrounding paragraphs', () => {
+    const blocks = wordprocessingBlocks(odtWithGroupedFormulaBytes());
+    expect(blockSummary(blocks)).toEqual(['Before the group', 'embeddedObject', 'After the group']);
+    expect(formulaRootTag(blocks[1])).toBe('math:mfrac');
+  });
+});
+
+describe('embedded-formula detection: a formula inside a list item', () => {
+  it('counts a text:list\'s own per-item block unwrapping, so the formula lands after the item it belongs to rather than at the end', () => {
+    const blocks = wordprocessingBlocks(odtWithListItemFormulaBytes());
+    expect(blockSummary(blocks)).toEqual(['Item one', 'Item two ', 'embeddedObject', 'After the list']);
+    expect(formulaRootTag(blocks[2])).toBe('math:mn');
+  });
+});
+
+describe('embedded-formula detection: an odp slide that also contains a group', () => {
+  it('detects the formula on a slide carrying a draw:g, attaching it to the shape readOdp actually produced for that frame', () => {
+    const content = readOdpContent(decodePackage(odpWithGroupAndFormulaBytes()));
+    if (content.kind !== 'presentation') {
+      throw new Error('expected a presentation ContentDocument');
+    }
+    const shapes = content.slides[0]!.shapes;
+    // walkDrawShapes splices a group's own frames in at the group's position, so the grouped text box is shapes[0] and the ungrouped formula frame is shapes[1].
+    expect(shapes).toHaveLength(2);
+    expect(shapes[0]!.blocks.map((block) => block.kind)).toEqual(['paragraph']);
+    expect(formulaRootTag(shapes[1]!.blocks[0])).toBe('math:msqrt');
+  });
+
+  it('detects a formula nested INSIDE the group itself, resolving its shape index the same way', () => {
+    const content = readOdpContent(decodePackage(odpWithFormulaInsideGroupBytes()));
+    if (content.kind !== 'presentation') {
+      throw new Error('expected a presentation ContentDocument');
+    }
+    const shapes = content.slides[0]!.shapes;
+    expect(shapes).toHaveLength(2);
+    expect(shapes[0]!.blocks.map((block) => block.kind)).toEqual(['paragraph']);
+    expect(formulaRootTag(shapes[1]!.blocks[0])).toBe('math:mfrac');
+  });
+
+  it('renders a grouped-slide formula as real MathML through odpToPdf', () => {
+    const pdfBytes = odpToPdf(odpWithGroupAndFormulaBytes());
+    expect(new TextDecoder('latin1').decode(pdfBytes)).toContain('CIDFontType0C');
   });
 });
 

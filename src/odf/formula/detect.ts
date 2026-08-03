@@ -1,5 +1,5 @@
-import type { Package, XmlElement, XmlNode } from 'odf.js';
-import { attrValue, childrenWithTag, readDrawFrame } from 'odf.js';
+import type { OdfTransformFunction, Package, XmlElement, XmlNode } from 'odf.js';
+import { attrValue, childrenWithTag, parseOdfLength, parseOdfTransform, readDrawFrame } from 'odf.js';
 import type { ContentFormula } from 'document-schema.js';
 import type { Box } from '../../model/geometry';
 import { readOdfEmbeddedFormula } from './read';
@@ -10,35 +10,128 @@ export interface DetectedFormulaFrame {
   readonly frame: Box;
 }
 
+// The same DetectedFormulaFrame plus the index of the ContentShape odf.js's own readOdp produced for this exact frame -- see collectSlideFormulaFrames below for how that index is derived rather than guessed.
+export interface DetectedSlideFormulaFrame extends DetectedFormulaFrame {
+  readonly shapeIndex: number;
+}
+
 // A draw:object's own xlink:href, pointing at an embedded sub-object, is written by real ODF producers as a package-relative path into the SAME container -- either "./ObjectN" or, per the ODF 1.2 schema's own XLink profile for an internal same-document reference, "#./ObjectN" (a fragment-prefixed form). Both strip down to the same bare "ObjectN" directory name, which is exactly the prefix odf.js's own Package.parts keys embedded-object parts under (e.g. "Object 1/content.xml").
 function subPackagePathFromHref(href: string): string {
   return href.replace(/^#?\.\//, '');
 }
 
-// Scans `containerChildren` (e.g. office:text's own children for an odt body, or draw:page's own children for an odp slide) for a top-level draw:frame whose sole content is a draw:object referencing an embedded formula sub-package -- resolving each one's own geometry (via odf.js's own exported readDrawFrame, the identical function walkDrawShapes itself uses, so this module never reimplements resolveOdfShapeGeometry/composeOdfGroupTransform) and formula content (via readOdfEmbeddedFormula). Returns them in document order. A draw:frame whose own draw:object doesn't resolve to a formula (any other embedded-object kind draw:object also covers -- a spreadsheet, a chart, ...), or whose own geometry can't be resolved, is silently omitted -- not every draw:frame is a formula, and this function's only job is finding the ones that are.
-export function detectEmbeddedFormulaFrames(containerChildren: readonly XmlNode[], pkg: Package): readonly DetectedFormulaFrame[] {
-  const out: DetectedFormulaFrame[] = [];
-  for (const child of containerChildren) {
-    if (child.type !== 'element' || child.tag !== 'draw:frame') {
-      continue;
-    }
-    const objectElement = childrenWithTag(child, 'draw:object')[0];
-    if (objectElement === undefined) {
-      continue;
-    }
-    const href = attrValue(objectElement, 'xlink:href');
-    if (href === undefined) {
-      continue;
-    }
-    const formula = readOdfEmbeddedFormula(pkg, subPackagePathFromHref(href));
-    if (formula === undefined) {
-      continue;
-    }
-    const shape = readDrawFrame(child, [], pkg);
-    if (shape === undefined) {
-      continue;
-    }
-    out.push({ frameElement: child, formula, frame: shape.frame });
+// The ContentFormula a draw:frame's own draw:object resolves to, or undefined when this frame carries no draw:object at all, or one referencing something that is not a formula (draw:object also embeds spreadsheets, charts, and other OLE-style objects this package makes no attempt to detect).
+function formulaOfFrame(frame: XmlElement, pkg: Package): ContentFormula | undefined {
+  const objectElement = childrenWithTag(frame, 'draw:object')[0];
+  if (objectElement === undefined) {
+    return undefined;
   }
+  const href = attrValue(objectElement, 'xlink:href');
+  if (href === undefined) {
+    return undefined;
+  }
+  return readOdfEmbeddedFormula(pkg, subPackagePathFromHref(href));
+}
+
+// A frame anchored INTO the text flow (text:anchor-type="as-char" or "char" -- the shape LibreOffice writes for a formula typed inline in a paragraph) carries svg:width/svg:height but no svg:x, because its horizontal position is decided by the surrounding text, not by the frame. odf.js's own readDrawFrame therefore resolves no geometry for one at all (resolveOdfShapeGeometry -> parseBox requires all four of svg:x/y/width/height), which is correct for its own purpose -- a shape with no position cannot be placed on a slide -- but wrong for a wordprocessing flow, where the layout engine derives x/y from the flow itself and reads only the frame's own height to pick a rendered size (see src/layout/engine.ts's own formulaSizePtFromFrame). This recovers exactly that: the declared size, at a zero origin the flow will replace.
+function flowAnchoredFrameBox(frame: XmlElement): Box | undefined {
+  const widthValue = attrValue(frame, 'svg:width');
+  const heightValue = attrValue(frame, 'svg:height');
+  if (widthValue === undefined || heightValue === undefined) {
+    return undefined;
+  }
+  const widthPt = parseOdfLength(widthValue);
+  const heightPt = parseOdfLength(heightValue);
+  if (widthPt === undefined || heightPt === undefined) {
+    return undefined;
+  }
+  return { xPt: 0, yPt: 0, widthPt, heightPt };
+}
+
+// A group's own draw:transform, composed onto whatever transform its ancestors already contribute -- lifted verbatim from odf.js's own walkDrawShapes (typed/draw/shapes.ts), including the "an empty own-transform list reuses the parent's array rather than copying it" detail, so a frame nested inside a group resolves to the exact same geometry odf.js itself would resolve for it.
+function nestedGroupFunctions(group: XmlElement, groupFunctions: readonly OdfTransformFunction[]): readonly OdfTransformFunction[] {
+  const value = attrValue(group, 'draw:transform');
+  const own = value === undefined ? [] : parseOdfTransform(value);
+  return own.length === 0 ? groupFunctions : [...own, ...groupFunctions];
+}
+
+// One draw:frame -> a DetectedFormulaFrame, or undefined when it is not a formula frame (no draw:object, or one referencing a non-formula sub-object) or when neither geometry path resolves a box for it. Geometry is resolved through odf.js's own readDrawFrame first -- the identical function walkDrawShapes uses, so nothing here reimplements resolveOdfShapeGeometry/composeOdfGroupTransform -- falling back to the flow-anchored form above only when that returns nothing.
+function readFormulaFrame(frame: XmlElement, groupFunctions: readonly OdfTransformFunction[], pkg: Package, allowFlowAnchored: boolean): DetectedFormulaFrame | undefined {
+  const formula = formulaOfFrame(frame, pkg);
+  if (formula === undefined) {
+    return undefined;
+  }
+  const box = readDrawFrame(frame, groupFunctions, pkg)?.frame ?? (allowFlowAnchored ? flowAnchoredFrameBox(frame) : undefined);
+  if (box === undefined) {
+    return undefined;
+  }
+  return { frameElement: frame, formula, frame: box };
+}
+
+function walkForFormulaFrames(nodes: readonly XmlNode[], groupFunctions: readonly OdfTransformFunction[], pkg: Package, out: DetectedFormulaFrame[]): void {
+  for (const node of nodes) {
+    if (node.type !== 'element') {
+      continue;
+    }
+    if (node.tag === 'draw:frame') {
+      const detected = readFormulaFrame(node, groupFunctions, pkg, true);
+      if (detected !== undefined) {
+        // A formula frame's own children are the draw:object reference itself -- there is nothing further inside it to find.
+        out.push(detected);
+        continue;
+      }
+      // A frame that is NOT a formula can still contain one: a draw:text-box holds real text:p content, which may itself anchor an inline formula frame.
+      walkForFormulaFrames(node.children, groupFunctions, pkg, out);
+      continue;
+    }
+    if (node.tag === 'draw:g') {
+      walkForFormulaFrames(node.children, nestedGroupFunctions(node, groupFunctions), pkg, out);
+      continue;
+    }
+    walkForFormulaFrames(node.children, groupFunctions, pkg, out);
+  }
+}
+
+// Every draw:frame resolving to an embedded formula found ANYWHERE beneath `nodes`, in document order: directly among them, nested inside a draw:g group (composing that group's own draw:transform), or anchored inline inside a paragraph's own run content. This is deliberately a deep walk rather than a direct-children scan -- a formula typed inline in a LibreOffice paragraph is a draw:frame child of text:p, and one dropped into a grouped diagram is a draw:frame child of draw:g; neither is a direct child of the container a caller starts from.
+//
+// Positioning the results back into a caller's own model is the caller's job, not this function's: an odt block index and an odp shape index are counted by two completely different upstream walks (odf.js's readBlocks vs its walkDrawShapes), so each caller mirrors its own.
+export function collectFormulaFrames(nodes: readonly XmlNode[], pkg: Package): readonly DetectedFormulaFrame[] {
+  const out: DetectedFormulaFrame[] = [];
+  walkForFormulaFrames(nodes, [], pkg, out);
+  return out;
+}
+
+// Every formula frame on one draw:page, each paired with the index of the ContentShape odf.js's own readOdp produced for it. That index is DERIVED, not guessed: readOdp's readSlide builds a slide's shapes array via walkDrawShapes(page.children, ...), which walks draw:frame and draw:g in document order, recurses into a group's own children, and pushes exactly one shape per draw:frame whose geometry readDrawFrame resolves (skipping any it cannot). This function performs the identical traversal with the identical skip condition, so the Nth shape it counts IS slide.shapes[N] -- including for a frame nested inside a group, which is why an odp slide containing a draw:g no longer has to be skipped wholesale.
+//
+// Geometry here is strictly readDrawFrame's, with no flow-anchored fallback: a frame walkDrawShapes could not resolve produced no shape at all, so there is nothing on the slide for a formula to attach to.
+export function collectSlideFormulaFrames(pageChildren: readonly XmlNode[], pkg: Package): readonly DetectedSlideFormulaFrame[] {
+  const out: DetectedSlideFormulaFrame[] = [];
+  const state = { nextShapeIndex: 0 };
+
+  const walk = (nodes: readonly XmlNode[], groupFunctions: readonly OdfTransformFunction[]): void => {
+    for (const node of nodes) {
+      if (node.type !== 'element') {
+        continue;
+      }
+      if (node.tag === 'draw:frame') {
+        const shape = readDrawFrame(node, groupFunctions, pkg);
+        if (shape === undefined) {
+          continue;
+        }
+        const shapeIndex = state.nextShapeIndex;
+        state.nextShapeIndex += 1;
+        const formula = formulaOfFrame(node, pkg);
+        if (formula !== undefined) {
+          out.push({ frameElement: node, formula, frame: shape.frame, shapeIndex });
+        }
+        continue;
+      }
+      if (node.tag === 'draw:g') {
+        walk(node.children, nestedGroupFunctions(node, groupFunctions));
+      }
+    }
+  };
+
+  walk(pageChildren, []);
   return out;
 }
