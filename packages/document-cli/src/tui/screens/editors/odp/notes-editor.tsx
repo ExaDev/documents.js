@@ -2,25 +2,19 @@ import { Box, Text, useInput } from 'ink';
 import { useState, type ReactElement } from 'react';
 import { TextField } from '../../../components/text-field.js';
 import { useAppDispatch, useAppState } from '../../../state/context.js';
-import { anyOverlayOpen, type OdpOpenDocument, type OpenDocument, type Screen } from '../../../state/types.js';
+import { anyOverlayOpen, type Screen } from '../../../state/types.js';
+import { assertPresentationDocument } from '../../shared/slide-family.js';
 
 export interface NotesEditorScreenProps {
   readonly screen: Extract<Screen, { kind: 'notesEditor' }>;
 }
 
-// Reached only via slide-detail's own 'n' key, which is gated to an odp document there -- SET_SLIDE_NOTES itself works against a pptx document too (PptxSlide also carries a real `.notes` getter/setter), but this screen keeps notes editing an odp-only affordance as a deliberate, bounded scope choice, not a technical constraint. Throws rather than returning undefined for the same reason `assertPresentationDocument` does in shared/slide-family.tsx: reaching this screen with anything other than an open odp document is a screen-router wiring bug.
-function assertOdpDocument(doc: OpenDocument | undefined): OdpOpenDocument {
-  if (doc?.format !== 'odp') {
-    throw new Error('NotesEditorScreen rendered without an open odp document; check the screen router in app.tsx.');
-  }
-  return doc;
-}
-
+// Reached via slide-detail's own 'n' key for either an open pptx or odp document -- PptxSlide and OdpSlide both carry a real `.notes` getter/setter (documents.js's own README confirms pptx speaker notes round-trip through pptxToPdf/pdfToPptx via a hidden annotation, the same as odp's own presentation:notes element), so this screen is shared between the two formats rather than being odp-only.
 export function NotesEditorScreen(props: NotesEditorScreenProps): ReactElement {
   const state = useAppState();
   const dispatch = useAppDispatch();
   const overlayOpen = anyOverlayOpen(state);
-  const doc = assertOdpDocument(state.openDocument);
+  const doc = assertPresentationDocument(state.openDocument);
   const { slideIndex } = props.screen;
   const slide = doc.editor.slides()[slideIndex];
   const [draft, setDraft] = useState(() => slide?.notes ?? '');

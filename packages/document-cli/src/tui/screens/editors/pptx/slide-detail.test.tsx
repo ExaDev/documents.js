@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { AppStateProvider, useAppDispatch, useAppState } from '../../../state/context.js';
 import { currentScreen } from '../../../state/types.js';
 import { settle, waitForFrame } from '../../../test-support.js';
+import { NotesEditorScreen } from '../odp/index.js';
 import { SlideDetailScreen } from './slide-detail.js';
 
 const ENTER_KEY = '\r';
@@ -46,12 +47,14 @@ function SlideDetailRouter(): ReactElement {
   switch (screen.kind) {
     case 'slideDetail':
       return <SlideDetailScreen screen={screen} />;
+    case 'notesEditor':
+      return <NotesEditorScreen screen={screen} />;
     default:
-      throw new Error(`SlideDetailRouter has no case for ${screen.kind}; this test only ever pushes slideDetail.`);
+      throw new Error(`SlideDetailRouter has no case for ${screen.kind}; this test only ever pushes slideDetail/notesEditor.`);
   }
 }
 
-// Reads the LIVE package fresh on every render, through the exact same content pivot real pptx/odp reading uses (readPptxContent/readOdpContent), and renders a one-line summary of slide 0's first shape's table (if any). This is how these tests observe a mutation the reducer applied to the real package -- PptxSlide.shapes() itself never reports a table graphicFrame at all (see slide.tsx's own doc comment), so this probe, not the visible shape list, is the ground truth these tests check against.
+// Reads the LIVE package fresh on every render, through the exact same content pivot real pptx/odp reading uses (readPptxContent/readOdpContent), and renders a one-line summary of slide 0's first shape's table (if any) and its own speaker notes. This is how these tests observe a mutation the reducer applied to the real package -- PptxSlide.shapes() itself never reports a table graphicFrame at all (see slide.tsx's own doc comment), so this probe, not the visible shape list, is the ground truth these tests check against.
 function DocumentProbe({ format }: { readonly format: 'pptx' | 'odp' }): ReactElement {
   const state = useAppState();
   const doc = state.openDocument;
@@ -65,7 +68,11 @@ function DocumentProbe({ format }: { readonly format: 'pptx' | 'odp' }): ReactEl
   const slide = content.slides[0];
   const tableBlock = slide?.shapes[0]?.blocks[0];
   const table = tableBlock?.kind === 'table' ? `${tableBlock.rows.length}x${tableBlock.rows[0]?.cells.length ?? 0}` : 'none';
-  return <Text>probe:table={table}</Text>;
+  return (
+    <Text>
+      probe:table={table} notes="{slide?.notes ?? ''}"
+    </Text>
+  );
 }
 
 // Opens the test document AND pushes slideDetail for its one slide in a single effect -- this file has no interest in exercising the slideList -> slideDetail navigation hop the slide-family suite already covers.
@@ -161,7 +168,41 @@ describe('SlideDetailScreen "b" add-table affordance', () => {
     await sendKey(stdin, ESCAPE_KEY);
     // The footer hint line is rendered unconditionally regardless of addMode (see slide-detail.tsx), so it is not itself a signal that the wizard closed -- the disappearance of the "Rows:" prompt is.
     const after = await waitForFrame(lastFrame, (frame) => !frame.includes('Rows:'));
-    expect(after).toContain('Enter: edit shape a: add shape Esc: back');
+    expect(after).toContain('Enter: edit shape a: add shape n: notes Esc: back');
     expect(after).toContain('probe:table=none');
+  });
+});
+
+describe('SlideDetailScreen "n" notes affordance shared between pptx and odp', () => {
+  it('opens the notes editor for a pptx slide and saves real speaker notes back onto PptxSlide.notes', async () => {
+    const { lastFrame, stdin } = renderAtSlideDetail('pptx', buildPptxOneSlideBytes());
+    await waitForText(lastFrame, 'Slide 1 -- 0 shapes');
+    expect(lastFrame()).toContain('notes=""');
+
+    await sendKey(stdin, 'n');
+    await waitForText(lastFrame, 'Slide 1 notes');
+
+    await settle();
+    stdin.write('Q3 growth is up');
+    await waitForText(lastFrame, 'Q3 growth is up');
+    stdin.write(ENTER_KEY);
+
+    // Back on slide-detail, with the probe now reading the real notes text back off PptxSlide.notes -- SET_SLIDE_NOTES was previously wired to odp only; this is the direct proof it now also commits for a pptx document.
+    const after = await waitForText(lastFrame, 'notes="Q3 growth is up"');
+    expect(after).toContain('Slide 1 -- 0 shapes');
+  });
+
+  it('opens the notes editor for an odp slide exactly as before', async () => {
+    const { lastFrame, stdin } = renderAtSlideDetail('odp', buildOdpOneSlideBytes());
+    await waitForText(lastFrame, 'Slide 1 -- 0 shapes');
+
+    await sendKey(stdin, 'n');
+    await waitForText(lastFrame, 'Slide 1 notes');
+    await settle();
+    stdin.write('Agenda for the meeting');
+    await waitForText(lastFrame, 'Agenda for the meeting');
+    stdin.write(ENTER_KEY);
+
+    await waitForText(lastFrame, 'notes="Agenda for the meeting"');
   });
 });

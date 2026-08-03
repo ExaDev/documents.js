@@ -295,6 +295,18 @@ describe('appReducer ADD_SLIDE_TABLE', () => {
   });
 });
 
+describe('appReducer SET_SLIDE_NOTES on pptx', () => {
+  it('sets real speaker notes on a pptx slide, not just an odp one', () => {
+    const editor = createPptx();
+    editor.addSlide();
+    const opened = openPptxDocument(editor.toBytes());
+
+    const withNotes = appReducer(opened, { type: 'SET_SLIDE_NOTES', slideIndex: 0, notes: 'Remember to mention Q3 growth' });
+    expect(withNotes.hasUnsavedChanges).toBe(true);
+    expect(pptxDocument(withNotes).editor.slides()[0]?.notes).toBe('Remember to mention Q3 growth');
+  });
+});
+
 describe('appReducer diagnostics and selection', () => {
   it('appends, dismisses and clears diagnostics', () => {
     const withTwo = applyAll([

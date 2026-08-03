@@ -100,10 +100,10 @@ export function SlideDetailScreen(props: SlideDetailScreenProps): ReactElement {
     { isActive: !overlayOpen && addMode === 'chooseKind' },
   );
 
-  // Notes editing is scoped to odp only -- see notes-editor.tsx's own doc comment for why pptx, which technically supports it too, is deliberately left out here.
+  // Notes editing dispatches SET_SLIDE_NOTES, which documents.js supports identically for pptx and odp (both PptxSlide and OdpSlide carry a real `.notes` getter/setter) -- so this key is available for either format, not gated to odp.
   useInput(
     (input) => {
-      if (input === 'n' && doc.format === 'odp') {
+      if (input === 'n') {
         dispatch({ type: 'PUSH_SCREEN', screen: { kind: 'notesEditor', slideIndex } });
       }
     },
@@ -218,9 +218,7 @@ export function SlideDetailScreen(props: SlideDetailScreenProps): ReactElement {
           />
         </Box>
       ) : undefined}
-      <Text dimColor>
-        Enter: edit shape a: add shape{doc.format === 'odp' ? ' n: notes' : ''} Esc: back
-      </Text>
+      <Text dimColor>Enter: edit shape a: add shape n: notes Esc: back</Text>
     </Box>
   );
 }
