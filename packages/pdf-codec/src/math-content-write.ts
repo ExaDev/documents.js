@@ -1,8 +1,8 @@
 import { ByteWriter } from './bytes/writer';
-import type { MathColor, MathGlyphRun, MathRule, MathStroke } from './math-types';
+import type { MathAssembledGlyphs, MathColor, MathGlyphRun, MathRule, MathStroke } from './math-types';
 import type { PositionedFormula } from './formula';
 import type { MathFont } from './math-font';
-import { pdfHexString } from './objects';
+import { pdfDict, pdfHexString, pdfName } from './objects';
 import { formatNumber, writeObject } from './serialize';
 
 // Renders a page's own PositionedFormula[] into PDF content-stream operator bytes -- the formula-specific counterpart to content-write.ts's writeContentStream, kept as its own module (rather than a new branch inside that one) because a formula's own text-showing genuinely differs from writeText's own WinAnsi/standard-14 path at the byte level: every glyph run here is shown through the embedded CID composite math font (src/pdf/math-font.ts) via Identity-H 2-byte-big-endian CIDs, never a WinAnsi-encoded 1-byte string. See write.ts's own module comment for why this can't simply be another LayoutItem kind instead.
@@ -60,6 +60,46 @@ function writeGlyphRun(writer: ByteWriter, positioned: PositionedFormula, item: 
   writer.writeAscii('ET\n');
 }
 
+function cidBytes(glyphId: number): Uint8Array<ArrayBuffer> {
+  return new Uint8Array([(glyphId >> 8) & 0xff, glyphId & 0xff]);
+}
+
+// A PDF text string (ISO 32000-1 7.9.2.2) in UTF-16BE with the leading U+FEFF byte-order mark that identifies it as such -- the encoding /ActualText needs to carry arbitrary Unicode. String.charCodeAt already yields UTF-16 code units, surrogate pairs included, so this needs no surrogate arithmetic of its own.
+function utf16BeWithBom(text: string): Uint8Array<ArrayBuffer> {
+  const bytes = new Uint8Array(2 + text.length * 2);
+  bytes[0] = 0xfe;
+  bytes[1] = 0xff;
+  for (let i = 0; i < text.length; i++) {
+    const unit = text.charCodeAt(i);
+    bytes[2 + i * 2] = (unit >> 8) & 0xff;
+    bytes[3 + i * 2] = unit & 0xff;
+  }
+  return bytes;
+}
+
+// Draws one stretched operator: each of its placements is a single glyph of the embedded font shown at its own computed position, addressed by glyph ID directly (Identity-H CIDs are this font's glyph IDs -- see math-font.ts) rather than resolved from text through the cmap the way writeGlyphRun does, because most of these glyphs have no Unicode code point to resolve from at all.
+//
+// The whole construction is wrapped in an /ActualText marked-content span naming the operator it stands for. Without it a tall bracket would extract as nothing: its glyphs are unencoded, so they get no ToUnicode entry (see collectUsedGlyphs below), and a reader has no other way to know that six stacked pieces spell "(". Marked content is invisible to rendering and this package's own content interpreter ignores it (interpret.ts's default operator branch), so it costs nothing but the bytes.
+function writeAssembledGlyphs(writer: ByteWriter, positioned: PositionedFormula, item: MathAssembledGlyphs, ctx: MathContentWriteContext): void {
+  if (item.placements.length === 0) {
+    return;
+  }
+  writeObject(writer, pdfName('Span'));
+  writer.writeAscii(' ');
+  writeObject(writer, pdfDict({ ActualText: pdfHexString(utf16BeWithBom(item.text)) }));
+  writer.writeAscii(' BDC\n');
+  for (const placement of item.placements) {
+    writer.writeAscii('BT\n');
+    writer.writeAscii(`/${ctx.resourceName} ${formatNumber(item.sizePt)} Tf\n`);
+    writeRgbOperator(writer, item.color, 'rg');
+    writer.writeAscii(`1 0 0 1 ${formatNumber(toPdfX(positioned, placement.xPt))} ${formatNumber(toPdfY(positioned, placement.yPt))} Tm\n`);
+    writeObject(writer, pdfHexString(cidBytes(placement.glyphId)));
+    writer.writeAscii(' Tj\n');
+    writer.writeAscii('ET\n');
+  }
+  writer.writeAscii('EMC\n');
+}
+
 function writeRule(writer: ByteWriter, positioned: PositionedFormula, item: MathRule): void {
   const x = toPdfX(positioned, item.xPt);
   const topY = toPdfY(positioned, item.yPt);
@@ -91,6 +131,8 @@ export function writeFormulaContentStream(formulas: readonly PositionedFormula[]
         writeGlyphRun(writer, positioned, item, ctx);
       } else if (item.kind === 'rule') {
         writeRule(writer, positioned, item);
+      } else if (item.kind === 'assembled-glyphs') {
+        writeAssembledGlyphs(writer, positioned, item, ctx);
       } else {
         writeStroke(writer, positioned, item);
       }
@@ -99,11 +141,21 @@ export function writeFormulaContentStream(formulas: readonly PositionedFormula[]
   return writer.toBytes();
 }
 
-// Every Unicode code point actually used across `formulas`' own glyph runs, resolved to its own glyph ID -- the exact, minimal set write.ts's own math font allocation needs for its /W widths array and ToUnicode CMap, even though the embedded CFF program itself carries the font's full, unmodified glyph repertoire (see math-font.ts's own module comment on why). Keyed by glyph ID (= CID, see math-font.ts) with the first code point seen mapped to it -- the cmap this font's glyphId() reads is a proper injective Unicode->glyph mapping for every code point this package's own mathvariant mapping ever produces, so a glyph ID mapping to more than one distinct code point across a whole document is not expected to occur.
-export function collectUsedGlyphs(formulas: readonly PositionedFormula[], font: MathFont): ReadonlyMap<number, number> {
-  const used = new Map<number, number>();
+// Every glyph actually drawn across `formulas` -- the exact, minimal set write.ts's own math font allocation needs for its /W widths array and ToUnicode CMap, even though the embedded CFF program itself carries the font's full, unmodified glyph repertoire (see math-font.ts's own module comment on why). Keyed by glyph ID (= CID, see math-font.ts).
+//
+// The value is the Unicode code point that glyph stands for, or `undefined` for a glyph that HAS no code point in this font's cmap: a stretchy construction's own variant and assembly pieces are addressed by glyph ID precisely because most of them are unencoded (see math-types.ts's MathAssembledGlyphs). Such a glyph still needs its /W width, so it belongs in this map, but it can contribute no ToUnicode entry -- buildMathFontObjects drops it from the CMap, and the /ActualText span writeAssembledGlyphs emits around the construction is what keeps the text recoverable instead. For an ordinary glyph run the mapping is the first code point seen: the cmap this font's glyphId() reads is a proper injective Unicode->glyph mapping for every code point this package's own mathvariant mapping ever produces, so a glyph ID mapping to more than one distinct code point across a whole document is not expected to occur.
+export function collectUsedGlyphs(formulas: readonly PositionedFormula[], font: MathFont): ReadonlyMap<number, number | undefined> {
+  const used = new Map<number, number | undefined>();
   for (const positioned of formulas) {
     for (const item of positioned.box.items) {
+      if (item.kind === 'assembled-glyphs') {
+        for (const placement of item.placements) {
+          if (!used.has(placement.glyphId)) {
+            used.set(placement.glyphId, undefined);
+          }
+        }
+        continue;
+      }
       if (item.kind !== 'glyphs') {
         continue;
       }
@@ -113,7 +165,8 @@ export function collectUsedGlyphs(formulas: readonly PositionedFormula[], font: 
           continue;
         }
         const glyphId = font.glyphId(codePoint);
-        if (glyphId !== undefined && !used.has(glyphId)) {
+        // A glyph first seen as an unencoded assembly piece and later drawn as ordinary text gains its code point here, so the two orders of encounter produce the same map.
+        if (glyphId !== undefined && used.get(glyphId) === undefined) {
           used.set(glyphId, codePoint);
         }
       }

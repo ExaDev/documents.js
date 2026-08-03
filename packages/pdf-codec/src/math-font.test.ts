@@ -126,3 +126,76 @@ describe('per-glyph ink bounds', () => {
     expect(space.inkDescentPt).toBeUndefined();
   });
 });
+
+// MathFontMetrics.stretch is the port documents.js's own MathML layout engine reaches stretchy glyphs through: math-stretch.ts already picks the variant or assembles the parts (and is tested against the real font in math-stretch.test.ts), so what is checked here is the layer this module adds on top -- converting to points at the caller's size, and MEASURING the resulting construction's real ink so a caller can place it. Every design-unit figure quoted below comes from the same raw-font values math-stretch.test.ts asserts, or from the glyph ink bounds cff-bounds.ts reads; the arithmetic is worked through in the comments rather than recorded from a run.
+describe('MathFontMetrics.stretch', () => {
+  const SIZE_PT = 12; // 1000 units/em, so exactly 0.012pt per design unit
+  const PAREN = 0x28;
+
+  it('reports a pre-built variant, measured from the variant glyph\'s own outline rather than its nominal advance', () => {
+    const result = loadMathFont().metricsAt(SIZE_PT).stretch(PAREN, 'vertical', 20, SIZE_PT);
+    expect(result).toBeDefined();
+    expect(result!.kind).toBe('variant');
+    // 20pt is 1666.67 design units, which the 1667-unit variant (glyph 1303) just covers.
+    expect(result!.placements).toEqual([{ glyphId: 1303, offsetPt: 0 }]);
+    expect(result!.sizePt).toBeCloseTo(1667 * 0.012, 9);
+    // That variant's own ink runs -563..1103 and its advance width is 427 -- all three genuinely differ from the base glyph's (-196..736, 357), which is the point of selecting a variant at all.
+    expect(result!.inkAscentPt).toBeCloseTo(1103 * 0.012, 9);
+    expect(result!.inkDescentPt).toBeCloseTo(563 * 0.012, 9);
+    expect(result!.advanceWidthPt).toBeCloseTo(427 * 0.012, 9);
+  });
+
+  it('reports the base glyph unchanged when it already reaches the target', () => {
+    const { font, metricsAt } = loadMathFont();
+    const result = metricsAt(SIZE_PT).stretch(PAREN, 'vertical', 10, SIZE_PT);
+    expect(result!.kind).toBe('base');
+    expect(result!.placements).toEqual([{ glyphId: font.glyphId(PAREN), offsetPt: 0 }]);
+    expect(result!.inkAscentPt).toBeCloseTo(736 * 0.012, 9);
+    expect(result!.inkDescentPt).toBeCloseTo(196 * 0.012, 9);
+  });
+
+  it('measures an assembled construction across every part, offsets included', () => {
+    const result = loadMathFont().metricsAt(SIZE_PT).stretch(PAREN, 'vertical', 80, SIZE_PT);
+    expect(result).toBeDefined();
+    expect(result!.kind).toBe('assembly');
+    // 80pt is 6666.67 design units: four repetitions of the 1252-unit extender between the 1273-unit hooks (7554 raw across six parts), with the five seams free to widen from the font's own 100-unit minimum up to the 250 the hooks' connectors allow -- (7554 - 6666.67) / 5 = 177.47 falls inside that range, so the construction lands exactly on the target.
+    expect(result!.sizePt).toBeCloseTo(80, 9);
+    expect(result!.placements.map((placement) => placement.glyphId)).toEqual([4862, 4861, 4861, 4861, 4861, 4860]);
+    expect(result!.placements[0]!.offsetPt).toBe(0);
+    // The last part's own offset is every preceding part's advance less one seam each: 1273 + 4x1252 - 5x177.4667.
+    expect(result!.placements[5]!.offsetPt).toBeCloseTo((1273 + 4 * 1252 - 5 * ((7554 - 6666 - 2 / 3) / 5)) * 0.012, 6);
+    // The topmost ink is the upper hook's own yMax (1272) lifted by that last offset; the lowest is the lower hook's own yMin, which is 0 -- so the construction's ink sits entirely at or above its drawing origin, which is exactly why a caller cannot centre it by assuming a symmetric extent.
+    expect(result!.inkAscentPt).toBeCloseTo(result!.placements[5]!.offsetPt + 1272 * 0.012, 6);
+    expect(result!.inkDescentPt).toBeCloseTo(0, 9);
+    // Every part of a stretched parenthesis is drawn from the same 484-unit-wide pieces, wider than the base glyph's own 357.
+    expect(result!.advanceWidthPt).toBeCloseTo(484 * 0.012, 9);
+  });
+
+  it('scales the whole construction with the size the operator is set at', () => {
+    const { metricsAt } = loadMathFont();
+    const small = metricsAt(12).stretch(PAREN, 'vertical', 40, 12)!;
+    const large = metricsAt(24).stretch(PAREN, 'vertical', 80, 24)!;
+    // The same target measured in ems, so the same construction, at twice the size.
+    expect(large.placements.map((p) => p.glyphId)).toEqual(small.placements.map((p) => p.glyphId));
+    expect(large.sizePt).toBeCloseTo(small.sizePt * 2, 9);
+    expect(large.inkAscentPt).toBeCloseTo(small.inkAscentPt * 2, 9);
+    expect(large.advanceWidthPt).toBeCloseTo(small.advanceWidthPt * 2, 9);
+  });
+
+  it('returns undefined for a glyph this font does not stretch, and for one it has no glyph for at all', () => {
+    const metrics = loadMathFont().metricsAt(SIZE_PT);
+    expect(metrics.stretch(0x78, 'vertical', 40, SIZE_PT)).toBeUndefined(); // 'x' -- not stretchy on either axis in this font
+    expect(metrics.stretch(0x28, 'horizontal', 40, SIZE_PT)).toBeUndefined(); // a parenthesis stretches vertically only
+    expect(metrics.stretch(0x1_0000, 'vertical', 40, SIZE_PT)).toBeUndefined(); // an unassigned code point
+  });
+
+  it('measures a HORIZONTAL construction across the axis it is NOT stretched along', () => {
+    // The over-brace assembles left to right, so a part's own offset shifts it in x and leaves the ink extent purely vertical -- the opposite of the vertical case above, and the reason measureConstruction has to know which axis it is on.
+    const result = loadMathFont().metricsAt(SIZE_PT).stretch(0x23de, 'horizontal', 60, SIZE_PT);
+    expect(result).toBeDefined();
+    expect(result!.kind).toBe('assembly');
+    expect(result!.placements.length).toBeGreaterThan(1);
+    expect(result!.inkAscentPt + result!.inkDescentPt).toBeLessThan(SIZE_PT); // a brace is a shallow band, however wide it is stretched
+    expect(result!.sizePt).toBeGreaterThanOrEqual(60);
+  });
+});

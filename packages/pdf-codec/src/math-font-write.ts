@@ -23,7 +23,7 @@ export interface MathFontObjects {
   readonly toUnicode: PdfObject;
 }
 
-function buildWidthsArray(font: MathFont, usedGlyphs: ReadonlyMap<number, number>): PdfObject {
+function buildWidthsArray(font: MathFont, usedGlyphs: ReadonlyMap<number, number | undefined>): PdfObject {
   const entries: PdfObject[] = [];
   // Sorted by glyph ID for deterministic, byte-identical output across runs with the same input -- matching write.ts's own "objects allocated in a fixed order" determinism guarantee (see that module's own top-of-writePdf comment).
   for (const glyphId of [...usedGlyphs.keys()].sort((a, b) => a - b)) {
@@ -55,8 +55,19 @@ function buildFontFileStream(font: MathFont, compress: boolean): PdfObject {
   return pdfStream(dict, compress ? deflate(font.cffBytes) : font.cffBytes);
 }
 
+// The subset of `usedGlyphs` that has a Unicode code point to map back to. A stretchy construction's own variant and assembly pieces are unencoded in this font (see math-content-write.ts's collectUsedGlyphs) -- they still need their /W width above, but there is genuinely no character for a ToUnicode entry to name, so they are dropped from the CMap rather than mapped to some stand-in that would extract as the wrong text. The /ActualText span around each such construction carries the real text instead.
+function toUnicodeEntries(usedGlyphs: ReadonlyMap<number, number | undefined>): ReadonlyMap<number, number> {
+  const entries = new Map<number, number>();
+  for (const [glyphId, codePoint] of usedGlyphs) {
+    if (codePoint !== undefined) {
+      entries.set(glyphId, codePoint);
+    }
+  }
+  return entries;
+}
+
 // Builds the five PDF objects a single embedded math composite font needs (/Type0, /CIDFontType0 descendant, /FontDescriptor, /FontFile3, ToUnicode CMap) -- write.ts allocates the five object numbers up front (matching its own existing font/image allocation pattern) and passes the resulting refs in so each object can point at the others; this function's own job is purely to build the dict/stream VALUES, not to decide numbering or write bytes to the file.
-export function buildMathFontObjects(font: MathFont, usedGlyphs: ReadonlyMap<number, number>, refs: MathFontObjectRefs, compress: boolean): MathFontObjects {
+export function buildMathFontObjects(font: MathFont, usedGlyphs: ReadonlyMap<number, number | undefined>, refs: MathFontObjectRefs, compress: boolean): MathFontObjects {
   const cidFont = pdfDict({
     Type: pdfName('Font'),
     Subtype: pdfName('CIDFontType0'),
@@ -81,6 +92,6 @@ export function buildMathFontObjects(font: MathFont, usedGlyphs: ReadonlyMap<num
     cidFont,
     descriptor: buildFontDescriptor(font, refs.fontFileRef),
     fontFile: buildFontFileStream(font, compress),
-    toUnicode: buildToUnicodeCMap(usedGlyphs),
+    toUnicode: buildToUnicodeCMap(toUnicodeEntries(usedGlyphs)),
   };
 }

@@ -12,7 +12,7 @@ export { PdfBytesSchema, pdfCodec } from './codec';
 
 // Formula/math: the structural port documents.js's own MathML layout engine (layoutFormula, staying in documents.js) produces real values against -- see src/math-types.ts and src/formula.ts for the full rationale.
 export type { PositionedFormula } from './formula';
-export type { MathBox, MathColor, MathFontMetrics, MathGlyphMetrics, MathGlyphRun, MathLayoutItem, MathRule, MathStroke } from './math-types';
+export type { MathAssembledGlyphs, MathBox, MathColor, MathFontMetrics, MathGlyphMetrics, MathGlyphPlacement, MathGlyphRun, MathLayoutItem, MathRule, MathStretchGlyph, MathStretchResult, MathStroke } from './math-types';
 export type { LoadedMathFont, MathFont, MathFontDescriptorMetrics } from './math-font';
 export { loadMathFont } from './math-font';
 // Per-glyph tight ink bounding boxes: the shape MathFont.glyphInkBounds reports in design units, and what MathGlyphMetrics.inkAscentPt/inkDescentPt are derived from. Exported so a layout engine outside this package (documents.js's own MathML engine is the caller this exists for) can size a token box from the glyphs it actually contains rather than from the font-wide nominal ascent/descent.

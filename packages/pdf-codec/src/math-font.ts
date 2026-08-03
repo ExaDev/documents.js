@@ -4,7 +4,7 @@
 //
 // A CID-keyed PDF composite font built this way needs no /CIDToGIDMap at all (that key exists only for /CIDFontType2): per ISO 32000-1 9.7.4.2, a /CIDFontType0 whose /FontFile3 is a "bare" (non-CID-keyed) CFF program is read with CID treated as directly indexing the CFF's own CharStrings INDEX by glyph order -- i.e. CID == GID -- which is exactly the numbering this module's own cmap-derived glyph IDs already use, so Identity-H text-showing (2-byte CIDs, big-endian) needs no further remapping anywhere in the write path.
 import { base64ToBytes } from './util/base64';
-import type { MathFontMetrics, MathGlyphMetrics } from './math-types';
+import type { MathFontMetrics, MathGlyphMetrics, MathStretchResult } from './math-types';
 import { STIX_TWO_MATH_FONT_BASE64 } from './assets/stix-two-math-font';
 import type { CffGlyphBounds } from './cff-bounds';
 import { parseCffGlyphBounds } from './cff-bounds';
@@ -13,7 +13,7 @@ import { buildCmapLookup } from './cmap-table';
 import type { GlyphInkBounds } from './glyph-bounds';
 import type { HmtxTable } from './hmtx-table';
 import { parseHmtx } from './hmtx-table';
-import type { MathStretchAxis, MathStretchConstruction } from './math-stretch';
+import type { MathStretchAxis, MathStretchConstruction, MathStretchPlacement } from './math-stretch';
 import { assembleStretchyGlyph, scaleMathStretchConstruction } from './math-stretch';
 import type { MathGlyphConstruction, MathTable } from './math-table';
 import { parseMathTable } from './math-table';
@@ -47,6 +47,54 @@ export interface MathFont {
 
 function toPt(designUnits: number, unitsPerEm: number, sizePt: number): number {
   return (designUnits / unitsPerEm) * sizePt;
+}
+
+// The whole construction's own real ink extent about its drawing origin, and its horizontal advance, both measured from the actual glyphs it is built from rather than assumed from the nominal advances the assembly model works in. Along the stretch axis each placement's own offset shifts its ink; across it every placement sits at the same position, so only the glyphs' own bounds matter. Returns undefined when NO placement's outline could be measured at all -- there is then nothing to position the construction by, and math-types.ts's own stretch() contract says the caller falls back to the unstretched base glyph rather than being handed a guessed extent.
+function measureConstruction(placements: readonly MathStretchPlacement[], axis: MathStretchAxis, inkBounds: CffGlyphBounds | undefined, hmtx: HmtxTable): { inkAscent: number; inkDescent: number; advanceWidth: number } | undefined {
+  let inkAscent = Number.NEGATIVE_INFINITY;
+  let inkDescent = Number.NEGATIVE_INFINITY;
+  let advanceWidth = 0;
+  for (const placement of placements) {
+    advanceWidth = Math.max(advanceWidth, hmtx.advanceWidth(placement.glyphId));
+    const ink = inkBounds?.bounds(placement.glyphId);
+    if (ink === undefined) {
+      continue;
+    }
+    const alongY = axis === 'vertical' ? placement.offset : 0;
+    inkAscent = Math.max(inkAscent, alongY + ink.yMax);
+    inkDescent = Math.max(inkDescent, -(alongY + ink.yMin));
+  }
+  return inkAscent === Number.NEGATIVE_INFINITY ? undefined : { inkAscent, inkDescent, advanceWidth };
+}
+
+// MathFontMetrics.stretch's own implementation: resolve the font's MathVariants construction for `codePoint` on `axis` (math-table.ts), pick or assemble the glyphs reaching `targetSizePt` (math-stretch.ts), then measure the result so a layout engine can place it. Kept alongside metricsAtSize rather than inside it because it needs the same closed-over parse state and the same design-units-to-points factor.
+function stretchAtSize(cmap: CmapLookup, hmtx: HmtxTable, math: MathTable, inkBounds: CffGlyphBounds | undefined, unitsPerEm: number, codePoint: number, axis: MathStretchAxis, targetSizePt: number, sizePt: number): MathStretchResult | undefined {
+  const glyphId = cmap(codePoint);
+  if (glyphId === undefined) {
+    return undefined;
+  }
+  const construction = (axis === 'vertical' ? math.variants.vertical : math.variants.horizontal).get(glyphId);
+  if (construction === undefined) {
+    return undefined;
+  }
+  const designUnitsPerPt = unitsPerEm / sizePt;
+  const assembled = assembleStretchyGlyph(construction, { axis, targetSize: targetSizePt * designUnitsPerPt, minConnectorOverlap: math.variants.minConnectorOverlap });
+  if (assembled === undefined) {
+    return undefined;
+  }
+  const measured = measureConstruction(assembled.placements, axis, inkBounds, hmtx);
+  if (measured === undefined) {
+    return undefined;
+  }
+  const pt = (designUnits: number): number => toPt(designUnits, unitsPerEm, sizePt);
+  return {
+    kind: assembled.kind,
+    sizePt: pt(assembled.size),
+    advanceWidthPt: pt(measured.advanceWidth),
+    inkAscentPt: pt(measured.inkAscent),
+    inkDescentPt: pt(measured.inkDescent),
+    placements: assembled.placements.map((placement) => ({ glyphId: placement.glyphId, offsetPt: pt(placement.offset) })),
+  };
 }
 
 // MathFontMetrics's own *Pt fields are already "at the caller's requested size" by contract (see metrics.ts) -- a single, size-independent parsed font cannot supply that directly, so this is the per-size factory loadMathFont's own metricsAt(sizePt) calls.
@@ -104,6 +152,9 @@ function metricsAtSize(cmap: CmapLookup, hmtx: HmtxTable, math: MathTable, inkBo
         inkAscentPt: ink === undefined ? undefined : toPt(ink.yMax, unitsPerEm, glyphSizePt),
         inkDescentPt: ink === undefined ? undefined : toPt(-ink.yMin, unitsPerEm, glyphSizePt),
       };
+    },
+    stretch(codePoint: number, axis: MathStretchAxis, targetSizePt: number, glyphSizePt: number): MathStretchResult | undefined {
+      return stretchAtSize(cmap, hmtx, math, inkBounds, unitsPerEm, codePoint, axis, targetSizePt, glyphSizePt);
     },
   };
 }
