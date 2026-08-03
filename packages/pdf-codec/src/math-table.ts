@@ -1,3 +1,4 @@
+import { parseCoverage } from './ot-layout-common';
 import type { SfntFont } from './sfnt';
 import { i16, sfntTableBytes, u16 } from './sfnt';
 
@@ -113,36 +114,14 @@ function parseMathConstants(bytes: Uint8Array<ArrayBuffer>, mathTableOffset: num
   };
 }
 
-// A Coverage table (OpenType Common Table Formats clause 2.3.2) resolved to a glyph ID -> coverage-index lookup -- the shared indirection every glyph-keyed MATH subtable (MathItalicsCorrectionInfo, MathTopAccentAttachment) uses to go from "this glyph" to "this glyph's own position in the parallel value array".
-function parseCoverageIndex(bytes: Uint8Array<ArrayBuffer>, coverageOffset: number): ReadonlyMap<number, number> {
-  const format = u16(bytes, coverageOffset);
-  const index = new Map<number, number>();
-  if (format === 1) {
-    const glyphCount = u16(bytes, coverageOffset + 2);
-    for (let i = 0; i < glyphCount; i++) {
-      index.set(u16(bytes, coverageOffset + 4 + i * 2), i);
-    }
-  } else if (format === 2) {
-    const rangeCount = u16(bytes, coverageOffset + 2);
-    for (let i = 0; i < rangeCount; i++) {
-      const recordOffset = coverageOffset + 4 + i * 6;
-      const startGlyphId = u16(bytes, recordOffset);
-      const endGlyphId = u16(bytes, recordOffset + 2);
-      const startCoverageIndex = u16(bytes, recordOffset + 4);
-      for (let glyphId = startGlyphId; glyphId <= endGlyphId; glyphId++) {
-        index.set(glyphId, startCoverageIndex + (glyphId - startGlyphId));
-      }
-    }
-  }
-  return index;
-}
-
-// A MathItalicsCorrectionInfo or MathTopAccentAttachment table (both share the identical shape: Offset16 Coverage, uint16 count, MathValueRecord[count]) resolved to a glyph ID -> design-unit value lookup.
+// A MathItalicsCorrectionInfo or MathTopAccentAttachment table (both share the identical shape: Offset16 Coverage, uint16 count, MathValueRecord[count]) resolved to a glyph ID -> design-unit value lookup. The Coverage table it indexes through is the shared OpenType Common Table Formats one (ot-layout-common.ts), the same structure gpos-table.ts resolves its own kerning subtables through; an unreadable Coverage costs this one subtable its values rather than the whole MATH table.
 function parseGlyphValueTable(bytes: Uint8Array<ArrayBuffer>, tableOffset: number): ReadonlyMap<number, number> {
-  const coverageOffset = tableOffset + u16(bytes, tableOffset);
-  const coverage = parseCoverageIndex(bytes, coverageOffset);
+  const coverage = parseCoverage(bytes, tableOffset + u16(bytes, tableOffset));
   const values = new Map<number, number>();
-  for (const [glyphId, coverageIndex] of coverage) {
+  if (coverage === undefined) {
+    return values;
+  }
+  for (const [glyphId, coverageIndex] of coverage.entries()) {
     values.set(glyphId, i16(bytes, tableOffset + 4 + coverageIndex * 4));
   }
   return values;
@@ -235,7 +214,11 @@ function parseConstructionsForAxis(bytes: Uint8Array<ArrayBuffer>, variantsOffse
   if (coverageOffset === 0) {
     return constructions;
   }
-  for (const [glyphId, coverageIndex] of parseCoverageIndex(bytes, variantsOffset + coverageOffset)) {
+  const coverage = parseCoverage(bytes, variantsOffset + coverageOffset);
+  if (coverage === undefined) {
+    return constructions;
+  }
+  for (const [glyphId, coverageIndex] of coverage.entries()) {
     if (coverageIndex >= count) {
       continue; // a coverage table listing more glyphs than the construction array has entries: skip the unbacked tail rather than reading past it
     }
