@@ -4,8 +4,9 @@ import { removeChild } from '../../xml/edit';
 import type { ImageInit, MediaContext } from '../odp/image';
 import { insertImageFrameMedia } from '../odp/image';
 import { buildTextBoxFrame, OdpShape } from '../odp/shape';
+import type { ContentVector } from 'document-schema.js';
 import type { BoxVectorInit, LineVectorInit, OdgVector, PathVectorInit } from './vector';
-import { buildEllipseElement, buildLineElement, buildPathElement, buildRectElement, OdgBoxVector, OdgLineVector, OdgPathVector, wrapVectorElement } from './vector';
+import { appendVectorTo, buildEllipseElement, buildLineElement, buildPathElement, buildRectElement, OdgBoxVector, OdgLineVector, OdgPathVector, wrapVectorElement } from './vector';
 
 export interface TextBoxInit {
   readonly frame: Box;
@@ -110,6 +111,11 @@ export class OdgPage {
     const element = buildPathElement(this.context.pkg, init);
     node.children.push(element);
     return new OdgPathVector(node.children, element, this.context.pkg);
+  }
+
+  // A whole ContentVector in one call, rotation included -- the kind-dispatching counterpart to the four hand-authoring setters above, for a caller (buildOdgPackage, and OdpSlide.addVector's own identical method) that already holds a modelled vector rather than per-kind init values. Goes through vector.ts's shared buildVectorElement so a rect/ellipse/line/path is built exactly one way whichever ODF document kind it lands in.
+  addVector(vector: ContentVector): OdgVector {
+    return appendVectorTo(this.live().children, this.context.pkg, vector);
   }
 
   remove(): void {

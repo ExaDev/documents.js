@@ -12,13 +12,25 @@ import { ensureAutomaticStyles, nextStyleName } from '../odt/automatic-styles';
 
 const GRAPHIC_STYLE_PREFIX = 'gr';
 
+// The positioning half of a graphic style, needed ONLY by a vector written into a TEXT document's flow (src/edit/odt/content.ts's own embedded-drawing branch). A draw:page's own children -- odg pages and odp slides alike -- are positioned directly by svg:x/svg:y against the page, with no anchor and nothing to declare; a shape living inside a text:p is anchored to that paragraph, and ODF then measures svg:x/svg:y against whatever style:horizontal-rel/style:vertical-rel say, defaulting to the paragraph itself. A recovered vector's coordinates are page-absolute, so a text-anchored one must declare style:*-rel="page" explicitly or it lands offset by wherever its anchor paragraph happened to flow to. style:wrap/style:run-through additionally keep it out of the text's way and behind it -- the ODF counterpart of the behindDoc="1"/wp:wrapNone pair src/edit/docx/vector.ts writes for exactly the same reason.
+const TEXT_FLOW_ANCHOR_ATTRS: Readonly<Record<string, string>> = {
+  'style:wrap': 'run-through',
+  'style:run-through': 'background',
+  'style:horizontal-pos': 'from-left',
+  'style:horizontal-rel': 'page',
+  'style:vertical-pos': 'from-top',
+  'style:vertical-rel': 'page',
+};
+
 export interface GraphicStyleInit {
   readonly fill?: Color;
   readonly stroke?: ContentStroke;
+  // See TEXT_FLOW_ANCHOR_ATTRS above. Absent (the odg/odp page case) means "positioned directly against the page", which needs no attributes at all.
+  readonly textFlowAnchored?: boolean;
 }
 
 function graphicPropertyAttrs(init: GraphicStyleInit): Record<string, string> {
-  const attrs: Record<string, string> = {};
+  const attrs: Record<string, string> = init.textFlowAnchored === true ? { ...TEXT_FLOW_ANCHOR_ATTRS } : {};
   if (init.fill === undefined) {
     attrs['draw:fill'] = 'none';
   } else {
@@ -93,12 +105,18 @@ export function readGraphicStroke(pkg: Package, element: XmlElement): ContentStr
   return color === undefined || widthPt === undefined ? undefined : { color, widthPt };
 }
 
+// Whether `element`'s own current style declares the text-flow anchoring above -- read back so a later fill/stroke change re-mints a style that keeps it, rather than silently repositioning a text-anchored vector back to paragraph-relative the first time someone touches its colour. style:vertical-rel is the single load-bearing attribute of the set (the one that actually decides what svg:y is measured against), so it is the one this tests.
+function readGraphicTextFlowAnchored(pkg: Package, element: XmlElement): boolean {
+  const props = graphicProperties(pkg, element);
+  return props !== undefined && attr(props, 'style:vertical-rel') === TEXT_FLOW_ANCHOR_ATTRS['style:vertical-rel'];
+}
+
 export function setGraphicFill(pkg: Package, element: XmlElement, fill: Color | undefined): void {
-  const name = buildGraphicStyle(pkg, { fill, stroke: readGraphicStroke(pkg, element) });
+  const name = buildGraphicStyle(pkg, { fill, stroke: readGraphicStroke(pkg, element), textFlowAnchored: readGraphicTextFlowAnchored(pkg, element) });
   setAttr(element, 'draw:style-name', name);
 }
 
 export function setGraphicStroke(pkg: Package, element: XmlElement, stroke: ContentStroke | undefined): void {
-  const name = buildGraphicStyle(pkg, { fill: readGraphicFill(pkg, element), stroke });
+  const name = buildGraphicStyle(pkg, { fill: readGraphicFill(pkg, element), stroke, textFlowAnchored: readGraphicTextFlowAnchored(pkg, element) });
   setAttr(element, 'draw:style-name', name);
 }
