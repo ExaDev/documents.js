@@ -2,6 +2,7 @@ import type {
   ContentBlock,
   ContentDocument,
   ContentDrawPage,
+  ContentEmbeddedObjectBlock,
   ContentParagraph,
   ContentPathPoint,
   ContentRun,
@@ -29,6 +30,7 @@ import type {
 } from 'document-schema.js';
 import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
 import { resolveStandardFont, STANDARD_METRICS } from 'pdf-codec';
+import { buildDrawingBlock } from '../model/embedded-drawing';
 import type { Box, Margins } from '../model/geometry';
 import { flipY } from '../model/geometry';
 import type { Alignment } from '../model/style';
@@ -223,6 +225,10 @@ function reconstructPageBlocks(page: LayoutPage, images: Record<string, LayoutIm
       positioned.push({ yPt: img.yPt, block: { kind: 'image', format: asset.format, base64: asset.base64, widthPt: img.widthPt, heightPt: img.heightPt } });
     }
   }
+  const recoveredVectors = recoverPageVectors(page);
+  if (recoveredVectors !== undefined) {
+    positioned.push({ yPt: recoveredVectors.topYPt, block: recoveredVectors.block });
+  }
   positioned.sort((a, b) => b.yPt - a.yPt);
   return positioned.map((p) => p.block);
 }
@@ -314,8 +320,17 @@ function reconstructSlide(page: LayoutPage, images: Record<string, LayoutImageAs
     }
   }
 
+  const recoveredVectors = recoverPageVectors(page);
+  // Vectors paint behind everything else, matching src/layout/drawing.ts's own documented vectors-then-shapes fallback for a page whose true interleaving is unknown -- and it is unknown here for the same reason: a slide's shapes array carries no ordering field relating it to content recovered outside it.
+  const vectorShapes: ContentShape[] = recoveredVectors === undefined ? [] : [wrapBlockInShape(recoveredVectors.block, { xPt: 0, yPt: 0, widthPt: page.widthPt, heightPt: page.heightPt })];
+
   // Images before text shapes in z-order (plan Step 10). notes recovers LayoutPage's own private page-dictionary entry (see pdf/write.ts/read.ts) when the source PDF was produced by this package's own pptxToPdf -- absent (falls back to '') for a PDF from any other producer, since nothing else would ever write it.
-  return { size: { widthPt: page.widthPt, heightPt: page.heightPt }, shapes: [...imageShapes, ...textShapes], notes: page.notes ?? '' };
+  return { size: { widthPt: page.widthPt, heightPt: page.heightPt }, shapes: [...vectorShapes, ...imageShapes, ...textShapes], notes: page.notes ?? '' };
+}
+
+// A single recovered block as its own containing shape, with the zero insets and no rotation every other shape this module produces already uses -- a slide has no container for a bare block, and a drawing recovered from a page is exactly one block.
+function wrapBlockInShape(block: ContentBlock, frame: Box): ContentShape {
+  return { frame, insetLeftPt: 0, insetTopPt: 0, insetRightPt: 0, insetBottomPt: 0, blocks: [block] };
 }
 
 interface TextBlock {
@@ -447,15 +462,12 @@ function reconstructDrawPage(page: LayoutPage, images: Record<string, LayoutImag
   const shapes: ContentShape[] = [];
   let paintOrder = 0;
   for (const item of page.items) {
-    if (item.kind === 'rect') {
-      vectors.push({ ...layoutRectToVector(item, page.heightPt), paintOrder: paintOrder++ });
-    } else if (item.kind === 'ellipse') {
-      vectors.push({ ...layoutEllipseToVector(item, page.heightPt), paintOrder: paintOrder++ });
-    } else if (item.kind === 'line') {
-      vectors.push({ ...layoutLineToVector(item, page.heightPt), paintOrder: paintOrder++ });
-    } else if (item.kind === 'path') {
-      vectors.push({ ...layoutPathToVector(item, page.heightPt), paintOrder: paintOrder++ });
-    } else if (item.kind === 'text') {
+    const vector = layoutItemToVector(item, page.heightPt);
+    if (vector !== undefined) {
+      vectors.push({ ...vector, paintOrder: paintOrder++ });
+      continue;
+    }
+    if (item.kind === 'text') {
       shapes.push({ ...layoutTextToShape(item, page.heightPt), paintOrder: paintOrder++ });
     } else if (item.kind === 'image') {
       const shape = imageToShape(item, page.heightPt, images);
@@ -465,6 +477,25 @@ function reconstructDrawPage(page: LayoutPage, images: Record<string, LayoutImag
     }
   }
   return { size: { widthPt: page.widthPt, heightPt: page.heightPt }, shapes, vectors };
+}
+
+// The ONE LayoutItem -> ContentVector classification in this package, shared verbatim by all three reconstruction directions: reconstructDrawing (above), and -- via recoverPageVectors below -- reconstructWordprocessing and reconstructPresentation. Which items reach it at all is a per-direction decision; what a rect/ellipse/line/path becomes once it does is not, and deliberately has no second implementation anywhere. Returns undefined for every non-vector kind (text/image/link), so a caller can use it as the "is this vector geometry?" test and its own converter in one step.
+//
+// How much this actually recovers is a property of pdf-codec's own content-stream interpreter, not of this function: its shape-pattern detection recognises an axis-aligned closed four-corner subpath as a real LayoutRect (any fill/stroke combination, and a 90-degree-rotated CTM as well as an unrotated one), a closed four-cubic kappa-ratio subpath as a real LayoutEllipse, and an open single-straight-segment stroke-only subpath as a real LayoutLine. Anything outside those patterns -- an off-axis rotation, a freeform curve, a multi-subpath figure -- stays a generic LayoutPath and is recovered as a 'path' vector, which is an honest narrowing of KIND only: the recovered geometry itself is exact either way.
+function layoutItemToVector(item: LayoutItem, pageHeightPt: number): ContentVector | undefined {
+  if (item.kind === 'rect') {
+    return layoutRectToVector(item, pageHeightPt);
+  }
+  if (item.kind === 'ellipse') {
+    return layoutEllipseToVector(item, pageHeightPt);
+  }
+  if (item.kind === 'line') {
+    return layoutLineToVector(item, pageHeightPt);
+  }
+  if (item.kind === 'path') {
+    return layoutPathToVector(item, pageHeightPt);
+  }
+  return undefined;
 }
 
 // The exact inverse of drawing.ts's own convertRectVector/convertEllipseVector: flipY is its own exact inverse (see model/geometry.ts's own doc comment), so re-flipping a LayoutRect/LayoutEllipse's bottom-left/y-up box recovers the identical top-left/y-down frame convertDrawingToLayout started from.
@@ -566,6 +597,43 @@ function layoutTextToShape(item: LayoutText, pageHeightPt: number): ContentShape
     insetBottomPt: 0,
     blocks: [{ kind: 'paragraph', runs: [textItemToContentRun(item)] }],
   };
+}
+
+// ---------------------------------------------------------------------------
+// Shared: VECTOR recovery for the wordprocessing and presentation directions.
+//
+// reconstructDrawing has always mapped every painted rect/ellipse/line/path back onto a ContentVector, because a drawing page has an array to put one in. reconstructWordprocessing and reconstructPresentation used to drop that geometry on the floor entirely -- filtering each page down to its text and image items and ignoring every stroke and fill -- purely because ContentSection.blocks and ContentSlide.shapes have no vector vocabulary of their own. That is a container gap, not a recovery gap: the classification is identical whichever direction asked for it, so both directions now run the SAME layoutItemToVector above and carry the result in a ContentEmbeddedObjectBlock (see src/model/embedded-drawing.ts for why that is the schema's own answer here rather than a widening of it).
+//
+// HONEST CONSEQUENCE, stated because it is a change in what these two directions emit: a PDF does not distinguish a stroke drawn to decorate from a stroke drawn as structure. A rule under a heading, an underline (pdf-codec writes one as a filled rectangle), and a table cell's own background fill are all genuine painted geometry, and are all now recovered as vectors rather than silently discarded. That is the intended behaviour -- discarding real content because it might be incidental is exactly the silent loss this package's conventions rule out -- but it does mean a reconstructed document carries more than its text alone.
+//
+// WRITE-SIDE STATUS, so this is not mistaken for an end-to-end feature: the recovered vectors reach the ContentDocument pivot only -- exposed through pdfToDocx/pdfToPptx's own onDocument callback and the DocumentConverter port's ConversionResult.package -- because none of the four OOXML/ODF wordprocessing/presentation builders can write vector shapes at all yet: there is no DrawingML preset/custom-geometry writer under src/edit/docx/ or src/edit/pptx/, and buildOdtPackage/buildOdpPackage have no draw:rect/draw:ellipse/draw:line/draw:path path either (src/edit/odg/ has those, but only for a drawing page). A caller wanting the recovered vectors as a real file today can hand the nested drawing document straight to buildOdgPackage. Writing them into docx/pptx/odt/odp is a genuine, separate feature -- the OOXML/ODF-shape mirror of src/edit/odg/ -- not a loose end of this one.
+// ---------------------------------------------------------------------------
+
+// A vector's own topmost edge in PDF space (y up), for positioning a recovered drawing among the text blocks around it. Every kind but 'line' carries a top-left/y-down frame; a line carries two bare endpoints instead.
+function vectorTopYDownPt(vector: ContentVector): number {
+  return vector.kind === 'line' ? Math.min(vector.from.yPt, vector.to.yPt) : vector.frame.yPt;
+}
+
+interface RecoveredVectors {
+  readonly block: ContentEmbeddedObjectBlock;
+  readonly topYPt: number; // PDF-space y of the topmost recovered vector, for ordering against the page's other content
+}
+
+// Every vector primitive on a page, in paint order, as one embedded drawing block -- or undefined when the page has none, so a text-only page's output is byte-identical to what it was before this recovery existed.
+function recoverPageVectors(page: LayoutPage): RecoveredVectors | undefined {
+  const vectors: ContentVector[] = [];
+  for (const item of page.items) {
+    const vector = layoutItemToVector(item, page.heightPt);
+    if (vector !== undefined) {
+      // paintOrder is the recovery index, exactly as reconstructDrawPage stamps it: a LayoutPage's items ARE its paint order, front-to-back by array position.
+      vectors.push({ ...vector, paintOrder: vectors.length });
+    }
+  }
+  if (vectors.length === 0) {
+    return undefined;
+  }
+  const topYDownPt = Math.min(...vectors.map(vectorTopYDownPt));
+  return { block: buildDrawingBlock({ widthPt: page.widthPt, heightPt: page.heightPt }, vectors), topYPt: page.heightPt - topYDownPt };
 }
 
 // ---------------------------------------------------------------------------

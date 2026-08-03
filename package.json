@@ -76,7 +76,7 @@
     "markdown-codec": "github:ExaDev/markdown-codec#beda0a89d92fffd153d5dcd05d767b404b721cda",
     "odf.js": "^2.0.0",
     "ooxml.js": "^2.6.1",
-    "pdf-codec": "^1.4.2",
+    "pdf-codec": "^1.6.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

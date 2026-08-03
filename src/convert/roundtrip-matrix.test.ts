@@ -268,7 +268,7 @@ const MATRIX_ENTRIES: readonly MatrixEntry[] = [
       { source: 'odg', target: 'pdf' },
       { source: 'pdf', target: 'odg' },
     ],
-    // minimalOdgBytes: two fill-only unrotated rects, a filled+stroked rect, an ellipse, a line, a genuine Bezier curve, and a text label. PDF's own content-stream operators only preserve a vector's exact original kind for a fill-only unrotated rect (readPdf's own fast path) -- everything else narrows to a generic 'path' on the way back (README's own reconstructDrawing gotcha), which this checks for explicitly rather than asserting every kind survives unchanged.
+    // minimalOdgBytes: two fill-only unrotated rects, a filled+stroked rect, an ellipse, a line, a genuine Bezier curve, and a text label. PDF records none of those kinds directly -- it has only `re` and the general path operators -- but pdf-codec's own shape-pattern detection recovers rect/ellipse/line back out of the recovered geometry, so every one of this fixture's kinds survives the round trip. src/convert/convert.test.ts's own pdfToOdg suite is where each kind's geometry and paint are checked in detail; this matrix entry just pins that the full set comes back.
     run: () => {
       const original = readOdgContent(decodeOdfPackage(minimalOdgBytes()));
       if (original.kind !== 'drawing') {
@@ -285,9 +285,7 @@ const MATRIX_ENTRIES: readonly MatrixEntry[] = [
       const beforeVectors = original.pages[0]!.vectors;
       const afterVectors = roundTripped.pages[0]!.vectors;
       expect(afterVectors).toHaveLength(beforeVectors.length);
-      // The two fill-only, unrotated rects (rectBack/rectFront) are the one case whose kind survives exactly.
-      expect(afterVectors[0]!.kind).toBe('rect');
-      expect(afterVectors[1]!.kind).toBe('rect');
+      expect(afterVectors.map((v) => v.kind)).toEqual(beforeVectors.map((v) => v.kind));
 
       expect(original.pages[0]!.shapes).toHaveLength(1);
       expect(roundTripped.pages[0]!.shapes).toHaveLength(1);

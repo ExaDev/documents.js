@@ -203,7 +203,7 @@ function appendBlock(body: OdtBody, block: ContentBlock): void {
   // block.kind === 'image' is intentionally unhandled -- see this file's own top-of-file comment.
 }
 
-// An embedded formula becomes a paragraph carrying its own plain-text stand-in, mirroring buildDocxPackage's identical appendEmbeddedObject (see that function for the full reasoning). Writing the real MathML back would mean writing a genuine embedded formula SUB-PACKAGE (a nested Object N/content.xml plus its own draw:frame/draw:object reference and manifest entries) -- a real feature, not a small extension of this block writer -- so the stand-in is the honest degradation until that exists, rather than the formula vanishing without trace.
+// An embedded formula becomes a paragraph carrying its own plain-text stand-in, mirroring buildDocxPackage's identical appendEmbeddedObject (see that function for the full reasoning, including why a reachable 'drawing' objectKind is deliberately written as nothing here rather than degraded to a stand-in). Writing the real MathML back would mean writing a genuine embedded formula SUB-PACKAGE (a nested Object N/content.xml plus its own draw:frame/draw:object reference and manifest entries) -- a real feature, not a small extension of this block writer -- so the stand-in is the honest degradation until that exists, rather than the formula vanishing without trace.
 function appendEmbeddedObject(body: OdtBody, block: ContentEmbeddedObjectBlock): void {
   const formula = formulaOfBlock(block);
   if (formula === undefined) {
