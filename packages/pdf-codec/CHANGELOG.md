@@ -1,3 +1,10 @@
+## [1.10.9](https://github.com/ExaDev/pdf-codec/compare/v1.10.8...v1.10.9) (2026-08-03)
+
+
+### Bug Fixes
+
+* **ci:** use pull_request_target so dependabot auto-merge can read secrets ([44bb5c4](https://github.com/ExaDev/pdf-codec/commit/44bb5c40c4a4a2a3fae5b50c946d4067dfd70b71))
+
 ## [1.10.8](https://github.com/ExaDev/pdf-codec/compare/v1.10.7...v1.10.8) (2026-08-03)
 
 
