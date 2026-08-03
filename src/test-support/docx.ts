@@ -55,3 +55,66 @@ export function minimalDocxBytes(): Uint8Array<ArrayBuffer> {
 export function standardFontDocxBytes(): Uint8Array<ArrayBuffer> {
   return zipPackage(docxParts(stylesXml('Arial')));
 }
+
+// A second, structurally authentic docx package exercising every part readDocx (ooxml.js) reads that readDocxContent (./read.ts, this package) does not carry through ContentDocument at all -- comments, footnotes (including the separator/continuationSeparator pair readDocx's own readFootnotes filters out), headers/footers, and a numbering (abstractNum/num) definition -- for readDocxExtras' (./extras.ts) own round-trip test. Full content-type overrides and relationships are included for realism even though readDocx itself locates comments/footnotes/numbering by fixed part path and headers/footers by path prefix, needing no relationship at all.
+const EXTRAS_CONTENT_TYPES_XML = enc(
+  '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/comments.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml"/><Override PartName="/word/footnotes.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml"/><Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/><Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/><Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/></Types>',
+);
+
+const EXTRAS_DOCUMENT_RELS_XML = enc(
+  '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="comments.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes" Target="footnotes.xml"/><Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/><Relationship Id="rId5" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/><Relationship Id="rId6" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/></Relationships>',
+);
+
+const EXTRAS_DOCUMENT_XML = enc(
+  '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+    '<w:body>' +
+    '<w:p><w:commentRangeStart w:id="0"/><w:r><w:t xml:space="preserve">Reviewed text</w:t></w:r><w:commentRangeEnd w:id="0"/><w:r><w:commentReference w:id="0"/></w:r></w:p>' +
+    '<w:p><w:r><w:t xml:space="preserve">See the note below</w:t></w:r><w:r><w:footnoteReference w:id="1"/></w:r></w:p>' +
+    '<w:p><w:pPr><w:numPr><w:numId w:val="1"/><w:ilvl w:val="0"/></w:numPr></w:pPr><w:r><w:t xml:space="preserve">First item</w:t></w:r></w:p>' +
+    '<w:sectPr><w:headerReference w:type="default" r:id="rId5" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/><w:footerReference w:type="default" r:id="rId6" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>' +
+    '</w:body></w:document>',
+);
+
+const EXTRAS_COMMENTS_XML = enc(
+  '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:comments xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:comment w:id="0" w:author="Jane Doe"><w:p><w:r><w:t>This needs a citation.</w:t></w:r></w:p></w:comment></w:comments>',
+);
+
+const EXTRAS_FOOTNOTES_XML = enc(
+  '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:footnotes xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+    '<w:footnote w:type="separator" w:id="-1"><w:p><w:r><w:separator/></w:r></w:p></w:footnote>' +
+    '<w:footnote w:type="continuationSeparator" w:id="0"><w:p><w:r><w:continuationSeparator/></w:r></w:p></w:footnote>' +
+    '<w:footnote w:id="1"><w:p><w:r><w:t>See appendix A for details.</w:t></w:r></w:p></w:footnote>' +
+    '</w:footnotes>',
+);
+
+const EXTRAS_NUMBERING_XML = enc(
+  '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+    '<w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/></w:lvl></w:abstractNum>' +
+    '<w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>' +
+    '</w:numbering>',
+);
+
+const EXTRAS_HEADER_XML = enc(
+  '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>Header text</w:t></w:r></w:p></w:hdr>',
+);
+
+const EXTRAS_FOOTER_XML = enc(
+  '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:t>Footer text</w:t></w:r></w:p></w:ftr>',
+);
+
+export function docxWithExtrasPackage(): Package {
+  return decodePackage(
+    zipPackage({
+      '[Content_Types].xml': EXTRAS_CONTENT_TYPES_XML,
+      '_rels/.rels': ROOT_RELS_XML,
+      'word/document.xml': EXTRAS_DOCUMENT_XML,
+      'word/_rels/document.xml.rels': EXTRAS_DOCUMENT_RELS_XML,
+      'word/styles.xml': STYLES_XML,
+      'word/comments.xml': EXTRAS_COMMENTS_XML,
+      'word/footnotes.xml': EXTRAS_FOOTNOTES_XML,
+      'word/numbering.xml': EXTRAS_NUMBERING_XML,
+      'word/header1.xml': EXTRAS_HEADER_XML,
+      'word/footer1.xml': EXTRAS_FOOTER_XML,
+    }),
+  );
+}
