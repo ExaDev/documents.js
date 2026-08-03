@@ -120,7 +120,7 @@ export {
 } from './typed/shared/path';
 export type { OdfRawPoint, OdfRawSegment, OdfRawSubpath, OdfViewBox } from './typed/shared/path';
 
-export { readDrawFrame, walkDrawShapes, readDrawPageContent } from './typed/draw/shapes';
+export { readDrawFrame, walkDrawShapes, readDrawPageContent, readDrawImageBlock } from './typed/draw/shapes';
 export type { DrawPageContent } from './typed/draw/shapes';
 
 export { readDrawObjectReference } from './typed/draw/embedded';

@@ -64,7 +64,7 @@ function readFrameAltText(frame: XmlElement): string | undefined {
 }
 
 // draw:image is a direct child of draw:frame, referencing its media part by a plain package path via xlink:href -- ODF has no relationships mechanism (see this package's own top-level README), so this IS the reference, not an indirection to resolve. Real saved .odp packages always use xlink:href against a real Pictures/ part (confirmed against a real LibreOffice-produced .odp); the flat-XML office:binary-data inline form is specific to the .fodp/.fods/.fodt single-file variants this reader (operating on a decoded zip-of-XML Package) never encounters, so it is not handled here. The frame is passed alongside its own draw:image purely for alt text, which lives on the FRAME (see readFrameAltText above), never on the image element.
-function readDrawImageBlock(image: XmlElement, frame: XmlElement, frameBox: Box, pkg: Package): ContentImageBlock | undefined {
+export function readDrawImageBlock(image: XmlElement, frame: XmlElement, frameBox: Box, pkg: Package): ContentImageBlock | undefined {
   const href = attrValue(image, 'xlink:href');
   const part = href === undefined ? undefined : pkg.parts[href];
   if (part?.kind !== 'binary') {
