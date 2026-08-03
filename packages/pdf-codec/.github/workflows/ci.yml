@@ -131,6 +131,35 @@ jobs:
         id: after
         run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
+  notify-downstream:
+    name: Notify downstream repositories
+    needs: release
+    if: needs.release.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Generate a token for cross-repo dispatch
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: '4473709'
+          private-key: ${{ secrets.AUTOMERGE_APP_PRIVATE_KEY }}
+          repositories: |
+            documents.js
+      - name: Dispatch sibling-released event to downstream repos
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          version="${{ needs.release.outputs.version }}"
+          for repo in documents.js; do
+            gh api "repos/ExaDev/$repo/dispatches" \
+              -f event_type=sibling-released \
+              -F "client_payload[package]=pdf-codec" \
+              -F "client_payload[version]=$version"
+          done
+
   publish-github-packages:
     name: Publish alias to GitHub Packages
     needs: release
