@@ -44,7 +44,7 @@ describe('dist/cli.js --help', () => {
     expect(code).toBe(EXIT_SUCCESS);
     const text = stdout.toString('utf8');
     // markdown-to-pdf is not registered by any code in this package -- it exists only because documents.js's own createLocalDocumentConverter().conversions now includes a markdown edge, and registerConversionCommands (src/commands/convert.ts) loops over that array unmodified. Its presence here is the end-to-end proof that registering a new format entirely inside documents.js is enough.
-    for (const name of ['docx-to-pdf', 'markdown-to-pdf', 'convert', 'formats', 'odm-to-pdf', 'odb-tables', 'pdf-inspect', 'tui']) {
+    for (const name of ['docx-to-pdf', 'markdown-to-pdf', 'convert', 'formats', 'odm-to-pdf', 'odb-tables', 'odb-forms', 'odb-reports', 'pdf-inspect', 'tui']) {
       expect(text).toContain(name);
     }
   });
@@ -106,6 +106,39 @@ describe('dist/cli.js docx-to-pdf -: stdin/stdout piping', () => {
     const summaryMatch = /wrote (\d+) bytes to -/.exec(stderrText);
     expect(summaryMatch).not.toBeNull();
     expect(stdout.length).toBe(Number(summaryMatch[1]));
+  });
+});
+
+// The one real binary fixture in the repo, checked in under src/ so both the unit suite and this smoke test read the identical file (see src/test-support/odb-fixture.ts for its provenance). Referenced by path rather than through the built bundle because these two commands take a file path as their input argument, which is exactly what is being exercised.
+const FORM_AND_REPORT_ODB_PATH = fileURLToPath(new URL('../src/test-support/fixtures/form-and-report.odb', import.meta.url));
+
+describe('dist/cli.js odb-forms and odb-reports: real .odb structure extraction', () => {
+  it("prints the fixture's own form, its table command, and its sub-form's separate query command", async () => {
+    const { code, stdout } = await spawnCli(['odb-forms', FORM_AND_REPORT_ODB_PATH]);
+    expect(code).toBe(EXIT_SUCCESS);
+    const text = stdout.toString('utf8');
+    expect(text).toContain('form SalesForm on table "SALES"');
+    expect(text).toContain('form:text txtCustomer -> CUSTOMER');
+    expect(text).toContain('subform HighValueSubForm on query "HighValueSales"');
+  });
+
+  it("prints the fixture's own report bands, group expressions, and rpt: formulas", async () => {
+    const { code, stdout } = await spawnCli(['odb-reports', FORM_AND_REPORT_ODB_PATH]);
+    expect(code).toBe(EXIT_SUCCESS);
+    const text = stdout.toString('utf8');
+    expect(text).toContain('data source: query "HighValueSales"');
+    expect(text).toContain('group rpt:HASCHANGED("REGION")');
+    expect(text).toContain('rpt:SUM([AMOUNT])');
+    expect(text).toContain('LEFT_QUARTER = rpt:LEFT([QUARTER];2)');
+  });
+
+  it('emits parseable JSON under --json, from the built bundle', async () => {
+    const { code, stdout } = await spawnCli(['odb-reports', FORM_AND_REPORT_ODB_PATH, '--json']);
+    expect(code).toBe(EXIT_SUCCESS);
+    const parsed = JSON.parse(stdout.toString('utf8'));
+    expect(Array.isArray(parsed)).toBe(true);
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0].name).toBe('SalesByRegion');
   });
 });
 
