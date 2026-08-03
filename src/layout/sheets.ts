@@ -21,7 +21,7 @@ import { flipY } from '../model/geometry';
 import { throwIfAborted } from '../ports/abort';
 import type { StyledFragment, StyledRun, TextMeasurer } from 'pdf-codec';
 import { wrapRunsToWidth } from 'pdf-codec';
-import { alignmentOffsetPt, lineNaturalHeightPt, pushCellBorderLines, sumColumnWidthsPt, toStyledRuns } from './shared';
+import { alignmentOffsetPt, justifyLineGapsPt, lineNaturalHeightPt, pushCellBorderLines, sumColumnWidthsPt, toStyledRuns } from './shared';
 
 // ContentDocument (the spreadsheet variant) -> LayoutDocument: ods/xlsx's own layout direction, genuinely distinct from both docx's flow/pagination (engine.ts) and pptx's direct placement (slides.ts). A sheet paginates over TWO axes at once (column bands x row bands, not just rows), print settings (range/scale/fit-to-page/repeat rows-columns/gridlines/headers/page order/manual breaks) drive the page grid directly rather than being ignored the way a docx section's margins alone would be, and cell overflow is bounded per cell (###, spill, truncate) rather than wrapped the way paragraph text is. This is also the first layout algorithm in the package genuinely long-running enough (a real sheet can carry tens of thousands of populated cells) to need cooperative cancellation wired into its own per-cell emission loop, not just checked once at the top of the function the way reconstruct.ts's own page/slide loops do.
 //
@@ -337,14 +337,18 @@ function renderCellText(
   const alignment = cell.alignment ?? defaultAlignmentForValue(cell.value.kind);
   const numericLike = isNumericLikeValue(cell.value.kind);
   const styledRuns = cellStyledRuns(cell);
-  const naturalLine = wrapRunsToWidth(styledRuns, measurer, Number.POSITIVE_INFINITY)[0]!;
+  // The full wrapped-line array is kept (not just its own first entry) purely so a justified cell can tell whether its rendered (always first, per this module's own single-line scope -- see its top-of-file doc comment) line is genuinely non-final: a cell's own source text carrying an explicit line break produces more than one WrappedLine here, of which only the first is ever rendered, so THAT first line is the non-final one a justified paragraph's own convention (src/layout/engine.ts) stretches.
+  const lines = wrapRunsToWidth(styledRuns, measurer, Number.POSITIVE_INFINITY);
+  const naturalLine = lines[0]!;
   const insetWidthPt = Math.max(0, ownWidthPt - CELL_TEXT_PADDING_PT * 2);
 
   let availableWidthPt = insetWidthPt;
   let fragments = naturalLine.fragments;
   let lineWidthPt = naturalLine.widthPt;
+  let overflowed = false;
 
   if (lineWidthPt > availableWidthPt) {
+    overflowed = true;
     if (numericLike) {
       const overflowRuns: StyledRun[] = [{ text: NUMERIC_OVERFLOW_TEXT, font: styledRuns[0]!.font, sizePt: styledRuns[0]!.sizePt, color: styledRuns[0]!.color }];
       const overflowLine = wrapRunsToWidth(overflowRuns, measurer, Number.POSITIVE_INFINITY)[0]!;
@@ -373,12 +377,14 @@ function renderCellText(
   const lineHeightPt = lineNaturalHeightPt(naturalLine, measurer, styledRuns[0]!);
   const lineTopYDownPt = verticalLineTopYDownPt(cell.verticalAlignment ?? DEFAULT_CELL_VERTICAL_ALIGNMENT, yTopDownPt, heightPt, lineHeightPt);
   const baselineYDownPt = lineTopYDownPt + naturalLine.ascentPt;
+  // Only a genuinely non-final, non-overflowing line gets its inter-word gaps stretched -- see src/layout/engine.ts's identical convention. A cell that triggered the numeric-'###'/string-spill-or-truncate overflow path above is never justified (its own fragments no longer reflect the natural, unstretched layout this function needs), and neither is the ordinary single-line cell (lines.length === 1), matching every real spreadsheet application's own "justify only wraps, never a single line" behaviour.
+  const justifyGapsPt = alignment === 'justify' && !overflowed && lines.length > 1 ? justifyLineGapsPt(naturalLine, availableWidthPt, measurer) : undefined;
 
-  for (const fragment of fragments) {
+  fragments.forEach((fragment, fragmentIndex) => {
     const textItem: LayoutText = {
       kind: 'text',
       text: fragment.text,
-      xPt: textStartXPt + fragment.xOffsetPt,
+      xPt: textStartXPt + fragment.xOffsetPt + (justifyGapsPt?.[fragmentIndex] ?? 0),
       yPt: pageHeightPt - baselineYDownPt,
       font: fragment.font,
       sizePt: fragment.sizePt,
@@ -387,7 +393,7 @@ function renderCellText(
       sourcePath: fragment.sourcePath,
     };
     out.push(textItem);
-  }
+  });
 }
 
 // --- Header-gutter labels and gridlines -------------------------------------------------------
