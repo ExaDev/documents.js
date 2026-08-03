@@ -1,3 +1,10 @@
+## [1.67.10](https://github.com/ExaDev/documents.js/compare/v1.67.9...v1.67.10) (2026-08-03)
+
+
+### Bug Fixes
+
+* **ci:** wait for a real check-run to register before requesting auto-merge ([f6c04cd](https://github.com/ExaDev/documents.js/commit/f6c04cd48e2b3ecdf8f5f583f5a39050565f3c83))
+
 ## [1.67.9](https://github.com/ExaDev/documents.js/compare/v1.67.8...v1.67.9) (2026-08-03)
 
 ## [1.67.8](https://github.com/ExaDev/documents.js/compare/v1.67.7...v1.67.8) (2026-08-03)
