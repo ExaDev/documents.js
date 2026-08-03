@@ -1,3 +1,10 @@
+## [1.0.7](https://github.com/ExaDev/markdown-codec/compare/v1.0.6...v1.0.7) (2026-08-03)
+
+
+### Bug Fixes
+
+* **ci:** use the GitHub App token for the branch push and PR creation too ([8f536da](https://github.com/ExaDev/markdown-codec/commit/8f536dae04c3e2c4f1bc349b5d1e00b4b17e0f88))
+
 ## [1.0.6](https://github.com/ExaDev/markdown-codec/compare/v1.0.5...v1.0.6) (2026-08-03)
 
 
