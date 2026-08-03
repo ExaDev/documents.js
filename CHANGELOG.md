@@ -1,3 +1,10 @@
+# [1.73.0](https://github.com/ExaDev/documents.js/compare/v1.72.0...v1.73.0) (2026-08-03)
+
+
+### Features
+
+* **edit:** add table-cell merge retrofit primitives for docx and odt ([685130b](https://github.com/ExaDev/documents.js/commit/685130bbcfc3ee20d9719cd137111d25452690aa))
+
 # [1.72.0](https://github.com/ExaDev/documents.js/compare/v1.71.0...v1.72.0) (2026-08-03)
 
 
