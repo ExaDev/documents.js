@@ -1,3 +1,10 @@
+## [1.67.8](https://github.com/ExaDev/documents.js/compare/v1.67.7...v1.67.8) (2026-08-03)
+
+
+### Bug Fixes
+
+* **ci:** use the GitHub App token for the branch push and PR creation too ([9eedd17](https://github.com/ExaDev/documents.js/commit/9eedd17a8f3133d98accfc0af4635e4f585846ff)), closes [#8](https://github.com/ExaDev/documents.js/issues/8) [#9](https://github.com/ExaDev/documents.js/issues/9)
+
 ## [1.67.7](https://github.com/ExaDev/documents.js/compare/v1.67.6...v1.67.7) (2026-08-03)
 
 ## [1.67.6](https://github.com/ExaDev/documents.js/compare/v1.67.5...v1.67.6) (2026-08-03)
