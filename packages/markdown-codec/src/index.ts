@@ -33,3 +33,18 @@ export type {
 } from './options/options';
 
 export type { MarkdownImageResolveContext, MarkdownImageResolver, MarkdownResolvedImageBytes } from './lower/image';
+
+// src/shared/style-constants.ts and src/shared/list-id.ts hold this package's own internal styleId/numId string vocabulary that src/lower and src/emit agree on -- re-exported here so a sibling package (documents.js) can build and parse the identical strings when constructing its own editor over a ContentDocument, without duplicating this package's grammar.
+export type { ListNumIdInfo, ListNumIdMintOptions, NumIdMintState } from './shared/list-id';
+export { createNumIdMintState, mintedListType, mintListNumId, parseListNumId } from './shared/list-id';
+export {
+  CODE_BLOCK_STYLE_ID,
+  headingStyleId,
+  HORIZONTAL_RULE_STYLE_ID,
+  HTML_PREFORMATTED_STYLE_ID,
+  MAX_HEADING_STYLE_LEVEL,
+  MONOSPACE_FONT_FAMILY,
+  parseHeadingStyleId,
+  QUOTE_INDENT_PT,
+  QUOTE_STYLE_ID,
+} from './shared/style-constants';
