@@ -708,6 +708,105 @@ describe('reconstructPresentation: vector recovery', () => {
   });
 });
 
+// --- Table recovery, gated on a real drawn gridline lattice ---------------------------------------------------
+
+// The same 3x3 boundary lattice the spreadsheet suite above uses, so the gate is demonstrably the identical detector rather than a second one with its own thresholds.
+function latticeItems(): LayoutItem[] {
+  return [line(0, 200, 300, 200), line(0, 150, 300, 150), line(0, 100, 300, 100), line(0, 100, 0, 200), line(120, 100, 120, 200), line(300, 100, 300, 200)];
+}
+
+describe('reconstructWordprocessing: gridline-gated table recovery', () => {
+  it('synthesizes a real table from a drawn lattice, with genuinely measured column widths and row heights', () => {
+    const items: LayoutItem[] = [
+      ...latticeItems(),
+      text({ text: 'Name', xPt: 10, yPt: 180, widthPt: 30 }),
+      text({ text: 'Total', xPt: 130, yPt: 180, widthPt: 30 }),
+      text({ text: 'Acme', xPt: 10, yPt: 130, widthPt: 30 }),
+      text({ text: '10', xPt: 130, yPt: 130, widthPt: 15 }),
+    ];
+    const blocks = blocksOf(reconstructWordprocessing(docFrom([page(300, 300, items)])));
+    const table = blocks.find((b) => b.kind === 'table');
+    if (table?.kind !== 'table') {
+      throw new Error('expected a recovered table block');
+    }
+    expect(table.columnWidthsPt).toEqual([120, 180]);
+    expect(table.rows.map((r) => r.heightPt)).toEqual([50, 50]);
+    expect(table.rows.map((r) => r.cells.map((c) => c.blocks.flatMap((b) => (b.kind === 'paragraph' ? b.runs.map((run) => run.text) : [])).join('')))).toEqual([
+      ['Name', 'Total'],
+      ['Acme', '10'],
+    ]);
+  });
+
+  it('does not also emit the table\'s own text as loose paragraphs, nor its own gridlines as loose vectors', () => {
+    const items: LayoutItem[] = [...latticeItems(), text({ text: 'Inside', xPt: 10, yPt: 180, widthPt: 30 })];
+    const blocks = blocksOf(reconstructWordprocessing(docFrom([page(300, 300, items)])));
+    expect(blocks.map((b) => b.kind)).toEqual(['table']);
+  });
+
+  it('recovers a vector drawn OUTSIDE the lattice while still excluding the lattice\'s own strokes', () => {
+    const items: LayoutItem[] = [...latticeItems(), text({ text: 'Inside', xPt: 10, yPt: 180, widthPt: 30 }), { kind: 'ellipse', xPt: 20, yPt: 250, widthPt: 40, heightPt: 20, fill: RED }];
+    const blocks = blocksOf(reconstructWordprocessing(docFrom([page(300, 300, items)])));
+    const embedded = blocks.find((b) => b.kind === 'embeddedObject');
+    expect(drawingVectorsOf(embedded).map((v) => v.kind)).toEqual(['ellipse']); // the six lattice lines are the table's structure, reported once
+  });
+
+  // The whole point of the gate: aligned columns of text with wide gaps are indistinguishable from a tabbed paragraph or a two-column layout, so they must never become a table.
+  it('never invents a table from column-aligned text alone, with no lattice drawn', () => {
+    const items: LayoutItem[] = [
+      text({ text: 'Name', xPt: 50, yPt: 200, widthPt: 40 }),
+      text({ text: 'Total', xPt: 200, yPt: 200, widthPt: 40 }),
+      text({ text: 'Acme', xPt: 50, yPt: 180, widthPt: 40 }),
+      text({ text: '10', xPt: 200, yPt: 180, widthPt: 15 }),
+    ];
+    const blocks = blocksOf(reconstructWordprocessing(docFrom([page(300, 300, items)])));
+    expect(blocks.some((b) => b.kind === 'table')).toBe(false);
+    expect(blocks.every((b) => b.kind === 'paragraph')).toBe(true);
+  });
+
+  it('rejects a lattice with no text inside it as decoration rather than recovering an empty table', () => {
+    const items: LayoutItem[] = [...latticeItems(), text({ text: 'Caption below', xPt: 10, yPt: 40, widthPt: 60 })];
+    const blocks = blocksOf(reconstructWordprocessing(docFrom([page(300, 300, items)])));
+    expect(blocks.some((b) => b.kind === 'table')).toBe(false);
+    // The strokes are still real geometry, so they come back as recovered vectors rather than vanishing.
+    expect(drawingVectorsOf(blocks.find((b) => b.kind === 'embeddedObject'))).toHaveLength(6);
+  });
+
+  it('does not fire on too few parallel lines, exactly as the spreadsheet direction does not', () => {
+    const items: LayoutItem[] = [line(0, 200, 300, 200), line(0, 100, 300, 100), line(0, 100, 0, 200), line(300, 100, 300, 200), text({ text: 'Solo', xPt: 10, yPt: 180, widthPt: 30 })];
+    const blocks = blocksOf(reconstructWordprocessing(docFrom([page(300, 300, items)])));
+    expect(blocks.some((b) => b.kind === 'table')).toBe(false);
+  });
+
+  // A table's borders in real output are drawn per cell edge, not as one line across the whole row (src/layout/shared.ts's own border emission) -- so the detector must union collinear touching segments before measuring a boundary's span, or a multi-column table never reaches the span-consistency bar.
+  it('detects a lattice whose boundaries are drawn as per-cell segments rather than full-width lines', () => {
+    const items: LayoutItem[] = [
+      line(0, 200, 120, 200),
+      line(120, 200, 300, 200),
+      line(0, 150, 120, 150),
+      line(120, 150, 300, 150),
+      line(0, 100, 120, 100),
+      line(120, 100, 300, 100),
+      line(0, 100, 0, 200),
+      line(120, 100, 120, 200),
+      line(300, 100, 300, 200),
+      text({ text: 'Cell', xPt: 10, yPt: 180, widthPt: 30 }),
+    ];
+    const blocks = blocksOf(reconstructWordprocessing(docFrom([page(300, 300, items)])));
+    expect(blocks.some((b) => b.kind === 'table')).toBe(true);
+  });
+});
+
+describe('reconstructPresentation: gridline-gated table recovery', () => {
+  it('wraps a recovered table in a shape framed at the lattice\'s own bounds', () => {
+    const items: LayoutItem[] = [...latticeItems(), text({ text: 'Inside', xPt: 10, yPt: 180, widthPt: 30 })];
+    const [slide] = slidesOf(reconstructPresentation(docFrom([page(300, 300, items)])));
+    const tableShape = slide!.shapes.find((s) => s.blocks[0]?.kind === 'table');
+    expect(tableShape).toBeDefined();
+    expect(tableShape!.frame).toEqual({ xPt: 0, yPt: 100, widthPt: 300, heightPt: 100 }); // flipY of x 0..300, y 100..200 on a 300pt-tall page
+    expect(slide!.shapes.some((s) => s.blocks[0]?.kind === 'paragraph')).toBe(false); // the table's own text is not also a loose text shape
+  });
+});
+
 // --- Heuristic cell re-typing, reported through the inference sink ---------------------------------------------
 
 describe('reconstructSpreadsheet: heuristic cell re-typing', () => {

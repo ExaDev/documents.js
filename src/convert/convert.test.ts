@@ -11,6 +11,7 @@ import { openOdt } from '../edit/odt/editor';
 import { createPptx, openPptx } from '../edit/pptx/editor';
 import { convertDrawingToLayout } from '../layout/drawing';
 import { readOdgContent } from '../odf/odg/read';
+import { readDocxContent } from '../ooxml/docx/read';
 import { readOdsContent } from '../odf/ods/read';
 import { createStandardFontMeasurer, readPdf } from 'pdf-codec';
 import { MarkdownInvalidUtf8Error } from 'markdown-codec';
@@ -372,6 +373,35 @@ describe('pdfToDocx', () => {
     expect(runs.some((r) => r.bold)).toBe(true);
     expect(runs.some((r) => r.color?.r === 1 && r.color.g === 0 && r.color.b === 0)).toBe(true);
     expect(runs.some((r) => r.sizePt === 24)).toBe(true);
+  });
+
+  // Item 3 end to end, through real bytes on both sides: a spreadsheet printed WITH gridlines draws a genuine lattice on the PDF page, and pdfToDocx turns that lattice -- and only a lattice -- into a real w:tbl in the produced docx. gridOdsBytes is reused rather than a hand-built PDF precisely because its gridlines are drawn by the ordinary odsToPdf path, so nothing about the geometry is arranged to suit the detector.
+  it('recovers a real table from a drawn gridline lattice, through odsToPdf then pdfToDocx', () => {
+    const docxBytes = pdfToDocx(odsToPdf(gridOdsBytes()));
+    const content = readDocxContent(decodeOoxmlPackage(docxBytes)); // reread through ooxml.js's own real readDocx, not this package's writer echoing its input back
+    if (content.kind !== 'wordprocessing') {
+      throw new Error('expected a wordprocessing ContentDocument');
+    }
+    const tables = content.sections.flatMap((section) => section.blocks).filter((block) => block.kind === 'table');
+    expect(tables).toHaveLength(1);
+    const [table] = tables;
+    if (table?.kind !== 'table') {
+      throw new Error('expected a table block');
+    }
+    const grid = table.rows.map((row) => row.cells.map((cell) => cell.blocks.flatMap((block) => (block.kind === 'paragraph' ? block.runs.map((run) => run.text) : [])).join('')));
+    // The fixture's own three data rows, plus the header-gutter row/column labels the printed sheet also draws inside the lattice.
+    expect(grid.some((row) => row.includes('Alpha') && row.includes('Beta') && row.includes('Gamma'))).toBe(true);
+    expect(grid.some((row) => row.includes('Four') && row.includes('Five') && row.includes('Six'))).toBe(true);
+  });
+
+  // The gate, end to end: the same fixture rendered from a docx whose page carries no drawn lattice at all must produce no table, however the text happens to line up.
+  it('never invents a table on a page with no drawn lattice', () => {
+    const docxBytes = pdfToDocx(docxToPdf(buildSampleDocx('Plain prose with no table at all')));
+    const content = readDocxContent(decodeOoxmlPackage(docxBytes));
+    if (content.kind !== 'wordprocessing') {
+      throw new Error('expected a wordprocessing ContentDocument');
+    }
+    expect(content.sections.flatMap((section) => section.blocks).some((block) => block.kind === 'table')).toBe(false);
   });
 });
 
