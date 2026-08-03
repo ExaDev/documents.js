@@ -1,6 +1,6 @@
 import { type Command } from 'commander';
 
-// The common flag surface every conversion-shaped command shares -- centralised here since the identical `.option()` calls are registered verbatim across all nineteen explicit per-format conversion commands, the generic `convert` command, and the odm/odb bridge commands; duplicating them at every one of those call sites would drift the moment a single flag's wording changed.
+// The common flag surface every conversion-shaped command shares -- centralised here since the identical `.option()` calls are registered verbatim across all twenty-seven explicit per-format conversion commands, the generic `convert` command, and the odm/odb bridge commands; duplicating them at every one of those call sites would drift the moment a single flag's wording changed.
 export function addOutOption(command: Command): Command {
   return command.option('-o, --out <file>', "output file path (defaults to the input path with the target format's extension); use - for stdout");
 }

@@ -73,7 +73,7 @@ async function runGenericConvert(input: string, output: string | undefined, opti
   return buildConversionAction(source, target.format)(input, output, toConversionCommandOptions(options));
 }
 
-// Registers every explicit `<source>-to-<target>` command (all nineteen pairs createLocalDocumentConverter().conversions declares -- the twelve PDF round trips, the six PDF-bypassing bridges, and odf-to-pdf) plus the generic `convert` command, all delegating to the identical buildConversionAction(source, target) so the conversion logic itself is never duplicated.
+// Registers every explicit `<source>-to-<target>` command (all twenty-seven pairs createLocalDocumentConverter().conversions declares -- nine `<format>-to-pdf` conversions including the one-way odf-to-pdf, eight `pdf-to-<format>` reverse conversions, and ten PDF-bypassing bridges) plus the generic `convert` command, all delegating to the identical buildConversionAction(source, target) so the conversion logic itself is never duplicated.
 export function registerConversionCommands(program: Command): void {
   const { conversions } = createLocalDocumentConverter();
 
