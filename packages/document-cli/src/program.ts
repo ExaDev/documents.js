@@ -1,6 +1,7 @@
 import { Command, type CommanderError } from 'commander';
 import { registerConversionCommands } from './commands/convert';
 import { registerFormatsCommand } from './commands/formats';
+import { registerFromPackageCommand } from './commands/from-package';
 import { registerOdbCommands } from './commands/odb';
 import { registerOdmCommand } from './commands/odm';
 import { registerPdfInspectCommand } from './commands/pdf-inspect';
@@ -22,6 +23,7 @@ export function createProgram(): Command {
 
   registerConversionCommands(program);
   registerFormatsCommand(program);
+  registerFromPackageCommand(program);
   registerOdmCommand(program);
   registerOdbCommands(program);
   registerPdfInspectCommand(program);

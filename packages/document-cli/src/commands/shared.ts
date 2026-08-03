@@ -1,10 +1,33 @@
 import { writeFile } from 'node:fs/promises';
-import { type DocumentFormat, createLocalDocumentConverter } from 'documents.js';
+import { type DocumentFormat, createLocalDocumentConverter, documentPackageWithSchema } from 'documents.js';
+import { inferFormatFromExtension, isDocumentFormat } from '../format';
 import { createRuntimeSignal } from '../runtime/abort';
 import { createDiagnosticReporter, createFontSubstitutionReporter } from '../runtime/diagnostics';
 import { EXIT_SUCCESS, EXIT_USAGE_ERROR, mapErrorToExit } from '../runtime/exit-codes';
 import { loadProvidedFonts } from '../runtime/fonts';
 import { readInput, resolveDefaultOutputPath, writeOutput } from '../runtime/io';
+
+// Every DocumentFormat this CLI's commands know how to name in a usage error -- shared between the generic `convert` command (commands/convert.ts) and `from-package` (commands/from-package.ts), the two commands whose target format is not already fixed by their own name.
+export const KNOWN_DOCUMENT_FORMATS = 'docx, pptx, xlsx, odt, odp, ods, odg, odf, markdown, pdf';
+
+// Resolves a target DocumentFormat the same way for both callers above: an explicit --to always wins (it is the caller stating intent unambiguously), falling back to the output path's own extension, and finally failing with a usage error naming exactly what is missing.
+export function resolveTargetFormat(output: string | undefined, out: string | undefined, to: string | undefined): { readonly format: DocumentFormat } | { readonly errorMessage: string } {
+  if (to !== undefined) {
+    if (!isDocumentFormat(to)) {
+      return { errorMessage: `unknown --to format '${to}'; expected one of ${KNOWN_DOCUMENT_FORMATS}` };
+    }
+    return { format: to };
+  }
+  const destination = output ?? out;
+  if (destination === undefined) {
+    return { errorMessage: 'cannot infer a target format -- pass an output path with a recognised extension, --out with one, or --to <format>' };
+  }
+  const inferred = inferFormatFromExtension(destination);
+  if (inferred === undefined) {
+    return { errorMessage: `cannot infer a target format from '${destination}'; pass --to <format> instead` };
+  }
+  return { format: inferred };
+}
 
 export interface ConversionCommandOptions {
   readonly out?: string;
@@ -70,7 +93,8 @@ export function buildConversionAction(
         if (result.package === undefined) {
           process.stderr.write(`[${command}] this conversion does not produce an intermediate DocumentPackage\n`);
         } else {
-          await writeFile(options.dumpPackage, JSON.stringify(result.package, undefined, 2));
+          // Tagged with its own $schema before serialising, not written raw -- documentFromJson (the read side `from-package` uses to read this file back in) identifies a value's kind purely from that field, so an untagged dump would be unreadable by its own round trip.
+          await writeFile(options.dumpPackage, JSON.stringify(documentPackageWithSchema(result.package), undefined, 2));
         }
       }
 
