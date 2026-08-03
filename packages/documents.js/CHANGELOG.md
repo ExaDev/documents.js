@@ -1,3 +1,10 @@
+# [1.75.0](https://github.com/ExaDev/documents.js/compare/v1.74.1...v1.75.0) (2026-08-03)
+
+
+### Features
+
+* add a live-view MarkdownEditor backed by a mutable ContentDocument ([413b206](https://github.com/ExaDev/documents.js/commit/413b206b4108bca33bfc60abaa2ac22455770b4d))
+
 ## [1.74.1](https://github.com/ExaDev/documents.js/compare/v1.74.0...v1.74.1) (2026-08-03)
 
 # [1.74.0](https://github.com/ExaDev/documents.js/compare/v1.73.0...v1.74.0) (2026-08-03)
