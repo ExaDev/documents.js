@@ -11,6 +11,12 @@ import { crc32, decodePng, readJpegInfo, wrapRunsToWidth } from 'pdf-codec';
 // A nominal fallback text size, used only when a ContentRun/paragraph has no resolvable size of its own (a wholly empty paragraph, or a run whose cascade never set one) -- ContentParagraph/ContentRun don't retain the cascade-resolved default for this case, only what ended up on an actual run.
 export const NOMINAL_TEXT_SIZE_PT = 18;
 
+// An embedded formula has no surrounding run to inherit a font size from the way ordinary text does, so every layout engine in this package picks one from the embedded object's own declared frame height (ContentEmbeddedObject.frame.heightPt -- the ORIGINAL formula's own rendered size in the source document): a single-line formula's total height (ascent + descent across its tallest/deepest element) is typically a little over twice its base font size, so half the frame height is a reasonable single-pass estimate. This is deliberately a one-shot heuristic, not an iterative fit-to-height search -- close enough for a faithful visual approximation (this package's own established bar -- see the README's Fidelity section), not a guarantee of reproducing the source's exact point size. Lives here rather than in any one engine because all three that render a formula (engine.ts's flow placement, slides.ts's shape placement, sheets.ts's cell-anchored placement) need the identical heuristic and there is nothing format-specific about it.
+const MIN_FORMULA_SIZE_PT = 8;
+export function formulaSizePtFromFrame(frameHeightPt: number): number {
+  return Math.max(MIN_FORMULA_SIZE_PT, frameHeightPt / 2);
+}
+
 // A table row's own explicit height is present for essentially every real-world docx/pptx table; this is a nominal fallback exercised only for a hand-built or malformed table that omits it.
 const FALLBACK_ROW_HEIGHT_PT = 20;
 

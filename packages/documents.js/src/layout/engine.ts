@@ -5,7 +5,7 @@ import { flipY } from '../model/geometry';
 import { formulaOfBlock, formulaPlaceholderText } from '../model/formula';
 import type { PositionedFormula, TextMeasurer } from 'pdf-codec';
 import { loadMathFont, wrapRunsToWidth } from 'pdf-codec';
-import { alignmentOffsetPt, effectiveStyledRuns, estimateRowHeightPt, justifyLineGapsPt, lineNaturalHeightPt, pushCellBorderLines, registerImage, sumColumnWidthsPt } from './shared';
+import { alignmentOffsetPt, effectiveStyledRuns, estimateRowHeightPt, formulaSizePtFromFrame, justifyLineGapsPt, lineNaturalHeightPt, pushCellBorderLines, registerImage, sumColumnWidthsPt } from './shared';
 
 // ContentDocument (the wordprocessing variant) -> LayoutDocument: docx's hard direction. A docx page isn't a fixed canvas the way a pptx slide is -- content flows and paginates, so this engine tracks a vertical cursor per page and starts a new page whenever the next line (or table row) would overflow the current one, honoring explicit page breaks, w:pageBreakBefore, and a per-section page-size/margin change. Headers/footers and live PAGE/NUMPAGES substitution are not laid out here -- src/ooxml/docx/read.ts doesn't read them either, a deliberate, tracked narrowing from the plan's original scope (see that file's own module doc).
 
@@ -20,12 +20,6 @@ export interface WordprocessingLayoutResult {
 }
 
 type WordprocessingContentDocument = Extract<ContentDocument, { kind: 'wordprocessing' }>;
-
-// A formula embedded inline in running text has no surrounding run to inherit a font size from the way ordinary text does, so this engine picks one from the embedded object's own declared frame height (ContentEmbeddedObjectBlock.frame.heightPt -- the ORIGINAL formula's own rendered size in the source document): a single-line formula's total height (ascent + descent across its tallest/deepest element) is typically a little over twice its base font size, so half the frame height is a reasonable single-pass estimate. This is deliberately a one-shot heuristic, not an iterative fit-to-height search -- close enough for a faithful visual approximation (this package's own established bar -- see the README's Fidelity section), not a guarantee of reproducing the source's exact point size.
-const MIN_FORMULA_SIZE_PT = 8;
-function formulaSizePtFromFrame(frameHeightPt: number): number {
-  return Math.max(MIN_FORMULA_SIZE_PT, frameHeightPt / 2);
-}
 
 // Mutated in place across an entire section's content: `items`/`cursorYDown` describe the page currently being built. Passing this single object around (rather than reassigning a `let` the way a simpler "current page" variable would) is what lets nested layout functions (table cells, individual lines) trigger a page break mid-paragraph or mid-table without every caller needing to thread a replacement value back up.
 interface FlowState {

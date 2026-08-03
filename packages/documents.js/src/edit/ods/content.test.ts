@@ -111,8 +111,14 @@ describe('buildOdsPackage', () => {
     expect(attrValue(frame!, 'svg:width')).toBe('40pt');
     expect(pkg.parts['Pictures/image1.png']?.kind).toBe('binary');
 
-    // readOds itself still hardcodes images: [] (odf.js does not read ods floating shapes back at all -- see src/layout/sheets.ts's own gotcha comment), so this checks the real written structure directly rather than a ContentDocument re-read.
-    expect(readOds(pkg).sheets[0]!.images).toEqual([]);
+    // odf.js 2.2.0's readOds genuinely reads a floating shape back (it previously hardcoded images: []), so this is now a real write-then-reread round trip rather than a structural check alone: the recovered image carries its own bytes, its declared size, and the anchor quartet buildOdsPackage wrote it at.
+    const recovered = readOds(pkg).sheets[0]!.images;
+    expect(recovered).toHaveLength(1);
+    expect(recovered[0]!.format).toBe('png');
+    expect(recovered[0]!.base64).toBe(bytesToBase64(pngBytes));
+    expect(recovered[0]!.widthPt).toBeCloseTo(40, 3);
+    expect(recovered[0]!.heightPt).toBeCloseTo(30, 3);
+    expect({ anchorRow: recovered[0]!.anchorRow, anchorColumn: recovered[0]!.anchorColumn }).toEqual({ anchorRow: 0, anchorColumn: 0 });
   });
 
   it('writes a formula-kind embeddedObject as a real ODF formula sub-document', () => {

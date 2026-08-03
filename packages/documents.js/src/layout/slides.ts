@@ -6,7 +6,7 @@ import { flipY } from '../model/geometry';
 import { formulaOfBlock } from '../model/formula';
 import type { Point, PositionedFormula, TextMeasurer } from 'pdf-codec';
 import { loadMathFont, rotatePointAboutCenter, wrapRunsToWidth } from 'pdf-codec';
-import { alignmentOffsetPt, effectiveStyledRuns, estimateRowHeightPt, justifyLineGapsPt, lineNaturalHeightPt, registerImage, sumColumnWidthsPt } from './shared';
+import { alignmentOffsetPt, effectiveStyledRuns, estimateRowHeightPt, formulaSizePtFromFrame, justifyLineGapsPt, lineNaturalHeightPt, registerImage, sumColumnWidthsPt } from './shared';
 
 // ContentDocument (the presentation variant) -> LayoutDocument: pptx's tractable layout direction. No pagination -- one slide is always exactly one PDF page (slide size maps directly to the page's own widthPt/heightPt) -- and no group-transform resolution either, since src/ooxml/pptx/read.ts already flattened every group into absolute shape positions at read time. What's left is genuinely just: wrap each shape's text within its own box (reusing the exact wrapRunsToWidth docx also uses), place images at their shape's frame, render table grids directly from explicit column widths/row heights, and apply the one deliberate Y-flip from OOXML's top-left/y-down space into PDF's bottom-left/y-up space.
 
@@ -21,12 +21,6 @@ export interface PresentationLayoutResult {
 }
 
 type PresentationContentDocument = Extract<ContentDocument, { kind: 'presentation' }>;
-
-// See src/layout/engine.ts's own identical constant/function for the reasoning -- a formula shape's own declared frame height is the best available proxy for the source formula's own rendered size, absent any surrounding run to inherit a size from.
-const MIN_FORMULA_SIZE_PT = 8;
-function formulaSizePtFromFrame(frameHeightPt: number): number {
-  return Math.max(MIN_FORMULA_SIZE_PT, frameHeightPt / 2);
-}
 
 // Threaded into convertShape (optionally -- see that function's own comment) so a formula-bearing shape can record its positioned result. The MathML itself comes from the block's own document (src/model/formula.ts's formulaOfBlock), so this carries only what a shape genuinely cannot know on its own: which page it is being laid out onto, and the shared accumulator to record into. `positioned` is mutated in place, the same "shared accumulator threaded through a layout pass" pattern src/layout/engine.ts's own `formulas` parameter uses.
 export interface ShapeFormulaContext {
