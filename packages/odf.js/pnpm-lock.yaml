@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       document-schema.js:
-        specifier: ^2.0.0
-        version: 2.0.0
+        specifier: ^2.2.0
+        version: 2.2.0
       fast-xml-parser:
         specifier: ^5.10.1
         version: 5.10.1
@@ -1056,8 +1056,8 @@ packages:
     resolution: {integrity: sha512-WkrWp9GR4KXfKGYzOLmTuGVi1UWFfws377n9cc55/tb6DuqyF6pcQ5AbiHEshaDpY9v6oaSr2XCDidGmMwdzIA==}
     engines: {node: '>=8'}
 
-  document-schema.js@2.0.0:
-    resolution: {integrity: sha512-2B0ErIQNsR8peTe0gzX7dk2zVzhZ1EwMmpuzgUVK6ZJqPDfa2HHApUrqBO32epOYMLCKIJTS0AqwoCocW1P2JA==}
+  document-schema.js@2.2.0:
+    resolution: {integrity: sha512-wMukmCqo7xBYYSBEeZlV+8qWEujBDztGNGvUkfI3LZGg3MlIjt3+JUvuBZaBVrotFH3gKRzKyHDeqeRJe18SOA==}
     engines: {node: '>=20'}
 
   dot-prop@5.3.0:
@@ -3581,7 +3581,7 @@ snapshots:
     dependencies:
       path-type: 4.0.0
 
-  document-schema.js@2.0.0:
+  document-schema.js@2.2.0:
     dependencies:
       zod: 4.4.3
 
