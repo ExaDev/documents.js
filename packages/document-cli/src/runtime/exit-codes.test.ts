@@ -40,7 +40,7 @@ describe('mapErrorToExit', () => {
   });
 
   it('maps OdbUnsupportedFormatError to EXIT_NEEDS_INFO', () => {
-    expect(mapErrorToExit(new OdbUnsupportedFormatError('hsqldb-binary', 'hsqldb.script_format=1'), undefined)).toBe(EXIT_NEEDS_INFO);
+    expect(mapErrorToExit(new OdbUnsupportedFormatError('unrecognised-engine', 'no known embedded database engine detected'), undefined)).toBe(EXIT_NEEDS_INFO);
   });
 
   it('maps PdfEncryptedError to EXIT_INPUT_ERROR', () => {

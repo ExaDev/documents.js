@@ -56,12 +56,13 @@ export const KIND_BADGE: Readonly<Record<ContentCellValue['kind'], string>> = {
   boolean: 'B',
   date: 'D',
   time: 'T',
+  dateTime: '@',
   error: 'E',
   empty: '.',
 };
 
 // Every kind a cell can genuinely be cycled to while editing, in display order -- 'empty' is reached by clearing the text instead of cycling to it (see cell-detail.tsx's own comment), so it is deliberately not a member of this list.
-export const CELL_VALUE_KINDS: readonly ContentCellValue['kind'][] = ['string', 'number', 'percentage', 'currency', 'boolean', 'date', 'time', 'error'];
+export const CELL_VALUE_KINDS: readonly ContentCellValue['kind'][] = ['string', 'number', 'percentage', 'currency', 'boolean', 'date', 'time', 'dateTime', 'error'];
 
 // The text an existing cell's own value round-trips through the editor as, when Enter opens it for editing with no seed keystroke -- the *raw* value (`String(42.5)`), never the rendered `displayText` (which for a percentage/currency/date cell is formatted for reading, not for re-parsing back into the same kind).
 export function rawEditableText(value: ContentCellValue): string {
@@ -71,6 +72,7 @@ export function rawEditableText(value: ContentCellValue): string {
     case 'string':
     case 'date':
     case 'time':
+    case 'dateTime':
     case 'error':
       return value.value;
     case 'boolean':
@@ -139,6 +141,10 @@ export function buildCellValue(kind: ContentCellValue['kind'], text: string): Co
     case 'time': {
       const trimmed = text.trim();
       return trimmed.length === 0 ? undefined : { kind: 'time', value: trimmed };
+    }
+    case 'dateTime': {
+      const trimmed = text.trim();
+      return trimmed.length === 0 ? undefined : { kind: 'dateTime', value: trimmed };
     }
     case 'error': {
       const trimmed = text.trim();
