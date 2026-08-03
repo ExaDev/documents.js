@@ -1,10 +1,29 @@
 import type { ContentDocument } from 'document-schema.js';
 import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
-import type { Package } from 'ooxml.js';
-import { readDocx } from 'ooxml.js';
+import type { Package, XmlElement } from 'ooxml.js';
+import { childrenWithTag, readDocx, rootElement } from 'ooxml.js';
+import type { OmmlDiagnosticSink } from './formula';
+import { spliceDocxFormulas } from './formula';
+
+const DOCUMENT_PART_PATH = 'word/document.xml';
+
+export interface ReadDocxContentOptions {
+  // Reports every OMML construct that degraded or was approximated while an equation was translated back into MathML (see src/omml/read.ts). `sourcePath` is the recovered formula block's own path into the returned ContentDocument, so a caller can name which equation each diagnostic came from -- the exact mirror of buildDocxPackage's own BuildDocxPackageOptions.onMathDiagnostic on the write side.
+  readonly onMathDiagnostic?: OmmlDiagnosticSink;
+}
+
+function documentBody(pkg: Package): XmlElement | undefined {
+  const root = rootElement(pkg.parts[DOCUMENT_PART_PATH]);
+  return root === undefined ? undefined : childrenWithTag(root, 'w:body')[0];
+}
 
 // Package -> ContentDocument (the wordprocessing variant). A thin adapter over ooxml.js's own readDocx: the WordprocessingML style cascade (docDefaults -> named-style basedOn chains -> paragraph-mark run properties -> character styles -> direct formatting), DrawingML theme resolution, and document-order section/block walking all now live upstream in ooxml.js (readDocx used to be a lossy, geometry-free projection unusable as a layout basis; it no longer is). readDocx's own `comments`/`footnotes`/`headers`/`footers`/`numbering` are not part of ContentDocument's shape and are not carried through here -- ContentDocument only models the section/block content a layout engine needs. They are not dropped outright, though: readDocxExtras (./extras.ts) exposes that same data as its own real return type, for a caller that wants it. LayoutMetadata's own `producer` field (a PDF-only concept) is left unset, exactly as it was before this package read docx metadata itself.
-export function readDocxContent(pkg: Package): ContentDocument {
+//
+// An OOXML math equation IS carried through, as a real ContentEmbeddedObjectBlock holding its own recovered MathML -- the identical shape readOdtContent produces for an ODF embedded formula, so a formula survives docx -> odt, docx -> PDF, and docx -> markdown by exactly the same mechanism an ODF one does. readDocx itself has no m:oMath handling at all, so this is a second, independent pass over the same word/document.xml (./formula.ts's spliceDocxFormulas), mirroring how src/odf/odt/read.ts recovers a formula odf.js's own readOdt likewise does not read.
+export function readDocxContent(pkg: Package, options?: ReadDocxContentOptions): ContentDocument {
   const docxDoc = readDocx(pkg);
-  return { kind: 'wordprocessing', formatVersion: CONTENT_FORMAT_VERSION, metadata: { ...docxDoc.metadata }, sections: docxDoc.sections };
+  const body = documentBody(pkg);
+  // readDocx already threw if word/document.xml has no w:body, so this only guards the type -- there is no reachable "readDocx succeeded but the body is gone" state.
+  const sections = body === undefined ? docxDoc.sections : spliceDocxFormulas(docxDoc.sections, body.children, options?.onMathDiagnostic);
+  return { kind: 'wordprocessing', formatVersion: CONTENT_FORMAT_VERSION, metadata: { ...docxDoc.metadata }, sections };
 }

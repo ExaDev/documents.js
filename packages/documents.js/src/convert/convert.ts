@@ -33,7 +33,7 @@ import { readPptxContent } from '../ooxml/pptx/read';
 import { readMarkdownContent } from '../markdown/read';
 import { buildMarkdownText } from '../markdown/write';
 import { decodeMarkdownText, encodeMarkdownText } from '../markdown/text';
-import type { OmmlDiagnostic } from '../omml/write';
+import type { OmmlDiagnostic } from '../omml/shared';
 import type { PdfDiagnosticSink, ProvidedFont, WinAnsiSubstitution } from 'pdf-codec';
 import { createFontMeasurer, createFontRegistry, loadMathFont, readPdf, writePdf } from 'pdf-codec';
 import type { DocumentFontRegistryOptions } from '../fonts/registry';
@@ -49,11 +49,13 @@ export interface DocumentToPdfOptions extends DocumentFontRegistryOptions {
   readonly onSubstitution?: (substitution: WinAnsiSubstitution, context: { readonly pageIndex: number }) => void;
   // Called exactly once, synchronously, with the DocumentPackage (content + layout) this conversion built internally, before the function returns its bytes -- a side channel for a caller that wants the intermediate pivot value, not just the target bytes, mirroring onSubstitution's own callback shape. Every conversion sharing this options type invokes it, odfToPdf included: a standalone formula document reports a genuine 'formula'-kind ContentDocument (see that function's own comment for what its LayoutDocument half does and does not carry).
   readonly onDocument?: (pkg: DocumentPackage) => void;
+  // Called once per OMML construct that degraded or was approximated while a docx's own equations were recovered as MathML (src/omml/read.ts). Only docxToPdf ever invokes it, and deliberately so rather than being declared on a docx-specific options type of its own: OOXML math is the one source vocabulary in this package whose READ direction involves a translation that can degrade at all -- every ODF-sourced conversion reads real MathML straight out of the source package with nothing to translate.
+  readonly onMathDiagnostic?: (diagnostic: OmmlDiagnostic, context: { readonly sourcePath?: string }) => void;
 }
 
 export function docxToPdf(bytes: Uint8Array<ArrayBuffer>, options?: DocumentToPdfOptions): Uint8Array<ArrayBuffer> {
   const pkg = openDocx(bytes).toPackage();
-  const content = readDocxContent(pkg);
+  const content = readDocxContent(pkg, { onMathDiagnostic: options?.onMathDiagnostic });
   // readDocxContent's declared return type is the full ContentDocument union, even though it always produces the wordprocessing variant in practice -- this both documents and enforces that.
   if (content.kind !== 'wordprocessing') {
     throw new Error('readDocxContent returned a non-wordprocessing ContentDocument');
@@ -249,7 +251,7 @@ export interface DocumentBridgeOptions {
   readonly signal?: AbortSignal;
   // Called exactly once, synchronously, with the DocumentPackage this bridge built internally, before the function returns its bytes -- mirroring DocumentToPdfOptions/PdfToDocumentOptions's own onDocument. A bridge never runs a layout engine (see this section's own top-of-block comment), so `layout` is always left undefined here -- DocumentPackageSchema already models layout as optional for exactly this case, and running a layout conversion purely to populate a field no caller asked for would be wasted work.
   readonly onDocument?: (pkg: DocumentPackage) => void;
-  // Called once per MathML construct that degraded or was approximated while an embedded formula was translated into OMML (src/omml/write.ts). Only the bridges that BUILD a docx from a formula-bearing source can ever invoke it: odtToDocx genuinely can, markdownToDocx threads it for consistency but has no formula construct in its own source format to produce one from, and every other bridge in this section either builds a non-OOXML package or has no formula-writing path at all. pdfToDocx deliberately has no equivalent option -- reconstructWordprocessing recovers positioned glyphs, never a formula block, so there is nothing there to report.
+  // Called once per formula construct that degraded or was approximated while an embedded formula crossed this bridge, in whichever direction the bridge translates: a MathML construct with no OMML counterpart when BUILDING a docx (src/omml/write.ts -- odtToDocx genuinely produces these; markdownToDocx threads the option for consistency but has no formula construct in its own source format to produce one from), and an OMML construct with no MathML counterpart when READING one (src/omml/read.ts -- docxToOdt and docxToMarkdown). pdfToDocx deliberately has no equivalent option -- reconstructWordprocessing recovers positioned glyphs, never a formula block, so there is nothing there to report.
   readonly onMathDiagnostic?: (diagnostic: OmmlDiagnostic, context: { readonly sourcePath?: string }) => void;
 }
 
@@ -266,11 +268,11 @@ export function odtToDocx(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBrid
   return encodePackage(buildDocxPackage(content, { onMathDiagnostic: options?.onMathDiagnostic })); // ooxml.js's own encodePackage -- buildDocxPackage produces an OOXML package.
 }
 
-// docx bytes -> odt bytes, the reverse of odtToDocx: readDocxContent(decodePackage(docxBytes)) feeds directly into buildOdtPackage, then odf.js's own encodePackage serializes the result.
+// docx bytes -> odt bytes, the reverse of odtToDocx: readDocxContent(decodePackage(docxBytes)) feeds directly into buildOdtPackage, then odf.js's own encodePackage serializes the result. An OOXML math equation crosses this bridge as a REAL ODF embedded formula sub-object, symmetrically with odtToDocx's own OMML writing: readDocxContent recovers the equation as MathML (src/omml/read.ts) and buildOdtPackage writes it back as a genuine formula sub-package referenced from a draw:frame/draw:object (src/odf-package/formula.ts), so an odt -> docx -> odt round trip keeps its formulas as formulas.
 export function docxToOdt(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBridgeOptions): Uint8Array<ArrayBuffer> {
   throwIfAborted(options?.signal);
   const pkg = decodeOoxmlPackage(bytes); // ooxml.js's own decodePackage -- docx is an OOXML package.
-  const content = readDocxContent(pkg);
+  const content = readDocxContent(pkg, { onMathDiagnostic: options?.onMathDiagnostic });
   if (content.kind !== 'wordprocessing') {
     throw new Error('readDocxContent returned a non-wordprocessing ContentDocument');
   }
@@ -349,7 +351,7 @@ export function markdownToDocx(bytes: Uint8Array<ArrayBuffer>, options?: Documen
 export function docxToMarkdown(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBridgeOptions): Uint8Array<ArrayBuffer> {
   throwIfAborted(options?.signal);
   const pkg = decodeOoxmlPackage(bytes); // ooxml.js's own decodePackage -- docx is an OOXML package.
-  const content = readDocxContent(pkg);
+  const content = readDocxContent(pkg, { onMathDiagnostic: options?.onMathDiagnostic });
   if (content.kind !== 'wordprocessing') {
     throw new Error('readDocxContent returned a non-wordprocessing ContentDocument');
   }
