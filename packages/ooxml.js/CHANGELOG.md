@@ -1,3 +1,10 @@
+## [2.6.7](https://github.com/ExaDev/ooxml.js/compare/v2.6.6...v2.6.7) (2026-08-03)
+
+
+### Bug Fixes
+
+* **ci:** use the GitHub App token for the branch push and PR creation too ([1072f1d](https://github.com/ExaDev/ooxml.js/commit/1072f1db3f366c32345641e32d1cf397f2bb5f5e))
+
 ## [2.6.6](https://github.com/ExaDev/ooxml.js/compare/v2.6.5...v2.6.6) (2026-08-03)
 
 
