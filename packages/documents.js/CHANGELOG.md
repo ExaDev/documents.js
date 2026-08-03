@@ -1,3 +1,11 @@
+# [1.63.0](https://github.com/ExaDev/documents.js/compare/v1.62.0...v1.63.0) (2026-08-03)
+
+
+### Features
+
+* extract source-embedded fonts from docx/pptx/odf packages ([69b49d5](https://github.com/ExaDev/documents.js/commit/69b49d553bbc467273a0ee8c00662f5aa95b3912))
+* wire real font embedding into all six docx/pptx/odt/odp/ods/odg to PDF conversions ([da2b61e](https://github.com/ExaDev/documents.js/commit/da2b61e26dc1c7ee8e9ae86ab8c099806ed031ad))
+
 # [1.62.0](https://github.com/ExaDev/documents.js/compare/v1.61.0...v1.62.0) (2026-08-03)
 
 
