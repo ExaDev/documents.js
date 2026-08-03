@@ -1,6 +1,6 @@
 name: Dependabot auto-merge
 
-# Two auto-merge policies in one workflow. Sibling ExaDev packages (document-schema.js) merge unconditionally once green -- no cooldown, matching this family's existing convention. Every other (third-party) dependency merges only for a minor or patch bump; a major bump still opens a PR via Dependabot but is left for manual review. Third-party updates additionally carry dependabot.yml's own 7-day cooldown before Dependabot proposes them at all. Auto-merge is enforced by main's own CI actually passing on the PR's head commit -- this workflow only requests the merge, GitHub itself withholds it until checks conclude.
+# Two auto-merge policies in one workflow. Sibling ExaDev packages (document-schema.js) merge unconditionally once green -- no cooldown, matching this family's existing convention. Every other (third-party) dependency merges only for a minor or patch bump; a major bump still opens a PR via Dependabot but is left for manual review. Third-party updates additionally carry dependabot.yml's own 7-day cooldown before Dependabot proposes them at all. Auto-merge is enforced by main's own CI actually passing on the PR's head commit -- this workflow only requests the merge, GitHub itself withholds it until checks conclude. The merge itself authenticates via a GitHub App installation token rather than GITHUB_TOKEN, so the resulting push to main triggers downstream workflow runs (ci.yml, release) instead of being silently skipped by GitHub's anti-recursion protection.
 
 on:
   pull_request:
@@ -43,9 +43,15 @@ jobs:
           else
             echo "merge=false" >> "$GITHUB_OUTPUT"
           fi
+      - name: Generate a token for the merge
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: "4473709"
+          private-key: ${{ secrets.AUTOMERGE_APP_PRIVATE_KEY }}
       - name: Enable auto-merge
         if: steps.decide.outputs.merge == 'true'
         run: gh pr merge --auto --rebase "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
