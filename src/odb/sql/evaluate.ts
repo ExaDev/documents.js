@@ -1,5 +1,6 @@
 import type { ContentCellValue } from 'document-schema.js';
 import type { HsqldbTable } from '../../hsqldb/script';
+import { aggregateCellValues, CELL_NULL, cellComparisonKey, compareCellValues } from '../values';
 import { HsqldbSqlEvaluationError } from './errors';
 import type { SqlComparisonOperator } from './lexer';
 import type { SqlAggregateFunction, SqlColumnRef, SqlLiteral, SqlNameRef, SqlOperand, SqlPredicate, SqlSelectStatement, SqlSortDirection } from './parser';
@@ -11,7 +12,7 @@ import type { SqlAggregateFunction, SqlColumnRef, SqlLiteral, SqlNameRef, SqlOpe
 // Four semantic decisions are worth stating outright, because each is a real choice a SQL implementation has to make and each is covered by its own test:
 //
 // 1. NULL is ContentCellValue's own { kind: 'empty' }, and WHERE uses genuine SQL three-valued logic: a comparison with a NULL operand is UNKNOWN, not false, and a row survives WHERE only when the predicate evaluates to TRUE. NOT UNKNOWN is UNKNOWN; UNKNOWN AND FALSE is FALSE; UNKNOWN OR TRUE is TRUE. IS [NOT] NULL is the only predicate here that can never be UNKNOWN.
-// 2. Values compare within three classes -- numeric (number/percentage/currency), boolean (false < true), and text (string/date/time/dateTime/error) -- and a comparison ACROSS classes throws rather than coercing, since coercing is exactly how a query engine silently returns wrong rows. Text comparison is UTF-16 code-unit order, not a locale collation: correct for the ISO-8601 date/time strings this package's readers produce, and deliberately not pretending to implement a database's own collation rules.
+// 2. Value comparison and the five aggregates' own NULL handling are src/odb/values.ts's, shared verbatim with src/odb/formula/'s Report Builder engine rather than restated here: values compare within three classes and never across them, and SUM/AVG/MIN/MAX skip NULLs and return NULL for a group with no non-NULL value at all. See that module's own top-of-file comment for the full statement of both rules.
 // 3. GROUP BY partitions by the grouped columns' own values, with all NULLs forming one group (SQL's own rule), and groups come back in first-appearance order -- SQL does not define an order without ORDER BY, and first-appearance is the one deterministic choice available. COUNT(*) counts rows; COUNT(column) counts non-NULL values; SUM/AVG/MIN/MAX ignore NULLs and return NULL for a group with no non-NULL value at all. An aggregate with no GROUP BY treats the whole (post-WHERE) row set as one group, and still returns exactly one row when that set is empty.
 // 4. ORDER BY sorts NULLs last under ASC (and therefore first under DESC, since a descending term is the ascending comparison negated). The sort is stable, so rows tied on every ORDER BY term keep their original relative order, and a multi-column ORDER BY resolves ties left to right.
 
@@ -21,55 +22,15 @@ export interface SqlResultSet {
   readonly rows: readonly (readonly ContentCellValue[])[];
 }
 
-const SQL_NULL: ContentCellValue = { kind: 'empty' };
-
 type Truth = 'true' | 'false' | 'unknown';
 
-type ComparisonKey =
-  | { readonly valueClass: 'numeric'; readonly numeric: number }
-  | { readonly valueClass: 'boolean'; readonly boolean: boolean }
-  | { readonly valueClass: 'text'; readonly text: string };
-
-function comparisonKeyOf(value: ContentCellValue): ComparisonKey | undefined {
-  switch (value.kind) {
-    case 'number':
-    case 'percentage':
-    case 'currency':
-      return { valueClass: 'numeric', numeric: value.value };
-    case 'boolean':
-      return { valueClass: 'boolean', boolean: value.value };
-    case 'date':
-    case 'time':
-    case 'dateTime':
-    case 'string':
-    case 'error':
-      return { valueClass: 'text', text: value.value };
-    case 'empty':
-      return undefined;
-  }
+// Turns a src/odb/values.ts failure into this engine's own error, carrying the statement that produced it. Shared value semantics, engine-specific error class -- see that module's own top-of-file comment for why the split exists.
+function sqlFailure(sql: string): (message: string) => Error {
+  return (message: string) => new HsqldbSqlEvaluationError(message, sql);
 }
 
-function compareKeys(left: ComparisonKey, right: ComparisonKey, sql: string): number {
-  if (left.valueClass === 'numeric' && right.valueClass === 'numeric') {
-    return left.numeric === right.numeric ? 0 : left.numeric < right.numeric ? -1 : 1;
-  }
-  if (left.valueClass === 'boolean' && right.valueClass === 'boolean') {
-    return left.boolean === right.boolean ? 0 : left.boolean ? 1 : -1;
-  }
-  if (left.valueClass === 'text' && right.valueClass === 'text') {
-    return left.text === right.text ? 0 : left.text < right.text ? -1 : 1;
-  }
-  throw new HsqldbSqlEvaluationError(`cannot compare a ${left.valueClass} value with a ${right.valueClass} value`, sql);
-}
-
-// Both operands are known non-NULL by the time this runs -- every caller resolves NULL to UNKNOWN (or to a sort position) before comparing.
 function compareValues(left: ContentCellValue, right: ContentCellValue, sql: string): number {
-  const leftKey = comparisonKeyOf(left);
-  const rightKey = comparisonKeyOf(right);
-  if (leftKey === undefined || rightKey === undefined) {
-    throw new HsqldbSqlEvaluationError('a NULL value reached a comparison that had already ruled NULL out', sql);
-  }
-  return compareKeys(leftKey, rightKey, sql);
+  return compareCellValues(left, right, sqlFailure(sql));
 }
 
 function truthOfComparison(ordering: number, operator: SqlComparisonOperator): Truth {
@@ -119,7 +80,7 @@ function literalToValue(literal: SqlLiteral): ContentCellValue {
     case 'boolean':
       return { kind: 'boolean', value: literal.value };
     case 'null':
-      return SQL_NULL;
+      return CELL_NULL;
   }
 }
 
@@ -226,7 +187,7 @@ function operandValue(operand: SqlOperand, row: readonly ContentCellValue[], res
 }
 
 function evaluateLike(value: ContentCellValue, pattern: string, sql: string): Truth {
-  const key = comparisonKeyOf(value);
+  const key = cellComparisonKey(value);
   if (key === undefined) {
     return 'unknown';
   }
@@ -296,30 +257,9 @@ function evaluatePredicate(predicate: SqlPredicate, row: readonly ContentCellVal
   }
 }
 
-function numericOf(value: ContentCellValue, aggregate: SqlAggregateFunction, sql: string): number {
-  const key = comparisonKeyOf(value);
-  if (key?.valueClass !== 'numeric') {
-    throw new HsqldbSqlEvaluationError(`${aggregate} requires numeric values, but found a ${value.kind} value`, sql);
-  }
-  return key.numeric;
-}
-
-// COUNT(*) never reaches here: it counts rows, not values, and is answered directly from the group's own row count. Everything below is the "over a column's values" case, where NULLs are skipped by every aggregate.
+// COUNT(*) never reaches src/odb/values.ts's aggregateCellValues: it counts rows, not values, and is answered directly from the group's own row count. Everything routed here is the "over a column's values" case, where NULLs are skipped by every aggregate.
 function aggregateOverValues(aggregate: SqlAggregateFunction, values: readonly ContentCellValue[], sql: string): ContentCellValue {
-  const present = values.filter((value) => value.kind !== 'empty');
-  if (aggregate === 'COUNT') {
-    return { kind: 'number', value: present.length };
-  }
-  const first = present[0];
-  if (first === undefined) {
-    // Every aggregate but COUNT returns NULL for a group with no non-NULL value at all -- SQL's own rule, and the reason AVG over an all-NULL column is NULL rather than a division by zero.
-    return SQL_NULL;
-  }
-  if (aggregate === 'SUM' || aggregate === 'AVG') {
-    const total = present.reduce((sum, value) => sum + numericOf(value, aggregate, sql), 0);
-    return { kind: 'number', value: aggregate === 'SUM' ? total : total / present.length };
-  }
-  return present.reduce((best, value) => ((aggregate === 'MIN' ? compareValues(value, best, sql) < 0 : compareValues(value, best, sql) > 0) ? value : best), first);
+  return aggregateCellValues(aggregate, values, sqlFailure(sql));
 }
 
 // NULL sorts after every non-NULL value under an ascending term; a descending term negates the whole comparison, which puts NULLs first. Stated as one rule rather than two so the two directions can never drift apart.
