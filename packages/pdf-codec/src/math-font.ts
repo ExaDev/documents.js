@@ -6,8 +6,11 @@
 import { base64ToBytes } from './util/base64';
 import type { MathFontMetrics, MathGlyphMetrics } from './math-types';
 import { STIX_TWO_MATH_FONT_BASE64 } from './assets/stix-two-math-font';
+import type { CffGlyphBounds } from './cff-bounds';
+import { parseCffGlyphBounds } from './cff-bounds';
 import type { CmapLookup } from './cmap-table';
 import { buildCmapLookup } from './cmap-table';
+import type { GlyphInkBounds } from './glyph-bounds';
 import type { HmtxTable } from './hmtx-table';
 import { parseHmtx } from './hmtx-table';
 import type { MathStretchAxis, MathStretchConstruction } from './math-stretch';
@@ -34,6 +37,8 @@ export interface MathFont {
   glyphId(codePoint: number): number | undefined;
   // The glyph-space (1000-units-per-em, PDF's own /W convention regardless of the font's own unitsPerEm) advance width for `glyphId` -- the value math-font-write.ts writes into /W, and the same conversion factor content stream widths implicitly rely on.
   glyphSpaceWidth(glyphId: number): number;
+  // This glyph's own tight ink bounding box in FONT DESIGN UNITS (y up, so a descender's yMin is negative), computed by interpreting its Type 2 charstring -- see cff-bounds.ts. `undefined` for a glyph outside the font, one that draws nothing (a space), or one whose charstring that module declines to walk. The size-relative form most callers want is MathGlyphMetrics.inkAscentPt/inkDescentPt, which metricsAt(sizePt) already converts to points.
+  glyphInkBounds(glyphId: number): GlyphInkBounds | undefined;
   // The font's own MathVariants.minConnectorOverlap, in design units -- the floor on assembly part overlap assembleStretchyGlyph (math-stretch.ts) needs alongside a construction from `stretchyConstruction` below.
   readonly minConnectorOverlap: number;
   // Everything the font declares about stretching the glyph for `codePoint` along `axis`, in design units, or `undefined` when the font's MathVariants subtable does not cover that glyph on that axis at all (i.e. the character is not stretchy in this font, whatever an operator dictionary may say about it). See LoadedMathFont.stretchGlyph below for the points-in/points-out form most callers want.
@@ -45,7 +50,7 @@ function toPt(designUnits: number, unitsPerEm: number, sizePt: number): number {
 }
 
 // MathFontMetrics's own *Pt fields are already "at the caller's requested size" by contract (see metrics.ts) -- a single, size-independent parsed font cannot supply that directly, so this is the per-size factory loadMathFont's own metricsAt(sizePt) calls.
-function metricsAtSize(cmap: CmapLookup, hmtx: HmtxTable, math: MathTable, unitsPerEm: number, ascentDesignUnits: number, descentDesignUnits: number, sizePt: number): MathFontMetrics {
+function metricsAtSize(cmap: CmapLookup, hmtx: HmtxTable, math: MathTable, inkBounds: CffGlyphBounds | undefined, unitsPerEm: number, ascentDesignUnits: number, descentDesignUnits: number, sizePt: number): MathFontMetrics {
   const c = math.constants;
   const pt = (designUnits: number): number => toPt(designUnits, unitsPerEm, sizePt);
   return {
@@ -90,10 +95,14 @@ function metricsAtSize(cmap: CmapLookup, hmtx: HmtxTable, math: MathTable, units
       const advanceWidthPt = toPt(hmtx.advanceWidth(glyphId), unitsPerEm, glyphSizePt);
       const italicCorrectionDesignUnits = math.glyphInfo.italicsCorrection.get(glyphId) ?? 0;
       const topAccentDesignUnits = math.glyphInfo.topAccentAttachment.get(glyphId);
+      // The glyph's own tight ink extent, from its actual outline rather than from the font-wide nominal ascent/descent every glyph in the face shares. Reported in the same direction convention as ascentPerEm/descentPerEm: ink above the baseline is a positive ascent, ink below it a positive descent -- which makes inkDescentPt NEGATIVE for a glyph drawing nothing below the baseline at all, since its lowest ink genuinely sits above it.
+      const ink = inkBounds?.bounds(glyphId);
       return {
         advanceWidthPt,
         italicCorrectionPt: toPt(italicCorrectionDesignUnits, unitsPerEm, glyphSizePt),
         topAccentXPt: topAccentDesignUnits === undefined ? undefined : toPt(topAccentDesignUnits, unitsPerEm, glyphSizePt),
+        inkAscentPt: ink === undefined ? undefined : toPt(ink.yMax, unitsPerEm, glyphSizePt),
+        inkDescentPt: ink === undefined ? undefined : toPt(-ink.yMin, unitsPerEm, glyphSizePt),
       };
     },
   };
@@ -143,13 +152,16 @@ export function loadMathFont(): LoadedMathFont {
   }
   const hmtx = parseHmtx(sfnt);
   const math = parseMathTable(sfnt);
+  // Per-glyph ink boxes come from walking each glyph's own charstring, since a CFF glyph -- unlike a TrueType one -- carries no bounding box of its own anywhere. Every glyph is walked at most once and memoised inside this object, which is itself built once per process alongside the rest of the parse.
+  const inkBounds = parseCffGlyphBounds(cffBytes);
 
   const font: MathFont = {
-    metrics: metricsAtSize(cmap, hmtx, math, unitsPerEm, ascentDesignUnits, descentDesignUnits, unitsPerEm), // a 1-unit-per-em-sized metrics object -- exists only to satisfy the MathFont.metrics field's own type; every real caller goes through metricsAt(sizePt) instead
+    metrics: metricsAtSize(cmap, hmtx, math, inkBounds, unitsPerEm, ascentDesignUnits, descentDesignUnits, unitsPerEm), // a 1-unit-per-em-sized metrics object -- exists only to satisfy the MathFont.metrics field's own type; every real caller goes through metricsAt(sizePt) instead
     cffBytes,
     descriptor: { unitsPerEm, ascent: ascentDesignUnits, descent: descentDesignUnits, capHeight, bboxMin, bboxMax, italicAngle: 0 },
     glyphId: (codePoint: number) => cmap(codePoint),
     glyphSpaceWidth: (glyphId: number) => (hmtx.advanceWidth(glyphId) * 1000) / unitsPerEm,
+    glyphInkBounds: (glyphId: number) => inkBounds?.bounds(glyphId),
     minConnectorOverlap: math.variants.minConnectorOverlap,
     stretchyConstruction: (codePoint: number, axis: MathStretchAxis) => {
       const glyphId = cmap(codePoint);
@@ -162,7 +174,7 @@ export function loadMathFont(): LoadedMathFont {
 
   cached = {
     font,
-    metricsAt: (sizePt: number) => metricsAtSize(cmap, hmtx, math, unitsPerEm, ascentDesignUnits, descentDesignUnits, sizePt),
+    metricsAt: (sizePt: number) => metricsAtSize(cmap, hmtx, math, inkBounds, unitsPerEm, ascentDesignUnits, descentDesignUnits, sizePt),
     stretchGlyph: (codePoint: number, axis: MathStretchAxis, targetSizePt: number, sizePt: number) => {
       const construction = font.stretchyConstruction(codePoint, axis);
       if (construction === undefined) {

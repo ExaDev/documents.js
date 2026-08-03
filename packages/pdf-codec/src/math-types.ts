@@ -57,10 +57,17 @@ export interface MathGlyphMetrics {
   readonly italicCorrectionPt: number;
   // The x position (from the glyph's own left origin) where a combining accent placed above/below this glyph via mover/munder accent="true" should centre itself -- undefined when the font's MathTopAccentAttachment table has no entry for this glyph, in which case the caller falls back to the glyph's own horizontal midpoint.
   readonly topAccentXPt?: number;
+  // This glyph's own TIGHT INK extent above and below the baseline, measured from its actual outline (math-font.ts walks the embedded font's Type 2 charstrings -- see cff-bounds.ts) rather than from the font-wide nominal ascent/descent below. A layout engine sizing a token box from these gets a box that fits the characters it actually contains: a full stop is a few tenths of an em tall, a bracket most of an em, where ascentPerEm/descentPerEm would give both the same vertical extent.
+  //
+  // Both are in points at the caller's requested size, and both follow ascentPerEm/descentPerEm's own sign convention: ink above the baseline is a positive ascent, ink below it a positive descent. `inkDescentPt` is therefore NEGATIVE for a glyph that draws nothing below the baseline (its lowest ink genuinely sits above it) -- a consumer wanting a box that never crosses the baseline clamps at zero itself rather than being handed a pre-clamped, less informative number.
+  //
+  // Both are undefined together, for a glyph that draws nothing at all (a space) or whose outline this package declines to walk; a caller falls back to the nominal metrics for that glyph. They are optional for that reason and because this interface is a structural mirror shared with documents.js (see this file's own header): an implementation that supplies neither still satisfies it.
+  readonly inkAscentPt?: number;
+  readonly inkDescentPt?: number;
 }
 
 export interface MathFontMetrics {
-  // The font's own overall design ascent/descent, as a fraction of its own em size (e.g. 0.762 for an ascender at 762/1000 units-per-em) -- used as a uniform vertical extent for every token glyph run (mi/mn/mo/mtext), since this module deliberately does not parse per-glyph ink bounding boxes (no glyf/CFF outline parsing -- see math-font.ts's own module comment on why). A real, honest simplification: a token run's box is sized from the font's nominal vertical metrics, not this specific glyph's own tight ink extent, which is accurate enough for box-model layout (spacing, alignment, pagination) but not pixel-tight around unusually tall or shallow glyphs.
+  // The font's own overall design ascent/descent, as a fraction of its own em size (e.g. 0.762 for an ascender at 762/1000 units-per-em): one uniform vertical extent every glyph in the face shares. Still the right measure for anything sized against the FONT rather than against particular characters (a line's own leading, a fallback for a glyph with no outline to measure), but no longer the only thing on offer for a token box: MathGlyphMetrics.inkAscentPt/inkDescentPt above now carry each glyph's own real, tight ink extent, measured from its outline.
   readonly ascentPerEm: number;
   readonly descentPerEm: number;
   readonly axisHeightPt: number;

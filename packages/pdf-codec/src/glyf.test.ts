@@ -230,3 +230,77 @@ describe('compositeComponents', () => {
     expect(damaged.glyf.compositeComponents(eAcute)).toBeUndefined();
   });
 });
+
+// Carlito Regular's own nominal vertical metrics ('hhea' ascent/descent at unitsPerEm 2048), read from the vendored file directly -- the font-wide extent every glyph in the face shares, and the value per-glyph ink bounds exist to replace where a caller is sizing a box around particular characters.
+const CARLITO_UNITS_PER_EM = 2048;
+const CARLITO_NOMINAL_ASCENT = 1950;
+const CARLITO_NOMINAL_DESCENT = -550;
+
+describe('GlyfTable.glyphInkBounds', () => {
+  it("reads a simple glyph's box straight out of its own header, where the format already states it", () => {
+    const { glyf, glyphIdFor } = load(carlitoRegularBytes());
+    const x = glyphIdFor(0x78);
+    expect(glyf.glyphHeader(x)?.numberOfContours).toBeGreaterThan(0);
+    expect(glyf.glyphInkBounds(x)).toEqual({ xMin: 23, yMin: 0, xMax: 864, yMax: 978 });
+  });
+
+  it("unions a composite's components under their own placement offsets", () => {
+    // 'é' is three components: a zero-sized anchor point at (75, 0), 'e' unshifted, and the acute accent shifted 312 units right. Each component's own box and offset was read out of the vendored .ttf by a standalone script, and the union below also matches fontTools' own outline bounds for the assembled glyph.
+    const { glyf, glyphIdFor } = load(carlitoRegularBytes());
+    const eAcute = glyphIdFor(0xe9);
+    const components = glyf.compositeComponents(eAcute);
+    expect(components?.map((component) => [component.glyphIndex, component.argument1, component.argument2])).toEqual([
+      [2781, 75, 0],
+      [59, 0, 0],
+      [172, 312, 0],
+    ]);
+    expect(glyf.glyphInkBounds(59)).toEqual({ xMin: 75, yMin: -14, xMax: 945, yMax: 993 }); // 'e' alone
+    expect(glyf.glyphInkBounds(172)).toEqual({ xMin: 81, yMin: 1123, xMax: 473, yMax: 1399 }); // the acute accent alone, before its 312-unit shift
+    expect(glyf.glyphInkBounds(eAcute)).toEqual({ xMin: 75, yMin: -14, xMax: 945, yMax: 1399 });
+  });
+
+  it('places a component whose own offset moves it below the baseline', () => {
+    // Carlito builds its full stop as the dot accent shifted 1184 units DOWN, so the union has to apply the offset rather than trusting either the component's own box or the composite's declared one: the accent alone sits at y 1168..1416, and the full stop it becomes at -16..232.
+    const { glyf, glyphIdFor } = load(carlitoRegularBytes());
+    expect(glyf.glyphInkBounds(193)).toEqual({ xMin: 108, yMin: 1168, xMax: 355, yMax: 1416 }); // the dot accent alone
+    expect(glyf.glyphInkBounds(glyphIdFor(0x2e))).toEqual({ xMin: 134, yMin: -16, xMax: 381, yMax: 232 });
+  });
+
+  it('distinguishes a short glyph from a tall one, which the nominal metrics cannot', () => {
+    const { glyf, glyphIdFor } = load(carlitoRegularBytes());
+    const period = glyf.glyphInkBounds(glyphIdFor(0x2e))!;
+    const parenleft = glyf.glyphInkBounds(glyphIdFor(0x28))!;
+    expect(period.yMax - period.yMin).toBe(248);
+    expect(parenleft.yMax - parenleft.yMin).toBe(1781);
+    expect((parenleft.yMax - parenleft.yMin) / (period.yMax - period.yMin)).toBeGreaterThan(7);
+  });
+
+  it('reports ink no taller or deeper than the nominal metrics for ordinary text glyphs', () => {
+    const { glyf, glyphIdFor } = load(carlitoRegularBytes());
+    for (const codePoint of [0x2e, 0x28, 0x78, 0x41, 0x79, 0xe9]) {
+      const box = glyf.glyphInkBounds(glyphIdFor(codePoint))!;
+      expect(box.yMax).toBeLessThanOrEqual(CARLITO_NOMINAL_ASCENT);
+      expect(box.yMin).toBeGreaterThanOrEqual(CARLITO_NOMINAL_DESCENT);
+      expect(box.yMax - box.yMin).toBeLessThanOrEqual(CARLITO_NOMINAL_ASCENT - CARLITO_NOMINAL_DESCENT);
+    }
+    // ... and by a wide margin for the shallowest of them: a full stop draws roughly an eighth of the vertical extent the face's own nominal metrics claim for every glyph alike.
+    const period = glyf.glyphInkBounds(glyphIdFor(0x2e))!;
+    expect((period.yMax - period.yMin) / (CARLITO_NOMINAL_ASCENT - CARLITO_NOMINAL_DESCENT)).toBeLessThan(0.11);
+    expect(CARLITO_UNITS_PER_EM).toBe(2048); // the em the values above are stated in, asserted so a different vendored face swapped in here fails loudly rather than silently rescaling every number
+  });
+
+  it('reports undefined for a glyph that draws nothing and for one outside the font', () => {
+    const { glyf, glyphIdFor } = load(carlitoRegularBytes());
+    expect(glyf.glyphBytes(glyphIdFor(0x20))?.length).toBe(0); // a space: a legitimately zero-length 'loca' entry
+    expect(glyf.glyphInkBounds(glyphIdFor(0x20))).toBeUndefined();
+    expect(glyf.glyphInkBounds(glyf.numGlyphs)).toBeUndefined();
+  });
+
+  it('agrees with Caladea too, a second real face with its own composite conventions', () => {
+    const { glyf, glyphIdFor } = load(caladeaRegularBytes());
+    const period = glyf.glyphInkBounds(glyphIdFor(0x2e))!;
+    const parenleft = glyf.glyphInkBounds(glyphIdFor(0x28))!;
+    expect(period.yMax - period.yMin).toBeLessThan(parenleft.yMax - parenleft.yMin);
+    expect(glyf.glyphInkBounds(glyphIdFor(0xe9))!.yMax).toBeGreaterThan(glyf.glyphInkBounds(glyphIdFor(0x65))!.yMax); // an accented 'e' reaches higher than a bare one
+  });
+});

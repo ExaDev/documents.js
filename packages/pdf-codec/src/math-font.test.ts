@@ -70,3 +70,59 @@ describe('loadMathFont', () => {
     expect(first).toBe(second);
   });
 });
+
+// The font's own nominal vertical metrics, the uniform extent every glyph in the face shares: hhea ascent 762 and descent -238 at unitsPerEm 1000, i.e. 0.762/0.238 per em. Per-glyph ink bounds are what a caller sizing a box around PARTICULAR characters uses instead -- see cff-bounds.test.ts for the outline walk itself, cross-checked there against fontTools over the font's whole repertoire.
+describe('per-glyph ink bounds', () => {
+  it('exposes a real ink box in design units for a glyph, and none for one that draws nothing', () => {
+    const { font } = loadMathFont();
+    expect(font.glyphInkBounds(font.glyphId(0x2e)!)).toEqual({ xMin: 62, yMin: -8, xMax: 183, yMax: 114 }); // '.'
+    expect(font.glyphInkBounds(font.glyphId(0x28)!)).toEqual({ xMin: 45, yMin: -196, xMax: 327, yMax: 736 }); // '('
+    expect(font.glyphInkBounds(font.glyphId(0x20)!)).toBeUndefined(); // a space has no ink
+  });
+
+  it('reports each glyph its own ink ascent and descent in points, where the nominal metrics report one figure for all of them', () => {
+    const { metricsAt } = loadMathFont();
+    const metrics = metricsAt(12);
+    const period = metrics.glyph(0x2e, 12)!;
+    const parenleft = metrics.glyph(0x28, 12)!;
+
+    expect(period.inkAscentPt).toBeCloseTo((114 / 1000) * 12, 6);
+    expect(period.inkDescentPt).toBeCloseTo((8 / 1000) * 12, 6);
+    expect(parenleft.inkAscentPt).toBeCloseTo((736 / 1000) * 12, 6);
+    expect(parenleft.inkDescentPt).toBeCloseTo((196 / 1000) * 12, 6);
+
+    // The whole point of the measurement: a token box built from these fits the character it contains. The nominal metrics give both glyphs the same 9.144pt ascent and 2.856pt descent at this size.
+    const nominalAscentPt = metrics.ascentPerEm * 12;
+    const nominalDescentPt = metrics.descentPerEm * 12;
+    expect(nominalAscentPt).toBeCloseTo(9.144, 6);
+    expect(nominalDescentPt).toBeCloseTo(2.856, 6);
+    for (const glyph of [period, parenleft]) {
+      expect(glyph.inkAscentPt!).toBeLessThanOrEqual(nominalAscentPt);
+      expect(glyph.inkDescentPt!).toBeLessThanOrEqual(nominalDescentPt);
+    }
+    expect(period.inkAscentPt! + period.inkDescentPt!).toBeLessThan((parenleft.inkAscentPt! + parenleft.inkDescentPt!) / 7);
+  });
+
+  it('reports a negative ink descent for a glyph drawing nothing below the baseline, rather than clamping it away', () => {
+    // 'x' sits exactly on the baseline (yMin 0) and 'y' descends to -235. A glyph whose lowest ink were above the baseline would report a negative descent, which is the honest number for it -- a consumer wanting a box that never crosses the baseline clamps at its own layer.
+    const metrics = loadMathFont().metricsAt(10);
+    expect(metrics.glyph(0x78, 10)!.inkDescentPt).toBeCloseTo(0, 10); // arithmetically zero: negating a yMin of 0 leaves -0, which compares equal to 0 everywhere but through Object.is
+    expect(metrics.glyph(0x79, 10)!.inkDescentPt).toBeCloseTo((235 / 1000) * 10, 6);
+    expect(metrics.glyph(0x78, 10)!.inkAscentPt).toBeCloseTo((473 / 1000) * 10, 6);
+  });
+
+  it('scales ink bounds with the size the glyph is measured at', () => {
+    const { metricsAt } = loadMathFont();
+    const small = metricsAt(12).glyph(0x28, 12)!;
+    const large = metricsAt(12).glyph(0x28, 24)!; // the glyph size, not the metrics size, is what a glyph's own measurements scale by
+    expect(large.inkAscentPt).toBeCloseTo(small.inkAscentPt! * 2, 6);
+    expect(large.inkDescentPt).toBeCloseTo(small.inkDescentPt! * 2, 6);
+  });
+
+  it('leaves both ink fields undefined together for a glyph with no outline', () => {
+    const space = loadMathFont().metricsAt(12).glyph(0x20, 12)!;
+    expect(space.advanceWidthPt).toBeGreaterThan(0);
+    expect(space.inkAscentPt).toBeUndefined();
+    expect(space.inkDescentPt).toBeUndefined();
+  });
+});
