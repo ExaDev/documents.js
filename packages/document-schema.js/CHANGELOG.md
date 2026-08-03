@@ -1,3 +1,10 @@
+## [2.2.4](https://github.com/ExaDev/document-schema.js/compare/v2.2.3...v2.2.4) (2026-08-03)
+
+
+### Bug Fixes
+
+* **ci:** use pull_request_target so dependabot auto-merge can read secrets ([0806071](https://github.com/ExaDev/document-schema.js/commit/0806071a626ce74b9470d07788bc4089f325327a))
+
 ## [2.2.3](https://github.com/ExaDev/document-schema.js/compare/v2.2.2...v2.2.3) (2026-08-03)
 
 ## [2.2.2](https://github.com/ExaDev/document-schema.js/compare/v2.2.1...v2.2.2) (2026-08-03)
