@@ -1,0 +1,27 @@
+name: Dependabot auto-merge
+
+# Scoped to sibling ExaDev packages only -- dependabot.yml's own allow list restricts every PR Dependabot opens in this repo to document-schema.js, so gating on the actor alone is sufficient; the fetch-metadata step below is for audit logging, not for a merge decision. Auto-merge is enforced by main's own required status checks (Commitlint/Lint/Typecheck/Test/Smoke test) -- this workflow only requests the merge, GitHub itself withholds it until those report success.
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Fetch Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+      - name: Enable auto-merge
+        run: gh pr merge --auto --rebase "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
