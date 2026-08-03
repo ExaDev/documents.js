@@ -1,6 +1,6 @@
 import type { Package, XmlElement, XmlNode } from 'odf.js';
 import { buildOdfSubpaths, formatOdfLength, parseLinePoints, parseOdfPathData, parseOdfViewBox, resolveOdfShapeGeometry } from 'odf.js';
-import type { Box, Color, ContentPathPoint, ContentStroke, ContentSubpath } from 'document-schema.js';
+import type { Box, Color, ContentPathPoint, ContentStroke, ContentSubpath, ContentVector } from 'document-schema.js';
 import { attr } from 'ooxml.js';
 import { removeChild, setAttr } from '../../xml/edit';
 import { el } from '../../xml/fragment';
@@ -25,12 +25,13 @@ export interface BoxVectorInit {
   readonly frame: Box;
   readonly fill?: Color;
   readonly stroke?: ContentStroke;
+  readonly textFlowAnchored?: boolean;
 }
 
 export type OdgBoxVectorKind = 'rect' | 'ellipse';
 
 function buildBoxVectorElement(pkg: Package, tag: 'draw:rect' | 'draw:ellipse', init: BoxVectorInit): XmlElement {
-  const styleName = buildGraphicStyle(pkg, { fill: init.fill, stroke: init.stroke });
+  const styleName = buildGraphicStyle(pkg, { fill: init.fill, stroke: init.stroke, textFlowAnchored: init.textFlowAnchored });
   return el(
     tag,
     {
@@ -128,10 +129,11 @@ export interface LineVectorInit {
   readonly from: ContentPathPoint;
   readonly to: ContentPathPoint;
   readonly stroke: ContentStroke;
+  readonly textFlowAnchored?: boolean;
 }
 
 export function buildLineElement(pkg: Package, init: LineVectorInit): XmlElement {
-  const styleName = buildGraphicStyle(pkg, { stroke: init.stroke });
+  const styleName = buildGraphicStyle(pkg, { stroke: init.stroke, textFlowAnchored: init.textFlowAnchored });
   return el(
     'draw:line',
     {
@@ -213,10 +215,11 @@ export interface PathVectorInit {
   readonly subpaths: readonly ContentSubpath[];
   readonly fill?: Color;
   readonly stroke?: ContentStroke;
+  readonly textFlowAnchored?: boolean;
 }
 
 export function buildPathElement(pkg: Package, init: PathVectorInit): XmlElement {
-  const styleName = buildGraphicStyle(pkg, { fill: init.fill, stroke: init.stroke });
+  const styleName = buildGraphicStyle(pkg, { fill: init.fill, stroke: init.stroke, textFlowAnchored: init.textFlowAnchored });
   return el(
     'draw:path',
     {
@@ -336,4 +339,55 @@ export function wrapVectorElement(container: XmlNode[], node: XmlElement, pkg: P
     default:
       return undefined;
   }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// One ContentVector -> its matching draw:* element, rotation included. The single dispatch point every ODF container that writes vector geometry goes through -- OdgPage.addVector (a drawing page), OdpSlide.addVector (a presentation's draw:page, structurally the same element), and OdtBody.appendVectors (a text document's flow) -- so a rect/ellipse/line/path is built exactly one way regardless of which document kind it lands in. draw:rect/draw:ellipse/draw:line/draw:path carry byte-for-byte the same attribute vocabulary in all three, which is precisely why odt and odp reuse this module rather than growing writers of their own.
+//
+// `textFlowAnchored` is the one genuine per-container difference: a page-level vector is positioned directly against its page and declares no anchor at all, while one living inside a text:p must say what its coordinates are measured against (see style.ts's own TEXT_FLOW_ANCHOR_ATTRS). text:anchor-type is the element-level half of that pair; the style carries the rest.
+
+export interface VectorElementOptions {
+  readonly textFlowAnchored?: boolean;
+}
+
+export function buildVectorElement(pkg: Package, vector: ContentVector, options?: VectorElementOptions): XmlElement {
+  const textFlowAnchored = options?.textFlowAnchored;
+  const element = buildUnanchoredVectorElement(pkg, vector, textFlowAnchored);
+  if (textFlowAnchored === true) {
+    setAttr(element, 'text:anchor-type', 'paragraph');
+  }
+  return element;
+}
+
+// buildVectorElement plus the append-and-wrap step every container-level caller then repeats: OdgPage.addVector and OdpSlide.addVector are each nothing but this against their own draw:page's children list. Dispatches to the matching live-view class straight off the ContentVector's own discriminant rather than re-deriving it from the built element's tag, so there is no impossible "not a vector after all" branch to narrow away.
+export function appendVectorTo(container: XmlNode[], pkg: Package, vector: ContentVector, options?: VectorElementOptions): OdgVector {
+  const element = buildVectorElement(pkg, vector, options);
+  container.push(element);
+  switch (vector.kind) {
+    case 'line':
+      return new OdgLineVector(container, element, pkg);
+    case 'path':
+      return new OdgPathVector(container, element, pkg);
+    case 'rect':
+    case 'ellipse':
+      return new OdgBoxVector(container, element, pkg);
+  }
+}
+
+function buildUnanchoredVectorElement(pkg: Package, vector: ContentVector, textFlowAnchored: boolean | undefined): XmlElement {
+  // 'line' is the one variant ContentVectorSchema gives no rotationDeg at all (two endpoints already encode any orientation a line can have), so it needs no applyOdfGeometry pass and returns straight from its builder.
+  if (vector.kind === 'line') {
+    return buildLineElement(pkg, { from: vector.from, to: vector.to, stroke: vector.stroke, textFlowAnchored });
+  }
+  const element =
+    vector.kind === 'rect'
+      ? buildRectElement(pkg, { frame: vector.frame, fill: vector.fill, stroke: vector.stroke, textFlowAnchored })
+      : vector.kind === 'ellipse'
+        ? buildEllipseElement(pkg, { frame: vector.frame, fill: vector.fill, stroke: vector.stroke, textFlowAnchored })
+        : buildPathElement(pkg, { frame: vector.frame, subpaths: vector.subpaths, fill: vector.fill, stroke: vector.stroke, textFlowAnchored });
+  if (vector.rotationDeg !== undefined) {
+    // Rewrites the plain svg:x/svg:y the builder just wrote into the draw:transform form a rotated ODF shape actually uses -- ODF never carries both (see src/edit/geometry.ts's own applyOdfGeometry note).
+    applyOdfGeometry(element, vector.frame, vector.rotationDeg);
+  }
+  return element;
 }
