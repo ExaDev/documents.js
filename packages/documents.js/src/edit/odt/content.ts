@@ -203,11 +203,19 @@ function appendBlock(body: OdtBody, block: ContentBlock): void {
   // block.kind === 'image' is intentionally unhandled -- see this file's own top-of-file comment.
 }
 
-// An embedded formula becomes a paragraph carrying its own plain-text stand-in, mirroring buildDocxPackage's identical appendEmbeddedObject (see that function for the full reasoning, including why a reachable 'drawing' objectKind is deliberately written as nothing here rather than degraded to a stand-in). Writing the real MathML back would mean writing a genuine embedded formula SUB-PACKAGE (a nested Object N/content.xml plus its own draw:frame/draw:object reference and manifest entries) -- a real feature, not a small extension of this block writer -- so the stand-in is the honest degradation until that exists, rather than the formula vanishing without trace.
+// An embedded formula becomes a paragraph carrying a REAL ODF formula sub-document -- a nested "Object N/content.xml" holding the block's own MathML, referenced from a draw:frame/draw:object and listed in the package manifest with the genuine formula media type (src/odf-package/formula.ts, via OdtBody.appendFormula). Exactly what odf.js's own readOdfEmbeddedFormula reads back, and the ODF-side symmetry of buildDocxPackage's own OMML writing: a formula crossing docx -> odt arrives as a formula, not as text.
+//
+// The plain-text stand-in (the formula's own StarMath annotation, or the literal "[formula]") remains the fallback for exactly one case, mirroring buildDocxPackage's own identical narrowing: a formula carrying no MathML nodes at all. Writing an empty formula sub-document would produce an object real consumers render as an empty box, and writing nothing at all would make the formula vanish without trace -- the silent-loss failure mode this codebase's conventions rule out.
+//
+// A reachable 'drawing' objectKind is still deliberately written as nothing here, for the reason buildDocxPackage's own appendEmbeddedObject states in full: there is no vector-primitive writer under src/edit/odt/ to write a rect/ellipse/line/path into a text document with, and degrading real geometry to a text stand-in would be noise rather than information.
 function appendEmbeddedObject(body: OdtBody, block: ContentEmbeddedObjectBlock): void {
   const formula = formulaOfBlock(block);
   if (formula === undefined) {
     return;
   }
-  populateParagraph(body.appendParagraph(), { kind: 'paragraph', runs: [{ text: formulaPlaceholderText(formula) }] });
+  if (formula.mathml.length === 0) {
+    populateParagraph(body.appendParagraph(), { kind: 'paragraph', runs: [{ text: formulaPlaceholderText(formula) }] });
+    return;
+  }
+  body.appendFormula(formula, block.frame);
 }

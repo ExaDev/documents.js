@@ -1,6 +1,9 @@
+import type { ContentFormula } from 'document-schema.js';
 import type { Package, XmlElement } from 'odf.js';
 import { decodePackage, encodePackage } from 'odf.js';
+import type { Box } from '../../model/geometry';
 import { ensurePageBreakStyleName } from './automatic-styles';
+import { insertFormulaFrameMedia } from './formula';
 import { buildList, OdtList } from './list';
 import type { ParagraphInit } from './paragraph';
 import { buildParagraph, OdtParagraph } from './paragraph';
@@ -15,6 +18,7 @@ export interface OdtBody {
   appendTable(init: TableInit): OdtTable;
   appendList(): OdtList;
   appendPageBreak(): void;
+  appendFormula(formula: ContentFormula, frame: Box): OdtParagraph;
 }
 
 function findContentRoot(pkg: Package): XmlElement {
@@ -66,6 +70,14 @@ class OdtBodyImpl implements OdtBody {
     const listElement = buildList(this.pkg);
     this.officeText.children.push(listElement);
     return new OdtList(this.officeText.children, listElement, this.pkg);
+  }
+
+  // Appends a paragraph whose only content is a real embedded formula: a draw:frame/draw:object referencing a genuine ODF formula sub-document written into this same package (src/odf-package/formula.ts). The odt counterpart to DocxParagraph.appendOfficeMath -- but a whole nested document rather than a different markup vocabulary inline, which is what an embedded ODF object actually is. The paragraph is returned so a caller can style or extend it; src/odf/odt/read.ts recognises a paragraph carrying nothing but a formula frame AS the formula, so leaving it otherwise empty is what makes the write-then-read round trip land on a single formula block rather than a formula beside an empty paragraph.
+  appendFormula(formula: ContentFormula, frame: Box): OdtParagraph {
+    const paragraphElement = buildParagraph(this.pkg);
+    paragraphElement.children.push(insertFormulaFrameMedia(this.pkg, frame, formula));
+    this.officeText.children.push(paragraphElement);
+    return new OdtParagraph(this.officeText.children, paragraphElement, this.pkg);
   }
 
   // ODF has no inline "hard page break" content element the way WordprocessingML's w:br/@w:type="page" is (see docx's own DocxBody.appendPageBreak, src/edit/docx/editor.ts) -- a manual page break is exclusively a paragraph-style property (style:paragraph-properties/@fo:break-before="page"), so this inserts an empty paragraph pointed at the shared page-break style (automatic-styles.ts's ensurePageBreakStyleName).
