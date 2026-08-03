@@ -110,6 +110,7 @@ describe('MathVariants parsing against the real STIX Two Math font', () => {
     ]);
   });
 
+  // Enumerating the whole 0x1FFFF codepoint range is cheap uninstrumented (well under 200ms), but `pnpm test:coverage`'s v8 coverage instrumentation adds per-call overhead to every one of the ~131,000 glyphId() calls below, which is enough to clear vitest's 5000ms default on a slower CI runner -- an explicit timeout, not a change to what this test checks.
   it('names glyphs that no Unicode code point reaches, which is why drawing a construction needs glyph IDs rather than text', () => {
     const font = loadMathFont();
     const encoded = new Set<number>();
@@ -138,7 +139,7 @@ describe('MathVariants parsing against the real STIX Two Math font', () => {
     for (const part of font.font.stretchyConstruction(OVER_BRACE, 'horizontal')!.assembly!.parts) {
       expect(encoded.has(part.glyphId)).toBe(false);
     }
-  });
+  }, 30_000);
 
   it("reads the radical sign's own vertical construction", () => {
     const construction = verticalConstruction(RADICAL);
