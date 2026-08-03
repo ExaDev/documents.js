@@ -1,3 +1,10 @@
+## [1.2.7](https://github.com/ExaDev/document-cli/compare/v1.2.6...v1.2.7) (2026-08-03)
+
+
+### Bug Fixes
+
+* **ci:** wrap the sibling-bump commit body onto two lines under commitlint's limit ([9e0c467](https://github.com/ExaDev/document-cli/commit/9e0c4671ad72031415d7de197ae276bbc8ac9846))
+
 ## [1.2.6](https://github.com/ExaDev/document-cli/compare/v1.2.5...v1.2.6) (2026-08-03)
 
 ## [1.2.5](https://github.com/ExaDev/document-cli/compare/v1.2.4...v1.2.5) (2026-08-03)
