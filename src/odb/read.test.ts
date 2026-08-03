@@ -3,7 +3,7 @@ import { bytesToBase64, decodePackage, el } from 'odf.js';
 import { describe, expect, it } from 'vitest';
 import { HsqldbScriptParseError } from '../hsqldb/script';
 import { RICH_FIXTURE_FBK_BASE64 } from '../test-support/firebird';
-import { embeddedHsqldbMultiIndexOdbBytes } from '../test-support/odb';
+import { embeddedHsqldbBinaryScriptOdbBytes, embeddedHsqldbCompressedScriptOdbBytes, embeddedHsqldbMultiIndexOdbBytes } from '../test-support/odb';
 import { OdbNoEmbeddedDataSourceError, OdbUnsupportedFormatError, readOdbTables } from './read';
 
 // Mirrors odf.js's own src/typed/odb/read.test.ts fixture-building style (databaseContentPart/manifestPart) -- readOdbTables sits directly on top of readOdbInventory, so its own tests build the identical minimal Package shape rather than a real .odb file. src/convert/odb.test.ts covers the genuine byte-level odbToXlsx/odbToCsv round trip separately.
@@ -120,34 +120,6 @@ describe('readOdbTables: unsupported embedded formats -- named, never silent', (
     expect(() => readOdbTables(pkg)).toThrow(/embedded "derby" database engine/);
   });
 
-  it('throws OdbUnsupportedFormatError naming HSQLDB\'s binary script format for a binary-format-simulated database/script', () => {
-    const pkg: Package = {
-      parts: {
-        'content.xml': databaseContentPart([connectionResource('sdbc:embedded:hsqldb')]),
-        'META-INF/manifest.xml': manifestPart([...BASE_MANIFEST_ENTRIES, { fullPath: 'database/script', mediaType: '' }]),
-        // Simulated HSQLDB BINARY script format (hsqldb.script_format=1): arbitrary non-text bytes, including a NUL and other C0 control bytes real SQL text never contains.
-        'database/script': { kind: 'binary', base64: bytesToBase64(new Uint8Array([0x01, 0x02, 0x00, 0x10, 0x20, 0x7f, 0xff, 0xfe])) },
-      },
-    };
-    expect(() => readOdbTables(pkg)).toThrow(OdbUnsupportedFormatError);
-    expect(formatOfThrownError(() => readOdbTables(pkg))).toBe('hsqldb-binary');
-    expect(() => readOdbTables(pkg)).toThrow(/binary whole-script format/);
-  });
-
-  it("throws OdbUnsupportedFormatError naming HSQLDB's compressed script format for zlib-header-prefixed bytes", () => {
-    const pkg: Package = {
-      parts: {
-        'content.xml': databaseContentPart([connectionResource('sdbc:embedded:hsqldb')]),
-        'META-INF/manifest.xml': manifestPart([...BASE_MANIFEST_ENTRIES, { fullPath: 'database/script', mediaType: '' }]),
-        // The real leading bytes of a genuine hsqldb.script_format=3 file, confirmed by generating one with the actual HSQLDB 1.8.0.10 engine bundled with LibreOffice 26.2 (org.hsqldb.scriptio.ScriptWriterZipped's own java.util.zip.Deflater output -- zlib-framed, RFC 1950, never gzip's 0x1f 0x8b).
-        'database/script': { kind: 'binary', base64: bytesToBase64(new Uint8Array([0x78, 0x9c, 0x5d, 0x51, 0xc1, 0x4a, 0xc3, 0x40])) },
-      },
-    };
-    expect(() => readOdbTables(pkg)).toThrow(OdbUnsupportedFormatError);
-    expect(formatOfThrownError(() => readOdbTables(pkg))).toBe('hsqldb-compressed');
-    expect(() => readOdbTables(pkg)).toThrow(/compressed whole-script format/);
-  });
-
   it('throws OdbUnsupportedFormatError when an embedded HSQLDB connection has no database/script part at all', () => {
     const pkg: Package = {
       parts: {
@@ -156,6 +128,29 @@ describe('readOdbTables: unsupported embedded formats -- named, never silent', (
       },
     };
     expect(() => readOdbTables(pkg)).toThrow(/no database\/script part/);
+  });
+});
+
+describe('readOdbTables: whole-script BINARY/COMPRESSED routing (Tier 4)', () => {
+  // The same tables and rows in both, since the two fixtures are the same database written at hsqldb.script_format=1 and =3 -- see src/test-support/odb.ts.
+  const EXPECTED_ROW_COUNTS = new Map([['EMPLOYEES', 4], ['TYPE_TEST', 3], ['EMPTY_TABLE', 0]]);
+
+  it('decodes a real BINARY-format database/script end to end', () => {
+    const tables = readOdbTables(decodePackage(embeddedHsqldbBinaryScriptOdbBytes()), { timeZone: 'Europe/London' });
+    expect(new Map(tables.map((table) => [table.tableName, table.rows.length]))).toEqual(EXPECTED_ROW_COUNTS);
+    expect(tables.find((table) => table.tableName === 'EMPLOYEES')?.rows[3]).toEqual([
+      { kind: 'number', value: 4 },
+      { kind: 'string', value: "Carol O'Brien" },
+      { kind: 'number', value: 91000.1 },
+      { kind: 'date', value: '2021-11-30' },
+      { kind: 'boolean', value: true },
+      { kind: 'number', value: 3000.75 },
+    ]);
+  });
+
+  it('decodes a real COMPRESSED-format database/script to exactly the same tables', () => {
+    const options = { timeZone: 'Europe/London' };
+    expect(readOdbTables(decodePackage(embeddedHsqldbCompressedScriptOdbBytes()), options)).toEqual(readOdbTables(decodePackage(embeddedHsqldbBinaryScriptOdbBytes()), options));
   });
 });
 
