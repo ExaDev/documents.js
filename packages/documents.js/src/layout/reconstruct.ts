@@ -15,6 +15,9 @@ import type {
   ContentSheetRow,
   ContentSlide,
   ContentSubpath,
+  ContentTable,
+  ContentTableCell,
+  ContentTableRow,
   ContentVector,
   LayoutDocument,
   LayoutEllipse,
@@ -37,13 +40,14 @@ import type { Alignment } from '../model/style';
 import { throwIfAborted } from '../ports/abort';
 import type { CellTypeInference, CellTypeInferenceSink } from './cell-typing';
 import { inferCellValue } from './cell-typing';
+import type { GridLattice } from './lattice';
+import { detectGridLattice, findColumnIndex, findRowIndex } from './lattice';
 
 export interface ReconstructOptions {
   readonly signal?: AbortSignal;
   // Called once per recovered spreadsheet cell whose rendered text was either RE-TYPED away from a plain string or deliberately DECLINED as too ambiguous to re-type -- reconstructSpreadsheet's own audit trail for a step that is, unavoidably, probabilistic. See src/layout/cell-typing.ts for the confidence bar each outcome is decided against. Cells whose text is not number/date/boolean-shaped at all are not reported: there was no inference to make, so there is nothing to audit.
   readonly onCellTypeInference?: CellTypeInferenceSink;
 }
-
 
 // LayoutDocument -> ContentDocument: PDF has no semantic paragraph/shape structure, just positioned glyphs and images, so both directions here are necessarily best-effort reconstructions from geometry -- this is the plan's most explicit fidelity trade-off, not a bug to be perfected later. Every threshold below is either the exact value the implementation plan specifies (cited inline) or a documented, deliberately bounded heuristic.
 
@@ -214,8 +218,11 @@ function buildSection(pages: readonly LayoutPage[], images: Record<string, Layou
   return { pageSize: { widthPt: pages[0]!.widthPt, heightPt: pages[0]!.heightPt }, margins: ZERO_MARGINS, blocks };
 }
 
+// Table recovery runs FIRST, because it decides what is left for everything after it: text inside a recovered lattice belongs to the table, not to the page's paragraph flow, and the lattice's own strokes belong to the table's structure, not to the recovered vector content. Both recoveries are no-ops on a page without the geometry to support them, so a text-only page produces exactly the blocks it always did. See the shared recovery section below for the full reasoning behind each gate.
 function reconstructPageBlocks(page: LayoutPage, images: Record<string, LayoutImageAsset>): ContentBlock[] {
-  const textItems = page.items.filter((i): i is LayoutText => i.kind === 'text');
+  const recoveredTable = recoverTable(page);
+  const consumedText = recoveredTable?.consumedText;
+  const textItems = page.items.filter((i): i is LayoutText => i.kind === 'text' && consumedText?.has(i) !== true);
   const imageItems = page.items.filter((i): i is LayoutImage => i.kind === 'image');
   const lines = clusterIntoLines(textItems);
   const paragraphs = clusterIntoParagraphs(lines);
@@ -230,7 +237,10 @@ function reconstructPageBlocks(page: LayoutPage, images: Record<string, LayoutIm
       positioned.push({ yPt: img.yPt, block: { kind: 'image', format: asset.format, base64: asset.base64, widthPt: img.widthPt, heightPt: img.heightPt } });
     }
   }
-  const recoveredVectors = recoverPageVectors(page);
+  if (recoveredTable !== undefined) {
+    positioned.push({ yPt: recoveredTable.topYPt, block: recoveredTable.table });
+  }
+  const recoveredVectors = recoverPageVectors(page, recoveredTable?.latticeItems ?? NO_ITEMS);
   if (recoveredVectors !== undefined) {
     positioned.push({ yPt: recoveredVectors.topYPt, block: recoveredVectors.block });
   }
@@ -310,8 +320,11 @@ export function reconstructPresentation(doc: LayoutDocument, options?: Reconstru
   return { kind: 'presentation', formatVersion: CONTENT_FORMAT_VERSION, metadata: doc.metadata, slides };
 }
 
+// Table and vector recovery run here on exactly the same terms as in reconstructPageBlocks above -- same detector, same gates, same exclusions -- differing only in the container each result has to be wrapped in: a slide holds nothing but ContentShapes, so a recovered table and a recovered drawing each become a shape framed at the geometry they were recovered from, rather than a bare block placed in a flow.
 function reconstructSlide(page: LayoutPage, images: Record<string, LayoutImageAsset>): ContentSlide {
-  const textItems = page.items.filter((i): i is LayoutText => i.kind === 'text');
+  const recoveredTable = recoverTable(page);
+  const consumedText = recoveredTable?.consumedText;
+  const textItems = page.items.filter((i): i is LayoutText => i.kind === 'text' && consumedText?.has(i) !== true);
   const imageItems = page.items.filter((i): i is LayoutImage => i.kind === 'image');
 
   const lines = clusterIntoLines(textItems);
@@ -324,16 +337,16 @@ function reconstructSlide(page: LayoutPage, images: Record<string, LayoutImageAs
       imageShapes.push(shape);
     }
   }
-
-  const recoveredVectors = recoverPageVectors(page);
+  const recoveredVectors = recoverPageVectors(page, recoveredTable?.latticeItems ?? NO_ITEMS);
   // Vectors paint behind everything else, matching src/layout/drawing.ts's own documented vectors-then-shapes fallback for a page whose true interleaving is unknown -- and it is unknown here for the same reason: a slide's shapes array carries no ordering field relating it to content recovered outside it.
   const vectorShapes: ContentShape[] = recoveredVectors === undefined ? [] : [wrapBlockInShape(recoveredVectors.block, { xPt: 0, yPt: 0, widthPt: page.widthPt, heightPt: page.heightPt })];
+  const tableShapes: ContentShape[] = recoveredTable === undefined ? [] : [wrapBlockInShape(recoveredTable.table, recoveredTable.frame)];
 
   // Images before text shapes in z-order (plan Step 10). notes recovers LayoutPage's own private page-dictionary entry (see pdf/write.ts/read.ts) when the source PDF was produced by this package's own pptxToPdf -- absent (falls back to '') for a PDF from any other producer, since nothing else would ever write it.
-  return { size: { widthPt: page.widthPt, heightPt: page.heightPt }, shapes: [...vectorShapes, ...imageShapes, ...textShapes], notes: page.notes ?? '' };
+  return { size: { widthPt: page.widthPt, heightPt: page.heightPt }, shapes: [...vectorShapes, ...imageShapes, ...tableShapes, ...textShapes], notes: page.notes ?? '' };
 }
 
-// A single recovered block as its own containing shape, with the zero insets and no rotation every other shape this module produces already uses -- a slide has no container for a bare block, and a drawing recovered from a page is exactly one block.
+// A single recovered block as its own containing shape, with the zero insets and no rotation every other shape this module produces already uses -- a slide has no container for a bare block, and a table or a drawing recovered from a page is exactly one block.
 function wrapBlockInShape(block: ContentBlock, frame: Box): ContentShape {
   return { frame, insetLeftPt: 0, insetTopPt: 0, insetRightPt: 0, insetBottomPt: 0, blocks: [block] };
 }
@@ -605,13 +618,13 @@ function layoutTextToShape(item: LayoutText, pageHeightPt: number): ContentShape
 }
 
 // ---------------------------------------------------------------------------
-// Shared: VECTOR recovery for the wordprocessing and presentation directions.
+// Shared: VECTOR and TABLE recovery for the wordprocessing and presentation directions.
 //
 // reconstructDrawing has always mapped every painted rect/ellipse/line/path back onto a ContentVector, because a drawing page has an array to put one in. reconstructWordprocessing and reconstructPresentation used to drop that geometry on the floor entirely -- filtering each page down to its text and image items and ignoring every stroke and fill -- purely because ContentSection.blocks and ContentSlide.shapes have no vector vocabulary of their own. That is a container gap, not a recovery gap: the classification is identical whichever direction asked for it, so both directions now run the SAME layoutItemToVector above and carry the result in a ContentEmbeddedObjectBlock (see src/model/embedded-drawing.ts for why that is the schema's own answer here rather than a widening of it).
 //
-// HONEST CONSEQUENCE, stated because it is a change in what these two directions emit: a PDF does not distinguish a stroke drawn to decorate from a stroke drawn as structure. A rule under a heading, an underline (pdf-codec writes one as a filled rectangle), and a table cell's own background fill are all genuine painted geometry, and are all now recovered as vectors rather than silently discarded. That is the intended behaviour -- discarding real content because it might be incidental is exactly the silent loss this package's conventions rule out -- but it does mean a reconstructed document carries more than its text alone.
+// HONEST CONSEQUENCE, stated because it is a change in what these two directions emit: a PDF does not distinguish a stroke drawn to decorate from a stroke drawn as structure. A rule under a heading, an underline (pdf-codec writes one as a filled rectangle), and a table cell's own background fill are all genuine painted geometry, and are all now recovered as vectors rather than silently discarded. That is the intended behaviour -- discarding real content because it might be incidental is exactly the silent loss this package's conventions rule out -- but it does mean a reconstructed document carries more than its text alone. The one case deliberately NOT double-counted is a table's own gridlines: when the table recovery below claims a lattice, the strokes that formed it are excluded from vector recovery, so the structure is reported once, as a table, rather than twice.
 //
-// WRITE-SIDE STATUS, so this is not mistaken for an end-to-end feature: the recovered vectors reach the ContentDocument pivot only -- exposed through pdfToDocx/pdfToPptx's own onDocument callback and the DocumentConverter port's ConversionResult.package -- because none of the four OOXML/ODF wordprocessing/presentation builders can write vector shapes at all yet: there is no DrawingML preset/custom-geometry writer under src/edit/docx/ or src/edit/pptx/, and buildOdtPackage/buildOdpPackage have no draw:rect/draw:ellipse/draw:line/draw:path path either (src/edit/odg/ has those, but only for a drawing page). A caller wanting the recovered vectors as a real file today can hand the nested drawing document straight to buildOdgPackage. Writing them into docx/pptx/odt/odp is a genuine, separate feature -- the OOXML/ODF-shape mirror of src/edit/odg/ -- not a loose end of this one.
+// WRITE-SIDE STATUS, so this is not mistaken for an end-to-end feature: the recovered table genuinely reaches the output bytes for every target (buildDocxPackage/buildOdtPackage append a real table, buildPptxPackage/buildOdpPackage add a real slide table). The recovered VECTORS reach the ContentDocument pivot only -- exposed through pdfToDocx/pdfToPptx's own onDocument callback and the DocumentConverter port's ConversionResult.package -- because none of the four OOXML/ODF wordprocessing/presentation builders can write vector shapes at all yet: there is no DrawingML preset/custom-geometry writer under src/edit/docx/ or src/edit/pptx/, and buildOdtPackage/buildOdpPackage have no draw:rect/draw:ellipse/draw:line/draw:path path either (src/edit/odg/ has those, but only for a drawing page). A caller wanting the recovered vectors as a real file today can hand the nested drawing document straight to buildOdgPackage. Writing them into docx/pptx/odt/odp is a genuine, separate feature -- the OOXML/ODF-shape mirror of src/edit/odg/ -- not a loose end of this one.
 // ---------------------------------------------------------------------------
 
 // A vector's own topmost edge in PDF space (y up), for positioning a recovered drawing among the text blocks around it. Every kind but 'line' carries a top-left/y-down frame; a line carries two bare endpoints instead.
@@ -624,10 +637,13 @@ interface RecoveredVectors {
   readonly topYPt: number; // PDF-space y of the topmost recovered vector, for ordering against the page's other content
 }
 
-// Every vector primitive on a page, in paint order, as one embedded drawing block -- or undefined when the page has none, so a text-only page's output is byte-identical to what it was before this recovery existed.
-function recoverPageVectors(page: LayoutPage): RecoveredVectors | undefined {
+// Every vector primitive on a page, in paint order, as one embedded drawing block -- or undefined when the page has none, so a text-only page's output is byte-identical to what it was before this recovery existed. `excluded` carries the items already claimed as a table's own gridlines.
+function recoverPageVectors(page: LayoutPage, excluded: ReadonlySet<LayoutItem>): RecoveredVectors | undefined {
   const vectors: ContentVector[] = [];
   for (const item of page.items) {
+    if (excluded.has(item)) {
+      continue;
+    }
     const vector = layoutItemToVector(item, page.heightPt);
     if (vector !== undefined) {
       // paintOrder is the recovery index, exactly as reconstructDrawPage stamps it: a LayoutPage's items ARE its paint order, front-to-back by array position.
@@ -641,145 +657,79 @@ function recoverPageVectors(page: LayoutPage): RecoveredVectors | undefined {
   return { block: buildDrawingBlock({ widthPt: page.widthPt, heightPt: page.heightPt }, vectors), topYPt: page.heightPt - topYDownPt };
 }
 
+// --- Table recovery, gated on an unambiguously detected gridline lattice ---------------------------------
+//
+// A ContentTable is synthesized ONLY from a real, drawn gridline lattice -- the identical detector, thresholds and span-consistency check reconstructSpreadsheet already gates its own cell-boundary recovery on (src/layout/lattice.ts). Text alignment and wide inter-word gaps are deliberately NOT accepted as evidence: several left-aligned lines with a tab-sized gap between their columns are indistinguishable, from geometry alone, from a genuinely tabbed paragraph, an indented code sample, or a two-column page layout, so building a table out of one would be inventing structure the source never had rather than recovering structure it did. That distinction is the whole point of the gate: a drawn lattice IS the table's structure, present in the file as real geometry; alignment merely resembles one.
+//
+// A lattice with no text inside it at all is rejected too. A grid of empty boxes is far more likely a decorative frame, a chart's plot area, or a form's field outlines than a table, and recovering it as an empty table would add a structure carrying nothing.
+
+interface RecoveredTable {
+  readonly table: ContentTable;
+  readonly frame: Box; // top-left/y-down, for the presentation direction's own containing shape
+  readonly topYPt: number; // PDF-space y of the lattice's top edge, for the wordprocessing direction's own block ordering
+  readonly consumedText: ReadonlySet<LayoutText>; // text now living inside the table, and therefore removed from paragraph/block clustering
+  readonly latticeItems: ReadonlySet<LayoutItem>; // the strokes that formed the lattice, excluded from vector recovery
+}
+
+// One cell's own text, as one ContentParagraph per recovered line. A table cell's text genuinely can wrap across lines (unlike a spreadsheet cell's -- see buildGridFromTextClustering's own note), and geometry alone cannot say whether two stacked lines in a cell were one wrapped paragraph or two separate ones, so each line stays its own paragraph rather than being joined on a guess. This is the same choice reconstructPresentation's own blockToShape already makes for a slide text box, for the same reason.
+function cellBlocksFromItems(items: readonly LayoutText[]): ContentBlock[] {
+  return clusterIntoLines(items).map(lineToParagraph);
+}
+
+function recoverTable(page: LayoutPage): RecoveredTable | undefined {
+  const lattice = detectGridLattice(page.items);
+  if (lattice === undefined) {
+    return undefined;
+  }
+  const rowCount = lattice.rowBoundariesDescPt.length - 1;
+  const columnCount = lattice.columnBoundariesAscPt.length - 1;
+  const groups = new Map<string, LayoutText[]>();
+  const consumedText = new Set<LayoutText>();
+  for (const item of page.items) {
+    if (item.kind !== 'text') {
+      continue;
+    }
+    const row = findRowIndex(lattice.rowBoundariesDescPt, item.yPt);
+    const column = findColumnIndex(lattice.columnBoundariesAscPt, item.xPt);
+    if (row === undefined || column === undefined) {
+      continue; // outside the lattice entirely -- a caption, a heading above the table
+    }
+    addToGroup(groups, row, column, item);
+    consumedText.add(item);
+  }
+  if (consumedText.size === 0) {
+    return undefined; // an empty lattice is decoration, not a table -- see this section's own note
+  }
+
+  const columnWidthsPt: number[] = [];
+  for (let j = 0; j < columnCount; j++) {
+    columnWidthsPt.push(lattice.columnBoundariesAscPt[j + 1]! - lattice.columnBoundariesAscPt[j]!);
+  }
+  const rows: ContentTableRow[] = [];
+  for (let i = 0; i < rowCount; i++) {
+    const cells: ContentTableCell[] = [];
+    for (let j = 0; j < columnCount; j++) {
+      // A cell with no text recovered inside it is emitted as a genuinely empty cell rather than skipped: a ContentTableRow's cells are positional, so dropping one would shift every cell after it into the wrong column.
+      cells.push({ blocks: cellBlocksFromItems(groups.get(groupKey(i, j)) ?? []) });
+    }
+    rows.push({ cells, heightPt: lattice.rowBoundariesDescPt[i]! - lattice.rowBoundariesDescPt[i + 1]! });
+  }
+
+  const leftXPt = lattice.columnBoundariesAscPt[0]!;
+  const rightXPt = lattice.columnBoundariesAscPt[columnCount]!;
+  const topYPt = lattice.rowBoundariesDescPt[0]!;
+  const bottomYPt = lattice.rowBoundariesDescPt[rowCount]!;
+  const frame = flipY({ xPt: leftXPt, yPt: bottomYPt, widthPt: rightXPt - leftXPt, heightPt: topYPt - bottomYPt }, page.heightPt);
+  return { table: { kind: 'table', rows, columnWidthsPt }, frame, topYPt, consumedText, latticeItems: lattice.sourceItems };
+}
+
+const NO_ITEMS: ReadonlySet<LayoutItem> = new Set();
+
 // ---------------------------------------------------------------------------
 // PDF -> ods (spreadsheet): recovers what was printed, not what was entered. Every recovered cell keeps its own rendered string verbatim in the REQUIRED displayText field, and additionally gets a heuristically re-typed `value` (number/percentage/currency/date/boolean) wherever src/layout/cell-typing.ts finds exactly one defensible reading of that string -- an explicitly PROBABILISTIC step, not a fidelity guarantee, since a rendered PDF genuinely never carries a cell's own typed value and a numeric-looking string may always have been a genuine string. Read cell-typing.ts's own module doc before relying on a re-typed value: it states the confidence bar, and every re-typing decision (including a deliberate refusal on a named ambiguity) is reported through ReconstructOptions.onCellTypeInference. A formula is still never claimed -- nothing about a rendered value implies one was computed. Two detection paths, tried in this order per page: (1) a real gridline lattice -- a genuine printed spreadsheet with gridlines enabled draws exactly this, see layout/sheets.ts's own renderGridlines -- is used DIRECTLY as cell boundaries, no inference needed; (2) absent a lattice, text is clustered into a grid from geometry alone, reusing this module's own clusterIntoLines for rows (a spreadsheet cell's own text is never wrapped across lines -- sheets.ts's own module doc -- so a text line already IS a row) and a parallel x-position recurrence clustering for columns, generalizing clusterIntoParagraphs's own single dominantLeftX to several recurring column anchors. Column widths, row heights, and a sheet's own page size are all genuinely MEASURED from recovered geometry, never invented; there is no attempt to recover print INTENT (range/scale/repeat-rows) that a rendered page carries no trace of at all.
 // ---------------------------------------------------------------------------
 
-// --- Path 1: gridline lattice detection -----------------------------------------------------------
-
-interface LineSegment {
-  readonly x1Pt: number;
-  readonly y1Pt: number;
-  readonly x2Pt: number;
-  readonly y2Pt: number;
-}
-
-// A gridline written by this package's own convertSpreadsheetToLayout (src/layout/sheets.ts's renderGridlines) survives a real PDF round trip as a generic LayoutPath, not a LayoutLine: pdf-codec's writeLine (content-write.ts) writes an m/l/S sequence that reads back through pdf-codec's own interpret.ts's general path tracking as a single-subpath, single-line-segment, stroke-only LayoutPath -- readPdf never reconstructs a 'line' kind item at all (a pre-existing, already-documented gap; see the README's own interpret.ts gotcha). Both shapes are accepted here so a hand-built LayoutDocument using genuine LayoutLine items (this module's own test fixtures, or a LayoutDocument from a producer other than readPdf) and a real PDF-round-tripped LayoutDocument both detect identically.
-function extractLineCandidates(items: readonly LayoutItem[]): LineSegment[] {
-  const segments: LineSegment[] = [];
-  for (const item of items) {
-    if (item.kind === 'line') {
-      segments.push({ x1Pt: item.x1Pt, y1Pt: item.y1Pt, x2Pt: item.x2Pt, y2Pt: item.y2Pt });
-      continue;
-    }
-    if (item.kind === 'path' && item.stroke !== undefined && item.subpaths.length === 1) {
-      const subpath = item.subpaths[0]!;
-      if (subpath.segments.length === 1 && subpath.segments[0]!.kind === 'line') {
-        const segment = subpath.segments[0]!;
-        segments.push({ x1Pt: subpath.startXPt, y1Pt: subpath.startYPt, x2Pt: segment.xPt, y2Pt: segment.yPt });
-      }
-    }
-  }
-  return segments;
-}
-
-// Tolerance for treating a segment as exactly horizontal/vertical -- generous enough to absorb the sub-point rounding a real PDF content-stream number format (4 decimal places, pdf-codec's serialize.ts) introduces on a round trip, tight enough that a genuinely diagonal line (a chart axis, a decorative rule) is never misread as a gridline.
-const AXIS_ALIGNMENT_TOLERANCE_PT = 0.5;
-
-// A stray tick mark or cell-border fragment is not evidence of a page-spanning gridline lattice -- only a segment at least this long is considered a lattice candidate at all.
-const MIN_GRIDLINE_LENGTH_PT = 4;
-
-interface AxisLine {
-  readonly position: number; // y for a horizontal candidate, x for a vertical one
-  readonly spanPt: number; // the segment's own length along its own axis
-}
-
-function classifyAxisLine(seg: LineSegment): ({ readonly axis: 'horizontal' | 'vertical' } & AxisLine) | undefined {
-  const dx = Math.abs(seg.x2Pt - seg.x1Pt);
-  const dy = Math.abs(seg.y2Pt - seg.y1Pt);
-  if (dy <= AXIS_ALIGNMENT_TOLERANCE_PT && dx >= MIN_GRIDLINE_LENGTH_PT) {
-    return { axis: 'horizontal', position: (seg.y1Pt + seg.y2Pt) / 2, spanPt: dx };
-  }
-  if (dx <= AXIS_ALIGNMENT_TOLERANCE_PT && dy >= MIN_GRIDLINE_LENGTH_PT) {
-    return { axis: 'vertical', position: (seg.x1Pt + seg.x2Pt) / 2, spanPt: dy };
-  }
-  return undefined;
-}
-
-// Positions within this of each other are the same drawn boundary, not two distinct ones -- generous enough to absorb the same sub-point PDF rounding AXIS_ALIGNMENT_TOLERANCE_PT above already accounts for.
-const POSITION_DEDUPE_TOLERANCE_PT = 0.5;
-
-// Merges near-duplicate positions (keeping the largest observed span for each -- generous, never lossy) and sorts them: descending for rows (PDF y grows upward, so the FIRST row boundary is the largest y, i.e. the top of the grid), ascending for columns (left to right).
-function dedupeAxisLines(lines: readonly AxisLine[], descending: boolean): AxisLine[] {
-  const sorted = [...lines].sort((a, b) => (descending ? b.position - a.position : a.position - b.position));
-  const result: { position: number; spanPt: number }[] = [];
-  for (const candidate of sorted) {
-    const last = result[result.length - 1];
-    if (last !== undefined && Math.abs(candidate.position - last.position) <= POSITION_DEDUPE_TOLERANCE_PT) {
-      last.spanPt = Math.max(last.spanPt, candidate.spanPt);
-    } else {
-      result.push({ position: candidate.position, spanPt: candidate.spanPt });
-    }
-  }
-  return result;
-}
-
-// At least 2 bounded rows/columns (3 boundary lines) before this counts as a lattice at all -- fewer is a page border or a couple of decorative rules, not a printed grid.
-const MIN_GRIDLINE_COUNT_PER_AXIS = 3;
-
-// A genuine gridline lattice draws every line the identical full grid width/height (layout/sheets.ts's own renderGridlines) -- so requiring most lines on an axis to reach close to that axis's own longest observed span is what actually distinguishes "these lines form a grid" from "these are just a few horizontal and vertical strokes that happen to coexist on the page" (a chart axis, an unrelated table border, a couple of decorative rules). 0.9 is generous enough to tolerate the sub-point rounding a real round trip introduces while still rejecting a scatter of unrelated short strokes.
-const GRID_SPAN_CONSISTENCY_RATIO = 0.9;
-
-function isRegularLattice(lines: readonly AxisLine[]): boolean {
-  if (lines.length < MIN_GRIDLINE_COUNT_PER_AXIS) {
-    return false;
-  }
-  const maxSpanPt = Math.max(...lines.map((l) => l.spanPt));
-  const consistentCount = lines.filter((l) => l.spanPt >= maxSpanPt * GRID_SPAN_CONSISTENCY_RATIO).length;
-  return consistentCount >= MIN_GRIDLINE_COUNT_PER_AXIS;
-}
-
-interface GridLattice {
-  readonly rowBoundariesDescPt: readonly number[]; // top-to-bottom, PDF y descending
-  readonly columnBoundariesAscPt: readonly number[]; // left-to-right, PDF x ascending
-}
-
-function detectGridLattice(items: readonly LayoutItem[]): GridLattice | undefined {
-  const horizontal: AxisLine[] = [];
-  const vertical: AxisLine[] = [];
-  for (const seg of extractLineCandidates(items)) {
-    const classified = classifyAxisLine(seg);
-    if (classified === undefined) {
-      continue;
-    }
-    (classified.axis === 'horizontal' ? horizontal : vertical).push(classified);
-  }
-  const rowBoundaries = dedupeAxisLines(horizontal, true);
-  const columnBoundaries = dedupeAxisLines(vertical, false);
-  if (!isRegularLattice(rowBoundaries) || !isRegularLattice(columnBoundaries)) {
-    return undefined;
-  }
-  return { rowBoundariesDescPt: rowBoundaries.map((l) => l.position), columnBoundariesAscPt: columnBoundaries.map((l) => l.position) };
-}
-
-// Only the OUTER edge of the whole lattice gets any tolerance -- generous enough to keep an item sitting just past the grid's own outermost boundary (sub-point PDF-round-trip rounding) inside it. An INTERIOR boundary gets none at all: giving one would open an ambiguous zone straddling two adjacent bands (a real, caught bug -- a column narrow enough that CELL_TEXT_PADDING_PT-scale tolerance on both sides of its own shared boundary let a neighbouring column's own text match the WRONG band first). A cell's own text sits comfortably away from its own band's far edge under ordinary conditions (near the bottom of its own row, near the left of its own column, per sheets.ts's own vertical-bottom alignment and per-cell inset), so a bare half-open partition at every interior boundary is both correct and unambiguous.
-const OUTER_EDGE_TOLERANCE_PT = 3;
-
-function findRowIndex(rowBoundariesDescPt: readonly number[], yPt: number): number | undefined {
-  const lastIndex = rowBoundariesDescPt.length - 1;
-  if (yPt > rowBoundariesDescPt[0]! + OUTER_EDGE_TOLERANCE_PT || yPt < rowBoundariesDescPt[lastIndex]! - OUTER_EDGE_TOLERANCE_PT) {
-    return undefined;
-  }
-  for (let i = 0; i < lastIndex; i++) {
-    if (yPt > rowBoundariesDescPt[i + 1]!) {
-      return i;
-    }
-  }
-  return lastIndex - 1;
-}
-
-function findColumnIndex(columnBoundariesAscPt: readonly number[], xPt: number): number | undefined {
-  const lastIndex = columnBoundariesAscPt.length - 1;
-  if (xPt < columnBoundariesAscPt[0]! - OUTER_EDGE_TOLERANCE_PT || xPt > columnBoundariesAscPt[lastIndex]! + OUTER_EDGE_TOLERANCE_PT) {
-    return undefined;
-  }
-  for (let j = 0; j < lastIndex; j++) {
-    if (xPt < columnBoundariesAscPt[j + 1]!) {
-      return j;
-    }
-  }
-  return lastIndex - 1;
-}
+// --- Path 1: gridline lattice detection (src/layout/lattice.ts, shared with the wordprocessing/presentation table recovery above) -----------------------------------------------------------
 
 // --- Shared: joining several LayoutText items already known to belong to one recovered cell, and turning row/column groups into ContentSheetCell[] -----
 

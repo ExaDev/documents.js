@@ -6,7 +6,7 @@ import { populateOdtTable, populateParagraph } from '../odt/content';
 import { createOdp } from './editor';
 import type { OdpSlide } from './slide';
 
-// ContentDocument -> a fresh odp Package, built entirely through the same edit/odp/* live-view primitives a caller would use by hand -- the odp-side counterpart to src/edit/pptx/content.ts's buildPptxPackage, and the write-side counterpart to src/odf/odp/read.ts's readOdpContent. Used by the PDF -> odp conversion path (src/layout/reconstruct.ts's own reconstructPresentation never produces a table block for a shape) and by the odp<->pptx bridge, which does.
+// ContentDocument -> a fresh odp Package, built entirely through the same edit/odp/* live-view primitives a caller would use by hand -- the odp-side counterpart to src/edit/pptx/content.ts's buildPptxPackage, and the write-side counterpart to src/odf/odp/read.ts's readOdpContent. Used by the PDF -> odp conversion path and by the odp<->pptx bridge. Both now genuinely produce table blocks: reconstructPresentation synthesizes one whenever it detects a real drawn gridline lattice on a page (src/layout/reconstruct.ts's own gate), so the table branch below is reachable from either caller, not only the bridge.
 //
 // A shape's rotationDeg IS written back here (unlike buildPptxPackage's own documented gap for pptx, which has no a:xfrm/@rot setter yet) -- OdpShape.rotationDeg exists specifically because this task called for genuine draw:transform support, reusing odf.js's own transform.ts machinery (see shape.ts's own buildTransformAttr).
 export function buildOdpPackage(content: ContentDocument): Package {
