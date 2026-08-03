@@ -1,8 +1,9 @@
 import type { Package, XmlNode } from 'odf.js';
-import { bytesToBase64, el } from 'odf.js';
+import { bytesToBase64, decodePackage, el } from 'odf.js';
 import { describe, expect, it } from 'vitest';
 import { HsqldbScriptParseError } from '../hsqldb/script';
 import { RICH_FIXTURE_FBK_BASE64 } from '../test-support/firebird';
+import { embeddedHsqldbMultiIndexOdbBytes } from '../test-support/odb';
 import { OdbNoEmbeddedDataSourceError, OdbUnsupportedFormatError, readOdbTables } from './read';
 
 // Mirrors odf.js's own src/typed/odb/read.test.ts fixture-building style (databaseContentPart/manifestPart) -- readOdbTables sits directly on top of readOdbInventory, so its own tests build the identical minimal Package shape rather than a real .odb file. src/convert/odb.test.ts covers the genuine byte-level odbToXlsx/odbToCsv round trip separately.
@@ -239,5 +240,21 @@ describe('readOdbTables: CACHED-table routing (database/data present)', () => {
       'database/data': { kind: 'binary', base64: bytesToBase64(syntheticCachedTableDataBytes()) },
     });
     expect(() => readOdbTables(pkg)).toThrow(/database\/properties/);
+  });
+
+  it('decodes a real multi-index CACHED-table .odb end to end (three-, two-, and single-index tables in one package)', () => {
+    const tables = readOdbTables(decodePackage(embeddedHsqldbMultiIndexOdbBytes()));
+    const rowCounts = new Map(tables.map((table) => [table.tableName, table.rows.length]));
+    expect(rowCounts.get('ORDERS')).toBe(5);
+    expect(rowCounts.get('SINGLE_IDX')).toBe(2);
+    expect(rowCounts.get('NO_PK')).toBe(3);
+    expect(tables.find((table) => table.tableName === 'ORDERS')?.rows[3]).toEqual([
+      { kind: 'number', value: 4 },
+      { kind: 'string', value: 'A-004' },
+      { kind: 'string', value: "O'Connor Region" },
+      { kind: 'number', value: 0 },
+      { kind: 'date', value: '2023-12-25' },
+      { kind: 'boolean', value: true },
+    ]);
   });
 });

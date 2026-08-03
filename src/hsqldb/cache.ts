@@ -18,6 +18,9 @@ export interface HsqldbCacheFileInfo {
 
 const SUPPORTED_COMPATIBLE_VERSION_PREFIXES: readonly string[] = ['1.7.', '1.8.'];
 
+// org.hsqldb.DiskNode.SIZE_IN_BYTE -- one row's own AVL node record for ONE index: iBalance/iLeft/iRight/iParent, four 4-byte big-endian row positions.
+const DISK_NODE_SIZE_BYTES = 16;
+
 // A database/properties part is a plain Java Properties text file: a '#'-prefixed banner line, a '#'-prefixed timestamp comment line, then ordinary `key=value` lines (java.util.Properties.store()'s own default format, confirmed against a real generated database/properties). Only the two facts this decoder actually needs are extracted: hsqldb.cache_file_scale (the .data file's own storage-unit scale) and hsqldb.compatible_version (this decoder's own version-scope guard).
 export function parseHsqldbProperties(text: string): HsqldbCacheFileInfo {
   const props = new Map<string, string>();
@@ -44,6 +47,14 @@ export function parseHsqldbProperties(text: string): HsqldbCacheFileInfo {
 
 const SET_TABLE_INDEX_RE = /^SET\s+TABLE\s+("(?:[^"]|"")*"|[A-Za-z_][A-Za-z0-9_$#]*)\s+INDEX'((?:[^']|'')*)'\s*$/i;
 
+// Everything a CACHED table's own SET TABLE...INDEX line tells this decoder: where its row tree starts, and how many 16-byte AVL node records every row carries ahead of its own column data.
+export interface HsqldbTableIndexRoots {
+  // Index 0's own root row position -- the primary key's index, or (for a table with no PRIMARY KEY declared at all) HSQLDB's own internal row-position index. Always the FIRST token, since org.hsqldb.Table.getIndexRoots writes indexList in order.
+  readonly rootPosition: number;
+  // The table's own index count, i.e. how many 16-byte org.hsqldb.DiskNode records precede a row's column data (org.hsqldb.CachedRow.getRealSize: `getIndexCount() * 16 + rowOutput.getSize(row)`).
+  readonly indexCount: number;
+}
+
 function unquoteIdentifier(raw: string): string {
   if (raw.length >= 2 && raw.startsWith('"') && raw.endsWith('"')) {
     return raw.slice(1, -1).replace(/""/g, '"');
@@ -51,9 +62,11 @@ function unquoteIdentifier(raw: string): string {
   return raw;
 }
 
-// Scans database/script's own TEXT-format bytes (already decoded to a string by src/hsqldb/script.ts's caller) for every `SET TABLE <name> INDEX'<tokens>'` line -- org.hsqldb.DatabaseScript.getIndexRootsDDL's own output format, written once per non-empty CACHED table at every checkpoint (org.hsqldb.Table.getIndexRoots(): a space-separated list of one root row-position per table index, index 0 (the primary key, or HSQLDB's own internal row-position index for a table with none declared) first, followed by the table's own identity-sequence value -- confirmed byte-for-byte against a real generated script, including the format's own lack of a space between "INDEX" and the opening quote). A table with zero rows gets NO such line at all (org.hsqldb.DatabaseScript's own writer skips a CACHED table entirely when `table.isEmpty(session)`, confirmed against a real fixture) -- callers treat "no entry in this map" as "zero rows", not as an error. Only a single-index table (exactly two tokens: one root position, one identity value) is supported; a table carrying additional indexes (an explicit CREATE INDEX, or a UNIQUE constraint's own auto-generated one, which org.hsqldb.DatabaseScript's own DDL-writing loop skips re-emitting as a CREATE INDEX statement since its name is a "reserved" system name) writes more root tokens than this decoder can attribute to a specific index without knowing the table's own indexCount, which is not reliably recoverable from the script's own DDL text alone -- a documented, honest scope boundary (see the README's Gotchas entry), not a guess.
-export function parseHsqldbIndexRoots(scriptText: string): ReadonlyMap<string, number> {
-  const roots = new Map<string, number>();
+// Scans database/script's own TEXT-format bytes (already decoded to a string by src/hsqldb/script.ts's caller) for every `SET TABLE <name> INDEX'<tokens>'` line -- org.hsqldb.DatabaseScript.getIndexRootsDDL's own output format, written once per non-empty CACHED table at every checkpoint (org.hsqldb.Table.getIndexRoots(): a space-separated list of one root row-position per table index, index 0 (the primary key, or HSQLDB's own internal row-position index for a table with none declared) first, followed by the table's own identity-sequence value -- confirmed byte-for-byte against a real generated script, including the format's own lack of a space between "INDEX" and the opening quote). A table with zero rows gets NO such line at all (org.hsqldb.DatabaseScript's own writer skips a CACHED table entirely when `table.isEmpty(session)`, confirmed against a real fixture) -- callers treat "no entry in this map" as "zero rows", not as an error.
+//
+// The token list is POSITIONAL, and is the only place a table's own index count is recorded: org.hsqldb.Table.setIndexRoots(String) -- the engine's own reader for this exact line -- reads precisely getIndexCount() integers and then one trailing identity-sequence bigint, so `tokens.length - 1` IS the index count, whatever mix of primary key, UNIQUE-constraint-generated index, and explicit CREATE INDEX produced it. That matters because a row's own on-disk record carries one 16-byte AVL node per index ahead of its column data (org.hsqldb.CachedRow.getRealSize/CachedRow(Table, RowInputInterface)), so the column data's offset depends on the count and nothing else. An earlier revision of this decoder rejected any multi-index table outright, on the premise that the index count could only come from counting CREATE INDEX statements in the DDL (where a UNIQUE constraint's own auto-generated index genuinely is invisible) -- that premise was simply wrong about where the count is recorded, and this line carries it directly. Verified against a real HSQLDB 1.8.0.10 fixture with a three-index table (PRIMARY KEY + UNIQUE(CODE) + CREATE INDEX -> `INDEX'136 32 240 0'`), a two-index table with no primary key at all (`INDEX'664 664 0'`), and a single-index table (`INDEX'528 0'`) -- see src/test-support/odb.ts and src/hsqldb/cache.test.ts.
+export function parseHsqldbIndexRoots(scriptText: string): ReadonlyMap<string, HsqldbTableIndexRoots> {
+  const roots = new Map<string, HsqldbTableIndexRoots>();
   for (const rawLine of scriptText.split('\n')) {
     const match = SET_TABLE_INDEX_RE.exec(rawLine.trim());
     if (match === null) {
@@ -63,25 +76,27 @@ export function parseHsqldbIndexRoots(scriptText: string): ReadonlyMap<string, n
     const tokensText = match[2] ?? '';
     const tableName = unquoteIdentifier(rawName).toUpperCase();
     const tokens = tokensText.trim().length === 0 ? [] : tokensText.trim().split(/\s+/);
-    if (tokens.length !== 2) {
-      throw new HsqldbRowFormatError(`table "${tableName}" declares ${Math.max(tokens.length - 1, 0)} index root(s) in its SET TABLE...INDEX line -- only a single-index (primary-key-only) CACHED table is supported`);
+    if (tokens.length < 2) {
+      throw new HsqldbRowFormatError(`table "${tableName}"'s SET TABLE...INDEX line has ${tokens.length} token(s) -- every such line carries at least one index root position followed by the table's own identity-sequence value`);
     }
+    const indexCount = tokens.length - 1;
     const rootToken = tokens[0] ?? '';
-    const rootPos = Number(rootToken);
-    if (!Number.isInteger(rootPos)) {
+    const rootPosition = Number(rootToken);
+    if (!Number.isInteger(rootPosition)) {
       throw new HsqldbRowFormatError(`table "${tableName}"'s SET TABLE...INDEX line has a non-integer root position "${rootToken}"`);
     }
-    roots.set(tableName, rootPos);
+    roots.set(tableName, { rootPosition, indexCount });
   }
   return roots;
 }
 
-// A CACHED table's own row-store record, exactly as org.hsqldb.CachedRow.write(RowOutputInterface)/org.hsqldb.rowio.RowOutputBase.writeRow lay it out and org.hsqldb.persist.DataFileCache.readObject/org.hsqldb.CachedRow(Table, RowInputInterface) read it back: a 4-byte big-endian storageSize (the row's own padded on-disk length, org.hsqldb.persist.DataFileCache.add(): getRealSize() rounded UP to the next multiple of 8), then one 16-byte AVL node record per table index (org.hsqldb.DiskNode.SIZE_IN_BYTE: iBalance/iLeft/iRight/iParent, each a 4-byte big-endian row *position* -- not a byte offset; 0 on disk means "no such child/parent", never a real row since position 0 falls inside the file's own 32-byte header), then the row's own column data (src/hsqldb/rowformat.ts's readHsqldbColumnValue, one call per column in table-declared order), then zero padding out to storageSize. This decoder only ever reads the FIRST node record (index 0, the primary index, four readInt32 calls below) -- consistent with parseHsqldbIndexRoots' own single-index-table scope -- so it does not need indexCount for anything beyond that implicit "exactly one" assumption.
+// A CACHED table's own row-store record, exactly as org.hsqldb.CachedRow.write(RowOutputInterface)/org.hsqldb.rowio.RowOutputBase.writeRow lay it out and org.hsqldb.persist.DataFileCache.readObject/org.hsqldb.CachedRow(Table, RowInputInterface) read it back: a 4-byte big-endian storageSize (the row's own padded on-disk length, org.hsqldb.persist.DataFileCache.add(): getRealSize() rounded UP to the next multiple of 8), then one 16-byte AVL node record PER TABLE INDEX (org.hsqldb.DiskNode.SIZE_IN_BYTE: iBalance/iLeft/iRight/iParent, each a 4-byte big-endian row *position* -- not a byte offset; 0 on disk means "no such child/parent", never a real row since position 0 falls inside the file's own 32-byte header), then the row's own column data (src/hsqldb/rowformat.ts's readHsqldbColumnValue, one call per column in table-declared order), then zero padding out to storageSize. Node records appear in index order, so index 0's is always first; this decoder reads that one for its own iLeft/iRight and skips straight past the rest, whose trees span the identical live row set in a different order and are therefore redundant for row recovery.
 
-// Walks a CACHED table's own AVL row-position tree, rooted at rootPos, entirely by following each row's own persisted iLeft/iRight child *positions* recursively -- never by comparing key values, so this walker has no notion of the table's own primary-key ordering or comparison semantics, only of "which row is this row's left/right child". This is also why no free-list/deleted-row bookkeeping is needed anywhere in this decoder: a deleted row is unlinked from its table's tree by the engine itself, well before its own space is ever added to the free-block list and potentially reused, so a traversal rooted at the tree's own CURRENT root can only ever reach rows that are still genuinely live -- a documented, deliberate simplification: this decoder never parses org.hsqldb.persist.DataFileBlockManager's own free-block structure at all (see the README's Gotchas entry). Produces rows in the tree's own in-order sequence (left subtree, then the row itself, then right subtree) -- for an ascending-INTEGER primary key inserted in order, as most real tables are, this reads back in the same order the rows were originally inserted, though nothing here relies on that being true in general.
-export function readHsqldbCachedTableRows(dataBytes: Uint8Array<ArrayBuffer>, rootPos: number, cacheFileScale: number, columns: readonly HsqldbColumn[]): (readonly ContentCellValue[])[] {
+// Walks a CACHED table's own AVL row-position tree, rooted at roots.rootPosition (index 0's root), entirely by following each row's own persisted iLeft/iRight child *positions* recursively -- never by comparing key values, so this walker has no notion of the table's own primary-key ordering or comparison semantics, only of "which row is this row's left/right child". This is also why no free-list/deleted-row bookkeeping is needed anywhere in this decoder: a deleted row is unlinked from its table's tree by the engine itself, well before its own space is ever added to the free-block list and potentially reused, so a traversal rooted at the tree's own CURRENT root can only ever reach rows that are still genuinely live -- a documented, deliberate simplification: this decoder never parses org.hsqldb.persist.DataFileBlockManager's own free-block structure at all (see the README's Gotchas entry). Produces rows in the tree's own in-order sequence (left subtree, then the row itself, then right subtree) -- for an ascending-INTEGER primary key inserted in order, as most real tables are, this reads back in the same order the rows were originally inserted, though nothing here relies on that being true in general.
+export function readHsqldbCachedTableRows(dataBytes: Uint8Array<ArrayBuffer>, roots: HsqldbTableIndexRoots, cacheFileScale: number, columns: readonly HsqldbColumn[]): (readonly ContentCellValue[])[] {
   const typeCodes = columns.map((column) => resolveHsqldbTypeCode(column.type));
   const results: ContentCellValue[][] = [];
+  const trailingNodeBytes = (roots.indexCount - 1) * DISK_NODE_SIZE_BYTES;
 
   function visit(pos: number): void {
     if (pos <= 0) {
@@ -101,6 +116,7 @@ export function readHsqldbCachedTableRows(dataBytes: Uint8Array<ArrayBuffer>, ro
     const iLeft = cursor.readInt32();
     const iRight = cursor.readInt32();
     cursor.readInt32(); // iParent -- unused for the same reason: this walker only ever descends, it never needs to climb back up.
+    cursor.position += trailingNodeBytes; // every FURTHER index's own node record for this same row, skipped wholesale: each one's tree reaches exactly the same live rows this one does.
     const values = columns.map((_column, index) => {
       const typeCode = typeCodes[index];
       if (typeCode === undefined) {
@@ -116,7 +132,7 @@ export function readHsqldbCachedTableRows(dataBytes: Uint8Array<ArrayBuffer>, ro
     visit(iRight);
   }
 
-  visit(rootPos);
+  visit(roots.rootPosition);
   return results;
 }
 
@@ -125,11 +141,11 @@ export function decodeHsqldbCachedTables(tables: readonly HsqldbTable[], scriptT
   const { cacheFileScale } = parseHsqldbProperties(propertiesText);
   const roots = parseHsqldbIndexRoots(scriptText);
   return tables.map((table) => {
-    const rootPos = roots.get(table.tableName.toUpperCase());
-    if (rootPos === undefined) {
+    const tableRoots = roots.get(table.tableName.toUpperCase());
+    if (tableRoots === undefined) {
       return table;
     }
-    const rows = readHsqldbCachedTableRows(dataBytes, rootPos, cacheFileScale, table.columns);
+    const rows = readHsqldbCachedTableRows(dataBytes, tableRoots, cacheFileScale, table.columns);
     return { ...table, rows };
   });
 }
