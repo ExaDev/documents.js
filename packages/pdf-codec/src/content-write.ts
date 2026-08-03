@@ -3,12 +3,13 @@ import type { Color as LayoutColor } from 'document-schema.js';
 import type { LayoutFont } from 'document-schema.js';
 import type { StandardFontName } from './afm-widths';
 import { ByteWriter } from './bytes/writer';
-import type { EmbeddedFace, EmbeddedFaceSubstitution } from './embedded-font';
+import type { EmbeddedFace, EmbeddedFaceSubstitution, EmbeddedShow } from './embedded-font';
 import { encodeForShowEmbedded } from './embedded-font';
 import type { Matrix } from './matrix';
 import { BEZIER_KAPPA, multiplyMatrices, rotationMatrix, scaleMatrix, translationMatrix } from './matrix';
 import type { TextMeasurer, UnderlineMetrics } from './measure';
-import { pdfHexString } from './objects';
+import type { PdfObject } from './objects';
+import { pdfArray, pdfHexString, pdfNum } from './objects';
 import { formatNumber, writeObject } from './serialize';
 import type { WinAnsiSubstitution } from './winansi';
 import { encodeForShow } from './winansi';
@@ -74,15 +75,21 @@ function writeUnderline(writer: ByteWriter, item: LayoutText, widthPt: number, u
   writer.writeAscii('Q\n');
 }
 
-// The BT..ET block both text branches share, differing only in the resource name, the Tz percentage, and the already-encoded show operand -- the operator sequence, its order, and the absolute Tm are identical whether the operand is a WinAnsi byte string or an Identity-H CID one.
-function writeShowTextBlock(writer: ByteWriter, item: LayoutText, resourceName: string, scalePercent: number, codes: Uint8Array<ArrayBuffer>): void {
+// What a text-showing block actually shows: one string via Tj, or a string-and-number array via TJ (ISO 32000-1 9.4.3, Table 109). Kept as a pair rather than inferred from the operand's own kind so the operator is stated at the point the decision is made rather than re-derived where it is written.
+interface ShowOperand {
+  readonly operand: PdfObject;
+  readonly operator: 'Tj' | 'TJ';
+}
+
+// The BT..ET block both text branches share, differing only in the resource name, the Tz percentage, and the already-encoded show operand -- the operator sequence, its order, and the absolute Tm are identical whether the operand is a WinAnsi byte string shown with Tj or an Identity-H CID array shown with TJ.
+function writeShowTextBlock(writer: ByteWriter, item: LayoutText, resourceName: string, scalePercent: number, show: ShowOperand): void {
   writer.writeAscii('BT\n');
   writer.writeAscii(`/${resourceName} ${formatNumber(item.sizePt)} Tf\n`);
   writer.writeAscii(`${formatNumber(scalePercent)} Tz\n`);
   writeRgbOperator(writer, item.color, 'rg');
   writeMatrixOperator(writer, anchorMatrix(item.xPt, item.yPt, item.rotationDeg), 'Tm');
-  writeObject(writer, pdfHexString(codes));
-  writer.writeAscii(' Tj\n');
+  writeObject(writer, show.operand);
+  writer.writeAscii(` ${show.operator}\n`);
   writer.writeAscii('ET\n');
 }
 
@@ -92,7 +99,8 @@ function writeStandardText(writer: ByteWriter, item: LayoutText, standardName: S
 
   // The Tz (horizontal scaling) percentage is a text-state parameter that persists across content-stream items until explicitly changed -- it must be written for every text item, even when the correction is 1.0 (100%), or a preceding item's correction would silently leak into this one.
   const scale = measurer.horizontalScaleFor(item.font);
-  writeShowTextBlock(writer, item, resourceName, scale * 100, encoded.codes);
+  // Always a plain Tj: a standard-14 face is measured through afm-widths.ts's own per-glyph width table, which carries no pair data of any kind, so there is no kerning on this path to position glyphs for and nothing that could make an array operand differ from a single string.
+  writeShowTextBlock(writer, item, resourceName, scale * 100, { operand: pdfHexString(encoded.codes), operator: 'Tj' });
 
   if (item.underline === true) {
     const widthPt = item.widthPt ?? (encoded.width1000 / GLYPH_SPACE_UNITS_PER_EM) * item.sizePt * scale;
@@ -100,14 +108,32 @@ function writeStandardText(writer: ByteWriter, item: LayoutText, standardName: S
   }
 }
 
-// An embedded face is shown exactly the way math-content-write.ts already shows the embedded math font: 2-byte big-endian CIDs (== glyph IDs, since every embedded font program this package writes preserves glyph IDs and declares /CIDToGIDMap /Identity) as a hex string operand to Tj, against a /Type0 Identity-H resource.
+// How an embedded run's glyphs are shown: 2-byte big-endian CIDs (== glyph IDs, since every embedded font program this package writes preserves glyph IDs and declares /CIDToGIDMap /Identity) against a /Type0 Identity-H resource -- the same operand shape math-content-write.ts already uses for the math font -- with the run split at each of the face's own pair-kerning adjustments.
 //
+// A run whose adjacent glyph pairs the face kerns nothing about (which includes every run in a face with no reachable 'GPOS' kerning at all) is shown as one unsplit hex string with Tj, byte for byte what this module emitted before kerning existed. Only a genuinely kerned run pays for a TJ array.
+//
+// The sign: a TJ number is SUBTRACTED from the current horizontal coordinate, in thousandths of a unit of text space (ISO 32000-1 9.4.3), so a positive number moves the next glyph closer and a pair the font tightens by 43.457 glyph-space units is written as +43.457. EmbeddedKern.adjustment1000 is the advance DELTA instead (negative to tighten, so that it sums straight into the run's own measured width), which is why it is negated exactly here, at the one point PDF's own convention starts applying. interpret.ts's TJ handling is the reader half of the same convention, so a document written here and read back through this package's own parser recovers the positions it was written with.
+function embeddedShowOperand(encoded: EmbeddedShow): ShowOperand {
+  if (encoded.kerns.length === 0) {
+    return { operand: pdfHexString(encoded.codes), operator: 'Tj' };
+  }
+  const items: PdfObject[] = [];
+  let runStart = 0;
+  for (const kern of encoded.kerns) {
+    items.push(pdfHexString(encoded.codes.subarray(runStart, kern.codeOffset)));
+    items.push(pdfNum(-kern.adjustment1000));
+    runStart = kern.codeOffset;
+  }
+  items.push(pdfHexString(encoded.codes.subarray(runStart)));
+  return { operand: pdfArray(items), operator: 'TJ' };
+}
+
 // Two things are deliberately NOT taken from the measurer here, even though the measurer would give the same answer whenever it was built with the same registry: the Tz percentage is fixed at 100 (an embedded face is drawn at its own real advances, so no correction can ever apply), and the underline geometry comes from this face's own 'post' table rather than from whichever standard-14 face the family would otherwise have substituted to. Reading both off the resolved face rather than off a separately-constructed measurer removes the one way the two could ever disagree.
 function writeEmbeddedText(writer: ByteWriter, item: LayoutText, face: EmbeddedFace, resourceName: string, missingGlyphs: EmbeddedFaceSubstitution[]): void {
   const encoded = encodeForShowEmbedded(item.text, face);
   missingGlyphs.push(...encoded.substitutions);
 
-  writeShowTextBlock(writer, item, resourceName, EMBEDDED_HORIZONTAL_SCALE_PERCENT, encoded.codes);
+  writeShowTextBlock(writer, item, resourceName, EMBEDDED_HORIZONTAL_SCALE_PERCENT, embeddedShowOperand(encoded));
 
   if (item.underline === true) {
     const widthPt = item.widthPt ?? (encoded.width1000 / GLYPH_SPACE_UNITS_PER_EM) * item.sizePt;

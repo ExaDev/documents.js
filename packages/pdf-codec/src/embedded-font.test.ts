@@ -180,13 +180,93 @@ describe('encodeForShowEmbedded', () => {
     const { face } = load(carlitoRegularBytes());
     const text = 'Hello, wörld!';
     const shown = encodeForShowEmbedded(text, face);
-    // Re-deriving the width from the emitted CIDs -- i.e. from exactly the bytes a Tj operand would carry -- reproduces the reported width. Nothing measures a string by a route the drawing path does not take.
+    // Re-deriving the width from the emitted CIDs -- i.e. from exactly the bytes a Tj/TJ operand would carry -- and from the face's own adjustment between each adjacent pair of them reproduces the reported width. Nothing measures a string by a route the drawing path does not take.
     let widthFromCodes = 0;
+    let previousGlyphId: number | undefined;
     for (let i = 0; i + 1 < shown.codes.length; i += 2) {
-      widthFromCodes += face.glyphSpaceWidth((shown.codes[i]! << 8) | shown.codes[i + 1]!);
+      const glyphId = (shown.codes[i]! << 8) | shown.codes[i + 1]!;
+      if (previousGlyphId !== undefined) {
+        widthFromCodes += face.kernGlyphSpace(previousGlyphId, glyphId);
+      }
+      widthFromCodes += face.glyphSpaceWidth(glyphId);
+      previousGlyphId = glyphId;
     }
     expect(widthFromCodes).toBe(shown.width1000);
     expect(shown.codes.length).toBe([...text].length * 2);
+  });
+});
+
+// Every design-unit adjustment asserted below is the value the real vendored font declares, already cross-checked against fontTools and HarfBuzz where gpos-table.ts was written (see gpos-table.test.ts's own note) -- what these tests add is that the value survives the em conversion and reaches the run's own measurement. The two families are the same matched pair the metrics tests above use, for the same reason: Carlito's 2048-unit em makes every adjustment a real fractional scaling, while Caladea's 1000-unit em makes the glyph-space number and the font's own design-unit number the same digits, so a bug that scaled kerning by the wrong em (or not at all) fails one family and passes the other.
+//
+// 'AVATAR' is chosen for what it forces rather than for reading nicely: four adjacent pairs the font genuinely kerns (AV, VA, AT, TA), a glyph repeated three times so a per-pair lookup cannot be mistaken for a per-glyph one, and a final pair (AR) the font's own coverage includes but adjusts by nothing.
+describe('pair kerning', () => {
+  function glyphOf(face: EmbeddedFace, character: string): number {
+    const glyphId = face.glyphId(character.codePointAt(0)!);
+    if (glyphId === undefined) {
+      throw new Error(`the vendored face has no glyph for '${character}'`);
+    }
+    return glyphId;
+  }
+
+  it('reports Carlito\'s own real adjustments, converted off its 2048-unit em into glyph space', () => {
+    const { face } = load(carlitoRegularBytes());
+    expect(face.kernGlyphSpace(glyphOf(face, 'A'), glyphOf(face, 'V'))).toBe(scaled(-89, CARLITO_UNITS_PER_EM)); // -43.45703125
+    expect(face.kernGlyphSpace(glyphOf(face, 'V'), glyphOf(face, 'A'))).toBe(scaled(-96, CARLITO_UNITS_PER_EM)); // -46.875
+    expect(face.kernGlyphSpace(glyphOf(face, 'A'), glyphOf(face, 'T'))).toBe(scaled(-160, CARLITO_UNITS_PER_EM)); // -78.125
+    // The conversion really happens: a face that passed its kerning through in design units, as the advance-width assertions above prove it must not, would report this as -89.
+    expect(face.kernGlyphSpace(glyphOf(face, 'A'), glyphOf(face, 'V'))).not.toBe(-89);
+    expect(face.kernGlyphSpace(glyphOf(face, 'A'), glyphOf(face, 'V'))).toBeCloseTo(-43.457, 3);
+    // 0 covers all three of "covered but adjusted by nothing" (A then R), "no subtable describes this pair" (H then i), and a pair against .notdef, none of which this layer has any reason to tell apart.
+    expect(face.kernGlyphSpace(glyphOf(face, 'A'), glyphOf(face, 'R'))).toBe(0);
+    expect(face.kernGlyphSpace(glyphOf(face, 'H'), glyphOf(face, 'i'))).toBe(0);
+    expect(face.kernGlyphSpace(0, glyphOf(face, 'A'))).toBe(0);
+  });
+
+  it('measures a Carlito run at its kerned width, genuinely narrower than the same run\'s bare advances', () => {
+    const { face } = load(carlitoRegularBytes());
+    const shown = encodeForShowEmbedded('AVATAR', face);
+    // Carlito Regular's own 'hmtx' advances, read out of the real .ttf with a bare DataView like every other design-unit value in this file: A 1185, V 1162, T 998, R 1112.
+    const naiveWidth1000 = scaled(1185 + 1162 + 1185 + 998 + 1185 + 1112, CARLITO_UNITS_PER_EM);
+    expect(naiveWidth1000).toBe(3333.49609375);
+    // AV -89, VA -96, AT -160, TA -160, and AR nothing: -505 design units == -246.58203125 in glyph space.
+    expect(shown.width1000).toBe(3086.9140625);
+    expect(shown.width1000).toBe(naiveWidth1000 + scaled(-505, CARLITO_UNITS_PER_EM));
+    expect(shown.width1000).toBeLessThan(naiveWidth1000);
+  });
+
+  it('records one adjustment per kerned pair, at the byte offset of the pair\'s own right-hand glyph', () => {
+    const { face } = load(carlitoRegularBytes());
+    const shown = encodeForShowEmbedded('AVATAR', face);
+    // Four entries, not five: the sixth glyph's pair (AR) is covered by the font and adjusted by nothing, so it splits the run nowhere. Each offset is two bytes per preceding glyph, since a CID is two bytes wide.
+    expect(shown.kerns).toEqual([
+      { codeOffset: 2, adjustment1000: scaled(-89, CARLITO_UNITS_PER_EM) },
+      { codeOffset: 4, adjustment1000: scaled(-96, CARLITO_UNITS_PER_EM) },
+      { codeOffset: 6, adjustment1000: scaled(-160, CARLITO_UNITS_PER_EM) },
+      { codeOffset: 8, adjustment1000: scaled(-160, CARLITO_UNITS_PER_EM) },
+    ]);
+    // The recorded adjustments and the reported width are one computation, not two: subtracting the former from the latter leaves exactly the bare advance sum.
+    const kerning1000 = shown.kerns.reduce((total, kern) => total + kern.adjustment1000, 0);
+    expect(shown.width1000 - kerning1000).toBe(scaled(1185 + 1162 + 1185 + 998 + 1185 + 1112, CARLITO_UNITS_PER_EM));
+  });
+
+  it('applies Caladea\'s own different adjustments, where a 1000-unit em makes glyph space and design units the same numbers', () => {
+    const { face } = load(caladeaRegularBytes());
+    const shown = encodeForShowEmbedded('AVATAR', face);
+    // Caladea Regular's own advances: A 599, V 598, T 557, R 613 design units, and its adjustments AV -117, VA -119, AT -79, TA -79.
+    const naiveWidth1000 = scaled(599 + 598 + 599 + 557 + 599 + 613, CALADEA_UNITS_PER_EM);
+    expect(naiveWidth1000).toBe(3565);
+    expect(shown.width1000).toBe(3171);
+    expect(shown.kerns.map((kern) => kern.adjustment1000)).toEqual([-117, -119, -79, -79]);
+    // Genuinely a different font's answer, not the same numbers scaled: Carlito tightens the identical string by -246.58203125 glyph-space units where this face tightens it by -394.
+    expect(shown.width1000 - naiveWidth1000).toBe(-394);
+  });
+
+  it('leaves a run with no kerned pair completely alone', () => {
+    const { face } = load(carlitoRegularBytes());
+    const shown = encodeForShowEmbedded('Hi', face);
+    // Carlito carries plenty of kerning; it simply says nothing about this pair. So there is nothing to split the run at, and the width is the bare advance sum -- which is what keeps the common case emitting the same single Tj string it always did.
+    expect(shown.kerns).toEqual([]);
+    expect(shown.width1000).toBe(face.glyphSpaceWidth(glyphOf(face, 'H')) + face.glyphSpaceWidth(glyphOf(face, 'i')));
   });
 });
 

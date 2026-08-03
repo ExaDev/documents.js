@@ -121,8 +121,30 @@ describe('writeContentStream: text in an embedded face', () => {
     const hex = [...encodeForShowEmbedded('Hi', face).codes].map((b) => b.toString(16).padStart(2, '0')).join('');
     expect(decode(bytes)).toBe(`BT\n/E1 12 Tf\n100 Tz\n0 0 0 rg\n1 0 0 1 10 20 Tm\n<${hex}> Tj\nET\n`);
     expect(hex).toHaveLength('Hi'.length * 4); // two bytes per character, unlike a WinAnsi string's one
+    // Carlito kerns nothing between 'H' and 'i', so this stays one unsplit string shown with Tj -- byte for byte what this module emitted before pair kerning existed.
+    expect(decode(bytes)).not.toContain('TJ');
     expect(substitutions).toHaveLength(0);
     expect(missingGlyphs).toHaveLength(0);
+  });
+
+  it('shows a kerned run as a real TJ array, splitting the CIDs at each of the face\'s own adjustments', () => {
+    const item: LayoutText = { kind: 'text', text: 'AVATAR', xPt: 10, yPt: 20, font: HELVETICA, sizePt: 12, color: BLACK };
+    const text = decode(writeContentStream([item], embeddedContext(embeddedFace())).bytes);
+    // Carlito's own AV/VA/AT/TA adjustments, -89/-96/-160/-160 design units on its 2048-unit em, as PDF TJ numbers: NEGATED, because ISO 32000-1 9.4.3 defines a TJ number as being subtracted from the current horizontal coordinate, so tightening a pair is a positive number. The final pair (AR) is one the font covers and adjusts by nothing, so it splits nothing and the last two glyphs stay in one string.
+    expect(text).toBe('BT\n/E1 12 Tf\n100 Tz\n0 0 0 rg\n1 0 0 1 10 20 Tm\n[<0003> 43.457 <0028> 46.875 <0003> 78.125 <0024> 78.125 <00030021>] TJ\nET\n');
+    // Concatenating the array's own strings back together gives exactly the CIDs an unkerned Tj would have shown: the split repositions glyphs, it never changes which ones are drawn.
+    const hex = [...encodeForShowEmbedded('AVATAR', embeddedFace()).codes].map((b) => b.toString(16).padStart(2, '0')).join('');
+    expect(hex).toBe('000300280003002400030021');
+  });
+
+  it('measures a kerned run\'s underline at the kerned width, not the bare advance sum', () => {
+    const face = embeddedFace();
+    const item: LayoutText = { kind: 'text', text: 'AVATAR', xPt: 0, yPt: 0, font: HELVETICA, sizePt: 12, color: BLACK, underline: true };
+    const text = decode(writeContentStream([item], embeddedContext(face)).bytes);
+    // The same width1000 the TJ array above actually advances by (3086.9140625 at size 1000), not the 3333.49609375 its glyphs' bare advances sum to -- an underline drawn to the unkerned sum would overhang the text it underlines by nearly three points at this size.
+    expect(text).toContain(` ${formatNumber((encodeForShowEmbedded('AVATAR', face).width1000 / 1000) * 12)} `);
+    expect(text).toContain(` ${formatNumber((3086.9140625 / 1000) * 12)} `);
+    expect(text).not.toContain(` ${formatNumber((3333.49609375 / 1000) * 12)} `);
   });
 
   it('always writes 100 Tz, never the measurer\'s standard-14 width correction', () => {

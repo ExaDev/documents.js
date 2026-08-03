@@ -7,6 +7,7 @@ import { encodeForShowEmbedded, loadEmbeddedFace } from './embedded-font';
 import { createFontRegistry } from './font-registry';
 import { encodePng } from './image/png-encode';
 import { createFontMeasurer, createStandardFontMeasurer } from './measure';
+import { readPdf } from './read';
 import { parseSfnt } from './sfnt';
 import { carlitoRegularBytes } from './test-support/fonts';
 import { wrapRunsToWidth } from './text-layout';
@@ -23,6 +24,7 @@ const HELVETICA = { family: 'Helvetica', weight: 'normal', style: 'normal' } as 
 const CALIBRI = { family: 'Calibri', weight: 'normal', style: 'normal' } as const;
 const CALIBRI_BOLD = { family: 'Calibri', weight: 'bold', style: 'normal' } as const;
 const CALIBRI_LIGHT = { family: 'Calibri Light', weight: 'normal', style: 'normal' } as const;
+const CAMBRIA = { family: 'Cambria', weight: 'normal', style: 'normal' } as const;
 const CAMBRIA_BOLD = { family: 'Cambria', weight: 'bold', style: 'normal' } as const;
 
 const TRUETYPE_SFNT_VERSION = 0x00010000;
@@ -236,9 +238,11 @@ describe('createFontMeasurer: measurement against a real embedded face', () => {
     const embeddedMeasurer = createFontMeasurer(createFontRegistry());
     const standardMeasurer = createStandardFontMeasurer();
 
-    // A column just wide enough to hold the whole string at the standard-14 substitute's (narrower) measurement. Carlito's own advances are genuinely wider, so the same column fits one word rather than two -- the wrap POINT moves, not merely a reported width.
-    const columnPt = standardMeasurer.widthOfTextAtSize(text, CALIBRI, 12) + 0.5;
-    expect(embeddedMeasurer.widthOfTextAtSize(text, CALIBRI, 12)).toBeGreaterThan(columnPt);
+    // A column just wide enough to hold the whole string at the standard-14 substitute's (narrower) measurement. Carlito's own advances are genuinely wider, so the same column fits one word rather than two -- the wrap POINT moves, not merely a reported width. The boundary is placed exactly halfway between the two real measurements rather than at either one plus a chosen slack: Carlito's own pair kerning pulls its measurement several points closer to the substitute's than the bare advances alone would, and a fixed slack that once cleared that gap comfortably no longer does.
+    const standardWidthPt = standardMeasurer.widthOfTextAtSize(text, CALIBRI, 12);
+    const embeddedWidthPt = embeddedMeasurer.widthOfTextAtSize(text, CALIBRI, 12);
+    const columnPt = (standardWidthPt + embeddedWidthPt) / 2;
+    expect(embeddedWidthPt).toBeGreaterThan(columnPt);
 
     const embeddedLines = wrapRunsToWidth(runs, embeddedMeasurer, columnPt);
     const standardLines = wrapRunsToWidth(runs, standardMeasurer, columnPt);
@@ -257,6 +261,54 @@ describe('createFontMeasurer: measurement against a real embedded face', () => {
     // Helvetica's own AFM values, which this must NOT have used.
     expect(underline.offsetPt).not.toBeCloseTo(-100, 3);
     expect(underline.thicknessPt).not.toBeCloseTo(50, 3);
+  });
+});
+
+// The whole path a pair-kerning adjustment travels, end to end: the font's own 'GPOS' table, through the shared encode-and-measure step, into a line's measured width and into the page's own content stream, and back out again through this package's own reader. Both vendored families appear for the reason they always do here -- Carlito's 2048-unit em makes every adjustment a real fractional conversion, Caladea's 1000-unit em makes a TJ number and the font's own declared design-unit adjustment the same digits.
+describe('writePdf: pair kerning, from the font table through to a written page', () => {
+  // Four adjacent pairs both families genuinely kern (AV, VA, AT, TA), a glyph repeated three times, and one final pair (AR) each font covers but adjusts by nothing.
+  const KERNED_TEXT = 'AVATAR';
+
+  it('measures a kerned string narrower than its own bare advance sum, by the font\'s real adjustments', () => {
+    const face = carlitoRegularFace();
+    const measuredPt = createFontMeasurer(createFontRegistry()).widthOfTextAtSize(KERNED_TEXT, CALIBRI, 12);
+    // Carlito Regular's own 'hmtx' advances, read out of the real .ttf with a bare DataView: A 1185, V 1162, T 998, R 1112 design units on a 2048-unit em. Their bare sum is what this package measured for this string before kerning was applied.
+    const naivePt = (((1185 + 1162 + 1185 + 998 + 1185 + 1112) * 1000) / 2048 / 1000) * 12;
+    expect(naivePt).toBeCloseTo(40.001953125, 10);
+    // AV -89, VA -96, AT -160, TA -160 design units: -505 in total, or -2.958984375pt at size 12.
+    expect(measuredPt).toBeCloseTo(37.04296875, 10);
+    expect(measuredPt).toBeCloseTo(naivePt - ((505 * 1000) / 2048 / 1000) * 12, 10);
+    expect(measuredPt).toBeLessThan(naivePt);
+    // The measurement is the shared encode step's own answer, not a second computation that happens to agree.
+    expect(measuredPt).toBeCloseTo((encodeForShowEmbedded(KERNED_TEXT, face).width1000 / 1000) * 12, 10);
+  });
+
+  it('writes the adjustments into the page as a real TJ array, read straight back out of the PDF bytes', () => {
+    // Cambria resolves to the vendored Caladea, whose 1000-unit em makes every TJ number the font's own declared design-unit adjustment exactly: AV 117, VA 119, AT 79, TA 79, each negated from the advance delta because a TJ number is subtracted from the current horizontal coordinate (ISO 32000-1 9.4.3).
+    const text = decode(writePdf(textDoc(KERNED_TEXT, CAMBRIA), { compress: false, fonts: createFontRegistry() }));
+    expect(text).toContain('[<0005> 117 <001a> 119 <0005> 79 <0018> 79 <00050016>] TJ');
+    // The array's own strings concatenate back to exactly the CIDs an unkerned Tj would have shown -- splitting the run repositions glyphs, it never changes which ones are drawn -- and no unsplit Tj for this run survives alongside it.
+    expect(text).not.toContain('<0005001a0005001800050016> Tj');
+  });
+
+  it('still writes a plain Tj for a run the same face kerns nothing in', () => {
+    // 'Hi' is a pair Caladea says nothing about, in a face carrying thousands of pairs it does. The common case keeps its single unsplit string.
+    const text = decode(writePdf(textDoc('Hi', CAMBRIA), { compress: false, fonts: createFontRegistry() }));
+    expect(text).toContain('<000c0027> Tj');
+    expect(text).not.toContain('TJ');
+  });
+
+  it('reads back through readPdf at the kerned positions, which is what settles the TJ sign empirically', () => {
+    const item = readPdf(writePdf(textDoc(KERNED_TEXT, CAMBRIA), { compress: false, fonts: createFontRegistry() })).pages[0]?.items[0];
+    if (item?.kind !== 'text') {
+      throw new Error('the written page did not read back as one text item');
+    }
+    // Caladea's own advances for A/V/T/R (599/598/557/613, on a 1000-unit em) sum to 3565 units; its four adjustments total -394. A TJ number written with the opposite sign would recover 3565 + 394 here -- WIDER than the unkerned run rather than narrower -- so this is the assertion that decides the direction against this package's own reader rather than by argument from the specification alone.
+    expect(item.widthPt).toBeCloseTo(((3565 - 394) / 1000) * 12, 4);
+    expect(item.widthPt).toBeLessThan((3565 / 1000) * 12);
+    expect(item.widthPt).not.toBeCloseTo(((3565 + 394) / 1000) * 12, 1);
+    // Splitting the run across several strings must not cost the text itself: the reader concatenates them and recovers the whole string through the same ToUnicode CMap.
+    expect(item.text).toBe(KERNED_TEXT);
   });
 });
 

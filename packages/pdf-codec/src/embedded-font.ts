@@ -2,6 +2,7 @@ import type { CmapLookup } from './cmap-table';
 import { buildCmapLookup } from './cmap-table';
 import { parseHead, parseMaxp, parseName, parseOs2, parsePost } from './font-tables';
 import { parseGlyf } from './glyf';
+import { buildGposKernLookup } from './gpos-table';
 import type { HmtxTable } from './hmtx-table';
 import { parseHmtx } from './hmtx-table';
 import type { SfntFont } from './sfnt';
@@ -62,6 +63,8 @@ export interface EmbeddedFace {
   glyphId(codePoint: number): number | undefined;
   // This glyph's advance width in glyph space -- the value a /W entry carries, and the one both measurement and content-stream emission below are driven by.
   glyphSpaceWidth(glyphId: number): number;
+  // The advance adjustment, in glyph space, this face's own 'GPOS' pair kerning applies to `leftGlyphId` when `rightGlyphId` immediately follows it -- negative to tighten, which is what nearly every real pair asks for. 0 covers three genuinely different facts the layout above has no use for distinguishing: the face declares no reachable kerning at all, no subtable describes this pair, or a subtable describes it and asks for no adjustment. gpos-table.ts keeps the last two apart for a caller that needs them; nothing here does, since all three draw and measure identically.
+  kernGlyphSpace(leftGlyphId: number, rightGlyphId: number): number;
 }
 
 // One EmbeddedFace per font, parsed at most once. Keyed on the byte array's own identity rather than on a name: a caller handing the same vendored asset's bytes back gets the same parse, and a font that is genuinely a different object is genuinely re-read, with no registry to invalidate and no way for two different fonts sharing a family name to collide.
@@ -126,6 +129,8 @@ function readEmbeddedFace(font: SfntFont): EmbeddedFace | undefined {
   const { unitsPerEm } = head;
   const scale = (designUnits: number): number => scaleToGlyphSpace(designUnits, unitsPerEm);
   const capHeight = resolveCapHeight(font, cmap, os2?.sCapHeight, hhea.ascent);
+  // The face's own pair kerning, read once here rather than per string: gpos-table.ts walks the whole 'GPOS' table up front and reduces it to per-subtable closures precisely so a query costs a bisection, and this cache is what makes "once" mean once per face rather than once per run of text. A face with no reachable kerning is given a lookup that adjusts nothing, so encodeForShowEmbedded below stays one code path instead of two.
+  const kern = buildGposKernLookup(font);
 
   return {
     font,
@@ -151,6 +156,7 @@ function readEmbeddedFace(font: SfntFont): EmbeddedFace | undefined {
     },
     glyphId: (codePoint: number) => cmap(codePoint),
     glyphSpaceWidth: (glyphId: number) => scale(hmtx.advanceWidth(glyphId)),
+    kernGlyphSpace: kern === undefined ? () => 0 : (leftGlyphId: number, rightGlyphId: number) => scale(kern(leftGlyphId, rightGlyphId) ?? 0),
   };
 }
 
@@ -179,16 +185,32 @@ export interface EmbeddedFaceSubstitution {
   readonly from: string;
 }
 
+// Every character an Identity-H composite font shows is a 2-byte big-endian CID, which for every font program this package embeds is the glyph ID itself (/CIDToGIDMap /Identity over a GID-preserving subset). Named rather than repeated as a literal because `codes` is indexed in both glyph units and byte units below and in content-write.ts, and the two only stay in step while one constant relates them.
+const CID_BYTE_LENGTH = 2;
+
+// One pair-kerning adjustment inside a shown run: the font's own answer for the two glyphs either side of `codeOffset`.
+export interface EmbeddedKern {
+  // Byte offset into `EmbeddedShow.codes` at which the RIGHT glyph of the kerned pair starts -- i.e. the adjustment belongs between the glyph ending at this offset and the one beginning at it. A byte offset rather than a glyph index so a consumer can slice `codes` around it without knowing how many bytes a CID occupies. Always at least CID_BYTE_LENGTH and always less than `codes.length`, so slicing here can never produce an empty leading or trailing run.
+  readonly codeOffset: number;
+  // The advance adjustment in glyph space, negative to tighten -- already summed into `width1000`, which is what keeps a measurement and the run's own drawn positioning the same fact stated twice rather than two independently-computed numbers. Deliberately NOT a PDF TJ operand: ISO 32000-1 9.4.3 defines a TJ number as being SUBTRACTED from the current horizontal coordinate, so an emitter negates this (see content-write.ts). Only ever non-zero: a pair the font covers but adjusts by nothing changes neither the measurement nor the drawing, so recording it would put a no-op number in a TJ array and split a run that had no reason to be split.
+  readonly adjustment1000: number;
+}
+
 export interface EmbeddedShow {
   readonly codes: Uint8Array<ArrayBuffer>; // two bytes per character: the glyph ID, big-endian, which is the CID an Identity-H Tj operand carries
-  readonly width1000: number; // total advance in glyph space, i.e. at font size 1000
+  readonly width1000: number; // total advance in glyph space, i.e. at font size 1000, pair kerning included
   readonly substitutions: readonly EmbeddedFaceSubstitution[];
+  // Every non-zero pair-kerning adjustment this run carries, in ascending `codeOffset` order -- empty for a face with no kerning, and empty for a run whose adjacent pairs the face says nothing about, which is what lets an emitter keep showing a single unsplit string for the common case.
+  readonly kerns: readonly EmbeddedKern[];
 }
 
 // The single code path both measurement and content-stream emission must go through for text drawn in an embedded face -- exactly winansi.ts's own encodeForShow rationale, for exactly the same reason: encoding and measuring a string in two separate steps risks the two disagreeing about which characters resolved to which glyph, which silently desyncs a line's computed wrap point from what is actually drawn on the page. Substituted characters advance by .notdef's own real width, so the measurement stays true to the glyphs that will be shown rather than to the ones that were asked for.
+//
+// Pair kerning is applied here, inside that same one path, for that same one reason: a width that included kerning while the content stream drew unkerned glyphs (or the reverse) would be the identical silent desync in a new place. `width1000` and `kerns` are computed in one pass over one glyph sequence, so a caller cannot measure by a route the drawing path does not take. Kerning is looked up between the glyphs that will actually be SHOWN, .notdef included -- the same "measure what will be drawn, not what was asked for" rule the substitution handling above follows.
 export function encodeForShowEmbedded(text: string, face: EmbeddedFace): EmbeddedShow {
   const glyphIds: number[] = [];
   const substitutions: EmbeddedFaceSubstitution[] = [];
+  const kerns: EmbeddedKern[] = [];
   let width1000 = 0;
   for (const character of text) {
     const glyphId = face.glyphId(character.codePointAt(0)!);
@@ -196,15 +218,23 @@ export function encodeForShowEmbedded(text: string, face: EmbeddedFace): Embedde
       substitutions.push({ from: character });
     }
     const shown = glyphId ?? NOTDEF_GLYPH_ID;
+    const previous = glyphIds[glyphIds.length - 1];
+    if (previous !== undefined) {
+      const adjustment1000 = face.kernGlyphSpace(previous, shown);
+      if (adjustment1000 !== 0) {
+        kerns.push({ codeOffset: glyphIds.length * CID_BYTE_LENGTH, adjustment1000 });
+        width1000 += adjustment1000;
+      }
+    }
     glyphIds.push(shown);
     width1000 += face.glyphSpaceWidth(shown);
   }
-  const codes = new Uint8Array(glyphIds.length * 2);
+  const codes = new Uint8Array(glyphIds.length * CID_BYTE_LENGTH);
   glyphIds.forEach((glyphId, index) => {
-    codes[index * 2] = (glyphId >> 8) & 0xff;
-    codes[index * 2 + 1] = glyphId & 0xff;
+    codes[index * CID_BYTE_LENGTH] = (glyphId >> 8) & 0xff;
+    codes[index * CID_BYTE_LENGTH + 1] = glyphId & 0xff;
   });
-  return { codes, width1000, substitutions };
+  return { codes, width1000, substitutions, kerns };
 }
 
 // Every code point across `texts` that `face` has a glyph for, keyed by that glyph ID -- the CID -> Unicode pairs a ToUnicode CMap needs, collected across every run a document draws in this one face. Mirrors math-content-write.ts's own collectUsedGlyphs, and shares its assumption: a face's 'cmap' is an injective Unicode-to-glyph mapping in practice, so the first code point seen for a glyph is the one that glyph represents. Characters the face cannot map contribute nothing -- .notdef stands for no Unicode text at all, and claiming otherwise in a ToUnicode CMap would make a copy/paste recover a character the page never showed.

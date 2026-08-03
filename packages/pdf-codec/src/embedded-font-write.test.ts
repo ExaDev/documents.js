@@ -191,7 +191,12 @@ describe('a real PDF carrying an embedded, subsetted Carlito, read back by this 
       throw new Error('unreachable');
     }
     // The recovered width is the font's own measurement of this string at this size, which is only true if every /W entry survived the round trip -- /DW alone would put every glyph at 1000 and inflate this by roughly two thirds.
-    const expectedWidthPt = (encodeForShowEmbedded(TEXT, face).width1000 / 1000) * FONT_SIZE_PT;
+    //
+    // The face's own pair kerning is subtracted back out rather than left in: this fixture's content stream is a single unkerned Tj (see buildContentStream above), while encodeForShowEmbedded's width additionally carries the kerning only a TJ array can actually draw. What is under test here is the /W array, so the expectation is the bare advance sum this page genuinely draws -- content-write.ts's own emission, not this fixture's, is where the kerned form is exercised.
+    const shown = encodeForShowEmbedded(TEXT, face);
+    const kerning1000 = shown.kerns.reduce((total, kern) => total + kern.adjustment1000, 0);
+    expect(kerning1000).toBeLessThan(0); // this string really does kern, so the subtraction above is doing work rather than standing in for nothing
+    const expectedWidthPt = ((shown.width1000 - kerning1000) / 1000) * FONT_SIZE_PT;
     expect(item.widthPt).toBeCloseTo(expectedWidthPt, 4);
     expect(item.widthPt).not.toBeCloseTo(([...TEXT].length * 1000 * FONT_SIZE_PT) / 1000, 0);
   });

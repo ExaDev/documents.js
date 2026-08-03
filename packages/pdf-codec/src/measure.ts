@@ -107,7 +107,7 @@ export function createFontMeasurer(registry?: FontRegistry, options: FontMeasure
     widthOfTextAtSize(text, font, sizePt) {
       const face = resolve(font);
       if (face.kind === 'embedded') {
-        // encodeForShowEmbedded is the single code path both this measurement and content-write.ts's own emission go through, so a character with no glyph in the face advances by the same .notdef width in both -- see its own comment for why measuring and encoding separately silently desyncs a wrap point from what is drawn.
+        // encodeForShowEmbedded is the single code path both this measurement and content-write.ts's own emission go through, so a character with no glyph in the face advances by the same .notdef width in both, and the face's own pair kerning is applied to the same adjacent glyph pairs in both -- see its own comment for why measuring and encoding separately silently desyncs a wrap point from what is drawn. Nothing here adds or subtracts kerning of its own: this is the same width the run's TJ array will actually advance by.
         return (encodeForShowEmbedded(text, face.face).width1000 / GLYPH_SPACE_UNITS_PER_EM) * sizePt;
       }
       const { width1000 } = encodeForShow(text, face.standardName);
