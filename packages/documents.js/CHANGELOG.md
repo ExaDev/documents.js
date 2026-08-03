@@ -1,3 +1,11 @@
+# [1.71.0](https://github.com/ExaDev/documents.js/compare/v1.70.1...v1.71.0) (2026-08-03)
+
+
+### Features
+
+* recover inline odt images as ContentImageBlock ([6f35b9a](https://github.com/ExaDev/documents.js/commit/6f35b9a36c13e78e44a9de3240b718b2cb2e928f))
+* write inline images into odt paragraphs ([0ce71db](https://github.com/ExaDev/documents.js/commit/0ce71db100ce1d89c0d05f36dfbb87d569088854))
+
 ## [1.70.1](https://github.com/ExaDev/documents.js/compare/v1.70.0...v1.70.1) (2026-08-03)
 
 # [1.70.0](https://github.com/ExaDev/documents.js/compare/v1.69.0...v1.70.0) (2026-08-03)
