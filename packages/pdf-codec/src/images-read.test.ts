@@ -8,6 +8,8 @@ import { asDict, pdfArray, pdfBool, pdfDict, pdfLiteralString, pdfName, pdfNum, 
 import { CCITT_FAX_FIXTURES, ccittFixtureBitmap, ccittFixtureBytes } from './test-support/ccitt-fax';
 import type { Jbig2Fixture } from './test-support/jbig2';
 import { JBIG2_FIXTURES, jbig2FixtureBytes } from './test-support/jbig2';
+import type { Jpeg2000Fixture } from './test-support/jpeg2000';
+import { JPEG2000_FIXTURES, jpeg2000FixtureBytes, jpeg2000FixtureSamples } from './test-support/jpeg2000';
 
 function collectDiagnostics(): { sink: PdfDiagnosticSink; diagnostics: PdfDiagnostic[] } {
   const diagnostics: PdfDiagnostic[] = [];
@@ -135,9 +137,16 @@ describe('readImageXObject: degradation', () => {
 
   it('skips an unsupported filter with a diagnostic (already raised by decodeStream)', () => {
     const { sink, diagnostics } = collectDiagnostics();
-    const dict = pdfDict({ Filter: pdfName('JPXDecode'), Width: pdfNum(1), Height: pdfNum(1) });
+    const dict = pdfDict({ Filter: pdfName('Crypt'), Width: pdfNum(1), Height: pdfNum(1) });
     expect(readImageXObject(dict, new Uint8Array([1]), EMPTY_RESOLVER, sink)).toBeUndefined();
     expect(diagnostics.some((d) => d.code === 'pdf/unsupported-filter')).toBe(true);
+  });
+
+  it('skips a JPXDecode image whose codestream cannot be decoded, with a diagnostic naming why', () => {
+    const { sink, diagnostics } = collectDiagnostics();
+    const dict = pdfDict({ Filter: pdfName('JPXDecode'), Width: pdfNum(1), Height: pdfNum(1) });
+    expect(readImageXObject(dict, new Uint8Array([1, 2, 3, 4]), EMPTY_RESOLVER, sink)).toBeUndefined();
+    expect(diagnostics.some((d) => d.code === 'image/jpx-undecodable')).toBe(true);
   });
 
   it('skips an unsupported bit depth with a diagnostic', () => {
@@ -270,5 +279,89 @@ describe('readImageXObject: JBIG2Decode', () => {
     const result = readImageXObject(imageDict(symbols), jbig2FixtureBytes(symbols.stream), EMPTY_RESOLVER, sink);
     expect(result).toBeUndefined();
     expect(diagnostics.map((d) => d.code)).toContain('pdf/jbig2-undecodable');
+  });
+});
+
+describe('readImageXObject: JPXDecode', () => {
+  function fixture(name: string): Jpeg2000Fixture {
+    const found = JPEG2000_FIXTURES.find((candidate) => candidate.name === name);
+    expect(found).toBeDefined();
+    if (found === undefined) {
+      throw new Error(`missing fixture ${name}`);
+    }
+    return found;
+  }
+
+  // ISO 32000-1 7.4.9: a JPXDecode image dictionary carries no /BitsPerComponent at all, and /ColorSpace is optional because the codestream (or its JP2 boxes) already says what the components mean.
+  function imageDict(entry: Jpeg2000Fixture, extra: Record<string, PdfObject> = {}): PdfDict {
+    return pdfDict({ Width: pdfNum(entry.width), Height: pdfNum(entry.height), Filter: pdfName('JPXDecode'), ...extra });
+  }
+
+  it('decodes a greyscale codestream into a PNG holding the original samples', () => {
+    const entry = fixture('ramp-basic');
+    const { sink, diagnostics } = collectDiagnostics();
+    const result = readImageXObject(imageDict(entry), jpeg2000FixtureBytes(entry.codestream), EMPTY_RESOLVER, sink);
+    expect(diagnostics).toEqual([]);
+    expect(result).toMatchObject({ format: 'png', widthPx: entry.width, heightPx: entry.height });
+    const decoded = decodePng(result?.bytes ?? new Uint8Array(0));
+    expect(decoded).toMatchObject({ width: entry.width, height: entry.height, channels: 1 });
+    expect(Array.from(decoded.data)).toEqual(jpeg2000FixtureSamples(entry)[0]);
+  });
+
+  it('interleaves a three-component codestream into RGB', () => {
+    const entry = fixture('colour-rct');
+    const { sink, diagnostics } = collectDiagnostics();
+    const result = readImageXObject(imageDict(entry), jpeg2000FixtureBytes(entry.codestream), EMPTY_RESOLVER, sink);
+    expect(diagnostics).toEqual([]);
+    const decoded = decodePng(result?.bytes ?? new Uint8Array(0));
+    expect(decoded.channels).toBe(3);
+    const planes = jpeg2000FixtureSamples(entry);
+    const interleaved: number[] = [];
+    for (let i = 0; i < entry.width * entry.height; i++) {
+      interleaved.push(planes[0]?.[i] ?? 0, planes[1]?.[i] ?? 0, planes[2]?.[i] ?? 0);
+    }
+    expect(Array.from(decoded.data)).toEqual(interleaved);
+  });
+
+  it('reads a JP2 file, not only a bare codestream, since ISO 32000-1 7.4.9 permits either', () => {
+    const entry = fixture('jp2-container');
+    const { sink, diagnostics } = collectDiagnostics();
+    const result = readImageXObject(imageDict(entry), jpeg2000FixtureBytes(entry.codestream), EMPTY_RESOLVER, sink);
+    expect(diagnostics).toEqual([]);
+    expect(decodePng(result?.bytes ?? new Uint8Array(0))).toMatchObject({ width: entry.width, height: entry.height, channels: 3 });
+  });
+
+  it("scales a codestream deeper than eight bits onto the PNG's own eight-bit channels", () => {
+    const entry = fixture('deep-12-bit');
+    const { sink, diagnostics } = collectDiagnostics();
+    const result = readImageXObject(imageDict(entry), jpeg2000FixtureBytes(entry.codestream), EMPTY_RESOLVER, sink);
+    expect(diagnostics).toEqual([]);
+    const decoded = decodePng(result?.bytes ?? new Uint8Array(0));
+    const expected = (jpeg2000FixtureSamples(entry)[0] ?? []).map((value) => Math.round((value * 255) / 4095));
+    expect(Array.from(decoded.data)).toEqual(expected);
+  });
+
+  it("lets the image dictionary's own /ColorSpace override what the codestream says", () => {
+    // The same three-component codestream read as DeviceGray takes only its first component, which is what a dictionary-declared colour space overriding the JP2 boxes means in practice.
+    const entry = fixture('colour-rct');
+    const { sink, diagnostics } = collectDiagnostics();
+    const dict = imageDict(entry, { ColorSpace: pdfName('DeviceGray') });
+    const result = readImageXObject(dict, jpeg2000FixtureBytes(entry.codestream), EMPTY_RESOLVER, sink);
+    const decoded = decodePng(result?.bytes ?? new Uint8Array(0));
+    expect(decoded.channels).toBe(1);
+    expect(Array.from(decoded.data)).toEqual(jpeg2000FixtureSamples(entry)[0]);
+    expect(diagnostics.map((entryDiagnostic) => entryDiagnostic.code)).toContain('image/jpx-extra-channels');
+  });
+
+  it('skips a codestream using a feature the decoder refuses, leaving the rest of the page readable', () => {
+    const entry = fixture('ramp-basic');
+    const codestream = jpeg2000FixtureBytes(entry.codestream);
+    // XRsiz of component 0: SOC and the SIZ marker are two bytes each, then SIZ's own length, Rsiz, eight 32-bit geometry fields, Csiz, and the component's Ssiz.
+    const subsampled = new Uint8Array(codestream);
+    subsampled[4 + 2 + 2 + 8 * 4 + 2 + 1] = 2;
+    const { sink, diagnostics } = collectDiagnostics();
+    expect(readImageXObject(imageDict(entry), subsampled, EMPTY_RESOLVER, sink)).toBeUndefined();
+    expect(diagnostics.map((diagnostic) => diagnostic.code)).toContain('image/jpx-undecodable');
+    expect(diagnostics.map((diagnostic) => diagnostic.message).join(' ')).toContain('sub-sampled');
   });
 });

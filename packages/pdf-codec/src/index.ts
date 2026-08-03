@@ -52,13 +52,20 @@ export { MAX_INFLATE_OUTPUT_BYTES, deflate, inflate, inflateTolerant } from './b
 export { ByteReader, isAsciiWhitespace } from './bytes/reader';
 export { ByteWriter, concatBytes } from './bytes/writer';
 
-// Image: JPEG marker scanning (dimensions only, compressed bytes untouched), a hand-written PNG codec (palette/gray/RGB/alpha, multi-IDAT, all five scanline filters), a hand-written CCITT Group 3/Group 4 fax decoder, and a hand-written JBIG2 decoder.
+// Image: JPEG marker scanning (dimensions only, compressed bytes untouched), a hand-written PNG codec (palette/gray/RGB/alpha, multi-IDAT, all five scanline filters), a hand-written CCITT Group 3/Group 4 fax decoder, a hand-written JBIG2 decoder, and a hand-written JPEG 2000 decoder.
 export type { CcittFaxImage, CcittFaxOptions } from './image/ccitt';
 export { decodeCcittFax } from './image/ccitt';
 // The JBIG2 decoder's own entry point, alongside the two errors it distinguishes: a malformed stream (Jbig2ParseError) and one using a JBIG2 feature this decoder does not implement (Jbig2UnsupportedError). Exported for the same reason decodeCcittFax is -- a caller holding a bare JBIG2 stream from somewhere other than a PDF should not have to reimplement it.
 export type { Jbig2DecodeOptions, Jbig2Image } from './image/jbig2';
 export { decodeJbig2Embedded } from './image/jbig2';
 export { Jbig2ParseError, Jbig2UnsupportedError } from './image/jbig2-errors';
+// The JPEG 2000 decoder's own two entry points -- full pixel decoding, and a metadata read that works on any conforming codestream including one whose pixels this decoder refuses -- alongside the JP2 box parser and the two errors they distinguish, exactly mirroring the JBIG2 surface above.
+export type { Jp2ChannelDefinition, Jp2ColourSpace, Jp2Container, Jp2ImageHeader } from './image/jp2-boxes';
+export { looksLikeBareCodestream, parseJp2Container } from './image/jp2-boxes';
+export type { Jpeg2000ComponentMetadata, Jpeg2000DecodeOptions, Jpeg2000Image, Jpeg2000Metadata } from './image/jpeg2000';
+export { decodeJpeg2000, readJpeg2000Metadata } from './image/jpeg2000';
+export type { Jpeg2000ProgressionOrder, Jpeg2000QuantizationStyle, Jpeg2000Transform } from './image/jpeg2000-codestream';
+export { Jpeg2000ParseError, Jpeg2000UnsupportedError } from './image/jpeg2000-errors';
 export type { JpegInfo } from './image/jpeg-info';
 export { readJpegInfo } from './image/jpeg-info';
 export type { PngDecodeOptions, RawImage } from './image/png-decode';

@@ -9,7 +9,7 @@ import { applyPredictor, readPredictorParams } from './predictors';
 
 export interface DecodedStream {
   readonly bytes: Uint8Array<ArrayBuffer>;
-  // Set when decoding stopped before exhausting the /Filter chain: either DCTDecode's deliberate JPEG passthrough (the encoded bytes ARE the deliverable -- see src/image/*'s own module docs) or a filter this codec doesn't implement (JPXDecode/Crypt), or a JBIG2Decode stream using a JBIG2 feature src/image/jbig2.ts does not decode. `bytes` is still encoded per this filter name either way.
+  // Set when decoding stopped before exhausting the /Filter chain: DCTDecode's deliberate JPEG passthrough (the encoded bytes ARE the deliverable -- see src/image/*'s own module docs), JPXDecode's own passthrough (a JPEG 2000 codestream carries its own component count and sample depth, which no plain byte array can express -- src/images-read.ts decodes it where those are meaningful), a filter this codec doesn't implement (Crypt), or a JBIG2Decode stream using a JBIG2 feature src/image/jbig2.ts does not decode. `bytes` is still encoded per this filter name either way.
   readonly remainingFilter?: string;
 }
 
@@ -45,6 +45,9 @@ export function decodeStream(raw: Uint8Array<ArrayBuffer>, dict: PdfDict, sink: 
       bytes = decoded;
     } else if (filter === 'DCTDecode' || filter === 'DCT') {
       return { bytes, remainingFilter: 'DCTDecode' };
+    } else if (filter === 'JPXDecode') {
+      // Handed on undecoded for the same reason DCTDecode is, though for the opposite half of the problem: a JPEG 2000 codestream decodes to samples whose component count and bit depth come from the codestream itself rather than from the image dictionary (ISO 32000-1 7.4.9), and DecodedStream has nowhere to put those. src/images-read.ts, which does have somewhere to put them, decodes it.
+      return { bytes, remainingFilter: 'JPXDecode' };
     } else {
       sink({ code: 'pdf/unsupported-filter', severity: 'warning', message: `unsupported stream filter "${filter}"; leaving remaining bytes undecoded` });
       return { bytes, remainingFilter: filter };

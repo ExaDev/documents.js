@@ -26,6 +26,10 @@ const FUNCTIONS = [
   'encodePng',
   'decodeCcittFax',
   'decodeJbig2Embedded',
+  'decodeJpeg2000',
+  'readJpeg2000Metadata',
+  'parseJp2Container',
+  'looksLikeBareCodestream',
   'unfilterScanlines',
   'filterScanlines',
   'NOOP_DIAGNOSTIC_SINK',
@@ -36,6 +40,8 @@ const FUNCTIONS = [
   'PdfPasswordRequiredError',
   'Jbig2ParseError',
   'Jbig2UnsupportedError',
+  'Jpeg2000ParseError',
+  'Jpeg2000UnsupportedError',
 ];
 const OBJECTS = ['pdfCodec', 'PdfBytesSchema', 'STANDARD_METRICS', 'MAX_INFLATE_OUTPUT_BYTES'];
 
@@ -88,6 +94,24 @@ describe.each([
         .map((item) => item.text)
         .join(' ');
       expect(text).toContain('Hello from the pdf-codec smoke test');
+    });
+  });
+
+
+  // A real OpenJPEG-produced JPEG 2000 codestream (the "tiny" fixture from src/test-support/jpeg2000.ts, inlined so this file stays free of src/ imports), decoded through the built bundle. The expected samples are the PGM the encoder was handed, so this asserts the whole tier-2/tier-1/wavelet chain reaches dist/ and reproduces the original integers exactly -- not merely that a decode call returned something.
+  describe('JPEG 2000 decoding', () => {
+    const CODESTREAM =
+      '/0//UQApAAAAAAAFAAAAAwAAAAAAAAAAAAAABQAAAAMAAAAAAAAAAAABBwEB/1IADAAAAAEAAQQEAAH/XAAHQEBISFD/ZAAlAAFDcmVhdGVkIGJ5IE9wZW5KUEVHIHZlcnNpb24gMi41LjT/kAAKAAAAAAAaAAH/k9+AQAeryAosLBLwgP/Z';
+    const EXPECTED = [0, 50, 100, 150, 200, 17, 67, 117, 167, 217, 34, 84, 134, 184, 234];
+
+    it('decodes a real codestream back to the exact samples it was encoded from', () => {
+      const bytes = Uint8Array.from(Buffer.from(CODESTREAM, 'base64'));
+      const metadata = api.readJpeg2000Metadata(bytes);
+      expect(metadata).toMatchObject({ width: 5, height: 3, transform: 'reversible-5-3', decodable: true });
+
+      const image = api.decodeJpeg2000(bytes);
+      expect({ width: image.width, height: image.height, components: image.components.length }).toEqual({ width: 5, height: 3, components: 1 });
+      expect(Array.from(image.components[0])).toEqual(EXPECTED);
     });
   });
 

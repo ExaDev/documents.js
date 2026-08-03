@@ -2,6 +2,8 @@ import type { RawImage } from './image/png-decode';
 import { encodePng } from './image/png-encode';
 import type { JpegInfo } from './image/jpeg-info';
 import { readJpegInfo } from './image/jpeg-info';
+import type { Jpeg2000Image } from './image/jpeg2000';
+import { decodeJpeg2000 } from './image/jpeg2000';
 import type { PdfDiagnosticSink } from './diagnostics';
 import { decodeStream } from './filters';
 import type { PdfObjectResolver } from './interpret';
@@ -200,6 +202,76 @@ function readSoftMaskAlpha(dict: PdfDict, width: number, height: number, resolve
   return decoded.bytes.subarray(0, width * height);
 }
 
+// ISO 32000-1 7.4.9: for a JPXDecode image the codestream is authoritative about how many components there are and how deep their samples run, and /BitsPerComponent "shall not be present" at all. /ColorSpace is optional, and when it IS present it overrides whatever the JP2 boxes said -- which is the only reason the dictionary is consulted here rather than the codestream alone.
+function jpeg2000ChannelKind(image: Jpeg2000Image, dict: PdfDict, resolver: PdfObjectResolver, sink: PdfDiagnosticSink): 'gray' | 'rgb' | 'cmyk' {
+  const declared = dictGet(dict, 'ColorSpace') ?? dictGet(dict, 'CS');
+  if (declared !== undefined) {
+    const resolved = resolveColorSpace(declared, resolver, sink);
+    if (resolved.kind === 'gray' || resolved.kind === 'rgb' || resolved.kind === 'cmyk') {
+      return resolved.kind;
+    }
+  }
+  if (image.colourSpace === 'greyscale') {
+    return 'gray';
+  }
+  if (image.colourSpace === 'cmyk') {
+    return 'cmyk';
+  }
+  if (image.colourSpace === 'srgb' || image.colourSpace === 'sycc' || image.colourSpace === 'e-srgb' || image.colourSpace === 'rommrgb') {
+    return 'rgb';
+  }
+  // A bare codestream carries no colour specification of its own, so the component count is the only thing left to go on -- the same fallback every JPEG 2000 reader makes.
+  return image.components.length >= 4 ? 'cmyk' : image.components.length >= 3 ? 'rgb' : 'gray';
+}
+
+function readJpeg2000Image(dict: PdfDict, raw: Uint8Array<ArrayBuffer>, resolver: PdfObjectResolver, sink: PdfDiagnosticSink): ExtractedPdfImage | undefined {
+  let image: Jpeg2000Image;
+  try {
+    image = decodeJpeg2000(raw, { onWarning: (message) => sink({ code: 'image/jpx-degraded', severity: 'warning', message }) });
+  } catch (error) {
+    sink({ code: 'image/jpx-undecodable', severity: 'warning', message: `JPXDecode image could not be decoded (${error instanceof Error ? error.message : String(error)}); skipping this image` });
+    return undefined;
+  }
+
+  const kind = jpeg2000ChannelKind(image, dict, resolver, sink);
+  const required = kind === 'cmyk' ? 4 : kind === 'rgb' ? 3 : 1;
+  if (image.components.length < required) {
+    sink({ code: 'image/jpx-undecodable', severity: 'warning', message: `JPXDecode image resolves to a ${kind} colour space but carries only ${String(image.components.length)} component(s); skipping this image` });
+    return undefined;
+  }
+  if (image.components.length > required) {
+    // An extra channel is an opacity or auxiliary one (a JP2 cdef box says which). Compositing it would need /SMaskInData handling this codec does not implement, so it is dropped rather than mistaken for colour.
+    sink({ code: 'image/jpx-extra-channels', severity: 'info', message: `JPXDecode image carries ${String(image.components.length)} components where its colour space needs ${String(required)}; the extra channel(s) are ignored` });
+  }
+
+  // The codestream's own sample depth is whatever it declares; a RawImage is always eight bits per channel, so anything else is scaled onto that range.
+  const maximum = (1 << image.bitDepth) - 1;
+  const scale = (value: number): number => (image.bitDepth === 8 ? value : Math.round((value * 255) / maximum));
+  const pixels = image.width * image.height;
+  const channels = kind === 'gray' ? 1 : 3;
+  const data = new Uint8Array(pixels * channels);
+  if (kind === 'cmyk') {
+    for (let i = 0; i < pixels; i++) {
+      const rgb = cmykToRgbByte(scale(image.components[0]?.[i] ?? 0) / 255, scale(image.components[1]?.[i] ?? 0) / 255, scale(image.components[2]?.[i] ?? 0) / 255, scale(image.components[3]?.[i] ?? 0) / 255);
+      data[i * 3] = rgb.r;
+      data[i * 3 + 1] = rgb.g;
+      data[i * 3 + 2] = rgb.b;
+    }
+  } else {
+    for (let channel = 0; channel < channels; channel++) {
+      const plane = image.components[channel];
+      for (let i = 0; i < pixels; i++) {
+        data[i * channels + channel] = scale(plane?.[i] ?? 0);
+      }
+    }
+  }
+
+  const rawImage: RawImage = { width: image.width, height: image.height, channels, data };
+  const alpha = readSoftMaskAlpha(dict, image.width, image.height, resolver, sink);
+  const withAlpha: RawImage = alpha !== undefined ? { ...rawImage, alpha } : rawImage;
+  return { format: 'png', bytes: encodePng(withAlpha), widthPx: image.width, heightPx: image.height };
+}
+
 export function readImageXObject(dict: PdfDict, raw: Uint8Array<ArrayBuffer>, resolver: PdfObjectResolver, sink: PdfDiagnosticSink): ExtractedPdfImage | undefined {
   if (asBool(dictGet(dict, 'ImageMask') ?? dictGet(dict, 'IM')) === true) {
     sink({ code: 'image/mask-unsupported', severity: 'info', message: 'an /ImageMask stencil paints with the current fill colour rather than standing alone as an image; skipping' });
@@ -217,6 +289,9 @@ export function readImageXObject(dict: PdfDict, raw: Uint8Array<ArrayBuffer>, re
       return undefined;
     }
     return { format: 'jpeg', bytes: decoded.bytes, widthPx: info.width, heightPx: info.height };
+  }
+  if (decoded.remainingFilter === 'JPXDecode') {
+    return readJpeg2000Image(dict, decoded.bytes, resolver, sink);
   }
   if (decoded.remainingFilter !== undefined) {
     return undefined; // decodeStream already raised 'pdf/unsupported-filter'

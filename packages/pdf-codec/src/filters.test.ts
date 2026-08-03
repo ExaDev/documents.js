@@ -247,13 +247,24 @@ describe('decodeStream', () => {
     expect(diagnostics).toEqual([]);
   });
 
-  it('degrades an unsupported filter with a diagnostic, leaving the bytes undecoded', () => {
+  it('passes JPXDecode bytes through unchanged, flagged as the remaining filter', () => {
+    // A JPEG 2000 codestream decodes to samples whose component count and depth come from the codestream rather than the image dictionary, so it is handed on undecoded for src/images-read.ts to deal with -- the same treatment DCTDecode gets, and for the same reason DecodedStream cannot express the result.
     const { sink, diagnostics } = collectDiagnostics();
-    const raw = new Uint8Array([1, 2, 3]);
+    const raw = new Uint8Array([0xff, 0x4f, 0xff, 0x51]);
     const dict = pdfDict({ Filter: pdfName('JPXDecode') });
     const result = decodeStream(raw, dict, sink);
-    expect(Array.from(result.bytes)).toEqual([1, 2, 3]);
+    expect(Array.from(result.bytes)).toEqual(Array.from(raw));
     expect(result.remainingFilter).toBe('JPXDecode');
+    expect(diagnostics).toEqual([]);
+  });
+
+  it('degrades a filter it does not implement with a diagnostic, leaving the bytes undecoded', () => {
+    const { sink, diagnostics } = collectDiagnostics();
+    const raw = new Uint8Array([1, 2, 3]);
+    const dict = pdfDict({ Filter: pdfName('Crypt') });
+    const result = decodeStream(raw, dict, sink);
+    expect(Array.from(result.bytes)).toEqual([1, 2, 3]);
+    expect(result.remainingFilter).toBe('Crypt');
     expect(diagnostics[0]?.code).toBe('pdf/unsupported-filter');
   });
 
