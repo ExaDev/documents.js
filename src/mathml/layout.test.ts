@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { loadMathFont } from 'pdf-codec';
 import { layoutFormula } from './layout';
 import type { MathGlyphRun, MathRule, MathStroke } from './layout-types';
+import type { MathFontMetrics } from './metrics';
 import type { MathMlElement, MathMlNode } from './nodes';
 
 // Real font metrics throughout -- src/mathml itself has zero dependency on pdf-codec (see this module's own README/architecture note), but its OWN test suite reaching into the real embedded font for realistic, non-synthetic assertions is a pragmatic, test-only exception: MathFontMetrics is a plain interface (metrics.ts), and pdf-codec's loadMathFont() is simply the most realistic implementation available to verify layout.ts's own geometry against.
@@ -25,6 +26,32 @@ function mn(value: string): MathMlElement {
 }
 function mo(value: string): MathMlElement {
   return el('mo', [text(value)]);
+}
+function mtext(value: string): MathMlElement {
+  return el('mtext', [text(value)]);
+}
+
+// Wraps the real embedded font's own metrics, injecting explicit ink bounds for two codepoints that are otherwise unrelated to their real glyph outlines -- '.' (PERIOD, U+002E) standing in for a visually short glyph, '[' (LEFT SQUARE BRACKET, U+005B) for a visually tall one -- while leaving every other measurement (advance width, italic correction, topAccentXPt) exactly as the real font reports it. This isolates layoutToken's own ink-bounds-union logic from whether the currently installed pdf-codec font backend populates inkAscentPt/inkDescentPt at all (it does not -- see metrics.ts's own doc comment on the fallback this enables).
+const PERIOD_INK = { inkAscentPt: 1, inkDescentPt: 0.3 } as const; // well inside the font's own nominal ascent/descent at SIZE_PT (9.144pt / 2.856pt)
+const BRACKET_INK = { inkAscentPt: 10, inkDescentPt: 4 } as const; // deliberately taller than the font's own nominal ascent/descent at SIZE_PT
+function metricsWithInk(): MathFontMetrics {
+  const base = metrics();
+  return {
+    ...base,
+    glyph(codePoint: number, sizePt: number) {
+      const real = base.glyph(codePoint, sizePt);
+      if (real === undefined) {
+        return real;
+      }
+      if (codePoint === 0x2e) {
+        return { ...real, ...PERIOD_INK };
+      }
+      if (codePoint === 0x5b) {
+        return { ...real, ...BRACKET_INK };
+      }
+      return real;
+    },
+  };
 }
 
 function glyphRuns(items: readonly { readonly kind: string }[]): MathGlyphRun[] {
@@ -280,5 +307,40 @@ describe('layoutFormula: diagnostics and graceful degradation', () => {
     const runs = glyphRuns(box.items);
     expect(runs).toHaveLength(1);
     expect(runs[0]!.text.codePointAt(0)).toBe(0x1d465);
+  });
+});
+
+describe('layoutFormula: token box height from real per-glyph ink bounds', () => {
+  it('a visually short glyph (period) gets a measurably tighter box than a visually tall glyph (bracket), using each glyph\'s own real ink bounds rather than the shared nominal font metrics', () => {
+    const shortBox = layoutFormula([mo('.')], { metrics: metricsWithInk(), sizePt: SIZE_PT, color: BLACK }).box;
+    const tallBox = layoutFormula([mo('[')], { metrics: metricsWithInk(), sizePt: SIZE_PT, color: BLACK }).box;
+
+    // Before this change every token box shared the identical nominal height (ascentPerEm + descentPerEm) * SIZE_PT regardless of glyph -- these must now be the real, distinct injected ink bounds, not the nominal ones.
+    expect(shortBox.ascentPt).toBeCloseTo(PERIOD_INK.inkAscentPt, 6);
+    expect(shortBox.descentPt).toBeCloseTo(PERIOD_INK.inkDescentPt, 6);
+    expect(tallBox.ascentPt).toBeCloseTo(BRACKET_INK.inkAscentPt, 6);
+    expect(tallBox.descentPt).toBeCloseTo(BRACKET_INK.inkDescentPt, 6);
+
+    expect(tallBox.heightPt).toBeGreaterThan(shortBox.heightPt);
+    // A real, non-trivial numeric gap -- (10 + 4) - (1 + 0.3) = 12.7pt -- not rounding noise.
+    expect(tallBox.heightPt - shortBox.heightPt).toBeCloseTo(12.7, 6);
+  });
+
+  it('unions every character\'s own ink bounds across a multi-character token, not just the first character\'s', () => {
+    const shortThenTall = layoutFormula([mtext('.[')], { metrics: metricsWithInk(), sizePt: SIZE_PT, color: BLACK }).box;
+    expect(shortThenTall.ascentPt).toBeCloseTo(BRACKET_INK.inkAscentPt, 6); // max(1, 10)
+    expect(shortThenTall.descentPt).toBeCloseTo(BRACKET_INK.inkDescentPt, 6); // max(0.3, 4)
+
+    // Order-independent: the taller glyph's own bounds win whether it is the first or second character -- proving this is a real union, not "use the first character's metric".
+    const tallThenShort = layoutFormula([mtext('[.')], { metrics: metricsWithInk(), sizePt: SIZE_PT, color: BLACK }).box;
+    expect(tallThenShort.ascentPt).toBeCloseTo(shortThenTall.ascentPt, 6);
+    expect(tallThenShort.descentPt).toBeCloseTo(shortThenTall.descentPt, 6);
+  });
+
+  it('falls back to the font\'s own nominal ascent/descent for a glyph that carries no ink bounds at all', () => {
+    const box = layoutFormula([mi('x')], { metrics: metrics(), sizePt: SIZE_PT, color: BLACK }).box;
+    const m = metrics();
+    expect(box.ascentPt).toBeCloseTo(m.ascentPerEm * SIZE_PT, 6);
+    expect(box.descentPt).toBeCloseTo(m.descentPerEm * SIZE_PT, 6);
   });
 });

@@ -50,10 +50,14 @@ function unsupported(ctx: LayoutContext, element: MathMlElement): MathBox {
   return layoutToken(textContent(element), 'normal', ctx);
 }
 
-// Renders `text` (already resolved to its final display string -- the caller has already applied mathvariant) as one MathGlyphRun, measuring its width one code point at a time via ctx.metrics.glyph and skipping (with a diagnostic) any code point the embedded font has no glyph for at all. Ascent/descent come from the font's own nominal design metrics (metrics.ts's own note explains why this module never parses per-glyph ink bounding boxes), so every token box shares the same vertical extent regardless of which characters it actually contains.
+// Renders `text` (already resolved to its final display string -- the caller has already applied mathvariant) as one MathGlyphRun, measuring its width one code point at a time via ctx.metrics.glyph and skipping (with a diagnostic) any code point the embedded font has no glyph for at all. Ascent/descent are the UNION of every rendered character's own real ink bounds (MathGlyphMetrics.inkAscentPt/inkDescentPt) when a glyph carries them -- not just the first character's -- falling back per-character to the font's own nominal design metrics (ascentPerEm/descentPerEm) for a glyph that carries no ink bounds at all (e.g. an implementation with no glyf/CFF outline parsing). A single-character token is the degenerate case of this same union.
 function layoutToken(rawText: string, variant: MathVariant, ctx: LayoutContext): MathBox {
   const styled = applyMathVariant(rawText, variant);
+  const nominalAscentPt = ctx.metrics.ascentPerEm * ctx.sizePt;
+  const nominalDescentPt = ctx.metrics.descentPerEm * ctx.sizePt;
   let widthPt = 0;
+  let ascentPt = 0;
+  let descentPt = 0;
   let text = '';
   for (const ch of styled) {
     const codePoint = ch.codePointAt(0);
@@ -67,12 +71,12 @@ function layoutToken(rawText: string, variant: MathVariant, ctx: LayoutContext):
     }
     text += ch;
     widthPt += glyph.advanceWidthPt;
+    ascentPt = Math.max(ascentPt, glyph.inkAscentPt ?? nominalAscentPt);
+    descentPt = Math.max(descentPt, glyph.inkDescentPt ?? nominalDescentPt);
   }
   if (text.length === 0) {
     return EMPTY_BOX;
   }
-  const ascentPt = ctx.metrics.ascentPerEm * ctx.sizePt;
-  const descentPt = ctx.metrics.descentPerEm * ctx.sizePt;
   const items: MathLayoutItem[] = [{ kind: 'glyphs', xPt: 0, yPt: ascentPt, text, sizePt: ctx.sizePt, color: ctx.color }];
   return { widthPt, ascentPt, descentPt, heightPt: ascentPt + descentPt, items };
 }
