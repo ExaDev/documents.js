@@ -3,7 +3,7 @@ import type { Package } from 'ooxml.js';
 import { formulaOfBlock, formulaPlaceholderText } from '../../model/formula';
 import { base64ToBytes } from 'ooxml.js';
 import { ptToTwips } from '../../model/units';
-import type { OmmlDiagnostic } from '../../omml/write';
+import type { OmmlDiagnostic } from '../../omml/shared';
 import type { DocxBody } from './editor';
 import { createDocx } from './editor';
 import type { DocxParagraph } from './paragraph';

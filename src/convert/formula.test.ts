@@ -14,7 +14,7 @@ import { attr, buildXml, childrenWithTag, decodePackage as decodeOoxmlPackage, e
 import { readPdf } from 'pdf-codec';
 import { buildDocxPackage } from '../edit/docx/content';
 import { decodeMarkdownText } from '../markdown/text';
-import type { OmmlDiagnostic } from '../omml/write';
+import type { OmmlDiagnostic } from '../omml/shared';
 import { readDocxContent } from '../ooxml/docx/read';
 import { readOdpContent } from '../odf/odp/read';
 import { readOdtContent } from '../odf/odt/read';
@@ -474,17 +474,25 @@ describe('odtToDocx: an embedded formula becomes real OOXML math', () => {
     expect(buildXml([root])).toContain('[formula]');
   });
 
-  it('does not read the equation back: ooxml.js\'s own readDocx has no m:oMath handling, so the equation paragraph reads as a runless paragraph', () => {
-    // Pins the documented read-back boundary (see the README's own "OMML is written but not read" gotcha) as an asserted fact rather than only prose: the docx genuinely holds real math, and nothing in this package's read path recovers it.
+  it('reads the equation back as a real formula block, consuming the paragraph that held nothing but the equation', () => {
+    // The read direction closing the loop the write direction opened: readDocxContent recovers the m:oMathPara this bridge wrote as a genuine ContentEmbeddedObjectBlock carrying real MathML, and the otherwise-empty w:p that held it becomes the formula block rather than an empty paragraph sitting beside one.
     const content = readDocxContent(decodeOoxmlPackage(odtToDocx(odtWithEmbeddedFormulaBytes())));
     if (content.kind !== 'wordprocessing') {
       throw new Error('expected a wordprocessing ContentDocument');
     }
     const blocks = content.sections[0]!.blocks;
-    expect(blocks.map((block) => block.kind)).toEqual(['paragraph', 'paragraph']);
-    expect(blocks.filter((block) => block.kind === 'embeddedObject')).toHaveLength(0);
-    const equationBlock = blocks[1];
-    expect(equationBlock?.kind === 'paragraph' ? equationBlock.runs : undefined).toEqual([]);
+    expect(blocks.map((block) => block.kind)).toEqual(['paragraph', 'embeddedObject']);
+    expect(formulaRootTag(blocks[1])).toBe('mfrac');
+    expect(blocks[1]?.kind === 'embeddedObject' ? blocks[1].sourcePath : undefined).toBe('sections[0].blocks[1]');
+  });
+
+  it('keeps an INLINE equation\'s own paragraph, placing the formula block immediately after it', () => {
+    // The mirror of the consumption rule above: a paragraph carrying real text alongside its equation is not the equation, so it keeps its own block and the formula lands after it -- exactly where src/odf/odt/read.ts places an inline ODF formula frame.
+    const content = readDocxContent(decodeOoxmlPackage(odtToDocx(odtWithInlineFormulaBytes())));
+    if (content.kind !== 'wordprocessing') {
+      throw new Error('expected a wordprocessing ContentDocument');
+    }
+    expect(blockSummary(content.sections[0]!.blocks)).toEqual(['First paragraph', 'Second paragraph with  inline.', 'embeddedObject', 'Third paragraph']);
   });
 
   it('carries an .odm chapter\'s own formula into a docx as OMML through the same path', () => {

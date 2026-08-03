@@ -7,6 +7,8 @@ import type { MathVariant } from '../mathml/variant';
 import { isMathVariant } from '../mathml/variant';
 import { encodeXmlText, needsSpacePreserve } from '../xml/entities';
 import { el, txt } from '../xml/fragment';
+import type { OmmlDiagnostic, OmmlDiagnosticKind } from './shared';
+import { miIntrinsicDefault, VARIANT_RUN_PROPERTIES } from './shared';
 
 // MathML presentation markup -> OMML (Office Math Markup Language, ECMA-376 Part 1 §22.1's own `m:` vocabulary), the write-side counterpart to src/mathml/layout.ts's own MathML -> MathBox typesetting engine. Both consume the identical MathMlNode tree and cover the identical construct set, deliberately: a formula rendered to PDF and the same formula written into a docx should degrade in the same places, never one silently better than the other.
 //
@@ -16,14 +18,6 @@ import { el, txt } from '../xml/fragment';
 
 // http://schemas.openxmlformats.org/officeDocument/2006/math -- OMML's own namespace, declared on the fragment's own root element rather than on the host document's w:document, so a fragment stays valid when appended to ANY docx, including one this package did not scaffold (openDocx over a third-party file whose root declares only xmlns:w). Redundant namespace declarations on a descendant are ordinary, valid XML; a missing one is not.
 const OMML_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/math';
-
-// 'unsupported-element': a MathML construct with no OMML equivalent at all -- degraded to a literal-text math run carrying that element's own text content, exactly as src/mathml/layout.ts's own `unsupported` fallback degrades it for the PDF path, so the formula still arrives (partially) rather than vanishing or failing the whole document. 'approximated-element': a construct that DOES map onto a real OMML element, but whose own attributes OMML cannot carry (mspace's explicit width -- OMML has no width-parameterised spacer at all, only literal space runs).
-export type OmmlDiagnosticKind = 'unsupported-element' | 'approximated-element';
-
-export interface OmmlDiagnostic {
-  readonly kind: OmmlDiagnosticKind;
-  readonly detail: string; // the element's own local tag name, namespace prefix stripped
-}
 
 export interface OmmlWriteResult {
   // undefined when the source MathML produced no OMML content at all -- an empty formula, or one whose every node was a non-element (a whitespace text node between siblings). A caller then falls back to whatever whole-formula stand-in it already has (src/model/formula.ts's formulaPlaceholderText), rather than writing an empty equation.
@@ -37,24 +31,6 @@ interface WriteContext {
   readonly displayStyle: boolean;
   readonly diagnostics: OmmlDiagnostic[];
 }
-
-// MathML's fourteen mathvariant values map exactly onto OMML's own two-axis (m:scr script x m:sty style) run properties, with no residue: m:scr names the alphabet (roman/script/fraktur/double-struck/sans-serif/monospace) and m:sty names the weight/slope (p=plain, b=bold, i=italic, bi=bold-italic). A 'roman' m:scr is OMML's own default and is left unwritten. Deliberately NOT applied by rewriting the characters themselves into the Unicode Mathematical Alphanumeric Symbols block the way src/mathml/variant.ts's applyMathVariant does for glyph rendering: OMML carries the style as markup, so writing both would double-apply it in Word.
-const VARIANT_RUN_PROPERTIES: Record<MathVariant, { readonly scr?: string; readonly sty: string }> = {
-  normal: { sty: 'p' },
-  bold: { sty: 'b' },
-  italic: { sty: 'i' },
-  'bold-italic': { sty: 'bi' },
-  'double-struck': { scr: 'double-struck', sty: 'p' },
-  script: { scr: 'script', sty: 'p' },
-  'bold-script': { scr: 'script', sty: 'b' },
-  fraktur: { scr: 'fraktur', sty: 'p' },
-  'bold-fraktur': { scr: 'fraktur', sty: 'b' },
-  'sans-serif': { scr: 'sans-serif', sty: 'p' },
-  'bold-sans-serif': { scr: 'sans-serif', sty: 'b' },
-  'sans-serif-italic': { scr: 'sans-serif', sty: 'i' },
-  'sans-serif-bold-italic': { scr: 'sans-serif', sty: 'bi' },
-  monospace: { scr: 'monospace', sty: 'p' },
-};
 
 // MathML columnalign -> OMML's own m:mcJc (ST_XAlign). ST_XAlign also has 'inside'/'outside', which MathML's columnalign has no counterpart for; anything unrecognised falls back to 'center', mtable's own default.
 function columnJustification(align: string | undefined): string {
@@ -85,11 +61,6 @@ function variantRunProperties(variant: MathVariant): XmlElement {
   }
   children.push(el('m:sty', { 'm:val': mapped.sty }));
   return el('m:rPr', {}, children);
-}
-
-// mi's own intrinsic default (MathML3 3.2.3), restated here rather than imported because src/mathml/layout.ts keeps it private to its own layout pass: italic for a single-character identifier, normal for anything longer.
-function miIntrinsicDefault(content: string): MathVariant {
-  return [...content].length === 1 ? 'italic' : 'normal';
 }
 
 function tokenVariant(element: MathMlElement, intrinsicDefault: MathVariant, ctx: WriteContext): MathVariant {

@@ -258,11 +258,15 @@ export { operatorProperties } from './mathml/operators';
 export type { MathVariant } from './mathml/variant';
 export { applyMathVariant, isMathVariant, mapMathVariant } from './mathml/variant';
 
-// --- MathML -> OMML (ECMA-376 Part 1's own Office Math Markup Language) structural translation: the WRITE-side counterpart to layoutFormula above, covering the identical construct set so a formula rendered to PDF and the same formula written into a docx degrade in exactly the same places. buildDocxPackage is its real caller (an embedded formula becomes genuine, editable Word math rather than a plain-text stand-in); exported directly for a caller assembling OOXML math itself, e.g. into a docx opened through openDocx. ---
-export type { OmmlDiagnostic, OmmlDiagnosticKind, OmmlWriteResult } from './omml/write';
+// --- MathML <-> OMML (ECMA-376 Part 1's own Office Math Markup Language) structural translation, both directions. buildOfficeMath/buildOfficeMathParagraph are the WRITE side, the counterpart to layoutFormula above: they cover the identical construct set, so a formula rendered to PDF and the same formula written into a docx degrade in exactly the same places (buildDocxPackage is their real caller -- an embedded formula becomes genuine, editable Word math rather than a plain-text stand-in). readOfficeMath/collectOfficeMathElements are the READ side, the structural inverse: they recover a Word-authored equation as real MathML, which is what makes readDocxContent carry a formula through at all (ooxml.js's own readDocx has no m:oMath handling whatsoever). Both are exported directly for a caller assembling or mining OOXML math itself, e.g. in a docx opened through openDocx. ---
+export type { OmmlDiagnostic, OmmlDiagnosticKind } from './omml/shared';
+export type { OmmlWriteResult } from './omml/write';
 export { buildOfficeMath, buildOfficeMathParagraph } from './omml/write';
+export type { OmmlReadResult } from './omml/read';
+export { collectOfficeMathElements, readOfficeMath } from './omml/read';
 
 // --- Format <-> ContentDocument readers and layout algorithms, each independently usable rather than only reachable through the ergonomic conversions below. ---
+export type { ReadDocxContentOptions } from './ooxml/docx/read';
 export { readDocxContent } from './ooxml/docx/read';
 // The docx-specific data readDocxContent above genuinely cannot carry through ContentDocument -- comments, footnotes, headers/footers, and numbering (abstractNum/num) definitions -- exposed as its own real return type rather than forced into a shape that doesn't model it.
 export type { DocxExtras } from './ooxml/docx/extras';
