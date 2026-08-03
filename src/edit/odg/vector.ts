@@ -146,6 +146,9 @@ export function buildLineElement(pkg: Package, init: LineVectorInit): XmlElement
 }
 
 export class OdgLineVector {
+  // A fixed discriminant, unlike OdgBoxVector's own tag-derived getter -- draw:line is the only element this class ever wraps.
+  readonly kind = 'line';
+
   private readonly container: XmlNode[];
   private readonly node: XmlElement;
   private readonly pkg: Package;
@@ -230,6 +233,9 @@ export function buildPathElement(pkg: Package, init: PathVectorInit): XmlElement
 }
 
 export class OdgPathVector {
+  // A fixed discriminant, for the same reason OdgLineVector's is: draw:path is the only element this class ever wraps.
+  readonly kind = 'path';
+
   private readonly container: XmlNode[];
   private readonly node: XmlElement;
   private readonly pkg: Package;
@@ -307,5 +313,27 @@ export class OdgPathVector {
   remove(): void {
     removeChild(this.container, this.live());
     this.removed = true;
+  }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// The three classes above as one union, discriminated on `kind` -- the same four-member vocabulary ContentVectorSchema's own variants carry ('rect'/'ellipse'/'line'/'path'), so a caller holding an OdgVector narrows it exactly as it would narrow a ContentVector. OdgBoxVector's own kind is the one member resolved from the live element's tag rather than being fixed per class, since one class serves both draw:rect and draw:ellipse (see its own note above).
+
+export type OdgVectorKind = OdgBoxVectorKind | 'line' | 'path';
+
+export type OdgVector = OdgBoxVector | OdgLineVector | OdgPathVector;
+
+// Wraps whichever vector-primitive element `node` actually is in its matching live-view class, or reports undefined for an element that is not a vector primitive at all (a draw:frame, most commonly -- draw:page mixes frames and vectors in one children list, since document order IS paint order for both). This is the read-side inverse of buildRectElement/buildEllipseElement/buildLineElement/buildPathElement above, and the single place tag-to-class dispatch lives: OdgPage.vectors (page.ts) is its caller.
+export function wrapVectorElement(container: XmlNode[], node: XmlElement, pkg: Package): OdgVector | undefined {
+  switch (node.tag) {
+    case 'draw:rect':
+    case 'draw:ellipse':
+      return new OdgBoxVector(container, node, pkg);
+    case 'draw:line':
+      return new OdgLineVector(container, node, pkg);
+    case 'draw:path':
+      return new OdgPathVector(container, node, pkg);
+    default:
+      return undefined;
   }
 }

@@ -92,6 +92,133 @@ describe('OdgPage.addRect / addEllipse / addLine / addPath / addTextBox / addIma
   });
 });
 
+describe('OdgPage.vectors: re-obtaining a live handle on an already-created vector', () => {
+  it('returns every vector primitive in paint order, each narrowed to its own kind, and skips draw:frame shapes entirely', () => {
+    const editor = createOdg();
+    const page = editor.addPage();
+    page.addRect({ frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 }, fill: RED });
+    page.addTextBox({ frame: { xPt: 0, yPt: 20, widthPt: 40, heightPt: 10 }, text: 'A label' });
+    page.addEllipse({ frame: { xPt: 20, yPt: 0, widthPt: 10, heightPt: 10 }, fill: BLUE });
+    page.addLine({ from: { xPt: 0, yPt: 0 }, to: { xPt: 10, yPt: 10 }, stroke: { color: BLACK, widthPt: 1 } });
+    page.addPath({ frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 }, subpaths: [{ start: { xPt: 0, yPt: 0 }, closed: false, segments: [{ kind: 'line', to: { xPt: 10, yPt: 10 } }] }] });
+
+    expect(page.vectors().map((v) => v.kind)).toEqual(['rect', 'ellipse', 'line', 'path']);
+    expect(page.shapes()).toHaveLength(1);
+  });
+
+  it('a handle re-obtained through vectors() edits the SAME underlying element the add* call returned, not a detached copy', () => {
+    const editor = createOdg();
+    const page = editor.addPage();
+    const created = page.addRect({ frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 }, fill: RED });
+
+    const reobtained = page.vectors()[0];
+    if (reobtained?.kind !== 'rect') {
+      throw new Error('expected the first vector to be the rect');
+    }
+    reobtained.fill = BLUE;
+
+    // The handle from addRect sees the change immediately: both are live views over one XmlElement.
+    expect(created.fill).toEqual(BLUE);
+  });
+
+  it('mutating fill and stroke through a re-obtained handle survives toBytes() and is read back by odf.js\'s own readOdg', () => {
+    const editor = createOdg();
+    const page = editor.addPage();
+    page.addRect({ frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 }, fill: RED });
+    page.addLine({ from: { xPt: 0, yPt: 0 }, to: { xPt: 10, yPt: 10 }, stroke: { color: BLACK, widthPt: 1 } });
+    page.addPath({ frame: { xPt: 0, yPt: 0, widthPt: 20, heightPt: 20 }, subpaths: [{ start: { xPt: 0, yPt: 0 }, closed: false, segments: [{ kind: 'line', to: { xPt: 20, yPt: 20 } }] }], fill: RED });
+
+    // Reopen from bytes first, so every handle used below is genuinely re-obtained from parsed XML rather than retained from creation.
+    const reopened = openOdg(editor.toBytes());
+    const reopenedPage = reopened.pages()[0];
+    if (reopenedPage === undefined) {
+      throw new Error('expected the reopened drawing to have a page');
+    }
+
+    for (const vector of reopenedPage.vectors()) {
+      switch (vector.kind) {
+        case 'rect':
+        case 'ellipse':
+          vector.fill = CYAN;
+          vector.stroke = { color: BLUE, widthPt: 3 };
+          break;
+        case 'line':
+          vector.stroke = { color: CYAN, widthPt: 4 };
+          break;
+        case 'path':
+          vector.fill = BLUE;
+          break;
+      }
+    }
+
+    const { pages } = readOdg(decodePackage(reopened.toBytes()));
+    const firstPage = pages[0];
+    if (firstPage === undefined) {
+      throw new Error('expected a page');
+    }
+
+    const rect = firstPage.vectors.find((v) => v.kind === 'rect');
+    if (rect?.kind !== 'rect') {
+      throw new Error('expected a rect vector');
+    }
+    expect(rect.fill).toEqual(CYAN);
+    expect(rect.stroke).toEqual({ color: BLUE, widthPt: 3 });
+
+    const line = firstPage.vectors.find((v) => v.kind === 'line');
+    if (line?.kind !== 'line') {
+      throw new Error('expected a line vector');
+    }
+    expect(line.stroke).toEqual({ color: CYAN, widthPt: 4 });
+
+    const path = firstPage.vectors.find((v) => v.kind === 'path');
+    if (path?.kind !== 'path') {
+      throw new Error('expected a path vector');
+    }
+    expect(path.fill).toEqual(BLUE);
+  });
+
+  it('a vector removed through a re-obtained handle disappears from the page and from the written bytes', () => {
+    const editor = createOdg();
+    const page = editor.addPage();
+    page.addRect({ frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 }, fill: RED });
+    page.addEllipse({ frame: { xPt: 20, yPt: 0, widthPt: 10, heightPt: 10 }, fill: BLUE });
+
+    const rect = page.vectors()[0];
+    if (rect === undefined) {
+      throw new Error('expected a rect vector');
+    }
+    rect.remove();
+
+    expect(page.vectors().map((v) => v.kind)).toEqual(['ellipse']);
+    const { pages } = readOdg(decodePackage(editor.toBytes()));
+    expect(pages[0]?.vectors.map((v) => v.kind)).toEqual(['ellipse']);
+  });
+
+  it('addPath accepts an arbitrary caller-supplied subpath array, curves included -- a re-obtained handle reparses exactly those points back out of the written svg:d', () => {
+    const editor = createOdg();
+    const page = editor.addPage();
+    const subpaths: ContentSubpath[] = [
+      {
+        start: { xPt: 0, yPt: 30 },
+        closed: true,
+        segments: [
+          { kind: 'line', to: { xPt: 45, yPt: 30 } },
+          { kind: 'cubic', control1: { xPt: 60, yPt: 30 }, control2: { xPt: 60, yPt: 0 }, to: { xPt: 25, yPt: 0 } },
+        ],
+      },
+      { start: { xPt: 5, yPt: 5 }, closed: false, segments: [{ kind: 'line', to: { xPt: 15, yPt: 15 } }] },
+    ];
+    page.addPath({ frame: { xPt: 10, yPt: 10, widthPt: 60, heightPt: 30 }, subpaths, fill: CYAN });
+
+    const reopened = openOdg(editor.toBytes());
+    const vector = reopened.pages()[0]?.vectors()[0];
+    if (vector?.kind !== 'path') {
+      throw new Error('expected the reopened page to expose the path vector');
+    }
+    expect(vector.subpaths).toEqual(subpaths);
+  });
+});
+
 describe('paint order: vectors and shapes come back in document-add order, with no draw:z-index attribute written', () => {
   it('matches odf.js\'s own canonical convention (document order IS z-order; real LibreOffice output never emits draw:z-index)', () => {
     const editor = createOdg();
