@@ -18,8 +18,8 @@ importers:
         specifier: ^1.0.0
         version: 1.0.0
       odf.js:
-        specifier: ^2.2.5
-        version: 2.2.5
+        specifier: ^2.2.8
+        version: 2.2.8
       ooxml.js:
         specifier: ^2.6.8
         version: 2.6.8
@@ -1942,8 +1942,8 @@ packages:
     resolution: {integrity: sha512-4a+OsYv9UktOJKE+l1A4OufDgdRF9PifWj+tJnHURo/P+WOxpG4GzUFL9qCalmWauao6ogiG+QvnCovwPoyAWA==}
     engines: {node: '>=12.20.0'}
 
-  odf.js@2.2.5:
-    resolution: {integrity: sha512-8IaTTSYybOlDPhaLk5Nbx8XOSi/fWelvSFUgOp6+6y72L0bB4jpeUjTtk8j4gGe8zEqNiJzsLMdcz/k7UcNKSw==}
+  odf.js@2.2.8:
+    resolution: {integrity: sha512-80n6zQTrw2wKfUq0D5tFU4BpYzre7pQqdmcko9b3Uc69g9fjClpk+V6CAt+ZvQ+Q2kb1gVK/yMmrgnIGIQjgsQ==}
     engines: {node: '>=20'}
 
   onetime@6.0.0:
@@ -4428,7 +4428,7 @@ snapshots:
 
   obug@2.1.4: {}
 
-  odf.js@2.2.5:
+  odf.js@2.2.8:
     dependencies:
       document-schema.js: 2.2.3
       fast-xml-parser: 5.10.1
