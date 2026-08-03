@@ -1,3 +1,10 @@
+## [1.0.9](https://github.com/ExaDev/markdown-codec/compare/v1.0.8...v1.0.9) (2026-08-03)
+
+
+### Bug Fixes
+
+* **ci:** use pull_request_target so dependabot auto-merge can read secrets ([f0dfce7](https://github.com/ExaDev/markdown-codec/commit/f0dfce773c5715e60c00b07525b8cb5bad7fa6fc))
+
 ## [1.0.8](https://github.com/ExaDev/markdown-codec/compare/v1.0.7...v1.0.8) (2026-08-03)
 
 
