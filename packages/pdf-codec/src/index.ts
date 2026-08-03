@@ -33,6 +33,10 @@ export { STANDARD_METRICS } from './afm-widths';
 export type { ResolvedFont } from './fonts';
 export { resolveStandardFont } from './fonts';
 
+// Font registry: a swappable, source/caller/vendored/standard-14 precedence port in front of resolveStandardFont -- see src/font-registry.ts's own header comment for the full resolution order.
+export type { FontRegistry, FontRegistryOptions, FontSubstitution, ProvidedFont, ResolvedFace } from './font-registry';
+export { createFontRegistry } from './font-registry';
+
 // Bytes: generic byte-level primitives with zero PDF knowledge (CRC32, DEFLATE/zlib, a backtracking reader, a chunked writer).
 export { crc32 } from './bytes/crc32';
 export type { DeflateLevel, InflateResult } from './bytes/flate';

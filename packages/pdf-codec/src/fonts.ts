@@ -76,7 +76,8 @@ const FAMILY_BY_NORMALIZED_NAME: ReadonlyMap<string, StandardFamily> = new Map([
 
 const DEFAULT_FAMILY: StandardFamily = 'helvetica';
 
-function normalizeFamilyName(raw: string): string {
+// Lowercase, strip everything but letters/digits -- so 'Calibri Light', 'CalibriLight', and 'calibri-light' all normalize to the identical 'calibrilight' key. Exported for font-substitutes.ts/font-registry.ts, which key their own exact-match tables and caches on this same normalization rather than maintaining a second copy of it.
+export function normalizeFamilyName(raw: string): string {
   return raw.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
