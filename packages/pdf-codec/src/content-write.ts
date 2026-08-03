@@ -3,18 +3,34 @@ import type { Color as LayoutColor } from 'document-schema.js';
 import type { LayoutFont } from 'document-schema.js';
 import type { StandardFontName } from './afm-widths';
 import { ByteWriter } from './bytes/writer';
+import type { EmbeddedFace, EmbeddedFaceSubstitution } from './embedded-font';
+import { encodeForShowEmbedded } from './embedded-font';
 import type { Matrix } from './matrix';
 import { BEZIER_KAPPA, multiplyMatrices, rotationMatrix, scaleMatrix, translationMatrix } from './matrix';
-import type { TextMeasurer } from './measure';
+import type { TextMeasurer, UnderlineMetrics } from './measure';
 import { pdfHexString } from './objects';
 import { formatNumber, writeObject } from './serialize';
 import type { WinAnsiSubstitution } from './winansi';
 import { encodeForShow } from './winansi';
 
-export interface ResolvedFontResource {
-  readonly resourceName: string; // e.g. 'F1', the key under the page's /Resources/Font dict
-  readonly standardName: StandardFontName;
-}
+// Which kind of font resource write.ts allocated for a given LayoutFont, and everything this module needs to actually show text in it. A discriminated union rather than one shape with optional fields because the two branches are genuinely different at the byte level: a standard-14 face shows a WinAnsi-encoded 1-byte-per-character string against a /Type1 font dict, while an embedded face shows Identity-H 2-byte CIDs against a /Type0 one (the same shape math-content-write.ts already emits for the math font), and there is no per-character encoding, width source, or underline metric the two share.
+export type ResolvedFontResource =
+  | {
+      readonly kind: 'standard';
+      readonly resourceName: string; // e.g. 'F1', the key under the page's /Resources/Font dict
+      readonly standardName: StandardFontName;
+    }
+  | {
+      readonly kind: 'embedded';
+      readonly resourceName: string; // e.g. 'E1', the key under the page's /Resources/Font dict
+      readonly face: EmbeddedFace;
+    };
+
+// PDF glyph space (ISO 32000-1 9.8.1): the 1000-units-per-em space every EmbeddedFaceMetrics field and every encodeForShowEmbedded width already carries, whatever the font's own design grid is.
+const GLYPH_SPACE_UNITS_PER_EM = 1000;
+
+// The Tz (horizontal scaling) percentage an embedded face is always drawn at: it advances at its own real widths, which is exactly what the measurer measured, so there is nothing to correct. See measure.ts's own DEFAULT_WIDTH_CORRECTIONS comment for why applying a standard-14 substitute's correction here as well would silently overrun a column.
+const EMBEDDED_HORIZONTAL_SCALE_PERCENT = 100;
 
 export interface ResolvedImageResource {
   readonly resourceName: string; // e.g. 'Im1', the key under the page's /Resources/XObject dict
@@ -29,8 +45,10 @@ export interface ContentWriteContext {
 
 export interface ContentStreamResult {
   readonly bytes: Uint8Array<ArrayBuffer>;
-  // Every WinAnsi substitution made while emitting text, in item order -- content-write.ts has no Diagnostic schema of its own to turn these into, so it hands back the raw substitutions and leaves that translation to whichever layer owns diagnostics.
+  // Every WinAnsi substitution made while emitting text in a STANDARD-14 face, in item order -- content-write.ts has no Diagnostic schema of its own to turn these into, so it hands back the raw substitutions and leaves that translation to whichever layer owns diagnostics.
   readonly substitutions: readonly WinAnsiSubstitution[];
+  // Every character shown as .notdef because the EMBEDDED face it was drawn in has no glyph for it, in item order. Kept separate from `substitutions` rather than folded into it because nothing visible was chosen as a replacement here -- a WinAnsiSubstitution's own `to` field would have to be invented, and claiming a '?' was drawn when a notdef box was drawn is a worse report than none. Reported rather than dropped: only the caller can decide whether that means picking another face or accepting the box.
+  readonly missingGlyphs: readonly EmbeddedFaceSubstitution[];
 }
 
 function writeRgbOperator(writer: ByteWriter, color: LayoutColor, operator: 'rg' | 'RG'): void {
@@ -47,8 +65,7 @@ function anchorMatrix(xPt: number, yPt: number, rotationDeg: number | undefined)
   return [r[0], r[1], r[2], r[3], xPt, yPt];
 }
 
-function writeUnderline(writer: ByteWriter, item: LayoutText, widthPt: number, measurer: TextMeasurer): void {
-  const underline = measurer.underlineAtSize(item.font, item.sizePt);
+function writeUnderline(writer: ByteWriter, item: LayoutText, widthPt: number, underline: UnderlineMetrics): void {
   writer.writeAscii('q\n');
   writeMatrixOperator(writer, anchorMatrix(item.xPt, item.yPt, item.rotationDeg), 'cm');
   writeRgbOperator(writer, item.color, 'rg');
@@ -57,28 +74,57 @@ function writeUnderline(writer: ByteWriter, item: LayoutText, widthPt: number, m
   writer.writeAscii('Q\n');
 }
 
-function writeText(writer: ByteWriter, item: LayoutText, context: ContentWriteContext, substitutions: WinAnsiSubstitution[]): void {
-  const font = context.resolveFont(item.font);
-  const encoded = encodeForShow(item.text, font.standardName);
-  substitutions.push(...encoded.substitutions);
-
-  // The Tz (horizontal scaling) percentage is a text-state parameter that persists across content-stream items until explicitly changed -- it must be written for every text item, even when the correction is 1.0 (100%), or a preceding item's correction would silently leak into this one.
-  const scalePercent = context.measurer.horizontalScaleFor(item.font) * 100;
-
+// The BT..ET block both text branches share, differing only in the resource name, the Tz percentage, and the already-encoded show operand -- the operator sequence, its order, and the absolute Tm are identical whether the operand is a WinAnsi byte string or an Identity-H CID one.
+function writeShowTextBlock(writer: ByteWriter, item: LayoutText, resourceName: string, scalePercent: number, codes: Uint8Array<ArrayBuffer>): void {
   writer.writeAscii('BT\n');
-  writer.writeAscii(`/${font.resourceName} ${formatNumber(item.sizePt)} Tf\n`);
+  writer.writeAscii(`/${resourceName} ${formatNumber(item.sizePt)} Tf\n`);
   writer.writeAscii(`${formatNumber(scalePercent)} Tz\n`);
   writeRgbOperator(writer, item.color, 'rg');
   writeMatrixOperator(writer, anchorMatrix(item.xPt, item.yPt, item.rotationDeg), 'Tm');
-  writeObject(writer, pdfHexString(encoded.codes));
+  writeObject(writer, pdfHexString(codes));
   writer.writeAscii(' Tj\n');
   writer.writeAscii('ET\n');
+}
+
+function writeStandardText(writer: ByteWriter, item: LayoutText, standardName: StandardFontName, resourceName: string, measurer: TextMeasurer, substitutions: WinAnsiSubstitution[]): void {
+  const encoded = encodeForShow(item.text, standardName);
+  substitutions.push(...encoded.substitutions);
+
+  // The Tz (horizontal scaling) percentage is a text-state parameter that persists across content-stream items until explicitly changed -- it must be written for every text item, even when the correction is 1.0 (100%), or a preceding item's correction would silently leak into this one.
+  const scale = measurer.horizontalScaleFor(item.font);
+  writeShowTextBlock(writer, item, resourceName, scale * 100, encoded.codes);
 
   if (item.underline === true) {
-    const scale = context.measurer.horizontalScaleFor(item.font);
-    const widthPt = item.widthPt ?? (encoded.width1000 / 1000) * item.sizePt * scale;
-    writeUnderline(writer, item, widthPt, context.measurer);
+    const widthPt = item.widthPt ?? (encoded.width1000 / GLYPH_SPACE_UNITS_PER_EM) * item.sizePt * scale;
+    writeUnderline(writer, item, widthPt, measurer.underlineAtSize(item.font, item.sizePt));
   }
+}
+
+// An embedded face is shown exactly the way math-content-write.ts already shows the embedded math font: 2-byte big-endian CIDs (== glyph IDs, since every embedded font program this package writes preserves glyph IDs and declares /CIDToGIDMap /Identity) as a hex string operand to Tj, against a /Type0 Identity-H resource.
+//
+// Two things are deliberately NOT taken from the measurer here, even though the measurer would give the same answer whenever it was built with the same registry: the Tz percentage is fixed at 100 (an embedded face is drawn at its own real advances, so no correction can ever apply), and the underline geometry comes from this face's own 'post' table rather than from whichever standard-14 face the family would otherwise have substituted to. Reading both off the resolved face rather than off a separately-constructed measurer removes the one way the two could ever disagree.
+function writeEmbeddedText(writer: ByteWriter, item: LayoutText, face: EmbeddedFace, resourceName: string, missingGlyphs: EmbeddedFaceSubstitution[]): void {
+  const encoded = encodeForShowEmbedded(item.text, face);
+  missingGlyphs.push(...encoded.substitutions);
+
+  writeShowTextBlock(writer, item, resourceName, EMBEDDED_HORIZONTAL_SCALE_PERCENT, encoded.codes);
+
+  if (item.underline === true) {
+    const widthPt = item.widthPt ?? (encoded.width1000 / GLYPH_SPACE_UNITS_PER_EM) * item.sizePt;
+    writeUnderline(writer, item, widthPt, {
+      offsetPt: (face.metrics.underlinePositionGlyphSpace / GLYPH_SPACE_UNITS_PER_EM) * item.sizePt,
+      thicknessPt: (face.metrics.underlineThicknessGlyphSpace / GLYPH_SPACE_UNITS_PER_EM) * item.sizePt,
+    });
+  }
+}
+
+function writeText(writer: ByteWriter, item: LayoutText, context: ContentWriteContext, substitutions: WinAnsiSubstitution[], missingGlyphs: EmbeddedFaceSubstitution[]): void {
+  const font = context.resolveFont(item.font);
+  if (font.kind === 'embedded') {
+    writeEmbeddedText(writer, item, font.face, font.resourceName, missingGlyphs);
+    return;
+  }
+  writeStandardText(writer, item, font.standardName, font.resourceName, context.measurer, substitutions);
 }
 
 // 'f'/'f*' (fill only, nonzero/evenodd), 'S' (stroke only), 'B'/'B*' (both, nonzero/evenodd), or undefined when neither is set -- a rect/ellipse/path with neither fill nor stroke is a valid LayoutItem (the schema permits it) that simply paints nothing, so callers skip emitting path bytes for it entirely rather than drawing an invisible path. fillRule only ever matters when fill is set (rect/ellipse never pass one, always taking the nonzero 'f'/'B' branch); a path with fillRule: 'evenodd' takes the starred variant instead.
@@ -196,10 +242,11 @@ function writeImage(writer: ByteWriter, item: LayoutImage, context: ContentWrite
 export function writeContentStream(items: readonly LayoutItem[], context: ContentWriteContext): ContentStreamResult {
   const writer = new ByteWriter();
   const substitutions: WinAnsiSubstitution[] = [];
+  const missingGlyphs: EmbeddedFaceSubstitution[] = [];
 
   for (const item of items) {
     if (item.kind === 'text') {
-      writeText(writer, item, context, substitutions);
+      writeText(writer, item, context, substitutions, missingGlyphs);
     } else if (item.kind === 'image') {
       writeImage(writer, item, context);
     } else if (item.kind === 'rect') {
@@ -213,5 +260,5 @@ export function writeContentStream(items: readonly LayoutItem[], context: Conten
     }
   }
 
-  return { bytes: writer.toBytes(), substitutions };
+  return { bytes: writer.toBytes(), substitutions, missingGlyphs };
 }

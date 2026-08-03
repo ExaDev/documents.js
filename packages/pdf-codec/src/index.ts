@@ -1,4 +1,4 @@
-// pdf-codec's public surface: a curated barrel export, no subpath exports, matching document-schema.js/odf.js/ooxml.js's own precedent. What's exported here is every symbol a real external consumer needs -- headline read/write/codec entry points, the formula/math port documents.js's own MathML layout engine passes real values through, the text-layout and font-resolution helpers every layout engine built on this codec needs, and the full bytes/image surface (this package owns src/bytes/ and src/image/ outright; nothing duplicates them upstream). Internal plumbing (objects.ts, serialize.ts, lexer.ts, parse.ts, xref.ts, document.ts, interpret.ts, content-read.ts, content-write.ts, filters.ts, predictors.ts, images-read.ts, cmap.ts, font-read.ts, font-style.ts, and the cmap-table/hmtx-table/font-tables/glyf/math-table/sfnt/sfnt-subset/cff-probe/tounicode/math-font-write/math-content-write/embedded-font/embedded-font-write font-parsing, font-subsetting, and font-embedding internals) stays unexported -- nothing outside this package's own src/ consumes it today.
+// pdf-codec's public surface: a curated barrel export, no subpath exports, matching document-schema.js/odf.js/ooxml.js's own precedent. What's exported here is every symbol a real external consumer needs -- headline read/write/codec entry points, the formula/math port documents.js's own MathML layout engine passes real values through, the text-layout and font-resolution helpers every layout engine built on this codec needs, and the full bytes/image surface (this package owns src/bytes/ and src/image/ outright; nothing duplicates them upstream). Internal plumbing (objects.ts, serialize.ts, lexer.ts, parse.ts, xref.ts, document.ts, interpret.ts, content-read.ts, content-write.ts, filters.ts, predictors.ts, images-read.ts, cmap.ts, font-read.ts, font-style.ts, and the cmap-table/hmtx-table/font-tables/glyf/math-table/sfnt/sfnt-subset/cff-probe/tounicode/math-font-write/math-content-write/embedded-font-write font-parsing, font-subsetting, and font-embedding internals) stays unexported -- nothing outside this package's own src/ consumes it today. embedded-font.ts is the one partial exception: its EmbeddedFace is the type ResolvedFace's own 'embedded' variant carries, and its EmbeddedFaceSubstitution is what WritePdfOptions.onMissingGlyph reports, so both must be nameable by an external caller even though nothing else in that module is exported.
 
 // Headline: read/write/diagnostics/codec.
 export type { ReadPdfOptions } from './read';
@@ -18,8 +18,8 @@ export { loadMathFont } from './math-font';
 
 // Text layout: consumed by every layout engine built on this codec (line-wrapping, run styling, underline metrics).
 export type { UnderlineMetrics } from './measure';
-export type { StandardFontMeasurerOptions, TextMeasurer } from './measure';
-export { createStandardFontMeasurer } from './measure';
+export type { FontMeasurerOptions, StandardFontMeasurerOptions, TextMeasurer, VerticalMetricPolicy } from './measure';
+export { DEFAULT_VERTICAL_METRIC_POLICY, createFontMeasurer, createStandardFontMeasurer } from './measure';
 export type { StyledFragment, StyledRun, WrapOptions, WrappedLine } from './text-layout';
 export { wrapRunsToWidth } from './text-layout';
 
@@ -35,7 +35,8 @@ export { resolveStandardFont } from './fonts';
 
 // Font registry: a swappable, source/caller/vendored/standard-14 precedence port in front of resolveStandardFont -- see src/font-registry.ts's own header comment for the full resolution order.
 export type { FontRegistry, FontRegistryOptions, FontSubstitution, ProvidedFont, ResolvedFace } from './font-registry';
-export { createFontRegistry } from './font-registry';
+export { createFontRegistry, resolveFaceWithRegistry } from './font-registry';
+export type { EmbeddedFace, EmbeddedFaceMetrics, EmbeddedFaceSubstitution } from './embedded-font';
 
 // Bytes: generic byte-level primitives with zero PDF knowledge (CRC32, DEFLATE/zlib, a backtracking reader, a chunked writer).
 export { crc32 } from './bytes/crc32';

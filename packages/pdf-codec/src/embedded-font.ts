@@ -34,6 +34,15 @@ export interface EmbeddedFaceMetrics {
   readonly unitsPerEm: number;
   readonly ascentGlyphSpace: number;
   readonly descentGlyphSpace: number; // negative, per the sfnt hhea convention PDF's own /Descent shares
+  // The three fields above/here are 'hhea's own ascender/descender/lineGap. They are what a /FontDescriptor's /Ascent and /Descent carry, and one of the three candidate vertical-metric sets a line-layout caller can choose between -- see measure.ts's VerticalMetricPolicy for why a font declares three competing sets and why picking between them is the caller's decision rather than this module's.
+  readonly lineGapGlyphSpace: number;
+  // 'OS/2's own sTypoAscender/sTypoDescender/sTypoLineGap: the typographic set, which the OpenType spec designates for line spacing. All three are undefined together, for a face with no readable 'OS/2' at all.
+  readonly typoAscentGlyphSpace: number | undefined;
+  readonly typoDescentGlyphSpace: number | undefined; // negative, matching the hhea convention above
+  readonly typoLineGapGlyphSpace: number | undefined;
+  // 'OS/2's own usWinAscent/usWinDescent: the clipping box Windows GDI derives a line height from. usWinDescent is declared as a POSITIVE distance below the baseline; it is negated here so every descent field in this interface carries the same sign convention. Both are undefined together, for a face with no readable 'OS/2'. There is no win-flavoured line gap -- the pair is a bounding box, not a spacing model.
+  readonly winAscentGlyphSpace: number | undefined;
+  readonly winDescentGlyphSpace: number | undefined;
   readonly capHeightGlyphSpace: number;
   readonly xHeightGlyphSpace: number | undefined; // only where 'OS/2' is version 2 or later, which alone declares it
   readonly bboxGlyphSpace: readonly [number, number, number, number]; // xMin, yMin, xMax, yMax -- /FontBBox's own order
@@ -126,6 +135,12 @@ function readEmbeddedFace(font: SfntFont): EmbeddedFace | undefined {
       unitsPerEm,
       ascentGlyphSpace: scale(hhea.ascent),
       descentGlyphSpace: scale(hhea.descent),
+      lineGapGlyphSpace: scale(hhea.lineGap),
+      typoAscentGlyphSpace: os2 === undefined ? undefined : scale(os2.sTypoAscender),
+      typoDescentGlyphSpace: os2 === undefined ? undefined : scale(os2.sTypoDescender),
+      typoLineGapGlyphSpace: os2 === undefined ? undefined : scale(os2.sTypoLineGap),
+      winAscentGlyphSpace: os2 === undefined ? undefined : scale(os2.usWinAscent),
+      winDescentGlyphSpace: os2 === undefined ? undefined : -scale(os2.usWinDescent),
       capHeightGlyphSpace: scale(capHeight),
       xHeightGlyphSpace: os2?.sxHeight === undefined ? undefined : scale(os2.sxHeight),
       bboxGlyphSpace: [scale(head.xMin), scale(head.yMin), scale(head.xMax), scale(head.yMax)],
@@ -142,11 +157,12 @@ function readEmbeddedFace(font: SfntFont): EmbeddedFace | undefined {
 const HHEA_TABLE_SIZE = 36;
 const HHEA_ASCENDER_OFFSET = 4;
 const HHEA_DESCENDER_OFFSET = 6;
+const HHEA_LINE_GAP_OFFSET = 8;
 const HHEA_NUMBER_OF_HMETRICS_OFFSET = 34;
 const LONG_HOR_METRIC_SIZE = 4; // advanceWidth (uint16) + leftSideBearing (int16)
 
-// 'hhea' (ISO/IEC 14496-22 clause 5.2.3): the two vertical metrics a /FontDescriptor is built from, plus the metric count that bounds 'hmtx'. font-tables.ts parses the whole-font tables a FontDescriptor otherwise needs but not this one, since nothing before now needed a general 'hhea' reader -- hmtx-table.ts reads only numberOfHMetrics out of it, and math-font.ts reaches into its raw bytes directly.
-function parseHhea(font: SfntFont): { readonly ascent: number; readonly descent: number; readonly numberOfHMetrics: number } | undefined {
+// 'hhea' (ISO/IEC 14496-22 clause 5.2.3): the three vertical metrics a /FontDescriptor and a line-height calculation are built from, plus the metric count that bounds 'hmtx'. font-tables.ts parses the whole-font tables a FontDescriptor otherwise needs but not this one, since nothing before now needed a general 'hhea' reader -- hmtx-table.ts reads only numberOfHMetrics out of it, and math-font.ts reaches into its raw bytes directly.
+function parseHhea(font: SfntFont): { readonly ascent: number; readonly descent: number; readonly lineGap: number; readonly numberOfHMetrics: number } | undefined {
   const bytes = sfntTableBytes(font, 'hhea');
   if (bytes === undefined || !hasBytes(bytes, 0, HHEA_TABLE_SIZE)) {
     return undefined;
@@ -155,7 +171,7 @@ function parseHhea(font: SfntFont): { readonly ascent: number; readonly descent:
   if (numberOfHMetrics === 0) {
     return undefined;
   }
-  return { ascent: i16(bytes, HHEA_ASCENDER_OFFSET), descent: i16(bytes, HHEA_DESCENDER_OFFSET), numberOfHMetrics };
+  return { ascent: i16(bytes, HHEA_ASCENDER_OFFSET), descent: i16(bytes, HHEA_DESCENDER_OFFSET), lineGap: i16(bytes, HHEA_LINE_GAP_OFFSET), numberOfHMetrics };
 }
 
 // A character the face has no glyph for at all. Reported rather than silently swallowed -- .notdef was shown in its place, and only the caller can decide whether that means substituting another face or accepting a notdef box. Deliberately not WinAnsiSubstitution's own { from, to } shape: nothing visible was chosen as a replacement here, so there is no honest `to` to state.

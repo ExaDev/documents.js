@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 import type { LayoutEllipse, LayoutImage, LayoutLine, LayoutLink, LayoutRect, LayoutText } from 'document-schema.js';
 import type { ContentWriteContext } from './content-write';
 import { writeContentStream } from './content-write';
+import type { EmbeddedFace } from './embedded-font';
+import { encodeForShowEmbedded, loadEmbeddedFace } from './embedded-font';
 import type { TextMeasurer } from './measure';
+import { formatNumber } from './serialize';
+import { parseSfnt } from './sfnt';
+import { carlitoRegularBytes } from './test-support/fonts';
 
 const BLACK = { r: 0, g: 0, b: 0 };
 const RED = { r: 1, g: 0, b: 0 };
@@ -22,7 +27,7 @@ function fakeMeasurer(scale = 1): TextMeasurer {
 function fakeContext(scale = 1): ContentWriteContext {
   return {
     measurer: fakeMeasurer(scale),
-    resolveFont: () => ({ resourceName: 'F1', standardName: 'Helvetica' }),
+    resolveFont: () => ({ kind: 'standard', resourceName: 'F1', standardName: 'Helvetica' }),
     resolveImage: () => ({ resourceName: 'Im1' }),
   };
 }
@@ -60,7 +65,7 @@ describe('writeContentStream: text', () => {
 
   it('resolves the font resource via the context and uses its name in Tf', () => {
     const item: LayoutText = { kind: 'text', text: 'A', xPt: 0, yPt: 0, font: HELVETICA, sizePt: 10, color: BLACK };
-    const context: ContentWriteContext = { ...fakeContext(), resolveFont: () => ({ resourceName: 'F7', standardName: 'Times-Roman' }) };
+    const context: ContentWriteContext = { ...fakeContext(), resolveFont: () => ({ kind: 'standard', resourceName: 'F7', standardName: 'Times-Roman' }) };
     const text = decode(writeContentStream([item], context).bytes);
     expect(text).toContain('/F7 10 Tf\n');
   });
@@ -88,6 +93,66 @@ describe('writeContentStream: text', () => {
     const item: LayoutText = { kind: 'text', text: 'AA', xPt: 0, yPt: 0, font: HELVETICA, sizePt: 10, color: BLACK, underline: true };
     const text = decode(writeContentStream([item], fakeContext()).bytes);
     expect(text).toContain('0 -1 13.34 0.5 re\n');
+  });
+});
+
+// The embedded-face branch of writeText. Every assertion here is against a fake measurer whose own answers are deliberately WRONG for this face (a 0.92 horizontal scale, a 0.1em underline offset) -- so a test passing proves the branch read the resolved face's own metrics rather than the measurer's, which is the whole point of resolving them off ResolvedFontResource instead.
+describe('writeContentStream: text in an embedded face', () => {
+  function embeddedFace(): EmbeddedFace {
+    const sfnt = parseSfnt(carlitoRegularBytes());
+    if (sfnt === undefined) {
+      throw new Error('vendored Carlito Regular failed to parse as an sfnt container');
+    }
+    const face = loadEmbeddedFace(sfnt);
+    if (face === undefined) {
+      throw new Error('vendored Carlito Regular failed to load as an embeddable face');
+    }
+    return face;
+  }
+
+  function embeddedContext(face: EmbeddedFace, scale = 0.92): ContentWriteContext {
+    return { ...fakeContext(scale), resolveFont: () => ({ kind: 'embedded', resourceName: 'E1', face }) };
+  }
+
+  it('emits BT/Tf/Tz/rg/Tm/Tj/ET with the embedded resource name and 2-byte Identity-H CIDs', () => {
+    const face = embeddedFace();
+    const item: LayoutText = { kind: 'text', text: 'Hi', xPt: 10, yPt: 20, font: HELVETICA, sizePt: 12, color: BLACK };
+    const { bytes, substitutions, missingGlyphs } = writeContentStream([item], embeddedContext(face));
+    const hex = [...encodeForShowEmbedded('Hi', face).codes].map((b) => b.toString(16).padStart(2, '0')).join('');
+    expect(decode(bytes)).toBe(`BT\n/E1 12 Tf\n100 Tz\n0 0 0 rg\n1 0 0 1 10 20 Tm\n<${hex}> Tj\nET\n`);
+    expect(hex).toHaveLength('Hi'.length * 4); // two bytes per character, unlike a WinAnsi string's one
+    expect(substitutions).toHaveLength(0);
+    expect(missingGlyphs).toHaveLength(0);
+  });
+
+  it('always writes 100 Tz, never the measurer\'s standard-14 width correction', () => {
+    const item: LayoutText = { kind: 'text', text: 'A', xPt: 0, yPt: 0, font: HELVETICA, sizePt: 10, color: BLACK };
+    const text = decode(writeContentStream([item], embeddedContext(embeddedFace(), 0.92)).bytes);
+    expect(text).toContain('100 Tz\n');
+    expect(text).not.toContain('92 Tz\n');
+  });
+
+  it('draws the underline from the face\'s own post metrics, not the measurer\'s', () => {
+    // Carlito Regular's raw 'post': underlinePosition -103, underlineThickness 194 design units on a 2048-unit em -- so at size 10, -0.502929... and 0.947265... points.
+    const item: LayoutText = { kind: 'text', text: 'A', xPt: 0, yPt: 0, font: HELVETICA, sizePt: 10, color: RED, underline: true, widthPt: 5 };
+    const text = decode(writeContentStream([item], embeddedContext(embeddedFace())).bytes);
+    expect(text).toContain(`0 ${formatNumber((-103 * 10) / 2048)} 5 ${formatNumber((194 * 10) / 2048)} re\n`);
+    // The fake measurer's own answers for size 10 are -1 and 0.5; neither may appear.
+    expect(text).not.toContain('0 -1 5 0.5 re\n');
+  });
+
+  it('falls back to the face\'s own measured width for an underline with no widthPt, with no scale applied', () => {
+    const face = embeddedFace();
+    const item: LayoutText = { kind: 'text', text: 'Hi', xPt: 0, yPt: 0, font: HELVETICA, sizePt: 10, color: BLACK, underline: true };
+    const text = decode(writeContentStream([item], embeddedContext(face)).bytes);
+    expect(text).toContain(` ${formatNumber((encodeForShowEmbedded('Hi', face).width1000 / 1000) * 10)} `);
+  });
+
+  it('reports a character the face has no glyph for as a missing glyph, not a WinAnsi substitution', () => {
+    const item: LayoutText = { kind: 'text', text: 'a中b', xPt: 0, yPt: 0, font: HELVETICA, sizePt: 10, color: BLACK };
+    const { substitutions, missingGlyphs } = writeContentStream([item], embeddedContext(embeddedFace()));
+    expect(missingGlyphs).toEqual([{ from: '中' }]);
+    expect(substitutions).toHaveLength(0);
   });
 });
 

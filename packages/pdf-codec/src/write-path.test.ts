@@ -24,7 +24,7 @@ function fakeMeasurer(): TextMeasurer {
 function fakeContext(): ContentWriteContext {
   return {
     measurer: fakeMeasurer(),
-    resolveFont: () => ({ resourceName: 'F1', standardName: 'Helvetica' }),
+    resolveFont: () => ({ kind: 'standard', resourceName: 'F1', standardName: 'Helvetica' }),
     resolveImage: () => ({ resourceName: 'Im1' }),
   };
 }

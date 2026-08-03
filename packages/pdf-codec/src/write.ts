@@ -3,26 +3,34 @@ import { deflate } from './bytes/flate';
 import { ByteWriter, concatBytes } from './bytes/writer';
 import { readJpegInfo } from './image/jpeg-info';
 import { decodePng } from './image/png-decode';
-import type { LayoutDocument, LayoutImageAsset, LayoutLink } from 'document-schema.js';
+import type { LayoutDocument, LayoutFont, LayoutImageAsset, LayoutLink } from 'document-schema.js';
 import type { PositionedFormula } from './formula';
 import type { FontMetrics, StandardFontName } from './afm-widths';
 import { STANDARD_METRICS, widthOfCode } from './afm-widths';
 import type { ContentWriteContext } from './content-write';
 import { writeContentStream } from './content-write';
+import type { EmbeddedFace, EmbeddedFaceSubstitution } from './embedded-font';
+import { collectEmbeddedGlyphs } from './embedded-font';
+import { buildEmbeddedFontObjects } from './embedded-font-write';
 import { winAnsiGlyphName } from './encoding';
-import { resolveStandardFont } from './fonts';
+import type { FontRegistry } from './font-registry';
+import { resolveFaceWithRegistry } from './font-registry';
 import { collectUsedGlyphs, writeFormulaContentStream } from './math-content-write';
 import { loadMathFont } from './math-font';
 import { buildMathFontObjects } from './math-font-write';
-import { createStandardFontMeasurer } from './measure';
+import { createFontMeasurer } from './measure';
 import type { PdfDict, PdfObject } from './objects';
 import { pdfArray, pdfDict, pdfHexString, pdfName, pdfNum, pdfRef, pdfStream } from './objects';
+import { subsetSfnt } from './sfnt-subset';
 import { throwIfAborted } from './util/abort';
 import { writeObject } from './serialize';
 import type { WinAnsiSubstitution } from './winansi';
 
 // A formula's own glyph runs are shown through an embedded CID composite font via Identity-H 2-byte CIDs (see math-content-write.ts's own module comment) -- a fundamentally different content-stream shape from an ordinary LayoutText item's single-byte WinAnsi string, and one document-schema.js's own LayoutItem union has no member for (LayoutFont only ever names one of the 14 standard PDF faces -- see src/model/style.ts's own comment -- with no room for "this run uses an embedded, non-standard font resource" at all). A formula therefore cannot travel through LayoutDocument.pages[].items the way every other kind of content this writer draws does; WritePdfOptions.formulas is this module's own, local side channel for it instead, positioned entirely outside document-schema.js's own schema.
 const MATH_FONT_RESOURCE_NAME = 'MF';
+
+// The /Resources/Font key prefix for an embedded text face, deliberately distinct from both the standard-14 faces' own 'F' prefix and the math font's 'MF': all three share one /Font dict, so a collision would silently make one font's resource name resolve to another's object.
+const EMBEDDED_FONT_RESOURCE_PREFIX = 'E';
 
 // WinAnsiEncoding's assigned byte range starts at 32 (space, the first printable ASCII code) and this writer's fonts use exactly the encoding's full byte range up to 255.
 const FIRST_CHAR = 32;
@@ -43,8 +51,12 @@ export interface WritePdfOptions {
   // Compresses content streams and PNG-sourced image data with FlateDecode. Defaults to true; false is an escape hatch for producing a human-auditable, uncompressed PDF (e.g. for a byte-golden test). JPEG-sourced images are embedded via DCTDecode regardless -- this option never touches them.
   readonly compress?: boolean;
   readonly signal?: AbortSignal;
-  // Called once per WinAnsi character substitution made while emitting text (see src/pdf/winansi.ts). writePdf itself has no Diagnostic schema to translate these into -- a caller that wants diagnostics (e.g. the local DocumentConverter) supplies this and does the translation itself.
+  // Called once per WinAnsi character substitution made while emitting text (see src/pdf/winansi.ts). writePdf itself has no Diagnostic schema to translate these into -- a caller that wants diagnostics (e.g. the local DocumentConverter) supplies this and does the translation itself. Only ever raised for text drawn in a standard-14 face; an embedded face reports through onMissingGlyph below instead.
   readonly onSubstitution?: (substitution: WinAnsiSubstitution, context: { readonly pageIndex: number }) => void;
+  // Called once per character drawn as .notdef because the EMBEDDED face resolved for it (see `fonts`) has no glyph for that character. The embedded-face counterpart to onSubstitution, kept separate because nothing visible was substituted -- see ContentStreamResult.missingGlyphs for why inventing a WinAnsiSubstitution's own `to` here would be a worse report than an honest one with no replacement to name.
+  readonly onMissingGlyph?: (missing: EmbeddedFaceSubstitution, context: { readonly pageIndex: number }) => void;
+  // Resolves each text item's own LayoutFont to a real embeddable face where one is available, falling through to the standard-14 mapping otherwise (see src/font-registry.ts for the full five-step order). Omitted -- the default -- every font resolves through resolveStandardFont exactly as it always has, no font program is embedded, and output is byte-identical to a build with no embedded-font support at all: a registry only ever changes anything for a caller that explicitly constructs one.
+  readonly fonts?: FontRegistry;
   // Every embedded formula to draw (src/mathml's own MathBox, already positioned per page) -- see this module's own top-of-file comment for why a formula can't travel through doc.pages[].items itself. The embedded STIX Two Math composite font (one Type0/CIDFontType0/FontDescriptor/FontFile3/ToUnicode object group) is allocated once for the whole document, only when this array is non-empty, and shared across every page that references it -- the same "allocate once, reuse via /Resources" pattern this writer already uses for every standard-14 font and image asset.
   readonly formulas?: readonly PositionedFormula[];
 }
@@ -254,10 +266,14 @@ function xrefEntry(offset: number, generation: number, inUse: boolean): string {
   return `${offset.toString().padStart(10, '0')} ${generation.toString().padStart(5, '0')} ${inUse ? 'n' : 'f'} \n`;
 }
 
-// Assembles a LayoutDocument into a complete PDF file: the object graph (Catalog, Pages, Info, one Font+FontDescriptor pair per standard-14 face actually used, one embedded math composite font group when options.formulas is non-empty (Type0/CIDFontType0/FontDescriptor/FontFile3/ToUnicode -- see math-font-write.ts), one Image XObject (+SMask) per image asset actually referenced, then each page's own Page dict, Contents stream (ordinary LayoutItem bytes followed by that page's own formula bytes, if any -- see math-content-write.ts), and optional Annots), a classic cross-reference table, and a trailer. Objects are allocated in this fixed order -- never derived from Map/object iteration order -- so identical input always produces byte-identical output (see the determinism tests).
+// Assembles a LayoutDocument into a complete PDF file: the object graph (Catalog, Pages, Info, one Font+FontDescriptor pair per standard-14 face actually used, one Image XObject (+SMask) per image asset actually referenced, one embedded math composite font group when options.formulas is non-empty (Type0/CIDFontType0/FontDescriptor/FontFile3/ToUnicode -- see math-font-write.ts), one embedded text font group per subsetted face when options.fonts resolved any (Type0/CIDFontType2/FontDescriptor/FontFile2/ToUnicode -- see embedded-font-write.ts), then each page's own Page dict, Contents stream (ordinary LayoutItem bytes followed by that page's own formula bytes, if any -- see math-content-write.ts), and optional Annots), a classic cross-reference table, and a trailer. Objects are allocated in this fixed order -- never derived from Map/object iteration order -- so identical input always produces byte-identical output (see the determinism tests).
+//
+// Without options.fonts, no embedded text face can exist, so that group consumes no object numbers and every other object is numbered exactly as it was before embedded-font support: output is byte-identical to a build with none of it (proved by the golden digests in write-embedded-font.test.ts).
 export function writePdf(doc: LayoutDocument, options: WritePdfOptions = {}): Uint8Array<ArrayBuffer> {
   const compress = options.compress ?? true;
-  const measurer = createStandardFontMeasurer();
+  const registry = options.fonts;
+  const measurer = createFontMeasurer(registry);
+  // The measurer's own vertical-metric policy (see measure.ts's VerticalMetricPolicy) is deliberately not exposed as a WritePdfOptions field: nothing on this write path consults lineHeightAtSize/ascenderAtSize/descenderAtSize at all. Pagination and line breaking already happened in whichever layout engine produced this LayoutDocument, against its own measurer; the only measurements writePdf itself makes are horizontalScaleFor and (for a standard-14 face) underlineAtSize, neither of which the policy touches.
 
   let nextObjNum = 1;
   const catalogNum = nextObjNum++;
@@ -266,10 +282,22 @@ export function writePdf(doc: LayoutDocument, options: WritePdfOptions = {}): Ui
 
   const fontNames = new Set<StandardFontName>();
   const imageIds = new Set<string>();
+  // Keyed by the EmbeddedFace object itself rather than by family name: a FontRegistry memoises one face per (family, bold, italic), so two LayoutFonts that resolve to the same real font program (Calibri and Calibri Light both substituting to Carlito Regular, say) arrive here as the identical object and correctly share one embedded font group, while two genuinely different programs never collide however similarly they are named.
+  const embeddedUses = new Map<EmbeddedFace, { readonly texts: string[]; readonly codePoints: Set<number> }>();
   for (const page of doc.pages) {
     for (const item of page.items) {
       if (item.kind === 'text') {
-        fontNames.add(resolveStandardFont(item.font.family, item.font.weight === 'bold', item.font.style === 'italic').standardName);
+        const resolved = resolveFaceWithRegistry(registry, item.font);
+        if (resolved.kind === 'embedded') {
+          const use = embeddedUses.get(resolved.face) ?? { texts: [], codePoints: new Set<number>() };
+          use.texts.push(item.text);
+          for (const character of item.text) {
+            use.codePoints.add(character.codePointAt(0)!);
+          }
+          embeddedUses.set(resolved.face, use);
+        } else {
+          fontNames.add(resolved.standardName);
+        }
       } else if (item.kind === 'image') {
         imageIds.add(item.imageId);
       }
@@ -300,6 +328,22 @@ export function writePdf(doc: LayoutDocument, options: WritePdfOptions = {}): Ui
     formulas.length === 0
       ? undefined
       : { type0Num: nextObjNum++, cidFontNum: nextObjNum++, descriptorNum: nextObjNum++, fontFileNum: nextObjNum++, toUnicodeNum: nextObjNum++, resourceName: MATH_FONT_RESOURCE_NAME };
+
+  // One five-object group per used embedded face, allocated in the same fixed order the math font's own group uses (Type0, descendant CIDFont, FontDescriptor, FontFile2, ToUnicode). Sorted by PostScript name so object numbering never depends on the order faces happened to be encountered in the page items; Array.prototype.sort is stable, so two distinct faces sharing one PostScript name keep first-encountered order and the ordering stays total. With no registry supplied this map is empty, no object number is consumed, and every allocation after this point is numbered exactly as it was before embedded fonts existed.
+  const embeddedAllocs = new Map<EmbeddedFace, { readonly type0Num: number; readonly cidFontNum: number; readonly descriptorNum: number; readonly fontFileNum: number; readonly toUnicodeNum: number; readonly resourceName: string; readonly texts: readonly string[]; readonly codePoints: ReadonlySet<number> }>();
+  const sortedEmbeddedUses = [...embeddedUses.entries()].sort(([a], [b]) => (a.postScriptName < b.postScriptName ? -1 : a.postScriptName > b.postScriptName ? 1 : 0));
+  for (const [index, [face, use]] of sortedEmbeddedUses.entries()) {
+    embeddedAllocs.set(face, {
+      type0Num: nextObjNum++,
+      cidFontNum: nextObjNum++,
+      descriptorNum: nextObjNum++,
+      fontFileNum: nextObjNum++,
+      toUnicodeNum: nextObjNum++,
+      resourceName: `${EMBEDDED_FONT_RESOURCE_PREFIX}${index + 1}`,
+      texts: use.texts,
+      codePoints: use.codePoints,
+    });
+  }
 
   const pageAllocs = doc.pages.map(() => ({ pageNum: nextObjNum++, contentsNum: nextObjNum++ }));
 
@@ -345,9 +389,33 @@ export function writePdf(doc: LayoutDocument, options: WritePdfOptions = {}): Ui
     objects.push({ num: mathFontAlloc.toUnicodeNum, value: built.toUnicode });
   }
 
+  for (const [face, alloc] of embeddedAllocs) {
+    // Ascending code points so the same document always subsets against the same input order, matching the sorted-for-determinism reasoning every other allocation here follows.
+    const subset = subsetSfnt(face.font, [...alloc.codePoints].sort((a, b) => a - b));
+    if (subset === undefined) {
+      // Loud rather than a silent fall-back to a standard-14 substitute: the caller's own registry chose this face, and quietly drawing the document in a different font than it asked for -- with metrics already laid out against this one -- would be a worse outcome than a failure naming exactly which face could not be embedded. subsetSfnt returns undefined only for a font it cannot rebuild correctly (a CFF-outline face with no 'glyf' at all, or a missing/truncated table it must reconstruct); see its own module comment.
+      throw new Error(`font "${face.postScriptName}" resolved to an embeddable face, but its glyph outlines could not be subsetted -- only TrueType-outline ('glyf') fonts can be embedded, so supply a TrueType face for this family or drop it from the registry`);
+    }
+    const built = buildEmbeddedFontObjects(
+      face,
+      subset,
+      collectEmbeddedGlyphs(alloc.texts, face),
+      { cidFontRef: pdfRef(alloc.cidFontNum, 0), descriptorRef: pdfRef(alloc.descriptorNum, 0), fontFileRef: pdfRef(alloc.fontFileNum, 0), toUnicodeRef: pdfRef(alloc.toUnicodeNum, 0) },
+      compress,
+    );
+    objects.push({ num: alloc.type0Num, value: built.type0 });
+    objects.push({ num: alloc.cidFontNum, value: built.cidFont });
+    objects.push({ num: alloc.descriptorNum, value: built.descriptor });
+    objects.push({ num: alloc.fontFileNum, value: built.fontFile });
+    objects.push({ num: alloc.toUnicodeNum, value: built.toUnicode });
+  }
+
   const resourceEntries = new Map<string, PdfObject>();
-  if (fontAllocs.size > 0 || mathFontAlloc !== undefined) {
+  if (fontAllocs.size > 0 || embeddedAllocs.size > 0 || mathFontAlloc !== undefined) {
     const fontEntries = new Map<string, PdfObject>([...fontAllocs.values()].map((alloc) => [alloc.resourceName, pdfRef(alloc.fontNum, 0)]));
+    for (const alloc of embeddedAllocs.values()) {
+      fontEntries.set(alloc.resourceName, pdfRef(alloc.type0Num, 0));
+    }
     if (mathFontAlloc !== undefined) {
       fontEntries.set(mathFontAlloc.resourceName, pdfRef(mathFontAlloc.type0Num, 0));
     }
@@ -370,13 +438,20 @@ export function writePdf(doc: LayoutDocument, options: WritePdfOptions = {}): Ui
 
   const context: ContentWriteContext = {
     measurer,
-    resolveFont: (font) => {
-      const standardName = resolveStandardFont(font.family, font.weight === 'bold', font.style === 'italic').standardName;
-      const alloc = fontAllocs.get(standardName);
-      if (alloc === undefined) {
-        throw new Error(`font "${standardName}" was not pre-allocated -- this is a writePdf internal invariant violation`);
+    resolveFont: (font: LayoutFont) => {
+      const resolved = resolveFaceWithRegistry(registry, font);
+      if (resolved.kind === 'embedded') {
+        const alloc = embeddedAllocs.get(resolved.face);
+        if (alloc === undefined) {
+          throw new Error(`embedded font "${resolved.face.postScriptName}" was not pre-allocated -- this is a writePdf internal invariant violation`);
+        }
+        return { kind: 'embedded', resourceName: alloc.resourceName, face: resolved.face };
       }
-      return { resourceName: alloc.resourceName, standardName };
+      const alloc = fontAllocs.get(resolved.standardName);
+      if (alloc === undefined) {
+        throw new Error(`font "${resolved.standardName}" was not pre-allocated -- this is a writePdf internal invariant violation`);
+      }
+      return { kind: 'standard', resourceName: alloc.resourceName, standardName: resolved.standardName };
     },
     resolveImage: (imageId) => {
       const alloc = imageAllocs.get(imageId);
@@ -391,9 +466,12 @@ export function writePdf(doc: LayoutDocument, options: WritePdfOptions = {}): Ui
     throwIfAborted(options.signal);
     const { pageNum, contentsNum } = pageAllocs[pageIndex]!;
 
-    const { bytes: contentBytes, substitutions } = writeContentStream(page.items, context);
+    const { bytes: contentBytes, substitutions, missingGlyphs } = writeContentStream(page.items, context);
     for (const substitution of substitutions) {
       options.onSubstitution?.(substitution, { pageIndex });
+    }
+    for (const missing of missingGlyphs) {
+      options.onMissingGlyph?.(missing, { pageIndex });
     }
 
     const pageFormulas = formulasByPage.get(pageIndex);
