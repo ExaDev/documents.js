@@ -24,6 +24,8 @@ const FUNCTIONS = [
   'readJpegInfo',
   'decodePng',
   'encodePng',
+  'decodeCcittFax',
+  'decodeJbig2Embedded',
   'unfilterScanlines',
   'filterScanlines',
   'NOOP_DIAGNOSTIC_SINK',
@@ -32,6 +34,8 @@ const FUNCTIONS = [
   'PdfParseError',
   'PdfEncryptedError',
   'PdfPasswordRequiredError',
+  'Jbig2ParseError',
+  'Jbig2UnsupportedError',
 ];
 const OBJECTS = ['pdfCodec', 'PdfBytesSchema', 'STANDARD_METRICS', 'MAX_INFLATE_OUTPUT_BYTES'];
 

@@ -52,9 +52,13 @@ export { MAX_INFLATE_OUTPUT_BYTES, deflate, inflate, inflateTolerant } from './b
 export { ByteReader, isAsciiWhitespace } from './bytes/reader';
 export { ByteWriter, concatBytes } from './bytes/writer';
 
-// Image: JPEG marker scanning (dimensions only, compressed bytes untouched), a hand-written PNG codec (palette/gray/RGB/alpha, multi-IDAT, all five scanline filters), and a hand-written CCITT Group 3/Group 4 fax decoder.
+// Image: JPEG marker scanning (dimensions only, compressed bytes untouched), a hand-written PNG codec (palette/gray/RGB/alpha, multi-IDAT, all five scanline filters), a hand-written CCITT Group 3/Group 4 fax decoder, and a hand-written JBIG2 decoder.
 export type { CcittFaxImage, CcittFaxOptions } from './image/ccitt';
 export { decodeCcittFax } from './image/ccitt';
+// The JBIG2 decoder's own entry point, alongside the two errors it distinguishes: a malformed stream (Jbig2ParseError) and one using a JBIG2 feature this decoder does not implement (Jbig2UnsupportedError). Exported for the same reason decodeCcittFax is -- a caller holding a bare JBIG2 stream from somewhere other than a PDF should not have to reimplement it.
+export type { Jbig2DecodeOptions, Jbig2Image } from './image/jbig2';
+export { decodeJbig2Embedded } from './image/jbig2';
+export { Jbig2ParseError, Jbig2UnsupportedError } from './image/jbig2-errors';
 export type { JpegInfo } from './image/jpeg-info';
 export { readJpegInfo } from './image/jpeg-info';
 export type { PngDecodeOptions, RawImage } from './image/png-decode';
