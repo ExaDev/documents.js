@@ -47,7 +47,8 @@ jobs:
           branch="sibling-update/${PACKAGE}-${VERSION}"
           git checkout -b "$branch"
           git add package.json pnpm-lock.yaml
-          git commit -m "build(deps): bump ${PACKAGE} to ${VERSION}" -m "Triggered instantly by the ${PACKAGE} release, via repository_dispatch, rather than waiting for the next daily Dependabot scan."
+          body=$(printf 'Triggered instantly via repository_dispatch when %s published its own release,\nrather than waiting for the next scheduled Dependabot scan.' "$PACKAGE")
+          git commit -m "build(deps): bump ${PACKAGE} to ${VERSION}" -m "$body"
           git push origin "$branch"
           pr_url=$(gh pr create --title "build(deps): bump ${PACKAGE} to ${VERSION}" --body "Automatic dependency bump triggered instantly by the ${PACKAGE} release." --base main --head "$branch")
           echo "pr_url=$pr_url" >> "$GITHUB_OUTPUT"
