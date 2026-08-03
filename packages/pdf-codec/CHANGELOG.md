@@ -1,3 +1,10 @@
+# [1.10.0](https://github.com/ExaDev/pdf-codec/compare/v1.9.0...v1.10.0) (2026-08-03)
+
+
+### Features
+
+* draw dashed, dotted, and double line/path strokes ([a5d5d42](https://github.com/ExaDev/pdf-codec/commit/a5d5d422d7d332e465e790f457c7c55d8c70e3ac))
+
 # [1.9.0](https://github.com/ExaDev/pdf-codec/compare/v1.8.0...v1.9.0) (2026-08-03)
 
 
