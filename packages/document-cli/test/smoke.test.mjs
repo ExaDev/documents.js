@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { createDocx } from 'documents.js';
+import { createDocx, createFontRegistry } from 'documents.js';
 // dist/index.js is this package's own deliberately-importable barrel (see its own top-of-file comment: "so an external consumer -- or a test -- can call this CLI's conversion logic directly"), unlike dist/cli.js -- pulling the exit-code constants from the built artifact avoids hardcoding magic exit-code numbers in this file while still proving the barrel build itself is sound.
 import { EXIT_INPUT_ERROR, EXIT_SUCCESS, EXIT_USAGE_ERROR } from '../dist/index.js';
 
@@ -201,6 +201,77 @@ describe('dist/cli.js docx-to-pdf: a nonexistent input file', () => {
       expect(lines).toHaveLength(1);
       // A raw, unhandled Node stack trace always includes a "    at <name> (<file>:<line>:<col>)" frame line -- absence of that shape is the simple heuristic distinguishing this CLI's own one-line formatError output from an escaped exception.
       expect(stderrText).not.toMatch(/at .*:\d+:\d+/);
+    } finally {
+      await rm(tmpDir, { recursive: true, force: true });
+    }
+  });
+});
+
+// A genuine font file on disk for --font-file to point at, without shipping one in this repository: the vendored Caladea face documents.js already carries, recovered through the public createFontRegistry API (its own substitute table maps Cambria to Caladea). Real font-tool output, so the family/weight/slope dist/ derives from it are derived from a real 'name'/'OS/2' table pair rather than from anything this test wrote.
+function vendoredCaladeaFaceBytes() {
+  const resolved = createFontRegistry().resolve({ family: 'Cambria', weight: 'normal', style: 'normal' });
+  if (resolved.kind !== 'embedded') {
+    throw new Error(`expected the vendored substitute table to embed a face for Cambria, got a ${resolved.kind} face`);
+  }
+  return resolved.face.font.bytes;
+}
+
+// A six-letter subset tag, a '+', then the PostScript name of whichever face was embedded (ISO 32000-1 9.6.2.1); a standard-14 face carries the bare name with no tag.
+function baseFontNames(pdfBytes) {
+  const text = new TextDecoder('latin1').decode(pdfBytes);
+  return [...text.matchAll(/\/BaseFont\s*\/([^\s/>\]]+)/g)].map((match) => match[1]);
+}
+
+function docxAskingFor(fontFamily) {
+  const editor = createDocx();
+  editor.body.appendParagraph().appendRun({ text: 'A paragraph in a named font family', fontFamily });
+  return editor.toBytes();
+}
+
+describe('dist/cli.js docx-to-pdf --font-file', () => {
+  it('embeds a real font file supplied on the command line, matched by the family that file itself declares', async () => {
+    const tmpDir = await mkdtemp(join(tmpdir(), 'document-cli-smoke-'));
+    try {
+      const inputPath = join(tmpDir, 'caladea.docx');
+      const fontPath = join(tmpDir, 'face.ttf');
+      // Caladea is deliberately a family documents.js has NO vendored substitute for (its table maps Calibri and Cambria, not Caladea), so without a --font-file this run has nothing to fall back to but a standard-14 face -- which is exactly what makes the two outputs below distinguishable.
+      await writeFile(inputPath, docxAskingFor('Caladea'));
+      await writeFile(fontPath, vendoredCaladeaFaceBytes());
+
+      const withoutFont = join(tmpDir, 'without-font.pdf');
+      const withFont = join(tmpDir, 'with-font.pdf');
+      expect((await spawnCli(['docx-to-pdf', inputPath, withoutFont])).code).toBe(EXIT_SUCCESS);
+      expect((await spawnCli(['docx-to-pdf', inputPath, withFont, '--font-file', fontPath])).code).toBe(EXIT_SUCCESS);
+
+      // Nothing on the command line ever said "Caladea" about that file: the family it is matched on came out of the font's own 'name' table, inside the built bundle.
+      for (const name of baseFontNames(await readFile(withoutFont))) {
+        expect(name).not.toContain('Caladea');
+      }
+      const suppliedNames = baseFontNames(await readFile(withFont));
+      expect(suppliedNames.length).toBeGreaterThan(0);
+      for (const name of suppliedNames) {
+        expect(name).toContain('Caladea');
+      }
+    } finally {
+      await rm(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('prints the structured substitution event under --report-font-substitutions, and names a bad font file outright', async () => {
+    const tmpDir = await mkdtemp(join(tmpdir(), 'document-cli-smoke-'));
+    try {
+      const inputPath = join(tmpDir, 'calibri.docx');
+      const notAFont = join(tmpDir, 'not-a-font.txt');
+      await writeFile(inputPath, docxAskingFor('Calibri'));
+      await writeFile(notAFont, 'plain text, definitely not a font\n');
+
+      const reported = await spawnCli(['docx-to-pdf', inputPath, join(tmpDir, 'reported.pdf'), '--report-font-substitutions']);
+      expect(reported.code).toBe(EXIT_SUCCESS);
+      expect(reported.stderr.toString('utf8')).toContain('font substitution: "Calibri" -> "carlito" (vendored-substitute)');
+
+      const rejected = await spawnCli(['docx-to-pdf', inputPath, join(tmpDir, 'never-written.pdf'), '--font-file', notAFont]);
+      expect(rejected.code).not.toBe(EXIT_SUCCESS);
+      expect(rejected.stderr.toString('utf8')).toContain('not-a-font.txt is not a TrueType/OpenType font file');
     } finally {
       await rm(tmpDir, { recursive: true, force: true });
     }

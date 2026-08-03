@@ -25,6 +25,23 @@ export function addDumpPackageOption(command: Command): Command {
   return command.option('--dump-package <file>', 'write the intermediate DocumentPackage (content + layout) this conversion built to a JSON file');
 }
 
+// Accumulates repeated --font-file <path> flags into a list, in the order given -- which is also the order documents.js's own FontRegistry resolves them in, so an earlier --font-file wins a family+weight+slope tie against a later one.
+function collectFontFile(value: string, previous: readonly string[]): readonly string[] {
+  return [...previous, value];
+}
+
+// The two font flags, registered only on commands whose target can actually be pdf -- the conversions that run a layout engine and resolve a typeface to draw with. A pdf-to-<format> reconstruction reads a PDF's own already-positioned glyphs and a format-to-format bridge runs no layout engine at all, so offering these there would advertise an option that could not do anything (the same reasoning that keeps --dump-package out of addConversionFlags below).
+export function addFontOptions(command: Command): Command {
+  command.option(
+    '--font-file <path>',
+    "embed this font file (.ttf/.otf) when the document asks for the family it declares; repeatable. The family, weight, and slope are read from the font's own 'name'/'OS/2' tables, so no accompanying family flag is needed",
+    collectFontFile,
+    [],
+  );
+  command.option('--report-font-substitutions', 'print each font face that resolved to something other than what the document asked for to stderr, as it happens', false);
+  return command;
+}
+
 // The shared flag set for a command that reads one file, converts or extracts from it, and writes one file: output destination, a run timeout, and the three output-shaping flags every such command supports. --dump-package is deliberately not included here -- only the PDF-pivot conversions ever populate ConversionResult.package, so it is added separately by callers that actually go through buildConversionAction.
 export function addConversionFlags(command: Command): Command {
   addOutOption(command);
@@ -42,4 +59,10 @@ export interface ConversionCliFlags {
   readonly json: boolean;
   readonly quiet: boolean;
   readonly verbose: boolean;
+}
+
+// addFontOptions's own two attributes, kept out of ConversionCliFlags because that interface describes what addConversionFlags registers and these are registered separately, on the subset of commands that can reach a layout engine. Both are optional for exactly that reason: on a command addFontOptions was never applied to, commander leaves them undefined rather than defaulting them.
+export interface FontCliFlags {
+  readonly fontFile?: readonly string[];
+  readonly reportFontSubstitutions?: boolean;
 }

@@ -3,13 +3,14 @@ import { basename, join } from 'node:path';
 import { InvalidArgumentError, type Command } from 'commander';
 import { OdmUnresolvedSectionError, odmToPdf } from 'documents.js';
 import { createRuntimeSignal } from '../runtime/abort';
-import { createDiagnosticReporter, substitutionToDiagnostic } from '../runtime/diagnostics';
+import { createDiagnosticReporter, createFontSubstitutionReporter, fontSubstitutionToDiagnostic, substitutionToDiagnostic } from '../runtime/diagnostics';
 import { EXIT_SUCCESS, EXIT_USAGE_ERROR, mapErrorToExit } from '../runtime/exit-codes';
+import { loadProvidedFonts } from '../runtime/fonts';
 import { readInput, resolveDefaultOutputPath, writeOutput } from '../runtime/io';
 import { formatError } from './shared';
-import { addJsonOption, addOutOption, addQuietOption, addTimeoutOption, addVerboseOption, type ConversionCliFlags } from './options';
+import { addFontOptions, addJsonOption, addOutOption, addQuietOption, addTimeoutOption, addVerboseOption, type ConversionCliFlags, type FontCliFlags } from './options';
 
-interface OdmCliOptions extends ConversionCliFlags {
+interface OdmCliOptions extends ConversionCliFlags, FontCliFlags {
   readonly chaptersDir?: string;
   readonly chapter: ReadonlyMap<string, string>;
 }
@@ -57,11 +58,24 @@ async function runOdmToPdf(input: string, output: string | undefined, options: O
   const reporter = createDiagnosticReporter({ json: options.json, quiet: options.quiet, command });
   let diagnosticCount = 0;
 
+  // Routed to the structured live reporter under --report-font-substitutions and to the ordinary diagnostic stream otherwise, which is exactly the pair of channels documents.js's own DocumentConverter port gives every other <format>-to-pdf command -- odm-to-pdf calls odmToPdf directly rather than through that port, so the split is made here instead.
+  const reportFontSubstitution = options.reportFontSubstitutions === true ? createFontSubstitutionReporter({ json: options.json, quiet: options.quiet, command }) : undefined;
+
   try {
     const inputBytes = await readInput(input, { signal });
+    const fonts = await loadProvidedFonts(options.fontFile ?? [], { signal });
     const bytes = odmToPdf(new Uint8Array(inputBytes), {
       signal,
       resolveSubDocument,
+      fonts,
+      onFontSubstitution: (substitution) => {
+        if (reportFontSubstitution !== undefined) {
+          reportFontSubstitution(substitution);
+          return;
+        }
+        diagnosticCount += 1;
+        reporter.report(fontSubstitutionToDiagnostic(substitution));
+      },
       onSubstitution: (substitution, context) => {
         diagnosticCount += 1;
         reporter.report(substitutionToDiagnostic(substitution, context.pageIndex));
@@ -90,6 +104,7 @@ export function registerOdmCommand(program: Command): void {
   addJsonOption(command);
   addQuietOption(command);
   addVerboseOption(command);
+  addFontOptions(command);
   command.option('--chapters-dir <dir>', "directory to search for each unresolved chapter href, matched by the href's own basename");
   command.option('--chapter <href>=<file>', 'resolve one chapter href to a local file explicitly; repeatable', collectChapterOverride, new Map<string, string>());
   command.action(async (input: string, output: string | undefined, options: OdmCliOptions) => {

@@ -1,8 +1,9 @@
 import { writeFile } from 'node:fs/promises';
 import { type DocumentFormat, createLocalDocumentConverter } from 'documents.js';
 import { createRuntimeSignal } from '../runtime/abort';
-import { createDiagnosticReporter } from '../runtime/diagnostics';
+import { createDiagnosticReporter, createFontSubstitutionReporter } from '../runtime/diagnostics';
 import { EXIT_SUCCESS, EXIT_USAGE_ERROR, mapErrorToExit } from '../runtime/exit-codes';
+import { loadProvidedFonts } from '../runtime/fonts';
 import { readInput, resolveDefaultOutputPath, writeOutput } from '../runtime/io';
 
 export interface ConversionCommandOptions {
@@ -12,6 +13,9 @@ export interface ConversionCommandOptions {
   readonly quiet: boolean;
   readonly verbose: boolean;
   readonly dumpPackage?: string;
+  // Both absent on a command addFontOptions (commands/options.ts) was never applied to -- a pdf-to-<format> reconstruction or a format-to-format bridge, neither of which resolves a typeface at all.
+  readonly fontFiles?: readonly string[];
+  readonly reportFontSubstitutions?: boolean;
 }
 
 // One clean line for a human, with a full stack trace appended only under --verbose -- a bare stack trace on every failure is noise for the common "wrong file" case, but indispensable when actually debugging this CLI itself.
@@ -41,10 +45,17 @@ export function buildConversionAction(
 
     try {
       const inputBytes = await readInput(input, { signal });
+      // Loaded before the conversion rather than lazily inside it: a mistyped --font-file path should fail before any work is done, and documents.js's own conversion functions are synchronous, so there is no point at which they could await a file read of their own.
+      const fonts = await loadProvidedFonts(options.fontFiles ?? [], { signal });
       const converter = createLocalDocumentConverter();
       const result = await converter.convert(
         { source: { format: source, bytes: new Uint8Array(inputBytes) }, targetFormat: target },
-        { signal },
+        {
+          signal,
+          fonts,
+          // Only wired under the flag: without it, every substitution is still reported through result.diagnostics below (the local converter records one whether or not a callback was supplied), so an unconditional callback here would print the same event twice.
+          onFontSubstitution: options.reportFontSubstitutions === true ? createFontSubstitutionReporter({ json: options.json, quiet: options.quiet, command }) : undefined,
+        },
       );
 
       await writeOutput(resolvedOutput, result.document.bytes);

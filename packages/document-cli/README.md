@@ -123,6 +123,23 @@ The 27 explicit conversions, `convert`, `odm-to-pdf`, `odb-to-xlsx`, and `odb-to
 
 `--dump-package <file>` is one flag further, registered only on the 27 explicit conversions and `convert` — it writes the intermediate `DocumentPackage` (content + layout) that conversion built to a JSON file. Every conversion populates one except `odf-to-pdf`, which accepts but never invokes its own `onDocument` callback (a standalone formula document has no `ContentDocument`/`LayoutDocument` pivot behind it); the ten PDF-bypassing bridges (`odt-to-docx`/`docx-to-odt`, `odp-to-pptx`/`pptx-to-odp`, `ods-to-xlsx`/`xlsx-to-ods`, `markdown-to-docx`/`docx-to-markdown`, `markdown-to-odt`/`odt-to-markdown`) populate one too, just with `layout` always `undefined`, since a bridge never runs a layout engine. `odm-to-pdf`/`odb-*` don't expose the flag at all, since neither goes through `DocumentConverter.convert` in the first place. `odb-tables`, `odb-forms`, `odb-reports`, `formats`, and `pdf-inspect` each take only their own `--json` (plus `pdf-inspect`'s own `--full`); `tui` takes no flags at all, only an optional positional file.
 
+### Real fonts
+
+By default a conversion renders through whatever `documents.js` resolves for itself: the source document's own embedded faces first, then `pdf-codec`'s vendored Carlito/Caladea substitutes (metric-compatible with Calibri/Cambria), then the standard 14 PDF fonts. `--font-file <path>` inserts your own faces between the first two steps — used wherever the document asks for the family a font file declares, and ignored where it doesn't.
+
+```sh
+document-cli docx-to-pdf report.docx report.pdf \
+  --font-file ~/fonts/Calibri.ttf \
+  --font-file ~/fonts/Calibri-Bold.ttf \
+  --report-font-substitutions
+```
+
+The flag is repeatable, takes a `.ttf`/`.otf` path, and needs **no accompanying family flag**: the family, weight, and slope are read from the font file's own `name` and `OS/2` tables. That is a deliberate choice over the alternative of a parallel `--font-family`/`--font-bold`/`--font-italic` set — three repeatable flags whose values must stay index-aligned with a fourth is a silent-misalignment hazard (pass two font files and one `--font-family` and the second face is mis-declared, with nothing reporting it), and every real font already states all three facts itself. The consequence to know about: a font file can only be supplied *as the family it says it is*. There is no way to say "draw Calibri using this file instead" — for that, the family in the document has to match the family in the font. A file that is not a readable font (a `.woff`, a `.ttc` collection, a mistyped path pointing at something else) fails the run outright, naming the file, rather than being quietly skipped.
+
+`--report-font-substitutions` prints each face that resolved to something other than what the document asked for, as it happens, with its structured fields intact (`--json` makes it one more NDJSON record: `{"type":"font-substitution","requestedFamily":"Calibri",…}`). Without it, the same fallbacks are still reported — the `font/substituted` diagnostic lines every conversion already emits — just as rendered messages after the fact rather than structured events as they occur.
+
+Both flags are registered only where they can do something: the nine `<format>-to-pdf` conversions, `convert`, and `odm-to-pdf`. A `pdf-to-<format>` reconstruction reads a PDF's own already-positioned glyphs and a format-to-format bridge runs no layout engine at all, so neither resolves a typeface and neither advertises the flags.
+
 Diagnostics and the summary line always go to stderr; stdout is reserved for the converted bytes on any command writing to `-`.
 
 ### Exit codes

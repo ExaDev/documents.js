@@ -4,9 +4,9 @@ import { type DocumentFormat, createLocalDocumentConverter } from 'documents.js'
 import { inferFormatFromExtension, isDocumentFormat } from '../format';
 import { EXIT_USAGE_ERROR } from '../runtime/exit-codes';
 import { type ConversionCommandOptions, buildConversionAction } from './shared';
-import { addConversionFlags, addDumpPackageOption, type ConversionCliFlags } from './options';
+import { addConversionFlags, addDumpPackageOption, addFontOptions, type ConversionCliFlags, type FontCliFlags } from './options';
 
-interface ConvertCliOptions extends ConversionCliFlags {
+interface ConvertCliOptions extends ConversionCliFlags, FontCliFlags {
   readonly dumpPackage?: string;
 }
 
@@ -22,6 +22,8 @@ function toConversionCommandOptions(options: ConvertCliOptions): ConversionComma
     quiet: options.quiet,
     verbose: options.verbose,
     dumpPackage: options.dumpPackage,
+    fontFiles: options.fontFile,
+    reportFontSubstitutions: options.reportFontSubstitutions,
   };
 }
 
@@ -82,6 +84,10 @@ export function registerConversionCommands(program: Command): void {
     const command = program.command(`${commandName} <input> [output]`).description(`convert a ${source} document to ${target}`);
     addConversionFlags(command);
     addDumpPackageOption(command);
+    // Only the <format>-to-pdf half of the table runs a layout engine and resolves a typeface; see addFontOptions's own comment on why the reverse and bridge commands deliberately do not advertise these flags.
+    if (target === 'pdf') {
+      addFontOptions(command);
+    }
     command.action(async (input: string, output: string | undefined, options: ConvertCliOptions) => {
       process.exitCode = await buildConversionAction(source, target)(input, output, toConversionCommandOptions(options));
     });
@@ -92,6 +98,8 @@ export function registerConversionCommands(program: Command): void {
     .description('convert between any two supported document formats, inferring source/target from file extensions where possible');
   addConversionFlags(generic);
   addDumpPackageOption(generic);
+  // Unconditionally here, unlike the explicit per-pair commands above: this command's target is only known once --to or the output path has been resolved at run time, and pdf is one of the targets it resolves to. A run that lands on some other target simply passes fonts the port has nothing to resolve them against, which local.ts already documents as a no-op for a non-layout edge.
+  addFontOptions(generic);
   generic.option('--to <format>', `target format when it cannot be inferred from the output path (${KNOWN_FORMATS})`);
   generic.action(async (input: string, output: string | undefined, options: GenericConvertCliOptions) => {
     process.exitCode = await runGenericConvert(input, output, options);
