@@ -15,6 +15,7 @@ import { OdbFormDetailScreen } from './screens/editors/odb/form-detail.js';
 import { OdbFormListScreen } from './screens/editors/odb/form-list.js';
 import { OdbReportDetailScreen } from './screens/editors/odb/report-detail.js';
 import { OdbReportListScreen } from './screens/editors/odb/report-list.js';
+import { OdbReportRenderScreen } from './screens/editors/odb/report-render.js';
 import { OdbTableListScreen } from './screens/editors/odb/table-list.js';
 import { OdbTableRowsScreen } from './screens/editors/odb/table-rows.js';
 import { OdgPageListScreen } from './screens/editors/odg/page-list.js';
@@ -104,6 +105,8 @@ function ScreenBody({ screen }: { readonly screen: Screen }): ReactElement {
       return <OdbReportListScreen />;
     case 'odbReportDetail':
       return <OdbReportDetailScreen />;
+    case 'odbReportRender':
+      return <OdbReportRenderScreen />;
     case 'markdownLineList':
       return <MarkdownLineListScreen />;
     case 'markdownLineEditor':

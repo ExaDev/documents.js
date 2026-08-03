@@ -29,6 +29,7 @@ export type Screen =
   | { readonly kind: 'odbFormDetail'; readonly formName: string }
   | { readonly kind: 'odbReportList' }
   | { readonly kind: 'odbReportDetail'; readonly reportName: string }
+  | { readonly kind: 'odbReportRender'; readonly reportName: string }
   | { readonly kind: 'markdownLineList' }
   | { readonly kind: 'markdownLineEditor'; readonly lineIndex: number }
   | { readonly kind: 'pdfPageList' }
@@ -223,6 +224,8 @@ export function selectionKeyFor(screen: Screen): string {
       return `odbFormDetail:${screen.formName}`;
     case 'odbReportDetail':
       return `odbReportDetail:${screen.reportName}`;
+    case 'odbReportRender':
+      return `odbReportRender:${screen.reportName}`;
     case 'markdownLineEditor':
       return `markdownLineEditor:${screen.lineIndex}`;
   }

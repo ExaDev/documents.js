@@ -37,7 +37,8 @@ export function OdbReportDetailScreen(): ReactElement {
   const { selectedIndex } = useNavigationInput({
     itemCount: lines.length,
     onSelect: () => {
-      // Nothing to open: a band or element line already carries its kind, name, formula, and field binding.
+      // A band or element line already carries its own kind, name, formula, and field binding, so Enter here does not drill into the selected line -- it renders the report itself (readOdbReportContent's own query -> formula -> band pipeline, not the static structure this screen browses) to a file the user picks.
+      dispatch({ type: 'PUSH_SCREEN', screen: { kind: 'odbReportRender', reportName: report.name } });
     },
     onBack: () => {
       dispatch({ type: 'POP_SCREEN' });
@@ -62,7 +63,7 @@ export function OdbReportDetailScreen(): ReactElement {
           </Text>
         )}
       />
-      <Text dimColor>Esc to go back to the report list</Text>
+      <Text dimColor>Enter to render this report, Esc to go back to the report list</Text>
     </Box>
   );
 }
