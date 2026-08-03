@@ -6,7 +6,7 @@ import { flipY } from '../model/geometry';
 import { formulaOfBlock } from '../model/formula';
 import type { Point, PositionedFormula, TextMeasurer } from 'pdf-codec';
 import { loadMathFont, rotatePointAboutCenter, wrapRunsToWidth } from 'pdf-codec';
-import { alignmentOffsetPt, effectiveStyledRuns, estimateRowHeightPt, lineNaturalHeightPt, registerImage, sumColumnWidthsPt } from './shared';
+import { alignmentOffsetPt, effectiveStyledRuns, estimateRowHeightPt, justifyLineGapsPt, lineNaturalHeightPt, registerImage, sumColumnWidthsPt } from './shared';
 
 // ContentDocument (the presentation variant) -> LayoutDocument: pptx's tractable layout direction. No pagination -- one slide is always exactly one PDF page (slide size maps directly to the page's own widthPt/heightPt) -- and no group-transform resolution either, since src/ooxml/pptx/read.ts already flattened every group into absolute shape positions at read time. What's left is genuinely just: wrap each shape's text within its own box (reusing the exact wrapRunsToWidth docx also uses), place images at their shape's frame, render table grids directly from explicit column widths/row heights, and apply the one deliberate Y-flip from OOXML's top-left/y-down space into PDF's bottom-left/y-up space.
 
@@ -78,9 +78,11 @@ function layoutParagraph(
     // First-line indent shifts only where the first line starts, not its wrap point -- wrapRunsToWidth already computed every line at one fixed width, so retroactively narrowing line 0's width isn't possible without re-wrapping. A documented simplification, not a silent one.
     const firstLineIndentPt = lineIndex === 0 ? (paragraph.indentFirstLinePt ?? 0) : 0;
     const alignOffsetPt = alignmentOffsetPt(paragraph.alignment, paragraphWidthPt, line.widthPt);
+    // Only a WRAPPED, non-final line of a justified paragraph gets its inter-word gaps stretched -- see src/layout/engine.ts's identical note on the same standard justification convention.
+    const justifyGapsPt = paragraph.alignment === 'justify' && lineIndex < lines.length - 1 ? justifyLineGapsPt(line, paragraphWidthPt, measurer) : undefined;
 
-    for (const fragment of line.fragments) {
-      const unrotated: Point = { x: paragraphLeftXDown + firstLineIndentPt + alignOffsetPt + fragment.xOffsetPt, y: slideHeightPt - baselineYDown };
+    line.fragments.forEach((fragment, fragmentIndex) => {
+      const unrotated: Point = { x: paragraphLeftXDown + firstLineIndentPt + alignOffsetPt + fragment.xOffsetPt + (justifyGapsPt?.[fragmentIndex] ?? 0), y: slideHeightPt - baselineYDown };
       const placed = placement.place(unrotated);
       const textItem: LayoutText = {
         kind: 'text',
@@ -110,7 +112,7 @@ function layoutParagraph(
         };
         out.push(link);
       }
-    }
+    });
     cursorYDown += scaledLineHeightPt;
   });
 

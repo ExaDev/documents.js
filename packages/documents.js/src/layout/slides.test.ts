@@ -128,6 +128,41 @@ describe('convertPresentationToLayout: alignment', () => {
     const [text] = textItems(layout.pages[0]!.items);
     expect(text?.xPt).toBe(98);
   });
+
+  it('stretches inter-word gaps on a justified shape paragraph\'s own wrapped (non-final) lines, but leaves its final line at natural, unstretched spacing -- mirroring src/layout/engine.ts\'s own identical justify behaviour', () => {
+    // Content width 7pt; each word ('aa'/'bb'/'cc'/'dd') is 2pt wide, a space 1pt -- "aa bb" (5pt) fits, "aa bb cc" (8pt) doesn't, so this wraps into two lines of two words each: "aa bb" then "cc dd", both naturally 5pt wide.
+    const s = shape({ frame: { xPt: 0, yPt: 0, widthPt: 7, heightPt: 50 }, blocks: [paragraph([run('aa bb cc dd', { sizePt: 10 })], { alignment: 'justify' })] });
+    const layout = convert([slide([s])]);
+    const [aa, bb, cc, dd] = textItems(layout.pages[0]!.items);
+    expect([aa?.text, bb?.text, cc?.text, dd?.text]).toEqual(['aa', 'bb', 'cc', 'dd']);
+
+    // Non-final line ("aa bb"): natural width 5pt against a 7pt target line box -- 2pt of slack, one gap, so the whole 2pt lands on 'bb', which is otherwise naturally 1pt after 'aa'.
+    expect(aa?.xPt).toBe(0);
+    expect(bb?.xPt).toBe(5); // natural offset 3 + 2pt of distributed slack
+
+    // Final line ("cc dd") is never stretched, even though it has the identical 2pt of slack available -- it renders at its own natural, single-space gap instead.
+    expect(cc?.xPt).toBe(0);
+    expect(dd?.xPt).toBe(3);
+  });
+
+  it('stretches a justified table cell\'s own wrapped paragraph the same way, since layoutTable reuses layoutParagraph unmodified', () => {
+    // Shape frame width matches the table's own single column width (7pt) exactly, so layoutTable's own proportional column-width scaling is a no-op (scale = contentWidthPt/gridWidthPt = 7/7 = 1) and the cell renders at the identical 7pt content width the shape-paragraph case above used.
+    const s = shape({
+      frame: { xPt: 0, yPt: 0, widthPt: 7, heightPt: 50 },
+      blocks: [
+        {
+          kind: 'table',
+          columnWidthsPt: [7],
+          rows: [{ heightPt: 20, cells: [{ blocks: [paragraph([run('aa bb cc dd', { sizePt: 10 })], { alignment: 'justify' })] }] }],
+        },
+      ],
+    });
+    const layout = convert([slide([s])]);
+    const [aa, bb] = textItems(layout.pages[0]!.items);
+    expect([aa?.text, bb?.text]).toEqual(['aa', 'bb']);
+    expect(aa?.xPt).toBe(0);
+    expect(bb?.xPt).toBe(5); // identical stretched non-final-line offset as the shape-paragraph case above
+  });
 });
 
 describe('convertPresentationToLayout: fontScale and lineSpacingReduction', () => {

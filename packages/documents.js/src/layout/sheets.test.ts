@@ -374,6 +374,31 @@ describe('step 7: cell text alignment, overflow, and vertical positioning', () =
     expect(texts.find((t) => t.text === 'TRUE')!.xPt).toBeCloseTo(23, 5); // center: padding(2) + (avail(46) - width(4))/2
   });
 
+  it('stretches inter-word gaps on a justified cell\'s own rendered (first, non-final) line, mirroring src/layout/engine.ts\'s own identical justify behaviour', () => {
+    // The cell's own source text carries an explicit line break ("aa bb\ncc dd"), the one way this module's own single-line-per-cell scope (see its top-of-file doc comment) ever produces more than one WrappedLine -- only the FIRST ("aa bb") is ever rendered, and since lines.length > 1 it counts as a genuinely non-final line for justification purposes. Column width 11pt minus 2*2pt padding = 7pt available -- "aa bb" is naturally 5pt wide (2 + 1 + 2, each word 2pt, the space 1pt), so it stretches to fill the remaining 2pt of slack across its own one gap, exactly as engine.ts's own justify test does.
+    const s = sheet([stringCell(0, 0, 'aa bb\ncc dd', { alignment: 'justify' })], {
+      columns: [{ index: 0, widthPt: 11 }],
+      rows: [{ index: 0, heightPt: 20 }],
+    });
+    const layout = convert([s]);
+    const texts = textItems(layout.pages[0]!.items);
+    expect(texts.map((t) => t.text)).toEqual(['aa', 'bb']); // only the first line ever renders -- 'cc dd' never appears
+    expect(texts[0]?.xPt).toBeCloseTo(2, 5); // xLeft(0) + padding(2), no justify stretch on the first fragment
+    expect(texts[1]?.xPt).toBeCloseTo(7, 5); // padding(2) + natural offset(3) + 2pt of distributed slack
+  });
+
+  it('leaves an ordinary single-line justified cell at its own natural, unstretched spacing (no wrapped non-final line to stretch)', () => {
+    const s = sheet([stringCell(0, 0, 'aa bb', { alignment: 'justify' })], {
+      columns: [{ index: 0, widthPt: 11 }],
+      rows: [{ index: 0, heightPt: 20 }],
+    });
+    const layout = convert([s]);
+    const texts = textItems(layout.pages[0]!.items);
+    expect(texts.map((t) => t.text)).toEqual(['aa', 'bb']);
+    expect(texts[0]?.xPt).toBeCloseTo(2, 5); // xLeft(0) + padding(2)
+    expect(texts[1]?.xPt).toBeCloseTo(5, 5); // padding(2) + natural offset(3), no stretch: lines.length === 1
+  });
+
   it('defaults vertical alignment to bottom: the baseline sits near the cell\'s own bottom edge, not its top', () => {
     const s = sheet([stringCell(0, 0, 'X')], {
       rows: [{ index: 0, heightPt: 100 }],
