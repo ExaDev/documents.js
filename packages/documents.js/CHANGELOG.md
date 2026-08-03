@@ -1,3 +1,11 @@
+# [1.65.0](https://github.com/ExaDev/documents.js/compare/v1.64.0...v1.65.0) (2026-08-03)
+
+
+### Features
+
+* **mathml:** stretch a row's vertical fences to the content they wrap ([0a3b292](https://github.com/ExaDev/documents.js/commit/0a3b2926f98b29611ea802534ea2f5cc5da6a5e2))
+* **mathml:** use real glyph ink bounds for token box height ([c522c4d](https://github.com/ExaDev/documents.js/commit/c522c4d450e9c3051dec820ba32fe41b517f3a68))
+
 # [1.64.0](https://github.com/ExaDev/documents.js/compare/v1.63.0...v1.64.0) (2026-08-03)
 
 
