@@ -5,7 +5,7 @@ import type { ContentSheetPrintSettings } from 'document-schema.js';
 import { removeChild, setAttr } from '../../xml/edit';
 import { COVERED_CELL_TAG, resolveCellNode } from './address';
 import { OdsCell } from './cell';
-import { writeColumnWidth, writeRowHeight } from './column-row';
+import { writeColumnHidden, writeColumnWidth, writeRowHeight, writeRowHidden } from './column-row';
 import { readSheetPrintSettings, writeSheetPrintSettings } from './print-settings';
 
 const NAME_ATTR = 'table:name';
@@ -59,6 +59,16 @@ export class OdsSheet {
   // The row-height counterpart to setColumnWidth above, mirroring it exactly for style:family="table-row"/style:row-height.
   setRowHeight(index: number, heightPt: number): void {
     writeRowHeight(this.pkg, this.live(), index, heightPt);
+  }
+
+  // Sets or clears table:visibility="collapse" on the column at `index` -- a plain attribute directly on the element, independent of setColumnWidth's own style-based sizing (see column-row.ts's own top-of-file note). Safe to call in either order relative to setColumnWidth, and safe to call more than once (unhiding by passing false again removes the attribute rather than leaving a stale "collapse").
+  setColumnHidden(index: number, hidden: boolean): void {
+    writeColumnHidden(this.live(), index, hidden);
+  }
+
+  // The row counterpart to setColumnHidden above.
+  setRowHidden(index: number, hidden: boolean): void {
+    writeRowHidden(this.live(), index, hidden);
   }
 
   // Resolves (individuating/gap-filling as needed) the cell at 0-based (row, column) and wraps it as an OdsCell -- rejecting a position covered by another cell's own merged range outright (see OdsCell's own class doc: a table:covered-table-cell is never wrapped), rather than silently handing back something whose value/formula/displayText setters would corrupt the merge.
