@@ -87,6 +87,24 @@ describe('readDrawFrame: content dispatch', () => {
     expect(shape?.blocks).toEqual([{ kind: 'image', format: 'png', base64: tinyPngBase64(), widthPt: 100, heightPt: 50 }]);
   });
 
+  it('reads the frame\'s own svg:title as the image block\'s altText -- alt text lives on the FRAME, not the draw:image element', () => {
+    const pkg: Package = { parts: { 'Pictures/img1.png': { kind: 'binary', base64: tinyPngBase64() } } };
+    const frame = el('draw:frame', box, [el('draw:image', { 'xlink:href': 'Pictures/img1.png' }), el('svg:title', {}, [txt('Chequered swatch')]), el('svg:desc', {}, [txt('A longer description')])]);
+    expect(readDrawFrame(frame, [], pkg)?.blocks[0]).toMatchObject({ kind: 'image', altText: 'Chequered swatch' });
+  });
+
+  it('falls back to svg:desc when the frame carries a description but no title', () => {
+    const pkg: Package = { parts: { 'Pictures/img1.png': { kind: 'binary', base64: tinyPngBase64() } } };
+    const frame = el('draw:frame', box, [el('draw:image', { 'xlink:href': 'Pictures/img1.png' }), el('svg:desc', {}, [txt('A longer description')])]);
+    expect(readDrawFrame(frame, [], pkg)?.blocks[0]).toMatchObject({ kind: 'image', altText: 'A longer description' });
+  });
+
+  it('leaves altText undefined (omitted, not empty-string) for a frame with neither svg:title nor svg:desc', () => {
+    const pkg: Package = { parts: { 'Pictures/img1.png': { kind: 'binary', base64: tinyPngBase64() } } };
+    const frame = el('draw:frame', box, [el('draw:image', { 'xlink:href': 'Pictures/img1.png' })]);
+    expect(readDrawFrame(frame, [], pkg)?.blocks[0]).not.toHaveProperty('altText');
+  });
+
   it('returns no blocks (not a thrown error) for a draw:image whose referenced part is missing', () => {
     const frame = el('draw:frame', box, [el('draw:image', { 'xlink:href': 'Pictures/missing.png' })]);
     expect(readDrawFrame(frame, [], { parts: {} })?.blocks).toEqual([]);

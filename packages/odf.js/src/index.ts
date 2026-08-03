@@ -123,6 +123,9 @@ export type { OdfRawPoint, OdfRawSegment, OdfRawSubpath, OdfViewBox } from './ty
 export { readDrawFrame, walkDrawShapes, readDrawPageContent } from './typed/draw/shapes';
 export type { DrawPageContent } from './typed/draw/shapes';
 
+export { readDrawObjectReference } from './typed/draw/embedded';
+export type { EmbeddedDrawObject, EmbeddedDocumentKind } from './typed/draw/embedded';
+
 export { readOdp } from './typed/odp/read';
 export type { OdpDocument } from './typed/odp/read';
 

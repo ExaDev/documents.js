@@ -1,9 +1,12 @@
 import type {
   ContentCellValue,
+  ContentDocument,
+  ContentEmbeddedObject,
   ContentRun,
   ContentSheet,
   ContentSheetCell,
   ContentSheetColumn,
+  ContentSheetImage,
   ContentSheetPrintRange,
   ContentSheetPrintSettings,
   ContentSheetRepeatRange,
@@ -11,8 +14,8 @@ import type {
   LayoutMetadata,
   Margins,
 } from 'document-schema.js';
-import { PAGE_SIZE_A4 } from 'document-schema.js';
-import type { XmlElement } from '../../model/node';
+import { CONTENT_FORMAT_VERSION, PAGE_SIZE_A4 } from 'document-schema.js';
+import type { XmlElement, XmlNode } from '../../model/node';
 import type { Package } from '../../model/package';
 import { attrValue, childrenWithTag, findChildElement, rootElement } from '../../xml/query';
 import { TableCursor, parseCellReference } from '../shared/a1';
@@ -23,12 +26,27 @@ import { parseMargins, parsePageSize } from '../shared/geometry';
 import { parseOdfLength } from '../shared/units';
 import { readOdfParagraph } from '../shared/paragraph';
 import { readCellStyleDecoration } from '../shared/table';
+import type { OdfTransformFunction } from '../shared/transform';
+import { parseOdfTransform } from '../shared/transform';
+import { readDrawFrame } from '../draw/shapes';
+import type { EmbeddedDrawObject } from '../draw/embedded';
+import { readDrawObjectReference } from '../draw/embedded';
+import { readOdg } from '../odg/read';
+import { readOdp } from '../odp/read';
+import { readOdt } from '../odt/read';
 
 // Package -> OdsDocument: a spreadsheet reader deliberately built GEOMETRY- and PRINT-SETTINGS-rich rather than a minimal cell-values-only reader (a real requirement from this reader's own design brief, not optional polish) -- real column widths/row heights, hidden rows/columns, merged ranges, every office:value-type variant with its own OpenFormula string carried verbatim, and a genuinely populated ContentSheetPrintSettings (page geometry, print range, scale/fit-to-page, repeat rows/columns, gridlines/headers, page order, manual breaks). Every ODF attribute name and structural shape below was confirmed against real LibreOffice 26.2 output (a headless UNO Basic macro building a real .ods with every one of these features actually configured through the same UNO calls the Calc UI itself uses -- Format > Columns > Width, Format > Rows > Height, Format > Print Areas, Format > Page Style's Sheet tab, a real merged range, a real cross-sheet SUM formula, every value-type including a GBP currency cell and a genuine #DIV/0! formula error -- then the resulting content.xml/styles.xml inspected directly), not assumed from memory or from xlsx's own different mechanisms. See this module's own inline notes at each surprising point (table:table-header-rows/columns as the REAL repeat-row/column mechanism, NOT a named range; style:master-page-name living on the table:table's own style:style[family="table"], NOT on table:table itself; the UNO API's own PageScale-vs-ScaleToPagesX/Y mutual-exclusivity quirk that shaped nothing in the READER but is worth knowing when re-deriving a fixture) for the exact evidence.
 //
 // THE TWO REPEAT-COUNT HAZARDS this reader is built around (see typed/shared/a1.ts's own top-of-file note for why they matter): table:number-columns-repeated/table:number-rows-repeated routinely reach into the hundreds of thousands on a real spreadsheet's trailing empty area, so this reader NEVER materializes one array entry per repeated position -- for cells, a purely-empty repeated run contributes nothing at all to `cells`; for table:table-column/table:table-row elements, `columns`/`rows` get exactly ONE ContentSheetColumn/ContentSheetRow per XML element (at that element's OWN starting index), never one per repeated index, mirroring exactly how a real ODS file itself already compresses a run of identically-formatted columns/rows (confirmed even in a perfectly ordinary two-column sheet: LibreOffice wrote ONE table:table-column with table:number-columns-repeated="2" for two identically-styled columns, not a repeat hazard specific to huge trailing empty runs at all). Column/row/cell indices are ALWAYS computed from a running cursor position (typed/shared/a1.ts's TableCursor for cells; a plain incrementing counter for the separate table:table-column walk) -- never read from an XML attribute, because ODF cells/columns/rows carry no address attribute of their own at all (unlike xlsx's own r="B7").
 //
-// SCOPE: sheet images (draw:frame-embedded pictures anchored to a cell) and embedded objects are not read here -- ContentSheetSchema's own `images`/`embeddedObjects` fields exist for a future reader to populate; this one always reports `images: []`. table:print-ranges is a space-separated list of cell-range-address strings per the OASIS spec, but ContentSheetPrintSettingsSchema's own `printRange` models only ONE range -- a document defining more than one non-contiguous print range has every range after the first silently ignored (a documented, narrow scope boundary, not a silent one).
+// ANCHORED DRAWINGS (ContentSheet.images / ContentSheet.embeddedObjects) are read here, through the SAME typed/draw/shapes.ts primitives odt/odp/odg already use -- readDrawFrame for the frame itself (geometry, group-transform composition, style-resolved insets, and draw:image -> ContentImageBlock resolution), typed/draw/embedded.ts's readDrawObjectReference for a draw:object's own embedded sub-document. Nothing about frame reading is reimplemented here; what IS spreadsheet-specific is where a frame LIVES and what its coordinates mean, and ODF has exactly two conventions for that, BOTH confirmed against real, unmodified LibreOffice 26.2 output (src/typed/ods/fixtures/sheet-anchors.ods, built via a Java UNO client driving the same calls the Calc UI itself uses -- Insert > Image with Anchor > To Cell, Insert > OLE Object, Anchor > To Page -- then unzipped and read directly):
+//
+// 1. ANCHORED TO A CELL: the draw:frame is a DIRECT CHILD OF THE table:table-cell it is anchored to, and its svg:x/svg:y are offsets from THAT CELL'S own top-left corner (verified numerically: a shape positioned 0.5cm/0.3cm beyond its anchor cell's origin serialises as svg:x="0.5cm" svg:y="0.3cm", regardless of where that cell sits on the sheet). The anchor cell reference is therefore not read from any attribute at all -- ODF cells carry no address attribute (see the repeat-count note below) -- it IS the running TableCursor position this reader already computes for every cell, exactly the same way ContentSheetCell.row/column are resolved.
+// 2. ANCHORED TO THE PAGE: the draw:frame sits inside a table:shapes element, a child of table:table itself appearing BEFORE its column definitions, and its svg:x/svg:y are absolute from the sheet's own origin. ContentSheetImage has no "page-anchored" variant, so such an image is reported at anchorRow/anchorColumn 0 with its absolute offsets carried through unchanged -- not an approximation: cell (0,0)'s own top-left IS the sheet origin, so the two coordinate systems coincide exactly there.
+//
+// A draw:g group is walked through (its own draw:transform composed onto each child via readDrawFrame's existing groupFunctions parameter, exactly as walkDrawShapes does for a slide), so a grouped anchored image is still found. What a sheet CANNOT carry is anything ContentSheetSchema has nowhere to put: a floating text box or a table frame (ContentSheet has no `shapes` array at all, unlike ContentSlide/ContentDrawPage), a bare vector primitive (no `vectors` array either -- the same scope boundary walkDrawShapes already documents for presentations), and an embedded formula or chart object (see typed/draw/embedded.ts's own SCOPE note: ContentEmbeddedObject.document is a required ContentDocument, whose union has no MathML- or chart-shaped variant). Each is skipped rather than mapped onto an approximation of a different kind.
+//
+// SCOPE: table:print-ranges is a space-separated list of cell-range-address strings per the OASIS spec, but ContentSheetPrintSettingsSchema's own `printRange` models only ONE range -- a document defining more than one non-contiguous print range has every range after the first silently ignored (a documented, narrow scope boundary, not a silent one).
 
 const CONTENT_PART = 'content.xml';
 
@@ -189,10 +207,90 @@ interface TableWalkResult {
   columns: ContentSheetColumn[];
   rows: ContentSheetRow[];
   cells: ContentSheetCell[];
+  images: ContentSheetImage[];
+  embeddedObjects: ContentEmbeddedObject[];
   repeatColumns: ContentSheetRepeatRange | undefined;
   repeatRows: ContentSheetRepeatRange | undefined;
   manualBreakRows: number[];
   manualBreakColumns: number[];
+}
+
+// An embedded sub-document -> the ContentDocument variant its own typed reader produces. This is the kind -> reader dispatch typed/draw/embedded.ts deliberately leaves to its caller (see that module's own note on the import cycle it would otherwise create): readOds is one of the four readers dispatched to, so a spreadsheet embedded inside a spreadsheet is plain self-recursion here, needing no indirection at all.
+function readEmbeddedObjectDocument(reference: EmbeddedDrawObject): ContentDocument {
+  switch (reference.objectKind) {
+    case 'wordprocessing': {
+      const { metadata, sections } = readOdt(reference.package);
+      return { kind: 'wordprocessing', formatVersion: CONTENT_FORMAT_VERSION, metadata, sections };
+    }
+    case 'presentation': {
+      const { metadata, slides } = readOdp(reference.package);
+      return { kind: 'presentation', formatVersion: CONTENT_FORMAT_VERSION, metadata, slides };
+    }
+    case 'drawing': {
+      const { metadata, pages } = readOdg(reference.package);
+      return { kind: 'drawing', formatVersion: CONTENT_FORMAT_VERSION, metadata, pages };
+    }
+    case 'spreadsheet': {
+      const { metadata, sheets } = readOds(reference.package);
+      return { kind: 'spreadsheet', formatVersion: CONTENT_FORMAT_VERSION, metadata, sheets };
+    }
+  }
+}
+
+// One anchored draw:frame -> whichever of `images`/`embeddedObjects` it belongs in, at the anchor position the caller resolved for it (the enclosing cell's own cursor row/column, or 0/0 for a page-anchored frame -- see this module's own top-of-file note on the two anchoring conventions). The frame itself is read by shapes.ts's readDrawFrame, so its resolved box already carries the group-composed offsets and the frame-sized ContentImageBlock this function only has to re-shape into a ContentSheetImage.
+//
+// draw:object is checked BEFORE the frame's own image blocks, because a real embedded-object frame ALSO carries a draw:image preview of the object (an ObjectReplacements/ GDI metafile) that must not be mistaken for anchored picture content -- the same ordering, for the same reason, that readDrawFrameContent already applies to a table frame's own preview image.
+function collectAnchoredFrame(
+  frameElement: XmlElement,
+  groupFunctions: readonly OdfTransformFunction[],
+  pkg: Package,
+  anchorRow: number,
+  anchorColumn: number,
+  images: ContentSheetImage[],
+  embeddedObjects: ContentEmbeddedObject[],
+): void {
+  const shape = readDrawFrame(frameElement, groupFunctions, pkg);
+  if (shape === undefined) {
+    return;
+  }
+
+  const reference = readDrawObjectReference(frameElement, pkg);
+  if (reference !== undefined) {
+    // ContentEmbeddedObject carries no anchor fields of its own (unlike ContentSheetImage) -- only a frame -- so an embedded object's own anchor cell is not representable and its frame keeps the coordinates the format itself stated: cell-relative for a cell-anchored object, sheet-absolute for a page-anchored one.
+    embeddedObjects.push({ objectKind: reference.objectKind, document: readEmbeddedObjectDocument(reference), frame: shape.frame });
+    return;
+  }
+
+  for (const block of shape.blocks) {
+    if (block.kind === 'image') {
+      images.push({ ...block, anchorRow, anchorColumn, offsetXPt: shape.frame.xPt, offsetYPt: shape.frame.yPt });
+    }
+  }
+}
+
+// Walks a shape container's own children (a table:table-cell's, a table:shapes', or a nested draw:g's), flattening draw:g groups exactly as walkDrawShapes does for a slide -- an enclosing group's own draw:transform is accumulated INNERMOST FIRST so composeOdfGroupTransform applies the list in the right order at the leaf. Every other element kind (a bare draw:rect/draw:custom-shape vector primitive, a draw:control, the cell's own text:p content) is skipped: see this module's own top-of-file note on what a ContentSheet has nowhere to carry.
+function collectAnchoredFrames(
+  children: readonly XmlNode[],
+  groupFunctions: readonly OdfTransformFunction[],
+  pkg: Package,
+  anchorRow: number,
+  anchorColumn: number,
+  images: ContentSheetImage[],
+  embeddedObjects: ContentEmbeddedObject[],
+): void {
+  for (const child of children) {
+    if (child.type !== 'element') {
+      continue;
+    }
+    if (child.tag === 'draw:frame') {
+      collectAnchoredFrame(child, groupFunctions, pkg, anchorRow, anchorColumn, images, embeddedObjects);
+    } else if (child.tag === 'draw:g') {
+      const ownValue = attrValue(child, 'draw:transform');
+      const ownFunctions = ownValue === undefined ? [] : parseOdfTransform(ownValue);
+      const nested = ownFunctions.length === 0 ? groupFunctions : [...ownFunctions, ...groupFunctions];
+      collectAnchoredFrames(child.children, nested, pkg, anchorRow, anchorColumn, images, embeddedObjects);
+    }
+  }
 }
 
 // Walks one table:table's own direct children in document order, unwrapping table:table-header-columns/table:table-header-rows transparently into the SAME columns/rows/cells this function already builds -- confirmed against real LibreOffice output as the REAL repeat-row/repeat-column mechanism ("rows/columns to repeat on every printed page", Format > Print Areas > Edit in the Calc UI): a wrapped table:table-column/table:table-row is a genuinely real column/row (contributing to `columns`/`rows`/`cells` exactly as if unwrapped, in the SAME document-order position), while the wrapper itself additionally marks that its covered index range is the print engine's own title-row/title-column range. This is NOT a named-range mechanism the way it might be guessed to be from xlsx's own different Print_Titles convention -- ODF has no named range involved here at all.
@@ -200,6 +298,8 @@ function readTable(tableElement: XmlElement, pkg: Package): TableWalkResult {
   const columns: ContentSheetColumn[] = [];
   const rows: ContentSheetRow[] = [];
   const cells: ContentSheetCell[] = [];
+  const images: ContentSheetImage[] = [];
+  const embeddedObjects: ContentEmbeddedObject[] = [];
   const manualBreakRows: number[] = [];
   const manualBreakColumns: number[] = [];
   let repeatColumns: ContentSheetRepeatRange | undefined;
@@ -229,6 +329,9 @@ function readTable(tableElement: XmlElement, pkg: Package): TableWalkResult {
         const columnIndex = cursor.columnIndex;
         const rowIndex = cursor.rowIndex;
         cursor.nextCell(readRepeatCount(child, 'table:number-columns-repeated'));
+
+        // Anchored drawings are collected BEFORE the empty-cell skip below: a cell whose only content is an anchored image or embedded object carries no value, formula or text at all, so it is (correctly) never materialized as a ContentSheetCell -- but its frame is real content that would be lost by skipping the cell entirely. See this module's own top-of-file note on why the anchor position is this cursor's own row/column rather than any attribute.
+        collectAnchoredFrames(child.children, [], pkg, rowIndex, columnIndex, images, embeddedObjects);
 
         const formula = attrValue(child, 'table:formula');
         const { runs, displayText } = readCellText(child, pkg);
@@ -292,7 +395,10 @@ function readTable(tableElement: XmlElement, pkg: Package): TableWalkResult {
     if (child.type !== 'element') {
       continue;
     }
-    if (child.tag === 'table:table-column') {
+    if (child.tag === 'table:shapes') {
+      // Page-anchored drawings: absolute sheet coordinates, reported against cell (0, 0) whose own top-left IS the sheet origin -- see this module's own top-of-file note (convention 2).
+      collectAnchoredFrames(child.children, [], pkg, 0, 0, images, embeddedObjects);
+    } else if (child.tag === 'table:table-column') {
       processColumn(child);
     } else if (child.tag === 'table:table-header-columns') {
       const startIndex = columnCursor;
@@ -319,7 +425,7 @@ function readTable(tableElement: XmlElement, pkg: Package): TableWalkResult {
     }
   }
 
-  return { columns, rows, cells, repeatColumns, repeatRows, manualBreakRows, manualBreakColumns };
+  return { columns, rows, cells, images, embeddedObjects, repeatColumns, repeatRows, manualBreakRows, manualBreakColumns };
 }
 
 // A sheet's own print settings resolve through table:table -> table:style-name -> style:style[family="table"] -> style:master-page-name -> style:master-page -> style:page-layout-name -> style:page-layout -> style:page-layout-properties -- confirmed against real LibreOffice output that style:master-page-name lives on the TABLE'S OWN style (family="table"), not as a direct attribute of table:table itself the way draw:master-page-name sits directly on a draw:page. The remaining master-page-name -> page-layout-properties chain is shared verbatim with odp/odg via masterpage.ts's own resolvePageLayoutProperties. Gridlines/headers/page-order/scale all live on that SAME style:page-layout-properties element: style:print is a space-separated TOKEN LIST ("charts drawings grid headers objects zero-values") whose "grid"/"headers" membership is this reader's own gridlines/headers booleans (confirmed: a page style with both explicitly turned off omits both tokens entirely, never emits e.g. grid="false"); style:print-page-order is "ltr" (over then down) or "ttb" (down then over, ODF's own default when the attribute is absent entirely); style:scale-to is a percentage-suffixed value; style:scale-to-X/style:scale-to-Y are the fit-to-N-pages-wide/tall pair -- confirmed mutually exclusive in the UNO API itself (setting ScaleToPagesX/Y, even to their own already-zero default, silently resets PageScale back to 100 -- a real LibreOffice UNO quirk that shaped how the FIXTURE was built, not this reader's own parsing, which simply reads whichever of the two attribute pairs the producer actually wrote).
@@ -391,9 +497,14 @@ function readSheet(tableElement: XmlElement, pkg: Package): ContentSheet | undef
   if (name === undefined) {
     return undefined;
   }
-  const { columns, rows, cells, repeatColumns, repeatRows, manualBreakRows, manualBreakColumns } = readTable(tableElement, pkg);
+  const { columns, rows, cells, images, embeddedObjects, repeatColumns, repeatRows, manualBreakRows, manualBreakColumns } = readTable(tableElement, pkg);
   const printSettings = readPrintSettings(tableElement, pkg, repeatColumns, repeatRows, manualBreakRows, manualBreakColumns);
-  return { name, cells, columns, rows, images: [], printSettings };
+  const sheet: ContentSheet = { name, cells, columns, rows, images, printSettings };
+  if (embeddedObjects.length > 0) {
+    // Optional in ContentSheetSchema, so it is set only when the sheet genuinely has one -- matching how every other optional field in this reader is omitted rather than written as an empty value.
+    sheet.embeddedObjects = embeddedObjects;
+  }
+  return sheet;
 }
 
 export function readOds(pkg: Package): OdsDocument {

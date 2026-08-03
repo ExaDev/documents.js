@@ -7,6 +7,7 @@ import { sniffImageFormat } from '../../image/sniff';
 import { resolveStyleElementChain } from '../shared/cascade';
 import { parseOdfColor } from '../shared/color';
 import { parseLinePoints } from '../shared/geometry';
+import { decodeOdfText } from '../shared/text';
 import { readOdfParagraph } from '../shared/paragraph';
 import { readOdfTable } from '../shared/table';
 import { parseOdfLength } from '../shared/units';
@@ -50,8 +51,20 @@ function readFrameInsets(frame: XmlElement, pkg: Package): FrameInsets {
   return insets;
 }
 
-// draw:image is a direct child of draw:frame, referencing its media part by a plain package path via xlink:href -- ODF has no relationships mechanism (see this package's own top-level README), so this IS the reference, not an indirection to resolve. Real saved .odp packages always use xlink:href against a real Pictures/ part (confirmed against a real LibreOffice-produced .odp); the flat-XML office:binary-data inline form is specific to the .fodp/.fods/.fodt single-file variants this reader (operating on a decoded zip-of-XML Package) never encounters, so it is not handled here.
-function readDrawImageBlock(image: XmlElement, frameBox: Box, pkg: Package): ContentImageBlock | undefined {
+// A draw:frame's own alternative text: svg:title (ODF's short title) preferred, svg:desc (its long description) used when a frame carries only the latter -- both are plain-text DIRECT CHILD ELEMENTS of draw:frame itself, not attributes, confirmed against real LibreOffice 26.2 output (a Calc image whose UNO Title/Description properties were both set round-trips as `<svg:title>...</svg:title><svg:desc>...</svg:desc>` siblings of the frame's own draw:image). ContentImageBlockSchema models exactly one altText string, so the two are collapsed with title first: LibreOffice's own HTML export writes svg:title into `alt=`, making it the closer match, and a frame carrying only a description still has genuine alternative text worth surfacing rather than dropping. Decoded via text.ts's own decodeOdfText (not a bare text-node concatenation) for the same reason every other ODF text getter in this package uses it -- a title/description containing a run of literal spaces or a tab is stored as text:s/text:tab elements.
+function readFrameAltText(frame: XmlElement): string | undefined {
+  const title = childrenWithTag(frame, 'svg:title')[0];
+  const decodedTitle = title === undefined ? undefined : decodeOdfText(title);
+  if (decodedTitle !== undefined && decodedTitle.length > 0) {
+    return decodedTitle;
+  }
+  const description = childrenWithTag(frame, 'svg:desc')[0];
+  const decodedDescription = description === undefined ? undefined : decodeOdfText(description);
+  return decodedDescription !== undefined && decodedDescription.length > 0 ? decodedDescription : undefined;
+}
+
+// draw:image is a direct child of draw:frame, referencing its media part by a plain package path via xlink:href -- ODF has no relationships mechanism (see this package's own top-level README), so this IS the reference, not an indirection to resolve. Real saved .odp packages always use xlink:href against a real Pictures/ part (confirmed against a real LibreOffice-produced .odp); the flat-XML office:binary-data inline form is specific to the .fodp/.fods/.fodt single-file variants this reader (operating on a decoded zip-of-XML Package) never encounters, so it is not handled here. The frame is passed alongside its own draw:image purely for alt text, which lives on the FRAME (see readFrameAltText above), never on the image element.
+function readDrawImageBlock(image: XmlElement, frame: XmlElement, frameBox: Box, pkg: Package): ContentImageBlock | undefined {
   const href = attrValue(image, 'xlink:href');
   const part = href === undefined ? undefined : pkg.parts[href];
   if (part?.kind !== 'binary') {
@@ -63,7 +76,12 @@ function readDrawImageBlock(image: XmlElement, frameBox: Box, pkg: Package): Con
     return undefined;
   }
   // The image renders at the FRAME's own resolved size, not the source image's native pixel dimensions -- matching ooxml.js's own readPicShape convention.
-  return { kind: 'image', format, base64: part.base64, widthPt: frameBox.widthPt, heightPt: frameBox.heightPt };
+  const block: ContentImageBlock = { kind: 'image', format, base64: part.base64, widthPt: frameBox.widthPt, heightPt: frameBox.heightPt };
+  const altText = readFrameAltText(frame);
+  if (altText !== undefined) {
+    block.altText = altText;
+  }
+  return block;
 }
 
 // A draw:frame's content is exactly one of table:table, draw:text-box, or draw:image (verified against real LibreOffice output) -- table:table is checked FIRST because a real saved presentation table frame also carries a sibling draw:image (an .svm fallback preview LibreOffice writes for consumers that can't render a real table), which must not be mistaken for the frame's own image content.
@@ -79,7 +97,7 @@ function readDrawFrameContent(frame: XmlElement, frameBox: Box, pkg: Package): C
   }
   const image = childrenWithTag(frame, 'draw:image')[0];
   if (image !== undefined) {
-    const block = readDrawImageBlock(image, frameBox, pkg);
+    const block = readDrawImageBlock(image, frame, frameBox, pkg);
     return block === undefined ? [] : [block];
   }
   return [];

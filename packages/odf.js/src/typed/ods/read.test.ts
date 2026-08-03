@@ -6,6 +6,7 @@ import { PAGE_SIZE_A4 } from 'document-schema.js';
 import type { Package } from '../../model/package';
 import type { XmlElement } from '../../model/node';
 import { el, txt } from '../../xml/fragment';
+import { bytesToBase64 } from '../../util/base64';
 import { parsePackage } from '../../package-io/read';
 import { parseOdfLength } from '../shared/units';
 import { readOds } from './read';
@@ -243,6 +244,150 @@ describe('readOds: minimal.ods (real LibreOffice output, default/unmodified shee
     expect(sheet.printSettings.repeatRows).toBeUndefined();
     expect(sheet.printSettings.repeatColumns).toBeUndefined();
     expect(sheet.printSettings.manualBreaks).toBeUndefined();
+  });
+});
+
+// sheet-anchors.ods was built via a Java UNO client against a headless LibreOffice 26.2 (the same "drive the calls the UI itself makes" technique the other fixtures use -- LibreOffice's own bundled Python cannot be launched directly on macOS 26, which kills it with a code-signing Launch Constraint Violation, and command-line `macro:///` dispatch never fired at all in this sandbox, so the Java UNO bridge shipped in LibreOffice's own Resources/java was used instead). Three real anchored drawings, saved with the calc8 filter and never hand-edited afterwards:
+//   - an 8x8 PNG anchored TO CELL C5 (column index 2, row index 4), sized 3cm x 2cm, positioned 0.5cm/0.3cm past its anchor cell's own top-left, with a real UNO Title and Description set (svg:title/svg:desc);
+//   - a LibreOffice Draw document embedded as an OLE object anchored TO CELL B8 (column index 1, row index 7), sized 4cm x 3cm, offset 0.2cm/0.1cm, containing one real orange rectangle;
+//   - the same PNG anchored TO PAGE at an absolute 7cm/0.9cm, sized 1.5cm x 1cm.
+describe('readOds: sheet-anchors.ods (real LibreOffice output -- anchored images and an embedded object)', () => {
+  const { sheets } = readOds(loadFixture('sheet-anchors.ods'));
+  const sheet = sheets[0];
+  if (sheet === undefined) {
+    throw new Error('expected at least one sheet');
+  }
+
+  it('reads both anchored images -- the page-anchored one (table:shapes, first in document order) then the cell-anchored one', () => {
+    expect(sheet.images).toHaveLength(2);
+    expect(sheet.images.map((image) => image.format)).toEqual(['png', 'png']);
+  });
+
+  it('resolves the cell-anchored image to its real anchor cell (C5) with its own cell-relative offsets, never a fabricated address attribute', () => {
+    const anchored = sheet.images[1];
+    expect(anchored?.anchorColumn).toBe(2);
+    expect(anchored?.anchorRow).toBe(4);
+    expect(anchored?.offsetXPt).toBeCloseTo(knownLength('0.5cm'), 6);
+    expect(anchored?.offsetYPt).toBeCloseTo(knownLength('0.3cm'), 6);
+  });
+
+  it('sizes the cell-anchored image to its own frame, not to the source PNG\'s 8x8 native pixels', () => {
+    expect(sheet.images[1]?.widthPt).toBeCloseTo(knownLength('3cm'), 6);
+    expect(sheet.images[1]?.heightPt).toBeCloseTo(knownLength('2cm'), 6);
+  });
+
+  it('carries the image\'s real bytes through as base64, sniffed to png from its own magic bytes', () => {
+    expect(sheet.images[1]?.base64.startsWith('iVBORw0KGgo')).toBe(true);
+  });
+
+  it('reads the frame\'s own svg:title as altText', () => {
+    expect(sheet.images[1]?.altText).toBe('Chequered swatch');
+  });
+
+  it('reports the page-anchored image (a real table:shapes child) against cell (0, 0) with its absolute sheet coordinates carried through unchanged', () => {
+    const pageAnchored = sheet.images[0];
+    expect(pageAnchored?.anchorRow).toBe(0);
+    expect(pageAnchored?.anchorColumn).toBe(0);
+    expect(pageAnchored?.offsetXPt).toBeCloseTo(knownLength('7cm'), 6);
+    expect(pageAnchored?.offsetYPt).toBeCloseTo(knownLength('0.9cm'), 6);
+    expect(pageAnchored?.altText).toBeUndefined();
+  });
+
+  it('reads the embedded OLE object as a real, fully-read drawing ContentDocument -- not a placeholder, and not its ObjectReplacements preview image', () => {
+    expect(sheet.embeddedObjects).toHaveLength(1);
+    const embedded = sheet.embeddedObjects?.[0];
+    expect(embedded?.objectKind).toBe('drawing');
+    expect(embedded?.document.kind).toBe('drawing');
+    if (embedded?.document.kind !== 'drawing') {
+      throw new Error('expected a drawing ContentDocument');
+    }
+    const vectors = embedded.document.pages[0]?.vectors;
+    expect(vectors).toHaveLength(1);
+    const vector = vectors?.[0];
+    if (vector?.kind !== 'rect') {
+      throw new Error('expected the embedded drawing\'s own rectangle');
+    }
+    expect(vector.fill).toEqual({ r: 1, g: 0x88 / 255, b: 0 });
+  });
+
+  it('reads the embedded object\'s own frame from the draw:frame, keeping the cell-relative coordinates the format itself states (ContentEmbeddedObject carries no anchor fields of its own)', () => {
+    const frame = sheet.embeddedObjects?.[0]?.frame;
+    expect(frame?.xPt).toBeCloseTo(knownLength('0.2cm'), 6);
+    expect(frame?.yPt).toBeCloseTo(knownLength('0.1cm'), 6);
+    expect(frame?.widthPt).toBeCloseTo(knownLength('4cm'), 6);
+    expect(frame?.heightPt).toBeCloseTo(knownLength('3cm'), 6);
+  });
+
+  it('never mistakes the embedded object\'s own ObjectReplacements preview for anchored picture content', () => {
+    expect(sheet.images.some((image) => image.widthPt > knownLength('3.5cm'))).toBe(false);
+  });
+
+  it('still reads the sheet\'s ordinary cell content alongside its drawings, and never materializes the drawing-only anchor cells as cells of their own', () => {
+    expect(sheet.cells.map((cell) => cell.displayText)).toEqual(['Label', 'Value', 'Alpha', '42']);
+  });
+
+  it('leaves embeddedObjects undefined on a sheet that has none, rather than writing an empty array', () => {
+    expect(readOds(loadFixture('kitchen-sink.ods')).sheets[0]?.embeddedObjects).toBeUndefined();
+    expect(readOds(loadFixture('kitchen-sink.ods')).sheets[0]?.images).toEqual([]);
+  });
+});
+
+describe('readOds: anchored drawings (synthetic packages -- the scope boundaries and group flattening real LibreOffice output does not exercise)', () => {
+  // Only the PNG magic-byte signature matters to sniffImageFormat -- the rest is arbitrary filler, matching typed/draw/shapes.test.ts's own convention.
+  const pngBase64 = bytesToBase64(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]));
+
+  function imageFrame(attrs: Record<string, string>): XmlElement {
+    return el('draw:frame', attrs, [el('draw:image', { 'xlink:href': 'Pictures/img.png' })]);
+  }
+
+  function drawingPackage(table: XmlElement): Package {
+    return {
+      parts: {
+        'content.xml': { kind: 'xml', nodes: [el('office:document-content', {}, [el('office:body', {}, [el('office:spreadsheet', {}, [table])])])] },
+        'Pictures/img.png': { kind: 'binary', base64: pngBase64 },
+      },
+    };
+  }
+
+  const frameBox = { 'svg:x': '10pt', 'svg:y': '20pt', 'svg:width': '100pt', 'svg:height': '50pt' };
+
+  it('resolves the anchor cell from the running cursor, so a frame in a cell after a repeated run still reports its real column index', () => {
+    const row = el('table:table-row', {}, [
+      el('table:table-cell', { 'table:number-columns-repeated': '5' }),
+      el('table:table-cell', {}, [imageFrame(frameBox)]),
+    ]);
+    const table = el('table:table', { 'table:name': 'Sheet1' }, [el('table:table-row', { 'table:number-rows-repeated': '3' }, []), row]);
+    const { sheets } = readOds(drawingPackage(table));
+    expect(sheets[0]?.images[0]).toMatchObject({ anchorRow: 3, anchorColumn: 5, offsetXPt: 10, offsetYPt: 20 });
+  });
+
+  it('walks through a draw:g group, composing the group\'s own draw:transform onto the frame exactly as walkDrawShapes does for a slide', () => {
+    const group = el('draw:g', { 'draw:transform': 'translate(5pt 7pt)' }, [imageFrame(frameBox)]);
+    const table = el('table:table', { 'table:name': 'Sheet1' }, [el('table:table-row', {}, [el('table:table-cell', {}, [group])])]);
+    const { sheets } = readOds(drawingPackage(table));
+    expect(sheets[0]?.images[0]).toMatchObject({ anchorRow: 0, anchorColumn: 0, offsetXPt: 15, offsetYPt: 27 });
+  });
+
+  it('skips a frame ContentSheet has nowhere to carry -- a floating text box (no `shapes` array) and a bare vector primitive (no `vectors` array)', () => {
+    const textBox = el('draw:frame', frameBox, [el('draw:text-box', {}, [el('text:p', {}, [txt('floating')])])]);
+    const rect = el('draw:rect', frameBox);
+    const table = el('table:table', { 'table:name': 'Sheet1' }, [el('table:table-row', {}, [el('table:table-cell', {}, [textBox, rect])])]);
+    const { sheets } = readOds(drawingPackage(table));
+    expect(sheets[0]?.images).toEqual([]);
+    expect(sheets[0]?.embeddedObjects).toBeUndefined();
+  });
+
+  it('skips a frame with no resolvable geometry at all, matching readDrawFrame\'s own documented inherited-positioning boundary', () => {
+    const table = el('table:table', { 'table:name': 'Sheet1' }, [el('table:table-row', {}, [el('table:table-cell', {}, [imageFrame({})])])]);
+    expect(readOds(drawingPackage(table)).sheets[0]?.images).toEqual([]);
+  });
+
+  it('reads an anchored image from a cell that also has real content, without disturbing that cell\'s own value', () => {
+    const cell = el('table:table-cell', { 'office:value-type': 'string' }, [el('text:p', {}, [txt('has a picture')]), imageFrame(frameBox)]);
+    const table = el('table:table', { 'table:name': 'Sheet1' }, [el('table:table-row', {}, [cell])]);
+    const { sheets } = readOds(drawingPackage(table));
+    expect(sheets[0]?.cells[0]?.displayText).toBe('has a picture');
+    expect(sheets[0]?.images[0]).toMatchObject({ anchorRow: 0, anchorColumn: 0 });
   });
 });
 
