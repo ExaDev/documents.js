@@ -1,3 +1,10 @@
+## [1.2.10](https://github.com/ExaDev/document-cli/compare/v1.2.9...v1.2.10) (2026-08-03)
+
+
+### Bug Fixes
+
+* **ci:** use pull_request_target so dependabot auto-merge can read secrets ([69b612d](https://github.com/ExaDev/document-cli/commit/69b612ddaa05de57ed153bb2e32479e6be75ecaa))
+
 ## [1.2.9](https://github.com/ExaDev/document-cli/compare/v1.2.8...v1.2.9) (2026-08-03)
 
 
