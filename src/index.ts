@@ -174,11 +174,13 @@ export type { DocxVerticalMerge } from './edit/docx/table';
 export { DocxTable, DocxTableCell, DocxTableRow } from './edit/docx/table';
 export { buildDocxPackage } from './edit/docx/content';
 
-export type { SlideImageInit, TextBoxInit } from './edit/pptx/slide';
+export type { SlideImageInit, SlideTableInit, TextBoxInit } from './edit/pptx/slide';
 export { createPptx, openPptx, PptxEditor } from './edit/pptx/editor';
 export { PptxSlide } from './edit/pptx/slide';
 export type { DrawingParagraphInit, DrawingRunInit } from './edit/pptx/shape';
 export { PptxShape } from './edit/pptx/shape';
+export type { PptxTableInit } from './edit/pptx/table';
+export { PptxTable, PptxTableCell, PptxTableRow } from './edit/pptx/table';
 export { buildPptxPackage } from './edit/pptx/content';
 
 export type { OdtBody } from './edit/odt/editor';
@@ -192,7 +194,7 @@ export type { TableInit as OdtTableInit } from './edit/odt/table';
 export { OdtTable, OdtTableCell, OdtTableRow } from './edit/odt/table';
 export { buildOdtPackage } from './edit/odt/content';
 
-export type { SlideImageInit as OdpSlideImageInit, TextBoxInit as OdpTextBoxInit } from './edit/odp/slide';
+export type { SlideImageInit as OdpSlideImageInit, SlideTableInit as OdpSlideTableInit, TextBoxInit as OdpTextBoxInit } from './edit/odp/slide';
 export { createOdp, OdpEditor, openOdp } from './edit/odp/editor';
 export { OdpSlide } from './edit/odp/slide';
 export { OdpShape } from './edit/odp/shape';
