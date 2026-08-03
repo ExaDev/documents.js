@@ -4,12 +4,14 @@ updates:
     directory: "/"
     schedule:
       interval: "daily"
-    allow:
-      - dependency-name: "document-schema.js"
-      - dependency-name: "ooxml.js"
-      - dependency-name: "odf.js"
-      - dependency-name: "pdf-codec"
-      - dependency-name: "markdown-codec"
+    cooldown:
+      default-days: 7
+      exclude:
+        - "document-schema.js"
+        - "ooxml.js"
+        - "odf.js"
+        - "pdf-codec"
+        - "markdown-codec"
     commit-message:
       prefix: "build"
       include: "scope"
