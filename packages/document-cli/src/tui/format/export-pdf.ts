@@ -1,16 +1,25 @@
 import { writeFile } from 'node:fs/promises';
-import { docxToPdf, encodeMarkdownText, markdownToPdf, odgToPdf, odpToPdf, odsToPdf, odtToPdf, pptxToPdf, type DocumentToPdfOptions } from 'documents.js';
+import { docxToPdf, encodeMarkdownText, markdownToPdf, odgToPdf, odpToPdf, odsToPdf, odtToPdf, pptxToPdf, type DocumentToPdfOptions, type ProvidedFont } from 'documents.js';
+import { loadProvidedFonts } from '../../runtime/fonts.js';
 import type { Diagnostic, OpenDocument } from '../state/types.js';
 
 export interface ExportToPdfOptions {
   readonly signal?: AbortSignal;
   readonly onDiagnostic: (diagnostic: Diagnostic) => void;
+  // Local font files to make available to this export, in the order the user gave them. Paths rather than already-loaded ProvidedFont values: reading and describing a font file can fail (a mistyped path, a .woff, a text file), and this is the one call the export screens already wrap in their own error handling, so failing here puts the message in front of the user rather than somewhere they have to catch separately.
+  readonly fontFiles?: readonly string[];
 }
 
 // documents.js's `WinAnsiSubstitution` fields are `from`/`to` -- the character that could not be represented in a standard-14 font, and the one written in its place.
-function toPdfOptions(options: ExportToPdfOptions): DocumentToPdfOptions {
+function toPdfOptions(options: ExportToPdfOptions, fonts: readonly ProvidedFont[]): DocumentToPdfOptions {
   return {
     signal: options.signal,
+    fonts,
+    // A whole face falling back, rather than a single character: reported into the same diagnostics stream, since that is the channel the export screens already surface (and auto-open the panel for). Distinct from onSubstitution below, which is one character at a time -- a run drawn in a real embedded face never reaches WinAnsi encoding at all.
+    onFontSubstitution: (substitution) => {
+      const requested = `${substitution.requestedFamily}${substitution.requestedBold ? ' bold' : ''}${substitution.requestedItalic ? ' italic' : ''}`;
+      options.onDiagnostic({ severity: 'info', message: `No "${requested}" face available; drew it in "${substitution.resolvedFamily}"` });
+    },
     onSubstitution: (substitution, context) => {
       options.onDiagnostic({ severity: 'info', message: `Substituted "${substitution.to}" for "${substitution.from}"`, pageIndex: context.pageIndex });
     },
@@ -21,7 +30,9 @@ export async function exportToPdf(openDocument: OpenDocument, destinationPath: s
   if (openDocument.format === 'odb' || openDocument.format === 'pdf') {
     throw new Error(`A ${openDocument.format} document is already a read-only source; there is no export-to-PDF path for it`);
   }
-  const pdfOptions = toPdfOptions(options);
+  // Loaded before anything is converted or written, so a bad font path fails with nothing half-written at the destination.
+  const fonts = await loadProvidedFonts(options.fontFiles ?? [], { signal: options.signal });
+  const pdfOptions = toPdfOptions(options, fonts);
   // The one place the ContentDocument pivot ever touches a markdown document in this TUI -- markdownToPdf runs directly on the raw source text, never on edit or save.
   if (openDocument.format === 'markdown') {
     const pdfBytes = markdownToPdf(encodeMarkdownText(openDocument.source), pdfOptions);
