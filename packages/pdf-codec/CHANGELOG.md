@@ -1,3 +1,10 @@
+## [1.10.5](https://github.com/ExaDev/pdf-codec/compare/v1.10.4...v1.10.5) (2026-08-03)
+
+
+### Bug Fixes
+
+* **ci:** use single-quoted string literals in workflow if-conditions ([9a1395f](https://github.com/ExaDev/pdf-codec/commit/9a1395f57f5aca7c294749fc9690614b6cd66d7c))
+
 ## [1.10.4](https://github.com/ExaDev/pdf-codec/compare/v1.10.3...v1.10.4) (2026-08-03)
 
 ## [1.10.3](https://github.com/ExaDev/pdf-codec/compare/v1.10.2...v1.10.3) (2026-08-03)
