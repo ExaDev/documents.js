@@ -2,16 +2,27 @@ import type { ContentDocument, ContentShape } from 'document-schema.js';
 import type { Package } from 'odf.js';
 import { base64ToBytes } from 'odf.js';
 import { mergeByPaintOrder } from '../../model/paint-order';
+import { resolveMetadataTimestamps } from '../../model/metadata';
+import type { ClockPort } from '../../ports/clock';
+import { systemClock } from '../../ports/clock';
 import { populateParagraph } from '../odt/content';
-import { createOdg } from './editor';
+import { OdgEditor } from './editor';
+import { createEmptyOdgPackage } from './scaffold';
 import type { OdgPage } from './page';
 
-// ContentDocument -> a fresh odg Package, built entirely through the same edit/odg/* live-view primitives a caller would use by hand -- the odg-side counterpart to src/edit/odp/content.ts's buildOdpPackage, and pdfToOdg's own package-building half (src/convert/convert.ts), fed by reconstructDrawing. Equally usable standalone by any caller holding a drawing ContentDocument from elsewhere -- most naturally one that came from readOdgContent itself, or the nested drawing document a recovered ContentEmbeddedObjectBlock carries (src/model/embedded-drawing.ts).
-export function buildOdgPackage(content: ContentDocument): Package {
+// clock resolves content.metadata's own createdIso/modifiedIso the same way createOdg does (src/model/metadata.ts's resolveMetadataTimestamps) -- systemClock by default, never overwriting a createdIso/modifiedIso the source content already carried.
+export interface BuildOdgPackageOptions {
+  readonly clock?: ClockPort;
+}
+
+// ContentDocument -> a fresh odg Package, built entirely through the same edit/odg/* live-view primitives a caller would use by hand -- the odg-side counterpart to src/edit/odp/content.ts's buildOdpPackage, and pdfToOdg's own package-building half (src/convert/convert.ts), fed by reconstructDrawing. Equally usable standalone by any caller holding a drawing ContentDocument from elsewhere -- most naturally one that came from readOdgContent itself, or the nested drawing document a recovered ContentEmbeddedObjectBlock carries (src/model/embedded-drawing.ts). Constructs its own package directly (createEmptyOdgPackage + OdgEditor) rather than calling createOdg(), mirroring buildDocxPackage's own identical reasoning: createOdg() always starts metadata from {}, but this function needs the SOURCE content's own metadata to reach resolveMetadataTimestamps.
+export function buildOdgPackage(content: ContentDocument, options?: BuildOdgPackageOptions): Package {
   if (content.kind !== 'drawing') {
     throw new Error('buildOdgPackage requires a drawing ContentDocument');
   }
-  const editor = createOdg();
+  const clock = options?.clock ?? systemClock;
+  const metadata = resolveMetadataTimestamps(content.metadata, clock);
+  const editor = new OdgEditor(createEmptyOdgPackage({ metadata }));
   const firstPage = content.pages[0];
   if (firstPage !== undefined) {
     editor.pageSize = firstPage.size;

@@ -1,4 +1,6 @@
+import type { LayoutMetadata } from 'document-schema.js';
 import type { Package, XmlElement, XmlNode } from 'ooxml.js';
+import { addCoreProperties } from '../../opc/core-properties';
 import { ensureContentTypeOverride } from '../../opc/content-types';
 import { buildRelativeTarget } from '../../opc/paths';
 import { addRelationship } from '../../opc/rels';
@@ -160,8 +162,12 @@ export function ensureNotesMaster(pkg: Package): string {
   return NOTES_MASTER_PART_PATH;
 }
 
-// Builds a minimal but genuinely valid, openable pptx package from nothing: [Content_Types].xml, the root relationship to ppt/presentation.xml, a widescreen presentation with an empty p:sldIdLst, and the slideMaster -> slideLayout -> theme chain ECMA-376 requires every presentation to have. (An earlier, chain-free version of this scaffold opened fine in this package's own reader, which tolerates a missing chain by design, but Keynote rejected it outright -- confirmed by testing.)
-export function createEmptyPptxPackage(): Package {
+export interface CreateEmptyPptxPackageOptions {
+  readonly metadata?: LayoutMetadata;
+}
+
+// Builds a minimal but genuinely valid, openable pptx package from nothing: [Content_Types].xml, the root relationship to ppt/presentation.xml, a widescreen presentation with an empty p:sldIdLst, and the slideMaster -> slideLayout -> theme chain ECMA-376 requires every presentation to have. (An earlier, chain-free version of this scaffold opened fine in this package's own reader, which tolerates a missing chain by design, but Keynote rejected it outright -- confirmed by testing.) A caller passing no options gets byte-for-byte the same package as before docProps/core.xml support existed -- options.metadata is purely additive, mirroring createEmptyDocxPackage's own identical convention (src/edit/docx/scaffold.ts).
+export function createEmptyPptxPackage(options?: CreateEmptyPptxPackageOptions): Package {
   const contentTypes = el('Types', { xmlns: CONTENT_TYPES_NS }, [
     el('Default', { Extension: 'rels', ContentType: 'application/vnd.openxmlformats-package.relationships+xml' }),
     el('Default', { Extension: 'xml', ContentType: 'application/xml' }),
@@ -210,6 +216,10 @@ export function createEmptyPptxPackage(): Package {
     el('p:sldSz', { cx: DEFAULT_SLIDE_WIDTH_EMU, cy: DEFAULT_SLIDE_HEIGHT_EMU }),
     el('p:notesSz', { cx: DEFAULT_NOTES_WIDTH_EMU, cy: DEFAULT_NOTES_HEIGHT_EMU }),
   );
+
+  if (options?.metadata !== undefined) {
+    addCoreProperties(pkg, options.metadata);
+  }
 
   return pkg;
 }

@@ -2,6 +2,9 @@ import type { ContentFormula, ContentVector } from 'document-schema.js';
 import type { Package, XmlElement } from 'odf.js';
 import { decodePackage, encodePackage } from 'odf.js';
 import type { Box } from '../../model/geometry';
+import { resolveMetadataTimestamps } from '../../model/metadata';
+import type { ClockPort } from '../../ports/clock';
+import { systemClock } from '../../ports/clock';
 import { buildVectorElement } from '../odg/vector';
 import { ensurePageBreakStyleName } from './automatic-styles';
 import { insertFormulaFrameMedia } from './formula';
@@ -159,6 +162,13 @@ export function openOdt(bytes: Uint8Array<ArrayBuffer>): OdtEditor {
   return new OdtEditor(decodePackage(bytes));
 }
 
-export function createOdt(): OdtEditor {
-  return new OdtEditor(createEmptyOdtPackage());
+export interface CreateOdtOptions {
+  readonly clock?: ClockPort;
+}
+
+// Creates a fresh odt with real office:meta creation/modification timestamps -- mirrors createDocx's own default-on clock behaviour exactly (src/edit/docx/editor.ts).
+export function createOdt(options?: CreateOdtOptions): OdtEditor {
+  const clock = options?.clock ?? systemClock;
+  const metadata = resolveMetadataTimestamps({}, clock);
+  return new OdtEditor(createEmptyOdtPackage({ metadata }));
 }

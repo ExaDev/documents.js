@@ -2,6 +2,9 @@ import type { Package, XmlElement } from 'odf.js';
 import { decodePackage, encodePackage, formatOdfLength, parseOdfLength } from 'odf.js';
 import { attr } from 'ooxml.js';
 import type { PageSize } from '../../model/geometry';
+import { resolveMetadataTimestamps } from '../../model/metadata';
+import type { ClockPort } from '../../ports/clock';
+import { systemClock } from '../../ports/clock';
 import { el } from '../../xml/fragment';
 import { createEmptyOdpPackage, MASTER_PAGE_NAME, PAGE_LAYOUT_NAME } from './scaffold';
 import type { SlideContext } from './slide';
@@ -147,6 +150,13 @@ export function openOdp(bytes: Uint8Array<ArrayBuffer>): OdpEditor {
   return new OdpEditor(decodePackage(bytes));
 }
 
-export function createOdp(): OdpEditor {
-  return new OdpEditor(createEmptyOdpPackage());
+export interface CreateOdpOptions {
+  readonly clock?: ClockPort;
+}
+
+// Creates a fresh odp with real office:meta creation/modification timestamps -- mirrors createDocx's own default-on clock behaviour exactly (src/edit/docx/editor.ts).
+export function createOdp(options?: CreateOdpOptions): OdpEditor {
+  const clock = options?.clock ?? systemClock;
+  const metadata = resolveMetadataTimestamps({}, clock);
+  return new OdpEditor(createEmptyOdpPackage({ metadata }));
 }

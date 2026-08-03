@@ -1,7 +1,9 @@
+import type { LayoutMetadata } from 'document-schema.js';
 import type { Package, XmlElement, XmlNode } from 'odf.js';
 import { ODF_MEDIA_TYPES, setDocumentMediaType, syncManifest, xmlnsAttributes } from 'odf.js';
 import { PAGE_SIZE_A4 } from '../../model/geometry';
-import { el } from '../../xml/fragment';
+import { encodeXmlText } from '../../xml/entities';
+import { el, txt } from '../../xml/fragment';
 
 // The namespace prefixes ods's own content.xml/styles.xml actually use: office/style/table for the spreadsheet structure and its automatic styles; text for a cell's own text:p/text:span content (identical to odt's, and identical machinery -- see cell.ts's setStyledRuns); fo for style:page-layout-properties' fo:page-width/height/margin-*. No draw/svg/xlink -- this editor writes no images/drawing anchors (ContentSheetImageSchema is a documented, tracked gap, see content.ts's own module doc), unlike odp's identical-looking scaffold, which needs them for slide shapes.
 const CONTENT_NS_PREFIXES = ['office', 'style', 'text', 'table', 'fo'] as const;
@@ -79,17 +81,53 @@ function buildContentXml(): XmlElement {
   ]);
 }
 
-function buildMetaXml(): XmlElement {
-  return el('office:document-meta', { ...xmlnsAttributes([...META_NS_PREFIXES]), 'office:version': ODF_VERSION }, [el('office:meta')]);
+// The office:meta children a LayoutMetadata value maps onto -- identical mapping to odt/scaffold.ts's own buildOfficeMeta (see that file's top-of-function comment for the full field-by-field rationale); duplicated here rather than shared, matching this directory's own existing convention of each format scaffold declaring its own small XML-building helpers.
+function buildOfficeMeta(metadata: LayoutMetadata | undefined): XmlElement[] {
+  if (metadata === undefined) {
+    return [];
+  }
+  const children: XmlElement[] = [];
+  if (metadata.title !== undefined) {
+    children.push(el('dc:title', {}, [txt(encodeXmlText(metadata.title))]));
+  }
+  if (metadata.author !== undefined) {
+    children.push(el('meta:initial-creator', {}, [txt(encodeXmlText(metadata.author))]));
+  }
+  if (metadata.subject !== undefined) {
+    children.push(el('dc:subject', {}, [txt(encodeXmlText(metadata.subject))]));
+  }
+  for (const keyword of metadata.keywords ?? []) {
+    children.push(el('meta:keyword', {}, [txt(encodeXmlText(keyword))]));
+  }
+  if (metadata.creator !== undefined) {
+    children.push(el('meta:generator', {}, [txt(encodeXmlText(metadata.creator))]));
+  }
+  if (metadata.createdIso !== undefined) {
+    children.push(el('meta:creation-date', {}, [txt(encodeXmlText(metadata.createdIso))]));
+  }
+  if (metadata.modifiedIso !== undefined) {
+    children.push(el('dc:date', {}, [txt(encodeXmlText(metadata.modifiedIso))]));
+  }
+  return children;
 }
 
-// Builds a minimal but genuinely valid, openable ods package from nothing: the mandatory mimetype part, a content.xml with one empty, named sheet (already referencing the shared print-settings style), a styles.xml with the page-layout -> master-page chain that sheet resolves through, a minimal meta.xml, and a manifest listing every part -- the same shape odt/odp's own createEmpty*Package functions use.
-export function createEmptyOdsPackage(): Package {
+function buildMetaXml(metadata?: LayoutMetadata): XmlElement {
+  return el('office:document-meta', { ...xmlnsAttributes([...META_NS_PREFIXES]), 'office:version': ODF_VERSION }, [
+    el('office:meta', {}, buildOfficeMeta(metadata)),
+  ]);
+}
+
+export interface CreateEmptyOdsPackageOptions {
+  readonly metadata?: LayoutMetadata;
+}
+
+// Builds a minimal but genuinely valid, openable ods package from nothing: the mandatory mimetype part, a content.xml with one empty, named sheet (already referencing the shared print-settings style), a styles.xml with the page-layout -> master-page chain that sheet resolves through, a minimal meta.xml, and a manifest listing every part -- the same shape odt/odp's own createEmpty*Package functions use. A caller passing no options gets byte-for-byte the same package as before office:meta population existed.
+export function createEmptyOdsPackage(options?: CreateEmptyOdsPackageOptions): Package {
   const pkg: Package = {
     parts: {
       'content.xml': { kind: 'xml', nodes: [declaration(), buildContentXml()] },
       'styles.xml': { kind: 'xml', nodes: [declaration(), buildStylesXml()] },
-      'meta.xml': { kind: 'xml', nodes: [declaration(), buildMetaXml()] },
+      'meta.xml': { kind: 'xml', nodes: [declaration(), buildMetaXml(options?.metadata)] },
     },
   };
   setDocumentMediaType(pkg, ODF_MEDIA_TYPES.ods);

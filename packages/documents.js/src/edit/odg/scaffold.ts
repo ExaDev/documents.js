@@ -1,7 +1,9 @@
+import type { LayoutMetadata } from 'document-schema.js';
 import type { Package, XmlElement, XmlNode } from 'odf.js';
 import { ODF_MEDIA_TYPES, setDocumentMediaType, syncManifest, xmlnsAttributes } from 'odf.js';
 import { PAGE_SIZE_A4 } from '../../model/geometry';
-import { el } from '../../xml/fragment';
+import { encodeXmlText } from '../../xml/entities';
+import { el, txt } from '../../xml/fragment';
 
 // The namespace prefixes odg's own content.xml/styles.xml actually use: office/style/text/table for the document structure odt's own scaffold already needed (a draw:text-box's content model is odt's own text:p, see edit/odp/shape.ts's identical reasoning), draw/svg/xlink for draw:page/draw:rect/draw:ellipse/draw:line/draw:path/draw:frame geometry and draw:image's own xlink:href, fo for style:page-layout-properties' fo:page-width/height. Unlike odp/scaffold.ts, there is no `presentation` prefix here at all -- odg has no presentation:notes concept (see odf.js's own typed/odg/read.ts top-of-file note on what genuinely differs between the two formats).
 const CONTENT_NS_PREFIXES = ['office', 'style', 'text', 'table', 'draw', 'fo', 'svg', 'xlink'] as const;
@@ -48,17 +50,53 @@ function buildContentXml(): XmlElement {
   ]);
 }
 
-function buildMetaXml(): XmlElement {
-  return el('office:document-meta', { ...xmlnsAttributes([...META_NS_PREFIXES]), 'office:version': ODF_VERSION }, [el('office:meta')]);
+// The office:meta children a LayoutMetadata value maps onto -- identical mapping to odt/scaffold.ts's own buildOfficeMeta (see that file's top-of-function comment for the full field-by-field rationale); duplicated here rather than shared, matching this directory's own existing convention of each format scaffold declaring its own small XML-building helpers.
+function buildOfficeMeta(metadata: LayoutMetadata | undefined): XmlElement[] {
+  if (metadata === undefined) {
+    return [];
+  }
+  const children: XmlElement[] = [];
+  if (metadata.title !== undefined) {
+    children.push(el('dc:title', {}, [txt(encodeXmlText(metadata.title))]));
+  }
+  if (metadata.author !== undefined) {
+    children.push(el('meta:initial-creator', {}, [txt(encodeXmlText(metadata.author))]));
+  }
+  if (metadata.subject !== undefined) {
+    children.push(el('dc:subject', {}, [txt(encodeXmlText(metadata.subject))]));
+  }
+  for (const keyword of metadata.keywords ?? []) {
+    children.push(el('meta:keyword', {}, [txt(encodeXmlText(keyword))]));
+  }
+  if (metadata.creator !== undefined) {
+    children.push(el('meta:generator', {}, [txt(encodeXmlText(metadata.creator))]));
+  }
+  if (metadata.createdIso !== undefined) {
+    children.push(el('meta:creation-date', {}, [txt(encodeXmlText(metadata.createdIso))]));
+  }
+  if (metadata.modifiedIso !== undefined) {
+    children.push(el('dc:date', {}, [txt(encodeXmlText(metadata.modifiedIso))]));
+  }
+  return children;
 }
 
-// Builds a minimal but genuinely valid, openable odg package from nothing: the mandatory mimetype part (via setDocumentMediaType), a content.xml with an empty office:automatic-styles and an empty office:body/office:drawing, a styles.xml with the page-layout -> master-page chain resolveDrawPageSize itself resolves for page geometry, a minimal meta.xml, and a manifest listing every part (via syncManifest) -- the same shape odp/scaffold.ts's own createEmptyOdpPackage uses, with office:drawing/office:presentation and the A4/widescreen default page size as the only differences.
-export function createEmptyOdgPackage(): Package {
+function buildMetaXml(metadata?: LayoutMetadata): XmlElement {
+  return el('office:document-meta', { ...xmlnsAttributes([...META_NS_PREFIXES]), 'office:version': ODF_VERSION }, [
+    el('office:meta', {}, buildOfficeMeta(metadata)),
+  ]);
+}
+
+export interface CreateEmptyOdgPackageOptions {
+  readonly metadata?: LayoutMetadata;
+}
+
+// Builds a minimal but genuinely valid, openable odg package from nothing: the mandatory mimetype part (via setDocumentMediaType), a content.xml with an empty office:automatic-styles and an empty office:body/office:drawing, a styles.xml with the page-layout -> master-page chain resolveDrawPageSize itself resolves for page geometry, a minimal meta.xml, and a manifest listing every part (via syncManifest) -- the same shape odp/scaffold.ts's own createEmptyOdpPackage uses, with office:drawing/office:presentation and the A4/widescreen default page size as the only differences. A caller passing no options gets byte-for-byte the same package as before office:meta population existed.
+export function createEmptyOdgPackage(options?: CreateEmptyOdgPackageOptions): Package {
   const pkg: Package = {
     parts: {
       'content.xml': { kind: 'xml', nodes: [declaration(), buildContentXml()] },
       'styles.xml': { kind: 'xml', nodes: [declaration(), buildStylesXml()] },
-      'meta.xml': { kind: 'xml', nodes: [declaration(), buildMetaXml()] },
+      'meta.xml': { kind: 'xml', nodes: [declaration(), buildMetaXml(options?.metadata)] },
     },
   };
   setDocumentMediaType(pkg, ODF_MEDIA_TYPES.odg);

@@ -1,7 +1,10 @@
 import type { Package, XmlElement } from 'ooxml.js';
 import { decodePackage, encodePackage, resolveRelationships, rootElement } from 'ooxml.js';
 import type { PageSize } from '../../model/geometry';
+import { resolveMetadataTimestamps } from '../../model/metadata';
 import { emuToPt, ptToEmu } from '../../model/units';
+import type { ClockPort } from '../../ports/clock';
+import { systemClock } from '../../ports/clock';
 import { ensureContentTypeOverride } from '../../opc/content-types';
 import { buildRelativeTarget } from '../../opc/paths';
 import { addRelationship } from '../../opc/rels';
@@ -235,6 +238,13 @@ export function openPptx(bytes: Uint8Array<ArrayBuffer>): PptxEditor {
   return new PptxEditor(decodePackage(bytes));
 }
 
-export function createPptx(): PptxEditor {
-  return new PptxEditor(createEmptyPptxPackage());
+export interface CreatePptxOptions {
+  readonly clock?: ClockPort;
+}
+
+// Creates a fresh pptx with real docProps/core.xml creation/modification timestamps -- mirrors createDocx's own default-on clock behaviour exactly (src/edit/docx/editor.ts).
+export function createPptx(options?: CreatePptxOptions): PptxEditor {
+  const clock = options?.clock ?? systemClock;
+  const metadata = resolveMetadataTimestamps({}, clock);
+  return new PptxEditor(createEmptyPptxPackage({ metadata }));
 }

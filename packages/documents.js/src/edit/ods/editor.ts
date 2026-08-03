@@ -1,6 +1,9 @@
 import type { Package, XmlElement } from 'odf.js';
 import { decodePackage, encodePackage } from 'odf.js';
 import { attr } from 'ooxml.js';
+import { resolveMetadataTimestamps } from '../../model/metadata';
+import type { ClockPort } from '../../ports/clock';
+import { systemClock } from '../../ports/clock';
 import { el } from '../../xml/fragment';
 import { ensureAutomaticStyles } from '../odt/automatic-styles';
 import { createEmptyOdsPackage, MASTER_PAGE_NAME, SHEET_TABLE_STYLE_NAME } from './scaffold';
@@ -108,6 +111,13 @@ export function openOds(bytes: Uint8Array<ArrayBuffer>): OdsEditor {
   return new OdsEditor(decodePackage(bytes));
 }
 
-export function createOds(): OdsEditor {
-  return new OdsEditor(createEmptyOdsPackage());
+export interface CreateOdsOptions {
+  readonly clock?: ClockPort;
+}
+
+// Creates a fresh ods with real office:meta creation/modification timestamps -- mirrors createDocx's own default-on clock behaviour exactly (src/edit/docx/editor.ts).
+export function createOds(options?: CreateOdsOptions): OdsEditor {
+  const clock = options?.clock ?? systemClock;
+  const metadata = resolveMetadataTimestamps({}, clock);
+  return new OdsEditor(createEmptyOdsPackage({ metadata }));
 }

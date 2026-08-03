@@ -2,20 +2,31 @@ import type { ContentBlock, ContentDocument, ContentEmbeddedObjectBlock, Content
 import type { Package } from 'odf.js';
 import { drawingOfBlock, embeddedDrawingVectors, FLOW_CONTAINER_ORIGIN } from '../../model/embedded-drawing';
 import { formulaOfBlock, formulaPlaceholderText } from '../../model/formula';
+import { resolveMetadataTimestamps } from '../../model/metadata';
+import type { ClockPort } from '../../ports/clock';
+import { systemClock } from '../../ports/clock';
 import type { OdtBody } from './editor';
-import { createOdt } from './editor';
+import { OdtEditor } from './editor';
+import { createEmptyOdtPackage } from './scaffold';
 import type { OdtList, OdtListItem } from './list';
 import type { OdtParagraph } from './paragraph';
 import type { OdtTable, OdtTableCell } from './table';
 
-// ContentDocument -> a fresh odt Package, built entirely through the same edit/odt/* live-view primitives a caller would use by hand -- the odt-side counterpart to src/edit/docx/content.ts's buildDocxPackage, and the write-side counterpart to src/odf/odt/read.ts's readOdtContent. Used by the PDF->odt conversion path (src/layout/reconstruct.ts's output never contains a ContentTable, since PDF table reconstruction degrades to tab-separated text), but written to handle the full ContentBlock union any other caller's ContentDocument might carry, mirroring buildDocxPackage's own scope exactly.
+// clock resolves content.metadata's own createdIso/modifiedIso the same way createOdt does (src/model/metadata.ts's resolveMetadataTimestamps) -- systemClock by default, never overwriting a createdIso/modifiedIso the source content already carried.
+export interface BuildOdtPackageOptions {
+  readonly clock?: ClockPort;
+}
+
+// ContentDocument -> a fresh odt Package, built entirely through the same edit/odt/* live-view primitives a caller would use by hand -- the odt-side counterpart to src/edit/docx/content.ts's buildDocxPackage, and the write-side counterpart to src/odf/odt/read.ts's readOdtContent. Used by the PDF->odt conversion path (src/layout/reconstruct.ts's output never contains a ContentTable, since PDF table reconstruction degrades to tab-separated text), but written to handle the full ContentBlock union any other caller's ContentDocument might carry, mirroring buildDocxPackage's own scope exactly. Constructs its own package directly (createEmptyOdtPackage + OdtEditor) rather than calling createOdt(), mirroring buildDocxPackage's own identical reasoning: createOdt() always starts metadata from {}, but this function needs the SOURCE content's own metadata to reach resolveMetadataTimestamps.
 //
 // Image blocks are deliberately NOT written here, unlike buildDocxPackage's own 'image' case: odf.js's readOdt (src/typed/odt/read.ts, readBlocks) does not read draw:frame/draw:image back into a ContentParagraph or any ContentBlock at all -- it dispatches only on text:p/text:h/text:list/table:table/text:section, so a draw:frame this function wrote would be entirely invisible to this package's own reader. Writing one anyway would be dead, silently-unverifiable functionality, not a genuine round-trip capability -- a documented, tracked gap for whenever odf.js's own reader gains image support, not a silent one: a ContentDocument's image blocks are simply skipped, the rest of the document still builds.
-export function buildOdtPackage(content: ContentDocument): Package {
+export function buildOdtPackage(content: ContentDocument, options?: BuildOdtPackageOptions): Package {
   if (content.kind !== 'wordprocessing') {
     throw new Error('buildOdtPackage requires a wordprocessing ContentDocument');
   }
-  const editor = createOdt();
+  const clock = options?.clock ?? systemClock;
+  const metadata = resolveMetadataTimestamps(content.metadata, clock);
+  const editor = new OdtEditor(createEmptyOdtPackage({ metadata }));
   content.sections.forEach((section, sectionIndex) => {
     if (sectionIndex > 0) {
       // A section boundary becomes a page break -- distinct per-section page size/margins isn't modelled by this bridge yet, mirroring buildDocxPackage's own identical single-page-layout scope (createOdt()'s single scaffolded page-layout covers every caller this function currently has).

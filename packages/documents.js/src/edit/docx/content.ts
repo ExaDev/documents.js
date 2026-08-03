@@ -1,26 +1,33 @@
 import type { ContentBlock, ContentDocument, ContentEmbeddedObjectBlock, ContentParagraph, ContentTable } from 'document-schema.js';
 import type { Package } from 'ooxml.js';
+import { resolveMetadataTimestamps } from '../../model/metadata';
 import { drawingOfBlock, embeddedDrawingVectors, FLOW_CONTAINER_ORIGIN } from '../../model/embedded-drawing';
 import { formulaOfBlock, formulaPlaceholderText } from '../../model/formula';
 import { base64ToBytes } from 'ooxml.js';
+import type { ClockPort } from '../../ports/clock';
+import { systemClock } from '../../ports/clock';
 import { ptToTwips } from '../../model/units';
 import type { OmmlDiagnostic } from '../../omml/shared';
 import type { DocxBody } from './editor';
-import { createDocx } from './editor';
+import { DocxEditor } from './editor';
+import { createEmptyDocxPackage } from './scaffold';
 import type { DocxParagraph } from './paragraph';
 import type { DocxTableCell } from './table';
 
-// Reports every MathML construct that degraded or was approximated while an embedded formula was translated into OMML (see src/omml/write.ts). `sourcePath` is the formula block's own path back into the source ContentDocument, when it carries one, so a caller can name which formula each diagnostic came from rather than only which construct.
+// Reports every MathML construct that degraded or was approximated while an embedded formula was translated into OMML (see src/omml/write.ts). `sourcePath` is the formula block's own path back into the source ContentDocument, when it carries one, so a caller can name which formula each diagnostic came from rather than only which construct. `clock` resolves content.metadata's own createdIso/modifiedIso the same way createDocx does (src/model/metadata.ts's resolveMetadataTimestamps) -- systemClock by default, so a rebuilt document still gets real timestamps, but never overwriting a createdIso/modifiedIso the source content already carried.
 export interface BuildDocxPackageOptions {
   readonly onMathDiagnostic?: (diagnostic: OmmlDiagnostic, context: { readonly sourcePath?: string }) => void;
+  readonly clock?: ClockPort;
 }
 
-// ContentDocument -> a fresh docx Package, built entirely through the same edit/docx/* live-view primitives a caller would use by hand -- the write-side counterpart to src/ooxml/docx/read.ts's readDocxContent. Used by the PDF->docx conversion path (src/layout/reconstruct.ts's output never contains a ContentTable, since PDF table reconstruction degrades to tab-separated text), but written to handle the full ContentBlock union for any other caller that wants a ContentDocument turned into real docx bytes.
+// ContentDocument -> a fresh docx Package, built entirely through the same edit/docx/* live-view primitives a caller would use by hand -- the write-side counterpart to src/ooxml/docx/read.ts's readDocxContent. Used by the PDF->docx conversion path (src/layout/reconstruct.ts's output never contains a ContentTable, since PDF table reconstruction degrades to tab-separated text), but written to handle the full ContentBlock union for any other caller that wants a ContentDocument turned into real docx bytes. Constructs its own package directly (createEmptyDocxPackage + DocxEditor) rather than calling createDocx(), since createDocx() always starts metadata from {} -- this function needs the SOURCE content's own metadata to reach resolveMetadataTimestamps, not an empty object.
 export function buildDocxPackage(content: ContentDocument, options?: BuildDocxPackageOptions): Package {
   if (content.kind !== 'wordprocessing') {
     throw new Error('buildDocxPackage requires a wordprocessing ContentDocument');
   }
-  const editor = createDocx();
+  const clock = options?.clock ?? systemClock;
+  const metadata = resolveMetadataTimestamps(content.metadata, clock);
+  const editor = new DocxEditor(createEmptyDocxPackage({ metadata }));
   content.sections.forEach((section, sectionIndex) => {
     if (sectionIndex > 0) {
       // A section boundary becomes a page break -- distinct per-section page size/margins (w:sectPr per section) isn't modelled by this bridge yet, since createDocx()'s single scaffolded section covers every caller this function currently has.
