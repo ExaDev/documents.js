@@ -1,3 +1,10 @@
+# [2.2.0](https://github.com/ExaDev/odf.js/compare/v2.1.0...v2.2.0) (2026-08-03)
+
+
+### Features
+
+* read an embedded formula object and its cell anchor from a spreadsheet ([62399e7](https://github.com/ExaDev/odf.js/commit/62399e7e6789ad8f2f5920bb2c9b73b3149bed8a))
+
 # [2.1.0](https://github.com/ExaDev/odf.js/compare/v2.0.0...v2.1.0) (2026-08-03)
 
 
