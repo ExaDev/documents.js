@@ -1,3 +1,10 @@
+## [1.0.5](https://github.com/ExaDev/markdown-codec/compare/v1.0.4...v1.0.5) (2026-08-03)
+
+
+### Bug Fixes
+
+* **ci:** use single-quoted string literals in workflow if-conditions ([e6d5bf1](https://github.com/ExaDev/markdown-codec/commit/e6d5bf184e1894d6770925cf345e4e5a10714887))
+
 ## [1.0.4](https://github.com/ExaDev/markdown-codec/compare/v1.0.3...v1.0.4) (2026-08-03)
 
 ## [1.0.3](https://github.com/ExaDev/markdown-codec/compare/v1.0.2...v1.0.3) (2026-08-03)
