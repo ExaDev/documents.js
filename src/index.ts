@@ -326,6 +326,14 @@ export type { OdbComponentInfo, OdbConnectionInfo, OdbForm, OdbFormControl, OdbF
 export { readOdbForm, readOdbInventory, readOdbReport, resolveOdbComponent } from 'odf.js';
 export { readOdbForms, readOdbReports } from './odb/components';
 export { OdbTableNotFoundError, OdbTableNotSpecifiedError } from './odb/csv';
+// A bounded single-table SQL SELECT engine (src/odb/sql/) over the HsqldbTable[] readOdbTables produces, so a .odb's own saved query (OdbQueryInfo.command, above) can actually be RUN against the data this package extracts -- the one thing an inventory of query text alone cannot do. Exported as the same independently-usable pipeline stages the rest of the .odb surface follows: parseSelect (SQL text -> a validated AST) and evaluateSelect (AST + tables -> a result set). Its grammar is a closed allowlist -- SELECT column-list-or-star FROM one table, optional WHERE (comparisons, AND/OR/NOT with parentheses, IS [NOT] NULL, [NOT] LIKE, [NOT] IN, [NOT] BETWEEN), GROUP BY with COUNT/SUM/AVG/MIN/MAX, and ORDER BY -- and everything outside it (JOINs, subqueries, UNION, DISTINCT, HAVING, row limits, aliases, scalar functions, arithmetic) throws HsqldbSqlUnsupportedError naming the construct rather than being silently ignored, the same policy src/hsqldb/script.ts's own statement parser follows. There is no reverse direction: this engine reads SQL, it never writes it.
+export type { SqlResultSet } from './odb/sql/evaluate';
+export { evaluateSelect } from './odb/sql/evaluate';
+export type { SqlAggregateArgument, SqlAggregateFunction, SqlColumnRef, SqlLiteral, SqlNameRef, SqlOperand, SqlOrderByTerm, SqlPredicate, SqlSelectItem, SqlSelectStatement, SqlSortDirection } from './odb/sql/parser';
+export { parseSelect } from './odb/sql/parser';
+export type { SqlComparisonOperator, SqlPunctuation, SqlToken } from './odb/sql/lexer';
+export { tokenizeSql } from './odb/sql/lexer';
+export { HsqldbSqlEvaluationError, HsqldbSqlParseError, HsqldbSqlUnsupportedError } from './odb/sql/errors';
 export type { OdbConversionOptions, OdbToCsvOptions } from './convert/convert';
 export { odbToCsv, odbToXlsx } from './convert/convert';
 export type { FirebirdBackupSummary, ReadFirebirdBackupResult } from './firebird/backup';
