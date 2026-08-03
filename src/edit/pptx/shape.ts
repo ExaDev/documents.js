@@ -4,7 +4,7 @@ import type { Box } from '../../model/geometry';
 import type { LayoutColor } from '../../model/color';
 import { emuToPt, ptToEmu } from '../../model/units';
 import type { Alignment } from '../../model/style';
-import { removeChild } from '../../xml/edit';
+import { removeAttr, removeChild, setAttr } from '../../xml/edit';
 import { encodeXmlText, needsSpacePreserve } from '../../xml/entities';
 import { el, txt } from '../../xml/fragment';
 
@@ -21,6 +21,9 @@ function parseEmuAttr(element: XmlElement, name: string): number | undefined {
   const value = attr(element, name);
   return value === undefined ? undefined : Number.parseInt(value, 10);
 }
+
+// a:xfrm/@rot is measured in 60,000ths of a degree, clockwise (ECMA-376 20.1.7.6) -- the DrawingML analogue of ODF's draw:transform rotation (see src/edit/odp/shape.ts's OdpShape.rotationDeg). ContentShape.rotationDeg (document-schema.js) is already clockwise-positive degrees for a top-level, ungrouped shape -- ooxml.js's own composeShapeRotationDeg collapses to a bare passthrough of xfrm.rotationDeg when there is no parent group transform (typed/shared/drawingml.ts) -- so this needs only the literal degree <-> 60,000ths scale, no sign flip or group composition. Exported for src/edit/pptx/table.ts's own buildTableGraphicFrame, whose p:xfrm uses the identical unit.
+export const ROTATION_UNITS_PER_DEGREE = 60000;
 
 // A live view over a p:sp (text box/autoshape) or p:pic (picture) element -- frame keeps OOXML's own top-left, y-down convention in points (already converted from EMU); the Y-flip into PDF space happens exactly once, in src/layout/slides.ts.
 export class PptxShape {
@@ -86,6 +89,27 @@ export class PptxShape {
       el('a:off', { x: String(ptToEmu(value.xPt)), y: String(ptToEmu(value.yPt)) }),
       el('a:ext', { cx: String(ptToEmu(value.widthPt)), cy: String(ptToEmu(value.heightPt)) }),
     ];
+  }
+
+  get rotationDeg(): number | undefined {
+    const spPr = this.spPrElement(false);
+    const xfrm = spPr === undefined ? undefined : directChild(spPr, 'a:xfrm');
+    const rot = xfrm === undefined ? undefined : attr(xfrm, 'rot');
+    return rot === undefined ? undefined : Number(rot) / ROTATION_UNITS_PER_DEGREE;
+  }
+
+  set rotationDeg(value: number | undefined) {
+    const spPr = this.spPrElement(true);
+    let xfrm = directChild(spPr, 'a:xfrm');
+    if (xfrm === undefined) {
+      xfrm = el('a:xfrm');
+      spPr.children.unshift(xfrm);
+    }
+    if (value === undefined || value === 0) {
+      removeAttr(xfrm, 'rot');
+      return;
+    }
+    setAttr(xfrm, 'rot', String(Math.round(value * ROTATION_UNITS_PER_DEGREE)));
   }
 
   get text(): string {
@@ -172,7 +196,8 @@ function buildDrawingRun(init: DrawingRunInit): XmlElement {
   return el('a:r', {}, [...rPr, el('a:t', tAttrs, [txt(encodeXmlText(init.text))])]);
 }
 
-function buildDrawingParagraph(init: DrawingParagraphInit): XmlElement {
+// Exported for src/edit/pptx/table.ts's own PptxTableCell.setParagraphs -- a:tc's own a:txBody holds the identical a:p/a:r/a:rPr/a:t content model a p:sp's own p:txBody does (ECMA-376 CT_TextBody is shared), so a table cell's paragraphs are built through this exact same function rather than a second implementation.
+export function buildDrawingParagraph(init: DrawingParagraphInit): XmlElement {
   const children: XmlNode[] = [];
   if (init.alignment !== undefined) {
     children.push(el('a:pPr', { algn: ALIGNMENT_TO_ALGN[init.alignment] }));
