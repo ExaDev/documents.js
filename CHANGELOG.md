@@ -1,3 +1,15 @@
+# [1.70.0](https://github.com/ExaDev/documents.js/compare/v1.69.0...v1.70.0) (2026-08-03)
+
+
+### Bug Fixes
+
+* **opc:** add addRootRelationship, a root-.rels-path-correct sibling of addRelationship ([3516b2e](https://github.com/ExaDev/documents.js/commit/3516b2e98bd8072c8ce2485954ffcefd1bde4353))
+
+
+### Features
+
+* stamp real docProps/core.xml and office:meta creation timestamps ([db75644](https://github.com/ExaDev/documents.js/commit/db756440ec045df9120da1b0a22d8fea5cf4772f))
+
 # [1.69.0](https://github.com/ExaDev/documents.js/compare/v1.68.0...v1.69.0) (2026-08-03)
 
 
