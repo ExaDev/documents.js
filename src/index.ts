@@ -238,6 +238,23 @@ export { OdgBoxVector, OdgLineVector, OdgPathVector } from './edit/odg/vector';
 export type { BuildOdgPackageOptions } from './edit/odg/content';
 export { buildOdgPackage } from './edit/odg/content';
 
+// A live-view editor over pdf-codec's own positioned-item model (LayoutDocument) -- NOT a content-stream/byte-level editor, see src/edit/pdf/editor.ts's own module doc comment for the rationale. PageInit is defined in page.ts (mirroring ParagraphInit living in paragraph.ts rather than editor.ts) since it's PdfPage's own initial shape, even though appendPage/insertPageAt (which consume it) live on PdfEditor.
+export type { PageInit } from './edit/pdf/page';
+export { PdfPage } from './edit/pdf/page';
+export type { CreatePdfOptions } from './edit/pdf/editor';
+export { createPdf, openPdf, PdfEditor } from './edit/pdf/editor';
+export type {
+  PdfEllipseInit,
+  PdfImageInit,
+  PdfItem,
+  PdfLineInit,
+  PdfLinkInit,
+  PdfPathInit,
+  PdfRectInit,
+  PdfTextInit,
+} from './edit/pdf/item';
+export { PdfEllipseItem, PdfImageItem, PdfLineItem, PdfLinkItem, PdfPathItem, PdfRectItem, PdfTextItem } from './edit/pdf/item';
+
 // --- The hand-written PDF codec, now an external dependency -- see pdf-codec's own README (https://github.com/ExaDev/pdf-codec) for its internals. ---
 export type { ReadPdfOptions } from 'pdf-codec';
 export { readPdf } from 'pdf-codec';
