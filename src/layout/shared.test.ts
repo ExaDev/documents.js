@@ -1,9 +1,11 @@
 import { bytesToBase64 } from 'ooxml.js';
 import { describe, expect, it } from 'vitest';
-import type { ContentRun, ContentTableRow, LayoutImageAsset } from 'document-schema.js';
+import type { ContentCellBorders, ContentRun, ContentTableRow, LayoutImageAsset, LayoutItem, LayoutLine } from 'document-schema.js';
 import type { TextMeasurer } from 'pdf-codec';
 import { encodePng, wrapRunsToWidth } from 'pdf-codec';
-import { alignmentOffsetPt, effectiveStyledRuns, estimateRowHeightPt, justifyLineGapsPt, lineNaturalHeightPt, NOMINAL_TEXT_SIZE_PT, registerImage, runFont, sumColumnWidthsPt, toStyledRuns } from './shared';
+import { alignmentOffsetPt, effectiveStyledRuns, estimateRowHeightPt, justifyLineGapsPt, lineNaturalHeightPt, NOMINAL_TEXT_SIZE_PT, pushCellBorderLines, registerImage, runFont, sumColumnWidthsPt, toStyledRuns } from './shared';
+
+const RED = { r: 1, g: 0, b: 0 };
 
 function fakeMeasurer(): TextMeasurer {
   return {
@@ -184,5 +186,42 @@ describe('estimateRowHeightPt', () => {
     const row: ContentTableRow = { cells: [{ blocks: [{ kind: 'paragraph', runs: [run('hi', { sizePt: 100 })] }] }] };
     const height = estimateRowHeightPt(row, measurer, [100], 1);
     expect(height).toBeCloseTo(100 * 1.2, 6); // lineHeightAtSize(100) via the fake measurer
+  });
+});
+
+function isLine(item: LayoutItem): item is LayoutLine {
+  return item.kind === 'line';
+}
+
+describe('pushCellBorderLines', () => {
+  it('carries a declared border\'s own dash style through onto the emitted LayoutLine, as of document-schema.js 2.1.0 adding that field to LayoutLineSchema', () => {
+    const borders: ContentCellBorders = { top: { color: RED, widthPt: 2, style: 'dashed' } };
+    const out: LayoutItem[] = [];
+    pushCellBorderLines(borders, { xPt: 0, yPt: 0, widthPt: 50, heightPt: 20 }, 800, undefined, out);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ kind: 'line', style: 'dashed', color: RED, widthPt: 2 });
+  });
+
+  it('leaves style undefined for a border that never declared one, rather than defaulting it to \'solid\'', () => {
+    const borders: ContentCellBorders = { left: { color: RED, widthPt: 1 } };
+    const out: LayoutItem[] = [];
+    pushCellBorderLines(borders, { xPt: 0, yPt: 0, widthPt: 50, heightPt: 20 }, 800, undefined, out);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ kind: 'line', color: RED, widthPt: 1 });
+    const [line] = out.filter(isLine);
+    expect(line?.style).toBeUndefined();
+  });
+
+  it('carries each edge\'s own distinct style independently -- a mix of dotted/double/solid on one cell does not collapse to one shared style', () => {
+    const borders: ContentCellBorders = {
+      top: { color: RED, widthPt: 1, style: 'dotted' },
+      right: { color: RED, widthPt: 1, style: 'double' },
+      bottom: { color: RED, widthPt: 1 },
+    };
+    const out: LayoutItem[] = [];
+    pushCellBorderLines(borders, { xPt: 0, yPt: 0, widthPt: 50, heightPt: 20 }, 800, undefined, out);
+    const styles = out.filter(isLine).map((item) => item.style);
+    // Emission order is top, bottom, left, right (pushCellBorderLines' own fixed edge order); left was never declared, so only top/bottom/right appear, in that order.
+    expect(styles).toEqual(['dotted', undefined, 'double']);
   });
 });

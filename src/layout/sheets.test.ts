@@ -460,6 +460,15 @@ describe('step 7: a cell\'s own borders paint as real LayoutLines, one per decla
     expect(lines).toContainEqual(expect.objectContaining({ x1Pt: 0, y1Pt: 800, x2Pt: 0, y2Pt: 780, color: BLUE, widthPt: 3 }));
   });
 
+  it('carries a declared border\'s own dash style through onto the emitted LayoutLine, as of document-schema.js 2.1.0', () => {
+    const s = sheet([stringCell(0, 0, 'A', { borders: { bottom: { color: RED, widthPt: 2, style: 'dashed' } } })], {
+      columns: [{ index: 0, widthPt: 50 }],
+      rows: [{ index: 0, heightPt: 20 }],
+    });
+    const [line] = lineItems(convert([s]).pages[0]!.items);
+    expect(line).toMatchObject({ style: 'dashed', color: RED, widthPt: 2 });
+  });
+
   it('emits all four edges when all four are declared', () => {
     const border = { color: RED, widthPt: 1 };
     const s = sheet([stringCell(0, 0, 'A', { borders: { top: border, right: border, bottom: border, left: border } })], {
