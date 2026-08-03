@@ -1,3 +1,10 @@
+## [2.6.9](https://github.com/ExaDev/ooxml.js/compare/v2.6.8...v2.6.9) (2026-08-03)
+
+
+### Bug Fixes
+
+* **ci:** use pull_request_target so dependabot auto-merge can read secrets ([ce64ee5](https://github.com/ExaDev/ooxml.js/commit/ce64ee5d1cbd774695c5a65506c34fc0e5cf9d4a))
+
 ## [2.6.8](https://github.com/ExaDev/ooxml.js/compare/v2.6.7...v2.6.8) (2026-08-03)
 
 
