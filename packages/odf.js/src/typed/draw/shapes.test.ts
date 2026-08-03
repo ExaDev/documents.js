@@ -675,6 +675,30 @@ describe('readDrawPageContent: svg:fill-rule (path vectors only -- rect/ellipse 
     }
     expect(vector.fillRule).toBeUndefined();
   });
+
+  // A genuine two-subpath "letter O" shape: an outer square and an inner square "hole", both wound in the SAME rotational direction (right, down, left, up from each one's own top-left corner). This is the real-world case svg:fill-rule actually distinguishes -- with two same-direction subpaths, 'nonzero' fills the inner square too (winding number 2 there, still != 0, so no hole at all), while 'evenodd' toggles at every boundary crossing and genuinely punches the hole (winding parity 0 inside the inner square). Both subpaths' own points are read back correctly regardless of fillRule -- this test's real assertion is that reading the attribute itself survives the full readDrawPageContent path, not just a synthetic single-loop svg:d.
+  it('reads svg:fill-rule="evenodd" from a real two-subpath donut/letter-O path with a hole', () => {
+    const gr1 = graphicStyle('gr1', { 'draw:fill-color': '#000000', 'svg:fill-rule': 'evenodd' });
+    const pkg: Package = { parts: { 'content.xml': contentPackage([gr1]) } };
+    const path = el('draw:path', {
+      'draw:style-name': 'gr1',
+      'svg:x': '0pt', 'svg:y': '0pt', 'svg:width': '100pt', 'svg:height': '100pt',
+      'svg:viewBox': '0 0 4000 4000',
+      // Outer square (0,0)-(4000,4000), then inner square (1000,1000)-(3000,3000) -- both traced right/down/left/up, i.e. the identical winding direction.
+      'svg:d': 'M0 0H4000V4000H0ZM1000 1000H3000V3000H1000Z',
+    });
+    const { vectors } = readDrawPageContent([path], pkg);
+    const vector = vectors[0];
+    if (vector?.kind !== 'path') {
+      throw new Error('expected a path vector');
+    }
+    expect(vector.fillRule).toBe('evenodd');
+    expect(vector.subpaths).toHaveLength(2);
+    expect(vector.subpaths[0]?.closed).toBe(true);
+    expect(vector.subpaths[1]?.closed).toBe(true);
+    // The inner subpath's own points survive intact (scaled from the shared 4000x4000 viewBox onto the 100pt x 100pt frame -- 1000/4000 * 100 = 25, 3000/4000 * 100 = 75).
+    expect(vector.subpaths[1]?.start).toEqual({ xPt: 25, yPt: 25 });
+  });
 });
 
 describe('readDrawPageContent: stroke style (solid/dashed) from draw:stroke', () => {
