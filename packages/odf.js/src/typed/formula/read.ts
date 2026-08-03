@@ -29,8 +29,8 @@ const ANNOTATION_TAGS = ['annotation', 'math:annotation'];
 // MathML's own semantics/annotation mechanism identifies an annotation's notation by its encoding attribute, e.g. "StarMath 5.0" -- a version-suffixed string, so this checks the encoding's own namespace-style prefix rather than an exact match.
 const STARMATH_ENCODING_PREFIX = 'StarMath';
 
-// content.xml's own MathML root: checked first at the part's own root position (the real, confirmed LibreOffice shape -- see this module's own top-of-file note), then as a descendant of whatever the actual root element turns out to be (the defensive "wrapped in office:document-content" fallback the design brief asked for, never itself observed in real output).
-function findMathRoot(nodes: readonly XmlNode[]): XmlElement | undefined {
+// content.xml's own MathML root: checked first at the part's own root position (the real, confirmed LibreOffice shape -- see this module's own top-of-file note), then as a descendant of whatever the actual root element turns out to be (the defensive "wrapped in office:document-content" fallback the design brief asked for, never itself observed in real output). Exported for typed/draw/embedded.ts, which asks the identical question of an EMBEDDED object's own sub-document content.xml when that sub-document turns out to have no office:body to classify it by -- the same detection, reused rather than restated, so the two can never disagree about what counts as a MathML root.
+export function findMathRoot(nodes: readonly XmlNode[]): XmlElement | undefined {
   const root = rootElement(nodes);
   if (root === undefined) {
     return undefined;

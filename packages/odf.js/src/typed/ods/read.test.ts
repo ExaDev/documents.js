@@ -310,12 +310,20 @@ describe('readOds: sheet-anchors.ods (real LibreOffice output -- anchored images
     expect(vector.fill).toEqual({ r: 1, g: 0x88 / 255, b: 0 });
   });
 
-  it('reads the embedded object\'s own frame from the draw:frame, keeping the cell-relative coordinates the format itself states (ContentEmbeddedObject carries no anchor fields of its own)', () => {
+  it('reads the embedded object\'s own frame from the draw:frame, keeping the cell-relative coordinates the format itself states', () => {
     const frame = sheet.embeddedObjects?.[0]?.frame;
     expect(frame?.xPt).toBeCloseTo(knownLength('0.2cm'), 6);
     expect(frame?.yPt).toBeCloseTo(knownLength('0.1cm'), 6);
     expect(frame?.widthPt).toBeCloseTo(knownLength('4cm'), 6);
     expect(frame?.heightPt).toBeCloseTo(knownLength('3cm'), 6);
+  });
+
+  it('resolves the embedded object to its real anchor cell (B8) with the same cell-relative offsets an anchored image gets', () => {
+    const embedded = sheet.embeddedObjects?.[0];
+    expect(embedded?.anchorColumn).toBe(1);
+    expect(embedded?.anchorRow).toBe(7);
+    expect(embedded?.offsetXPt).toBeCloseTo(knownLength('0.2cm'), 6);
+    expect(embedded?.offsetYPt).toBeCloseTo(knownLength('0.1cm'), 6);
   });
 
   it('never mistakes the embedded object\'s own ObjectReplacements preview for anchored picture content', () => {
@@ -329,6 +337,62 @@ describe('readOds: sheet-anchors.ods (real LibreOffice output -- anchored images
   it('leaves embeddedObjects undefined on a sheet that has none, rather than writing an empty array', () => {
     expect(readOds(loadFixture('kitchen-sink.ods')).sheets[0]?.embeddedObjects).toBeUndefined();
     expect(readOds(loadFixture('kitchen-sink.ods')).sheets[0]?.images).toEqual([]);
+  });
+});
+
+// sheet-formula.ods was built the same way as sheet-anchors.ods above (a Java UNO client against a headless LibreOffice 26.2, saved with the calc8 filter, never hand-edited afterwards): a one-sheet Calc document named "Formulas" carrying two ordinary cells and ONE real LibreOffice Math object -- a com.sun.star.drawing.OLE2Shape with Math's own CLSID 078B7ABA-54FC-457F-8551-6147E776A997, its Formula property set to the StarMath expression "f(x) = {x^2} over {2} + sqrt {x}", anchored TO CELL C4 (column index 2, row index 3) at a 0.4cm/0.2cm cell-relative offset. Its saved shape confirms, on a genuinely produced file, everything typed/draw/embedded.ts's formula path is built on: the frame is an ordinary draw:frame with a draw:object href of "./Object 1" plus the usual ObjectReplacements preview sibling, the outer manifest declares "Object 1/" as application/vnd.oasis.opendocument.formula, and that sub-document's own content.xml is a BARE <math> root with no office:body (and, notably, no meta.xml part of its own at all).
+describe('readOds: sheet-formula.ods (real LibreOffice output -- a Math object anchored to a cell)', () => {
+  const { sheets } = readOds(loadFixture('sheet-formula.ods'));
+  const sheet = sheets[0];
+  if (sheet === undefined) {
+    throw new Error('expected at least one sheet');
+  }
+
+  it('reads the embedded Math object as a real formula ContentDocument, not as its ObjectReplacements preview image', () => {
+    expect(sheet.images).toEqual([]);
+    expect(sheet.embeddedObjects).toHaveLength(1);
+    expect(sheet.embeddedObjects?.[0]?.objectKind).toBe('formula');
+    expect(sheet.embeddedObjects?.[0]?.document.kind).toBe('formula');
+  });
+
+  it('carries the formula\'s real MathML through, with its own StarMath annotation -- the same payload readOdfFormulaDocument produces for a standalone .odf', () => {
+    const document = sheet.embeddedObjects?.[0]?.document;
+    if (document?.kind !== 'formula') {
+      throw new Error('expected a formula ContentDocument');
+    }
+    expect(document.formula.starMath).toBe('f(x) = {x^2} over {2} + sqrt {x}');
+    // The MathML root's own children, exactly as read: one <semantics> wrapping the presentation MathML plus the annotation.
+    const [semantics] = document.formula.mathml;
+    if (semantics?.type !== 'element') {
+      throw new Error('expected a <semantics> element');
+    }
+    expect(semantics.tag).toBe('semantics');
+    expect(semantics.children.filter((child) => child.type === 'element').map((child) => child.tag)).toEqual(['mrow', 'annotation']);
+  });
+
+  it('resolves the formula object to its real anchor cell (C4) with its own cell-relative offsets', () => {
+    const embedded = sheet.embeddedObjects?.[0];
+    expect(embedded?.anchorColumn).toBe(2);
+    expect(embedded?.anchorRow).toBe(3);
+    expect(embedded?.offsetXPt).toBeCloseTo(knownLength('0.4cm'), 6);
+    expect(embedded?.offsetYPt).toBeCloseTo(knownLength('0.2cm'), 6);
+    expect(embedded?.frame.xPt).toBeCloseTo(knownLength('0.4cm'), 6);
+    expect(embedded?.frame.yPt).toBeCloseTo(knownLength('0.2cm'), 6);
+  });
+
+  it('reads the frame at the size LibreOffice itself sized the rendered formula to, not at the size the OLE shape was created with', () => {
+    // LibreOffice resizes a Math OLE object's own frame to its rendered formula: the shape was created 4cm x 2cm and saved as 2.701cm x 4.515cm.
+    expect(sheet.embeddedObjects?.[0]?.frame.widthPt).toBeCloseTo(knownLength('2.701cm'), 6);
+    expect(sheet.embeddedObjects?.[0]?.frame.heightPt).toBeCloseTo(knownLength('4.515cm'), 6);
+  });
+
+  it('reports empty metadata for a sub-document that ships no meta.xml of its own, rather than throwing', () => {
+    expect(sheet.embeddedObjects?.[0]?.document.metadata).toEqual({});
+  });
+
+  it('still reads the sheet\'s ordinary cells alongside the formula, and never materializes the formula\'s own anchor cell as a cell of its own', () => {
+    expect(sheet.name).toBe('Formulas');
+    expect(sheet.cells.map((cell) => cell.displayText)).toEqual(['Quantity', '7']);
   });
 });
 

@@ -4,7 +4,7 @@ import type { XmlElement } from '../../model/node';
 import { el, txt } from '../../xml/fragment';
 import { readDrawObjectReference } from './embedded';
 
-// The real shape this reader targets is proven end to end against genuine LibreOffice output in typed/ods/read.test.ts (src/typed/ods/fixtures/sheet-anchors.ods, a real Calc sheet with a real embedded Draw document anchored to a cell). This suite covers the reference-resolution edges that file cannot: a linked (not embedded) object, a broken href, and each representable/unrepresentable body kind.
+// The real shape this reader targets is proven end to end against genuine LibreOffice output in typed/ods/read.test.ts (src/typed/ods/fixtures/sheet-anchors.ods, a real Calc sheet with a real embedded Draw document anchored to a cell, and src/typed/ods/fixtures/sheet-formula.ods, the same with a real Math object). This suite covers the reference-resolution edges those files cannot: a linked (not embedded) object, a broken href, and each representable/unrepresentable body kind.
 
 function subDocumentPart(bodyChild: XmlElement): Package['parts'][string] {
   return { kind: 'xml', nodes: [el('office:document-content', {}, [el('office:body', {}, [bodyChild])])] };
@@ -12,6 +12,16 @@ function subDocumentPart(bodyChild: XmlElement): Package['parts'][string] {
 
 function packageWithObject(prefix: string, bodyChild: XmlElement): Package {
   return { parts: { [`${prefix}/content.xml`]: subDocumentPart(bodyChild) } };
+}
+
+// Copied element-for-element from the REAL "Object 1/content.xml" inside src/typed/ods/fixtures/sheet-formula.ods (a genuine LibreOffice 26.2 Calc sheet with a Math object anchored to a cell, never hand-edited) -- the same bare "math" root with a DEFAULT MathML xmlns, the same <semantics>/<annotation encoding="StarMath 5.0"> shape, deliberately not simplified, matching typed/formula/read.test.ts's own convention for the standalone .odf case.
+function realEmbeddedFormulaRoot(): XmlElement {
+  return el('math', { xmlns: 'http://www.w3.org/1998/Math/MathML', display: 'block' }, [
+    el('semantics', {}, [
+      el('mrow', {}, [el('mi', {}, [txt('f')]), el('mo', { stretchy: 'false' }, [txt('=')]), el('mn', {}, [txt('1')])]),
+      el('annotation', { encoding: 'StarMath 5.0' }, [txt('f = 1')]),
+    ]),
+  ]);
 }
 
 function objectFrame(href: string): XmlElement {
@@ -44,8 +54,24 @@ describe('readDrawObjectReference', () => {
     expect(readDrawObjectReference(objectFrame('Object 1'), packageWithObject('Object 1', el('office:database')))).toBeUndefined();
   });
 
-  it('returns undefined for an embedded FORMULA sub-document: its content.xml root is a bare <math> element with no office:body, and ContentDocument has no MathML-shaped variant to carry it in', () => {
-    const pkg: Package = { parts: { 'Object 1/content.xml': { kind: 'xml', nodes: [el('math', {}, [el('semantics', {}, [el('mi', {}, [txt('x')])])])] } } };
+  it('returns undefined for an office:chart sub-document -- ContentEmbeddedObjectKind has no chart member to map one onto', () => {
+    expect(readDrawObjectReference(objectFrame('Object 1'), packageWithObject('Object 1', el('office:chart')))).toBeUndefined();
+  });
+
+  it('resolves an embedded FORMULA sub-document, whose content.xml root is a bare <math> element with no office:body at all, to objectKind "formula"', () => {
+    const pkg: Package = { parts: { 'Object 1/content.xml': { kind: 'xml', nodes: [realEmbeddedFormulaRoot()] } } };
+    const reference = readDrawObjectReference(objectFrame('./Object 1'), pkg);
+    expect(reference?.objectKind).toBe('formula');
+    expect(reference?.href).toBe('Object 1');
+  });
+
+  it('also resolves a "math:math"-prefixed root, the defensive alternative typed/formula/read.ts matches alongside the bare tag real LibreOffice writes', () => {
+    const pkg: Package = { parts: { 'Object 1/content.xml': { kind: 'xml', nodes: [el('math:math', {}, [el('math:semantics', {}, [el('mi', {}, [txt('x')])])])] } } };
+    expect(readDrawObjectReference(objectFrame('./Object 1'), pkg)?.objectKind).toBe('formula');
+  });
+
+  it('returns undefined for a sub-document that is neither an office:body document nor a MathML root', () => {
+    const pkg: Package = { parts: { 'Object 1/content.xml': { kind: 'xml', nodes: [el('office:document-content', {}, [el('office:scripts')])] } } };
     expect(readDrawObjectReference(objectFrame('./Object 1'), pkg)).toBeUndefined();
   });
 
