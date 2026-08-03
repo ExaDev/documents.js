@@ -1,6 +1,6 @@
 name: Sibling dependency instant update
 
-# Triggered the moment a sibling ExaDev package this repo depends on publishes a new version -- the publishing repo own ci.yml sends this repository_dispatch event right after semantic-release completes, instead of waiting for Dependabot own daily scheduled scan to notice. Bumps the named dependency, opens a PR, and requests auto-merge. The branch push and the PR-open call both authenticate via a freshly-minted GitHub App installation token, not the default GITHUB_TOKEN -- GITHUB_TOKEN-authenticated actions (a push OR opening a PR) do not cascade into further workflow runs, so a GITHUB_TOKEN-created PR would never trigger this repo own ci.yml pull_request checks at all, leaving nothing for auto-merge to wait on and letting GitHub treat the PR as already mergeable the instant it opens. This workflow never pushes directly to main -- the PR still only merges once this repo own CI genuinely passes on it. Note: every repo in this family also enforces a minimumReleaseAge pnpm supply-chain gate (see pnpm-workspace.yaml); pnpm add itself can refuse to install a version published within that window, in which case this workflow run fails cleanly and the bump is left for Dependabot own next daily scan to pick up once the window has passed -- a neutral fallback, not a regression, since that scan would have handled it anyway.
+# Triggered the moment a sibling ExaDev package this repo depends on publishes a new version -- the publishing repo own ci.yml sends this repository_dispatch event right after semantic-release completes, instead of waiting for Dependabot own daily scheduled scan to notice. Bumps the named dependency, opens a PR, and requests auto-merge. The branch push and the PR-open call both authenticate via a freshly-minted GitHub App installation token, not the default GITHUB_TOKEN -- GITHUB_TOKEN-authenticated actions (a push OR opening a PR) do not cascade into further workflow runs, so a GITHUB_TOKEN-created PR would never trigger this repo own ci.yml pull_request checks at all, leaving nothing for auto-merge to wait on and letting GitHub treat the PR as already mergeable the instant it opens. Even with the App token making that cascade happen for real, there is a second, narrower race: GitHub can take a few seconds to actually register ci.yml own check-runs against the new PR, and calling gh pr merge --auto before any check has registered gets rejected with "Pull request is in clean status" -- confirmed happening in production even after the App-token fix landed. The wait step below polls for ci.yml own Test check-run to actually appear before requesting auto-merge, closing that race. This workflow never pushes directly to main -- the PR still only merges once this repo own CI genuinely passes on it. Note: every repo in this family also enforces a minimumReleaseAge pnpm supply-chain gate (see pnpm-workspace.yaml); pnpm add itself can refuse to install a version published within that window, in which case this workflow run fails cleanly and the bump is left for Dependabot own next daily scan to pick up once the window has passed -- a neutral fallback, not a regression, since that scan would have handled it anyway.
 
 on:
   repository_dispatch:
@@ -60,6 +60,21 @@ jobs:
           git push origin "$branch"
           pr_url=$(gh pr create --title "build(deps): bump ${PACKAGE} to ${VERSION}" --body "Automatic dependency bump triggered instantly by the ${PACKAGE} release." --base main --head "$branch")
           echo "pr_url=$pr_url" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Wait for this repo own real CI to register on the PR
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          for i in $(seq 1 30); do
+            found=$(gh api "repos/${{ github.repository }}/commits/${{ steps.pr.outputs.head_sha }}/check-runs" --jq '[.check_runs[] | select(.name == "Test")] | length')
+            if [ "$found" -gt 0 ]; then
+              echo "ci.yml own Test check has registered after $((i * 3))s"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "::warning::ci.yml own Test check never registered after 90s -- proceeding anyway, but auto-merge may reject the PR as already clean or merge it immediately" >&2
       - name: Enable auto-merge
         if: steps.diff.outputs.changed == 'true'
         env:
