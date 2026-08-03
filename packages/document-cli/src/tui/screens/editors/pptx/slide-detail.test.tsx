@@ -136,7 +136,7 @@ describe('SlideDetailScreen "b" add-table affordance', () => {
     expect(after).not.toContain('Columns:');
   });
 
-  it('adds a real table to an odp slide via the rows/columns prompt, visible both as a new shape and in the probe', async () => {
+  it('adds a real table to an odp slide via the rows/columns prompt, verified against the real package content', async () => {
     const { lastFrame, stdin } = renderAtSlideDetail('odp', buildOdpOneSlideBytes());
     await waitForText(lastFrame, 'Slide 1 -- 0 shapes');
 
@@ -151,9 +151,9 @@ describe('SlideDetailScreen "b" add-table affordance', () => {
     await replaceField(stdin, '4');
     await sendKey(stdin, ENTER_KEY);
 
-    // Unlike pptx, OdpSlide.shapes() DOES walk every draw:frame including a table's own frame, so odp's own shape count updates immediately -- a second, independent confirmation the table landed for real, alongside the probe.
+    // OdpSlide.shapes() now excludes a table's own draw:frame (it used to double-expose it as a functionally-dead OdpShape whose .paragraphs()/.text silently returned nothing) -- "0 shapes" staying put is the correct, expected read now, matching pptx's own convention. The probe line (built from the same content pivot real odp reading uses) is what proves the table genuinely landed in the package, exactly as it already is for pptx.
     const after = await waitForText(lastFrame, 'probe:table=2x4');
-    expect(after).toContain('Slide 1 -- 1 shape');
+    expect(after).toContain('Slide 1 -- 0 shapes');
   });
 
   it('cancels the add-table wizard on Escape without touching the document', async () => {
