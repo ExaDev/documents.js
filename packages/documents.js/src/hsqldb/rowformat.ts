@@ -108,7 +108,7 @@ export class HsqldbDataCursor {
 }
 
 // Java's own "modified UTF-8" encoding (java.io.DataOutput.writeUTF's per-character scheme, reused verbatim by HSQLDB's own org.hsqldb.lib.StringConverter.writeUTF/readUTF for every CHAR/VARCHAR row field) -- deliberately NOT plain UTF-8: the NUL character always encodes as the 2-byte sequence 0xC0 0x80 rather than a bare 0x00 byte, and a supplementary-plane character (outside the Basic Multilingual Plane) encodes as two independent 3-byte sequences over its own UTF-16 surrogate pair rather than one real 4-byte UTF-8 sequence. TextDecoder('utf-8') would silently misdecode either case, so this is a dedicated decoder rather than a shortcut -- each decoded UTF-16 code unit is appended via String.fromCharCode, so a genuine surrogate pair (two consecutive 3-byte sequences) still recombines into the correct JS string exactly as it would in Java, with no special-casing needed here.
-function readModifiedUtf8(bytes: Uint8Array<ArrayBuffer>): string {
+export function readModifiedUtf8(bytes: Uint8Array<ArrayBuffer>): string {
   let result = '';
   let i = 0;
   while (i < bytes.length) {

@@ -1,5 +1,6 @@
 import type { Package } from 'odf.js';
 import { base64ToBytes, readOdbInventory } from 'odf.js';
+import { inflateHsqldbCompressedScript, parseHsqldbBinaryScript } from '../hsqldb/binary-script';
 import { decodeHsqldbCachedTables } from '../hsqldb/cache';
 import type { HsqldbDecodeOptions } from '../hsqldb/rowformat';
 import type { HsqldbTable } from '../hsqldb/script';
@@ -7,7 +8,7 @@ import { parseHsqldbScript } from '../hsqldb/script';
 import { readManifest } from '../odf-package/manifest';
 import { readFirebirdBackup } from '../firebird/backup';
 
-// readOdbTables(pkg) is the decoder-selection shell for .odb (ODF database front-end) packages: it inspects what odf.js's own readOdbInventory and the package's own manifest-media-type-classified parts actually contain, and routes to the implemented decoders -- src/hsqldb/script.ts's Tier 1 HSQLDB TEXT-script parser, extended by src/hsqldb/cache.ts's Tier 2 CACHED-table binary row-store decoder whenever a database/data part is present, or src/firebird/backup.ts's Tier 3 Firebird gbak-backup-format reader for a Firebird-backed .odb -- when the shape matches, or throws a specific, named diagnostic naming exactly what was found otherwise -- never a silent empty result. Two failure modes remain permanently out of scope, not merely unimplemented: an external-only connection (no embedded engine to read from at all), and HSQLDB's own whole-script BINARY/COMPRESSED serialization (hsqldb.script_format=1/3 -- a materially different and more complex format from CACHED-table row storage: both are the identical length-prefixed, COMMAND-tagged binary encoding of the script's own DDL/DML statements themselves, confirmed against real HSQLDB 1.8.0.10 output; =3 is that exact same binary stream wrapped in ordinary zlib DEFLATE, not a compressed TEXT script -- see this module's own classifyScriptBytes comment). Both throw their own named error class below.
+// readOdbTables(pkg) is the decoder-selection shell for .odb (ODF database front-end) packages: it inspects what odf.js's own readOdbInventory and the package's own manifest-media-type-classified parts actually contain, and routes to the implemented decoders, or throws a specific, named diagnostic naming exactly what was found otherwise -- never a silent empty result. Every embedded storage shape HSQLDB and Firebird can produce is now decoded: src/hsqldb/script.ts's Tier 1 TEXT-script parser (hsqldb.script_format=0), extended by src/hsqldb/cache.ts's Tier 2 CACHED-table binary row-store decoder whenever a database/data part is present; src/firebird/backup.ts's Tier 3 gbak-backup-format reader for a Firebird-backed .odb; and src/hsqldb/binary-script.ts's Tier 4 whole-script BINARY/COMPRESSED reader (hsqldb.script_format=1 and =3, the latter being that identical byte stream under ordinary zlib DEFLATE -- see this module's own classifyScriptBytes comment). Tier 4's own recovered DDL feeds Tier 2 exactly as Tier 1's does, so a BINARY-format script belonging to a database with CACHED tables decodes end to end too. One failure mode remains permanently out of scope rather than merely unimplemented: an external-only connection, with no embedded engine to read from at all.
 
 export class OdbNoEmbeddedDataSourceError extends Error {
   readonly url: string | undefined;
@@ -23,7 +24,8 @@ export class OdbNoEmbeddedDataSourceError extends Error {
   }
 }
 
-export type OdbUnsupportedFormat = 'hsqldb-binary' | 'hsqldb-compressed' | 'unrecognised-engine';
+// One member today, since every embedded storage shape this package encounters is now decoded -- what remains is a connection naming an embedded engine (or an engine's own storage shape) this package has no reader for at all.
+export type OdbUnsupportedFormat = 'unrecognised-engine';
 
 export class OdbUnsupportedFormatError extends Error {
   readonly format: OdbUnsupportedFormat;
@@ -120,19 +122,19 @@ export function readOdbTables(pkg: Package, options?: HsqldbDecodeOptions): read
 
   const scriptBytes = base64ToBytes(scriptPart.base64);
   const classification = classifyScriptBytes(scriptBytes);
-  if (classification === 'compressed') {
-    throw new OdbUnsupportedFormatError('hsqldb-compressed', "HSQLDB's compressed whole-script format (hsqldb.script_format=3) -- a zlib-wrapped copy of the same length-prefixed binary DDL/DML statement encoding hsqldb.script_format=1 uses, not compressed SQL text");
-  }
-  if (classification === 'binary') {
-    throw new OdbUnsupportedFormatError('hsqldb-binary', "HSQLDB's binary whole-script format (hsqldb.script_format=1) -- a length-prefixed, COMMAND-tagged binary encoding of the script's own DDL/DML statements themselves, a materially different and larger undertaking than CACHED-table row-store decoding (Tier 2)");
+  if (classification !== 'text') {
+    // Tier 4: one whole-script binary stream, optionally zlib-wrapped. Its own DDL comes back as ordinary TEXT-format script text, which is what withCachedTableRows needs to find any CACHED table's index roots in -- so the two tiers compose exactly as they do for a TEXT script.
+    const binaryBytes = classification === 'compressed' ? inflateHsqldbCompressedScript(scriptBytes) : scriptBytes;
+    const { scriptText, tables } = parseHsqldbBinaryScript(binaryBytes, options);
+    return withCachedTableRows(pkg, tables, scriptText, options);
   }
 
-  const tables = parseHsqldbScript(scriptBytes);
-  return withCachedTableRows(pkg, tables, scriptBytes, options);
+  const scriptText = new TextDecoder('utf-8', { fatal: true }).decode(scriptBytes);
+  return withCachedTableRows(pkg, parseHsqldbScript(scriptBytes), scriptText, options);
 }
 
-// A CACHED table's own DDL still lives in database/script as ordinary TEXT-format SQL -- parseHsqldbScript above has already produced every table's correct column list -- but a real HSQLDB writer never emits INSERT statements for a CACHED table's own rows, only for MEMORY/TEXT tables. database/data (present only when at least one table is CACHED) carries the actual row bytes; src/hsqldb/cache.ts's decodeHsqldbCachedTables splices them in. No database/data part at all -- the common case, every table MEMORY/TEXT, or (per the existing Tier 1 fixtures) no CACHED table involved -- leaves parseHsqldbScript's own result untouched, exactly matching every pre-Tier-2 caller's existing expectations.
-function withCachedTableRows(pkg: Package, tables: readonly HsqldbTable[], scriptBytes: Uint8Array, options: HsqldbDecodeOptions | undefined): readonly HsqldbTable[] {
+// A CACHED table's own DDL always lives in database/script (as literal SQL text for a TEXT script, and as a DDL statement inside the leading Result record for a BINARY/COMPRESSED one, which Tier 4 recovers into the identical text) -- the caller has already produced every table's correct column list from it -- but a real HSQLDB writer never emits row data for a CACHED table into the script in any format, only for MEMORY/TEXT tables. database/data (present only when at least one table is CACHED) carries the actual row bytes; src/hsqldb/cache.ts's decodeHsqldbCachedTables splices them in. No database/data part at all -- the common case, every table MEMORY/TEXT, or (per the existing Tier 1 fixtures) no CACHED table involved -- leaves parseHsqldbScript's own result untouched, exactly matching every pre-Tier-2 caller's existing expectations.
+function withCachedTableRows(pkg: Package, tables: readonly HsqldbTable[], scriptText: string, options: HsqldbDecodeOptions | undefined): readonly HsqldbTable[] {
   const dataPart = pkg.parts[DATABASE_DATA_PART];
   if (dataPart === undefined) {
     return tables;
@@ -148,7 +150,6 @@ function withCachedTableRows(pkg: Package, tables: readonly HsqldbTable[], scrip
     throw new Error(`readOdbTables: ${DATABASE_PROPERTIES_PART} is not a binary part (found kind "${propertiesPart.kind}") -- malformed .odb package`);
   }
 
-  const scriptText = new TextDecoder('utf-8', { fatal: true }).decode(scriptBytes);
   const dataBytes = base64ToBytes(dataPart.base64);
   const propertiesText = new TextDecoder('utf-8', { fatal: true }).decode(base64ToBytes(propertiesPart.base64));
   return decodeHsqldbCachedTables(tables, scriptText, dataBytes, propertiesText, options);
