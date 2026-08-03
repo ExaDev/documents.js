@@ -3,7 +3,7 @@ import { COLOR_BLACK, LAYOUT_FORMAT_VERSION } from 'document-schema.js';
 import { layoutFormula } from '../mathml/layout';
 import type { Box } from '../model/geometry';
 import { flipY } from '../model/geometry';
-import type { EmbeddedFormula } from '../model/formula';
+import { formulaOfBlock } from '../model/formula';
 import type { Point, PositionedFormula, TextMeasurer } from 'pdf-codec';
 import { loadMathFont, rotatePointAboutCenter, wrapRunsToWidth } from 'pdf-codec';
 import { alignmentOffsetPt, effectiveStyledRuns, estimateRowHeightPt, lineNaturalHeightPt, registerImage, sumColumnWidthsPt } from './shared';
@@ -12,8 +12,6 @@ import { alignmentOffsetPt, effectiveStyledRuns, estimateRowHeightPt, lineNatura
 
 export interface SlidesLayoutOptions {
   readonly measurer: TextMeasurer;
-  // Raw MathML for every embedded formula shape in `doc`, keyed by that shape's own placeholder block sourcePath -- see src/odf/odp/read.ts's readOdpContent for how this map is built, and src/layout/engine.ts's own EngineLayoutOptions.formulas for the identical mechanism on the wordprocessing side.
-  readonly formulas?: ReadonlyMap<string, EmbeddedFormula>;
 }
 
 export interface PresentationLayoutResult {
@@ -30,9 +28,8 @@ function formulaSizePtFromFrame(frameHeightPt: number): number {
   return Math.max(MIN_FORMULA_SIZE_PT, frameHeightPt / 2);
 }
 
-// Threaded into convertShape (optionally -- see that function's own comment) so a formula-bearing shape can resolve its own raw MathML and record its positioned result. `positioned` is mutated in place, the same "shared accumulator threaded through a layout pass" pattern src/layout/engine.ts's own `formulas` parameter uses.
+// Threaded into convertShape (optionally -- see that function's own comment) so a formula-bearing shape can record its positioned result. The MathML itself comes from the block's own document (src/model/formula.ts's formulaOfBlock), so this carries only what a shape genuinely cannot know on its own: which page it is being laid out onto, and the shared accumulator to record into. `positioned` is mutated in place, the same "shared accumulator threaded through a layout pass" pattern src/layout/engine.ts's own `formulas` parameter uses.
 export interface ShapeFormulaContext {
-  readonly formulas: ReadonlyMap<string, EmbeddedFormula>;
   readonly pageIndex: number;
   readonly positioned: PositionedFormula[];
 }
@@ -157,19 +154,19 @@ function layoutTable(table: ContentTable, contentLeftXDown: number, contentWidth
   return cursorYDown;
 }
 
-// A formula shape's own placeholder block (see src/odf/odp/read.ts's readOdpContent) is the shape's ONLY block -- odp's own detection replaces a formula-bearing shape's blocks outright rather than appending alongside other content, unlike odt's paragraph-flow case -- so this places the resolved MathBox directly at the shape's own frame, the same "one block, one position" treatment layoutImageFlow (src/layout/engine.ts) and this function's own image branch above already give an image block. Rotation is deliberately NOT applied to a formula shape (unlike text/image, both routed through `placement.place`): pdf-codec's write.ts's own formula content-stream emission has no rotated-CID-text path, only translation -- a real, tracked, bounded gap (position is correct; a rotated formula shape renders unrotated), not a silent one.
+// A formula shape's own embedded-object block (see src/odf/odp/read.ts's readOdpContent) is the shape's ONLY block -- odp's own detection replaces a formula-bearing shape's blocks outright rather than appending alongside other content, unlike odt's paragraph-flow case -- so this places the resolved MathBox directly at the shape's own frame, the same "one block, one position" treatment layoutImageFlow (src/layout/engine.ts) and this function's own image branch above already give an image block. Rotation is deliberately NOT applied to a formula shape (unlike text/image, both routed through `placement.place`): pdf-codec's write.ts's own formula content-stream emission has no rotated-CID-text path, only translation -- a real, tracked, bounded gap (position is correct; a rotated formula shape renders unrotated), not a silent one.
 function layoutShapeFormula(block: ContentEmbeddedObjectBlock, flippedFrame: Box, formulaContext: ShapeFormulaContext): void {
-  const embedded = block.sourcePath === undefined ? undefined : formulaContext.formulas.get(block.sourcePath);
-  if (embedded === undefined) {
+  const formula = formulaOfBlock(block);
+  if (formula === undefined || formula.mathml.length === 0) {
     return;
   }
   const sizePt = formulaSizePtFromFrame(block.frame.heightPt);
   const metrics = loadMathFont().metricsAt(sizePt);
-  const { box } = layoutFormula(embedded.mathml, { metrics, sizePt, color: COLOR_BLACK });
+  const { box } = layoutFormula(formula.mathml, { metrics, sizePt, color: COLOR_BLACK });
   formulaContext.positioned.push({ pageIndex: formulaContext.pageIndex, xPt: flippedFrame.xPt, yPt: flippedFrame.yPt, box });
 }
 
-// Exported for reuse by src/layout/drawing.ts: a drawing page's own ContentShape entries (draw:frame text/table/image content, and unrecognised custom-shape presets salvaged as text -- see odf.js's typed/draw/shapes.ts) are the exact same ContentShapeSchema-typed value a slide's shapes are, so odg gets slide-quality paragraph flow, image placement, and table layout for free rather than a second, drifting copy of this function. `formulaContext` is optional and appended last precisely so drawing.ts's own existing 5-argument call site keeps compiling unchanged -- odg embedded-formula support is out of this task's own stated scope (odt/ods/odp only), so a formula block reached with no formulaContext simply falls through unhandled, the same as it always did.
+// Exported for reuse by src/layout/drawing.ts: a drawing page's own ContentShape entries (draw:frame text/table/image content, and unrecognised custom-shape presets salvaged as text -- see odf.js's typed/draw/shapes.ts) are the exact same ContentShapeSchema-typed value a slide's shapes are, so odg gets slide-quality paragraph flow, image placement, and table layout for free rather than a second, drifting copy of this function. `formulaContext` is optional and appended last precisely so drawing.ts's own existing 5-argument call site keeps compiling unchanged -- readOdgContent runs no embedded-formula detection pass of its own (src/odf/odg/read.ts), so a drawing page never carries a formula block for that call site to need one for, and convertDrawingToLayout has no PositionedFormula output to record one into either.
 export function convertShape(shape: ContentShape, slideHeightPt: number, measurer: TextMeasurer, images: Record<string, LayoutImageAsset>, out: LayoutItem[], formulaContext?: ShapeFormulaContext): void {
   const flippedFrame = flipY(shape.frame, slideHeightPt);
   const placement = shapePlacement(flippedFrame, shape.rotationDeg);
@@ -196,9 +193,9 @@ export function convertShape(shape: ContentShape, slideHeightPt: number, measure
   }
 }
 
-function convertSlide(slide: ContentSlide, slideIndex: number, measurer: TextMeasurer, images: Record<string, LayoutImageAsset>, formulas: ReadonlyMap<string, EmbeddedFormula> | undefined, positioned: PositionedFormula[]): LayoutPage {
+function convertSlide(slide: ContentSlide, slideIndex: number, measurer: TextMeasurer, images: Record<string, LayoutImageAsset>, positioned: PositionedFormula[]): LayoutPage {
   const items: LayoutItem[] = [];
-  const formulaContext: ShapeFormulaContext | undefined = formulas === undefined ? undefined : { formulas, pageIndex: slideIndex, positioned };
+  const formulaContext: ShapeFormulaContext = { pageIndex: slideIndex, positioned };
   for (const shape of slide.shapes) {
     convertShape(shape, slide.size.heightPt, measurer, images, items, formulaContext);
   }
@@ -209,6 +206,6 @@ function convertSlide(slide: ContentSlide, slideIndex: number, measurer: TextMea
 export function convertPresentationToLayout(doc: PresentationContentDocument, options: SlidesLayoutOptions): PresentationLayoutResult {
   const images: Record<string, LayoutImageAsset> = {};
   const formulas: PositionedFormula[] = [];
-  const pages = doc.slides.map((slide, slideIndex) => convertSlide(slide, slideIndex, options.measurer, images, options.formulas, formulas));
+  const pages = doc.slides.map((slide, slideIndex) => convertSlide(slide, slideIndex, options.measurer, images, formulas));
   return { document: { formatVersion: LAYOUT_FORMAT_VERSION, metadata: doc.metadata, pages, images }, formulas };
 }

@@ -42,7 +42,7 @@ export interface DocumentToPdfOptions {
   readonly signal?: AbortSignal;
   // Called once per WinAnsi character substitution made while emitting text (see pdf-codec's winansi.ts) -- writePdf's own hook, passed straight through.
   readonly onSubstitution?: (substitution: WinAnsiSubstitution, context: { readonly pageIndex: number }) => void;
-  // Called exactly once, synchronously, with the DocumentPackage (content + layout) this conversion built internally, before the function returns its bytes -- a side channel for a caller that wants the intermediate pivot value, not just the target bytes, mirroring onSubstitution's own callback shape. odfToPdf also accepts this (it shares this options type) but never invokes it: a standalone formula document has no ContentDocument-shaped structure to report (see readOdfFormulaContent's own module comment).
+  // Called exactly once, synchronously, with the DocumentPackage (content + layout) this conversion built internally, before the function returns its bytes -- a side channel for a caller that wants the intermediate pivot value, not just the target bytes, mirroring onSubstitution's own callback shape. Every conversion sharing this options type invokes it, odfToPdf included: a standalone formula document reports a genuine 'formula'-kind ContentDocument (see that function's own comment for what its LayoutDocument half does and does not carry).
   readonly onDocument?: (pkg: DocumentPackage) => void;
 }
 
@@ -58,16 +58,16 @@ export function docxToPdf(bytes: Uint8Array<ArrayBuffer>, options?: DocumentToPd
   return writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution, formulas });
 }
 
-// odt's package is decoded via odf.js's own decodePackage, NOT ooxml.js's -- an odt file is an ODF package, not an OOXML one, so it needs odf.js's own codec to become a Package at all. Everything downstream of that (readOdtContent -> convertWordprocessingToLayout -> writePdf) is identical to docxToPdf's own pipeline, which is the whole architectural point -- readOdtContent's own extra `formulas` map (any embedded formula readOdtContent found -- see that module's own comment) is the one genuine difference, threaded through convertWordprocessingToLayout's own `formulas` option so a formula renders as real MathML rather than its own plain-text placeholder.
+// odt's package is decoded via odf.js's own decodePackage, NOT ooxml.js's -- an odt file is an ODF package, not an OOXML one, so it needs odf.js's own codec to become a Package at all. Everything downstream of that (readOdtContent -> convertWordprocessingToLayout -> writePdf) is identical to docxToPdf's own pipeline, byte for byte at the call-site level, which is the whole architectural point: an embedded formula travels inside the ContentDocument itself (a real ContentEmbeddedObjectBlock carrying a 'formula'-kind document -- see src/model/formula.ts), so there is no odt-specific option to thread anywhere, and the layout engine renders real MathML without ever being told which format the document came from.
 export function odtToPdf(bytes: Uint8Array<ArrayBuffer>, options?: DocumentToPdfOptions): Uint8Array<ArrayBuffer> {
   const pkg = decodePackage(bytes);
   const content = readOdtContent(pkg);
-  // readOdtContent's declared return type wraps the full ContentDocument union, even though it always produces the wordprocessing variant in practice -- this both documents and enforces that, mirroring docxToPdf's own guard above.
-  if (content.document.kind !== 'wordprocessing') {
+  // readOdtContent's declared return type is the full ContentDocument union, even though it always produces the wordprocessing variant in practice -- this both documents and enforces that, mirroring docxToPdf's own guard above.
+  if (content.kind !== 'wordprocessing') {
     throw new Error('readOdtContent returned a non-wordprocessing ContentDocument');
   }
-  const { document: layout, formulas } = convertWordprocessingToLayout(content.document, { measurer: createStandardFontMeasurer(), formulas: content.formulas });
-  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content: content.document, layout });
+  const { document: layout, formulas } = convertWordprocessingToLayout(content, { measurer: createStandardFontMeasurer() });
+  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content, layout });
   return writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution, formulas });
 }
 
@@ -77,21 +77,22 @@ export function pptxToPdf(bytes: Uint8Array<ArrayBuffer>, options?: DocumentToPd
   if (content.kind !== 'presentation') {
     throw new Error('readPptxContent returned a non-presentation ContentDocument');
   }
-  const { document: layout } = convertPresentationToLayout(content, { measurer: createStandardFontMeasurer() });
+  const { document: layout, formulas } = convertPresentationToLayout(content, { measurer: createStandardFontMeasurer() });
   options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content, layout });
-  return writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution });
+  // Threaded through for the same reason odpToPdf's is, even though readPptxContent produces no formula block today: a formula lives inside the ContentDocument now, so whether any given conversion can carry one is a property of its READER, not of its writePdf call -- discarding the engine's own formula output here would silently drop one the moment ooxml.js's reader learns to produce an OMML-sourced formula block.
+  return writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution, formulas });
 }
 
-// odp's package is decoded via odf.js's own decodePackage, NOT ooxml.js's -- an odp file is an ODF package, not an OOXML one, so it needs odf.js's own codec to become a Package at all. Everything downstream of that (readOdpContent -> convertPresentationToLayout -> writePdf) is identical to pptxToPdf's own pipeline, including the same hidden-annotation speaker-notes mechanism (see src/layout/slides.ts's own note-carrying comment), which is what this package's own tests prove notes survive for free -- readOdpContent's own extra `formulas` map is the one genuine difference, mirroring odtToPdf's own identical wiring above.
+// odp's package is decoded via odf.js's own decodePackage, NOT ooxml.js's -- an odp file is an ODF package, not an OOXML one, so it needs odf.js's own codec to become a Package at all. Everything downstream of that (readOdpContent -> convertPresentationToLayout -> writePdf) is identical to pptxToPdf's own pipeline, including the same hidden-annotation speaker-notes mechanism (see src/layout/slides.ts's own note-carrying comment), which is what this package's own tests prove notes survive for free. An embedded formula needs no special wiring here either, for the same reason odtToPdf's doesn't: it travels inside the ContentDocument as a real embedded-object block.
 export function odpToPdf(bytes: Uint8Array<ArrayBuffer>, options?: DocumentToPdfOptions): Uint8Array<ArrayBuffer> {
   const pkg = decodePackage(bytes);
   const content = readOdpContent(pkg);
-  // readOdpContent's declared return type wraps the full ContentDocument union, even though it always produces the presentation variant in practice -- this both documents and enforces that, mirroring pptxToPdf's own guard above.
-  if (content.document.kind !== 'presentation') {
+  // readOdpContent's declared return type is the full ContentDocument union, even though it always produces the presentation variant in practice -- this both documents and enforces that, mirroring pptxToPdf's own guard above.
+  if (content.kind !== 'presentation') {
     throw new Error('readOdpContent returned a non-presentation ContentDocument');
   }
-  const { document: layout, formulas } = convertPresentationToLayout(content.document, { measurer: createStandardFontMeasurer(), formulas: content.formulas });
-  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content: content.document, layout });
+  const { document: layout, formulas } = convertPresentationToLayout(content, { measurer: createStandardFontMeasurer() });
+  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content, layout });
   return writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution, formulas });
 }
 
@@ -138,22 +139,27 @@ export function markdownToPdf(bytes: Uint8Array<ArrayBuffer>, options?: Document
 const STANDALONE_FORMULA_SIZE_PT = 18; // larger than a typical embedded formula (see engine.ts's own formulaSizePtFromFrame), since a standalone .odf's own formula is usually the whole document's content, not a small inline element.
 const STANDALONE_FORMULA_MARGIN_PT = 72; // 1 inch
 
-// odf bytes -> PDF bytes: readOdfFormulaContent -> src/mathml's layoutFormula -> a single formula positioned on one A4 page -> writePdf, with the embedded STIX Two Math font (pdf-codec's math-font.ts) doing the actual glyph rendering. options.onDocument (inherited from the shared DocumentToPdfOptions type) is deliberately never invoked here: readOdfFormulaContent's own return value is not a ContentDocument at all (a standalone formula matches none of ContentDocumentSchema's wordprocessing/presentation/spreadsheet/drawing variants -- see that function's own module comment), and the `layout` value built below carries no LayoutItems either, since the formula itself is rendered through writePdf's separate `formulas` positioning rather than as page content -- there is nothing valid to hand back as a DocumentPackage. This is NOT one of the twelve round-trip conversions above (and has no reverse pdfToOdf, no z.codec() pair, and no DocumentConverter port entry -- see src/convert/port.ts's own note): scope for v1, per the design plan this package was built against, is odfToPdf alone, rendering "faithful mathematical typesetting" for a single formula (or small formula document). PDF -> structured MathML is a categorically different, OCR-adjacent problem -- recovering a semantic operator tree (msub vs msup vs a coincidentally-superscript-shaped run of glyphs) from nothing but positioned glyphs and paths has no geometry-reconstruction analogue anywhere else in this package (reconstructWordprocessing/reconstructPresentation recover paragraph/shape STRUCTURE from geometry, never semantic MEANING the way "this pair of glyphs forms a fraction" would require) -- and is deliberately not attempted here.
+// odf bytes -> PDF bytes: readOdfFormulaContent -> src/mathml's layoutFormula -> a single formula positioned on one A4 page -> writePdf, with the embedded STIX Two Math font (pdf-codec's math-font.ts) doing the actual glyph rendering. options.onDocument IS invoked here now, with a genuine 'formula'-kind ContentDocument (document-schema.js 2.0.0's fifth variant, carrying the formula's own MathML and StarMath annotation) alongside the LayoutDocument -- previously there was no ContentDocument shape a standalone formula could be reported as at all, so the callback was accepted and never called. The reported `layout` still carries no LayoutItems, by construction: the formula renders through writePdf's separate `formulas` positioning rather than as page content, so its page really is empty of items and the page geometry is all the layout has to report. This is NOT one of the twelve round-trip conversions above (and has no reverse pdfToOdf, no z.codec() pair, and no DocumentConverter port entry -- see src/convert/port.ts's own note): scope for v1, per the design plan this package was built against, is odfToPdf alone, rendering "faithful mathematical typesetting" for a single formula (or small formula document). PDF -> structured MathML is a categorically different, OCR-adjacent problem -- recovering a semantic operator tree (msub vs msup vs a coincidentally-superscript-shaped run of glyphs) from nothing but positioned glyphs and paths has no geometry-reconstruction analogue anywhere else in this package (reconstructWordprocessing/reconstructPresentation recover paragraph/shape STRUCTURE from geometry, never semantic MEANING the way "this pair of glyphs forms a fraction" would require) -- and is deliberately not attempted here.
 export function odfToPdf(bytes: Uint8Array<ArrayBuffer>, options?: DocumentToPdfOptions): Uint8Array<ArrayBuffer> {
   throwIfAborted(options?.signal);
   const pkg = decodePackage(bytes); // odf.js's own decodePackage -- odf is an ODF package.
-  const formula = readOdfFormulaContent(pkg);
+  const content = readOdfFormulaContent(pkg);
+  // readOdfFormulaContent's declared return type is the full ContentDocument union, even though it always produces the formula variant in practice -- this both documents and enforces that, mirroring every other readXContent guard in this file.
+  if (content.kind !== 'formula') {
+    throw new Error('readOdfFormulaContent returned a non-formula ContentDocument');
+  }
 
   const metrics = loadMathFont().metricsAt(STANDALONE_FORMULA_SIZE_PT);
-  const { box } = layoutFormula(formula.mathml, { metrics, sizePt: STANDALONE_FORMULA_SIZE_PT, color: COLOR_BLACK });
+  const { box } = layoutFormula(content.formula.mathml, { metrics, sizePt: STANDALONE_FORMULA_SIZE_PT, color: COLOR_BLACK });
   const flipped = flipY({ xPt: STANDALONE_FORMULA_MARGIN_PT, yPt: STANDALONE_FORMULA_MARGIN_PT, widthPt: box.widthPt, heightPt: box.heightPt }, PAGE_SIZE_A4.heightPt);
 
   const layout: LayoutDocument = {
     formatVersion: LAYOUT_FORMAT_VERSION,
-    metadata: formula.metadata,
+    metadata: content.metadata,
     pages: [{ widthPt: PAGE_SIZE_A4.widthPt, heightPt: PAGE_SIZE_A4.heightPt, items: [] }],
     images: {},
   };
+  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content, layout });
   throwIfAborted(options?.signal);
   return writePdf(layout, { signal: options?.signal, formulas: [{ pageIndex: 0, xPt: flipped.xPt, yPt: flipped.yPt, box }] });
 }
@@ -227,11 +233,11 @@ export interface DocumentBridgeOptions {
   readonly onDocument?: (pkg: DocumentPackage) => void;
 }
 
-// odt bytes -> docx bytes: readOdtContent(decodePackage(odtBytes)) feeds directly into buildDocxPackage, then ooxml.js's own encodePackage serializes the result -- no writePdf/readPdf, no measurer, no reconstruction. Cancellation has no loop to hook into the way writePdf/readPdf's own page/content-stream loops do (see src/ports/abort.ts's own module comment) -- read and build are each a single bounded pass over the source document -- so the signal is checked once before each of those two stages rather than threaded into buildDocxPackage/readOdtContent themselves, which accept no such option today. An embedded formula survives this bridge only as its own placeholder text (its StarMath annotation, or "[formula]") -- buildDocxPackage has no MathML-writing path of its own (OOXML's own math markup, OMML, is a different vocabulary this package does not write), so readOdtContent's own `formulas` map (the real MathML) is simply not consulted here.
+// odt bytes -> docx bytes: readOdtContent(decodePackage(odtBytes)) feeds directly into buildDocxPackage, then ooxml.js's own encodePackage serializes the result -- no writePdf/readPdf, no measurer, no reconstruction. Cancellation has no loop to hook into the way writePdf/readPdf's own page/content-stream loops do (see src/ports/abort.ts's own module comment) -- read and build are each a single bounded pass over the source document -- so the signal is checked once before each of those two stages rather than threaded into buildDocxPackage/readOdtContent themselves, which accept no such option today. An embedded formula survives this bridge only as its own plain-text stand-in (its StarMath annotation, or "[formula]"): buildDocxPackage has no MathML-writing path of its own -- OOXML's own math markup, OMML, is a vocabulary this package does not write -- so its appendEmbeddedObject degrades a formula block to a paragraph rather than dropping it (src/edit/docx/content.ts). The real MathML the source carried is genuinely lost at this boundary; the formula's presence is not.
 export function odtToDocx(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBridgeOptions): Uint8Array<ArrayBuffer> {
   throwIfAborted(options?.signal);
   const pkg = decodePackage(bytes); // odf.js's own decodePackage -- odt is an ODF package.
-  const content = readOdtContent(pkg).document;
+  const content = readOdtContent(pkg);
   if (content.kind !== 'wordprocessing') {
     throw new Error('readOdtContent returned a non-wordprocessing ContentDocument');
   }
@@ -257,7 +263,7 @@ export function docxToOdt(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBrid
 export function odpToPptx(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBridgeOptions): Uint8Array<ArrayBuffer> {
   throwIfAborted(options?.signal);
   const pkg = decodePackage(bytes); // odf.js's own decodePackage -- odp is an ODF package.
-  const content = readOdpContent(pkg).document;
+  const content = readOdpContent(pkg);
   if (content.kind !== 'presentation') {
     throw new Error('readOdpContent returned a non-presentation ContentDocument');
   }
@@ -347,11 +353,11 @@ export function markdownToOdt(bytes: Uint8Array<ArrayBuffer>, options?: Document
   return encodeOdfPackage(buildOdtPackage(content)); // odf.js's own encodePackage -- buildOdtPackage produces an ODF package.
 }
 
-// odt bytes -> markdown bytes, the reverse of markdownToOdt: readOdtContent(decodePackage(odtBytes)).document feeds directly into buildMarkdownText, then encodeMarkdownText encodes the result. readOdtContent's own `formulas` map (any embedded formula it found) is discarded here, exactly as odtToDocx already discards it -- markdown has no MathML-writing path of its own for the same reason buildDocxPackage doesn't.
+// odt bytes -> markdown bytes, the reverse of markdownToOdt: readOdtContent(decodePackage(odtBytes)) feeds directly into buildMarkdownText, then encodeMarkdownText encodes the result. An embedded formula degrades to its own plain-text stand-in here exactly as it does in odtToDocx -- CommonMark/GFM has no math construct at all, so buildMarkdownText flattens a formula block to a paragraph carrying that text (src/markdown/write.ts's own toLegacyBlock).
 export function odtToMarkdown(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBridgeOptions): Uint8Array<ArrayBuffer> {
   throwIfAborted(options?.signal);
   const pkg = decodePackage(bytes); // odf.js's own decodePackage -- odt is an ODF package.
-  const content = readOdtContent(pkg).document;
+  const content = readOdtContent(pkg);
   if (content.kind !== 'wordprocessing') {
     throw new Error('readOdtContent returned a non-wordprocessing ContentDocument');
   }
@@ -443,11 +449,11 @@ export function odmToPdf(bytes: Uint8Array<ArrayBuffer>, options?: OdmToPdfOptio
     }
 
     const chapterPkg = decodePackage(chapterBytes); // odf.js's own decodePackage -- a linked chapter is itself an odt (ODF) package.
-    const chapterContent = readOdtContent(chapterPkg).document;
+    const chapterContent = readOdtContent(chapterPkg);
     if (chapterContent.kind !== 'wordprocessing') {
       throw new Error('readOdtContent returned a non-wordprocessing ContentDocument');
     }
-    // A chapter's own embedded formulas (readOdtContent's own `formulas` map, discarded here) render as their own plain-text placeholder rather than real MathML in the combined odm document -- threading per-chapter formula maps through withLeadingChapterBreak's own section renumbering, and re-keying every formula's sourcePath against combinedSections' own final block indices, is a materially larger undertaking than this already-substantial task's own scope, and .odm itself has no confirmed real-world test fixture to validate it against (see this module's own OdmUnresolvedSectionError comment).
+    // A chapter's own embedded formulas need nothing special here at all: a formula is an ordinary block inside the chapter's own ContentDocument (see src/model/formula.ts), so it survives concatenation into the combined document exactly as every paragraph and table does, and renders as real MathML through the same convertWordprocessingToLayout every other conversion uses. This used to be a documented gap -- the formulas travelled in a side-channel map keyed by sourcePath, and re-keying every entry against combinedSections' own renumbered block indices was intractable -- which the move of a formula's content INTO the ContentDocument removed outright rather than solved.
     chapterSections.push(chapterContent.sections);
   }
 
@@ -472,8 +478,8 @@ export function odmToPdf(bytes: Uint8Array<ArrayBuffer>, options?: OdmToPdfOptio
     metadata: readOdfMetadata(pkg),
     sections: combinedSections,
   };
-  const { document: layout } = convertWordprocessingToLayout(content, { measurer: createStandardFontMeasurer() });
-  return writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution });
+  const { document: layout, formulas } = convertWordprocessingToLayout(content, { measurer: createStandardFontMeasurer() });
+  return writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution, formulas });
 }
 
 // odb (ODF database front-end) Tier 1 support: readOdbTables(pkg) already does the real work (decoder selection over odf.js's own readOdbInventory, then src/hsqldb/script.ts's bounded HSQLDB TEXT-script parser) -- odbToXlsx/odbToCsv below are thin compositions over it, matching odsToXlsx's own "reader -> pivot -> writer" shape. Unlike every conversion above, .odb has no PDF conversion and no reverse (xlsx/csv -> odb) direction at all -- Reports require live SQL execution to render, categorically out of scope (see README) -- so, like odmToPdf, these are deliberately NOT wired into the DocumentConverter port (src/convert/port.ts): that port's {source, targetFormat} contract assumes a conversion has a natural place in DocumentFormat's own bytes-in/bytes-out shape, and odb's own asymmetry (one source format, two unrelated target shapes, one of which needs a table-selection option the other doesn't) doesn't fit it any better than odmToPdf's resolver-shaped conversion did.

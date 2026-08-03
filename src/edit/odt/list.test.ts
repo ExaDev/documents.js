@@ -8,7 +8,7 @@ function isParagraph(block: ContentBlock): block is ContentParagraph {
 }
 
 function paragraphsOf(pkg: Parameters<typeof readOdtContent>[0]): ContentParagraph[] {
-  const content = readOdtContent(pkg).document;
+  const content = readOdtContent(pkg);
   if (content.kind !== 'wordprocessing') {
     throw new Error('expected a wordprocessing ContentDocument');
   }
