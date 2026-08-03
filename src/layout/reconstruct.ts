@@ -35,10 +35,15 @@ import type { Box, Margins } from '../model/geometry';
 import { flipY } from '../model/geometry';
 import type { Alignment } from '../model/style';
 import { throwIfAborted } from '../ports/abort';
+import type { CellTypeInference, CellTypeInferenceSink } from './cell-typing';
+import { inferCellValue } from './cell-typing';
 
 export interface ReconstructOptions {
   readonly signal?: AbortSignal;
+  // Called once per recovered spreadsheet cell whose rendered text was either RE-TYPED away from a plain string or deliberately DECLINED as too ambiguous to re-type -- reconstructSpreadsheet's own audit trail for a step that is, unavoidably, probabilistic. See src/layout/cell-typing.ts for the confidence bar each outcome is decided against. Cells whose text is not number/date/boolean-shaped at all are not reported: there was no inference to make, so there is nothing to audit.
+  readonly onCellTypeInference?: CellTypeInferenceSink;
 }
+
 
 // LayoutDocument -> ContentDocument: PDF has no semantic paragraph/shape structure, just positioned glyphs and images, so both directions here are necessarily best-effort reconstructions from geometry -- this is the plan's most explicit fidelity trade-off, not a bug to be perfected later. Every threshold below is either the exact value the implementation plan specifies (cited inline) or a documented, deliberately bounded heuristic.
 
@@ -637,7 +642,7 @@ function recoverPageVectors(page: LayoutPage): RecoveredVectors | undefined {
 }
 
 // ---------------------------------------------------------------------------
-// PDF -> ods (spreadsheet): recovers what was printed, not what was entered. Every recovered cell is a bare string carrying only its own extracted displayText -- never re-parsed into a number/date/boolean, never claimed as a formula, matching this module's own consistent "geometry in, no semantic invention" discipline throughout. Two detection paths, tried in this order per page: (1) a real gridline lattice -- a genuine printed spreadsheet with gridlines enabled draws exactly this, see layout/sheets.ts's own renderGridlines -- is used DIRECTLY as cell boundaries, no inference needed; (2) absent a lattice, text is clustered into a grid from geometry alone, reusing this module's own clusterIntoLines for rows (a spreadsheet cell's own text is never wrapped across lines -- sheets.ts's own module doc -- so a text line already IS a row) and a parallel x-position recurrence clustering for columns, generalizing clusterIntoParagraphs's own single dominantLeftX to several recurring column anchors. Column widths, row heights, and a sheet's own page size are all genuinely MEASURED from recovered geometry, never invented; there is no attempt to recover print INTENT (range/scale/repeat-rows) that a rendered page carries no trace of at all.
+// PDF -> ods (spreadsheet): recovers what was printed, not what was entered. Every recovered cell keeps its own rendered string verbatim in the REQUIRED displayText field, and additionally gets a heuristically re-typed `value` (number/percentage/currency/date/boolean) wherever src/layout/cell-typing.ts finds exactly one defensible reading of that string -- an explicitly PROBABILISTIC step, not a fidelity guarantee, since a rendered PDF genuinely never carries a cell's own typed value and a numeric-looking string may always have been a genuine string. Read cell-typing.ts's own module doc before relying on a re-typed value: it states the confidence bar, and every re-typing decision (including a deliberate refusal on a named ambiguity) is reported through ReconstructOptions.onCellTypeInference. A formula is still never claimed -- nothing about a rendered value implies one was computed. Two detection paths, tried in this order per page: (1) a real gridline lattice -- a genuine printed spreadsheet with gridlines enabled draws exactly this, see layout/sheets.ts's own renderGridlines -- is used DIRECTLY as cell boundaries, no inference needed; (2) absent a lattice, text is clustered into a grid from geometry alone, reusing this module's own clusterIntoLines for rows (a spreadsheet cell's own text is never wrapped across lines -- sheets.ts's own module doc -- so a text line already IS a row) and a parallel x-position recurrence clustering for columns, generalizing clusterIntoParagraphs's own single dominantLeftX to several recurring column anchors. Column widths, row heights, and a sheet's own page size are all genuinely MEASURED from recovered geometry, never invented; there is no attempt to recover print INTENT (range/scale/repeat-rows) that a rendered page carries no trace of at all.
 // ---------------------------------------------------------------------------
 
 // --- Path 1: gridline lattice detection -----------------------------------------------------------
@@ -809,8 +814,8 @@ function addToGroup(groups: Map<string, LayoutText[]>, row: number, column: numb
   }
 }
 
-// Every recovered cell is a bare string carrying only its own displayText -- see this section's own top-of-block note. A (row, column) position with no text assigned to it at all is simply never emitted, matching the sparse cell model buildOdsPackage's own appendCell already expects.
-function buildCellsFromGroups(groups: ReadonlyMap<string, readonly LayoutText[]>): ContentSheetCell[] {
+// Every recovered cell ALWAYS carries its own rendered text verbatim in displayText, and additionally carries a heuristically re-typed `value` wherever src/layout/cell-typing.ts finds exactly one defensible reading of that text (see its own module doc for the confidence bar, and this section's top-of-block note for why the whole step is probabilistic). A cell whose text is ambiguous, or not number/date/boolean-shaped at all, keeps `value` as the plain string it was recovered as -- so `value.kind !== 'string'` is itself the flag distinguishing an inferred value from an untouched one, with the reporting sink below carrying the reason behind either outcome. A (row, column) position with no text assigned to it at all is simply never emitted, matching the sparse cell model buildOdsPackage's own appendCell already expects.
+function buildCellsFromGroups(groups: ReadonlyMap<string, readonly LayoutText[]>, context: CellTypingContext): ContentSheetCell[] {
   const cells: ContentSheetCell[] = [];
   for (const [key, items] of groups) {
     const displayText = joinCellText(items);
@@ -818,10 +823,28 @@ function buildCellsFromGroups(groups: ReadonlyMap<string, readonly LayoutText[]>
       continue;
     }
     const [rowPart, columnPart] = key.split(',');
-    cells.push({ row: Number(rowPart), column: Number(columnPart), value: { kind: 'string', value: displayText }, displayText });
+    const row = Number(rowPart);
+    const column = Number(columnPart);
+    cells.push({ row, column, value: inferredCellValue(displayText, row, column, context), displayText });
   }
   cells.sort((a, b) => a.row - b.row || a.column - b.column);
   return cells;
+}
+
+interface CellTypingContext {
+  readonly sheetIndex: number;
+  readonly sink?: CellTypeInferenceSink;
+}
+
+// The one place a recovered cell's re-typed value is decided and reported. A 'retyped' result replaces the plain-string value; a 'declined' one deliberately does not, leaving the string in place -- both are reported, because "we looked and refused" is exactly as much a part of the audit trail as "we looked and re-typed", and a caller cannot reconstruct the refusal from the output alone (a declined cell is indistinguishable from one that was never number-shaped to begin with).
+function inferredCellValue(displayText: string, row: number, column: number, context: CellTypingContext): ContentSheetCell['value'] {
+  const inference = inferCellValue(displayText);
+  if (inference === undefined) {
+    return { kind: 'string', value: displayText };
+  }
+  const reported: CellTypeInference = { sheetIndex: context.sheetIndex, row, column, displayText, ...inference };
+  context.sink?.(reported);
+  return inference.outcome === 'retyped' ? inference.value : { kind: 'string', value: displayText };
 }
 
 interface ReconstructedGrid {
@@ -832,7 +855,7 @@ interface ReconstructedGrid {
 }
 
 // The gridline positions ARE the cell boundaries -- column/row widths are the exact, genuinely measured gap between consecutive drawn lines, not estimated from text at all.
-function buildGridFromLattice(textItems: readonly LayoutText[], lattice: GridLattice): ReconstructedGrid {
+function buildGridFromLattice(textItems: readonly LayoutText[], lattice: GridLattice, context: CellTypingContext): ReconstructedGrid {
   const groups = new Map<string, LayoutText[]>();
   for (const item of textItems) {
     const row = findRowIndex(lattice.rowBoundariesDescPt, item.yPt);
@@ -850,7 +873,7 @@ function buildGridFromLattice(textItems: readonly LayoutText[], lattice: GridLat
   for (let i = 0; i < lattice.rowBoundariesDescPt.length - 1; i++) {
     rows.push({ index: i, heightPt: lattice.rowBoundariesDescPt[i]! - lattice.rowBoundariesDescPt[i + 1]! });
   }
-  return { cells: buildCellsFromGroups(groups), columns, rows, gridlines: true };
+  return { cells: buildCellsFromGroups(groups, context), columns, rows, gridlines: true };
 }
 
 // --- Path 2: text-position clustering, no gridlines present -----------------------------------------------------------
@@ -906,7 +929,7 @@ function lastColumnWidthPt(groups: ReadonlyMap<string, readonly LayoutText[]>, c
 }
 
 // Rows reuse clusterIntoLines directly -- a spreadsheet cell's own text is never wrapped across lines (sheets.ts's own module doc), so a text line already IS a row, with no separate row-clustering pass needed. Each line is then split into segments wherever a large horizontal gap occurs, reusing splitLineByLargeGaps verbatim -- the same >2em-gap signal reconstructPresentation's own block clustering already uses to tell "still one cluster of text" from "a new one" -- since a single cell's own text can arrive as several directly adjacent LayoutText fragments (a run-level style change mid-cell) that must be treated as one cell candidate, not several. Row heights are the genuinely measured baseline-to-baseline gap to the next row; the last row (no following baseline to measure against) falls back to this page's own modal line spacing, the same already-justified estimateModalLineSpacing this module uses for paragraph/block clustering above.
-function buildGridFromTextClustering(textItems: readonly LayoutText[]): ReconstructedGrid {
+function buildGridFromTextClustering(textItems: readonly LayoutText[], context: CellTypingContext): ReconstructedGrid {
   const lines = clusterIntoLines(textItems);
   if (lines.length === 0) {
     return { cells: [], columns: [], rows: [], gridlines: false };
@@ -939,16 +962,17 @@ function buildGridFromTextClustering(textItems: readonly LayoutText[]): Reconstr
     return { index: j, widthPt: nextPosition !== undefined ? nextPosition - position : lastColumnWidthPt(groups, j, position) };
   });
 
-  return { cells: buildCellsFromGroups(groups), columns, rows, gridlines: false };
+  return { cells: buildCellsFromGroups(groups, context), columns, rows, gridlines: false };
 }
 
 // --- Orchestration: one ContentSheet per PDF page -----------------------------------------------------------
 
 // A PDF page carries no sheet name, and no trace of whether the source spreadsheet's own column/row banding split one sheet across several printed pages -- there is no principled way to re-merge pages back into fewer sheets from geometry alone, so this maps one page to one sheet, exactly as reconstructPresentation maps one page to one slide.
-function reconstructSheet(page: LayoutPage, pageIndex: number): ContentSheet {
+function reconstructSheet(page: LayoutPage, pageIndex: number, sink: CellTypeInferenceSink | undefined): ContentSheet {
   const textItems = page.items.filter((i): i is LayoutText => i.kind === 'text');
   const lattice = detectGridLattice(page.items);
-  const grid = lattice !== undefined ? buildGridFromLattice(textItems, lattice) : buildGridFromTextClustering(textItems);
+  const context: CellTypingContext = { sheetIndex: pageIndex, sink };
+  const grid = lattice !== undefined ? buildGridFromLattice(textItems, lattice, context) : buildGridFromTextClustering(textItems, context);
 
   // Margins have no PDF equivalent to recover, mirroring buildSection's own ZERO_MARGINS reasoning above. gridlines reflects whichever detection path actually ran; headers is always false -- a header-gutter row-number/column-letter label has no reliable geometric signal distinguishing it from an ordinary short cell, so this makes no attempt to detect one (any such label sitting outside the detected grid lattice is simply dropped by findRowIndex/findColumnIndex returning undefined for it, rather than being misread as real cell content). No print range/scale/fit-to-page/repeat-rows/repeat-columns/manual-breaks assumption is made at all -- a rendered page carries no trace of print INTENT, only what was visually printed.
   const printSettings: ContentSheetPrintSettings = {
@@ -966,7 +990,7 @@ export function reconstructSpreadsheet(doc: LayoutDocument, options?: Reconstruc
   const signal = options?.signal;
   const sheets: ContentSheet[] = doc.pages.map((page, index) => {
     throwIfAborted(signal);
-    return reconstructSheet(page, index);
+    return reconstructSheet(page, index, options?.onCellTypeInference);
   });
   return { kind: 'spreadsheet', formatVersion: CONTENT_FORMAT_VERSION, metadata: doc.metadata, sheets };
 }
