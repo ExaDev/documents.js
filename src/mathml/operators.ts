@@ -159,6 +159,10 @@ const OPERATORS = new Map<string, OperatorProperties>([
   ['…', { ...DEFAULT_OPERATOR, lspaceEm: ZERO_SPACE, rspaceEm: ZERO_SPACE }], // horizontal ellipsis
   ['⋯', { ...DEFAULT_OPERATOR, lspaceEm: ZERO_SPACE, rspaceEm: ZERO_SPACE }], // midline ellipsis
   ['√', { ...DEFAULT_OPERATOR, lspaceEm: ZERO_SPACE, rspaceEm: ZERO_SPACE, stretchy: true }], // radical sign, when it appears as a bare <mo> rather than inside msqrt/mroot
+
+  // Over/under-brace: MathML3 Appendix C gives U+23DE/U+23DF form="postfix", lspace=rspace=0, stretchy="true", accent="true" -- this dictionary's OperatorProperties has no accent field of its own, since accent-attachment centring is driven by the *element's* own accent="true"/accentunder="true" attribute on munder/mover/munderover (see layout.ts's own layoutUnderOverElement), not by the operator dictionary; only stretchy carries through here. These two only ever occur as munder/mover script content -- an over/under-brace standing alone as an ordinary inline operator is not a real MathML use case.
+  ['⏞', { ...DEFAULT_OPERATOR, lspaceEm: ZERO_SPACE, rspaceEm: ZERO_SPACE, stretchy: true }], // U+23DE TOP CURLY BRACKET (over-brace)
+  ['⏟', { ...DEFAULT_OPERATOR, lspaceEm: ZERO_SPACE, rspaceEm: ZERO_SPACE, stretchy: true }], // U+23DF BOTTOM CURLY BRACKET (under-brace)
 ]);
 
 // The operator dictionary entry for `text` (an <mo> element's own text content, already trimmed), or the default infix-shaped entry when `text` is not one of the operators this dictionary specifically recognises.
