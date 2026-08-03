@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { ContentDrawPage, ContentParagraph, ContentShape, ContentSheet, LayoutDocument, LayoutImage, LayoutImageAsset, LayoutItem, LayoutPage, LayoutText } from 'document-schema.js';
+import type { ContentBlock, ContentDrawPage, ContentParagraph, ContentShape, ContentSheet, ContentSlide, ContentVector, LayoutDocument, LayoutImage, LayoutImageAsset, LayoutItem, LayoutPage, LayoutText } from 'document-schema.js';
 import { STANDARD_METRICS } from 'pdf-codec';
+import { drawingOfBlock } from '../model/embedded-drawing';
 import { reconstructDrawing, reconstructPresentation, reconstructSpreadsheet, reconstructWordprocessing } from './reconstruct';
 
 const RED = { r: 1, g: 0, b: 0 };
@@ -27,7 +28,7 @@ function line(x1Pt: number, y1Pt: number, x2Pt: number, y2Pt: number): LayoutIte
   return { kind: 'line', x1Pt, y1Pt, x2Pt, y2Pt, color: BLACK, widthPt: 0.5 };
 }
 
-// The shape a REAL gridline actually takes after a genuine PDF round trip -- writeLine's own m/l/S sequence reads back through interpret.ts's general path tracking as a single-subpath, single-line-segment, stroke-only LayoutPath, never a LayoutLine (readPdf never reconstructs a 'line' kind item at all). Used by the "recovered as paths" test below to prove detectGridLattice accepts this shape too, not only the hand-built LayoutLine items the other tests use for brevity.
+// The generic-path shape a stroke can still arrive in when it misses pdf-codec's own LayoutLine shape pattern (several segments in one subpath, or a subpath that is also filled), and the shape every stroke arrived in before that pattern existed. detectGridLattice accepts it alongside a genuine LayoutLine so a hand-built LayoutDocument, an older recorded one, and a freshly round-tripped one all detect identically -- which the "built from stroked LayoutPath items" test below is what actually pins.
 function strokedLinePath(x1Pt: number, y1Pt: number, x2Pt: number, y2Pt: number): LayoutItem {
   return { kind: 'path', subpaths: [{ startXPt: x1Pt, startYPt: y1Pt, closed: false, segments: [{ kind: 'line', xPt: x2Pt, yPt: y2Pt }] }], stroke: { color: BLACK, widthPt: 0.5 } };
 }
@@ -487,8 +488,8 @@ describe('reconstructSpreadsheet: gridline lattice detection', () => {
     expect(sheet!.cells.map((c) => c.displayText)).toEqual(['R0C0']);
   });
 
-  // The real shape a genuine PDF round trip produces: readPdf never reconstructs a LayoutLine, so a written gridline always comes back as a generic single-segment stroked LayoutPath (see this file's own strokedLinePath doc comment above).
-  it('detects a lattice built from single-segment stroked LayoutPath items, the shape a real PDF round trip actually produces', () => {
+  // A stroke that misses pdf-codec's own LayoutLine shape pattern still arrives as a generic single-segment stroked LayoutPath (see this file's own strokedLinePath doc comment above), and must detect identically to a genuine LayoutLine.
+  it('detects a lattice built from single-segment stroked LayoutPath items, not only from genuine LayoutLine items', () => {
     const items: LayoutItem[] = [
       strokedLinePath(0, 200, 300, 200),
       strokedLinePath(0, 150, 300, 150),
@@ -618,5 +619,89 @@ describe('reconstructDrawing: shared paintOrder', () => {
     ];
     const [pg] = drawPages(reconstructDrawing(docFrom([page(400, 300, items)])));
     expect(pg!.vectors.map((v) => v.paintOrder)).toEqual([0, 1]);
+  });
+});
+
+// --- Vector recovery generalized into the wordprocessing/presentation directions -------------------------------
+
+// Both directions carry recovered vectors in a ContentEmbeddedObjectBlock whose nested document is a real one-page drawing document -- the container ContentSection/ContentSlide lack a vectors array of their own. Reading one back out is the same narrowing in both, so both suites share this helper.
+function drawingVectorsOf(block: ContentBlock | undefined): ContentVector[] {
+  if (block?.kind !== 'embeddedObject') {
+    throw new Error(`expected an embeddedObject block, got ${String(block?.kind)}`);
+  }
+  const document = drawingOfBlock(block);
+  if (document === undefined) {
+    throw new Error('expected the embedded document to be a drawing document');
+  }
+  return [...document.pages[0]!.vectors];
+}
+
+function blocksOf(doc: ReturnType<typeof reconstructWordprocessing>): ContentBlock[] {
+  if (doc.kind !== 'wordprocessing') {
+    throw new Error('expected a wordprocessing document');
+  }
+  return doc.sections.flatMap((s) => s.blocks);
+}
+
+function slidesOf(doc: ReturnType<typeof reconstructPresentation>): ContentSlide[] {
+  if (doc.kind !== 'presentation') {
+    throw new Error('expected a presentation document');
+  }
+  return [...doc.slides];
+}
+
+describe('reconstructWordprocessing: vector recovery', () => {
+  it('recovers a page\'s rect/ellipse/line/path geometry as an embedded drawing block, using the same classification reconstructDrawing does', () => {
+    const items: LayoutItem[] = [
+      text({ text: 'Heading', xPt: 50, yPt: 700, widthPt: 60 }),
+      { kind: 'rect', xPt: 50, yPt: 600, widthPt: 100, heightPt: 40, fill: RED },
+      { kind: 'ellipse', xPt: 200, yPt: 600, widthPt: 60, heightPt: 30, stroke: { color: BLACK, widthPt: 1 } },
+      line(50, 580, 300, 580),
+    ];
+    const blocks = blocksOf(reconstructWordprocessing(docFrom([page(612, 792, items)])));
+    const embedded = blocks.find((b) => b.kind === 'embeddedObject');
+    const vectors = drawingVectorsOf(embedded);
+    expect(vectors.map((v) => v.kind)).toEqual(['rect', 'ellipse', 'line']);
+    // The identical flipY inverse reconstructDrawing applies: yPt = 792 - 600 - 40.
+    expect(vectors[0]).toMatchObject({ kind: 'rect', frame: { xPt: 50, yPt: 152, widthPt: 100, heightPt: 40 }, fill: RED, paintOrder: 0 });
+    // The text is untouched by vector recovery -- it still clusters into its own paragraph.
+    expect(blocks.filter((b) => b.kind === 'paragraph')).toHaveLength(1);
+  });
+
+  it('emits no embedded drawing block at all for a page carrying no vector geometry, leaving a text-only page exactly as it was', () => {
+    const blocks = blocksOf(reconstructWordprocessing(docFrom([page(612, 792, [text({ text: 'Only text', xPt: 50, yPt: 700, widthPt: 60 })])])));
+    expect(blocks.map((b) => b.kind)).toEqual(['paragraph']);
+  });
+
+  // The recovered drawing sorts into the page's own block flow by its topmost vector, not pinned to the top or bottom -- so a rule drawn below a paragraph reads after it.
+  it('positions the recovered drawing among the page\'s other blocks by its own topmost recovered edge', () => {
+    const items: LayoutItem[] = [
+      text({ text: 'Above the rule', xPt: 50, yPt: 700, widthPt: 80 }),
+      line(50, 650, 300, 650),
+      text({ text: 'Below the rule', xPt: 50, yPt: 600, widthPt: 80 }),
+    ];
+    const blocks = blocksOf(reconstructWordprocessing(docFrom([page(612, 792, items)])));
+    expect(blocks.map((b) => b.kind)).toEqual(['paragraph', 'embeddedObject', 'paragraph']);
+  });
+});
+
+describe('reconstructPresentation: vector recovery', () => {
+  it('recovers a slide\'s vector geometry as a backmost shape wrapping an embedded drawing block', () => {
+    const items: LayoutItem[] = [
+      { kind: 'rect', xPt: 0, yPt: 0, widthPt: 960, heightPt: 540, fill: RED },
+      text({ text: 'Title', xPt: 100, yPt: 400, widthPt: 60 }),
+    ];
+    const [slide] = slidesOf(reconstructPresentation(docFrom([page(960, 540, items)])));
+    expect(slide!.shapes).toHaveLength(2);
+    // Vectors paint behind everything else, matching drawing.ts's own documented fallback ordering.
+    expect(drawingVectorsOf(slide!.shapes[0]!.blocks[0]).map((v) => v.kind)).toEqual(['rect']);
+    expect(slide!.shapes[0]!.frame).toEqual({ xPt: 0, yPt: 0, widthPt: 960, heightPt: 540 });
+    expect(slide!.shapes[1]!.blocks[0]).toMatchObject({ kind: 'paragraph' });
+  });
+
+  it('leaves a text-only slide with exactly the shapes it always had', () => {
+    const [slide] = slidesOf(reconstructPresentation(docFrom([page(960, 540, [text({ text: 'Title', xPt: 100, yPt: 400, widthPt: 60 })])])));
+    expect(slide!.shapes).toHaveLength(1);
+    expect(slide!.shapes[0]!.blocks[0]).toMatchObject({ kind: 'paragraph' });
   });
 });

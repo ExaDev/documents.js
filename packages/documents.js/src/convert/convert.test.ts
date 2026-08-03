@@ -220,7 +220,7 @@ describe('odsToPdf', () => {
   });
 
   it('reads print settings (page size, headers) through to the rendered page', () => {
-    // Gridlines aren't asserted here via a round trip through readPdf: readPdf's own content-stream interpreter (pdf-codec's interpret.ts) never reconstructs a 'line' kind item at all -- a pre-existing, documented asymmetry of the read direction, not something this change touches. Gridline emission itself (one LayoutLine per boundary) is already covered directly at the layout level by src/layout/sheets.test.ts.
+    // Gridlines aren't asserted here, only page size and header labels: gridline emission itself (one LayoutLine per boundary) is covered directly at the layout level by src/layout/sheets.test.ts, and its survival through a real PDF round trip is covered by the pdfToOds lattice-detection tests rather than duplicated here.
     const pdfBytes = odsToPdf(minimalOdsBytes());
     const layout = readPdf(pdfBytes);
     expect(layout.pages[0]).toMatchObject({ widthPt: 400, heightPt: 300 });
@@ -229,7 +229,7 @@ describe('odsToPdf', () => {
     expect(text).toContain('1'); // row-number header label
   });
 
-  // End-to-end proof for the per-cell decoration wiring, all the way from real ODF style XML: decoratedOdsBytes declares fo:background-color / fo:border / fo:text-align / style:vertical-align on real table-cell styles, odf.js's readOds resolves all four onto ContentSheetCell, and src/layout/sheets.ts turns them into genuine LayoutRect/LayoutLine items and a genuinely different text position. Asserted against onDocument's own LayoutDocument rather than a readPdf round trip, because readPdf never reconstructs a 'line' kind item at all (a documented, pre-existing asymmetry -- see the print-settings test above for the same reason).
+  // End-to-end proof for the per-cell decoration wiring, all the way from real ODF style XML: decoratedOdsBytes declares fo:background-color / fo:border / fo:text-align / style:vertical-align on real table-cell styles, odf.js's readOds resolves all four onto ContentSheetCell, and src/layout/sheets.ts turns them into genuine LayoutRect/LayoutLine items and a genuinely different text position. Asserted against onDocument's own LayoutDocument rather than a readPdf round trip, so the assertions pin what src/layout/sheets.ts itself emitted rather than what survived a second, independently-tested encode/decode hop.
   it('renders a decorated cell\'s own background, borders, alignment, and vertical alignment into the resulting layout', () => {
     let pkg: DocumentPackage | undefined;
     odsToPdf(decoratedOdsBytes(), { onDocument: (p) => { pkg = p; } });
@@ -471,7 +471,7 @@ describe('pdfToOdp', () => {
 });
 
 describe('pdfToOds', () => {
-  // gridOdsBytes (src/test-support/ods.ts) is a purpose-built fixture: three real, fully visible columns and three rows, gridlines AND headers explicitly enabled -- unlike minimalOdsBytes's own hidden column, which collapses two of its own gridline boundaries onto the same x position and would defeat this test's whole point. odsToPdf genuinely draws the LayoutLine lattice (src/layout/sheets.ts's renderGridlines) reconstructSpreadsheet's own gridline-detection path needs, so this proves the lattice path is what actually ran, not the text-clustering fallback -- and that every recovered cell is an honest bare string, never re-parsed into a typed value.
+  // gridOdsBytes (src/test-support/ods.ts) is a purpose-built fixture: three real, fully visible columns and three rows, gridlines AND headers explicitly enabled -- unlike minimalOdsBytes's own hidden column, which collapses two of its own gridline boundaries onto the same x position and would defeat this test's whole point. odsToPdf genuinely draws the LayoutLine lattice (src/layout/sheets.ts's renderGridlines) reconstructSpreadsheet's own gridline-detection path needs, so this proves the lattice path is what actually ran, not the text-clustering fallback. Every recovered cell is an honest bare string, never re-parsed into a typed value.
   it('round-trips a real gridline lattice and every cell\'s text through odsToPdf then pdfToOds, detected via the drawn gridlines rather than text-position clustering', () => {
     const pdfBytes = odsToPdf(gridOdsBytes());
     const odsBytes = pdfToOds(pdfBytes);
@@ -501,6 +501,7 @@ describe('pdfToOds', () => {
       ['Four', 'Five', 'Six'],
     ]);
   });
+
 
   it('throws when the signal is already aborted', () => {
     const pdfBytes = odsToPdf(gridOdsBytes());
@@ -581,8 +582,8 @@ function vectorBoundingBox(vector: ContentVector): { xPt: number; yPt: number; w
 }
 
 describe('pdfToOdg', () => {
-  // PDF has no native rect/ellipse/line primitive beyond one narrow case: readPdf's own content-stream interpreter (pdf-codec's interpret.ts) only recovers a LayoutRect fast path for a FILL-ONLY rectangle under a non-rotated CTM (the exact case the fixture's rectBack/rectFront both are). Everything else here -- Rect1 (filled AND stroked, so it takes the 'B' paint operator, not 'f', and therefore misses the fast path), the ellipse (always written as four cubic Beziers, pdf-codec's content-write.ts's writeEllipse -- PDF has no native ellipse operator at all), and the line (readPdf never reconstructs a 'line' kind item at all, a pre-existing, already-documented README gotcha, confirmed here to extend to every LayoutLine, not just the ones ods's own gridlines produce) -- comes back as a generic LayoutPath, and therefore round-trips through reconstructDrawing as a ContentVector 'path', not its original kind. This is a real, pre-existing PDF-READ-side limitation (not something reconstructDrawing itself introduces), and an honest, expected-approximate/exact split: position and size survive within floating-point tolerance for every vector regardless of kind change; the vector's own discriminant kind survives exactly only for a fill-only, unrotated rect, and for anything that was already a generic path (the curve) to begin with. The text label's own frame is approximate too, for an unrelated reason: reconstructDrawing derives it from real AFM ascent/descent metrics (the same estimation reconstructPresentation already uses), not the original ODF frame's own explicit svg:x/y/width/height, which no longer exists anywhere in the recovered PDF geometry.
-  it("round-trips the fixture's rect/rect/rect/ellipse/line/path mix and text label through odgToPdf then pdfToOdg, with position/size surviving within tolerance and kind narrowing exactly where PDF forces it to", () => {
+  // PDF has no rect, ellipse, or line operator whose presence a reader could simply look for -- only `re` (itself defined as a four-point subpath) and the general path operators -- so what a stroke or fill WAS is recoverable from its geometry or not at all. pdf-codec's own content-stream interpreter now recovers all three from that geometry (its shape-pattern detection: an axis-aligned closed four-corner subpath under any fill/stroke combination is a LayoutRect, a closed four-cubic subpath meeting its bounding box at the four cardinal points with kappa-ratio controls is a LayoutEllipse, an open single-straight-segment stroke-only subpath is a LayoutLine), which is what lets every vector in this fixture round-trip with its ORIGINAL kind intact -- including Rect1, which is filled AND stroked and therefore takes the 'B' paint operator rather than 'f', and the ellipse and the line, all three of which used to come back as a generic 'path'. reconstructDrawing itself is unchanged by that: it always mapped whatever kind it was handed 1:1 (src/layout/reconstruct.ts's layoutItemToVector), so the improvement is entirely in how much kind information survives the PDF, not in how it is mapped afterwards. Position and size were already exact within floating-point tolerance regardless of kind and remain so. The text label's own frame is still approximate, for an unrelated reason: reconstructDrawing derives it from real AFM ascent/descent metrics (the same estimation reconstructPresentation already uses), not the original ODF frame's own explicit svg:x/y/width/height, which no longer exists anywhere in the recovered PDF geometry.
+  it("round-trips the fixture's rect/rect/rect/ellipse/line/path mix and text label through odgToPdf then pdfToOdg, with every vector's own kind, position and size surviving", () => {
     const original = readOdgContent(minimalOdgPackage());
     if (original.kind !== 'drawing') {
       throw new Error('expected a drawing ContentDocument');
@@ -600,17 +601,11 @@ describe('pdfToOdg', () => {
     const afterVectors = roundTripped.pages[0]!.vectors;
     expect(afterVectors).toHaveLength(beforeVectors.length);
 
-    // rectBack, rectFront (fill-only, unrotated): the one case that survives with its original 'rect' kind.
-    expect(afterVectors[0]!.kind).toBe('rect');
-    expect(afterVectors[1]!.kind).toBe('rect');
-    // Rect1 (filled AND stroked), the ellipse, and the line: each degrades to a generic 'path', per this test's own top-of-block note.
-    expect(afterVectors[2]!.kind).toBe('path');
-    expect(afterVectors[3]!.kind).toBe('path');
-    expect(afterVectors[4]!.kind).toBe('path');
-    // curvePath was already a path -- kind is unaffected by the PDF round trip either way.
-    expect(afterVectors[5]!.kind).toBe('path');
+    // Every kind survives: rectBack/rectFront (fill-only), Rect1 (filled AND stroked, the case that used to collapse), the ellipse, the line, and the freeform curve that was a path to begin with.
+    expect(afterVectors.map((v) => v.kind)).toEqual(beforeVectors.map((v) => v.kind));
+    expect(afterVectors.map((v) => v.kind)).toEqual(['rect', 'rect', 'rect', 'ellipse', 'line', 'path']);
 
-    // rectBack/rectFront/Rect1(now a path)/ellipse(now a path)/line(now a path) all compare exactly (within tolerance) against their ORIGINAL frame: none of their own points -- corners for a rect/rectangle-shaped path, kappa-offset control points for an ellipse that by construction never exceed its own bounding box, or the two bare endpoints for a line -- ever extend beyond that frame. curvePath (index 5) is handled separately below, for a genuinely different reason.
+    // The five non-curve vectors all compare exactly (within tolerance) against their ORIGINAL frame: none of their own points -- a rect's corners, an ellipse's kappa-offset controls (which by construction never exceed its own bounding box), or a line's two bare endpoints -- ever extend beyond that frame. curvePath (index 5) is handled separately below, for a genuinely different reason.
     beforeVectors.slice(0, 5).forEach((before, i) => {
       expectBoxClose(vectorBoundingBox(afterVectors[i]!), vectorBoundingBox(before));
     });
@@ -633,16 +628,34 @@ describe('pdfToOdg', () => {
     expect(closeTo(rectBackAfter.fill!.g, rectBackBefore.fill!.g, 0.001)).toBe(true);
     expect(closeTo(rectBackAfter.fill!.b, rectBackBefore.fill!.b, 0.001)).toBe(true);
 
-    // The ellipse-turned-path (index 3) also keeps its exact fill colour and, since writeEllipse now emits an explicit closepath (h) even though its four Bezier arcs already return to their own start point, comes back marked closed: true -- required for a real ODF/SVG consumer to fill it at all (confirmed against actual LibreOffice rendering; see the README's own Gotchas note on this exact fix).
+    // The ellipse comes back as a real 'ellipse' vector -- recovered from the four kappa-ratio cubics writeEllipse emits, since PDF has no ellipse operator to record it with -- keeping its exact fill and stroke.
     const ellipseVectorAfter = afterVectors[3]!;
     const ellipseVectorBefore = beforeVectors[3]!;
-    if (ellipseVectorAfter.kind !== 'path' || ellipseVectorBefore.kind !== 'ellipse') {
-      throw new Error('expected the ellipse to have narrowed to a path');
+    if (ellipseVectorAfter.kind !== 'ellipse' || ellipseVectorBefore.kind !== 'ellipse') {
+      throw new Error('expected the ellipse to survive as an ellipse');
     }
     expect(closeTo(ellipseVectorAfter.fill!.r, ellipseVectorBefore.fill!.r, 0.001)).toBe(true);
     expect(closeTo(ellipseVectorAfter.fill!.g, ellipseVectorBefore.fill!.g, 0.001)).toBe(true);
     expect(closeTo(ellipseVectorAfter.fill!.b, ellipseVectorBefore.fill!.b, 0.001)).toBe(true);
-    expect(ellipseVectorAfter.subpaths[0]?.closed).toBe(true);
+    expect(ellipseVectorAfter.stroke).toBeDefined();
+
+    // The stroked-and-filled rect (index 2) keeps BOTH its fill and its stroke, which is what distinguishes it from the two fill-only rects either side of it and is exactly why it used to miss detection.
+    const strokedRectAfter = afterVectors[2]!;
+    if (strokedRectAfter.kind !== 'rect') {
+      throw new Error('expected the stroked-and-filled rect to survive as a rect');
+    }
+    expect(strokedRectAfter.fill).toBeDefined();
+    expect(strokedRectAfter.stroke).toBeDefined();
+
+    // The line comes back as a real 'line' vector carrying its own two endpoints and stroke, not a degenerate zero-height rect or a one-segment path.
+    const lineAfter = afterVectors[4]!;
+    const lineBefore = beforeVectors[4]!;
+    if (lineAfter.kind !== 'line' || lineBefore.kind !== 'line') {
+      throw new Error('expected the line to survive as a line');
+    }
+    expect(closeTo(lineAfter.from.xPt, lineBefore.from.xPt, GEOMETRY_TOLERANCE_PT)).toBe(true);
+    expect(closeTo(lineAfter.to.yPt, lineBefore.to.yPt, GEOMETRY_TOLERANCE_PT)).toBe(true);
+    expect(closeTo(lineAfter.stroke.widthPt, lineBefore.stroke.widthPt, GEOMETRY_TOLERANCE_PT)).toBe(true);
 
     // The curve specifically must still be a genuine cubic segment, not a straight-line approximation of it -- proving writePath -> readPdf's own general path tracking (pdf-codec's interpret.ts) recovers the real curve, not just its endpoints, and reconstructDrawing carries that segment kind straight across.
     const curveVectorAfter = afterVectors[5]!;
@@ -667,7 +680,7 @@ describe('pdfToOdg', () => {
     expect(Math.abs(afterShape!.frame.yPt - beforeShape!.frame.yPt)).toBeLessThan(20);
   });
 
-  // A rotated vector's own rotation genuinely reaches the page and comes back: convertDrawingToLayout resolves it into a LayoutPath of rotated corners (LayoutRect carries no rotation field of its own), writePath emits those as real PDF path operators, readPdf recovers them, and reconstructDrawing maps them back onto a ContentVector. What survives is the rotated GEOMETRY, not the rotationDeg field -- a PDF path records where the corners ended up, never that a right-angled box was turned to get there -- so the recovered vector is an unrotated 'path' whose four corners sit exactly where the rotation put them. That is the honest limit of the round trip, and it is checkable exactly, because a 90-degree turn of a wide rect about its own centre swaps that rect's width and height.
+  // A rotated vector's own rotation genuinely reaches the page and comes back: convertDrawingToLayout resolves it into a LayoutPath of rotated corners (LayoutRect carries no rotation field of its own), writePath emits those as real PDF path operators, readPdf recovers them, and reconstructDrawing maps them back onto a ContentVector. What survives is the rotated GEOMETRY, not the rotationDeg field -- a PDF path records where the corners ended up, never that a right-angled box was turned to get there -- so the recovered vector carries no rotation of its own, with its corners sitting exactly where the rotation put them. That is the honest limit of the round trip, and it is checkable exactly, because a 90-degree turn of a wide rect about its own centre swaps that rect's width and height. A QUARTER turn specifically leaves the turned corners still axis-aligned, so pdf-codec's own shape detection legitimately recovers this one as a 'rect' again (its rect pattern covers a 90-degree-rotated CTM, not only an unrotated one) -- the same swapped-bounding-box assertions below are what prove the rotation genuinely happened rather than the round trip having quietly ignored it. A rotation that is NOT a multiple of 90 degrees leaves no axis-aligned pattern to match at all and is recovered as a generic 'path', which the sibling test below covers.
   it('carries a rotated odg vector\'s rotation through odgToPdf then pdfToOdg as genuinely rotated recovered geometry', () => {
     const editor = createOdg();
     editor.pageSize = { widthPt: 400, heightPt: 300 };
@@ -691,7 +704,8 @@ describe('pdfToOdg', () => {
       throw new Error('expected a drawing ContentDocument');
     }
     const recovered = roundTripped.pages[0]!.vectors[0]!;
-    expect(recovered.kind).toBe('path'); // a rotated rect is no longer an axis-aligned rect, so PDF can only carry it as a path
+    expect(recovered.kind).toBe('rect'); // a quarter-turned rect is still axis-aligned, so it is recovered as a rect -- turned, not untouched, as the swapped extents below prove
+    expect(recovered.kind === 'rect' ? recovered.rotationDeg : undefined).toBeUndefined(); // the rotationDeg FIELD is genuinely gone: PDF recorded where the corners ended up, not that a turn produced them
 
     // The rotated rect's own bounding box is the source frame's width and height SWAPPED, still centred on the same point -- exactly what a 90-degree turn produces, and nothing an unrotated round trip could ever produce.
     const box = vectorBoundingBox(recovered);
@@ -699,6 +713,34 @@ describe('pdfToOdg', () => {
     expect(closeTo(box.heightPt, 120, GEOMETRY_TOLERANCE_PT)).toBe(true);
     expect(closeTo(box.xPt + box.widthPt / 2, 160, GEOMETRY_TOLERANCE_PT)).toBe(true); // 100 + 120/2
     expect(closeTo(box.yPt + box.heightPt / 2, 120, GEOMETRY_TOLERANCE_PT)).toBe(true); // 100 + 40/2
+  });
+
+  // The complement of the quarter-turn case above, and the boundary of what pdf-codec's shape detection claims: a rect turned by an angle that leaves no edge axis-aligned matches no shape pattern at all, so it is recovered as a generic 'path' carrying the four rotated corners exactly. Kind narrows; geometry does not.
+  it('recovers a rect rotated off-axis as a generic path with its four rotated corners intact', () => {
+    const editor = createOdg();
+    editor.pageSize = { widthPt: 400, heightPt: 300 };
+    const drawPage = editor.addPage();
+    drawPage.addRect({ frame: { xPt: 100, yPt: 100, widthPt: 120, heightPt: 40 }, fill: { r: 1, g: 0, b: 0 } }).rotationDeg = 30;
+
+    const roundTripped = readOdgContent(decodePackage(pdfToOdg(odgToPdf(editor.toBytes()))));
+    if (roundTripped.kind !== 'drawing') {
+      throw new Error('expected a drawing ContentDocument');
+    }
+    const recovered = roundTripped.pages[0]!.vectors[0]!;
+    expect(recovered.kind).toBe('path');
+    if (recovered.kind !== 'path') {
+      throw new Error('expected a path vector');
+    }
+    // Four corners, still a closed quadrilateral, still centred where the rotation left it -- and demonstrably rotated, since a 30-degree turn of a 120x40 rect bounds to 124.0 x 94.6 rather than the original 120 x 40.
+    expect(recovered.subpaths).toHaveLength(1);
+    expect(recovered.subpaths[0]!.segments).toHaveLength(3);
+    expect(recovered.subpaths[0]!.closed).toBe(true);
+    const box = vectorBoundingBox(recovered);
+    const halfTurn = (30 * Math.PI) / 180;
+    expect(closeTo(box.widthPt, 120 * Math.cos(halfTurn) + 40 * Math.sin(halfTurn), GEOMETRY_TOLERANCE_PT)).toBe(true);
+    expect(closeTo(box.heightPt, 120 * Math.sin(halfTurn) + 40 * Math.cos(halfTurn), GEOMETRY_TOLERANCE_PT)).toBe(true);
+    expect(closeTo(box.xPt + box.widthPt / 2, 160, GEOMETRY_TOLERANCE_PT)).toBe(true);
+    expect(closeTo(box.yPt + box.heightPt / 2, 120, GEOMETRY_TOLERANCE_PT)).toBe(true);
   });
 
   it('throws when the signal is already aborted', () => {
