@@ -32,5 +32,8 @@ export function odfFormulaPackage(mathMlInner: string, options?: { readonly star
 export const FRACTION_FORMULA = '<math:mfrac><math:mi>a</math:mi><math:mi>b</math:mi></math:mfrac>';
 export const SQRT_FORMULA = '<math:msqrt><math:mi>x</math:mi></math:msqrt>';
 export const SUBSUP_FORMULA = '<math:mrow><math:mi>x</math:mi><math:msubsup><math:mi>y</math:mi><math:mn>1</math:mn><math:mn>2</math:mn></math:msubsup></math:mrow>';
+// A parenthesised stack of nested fractions: the only construct these fixtures can build that is genuinely taller than the largest pre-built parenthesis STIX Two Math draws by hand (3821 design units), so the fences must be assembled from the font's own repeatable parts to cover it -- see src/mathml/layout.ts's own stretchRowOperators.
+export const STRETCHY_FENCE_FORMULA = `<math:mrow><math:mo>(</math:mo>${['', '', '', '', ''].reduce((inner) => `<math:mfrac>${inner}<math:mn>2</math:mn></math:mfrac>`, '<math:mn>1</math:mn>')}<math:mo>)</math:mo></math:mrow>`;
+
 export const MATRIX_FORMULA =
   '<math:mtable><math:mtr><math:mtd><math:mn>1</math:mn></math:mtd><math:mtd><math:mn>2</math:mn></math:mtd></math:mtr><math:mtr><math:mtd><math:mn>3</math:mn></math:mtd><math:mtd><math:mn>4</math:mn></math:mtd></math:mtr></math:mtable>';

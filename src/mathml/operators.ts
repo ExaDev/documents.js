@@ -42,8 +42,10 @@ function separator(): OperatorProperties {
 }
 
 // largeop + movablelimits: a symbol whose under/over-script content moves to sub/sup position outside display style (sum, product, union, intersection, ⋁/⋀, the coproduct family) -- this is the standard TeX/MathML \nolimits-vs-\limits distinction for "big operators whose limits are conventionally inline in running text".
+//
+// NOT stretchy, matching MathML3's own dictionary entry for every one of these (appendix C gives U+2211 and its siblings stretchy="false"): a big operator grows by selecting a larger DESIGNED size in display style -- the largeop mechanism -- never by stretching to whatever else happens to share its row. The distinction is load-bearing now that layout.ts genuinely stretches a stretchy operator to its row's content: STIX Two Math does declare vertical MathVariants for ∑/∏/⋃, so claiming stretchy here would visibly deform a summation sign standing next to a tall fraction.
 function bigOperatorMovable(): OperatorProperties {
-  return { ...DEFAULT_OPERATOR, lspaceEm: THIN_SPACE, rspaceEm: THIN_SPACE, largeop: true, movablelimits: true, stretchy: true };
+  return { ...DEFAULT_OPERATOR, lspaceEm: THIN_SPACE, rspaceEm: THIN_SPACE, largeop: true, movablelimits: true, stretchy: false };
 }
 
 // largeop, NOT movablelimits: the integral family, whose limits are always sub/sup-positioned even in display style (an integral is never written with the bounds stacked directly above/below the sign).

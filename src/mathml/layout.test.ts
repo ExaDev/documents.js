@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { loadMathFont } from 'pdf-codec';
 import { layoutFormula } from './layout';
-import type { MathGlyphRun, MathRule, MathStroke } from './layout-types';
+import type { MathAssembledGlyphs, MathGlyphRun, MathRule, MathStroke } from './layout-types';
 import type { MathFontMetrics } from './metrics';
 import type { MathMlElement, MathMlNode } from './nodes';
 
@@ -62,6 +62,9 @@ function rules(items: readonly { readonly kind: string }[]): MathRule[] {
 }
 function strokes(items: readonly { readonly kind: string }[]): MathStroke[] {
   return items.filter((i): i is MathStroke => i.kind === 'stroke');
+}
+function assembled(items: readonly { readonly kind: string }[]): MathAssembledGlyphs[] {
+  return items.filter((i): i is MathAssembledGlyphs => i.kind === 'assembled-glyphs');
 }
 
 describe('layoutFormula: mi/mn/mo tokens', () => {
@@ -338,9 +341,161 @@ describe('layoutFormula: token box height from real per-glyph ink bounds', () =>
   });
 
   it('falls back to the font\'s own nominal ascent/descent for a glyph that carries no ink bounds at all', () => {
-    const box = layoutFormula([mi('x')], { metrics: metrics(), sizePt: SIZE_PT, color: BLACK }).box;
-    const m = metrics();
-    expect(box.ascentPt).toBeCloseTo(m.ascentPerEm * SIZE_PT, 6);
-    expect(box.descentPt).toBeCloseTo(m.descentPerEm * SIZE_PT, 6);
+    // Driven through a metrics implementation that deliberately reports no ink bounds, rather than through whichever glyph the currently installed pdf-codec backend happens not to measure: that backend now walks CFF charstrings and supplies real bounds for essentially every drawing glyph, so relying on a real gap would make this test's own premise depend on the font backend's coverage rather than on layoutToken's fallback.
+    const base = metrics();
+    const withoutInk: MathFontMetrics = {
+      ...base,
+      glyph(codePoint: number, sizePt: number) {
+        const real = base.glyph(codePoint, sizePt);
+        return real === undefined ? real : { advanceWidthPt: real.advanceWidthPt, italicCorrectionPt: real.italicCorrectionPt, topAccentXPt: real.topAccentXPt };
+      },
+    };
+    const box = layoutFormula([mi('x')], { metrics: withoutInk, sizePt: SIZE_PT, color: BLACK }).box;
+    expect(box.ascentPt).toBeCloseTo(base.ascentPerEm * SIZE_PT, 6);
+    expect(box.descentPt).toBeCloseTo(base.descentPerEm * SIZE_PT, 6);
+  });
+});
+
+// Stretchy fences drawn from the font's own OpenType MATH MathVariants data. Every glyph ID asserted below is looked up from the real font by the Unicode name of the piece it is -- LEFT PARENTHESIS LOWER HOOK (U+239D) and friends -- rather than hardcoded, which makes these assertions an external cross-check on which pieces the engine picked and in which order, not a restatement of whatever it produced. The bracket family is the one family whose assembly pieces Unicode gives code points to at all (the U+239B..U+23AD block); every other stretchy construction's pieces are unencoded, which is exactly why a placement carries a glyph ID rather than text.
+describe('layoutFormula: stretchy fences', () => {
+  const font = loadMathFont().font;
+  const LEFT_PAREN_PIECES = [0x239d, 0x239c, 0x239b]; // lower hook, extension, upper hook -- bottom to top
+  const RIGHT_PAREN_PIECES = [0x239e, 0x239f, 0x23a0]; // upper hook, extension, lower hook (Unicode names the right-hand pieces top-first)
+  const LEFT_BRACKET_PIECES = [0x23a3, 0x23a2, 0x23a1]; // LEFT SQUARE BRACKET LOWER CORNER / EXTENSION / UPPER CORNER
+
+  function fenced(inner: MathMlElement, open = '(', close = ')'): MathMlElement {
+    return el('mrow', [mo(open), inner, mo(close)]);
+  }
+  // A fraction whose numerator is itself a fraction, nested `depth` times -- the tallest thing this test can build out of ordinary MathML, and the only way to push a fence past the largest pre-built variant the font offers (3821 design units, 45.85pt at 12pt) into a genuine part assembly.
+  function nestedFraction(depth: number): MathMlElement {
+    let numerator: MathMlElement = mn('1');
+    for (let i = 0; i < depth; i++) {
+      numerator = el('mfrac', [numerator, mn('2')]);
+    }
+    return numerator;
+  }
+  function layout(root: MathMlElement) {
+    return layoutFormula([root], { metrics: metrics(), sizePt: SIZE_PT, color: BLACK }).box;
+  }
+
+  it('leaves an ordinary inline fence as a text glyph run, since the base glyph already covers its content', () => {
+    const box = layout(fenced(mi('x')));
+    // Nothing to assemble: 'x' is well inside the base parenthesis, so the operator keeps its real Unicode text -- which is what keeps a plain (x) extracting as "(x)" from the resulting PDF.
+    expect(assembled(box.items)).toHaveLength(0);
+    expect(glyphRuns(box.items).map((run) => run.text)).toContain('(');
+    expect(glyphRuns(box.items).map((run) => run.text)).toContain(')');
+  });
+
+  it('selects a larger pre-built variant glyph for a fence around a single fraction', () => {
+    const box = layout(fenced(nestedFraction(1)));
+    const items = assembled(box.items);
+    expect(items).toHaveLength(2);
+    // One glyph each: a pre-built variant, not an assembly -- a single-level fraction is well within the sizes STIX Two Math draws by hand.
+    expect(items.map((item) => item.placements.length)).toEqual([1, 1]);
+    expect(items.map((item) => item.text)).toEqual(['(', ')']);
+    // A genuinely different glyph from the base parenthesis, and from each other (the font draws left and right separately).
+    const drawn = items.map((item) => item.placements[0]!.glyphId);
+    expect(drawn[0]).not.toBe(font.glyphId(0x28));
+    expect(drawn[1]).not.toBe(font.glyphId(0x29));
+    expect(drawn[0]).not.toBe(drawn[1]);
+  });
+
+  it('assembles a fence from the font\'s own real parts once no pre-built variant is large enough', () => {
+    const box = layout(fenced(nestedFraction(4)));
+    const [open, close] = assembled(box.items);
+    expect(open).toBeDefined();
+    expect(close).toBeDefined();
+
+    // Bottom hook, one or more extension pieces, top hook -- identified by the Unicode code points of the pieces themselves, so this checks the engine picked the real parenthesis parts in the real bottom-to-top order the font lists them in.
+    const openGlyphs = open!.placements.map((placement) => placement.glyphId);
+    expect(openGlyphs.length).toBeGreaterThan(2);
+    expect(openGlyphs[0]).toBe(font.glyphId(LEFT_PAREN_PIECES[0]!));
+    expect(openGlyphs[openGlyphs.length - 1]).toBe(font.glyphId(LEFT_PAREN_PIECES[2]!));
+    expect(new Set(openGlyphs.slice(1, -1))).toEqual(new Set([font.glyphId(LEFT_PAREN_PIECES[1]!)]));
+    expect(close!.placements.map((p) => p.glyphId)[0]).toBe(font.glyphId(RIGHT_PAREN_PIECES[2]!));
+    expect(close!.placements.map((p) => p.glyphId).at(-1)).toBe(font.glyphId(RIGHT_PAREN_PIECES[0]!));
+
+    // Parts are laid down bottom to top, so in the box's own y-down space each successive placement sits strictly HIGHER (smaller yPt) than the one before it, and they all share one x.
+    const ys = open!.placements.map((placement) => placement.yPt);
+    for (let i = 1; i < ys.length; i++) {
+      expect(ys[i]!).toBeLessThan(ys[i - 1]!);
+    }
+    expect(new Set(open!.placements.map((placement) => placement.xPt)).size).toBe(1);
+  });
+
+  it('assembles a square bracket from its own square-bracket parts, not the parenthesis ones', () => {
+    const box = layout(fenced(nestedFraction(4), '[', ']'));
+    const [open] = assembled(box.items);
+    const glyphs = open!.placements.map((placement) => placement.glyphId);
+    expect(glyphs[0]).toBe(font.glyphId(LEFT_BRACKET_PIECES[0]!));
+    expect(glyphs.at(-1)).toBe(font.glyphId(LEFT_BRACKET_PIECES[2]!));
+    expect(new Set(glyphs.slice(1, -1))).toEqual(new Set([font.glyphId(LEFT_BRACKET_PIECES[1]!)]));
+  });
+
+  it('sizes the assembly to the actual content height, adding parts as the content grows', () => {
+    const partCounts = [4, 6, 8].map((depth) => assembled(layout(fenced(nestedFraction(depth))).items)[0]!.placements.length);
+    for (let i = 1; i < partCounts.length; i++) {
+      expect(partCounts[i]!).toBeGreaterThan(partCounts[i - 1]!);
+    }
+  });
+
+  it('makes the fence at least as tall as the content it wraps, and no shorter than the base glyph was', () => {
+    const inner = nestedFraction(4);
+    const contentBox = layout(inner);
+    const fencedBox = layout(fenced(inner));
+    expect(fencedBox.ascentPt).toBeGreaterThanOrEqual(contentBox.ascentPt);
+    expect(fencedBox.descentPt).toBeGreaterThanOrEqual(contentBox.descentPt);
+    // The whole row is now as tall as the fence rather than as tall as the fraction, since a symmetric fence overshoots whichever side of the axis is shorter.
+    expect(fencedBox.heightPt).toBeGreaterThan(contentBox.heightPt);
+  });
+
+  it('centres a stretched fence on the maths axis rather than on the text baseline', () => {
+    // A symmetric fence's own ascent and descent are (axis + h/2) and (h/2 - axis), so their difference is twice the axis height whatever h turns out to be -- and because a symmetric fence always covers the content on both sides of the axis, the whole fenced row inherits that same difference. A baseline-aligned fence would instead show almost all of its height as ascent, so this is a real discriminator, not a tautology.
+    //
+    // The residual tolerance is one font design unit (0.012pt at 12pt): a construction's own measured INK is a design unit or two shorter than the nominal advance the assembly model reaches its target with, so the fence can end up a hair shorter than the content's own descent on one side, which the row's own max() then keeps.
+    const oneDesignUnitPt = SIZE_PT / loadMathFont().font.descriptor.unitsPerEm;
+    for (const depth of [1, 4, 6]) {
+      const box = layout(fenced(nestedFraction(depth)));
+      expect(assembled(box.items)).toHaveLength(2);
+      expect(Math.abs(box.ascentPt - box.descentPt - 2 * metrics().axisHeightPt)).toBeLessThanOrEqual(oneDesignUnitPt);
+      // Not merely baseline-aligned: a tall fence genuinely descends well below the baseline.
+      expect(box.descentPt).toBeGreaterThan(metrics().axisHeightPt);
+    }
+  });
+
+  it('sizes every stretchy fence in a row to the row\'s own content, never to each other', () => {
+    // The target is the maximum extent of the row's NON-stretchy children, so adding more fences around the same fraction cannot change any of them: the outer parenthesis assembles identically whether it is alone or wrapped around three further fences. Sizing to each other would make each successive fence grow.
+    const inner = nestedFraction(4);
+    const alone = assembled(layout(fenced(inner)).items);
+    const nested = assembled(layout(el('mrow', [mo('('), mo('['), inner, mo(']'), mo(')')])).items);
+    expect(nested).toHaveLength(4);
+    // Compared on glyph ID and vertical placement: only xPt legitimately differs, since the extra inner fences push the closing one further right along the row.
+    const vertical = (item: MathAssembledGlyphs) => item.placements.map((placement) => ({ glyphId: placement.glyphId, yPt: placement.yPt }));
+    expect(vertical(nested[0]!)).toEqual(vertical(alone[0]!));
+    expect(vertical(nested.at(-1)!)).toEqual(vertical(alone[1]!));
+    // The mirrored halves of one pair are the same construction drawn from the font's own left- and right-hand pieces, so they span identically even though every glyph ID differs.
+    const span = (item: MathAssembledGlyphs) => Math.abs(item.placements[0]!.yPt - item.placements.at(-1)!.yPt);
+    expect(span(alone[1]!)).toBeCloseTo(span(alone[0]!), 9);
+    expect(alone[1]!.placements.map((p) => p.glyphId)).not.toEqual(alone[0]!.placements.map((p) => p.glyphId));
+  });
+
+  it('honours an explicit stretchy="false" on the operator', () => {
+    const inner = nestedFraction(4);
+    const stretchyOff = el('mrow', [el('mo', [text('(')], [{ name: 'stretchy', value: 'false' }]), inner, mo(')')]);
+    const items = assembled(layoutFormula([stretchyOff], { metrics: metrics(), sizePt: SIZE_PT, color: BLACK }).box.items);
+    expect(items).toHaveLength(1); // only the closing fence stretched
+    expect(items[0]!.text).toBe(')');
+  });
+
+  it('never stretches a big operator, whose display size comes from largeop rather than from its row', () => {
+    // STIX Two Math does declare vertical MathVariants for the summation sign, so this only holds because the operator dictionary correctly reports it as non-stretchy (see operators.ts's own bigOperatorMovable note).
+    const box = layout(el('mrow', [mo('∑'), nestedFraction(4)]));
+    expect(assembled(box.items)).toHaveLength(0);
+  });
+
+  it('leaves a stretchy operator alone when there is nothing else in the row to stretch to', () => {
+    const box = layout(el('mrow', [mo('('), mo(')')]));
+    expect(assembled(box.items)).toHaveLength(0);
+    expect(glyphRuns(box.items).map((run) => run.text)).toEqual(['(', ')']);
   });
 });
