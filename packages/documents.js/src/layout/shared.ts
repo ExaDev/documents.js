@@ -51,7 +51,7 @@ export function lineNaturalHeightPt(line: WrappedLine, measurer: TextMeasurer, f
   return max;
 }
 
-// Justification (stretching inter-word spacing to fill the line) is not implemented for v1 -- treated as left-aligned, a documented narrowing rather than a silent approximation left unexplained.
+// The whole-line offset for center/right alignment, or the paragraph-start offset (0) for left/justify. Justification's own inter-word stretching is a per-fragment concern, not a single whole-line offset -- see justifyLineGapsPt below, which a justified paragraph's own line-emission loop calls in addition to (not instead of) this function.
 export function alignmentOffsetPt(alignment: Alignment | undefined, contentWidthPt: number, lineWidthPt: number): number {
   if (alignment === 'center') {
     return Math.max(0, (contentWidthPt - lineWidthPt) / 2);
@@ -60,6 +60,48 @@ export function alignmentOffsetPt(alignment: Alignment | undefined, contentWidth
     return Math.max(0, contentWidthPt - lineWidthPt);
   }
   return 0;
+}
+
+// Floating-point tolerance for detecting a genuine inter-word gap between two adjacent wrapped-line fragments (see justifyLineGapsPt) -- widths coming out of TextMeasurer are IEEE-754 doubles accumulated across several additions, so an exact-zero comparison would misclassify a genuine touching pair (e.g. a single word split across a run-boundary, which wrapRunsToWidth's own atomizeRuns keeps as one unbreakable box atom with zero gap between its fragments) as a gapped one on some inputs.
+const GAP_DETECTION_EPSILON_PT = 0.01;
+
+// The standard justification algorithm: computes, per fragment of one already-wrapped line, the cumulative extra horizontal offset (points) that stretches the line's own natural word/single-space layout out to fill targetWidthPt exactly. wrapRunsToWidth's own WrappedLine carries only natural (unstretched) per-fragment xOffsetPt values with no record of where a word boundary (a consumed glue/space atom) fell versus where two fragments merely abut because they're pieces of one word split across a run boundary -- so this function first recovers that distinction by comparing each fragment's own start offset against the previous fragment's natural end (text width already known to the caller's own measurer): a gap wider than floating-point noise between the two means a space stood there. The slack (targetWidthPt minus the line's own natural widthPt) is then divided evenly across every detected gap and applied as an increasing cumulative offset from that gap onward, so the line's last fragment ends exactly at targetWidthPt. Returns an all-zero array (nothing shifts) when there is nothing to stretch across -- fewer than two fragments (no possible gap), no genuine gap detected between any adjacent pair (a single unbroken word), or the line's natural width already meets or exceeds the target (this function only ever adds space; it never compresses an over-width line). The caller adds `result[i]` onto `line.fragments[i].xOffsetPt` -- the fragment's own content and its unstretched natural offset are otherwise untouched.
+export function justifyLineGapsPt(line: WrappedLine, targetWidthPt: number, measurer: TextMeasurer): readonly number[] {
+  const fragments = line.fragments;
+  const extrasPt = new Array<number>(fragments.length).fill(0);
+  if (fragments.length < 2) {
+    return extrasPt;
+  }
+
+  const gapIndices: number[] = [];
+  for (let i = 0; i < fragments.length - 1; i++) {
+    const fragment = fragments[i]!;
+    const next = fragments[i + 1]!;
+    const naturalEndPt = fragment.xOffsetPt + measurer.widthOfTextAtSize(fragment.text, fragment.font, fragment.sizePt);
+    if (next.xOffsetPt - naturalEndPt > GAP_DETECTION_EPSILON_PT) {
+      gapIndices.push(i);
+    }
+  }
+  if (gapIndices.length === 0) {
+    return extrasPt;
+  }
+
+  const slackPt = targetWidthPt - line.widthPt;
+  if (slackPt <= 0) {
+    return extrasPt;
+  }
+
+  const extraPerGapPt = slackPt / gapIndices.length;
+  let cumulativePt = 0;
+  let gapPointer = 0;
+  for (let i = 0; i < fragments.length; i++) {
+    extrasPt[i] = cumulativePt;
+    if (gapPointer < gapIndices.length && gapIndices[gapPointer] === i) {
+      cumulativePt += extraPerGapPt;
+      gapPointer++;
+    }
+  }
+  return extrasPt;
 }
 
 function pushBorderLine(border: ContentBorder | undefined, x1Pt: number, y1Pt: number, x2Pt: number, y2Pt: number, sourcePath: string | undefined, out: LayoutItem[]): void {

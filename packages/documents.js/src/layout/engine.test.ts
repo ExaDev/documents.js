@@ -234,4 +234,30 @@ describe('convertWordprocessingToLayout: indentation and alignment', () => {
     // width('hi')=2; content width 100; offset=(100-2)/2=49.
     expect(text?.xPt).toBe(49);
   });
+
+  it('stretches inter-word gaps on a justified paragraph\'s own wrapped (non-final) lines, but leaves its final line at natural, unstretched spacing', () => {
+    // Content width 7pt; each word ('aa'/'bb'/'cc'/'dd') is 2pt wide, a space 1pt -- "aa bb" (5pt) fits, "aa bb cc" (8pt) doesn't, so this wraps into two lines of two words each: "aa bb" then "cc dd", both naturally 5pt wide.
+    const layout = convert([
+      section([paragraph([run('aa bb cc dd', { sizePt: 10 })], { alignment: 'justify' })], {
+        pageSize: { widthPt: 7, heightPt: 50 },
+        margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+      }),
+    ]);
+    const [aa, bb, cc, dd] = textItems(layout.pages[0]!.items);
+    expect([aa?.text, bb?.text, cc?.text, dd?.text]).toEqual(['aa', 'bb', 'cc', 'dd']);
+
+    // Non-final line ("aa bb"): natural width 5pt against a 7pt target line box -- 2pt of slack, one gap, so the whole 2pt lands on 'bb', which is otherwise naturally 1pt after 'aa'.
+    expect(aa?.xPt).toBe(0);
+    expect(bb?.xPt).toBe(5); // natural offset 3 + 2pt of distributed slack
+    const nonFinalGapPt = (bb?.xPt ?? 0) - (aa?.xPt ?? 0) - 2; // 2 = width of 'aa'
+
+    // Final line ("cc dd") is never stretched, even though it has the identical 2pt of slack available -- it renders at its own natural, single-space gap instead.
+    expect(cc?.xPt).toBe(0);
+    expect(dd?.xPt).toBe(3);
+    const finalGapPt = (dd?.xPt ?? 0) - (cc?.xPt ?? 0) - 2;
+
+    expect(nonFinalGapPt).toBe(3);
+    expect(finalGapPt).toBe(1);
+    expect(nonFinalGapPt).toBeGreaterThan(finalGapPt);
+  });
 });
