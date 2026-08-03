@@ -239,19 +239,17 @@ export { applyMathVariant, isMathVariant, mapMathVariant } from './mathml/varian
 // --- Format <-> ContentDocument readers and layout algorithms, each independently usable rather than only reachable through the ergonomic conversions below. ---
 export { readDocxContent } from './ooxml/docx/read';
 export { readPptxContent } from './ooxml/pptx/read';
-export type { OdtContentResult } from './odf/odt/read';
 export { readOdtContent } from './odf/odt/read';
-export type { OdpContentResult } from './odf/odp/read';
 export { readOdpContent } from './odf/odp/read';
 export { readOdsContent } from './odf/ods/read';
 export { readOdgContent } from './odf/odg/read';
-export type { StandaloneFormulaContent } from './odf/formula/read';
 export { readOdfEmbeddedFormula, readOdfFormulaContent } from './odf/formula/read';
 // markdown <-> ContentDocument -- readMarkdownContent/buildMarkdownText are thin adapters over markdown-codec's own readMarkdown/writeMarkdown (see src/markdown/read.ts's own module comment), never re-exported here directly for the same reason readDocx/readPptx aren't (see this section's own top-of-file note): markdown-codec's own readMarkdown/writeMarkdown operate on document-schema.js's ContentDocument shape directly, a nominally different type from this package's own local ContentDocument above, so exposing both would invite a caller to reach for the wrong one. decodeMarkdownText/encodeMarkdownText are the byte<->text boundary markdown-codec itself has no opinion on (it operates on strings, not bytes) -- exported for a caller composing readMarkdownContent/buildMarkdownText directly, matching every other independently-exported pipeline stage in this section.
 export { decodeMarkdownText, encodeMarkdownText } from './markdown/text';
 export { readMarkdownContent } from './markdown/read';
 export { buildMarkdownText } from './markdown/write';
-export type { EmbeddedFormula } from './model/formula';
+// A formula travels inside a ContentDocument now (document-schema.js's own 'formula' variant), not alongside one -- these are the small helpers for building and reading that shape: the 'formula'-kind envelope, the embedded-object block an odt/odp reader produces for an inline formula, the narrowing back out of such a block, and the plain-text stand-in for a consumer with no MathML rendering of its own.
+export { buildFormulaBlock, formulaDocument, formulaOfBlock, formulaPlaceholderText } from './model/formula';
 export type { PositionedFormula } from 'pdf-codec';
 export type { EngineLayoutOptions, WordprocessingLayoutResult } from './layout/engine';
 export { convertWordprocessingToLayout } from './layout/engine';

@@ -1,5 +1,6 @@
-import type { ContentBlock, ContentDocument, ContentParagraph, ContentTable } from 'document-schema.js';
+import type { ContentBlock, ContentDocument, ContentEmbeddedObjectBlock, ContentParagraph, ContentTable } from 'document-schema.js';
 import type { Package } from 'odf.js';
+import { formulaOfBlock, formulaPlaceholderText } from '../../model/formula';
 import type { OdtBody } from './editor';
 import { createOdt } from './editor';
 import type { OdtList, OdtListItem } from './list';
@@ -167,6 +168,17 @@ function appendBlock(body: OdtBody, block: ContentBlock): void {
     body.appendPageBreak();
   } else if (block.kind === 'table') {
     appendTable(body, block);
+  } else if (block.kind === 'embeddedObject') {
+    appendEmbeddedObject(body, block);
   }
-  // block.kind === 'image' is intentionally unhandled -- see this file's own top-of-file comment. block.kind === 'embeddedObject' falls through here unhandled for the same reason buildDocxPackage's own does: no reader this package depends on produces one yet.
+  // block.kind === 'image' is intentionally unhandled -- see this file's own top-of-file comment.
+}
+
+// An embedded formula becomes a paragraph carrying its own plain-text stand-in, mirroring buildDocxPackage's identical appendEmbeddedObject (see that function for the full reasoning). Writing the real MathML back would mean writing a genuine embedded formula SUB-PACKAGE (a nested Object N/content.xml plus its own draw:frame/draw:object reference and manifest entries) -- a real feature, not a small extension of this block writer -- so the stand-in is the honest degradation until that exists, rather than the formula vanishing without trace.
+function appendEmbeddedObject(body: OdtBody, block: ContentEmbeddedObjectBlock): void {
+  const formula = formulaOfBlock(block);
+  if (formula === undefined) {
+    return;
+  }
+  populateParagraph(body.appendParagraph(), { kind: 'paragraph', runs: [{ text: formulaPlaceholderText(formula) }] });
 }

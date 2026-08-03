@@ -1,5 +1,6 @@
-import type { ContentBlock, ContentDocument, ContentParagraph, ContentTable } from 'document-schema.js';
+import type { ContentBlock, ContentDocument, ContentEmbeddedObjectBlock, ContentParagraph, ContentTable } from 'document-schema.js';
 import type { Package } from 'ooxml.js';
+import { formulaOfBlock, formulaPlaceholderText } from '../../model/formula';
 import { base64ToBytes } from 'ooxml.js';
 import { ptToTwips } from '../../model/units';
 import type { DocxBody } from './editor';
@@ -130,6 +131,16 @@ function appendBlock(body: DocxBody, block: ContentBlock): void {
     body.appendPageBreak();
   } else if (block.kind === 'table') {
     appendTable(body, block);
+  } else if (block.kind === 'embeddedObject') {
+    appendEmbeddedObject(body, block);
   }
-  // block.kind === 'embeddedObject' (document-schema.js's forward-looking schema addition for an OLE-style nested document -- formula/wordprocessing/presentation/spreadsheet/drawing) falls through here unhandled: no reader this package depends on (ooxml.js's readDocx/readPptx, odf.js's readOdt/readOdp/readOds/readOdg) produces one yet, so there is nothing to round-trip today -- a documented, currently-unreachable gap, not a silent one.
+}
+
+// An embedded formula becomes a paragraph carrying the formula's own plain-text stand-in -- its StarMath annotation, or the literal "[formula]". This is a genuine, honest degradation rather than a silent drop: OOXML's own math markup is OMML, a vocabulary this package does not write at all, so there is no way to carry the real MathML into a docx; writing nothing would make the formula vanish without trace, which is exactly the silent-loss failure mode this codebase's conventions rule out. Every OTHER embeddedObject objectKind (an OLE-style nested wordprocessing/presentation/spreadsheet/drawing document) is still unhandled: no reader this package depends on produces one, so there is nothing reachable to round-trip and nothing to degrade.
+function appendEmbeddedObject(body: DocxBody, block: ContentEmbeddedObjectBlock): void {
+  const formula = formulaOfBlock(block);
+  if (formula === undefined) {
+    return;
+  }
+  body.appendParagraph().appendRun({ text: formulaPlaceholderText(formula) });
 }

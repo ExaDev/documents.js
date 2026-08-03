@@ -1,12 +1,12 @@
 import type { Package, XmlElement, XmlNode } from 'odf.js';
 import { attrValue, childrenWithTag, readDrawFrame } from 'odf.js';
+import type { ContentFormula } from 'document-schema.js';
 import type { Box } from '../../model/geometry';
-import type { EmbeddedFormula } from '../../model/formula';
 import { readOdfEmbeddedFormula } from './read';
 
 export interface DetectedFormulaFrame {
   readonly frameElement: XmlElement;
-  readonly formula: EmbeddedFormula;
+  readonly formula: ContentFormula;
   readonly frame: Box;
 }
 
