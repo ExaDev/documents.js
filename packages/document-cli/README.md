@@ -2,7 +2,7 @@
 
 [![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/document-cli) [![npm](https://img.shields.io/badge/npm-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/document-cli) [![Release](https://img.shields.io/github/v/release/ExaDev/document-cli)](https://github.com/ExaDev/document-cli/releases/latest) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/document-cli/ci.yml?branch=main)](https://github.com/ExaDev/document-cli/actions)
 
-> A command-line interface and an interactive terminal (Ink) app for [`documents.js`](https://github.com/ExaDev/documents.js): every docx/pptx/odt/odp/ods/odg/odf/odm/odb conversion, bridge, and editor documents.js exposes, wired up as a scriptable subcommand or a full-screen terminal editor. Installs as either `document-cli` or `doculi`.
+> A command-line interface and an interactive terminal (Ink) app for [`documents.js`](https://github.com/ExaDev/documents.js): every docx/pptx/odt/odp/ods/odg/odf/pdf/odm/odb/xlsx/markdown conversion, bridge, and editor documents.js exposes, wired up as a scriptable subcommand or a full-screen terminal editor. Installs as either `document-cli` or `doculi`.
 
 `document-cli` adds no conversion or editing logic of its own — it is a dispatch layer over `documents.js`'s existing conversion functions, `DocumentConverter` port, live-view editors, and `.odb`/PDF readers. What it adds is two ways to drive them without writing TypeScript: a scriptable, Unix-shaped CLI (stdin/stdout, exit codes, `--json` diagnostics) for pipelines, and a full-screen Ink terminal app for browsing and editing a document interactively.
 
