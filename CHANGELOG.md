@@ -1,3 +1,10 @@
+# [1.72.0](https://github.com/ExaDev/documents.js/compare/v1.71.0...v1.72.0) (2026-08-03)
+
+
+### Features
+
+* enumerate DrawingML/table:table shapes via PptxSlide.tables/OdpSlide.tables ([43c3267](https://github.com/ExaDev/documents.js/commit/43c326717c40b99f3fe1c15c05a9ac37a3cfd389))
+
 # [1.71.0](https://github.com/ExaDev/documents.js/compare/v1.70.1...v1.71.0) (2026-08-03)
 
 
