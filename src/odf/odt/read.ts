@@ -1,6 +1,6 @@
 import type { ContentBlock, ContentDocument } from 'document-schema.js';
 import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
-import type { Package, XmlNode } from 'odf.js';
+import type { Package, XmlElement, XmlNode } from 'odf.js';
 import { findChildElement, readOdt, rootElement } from 'odf.js';
 import { buildFormulaBlock } from '../../model/formula';
 import type { DetectedFormulaFrame } from '../formula/detect';
@@ -23,9 +23,9 @@ export function readOdtContent(pkg: Package): ContentDocument {
     const text = body === undefined ? undefined : findChildElement(body.children, 'office:text');
     if (text !== undefined) {
       const section = odtDoc.sections[0]!;
-      const placements = collectFormulaPlacements(text.children, pkg);
+      const { placements, consumedBlockIndices } = collectFormulaPlacements(text.children, pkg);
       if (placements.length > 0) {
-        odtDoc.sections[0] = { ...section, blocks: spliceFormulaBlocks(section.blocks, placements) };
+        odtDoc.sections[0] = { ...section, blocks: spliceFormulaBlocks(section.blocks, placements, consumedBlockIndices) };
       }
     }
   }
@@ -43,45 +43,88 @@ interface BlockCountState {
   blockCount: number;
 }
 
+// The placements plus the indices of odf.js's OWN blocks that a formula replaces outright rather than following. A text:p carrying nothing but a formula frame IS the formula (the shape OdtBody.appendFormula writes, and the shape LibreOffice writes for a display formula on its own line), so emitting both its empty ContentParagraph and the formula block would leave a blank paragraph beside every formula -- and, since buildOdtPackage writes each formula back into a paragraph of its own, one more blank paragraph on every odt -> docx -> odt hop after that.
+interface FormulaPlacements {
+  readonly placements: readonly FormulaPlacement[];
+  readonly consumedBlockIndices: ReadonlySet<number>;
+}
+
+interface CollectState extends BlockCountState {
+  readonly placements: FormulaPlacement[];
+  readonly consumedBlockIndices: Set<number>;
+}
+
 function pushPlacements(out: FormulaPlacement[], index: number, detected: readonly DetectedFormulaFrame[]): void {
   for (const frame of detected) {
     out.push({ index, detected: frame });
   }
 }
 
+// True when every one of a paragraph's own children is one of the formula frames just detected inside it (or whitespace between them) -- i.e. the paragraph has no text and no other content of its own.
+function isFormulaOnlyParagraph(paragraph: XmlElement, detected: readonly DetectedFormulaFrame[]): boolean {
+  if (detected.length === 0) {
+    return false;
+  }
+  const frames = detected.map((entry) => entry.frameElement);
+  for (const child of paragraph.children) {
+    if (child.type === 'text') {
+      if (child.value.trim().length > 0) {
+        return false;
+      }
+      continue;
+    }
+    if (child.type !== 'element') {
+      continue;
+    }
+    if (!frames.includes(child)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// One paragraph/heading's own contribution: its block, then every formula frame found inside it placed immediately after -- unless the paragraph is nothing but those frames, in which case the block is consumed and the formulas take its place.
+function pushParagraphPlacements(node: XmlElement, pkg: Package, state: CollectState): void {
+  const detected = collectFormulaFrames(node.children, pkg);
+  state.blockCount += 1;
+  if (isFormulaOnlyParagraph(node, detected)) {
+    state.consumedBlockIndices.add(state.blockCount - 1);
+  }
+  pushPlacements(state.placements, state.blockCount, detected);
+}
+
 // Mirrors odf.js's own readOdt/readBlocks walk (typed/odt/read.ts) exactly, counting how many ContentBlocks each office:text child contributes, so a formula frame's own insertion point is COUNTED rather than approximated. That count is what true positional interleaving needs and what this adapter previously did not have: "one raw XML child = one block" does not hold in general, since a single text:list unwraps into one ContentParagraph per list item at every nesting level, and a text:section contributes its whole nested block run.
 //
 // A formula anchored inline inside a paragraph (or inside a table's own cell content) is placed immediately AFTER that paragraph's/table's own block, the closest true position ContentBlock can express: ContentRun is text-only, so there is no inline slot inside a paragraph for an embedded object to occupy, and splitting the paragraph in two around the formula would invent a paragraph boundary the source never had. A formula in a container that contributes no block of its own (a top-level draw:frame, a draw:g group) is placed at the current index instead -- i.e. exactly where it sits, between the blocks either side of it.
-function collectFormulaPlacements(nodes: readonly XmlNode[], pkg: Package): readonly FormulaPlacement[] {
-  const out: FormulaPlacement[] = [];
-  walkForPlacements(nodes, pkg, { blockCount: 0 }, out);
-  return out;
+function collectFormulaPlacements(nodes: readonly XmlNode[], pkg: Package): FormulaPlacements {
+  const state: CollectState = { blockCount: 0, placements: [], consumedBlockIndices: new Set<number>() };
+  walkForPlacements(nodes, pkg, state);
+  return { placements: state.placements, consumedBlockIndices: state.consumedBlockIndices };
 }
 
-function walkForPlacements(nodes: readonly XmlNode[], pkg: Package, state: BlockCountState, out: FormulaPlacement[]): void {
+function walkForPlacements(nodes: readonly XmlNode[], pkg: Package, state: CollectState): void {
   for (const node of nodes) {
     if (node.type !== 'element') {
       continue;
     }
     if (node.tag === 'text:p' || node.tag === 'text:h') {
-      state.blockCount += 1;
-      pushPlacements(out, state.blockCount, collectFormulaFrames(node.children, pkg));
+      pushParagraphPlacements(node, pkg, state);
     } else if (node.tag === 'text:list') {
-      walkListForPlacements(node.children, pkg, state, out);
+      walkListForPlacements(node.children, pkg, state);
     } else if (node.tag === 'table:table') {
       state.blockCount += 1;
-      pushPlacements(out, state.blockCount, collectFormulaFrames(node.children, pkg));
+      pushPlacements(state.placements, state.blockCount, collectFormulaFrames(node.children, pkg));
     } else if (node.tag === 'text:section') {
-      walkForPlacements(node.children, pkg, state, out);
+      walkForPlacements(node.children, pkg, state);
     } else {
       // Every other child contributes no block at all to readOdt's own output -- a draw:frame, a draw:g, a text:table-of-content placeholder, a text:sequence-decls. A formula found beneath one belongs at the current index, before whatever block the next content child produces.
-      pushPlacements(out, state.blockCount, collectFormulaFrames([node], pkg));
+      pushPlacements(state.placements, state.blockCount, collectFormulaFrames([node], pkg));
     }
   }
 }
 
 // The list half of the same mirror: readOdt's own readListItems descends text:list-item children only, emitting one block per text:p/text:h and recursing one nesting level per nested text:list. Anything else inside a list item (including a bare draw:frame) contributes no block, exactly as at top level.
-function walkListForPlacements(itemNodes: readonly XmlNode[], pkg: Package, state: BlockCountState, out: FormulaPlacement[]): void {
+function walkListForPlacements(itemNodes: readonly XmlNode[], pkg: Package, state: CollectState): void {
   for (const item of itemNodes) {
     if (item.type !== 'element' || item.tag !== 'text:list-item') {
       continue;
@@ -91,19 +134,18 @@ function walkListForPlacements(itemNodes: readonly XmlNode[], pkg: Package, stat
         continue;
       }
       if (itemChild.tag === 'text:p' || itemChild.tag === 'text:h') {
-        state.blockCount += 1;
-        pushPlacements(out, state.blockCount, collectFormulaFrames(itemChild.children, pkg));
+        pushParagraphPlacements(itemChild, pkg, state);
       } else if (itemChild.tag === 'text:list') {
-        walkListForPlacements(itemChild.children, pkg, state, out);
+        walkListForPlacements(itemChild.children, pkg, state);
       } else {
-        pushPlacements(out, state.blockCount, collectFormulaFrames([itemChild], pkg));
+        pushPlacements(state.placements, state.blockCount, collectFormulaFrames([itemChild], pkg));
       }
     }
   }
 }
 
-// One forward pass over the original blocks, emitting every placement due before each one. Each formula block's own sourcePath names its FINAL index in the combined array (the array a consumer actually sees), matching how every other block's sourcePath addresses the document it is part of.
-function spliceFormulaBlocks(blocks: readonly ContentBlock[], placements: readonly FormulaPlacement[]): ContentBlock[] {
+// One forward pass over the original blocks, emitting every placement due before each one and skipping every block a formula-only paragraph contributed. Each formula block's own sourcePath names its FINAL index in the combined array (the array a consumer actually sees), matching how every other block's sourcePath addresses the document it is part of.
+function spliceFormulaBlocks(blocks: readonly ContentBlock[], placements: readonly FormulaPlacement[], consumedBlockIndices: ReadonlySet<number>): ContentBlock[] {
   const out: ContentBlock[] = [];
   let next = 0;
   for (let index = 0; index <= blocks.length; index++) {
@@ -113,7 +155,7 @@ function spliceFormulaBlocks(blocks: readonly ContentBlock[], placements: readon
       next += 1;
     }
     const block = blocks[index];
-    if (block !== undefined) {
+    if (block !== undefined && !consumedBlockIndices.has(index)) {
       out.push(block);
     }
   }

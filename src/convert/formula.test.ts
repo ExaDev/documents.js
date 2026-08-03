@@ -2,12 +2,12 @@ import { execFileSync } from 'node:child_process';
 import { writeFileSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { zipPackage } from 'odf.js';
+import { buildXml as buildOdfXml, zipPackage } from 'odf.js';
 import { describe, expect, it } from 'vitest';
 import { FRACTION_FORMULA, MATRIX_FORMULA, odfFormulaBytes, SQRT_FORMULA, SUBSUP_FORMULA } from '../test-support/odf';
 import { minimalOdpBytes } from '../test-support/odp';
 import { minimalOdtBytes } from '../test-support/odt';
-import type { ContentBlock, DocumentPackage } from 'document-schema.js';
+import type { ContentBlock, DocumentPackage, MathMlNode } from 'document-schema.js';
 import { decodePackage } from 'odf.js';
 import type { XmlElement } from 'ooxml.js';
 import { attr, buildXml, childrenWithTag, decodePackage as decodeOoxmlPackage, elementsWithTag, encodePackage as encodeOoxmlPackage, rootElement, textContent } from 'ooxml.js';
@@ -19,7 +19,7 @@ import { readDocxContent } from '../ooxml/docx/read';
 import { readOdpContent } from '../odf/odp/read';
 import { readOdtContent } from '../odf/odt/read';
 import { odmBytes } from '../test-support/odm';
-import { odfToPdf, odmToPdf, odpToPdf, odtToDocx, odtToMarkdown, odtToPdf } from './convert';
+import { docxToOdt, odfToPdf, odmToPdf, odpToPdf, odtToDocx, odtToMarkdown, odtToPdf } from './convert';
 
 // End-to-end coverage for the MathML/formula pipeline: odfToPdf (a standalone .odf formula document) for each of the task's own named curated formulas (a simple fraction, a square root, a superscript/subscript combination, a small matrix via mtable), plus the embedded-formula-inside-odt/odp path. Checks the output PDF is well-formed (readable back through this package's own readPdf; also cross-checked with qpdf --check when that binary is available locally -- see qpdfCheck below) and that real layout invariants hold, not just "it doesn't crash".
 
@@ -504,5 +504,86 @@ describe('odtToDocx: an embedded formula becomes real OOXML math', () => {
     }
     const root = documentRootOf(encodeOoxmlPackage(buildDocxPackage(combined)));
     expect(elementsWithTag([root], 'm:f')).toHaveLength(1);
+  });
+});
+
+// --- The regression this whole pair of features exists to close: a formula surviving odt -> docx -> odt as a formula ---
+
+// Every element tag, nested, with a token element's own text inlined -- the same "same construct types, same content" comparison src/omml/read.test.ts's own round-trip suite uses, applied here to the MathML at each end of a two-format chain.
+function mathSignature(nodes: readonly MathMlNode[]): string {
+  return nodes
+    .flatMap((node) => {
+      if (node.type !== 'element') {
+        return [];
+      }
+      const inner = node.children.some((child) => child.type === 'element') ? mathSignature(node.children) : node.children.map((child) => (child.type === 'text' ? child.value : '')).join('');
+      const colon = node.tag.indexOf(':');
+      return [`${colon === -1 ? node.tag : node.tag.slice(colon + 1)}(${inner})`];
+    })
+    .join(',');
+}
+
+function formulaMathmlOf(blocks: readonly ContentBlock[]): readonly MathMlNode[] {
+  const block = blocks.find((candidate) => candidate.kind === 'embeddedObject');
+  if (block?.kind !== 'embeddedObject' || block.document.kind !== 'formula') {
+    throw new Error(`expected a formula block among ${JSON.stringify(blocks.map((candidate) => candidate.kind))}`);
+  }
+  return block.document.formula.mathml;
+}
+
+describe('odt -> docx -> odt: a formula survives the whole chain as a formula', () => {
+  it('recovers the same MathML at the far end, having been real OMML in the middle', () => {
+    const source = odtWithEmbeddedFormulaBytes();
+    const sourceContent = readOdtContent(decodePackage(source));
+    if (sourceContent.kind !== 'wordprocessing') {
+      throw new Error('expected a wordprocessing ContentDocument');
+    }
+
+    const docxBytes = odtToDocx(source);
+    // The middle of the chain is genuinely editable Word math, not a stand-in and not a picture.
+    expect(elementsWithTag([documentRootOf(docxBytes)], 'm:f')).toHaveLength(1);
+
+    const finalContent = readOdtContent(decodePackage(docxToOdt(docxBytes)));
+    if (finalContent.kind !== 'wordprocessing') {
+      throw new Error('expected a wordprocessing ContentDocument');
+    }
+    expect(blockSummary(finalContent.sections[0]!.blocks)).toEqual(['Before the formula', 'embeddedObject']);
+    expect(mathSignature(formulaMathmlOf(finalContent.sections[0]!.blocks))).toBe(mathSignature(formulaMathmlOf(sourceContent.sections[0]!.blocks)));
+  });
+
+  it('carries the whole odt chain as a real embedded sub-document, not a plain-text stand-in anywhere along it', () => {
+    const odtBytes = docxToOdt(odtToDocx(odtWithEmbeddedFormulaBytes()));
+    const pkg = decodePackage(odtBytes);
+    expect(pkg.parts['Object 1/content.xml']?.kind).toBe('xml');
+    // The literal stand-in the bridge used to write is gone from both ends of the chain.
+    const content = pkg.parts['content.xml'];
+    expect(content?.kind === 'xml' ? buildOdfXml(content.nodes) : '').not.toContain('[formula]');
+  });
+
+  it('renders as genuine typeset MathML when the round-tripped odt is converted to PDF, proving the recovered tree is real math rather than text', () => {
+    const odtBytes = docxToOdt(odtToDocx(odtWithEmbeddedFormulaBytes()));
+    // A rendered MathML formula embeds the real STIX Two Math CID font; a plain-text stand-in would use a standard-14 font and no CIDFont resource at all.
+    expect(new TextDecoder('latin1').decode(odtToPdf(odtBytes))).toContain('CIDFontType0C');
+  });
+
+  it('survives repeated odt -> docx -> odt cycles without accumulating blank paragraphs or losing the formula', () => {
+    let bytes = odtWithEmbeddedFormulaBytes();
+    for (let cycle = 0; cycle < 3; cycle++) {
+      bytes = docxToOdt(odtToDocx(bytes));
+      const content = readOdtContent(decodePackage(bytes));
+      if (content.kind !== 'wordprocessing') {
+        throw new Error('expected a wordprocessing ContentDocument');
+      }
+      expect(blockSummary(content.sections[0]!.blocks)).toEqual(['Before the formula', 'embeddedObject']);
+    }
+  });
+
+  it('takes an INLINE odt formula through the same chain, keeping its own paragraph and its position', () => {
+    const finalContent = readOdtContent(decodePackage(docxToOdt(odtToDocx(odtWithInlineFormulaBytes()))));
+    if (finalContent.kind !== 'wordprocessing') {
+      throw new Error('expected a wordprocessing ContentDocument');
+    }
+    expect(blockSummary(finalContent.sections[0]!.blocks)).toEqual(['First paragraph', 'Second paragraph with  inline.', 'embeddedObject', 'Third paragraph']);
+    expect(mathSignature(formulaMathmlOf(finalContent.sections[0]!.blocks))).toBe('msqrt(mi(x))');
   });
 });
