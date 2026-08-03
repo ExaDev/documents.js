@@ -4,8 +4,8 @@ import { removeChild } from '../../xml/edit';
 import type { ImageInit, MediaContext } from '../odp/image';
 import { insertImageFrameMedia } from '../odp/image';
 import { buildTextBoxFrame, OdpShape } from '../odp/shape';
-import type { BoxVectorInit, LineVectorInit, PathVectorInit } from './vector';
-import { buildEllipseElement, buildLineElement, buildPathElement, buildRectElement, OdgBoxVector, OdgLineVector, OdgPathVector } from './vector';
+import type { BoxVectorInit, LineVectorInit, OdgVector, PathVectorInit } from './vector';
+import { buildEllipseElement, buildLineElement, buildPathElement, buildRectElement, OdgBoxVector, OdgLineVector, OdgPathVector, wrapVectorElement } from './vector';
 
 export interface TextBoxInit {
   readonly frame: Box;
@@ -67,6 +67,22 @@ export class OdgPage {
   }
 
   // Vector primitives (rect/ellipse/line/path) are appended alongside shapes in the SAME draw:page children list -- document order IS paint order for odg, exactly as it is for odp's own slide shapes (see odf.js's own typed/draw/shapes.ts paintOrderKey note: real LibreOffice output never emits an explicit draw:z-index, it reorders elements to already match paint order). A caller wanting a vector to paint behind/in front of a particular shape controls that purely by calling addRect/addEllipse/addLine/addPath/addTextBox/addImage in the desired order.
+
+  // Live handles on every vector primitive already on this page, in paint (document) order -- the vector counterpart to shapes() above, and the read-side inverse of addRect/addEllipse/addLine/addPath. Genuinely live, exactly like every other accessor in this editor family: each returned wrapper holds the real XmlElement inside the decoded Package, so setting `.fill`/`.stroke`/`.frame` on one edits the actual document tree in place, and a later toBytes() carries the change. Without this, a vector was only ever settable at creation time, since add* returned the sole handle that would ever exist for it.
+  vectors(): OdgVector[] {
+    const node = this.live();
+    const out: OdgVector[] = [];
+    for (const child of node.children) {
+      if (child.type !== 'element') {
+        continue;
+      }
+      const vector = wrapVectorElement(node.children, child, this.context.pkg);
+      if (vector !== undefined) {
+        out.push(vector);
+      }
+    }
+    return out;
+  }
 
   addRect(init: BoxVectorInit): OdgBoxVector {
     const node = this.live();

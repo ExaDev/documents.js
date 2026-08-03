@@ -217,7 +217,7 @@ export type { PageImageInit as OdgPageImageInit, TextBoxInit as OdgTextBoxInit }
 export { createOdg, OdgEditor, openOdg } from './edit/odg/editor';
 export { OdgPage } from './edit/odg/page';
 // draw:frame content (text boxes/images) reuses OdpShape wholesale -- see edit/odg/page.ts's own top-of-file note; there is no separate OdgShape class.
-export type { BoxVectorInit as OdgBoxVectorInit, LineVectorInit as OdgLineVectorInit, PathVectorInit as OdgPathVectorInit } from './edit/odg/vector';
+export type { BoxVectorInit as OdgBoxVectorInit, LineVectorInit as OdgLineVectorInit, OdgVector, OdgVectorKind, PathVectorInit as OdgPathVectorInit } from './edit/odg/vector';
 export { OdgBoxVector, OdgLineVector, OdgPathVector } from './edit/odg/vector';
 export { buildOdgPackage } from './edit/odg/content';
 
