@@ -1,5 +1,6 @@
-import { rootElement } from 'odf.js';
+import { decodePackage, encodePackage, rootElement } from 'odf.js';
 import { describe, expect, it } from 'vitest';
+import { readOdtContent } from '../../odf/odt/read';
 import { createOdt } from './editor';
 
 describe('OdtTable', () => {
@@ -81,5 +82,116 @@ describe('OdtTable', () => {
         : [];
     // Two distinct widths (100pt, 200pt) across the first table, plus the second table's 100pt column reusing the first table's own 100pt style -- so exactly two table-column styles total, not three.
     expect(columnStyles).toHaveLength(2);
+  });
+});
+
+describe('OdtTableRow.mergeCellsHorizontally', () => {
+  it('merges colSpan grid columns into one cell, retagging the consumed positions to table:covered-table-cell', () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 1, columns: 4 });
+    table.cell(0, 2).appendParagraph({ text: 'consumed content' });
+
+    const anchor = table.rows()[0]!.mergeCellsHorizontally(1, 2);
+    anchor.appendParagraph({ text: 'anchor content' });
+
+    // 4 grid positions still exist: 1 unmerged real cell (col 0), 1 anchor real cell with colSpan=2 (col 1), 1 table:covered-table-cell (col 2), and 1 unmerged real cell (col 3) -- 3 real cells total
+    expect(table.rows()[0]!.cells()).toHaveLength(3);
+    expect(table.cell(0, 1).colSpan).toBe(2);
+    expect(table.cell(0, 1).text).toContain('anchor content');
+
+    const pkg = decodePackage(encodePackage(editor.toPackage()));
+    const content = readOdtContent(pkg);
+    if (content.kind !== 'wordprocessing') {
+      throw new Error('expected wordprocessing content');
+    }
+    const roundTrippedTable = content.sections[0]?.blocks.find((b) => b.kind === 'table');
+    if (roundTrippedTable?.kind !== 'table') {
+      throw new Error('expected a table block');
+    }
+    // the grid-position invariant: 4 entries total (1 plain + 1 merged-anchor + 2 covered), matching the 4 real grid columns
+    expect(roundTrippedTable.rows[0]?.cells).toHaveLength(4);
+    expect(roundTrippedTable.rows[0]?.cells[1]?.colSpan).toBe(2);
+  });
+
+  it('throws a clear error when the anchor position is already covered by another merge', () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 1, columns: 4 });
+    table.rows()[0]!.mergeCellsHorizontally(0, 2);
+    expect(() => table.rows()[0]!.mergeCellsHorizontally(1, 1)).toThrow(/already covered/);
+  });
+
+  it('silently discards a consumed cell that already had real text, with no error', () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 1, columns: 3 });
+    table.cell(0, 0).appendParagraph({ text: 'anchor' });
+    table.cell(0, 1).appendParagraph({ text: 'about to be discarded' });
+
+    expect(() => table.rows()[0]!.mergeCellsHorizontally(0, 2)).not.toThrow();
+    expect(table.rows()[0]!.cells()).toHaveLength(2);
+  });
+
+  it('throws for an out-of-range startColumnIndex or a colSpan exceeding the row width', () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 1, columns: 2 });
+    expect(() => table.rows()[0]!.mergeCellsHorizontally(5, 1)).toThrow(/does not exist/);
+    expect(() => table.rows()[0]!.mergeCellsHorizontally(0, 5)).toThrow(/exceeds/);
+    expect(() => table.rows()[0]!.mergeCellsHorizontally(0, 0)).toThrow(/positive integer/);
+  });
+});
+
+describe('OdtTable.mergeCells', () => {
+  it('merges a rowSpan x colSpan rectangle, proving the true-grid-column-index property through a prior horizontal merge', () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 2, columns: 4 });
+
+    // First, horizontally merge row 0's columns 1-2 -- this changes row 0's own shape (3 real cells instead of 4).
+    table.rows()[0]!.mergeCellsHorizontally(1, 2);
+
+    // Now merge a rowSpan=2 rectangle starting at grid column 1, spanning 2 columns, over BOTH rows -- this must correctly find grid column 1 in row 0 (now the already-merged anchor) and mark row 1's TRUE grid columns 1 and 2 as covered, despite row 0's own different real-cell-count shape.
+    const anchor = table.mergeCells(0, 1, 2, 2);
+    anchor.appendParagraph({ text: 'block' });
+
+    expect(table.cell(0, 1).colSpan).toBe(2);
+    expect(table.cell(0, 1).rowSpan).toBe(2);
+    // row 1 now has 2 real cells (col 0 and col 3) plus 2 covered positions (cols 1-2)
+    expect(table.rows()[1]!.cells()).toHaveLength(2);
+
+    const pkg = decodePackage(encodePackage(editor.toPackage()));
+    const content = readOdtContent(pkg);
+    if (content.kind !== 'wordprocessing') {
+      throw new Error('expected wordprocessing content');
+    }
+    const roundTrippedTable = content.sections[0]?.blocks.find((b) => b.kind === 'table');
+    if (roundTrippedTable?.kind !== 'table') {
+      throw new Error('expected a table block');
+    }
+    // both rows keep the full 4-grid-position shape
+    expect(roundTrippedTable.rows[0]?.cells).toHaveLength(4);
+    expect(roundTrippedTable.rows[1]?.cells).toHaveLength(4);
+    expect(roundTrippedTable.rows[0]?.cells[1]?.colSpan).toBe(2);
+    expect(roundTrippedTable.rows[0]?.cells[1]?.rowSpan).toBe(2);
+  });
+
+  it('throws a clear error when the already-covered-anchor guard fires through mergeCells', () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 2, columns: 3 });
+    table.mergeCells(0, 0, 2, 2);
+    expect(() => table.mergeCells(0, 1, 1, 1)).toThrow(/already covered/);
+  });
+
+  it('silently discards consumed content, matching the docx primitive\'s own precedent', () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 2, columns: 2 });
+    table.cell(0, 1).appendParagraph({ text: 'discarded' });
+    table.cell(1, 0).appendParagraph({ text: 'also discarded' });
+    expect(() => table.mergeCells(0, 0, 2, 2)).not.toThrow();
+  });
+
+  it('throws for an out-of-range startRow or a rowSpan exceeding the table height', () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 2, columns: 2 });
+    expect(() => table.mergeCells(5, 0, 1, 1)).toThrow(/does not exist/);
+    expect(() => table.mergeCells(0, 0, 5, 1)).toThrow(/exceeds/);
+    expect(() => table.mergeCells(0, 0, 0, 1)).toThrow(/positive integer/);
   });
 });

@@ -133,6 +133,62 @@ export class OdtTableRow {
   appendCoveredCell(): void {
     this.node.children.push(el('table:covered-table-cell'));
   }
+
+  // This row's own true grid-column list -- BOTH real table:table-cell and placeholder table:covered-table-cell children, in document order. ODF's grid model guarantees exactly one child element (of either tag) per grid position in every row, which is why walking both tags (rather than cells()' own real-cell-only filter) gives a startColumnIndex that is correct even for a row a prior vertical merge already covered.
+  private gridCells(): XmlElement[] {
+    const out: XmlElement[] = [];
+    for (const child of this.node.children) {
+      if (child.type === 'element' && (child.tag === 'table:table-cell' || child.tag === 'table:covered-table-cell')) {
+        out.push(child);
+      }
+    }
+    return out;
+  }
+
+  // Merges colSpan grid columns of THIS row into one cell: the anchor at startColumnIndex gets table:number-columns-spanned (via OdtTableCell.colSpan), and every OTHER covered position is RETAGGED in place to table:covered-table-cell -- exactly OdsSheet.mergeCells' own technique (src/edit/ods/sheet.ts: `element.tag = ...; element.attributes = []; element.children = [];`), never removed and reinserted, since ODF's grid model requires one child element per grid position regardless of merge state. Consumed cells' own content is discarded silently and unconditionally -- no check, no guard -- matching that same precedent exactly: documented, intentional behaviour, not a silent trap.
+  mergeCellsHorizontally(startColumnIndex: number, colSpan: number): OdtTableCell {
+    if (!Number.isInteger(colSpan) || colSpan < 1) {
+      throw new Error(`mergeCellsHorizontally: colSpan must be a positive integer, got ${colSpan}`);
+    }
+    const gridCells = this.gridCells();
+    const anchorElement = gridCells[startColumnIndex];
+    if (anchorElement === undefined) {
+      throw new Error(`mergeCellsHorizontally: column ${startColumnIndex} does not exist in this row`);
+    }
+    if (anchorElement.tag === 'table:covered-table-cell') {
+      throw new Error(
+        `mergeCellsHorizontally: column ${startColumnIndex} is already covered by another merge -- address that merge's own anchor cell instead`,
+      );
+    }
+    if (startColumnIndex + colSpan > gridCells.length) {
+      throw new Error(
+        `mergeCellsHorizontally: colSpan ${colSpan} starting at column ${startColumnIndex} exceeds this row's own ${gridCells.length} grid columns`,
+      );
+    }
+    for (let i = 1; i < colSpan; i++) {
+      const consumedElement = gridCells[startColumnIndex + i];
+      if (consumedElement !== undefined) {
+        consumedElement.tag = 'table:covered-table-cell';
+        consumedElement.attributes = [];
+        consumedElement.children = [];
+      }
+    }
+    const anchor = new OdtTableCell(anchorElement, this.pkg);
+    anchor.colSpan = colSpan;
+    return anchor;
+  }
+
+  // Marks the grid position at columnIndex as covered by a merge anchored elsewhere (typically a different row, in a vertical merge's own covered rows) -- the single-position primitive OdtTable.mergeCells uses to stamp every covered position in a rowSpan x colSpan rectangle below the anchor row. Retags in place, exactly like mergeCellsHorizontally's own consumed-cell handling above.
+  markCellCovered(columnIndex: number): void {
+    const gridCells = this.gridCells();
+    const element = gridCells[columnIndex];
+    if (element === undefined) {
+      throw new Error(`markCellCovered: column ${columnIndex} does not exist in this row`);
+    }
+    element.tag = 'table:covered-table-cell';
+    element.attributes = [];
+    element.children = [];
+  }
 }
 
 function buildCell(pkg: Package): XmlElement {
@@ -201,6 +257,32 @@ export class OdtTable {
     const row = el('table:table-row');
     node.children.push(row);
     return new OdtTableRow(row, this.pkg);
+  }
+
+  // Merges the rowSpan x colSpan rectangle anchored at (startRow, startColumn): calls OdtTableRow.mergeCellsHorizontally on the anchor row (which sets the anchor's own colSpan), sets rowSpan on that same anchor cell when rowSpan > 1, then calls markCellCovered for every column the rectangle covers on every row below the anchor -- unlike docx, ODF's grid model means only the FIRST row of a vertical merge needs a real horizontal merge; every row below it just needs its own covered positions stamped, since table:number-rows-spanned on the anchor already says how many rows the merge covers.
+  mergeCells(startRow: number, startColumn: number, rowSpan: number, colSpan: number): OdtTableCell {
+    if (!Number.isInteger(rowSpan) || rowSpan < 1 || !Number.isInteger(colSpan) || colSpan < 1) {
+      throw new Error(`mergeCells: rowSpan and colSpan must be positive integers, got rowSpan=${rowSpan}, colSpan=${colSpan}`);
+    }
+    const rows = this.rows();
+    const anchorRow = rows[startRow];
+    if (anchorRow === undefined) {
+      throw new Error(`mergeCells: row ${startRow} does not exist in this table`);
+    }
+    const anchor = anchorRow.mergeCellsHorizontally(startColumn, colSpan);
+    if (rowSpan > 1) {
+      anchor.rowSpan = rowSpan;
+      for (let r = 1; r < rowSpan; r++) {
+        const coveredRow = rows[startRow + r];
+        if (coveredRow === undefined) {
+          throw new Error(`mergeCells: rowSpan ${rowSpan} starting at row ${startRow} exceeds this table's own ${rows.length} rows`);
+        }
+        for (let c = 0; c < colSpan; c++) {
+          coveredRow.markCellCovered(startColumn + c);
+        }
+      }
+    }
+    return anchor;
   }
 
   remove(): void {
