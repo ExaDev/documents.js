@@ -1,29 +1,58 @@
 import { basename, dirname, extname, join } from 'node:path';
 import { type Command } from 'commander';
-import { decodePackage } from 'odf.js';
+import { decodePackage, encodePackage as encodeOdfPackage, type Package } from 'odf.js';
 import {
+  type ContentDocument,
+  type DocumentFormat,
+  type FontSubstitution,
   OdbNoEmbeddedDataSourceError,
+  OdbReportNotSpecifiedError,
   OdbTableNotFoundError,
   OdbTableNotSpecifiedError,
   OdbUnsupportedFormatError,
+  buildDocxPackage,
+  buildOdtPackage,
+  convertWordprocessingToLayout,
+  createFontMeasurer,
+  createFontRegistry,
+  encodePackage,
+  evaluateSelect,
   odbToCsv,
   odbToXlsx,
+  parseSelect,
+  type ProvidedFont,
   readOdbForms,
+  readOdbInventory,
+  readOdbReportContent,
   readOdbReports,
   readOdbTables,
+  writePdf,
 } from 'documents.js';
 import { describeOdbForm, describeOdbReport, formatOdbFormLines, formatOdbReportLines, odbFormSummary } from '../odb-structure';
 import { createRuntimeSignal } from '../runtime/abort';
-import { createDiagnosticReporter } from '../runtime/diagnostics';
+import { createDiagnosticReporter, createFontSubstitutionReporter, fontSubstitutionToDiagnostic, substitutionToDiagnostic, type DiagnosticReporter } from '../runtime/diagnostics';
 import { EXIT_SUCCESS, EXIT_USAGE_ERROR, mapErrorToExit } from '../runtime/exit-codes';
+import { loadProvidedFonts } from '../runtime/fonts';
 import { readInput, resolveDefaultOutputPath, writeOutput } from '../runtime/io';
-import { formatError } from './shared';
-import { addJsonOption, addOutOption, addQuietOption, addTimeoutOption, addVerboseOption, type ConversionCliFlags } from './options';
+import { formatSqlResultSetTable } from '../sql-result-format';
+import { formatError, resolveTargetFormat } from './shared';
+import { addFontOptions, addJsonOption, addOutOption, addQuietOption, addTimeoutOption, addVerboseOption, type ConversionCliFlags, type FontCliFlags } from './options';
 
 type OdbCliOptions = ConversionCliFlags;
 
 interface OdbToCsvCliOptions extends OdbCliOptions {
   readonly table?: string;
+}
+
+interface OdbQueryCliOptions {
+  readonly json: boolean;
+  readonly sql?: string;
+  readonly query?: string;
+}
+
+interface OdbRenderReportCliOptions extends ConversionCliFlags, FontCliFlags {
+  readonly report?: string;
+  readonly to?: string;
 }
 
 type AbortReason = 'interrupt' | 'timeout' | undefined;
@@ -42,6 +71,15 @@ function reportOdbError(command: string, error: unknown, verbose: boolean, abort
 function reportOdbCsvError(command: string, error: unknown, verbose: boolean, abortReason: AbortReason): number {
   if (error instanceof OdbTableNotSpecifiedError || error instanceof OdbTableNotFoundError) {
     process.stderr.write(`[${command}] ${error.message}\nrun 'odb-tables' first to see the available tables\n`);
+    return mapErrorToExit(error, abortReason);
+  }
+  return reportOdbError(command, error, verbose, abortReason);
+}
+
+// odb-render-report only: OdbReportNotSpecifiedError is thrown exclusively by readOdbReportContent's own report selection (mirrors selectReport in documents.js's src/odb/report/content.ts) -- no other odb command can hit this branch, since odb-query resolves a saved *query* by name, never a report.
+function reportOdbReportError(command: string, error: unknown, verbose: boolean, abortReason: AbortReason): number {
+  if (error instanceof OdbReportNotSpecifiedError) {
+    process.stderr.write(`[${command}] ${error.message}\nrun 'odb-reports' first to see the available reports\n`);
     return mapErrorToExit(error, abortReason);
   }
   return reportOdbError(command, error, verbose, abortReason);
@@ -123,6 +161,62 @@ async function runOdbTables(input: string, options: { readonly json: boolean }):
   }
 }
 
+// odb-query only: resolves the SQL text to run from exactly one of --sql/--query. --sql is used verbatim; --query looks the name up against the .odb's own db:queries (readOdbInventory's own OdbQueryInfo[]) and runs that saved command instead. Mutual exclusivity and "neither was given" are both checked by the caller before this ever runs, so the only failure this itself reports is an unresolvable --query name.
+function resolveQuerySql(pkg: Package, options: { readonly sql?: string; readonly query?: string }): { readonly sql: string } | { readonly errorMessage: string } {
+  if (options.sql !== undefined) {
+    return { sql: options.sql };
+  }
+  const queryName = options.query;
+  if (queryName === undefined) {
+    return { errorMessage: 'pass --sql <text> or --query <savedName>' };
+  }
+  const inventory = readOdbInventory(pkg);
+  const saved = inventory.queries.find((candidate) => candidate.name === queryName);
+  if (saved === undefined) {
+    const available = inventory.queries.map((candidate) => candidate.name);
+    return { errorMessage: `this .odb declares no saved query named '${queryName}'${available.length === 0 ? '' : ` -- available: ${available.join(', ')}`}` };
+  }
+  return { sql: saved.command };
+}
+
+// Runs a bounded single-table SELECT (documents.js's own src/odb/sql/ engine -- parseSelect/evaluateSelect, no database anywhere in the path) over every table an embedded .odb extracts, either given directly via --sql or by naming one of the .odb's own saved queries via --query. --json emits the bare SqlResultSet ({ columns, rows }) straight to stdout, matching odb-tables' own structural-JSON convention rather than the NDJSON-diagnostics convention the conversion-flag commands use -- this command produces no document bytes and reports no diagnostics of its own.
+async function runOdbQuery(input: string, options: OdbQueryCliOptions): Promise<number> {
+  const command = 'odb-query';
+  if (options.sql !== undefined && options.query !== undefined) {
+    process.stderr.write(`[${command}] pass --sql or --query, not both\n`);
+    return EXIT_USAGE_ERROR;
+  }
+  if (options.sql === undefined && options.query === undefined) {
+    process.stderr.write(`[${command}] pass --sql <text> or --query <savedName>\n`);
+    return EXIT_USAGE_ERROR;
+  }
+  const { signal, getAbortReason } = createRuntimeSignal({});
+
+  try {
+    const inputBytes = await readInput(input, { signal });
+    const pkg = decodePackage(new Uint8Array(inputBytes));
+    const resolved = resolveQuerySql(pkg, options);
+    if ('errorMessage' in resolved) {
+      process.stderr.write(`[${command}] ${resolved.errorMessage}\n`);
+      return EXIT_USAGE_ERROR;
+    }
+
+    const result = evaluateSelect(parseSelect(resolved.sql), readOdbTables(pkg));
+
+    if (options.json) {
+      process.stdout.write(`${JSON.stringify(result)}\n`);
+      return EXIT_SUCCESS;
+    }
+
+    for (const line of formatSqlResultSetTable(result)) {
+      process.stdout.write(`${line}\n`);
+    }
+    return EXIT_SUCCESS;
+  } catch (error) {
+    return reportOdbError(command, error, false, getAbortReason());
+  }
+}
+
 // odb-forms and odb-reports both read STRUCTURE, not data: a form's own field-bound controls and a report's own band/group/formula layout live in static ODF sub-documents inside the package, resolved by odf.js without ever consulting the embedded database. That is why neither command needs (or offers) --table, an output path, or any of the conversion flags -- there is nothing to convert and nothing to write, only a structure to print.
 async function runOdbForms(input: string, options: { readonly json: boolean }): Promise<number> {
   const command = 'odb-forms';
@@ -185,6 +279,105 @@ async function runOdbReports(input: string, options: { readonly json: boolean })
   }
 }
 
+// odb-render-report only: the three real targets a rendered report can become. Restricted to a subset of DocumentFormat's own ten members -- readOdbReportContent always produces a wordprocessing ContentDocument, and pptx/xlsx/odg/odp/ods/markdown/odf all have no wordprocessing counterpart to build one into (the same reasoning buildDocxPackage/buildOdtPackage's own internal 'wordprocessing'-only guards already enforce at runtime; this is that same restriction stated as a type).
+const ODB_REPORT_TARGET_FORMATS: Readonly<Record<'docx' | 'odt' | 'pdf', true>> = { docx: true, odt: true, pdf: true };
+
+function isOdbReportTargetFormat(format: DocumentFormat): format is 'docx' | 'odt' | 'pdf' {
+  return format in ODB_REPORT_TARGET_FORMATS;
+}
+
+// docx and odt are exactly from-package.ts's own buildBytesForTarget pattern: build a fresh package through the matching buildXPackage, encode it with that format's own codec. pdf is markdownToPdf's own pipeline shape (documents.js's src/convert/convert.ts) rather than createDocumentFontRegistry's -- a rendered report has no source package of its own to extract embedded fonts from, so createFontRegistry (caller-supplied faces plus the vendored substitutes and the standard 14) is the right registry, exactly as it is for markdown.
+function renderOdbReportBytes(
+  content: ContentDocument,
+  target: 'docx' | 'odt' | 'pdf',
+  options: {
+    readonly fonts: readonly ProvidedFont[];
+    readonly signal: AbortSignal;
+    readonly reporter: DiagnosticReporter;
+    readonly reportFontSubstitution: ((substitution: FontSubstitution) => void) | undefined;
+    readonly onDiagnosticCounted: () => void;
+  },
+): Uint8Array<ArrayBuffer> {
+  if (target === 'docx') {
+    return encodePackage(buildDocxPackage(content));
+  }
+  if (target === 'odt') {
+    return encodeOdfPackage(buildOdtPackage(content));
+  }
+  if (content.kind !== 'wordprocessing') {
+    throw new Error('readOdbReportContent returned a non-wordprocessing ContentDocument');
+  }
+  const fonts = createFontRegistry({
+    fonts: options.fonts,
+    onSubstitution: (substitution) => {
+      if (options.reportFontSubstitution !== undefined) {
+        options.reportFontSubstitution(substitution);
+        return;
+      }
+      options.onDiagnosticCounted();
+      options.reporter.report(fontSubstitutionToDiagnostic(substitution));
+    },
+  });
+  const { document: layout, formulas } = convertWordprocessingToLayout(content, { measurer: createFontMeasurer(fonts) });
+  return writePdf(layout, {
+    signal: options.signal,
+    onSubstitution: (substitution, context) => {
+      options.onDiagnosticCounted();
+      options.reporter.report(substitutionToDiagnostic(substitution, context.pageIndex));
+    },
+    formulas,
+    fonts,
+  });
+}
+
+async function runOdbRenderReport(input: string, output: string | undefined, options: OdbRenderReportCliOptions): Promise<number> {
+  const command = 'odb-render-report';
+  if (output !== undefined && options.out !== undefined && output !== options.out) {
+    process.stderr.write(`[${command}] conflicting output destinations: positional '${output}' and --out '${options.out}'\n`);
+    return EXIT_USAGE_ERROR;
+  }
+
+  const target = resolveTargetFormat(output, options.out, options.to);
+  if ('errorMessage' in target) {
+    process.stderr.write(`[${command}] ${target.errorMessage}\n`);
+    return EXIT_USAGE_ERROR;
+  }
+  if (!isOdbReportTargetFormat(target.format)) {
+    process.stderr.write(`[${command}] '${target.format}' is not a supported report render target; expected one of docx, odt, pdf\n`);
+    return EXIT_USAGE_ERROR;
+  }
+  const targetFormat = target.format;
+
+  const resolvedOutput = output ?? options.out ?? (input === '-' ? '-' : resolveDefaultOutputPath(input, targetFormat));
+  const { signal, getAbortReason } = createRuntimeSignal({ timeoutMs: options.timeout });
+  const reporter = createDiagnosticReporter({ json: options.json, quiet: options.quiet, command });
+  let diagnosticCount = 0;
+  const reportFontSubstitution = options.reportFontSubstitutions === true ? createFontSubstitutionReporter({ json: options.json, quiet: options.quiet, command }) : undefined;
+
+  try {
+    const inputBytes = await readInput(input, { signal });
+    const fonts = await loadProvidedFonts(options.fontFile ?? [], { signal });
+    const pkg = decodePackage(new Uint8Array(inputBytes));
+    const content = readOdbReportContent(pkg, { report: options.report });
+
+    const bytes = renderOdbReportBytes(content, targetFormat, {
+      fonts,
+      signal,
+      reporter,
+      reportFontSubstitution,
+      onDiagnosticCounted: () => {
+        diagnosticCount += 1;
+      },
+    });
+
+    await writeOutput(resolvedOutput, bytes);
+    reporter.summarize({ output: resolvedOutput, bytes: bytes.byteLength, diagnosticCount });
+    return EXIT_SUCCESS;
+  } catch (error) {
+    return reportOdbReportError(command, error, options.verbose, getAbortReason());
+  }
+}
+
 function registerOdbToXlsxCommand(program: Command): void {
   const command = program.command('odb-to-xlsx <input> [output]').description('extract every table an embedded .odb database declares into one xlsx workbook, one sheet per table');
   addOutOption(command);
@@ -240,10 +433,41 @@ function registerOdbReportsCommand(program: Command): void {
     });
 }
 
+function registerOdbQueryCommand(program: Command): void {
+  program
+    .command('odb-query <input>')
+    .description("run a bounded SELECT over an embedded .odb database's own extracted tables, given directly or by naming one of its saved queries")
+    .option('--sql <text>', 'the SELECT statement to run -- mutually exclusive with --query')
+    .option('--query <savedName>', "the name of one of the .odb's own saved queries to run -- mutually exclusive with --sql")
+    .option('--json', 'emit the result set as JSON ({ columns, rows }) instead of a plain-text table', false)
+    .action(async (input: string, options: OdbQueryCliOptions) => {
+      process.exitCode = await runOdbQuery(input, options);
+    });
+}
+
+function registerOdbRenderReportCommand(program: Command): void {
+  const command = program
+    .command('odb-render-report <input> [output]')
+    .description("render one of an .odb's own reports -- its query resolved, its rpt: formulas evaluated, its bands laid out -- to docx, odt, or pdf");
+  addOutOption(command);
+  addTimeoutOption(command);
+  addJsonOption(command);
+  addQuietOption(command);
+  addVerboseOption(command);
+  addFontOptions(command);
+  command.option('--report <name>', 'the report to render -- required only when the .odb declares more than one report');
+  command.option('--to <format>', 'target format when it cannot be inferred from the output path (docx, odt, pdf)');
+  command.action(async (input: string, output: string | undefined, options: OdbRenderReportCliOptions) => {
+    process.exitCode = await runOdbRenderReport(input, output, options);
+  });
+}
+
 export function registerOdbCommands(program: Command): void {
   registerOdbToXlsxCommand(program);
   registerOdbToCsvCommand(program);
   registerOdbTablesCommand(program);
   registerOdbFormsCommand(program);
   registerOdbReportsCommand(program);
+  registerOdbQueryCommand(program);
+  registerOdbRenderReportCommand(program);
 }

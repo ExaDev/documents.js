@@ -1,5 +1,9 @@
 import {
+  HsqldbSqlEvaluationError,
+  HsqldbSqlParseError,
+  HsqldbSqlUnsupportedError,
   OdbNoEmbeddedDataSourceError,
+  OdbReportNotSpecifiedError,
   OdbTableNotFoundError,
   OdbTableNotSpecifiedError,
   OdbUnsupportedFormatError,
@@ -24,15 +28,20 @@ export function mapErrorToExit(error: unknown, abortReason: 'interrupt' | 'timeo
   if (abortReason === 'timeout') {
     return EXIT_TIMEOUT;
   }
-  // These five all mean "documents.js already told the caller exactly what extra input it needs" (which .odm chapter hrefs are unresolved, which .odb table to pick, which format isn't embedded) -- distinct from an ordinary unusable-input failure because the fix is supplying more information, not a different file.
+  // These six all mean "documents.js already told the caller exactly what extra input it needs" (which .odm chapter hrefs are unresolved, which .odb table or report to pick, which format isn't embedded) -- distinct from an ordinary unusable-input failure because the fix is supplying more information, not a different file.
   if (
     error instanceof OdmUnresolvedSectionError ||
     error instanceof OdbTableNotSpecifiedError ||
     error instanceof OdbTableNotFoundError ||
     error instanceof OdbNoEmbeddedDataSourceError ||
-    error instanceof OdbUnsupportedFormatError
+    error instanceof OdbUnsupportedFormatError ||
+    error instanceof OdbReportNotSpecifiedError
   ) {
     return EXIT_NEEDS_INFO;
+  }
+  // odb-query's own bounded SQL engine (documents.js's src/odb/sql/): a real SQL construct it deliberately doesn't implement, input that isn't well-formed SQL under its grammar, or a statement that parsed but can't be executed against the data -- every one an ordinary unusable-input failure, not a "give me more information" one, since none of the three names a specific piece of missing input the way the EXIT_NEEDS_INFO group above does.
+  if (error instanceof HsqldbSqlUnsupportedError || error instanceof HsqldbSqlParseError || error instanceof HsqldbSqlEvaluationError) {
+    return EXIT_INPUT_ERROR;
   }
   // PdfEncryptedError extends PdfParseError, so this branch is redundant with the default fall-through below -- kept explicit anyway so the mapping documents its intent (these two error classes are unusable-input failures, not a catch-all) rather than relying on an implicit default to cover a case this function is specifically supposed to name.
   if (error instanceof PdfEncryptedError || error instanceof PdfParseError) {
