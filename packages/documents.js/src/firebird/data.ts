@@ -126,7 +126,37 @@ function storedFieldsOf(fields: readonly FirebirdField[]): readonly FirebirdFiel
   return fields.filter((field) => !field.computed);
 }
 
-function decodeRowValues(fields: readonly FirebirdField[], payload: Uint8Array<ArrayBuffer>): ContentCellValue[] {
+// unscaled * 10^-decimalScale as an exact, arbitrary-precision decimal digit string, built via BigInt digit manipulation rather than the floating multiplication (`raw * 10 ** field.scale`) this module's own first implementation used -- that multiplication is exactly the kind of rounding-prone arithmetic this function exists to avoid for a large stored integer. Mirrors src/hsqldb/rowformat.ts's own identically-named-in-spirit helper, restated locally rather than imported: src/firebird/ deliberately carries no value-level dependency on src/hsqldb (only a type-only one, for HsqldbTable/HsqldbColumn -- see this package's README on that isolation), and this is a self-contained handful of lines, the same "duplicate a small port-level helper rather than couple two independent decoder tiers" call this package already makes for throwIfAborted.
+function exactDecimalDigits(unscaled: bigint, decimalScale: number): string {
+  const isNegative = unscaled < 0n;
+  const magnitudeDigits = (isNegative ? -unscaled : unscaled).toString();
+  const sign = isNegative ? '-' : '';
+  if (decimalScale <= 0) {
+    return `${sign}${magnitudeDigits}${'0'.repeat(-decimalScale)}`;
+  }
+  const padded = magnitudeDigits.padStart(decimalScale + 1, '0');
+  const wholePart = padded.slice(0, padded.length - decimalScale);
+  const fractionPart = padded.slice(padded.length - decimalScale);
+  return `${sign}${wholePart}.${fractionPart}`;
+}
+
+// Strips trailing zeros from a decimal digit string's own fractional part (and the decimal point itself, once the fraction is fully consumed) -- see src/hsqldb/rowformat.ts's identical helper for the full reasoning: a fixed-scale value like "250.00" carries no more precision than "250", so without this normalisation an ordinary whole-number-valued DECIMAL/NUMERIC column (the BONUS/BUDGET fixtures this module's own tests already cover both have one) would spuriously gain an exactValue sidecar even though Number() already represents it exactly.
+function trimTrailingFractionZeros(digits: string): string {
+  if (!digits.includes('.')) {
+    return digits;
+  }
+  const trimmed = digits.replace(/0+$/, '');
+  return trimmed.endsWith('.') ? trimmed.slice(0, -1) : trimmed;
+}
+
+// A 'number'-kind ContentCellValue for a 'short'/'long'/'int64' field's own exact stored-integer-plus-scale value (field.scale is Firebird's own convention, 0 or negative -- see FirebirdField.scale -- so decimalScale here is its negation, matching the "positive scale = digits after the decimal point" convention src/hsqldb/rowformat.ts's own sidecar helper uses). Attaches document-schema.js's own exactValue sidecar (ContentCellValueSchema's own doc comment: "a producer should only set it when String(Number(exactValue)) would not round-trip back to exactValue exactly") only when the double approximation genuinely loses information -- absent for the overwhelming majority of real BIGINT/DECIMAL/NUMERIC cells, present with the real, full-precision decimal string for an int64 (BIGINT-equivalent) value beyond Number.MAX_SAFE_INTEGER or a scaled DECIMAL/NUMERIC value with more significant digits than a double can carry.
+function numericCellValue(unscaled: bigint, decimalScale: number): ContentCellValue {
+  const exact = trimTrailingFractionZeros(exactDecimalDigits(unscaled, decimalScale));
+  const value = Number(exact);
+  return String(value) === exact ? { kind: 'number', value } : { kind: 'number', value, exactValue: exact };
+}
+
+export function decodeRowValues(fields: readonly FirebirdField[], payload: Uint8Array<ArrayBuffer>): ContentCellValue[] {
   const storedFields = storedFieldsOf(fields);
   const xdr = new XdrReader(payload);
   const rawValues: (ContentCellValue | undefined)[] = [];
@@ -134,17 +164,14 @@ function decodeRowValues(fields: readonly FirebirdField[], payload: Uint8Array<A
   for (const field of storedFields) {
     switch (field.physicalType) {
       case 'short':
-        rawValues.push({ kind: 'number', value: field.scale === 0 ? xdr.readInt16() : xdr.readInt16() * 10 ** field.scale });
+        rawValues.push(numericCellValue(BigInt(xdr.readInt16()), -field.scale));
         break;
       case 'long':
-        rawValues.push({ kind: 'number', value: field.scale === 0 ? xdr.readInt32() : xdr.readInt32() * 10 ** field.scale });
+        rawValues.push(numericCellValue(BigInt(xdr.readInt32()), -field.scale));
         break;
-      case 'int64': {
-        const raw = xdr.readInt64();
-        const scaled = field.scale === 0 ? Number(raw) : Number(raw) * 10 ** field.scale;
-        rawValues.push({ kind: 'number', value: scaled });
+      case 'int64':
+        rawValues.push(numericCellValue(xdr.readInt64(), -field.scale));
         break;
-      }
       case 'real':
         rawValues.push({ kind: 'number', value: xdr.readFloat() });
         break;

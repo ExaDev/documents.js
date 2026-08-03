@@ -160,18 +160,34 @@ function signedBigIntFromBytes(bytes: Uint8Array<ArrayBuffer>): bigint {
   return isNegative ? magnitude - (1n << BigInt(8 * bytes.length)) : magnitude;
 }
 
-// unscaled * 10^-scale, built as a decimal STRING via BigInt digit manipulation (never a floating multiplication/division, which would risk rounding for a large unscaled magnitude) and only converted to a JS number at the very end -- matching how src/hsqldb/script.ts's own Tier 1 NUMBER_LITERAL_RE-based DECIMAL/NUMERIC literal parsing already stores every numeric SQL value as a plain JS number, since ContentCellValue's 'number' kind has no arbitrary-precision decimal representation to offer instead.
-function decimalNumberFromUnscaled(unscaled: bigint, scale: number): number {
+// unscaled * 10^-scale, built as a decimal STRING via BigInt digit manipulation (never a floating multiplication/division, which would risk rounding for a large unscaled magnitude) -- matching how src/hsqldb/script.ts's own Tier 1 NUMBER_LITERAL_RE-based DECIMAL/NUMERIC literal parsing already keeps a numeric SQL literal's own source text intact rather than reconstructing it from a parsed float. This is the exact digit string document-schema.js's own DecimalStringSchema (ContentCellValueSchema's exactValue sidecar) expects, before any trailing-zero normalisation.
+function exactDecimalDigits(unscaled: bigint, scale: number): string {
   const isNegative = unscaled < 0n;
   const magnitudeDigits = (isNegative ? -unscaled : unscaled).toString();
   const sign = isNegative ? '-' : '';
   if (scale <= 0) {
-    return Number(`${sign}${magnitudeDigits}${'0'.repeat(-scale)}`);
+    return `${sign}${magnitudeDigits}${'0'.repeat(-scale)}`;
   }
   const padded = magnitudeDigits.padStart(scale + 1, '0');
   const wholePart = padded.slice(0, padded.length - scale);
   const fractionPart = padded.slice(padded.length - scale);
-  return Number(`${sign}${wholePart}.${fractionPart}`);
+  return `${sign}${wholePart}.${fractionPart}`;
+}
+
+// Strips trailing zeros from a decimal digit string's own fractional part (and the decimal point itself, once the fraction is fully consumed) -- a fixed-scale DECIMAL/NUMERIC value like "125.50" carries no more precision than "125.5" (trailing fractional zeros are never significant digits, unlike an integer's own trailing zeros, which this function leaves untouched since it only ever trims after a '.'). Without this normalisation, an ordinary DECIMAL(10,2) column whose value happens to be a whole number or end in a zero digit (a common, unremarkable case -- see the real EMPLOYEES/ORDERS fixtures this module's own tests already cover) would spuriously gain an exactValue sidecar even though Number() already represents it exactly, just under a different, shorter string spelling.
+function trimTrailingFractionZeros(digits: string): string {
+  if (!digits.includes('.')) {
+    return digits;
+  }
+  const trimmed = digits.replace(/0+$/, '');
+  return trimmed.endsWith('.') ? trimmed.slice(0, -1) : trimmed;
+}
+
+// A 'number'-kind ContentCellValue for an exact unscaled-integer-plus-scale value, attaching document-schema.js's own exactValue sidecar (ContentCellValueSchema's own doc comment: "a producer should only set it when String(Number(exactValue)) would not round-trip back to exactValue exactly") only when the double approximation genuinely loses information -- absent for the overwhelming majority of real BIGINT/DECIMAL/NUMERIC cells (anything Number() already represents exactly), present with the real, full-precision decimal string for a BIGINT beyond Number.MAX_SAFE_INTEGER or a DECIMAL/NUMERIC value with more significant digits than a double can carry.
+function numericCellValue(unscaled: bigint, scale: number): ContentCellValue {
+  const exact = trimTrailingFractionZeros(exactDecimalDigits(unscaled, scale));
+  const value = Number(exact);
+  return String(value) === exact ? { kind: 'number', value } : { kind: 'number', value, exactValue: exact };
 }
 
 function pad2(n: number): string {
@@ -285,7 +301,7 @@ export function readHsqldbColumnValue(cursor: HsqldbDataCursor, typeCode: number
     case 4: // INTEGER
       return { kind: 'number', value: cursor.readInt32() };
     case -5: // BIGINT
-      return { kind: 'number', value: Number(cursor.readBigInt64()) };
+      return numericCellValue(cursor.readBigInt64(), 0);
     case 6: // FLOAT
     case 7: // REAL
     case 8: // DOUBLE (all three read as an 8-byte IEEE754 double, per RowInputBinary.readReal)
@@ -296,7 +312,7 @@ export function readHsqldbColumnValue(cursor: HsqldbDataCursor, typeCode: number
       const byteLength = cursor.readInt32();
       const magnitudeBytes = cursor.readBytes(byteLength);
       const scale = cursor.readInt32();
-      return { kind: 'number', value: decimalNumberFromUnscaled(signedBigIntFromBytes(magnitudeBytes), scale) };
+      return numericCellValue(signedBigIntFromBytes(magnitudeBytes), scale);
     }
     case 16: // BOOLEAN/BIT
       return { kind: 'boolean', value: cursor.readUint8() !== 0 };
