@@ -1,6 +1,6 @@
 name: Dependabot auto-merge
 
-# This repo has no sibling ExaDev package of its own to depend on, so every Dependabot PR here is a third-party dependency: auto-merge fires only for a minor or patch bump (never major, which still opens a PR for manual review), and only once dependabot.yml's own 7-day cooldown has let Dependabot propose it in the first place. Auto-merge is enforced by main's own CI actually passing on the PR's head commit -- this workflow only requests the merge, GitHub itself withholds it until checks conclude.
+# This repo has no sibling ExaDev package of its own to depend on, so every Dependabot PR here is a third-party dependency: auto-merge fires only for a minor or patch bump (never major, which still opens a PR for manual review), and only once dependabot.yml's own 7-day cooldown has let Dependabot propose it in the first place. Auto-merge is enforced by main's own CI actually passing on the PR's head commit -- this workflow only requests the merge, GitHub itself withholds it until checks conclude. The merge step authenticates via a GitHub App installation token rather than GITHUB_TOKEN specifically so the resulting push cascades into ci.yml/release, since GitHub does not let GITHUB_TOKEN-authenticated pushes trigger further workflow runs.
 
 on:
   pull_request:
@@ -20,9 +20,15 @@ jobs:
         uses: dependabot/fetch-metadata@v2
         with:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
+      - name: Generate a token for the merge
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: "4473709"
+          private-key: ${{ secrets.AUTOMERGE_APP_PRIVATE_KEY }}
       - name: Enable auto-merge
         if: steps.metadata.outputs.update-type == 'version-update:semver-minor' || steps.metadata.outputs.update-type == 'version-update:semver-patch'
         run: gh pr merge --auto --rebase "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
