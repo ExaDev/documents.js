@@ -1,3 +1,10 @@
+# [1.68.0](https://github.com/ExaDev/documents.js/compare/v1.67.16...v1.68.0) (2026-08-03)
+
+
+### Features
+
+* recover vector-only shapes back into docx/pptx/odt/odp readers ([e0d6b0b](https://github.com/ExaDev/documents.js/commit/e0d6b0bdc7dde3781b16ad33587d79ac51872491))
+
 ## [1.67.16](https://github.com/ExaDev/documents.js/compare/v1.67.15...v1.67.16) (2026-08-03)
 
 ## [1.67.15](https://github.com/ExaDev/documents.js/compare/v1.67.14...v1.67.15) (2026-08-03)
