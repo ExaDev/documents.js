@@ -1,3 +1,10 @@
+## [2.6.8](https://github.com/ExaDev/ooxml.js/compare/v2.6.7...v2.6.8) (2026-08-03)
+
+
+### Bug Fixes
+
+* **ci:** wait for a real check-run to register before requesting auto-merge ([af8b755](https://github.com/ExaDev/ooxml.js/commit/af8b755a789bbb6c32963579cc24375bdd920d0c))
+
 ## [2.6.7](https://github.com/ExaDev/ooxml.js/compare/v2.6.6...v2.6.7) (2026-08-03)
 
 
