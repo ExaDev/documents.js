@@ -1,3 +1,10 @@
+## [1.10.6](https://github.com/ExaDev/pdf-codec/compare/v1.10.5...v1.10.6) (2026-08-03)
+
+
+### Bug Fixes
+
+* **ci:** wrap the sibling-bump commit body onto two lines under commitlint's limit ([e94d873](https://github.com/ExaDev/pdf-codec/commit/e94d873fbf4150a53f6b7e63b802d84d4f39af31))
+
 ## [1.10.5](https://github.com/ExaDev/pdf-codec/compare/v1.10.4...v1.10.5) (2026-08-03)
 
 
