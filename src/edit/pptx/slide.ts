@@ -13,7 +13,7 @@ import { insertPictureShapeMedia } from './image';
 import { buildEmptyGroupSpTree, DML_NS, ensureNotesMaster, NOTES_MASTER_REL_TYPE, PML_NS } from './scaffold';
 import { buildTextBoxShape, PptxShape } from './shape';
 import type { PptxTableInit } from './table';
-import { buildDrawingTable, buildTableGraphicFrame, PptxTable } from './table';
+import { buildDrawingTable, buildTableGraphicFrame, findGraphicFrameTable, PptxTable } from './table';
 import { buildVectorShape } from './vector';
 
 export interface TextBoxInit {
@@ -133,6 +133,22 @@ export class PptxSlide {
     for (const child of spTree.children) {
       if (child.type === 'element' && (child.tag === 'p:sp' || child.tag === 'p:pic')) {
         out.push(new PptxShape(spTree.children, child));
+      }
+    }
+    return out;
+  }
+
+  // Live handles on every DrawingML table already on this slide, in document order -- the read-side inverse of addTable, and the table-shaped counterpart to shapes() above. A table lives in its own p:graphicFrame, a shape kind shapes() never walks at all (see addTable's own note on why it needs a PptxTable rather than a PptxShape), so this is a genuinely separate enumeration rather than a filter over shapes()'s own result. findGraphicFrameTable (table.ts) is the exact uri === TABLE_GRAPHIC_URI check that excludes a chart/SmartArt graphic frame from being mistaken for a table.
+  tables(): PptxTable[] {
+    const spTree = findSpTree(this.live());
+    const out: PptxTable[] = [];
+    for (const child of spTree.children) {
+      if (child.type !== 'element' || child.tag !== 'p:graphicFrame') {
+        continue;
+      }
+      const tableElement = findGraphicFrameTable(child);
+      if (tableElement !== undefined) {
+        out.push(new PptxTable(tableElement));
       }
     }
     return out;

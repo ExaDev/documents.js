@@ -158,3 +158,13 @@ export function buildTableGraphicFrame(frame: Box, tableElement: XmlElement, sha
     el('a:graphic', {}, [el('a:graphicData', { uri: TABLE_GRAPHIC_URI }, [tableElement])]),
   ]);
 }
+
+// The read-side inverse of buildTableGraphicFrame: given a p:graphicFrame, returns its a:tbl element if -- and only if -- its a:graphic/a:graphicData carries the table URI, exactly the same uri === TABLE_GRAPHIC_URI check ooxml.js's own readGraphicFrameShape (typed/pptx/read.ts) already makes when deciding whether a graphic frame is a table. Returns undefined for a graphic frame holding a chart, SmartArt, or any other a:graphicData payload -- PptxSlide.tables() uses this to filter p:spTree's children down to real tables only.
+export function findGraphicFrameTable(graphicFrame: XmlElement): XmlElement | undefined {
+  const graphic = directChildElement(graphicFrame, 'a:graphic');
+  const graphicData = graphic === undefined ? undefined : directChildElement(graphic, 'a:graphicData');
+  if (graphicData === undefined || attr(graphicData, 'uri') !== TABLE_GRAPHIC_URI) {
+    return undefined;
+  }
+  return directChildElement(graphicData, 'a:tbl');
+}
