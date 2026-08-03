@@ -1,3 +1,10 @@
+## [1.2.8](https://github.com/ExaDev/document-cli/compare/v1.2.7...v1.2.8) (2026-08-03)
+
+
+### Bug Fixes
+
+* **ci:** use the GitHub App token for the branch push and PR creation too ([7348c1e](https://github.com/ExaDev/document-cli/commit/7348c1e1e8cc9d08bfe6af2f99fe8cfaa90ec966))
+
 ## [1.2.7](https://github.com/ExaDev/document-cli/compare/v1.2.6...v1.2.7) (2026-08-03)
 
 
