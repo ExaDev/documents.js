@@ -1,3 +1,5 @@
+## [1.2.5](https://github.com/ExaDev/document-cli/compare/v1.2.4...v1.2.5) (2026-08-03)
+
 ## [1.2.4](https://github.com/ExaDev/document-cli/compare/v1.2.3...v1.2.4) (2026-08-03)
 
 ## [1.2.3](https://github.com/ExaDev/document-cli/compare/v1.2.2...v1.2.3) (2026-08-03)
