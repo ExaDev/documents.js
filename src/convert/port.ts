@@ -1,4 +1,5 @@
 import type { DocumentPackage } from 'document-schema.js';
+import type { FontSubstitution, ProvidedFont } from 'pdf-codec';
 
 // The conversion behaviour modelled as a swappable port/contract, not a hard-wired function -- this workspace's standing "portable runtime and storage boundaries" convention, even though the only implementation today (local.ts) is entirely synchronous under the hood. `convert()` itself stays async and takes a mandatory abort signal regardless of that: it's a portability contract for a future non-local adapter (a remote conversion service, say), not a reflection of the local implementation's own synchronicity.
 
@@ -30,9 +31,18 @@ export interface ConversionResult {
   readonly package?: DocumentPackage;
 }
 
+// The per-call options every DocumentConverter implementation must accept. `signal` is mandatory (see this module's own top comment on why the contract is async and cancellable regardless of the local implementation's synchronicity); the two font options are optional and serialisable-adjacent rather than freely so -- `fonts` carries raw font bytes, which a remote adapter would have to ship over the wire, and `onFontSubstitution` is a live callback a remote adapter would instead surface through ConversionResult.diagnostics (which the local implementation ALSO populates, so a caller that supplies no callback still learns every face that fell back).
+export interface ConversionOptions {
+  readonly signal: AbortSignal;
+  // Faces to make available on top of whatever the source document itself embeds. Only reaches conversions that actually lay text out -- an X-to-PDF conversion; a PDF-to-X reconstruction and a PDF-bypassing bridge each run no layout engine and resolve no font at all (see local.ts).
+  readonly fonts?: readonly ProvidedFont[];
+  // Called once per requested family+bold+italic that resolved to something else -- a different face of the same family, or a vendored metric-compatible substitute. Reported through ConversionResult.diagnostics as well, so this callback is for a caller wanting the structured value rather than the rendered message.
+  readonly onFontSubstitution?: (substitution: FontSubstitution) => void;
+}
+
 export interface DocumentConverter {
-  // Bumped whenever DocumentConverter's own contract shape changes -- e.g. ConversionResult gaining a new field a caller might need to branch on -- not when the conversions table simply grows with more supported source/target pairs (that's discoverable at runtime via `conversions` itself, not a breaking contract change).
+  // Bumped whenever DocumentConverter's own contract shape changes -- e.g. ConversionResult gaining a new field a caller might need to branch on, or convert()'s own options gaining one an implementation is now expected to honour -- not when the conversions table simply grows with more supported source/target pairs (that's discoverable at runtime via `conversions` itself, not a breaking contract change).
   readonly contractVersion: number;
   readonly conversions: readonly { readonly source: DocumentFormat; readonly target: DocumentFormat }[];
-  convert(request: ConversionRequest, options: { readonly signal: AbortSignal }): Promise<ConversionResult>;
+  convert(request: ConversionRequest, options: ConversionOptions): Promise<ConversionResult>;
 }
