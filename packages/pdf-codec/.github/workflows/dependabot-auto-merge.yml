@@ -3,7 +3,14 @@ name: Dependabot auto-merge
 # Two auto-merge policies in one workflow. Sibling ExaDev packages (document-schema.js) merge unconditionally once green -- no cooldown, matching this family's existing convention. Every other (third-party) dependency merges only for a minor or patch bump; a major bump still opens a PR via Dependabot but is left for manual review. Third-party updates additionally carry dependabot.yml's own 7-day cooldown before Dependabot proposes them at all. Auto-merge is enforced by main's own CI actually passing on the PR's head commit -- this workflow only requests the merge, GitHub itself withholds it until checks conclude. The merge itself authenticates via a GitHub App installation token rather than GITHUB_TOKEN, so the resulting push to main triggers downstream workflow runs (ci.yml, release) instead of being silently skipped by GitHub's anti-recursion protection.
 
 on:
-  pull_request:
+  # pull_request_target, not pull_request -- a workflow run triggered by dependabot[bot]'s own pull_request
+  # event gets NO secret access at all (a hard GitHub Actions security restriction against a compromised
+  # dependency update exfiltrating secrets), so secrets.AUTOMERGE_APP_PRIVATE_KEY would resolve empty
+  # regardless of how correctly the secret itself is configured. pull_request_target runs using the base
+  # branch's own workflow file and normal secret access instead. Safe here specifically because this job
+  # never checks out or executes the PR's own code -- it only calls the GitHub API (fetch-metadata, gh pr
+  # merge), which is exactly the case pull_request_target's own security guidance calls out as safe.
+  pull_request_target:
 
 permissions:
   contents: write
