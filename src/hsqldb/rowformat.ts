@@ -178,31 +178,94 @@ function pad2(n: number): string {
   return String(n).padStart(2, '0');
 }
 
-// HSQLDB 1.8's own DATE/TIME/TIMESTAMP row encoding is a bare epoch-millisecond long (java.sql.Date/Time.getTime(), or a java.sql.Timestamp's getTime() for TIMESTAMP) with no embedded timezone or offset at all: org.hsqldb.HsqlDateTime resolves every date/time value through a java.util.Calendar carrying no explicit TimeZone, i.e. the WRITING JVM's own default timezone, so the on-disk long is only unambiguous when reinterpreted in that same timezone. This decoder reconstructs the calendar date/time using the READING process's own local timezone (JS Date's local getFullYear/getMonth/getDate/getHours/etc., deliberately not the UTC variants) -- correct whenever a .odb is read on the same machine/region that created it, the overwhelmingly common case, but a genuine, inherent format limitation (not an implementation shortcut) for a .odb moved to a host in a materially different timezone. Verified empirically against a real HSQLDB-written fixture spanning both GMT and BST dates -- see src/hsqldb/cache.ts's own verification account and the README's Gotchas entry.
-function epochMillisToLocalDate(epochMillis: bigint): Date {
-  return new Date(Number(epochMillis));
+// HSQLDB 1.8's own DATE/TIME/TIMESTAMP row encoding is a bare epoch-millisecond long (java.sql.Date/Time.getTime(), or a java.sql.Timestamp's getTime() for TIMESTAMP) with no embedded timezone or offset at all: org.hsqldb.HsqlDateTime resolves every date/time value through a java.util.Calendar carrying no explicit TimeZone, i.e. the WRITING JVM's own default timezone, so the on-disk long is only unambiguous when reinterpreted in that same timezone. Which timezone that was is genuinely not recorded anywhere in the file, so it can only ever come from the caller -- hence timeZone below, and hence the reading process's own local timezone as the default, correct whenever a .odb is read on the same machine/region that created it (the overwhelmingly common case) and wrong, silently, for one moved elsewhere. Verified empirically against a real HSQLDB-written fixture spanning both GMT and BST dates -- see src/hsqldb/cache.ts's own verification account and the README's Gotchas entry.
+export interface HsqldbDecodeOptions {
+  // The IANA time-zone name (e.g. 'Europe/London', 'America/New_York') the .odb's own DATE/TIME/TIMESTAMP values were WRITTEN in. Omitted -- the default -- means the reading process's own local timezone. Affects the CACHED-table binary row store (Tier 2) and the binary/compressed whole-script format (Tier 4) only: Tier 1's TEXT script carries date/time values as already-formatted literal text, and Tier 3's Firebird backup carries a genuine timezone-free day count, so neither has an epoch instant to reinterpret in the first place.
+  readonly timeZone?: string;
 }
 
-function formatLocalDate(epochMillis: bigint): string {
-  const date = epochMillisToLocalDate(epochMillis);
-  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+interface CalendarFields {
+  readonly year: number;
+  readonly month: number;
+  readonly day: number;
+  readonly hours: number;
+  readonly minutes: number;
+  readonly seconds: number;
 }
 
-function formatLocalTime(epochMillis: bigint): string {
-  const date = epochMillisToLocalDate(epochMillis);
-  const base = `${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`;
-  return date.getMilliseconds() === 0 ? base : `${base}.${String(date.getMilliseconds()).padStart(3, '0')}`;
+const ZONED_FORMATTERS = new Map<string, Intl.DateTimeFormat>();
+
+// The 'u-ca-iso8601' calendar extension pins the year field to the proleptic ISO year (matching Date.getFullYear's own numbering, including year 0 and negatives) rather than a locale's default era-relative one, so the two branches of calendarFieldsAt below agree by construction rather than by coincidence. Throws RangeError, naming the offending value, for a time-zone name the platform does not recognise -- deliberately left to propagate, since it is already the clearest possible diagnosis of a caller's own bad option.
+function zonedFormatter(timeZone: string): Intl.DateTimeFormat {
+  const cached = ZONED_FORMATTERS.get(timeZone);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const formatter = new Intl.DateTimeFormat('en-US-u-ca-iso8601', {
+    timeZone,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+  ZONED_FORMATTERS.set(timeZone, formatter);
+  return formatter;
 }
 
-// TIMESTAMP's own on-disk pair is [epoch-millis long][nanos int] (org.hsqldb.rowio.RowOutputBinary.writeTimestamp: writeLong(timestamp.getTime()); writeInt(timestamp.getNanos())) -- java.sql.Timestamp.getNanos() carries the value's FULL nanosecond-resolution fractional-second component independently of getTime()'s own millisecond-rounded one, so the fractional suffix below is built from nanos directly rather than from the millis value's own sub-second part (only the whole-second date/time-of-day fields are read off the Date object).
-function formatLocalTimestamp(epochMillis: bigint, nanos: number): string {
-  const date = epochMillisToLocalDate(epochMillis);
-  const base = `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())} ${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`;
+function requiredPart(parts: ReadonlyMap<string, string>, type: string, timeZone: string): number {
+  const raw = parts.get(type);
+  if (raw === undefined) {
+    throw new HsqldbRowFormatError(`Intl.DateTimeFormat produced no "${type}" part for time zone "${timeZone}"`);
+  }
+  return Number(raw);
+}
+
+// Resolves an epoch instant's own calendar fields in the requested zone -- via JS Date's local getters when the caller wants the reading process's own timezone (the historical, verified default path), and via a cached Intl.DateTimeFormat otherwise. Cached per zone NAME only, never for the implicit local zone, so a process that changes its own TZ mid-run (as this package's own test suite deliberately does) never reads a stale formatter.
+function calendarFieldsAt(epochMillis: bigint, timeZone: string | undefined): CalendarFields {
+  const date = new Date(Number(epochMillis));
+  if (timeZone === undefined) {
+    return { year: date.getFullYear(), month: date.getMonth() + 1, day: date.getDate(), hours: date.getHours(), minutes: date.getMinutes(), seconds: date.getSeconds() };
+  }
+  const parts = new Map(zonedFormatter(timeZone).formatToParts(date).map((part) => [part.type, part.value]));
+  return {
+    year: requiredPart(parts, 'year', timeZone),
+    month: requiredPart(parts, 'month', timeZone),
+    day: requiredPart(parts, 'day', timeZone),
+    hours: requiredPart(parts, 'hour', timeZone),
+    minutes: requiredPart(parts, 'minute', timeZone),
+    seconds: requiredPart(parts, 'second', timeZone),
+  };
+}
+
+// The instant's own sub-second remainder, which is timezone-independent (every IANA zone offset is a whole number of minutes) and so is taken straight off the epoch value rather than through calendarFieldsAt.
+function millisOfSecond(epochMillis: bigint): number {
+  return Number(((epochMillis % 1000n) + 1000n) % 1000n);
+}
+
+function formatDate(epochMillis: bigint, timeZone: string | undefined): string {
+  const { year, month, day } = calendarFieldsAt(epochMillis, timeZone);
+  return `${year}-${pad2(month)}-${pad2(day)}`;
+}
+
+function formatTime(epochMillis: bigint, timeZone: string | undefined): string {
+  const { hours, minutes, seconds } = calendarFieldsAt(epochMillis, timeZone);
+  const base = `${pad2(hours)}:${pad2(minutes)}:${pad2(seconds)}`;
+  const millis = millisOfSecond(epochMillis);
+  return millis === 0 ? base : `${base}.${String(millis).padStart(3, '0')}`;
+}
+
+// TIMESTAMP's own on-disk pair is [epoch-millis long][nanos int] (org.hsqldb.rowio.RowOutputBinary.writeTimestamp: writeLong(timestamp.getTime()); writeInt(timestamp.getNanos())) -- java.sql.Timestamp.getNanos() carries the value's FULL nanosecond-resolution fractional-second component independently of getTime()'s own millisecond-rounded one, so the fractional suffix below is built from nanos directly rather than from the millis value's own sub-second part (only the whole-second date/time-of-day fields come from the instant).
+function formatTimestamp(epochMillis: bigint, nanos: number, timeZone: string | undefined): string {
+  const { year, month, day, hours, minutes, seconds } = calendarFieldsAt(epochMillis, timeZone);
+  const base = `${year}-${pad2(month)}-${pad2(day)} ${pad2(hours)}:${pad2(minutes)}:${pad2(seconds)}`;
   return nanos === 0 ? base : `${base}.${String(nanos).padStart(9, '0')}`;
 }
 
 // Reads one column's own binary field: the shared 1-byte present-flag, then (if present) the type-specific payload -- mirrors org.hsqldb.rowio.RowInputBase.readData()'s per-column dispatch exactly, one SQL type code at a time. BIGINT converts through a bigint and is only cast to a JS number at the very end via Number(): a BIGINT value beyond Number.MAX_SAFE_INTEGER loses precision doing this, the same class of limitation every 'number'-kind ContentCellValue in this package already has (DECIMAL/NUMERIC included) -- see the README's Gotchas entry. TIMESTAMP maps onto ContentCellValue's 'date' kind, matching src/hsqldb/script.ts's own Tier 1 TIMESTAMP-literal handling: ContentCellValue has no timestamp kind of its own.
-export function readHsqldbColumnValue(cursor: HsqldbDataCursor, typeCode: number): ContentCellValue {
+export function readHsqldbColumnValue(cursor: HsqldbDataCursor, typeCode: number, options?: HsqldbDecodeOptions): ContentCellValue {
   const presentFlag = cursor.readUint8();
   if (presentFlag === 0) {
     return { kind: 'empty' };
@@ -238,14 +301,14 @@ export function readHsqldbColumnValue(cursor: HsqldbDataCursor, typeCode: number
     case 16: // BOOLEAN/BIT
       return { kind: 'boolean', value: cursor.readUint8() !== 0 };
     case 91: // DATE
-      return { kind: 'date', value: formatLocalDate(cursor.readBigInt64()) };
+      return { kind: 'date', value: formatDate(cursor.readBigInt64(), options?.timeZone) };
     case 92: // TIME
-      return { kind: 'time', value: formatLocalTime(cursor.readBigInt64()) };
+      return { kind: 'time', value: formatTime(cursor.readBigInt64(), options?.timeZone) };
     case 93: {
       // TIMESTAMP
       const millis = cursor.readBigInt64();
       const nanos = cursor.readInt32();
-      return { kind: 'date', value: formatLocalTimestamp(millis, nanos) };
+      return { kind: 'date', value: formatTimestamp(millis, nanos, options?.timeZone) };
     }
     default:
       throw new HsqldbRowFormatError(`unsupported SQL type code ${typeCode} while decoding a row value`);

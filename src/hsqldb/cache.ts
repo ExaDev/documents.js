@@ -1,5 +1,6 @@
 import type { ContentCellValue } from 'document-schema.js';
 import type { HsqldbColumn, HsqldbTable } from './script';
+import type { HsqldbDecodeOptions } from './rowformat';
 import { HsqldbRowFormatError, HsqldbDataCursor, readHsqldbColumnValue, resolveHsqldbTypeCode } from './rowformat';
 
 // Tier 2 -- HSQLDB 1.8.x's own binary CACHED-table row-store format: when a table is declared CACHED (LibreOffice's own embedded HSQLDB default -- see database.isStoredFileAccess() in the decompiled org.hsqldb.persist.HsqlDatabaseProperties constructor, which switches hsqldb.default_table_type to "cached" specifically for a storage-backed (i.e. embedded-in-a-package) database), that table's own DDL still lives in database/script as ordinary TEXT-format SQL (a CREATE CACHED TABLE statement, parsed by src/hsqldb/script.ts exactly like a MEMORY/TEXT table's), but its ROW DATA lives entirely in database/data, a separate binary page-cache file, with database/properties declaring the engine version and cache-file layout and database/backup holding a zip snapshot of database/data taken at the last checkpoint (org.hsqldb.persist.Log.checkpoint()/DataFileCache.backupFile()). This module is the row/tree-walking half; src/hsqldb/rowformat.ts is the per-SQL-type binary field decoding it calls into.
@@ -93,7 +94,7 @@ export function parseHsqldbIndexRoots(scriptText: string): ReadonlyMap<string, H
 // A CACHED table's own row-store record, exactly as org.hsqldb.CachedRow.write(RowOutputInterface)/org.hsqldb.rowio.RowOutputBase.writeRow lay it out and org.hsqldb.persist.DataFileCache.readObject/org.hsqldb.CachedRow(Table, RowInputInterface) read it back: a 4-byte big-endian storageSize (the row's own padded on-disk length, org.hsqldb.persist.DataFileCache.add(): getRealSize() rounded UP to the next multiple of 8), then one 16-byte AVL node record PER TABLE INDEX (org.hsqldb.DiskNode.SIZE_IN_BYTE: iBalance/iLeft/iRight/iParent, each a 4-byte big-endian row *position* -- not a byte offset; 0 on disk means "no such child/parent", never a real row since position 0 falls inside the file's own 32-byte header), then the row's own column data (src/hsqldb/rowformat.ts's readHsqldbColumnValue, one call per column in table-declared order), then zero padding out to storageSize. Node records appear in index order, so index 0's is always first; this decoder reads that one for its own iLeft/iRight and skips straight past the rest, whose trees span the identical live row set in a different order and are therefore redundant for row recovery.
 
 // Walks a CACHED table's own AVL row-position tree, rooted at roots.rootPosition (index 0's root), entirely by following each row's own persisted iLeft/iRight child *positions* recursively -- never by comparing key values, so this walker has no notion of the table's own primary-key ordering or comparison semantics, only of "which row is this row's left/right child". This is also why no free-list/deleted-row bookkeeping is needed anywhere in this decoder: a deleted row is unlinked from its table's tree by the engine itself, well before its own space is ever added to the free-block list and potentially reused, so a traversal rooted at the tree's own CURRENT root can only ever reach rows that are still genuinely live -- a documented, deliberate simplification: this decoder never parses org.hsqldb.persist.DataFileBlockManager's own free-block structure at all (see the README's Gotchas entry). Produces rows in the tree's own in-order sequence (left subtree, then the row itself, then right subtree) -- for an ascending-INTEGER primary key inserted in order, as most real tables are, this reads back in the same order the rows were originally inserted, though nothing here relies on that being true in general.
-export function readHsqldbCachedTableRows(dataBytes: Uint8Array<ArrayBuffer>, roots: HsqldbTableIndexRoots, cacheFileScale: number, columns: readonly HsqldbColumn[]): (readonly ContentCellValue[])[] {
+export function readHsqldbCachedTableRows(dataBytes: Uint8Array<ArrayBuffer>, roots: HsqldbTableIndexRoots, cacheFileScale: number, columns: readonly HsqldbColumn[], options?: HsqldbDecodeOptions): (readonly ContentCellValue[])[] {
   const typeCodes = columns.map((column) => resolveHsqldbTypeCode(column.type));
   const results: ContentCellValue[][] = [];
   const trailingNodeBytes = (roots.indexCount - 1) * DISK_NODE_SIZE_BYTES;
@@ -122,7 +123,7 @@ export function readHsqldbCachedTableRows(dataBytes: Uint8Array<ArrayBuffer>, ro
       if (typeCode === undefined) {
         throw new HsqldbRowFormatError('internal error: column/type-code alignment failure');
       }
-      return readHsqldbColumnValue(cursor, typeCode);
+      return readHsqldbColumnValue(cursor, typeCode, options);
     });
     if (cursor.position > rowEnd) {
       throw new HsqldbRowFormatError(`row at position ${pos} overran its own declared storage size (consumed ${cursor.position - byteOffset} bytes, declared ${storageSize})`);
@@ -137,7 +138,7 @@ export function readHsqldbCachedTableRows(dataBytes: Uint8Array<ArrayBuffer>, ro
 }
 
 // The Tier 2 entry point: given the DDL/rows src/hsqldb/script.ts's Tier 1 parseHsqldbScript already produced from database/script's own TEXT-format bytes (a CACHED table's own CREATE CACHED TABLE statement parses exactly like a MEMORY/TEXT table's, so Tier 1 already has every table's correct column list -- only a CACHED table's own INSERT-derived rows are missing, since real HSQLDB output never writes INSERT statements for CACHED-table data), splices in the real row data for every table that has a SET TABLE...INDEX line -- a table with no such line either genuinely is a MEMORY/TEXT table (whose rows, if any, already came from real INSERT statements and stand untouched) or is a CACHED table with zero rows (whose already-correctly-empty rows also stand untouched); either way, leaving that table exactly as Tier 1 produced it is correct, not a gap.
-export function decodeHsqldbCachedTables(tables: readonly HsqldbTable[], scriptText: string, dataBytes: Uint8Array<ArrayBuffer>, propertiesText: string): readonly HsqldbTable[] {
+export function decodeHsqldbCachedTables(tables: readonly HsqldbTable[], scriptText: string, dataBytes: Uint8Array<ArrayBuffer>, propertiesText: string, options?: HsqldbDecodeOptions): readonly HsqldbTable[] {
   const { cacheFileScale } = parseHsqldbProperties(propertiesText);
   const roots = parseHsqldbIndexRoots(scriptText);
   return tables.map((table) => {
@@ -145,7 +146,7 @@ export function decodeHsqldbCachedTables(tables: readonly HsqldbTable[], scriptT
     if (tableRoots === undefined) {
       return table;
     }
-    const rows = readHsqldbCachedTableRows(dataBytes, tableRoots, cacheFileScale, table.columns);
+    const rows = readHsqldbCachedTableRows(dataBytes, tableRoots, cacheFileScale, table.columns, options);
     return { ...table, rows };
   });
 }

@@ -1,6 +1,7 @@
 import type { Package } from 'odf.js';
 import { base64ToBytes, readOdbInventory } from 'odf.js';
 import { decodeHsqldbCachedTables } from '../hsqldb/cache';
+import type { HsqldbDecodeOptions } from '../hsqldb/rowformat';
 import type { HsqldbTable } from '../hsqldb/script';
 import { parseHsqldbScript } from '../hsqldb/script';
 import { readManifest } from '../odf-package/manifest';
@@ -76,7 +77,7 @@ function classifyScriptBytes(bytes: Uint8Array): 'text' | 'compressed' | 'binary
   return 'text';
 }
 
-export function readOdbTables(pkg: Package): readonly HsqldbTable[] {
+export function readOdbTables(pkg: Package, options?: HsqldbDecodeOptions): readonly HsqldbTable[] {
   const inventory = readOdbInventory(pkg);
   if (inventory.connection === undefined || inventory.connection.type === 'external') {
     throw new OdbNoEmbeddedDataSourceError(inventory.connection?.url);
@@ -127,11 +128,11 @@ export function readOdbTables(pkg: Package): readonly HsqldbTable[] {
   }
 
   const tables = parseHsqldbScript(scriptBytes);
-  return withCachedTableRows(pkg, tables, scriptBytes);
+  return withCachedTableRows(pkg, tables, scriptBytes, options);
 }
 
 // A CACHED table's own DDL still lives in database/script as ordinary TEXT-format SQL -- parseHsqldbScript above has already produced every table's correct column list -- but a real HSQLDB writer never emits INSERT statements for a CACHED table's own rows, only for MEMORY/TEXT tables. database/data (present only when at least one table is CACHED) carries the actual row bytes; src/hsqldb/cache.ts's decodeHsqldbCachedTables splices them in. No database/data part at all -- the common case, every table MEMORY/TEXT, or (per the existing Tier 1 fixtures) no CACHED table involved -- leaves parseHsqldbScript's own result untouched, exactly matching every pre-Tier-2 caller's existing expectations.
-function withCachedTableRows(pkg: Package, tables: readonly HsqldbTable[], scriptBytes: Uint8Array): readonly HsqldbTable[] {
+function withCachedTableRows(pkg: Package, tables: readonly HsqldbTable[], scriptBytes: Uint8Array, options: HsqldbDecodeOptions | undefined): readonly HsqldbTable[] {
   const dataPart = pkg.parts[DATABASE_DATA_PART];
   if (dataPart === undefined) {
     return tables;
@@ -150,5 +151,5 @@ function withCachedTableRows(pkg: Package, tables: readonly HsqldbTable[], scrip
   const scriptText = new TextDecoder('utf-8', { fatal: true }).decode(scriptBytes);
   const dataBytes = base64ToBytes(dataPart.base64);
   const propertiesText = new TextDecoder('utf-8', { fatal: true }).decode(base64ToBytes(propertiesPart.base64));
-  return decodeHsqldbCachedTables(tables, scriptText, dataBytes, propertiesText);
+  return decodeHsqldbCachedTables(tables, scriptText, dataBytes, propertiesText, options);
 }
