@@ -303,6 +303,7 @@ export { odmToPdf, OdmUnresolvedSectionError } from './convert/convert';
 export type { HsqldbColumn, HsqldbTable } from './hsqldb/script';
 export { displayTextFor as hsqldbCellDisplayText, HsqldbScriptParseError, parseHsqldbScript } from './hsqldb/script';
 export { decodeHsqldbCachedTables } from './hsqldb/cache';
+export type { HsqldbDecodeOptions } from './hsqldb/rowformat';
 export { HsqldbRowFormatError } from './hsqldb/rowformat';
 export type { OdbUnsupportedFormat } from './odb/read';
 export { OdbNoEmbeddedDataSourceError, OdbUnsupportedFormatError, readOdbTables } from './odb/read';
@@ -312,7 +313,7 @@ export type { OdbComponentInfo, OdbConnectionInfo, OdbForm, OdbFormControl, OdbF
 export { readOdbForm, readOdbInventory, readOdbReport, resolveOdbComponent } from 'odf.js';
 export { readOdbForms, readOdbReports } from './odb/components';
 export { OdbTableNotFoundError, OdbTableNotSpecifiedError } from './odb/csv';
-export type { OdbToCsvOptions } from './convert/convert';
+export type { OdbConversionOptions, OdbToCsvOptions } from './convert/convert';
 export { odbToCsv, odbToXlsx } from './convert/convert';
 export type { FirebirdBackupSummary, ReadFirebirdBackupResult } from './firebird/backup';
 export {

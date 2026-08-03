@@ -126,6 +126,48 @@ describe('readHsqldbCachedTableRows: byte-level decode against the real fixture'
   });
 });
 
+describe('readHsqldbCachedTableRows: caller-supplied timeZone override', () => {
+  // The fixture was written by a JVM in Europe/London (see this file's own beforeAll), so its DATE values only decode to their original calendar day when read in that zone. Reading the same bytes in a materially different zone is exactly the "moved to another host" case the default local-timezone behaviour cannot serve, and is what the option exists for.
+  function employeeColumns() {
+    const employees = parseHsqldbScript(new TextEncoder().encode(HSQLDB_CACHED_SCRIPT_TEXT)).find((table) => table.tableName === 'EMPLOYEES');
+    if (employees === undefined) {
+      throw new Error('fixture script has no EMPLOYEES table');
+    }
+    return employees.columns;
+  }
+
+  it('reinterprets DATE values in an explicitly supplied zone, leaving the default (local) behaviour unchanged', () => {
+    const dataBytes = base64ToBytes(decodedFixture().dataBase64);
+    const columns = employeeColumns();
+    const local = readHsqldbCachedTableRows(dataBytes, { rootPosition: 232, indexCount: 1 }, 1, columns);
+    const newYork = readHsqldbCachedTableRows(dataBytes, { rootPosition: 232, indexCount: 1 }, 1, columns, { timeZone: 'America/New_York' });
+
+    // Row 0's HIRE_DATE is midnight Europe/London on 2020-01-15 -- 19:00 the previous day in New York.
+    expect(local[0]?.[3]).toEqual({ kind: 'date', value: '2020-01-15' });
+    expect(newYork[0]?.[3]).toEqual({ kind: 'date', value: '2020-01-14' });
+    // Explicitly naming the zone the fixture was written in reproduces the default result exactly.
+    expect(readHsqldbCachedTableRows(dataBytes, { rootPosition: 232, indexCount: 1 }, 1, columns, { timeZone: 'Europe/London' })).toEqual(local);
+  });
+
+  it('reinterprets TIME and TIMESTAMP values in the supplied zone too, keeping a TIMESTAMP\'s own nanosecond component intact', () => {
+    const dataBytes = base64ToBytes(decodedFixture().dataBase64);
+    const typeTest = parseHsqldbScript(new TextEncoder().encode(HSQLDB_CACHED_SCRIPT_TEXT)).find((table) => table.tableName === 'TYPE_TEST');
+    if (typeTest === undefined) {
+      throw new Error('fixture script has no TYPE_TEST table');
+    }
+    const rows = readHsqldbCachedTableRows(dataBytes, { rootPosition: 664, indexCount: 1 }, 1, typeTest.columns, { timeZone: 'UTC' });
+    // 14:30 London wall clock on 1970-01-01, the epoch day HSQLDB normalises a bare TIME onto -- which reads back as 13:30 UTC, not 14:30, because the UK was on permanent UTC+1 ("British Standard Time") from October 1968 to October 1971. A real, checkable offset difference rather than a coincidental match, and one the local-timezone default cannot express at all.
+    expect(rows[0]?.[1]).toEqual({ kind: 'time', value: '13:30:00' });
+    // 09:45:30.123456789 London on 2024-03-15 (GMT that day) -- the same wall clock in UTC, nanoseconds untouched.
+    expect(rows[0]?.[2]).toEqual({ kind: 'date', value: '2024-03-15 09:45:30.123456789' });
+  });
+
+  it('throws a RangeError naming the value for an unrecognised time-zone name', () => {
+    const dataBytes = base64ToBytes(decodedFixture().dataBase64);
+    expect(() => readHsqldbCachedTableRows(dataBytes, { rootPosition: 232, indexCount: 1 }, 1, employeeColumns(), { timeZone: 'Mars/Olympus_Mons' })).toThrow(RangeError);
+  });
+});
+
 describe('decodeHsqldbCachedTables: multi-index CACHED tables, against the real multi-index fixture', () => {
   it('recovers every row of a three-index, a two-index, and a single-index table, matching what HSQLDB 1.8.0.10 itself reported via JDBC', () => {
     const pkg = decodePackage(embeddedHsqldbMultiIndexOdbBytes());
