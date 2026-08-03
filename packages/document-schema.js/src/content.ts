@@ -93,6 +93,11 @@ export interface ContentEmbeddedObject {
   objectKind: ContentEmbeddedObjectKind;
   document: ContentDocument;
   frame: Box; // page-space position and size, in the same xPt/yPt/widthPt/heightPt convention as ContentShape.frame
+  // Cell-anchor position, mirroring ContentSheetImageSchema's own anchorRow/anchorColumn/offsetXPt/offsetYPt field names and types exactly (src/content.ts's ContentSheetImageSchema, further down this file) -- all four optional here, unlike on ContentSheetImageSchema where they're required, since only a spreadsheet-anchored embedded object (one held in ContentSheetSchema.embeddedObjects) ever sets them; a wordprocessing/presentation/drawing embedded object has no cell to anchor into and simply omits all four.
+  anchorRow?: number;
+  anchorColumn?: number;
+  offsetXPt?: number; // offset from the anchor cell's own top-left corner
+  offsetYPt?: number;
 }
 
 // The block-level anchoring point for an embedded object inside a wordprocessing section's or a presentation/drawing shape's own block flow -- reuses ContentEmbeddedObject's fields directly (frame included) rather than nesting a separate `embeddedObject: ContentEmbeddedObject` field, since ContentEmbeddedObject already carries its own frame and duplicating it would just be two copies of the same position.
@@ -140,7 +145,13 @@ function isContentEmbeddedObject(value: unknown): value is ContentEmbeddedObject
     isRecord(value) &&
     isContentEmbeddedObjectKind(value.objectKind) &&
     BoxSchema.safeParse(value.frame).success &&
-    ContentDocumentSchema.safeParse(value.document).success
+    ContentDocumentSchema.safeParse(value.document).success &&
+    (value.anchorRow === undefined ||
+      (typeof value.anchorRow === 'number' && Number.isInteger(value.anchorRow) && value.anchorRow >= 0)) &&
+    (value.anchorColumn === undefined ||
+      (typeof value.anchorColumn === 'number' && Number.isInteger(value.anchorColumn) && value.anchorColumn >= 0)) &&
+    (value.offsetXPt === undefined || typeof value.offsetXPt === 'number') &&
+    (value.offsetYPt === undefined || typeof value.offsetYPt === 'number')
   );
 }
 

@@ -27,6 +27,7 @@ import {
   EMBEDDED_OBJECT_KINDS,
   LayoutDocumentSchema,
   MathMlNodeSchema,
+  MAX_SAFE_INTEGER,
   SCHEMA_FILE_NAMES,
   schemaUriFor,
 } from '../dist/index.js';
@@ -61,12 +62,16 @@ function override(ctx) {
     return;
   }
   if (ctx.zodSchema === ContentEmbeddedObjectSchema) {
-    // Standalone schema for an embedded object on its own (src/content.ts), independent of the ContentBlock 'embeddedObject' wrapper above -- this is what ContentSheetSchema.embeddedObjects validates each entry against. Same object shape as $defs.ContentEmbeddedObjectBlock minus the `kind` discriminant.
+    // Standalone schema for an embedded object on its own (src/content.ts), independent of the ContentBlock 'embeddedObject' wrapper above -- this is what ContentSheetSchema.embeddedObjects validates each entry against. Same object shape as $defs.ContentEmbeddedObjectBlock minus the `kind` discriminant, cell-anchor fields included.
     ctx.jsonSchema.type = 'object';
     ctx.jsonSchema.properties = {
       objectKind: { type: 'string', enum: EMBEDDED_OBJECT_KINDS },
       document: { $ref: CONTENT_DOCUMENT_URI },
       frame: { $ref: '#/$defs/Box' },
+      anchorRow: { type: 'integer', minimum: 0, maximum: MAX_SAFE_INTEGER },
+      anchorColumn: { type: 'integer', minimum: 0, maximum: MAX_SAFE_INTEGER },
+      offsetXPt: { type: 'number' },
+      offsetYPt: { type: 'number' },
     };
     ctx.jsonSchema.required = ['objectKind', 'document', 'frame'];
     ctx.jsonSchema.additionalProperties = false;

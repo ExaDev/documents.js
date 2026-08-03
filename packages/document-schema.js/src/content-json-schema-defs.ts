@@ -185,6 +185,11 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       document: { $ref: CONTENT_DOCUMENT_URI },
       frame: { $ref: '#/$defs/Box' },
       sourcePath: { type: 'string' },
+      // Cell-anchor position, all four optional -- only set on an embedded object held in a ContentSheetSchema.embeddedObjects array; mirrors ContentSheetImageSchema's own anchorRow/anchorColumn/offsetXPt/offsetYPt representation exactly (see schemas/content-document.schema.json's own ContentSheetImage fragment, generated -- not hand-transcribed -- since that schema is a real z.object()).
+      anchorRow: { type: 'integer', minimum: 0, maximum: MAX_SAFE_INTEGER },
+      anchorColumn: { type: 'integer', minimum: 0, maximum: MAX_SAFE_INTEGER },
+      offsetXPt: { type: 'number' },
+      offsetYPt: { type: 'number' },
     },
     required: ['kind', 'objectKind', 'document', 'frame'],
     additionalProperties: false,

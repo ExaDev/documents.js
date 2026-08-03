@@ -7,6 +7,7 @@ import {
   type ContentDocument,
   ContentDocumentSchema,
   type ContentEmbeddedObject,
+  ContentEmbeddedObjectSchema,
   ContentRunSchema,
   ContentShapeSchema,
   ContentSheetColumnSchema,
@@ -657,6 +658,43 @@ describe('ContentEmbeddedObjectSchema deep recursion', () => {
     const parsed = ContentDocumentSchema.parse(spreadsheetWithDrawing);
     const roundTripped: unknown = JSON.parse(JSON.stringify(parsed));
     expect(ContentDocumentSchema.parse(roundTripped)).toEqual(spreadsheetWithDrawing);
+  });
+
+  it('accepts a sheet-anchored embedded object carrying anchorRow/anchorColumn/offsetXPt/offsetYPt', () => {
+    const cellAnchoredEmbeddedObject: ContentEmbeddedObject = {
+      ...drawingEmbeddedObject,
+      anchorRow: 3,
+      anchorColumn: 1,
+      offsetXPt: 4.5,
+      offsetYPt: -2,
+    };
+    const sheetWithAnchoredObject: ContentDocument = {
+      ...spreadsheetWithDrawing,
+      sheets: [{ ...spreadsheetWithDrawing.sheets[0]!, embeddedObjects: [cellAnchoredEmbeddedObject] }],
+    };
+    const parsed = ContentDocumentSchema.parse(sheetWithAnchoredObject);
+    if (parsed.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet document');
+    }
+    const embedded = parsed.sheets[0]?.embeddedObjects?.[0];
+    expect(embedded?.anchorRow).toBe(3);
+    expect(embedded?.anchorColumn).toBe(1);
+    expect(embedded?.offsetXPt).toBe(4.5);
+    expect(embedded?.offsetYPt).toBe(-2);
+  });
+
+  it('still accepts an embedded object with no cell-anchor fields at all (a wordprocessing/presentation/drawing context, which never sets them)', () => {
+    expect(drawingEmbeddedObject.anchorRow).toBeUndefined();
+    expect(ContentEmbeddedObjectSchema.safeParse(drawingEmbeddedObject).success).toBe(true);
+  });
+
+  it('rejects a negative or non-integer anchorRow/anchorColumn', () => {
+    expect(
+      ContentEmbeddedObjectSchema.safeParse({ ...drawingEmbeddedObject, anchorRow: -1 }).success,
+    ).toBe(false);
+    expect(
+      ContentEmbeddedObjectSchema.safeParse({ ...drawingEmbeddedObject, anchorColumn: 1.5 }).success,
+    ).toBe(false);
   });
 
   it('rejects a malformed embedded object buried three levels deep, not just at the outermost shell', () => {
