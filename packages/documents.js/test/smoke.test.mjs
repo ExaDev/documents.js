@@ -151,6 +151,30 @@ describe('dist/ end-to-end: docxToPdf then pdfToDocx, from the CJS build', () =>
   });
 });
 
+// Real font resolution, from the built artifact: a run asking for Calibri resolves through pdf-codec's vendored, metric-compatible Carlito face and a genuine TrueType font program travels in the PDF -- the same "the font asset survived the build and was actually used" proof odfToPdf's own STIX Two Math assertion below makes, for the other font path. The control assertion (Arial, which no vendored substitute claims and the standard 14 cover directly) is what keeps this honest: it proves the embedding above is driven by the requested family rather than by every conversion now embedding something unconditionally.
+describe('dist/ end-to-end: font resolution in docxToPdf, from the CJS build', () => {
+  function docxAskingFor(fontFamily) {
+    const pkg = cjs.createDocx();
+    pkg.body.appendParagraph().appendRun({ text: 'Hello from the font smoke test', fontFamily });
+    return pkg.toBytes();
+  }
+
+  it('embeds a real Carlito TrueType font program for a Calibri run', () => {
+    const raw = new TextDecoder('latin1').decode(cjs.docxToPdf(docxAskingFor('Calibri')));
+    expect(raw).toContain('/Subtype /Type0');
+    expect(raw).toContain('/Encoding /Identity-H');
+    expect(raw).toContain('/Subtype /CIDFontType2');
+    expect(raw).toContain('/FontFile2');
+    expect(raw).toMatch(/\/BaseFont \/[A-Z]{6}\+Carlito-Regular/);
+  });
+
+  it('embeds nothing at all for an Arial run, using the standard 14 exactly as before', () => {
+    const raw = new TextDecoder('latin1').decode(cjs.docxToPdf(docxAskingFor('Arial')));
+    expect(raw).not.toContain('/FontFile2');
+    expect(raw).toContain('/BaseFont /Helvetica');
+  });
+});
+
 describe('dist/ end-to-end: odtToPdf, from the CJS build', () => {
   it('produces a real PDF from a genuine ODF package, without throwing', () => {
     const pdfBytes = cjs.odtToPdf(minimalOdtBytes());

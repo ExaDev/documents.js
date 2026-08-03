@@ -228,6 +228,17 @@ export { pdfCodec } from 'pdf-codec';
 export type { LoadedMathFont, MathFont, MathFontDescriptorMetrics } from 'pdf-codec';
 export { loadMathFont } from 'pdf-codec';
 
+// --- Real font resolution: which typeface a conversion actually renders through, rather than the standard 14 alone. Every X-to-PDF conversion below builds a FontRegistry whose precedence is source-embedded faces, then the caller's own `fonts`, then pdf-codec's vendored Carlito/Caladea substitutes (metric-compatible with Calibri/Cambria), then the standard 14 -- so a document that embeds its fonts renders in its real typeface at its real metrics without the caller doing anything. The pdf-codec primitives are re-exported because DocumentToPdfOptions.fonts/onFontSubstitution are typed in terms of them; the extractors and createDocumentFontRegistry are exported for a caller composing readXContent/convertXToLayout/writePdf themselves rather than through an ergonomic conversion. ---
+export type { FontRegistry, FontRegistryOptions, FontSubstitution, ProvidedFont, ResolvedFace } from 'pdf-codec';
+export { createFontMeasurer, createFontRegistry, createStandardFontMeasurer } from 'pdf-codec';
+export type { DocumentFontRegistryOptions, FontSourcePackage } from './fonts/registry';
+export { createDocumentFontRegistry, extractSourceFonts } from './fonts/registry';
+// The two format-specific extractors behind extractSourceFonts, plus each one's own error class -- a package declaring a font part it cannot resolve throws rather than quietly downgrading to a substitute, so a caller catching these is catching a structurally broken source document, not a missing optional feature.
+export { extractOoxmlEmbeddedFonts, OoxmlEmbeddedFontError } from './fonts/ooxml';
+export { extractOdfEmbeddedFonts, OdfEmbeddedFontError } from './fonts/odf';
+// ECMA-376 Part 4, 2.8.1's own font obfuscation, sniff-first over both formats (see src/fonts/obfuscation.ts) -- exported for a caller holding a raw .odttf/.fntdata part of their own rather than a whole package.
+export { deobfuscateEmbeddedFont, deriveFontKey, FontDeobfuscationError, looksLikeSfnt } from './fonts/obfuscation';
+
 // --- MathML presentation-layer typesetting: a pure box-model layout engine (no PDF or ODF knowledge of its own -- see src/mathml/'s own module comments), consuming odf.js's readOdfFormula's own raw MathML tree via a locally-defined, structurally-compatible node type. odfToPdf (below) and the odt/odp embedded-formula layout paths (src/layout/engine.ts, src/layout/slides.ts) are its two real callers; exported directly too, for a caller that wants to lay out a formula (e.g. onto a custom page layout) without going through either. ---
 export type { LayoutFormulaOptions } from './mathml/layout';
 export { layoutFormula } from './mathml/layout';
@@ -330,7 +341,7 @@ export { FirebirdUnsupportedFieldTypeError } from './firebird/blr-types';
 export { FirebirdBackupParseError } from './firebird/reader';
 
 // --- The swappable conversion port, for a caller that wants to inject a different (e.g. remote) implementation later without changing call sites. ---
-export type { ConversionRequest, ConversionResult, Diagnostic, DocumentConverter, DocumentFormat, DocumentPayload } from './convert/port';
+export type { ConversionOptions, ConversionRequest, ConversionResult, Diagnostic, DocumentConverter, DocumentFormat, DocumentPayload } from './convert/port';
 export { createLocalDocumentConverter } from './convert/local';
 
 // --- Ports a caller can inject: deterministic clocks (for reproducible PDF output in tests) and cancellation. ---

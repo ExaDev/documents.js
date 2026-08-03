@@ -164,6 +164,19 @@ const ODT_MANIFEST_XML = enc(
   '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.3"><manifest:file-entry manifest:full-path="/" manifest:media-type="application/vnd.oasis.opendocument.text"/><manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/><manifest:file-entry manifest:full-path="styles.xml" manifest:media-type="text/xml"/><manifest:file-entry manifest:full-path="Fonts/Caladea_Regular.ttf" manifest:media-type="application/x-font-ttf"/><manifest:file-entry manifest:full-path="Fonts/Caladea_Bold.ttf" manifest:media-type="application/x-font-ttf"/></manifest:manifest>',
 );
 
+// fontRequestOdtBytes below writes content.xml alone (no styles.xml), so it needs its own manifests rather than reusing the one above -- a manifest declaring a part the package does not contain is a broken document, not a harmlessly over-declared one.
+const FONT_REQUEST_MANIFEST_ENTRIES =
+  '<manifest:file-entry manifest:full-path="/" manifest:media-type="application/vnd.oasis.opendocument.text"/><manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/>';
+
+const FONT_REQUEST_FONT_MANIFEST_ENTRIES =
+  '<manifest:file-entry manifest:full-path="Fonts/Caladea_Regular.ttf" manifest:media-type="application/x-font-ttf"/><manifest:file-entry manifest:full-path="Fonts/Caladea_Bold.ttf" manifest:media-type="application/x-font-ttf"/>';
+
+function fontRequestManifest(withFonts: boolean): Uint8Array<ArrayBuffer> {
+  return enc(
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.3">${FONT_REQUEST_MANIFEST_ENTRIES}${withFonts ? FONT_REQUEST_FONT_MANIFEST_ENTRIES : ''}</manifest:manifest>`,
+  );
+}
+
 function embeddedFontOdtEntries(): (readonly [string, { readonly bytes: Uint8Array<ArrayBuffer>; readonly stored?: boolean }])[] {
   return [
     ['mimetype', { bytes: ODT_MIMETYPE, stored: true }],
@@ -178,4 +191,21 @@ function embeddedFontOdtEntries(): (readonly [string, { readonly bytes: Uint8Arr
 // An odt embedding two plain (never obfuscated) Caladea faces under Fonts/, declared in both content.xml and styles.xml exactly as LibreOffice writes them.
 export function embeddedFontOdtPackage(): OdfPackage {
   return decodeOdfPackage(zipOdfPackage(embeddedFontOdtEntries()));
+}
+
+// An odt whose one paragraph asks for `family` by fo:font-family, optionally embedding the real Caladea faces alongside it. Deliberately a separate fixture from embeddedFontOdtPackage above rather than an option on it, because the two answer different questions: that one reproduces LibreOffice's own markup exactly (style:font-name on the text style, resolved through office:font-face-decls) to prove EXTRACTION, this one has to survive odf.js's own style reading all the way to a ContentRun.fontFamily so a whole conversion can be driven by it -- and odf.js resolves fo:font-family, not the style:font-name -> office:font-face-decls indirection. Both attributes are valid ODF; only the former currently reaches a ContentRun, which is why the extraction fixture above renders as the default family despite embedding real faces.
+export function fontRequestOdtBytes(family: string, embedCaladea = false): Uint8Array<ArrayBuffer> {
+  const declarations = embedCaladea ? ODT_FONT_FACE_DECLS : '';
+  const content = enc(
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<office:document-content ${ODF_NS}>${declarations}<office:automatic-styles><style:style style:name="T1" style:family="text"><style:text-properties fo:font-family="${family}"/></style:style></office:automatic-styles><office:body><office:text><text:p><text:span text:style-name="T1">Font sample</text:span></text:p></office:text></office:body></office:document-content>`,
+  );
+  const entries: (readonly [string, { readonly bytes: Uint8Array<ArrayBuffer>; readonly stored?: boolean }])[] = [
+    ['mimetype', { bytes: ODT_MIMETYPE, stored: true }],
+    ['content.xml', { bytes: content }],
+    ['META-INF/manifest.xml', { bytes: fontRequestManifest(embedCaladea) }],
+  ];
+  if (embedCaladea) {
+    entries.push(['Fonts/Caladea_Regular.ttf', { bytes: caladeaRegularBytes() }], ['Fonts/Caladea_Bold.ttf', { bytes: caladeaBoldBytes() }]);
+  }
+  return zipOdfPackage(entries);
 }

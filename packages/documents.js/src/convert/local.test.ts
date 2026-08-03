@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import type { FontSubstitution } from 'pdf-codec';
 import { createDocx } from '../edit/docx/editor';
 import { createPptx } from '../edit/pptx/editor';
+import { minimalDocxBytes } from '../test-support/docx';
+import { caladeaRegularBytes } from '../test-support/fonts';
 import { brokenStartxrefPdf } from '../test-support/pdf';
 import { FRACTION_FORMULA, odfFormulaBytes } from '../test-support/odf';
 import { minimalOdgBytes } from '../test-support/odg';
@@ -29,7 +32,8 @@ function buildSamplePptx(text: string): Uint8Array<ArrayBuffer> {
 describe('createLocalDocumentConverter: shape', () => {
   it('reports contractVersion and the supported conversion pairs', () => {
     const converter = createLocalDocumentConverter();
-    expect(converter.contractVersion).toBe(2);
+    // 3, not 2: convert()'s own ConversionOptions gained fonts/onFontSubstitution, which an implementation is expected to honour -- see port.ts's own contractVersion comment on what does and does not warrant a bump.
+    expect(converter.contractVersion).toBe(3);
     expect(converter.conversions).toEqual([
       { source: 'docx', target: 'pdf' },
       { source: 'pptx', target: 'pdf' },
@@ -279,5 +283,43 @@ describe('createLocalDocumentConverter: convert', () => {
     const pkg = result.package!;
     expect(pkg.content.kind).toBe('wordprocessing');
     expect(pkg.layout).toBeUndefined();
+  });
+});
+
+describe('createLocalDocumentConverter: fonts', () => {
+  it('reports a vendored font substitution as a diagnostic even with no callback supplied', async () => {
+    const converter = createLocalDocumentConverter();
+    const result = await converter.convert({ source: { format: 'docx', bytes: minimalDocxBytes() }, targetFormat: 'pdf' }, { signal: new AbortController().signal });
+    expect(result.diagnostics).toContainEqual({ severity: 'info', code: 'font/substituted', message: '"Calibri" is not available; substituted the metric-compatible "carlito"' });
+  });
+
+  it('forwards the structured substitution to the caller own callback as well', async () => {
+    const converter = createLocalDocumentConverter();
+    const substitutions: FontSubstitution[] = [];
+    await converter.convert(
+      { source: { format: 'docx', bytes: minimalDocxBytes() }, targetFormat: 'pdf' },
+      { signal: new AbortController().signal, onFontSubstitution: (substitution) => substitutions.push(substitution) },
+    );
+    expect(substitutions).toEqual([{ requestedFamily: 'Calibri', requestedBold: false, requestedItalic: false, reason: 'vendored-substitute', resolvedFamily: 'carlito' }]);
+  });
+
+  // Threading proof rather than a font-resolution proof (src/convert/convert-fonts.test.ts asserts on the real PDF font resource): a caller-supplied face for the requested family means nothing falls back, so the substitution diagnostic that would otherwise be reported is absent.
+  it('threads caller-supplied faces into the conversion that lays text out', async () => {
+    const converter = createLocalDocumentConverter();
+    const result = await converter.convert(
+      { source: { format: 'docx', bytes: minimalDocxBytes() }, targetFormat: 'pdf' },
+      { signal: new AbortController().signal, fonts: [{ family: 'Calibri', bold: false, italic: false, bytes: caladeaRegularBytes() }] },
+    );
+    expect(result.diagnostics.some((diagnostic) => diagnostic.code === 'font/substituted')).toBe(false);
+  });
+
+  // A bridge runs no layout engine and resolves no face, so supplying fonts to one is accepted and reports nothing rather than silently changing its output.
+  it('reports no font diagnostics for a PDF-bypassing bridge conversion', async () => {
+    const converter = createLocalDocumentConverter();
+    const result = await converter.convert(
+      { source: { format: 'odt', bytes: minimalOdtBytes() }, targetFormat: 'docx' },
+      { signal: new AbortController().signal, fonts: [{ family: 'Calibri', bold: false, italic: false, bytes: caladeaRegularBytes() }] },
+    );
+    expect(result.diagnostics).toEqual([]);
   });
 });
