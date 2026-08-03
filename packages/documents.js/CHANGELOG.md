@@ -1,3 +1,32 @@
+# [1.62.0](https://github.com/ExaDev/documents.js/compare/v1.61.0...v1.62.0) (2026-08-03)
+
+
+### Bug Fixes
+
+* **docx:** merge an inline image's own paragraph back on write ([c470c2d](https://github.com/ExaDev/documents.js/commit/c470c2df7bcd6212270ab5a474a43ccb3431431f))
+
+
+### Features
+
+* **docx,odt:** write colSpan/rowSpan merge attributes when building tables ([395fd30](https://github.com/ExaDev/documents.js/commit/395fd30e75d9850f7226aeef1a7867469c9d0d00))
+* **docx:** write an embedded formula as real OMML math instead of a text stand-in ([2deeca2](https://github.com/ExaDev/documents.js/commit/2deeca2fe920534357d8c93ec74c549ed5e430ff))
+* **firebird:** decode BLOB column content from a gbak backup ([03bca0c](https://github.com/ExaDev/documents.js/commit/03bca0c0747fcb3e54e52abea5e036b1aaf0913f))
+* **formula:** carry a formula inside the ContentDocument, not beside it ([d9933f3](https://github.com/ExaDev/documents.js/commit/d9933f37ab7ec69ff4b65a622b4f8d6c61058ad9))
+* **hsqldb:** accept a timezone for CACHED-table date and time decoding ([e922fac](https://github.com/ExaDev/documents.js/commit/e922fac0881820c16b919f07d7be415cf8a76c61))
+* **hsqldb:** decode a CACHED table carrying more than one index ([4e5032d](https://github.com/ExaDev/documents.js/commit/4e5032d6e46d6e0d41b78a1a78dd472f620af580))
+* **hsqldb:** decode the whole-script BINARY and COMPRESSED formats ([145e109](https://github.com/ExaDev/documents.js/commit/145e109e2956345027bb7b89d1d72f5fcd8113c0))
+* implement real inter-word justification for justified paragraphs ([57615d6](https://github.com/ExaDev/documents.js/commit/57615d6bbacc8323b735b456bf22a5ce142229bc))
+* **layout:** re-type recovered spreadsheet cells from their rendered text ([819d189](https://github.com/ExaDev/documents.js/commit/819d189de3618ff8fda3c728d2ae0ae3d8cb6f8c))
+* **layout:** recover a table from a drawn gridline lattice in PDF reconstruction ([f79dcc4](https://github.com/ExaDev/documents.js/commit/f79dcc47489636010557453dfb84895167fc0ece))
+* **layout:** recover vector primitives in wordprocessing and presentation reconstruction ([79472a6](https://github.com/ExaDev/documents.js/commit/79472a6a288c2a649fbcc0cf9576546306eb5714))
+* **layout:** render per-cell background, borders, and alignment overrides ([328409a](https://github.com/ExaDev/documents.js/commit/328409a8e765b6cee7cd6aa21bc8f78722eccad9))
+* **odb:** expose readOdbForm/readOdbReport via readOdbForms/readOdbReports ([1a4b221](https://github.com/ExaDev/documents.js/commit/1a4b2212d928820e15653558766e4a5926564dcb))
+* **odf:** detect an embedded formula wherever its frame sits, at its true block position ([8ed1161](https://github.com/ExaDev/documents.js/commit/8ed11618bce97ef835baedcc4506f7ee7aaad2b0))
+* **odg:** paint a drawing page by its shared paintOrder instead of vectors-then-shapes ([f8213cf](https://github.com/ExaDev/documents.js/commit/f8213cf7b805f87c906ed1c8d53fa897514f7809))
+* **odg:** rotate vector primitives, resolving a rotated one into a LayoutPath ([8459ab6](https://github.com/ExaDev/documents.js/commit/8459ab62432668f1cdcf915b50d1de222aacda00))
+* **pptx,odp:** write a real table into a slide shape ([5e8cacc](https://github.com/ExaDev/documents.js/commit/5e8cacc66260daa6e323c798004fc6a897d57978))
+* **pptx:** add rotationDeg setter to PptxShape ([07046d4](https://github.com/ExaDev/documents.js/commit/07046d489433d8cb4f36767387dea07723cc86d9))
+
 # [1.61.0](https://github.com/ExaDev/documents.js/compare/v1.60.3...v1.61.0) (2026-08-02)
 
 
