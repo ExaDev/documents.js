@@ -1,6 +1,6 @@
 // documents.js's public surface: bidirectional docx/pptx/odt/odp/ods/odg <-> PDF conversion, a read+write live-view editor for docx/pptx/odt/odp/ods/odg, and a hand-written PDF codec, built on ooxml.js's lossless OOXML core and odf.js's lossless ODF core.
 
-// --- ooxml.js's lossless OOXML core, re-exported so consumers need only this one dependency. Its own typed readers (readDocx/readPptx/readXlsx) and their result types are deliberately NOT re-exported here: readDocxContent/readPptxContent (below) already wrap readDocx/readPptx into ContentDocument, so exposing both the wrapper and the thing it wraps would be a trap -- two overlapping entry points to the same underlying read, one of which (readDocx/readPptx's own comments/footnotes/headers/footers) carries fields ContentDocument doesn't model at all. ---
+// --- ooxml.js's lossless OOXML core, re-exported so consumers need only this one dependency. Its own typed readers (readDocx/readPptx/readXlsx) and their result types are deliberately NOT re-exported here: readDocxContent/readPptxContent (below) already wrap readDocx/readPptx into ContentDocument, so exposing both the wrapper and the thing it wraps would be a trap -- two overlapping entry points to the same underlying read. readDocx's own comments/footnotes/headers/footers/numbering, which ContentDocument doesn't model at all, are not lost, though -- see readDocxExtras below, which exposes that data as its own real return type rather than by re-exporting readDocx itself. Comment/Footnote/NumberingDefinitions (ooxml.js's own types, reused by readDocxExtras' own return shape) are re-exported here since they're genuinely just data types, not a second entry point to the same read. ---
 export {
   type Attribute,
   AttributeSchema,
@@ -17,6 +17,13 @@ export {
   CompactXmlNodeSchema,
   type DefinedName,
   DefinedNameSchema,
+  type Footnote,
+  FootnoteSchema,
+  type NumberingDefinition,
+  NumberingDefinitionSchema,
+  type NumberingDefinitions,
+  type NumberingLevel,
+  NumberingLevelSchema,
   type Package,
   PackageSchema,
   type Part,
@@ -257,6 +264,9 @@ export { buildOfficeMath, buildOfficeMathParagraph } from './omml/write';
 
 // --- Format <-> ContentDocument readers and layout algorithms, each independently usable rather than only reachable through the ergonomic conversions below. ---
 export { readDocxContent } from './ooxml/docx/read';
+// The docx-specific data readDocxContent above genuinely cannot carry through ContentDocument -- comments, footnotes, headers/footers, and numbering (abstractNum/num) definitions -- exposed as its own real return type rather than forced into a shape that doesn't model it.
+export type { DocxExtras } from './ooxml/docx/extras';
+export { readDocxExtras } from './ooxml/docx/extras';
 export { readPptxContent } from './ooxml/pptx/read';
 export { readOdtContent } from './odf/odt/read';
 export { readOdpContent } from './odf/odp/read';
