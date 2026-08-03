@@ -1,3 +1,22 @@
+# [1.6.0](https://github.com/ExaDev/pdf-codec/compare/v1.5.0...v1.6.0) (2026-08-03)
+
+
+### Bug Fixes
+
+* separate the subset-tag hash inputs with a space, not a NUL byte ([cf11e8f](https://github.com/ExaDev/pdf-codec/commit/cf11e8fe6fb4c6aec886901c351b2f0a660bf502))
+* split ToUnicode CMap entries into blocks of at most 100 ([d62991a](https://github.com/ExaDev/pdf-codec/commit/d62991a4671f6aa5dfa3c2bb5ea1476e61b741ab))
+
+
+### Features
+
+* add a FontRegistry with source/caller/vendored/standard-14 resolution precedence ([162b24c](https://github.com/ExaDev/pdf-codec/commit/162b24c08108def11bcb7861f69d60b0b44c8a27))
+* add a GID-preserving TrueType font subsetter ([16ed0dc](https://github.com/ExaDev/pdf-codec/commit/16ed0dc9fe2392239f201801c88a507eefb8c397))
+* add head/maxp/OS-2/post/name and glyf/loca table parsers; generalize cmap/hmtx ([8a80ecf](https://github.com/ExaDev/pdf-codec/commit/8a80ecff0474954ac39c91703ba07f46975fc97b))
+* build the Type0/CIDFontType2 PDF object group for embedded TrueType fonts ([8ceabaa](https://github.com/ExaDev/pdf-codec/commit/8ceabaa8b496668b7935b4ef236b43fdab3f1de9))
+* detect a CID-keyed CFF font program ([c4823b1](https://github.com/ExaDev/pdf-codec/commit/c4823b14b08fe1bdf6de5e7cefef2f8aaf775640))
+* vendor Carlito and Caladea TrueType font assets ([d8f4287](https://github.com/ExaDev/pdf-codec/commit/d8f42870b0d7e8c0eff31f156c2b14c95e5b0dc0))
+* wire embedded font resolution into measurement and PDF text writing ([44e6ed9](https://github.com/ExaDev/pdf-codec/commit/44e6ed97fc9f7a52ed29a42c46596bacbd606bd9))
+
 # [1.5.0](https://github.com/ExaDev/pdf-codec/compare/v1.4.2...v1.5.0) (2026-08-02)
 
 
