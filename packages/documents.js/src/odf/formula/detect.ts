@@ -1,7 +1,8 @@
 import type { OdfTransformFunction, Package, XmlElement, XmlNode } from 'odf.js';
-import { attrValue, childrenWithTag, parseOdfLength, parseOdfTransform, readDrawFrame } from 'odf.js';
+import { attrValue, childrenWithTag, parseOdfTransform, readDrawFrame } from 'odf.js';
 import type { ContentFormula } from 'document-schema.js';
 import type { Box } from '../../model/geometry';
+import { flowAnchoredFrameBox } from '../shared/flow-anchor';
 import { readOdfEmbeddedFormula } from './read';
 
 export interface DetectedFormulaFrame {
@@ -31,21 +32,6 @@ function formulaOfFrame(frame: XmlElement, pkg: Package): ContentFormula | undef
     return undefined;
   }
   return readOdfEmbeddedFormula(pkg, subPackagePathFromHref(href));
-}
-
-// A frame anchored INTO the text flow (text:anchor-type="as-char" or "char" -- the shape LibreOffice writes for a formula typed inline in a paragraph) carries svg:width/svg:height but no svg:x, because its horizontal position is decided by the surrounding text, not by the frame. odf.js's own readDrawFrame therefore resolves no geometry for one at all (resolveOdfShapeGeometry -> parseBox requires all four of svg:x/y/width/height), which is correct for its own purpose -- a shape with no position cannot be placed on a slide -- but wrong for a wordprocessing flow, where the layout engine derives x/y from the flow itself and reads only the frame's own height to pick a rendered size (see src/layout/engine.ts's own formulaSizePtFromFrame). This recovers exactly that: the declared size, at a zero origin the flow will replace.
-function flowAnchoredFrameBox(frame: XmlElement): Box | undefined {
-  const widthValue = attrValue(frame, 'svg:width');
-  const heightValue = attrValue(frame, 'svg:height');
-  if (widthValue === undefined || heightValue === undefined) {
-    return undefined;
-  }
-  const widthPt = parseOdfLength(widthValue);
-  const heightPt = parseOdfLength(heightValue);
-  if (widthPt === undefined || heightPt === undefined) {
-    return undefined;
-  }
-  return { xPt: 0, yPt: 0, widthPt, heightPt };
 }
 
 // A group's own draw:transform, composed onto whatever transform its ancestors already contribute -- lifted verbatim from odf.js's own walkDrawShapes (typed/draw/shapes.ts), including the "an empty own-transform list reuses the parent's array rather than copying it" detail, so a frame nested inside a group resolves to the exact same geometry odf.js itself would resolve for it.
