@@ -172,6 +172,119 @@ describe('OdsSheet.printSettings', () => {
   });
 });
 
+describe('OdsSheet.printSettings: printRange, scale/fitToPages, repeatRows/repeatColumns, manualBreaks', () => {
+  it('printRange round-trips through a real write -> reread cycle via odf.js\'s own readOds parser', () => {
+    const editor = createOds();
+    const sheet = editor.sheets()[0]!;
+    sheet.cell(0, 0).value = { kind: 'string', value: 'x' };
+    sheet.printSettings = { ...CUSTOM_PRINT_SETTINGS, printRange: { startRow: 0, startColumn: 0, endRow: 9, endColumn: 4 } };
+
+    const content = readOdsContent(openOds(editor.toBytes()).toPackage());
+    if (content.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    expect(content.sheets[0]!.printSettings.printRange).toEqual({ startRow: 0, startColumn: 0, endRow: 9, endColumn: 4 });
+  });
+
+  it('scalePercent and fitToPages round-trip independently -- setting one never perturbs a separately-set other', () => {
+    const editor = createOds();
+    const sheetA = editor.sheets()[0]!;
+    sheetA.printSettings = { ...CUSTOM_PRINT_SETTINGS, scalePercent: 80 };
+    const sheetB = editor.addSheet('FitToPages');
+    sheetB.printSettings = { ...CUSTOM_PRINT_SETTINGS, fitToPages: { width: 1, height: 2 } };
+
+    const content = readOdsContent(openOds(editor.toBytes()).toPackage());
+    if (content.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    expect(content.sheets[0]!.printSettings.scalePercent).toBe(80);
+    expect(content.sheets[0]!.printSettings.fitToPages).toBeUndefined();
+    expect(content.sheets[1]!.printSettings.fitToPages).toEqual({ width: 1, height: 2 });
+    expect(content.sheets[1]!.printSettings.scalePercent).toBeUndefined();
+  });
+
+  it('repeatRows/repeatColumns wrap the real rows/columns into table:table-header-rows/table:table-header-columns, and round-trip through odf.js\'s own readOds', () => {
+    const editor = createOds();
+    const sheet = editor.sheets()[0]!;
+    sheet.cell(0, 0).value = { kind: 'string', value: 'Header' };
+    sheet.cell(5, 2).value = { kind: 'string', value: 'Data' };
+    sheet.printSettings = { ...CUSTOM_PRINT_SETTINGS, repeatRows: { start: 0, end: 0 }, repeatColumns: { start: 0, end: 0 } };
+
+    const table = findTableElement(editor);
+    expect(directChild(table, 'table:table-header-rows')).toBeDefined();
+    expect(directChild(table, 'table:table-header-columns')).toBeDefined();
+
+    const content = readOdsContent(openOds(editor.toBytes()).toPackage());
+    if (content.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    const sheetOut = content.sheets[0]!;
+    expect(sheetOut.printSettings.repeatRows).toEqual({ start: 0, end: 0 });
+    expect(sheetOut.printSettings.repeatColumns).toEqual({ start: 0, end: 0 });
+    // The wrapped header row's own cell content survived the structural move, and the un-wrapped data cell beyond it is still addressable at its own real position.
+    expect(sheetOut.cells.find((c) => c.row === 0 && c.column === 0)?.value).toEqual({ kind: 'string', value: 'Header' });
+    expect(sheetOut.cells.find((c) => c.row === 5 && c.column === 2)?.value).toEqual({ kind: 'string', value: 'Data' });
+  });
+
+  it('a cell written to a row AFTER it has been wrapped into repeatRows resolves to its real, existing position rather than a spurious duplicate', () => {
+    const editor = createOds();
+    const sheet = editor.sheets()[0]!;
+    sheet.cell(0, 0).value = { kind: 'string', value: 'Header' };
+    sheet.printSettings = { ...CUSTOM_PRINT_SETTINGS, repeatRows: { start: 0, end: 0 } };
+
+    // Row 0 is now wrapped inside table:table-header-rows -- writing a SECOND cell on that same row must find the SAME wrapped row element, not create a duplicate direct-child row 0.
+    sheet.cell(0, 1).value = { kind: 'string', value: 'Header2' };
+
+    const table = findTableElement(editor);
+    const directRows = table.children.filter((c): c is XmlElement => c.type === 'element' && c.tag === 'table:table-row');
+    expect(directRows).toHaveLength(0); // row 0 lives ONLY inside the header wrapper, never duplicated as a direct child too
+
+    const content = readOdsContent(openOds(editor.toBytes()).toPackage());
+    if (content.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    const row0Cells = content.sheets[0]!.cells.filter((c) => c.row === 0);
+    expect(row0Cells).toHaveLength(2);
+    expect(row0Cells.find((c) => c.column === 0)?.value).toEqual({ kind: 'string', value: 'Header' });
+    expect(row0Cells.find((c) => c.column === 1)?.value).toEqual({ kind: 'string', value: 'Header2' });
+  });
+
+  it('manualBreaks round-trip on both rows and columns, preserving a width/height already set on the SAME row/column', () => {
+    const editor = createOds();
+    const sheet = editor.sheets()[0]!;
+    sheet.cell(3, 2).value = { kind: 'string', value: 'x' };
+    sheet.setColumnWidth(2, 111);
+    sheet.setRowHeight(3, 22);
+    sheet.printSettings = { ...CUSTOM_PRINT_SETTINGS, manualBreaks: { rows: [3], columns: [2] } };
+
+    const content = readOdsContent(openOds(editor.toBytes()).toPackage());
+    if (content.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    const sheetOut = content.sheets[0]!;
+    expect(sheetOut.printSettings.manualBreaks).toEqual({ rows: [3], columns: [2] });
+    // Setting the manual break must not have clobbered the width/height already set on that same column/row.
+    expect(sheetOut.columns.find((c) => c.index === 2)?.widthPt).toBeCloseTo(111, 5);
+    expect(sheetOut.rows.find((r) => r.index === 3)?.heightPt).toBeCloseTo(22, 5);
+  });
+
+  it('setting a width AFTER a manual break on the same column preserves the break, mirroring the reverse order above', () => {
+    const editor = createOds();
+    const sheet = editor.sheets()[0]!;
+    sheet.cell(0, 4).value = { kind: 'string', value: 'x' };
+    sheet.printSettings = { ...CUSTOM_PRINT_SETTINGS, manualBreaks: { rows: [], columns: [4] } };
+    sheet.setColumnWidth(4, 77);
+
+    const content = readOdsContent(openOds(editor.toBytes()).toPackage());
+    if (content.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    const sheetOut = content.sheets[0]!;
+    expect(sheetOut.columns.find((c) => c.index === 4)?.widthPt).toBeCloseTo(77, 5);
+    expect(sheetOut.printSettings.manualBreaks?.columns).toContain(4);
+  });
+});
+
 describe('OdsSheet.setColumnWidth / setRowHeight', () => {
   it('a column/row no cell has touched yet reads back at width/height 0 (the pre-fix behaviour, still true until set)', () => {
     const editor = createOds();
