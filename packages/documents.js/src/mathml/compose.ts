@@ -2,7 +2,7 @@ import type { MathBox, MathLayoutItem } from './layout-types';
 
 export const EMPTY_BOX: MathBox = { widthPt: 0, heightPt: 0, ascentPt: 0, descentPt: 0, items: [] };
 
-// Translates every item in `items` by (dxPt, dyPt) -- the one place this module touches an individual MathLayoutItem's own coordinate fields, since MathStroke's points are a nested array unlike MathGlyphRun/MathRule's flat xPt/yPt.
+// Translates every item in `items` by (dxPt, dyPt) -- the one place this module touches an individual MathLayoutItem's own coordinate fields, since MathStroke's points and MathAssembledGlyphs' placements are each a nested array unlike MathGlyphRun/MathRule's flat xPt/yPt.
 export function shiftItems(items: readonly MathLayoutItem[], dxPt: number, dyPt: number): MathLayoutItem[] {
   if (dxPt === 0 && dyPt === 0) {
     return [...items];
@@ -10,6 +10,9 @@ export function shiftItems(items: readonly MathLayoutItem[], dxPt: number, dyPt:
   return items.map((item) => {
     if (item.kind === 'stroke') {
       return { ...item, points: item.points.map((p) => ({ xPt: p.xPt + dxPt, yPt: p.yPt + dyPt })) };
+    }
+    if (item.kind === 'assembled-glyphs') {
+      return { ...item, placements: item.placements.map((p) => ({ glyphId: p.glyphId, xPt: p.xPt + dxPt, yPt: p.yPt + dyPt })) };
     }
     return { ...item, xPt: item.xPt + dxPt, yPt: item.yPt + dyPt };
   });

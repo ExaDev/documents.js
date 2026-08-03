@@ -249,8 +249,8 @@ export { deobfuscateEmbeddedFont, deriveFontKey, FontDeobfuscationError, looksLi
 // --- MathML presentation-layer typesetting: a pure box-model layout engine (no PDF or ODF knowledge of its own -- see src/mathml/'s own module comments), consuming odf.js's readOdfFormula's own raw MathML tree via a locally-defined, structurally-compatible node type. odfToPdf (below) and the odt/odp embedded-formula layout paths (src/layout/engine.ts, src/layout/slides.ts) are its two real callers; exported directly too, for a caller that wants to lay out a formula (e.g. onto a custom page layout) without going through either. ---
 export type { LayoutFormulaOptions } from './mathml/layout';
 export { layoutFormula } from './mathml/layout';
-export type { MathBox, MathColor, MathDiagnostic, MathDiagnosticKind, MathGlyphRun, MathLayoutItem, MathLayoutResult, MathRule, MathStroke } from './mathml/layout-types';
-export type { MathFontMetrics, MathGlyphMetrics } from './mathml/metrics';
+export type { MathAssembledGlyphs, MathBox, MathColor, MathDiagnostic, MathDiagnosticKind, MathGlyphPlacement, MathGlyphRun, MathLayoutItem, MathLayoutResult, MathRule, MathStroke } from './mathml/layout-types';
+export type { MathFontMetrics, MathGlyphMetrics, MathStretchAxis, MathStretchGlyph, MathStretchResult } from './mathml/metrics';
 export type { MathMlAttribute, MathMlElement, MathMlNode, MathMlText } from './mathml/nodes';
 export { elementChildren, elementLocalName, firstChildByLocalName, isMathMlElement, localName, textContent as mathMlTextContent } from './mathml/nodes';
 export type { OperatorProperties } from './mathml/operators';

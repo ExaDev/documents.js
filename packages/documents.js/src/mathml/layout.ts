@@ -1,7 +1,7 @@
 import { EMPTY_BOX, concatBoxesHorizontally, placeChild, shiftItems } from './compose';
 import { parseMathLength } from './length';
-import type { MathBox, MathColor, MathDiagnostic, MathLayoutItem, MathLayoutResult } from './layout-types';
-import type { MathFontMetrics } from './metrics';
+import type { MathBox, MathColor, MathDiagnostic, MathGlyphPlacement, MathLayoutItem, MathLayoutResult } from './layout-types';
+import type { MathFontMetrics, MathStretchResult } from './metrics';
 import type { MathMlElement, MathMlNode } from './nodes';
 import { attrValue, elementChildren, elementLocalName, isMathMlElement, textContent } from './nodes';
 import { operatorProperties } from './operators';
@@ -94,8 +94,76 @@ function miIntrinsicDefault(content: string): MathVariant {
   return [...content].length === 1 ? 'italic' : 'normal';
 }
 
+// Whether `element` is an operator that stretches to its row's own content. The operator dictionary's own `stretchy` property is the default; MathML lets a document override it per element, and only an explicit stretchy="false" is honoured here, since stretchy="true" cannot make a glyph the font declares no MathVariants construction for stretchable anyway (metrics.stretch simply returns undefined for it and the operator draws at its base size).
+function isStretchyOperator(element: MathMlElement): boolean {
+  if (elementLocalName(element) !== 'mo') {
+    return false;
+  }
+  if (attrValue(element, 'stretchy') === 'false') {
+    return false;
+  }
+  return operatorProperties(textContent(element).trim()).stretchy;
+}
+
+// Turns one resolved stretchy construction into a box holding a single 'assembled-glyphs' item. The construction's own real ink is centred on the maths axis -- the default `symmetric` behaviour MathML gives a fence, and the reason a pair of tall brackets lines up with the fraction rule between them rather than with the text baseline -- so the drawing origin sits `originAboveBaselinePt` above the shared baseline and the box's own edges land exactly on the ink's own top and bottom.
+function stretchedBox(result: MathStretchResult, text: string, ctx: LayoutContext): MathBox {
+  const axisPt = ctx.metrics.axisHeightPt;
+  const inkHeightPt = result.inkAscentPt + result.inkDescentPt;
+  const originAboveBaselinePt = axisPt - (result.inkAscentPt - result.inkDescentPt) / 2;
+  const ascentPt = axisPt + inkHeightPt / 2;
+  const descentPt = inkHeightPt / 2 - axisPt;
+  // Box-local y-down from the box's own top: the baseline is `ascentPt` down, the drawing origin `originAboveBaselinePt` above that, and each placement a further `offsetPt` up the stretch axis.
+  const placements: MathGlyphPlacement[] = result.placements.map((placement) => ({ glyphId: placement.glyphId, xPt: 0, yPt: ascentPt - originAboveBaselinePt - placement.offsetPt }));
+  const items: MathLayoutItem[] = [{ kind: 'assembled-glyphs', placements, text, sizePt: ctx.sizePt, color: ctx.color }];
+  return { widthPt: result.advanceWidthPt, ascentPt, descentPt, heightPt: ascentPt + descentPt, items };
+}
+
+// The stretched replacement box for one operator, or undefined to keep the ordinary text run already laid out for it. Kept deliberately: a 'base' result means the font's own smallest form already reaches the target, and the existing MathGlyphRun carries the operator's real Unicode text where an assembled-glyphs item can only carry glyph IDs -- so an ordinary inline (x+1) renders exactly as it did before this stretching path existed, text extraction included.
+function stretchOperator(element: MathMlElement, targetSizePt: number, ctx: LayoutContext): MathBox | undefined {
+  const text = textContent(element).trim();
+  const codePoints = [...text];
+  // A multi-character operator has no single glyph to look a construction up for; the font's MathVariants data is keyed per glyph.
+  if (codePoints.length !== 1) {
+    return undefined;
+  }
+  const codePoint = codePoints[0]?.codePointAt(0);
+  if (codePoint === undefined) {
+    return undefined;
+  }
+  const result = ctx.metrics.stretch(codePoint, 'vertical', targetSizePt, ctx.sizePt);
+  if (result === undefined || result.kind === 'base') {
+    return undefined;
+  }
+  return stretchedBox(result, text, ctx);
+}
+
+// Replaces each stretchy operator's own box with one stretched to cover the rest of the row. Per MathML3 3.2.5.8 the target is the maximum height and depth of the row's OTHER children -- a stretchy operator's own natural size never counts towards it, so several fences in one row all size to the same content rather than escalating off each other -- and a fence stretches symmetrically about the maths axis, which is what makes the target twice the larger of the two half-extents rather than the plain content height.
+//
+// Only the VERTICAL axis is wired up here. Horizontal stretching (an over/under-brace spanning its own base, U+23DE/U+23DF) needs a target derived from a box's width inside layoutUnderOver rather than from a row's height, and nothing in this module calls metrics.stretch with 'horizontal' yet -- see this package's own README for the exact boundary.
+function stretchRowOperators(children: readonly MathMlElement[], boxes: readonly MathBox[], ctx: LayoutContext): readonly MathBox[] {
+  const stretchy = children.map(isStretchyOperator);
+  if (!stretchy.includes(true)) {
+    return boxes;
+  }
+  const others = boxes.filter((_, index) => stretchy[index] !== true);
+  if (others.length === 0) {
+    return boxes;
+  }
+  const axisPt = ctx.metrics.axisHeightPt;
+  const maxAscentPt = others.reduce((max, box) => Math.max(max, box.ascentPt), 0);
+  const maxDescentPt = others.reduce((max, box) => Math.max(max, box.descentPt), 0);
+  const targetSizePt = 2 * Math.max(maxAscentPt - axisPt, maxDescentPt + axisPt);
+  return boxes.map((box, index) => {
+    if (stretchy[index] !== true) {
+      return box;
+    }
+    const element = children[index];
+    return (element === undefined ? undefined : stretchOperator(element, targetSizePt, ctx)) ?? box;
+  });
+}
+
 function layoutRowChildren(children: readonly MathMlElement[], ctx: LayoutContext): MathBox {
-  const boxes = children.map((child) => layoutNode(child, ctx));
+  const boxes = stretchRowOperators(children, children.map((child) => layoutNode(child, ctx)), ctx);
   const gapsPt = children.map((child, index) => {
     if (index === 0) {
       return 0;

@@ -2,16 +2,17 @@ import { execFileSync } from 'node:child_process';
 import { writeFileSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { unzlibSync } from 'fflate';
 import { buildXml as buildOdfXml, zipPackage } from 'odf.js';
 import { describe, expect, it } from 'vitest';
-import { FRACTION_FORMULA, MATRIX_FORMULA, odfFormulaBytes, SQRT_FORMULA, SUBSUP_FORMULA } from '../test-support/odf';
+import { FRACTION_FORMULA, MATRIX_FORMULA, odfFormulaBytes, SQRT_FORMULA, STRETCHY_FENCE_FORMULA, SUBSUP_FORMULA } from '../test-support/odf';
 import { minimalOdpBytes } from '../test-support/odp';
 import { minimalOdtBytes } from '../test-support/odt';
 import type { ContentBlock, DocumentPackage, MathMlNode } from 'document-schema.js';
 import { decodePackage } from 'odf.js';
 import type { XmlElement } from 'ooxml.js';
 import { attr, buildXml, childrenWithTag, decodePackage as decodeOoxmlPackage, elementsWithTag, encodePackage as encodeOoxmlPackage, rootElement, textContent } from 'ooxml.js';
-import { readPdf } from 'pdf-codec';
+import { loadMathFont, readPdf } from 'pdf-codec';
 import { buildDocxPackage } from '../edit/docx/content';
 import { decodeMarkdownText } from '../markdown/text';
 import type { OmmlDiagnostic } from '../omml/shared';
@@ -88,6 +89,64 @@ describe('odfToPdf: a small matrix (mtable)', () => {
     // starMath itself is not asserted on the PDF (there is no StarMath-rendering path -- the real MathML is what's rendered), but this confirms the option is accepted and odfToPdf still succeeds with it present.
     const bytes = odfToPdf(odfFormulaBytes(FRACTION_FORMULA, { starMath: '{a} over {b}' }));
     expect(readPdf(bytes).pages).toHaveLength(1);
+  });
+});
+
+// Every Flate-compressed stream in `bytes`, inflated back to text -- the only way to assert on the content-stream OPERATORS a conversion produced, since writePdf compresses them. Brute force by design (try each stream, keep the ones that inflate) rather than walking the object graph: this is a test wanting to read what was drawn, not a second PDF parser.
+function inflatedStreams(bytes: Uint8Array<ArrayBuffer>): string[] {
+  const raw = new TextDecoder('latin1').decode(bytes);
+  const streams: string[] = [];
+  const marker = /stream\r?\n/g;
+  let match: RegExpExecArray | null = marker.exec(raw);
+  while (match !== null) {
+    const start = match.index + match[0].length;
+    const end = raw.indexOf('endstream', start);
+    if (end >= 0) {
+      try {
+        streams.push(new TextDecoder('latin1').decode(unzlibSync(bytes.subarray(start, end))));
+      } catch {
+        // Not a Flate stream (or not one whose bounds this crude scan got right) -- the streams that matter here are, so skipping is correct rather than a swallowed failure.
+      }
+    }
+    match = marker.exec(raw);
+  }
+  return streams;
+}
+
+// The page content stream specifically: the one selecting the embedded math font resource write.ts allocates for formulas. Identified by that resource selection rather than by any operator name, since the embedded CFF font program is itself a Flate stream whose compressed bytes can coincidentally contain any two-letter operator.
+function formulaContentStream(bytes: Uint8Array<ArrayBuffer>): string {
+  const content = inflatedStreams(bytes).find((stream) => stream.includes('/MF ') && stream.includes(' Tf\n'));
+  expect(content).toBeDefined();
+  return content!;
+}
+
+describe('odfToPdf: a stretchy fence around a tall construct', () => {
+  it('draws each fence as a real multi-part assembly of the font\'s own glyphs, sized to the content', () => {
+    const bytes = odfToPdf(odfFormulaBytes(STRETCHY_FENCE_FORMULA));
+    expect(readPdf(bytes).pages).toHaveLength(1);
+    qpdfCheck(bytes);
+
+    const content = formulaContentStream(bytes);
+    const font = loadMathFont().font;
+    const cid = (codePoint: number) => `<${font.glyphId(codePoint)!.toString(16).padStart(4, '0')}> Tj`;
+    // The real LEFT PARENTHESIS pieces, by the Unicode code points that name them: a lower hook, at least one extension, an upper hook. Their glyph IDs reach the content stream as bare Identity-H CIDs, which is the whole point of drawing an assembly by glyph ID.
+    expect(content).toContain(cid(0x239d)); // LEFT PARENTHESIS LOWER HOOK
+    expect(content).toContain(cid(0x239b)); // LEFT PARENTHESIS UPPER HOOK
+    expect(content.split(cid(0x239c)).length - 1).toBeGreaterThan(0); // LEFT PARENTHESIS EXTENSION, repeated
+    expect(content).toContain(cid(0x23a0)); // RIGHT PARENTHESIS LOWER HOOK -- the closing fence is assembled too
+    // One /ActualText span per fence, so a reader still extracts "(" and ")" from glyphs that carry no ToUnicode mapping of their own.
+    expect(content.split('/ActualText <feff0028> >> BDC').length - 1).toBe(1);
+    expect(content.split('/ActualText <feff0029> >> BDC').length - 1).toBe(1);
+    expect(content.split('EMC').length - 1).toBe(2);
+  });
+
+  it('leaves an ordinary short fence as ordinary text, drawn through the font\'s own cmap', () => {
+    const short = '<math:mrow><math:mo>(</math:mo><math:mi>x</math:mi><math:mo>)</math:mo></math:mrow>';
+    const content = formulaContentStream(odfToPdf(odfFormulaBytes(short)));
+    expect(content).not.toContain('BDC'); // nothing was assembled
+    const font = loadMathFont().font;
+    // The base parenthesis glyph itself, shown as part of an ordinary multi-glyph text run rather than on its own.
+    expect(content).toContain(font.glyphId(0x28)!.toString(16).padStart(4, '0'));
   });
 });
 
