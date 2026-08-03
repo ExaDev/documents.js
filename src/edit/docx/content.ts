@@ -1,5 +1,6 @@
 import type { ContentBlock, ContentDocument, ContentEmbeddedObjectBlock, ContentParagraph, ContentTable } from 'document-schema.js';
 import type { Package } from 'ooxml.js';
+import { drawingOfBlock, embeddedDrawingVectors, FLOW_CONTAINER_ORIGIN } from '../../model/embedded-drawing';
 import { formulaOfBlock, formulaPlaceholderText } from '../../model/formula';
 import { base64ToBytes } from 'ooxml.js';
 import { ptToTwips } from '../../model/units';
@@ -168,8 +169,12 @@ function appendBlock(body: DocxBody, block: ContentBlock, options: BuildDocxPack
 //
 // The plain-text stand-in (the formula's own StarMath annotation, or the literal "[formula]") remains the fallback for exactly one case: a formula whose MathML produced no OMML content at all -- an empty mathml array, or a block whose document is not a formula document. Writing nothing there would make the formula vanish without trace, the silent-loss failure mode this codebase's conventions rule out. An individual MathML construct with no OMML counterpart degrades on its own, inside the equation, with a diagnostic -- see src/omml/write.ts -- rather than dragging the whole formula down to text.
 //
-// A 'drawing' objectKind IS reachable -- reconstructWordprocessing wraps a page's recovered vector primitives in one (src/layout/reconstruct.ts) -- and is deliberately not written: there is no DrawingML preset/custom-geometry writer under src/edit/docx/ to write a rect/ellipse/line/path with, and degrading real geometry to a text stand-in the way a formula used to would be noise rather than information (a rect has no text to stand in for). The recovered vectors stay fully available on the ContentDocument itself, which pdfToDocx hands back through its own onDocument callback. The remaining objectKinds (a nested wordprocessing/presentation/spreadsheet document) are still unhandled: no reader this package depends on produces one.
+// A 'drawing' objectKind -- what reconstructWordprocessing wraps a page's recovered vector primitives in (src/layout/reconstruct.ts) -- becomes a paragraph carrying one real page-anchored DrawingML shape per vector (src/edit/docx/vector.ts, built on the shared preset/custom-geometry writer pptx uses too). The remaining objectKinds (a nested wordprocessing/presentation/spreadsheet document) are still unhandled: no reader this package depends on produces one.
 function appendEmbeddedObject(body: DocxBody, block: ContentEmbeddedObjectBlock, options: BuildDocxPackageOptions | undefined): void {
+  if (drawingOfBlock(block) !== undefined) {
+    body.appendParagraph().appendVectorAnchors(embeddedDrawingVectors(block, FLOW_CONTAINER_ORIGIN));
+    return;
+  }
   const formula = formulaOfBlock(block);
   if (formula === undefined) {
     return;

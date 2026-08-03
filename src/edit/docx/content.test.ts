@@ -1,13 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
 import type { ContentDocument } from 'document-schema.js';
-import { bytesToBase64 } from 'ooxml.js';
+import type { XmlElement } from 'ooxml.js';
+import { attr, bytesToBase64, childrenWithTag, decodePackage, encodePackage, rootElement, textContent } from 'ooxml.js';
 import { readDocxContent } from '../../ooxml/docx/read';
+import { collectDrawingMlVectors } from '../../test-support/drawingml-vector';
+import { VECTOR_FIXTURE, vectorDrawingBlock } from '../../test-support/vectors';
+import { walkElements } from '../../xml/query';
 import { buildDocxPackage } from './content';
 import { DocxEditor } from './editor';
 
 function wordDoc(sections: Extract<ContentDocument, { kind: 'wordprocessing' }>['sections']): ContentDocument {
   return { kind: 'wordprocessing', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, sections };
+}
+
+function descendants(root: XmlElement, tag: string): XmlElement[] {
+  return [...walkElements(root.children)].filter((cursor) => cursor.node.tag === tag).map((cursor) => cursor.node);
 }
 
 describe('buildDocxPackage', () => {
@@ -175,5 +183,58 @@ describe('buildDocxPackage', () => {
     expect(tableBlock.rows[0]?.cells).toHaveLength(1);
     expect(tableBlock.rows[0]?.cells[0]?.colSpan).toBe(2);
     expect(tableBlock.rows[0]?.cells[0]?.blocks[0]).toMatchObject({ kind: 'paragraph', runs: [{ text: 'A1' }] });
+  });
+
+  it('writes a recovered drawing block as real DrawingML vector shapes that survive a build-then-read round trip', () => {
+    const content = wordDoc([
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+        blocks: [{ kind: 'paragraph', runs: [{ text: 'Before' }] }, vectorDrawingBlock({ widthPt: 612, heightPt: 792 }), { kind: 'paragraph', runs: [{ text: 'After' }] }],
+      },
+    ]);
+    // Re-encoded and re-decoded, so what is read back has genuinely been through the zip/XML serialiser rather than being the same in-memory tree the writer produced.
+    const pkg = decodePackage(encodePackage(buildDocxPackage(content)));
+    const documentRoot = rootElement(pkg.parts['word/document.xml']);
+    if (documentRoot === undefined) {
+      throw new Error('expected a word/document.xml root element');
+    }
+    expect(collectDrawingMlVectors(documentRoot, 'wps:spPr')).toEqual(VECTOR_FIXTURE);
+    // The surrounding text is untouched: the anchors hang off one paragraph of their own between the two real ones.
+    expect(new DocxEditor(pkg).paragraphs().map((p) => p.text)).toEqual(['Before', '', 'After']);
+  });
+
+  // Pins the actual markup, not just this package's own oracle round-tripping against itself: the DrawingML reader in test-support is written alongside the writer, so at least one test has to assert the literal attribute values a real Word/LibreOffice would read.
+  it('anchors each vector shape to the page at its own recovered coordinates, behind the text', () => {
+    const content = wordDoc([
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+        blocks: [vectorDrawingBlock({ widthPt: 612, heightPt: 792 })],
+      },
+    ]);
+    const pkg = decodePackage(encodePackage(buildDocxPackage(content)));
+    const documentRoot = rootElement(pkg.parts['word/document.xml']);
+    if (documentRoot === undefined) {
+      throw new Error('expected a word/document.xml root element');
+    }
+    const anchors = descendants(documentRoot, 'wp:anchor');
+    expect(anchors).toHaveLength(VECTOR_FIXTURE.length);
+    const [first] = anchors;
+    expect(attr(first!, 'behindDoc')).toBe('1');
+    expect(childrenWithTag(first!, 'wp:wrapNone')).toHaveLength(1);
+    const positionH = childrenWithTag(first!, 'wp:positionH')[0]!;
+    const positionV = childrenWithTag(first!, 'wp:positionV')[0]!;
+    expect(attr(positionH, 'relativeFrom')).toBe('page');
+    expect(attr(positionV, 'relativeFrom')).toBe('page');
+    // The first fixture vector's frame is (10pt, 20pt); 1pt is 12,700 EMU.
+    expect(textContent(childrenWithTag(positionH, 'wp:posOffset')[0]!)).toBe('127000');
+    expect(textContent(childrenWithTag(positionV, 'wp:posOffset')[0]!)).toBe('254000');
+    // A shape lives in the wordprocessingShape extension part, the only DrawingML vocabulary WordprocessingML has for a non-picture shape.
+    const graphicData = descendants(anchors[0]!, 'a:graphicData')[0]!;
+    expect(attr(graphicData, 'uri')).toBe('http://schemas.microsoft.com/office/word/2010/wordprocessingShape');
+    expect(descendants(graphicData, 'wps:wsp')).toHaveLength(1);
+    // relativeHeight is Word's own z-order among floating objects, stamped from each vector's position in the recovered paint order.
+    expect(anchors.map((anchor) => attr(anchor, 'relativeHeight'))).toEqual(['0', '1', '2', '3', '4']);
   });
 });

@@ -18,8 +18,8 @@ const DRAWING_NS = {
   r: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships',
 };
 
-// wp:docPr and pic:cNvPr both need a document-unique numeric id; scanning the whole document.xml tree for the highest existing one (mirroring how opc/rels.ts allocates rIds) keeps new ids from ever colliding with ones already present.
-function nextDrawingId(documentRoot: XmlElement): number {
+// wp:docPr and pic:cNvPr both need a document-unique numeric id; scanning the whole document.xml tree for the highest existing one (mirroring how opc/rels.ts allocates rIds) keeps new ids from ever colliding with ones already present. Exported for src/edit/docx/paragraph.ts's own appendVectorAnchor, which needs the identical wp:docPr id allocation without any media part to insert alongside it.
+export function nextDrawingId(documentRoot: XmlElement): number {
   let max = 0;
   const stack: XmlElement[] = [documentRoot];
   while (stack.length > 0) {
