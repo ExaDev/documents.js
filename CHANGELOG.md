@@ -1,3 +1,10 @@
+# [1.74.0](https://github.com/ExaDev/documents.js/compare/v1.73.0...v1.74.0) (2026-08-03)
+
+
+### Features
+
+* add live-view PDF editor over pdf-codec's positioned-item model ([9da4752](https://github.com/ExaDev/documents.js/commit/9da47526a2f51c3bbdfad087c371c182b7a2889d))
+
 # [1.73.0](https://github.com/ExaDev/documents.js/compare/v1.72.0...v1.73.0) (2026-08-03)
 
 
