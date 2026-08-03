@@ -274,3 +274,17 @@ export function withInfoDictPdf(): Uint8Array<ArrayBuffer> {
   b.classicXrefAndTrailer(6, '/Root 1 0 R /Info 6 0 R');
   return b.bytes();
 }
+
+// Two pages sharing one font resource, the first carrying a single text run and the second carrying two -- for exercising src/edit/pdf's own PdfEditor/PdfPage against a genuinely external, multi-page, multi-item document rather than only ever round-tripping this package's own writePdf output. Deliberately real, distinguishable item content and positions across both pages (rather than one item repeated) so a test editing one item can assert every OTHER item, on either page, survived completely unchanged.
+export function twoPageMultiTextPdf(): Uint8Array<ArrayBuffer> {
+  const b = new FixtureBuilder().header('1.4');
+  b.object(1, '<< /Type /Catalog /Pages 2 0 R >>');
+  b.object(2, '<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>');
+  b.object(3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Resources << /Font << /F1 5 0 R >> >> /Contents 6 0 R >>');
+  b.object(4, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Resources << /Font << /F1 5 0 R >> >> /Contents 7 0 R >>');
+  b.object(5, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+  b.stream(6, '<< >>', enc('BT /F1 12 Tf 10 50 Td (PageZero) Tj ET'));
+  b.stream(7, '<< >>', enc('BT /F1 12 Tf 10 50 Td (First) Tj ET BT /F1 12 Tf 10 90 Td (Second) Tj ET'));
+  b.classicXrefAndTrailer(7, '/Root 1 0 R');
+  return b.bytes();
+}
