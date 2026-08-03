@@ -1,3 +1,10 @@
+## [2.2.6](https://github.com/ExaDev/odf.js/compare/v2.2.5...v2.2.6) (2026-08-03)
+
+
+### Bug Fixes
+
+* **ci:** use the GitHub App token for the branch push and PR creation too ([ffe0e6d](https://github.com/ExaDev/odf.js/commit/ffe0e6deb90e7914c74bb305156e0cd5f395c4b3))
+
 ## [2.2.5](https://github.com/ExaDev/odf.js/compare/v2.2.4...v2.2.5) (2026-08-03)
 
 
