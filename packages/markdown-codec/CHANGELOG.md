@@ -1,3 +1,10 @@
+## [1.0.6](https://github.com/ExaDev/markdown-codec/compare/v1.0.5...v1.0.6) (2026-08-03)
+
+
+### Bug Fixes
+
+* **ci:** wrap the sibling-bump commit body onto two lines under commitlint's limit ([a8dfc97](https://github.com/ExaDev/markdown-codec/commit/a8dfc97750a8ae4cc1b1232ce85c25e5540b3eb7))
+
 ## [1.0.5](https://github.com/ExaDev/markdown-codec/compare/v1.0.4...v1.0.5) (2026-08-03)
 
 
