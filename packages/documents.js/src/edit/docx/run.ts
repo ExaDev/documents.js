@@ -5,6 +5,7 @@ import { colorToRgbHex } from '../../model/color';
 import { removeChild, setAttr } from '../../xml/edit';
 import { encodeXmlText, needsSpacePreserve } from '../../xml/entities';
 import { el, txt } from '../../xml/fragment';
+import { walkElements } from '../../xml/query';
 import {
   ensureFirstChild,
   getColor,
@@ -17,6 +18,17 @@ import {
   setSizePt,
   setToggle,
 } from './props';
+
+// WordprocessingML text is the content of w:t elements and nothing else -- never a raw text-node concatenation of the whole subtree, which is what ooxml.js's own textContent (deliberately format-agnostic) performs. A w:r can also carry a w:drawing, and an anchored shape inside one holds real element text of its own that is not text at all: wp:posOffset's content is an EMU coordinate (see src/edit/docx/vector.ts). A w:p can further carry an m:oMathPara equation, whose glyphs live in m:t. Concatenating either into a paragraph's or run's reported text would report markup as prose.
+export function wordprocessingText(element: XmlElement): string {
+  let out = '';
+  for (const cursor of walkElements([element])) {
+    if (cursor.node.tag === 'w:t') {
+      out += textContent(cursor.node);
+    }
+  }
+  return out;
+}
 
 export interface RunInit {
   readonly text?: string;
@@ -80,7 +92,7 @@ export class DocxRun {
   }
 
   get text(): string {
-    return textContent(this.live());
+    return wordprocessingText(this.live());
   }
 
   set text(value: string) {

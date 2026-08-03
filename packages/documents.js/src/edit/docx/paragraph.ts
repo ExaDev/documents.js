@@ -1,16 +1,17 @@
 import type { Package, XmlElement, XmlNode } from 'ooxml.js';
-import { attr, textContent } from 'ooxml.js';
-import type { ContentListMembership } from 'document-schema.js';
+import { attr } from 'ooxml.js';
+import type { ContentListMembership, ContentVector } from 'document-schema.js';
 import type { MathMlNode } from '../../mathml/nodes';
 import type { OmmlWriteResult } from '../../omml/write';
 import { buildOfficeMathParagraph } from '../../omml/write';
 import { getOrCreateChildElement, removeChild } from '../../xml/edit';
 import { el } from '../../xml/fragment';
 import type { ImageInit, MediaContext } from './image';
-import { insertImageMedia } from './image';
+import { insertImageMedia, nextDrawingId } from './image';
 import { ensureFirstChild, getAlignment, getStyleId, PPR_ORDER, setAlignment, setStyleId } from './props';
 import type { RunInit } from './run';
-import { buildRun, DocxRun } from './run';
+import { buildRun, DocxRun, wordprocessingText } from './run';
+import { buildAnchoredVectorDrawing } from './vector';
 
 export interface ParagraphInit {
   readonly text?: string;
@@ -62,7 +63,7 @@ export class DocxParagraph {
   }
 
   get text(): string {
-    return textContent(this.live());
+    return wordprocessingText(this.live());
   }
 
   runs(): DocxRun[] {
@@ -176,6 +177,20 @@ export class DocxParagraph {
     }
     node.children.push(result.element);
     return { ...result, written: true };
+  }
+
+  // Appends one run per vector, each carrying a real page-anchored DrawingML shape (src/edit/docx/vector.ts) -- the docx counterpart to OdtBody.appendVectors. Every anchor hangs off this one paragraph, since they came from a single embedded drawing block covering one page's worth of geometry and a floating anchor takes no vertical space of its own; `relativeHeight` is stamped from each vector's own position in the run, so the paint order they were recovered in survives as Word's own floating-object z-order.
+  //
+  // Requires the paragraph to have been opened through a DocxEditor, for the same reason insertImageAfter below does: the document root is where a document-unique wp:docPr id is allocated from.
+  appendVectorAnchors(vectors: readonly ContentVector[]): void {
+    const node = this.live();
+    if (this.imageContext === undefined) {
+      throw new Error('appendVectorAnchors requires a paragraph opened through a DocxEditor');
+    }
+    const { documentRoot } = this.imageContext;
+    vectors.forEach((vector, index) => {
+      node.children.push(el('w:r', {}, [buildAnchoredVectorDrawing(vector, nextDrawingId(documentRoot), index)]));
+    });
   }
 
   // Appends a new run containing an inline image to the end of this paragraph. Requires the paragraph to have been opened through a DocxEditor (table-cell paragraphs currently have no image context -- see ImageMediaContext's own doc comment).

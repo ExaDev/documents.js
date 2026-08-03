@@ -1,3 +1,4 @@
+import type { ContentVector } from 'document-schema.js';
 import type { Package, XmlElement, XmlNode } from 'ooxml.js';
 import { resolveRelationships, rootElement, textContent } from 'ooxml.js';
 import type { Box } from '../../model/geometry';
@@ -13,6 +14,7 @@ import { buildEmptyGroupSpTree, DML_NS, ensureNotesMaster, NOTES_MASTER_REL_TYPE
 import { buildTextBoxShape, PptxShape } from './shape';
 import type { PptxTableInit } from './table';
 import { buildDrawingTable, buildTableGraphicFrame, PptxTable } from './table';
+import { buildVectorShape } from './vector';
 
 export interface TextBoxInit {
   readonly frame: Box;
@@ -140,6 +142,14 @@ export class PptxSlide {
     const spTree = findSpTree(this.live());
     const id = nextIdIn(spTree);
     const shapeElement = buildTextBoxShape(init.frame, init.text, id);
+    spTree.children.push(shapeElement);
+    return new PptxShape(spTree.children, shapeElement);
+  }
+
+  // A vector primitive (rect/ellipse/line/path) as its own p:sp on this slide's shape tree, appended in call order -- p:spTree's document order IS paint order in PresentationML, exactly as draw:page's is in ODF, so a later addVector/addTextBox call paints in front of an earlier one with nothing else to declare. Returns a PptxShape because a vector shape IS a p:sp: frame/rotationDeg read and write through the same p:spPr/a:xfrm every other shape uses.
+  addVector(vector: ContentVector): PptxShape {
+    const spTree = findSpTree(this.live());
+    const shapeElement = buildVectorShape(vector, nextIdIn(spTree));
     spTree.children.push(shapeElement);
     return new PptxShape(spTree.children, shapeElement);
   }

@@ -1,7 +1,7 @@
 import type { ContentBlock, ContentDocument, ContentShape, ContentTable } from 'document-schema.js';
 import type { Package } from 'ooxml.js';
 import { base64ToBytes } from 'ooxml.js';
-import { drawingOfBlock } from '../../model/embedded-drawing';
+import { drawingOfBlock, embeddedDrawingVectors } from '../../model/embedded-drawing';
 import type { DrawingParagraphInit } from './shape';
 import { createPptx } from './editor';
 import type { PptxSlide } from './slide';
@@ -33,8 +33,11 @@ export function buildPptxPackage(content: ContentDocument): Package {
 
 function appendShape(slide: PptxSlide, shape: ContentShape): void {
   const [onlyBlock] = shape.blocks;
-  // A shape carrying nothing but a recovered DRAWING (src/layout/reconstruct.ts's own vector recovery wraps one in a shape, since a slide has no other container for a block) is skipped outright rather than falling through to the text-box branch below, which would add a visibly empty text box to every slide that had any painted geometry on it. There is no vector-shape writer here to write it with -- see reconstruct.ts's own write-side status note -- and an empty box is a worse outcome than the honest omission the caller can still see in full via the ContentDocument itself.
+  // A shape carrying nothing but a recovered DRAWING (src/layout/reconstruct.ts's own vector recovery wraps one in a shape, since a slide has no other container for a block) becomes one real DrawingML autoshape per vector primitive on the slide's own shape tree -- NOT a single containing shape, since PresentationML positions every p:sp against the slide directly and has no "shape holding loose geometry" construct to nest them in. The vectors are translated by the wrapping shape's own frame origin, since that frame is where the embedded drawing sits on the slide.
   if (shape.blocks.length === 1 && onlyBlock?.kind === 'embeddedObject' && drawingOfBlock(onlyBlock) !== undefined) {
+    for (const vector of embeddedDrawingVectors(onlyBlock, shape.frame)) {
+      slide.addVector(vector);
+    }
     return;
   }
   if (shape.blocks.length === 1 && onlyBlock?.kind === 'image') {

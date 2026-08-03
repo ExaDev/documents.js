@@ -7,6 +7,7 @@ import type { Alignment } from '../../model/style';
 import { removeAttr, removeChild, setAttr } from '../../xml/edit';
 import { encodeXmlText, needsSpacePreserve } from '../../xml/entities';
 import { el, txt } from '../../xml/fragment';
+import { drawingMlColorHex } from '../drawingml/vector';
 
 function directChild(parent: XmlElement, tag: string): XmlElement | undefined {
   for (const child of parent.children) {
@@ -167,11 +168,6 @@ const ALIGNMENT_TO_ALGN: Readonly<Record<Alignment, string>> = { left: 'l', cent
 // a:rPr/@sz is in hundredths of a point (ECMA-376 20.1.10.71), unlike WordprocessingML's half-points.
 const HUNDREDTHS_POINT_PER_POINT = 100;
 
-function colorToHex(color: LayoutColor): string {
-  const toByte = (c: number): string => Math.round(c * 255).toString(16).padStart(2, '0');
-  return `${toByte(color.r)}${toByte(color.g)}${toByte(color.b)}`.toUpperCase();
-}
-
 // DrawingML run properties are attribute-based toggles (b="1", i="1" on a:rPr itself), not the element-presence toggles WordprocessingML uses (w:b/w:i as child elements) -- the same distinction ooxml.js's readPptx documents for the read side, mirrored here on write.
 function buildDrawingRun(init: DrawingRunInit): XmlElement {
   const rPrAttrs: Record<string, string> = {};
@@ -186,7 +182,7 @@ function buildDrawingRun(init: DrawingRunInit): XmlElement {
   }
   const rPrChildren: XmlNode[] = [];
   if (init.color !== undefined) {
-    rPrChildren.push(el('a:solidFill', {}, [el('a:srgbClr', { val: colorToHex(init.color) })]));
+    rPrChildren.push(el('a:solidFill', {}, [el('a:srgbClr', { val: drawingMlColorHex(init.color) })]));
   }
   if (init.fontFamily !== undefined) {
     rPrChildren.push(el('a:latin', { typeface: init.fontFamily }));
