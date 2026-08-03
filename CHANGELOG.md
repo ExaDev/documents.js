@@ -1,3 +1,16 @@
+# [1.66.0](https://github.com/ExaDev/documents.js/compare/v1.65.0...v1.66.0) (2026-08-03)
+
+
+### Features
+
+* **docx,pptx:** write a recovered drawing block as real DrawingML vector shapes ([08e7dc1](https://github.com/ExaDev/documents.js/commit/08e7dc1a13185e280e9b6e44bbca012bc48d3e52))
+* **layout:** carry a declared cell border's dash style through to PDF layout ([1137198](https://github.com/ExaDev/documents.js/commit/1137198d8b677b813cb4a8832bb9d35ff37d8188))
+* **model:** flatten an embedded drawing block's vectors into a container's space ([2505c89](https://github.com/ExaDev/documents.js/commit/2505c89cd434d59b4fde429cacd6088709335e93))
+* **odf:** build any ContentVector as a draw: primitive, page- or flow-anchored ([a008776](https://github.com/ExaDev/documents.js/commit/a008776bdc7c5c206fa0f069bc1aba3df09b40a7))
+* **odg:** expose live handles on a page's existing vector primitives ([4110d2e](https://github.com/ExaDev/documents.js/commit/4110d2ebdba26f94b52d914a66c35ca6f3f69f66))
+* **odt,odp:** write a recovered drawing block as real draw: vector primitives ([e2682fb](https://github.com/ExaDev/documents.js/commit/e2682fb9ce5eea1abacb3e41c9d1d24b76722da0))
+* **odt:** read a list item's own paragraphs, text, and nested lists ([601e873](https://github.com/ExaDev/documents.js/commit/601e8738078c86926264cba225437b4df99b17e9))
+
 # [1.65.0](https://github.com/ExaDev/documents.js/compare/v1.64.0...v1.65.0) (2026-08-03)
 
 
