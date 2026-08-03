@@ -1,7 +1,7 @@
 import type { ContentDocument, ContentShape } from 'document-schema.js';
 import type { Package } from 'odf.js';
 import { base64ToBytes } from 'odf.js';
-import { drawingOfBlock } from '../../model/embedded-drawing';
+import { drawingOfBlock, embeddedDrawingVectors } from '../../model/embedded-drawing';
 import { populateOdtTable, populateParagraph } from '../odt/content';
 import { createOdp } from './editor';
 import type { OdpSlide } from './slide';
@@ -32,8 +32,11 @@ export function buildOdpPackage(content: ContentDocument): Package {
 
 function appendShape(slide: OdpSlide, shape: ContentShape): void {
   const [onlyBlock] = shape.blocks;
-  // A shape carrying nothing but a recovered DRAWING (src/layout/reconstruct.ts's own vector recovery wraps one in a shape, since a slide has no other container for a block) is skipped outright rather than falling through to the text-box branch below, which would add a visibly empty text box to every slide that had any painted geometry on it. There is no vector-shape writer here to write it with -- see reconstruct.ts's own write-side status note -- and an empty box is a worse outcome than the honest omission the caller can still see in full via the ContentDocument itself.
+  // A shape carrying nothing but a recovered DRAWING (src/layout/reconstruct.ts's own vector recovery wraps one in a shape, since a slide has no other container for a block) becomes real draw:rect/draw:ellipse/draw:line/draw:path elements on the slide's own draw:page -- NOT a shape at all, since ODF positions a vector primitive directly against the page rather than nesting it in a frame. The vectors are translated by the wrapping shape's own frame origin, since that frame is where the embedded drawing sits on the slide. Built through src/edit/odg/vector.ts's writer, imported and reused wholesale (see OdpSlide.addVector's own note on why a presentation's draw:page needs no odp-specific variant of it).
   if (shape.blocks.length === 1 && onlyBlock?.kind === 'embeddedObject' && drawingOfBlock(onlyBlock) !== undefined) {
+    for (const vector of embeddedDrawingVectors(onlyBlock, shape.frame)) {
+      slide.addVector(vector);
+    }
     return;
   }
   if (shape.blocks.length === 1 && onlyBlock?.kind === 'image') {
