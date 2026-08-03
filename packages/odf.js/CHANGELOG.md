@@ -1,3 +1,10 @@
+# [2.3.0](https://github.com/ExaDev/odf.js/compare/v2.2.10...v2.3.0) (2026-08-03)
+
+
+### Features
+
+* export readDrawImageBlock for sibling packages ([d1c6121](https://github.com/ExaDev/odf.js/commit/d1c6121e391162bbaccc717cff037f1307c8eafd))
+
 ## [2.2.10](https://github.com/ExaDev/odf.js/compare/v2.2.9...v2.2.10) (2026-08-03)
 
 ## [2.2.9](https://github.com/ExaDev/odf.js/compare/v2.2.8...v2.2.9) (2026-08-03)
