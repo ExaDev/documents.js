@@ -1,3 +1,11 @@
+# [1.3.0](https://github.com/ExaDev/document-cli/compare/v1.2.11...v1.3.0) (2026-08-03)
+
+
+### Features
+
+* add odb-query and odb-render-report commands ([0035d3c](https://github.com/ExaDev/document-cli/commit/0035d3c27268ba980fc43bdf38faa3fd7ff1c2c4))
+* wire report rendering into the odb TUI's report detail screen ([c92b15f](https://github.com/ExaDev/document-cli/commit/c92b15fc23a6a5473eefe44d1ed91098cb1565a6))
+
 ## [1.2.11](https://github.com/ExaDev/document-cli/compare/v1.2.10...v1.2.11) (2026-08-03)
 
 ## [1.2.10](https://github.com/ExaDev/document-cli/compare/v1.2.9...v1.2.10) (2026-08-03)
