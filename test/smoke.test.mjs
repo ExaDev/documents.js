@@ -121,6 +121,27 @@ function minimalOdfFormulaBytes() {
   ]);
 }
 
+// An ods carrying ONE real cell-anchored formula: a draw:frame inside cell C4's own table:table-cell (column index 2, row index 3, at a 0.4cm/0.2cm cell-relative offset), referencing an "Object 1" sub-document the manifest declares as a formula. This is the shape real LibreOffice writes -- see src/test-support/ods-formula.ts, which embeds an actual LibreOffice-produced file of exactly this structure for the unit suite -- restated inline here because the smoke suite deliberately builds every fixture from hand-authored ODF XML rather than importing anything out of src/. It proves the whole cell-anchored formula pipeline reaches the built dist/ artifact: odf.js's readOds resolving the anchor quartet, dist's own convertSpreadsheetToLayout placing the box against that sheet's real column/row geometry, and src/mathml + the embedded STIX Two Math font actually typesetting it into the page's content stream.
+function odsWithAnchoredFormulaBytes() {
+  const mimetype = new TextEncoder().encode(ODF_MEDIA_TYPES.ods);
+  const contentXml = new TextEncoder().encode(
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0" xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0" xmlns:xlink="http://www.w3.org/1999/xlink"><office:automatic-styles><style:style style:name="Wide" style:family="table-column"><style:table-column-properties style:column-width="3cm"/></style:style><style:style style:name="Tall" style:family="table-row"><style:table-row-properties style:row-height="0.45cm"/></style:style></office:automatic-styles><office:body><office:spreadsheet><table:table table:name="Formulas"><table:table-column table:style-name="Wide" table:number-columns-repeated="3"/><table:table-row table:style-name="Tall"><table:table-cell office:value-type="string"><text:p>Quantity</text:p></table:table-cell></table:table-row><table:table-row table:style-name="Tall" table:number-rows-repeated="2"/><table:table-row table:style-name="Tall"><table:table-cell table:number-columns-repeated="2"/><table:table-cell><draw:frame svg:width="2.7cm" svg:height="1.2cm" svg:x="0.4cm" svg:y="0.2cm"><draw:object xlink:href="./Object 1" xlink:type="simple" xlink:show="embed" xlink:actuate="onLoad"/></draw:frame></table:table-cell></table:table-row></table:table></office:spreadsheet></office:body></office:document-content>',
+  );
+  // A bare <math> root with no office:body wrapper, exactly as LibreOffice writes an embedded Math sub-document's own content.xml.
+  const objectContentXml = new TextEncoder().encode(
+    '<?xml version="1.0" encoding="UTF-8"?><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mfrac><msup><mi>x</mi><mn>2</mn></msup><mn>2</mn></mfrac><annotation encoding="StarMath 5.0">{x^2} over {2}</annotation></semantics></math>',
+  );
+  const manifestXml = new TextEncoder().encode(
+    `<?xml version="1.0" encoding="UTF-8"?><manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.3"><manifest:file-entry manifest:full-path="/" manifest:media-type="${ODF_MEDIA_TYPES.ods}"/><manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/><manifest:file-entry manifest:full-path="Object 1/" manifest:media-type="${ODF_MEDIA_TYPES.odf}"/><manifest:file-entry manifest:full-path="Object 1/content.xml" manifest:media-type="text/xml"/></manifest:manifest>`,
+  );
+  return zipPackage([
+    ['mimetype', { bytes: mimetype, stored: true }],
+    ['content.xml', { bytes: contentXml }],
+    ['Object 1/content.xml', { bytes: objectContentXml }],
+    ['META-INF/manifest.xml', { bytes: manifestXml }],
+  ]);
+}
+
 describe('dist/ exports are present in both builds', () => {
   for (const name of FUNCTIONS) {
     it(`${name} is a function`, () => {
@@ -394,6 +415,27 @@ describe('dist/ end-to-end: odfToPdf, from the CJS build', () => {
     expect(raw).toContain('/Subtype /Type0');
     expect(raw).toContain('/Encoding /Identity-H');
     expect(raw).toContain('/Subtype /CIDFontType0C');
+  });
+});
+
+describe('dist/ end-to-end: odsToPdf with a cell-anchored formula, from the CJS build', () => {
+  it('typesets the anchored formula through the embedded STIX Two Math font, positioned at its own anchor cell', () => {
+    const pdfBytes = cjs.odsToPdf(odsWithAnchoredFormulaBytes());
+    expect(new TextDecoder('latin1').decode(pdfBytes.subarray(0, 5))).toBe('%PDF-');
+    const raw = new TextDecoder('latin1').decode(pdfBytes);
+    // The same concrete proof odfToPdf's own smoke test above uses: a real embedded Type0/Identity-H/CIDFontType0C resource, which a plain-text stand-in would never produce.
+    expect(raw).toContain('/Subtype /Type0');
+    expect(raw).toContain('/Encoding /Identity-H');
+    expect(raw).toContain('/Subtype /CIDFontType0C');
+    expect(cjs.readPdf(pdfBytes).pages).toHaveLength(1);
+
+    // And it really is placed at cell C4 rather than the sheet's origin: convertSpreadsheetToLayout's own reported position sits two 3cm columns plus the frame's own 0.4cm offset in from the page's left content edge, and three 0.45cm rows plus 0.2cm down from its top.
+    const content = cjs.readOdsContent(cjs.decodePackage(odsWithAnchoredFormulaBytes()));
+    const { formulas } = cjs.convertSpreadsheetToLayout(content, { measurer: cjs.createFontMeasurer(cjs.createFontRegistry()) });
+    expect(formulas).toHaveLength(1);
+    const sheet = content.sheets[0];
+    const cmToPt = (cm) => (cm / 2.54) * 72;
+    expect(formulas[0].xPt).toBeCloseTo(sheet.printSettings.margins.leftPt + cmToPt(3) * 2 + cmToPt(0.4), 2);
   });
 });
 

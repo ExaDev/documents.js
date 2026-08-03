@@ -149,7 +149,8 @@ function referenceOdsPdf(bytes: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer
   if (content.kind !== 'spreadsheet') {
     throw new Error('readOdsContent returned a non-spreadsheet ContentDocument');
   }
-  return writePdf(convertSpreadsheetToLayout(content, { measurer: createStandardFontMeasurer() }));
+  const { document: layout, formulas } = convertSpreadsheetToLayout(content, { measurer: createStandardFontMeasurer() });
+  return writePdf(layout, { formulas });
 }
 
 function referenceOdgPdf(bytes: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {

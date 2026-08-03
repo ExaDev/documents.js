@@ -110,7 +110,7 @@ export function odpToPdf(bytes: Uint8Array<ArrayBuffer>, options?: DocumentToPdf
   return writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution, formulas, fonts });
 }
 
-// ods's package is decoded via odf.js's own decodePackage, mirroring odtToPdf/odpToPdf above -- but unlike those two, convertSpreadsheetToLayout is genuinely new layout code (src/layout/sheets.ts), not a reused docx/pptx engine, since a spreadsheet's own column-band x row-band pagination and print-settings-driven page grid have no docx/pptx analogue.
+// ods's package is decoded via odf.js's own decodePackage, mirroring odtToPdf/odpToPdf above -- but unlike those two, convertSpreadsheetToLayout is genuinely new layout code (src/layout/sheets.ts), not a reused docx/pptx engine, since a spreadsheet's own column-band x row-band pagination and print-settings-driven page grid have no docx/pptx analogue. A formula embedded in a cell needs no ods-specific option threaded anywhere either, for the same reason odtToPdf's/odpToPdf's doesn't: it travels inside the ContentDocument as a real ContentEmbeddedObject on its own sheet, carrying the anchor cell and cell-relative offset the layout engine resolves against that sheet's own axis geometry.
 export function odsToPdf(bytes: Uint8Array<ArrayBuffer>, options?: DocumentToPdfOptions): Uint8Array<ArrayBuffer> {
   const pkg = decodePackage(bytes);
   const content = readOdsContent(pkg);
@@ -119,9 +119,9 @@ export function odsToPdf(bytes: Uint8Array<ArrayBuffer>, options?: DocumentToPdf
     throw new Error('readOdsContent returned a non-spreadsheet ContentDocument');
   }
   const fonts = createDocumentFontRegistry({ kind: 'odf', package: pkg }, options);
-  const layout = convertSpreadsheetToLayout(content, { measurer: createFontMeasurer(fonts), signal: options?.signal });
+  const { document: layout, formulas } = convertSpreadsheetToLayout(content, { measurer: createFontMeasurer(fonts), signal: options?.signal });
   options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content, layout });
-  return writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution, fonts });
+  return writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution, formulas, fonts });
 }
 
 // odg's package is decoded via odf.js's own decodePackage, mirroring odtToPdf/odpToPdf/odsToPdf above. convertDrawingToLayout (src/layout/drawing.ts) is genuinely new layout code, like convertSpreadsheetToLayout -- a drawing's vector-primitive vocabulary (rect/ellipse/line/path) has no docx/pptx analogue, even though the ContentShape (text/image/table) half of a drawing page reuses convertShape from slides.ts unmodified.

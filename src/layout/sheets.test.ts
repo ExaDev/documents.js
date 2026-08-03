@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { ContentDocument, ContentSheet, ContentSheetCell, ContentSheetPrintSettings, LayoutItem, LayoutLine, LayoutRect, LayoutText } from 'document-schema.js';
+import type { ContentDocument, ContentEmbeddedObject, ContentSheet, ContentSheetCell, ContentSheetPrintSettings, LayoutItem, LayoutLine, LayoutRect, LayoutText, MathMlNode } from 'document-schema.js';
 import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
 import type { TextMeasurer } from 'pdf-codec';
+import { DEFAULT_LAYOUT_FONT } from '../model/style';
 import { convertSpreadsheetToLayout } from './sheets';
 
 // Every character is sizePt/10 pt wide; lineHeightAtSize is 1.2x, ascender 0.8x, descender -0.2x -- the same fake-measurer convention already used across src/layout/engine.test.ts and src/layout/slides.test.ts.
@@ -42,8 +43,13 @@ function doc(sheets: ContentSheet[]): Extract<ContentDocument, { kind: 'spreadsh
   return { kind: 'spreadsheet', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, sheets };
 }
 
-function convert(sheets: ContentSheet[], measurer: TextMeasurer = fakeMeasurer(), signal?: AbortSignal) {
+function convertResult(sheets: ContentSheet[], measurer: TextMeasurer = fakeMeasurer(), signal?: AbortSignal) {
   return convertSpreadsheetToLayout(doc(sheets), { measurer, signal });
+}
+
+// The LayoutDocument half alone, which is all every geometry/text/gridline assertion below cares about -- the formula half has its own dedicated describe block, and reads convertResult directly.
+function convert(sheets: ContentSheet[], measurer: TextMeasurer = fakeMeasurer(), signal?: AbortSignal) {
+  return convertResult(sheets, measurer, signal).document;
 }
 
 function textItems(items: readonly LayoutItem[]): LayoutText[] {
@@ -601,5 +607,135 @@ describe('convertSpreadsheetToLayout: multiple sheets', () => {
     expect(layout.pages).toHaveLength(2);
     expect(textItems(layout.pages[0]!.items).map((t) => t.text)).toEqual(['First']);
     expect(textItems(layout.pages[1]!.items).map((t) => t.text)).toEqual(['Second']);
+  });
+});
+
+// --- Cell-anchored embedded formulas -----------------------------------------------------------
+
+// Real MathML rather than a stub: layoutFormula is genuinely invoked here (loadMathFont/the STIX MATH table drive the box), so an assertion on the resulting box's own dimensions would be an assertion about that font, not about this module. What this module owns is WHERE the box lands and WHETHER it is emitted at all, which is what every test below checks.
+const MI_X: MathMlNode[] = [{ type: 'element', tag: 'mi', attributes: [], children: [{ type: 'text', value: 'x' }] }];
+
+function formulaObject(anchorRow: number, anchorColumn: number, offsetXPt: number, offsetYPt: number, overrides: Partial<ContentEmbeddedObject> = {}): ContentEmbeddedObject {
+  return {
+    objectKind: 'formula',
+    document: { kind: 'formula', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, formula: { mathml: MI_X } },
+    frame: { xPt: offsetXPt, yPt: offsetYPt, widthPt: 40, heightPt: 24 },
+    anchorRow,
+    anchorColumn,
+    offsetXPt,
+    offsetYPt,
+    ...overrides,
+  };
+}
+
+const COLUMNS_20 = [0, 1, 2, 3].map((index) => ({ index, widthPt: 20 }));
+const ROWS_10 = [0, 1, 2, 3].map((index) => ({ index, heightPt: 10 }));
+
+describe('convertSpreadsheetToLayout: cell-anchored embedded formulas', () => {
+  it('positions a formula at its own anchor cell plus its cell-relative offset, flipped into PDF page space', () => {
+    const s = sheet([stringCell(0, 0, 'A'), stringCell(3, 3, 'D')], {
+      columns: COLUMNS_20,
+      rows: ROWS_10,
+      embeddedObjects: [formulaObject(2, 1, 3, 4)],
+    });
+    const { formulas } = convertResult([s]);
+    expect(formulas).toHaveLength(1);
+    const [positioned] = formulas;
+    expect(positioned!.pageIndex).toBe(0);
+    // Column 1 starts one 20pt column in; the 3pt offset is a cell-local inset, applied unscaled.
+    expect(positioned!.xPt).toBeCloseTo(0 + 20 + 3, 6);
+    // Row 2 starts two 10pt rows down from the grid top; y-down 20 + 4, flipped through the 800pt page against the box's own height.
+    expect(positioned!.yPt).toBeCloseTo(800 - (0 + 20 + 4) - positioned!.box.heightPt, 6);
+  });
+
+  it('widens the print range to cover an anchor cell beyond the populated-cell extent, so the formula still renders', () => {
+    // The only populated cell is A1; without the anchor participating in the range, column 3/row 3 would sit in no band at all and the formula would silently never be emitted.
+    const s = sheet([stringCell(0, 0, 'A')], { columns: COLUMNS_20, rows: ROWS_10, embeddedObjects: [formulaObject(3, 3, 0, 0)] });
+    const { document: layout, formulas } = convertResult([s]);
+    expect(formulas).toHaveLength(1);
+    expect(formulas[0]!.xPt).toBeCloseTo(60, 6);
+    expect(formulas[0]!.yPt).toBeCloseTo(800 - 30 - formulas[0]!.box.heightPt, 6);
+    // The cell content itself is unaffected -- widening the range adds no text of its own.
+    expect(textItems(layout.pages[0]!.items).map((t) => t.text)).toEqual(['A']);
+  });
+
+  it('renders a sheet carrying nothing but an anchored formula, which would otherwise have no print range at all', () => {
+    const s = sheet([], { columns: COLUMNS_20, rows: ROWS_10, embeddedObjects: [formulaObject(0, 0, 0, 0)] });
+    const { document: layout, formulas } = convertResult([s]);
+    expect(layout.pages).toHaveLength(1);
+    expect(formulas).toHaveLength(1);
+  });
+
+  it('honors an explicit printRange rather than widening it, leaving an anchor outside that range unrendered', () => {
+    const s = sheet([stringCell(0, 0, 'A')], {
+      columns: COLUMNS_20,
+      rows: ROWS_10,
+      printSettings: { ...basePrintSettings, printRange: { startRow: 0, startColumn: 0, endRow: 0, endColumn: 0 } },
+      embeddedObjects: [formulaObject(3, 3, 0, 0)],
+    });
+    expect(convertResult([s]).formulas).toEqual([]);
+  });
+
+  it('accounts for the header gutter and page margins, since it reads the already-positioned axes rather than recomputing them', () => {
+    const s = sheet([stringCell(0, 0, 'A')], {
+      columns: COLUMNS_20,
+      rows: ROWS_10,
+      printSettings: { ...basePrintSettings, headers: true, margins: { topPt: 5, rightPt: 0, bottomPt: 0, leftPt: 7 } },
+      embeddedObjects: [formulaObject(0, 0, 1, 2)],
+    });
+    const measurer = fakeMeasurer();
+    const { formulas } = convertResult([s], measurer);
+    // Header gutter: as wide as the widest row label plus two paddings, as tall as one header line -- read back from the measurer rather than restated as a literal.
+    const gutterWidthPt = measurer.widthOfTextAtSize('1', DEFAULT_LAYOUT_FONT, 8) + 2 * 2;
+    const gutterHeightPt = measurer.lineHeightAtSize(DEFAULT_LAYOUT_FONT, 8);
+    expect(formulas[0]!.xPt).toBeCloseTo(7 + gutterWidthPt + 1, 6);
+    expect(formulas[0]!.yPt).toBeCloseTo(800 - (5 + gutterHeightPt + 2) - formulas[0]!.box.heightPt, 6);
+  });
+
+  it('skips an anchor in a hidden column or a hidden row, exactly as it skips that cell\'s own content', () => {
+    const hiddenColumns = [{ index: 0, widthPt: 20 }, { index: 1, widthPt: 20, hidden: true }, { index: 2, widthPt: 20 }, { index: 3, widthPt: 20 }];
+    const hiddenRows = [{ index: 0, heightPt: 10 }, { index: 1, heightPt: 10, hidden: true }, { index: 2, heightPt: 10 }, { index: 3, heightPt: 10 }];
+    const hiddenColumnSheet = sheet([stringCell(0, 0, 'A')], { columns: hiddenColumns, rows: ROWS_10, embeddedObjects: [formulaObject(0, 1, 0, 0)] });
+    const hiddenRowSheet = sheet([stringCell(0, 0, 'A')], { columns: COLUMNS_20, rows: hiddenRows, embeddedObjects: [formulaObject(1, 0, 0, 0)] });
+    expect(convertResult([hiddenColumnSheet]).formulas).toEqual([]);
+    expect(convertResult([hiddenRowSheet]).formulas).toEqual([]);
+  });
+
+  it('skips an embedded object that is not a formula, one whose document carries no MathML, and one with no anchor', () => {
+    const notFormula: ContentEmbeddedObject = { ...formulaObject(0, 0, 0, 0), objectKind: 'drawing' };
+    const emptyMathml: ContentEmbeddedObject = {
+      ...formulaObject(0, 0, 0, 0),
+      document: { kind: 'formula', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, formula: { mathml: [], starMath: 'x' } },
+    };
+    const anchorless: ContentEmbeddedObject = {
+      objectKind: 'formula',
+      document: { kind: 'formula', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, formula: { mathml: MI_X } },
+      frame: { xPt: 0, yPt: 0, widthPt: 40, heightPt: 24 },
+    };
+    const s = sheet([stringCell(0, 0, 'A')], { columns: COLUMNS_20, rows: ROWS_10, embeddedObjects: [notFormula, emptyMathml, anchorless] });
+    expect(convertResult([s]).formulas).toEqual([]);
+  });
+
+  it('emits a formula anchored inside a repeat row band once per page carrying that band', () => {
+    // Two row bands (four 10pt rows, 20pt of bandable height available after the repeat row) means two pages; the repeat row -- and therefore its anchored formula -- appears on both.
+    const cells = [0, 1, 2, 3, 4].map((row) => stringCell(row, 0, `r${row}`));
+    const s = sheet(cells, {
+      columns: COLUMNS_20,
+      rows: [0, 1, 2, 3, 4].map((index) => ({ index, heightPt: 10 })),
+      printSettings: { ...basePrintSettings, pageSize: { widthPt: 600, heightPt: 30 }, repeatRows: { start: 0, end: 0 } },
+      embeddedObjects: [formulaObject(0, 0, 0, 0)],
+    });
+    const { document: layout, formulas } = convertResult([s]);
+    expect(layout.pages.length).toBeGreaterThan(1);
+    expect(formulas).toHaveLength(layout.pages.length);
+    expect(formulas.map((f) => f.pageIndex)).toEqual(layout.pages.map((_, index) => index));
+  });
+
+  it('numbers pageIndex across the whole document, not per sheet', () => {
+    const first = sheet([stringCell(0, 0, 'First')], { name: 'One', columns: COLUMNS_20, rows: ROWS_10 });
+    const second = sheet([stringCell(0, 0, 'Second')], { name: 'Two', columns: COLUMNS_20, rows: ROWS_10, embeddedObjects: [formulaObject(0, 0, 0, 0)] });
+    const { document: layout, formulas } = convertResult([first, second]);
+    expect(layout.pages).toHaveLength(2);
+    expect(formulas.map((f) => f.pageIndex)).toEqual([1]);
   });
 });

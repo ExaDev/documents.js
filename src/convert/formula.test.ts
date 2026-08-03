@@ -8,19 +8,22 @@ import { describe, expect, it } from 'vitest';
 import { FRACTION_FORMULA, MATRIX_FORMULA, odfFormulaBytes, SQRT_FORMULA, STRETCHY_FENCE_FORMULA, SUBSUP_FORMULA } from '../test-support/odf';
 import { minimalOdpBytes } from '../test-support/odp';
 import { minimalOdtBytes } from '../test-support/odt';
-import type { ContentBlock, DocumentPackage, MathMlNode } from 'document-schema.js';
+import type { ContentBlock, ContentDocument, DocumentPackage, MathMlNode } from 'document-schema.js';
 import { decodePackage } from 'odf.js';
 import type { XmlElement } from 'ooxml.js';
 import { attr, buildXml, childrenWithTag, decodePackage as decodeOoxmlPackage, elementsWithTag, encodePackage as encodeOoxmlPackage, rootElement, textContent } from 'ooxml.js';
-import { loadMathFont, readPdf } from 'pdf-codec';
+import { createFontMeasurer, createFontRegistry, loadMathFont, readPdf } from 'pdf-codec';
 import { buildDocxPackage } from '../edit/docx/content';
 import { decodeMarkdownText } from '../markdown/text';
 import type { OmmlDiagnostic } from '../omml/shared';
 import { readDocxContent } from '../ooxml/docx/read';
 import { readOdpContent } from '../odf/odp/read';
 import { readOdtContent } from '../odf/odt/read';
+import { convertSpreadsheetToLayout } from '../layout/sheets';
+import { readOdsContent } from '../odf/ods/read';
 import { odmBytes } from '../test-support/odm';
-import { docxToOdt, odfToPdf, odmToPdf, odpToPdf, odtToDocx, odtToMarkdown, odtToPdf } from './convert';
+import { sheetFormulaOdsBytes } from '../test-support/ods-formula';
+import { docxToOdt, odfToPdf, odmToPdf, odpToPdf, odsToPdf, odtToDocx, odtToMarkdown, odtToPdf } from './convert';
 
 // End-to-end coverage for the MathML/formula pipeline: odfToPdf (a standalone .odf formula document) for each of the task's own named curated formulas (a simple fraction, a square root, a superscript/subscript combination, a small matrix via mtable), plus the embedded-formula-inside-odt/odp path. Checks the output PDF is well-formed (readable back through this package's own readPdf; also cross-checked with qpdf --check when that binary is available locally -- see qpdfCheck below) and that real layout invariants hold, not just "it doesn't crash".
 
@@ -644,5 +647,96 @@ describe('odt -> docx -> odt: a formula survives the whole chain as a formula', 
     }
     expect(blockSummary(finalContent.sections[0]!.blocks)).toEqual(['First paragraph', 'Second paragraph with  inline.', 'embeddedObject', 'Third paragraph']);
     expect(mathSignature(formulaMathmlOf(finalContent.sections[0]!.blocks))).toBe('msqrt(mi(x))');
+  });
+});
+
+// --- A formula anchored to a spreadsheet cell, from a real LibreOffice-authored .ods ------------
+
+// The sheets-side counterpart to the odt/odp embedded-formula suites above, and the one exercised against a genuinely LibreOffice-produced file rather than a fixture this package assembled: src/test-support/ods-formula.ts embeds odf.js's own real sheet-formula.ods, a Calc document whose single Math object is anchored TO CELL C4 (column index 2, row index 3) at a 0.4cm/0.2cm cell-relative offset. What that file establishes, and a hand-built fixture could not, is that the anchor quartet src/layout/sheets.ts resolves against (ContentEmbeddedObject.anchorRow/anchorColumn/offsetXPt/offsetYPt) matches what a real spreadsheet application actually writes.
+
+// The `1 0 0 1 x y Tm` translations of every text run set in the math font, in content-stream order -- pdf-codec's math-content-write.ts emits one BT/Tf/Tm/Tj/ET group per positioned glyph run, always with the /MF resource name. Reuses this file's own inflatedStreams above, since a formula's real glyph placement is observable nowhere else: readPdf reconstructs LayoutItems, and a formula's CID-font runs deliberately never travel as LayoutItems (see src/layout/engine.ts's WordprocessingLayoutResult.formulas).
+function mathFontTextMatrices(pdfBytes: Uint8Array<ArrayBuffer>): { readonly xPt: number; readonly yPt: number }[] {
+  const content = inflatedStreams(pdfBytes).find((stream) => stream.includes('/MF ') && stream.includes(' Tm'));
+  if (content === undefined) {
+    throw new Error('no page content stream setting text in the math font');
+  }
+  return [...content.matchAll(/\/MF [\d.-]+ Tf\n(?:[^\n]*\n)*?1 0 0 1 ([\d.-]+) ([\d.-]+) Tm/g)].map((match) => ({ xPt: Number(match[1]), yPt: Number(match[2]) }));
+}
+
+describe('odsToPdf: a formula anchored to a spreadsheet cell', () => {
+  const bytes = sheetFormulaOdsBytes();
+
+  function spreadsheetContent(): Extract<ContentDocument, { kind: 'spreadsheet' }> {
+    const content = readOdsContent(decodePackage(bytes));
+    if (content.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    return content;
+  }
+
+  it('reads the real file\'s own Math object as an anchored formula-kind embedded object carrying genuine MathML', () => {
+    const sheet = spreadsheetContent().sheets[0]!;
+    expect(sheet.name).toBe('Formulas');
+    expect(sheet.embeddedObjects).toHaveLength(1);
+    const object = sheet.embeddedObjects![0]!;
+    expect(object.objectKind).toBe('formula');
+    expect(object.anchorRow).toBe(3);
+    expect(object.anchorColumn).toBe(2);
+    if (object.document.kind !== 'formula') {
+      throw new Error('expected a formula ContentDocument');
+    }
+    expect(object.document.formula.starMath).toBe('f(x) = {x^2} over {2} + sqrt {x}');
+    // The real MathML tree, not merely the StarMath annotation: a fraction and a square root, exactly as authored.
+    expect(mathSignature(object.document.formula.mathml)).toContain('mfrac');
+    expect(mathSignature(object.document.formula.mathml)).toContain('msqrt');
+  });
+
+  it('renders it through the real embedded STIX Two Math font, not as a plain-text stand-in', () => {
+    const pdfBytes = odsToPdf(bytes);
+    const latin1 = new TextDecoder('latin1').decode(pdfBytes);
+    // A composite CID font resource: /Type0 with Identity-H encoding over a CIDFontType0C (bare CFF) descendant. A stand-in would have rendered as ordinary WinAnsi text in a standard-14 face, with no CIDFont resource in the file at all.
+    expect(latin1).toContain('/Type0');
+    expect(latin1).toContain('/Identity-H');
+    expect(latin1).toContain('CIDFontType0C');
+    expect(latin1).toContain('STIXTwoMath');
+    // The formula's own glyphs really are drawn in that font, not merely declared as an unused resource.
+    expect(mathFontTextMatrices(pdfBytes).length).toBeGreaterThan(0);
+    qpdfCheck(pdfBytes);
+    expect(readPdf(pdfBytes).pages).toHaveLength(1);
+  });
+
+  it('places those glyphs at cell C4\'s own position, derived from the file\'s real column widths, row heights, margins, and cell offset', () => {
+    const sheet = spreadsheetContent().sheets[0]!;
+    const object = sheet.embeddedObjects![0]!;
+    const { margins, pageSize } = sheet.printSettings;
+    // The fixture declares no header gutter and no repeat bands, and its print range starts at row 0/column 0, so the grid origin is the page's own top-left content corner -- and the anchor's grid offset is simply the widths/heights of everything before it. Every number below is read out of the file, never restated as a literal.
+    const columnWidthPt = (index: number): number => sheet.columns.find((column) => column.index === index)?.widthPt ?? 0;
+    const rowHeightPt = (index: number): number => sheet.rows.find((row) => row.index === index)?.heightPt ?? 0;
+    // Column and row entries are run-length compressed (one entry per STARTING index of a repeated run), so an index with no entry of its own carries the last entry at or before it -- exactly what resolveAxis does.
+    const carriedWidthPt = (index: number): number => columnWidthPt([...sheet.columns].reverse().find((column) => column.index <= index)!.index);
+    const carriedHeightPt = (index: number): number => rowHeightPt([...sheet.rows].reverse().find((row) => row.index <= index)!.index);
+    const expectedXPt = margins.leftPt + carriedWidthPt(0) + carriedWidthPt(1) + object.offsetXPt!;
+    const expectedTopYDownPt = margins.topPt + carriedHeightPt(0) + carriedHeightPt(1) + carriedHeightPt(2) + object.offsetYPt!;
+
+    const matrices = mathFontTextMatrices(odsToPdf(bytes));
+    const leftmostXPt = Math.min(...matrices.map((matrix) => matrix.xPt));
+    const topmostYPt = Math.max(...matrices.map((matrix) => matrix.yPt));
+    // The leftmost glyph run starts exactly at the anchor cell's own left edge plus the frame's cell-relative offset.
+    expect(leftmostXPt).toBeCloseTo(expectedXPt, 3);
+    // Every glyph sits below the box's own top edge (y-up), and none is placed above where the anchor cell's offset puts that edge.
+    expect(pageSize.heightPt - topmostYPt).toBeGreaterThanOrEqual(expectedTopYDownPt - 1e-6);
+    // The formula is genuinely anchored down the page at row 3, not left at the sheet's own origin: its glyphs sit well below the first row's text baseline.
+    const firstRowBaselineYPt = pageSize.heightPt - margins.topPt - carriedHeightPt(0);
+    expect(topmostYPt).toBeLessThan(firstRowBaselineYPt);
+  });
+
+  it('reports the same positioned formula through convertSpreadsheetToLayout\'s own result, on the page it was laid out onto', () => {
+    const { document: layout, formulas } = convertSpreadsheetToLayout(spreadsheetContent(), { measurer: createFontMeasurer(createFontRegistry()) });
+    expect(layout.pages).toHaveLength(1);
+    expect(formulas).toHaveLength(1);
+    expect(formulas[0]!.pageIndex).toBe(0);
+    expect(formulas[0]!.box.items.length).toBeGreaterThan(0);
+    // The layout-level x matches the leftmost glyph the writer actually emitted -- the two halves of the pipeline agree.
+    expect(Math.min(...mathFontTextMatrices(odsToPdf(bytes)).map((matrix) => matrix.xPt))).toBeCloseTo(formulas[0]!.xPt, 3);
   });
 });

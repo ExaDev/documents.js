@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       document-schema.js:
-        specifier: ^2.1.0
-        version: 2.1.0
+        specifier: ^2.2.0
+        version: 2.2.0
       fflate:
         specifier: ^0.8.3
         version: 0.8.3
@@ -18,8 +18,8 @@ importers:
         specifier: github:ExaDev/markdown-codec#beda0a89d92fffd153d5dcd05d767b404b721cda
         version: https://codeload.github.com/ExaDev/markdown-codec/tar.gz/beda0a89d92fffd153d5dcd05d767b404b721cda
       odf.js:
-        specifier: ^2.0.0
-        version: 2.0.0
+        specifier: ^2.2.0
+        version: 2.2.0
       ooxml.js:
         specifier: ^2.6.1
         version: 2.6.1
@@ -1069,12 +1069,12 @@ packages:
     resolution: {integrity: sha512-zYyXuHp0T0AnN3NK3u1yX6STA50sgVzu95zJh663iGD0XnrTEPK05lptX8RsHKLukF+709rXQgh1BpATmvv17g==}
     engines: {node: '>=20'}
 
-  document-schema.js@2.0.0:
-    resolution: {integrity: sha512-2B0ErIQNsR8peTe0gzX7dk2zVzhZ1EwMmpuzgUVK6ZJqPDfa2HHApUrqBO32epOYMLCKIJTS0AqwoCocW1P2JA==}
-    engines: {node: '>=20'}
-
   document-schema.js@2.1.0:
     resolution: {integrity: sha512-EjmqjK/Es9Ko4TCJYq9X5BKkh75gWxf+OzVYl3dLj323/m0Ylav994izC2Qhl/r+ZdMKy8dE5DT6FdJb8cKE9w==}
+    engines: {node: '>=20'}
+
+  document-schema.js@2.2.0:
+    resolution: {integrity: sha512-wMukmCqo7xBYYSBEeZlV+8qWEujBDztGNGvUkfI3LZGg3MlIjt3+JUvuBZaBVrotFH3gKRzKyHDeqeRJe18SOA==}
     engines: {node: '>=20'}
 
   dot-prop@5.3.0:
@@ -1853,8 +1853,8 @@ packages:
     resolution: {integrity: sha512-4a+OsYv9UktOJKE+l1A4OufDgdRF9PifWj+tJnHURo/P+WOxpG4GzUFL9qCalmWauao6ogiG+QvnCovwPoyAWA==}
     engines: {node: '>=12.20.0'}
 
-  odf.js@2.0.0:
-    resolution: {integrity: sha512-3LwKnexa99JCz6IUc4wV3s7PXzKGEUX4afZSwA0EieGRiVaTER8hGC4THO+Jw7YizL6CLTXB5ESY1VA4NUC1xg==}
+  odf.js@2.2.0:
+    resolution: {integrity: sha512-g/QgapXdNWc0MJNYgqeeygtI3H1d3m+qFefpVwsQb7RVQuoJnBrwA1H1PTaSy5Fp0tYmRPNf6+M2lN1RczMo8w==}
     engines: {node: '>=20'}
 
   onetime@6.0.0:
@@ -3619,11 +3619,11 @@ snapshots:
     dependencies:
       zod: 4.4.3
 
-  document-schema.js@2.0.0:
+  document-schema.js@2.1.0:
     dependencies:
       zod: 4.4.3
 
-  document-schema.js@2.1.0:
+  document-schema.js@2.2.0:
     dependencies:
       zod: 4.4.3
 
@@ -4292,9 +4292,9 @@ snapshots:
 
   obug@2.1.4: {}
 
-  odf.js@2.0.0:
+  odf.js@2.2.0:
     dependencies:
-      document-schema.js: 2.0.0
+      document-schema.js: 2.2.0
       fast-xml-parser: 5.10.1
       fflate: 0.8.3
       zod: 4.4.3
@@ -4305,7 +4305,7 @@ snapshots:
 
   ooxml.js@2.6.1:
     dependencies:
-      document-schema.js: 2.0.0
+      document-schema.js: 2.1.0
       fast-xml-parser: 5.10.1
       fflate: 0.8.3
       zod: 4.4.3
@@ -4403,7 +4403,7 @@ snapshots:
 
   pdf-codec@1.8.0:
     dependencies:
-      document-schema.js: 2.0.0
+      document-schema.js: 2.1.0
       fflate: 0.8.3
       zod: 4.4.3
 

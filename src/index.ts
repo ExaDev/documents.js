@@ -290,7 +290,7 @@ export type { EngineLayoutOptions, WordprocessingLayoutResult } from './layout/e
 export { convertWordprocessingToLayout } from './layout/engine';
 export type { PresentationLayoutResult, SlidesLayoutOptions } from './layout/slides';
 export { convertPresentationToLayout } from './layout/slides';
-export type { SheetsLayoutOptions } from './layout/sheets';
+export type { SheetsLayoutOptions, SpreadsheetLayoutResult } from './layout/sheets';
 export { convertSpreadsheetToLayout } from './layout/sheets';
 export type { DrawingLayoutOptions } from './layout/drawing';
 export { convertDrawingToLayout } from './layout/drawing';
