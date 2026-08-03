@@ -2,18 +2,22 @@ import { inflateTolerant } from './bytes/flate';
 import { isAsciiWhitespace } from './bytes/reader';
 import type { PdfDiagnosticSink } from './diagnostics';
 import { decodeCcittFax } from './image/ccitt';
+import { decodeJbig2Embedded } from './image/jbig2';
 import type { PdfDict, PdfObject } from './objects';
 import { asArray, asBool, asDict, asName, asNumber, dictGet } from './objects';
 import { applyPredictor, readPredictorParams } from './predictors';
 
 export interface DecodedStream {
   readonly bytes: Uint8Array<ArrayBuffer>;
-  // Set when decoding stopped before exhausting the /Filter chain: either DCTDecode's deliberate JPEG passthrough (the encoded bytes ARE the deliverable -- see src/image/*'s own module docs) or a filter this codec doesn't implement (JBIG2Decode/JPXDecode/Crypt). `bytes` is still encoded per this filter name either way.
+  // Set when decoding stopped before exhausting the /Filter chain: either DCTDecode's deliberate JPEG passthrough (the encoded bytes ARE the deliverable -- see src/image/*'s own module docs) or a filter this codec doesn't implement (JPXDecode/Crypt), or a JBIG2Decode stream using a JBIG2 feature src/image/jbig2.ts does not decode. `bytes` is still encoded per this filter name either way.
   readonly remainingFilter?: string;
 }
 
+// Follows one indirect reference. Only /DecodeParms entries that are themselves whole objects need this -- in practice just JBIG2Decode's /JBIG2Globals stream, which a producer essentially always writes as a reference since several images share it. Declared as a bare callback rather than taking src/interpret.ts's PdfObjectResolver so this module keeps no dependency on the interpreter.
+export type PdfIndirectResolver = (obj: PdfObject | undefined) => PdfObject | undefined;
+
 // Runs a stream's raw bytes through its /Filter chain (a single name or an array of names, with /DecodeParms supplying per-filter parameters in the same single-or-array shape). Recoverable per-filter issues (an unresolvable /Predictor, an unimplemented filter) degrade with a diagnostic and stop the chain rather than throwing -- the caller decides whether the partially- or un-decoded result is still useful (e.g. a DCTDecode image's bytes are perfectly usable as-is).
-export function decodeStream(raw: Uint8Array<ArrayBuffer>, dict: PdfDict, sink: PdfDiagnosticSink): DecodedStream {
+export function decodeStream(raw: Uint8Array<ArrayBuffer>, dict: PdfDict, sink: PdfDiagnosticSink, resolve?: PdfIndirectResolver): DecodedStream {
   const filters = filterNames(dict);
   const parms = decodeParmsList(dict, filters.length);
   let bytes = raw;
@@ -33,6 +37,12 @@ export function decodeStream(raw: Uint8Array<ArrayBuffer>, dict: PdfDict, sink: 
       bytes = runLengthDecode(bytes);
     } else if (filter === 'CCITTFaxDecode' || filter === 'CCF') {
       bytes = ccittFaxDecode(bytes, parm, dict, sink);
+    } else if (filter === 'JBIG2Decode') {
+      const decoded = jbig2Decode(bytes, parm, dict, sink, resolve);
+      if (decoded === undefined) {
+        return { bytes, remainingFilter: 'JBIG2Decode' };
+      }
+      bytes = decoded;
     } else if (filter === 'DCTDecode' || filter === 'DCT') {
       return { bytes, remainingFilter: 'DCTDecode' };
     } else {
@@ -63,6 +73,35 @@ function ccittFaxDecode(data: Uint8Array<ArrayBuffer>, parm: PdfDict | undefined
     encodedByteAlign: asBool(parmGet('EncodedByteAlign')),
     onWarning: (message) => sink({ code: 'pdf/ccitt-fax-degraded', severity: 'warning', message }),
   }).bytes;
+}
+
+// JBIG2Decode (ISO 32000-1 7.4.7). The filter has exactly one /DecodeParms entry, /JBIG2Globals: a stream of segments -- typically a symbol dictionary -- shared by every page of the document that was embedded, which a page's own segments refer to by segment number.
+//
+// Two polarity/sizing details, both of them PDF's rather than JBIG2's, and both handled here so src/image/jbig2.ts stays free of PDF knowledge. First, JBIG2 codes a black pixel as a 1 bit (T.88 3.29) while a PDF 1-bit /DeviceGray image reads 0 as black, so the decoded bitmap is inverted on the way out -- exactly the convention CCITTFaxDecode reaches through its own /BlackIs1 defaulting to false. Second, the image dictionary's own /Width and /Height are authoritative over the page information segment's, which is also the only way a JBIG2 page of "unknown" (striped) height resolves at all.
+//
+// Returns undefined when the stream uses a JBIG2 feature this decoder does not implement, or is malformed. That degrades exactly like an unimplemented filter: the caller gets the still-encoded bytes back with remainingFilter set, skips the image, and the rest of the page still reads.
+function jbig2Decode(data: Uint8Array<ArrayBuffer>, parm: PdfDict | undefined, dict: PdfDict, sink: PdfDiagnosticSink, resolve: PdfIndirectResolver | undefined): Uint8Array<ArrayBuffer> | undefined {
+  const globalsObj = parm !== undefined ? dictGet(parm, 'JBIG2Globals') : undefined;
+  const resolvedGlobals = resolve !== undefined ? resolve(globalsObj) : globalsObj;
+  let globals: Uint8Array<ArrayBuffer> | undefined;
+  if (resolvedGlobals?.kind === 'stream') {
+    globals = decodeStream(resolvedGlobals.raw, resolvedGlobals.dict, sink, resolve).bytes;
+  } else if (globalsObj !== undefined) {
+    sink({ code: 'pdf/jbig2-degraded', severity: 'warning', message: 'a JBIG2Decode stream declares /JBIG2Globals but it could not be resolved to a stream; decoding without it, which will fail if the page refers to a shared symbol dictionary' });
+  }
+
+  try {
+    const image = decodeJbig2Embedded(data, {
+      globals,
+      width: asNumber(dictGet(dict, 'Width') ?? dictGet(dict, 'W')),
+      height: asNumber(dictGet(dict, 'Height') ?? dictGet(dict, 'H')),
+      onWarning: (message) => sink({ code: 'pdf/jbig2-degraded', severity: 'warning', message }),
+    });
+    return Uint8Array.from(image.bytes, (byte) => byte ^ 0xff);
+  } catch (error) {
+    sink({ code: 'pdf/jbig2-undecodable', severity: 'warning', message: `JBIG2Decode stream could not be decoded (${error instanceof Error ? error.message : String(error)}); leaving its bytes undecoded` });
+    return undefined;
+  }
 }
 
 function filterNames(dict: PdfDict): string[] {

@@ -206,7 +206,8 @@ export function readImageXObject(dict: PdfDict, raw: Uint8Array<ArrayBuffer>, re
     return undefined;
   }
 
-  const decoded = decodeStream(raw, dict, sink);
+  // The resolver is threaded in here, and only here, because JBIG2Decode's own /JBIG2Globals DecodeParms entry is a stream that a producer essentially always writes as an indirect reference -- no other filter this codec implements has a parameter that needs dereferencing.
+  const decoded = decodeStream(raw, dict, sink, (obj) => resolver.resolve(obj));
   if (decoded.remainingFilter === 'DCTDecode') {
     let info: JpegInfo;
     try {

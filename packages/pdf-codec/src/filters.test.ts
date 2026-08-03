@@ -2,8 +2,11 @@ import { zlibSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
 import type { PdfDiagnostic, PdfDiagnosticSink } from './diagnostics';
 import { ascii85Decode, asciiHexDecode, decodeStream, lzwDecode, runLengthDecode } from './filters';
-import { pdfArray, pdfBool, pdfDict, pdfName, pdfNull, pdfNum } from './objects';
+import type { PdfObject } from './objects';
+import { pdfArray, pdfBool, pdfDict, pdfName, pdfNull, pdfNum, pdfRef, pdfStream } from './objects';
 import { CCITT_FAX_FIXTURES, ccittFixtureBytes } from './test-support/ccitt-fax';
+import type { Jbig2Fixture } from './test-support/jbig2';
+import { JBIG2_FIXTURES, jbig2FixtureBytes } from './test-support/jbig2';
 
 function collectDiagnostics(): { sink: PdfDiagnosticSink; diagnostics: PdfDiagnostic[] } {
   const diagnostics: PdfDiagnostic[] = [];
@@ -247,10 +250,10 @@ describe('decodeStream', () => {
   it('degrades an unsupported filter with a diagnostic, leaving the bytes undecoded', () => {
     const { sink, diagnostics } = collectDiagnostics();
     const raw = new Uint8Array([1, 2, 3]);
-    const dict = pdfDict({ Filter: pdfName('JBIG2Decode') });
+    const dict = pdfDict({ Filter: pdfName('JPXDecode') });
     const result = decodeStream(raw, dict, sink);
     expect(Array.from(result.bytes)).toEqual([1, 2, 3]);
-    expect(result.remainingFilter).toBe('JBIG2Decode');
+    expect(result.remainingFilter).toBe('JPXDecode');
     expect(diagnostics[0]?.code).toBe('pdf/unsupported-filter');
   });
 
@@ -326,5 +329,83 @@ describe('decodeStream: CCITTFaxDecode', () => {
     const result = decodeStream(new Uint8Array([0x80, 0x02, 0x00, 0x00]), dict, sink);
     expect(result.bytes.length).toBe(4); // one byte per row, the undecodable rows padded white
     expect(diagnostics.map((d) => d.code)).toContain('pdf/ccitt-fax-degraded');
+  });
+});
+
+describe('decodeStream: JBIG2Decode', () => {
+  const generic = JBIG2_FIXTURES.find((f) => f.name === 'box-generic')!;
+  const symbols = JBIG2_FIXTURES.find((f) => f.name === 'text-symbols')!;
+
+  // The filter's output is the inverse of JBIG2's own polarity: a black pixel is the 0 bit, so a 1-bit /DeviceGray sample reads it as black without any /Decode array.
+  function expectedFilterBytes(fixture: Jbig2Fixture): number[] {
+    const bytesPerRow = Math.ceil(fixture.width / 8);
+    const bytes = new Uint8Array(bytesPerRow * fixture.height).fill(0xff);
+    for (let y = 0; y < fixture.height; y++) {
+      for (let x = 0; x < fixture.width; x++) {
+        if (fixture.expected[y]?.[x] === '#') {
+          const index = y * bytesPerRow + (x >> 3);
+          bytes[index] = (bytes[index] ?? 0) & ~(0x80 >> (x & 7));
+        }
+      }
+    }
+    return Array.from(bytes);
+  }
+
+  it('decodes a generic-region stream into a packed 1-bit bitmap with black in the 0 bit', () => {
+    const { sink, diagnostics } = collectDiagnostics();
+    const dict = pdfDict({ Filter: pdfName('JBIG2Decode'), Width: pdfNum(generic.width), Height: pdfNum(generic.height), BitsPerComponent: pdfNum(1), ColorSpace: pdfName('DeviceGray') });
+    const result = decodeStream(jbig2FixtureBytes(generic.stream), dict, sink);
+    expect(diagnostics).toEqual([]);
+    expect(result.remainingFilter).toBeUndefined();
+    expect(Array.from(result.bytes)).toEqual(expectedFilterBytes(generic));
+  });
+
+  it('resolves the /JBIG2Globals DecodeParms stream through the caller-supplied indirect resolver', () => {
+    const { sink, diagnostics } = collectDiagnostics();
+    const globalsStream = pdfStream(pdfDict({}), jbig2FixtureBytes(symbols.globals!));
+    const resolve = (obj: PdfObject | undefined): PdfObject | undefined => (obj?.kind === 'ref' && obj.num === 7 ? globalsStream : obj);
+    const dict = pdfDict({
+      Filter: pdfName('JBIG2Decode'),
+      DecodeParms: pdfDict({ JBIG2Globals: pdfRef(7, 0) }),
+      Width: pdfNum(symbols.width),
+      Height: pdfNum(symbols.height),
+      BitsPerComponent: pdfNum(1),
+      ColorSpace: pdfName('DeviceGray'),
+    });
+    const result = decodeStream(jbig2FixtureBytes(symbols.stream), dict, sink, resolve);
+    expect(diagnostics).toEqual([]);
+    expect(Array.from(result.bytes)).toEqual(expectedFilterBytes(symbols));
+  });
+
+  it('takes the page size from the image dictionary, cropping what the page information segment declared', () => {
+    const { sink } = collectDiagnostics();
+    const dict = pdfDict({ Filter: pdfName('JBIG2Decode'), Width: pdfNum(8), Height: pdfNum(4) });
+    const result = decodeStream(jbig2FixtureBytes(generic.stream), dict, sink);
+    expect(result.bytes.length).toBe(4);
+  });
+
+  it('degrades an undecodable JBIG2 stream with a diagnostic rather than throwing', () => {
+    const { sink, diagnostics } = collectDiagnostics();
+    // A text region whose symbol dictionary lives in a /JBIG2Globals stream that was never supplied.
+    const dict = pdfDict({ Filter: pdfName('JBIG2Decode'), Width: pdfNum(symbols.width), Height: pdfNum(symbols.height) });
+    const raw = jbig2FixtureBytes(symbols.stream);
+    const result = decodeStream(raw, dict, sink);
+    expect(result.remainingFilter).toBe('JBIG2Decode');
+    expect(Array.from(result.bytes)).toEqual(Array.from(raw));
+    expect(diagnostics.map((d) => d.code)).toContain('pdf/jbig2-undecodable');
+  });
+
+  it('warns when /JBIG2Globals is present but unresolvable, rather than silently ignoring it', () => {
+    const { sink, diagnostics } = collectDiagnostics();
+    const dict = pdfDict({
+      Filter: pdfName('JBIG2Decode'),
+      DecodeParms: pdfDict({ JBIG2Globals: pdfRef(9, 0) }),
+      Width: pdfNum(generic.width),
+      Height: pdfNum(generic.height),
+    });
+    const result = decodeStream(jbig2FixtureBytes(generic.stream), dict, sink);
+    expect(diagnostics.map((d) => d.code)).toContain('pdf/jbig2-degraded');
+    // The page's own segments still decode: only a stream that genuinely needed the globals would fail.
+    expect(Array.from(result.bytes)).toEqual(expectedFilterBytes(generic));
   });
 });
