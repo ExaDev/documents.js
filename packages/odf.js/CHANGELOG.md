@@ -1,3 +1,10 @@
+## [2.2.9](https://github.com/ExaDev/odf.js/compare/v2.2.8...v2.2.9) (2026-08-03)
+
+
+### Bug Fixes
+
+* **ci:** use pull_request_target so dependabot auto-merge can read secrets ([f0cce44](https://github.com/ExaDev/odf.js/commit/f0cce441d901636f1ca43038742b74cfaa002bd7))
+
 ## [2.2.8](https://github.com/ExaDev/odf.js/compare/v2.2.7...v2.2.8) (2026-08-03)
 
 
