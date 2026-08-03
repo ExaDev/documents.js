@@ -1,3 +1,15 @@
+# [1.7.0](https://github.com/ExaDev/pdf-codec/compare/v1.6.0...v1.7.0) (2026-08-03)
+
+
+### Features
+
+* add a hand-written JBIG2 decoder for ITU-T T.88 embedded streams ([edca3f1](https://github.com/ExaDev/pdf-codec/commit/edca3f13f1680261d5dff7a5d114a4c77391c93e))
+* add a hand-written JPEG 2000 decoder for ISO/IEC 15444-1 codestreams ([dd8c107](https://github.com/ExaDev/pdf-codec/commit/dd8c107f6446a06fd0fb5323408fae0a7220c700))
+* compute real glyph ink-tight bounding boxes from outline data ([d48a17a](https://github.com/ExaDev/pdf-codec/commit/d48a17a528c0de0d82cd0e4ade1caab9c06b4a78))
+* decode JBIG2Decode image streams instead of skipping them ([6ccbfe7](https://github.com/ExaDev/pdf-codec/commit/6ccbfe7b5f07eeaaefb2a60a72f07559db124bd8))
+* decode JPXDecode image streams instead of skipping them ([c7bb2bc](https://github.com/ExaDev/pdf-codec/commit/c7bb2bcbd0156ef920c8bbf3445ef1f16fd3b70a))
+* parse MathVariants and assemble stretchy glyph constructions ([21aa48e](https://github.com/ExaDev/pdf-codec/commit/21aa48e2fd1f02d7b544e868e2c4bddd381866e3))
+
 # [1.6.0](https://github.com/ExaDev/pdf-codec/compare/v1.5.0...v1.6.0) (2026-08-03)
 
 
