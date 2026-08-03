@@ -1,6 +1,6 @@
 {
   "name": "documents.js",
-  "version": "1.67.11",
+  "version": "1.67.12",
   "description": "Bidirectional docx/pptx <-> PDF conversion and a read+write editable OOXML document model, built on ooxml.js and Zod 4 codecs.",
   "type": "module",
   "repository": {
