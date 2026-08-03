@@ -1,6 +1,31 @@
+import type { Package, XmlElement } from 'odf.js';
+import { attrValue, bytesToBase64, childrenWithTag, decodeOdfText, elementsWithTag, readManifest, rootElement, validateManifest } from 'odf.js';
+import { encodePng } from 'pdf-codec';
 import { describe, expect, it } from 'vitest';
 import { createOdt } from './editor';
 import { buildParagraph, OdtParagraph } from './paragraph';
+
+// A genuine, decodable 2x2 PNG (not just a bare magic-number stub) -- mirrors src/test-support/odp.ts's own tinyPngBase64 reasoning: readOdtContent's own image detection (src/odf/image/detect.ts) calls odf.js's own readDrawImageBlock, which sniffs the actual bytes and returns undefined for anything it cannot recognise as a real image format.
+function tinyPngBytes(): Uint8Array<ArrayBuffer> {
+  return encodePng({ width: 2, height: 2, channels: 3, data: new Uint8Array([255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 0]) });
+}
+
+function contentRoot(pkg: Package): XmlElement {
+  const part = pkg.parts['content.xml'];
+  const root = part?.kind === 'xml' ? rootElement(part.nodes) : undefined;
+  if (root === undefined) {
+    throw new Error('expected the built odt to have a content.xml root element');
+  }
+  return root;
+}
+
+function findDrawFrame(pkg: Package): XmlElement {
+  const [frame] = elementsWithTag([contentRoot(pkg)], 'draw:frame');
+  if (frame === undefined) {
+    throw new Error('expected a draw:frame element');
+  }
+  return frame;
+}
 
 describe('OdtParagraph text', () => {
   it('aggregates text across multiple runs, including a bare tab', () => {
@@ -72,6 +97,57 @@ describe('buildParagraph', () => {
     const paragraph = new OdtParagraph([paragraphElement], paragraphElement, editor.toPackage());
     expect(paragraph.alignment).toBe('center');
     expect(paragraph.styleId).not.toBe('Standard');
+  });
+});
+
+describe('OdtParagraph.insertImageAfter', () => {
+  it('appends an as-char anchored draw:frame referencing the inserted media part, with no absolute position', () => {
+    const editor = createOdt();
+    const paragraph = editor.body.appendParagraph();
+    paragraph.insertImageAfter({ format: 'png', bytes: tinyPngBytes(), widthPt: 100, heightPt: 50 });
+    const pkg = editor.toPackage();
+    const mediaParts = Object.keys(pkg.parts).filter((path) => path.startsWith('Pictures/'));
+    expect(mediaParts).toHaveLength(1);
+    const [partPath] = mediaParts;
+
+    const frameElement = findDrawFrame(pkg);
+    expect(attrValue(frameElement, 'text:anchor-type')).toBe('as-char');
+    expect(attrValue(frameElement, 'svg:width')).toBe('100pt');
+    expect(attrValue(frameElement, 'svg:height')).toBe('50pt');
+    expect(attrValue(frameElement, 'svg:x')).toBeUndefined();
+    expect(attrValue(frameElement, 'svg:y')).toBeUndefined();
+    const [imageElement] = childrenWithTag(frameElement, 'draw:image');
+    expect(attrValue(imageElement!, 'xlink:href')).toBe(partPath);
+  });
+
+  it('writes altText as a real svg:title child element, never an attribute', () => {
+    const editor = createOdt();
+    const paragraph = editor.body.appendParagraph();
+    paragraph.insertImageAfter({ format: 'png', bytes: tinyPngBytes(), widthPt: 100, heightPt: 50, altText: 'A photo' });
+    const frameElement = findDrawFrame(editor.toPackage());
+    expect(attrValue(frameElement, 'svg:title')).toBeUndefined();
+    const [titleElement] = childrenWithTag(frameElement, 'svg:title');
+    expect(titleElement).toBeDefined();
+    expect(decodeOdfText(titleElement!)).toBe('A photo');
+  });
+
+  it('registers the binary part under Pictures/ with a matching, valid manifest entry', () => {
+    const editor = createOdt();
+    const paragraph = editor.body.appendParagraph();
+    const bytes = tinyPngBytes();
+    paragraph.insertImageAfter({ format: 'png', bytes, widthPt: 100, heightPt: 50 });
+    const pkg = editor.toPackage();
+    const mediaParts = Object.keys(pkg.parts).filter((path) => path.startsWith('Pictures/'));
+    expect(mediaParts).toHaveLength(1);
+    const [partPath] = mediaParts;
+    const entries = readManifest(pkg).entries;
+    expect(entries.find((entry) => entry.fullPath === partPath)?.mediaType).toBe('image/png');
+    expect(validateManifest(pkg).filter((problem) => problem.severity === 'error')).toEqual([]);
+    const part = pkg.parts[partPath!];
+    if (part?.kind !== 'binary') {
+      throw new Error('expected a binary media part');
+    }
+    expect(part.base64).toBe(bytesToBase64(bytes));
   });
 });
 

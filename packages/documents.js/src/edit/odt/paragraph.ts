@@ -3,7 +3,10 @@ import { attr } from 'ooxml.js';
 import { removeAttr, removeChild, setAttr } from '../../xml/edit';
 import { el } from '../../xml/fragment';
 import { decodeOdfText } from '../../xml/odf-text';
+import type { Box } from '../../model/geometry';
 import type { Alignment } from '../../model/style';
+import type { ImageInit } from './image';
+import { insertImageFrameMedia } from './image';
 import { applyStyleChange, readCurrentStyleProperties } from './props';
 import type { RunInit } from './run';
 import { buildRun, OdtRun } from './run';
@@ -96,6 +99,13 @@ export class OdtParagraph {
 
   set alignment(value: Alignment | undefined) {
     applyStyleChange(this.pkg, this.live(), 'paragraph', { alignment: value });
+  }
+
+  // Appends a new inline image, anchored as-char at the end of this paragraph's own content -- the odt counterpart to DocxParagraph.insertImageAfter, but simpler: unlike a docx paragraph (which needs a document-root reference to allocate a document-unique wp:docPr id), an OdtParagraph already carries this.pkg unconditionally, including inside a table cell (OdtTableCell.appendParagraph passes it through too), so this works there with zero extra plumbing -- a genuine odt advantage over docx's own documented table-cell limitation.
+  insertImageAfter(image: ImageInit): void {
+    const node = this.live();
+    const frame: Box = { xPt: 0, yPt: 0, widthPt: image.widthPt, heightPt: image.heightPt };
+    node.children.push(insertImageFrameMedia(this.pkg, frame, image));
   }
 
   remove(): void {

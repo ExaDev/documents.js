@@ -1,5 +1,6 @@
-import type { ContentBlock, ContentDocument, ContentEmbeddedObjectBlock, ContentParagraph, ContentTable } from 'document-schema.js';
+import type { ContentBlock, ContentDocument, ContentEmbeddedObjectBlock, ContentImageBlock, ContentParagraph, ContentTable } from 'document-schema.js';
 import type { Package } from 'odf.js';
+import { base64ToBytes } from 'odf.js';
 import { drawingOfBlock, embeddedDrawingVectors, FLOW_CONTAINER_ORIGIN } from '../../model/embedded-drawing';
 import { formulaOfBlock, formulaPlaceholderText } from '../../model/formula';
 import { resolveMetadataTimestamps } from '../../model/metadata';
@@ -19,7 +20,7 @@ export interface BuildOdtPackageOptions {
 
 // ContentDocument -> a fresh odt Package, built entirely through the same edit/odt/* live-view primitives a caller would use by hand -- the odt-side counterpart to src/edit/docx/content.ts's buildDocxPackage, and the write-side counterpart to src/odf/odt/read.ts's readOdtContent. Used by the PDF->odt conversion path (src/layout/reconstruct.ts's output never contains a ContentTable, since PDF table reconstruction degrades to tab-separated text), but written to handle the full ContentBlock union any other caller's ContentDocument might carry, mirroring buildDocxPackage's own scope exactly. Constructs its own package directly (createEmptyOdtPackage + OdtEditor) rather than calling createOdt(), mirroring buildDocxPackage's own identical reasoning: createOdt() always starts metadata from {}, but this function needs the SOURCE content's own metadata to reach resolveMetadataTimestamps.
 //
-// Image blocks are deliberately NOT written here, unlike buildDocxPackage's own 'image' case: odf.js's readOdt (src/typed/odt/read.ts, readBlocks) does not read draw:frame/draw:image back into a ContentParagraph or any ContentBlock at all -- it dispatches only on text:p/text:h/text:list/table:table/text:section, so a draw:frame this function wrote would be entirely invisible to this package's own reader. Writing one anyway would be dead, silently-unverifiable functionality, not a genuine round-trip capability -- a documented, tracked gap for whenever odf.js's own reader gains image support, not a silent one: a ContentDocument's image blocks are simply skipped, the rest of the document still builds.
+// Image blocks ARE written here, unlike an earlier version of this function: OdtParagraph.insertImageAfter (src/edit/odt/paragraph.ts) writes a real inline draw:frame/draw:image, and src/odf/odt/read.ts's own readOdtContent now runs a second detection pass (src/odf/image/detect.ts) that recovers it back, closing the round trip odf.js's own readOdt alone cannot: that reader still does not dispatch on draw:frame/draw:image at all.
 export function buildOdtPackage(content: ContentDocument, options?: BuildOdtPackageOptions): Package {
   if (content.kind !== 'wordprocessing') {
     throw new Error('buildOdtPackage requires a wordprocessing ContentDocument');
@@ -37,13 +38,38 @@ export function buildOdtPackage(content: ContentDocument, options?: BuildOdtPack
   return editor.toPackage();
 }
 
-// Walks a flat block list, routing maximal consecutive runs of list-member paragraphs (block.list !== undefined, docx's own flat numId/level model -- see paragraph.ts's own DocxParagraph.list) through appendListRun instead of appendBlock, since ODF has no flat paragraph-level list property to set the way buildDocxPackage's own populateParagraph does (see that file's own paragraph.list assignment); a list only exists in ODF as a real text:list/text:list-item tree, so it has to be built as one. Every other block kind is unaffected and still goes through appendBlock one at a time.
+// readOdtContent's own image detection (src/odf/image/detect.ts, via src/odf/odt/read.ts's collectImagePlacements) never consumes the paragraph an inline image is found in -- ContentImageBlock has nowhere to record inline membership, unlike a formula/drawing embeddedObject block, which stands in for the whole paragraph it replaced -- so a real inline image always arrives as [paragraph, image], the identical two-block shape ooxml.js's own readDocx produces for a docx inline image, and for the identical reason (see buildDocxPackage's own isMergeableImageParagraph, src/edit/docx/content.ts). Writing both blocks back as two independent paragraphs would insert a spurious extra empty paragraph before every image on every odt round trip; this instead recognises exactly that shape and writes it back as the single physical paragraph it came from, populating the paragraph's own properties and then calling insertImageAfter on that SAME paragraph.
+//
+// A list-member paragraph (block.list !== undefined) is deliberately excluded here, unlike docx's version: OdtParagraph carries no flat list property the way DocxParagraph does -- ODF nests a list structurally (text:list/text:list-item, see list.ts) -- so merging one into a plain body.appendParagraph() would silently drop it out of its enclosing list tree. Leaving that rare combination unmerged costs one extra empty paragraph, not lost list membership; appendBlocks' own list-run branch below still handles it.
+function isMergeableImageParagraph(block: ContentBlock): block is ContentParagraph {
+  return block.kind === 'paragraph' && block.list === undefined && block.runs.every((run) => run.text === '');
+}
+
+function appendMergedImageParagraph(body: OdtBody, paragraphBlock: ContentParagraph, imageBlock: ContentImageBlock): void {
+  // Only the paragraph's own properties are written here, never its runs -- every run.text in a mergeable paragraph is an empty placeholder for the image's own inline position (see this function's own top comment), and writing it via populateParagraph would add a real, spurious empty-text run alongside the image frame insertImageAfter is about to append.
+  const paragraph = body.appendParagraph();
+  if (paragraphBlock.styleId !== undefined) {
+    paragraph.styleId = paragraphBlock.styleId;
+  }
+  if (paragraphBlock.alignment !== undefined) {
+    paragraph.alignment = paragraphBlock.alignment;
+  }
+  paragraph.insertImageAfter({ format: imageBlock.format, bytes: base64ToBytes(imageBlock.base64), widthPt: imageBlock.widthPt, heightPt: imageBlock.heightPt, altText: imageBlock.altText });
+}
+
+// Walks a flat block list, routing maximal consecutive runs of list-member paragraphs (block.list !== undefined, docx's own flat numId/level model -- see paragraph.ts's own DocxParagraph.list) through appendListRun instead of appendBlock, since ODF has no flat paragraph-level list property to set the way buildDocxPackage's own populateParagraph does (see that file's own paragraph.list assignment); a list only exists in ODF as a real text:list/text:list-item tree, so it has to be built as one. A paragraph immediately followed by an image block (the shape readOdtContent now produces for a real inline image -- see isMergeableImageParagraph above) is merged into one physical paragraph+image instead, checked ahead of the list-run branch since it never applies to a list-member paragraph anyway. Every other block kind is unaffected and still goes through appendBlock one at a time.
 function appendBlocks(body: OdtBody, blocks: readonly ContentBlock[]): void {
   let i = 0;
   while (i < blocks.length) {
     const block = blocks[i];
     if (block === undefined) {
       i++;
+      continue;
+    }
+    const next = blocks[i + 1];
+    if (isMergeableImageParagraph(block) && next?.kind === 'image') {
+      appendMergedImageParagraph(body, block, next);
+      i += 2;
       continue;
     }
     if (block.kind === 'paragraph' && block.list !== undefined) {
@@ -139,6 +165,9 @@ function populateCellBlocks(cell: OdtTableCell, blocks: readonly ContentBlock[])
   const firstParagraph = cell.paragraphs()[0];
   if (firstBlock?.kind === 'paragraph' && firstParagraph !== undefined) {
     populateParagraph(firstParagraph, firstBlock);
+  } else if (firstBlock?.kind === 'image' && firstParagraph !== undefined) {
+    // Reuses buildCell's own pre-built empty first paragraph for the image, rather than appending a fresh one via appendCellBlock -- avoiding a stray blank paragraph ahead of the image when it is the cell's only content. OdtTableCell.appendParagraph already threads this.pkg through (see table.ts), so insertImageAfter works inside a cell with zero extra plumbing -- a genuine odt advantage over docx's own documented table-cell image limitation.
+    firstParagraph.insertImageAfter({ format: firstBlock.format, bytes: base64ToBytes(firstBlock.base64), widthPt: firstBlock.widthPt, heightPt: firstBlock.heightPt, altText: firstBlock.altText });
   } else if (firstBlock !== undefined) {
     appendCellBlock(cell, firstBlock);
   }
@@ -198,13 +227,20 @@ function appendTable(body: OdtBody, block: ContentTable): void {
 function appendCellBlock(cell: OdtTableCell, block: ContentBlock): void {
   if (block.kind === 'paragraph') {
     populateParagraph(cell.appendParagraph(), block);
+  } else if (block.kind === 'image') {
+    const paragraph = cell.appendParagraph();
+    paragraph.insertImageAfter({ format: block.format, bytes: base64ToBytes(block.base64), widthPt: block.widthPt, heightPt: block.heightPt, altText: block.altText });
   }
-  // Nested tables and images inside a table cell are out of scope for this bridge -- ContentBlock permits arbitrary nesting, but PDF-sourced content (the one caller today) never produces it, mirroring buildDocxPackage's own identical comment.
+  // Nested tables inside a table cell are still out of scope for this bridge -- ContentBlock permits arbitrary nesting, but PDF-sourced content (the one caller today) never produces it, mirroring buildDocxPackage's own identical comment.
 }
 
+// A bare image block reaching here (i.e. not already consumed by appendBlocks' own merge-back check above) gets a fresh paragraph of its own -- mirrors buildDocxPackage's own appendBlock 'image' case exactly.
 function appendBlock(body: OdtBody, block: ContentBlock): void {
   if (block.kind === 'paragraph') {
     populateParagraph(body.appendParagraph(), block);
+  } else if (block.kind === 'image') {
+    const paragraph = body.appendParagraph();
+    paragraph.insertImageAfter({ format: block.format, bytes: base64ToBytes(block.base64), widthPt: block.widthPt, heightPt: block.heightPt, altText: block.altText });
   } else if (block.kind === 'pageBreak') {
     body.appendPageBreak();
   } else if (block.kind === 'table') {
@@ -212,7 +248,6 @@ function appendBlock(body: OdtBody, block: ContentBlock): void {
   } else if (block.kind === 'embeddedObject') {
     appendEmbeddedObject(body, block);
   }
-  // block.kind === 'image' is intentionally unhandled -- see this file's own top-of-file comment.
 }
 
 // An embedded formula becomes a paragraph carrying a REAL ODF formula sub-document -- a nested "Object N/content.xml" holding the block's own MathML, referenced from a draw:frame/draw:object and listed in the package manifest with the genuine formula media type (src/odf-package/formula.ts, via OdtBody.appendFormula). Exactly what odf.js's own readOdfEmbeddedFormula reads back, and the ODF-side symmetry of buildDocxPackage's own OMML writing: a formula crossing docx -> odt arrives as a formula, not as text.

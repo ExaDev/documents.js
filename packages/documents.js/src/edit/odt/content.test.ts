@@ -1,13 +1,19 @@
 import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
 import type { ContentDocument, ContentVector } from 'document-schema.js';
 import type { Package, XmlElement } from 'odf.js';
-import { childrenWithTag, decodePackage, encodePackage, findChildElement, readDrawPageContent, rootElement } from 'odf.js';
+import { bytesToBase64, childrenWithTag, decodePackage, encodePackage, findChildElement, readDrawPageContent, rootElement } from 'odf.js';
 import { attr } from 'ooxml.js';
+import { encodePng } from 'pdf-codec';
 import { describe, expect, it } from 'vitest';
 import { readOdtContent } from '../../odf/odt/read';
 import { rotationsOf, VECTOR_FIXTURE, vectorDrawingBlock, withoutRotation } from '../../test-support/vectors';
 import { buildOdtPackage } from './content';
 import { OdtEditor } from './editor';
+
+// A genuine, decodable 2x2 PNG -- readOdtContent's own image detection (src/odf/image/detect.ts) calls odf.js's own readDrawImageBlock, which sniffs the actual bytes and returns undefined for anything it cannot recognise as a real image format.
+function tinyPngBase64(): string {
+  return bytesToBase64(encodePng({ width: 2, height: 2, channels: 3, data: new Uint8Array([255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 0]) }));
+}
 
 function wordDoc(sections: Extract<ContentDocument, { kind: 'wordprocessing' }>['sections']): ContentDocument {
   return { kind: 'wordprocessing', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, sections };
@@ -194,21 +200,79 @@ describe('buildOdtPackage', () => {
     expect(tableBlock.rows[0]?.cells[1]?.blocks).toEqual([]);
   });
 
-  it('skips image blocks (documented gap: odf.js readOdt does not read them back)', () => {
+  it('inserts an image block as media, referenced from its own paragraph, and reads back through readOdtContent', () => {
+    const content = wordDoc([
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+        blocks: [{ kind: 'image', format: 'png', base64: tinyPngBase64(), widthPt: 100, heightPt: 50 }],
+      },
+    ]);
+    const pkg = buildOdtPackage(content);
+    const mediaParts = Object.keys(pkg.parts).filter((p) => p.startsWith('Pictures/'));
+    expect(mediaParts).toHaveLength(1);
+    // A bare image block with no preceding paragraph still gets one real text:p to anchor into (appendBlock's own 'image' case, mirroring buildDocxPackage's identical fallback) -- exactly one physical paragraph was written.
+    expect(new OdtEditor(pkg).paragraphs()).toHaveLength(1);
+
+    const recovered = readOdtContent(decodePackage(encodePackage(pkg)));
+    if (recovered.kind !== 'wordprocessing') {
+      throw new Error('expected a wordprocessing ContentDocument');
+    }
+    // readOdtContent's own image detection never consumes the paragraph it finds the image in (see src/odf/odt/read.ts's own top-of-file comment) -- so the single physical text:p reads back as an empty paragraph block immediately followed by the image block, the identical two-block shape ooxml.js's own readDocx produces for a docx inline image with no surrounding text.
+    expect(recovered.sections[0]!.blocks.map((block) => block.kind)).toEqual(['paragraph', 'image']);
+    expect(recovered.sections[0]!.blocks[1]).toMatchObject({ kind: 'image', format: 'png', widthPt: 100, heightPt: 50 });
+  });
+
+  it('merges a real paragraph immediately followed by an image into one physical paragraph, not two', () => {
     const content = wordDoc([
       {
         pageSize: { widthPt: 612, heightPt: 792 },
         margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
         blocks: [
           { kind: 'paragraph', runs: [{ text: 'Before' }] },
-          { kind: 'image', format: 'png', base64: 'AAAA', widthPt: 100, heightPt: 50 },
+          { kind: 'paragraph', styleId: 'Standard', runs: [{ text: '' }] },
+          { kind: 'image', format: 'png', base64: tinyPngBase64(), widthPt: 100, heightPt: 50 },
           { kind: 'paragraph', runs: [{ text: 'After' }] },
         ],
       },
     ]);
-    expect(() => buildOdtPackage(content)).not.toThrow();
-    const editor = new OdtEditor(buildOdtPackage(content));
-    expect(editor.paragraphs().map((p) => p.text)).toEqual(['Before', 'After']);
+    const pkg = buildOdtPackage(content);
+    // Exactly three real text:p elements were written -- if the merge failed, the empty run-carrying paragraph and its image would have landed as two separate paragraphs, producing four.
+    const editor = new OdtEditor(pkg);
+    expect(editor.paragraphs().map((p) => p.text)).toEqual(['Before', '', 'After']);
+
+    // Reading the three physical paragraphs back splits the merged one into its own [paragraph, image] pair again (see the test above), so the four LOGICAL blocks the source declared survive exactly -- the merge only ever avoids an extra spurious PHYSICAL paragraph, never a logical one.
+    const recovered = readOdtContent(decodePackage(encodePackage(pkg)));
+    if (recovered.kind !== 'wordprocessing') {
+      throw new Error('expected a wordprocessing ContentDocument');
+    }
+    expect(recovered.sections[0]!.blocks.map((block) => block.kind)).toEqual(['paragraph', 'paragraph', 'image', 'paragraph']);
+  });
+
+  it('writes an image inside a table cell, unlike buildDocxPackage\'s own documented table-cell limitation', () => {
+    const content = wordDoc([
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+        blocks: [
+          {
+            kind: 'table',
+            columnWidthsPt: [200, 200],
+            rows: [{ cells: [{ blocks: [{ kind: 'image', format: 'png', base64: tinyPngBase64(), widthPt: 100, heightPt: 50 }] }, { blocks: [{ kind: 'paragraph', runs: [{ text: 'B1' }] }] }] }],
+          },
+        ],
+      },
+    ]);
+    const pkg = buildOdtPackage(content);
+    const mediaParts = Object.keys(pkg.parts).filter((p) => p.startsWith('Pictures/'));
+    expect(mediaParts).toHaveLength(1);
+
+    const editor = new OdtEditor(pkg);
+    const [table] = editor.tables();
+    const [row] = table!.rows();
+    const [firstCell, secondCell] = row!.cells();
+    expect(firstCell!.paragraphs()).toHaveLength(1); // the image reused the cell's own pre-built first paragraph, no stray blank one alongside it
+    expect(secondCell!.text).toBe('B1');
   });
 
   it('writes a recovered drawing block as real draw: vector primitives that survive a build-then-read round trip', () => {
