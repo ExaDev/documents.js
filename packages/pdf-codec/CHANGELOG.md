@@ -1,3 +1,10 @@
+## [1.10.7](https://github.com/ExaDev/pdf-codec/compare/v1.10.6...v1.10.7) (2026-08-03)
+
+
+### Bug Fixes
+
+* **ci:** use the GitHub App token for the branch push and PR creation too ([7264c24](https://github.com/ExaDev/pdf-codec/commit/7264c245ff11ee46064105093e2e2537562d5a02))
+
 ## [1.10.6](https://github.com/ExaDev/pdf-codec/compare/v1.10.5...v1.10.6) (2026-08-03)
 
 
