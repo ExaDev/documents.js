@@ -1,3 +1,10 @@
+# [1.8.0](https://github.com/ExaDev/pdf-codec/compare/v1.7.0...v1.8.0) (2026-08-03)
+
+
+### Features
+
+* draw stretchy glyph constructions by glyph ID ([7d1aa09](https://github.com/ExaDev/pdf-codec/commit/7d1aa091106628086647311e622930fc56c1a24e))
+
 # [1.7.0](https://github.com/ExaDev/pdf-codec/compare/v1.6.0...v1.7.0) (2026-08-03)
 
 
