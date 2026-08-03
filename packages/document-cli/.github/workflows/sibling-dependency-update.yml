@@ -1,6 +1,6 @@
 name: Sibling dependency instant update
 
-# Triggered the moment a sibling ExaDev package this repo depends on publishes a new version -- the publishing repo own ci.yml sends this repository_dispatch event right after semantic-release completes, instead of waiting for Dependabot own daily scheduled scan to notice. Bumps the named dependency, opens a PR, and requests auto-merge -- the branch push and PR creation use the default GITHUB_TOKEN (an ordinary same-repo operation), but the final merge step mints and uses a GitHub App installation token instead, since GITHUB_TOKEN-authenticated pushes do not cascade into further workflow runs and that merge needs to trigger ci.yml and release normally. This workflow never pushes directly to main -- the PR still only merges once this repo own CI genuinely passes on it. Note: every repo in this family also enforces a minimumReleaseAge pnpm supply-chain gate (see pnpm-workspace.yaml) that CI own pnpm install --frozen-lockfile step respects unconditionally, with no per-package exceptions -- so a same-day sibling release still cannot actually pass CI (and therefore cannot merge) until that gate window has elapsed, regardless of how quickly this workflow opens the PR.
+# Triggered the moment a sibling ExaDev package this repo depends on publishes a new version -- the publishing repo own ci.yml sends this repository_dispatch event right after semantic-release completes, instead of waiting for Dependabot own daily scheduled scan to notice. Bumps the named dependency, opens a PR, and requests auto-merge. The branch push and the PR-open call both authenticate via a freshly-minted GitHub App installation token, not the default GITHUB_TOKEN -- GITHUB_TOKEN-authenticated actions (a push OR opening a PR) do not cascade into further workflow runs, so a GITHUB_TOKEN-created PR would never trigger this repo own ci.yml pull_request checks at all, leaving nothing for auto-merge to wait on and letting GitHub treat the PR as already mergeable the instant it opens. This workflow never pushes directly to main -- the PR still only merges once this repo own CI genuinely passes on it. Note: every repo in this family also enforces a minimumReleaseAge pnpm supply-chain gate (see pnpm-workspace.yaml); pnpm add itself can refuse to install a version published within that window, in which case this workflow run fails cleanly and the bump is left for Dependabot own next daily scan to pick up once the window has passed -- a neutral fallback, not a regression, since that scan would have handled it anyway.
 
 on:
   repository_dispatch:
@@ -34,11 +34,18 @@ jobs:
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
+      - name: Generate a token for the branch push and PR
+        if: steps.diff.outputs.changed == 'true'
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: "4473709"
+          private-key: ${{ secrets.AUTOMERGE_APP_PRIVATE_KEY }}
       - name: Commit and open a PR
         if: steps.diff.outputs.changed == 'true'
         id: pr
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           PACKAGE: ${{ github.event.client_payload.package }}
           VERSION: ${{ github.event.client_payload.version }}
         run: |
@@ -49,16 +56,10 @@ jobs:
           git add package.json pnpm-lock.yaml
           body=$(printf 'Triggered instantly via repository_dispatch when %s published its own release,\nrather than waiting for the next scheduled Dependabot scan.' "$PACKAGE")
           git commit -m "build(deps): bump ${PACKAGE} to ${VERSION}" -m "$body"
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
           git push origin "$branch"
           pr_url=$(gh pr create --title "build(deps): bump ${PACKAGE} to ${VERSION}" --body "Automatic dependency bump triggered instantly by the ${PACKAGE} release." --base main --head "$branch")
           echo "pr_url=$pr_url" >> "$GITHUB_OUTPUT"
-      - name: Generate a token for the merge
-        if: steps.diff.outputs.changed == 'true'
-        id: app-token
-        uses: actions/create-github-app-token@v2
-        with:
-          app-id: "4473709"
-          private-key: ${{ secrets.AUTOMERGE_APP_PRIVATE_KEY }}
       - name: Enable auto-merge
         if: steps.diff.outputs.changed == 'true'
         env:
