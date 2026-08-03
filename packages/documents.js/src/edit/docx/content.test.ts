@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
 import type { ContentDocument } from 'document-schema.js';
 import { bytesToBase64 } from 'ooxml.js';
+import { readDocxContent } from '../../ooxml/docx/read';
 import { buildDocxPackage } from './content';
 import { DocxEditor } from './editor';
 
@@ -109,5 +110,70 @@ describe('buildDocxPackage', () => {
     expect(rows[0]!.cells()).toHaveLength(2);
     expect(rows[0]!.cells()[0]!.text).toBe('A1');
     expect(rows[1]!.cells()[1]!.text).toBe('B2');
+  });
+
+  it('a vertically merged (rowSpan) cell survives a build-then-read round trip as merged, not as two ordinary cells', () => {
+    const content = wordDoc([
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+        blocks: [
+          {
+            kind: 'table',
+            columnWidthsPt: [100, 100],
+            rows: [
+              { cells: [{ blocks: [{ kind: 'paragraph', runs: [{ text: 'A1' }] }], rowSpan: 2 }, { blocks: [{ kind: 'paragraph', runs: [{ text: 'B1' }] }] }] },
+              { cells: [{ blocks: [] }, { blocks: [{ kind: 'paragraph', runs: [{ text: 'B2' }] }] }] },
+            ],
+          },
+        ],
+      },
+    ]);
+    const pkg = buildDocxPackage(content);
+    const roundTripped = readDocxContent(pkg);
+    if (roundTripped.kind !== 'wordprocessing') {
+      throw new Error('expected a wordprocessing ContentDocument');
+    }
+    const tableBlock = roundTripped.sections[0]!.blocks[0];
+    expect(tableBlock?.kind).toBe('table');
+    if (tableBlock?.kind !== 'table') {
+      throw new Error('expected a table block');
+    }
+    expect(tableBlock.rows[0]?.cells[0]?.rowSpan).toBe(2);
+    expect(tableBlock.rows[0]?.cells[0]?.blocks[0]).toMatchObject({ kind: 'paragraph', runs: [{ text: 'A1' }] });
+    expect(tableBlock.rows[1]?.cells[0]?.rowSpan).toBeUndefined();
+    expect(tableBlock.rows[1]?.cells[0]?.blocks).toEqual([]);
+    expect(tableBlock.rows[0]?.cells[1]?.blocks[0]).toMatchObject({ kind: 'paragraph', runs: [{ text: 'B1' }] });
+    expect(tableBlock.rows[1]?.cells[1]?.blocks[0]).toMatchObject({ kind: 'paragraph', runs: [{ text: 'B2' }] });
+  });
+
+  it('a horizontally merged (colSpan) cell survives a build-then-read round trip as merged, not as two ordinary cells', () => {
+    const content = wordDoc([
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+        blocks: [
+          {
+            kind: 'table',
+            columnWidthsPt: [100, 100],
+            rows: [{ cells: [{ blocks: [{ kind: 'paragraph', runs: [{ text: 'A1' }] }], colSpan: 2 }] }],
+          },
+        ],
+      },
+    ]);
+    const pkg = buildDocxPackage(content);
+    const roundTripped = readDocxContent(pkg);
+    if (roundTripped.kind !== 'wordprocessing') {
+      throw new Error('expected a wordprocessing ContentDocument');
+    }
+    const tableBlock = roundTripped.sections[0]!.blocks[0];
+    expect(tableBlock?.kind).toBe('table');
+    if (tableBlock?.kind !== 'table') {
+      throw new Error('expected a table block');
+    }
+    // docx collapses a horizontal merge into ONE real w:tc (no filler element for the consumed column), so the row's own cells array has exactly one entry, not two.
+    expect(tableBlock.rows[0]?.cells).toHaveLength(1);
+    expect(tableBlock.rows[0]?.cells[0]?.colSpan).toBe(2);
+    expect(tableBlock.rows[0]?.cells[0]?.blocks[0]).toMatchObject({ kind: 'paragraph', runs: [{ text: 'A1' }] });
   });
 });

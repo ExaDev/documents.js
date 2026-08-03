@@ -5,13 +5,11 @@ import type { OdtBody } from './editor';
 import { createOdt } from './editor';
 import type { OdtList, OdtListItem } from './list';
 import type { OdtParagraph } from './paragraph';
-import type { OdtTableCell } from './table';
+import type { OdtTable, OdtTableCell } from './table';
 
 // ContentDocument -> a fresh odt Package, built entirely through the same edit/odt/* live-view primitives a caller would use by hand -- the odt-side counterpart to src/edit/docx/content.ts's buildDocxPackage, and the write-side counterpart to src/odf/odt/read.ts's readOdtContent. Used by the PDF->odt conversion path (src/layout/reconstruct.ts's output never contains a ContentTable, since PDF table reconstruction degrades to tab-separated text), but written to handle the full ContentBlock union any other caller's ContentDocument might carry, mirroring buildDocxPackage's own scope exactly.
 //
 // Image blocks are deliberately NOT written here, unlike buildDocxPackage's own 'image' case: odf.js's readOdt (src/typed/odt/read.ts, readBlocks) does not read draw:frame/draw:image back into a ContentParagraph or any ContentBlock at all -- it dispatches only on text:p/text:h/text:list/table:table/text:section, so a draw:frame this function wrote would be entirely invisible to this package's own reader. Writing one anyway would be dead, silently-unverifiable functionality, not a genuine round-trip capability -- a documented, tracked gap for whenever odf.js's own reader gains image support, not a silent one: a ContentDocument's image blocks are simply skipped, the rest of the document still builds.
-//
-// Table cell colSpan/rowSpan are read from the content but not yet written, mirroring buildDocxPackage's own identical documented gap: OdtTableCell (table.ts) has no colSpan/rowSpan setters yet, so a merged cell currently round-trips as an ordinary unmerged one.
 export function buildOdtPackage(content: ContentDocument): Package {
   if (content.kind !== 'wordprocessing') {
     throw new Error('buildOdtPackage requires a wordprocessing ContentDocument');
@@ -124,34 +122,65 @@ export function populateParagraph(paragraph: OdtParagraph, block: ContentParagra
   }
 }
 
+function populateCellBlocks(cell: OdtTableCell, blocks: readonly ContentBlock[]): void {
+  const [firstBlock, ...restBlocks] = blocks;
+  const firstParagraph = cell.paragraphs()[0];
+  if (firstBlock?.kind === 'paragraph' && firstParagraph !== undefined) {
+    populateParagraph(firstParagraph, firstBlock);
+  } else if (firstBlock !== undefined) {
+    appendCellBlock(cell, firstBlock);
+  }
+  for (const remaining of restBlocks) {
+    appendCellBlock(cell, remaining);
+  }
+}
+
+// Unlike docx's gridSpan (see the identically-named function in src/edit/docx/content.ts), ODF needs a real table:covered-table-cell element for EVERY grid position a merge consumes, horizontal or vertical -- odf.js's own readTableRow pushes one `{ blocks: [] }` array entry per covered-table-cell it finds (see typed/shared/table.ts), so ContentTable.rows[].cells already has exactly one entry per grid column in every row, master cells and covered placeholders alike. This walks each row left to right, consuming those placeholder entries as it goes: horizontalCoverRemaining accounts for the REST OF THIS ROW'S OWN entries a colSpan>1 master cell just consumed, and verticalMerges (keyed by grid column index) accounts for a rowSpan>1 master's entries in EVERY row below it, across the full width of its own colSpan. Exported so src/edit/odp/content.ts's own buildOdpPackage can reuse this exact merge-aware population logic for a slide shape's own table:table content (a draw:frame's table:table is byte-for-byte the same content model a document-level one is -- see odf.js's own readDrawFrameContent) -- the table.ts primitives it walks (OdtTable.appendEmptyRow/OdtTableRow.appendCell/appendCoveredCell) are already format-neutral over WHERE the table:table element lives.
+export function populateOdtTable(table: OdtTable, block: ContentTable): void {
+  const verticalMerges = new Map<number, number>();
+  block.rows.forEach((row) => {
+    const tableRow = table.appendEmptyRow();
+    let colIndex = 0;
+    let horizontalCoverRemaining = 0;
+    row.cells.forEach((cell) => {
+      if (horizontalCoverRemaining > 0) {
+        tableRow.appendCoveredCell();
+        horizontalCoverRemaining -= 1;
+        colIndex += 1;
+        return;
+      }
+      const verticalRemaining = verticalMerges.get(colIndex);
+      if (verticalRemaining !== undefined && verticalRemaining > 0) {
+        tableRow.appendCoveredCell();
+        verticalMerges.set(colIndex, verticalRemaining - 1);
+        colIndex += 1;
+        return;
+      }
+      const tableCell = tableRow.appendCell();
+      const span = cell.colSpan ?? 1;
+      if (span > 1) {
+        tableCell.colSpan = span;
+        horizontalCoverRemaining = span - 1;
+      }
+      if (cell.rowSpan !== undefined && cell.rowSpan > 1) {
+        tableCell.rowSpan = cell.rowSpan;
+        for (let c = 0; c < span; c++) {
+          verticalMerges.set(colIndex + c, cell.rowSpan - 1);
+        }
+      }
+      populateCellBlocks(tableCell, cell.blocks);
+      colIndex += 1;
+    });
+  });
+}
+
 function appendTable(body: OdtBody, block: ContentTable): void {
   const columns = block.columnWidthsPt.length;
   if (block.rows.length === 0 || columns === 0) {
     return;
   }
-  const table = body.appendTable({ rows: block.rows.length, columns, columnWidthsPt: block.columnWidthsPt });
-  block.rows.forEach((row, rowIndex) => {
-    const tableRow = table.rows()[rowIndex];
-    if (tableRow === undefined) {
-      return;
-    }
-    row.cells.forEach((cell, cellIndex) => {
-      const tableCell = tableRow.cells()[cellIndex];
-      if (tableCell === undefined) {
-        return;
-      }
-      const [firstBlock, ...restBlocks] = cell.blocks;
-      const firstParagraph = tableCell.paragraphs()[0];
-      if (firstBlock?.kind === 'paragraph' && firstParagraph !== undefined) {
-        populateParagraph(firstParagraph, firstBlock);
-      } else if (firstBlock !== undefined) {
-        appendCellBlock(tableCell, firstBlock);
-      }
-      for (const remaining of restBlocks) {
-        appendCellBlock(tableCell, remaining);
-      }
-    });
-  });
+  const table = body.appendTable({ rows: 0, columns, columnWidthsPt: block.columnWidthsPt });
+  populateOdtTable(table, block);
 }
 
 function appendCellBlock(cell: OdtTableCell, block: ContentBlock): void {

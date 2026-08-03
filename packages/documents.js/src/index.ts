@@ -170,6 +170,7 @@ export type { DocxBody } from './edit/docx/editor';
 export { createDocx, DocxEditor, openDocx } from './edit/docx/editor';
 export { DocxParagraph } from './edit/docx/paragraph';
 export { DocxRun } from './edit/docx/run';
+export type { DocxVerticalMerge } from './edit/docx/table';
 export { DocxTable, DocxTableCell, DocxTableRow } from './edit/docx/table';
 export { buildDocxPackage } from './edit/docx/content';
 
