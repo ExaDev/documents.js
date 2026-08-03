@@ -32,6 +32,7 @@ import { readPptxContent } from '../ooxml/pptx/read';
 import { readMarkdownContent } from '../markdown/read';
 import { buildMarkdownText } from '../markdown/write';
 import { decodeMarkdownText, encodeMarkdownText } from '../markdown/text';
+import type { OmmlDiagnostic } from '../omml/write';
 import type { PdfDiagnosticSink, WinAnsiSubstitution } from 'pdf-codec';
 import { createStandardFontMeasurer, loadMathFont, readPdf, writePdf } from 'pdf-codec';
 import { throwIfAborted } from '../ports/abort';
@@ -231,9 +232,11 @@ export interface DocumentBridgeOptions {
   readonly signal?: AbortSignal;
   // Called exactly once, synchronously, with the DocumentPackage this bridge built internally, before the function returns its bytes -- mirroring DocumentToPdfOptions/PdfToDocumentOptions's own onDocument. A bridge never runs a layout engine (see this section's own top-of-block comment), so `layout` is always left undefined here -- DocumentPackageSchema already models layout as optional for exactly this case, and running a layout conversion purely to populate a field no caller asked for would be wasted work.
   readonly onDocument?: (pkg: DocumentPackage) => void;
+  // Called once per MathML construct that degraded or was approximated while an embedded formula was translated into OMML (src/omml/write.ts). Only the bridges that BUILD a docx from a formula-bearing source can ever invoke it: odtToDocx genuinely can, markdownToDocx threads it for consistency but has no formula construct in its own source format to produce one from, and every other bridge in this section either builds a non-OOXML package or has no formula-writing path at all. pdfToDocx deliberately has no equivalent option -- reconstructWordprocessing recovers positioned glyphs, never a formula block, so there is nothing there to report.
+  readonly onMathDiagnostic?: (diagnostic: OmmlDiagnostic, context: { readonly sourcePath?: string }) => void;
 }
 
-// odt bytes -> docx bytes: readOdtContent(decodePackage(odtBytes)) feeds directly into buildDocxPackage, then ooxml.js's own encodePackage serializes the result -- no writePdf/readPdf, no measurer, no reconstruction. Cancellation has no loop to hook into the way writePdf/readPdf's own page/content-stream loops do (see src/ports/abort.ts's own module comment) -- read and build are each a single bounded pass over the source document -- so the signal is checked once before each of those two stages rather than threaded into buildDocxPackage/readOdtContent themselves, which accept no such option today. An embedded formula survives this bridge only as its own plain-text stand-in (its StarMath annotation, or "[formula]"): buildDocxPackage has no MathML-writing path of its own -- OOXML's own math markup, OMML, is a vocabulary this package does not write -- so its appendEmbeddedObject degrades a formula block to a paragraph rather than dropping it (src/edit/docx/content.ts). The real MathML the source carried is genuinely lost at this boundary; the formula's presence is not.
+// odt bytes -> docx bytes: readOdtContent(decodePackage(odtBytes)) feeds directly into buildDocxPackage, then ooxml.js's own encodePackage serializes the result -- no writePdf/readPdf, no measurer, no reconstruction. Cancellation has no loop to hook into the way writePdf/readPdf's own page/content-stream loops do (see src/ports/abort.ts's own module comment) -- read and build are each a single bounded pass over the source document -- so the signal is checked once before each of those two stages rather than threaded into buildDocxPackage/readOdtContent themselves, which accept no such option today. An embedded formula now crosses this bridge as REAL, editable OOXML math: buildDocxPackage translates the block's own MathML into genuine OMML (m:oMathPara > m:oMath -- see src/omml/write.ts) rather than degrading it to the plain-text stand-in it used to become. Only a construct OMML has no counterpart for degrades, individually and with a diagnostic reported through options.onMathDiagnostic.
 export function odtToDocx(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBridgeOptions): Uint8Array<ArrayBuffer> {
   throwIfAborted(options?.signal);
   const pkg = decodePackage(bytes); // odf.js's own decodePackage -- odt is an ODF package.
@@ -243,7 +246,7 @@ export function odtToDocx(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBrid
   }
   throwIfAborted(options?.signal);
   options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content });
-  return encodePackage(buildDocxPackage(content)); // ooxml.js's own encodePackage -- buildDocxPackage produces an OOXML package.
+  return encodePackage(buildDocxPackage(content, { onMathDiagnostic: options?.onMathDiagnostic })); // ooxml.js's own encodePackage -- buildDocxPackage produces an OOXML package.
 }
 
 // docx bytes -> odt bytes, the reverse of odtToDocx: readDocxContent(decodePackage(docxBytes)) feeds directly into buildOdtPackage, then odf.js's own encodePackage serializes the result.
@@ -322,7 +325,7 @@ export function markdownToDocx(bytes: Uint8Array<ArrayBuffer>, options?: Documen
   }
   throwIfAborted(options?.signal);
   options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content });
-  return encodePackage(buildDocxPackage(content)); // ooxml.js's own encodePackage -- buildDocxPackage produces an OOXML package.
+  return encodePackage(buildDocxPackage(content, { onMathDiagnostic: options?.onMathDiagnostic })); // ooxml.js's own encodePackage -- buildDocxPackage produces an OOXML package.
 }
 
 // docx bytes -> markdown bytes, the reverse of markdownToDocx: readDocxContent(decodeOoxmlPackage(docxBytes)) feeds directly into buildMarkdownText, then encodeMarkdownText (src/markdown/text.ts) is the final UTF-8 encode step in place of every other bridge's own format-specific encodePackage call.

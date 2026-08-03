@@ -172,6 +172,7 @@ export { DocxParagraph } from './edit/docx/paragraph';
 export { DocxRun } from './edit/docx/run';
 export type { DocxVerticalMerge } from './edit/docx/table';
 export { DocxTable, DocxTableCell, DocxTableRow } from './edit/docx/table';
+export type { BuildDocxPackageOptions } from './edit/docx/content';
 export { buildDocxPackage } from './edit/docx/content';
 
 export type { SlideImageInit, SlideTableInit, TextBoxInit } from './edit/pptx/slide';
@@ -238,6 +239,10 @@ export type { OperatorProperties } from './mathml/operators';
 export { operatorProperties } from './mathml/operators';
 export type { MathVariant } from './mathml/variant';
 export { applyMathVariant, isMathVariant, mapMathVariant } from './mathml/variant';
+
+// --- MathML -> OMML (ECMA-376 Part 1's own Office Math Markup Language) structural translation: the WRITE-side counterpart to layoutFormula above, covering the identical construct set so a formula rendered to PDF and the same formula written into a docx degrade in exactly the same places. buildDocxPackage is its real caller (an embedded formula becomes genuine, editable Word math rather than a plain-text stand-in); exported directly for a caller assembling OOXML math itself, e.g. into a docx opened through openDocx. ---
+export type { OmmlDiagnostic, OmmlDiagnosticKind, OmmlWriteResult } from './omml/write';
+export { buildOfficeMath, buildOfficeMathParagraph } from './omml/write';
 
 // --- Format <-> ContentDocument readers and layout algorithms, each independently usable rather than only reachable through the ergonomic conversions below. ---
 export { readDocxContent } from './ooxml/docx/read';

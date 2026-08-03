@@ -1,6 +1,9 @@
 import type { Package, XmlElement, XmlNode } from 'ooxml.js';
 import { attr, textContent } from 'ooxml.js';
 import type { ContentListMembership } from 'document-schema.js';
+import type { MathMlNode } from '../../mathml/nodes';
+import type { OmmlWriteResult } from '../../omml/write';
+import { buildOfficeMathParagraph } from '../../omml/write';
 import { getOrCreateChildElement, removeChild } from '../../xml/edit';
 import { el } from '../../xml/fragment';
 import type { ImageInit, MediaContext } from './image';
@@ -160,6 +163,19 @@ export class DocxParagraph {
     const numPr = getOrCreateChildElement(pPr, 'w:numPr', PPR_ORDER, () => el('w:numPr'));
     // CT_NumPr's sequence is ilvl before numId.
     numPr.children = [el('w:ilvl', { 'w:val': String(value.level) }), el('w:numId', { 'w:val': value.numId })];
+  }
+
+  // Appends a real OMML display equation (m:oMathPara > m:oMath) to the end of this paragraph, translated from `mathml` by src/omml/write.ts -- genuinely editable Word math, not a picture and not a plain-text stand-in. m:oMathPara is a member of WordprocessingML's own EG_PContent, so it is a direct child of w:p exactly as a w:r is, and needs no run to sit inside.
+  //
+  // Returns the translation's own result: `written` is false when the MathML produced no OMML content at all (an empty formula), which is a caller's signal to fall back to its own stand-in rather than leave the paragraph empty; `diagnostics` reports every construct that degraded or was approximated on the way through.
+  appendOfficeMath(mathml: readonly MathMlNode[]): OmmlWriteResult & { readonly written: boolean } {
+    const node = this.live();
+    const result = buildOfficeMathParagraph(mathml);
+    if (result.element === undefined) {
+      return { ...result, written: false };
+    }
+    node.children.push(result.element);
+    return { ...result, written: true };
   }
 
   // Appends a new run containing an inline image to the end of this paragraph. Requires the paragraph to have been opened through a DocxEditor (table-cell paragraphs currently have no image context -- see ImageMediaContext's own doc comment).

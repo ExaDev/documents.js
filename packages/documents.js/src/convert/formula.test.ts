@@ -9,9 +9,12 @@ import { minimalOdpBytes } from '../test-support/odp';
 import { minimalOdtBytes } from '../test-support/odt';
 import type { ContentBlock, DocumentPackage } from 'document-schema.js';
 import { decodePackage } from 'odf.js';
-import { decodePackage as decodeOoxmlPackage } from 'ooxml.js';
+import type { XmlElement } from 'ooxml.js';
+import { attr, buildXml, childrenWithTag, decodePackage as decodeOoxmlPackage, elementsWithTag, encodePackage as encodeOoxmlPackage, rootElement, textContent } from 'ooxml.js';
 import { readPdf } from 'pdf-codec';
+import { buildDocxPackage } from '../edit/docx/content';
 import { decodeMarkdownText } from '../markdown/text';
+import type { OmmlDiagnostic } from '../omml/write';
 import { readDocxContent } from '../ooxml/docx/read';
 import { readOdpContent } from '../odf/odp/read';
 import { readOdtContent } from '../odf/odt/read';
@@ -383,20 +386,115 @@ describe('a formula crossing a boundary that cannot typeset it', () => {
     expect(new TextDecoder('latin1').decode(pdfBytes)).toContain('CIDFontType0C');
   });
 
-  it('degrades an odt formula to its own plain-text stand-in across the docx bridge rather than dropping it silently', () => {
-    const docxBytes = odtToDocx(odtWithEmbeddedFormulaBytes());
-    const content = readDocxContent(decodeOoxmlPackage(docxBytes));
-    if (content.kind !== 'wordprocessing') {
-      throw new Error('expected a wordprocessing ContentDocument');
-    }
-    const texts = content.sections.flatMap((s) => s.blocks).flatMap((b) => (b.kind === 'paragraph' ? [b.runs.map((r) => r.text).join('')] : []));
-    expect(texts).toContain('Before the formula');
-    expect(texts).toContain('[formula]'); // this fixture's formula carries no StarMath annotation, so the literal marker is the stand-in
-  });
-
   it('degrades the same formula to that stand-in across the markdown bridge too', () => {
     const markdown = decodeMarkdownText(odtToMarkdown(odtWithEmbeddedFormulaBytes()));
     expect(markdown).toContain('Before the formula');
     expect(markdown).toContain('formula'); // markdown-codec escapes the surrounding brackets, so match the word rather than the exact literal
+  });
+});
+
+// --- odt -> docx: a formula crosses as REAL OMML now, verified against the actual word/document.xml element tree the bridge wrote ---
+
+function documentRootOf(docxBytes: Uint8Array<ArrayBuffer>): XmlElement {
+  const root = rootElement(decodeOoxmlPackage(docxBytes).parts['word/document.xml']);
+  if (root === undefined) {
+    throw new Error('expected the built docx to have a word/document.xml root element');
+  }
+  return root;
+}
+
+function ommlTextOf(root: XmlElement): string[] {
+  return elementsWithTag([root], 'm:t').map((t) => t.children.map((child) => (child.type === 'text' ? child.value : '')).join(''));
+}
+
+describe('odtToDocx: an embedded formula becomes real OOXML math', () => {
+  it('writes a genuine m:oMathPara > m:oMath display equation, not the plain-text stand-in', () => {
+    const root = documentRootOf(odtToDocx(odtWithEmbeddedFormulaBytes()));
+
+    const paras = elementsWithTag([root], 'm:oMathPara');
+    expect(paras).toHaveLength(1);
+    expect(childrenWithTag(paras[0]!, 'm:oMath')).toHaveLength(1);
+    // The formula's own structure, translated -- an m:f carrying num/den, exactly what a docx-math-aware consumer renders as a fraction.
+    const fractions = elementsWithTag([root], 'm:f');
+    expect(fractions).toHaveLength(1);
+    expect(childrenWithTag(fractions[0]!, 'm:num')).toHaveLength(1);
+    expect(childrenWithTag(fractions[0]!, 'm:den')).toHaveLength(1);
+    expect(ommlTextOf(root)).toEqual(['a', 'b']);
+
+    // ...and the stand-in it used to write is genuinely gone, not merely accompanied by real math.
+    expect(buildXml([root])).not.toContain('[formula]');
+  });
+
+  it('hangs the equation directly off a w:p, where WordprocessingML\'s own EG_PContent permits it, with the OMML namespace declared on the fragment itself', () => {
+    const root = documentRootOf(odtToDocx(odtWithEmbeddedFormulaBytes()));
+    const mathParagraph = elementsWithTag([root], 'w:p').find((paragraph) => childrenWithTag(paragraph, 'm:oMathPara').length > 0);
+    expect(mathParagraph).toBeDefined();
+    expect(attr(childrenWithTag(mathParagraph!, 'm:oMathPara')[0]!, 'xmlns:m')).toBe('http://schemas.openxmlformats.org/officeDocument/2006/math');
+  });
+
+  it('keeps the surrounding paragraph text intact alongside the equation', () => {
+    const content = readDocxContent(decodeOoxmlPackage(odtToDocx(odtWithEmbeddedFormulaBytes())));
+    if (content.kind !== 'wordprocessing') {
+      throw new Error('expected a wordprocessing ContentDocument');
+    }
+    const texts = content.sections.flatMap((section) => section.blocks).flatMap((block) => (block.kind === 'paragraph' ? [block.runs.map((run) => run.text).join('')] : []));
+    expect(texts).toContain('Before the formula');
+  });
+
+  it('carries an INLINE odt formula across the bridge as OMML too, in its own true block position', () => {
+    const root = documentRootOf(odtToDocx(odtWithInlineFormulaBytes()));
+    expect(elementsWithTag([root], 'm:rad')).toHaveLength(1);
+    // The equation paragraph sits between the second and third source paragraphs, exactly where the inline frame was anchored.
+    const paragraphKinds = elementsWithTag([root], 'w:p').map((paragraph) => (childrenWithTag(paragraph, 'm:oMathPara').length > 0 ? 'math' : textContent(paragraph)));
+    expect(paragraphKinds).toEqual(['First paragraph', 'Second paragraph with  inline.', 'math', 'Third paragraph']);
+  });
+
+  it('reports no diagnostics at all for a formula whose every construct has a real OMML equivalent', () => {
+    const diagnostics: OmmlDiagnostic[] = [];
+    odtToDocx(odtWithEmbeddedFormulaBytes(), { onMathDiagnostic: (diagnostic) => diagnostics.push(diagnostic) });
+    expect(diagnostics).toEqual([]);
+  });
+
+  it('degrades only an unsupported construct, reporting it while the rest of the equation stays real math', () => {
+    const bytes = odtZip('<text:p>Mixed</text:p><draw:frame svg:x="2cm" svg:y="2cm" svg:width="4cm" svg:height="1.5cm"><draw:object xlink:href="./Object 1"/></draw:frame>', [
+      ['Object 1', '<math:mrow><math:mfrac><math:mi>a</math:mi><math:mi>b</math:mi></math:mfrac><math:mmultiscripts><math:mi>F</math:mi></math:mmultiscripts></math:mrow>'],
+    ]);
+    const diagnostics: { readonly kind: string; readonly detail: string; readonly sourcePath: string | undefined }[] = [];
+    const root = documentRootOf(odtToDocx(bytes, { onMathDiagnostic: (diagnostic, context) => diagnostics.push({ ...diagnostic, sourcePath: context.sourcePath }) }));
+
+    expect(diagnostics).toEqual([{ kind: 'unsupported-element', detail: 'mmultiscripts', sourcePath: 'sections[0].blocks[1]' }]);
+    expect(elementsWithTag([root], 'm:f')).toHaveLength(1);
+    expect(ommlTextOf(root)).toEqual(['a', 'b', 'F']);
+  });
+
+  it('falls back to the whole-formula plain-text stand-in only when the MathML produces no OMML at all', () => {
+    const bytes = odtZip('<text:p>Empty</text:p><draw:frame svg:x="2cm" svg:y="2cm" svg:width="4cm" svg:height="1.5cm"><draw:object xlink:href="./Object 1"/></draw:frame>', [['Object 1', '']]);
+    const root = documentRootOf(odtToDocx(bytes));
+    expect(elementsWithTag([root], 'm:oMathPara')).toHaveLength(0);
+    expect(buildXml([root])).toContain('[formula]');
+  });
+
+  it('does not read the equation back: ooxml.js\'s own readDocx has no m:oMath handling, so the equation paragraph reads as a runless paragraph', () => {
+    // Pins the documented read-back boundary (see the README's own "OMML is written but not read" gotcha) as an asserted fact rather than only prose: the docx genuinely holds real math, and nothing in this package's read path recovers it.
+    const content = readDocxContent(decodeOoxmlPackage(odtToDocx(odtWithEmbeddedFormulaBytes())));
+    if (content.kind !== 'wordprocessing') {
+      throw new Error('expected a wordprocessing ContentDocument');
+    }
+    const blocks = content.sections[0]!.blocks;
+    expect(blocks.map((block) => block.kind)).toEqual(['paragraph', 'paragraph']);
+    expect(blocks.filter((block) => block.kind === 'embeddedObject')).toHaveLength(0);
+    const equationBlock = blocks[1];
+    expect(equationBlock?.kind === 'paragraph' ? equationBlock.runs : undefined).toEqual([]);
+  });
+
+  it('carries an .odm chapter\'s own formula into a docx as OMML through the same path', () => {
+    const chapterBytes = odtWithEmbeddedFormulaBytes();
+    // odmToPdf proves the PDF direction; this proves the same concatenated ContentDocument writes real math when the target is docx instead.
+    const combined = readOdtContent(decodePackage(chapterBytes));
+    if (combined.kind !== 'wordprocessing') {
+      throw new Error('expected a wordprocessing ContentDocument');
+    }
+    const root = documentRootOf(encodeOoxmlPackage(buildDocxPackage(combined)));
+    expect(elementsWithTag([root], 'm:f')).toHaveLength(1);
   });
 });

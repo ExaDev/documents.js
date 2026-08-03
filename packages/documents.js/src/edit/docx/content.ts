@@ -3,13 +3,19 @@ import type { Package } from 'ooxml.js';
 import { formulaOfBlock, formulaPlaceholderText } from '../../model/formula';
 import { base64ToBytes } from 'ooxml.js';
 import { ptToTwips } from '../../model/units';
+import type { OmmlDiagnostic } from '../../omml/write';
 import type { DocxBody } from './editor';
 import { createDocx } from './editor';
 import type { DocxParagraph } from './paragraph';
 import type { DocxTableCell } from './table';
 
+// Reports every MathML construct that degraded or was approximated while an embedded formula was translated into OMML (see src/omml/write.ts). `sourcePath` is the formula block's own path back into the source ContentDocument, when it carries one, so a caller can name which formula each diagnostic came from rather than only which construct.
+export interface BuildDocxPackageOptions {
+  readonly onMathDiagnostic?: (diagnostic: OmmlDiagnostic, context: { readonly sourcePath?: string }) => void;
+}
+
 // ContentDocument -> a fresh docx Package, built entirely through the same edit/docx/* live-view primitives a caller would use by hand -- the write-side counterpart to src/ooxml/docx/read.ts's readDocxContent. Used by the PDF->docx conversion path (src/layout/reconstruct.ts's output never contains a ContentTable, since PDF table reconstruction degrades to tab-separated text), but written to handle the full ContentBlock union for any other caller that wants a ContentDocument turned into real docx bytes.
-export function buildDocxPackage(content: ContentDocument): Package {
+export function buildDocxPackage(content: ContentDocument, options?: BuildDocxPackageOptions): Package {
   if (content.kind !== 'wordprocessing') {
     throw new Error('buildDocxPackage requires a wordprocessing ContentDocument');
   }
@@ -19,7 +25,7 @@ export function buildDocxPackage(content: ContentDocument): Package {
       // A section boundary becomes a page break -- distinct per-section page size/margins (w:sectPr per section) isn't modelled by this bridge yet, since createDocx()'s single scaffolded section covers every caller this function currently has.
       editor.body.appendPageBreak();
     }
-    appendBlocks(editor.body, section.blocks);
+    appendBlocks(editor.body, section.blocks, options);
   });
   return editor.toPackage();
 }
@@ -29,7 +35,7 @@ function isMergeableImageParagraph(block: ContentBlock): block is ContentParagra
   return block.kind === 'paragraph' && block.runs.every((run) => run.text === '');
 }
 
-function appendBlocks(body: DocxBody, blocks: readonly ContentBlock[]): void {
+function appendBlocks(body: DocxBody, blocks: readonly ContentBlock[], options: BuildDocxPackageOptions | undefined): void {
   let index = 0;
   while (index < blocks.length) {
     const block = blocks[index];
@@ -45,7 +51,7 @@ function appendBlocks(body: DocxBody, blocks: readonly ContentBlock[]): void {
       continue;
     }
     if (block !== undefined) {
-      appendBlock(body, block);
+      appendBlock(body, block, options);
     }
     index += 1;
   }
@@ -143,7 +149,7 @@ function appendCellBlock(cell: DocxTableCell, block: ContentBlock): void {
   // Nested tables and images inside a table cell are out of scope for this bridge -- ContentBlock permits arbitrary nesting, but PDF-sourced content (the one caller today) never produces it.
 }
 
-function appendBlock(body: DocxBody, block: ContentBlock): void {
+function appendBlock(body: DocxBody, block: ContentBlock, options: BuildDocxPackageOptions | undefined): void {
   if (block.kind === 'paragraph') {
     populateParagraph(body.appendParagraph(), block);
   } else if (block.kind === 'image') {
@@ -154,15 +160,26 @@ function appendBlock(body: DocxBody, block: ContentBlock): void {
   } else if (block.kind === 'table') {
     appendTable(body, block);
   } else if (block.kind === 'embeddedObject') {
-    appendEmbeddedObject(body, block);
+    appendEmbeddedObject(body, block, options);
   }
 }
 
-// An embedded formula becomes a paragraph carrying the formula's own plain-text stand-in -- its StarMath annotation, or the literal "[formula]". This is a genuine, honest degradation rather than a silent drop: OOXML's own math markup is OMML, a vocabulary this package does not write at all, so there is no way to carry the real MathML into a docx; writing nothing would make the formula vanish without trace, which is exactly the silent-loss failure mode this codebase's conventions rule out. A 'drawing' objectKind IS now reachable -- reconstructWordprocessing wraps a page's recovered vector primitives in one (src/layout/reconstruct.ts) -- and is deliberately not written: there is no DrawingML preset/custom-geometry writer under src/edit/docx/ to write a rect/ellipse/line/path with, and degrading real geometry to a text stand-in the way a formula degrades would be noise rather than information (a rect has no text to stand in for). The recovered vectors stay fully available on the ContentDocument itself, which pdfToDocx hands back through its own onDocument callback. The remaining objectKinds (a nested wordprocessing/presentation/spreadsheet document) are still unhandled: no reader this package depends on produces one.
-function appendEmbeddedObject(body: DocxBody, block: ContentEmbeddedObjectBlock): void {
+// An embedded formula becomes a paragraph carrying a REAL OMML display equation (m:oMathPara > m:oMath), structurally translated from the block's own MathML by src/omml/write.ts -- genuinely editable Word math, not a picture and not a plain-text stand-in. This is what makes a formula survive the odt -> docx bridge and an .odm chapter as math rather than as text.
+//
+// The plain-text stand-in (the formula's own StarMath annotation, or the literal "[formula]") remains the fallback for exactly one case: a formula whose MathML produced no OMML content at all -- an empty mathml array, or a block whose document is not a formula document. Writing nothing there would make the formula vanish without trace, the silent-loss failure mode this codebase's conventions rule out. An individual MathML construct with no OMML counterpart degrades on its own, inside the equation, with a diagnostic -- see src/omml/write.ts -- rather than dragging the whole formula down to text.
+//
+// A 'drawing' objectKind IS reachable -- reconstructWordprocessing wraps a page's recovered vector primitives in one (src/layout/reconstruct.ts) -- and is deliberately not written: there is no DrawingML preset/custom-geometry writer under src/edit/docx/ to write a rect/ellipse/line/path with, and degrading real geometry to a text stand-in the way a formula used to would be noise rather than information (a rect has no text to stand in for). The recovered vectors stay fully available on the ContentDocument itself, which pdfToDocx hands back through its own onDocument callback. The remaining objectKinds (a nested wordprocessing/presentation/spreadsheet document) are still unhandled: no reader this package depends on produces one.
+function appendEmbeddedObject(body: DocxBody, block: ContentEmbeddedObjectBlock, options: BuildDocxPackageOptions | undefined): void {
   const formula = formulaOfBlock(block);
   if (formula === undefined) {
     return;
   }
-  body.appendParagraph().appendRun({ text: formulaPlaceholderText(formula) });
+  const paragraph = body.appendParagraph();
+  const { written, diagnostics } = paragraph.appendOfficeMath(formula.mathml);
+  for (const diagnostic of diagnostics) {
+    options?.onMathDiagnostic?.(diagnostic, { sourcePath: block.sourcePath });
+  }
+  if (!written) {
+    paragraph.appendRun({ text: formulaPlaceholderText(formula) });
+  }
 }
