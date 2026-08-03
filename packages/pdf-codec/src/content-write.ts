@@ -173,6 +173,139 @@ function formatPoint(x: number, y: number): string {
   return `${formatNumber(x)} ${formatNumber(y)}`;
 }
 
+// A LayoutLine's/LayoutPath's own stroke style (document-schema.js 2.1's `style` field). 'solid' and an absent field are the same thing: the PDF graphics state's own defaults, with nothing emitted for either.
+type StrokeStyle = NonNullable<LayoutLine['style']>;
+
+// Dash-pattern lengths (ISO 32000-1 8.4.3.6, the 'd' operator) are expressed as multiples of the stroke's OWN width rather than as fixed point lengths, so a hairline rule and a thick one both read as recognisably dashed: a fixed [3 3] pattern under a 6pt stroke paints overlapping blocks that read as solid, and under a 0.25pt one paints dashes twelve times longer than they are thick.
+const DASHED_ON_WIDTH_MULTIPLE = 3;
+const DASHED_GAP_WIDTH_MULTIPLE = 3;
+
+// A dotted stroke is a dash array with a ZERO on-length, painted under a round cap: a zero-length dash paints its two round caps at the same point, i.e. exactly one filled circle of diameter = the stroke width, which is what a dot is. Any non-zero on-length would paint a capsule (the segment plus a semicircle at each end) instead, reading as a short dash rather than a dot. Under the DEFAULT butt cap (0 J) the identical array paints nothing at all -- a butt cap adds no length to a zero-length segment -- which is why the 'J' operator below is not optional decoration here but the thing that makes the dots exist.
+const DOTTED_ON_LENGTH_PT = 0;
+const DOTTED_GAP_WIDTH_MULTIPLE = 2;
+
+// Every dash pattern this module emits starts at the beginning of its own on-length (ISO 32000-1 8.4.3.6's dash phase), so a rule always begins with ink rather than an arbitrary partial gap.
+const DASH_PHASE_PT = 0;
+
+// ISO 32000-1 Table 53: 0 = butt cap (the PDF default), 1 = round cap.
+const LINE_CAP_BUTT = 0;
+const LINE_CAP_ROUND = 1;
+
+// A 'double' stroke has no PDF operator of its own -- it is two parallel strokes. Splitting the declared width w into three equal bands (ink, gap, ink) gives each rule a width of w/3 and puts their centrelines w/3 either side of the original one, so the pair's total ink extent is exactly w: the same visual weight the single solid stroke would have carried, now read as two rules with a gap of their own width between them.
+const DOUBLE_RULE_BANDS = 3;
+
+// Which side of the original centreline each of the two rules is drawn on, in emission order.
+const DOUBLE_RULE_SIGNS = [1, -1] as const;
+
+// Emits the graphics-state operators one stroke style needs before the path it applies to, and reports whether it emitted any -- the caller uses that to decide whether resetStrokeStyleState is needed afterwards. 'double' is not handled here at all: it is a geometry change (two offset paths), not a graphics-state one, and its callers route around this entirely.
+function writeStrokeStyleState(writer: ByteWriter, style: StrokeStyle | undefined, strokeWidthPt: number): boolean {
+  if (style === 'dashed') {
+    writer.writeAscii(`[${formatNumber(strokeWidthPt * DASHED_ON_WIDTH_MULTIPLE)} ${formatNumber(strokeWidthPt * DASHED_GAP_WIDTH_MULTIPLE)}] ${formatNumber(DASH_PHASE_PT)} d\n`);
+    return true;
+  }
+  if (style === 'dotted') {
+    writer.writeAscii(`[${formatNumber(DOTTED_ON_LENGTH_PT)} ${formatNumber(strokeWidthPt * DOTTED_GAP_WIDTH_MULTIPLE)}] ${formatNumber(DASH_PHASE_PT)} d\n`);
+    writer.writeAscii(`${formatNumber(LINE_CAP_ROUND)} J\n`);
+    return true;
+  }
+  return false;
+}
+
+// Restores the dash pattern (and, after a dotted stroke, the line cap) to the PDF defaults. The graphics state persists for the whole remainder of the content stream, so a dashed table rule left un-reset would silently dash every later line, rect, ellipse, path, and text underline on the same page.
+function resetStrokeStyleState(writer: ByteWriter, style: StrokeStyle | undefined): void {
+  writer.writeAscii(`[] ${formatNumber(DASH_PHASE_PT)} d\n`);
+  if (style === 'dotted') {
+    writer.writeAscii(`${formatNumber(LINE_CAP_BUTT)} J\n`);
+  }
+}
+
+interface UnitNormal {
+  readonly x: number;
+  readonly y: number;
+}
+
+// The left-hand unit normal of the chord from (fromX, fromY) to (toX, toY), or undefined for a zero-length chord -- a point has no direction to be perpendicular to, and normalising it would divide by zero.
+function chordNormal(fromX: number, fromY: number, toX: number, toY: number): UnitNormal | undefined {
+  const dx = toX - fromX;
+  const dy = toY - fromY;
+  const length = Math.hypot(dx, dy);
+  if (length === 0) {
+    return undefined;
+  }
+  return { x: -dy / length, y: dx / length };
+}
+
+// The offset direction at a vertex joining two chords: the normalised sum of their own unit normals, which bisects the corner rather than picking one side's perpendicular arbitrarily. Undefined when neither neighbour has a direction, and also when the two exactly cancel (a 180-degree reversal, where the sum is the zero vector and there is no meaningful bisector) -- both cases leave that point un-offset rather than moving it in an invented direction.
+function averageNormal(a: UnitNormal | undefined, b: UnitNormal | undefined): UnitNormal | undefined {
+  if (a === undefined) {
+    return b;
+  }
+  if (b === undefined) {
+    return a;
+  }
+  const x = a.x + b.x;
+  const y = a.y + b.y;
+  const length = Math.hypot(x, y);
+  if (length === 0) {
+    return undefined;
+  }
+  return { x: x / length, y: y / length };
+}
+
+function offsetX(x: number, normal: UnitNormal | undefined, offsetPt: number): number {
+  return normal === undefined ? x : x + normal.x * offsetPt;
+}
+
+function offsetY(y: number, normal: UnitNormal | undefined, offsetPt: number): number {
+  return normal === undefined ? y : y + normal.y * offsetPt;
+}
+
+// Displaces a whole subpath sideways by offsetPt, for the two parallel rules a 'double' stroke is drawn as. Each ON-PATH point moves along the bisector of its own two adjacent chord normals (so a corner's two rules stay parallel through the corner rather than crossing it), and a cubic's control points move along their own segment's chord normal. This is a chord-based approximation of a true parallel curve, not an exact offset -- an exact offset of a cubic Bezier is not itself a cubic and cannot be written as one -- but the offsets here are a third of a stroke width, at which scale the difference is far below the width of the ink being drawn.
+function offsetSubpath(subpath: LayoutSubpath, offsetPt: number): LayoutSubpath {
+  const points = [{ x: subpath.startXPt, y: subpath.startYPt }, ...subpath.segments.map((segment) => ({ x: segment.xPt, y: segment.yPt }))];
+
+  // One entry per segment, in segment order, plus -- when the subpath is closed -- the implicit closing chord from the last point back to the first. That closing edge is real ink (drawn by 'h'), so its normal has to reach the two vertices it joins just as an explicit segment's does. Indexing works out so that chords[i] is always the chord LEAVING points[i].
+  const chords: (UnitNormal | undefined)[] = [];
+  for (let i = 0; i + 1 < points.length; i += 1) {
+    const from = points[i]!;
+    const to = points[i + 1]!;
+    chords.push(chordNormal(from.x, from.y, to.x, to.y));
+  }
+  if (subpath.closed && points.length > 1) {
+    const from = points[points.length - 1]!;
+    const to = points[0]!;
+    chords.push(chordNormal(from.x, from.y, to.x, to.y));
+  }
+
+  const vertexNormals = points.map((_point, i) => {
+    const incoming = i === 0 ? (subpath.closed ? chords[chords.length - 1] : undefined) : chords[i - 1];
+    return averageNormal(incoming, chords[i]);
+  });
+
+  return {
+    startXPt: offsetX(subpath.startXPt, vertexNormals[0], offsetPt),
+    startYPt: offsetY(subpath.startYPt, vertexNormals[0], offsetPt),
+    closed: subpath.closed,
+    segments: subpath.segments.map((segment, i) => {
+      const endNormal = vertexNormals[i + 1];
+      if (segment.kind === 'line') {
+        return { kind: 'line', xPt: offsetX(segment.xPt, endNormal, offsetPt), yPt: offsetY(segment.yPt, endNormal, offsetPt) };
+      }
+      // A control point has no vertex of its own to bisect at, so it rides its segment's own chord normal; a degenerate segment (start and end coincident, a legitimate way to write a closed loop) has no chord, and falls back to the normal already computed for the vertex it starts from.
+      const controlNormal = chords[i] ?? vertexNormals[i];
+      return {
+        kind: 'cubic',
+        c1xPt: offsetX(segment.c1xPt, controlNormal, offsetPt),
+        c1yPt: offsetY(segment.c1yPt, controlNormal, offsetPt),
+        c2xPt: offsetX(segment.c2xPt, controlNormal, offsetPt),
+        c2yPt: offsetY(segment.c2yPt, controlNormal, offsetPt),
+        xPt: offsetX(segment.xPt, endNormal, offsetPt),
+        yPt: offsetY(segment.yPt, endNormal, offsetPt),
+      };
+    }),
+  };
+}
+
 function writeFillAndStroke(writer: ByteWriter, fill: LayoutColor | undefined, stroke: { readonly color: LayoutColor; readonly widthPt: number } | undefined): void {
   if (fill !== undefined) {
     writeRgbOperator(writer, fill, 'rg');
@@ -193,11 +326,40 @@ function writeRect(writer: ByteWriter, item: LayoutRect): void {
   writer.writeAscii(`${paint}\n`);
 }
 
+// A 'double' line, drawn as its two parallel rules: the line's own direction gives the perpendicular to offset along directly, so there is no per-vertex bisecting to do the way offsetSubpath needs for a path. A zero-length line has no direction at all and is drawn once at its declared width instead -- the only alternative would be offsetting along an invented direction.
+function writeDoubleLine(writer: ByteWriter, item: LayoutLine): void {
+  writeRgbOperator(writer, item.color, 'RG');
+  const normal = chordNormal(item.x1Pt, item.y1Pt, item.x2Pt, item.y2Pt);
+  if (normal === undefined) {
+    writer.writeAscii(`${formatNumber(item.widthPt)} w\n`);
+    writer.writeAscii(`${formatNumber(item.x1Pt)} ${formatNumber(item.y1Pt)} m ${formatNumber(item.x2Pt)} ${formatNumber(item.y2Pt)} l\n`);
+    writer.writeAscii('S\n');
+    return;
+  }
+  const ruleWidthPt = item.widthPt / DOUBLE_RULE_BANDS;
+  const ruleOffsetPt = item.widthPt / DOUBLE_RULE_BANDS;
+  writer.writeAscii(`${formatNumber(ruleWidthPt)} w\n`);
+  for (const sign of DOUBLE_RULE_SIGNS) {
+    const dx = normal.x * ruleOffsetPt * sign;
+    const dy = normal.y * ruleOffsetPt * sign;
+    writer.writeAscii(`${formatPoint(item.x1Pt + dx, item.y1Pt + dy)} m ${formatPoint(item.x2Pt + dx, item.y2Pt + dy)} l\n`);
+    writer.writeAscii('S\n');
+  }
+}
+
 function writeLine(writer: ByteWriter, item: LayoutLine): void {
+  if (item.style === 'double') {
+    writeDoubleLine(writer, item);
+    return;
+  }
   writeRgbOperator(writer, item.color, 'RG');
   writer.writeAscii(`${formatNumber(item.widthPt)} w\n`);
+  const styled = writeStrokeStyleState(writer, item.style, item.widthPt);
   writer.writeAscii(`${formatNumber(item.x1Pt)} ${formatNumber(item.y1Pt)} m ${formatNumber(item.x2Pt)} ${formatNumber(item.y2Pt)} l\n`);
   writer.writeAscii('S\n');
+  if (styled) {
+    resetStrokeStyleState(writer, item.style);
+  }
 }
 
 // Approximates the ellipse as four cubic Bezier arcs, one per quadrant, using the standard kappa constant for the control-point offset -- PDF has no native ellipse or circle operator. The final arc returns exactly to the starting point, so an explicit `h` (closepath) is emitted even though it draws no additional ink: ISO 32000-1 8.5.3.1 already implicitly closes every subpath for FILL purposes regardless, but never for STROKE, so an ellipse written without `h` paints its own stroke as a technically-open path -- invisible for a smooth curve with no sharp corner at the seam, but it also means readPdf's own general path tracking (interpret.ts) records the recovered subpath as closed: false (it only sets closed: true when it actually sees an `h` operator), which then blocks a filled-and-stroked ellipse from being recognised as fillable by any downstream ODF/SVG consumer that correctly requires an explicitly closed path before filling it (confirmed against real LibreOffice 26.2: a reconstructed ellipse-turned-path with fill set but closed: false rendered with no fill at all). Emitting `h` makes both the PDF bytes and the recovered geometry match the ellipse's own true, always-closed shape.
@@ -239,16 +401,55 @@ function writeSubpath(writer: ByteWriter, subpath: LayoutSubpath): void {
   }
 }
 
+// A 'double'-stroked path, drawn as its two parallel rules. Any fill paints once, from the ORIGINAL un-offset geometry and before either rule: doubling describes the rule drawn along the path, not the region it encloses, so filling both offset copies would paint the interior twice and bulge it outwards by the offset on whichever side ran wider.
+function writeDoublePath(writer: ByteWriter, item: LayoutPath, stroke: { readonly color: LayoutColor; readonly widthPt: number }): void {
+  if (item.fill !== undefined) {
+    writeRgbOperator(writer, item.fill, 'rg');
+    for (const subpath of item.subpaths) {
+      writeSubpath(writer, subpath);
+    }
+    writer.writeAscii(`${item.fillRule === 'evenodd' ? 'f*' : 'f'}\n`);
+  }
+
+  const ruleWidthPt = stroke.widthPt / DOUBLE_RULE_BANDS;
+  const ruleOffsetPt = stroke.widthPt / DOUBLE_RULE_BANDS;
+  writeRgbOperator(writer, stroke.color, 'RG');
+  writer.writeAscii(`${formatNumber(ruleWidthPt)} w\n`);
+  for (const sign of DOUBLE_RULE_SIGNS) {
+    for (const subpath of item.subpaths) {
+      writeSubpath(writer, offsetSubpath(subpath, ruleOffsetPt * sign));
+    }
+    writer.writeAscii('S\n');
+  }
+}
+
 function writePath(writer: ByteWriter, item: LayoutPath): void {
   const paint = paintOperatorFor(item.fill, item.stroke, item.fillRule);
   if (paint === undefined) {
     return;
   }
+  // A stroke style only means anything when there is a stroke to apply it to -- a fill-only path carrying style: 'dashed' has no ink whose on/off lengths could differ, and paints exactly as it would without the field.
+  if (item.stroke === undefined) {
+    writeFillAndStroke(writer, item.fill, undefined);
+    for (const subpath of item.subpaths) {
+      writeSubpath(writer, subpath);
+    }
+    writer.writeAscii(`${paint}\n`);
+    return;
+  }
+  if (item.style === 'double') {
+    writeDoublePath(writer, item, item.stroke);
+    return;
+  }
   writeFillAndStroke(writer, item.fill, item.stroke);
+  const styled = writeStrokeStyleState(writer, item.style, item.stroke.widthPt);
   for (const subpath of item.subpaths) {
     writeSubpath(writer, subpath);
   }
   writer.writeAscii(`${paint}\n`);
+  if (styled) {
+    resetStrokeStyleState(writer, item.style);
+  }
 }
 
 // Images are drawn into the PDF unit square [0,1]x[0,1] via the Do operator, so the CTM must encode the actual placement (position, size, rotation) in one step: scale the unit square to the image's point dimensions, rotate about its own origin corner, then translate that corner to (xPt, yPt).

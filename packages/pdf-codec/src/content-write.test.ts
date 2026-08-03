@@ -212,6 +212,67 @@ describe('writeContentStream: line', () => {
   });
 });
 
+// Every expectation below asserts the FULL emitted operator string, not a substring or a byte count: the whole point of the style field is the exact dash array, phase, and cap the graphics state ends up carrying, and a "contains [6 6]" assertion would pass just as happily on a stream that also left the pattern set for every later item on the page.
+describe('writeContentStream: line -- stroke style', () => {
+  // A 90pt horizontal rule at 2pt wide, so every derived length below is a clean multiple: dashes at 3x the stroke width are 6pt on, 6pt off; a dotted gap at 2x is 4pt.
+  const rule: LayoutLine = { kind: 'line', x1Pt: 10, y1Pt: 10, x2Pt: 100, y2Pt: 10, color: BLACK, widthPt: 2 };
+
+  it('emits nothing extra for an absent style', () => {
+    const text = decode(writeContentStream([rule], fakeContext()).bytes);
+    expect(text).toBe('0 0 0 RG\n2 w\n10 10 m 100 10 l\nS\n');
+  });
+
+  it("emits nothing extra for style: 'solid', which means exactly what an absent style means", () => {
+    const text = decode(writeContentStream([{ ...rule, style: 'solid' }], fakeContext()).bytes);
+    expect(text).toBe('0 0 0 RG\n2 w\n10 10 m 100 10 l\nS\n');
+  });
+
+  it("emits a [6 6] 0 d dash array (3x the 2pt stroke width, on and off) before the stroke and resets it to [] 0 d after", () => {
+    const text = decode(writeContentStream([{ ...rule, style: 'dashed' }], fakeContext()).bytes);
+    expect(text).toBe('0 0 0 RG\n2 w\n[6 6] 0 d\n10 10 m 100 10 l\nS\n[] 0 d\n');
+  });
+
+  // The zero on-length is what makes these dots rather than short dashes, and it only paints at all under the round cap: 1 J turns each zero-length segment into a single circle of diameter = the 2pt stroke width, while the default 0 J would paint literally nothing.
+  it('emits a [0 4] 0 d dash array and a 1 J round cap for dotted, resetting both afterwards', () => {
+    const text = decode(writeContentStream([{ ...rule, style: 'dotted' }], fakeContext()).bytes);
+    expect(text).toBe('0 0 0 RG\n2 w\n[0 4] 0 d\n1 J\n10 10 m 100 10 l\nS\n[] 0 d\n0 J\n');
+  });
+
+  // 3pt splits into three 1pt bands -- ink, gap, ink -- so each rule is 1pt wide and sits 1pt either side of y=10, putting the pair's outer edges exactly where the single 3pt stroke's own edges would have been.
+  it('draws double as two real 1pt strokes offset perpendicular by 1pt either side of a 3pt line', () => {
+    const doubled: LayoutLine = { ...rule, widthPt: 3, style: 'double' };
+    const text = decode(writeContentStream([doubled], fakeContext()).bytes);
+    expect(text).toBe('0 0 0 RG\n1 w\n10 11 m 100 11 l\nS\n10 9 m 100 9 l\nS\n');
+  });
+
+  // A vertical line's perpendicular is horizontal: the offsets have to follow the line's own direction, not a fixed axis.
+  it('offsets a vertical double line horizontally, not vertically', () => {
+    const vertical: LayoutLine = { kind: 'line', x1Pt: 50, y1Pt: 0, x2Pt: 50, y2Pt: 30, color: BLACK, widthPt: 3, style: 'double' };
+    const text = decode(writeContentStream([vertical], fakeContext()).bytes);
+    expect(text).toBe('0 0 0 RG\n1 w\n49 0 m 49 30 l\nS\n51 0 m 51 30 l\nS\n');
+  });
+
+  // A degenerate line has no direction, so there is no perpendicular to offset along; drawing it once at its declared width is the only thing left that isn't an invented direction.
+  it('falls back to a single stroke at the declared width for a zero-length double line', () => {
+    const degenerate: LayoutLine = { kind: 'line', x1Pt: 7, y1Pt: 7, x2Pt: 7, y2Pt: 7, color: BLACK, widthPt: 3, style: 'double' };
+    const text = decode(writeContentStream([degenerate], fakeContext()).bytes);
+    expect(text).toBe('0 0 0 RG\n3 w\n7 7 m 7 7 l\nS\n');
+  });
+
+  // The regression this reset exists to prevent: the PDF graphics state persists for the whole content stream, so without the trailing [] 0 d the rect below would be stroked dashed too, on a page that never asked for it.
+  it('leaves the dash pattern reset before a later, unrelated item in the same stream', () => {
+    const rect: LayoutRect = { kind: 'rect', xPt: 0, yPt: 0, widthPt: 5, heightPt: 5, stroke: { color: RED, widthPt: 1 } };
+    const text = decode(writeContentStream([{ ...rule, style: 'dashed' }, rect], fakeContext()).bytes);
+    expect(text).toBe('0 0 0 RG\n2 w\n[6 6] 0 d\n10 10 m 100 10 l\nS\n[] 0 d\n1 0 0 RG\n1 w\n0 0 5 5 re\nS\n');
+  });
+
+  it('leaves both the dash pattern and the line cap reset before a later item after a dotted line', () => {
+    const plain: LayoutLine = { kind: 'line', x1Pt: 0, y1Pt: 0, x2Pt: 10, y2Pt: 0, color: RED, widthPt: 1 };
+    const text = decode(writeContentStream([{ ...rule, style: 'dotted' }, plain], fakeContext()).bytes);
+    expect(text.endsWith('[] 0 d\n0 J\n1 0 0 RG\n1 w\n0 0 m 10 0 l\nS\n')).toBe(true);
+  });
+});
+
 describe('writeContentStream: ellipse', () => {
   it('emits a starting point and four Bezier curve segments before the paint operator', () => {
     const item: LayoutEllipse = { kind: 'ellipse', xPt: 0, yPt: 0, widthPt: 10, heightPt: 10, fill: RED };
