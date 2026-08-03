@@ -1,3 +1,10 @@
+## [1.10.8](https://github.com/ExaDev/pdf-codec/compare/v1.10.7...v1.10.8) (2026-08-03)
+
+
+### Bug Fixes
+
+* **ci:** wait for a real check-run to register before requesting auto-merge ([531f352](https://github.com/ExaDev/pdf-codec/commit/531f352ccf4542de6535768997afdfd2d6b3cbbf))
+
 ## [1.10.7](https://github.com/ExaDev/pdf-codec/compare/v1.10.6...v1.10.7) (2026-08-03)
 
 
