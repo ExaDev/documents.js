@@ -1,3 +1,10 @@
+# [1.69.0](https://github.com/ExaDev/documents.js/compare/v1.68.0...v1.69.0) (2026-08-03)
+
+
+### Features
+
+* **mathml:** stretch over/under-brace horizontally to its own base width ([1c05dcd](https://github.com/ExaDev/documents.js/commit/1c05dcde8af2823f64f07cfc5c862dab1c05942e))
+
 # [1.68.0](https://github.com/ExaDev/documents.js/compare/v1.67.16...v1.68.0) (2026-08-03)
 
 
