@@ -10,7 +10,7 @@ importers:
     dependencies:
       document-schema.js:
         specifier: ^2.2.0
-        version: 2.2.0
+        version: 2.2.1
       fflate:
         specifier: ^0.8.3
         version: 0.8.3
@@ -1155,12 +1155,12 @@ packages:
     resolution: {integrity: sha512-WkrWp9GR4KXfKGYzOLmTuGVi1UWFfws377n9cc55/tb6DuqyF6pcQ5AbiHEshaDpY9v6oaSr2XCDidGmMwdzIA==}
     engines: {node: '>=8'}
 
-  document-schema.js@1.7.0:
-    resolution: {integrity: sha512-zYyXuHp0T0AnN3NK3u1yX6STA50sgVzu95zJh663iGD0XnrTEPK05lptX8RsHKLukF+709rXQgh1BpATmvv17g==}
+  document-schema.js@1.10.1:
+    resolution: {integrity: sha512-+DB8/OzEf7yxQGcOP9/Bgf162QVNpATDu0NDfTNCTMvC8b5/47jwaFlf9TTpijq48a5q9oOWNhpqGmAzSHcWZg==}
     engines: {node: '>=20'}
 
-  document-schema.js@2.2.0:
-    resolution: {integrity: sha512-wMukmCqo7xBYYSBEeZlV+8qWEujBDztGNGvUkfI3LZGg3MlIjt3+JUvuBZaBVrotFH3gKRzKyHDeqeRJe18SOA==}
+  document-schema.js@2.2.1:
+    resolution: {integrity: sha512-ni4gs70sSIa5rURcsKaGAxF+8i8AeRA5afJmclDoshDUh5xgyDnYCObA7AbNOE+xJ6GsPhEAXs030X0QMuIEJg==}
     engines: {node: '>=20'}
 
   dot-prop@5.3.0:
@@ -3747,11 +3747,11 @@ snapshots:
     dependencies:
       path-type: 4.0.0
 
-  document-schema.js@1.7.0:
+  document-schema.js@1.10.1:
     dependencies:
       zod: 4.4.3
 
-  document-schema.js@2.2.0:
+  document-schema.js@2.2.1:
     dependencies:
       zod: 4.4.3
 
@@ -4318,7 +4318,7 @@ snapshots:
 
   markdown-codec@1.0.0:
     dependencies:
-      document-schema.js: 1.7.0
+      document-schema.js: 1.10.1
       zod: 4.4.3
 
   marked-terminal@7.3.0(marked@15.0.12):
@@ -4422,7 +4422,7 @@ snapshots:
 
   odf.js@2.2.0:
     dependencies:
-      document-schema.js: 2.2.0
+      document-schema.js: 2.2.1
       fast-xml-parser: 5.10.1
       fflate: 0.8.3
       zod: 4.4.3
@@ -4433,7 +4433,7 @@ snapshots:
 
   ooxml.js@2.6.2:
     dependencies:
-      document-schema.js: 2.2.0
+      document-schema.js: 2.2.1
       fast-xml-parser: 5.10.1
       fflate: 0.8.3
       zod: 4.4.3
@@ -4531,7 +4531,7 @@ snapshots:
 
   pdf-codec@1.10.0:
     dependencies:
-      document-schema.js: 2.2.0
+      document-schema.js: 2.2.1
       fflate: 0.8.3
       zod: 4.4.3
 
