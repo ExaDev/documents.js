@@ -1,3 +1,10 @@
+## [2.2.8](https://github.com/ExaDev/odf.js/compare/v2.2.7...v2.2.8) (2026-08-03)
+
+
+### Bug Fixes
+
+* **ci:** wait for a real check-run to register before requesting auto-merge ([8180b8c](https://github.com/ExaDev/odf.js/commit/8180b8c1b91dae41dffbdcb5f692b4c7069e93f8))
+
 ## [2.2.7](https://github.com/ExaDev/odf.js/compare/v2.2.6...v2.2.7) (2026-08-03)
 
 ## [2.2.6](https://github.com/ExaDev/odf.js/compare/v2.2.5...v2.2.6) (2026-08-03)
