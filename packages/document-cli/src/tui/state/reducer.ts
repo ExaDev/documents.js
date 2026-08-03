@@ -89,7 +89,7 @@ function documentWithPath(doc: OpenDocument, path: string): OpenDocument {
     case 'odg':
       return { format: 'odg', editor: doc.editor, path };
     case 'odb':
-      return { format: 'odb', tables: doc.tables, path };
+      return { format: 'odb', tables: doc.tables, forms: doc.forms, reports: doc.reports, path };
     case 'markdown':
       return { format: 'markdown', source: doc.source, path };
     case 'pdf':

@@ -1,4 +1,4 @@
-import type { DocxEditor, HsqldbTable, LayoutDocument, OdgEditor, OdpEditor, OdsEditor, OdtEditor, PptxEditor } from 'documents.js';
+import type { DocxEditor, HsqldbTable, LayoutDocument, OdbForm, OdbReport, OdgEditor, OdpEditor, OdsEditor, OdtEditor, PptxEditor } from 'documents.js';
 
 // RULE FOR EVERY SCREEN BUILT ON THIS STATE: documents.js's editor objects (DocxRun, OdtParagraph, PptxShape, OdsCell, OdgBoxVector, ...) are LIVE VIEWS over the mutable XML tree inside the decoded package -- `run.bold = true` edits that tree in place and produces no new object reference anywhere. Call the accessors (`editor.paragraphs()`, `slide.shapes()`, `sheet.cell(r, c)`) FRESH on every render and never cache their results in useState/useMemo: any mutation, from any screen, silently invalidates an array captured on an earlier render, and nothing in the type system or in React will tell you. `AppState.hasUnsavedChanges` flipping (and the new outer state object the reducer returns with it) is the ONLY re-render signal a mutation produces -- see the deliberate-impurity note in reducer.ts.
 
@@ -25,6 +25,10 @@ export type Screen =
   | { readonly kind: 'shapeOrVectorDetail'; readonly pageIndex: number; readonly itemIndex: number }
   | { readonly kind: 'odbTableList' }
   | { readonly kind: 'odbTableRows'; readonly tableName: string }
+  | { readonly kind: 'odbFormList' }
+  | { readonly kind: 'odbFormDetail'; readonly formName: string }
+  | { readonly kind: 'odbReportList' }
+  | { readonly kind: 'odbReportDetail'; readonly reportName: string }
   | { readonly kind: 'markdownLineList' }
   | { readonly kind: 'markdownLineEditor'; readonly lineIndex: number }
   | { readonly kind: 'pdfPageList' }
@@ -72,9 +76,13 @@ export interface OdgOpenDocument {
 }
 
 // `.odb` carries no editor: documents.js reads its embedded database's tables and offers no write direction at all, so `path` is always known (it was read from disk) and the document is permanently read-only.
+//
+// All three collections are resolved once, at open time, from the same decoded package -- `tables` from the embedded database's own storage, `forms`/`reports` from the static ODF sub-documents inside the package. They are plain immutable values rather than live views, so unlike an editor format's accessors (see the RULE at the top of this file) they are safe to hold on to across renders.
 export interface OdbOpenDocument {
   readonly format: 'odb';
   readonly tables: readonly HsqldbTable[];
+  readonly forms: readonly OdbForm[];
+  readonly reports: readonly OdbReport[];
   readonly path: string;
 }
 
@@ -168,6 +176,8 @@ export function selectionKeyFor(screen: Screen): string {
     case 'sheetList':
     case 'pageList':
     case 'odbTableList':
+    case 'odbFormList':
+    case 'odbReportList':
     case 'pdfPageList':
     case 'exportOptions':
     case 'saveAsPrompt':
@@ -201,6 +211,10 @@ export function selectionKeyFor(screen: Screen): string {
       return `${screen.kind}:${screen.pageIndex}:${screen.itemIndex}`;
     case 'odbTableRows':
       return `odbTableRows:${screen.tableName}`;
+    case 'odbFormDetail':
+      return `odbFormDetail:${screen.formName}`;
+    case 'odbReportDetail':
+      return `odbReportDetail:${screen.reportName}`;
     case 'markdownLineEditor':
       return `markdownLineEditor:${screen.lineIndex}`;
   }

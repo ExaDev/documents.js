@@ -1,5 +1,5 @@
 import { readFile, writeFile } from 'node:fs/promises';
-import { createDocx, createOdg, createOdp, createOds, createOdt, createPptx, decodeMarkdownText, encodeMarkdownText, openDocx, openOdg, openOdp, openOds, openOdt, openPptx, readOdbTables, readPdf } from 'documents.js';
+import { createDocx, createOdg, createOdp, createOds, createOdt, createPptx, decodeMarkdownText, encodeMarkdownText, openDocx, openOdg, openOdp, openOds, openOdt, openPptx, readOdbForms, readOdbReports, readOdbTables, readPdf } from 'documents.js';
 import { decodePackage } from 'odf.js';
 import type { EditableFormat, OpenDocument } from '../state/types.js';
 import { detectFormat } from './detect-format.js';
@@ -13,7 +13,9 @@ export async function openDocumentAtPath(path: string): Promise<OpenDocument> {
   const bytes = new Uint8Array(await readFile(path));
 
   if (path.toLowerCase().endsWith(ODB_EXTENSION)) {
-    return { format: 'odb', tables: readOdbTables(decodePackage(bytes)), path };
+    // Decoded once and read three ways: tables come from the embedded database's own storage, forms and reports from static ODF sub-documents inside the same package. All three are resolved eagerly at open time rather than lazily per screen, because a `.odb` is opened read-only and none of the three can change afterwards -- there is nothing for a later read to pick up.
+    const pkg = decodePackage(bytes);
+    return { format: 'odb', tables: readOdbTables(pkg), forms: readOdbForms(pkg), reports: readOdbReports(pkg), path };
   }
 
   const format = detectFormat(path);
