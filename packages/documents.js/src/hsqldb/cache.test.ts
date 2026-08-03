@@ -1,6 +1,13 @@
 import { base64ToBytes, decodePackage } from 'odf.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { embeddedHsqldbCachedOdbBytes, HSQLDB_CACHED_PROPERTIES_TEXT, HSQLDB_CACHED_SCRIPT_TEXT } from '../test-support/odb';
+import {
+  embeddedHsqldbCachedOdbBytes,
+  embeddedHsqldbMultiIndexOdbBytes,
+  HSQLDB_CACHED_PROPERTIES_TEXT,
+  HSQLDB_CACHED_SCRIPT_TEXT,
+  HSQLDB_MULTI_INDEX_PROPERTIES_TEXT,
+  HSQLDB_MULTI_INDEX_SCRIPT_TEXT,
+} from '../test-support/odb';
 import { decodeHsqldbCachedTables, parseHsqldbIndexRoots, parseHsqldbProperties, readHsqldbCachedTableRows } from './cache';
 import { HsqldbRowFormatError } from './rowformat';
 import { parseHsqldbScript } from './script';
@@ -54,25 +61,38 @@ describe('parseHsqldbProperties', () => {
 describe('parseHsqldbIndexRoots', () => {
   it('reads every SET TABLE...INDEX line from the real fixture script, keyed by uppercased table name', () => {
     const roots = parseHsqldbIndexRoots(HSQLDB_CACHED_SCRIPT_TEXT);
-    expect(roots.get('EMPLOYEES')).toBe(232);
-    expect(roots.get('DEPARTMENTS')).toBe(512);
-    expect(roots.get('TYPE_TEST')).toBe(664);
+    expect(roots.get('EMPLOYEES')).toEqual({ rootPosition: 232, indexCount: 1 });
+    expect(roots.get('DEPARTMENTS')).toEqual({ rootPosition: 512, indexCount: 1 });
+    expect(roots.get('TYPE_TEST')).toEqual({ rootPosition: 664, indexCount: 1 });
     expect(roots.has('EMPTY_TABLE')).toBe(false);
   });
 
   it('unquotes a double-quoted table name and folds it to uppercase, un-doubling an embedded quote', () => {
     const roots = parseHsqldbIndexRoots('SET TABLE "My ""Odd"" Table" INDEX\'42 7\'');
-    expect(roots.get('MY "ODD" TABLE')).toBe(42);
+    expect(roots.get('MY "ODD" TABLE')).toEqual({ rootPosition: 42, indexCount: 1 });
   });
 
-  it('throws for a multi-index table (more than one root token before the trailing identity value)', () => {
-    expect(() => parseHsqldbIndexRoots("SET TABLE T INDEX'100 200 7'")).toThrow(HsqldbRowFormatError);
-    expect(() => parseHsqldbIndexRoots("SET TABLE T INDEX'100 200 7'")).toThrow(/only a single-index/);
+  it('recovers the index count of a multi-index table from its own root-token count, per the real HSQLDB 1.8.0.10 multi-index fixture', () => {
+    const roots = parseHsqldbIndexRoots(HSQLDB_MULTI_INDEX_SCRIPT_TEXT);
+    // PRIMARY KEY + UNIQUE(CODE)'s own auto-generated index + an explicit CREATE INDEX.
+    expect(roots.get('ORDERS')).toEqual({ rootPosition: 136, indexCount: 3 });
+    // No PRIMARY KEY at all: index 0 is HSQLDB's own internal row-position index, index 1 the explicit CREATE INDEX.
+    expect(roots.get('NO_PK')).toEqual({ rootPosition: 664, indexCount: 2 });
+    expect(roots.get('SINGLE_IDX')).toEqual({ rootPosition: 528, indexCount: 1 });
+  });
+
+  it('throws for a line carrying no root position at all (only the trailing identity value)', () => {
+    expect(() => parseHsqldbIndexRoots("SET TABLE T INDEX'7'")).toThrow(HsqldbRowFormatError);
+    expect(() => parseHsqldbIndexRoots("SET TABLE T INDEX'7'")).toThrow(/at least one index root position/);
+  });
+
+  it('throws for a non-integer root position', () => {
+    expect(() => parseHsqldbIndexRoots("SET TABLE T INDEX'abc 7'")).toThrow(/non-integer root position/);
   });
 
   it('ignores every other statement kind (case-insensitively) and blank lines', () => {
     const roots = parseHsqldbIndexRoots('CREATE CACHED TABLE T(A INTEGER)\n\nset table t index\'5 0\'\nGRANT DBA TO SA');
-    expect(roots.get('T')).toBe(5);
+    expect(roots.get('T')).toEqual({ rootPosition: 5, indexCount: 1 });
   });
 });
 
@@ -85,7 +105,7 @@ describe('readHsqldbCachedTableRows: byte-level decode against the real fixture'
     if (employees === undefined) {
       throw new Error('fixture script has no EMPLOYEES table');
     }
-    const rows = readHsqldbCachedTableRows(dataBytes, 232, 1, employees.columns);
+    const rows = readHsqldbCachedTableRows(dataBytes, { rootPosition: 232, indexCount: 1 }, 1, employees.columns);
     expect(rows).toEqual([
       [{ kind: 'number', value: 1 }, { kind: 'string', value: 'Alice Smith' }, { kind: 'number', value: 75000.5 }, { kind: 'date', value: '2020-01-15' }, { kind: 'boolean', value: true }, { kind: 'number', value: 1500.25 }],
       [{ kind: 'number', value: 2 }, { kind: 'string', value: 'Bob Jones' }, { kind: 'number', value: 62000 }, { kind: 'date', value: '2019-06-01' }, { kind: 'boolean', value: false }, { kind: 'empty' }],
@@ -98,11 +118,43 @@ describe('readHsqldbCachedTableRows: byte-level decode against the real fixture'
   });
 
   it('returns an empty array for root position -1 without touching the data bytes', () => {
-    expect(readHsqldbCachedTableRows(new Uint8Array(0), -1, 1, [{ name: 'ID', type: 'INTEGER' }])).toEqual([]);
+    expect(readHsqldbCachedTableRows(new Uint8Array(0), { rootPosition: -1, indexCount: 1 }, 1, [{ name: 'ID', type: 'INTEGER' }])).toEqual([]);
   });
 
   it('throws for a row position outside the data bytes', () => {
-    expect(() => readHsqldbCachedTableRows(new Uint8Array(8), 100, 1, [{ name: 'ID', type: 'INTEGER' }])).toThrow(HsqldbRowFormatError);
+    expect(() => readHsqldbCachedTableRows(new Uint8Array(8), { rootPosition: 100, indexCount: 1 }, 1, [{ name: 'ID', type: 'INTEGER' }])).toThrow(HsqldbRowFormatError);
+  });
+});
+
+describe('decodeHsqldbCachedTables: multi-index CACHED tables, against the real multi-index fixture', () => {
+  it('recovers every row of a three-index, a two-index, and a single-index table, matching what HSQLDB 1.8.0.10 itself reported via JDBC', () => {
+    const pkg = decodePackage(embeddedHsqldbMultiIndexOdbBytes());
+    const dataPart = pkg.parts['database/data'];
+    if (dataPart?.kind !== 'binary') {
+      throw new Error('multi-index fixture missing database/data');
+    }
+    const tier1Tables = parseHsqldbScript(new TextEncoder().encode(HSQLDB_MULTI_INDEX_SCRIPT_TEXT));
+    const decoded = decodeHsqldbCachedTables(tier1Tables, HSQLDB_MULTI_INDEX_SCRIPT_TEXT, base64ToBytes(dataPart.base64), HSQLDB_MULTI_INDEX_PROPERTIES_TEXT);
+    const byName = new Map(decoded.map((table) => [table.tableName, table]));
+
+    expect(byName.get('ORDERS')?.rows).toEqual([
+      [{ kind: 'number', value: 1 }, { kind: 'string', value: 'A-001' }, { kind: 'string', value: 'North' }, { kind: 'number', value: 125.5 }, { kind: 'date', value: '2024-02-11' }, { kind: 'boolean', value: true }],
+      [{ kind: 'number', value: 2 }, { kind: 'string', value: 'A-002' }, { kind: 'string', value: 'South' }, { kind: 'number', value: 99.99 }, { kind: 'date', value: '2024-06-30' }, { kind: 'boolean', value: false }],
+      [{ kind: 'number', value: 3 }, { kind: 'empty' }, { kind: 'string', value: 'North' }, { kind: 'empty' }, { kind: 'empty' }, { kind: 'empty' }],
+      [{ kind: 'number', value: 4 }, { kind: 'string', value: 'A-004' }, { kind: 'string', value: "O'Connor Region" }, { kind: 'number', value: 0 }, { kind: 'date', value: '2023-12-25' }, { kind: 'boolean', value: true }],
+      [{ kind: 'number', value: 5 }, { kind: 'string', value: 'A-005' }, { kind: 'string', value: 'West' }, { kind: 'number', value: 7500.75 }, { kind: 'date', value: '2022-07-19' }, { kind: 'boolean', value: false }],
+    ]);
+
+    expect(byName.get('NO_PK')?.rows).toEqual([
+      [{ kind: 'number', value: 10 }, { kind: 'string', value: 'ten' }],
+      [{ kind: 'number', value: 20 }, { kind: 'string', value: 'twenty' }],
+      [{ kind: 'number', value: 30 }, { kind: 'empty' }],
+    ]);
+
+    expect(byName.get('SINGLE_IDX')?.rows).toEqual([
+      [{ kind: 'number', value: 1 }, { kind: 'string', value: 'single index table' }],
+      [{ kind: 'number', value: 2 }, { kind: 'empty' }],
+    ]);
   });
 });
 
