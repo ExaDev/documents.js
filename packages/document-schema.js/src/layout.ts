@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ColorSchema } from './color';
+import { ContentStrokeStyleSchema } from './content';
 import { LayoutMetadataSchema } from './metadata';
 import { LayoutFontSchema } from './style';
 
@@ -56,6 +57,7 @@ export const LayoutLineSchema = z.object({
   y2Pt: z.number(),
   color: ColorSchema,
   widthPt: z.number().positive(),
+  style: ContentStrokeStyleSchema.optional(), // stroke dash pattern hint; absent means 'solid', matching ContentStrokeSchema's own documented default
   sourcePath: z.string().optional(), // deterministic, document-order-derived path copied from the ContentDocument item this was laid out from
 });
 export type LayoutLine = z.infer<typeof LayoutLineSchema>;
@@ -103,6 +105,7 @@ export const LayoutPathSchema = z.object({
   fill: ColorSchema.optional(),
   fillRule: z.enum(['nonzero', 'evenodd']).optional(),
   stroke: z.object({ color: ColorSchema, widthPt: z.number().positive() }).optional(),
+  style: ContentStrokeStyleSchema.optional(), // stroke dash pattern hint; absent means 'solid', matching ContentStrokeSchema's own documented default
   sourcePath: z.string().optional(), // deterministic, document-order-derived path copied from the ContentDocument item this was laid out from
 });
 export type LayoutPath = z.infer<typeof LayoutPathSchema>;
