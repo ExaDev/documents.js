@@ -3,7 +3,7 @@ import { z } from "zod";
 declare const MarkdownBytesSchema: z.ZodCustom<Uint8Array<ArrayBuffer>, Uint8Array<ArrayBuffer>>;
 declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uint8Array<ArrayBuffer>>, z.ZodDiscriminatedUnion<[z.ZodObject<{
   kind: z.ZodLiteral<"wordprocessing">;
-  formatVersion: z.ZodLiteral<1>;
+  formatVersion: z.ZodLiteral<2>;
   metadata: z.ZodObject<{
     title: z.ZodOptional<z.ZodString>;
     author: z.ZodOptional<z.ZodString>;
@@ -29,7 +29,7 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
   }, z.core.$strip>>;
 }, z.core.$strip>, z.ZodObject<{
   kind: z.ZodLiteral<"presentation">;
-  formatVersion: z.ZodLiteral<1>;
+  formatVersion: z.ZodLiteral<2>;
   metadata: z.ZodObject<{
     title: z.ZodOptional<z.ZodString>;
     author: z.ZodOptional<z.ZodString>;
@@ -60,6 +60,7 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
       insetBottomPt: z.ZodNumber;
       fontScale: z.ZodOptional<z.ZodNumber>;
       lineSpacingReduction: z.ZodOptional<z.ZodNumber>;
+      paintOrder: z.ZodOptional<z.ZodNumber>;
       sourcePath: z.ZodOptional<z.ZodString>;
       blocks: z.ZodArray<z.ZodCustom<import("document-schema.js").ContentBlock, import("document-schema.js").ContentBlock>>;
     }, z.core.$strip>>;
@@ -67,7 +68,7 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
   }, z.core.$strip>>;
 }, z.core.$strip>, z.ZodObject<{
   kind: z.ZodLiteral<"spreadsheet">;
-  formatVersion: z.ZodLiteral<1>;
+  formatVersion: z.ZodLiteral<2>;
   metadata: z.ZodObject<{
     title: z.ZodOptional<z.ZodString>;
     author: z.ZodOptional<z.ZodString>;
@@ -86,13 +87,16 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
       value: z.ZodDiscriminatedUnion<[z.ZodObject<{
         kind: z.ZodLiteral<"number">;
         value: z.ZodNumber;
+        exactValue: z.ZodOptional<z.ZodString>;
       }, z.core.$strip>, z.ZodObject<{
         kind: z.ZodLiteral<"percentage">;
         value: z.ZodNumber;
+        exactValue: z.ZodOptional<z.ZodString>;
       }, z.core.$strip>, z.ZodObject<{
         kind: z.ZodLiteral<"currency">;
         value: z.ZodNumber;
         currency: z.ZodOptional<z.ZodString>;
+        exactValue: z.ZodOptional<z.ZodString>;
       }, z.core.$strip>, z.ZodObject<{
         kind: z.ZodLiteral<"boolean">;
         value: z.ZodBoolean;
@@ -101,6 +105,9 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
         value: z.ZodString;
       }, z.core.$strip>, z.ZodObject<{
         kind: z.ZodLiteral<"time">;
+        value: z.ZodString;
+      }, z.core.$strip>, z.ZodObject<{
+        kind: z.ZodLiteral<"dateTime">;
         value: z.ZodString;
       }, z.core.$strip>, z.ZodObject<{
         kind: z.ZodLiteral<"string">;
@@ -131,15 +138,90 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
       }, z.core.$strip>>>;
       colSpan: z.ZodOptional<z.ZodNumber>;
       rowSpan: z.ZodOptional<z.ZodNumber>;
+      background: z.ZodOptional<z.ZodObject<{
+        r: z.ZodNumber;
+        g: z.ZodNumber;
+        b: z.ZodNumber;
+      }, z.core.$strip>>;
+      borders: z.ZodOptional<z.ZodObject<{
+        left: z.ZodOptional<z.ZodObject<{
+          color: z.ZodObject<{
+            r: z.ZodNumber;
+            g: z.ZodNumber;
+            b: z.ZodNumber;
+          }, z.core.$strip>;
+          widthPt: z.ZodNumber;
+          style: z.ZodOptional<z.ZodEnum<{
+            solid: "solid";
+            dashed: "dashed";
+            dotted: "dotted";
+            double: "double";
+          }>>;
+        }, z.core.$strip>>;
+        right: z.ZodOptional<z.ZodObject<{
+          color: z.ZodObject<{
+            r: z.ZodNumber;
+            g: z.ZodNumber;
+            b: z.ZodNumber;
+          }, z.core.$strip>;
+          widthPt: z.ZodNumber;
+          style: z.ZodOptional<z.ZodEnum<{
+            solid: "solid";
+            dashed: "dashed";
+            dotted: "dotted";
+            double: "double";
+          }>>;
+        }, z.core.$strip>>;
+        top: z.ZodOptional<z.ZodObject<{
+          color: z.ZodObject<{
+            r: z.ZodNumber;
+            g: z.ZodNumber;
+            b: z.ZodNumber;
+          }, z.core.$strip>;
+          widthPt: z.ZodNumber;
+          style: z.ZodOptional<z.ZodEnum<{
+            solid: "solid";
+            dashed: "dashed";
+            dotted: "dotted";
+            double: "double";
+          }>>;
+        }, z.core.$strip>>;
+        bottom: z.ZodOptional<z.ZodObject<{
+          color: z.ZodObject<{
+            r: z.ZodNumber;
+            g: z.ZodNumber;
+            b: z.ZodNumber;
+          }, z.core.$strip>;
+          widthPt: z.ZodNumber;
+          style: z.ZodOptional<z.ZodEnum<{
+            solid: "solid";
+            dashed: "dashed";
+            dotted: "dotted";
+            double: "double";
+          }>>;
+        }, z.core.$strip>>;
+      }, z.core.$strip>>;
+      alignment: z.ZodOptional<z.ZodEnum<{
+        left: "left";
+        center: "center";
+        right: "right";
+        justify: "justify";
+      }>>;
+      verticalAlignment: z.ZodOptional<z.ZodEnum<{
+        top: "top";
+        bottom: "bottom";
+        middle: "middle";
+      }>>;
+      sourcePath: z.ZodOptional<z.ZodString>;
     }, z.core.$strip>>;
     columns: z.ZodArray<z.ZodObject<{
       index: z.ZodNumber;
-      widthPt: z.ZodNumber;
+      widthPt: z.ZodOptional<z.ZodNumber>;
       hidden: z.ZodOptional<z.ZodBoolean>;
     }, z.core.$strip>>;
     rows: z.ZodArray<z.ZodObject<{
       index: z.ZodNumber;
-      heightPt: z.ZodNumber;
+      heightPt: z.ZodOptional<z.ZodNumber>;
       hidden: z.ZodOptional<z.ZodBoolean>;
     }, z.core.$strip>>;
     images: z.ZodArray<z.ZodObject<{
@@ -175,7 +257,7 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
         endRow: z.ZodNumber;
         endColumn: z.ZodNumber;
       }, z.core.$strip>>;
-      scale: z.ZodOptional<z.ZodNumber>;
+      scalePercent: z.ZodOptional<z.ZodNumber>;
       fitToPages: z.ZodOptional<z.ZodObject<{
         width: z.ZodNumber;
         height: z.ZodNumber;
@@ -203,7 +285,7 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
   }, z.core.$strip>>;
 }, z.core.$strip>, z.ZodObject<{
   kind: z.ZodLiteral<"drawing">;
-  formatVersion: z.ZodLiteral<1>;
+  formatVersion: z.ZodLiteral<2>;
   metadata: z.ZodObject<{
     title: z.ZodOptional<z.ZodString>;
     author: z.ZodOptional<z.ZodString>;
@@ -234,6 +316,7 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
       insetBottomPt: z.ZodNumber;
       fontScale: z.ZodOptional<z.ZodNumber>;
       lineSpacingReduction: z.ZodOptional<z.ZodNumber>;
+      paintOrder: z.ZodOptional<z.ZodNumber>;
       sourcePath: z.ZodOptional<z.ZodString>;
       blocks: z.ZodArray<z.ZodCustom<import("document-schema.js").ContentBlock, import("document-schema.js").ContentBlock>>;
     }, z.core.$strip>>;
@@ -245,6 +328,7 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
         widthPt: z.ZodNumber;
         heightPt: z.ZodNumber;
       }, z.core.$strip>;
+      rotationDeg: z.ZodOptional<z.ZodNumber>;
       fill: z.ZodOptional<z.ZodObject<{
         r: z.ZodNumber;
         g: z.ZodNumber;
@@ -257,7 +341,14 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
           b: z.ZodNumber;
         }, z.core.$strip>;
         widthPt: z.ZodNumber;
+        style: z.ZodOptional<z.ZodEnum<{
+          solid: "solid";
+          dashed: "dashed";
+          dotted: "dotted";
+          double: "double";
+        }>>;
       }, z.core.$strip>>;
+      paintOrder: z.ZodOptional<z.ZodNumber>;
       sourcePath: z.ZodOptional<z.ZodString>;
     }, z.core.$strip>, z.ZodObject<{
       kind: z.ZodLiteral<"ellipse">;
@@ -267,6 +358,7 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
         widthPt: z.ZodNumber;
         heightPt: z.ZodNumber;
       }, z.core.$strip>;
+      rotationDeg: z.ZodOptional<z.ZodNumber>;
       fill: z.ZodOptional<z.ZodObject<{
         r: z.ZodNumber;
         g: z.ZodNumber;
@@ -279,7 +371,14 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
           b: z.ZodNumber;
         }, z.core.$strip>;
         widthPt: z.ZodNumber;
+        style: z.ZodOptional<z.ZodEnum<{
+          solid: "solid";
+          dashed: "dashed";
+          dotted: "dotted";
+          double: "double";
+        }>>;
       }, z.core.$strip>>;
+      paintOrder: z.ZodOptional<z.ZodNumber>;
       sourcePath: z.ZodOptional<z.ZodString>;
     }, z.core.$strip>, z.ZodObject<{
       kind: z.ZodLiteral<"line">;
@@ -298,7 +397,14 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
           b: z.ZodNumber;
         }, z.core.$strip>;
         widthPt: z.ZodNumber;
+        style: z.ZodOptional<z.ZodEnum<{
+          solid: "solid";
+          dashed: "dashed";
+          dotted: "dotted";
+          double: "double";
+        }>>;
       }, z.core.$strip>;
+      paintOrder: z.ZodOptional<z.ZodNumber>;
       sourcePath: z.ZodOptional<z.ZodString>;
     }, z.core.$strip>, z.ZodObject<{
       kind: z.ZodLiteral<"path">;
@@ -308,6 +414,7 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
         widthPt: z.ZodNumber;
         heightPt: z.ZodNumber;
       }, z.core.$strip>;
+      rotationDeg: z.ZodOptional<z.ZodNumber>;
       subpaths: z.ZodArray<z.ZodObject<{
         start: z.ZodObject<{
           xPt: z.ZodNumber;
@@ -352,10 +459,34 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
           b: z.ZodNumber;
         }, z.core.$strip>;
         widthPt: z.ZodNumber;
+        style: z.ZodOptional<z.ZodEnum<{
+          solid: "solid";
+          dashed: "dashed";
+          dotted: "dotted";
+          double: "double";
+        }>>;
       }, z.core.$strip>>;
+      paintOrder: z.ZodOptional<z.ZodNumber>;
       sourcePath: z.ZodOptional<z.ZodString>;
     }, z.core.$strip>], "kind">>;
   }, z.core.$strip>>;
+}, z.core.$strip>, z.ZodObject<{
+  kind: z.ZodLiteral<"formula">;
+  formatVersion: z.ZodLiteral<2>;
+  metadata: z.ZodObject<{
+    title: z.ZodOptional<z.ZodString>;
+    author: z.ZodOptional<z.ZodString>;
+    subject: z.ZodOptional<z.ZodString>;
+    keywords: z.ZodOptional<z.ZodArray<z.ZodString>>;
+    creator: z.ZodOptional<z.ZodString>;
+    producer: z.ZodOptional<z.ZodString>;
+    createdIso: z.ZodOptional<z.ZodString>;
+    modifiedIso: z.ZodOptional<z.ZodString>;
+  }, z.core.$strip>;
+  formula: z.ZodObject<{
+    mathml: z.ZodArray<z.ZodCustom<import("document-schema.js").MathMlNode, import("document-schema.js").MathMlNode>>;
+    starMath: z.ZodOptional<z.ZodString>;
+  }, z.core.$strip>;
 }, z.core.$strip>], "kind">>;
 //#endregion
 export { MarkdownBytesSchema, markdownCodec };
