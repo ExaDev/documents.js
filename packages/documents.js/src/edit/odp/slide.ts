@@ -90,11 +90,12 @@ export class OdpSlide {
     return this.node;
   }
 
+  // Excludes a draw:frame whose direct content is a table:table -- that frame belongs to tables() below (a table shape has no draw:text-box wrapper at all, see addTable's own note, so an OdpShape over it would be functionally dead: .paragraphs()/.text both look for a draw:text-box child that isn't there and silently return []/''). Before this exclusion, a table frame was double-exposed: once here as a dead OdpShape, and once for real via tables().
   shapes(): OdpShape[] {
     const node = this.live();
     const out: OdpShape[] = [];
     for (const child of node.children) {
-      if (child.type === 'element' && child.tag === 'draw:frame') {
+      if (child.type === 'element' && child.tag === 'draw:frame' && directChild(child, 'table:table') === undefined) {
         out.push(new OdpShape(node.children, child, this.context.pkg));
       }
     }
@@ -126,6 +127,26 @@ export class OdpSlide {
       shape: new OdpShape(node.children, frameElement, this.context.pkg),
       table: new OdtTable(frameElement.children, tableElement, this.context.pkg),
     };
+  }
+
+  // Live handles on every table shape already on this slide, in document order -- the read-side inverse of addTable, and the table-shaped counterpart to shapes() above (which deliberately excludes these same frames, see its own note). Constructs the identical OdpTableShape pair addTable returns, over the EXISTING draw:frame/table:table pair, mirroring OdgPage.vectors()'s own "enumerate every existing element, wrap it in the same live class add* already returns" convention.
+  tables(): OdpTableShape[] {
+    const node = this.live();
+    const out: OdpTableShape[] = [];
+    for (const child of node.children) {
+      if (child.type !== 'element' || child.tag !== 'draw:frame') {
+        continue;
+      }
+      const tableElement = directChild(child, 'table:table');
+      if (tableElement === undefined) {
+        continue;
+      }
+      out.push({
+        shape: new OdpShape(node.children, child, this.context.pkg),
+        table: new OdtTable(child.children, tableElement, this.context.pkg),
+      });
+    }
+    return out;
   }
 
   // A vector primitive (rect/ellipse/line/path) appended alongside this slide's shapes, in the SAME draw:page children list -- document order is paint order here exactly as it is for an odg page (see OdgPage's own note on why no draw:z-index is ever written). This reuses src/edit/odg/vector.ts's builders WHOLESALE, mirroring how OdpShape/OdtParagraph are themselves reused across formats elsewhere in this package: draw:rect/draw:ellipse/draw:line/draw:path carry byte-for-byte the same attribute vocabulary on a presentation's draw:page as on a drawing's, and odf.js's own readDrawPageContent reads both through one function. A slide is positioned against its page, so nothing here is text-flow anchored.
