@@ -1,3 +1,10 @@
+# [1.67.0](https://github.com/ExaDev/documents.js/compare/v1.66.0...v1.67.0) (2026-08-03)
+
+
+### Features
+
+* **layout:** render a formula anchored to a spreadsheet cell ([3fb1936](https://github.com/ExaDev/documents.js/commit/3fb1936dd76625576641f875616d0c0e94068fb2))
+
 # [1.66.0](https://github.com/ExaDev/documents.js/compare/v1.65.0...v1.66.0) (2026-08-03)
 
 
