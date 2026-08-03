@@ -1,7 +1,8 @@
+import { createOdp, createPptx, openOdp, openPptx, readOdpContent, readPptxContent } from 'documents.js';
 import { describe, expect, it } from 'vitest';
 import type { Action } from './actions.js';
 import { appReducer, createInitialState } from './reducer.js';
-import type { AppState, DocxOpenDocument, MarkdownOpenDocument, OdsOpenDocument } from './types.js';
+import type { AppState, DocxOpenDocument, MarkdownOpenDocument, OdpOpenDocument, OdsOpenDocument, PptxOpenDocument } from './types.js';
 
 function applyAll(actions: readonly Action[], from: AppState = createInitialState()): AppState {
   return actions.reduce<AppState>(appReducer, from);
@@ -21,6 +22,30 @@ function odsDocument(state: AppState): OdsOpenDocument {
     throw new Error('expected an open ods document');
   }
   return doc;
+}
+
+function pptxDocument(state: AppState): PptxOpenDocument {
+  const doc = state.openDocument;
+  if (doc?.format !== 'pptx') {
+    throw new Error('expected an open pptx document');
+  }
+  return doc;
+}
+
+function odpDocument(state: AppState): OdpOpenDocument {
+  const doc = state.openDocument;
+  if (doc?.format !== 'odp') {
+    throw new Error('expected an open odp document');
+  }
+  return doc;
+}
+
+function openPptxDocument(bytes: Uint8Array<ArrayBuffer>, path = '/tmp/deck.pptx'): AppState {
+  return appReducer(createInitialState(), { type: 'OPEN_FILE_SUCCESS', path, doc: { format: 'pptx', editor: openPptx(bytes), path } });
+}
+
+function openOdpDocument(bytes: Uint8Array<ArrayBuffer>, path = '/tmp/deck.odp'): AppState {
+  return appReducer(createInitialState(), { type: 'OPEN_FILE_SUCCESS', path, doc: { format: 'odp', editor: openOdp(bytes), path } });
 }
 
 function markdownDocument(state: AppState): MarkdownOpenDocument {
@@ -207,6 +232,66 @@ describe('appReducer undo', () => {
     const undone = appReducer(created, { type: 'UNDO' });
     expect(undone.status?.severity).toBe('info');
     expect(undone.openDocument).toBe(created.openDocument);
+  });
+});
+
+describe('appReducer ADD_SLIDE_TABLE', () => {
+  it('adds a real table to a pptx slide, reachable through documents.js own PptxSlide.addTable', () => {
+    const editor = createPptx();
+    editor.addSlide();
+    const opened = openPptxDocument(editor.toBytes());
+
+    const withTable = appReducer(opened, { type: 'ADD_SLIDE_TABLE', slideIndex: 0, frame: { xPt: 10, yPt: 10, widthPt: 200, heightPt: 100 }, rows: 3, columns: 2 });
+    expect(withTable.hasUnsavedChanges).toBe(true);
+
+    // PptxSlide.shapes() never returns a table graphicFrame at all (documents.js's own shapes() walk only matches p:sp/p:pic), so the only way to observe the table this reducer just added is the same read-only pivot readPptxContent already uses -- proving the mutation reached the real package, not just that the action was accepted.
+    const content = readPptxContent(pptxDocument(withTable).editor.toPackage());
+    if (content.kind !== 'presentation') {
+      throw new Error(`expected a presentation ContentDocument from readPptxContent, got ${content.kind}`);
+    }
+    const tableBlock = content.slides[0]?.shapes[0]?.blocks[0];
+    if (tableBlock?.kind !== 'table') {
+      throw new Error(`expected a table block on slide 0's first shape, got ${tableBlock?.kind}`);
+    }
+    expect(tableBlock.rows).toHaveLength(3);
+    expect(tableBlock.rows[0]?.cells).toHaveLength(2);
+  });
+
+  it('adds a real table to an odp slide, reachable through documents.js own OdpSlide.addTable', () => {
+    const editor = createOdp();
+    editor.addSlide();
+    const opened = openOdpDocument(editor.toBytes());
+
+    const withTable = appReducer(opened, { type: 'ADD_SLIDE_TABLE', slideIndex: 0, frame: { xPt: 10, yPt: 10, widthPt: 200, heightPt: 100 }, rows: 2, columns: 4 });
+    expect(withTable.hasUnsavedChanges).toBe(true);
+
+    const content = readOdpContent(odpDocument(withTable).editor.toPackage());
+    if (content.kind !== 'presentation') {
+      throw new Error(`expected a presentation ContentDocument from readOdpContent, got ${content.kind}`);
+    }
+    const tableBlock = content.slides[0]?.shapes[0]?.blocks[0];
+    if (tableBlock?.kind !== 'table') {
+      throw new Error(`expected a table block on slide 0's first shape, got ${tableBlock?.kind}`);
+    }
+    expect(tableBlock.rows).toHaveLength(2);
+    expect(tableBlock.rows[0]?.cells).toHaveLength(4);
+  });
+
+  it('warns rather than crashing for a slide index that does not exist', () => {
+    const editor = createPptx();
+    editor.addSlide();
+    const opened = openPptxDocument(editor.toBytes());
+
+    const result = appReducer(opened, { type: 'ADD_SLIDE_TABLE', slideIndex: 5, frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 100 }, rows: 2, columns: 2 });
+    expect(result.status?.severity).toBe('warning');
+    expect(result.hasUnsavedChanges).toBe(false);
+  });
+
+  it('warns rather than crashing when the open document is not a pptx or odp document', () => {
+    const created = appReducer(createInitialState(), { type: 'CREATE_DOCUMENT', format: 'docx' });
+    const result = appReducer(created, { type: 'ADD_SLIDE_TABLE', slideIndex: 0, frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 100 }, rows: 2, columns: 2 });
+    expect(result.status?.severity).toBe('warning');
+    expect(result.status?.text).toContain('pptx or odp');
   });
 });
 

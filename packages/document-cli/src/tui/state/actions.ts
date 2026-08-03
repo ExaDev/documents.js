@@ -42,6 +42,7 @@ export type Action =
   | { readonly type: 'SET_TABLE_CELL_TEXT'; readonly tableIndex: number; readonly row: number; readonly column: number; readonly text: string }
   | { readonly type: 'ADD_LIST_ITEM'; readonly blockIndex: number; readonly text: string }
   | { readonly type: 'ADD_SLIDE' }
+  | { readonly type: 'ADD_SLIDE_TABLE'; readonly slideIndex: number; readonly frame: Box; readonly rows: number; readonly columns: number }
   | { readonly type: 'ADD_TEXTBOX'; readonly containerIndex: number; readonly frame: Box; readonly text: string }
   | { readonly type: 'ADD_IMAGE'; readonly containerIndex: number; readonly frame: Box; readonly format: 'png' | 'jpeg'; readonly bytes: Uint8Array<ArrayBuffer>; readonly altText: string | undefined }
   | { readonly type: 'SET_SHAPE_TEXT'; readonly containerIndex: number; readonly shapeIndex: number; readonly text: string }

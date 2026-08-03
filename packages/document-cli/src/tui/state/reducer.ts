@@ -499,6 +499,20 @@ export function appReducer(state: AppState, action: Action): AppState {
       });
     }
 
+    case 'ADD_SLIDE_TABLE': {
+      const doc = presentationDocument(state);
+      if (doc === undefined) {
+        return wrongDocument(state, 'a pptx or odp document');
+      }
+      const slide = doc.editor.slides()[action.slideIndex];
+      if (slide === undefined) {
+        return withStatus(state, 'warning', `There is no slide at index ${action.slideIndex}`);
+      }
+      return mutate(state, doc, () => {
+        slide.addTable({ frame: action.frame, table: { rows: action.rows, columns: action.columns } });
+      });
+    }
+
     case 'ADD_TEXTBOX': {
       const doc = shapeHostDocument(state);
       if (doc === undefined) {

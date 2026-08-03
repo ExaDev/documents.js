@@ -13,9 +13,19 @@ export interface SlideDetailScreenProps {
   readonly screen: Extract<Screen, { kind: 'slideDetail' }>;
 }
 
-type AddShapeMode = 'closed' | 'chooseKind' | 'textbox' | 'image';
+// 'tableRows'/'tableColumns' are a two-step wizard rather than one combined field: this screen has no multi-field FieldWizard the way odg's page-detail.tsx does (see that file's own FieldWizard), and a table only ever needs these two small integers, so two sequential single-value TextField steps -- the same shape every other add-item flow in this screen already uses -- covers it without importing a heavier component for one caller.
+type AddItemMode = 'closed' | 'chooseKind' | 'textbox' | 'image' | 'tableRows' | 'tableColumns';
 
 const IMAGE_EXTENSION_TO_FORMAT: Readonly<Record<string, 'png' | 'jpeg'>> = { png: 'png', jpg: 'jpeg', jpeg: 'jpeg' };
+
+const DEFAULT_TABLE_ROWS = 2;
+const DEFAULT_TABLE_COLUMNS = 2;
+
+// Table dimensions are small positive integers -- a blank or non-numeric entry falls back to the same default the field was pre-filled with, and anything less than 1 (zero, negative, a fraction that floors to 0) does too, since documents.js's own SlideTableInit has no meaningful zero-row or zero-column table to build.
+function parsePositiveIntField(raw: string, fallback: number): number {
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
 
 function imageFormatFromPath(path: string): 'png' | 'jpeg' | undefined {
   const dotIndex = path.lastIndexOf('.');
@@ -43,9 +53,10 @@ export function SlideDetailScreen(props: SlideDetailScreenProps): ReactElement {
   const shapes = slide === undefined ? [] : slide.shapes();
   const rows = shapes.map((shape, index) => ({ index, text: shape.text, frame: shape.frame }));
 
-  const [addMode, setAddMode] = useState<AddShapeMode>('closed');
+  const [addMode, setAddMode] = useState<AddItemMode>('closed');
   const [draft, setDraft] = useState('');
   const [imageError, setImageError] = useState<string | undefined>(undefined);
+  const [tableRows, setTableRows] = useState(DEFAULT_TABLE_ROWS);
   const formIsOpen = addMode !== 'closed';
 
   const { selectedIndex } = useNavigationInput({
@@ -63,7 +74,7 @@ export function SlideDetailScreen(props: SlideDetailScreenProps): ReactElement {
     },
   });
 
-  // 't'/'i' choose the new shape's kind; anything else (bar Esc) is ignored rather than falling through to the list navigation below, since useNavigationInput is already inactive for the whole add-shape flow (see `formIsOpen` above).
+  // 't'/'i'/'b' choose the new item's kind; anything else (bar Esc) is ignored rather than falling through to the list navigation below, since useNavigationInput is already inactive for the whole add-item flow (see `formIsOpen` above).
   useInput(
     (input, key) => {
       if (key.escape) {
@@ -79,6 +90,11 @@ export function SlideDetailScreen(props: SlideDetailScreenProps): ReactElement {
         setDraft('');
         setImageError(undefined);
         setAddMode('image');
+        return;
+      }
+      if (input === 'b') {
+        setDraft(String(DEFAULT_TABLE_ROWS));
+        setAddMode('tableRows');
       }
     },
     { isActive: !overlayOpen && addMode === 'chooseKind' },
@@ -111,6 +127,18 @@ export function SlideDetailScreen(props: SlideDetailScreenProps): ReactElement {
     })();
   };
 
+  const commitTableRows = (raw: string): void => {
+    setTableRows(parsePositiveIntField(raw, DEFAULT_TABLE_ROWS));
+    setDraft(String(DEFAULT_TABLE_COLUMNS));
+    setAddMode('tableColumns');
+  };
+
+  const commitTableColumns = (raw: string): void => {
+    const columns = parsePositiveIntField(raw, DEFAULT_TABLE_COLUMNS);
+    dispatch({ type: 'ADD_SLIDE_TABLE', slideIndex, frame: defaultShapeFrame(doc.editor.slideSize), rows: tableRows, columns });
+    setAddMode('closed');
+  };
+
   return (
     <Box flexDirection="column">
       <Text bold>
@@ -130,7 +158,7 @@ export function SlideDetailScreen(props: SlideDetailScreenProps): ReactElement {
           )}
         />
       )}
-      {addMode === 'chooseKind' ? <Text color="cyan">Add shape: t textbox, i image, Esc cancel</Text> : undefined}
+      {addMode === 'chooseKind' ? <Text color="cyan">Add shape: t textbox, i image, b table, Esc cancel</Text> : undefined}
       {addMode === 'textbox' ? (
         <Box>
           <Text color="cyan">Textbox content: </Text>
@@ -160,6 +188,34 @@ export function SlideDetailScreen(props: SlideDetailScreenProps): ReactElement {
             />
           </Box>
           {imageError === undefined ? undefined : <Text color="red">{imageError}</Text>}
+        </Box>
+      ) : undefined}
+      {addMode === 'tableRows' ? (
+        <Box>
+          <Text color="cyan">Rows: </Text>
+          <TextField
+            value={draft}
+            isFocused
+            onChange={setDraft}
+            onSubmit={commitTableRows}
+            onCancel={() => {
+              setAddMode('closed');
+            }}
+          />
+        </Box>
+      ) : undefined}
+      {addMode === 'tableColumns' ? (
+        <Box>
+          <Text color="cyan">Columns: </Text>
+          <TextField
+            value={draft}
+            isFocused
+            onChange={setDraft}
+            onSubmit={commitTableColumns}
+            onCancel={() => {
+              setAddMode('closed');
+            }}
+          />
         </Box>
       ) : undefined}
       <Text dimColor>
