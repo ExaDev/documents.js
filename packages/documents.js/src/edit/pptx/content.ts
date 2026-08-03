@@ -7,7 +7,7 @@ import type { PptxSlide } from './slide';
 
 // ContentDocument -> a fresh pptx Package, the write-side counterpart to src/ooxml/pptx/read.ts's readPptxContent. Used by the PDF->pptx conversion path.
 //
-// Two gaps, both bounded and tracked rather than silent: a shape's rotationDeg is read from the content but not yet applied, since PptxShape has no a:xfrm/@rot setter yet (only frame/text/setParagraphs); and every slide shares one deck-wide size (p:sldSz is presentation-level, not per-slide) -- taken from the first slide, since PDF-reconstructed pages that come from a single source document invariably share one page size in practice.
+// One remaining gap, bounded and tracked rather than silent: every slide shares one deck-wide size (p:sldSz is presentation-level, not per-slide) -- taken from the first slide, since PDF-reconstructed pages that come from a single source document invariably share one page size in practice.
 export function buildPptxPackage(content: ContentDocument): Package {
   if (content.kind !== 'presentation') {
     throw new Error('buildPptxPackage requires a presentation ContentDocument');
@@ -32,7 +32,10 @@ export function buildPptxPackage(content: ContentDocument): Package {
 function appendShape(slide: PptxSlide, shape: ContentShape): void {
   const [onlyBlock] = shape.blocks;
   if (shape.blocks.length === 1 && onlyBlock?.kind === 'image') {
-    slide.addImage({ frame: shape.frame, format: onlyBlock.format, bytes: base64ToBytes(onlyBlock.base64), altText: onlyBlock.altText });
+    const imageShape = slide.addImage({ frame: shape.frame, format: onlyBlock.format, bytes: base64ToBytes(onlyBlock.base64), altText: onlyBlock.altText });
+    if (shape.rotationDeg !== undefined) {
+      imageShape.rotationDeg = shape.rotationDeg;
+    }
     return;
   }
   const paragraphs: DrawingParagraphInit[] = [];
@@ -46,5 +49,8 @@ function appendShape(slide: PptxSlide, shape: ContentShape): void {
     });
   }
   const textBox = slide.addTextBox({ frame: shape.frame, text: '' });
+  if (shape.rotationDeg !== undefined) {
+    textBox.rotationDeg = shape.rotationDeg;
+  }
   textBox.setParagraphs(paragraphs);
 }

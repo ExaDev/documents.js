@@ -420,6 +420,34 @@ describe('odp <-> pptx: odp -> pptx -> odp', () => {
   });
 });
 
+describe('odp <-> pptx: shape rotation', () => {
+  it('a rotated pptx shape survives pptx -> odp -> pptx', () => {
+    const editor = createPptx();
+    const slide = editor.addSlide();
+    const shape = slide.addTextBox({ frame: { xPt: 50, yPt: 50, widthPt: 200, heightPt: 60 }, text: 'Rotated' });
+    shape.rotationDeg = 30;
+    const pptxBytes = editor.toBytes();
+
+    const odpBytes = pptxToOdp(pptxBytes);
+    const roundTrippedBytes = odpToPptx(odpBytes);
+    const roundTripped = pptxContentOf(roundTrippedBytes);
+    expect(roundTripped.slides[0]?.shapes[0]?.rotationDeg).toBeCloseTo(30, 5);
+  });
+
+  it('a rotated odp shape survives odp -> pptx -> odp', () => {
+    const editor = createOdp();
+    const slide = editor.addSlide();
+    const shape = slide.addTextBox({ frame: { xPt: 50, yPt: 50, widthPt: 200, heightPt: 60 }, text: 'Rotated' });
+    shape.rotationDeg = 30;
+    const odpBytes = editor.toBytes();
+
+    const pptxBytes = odpToPptx(odpBytes);
+    const roundTrippedBytes = pptxToOdp(pptxBytes);
+    const roundTripped = odpContentOf(roundTrippedBytes);
+    expect(roundTripped.slides[0]?.shapes[0]?.rotationDeg).toBeCloseTo(30, 5);
+  });
+});
+
 // minimalOdpBytes() (test-support/odp.ts) carries content buildOdpPackage/buildPptxPackage do NOT fully round-trip -- a rotated frame, a grouped pair of shapes, an image, and a TABLE SHAPE (a draw:frame whose content is a table:table directly, not inside a text box). This is a genuine, real fidelity finding for THIS bridge specifically, distinct from the PDF-pivot conversions' own already-documented table-in-shape gap: buildPptxPackage's own appendShape (src/edit/pptx/content.ts) silently drops any non-paragraph block inside a shape's own text-box loop, a scope narrowing whose own comment ("PDF-reconstructed shapes never mix kinds") assumed its only caller was the PDF-reconstruction path -- odpToPptx is a second, non-PDF-reconstructed caller for which that assumption no longer holds, and a real odp table shape silently becomes an EMPTY pptx text box rather than a table. Documented here, in the README's own Gotchas, and left as a bounded, tracked gap rather than fixed in this change -- closing it properly means teaching buildPptxPackage/buildOdpPackage to write real tables into a slide shape at all, a materially larger feature than this task's own explicit scope.
 describe('odp <-> pptx: real fidelity gap -- a table shape does not survive odpToPptx', () => {
   it('carries the rotated title, the grouped shapes, the image, and the notes through odpToPptx, but silently drops the table shape\'s own content', () => {

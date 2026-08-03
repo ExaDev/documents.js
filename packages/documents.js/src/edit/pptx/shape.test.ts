@@ -31,6 +31,33 @@ describe('buildTextBoxShape / PptxShape frame and text', () => {
     expect(shape.frame).toEqual(newFrame);
   });
 
+  it('rotationDeg is undefined with no a:xfrm/@rot attribute', () => {
+    const shapeElement = buildTextBoxShape({ xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 }, 'Hi', 2);
+    const shape = new PptxShape([shapeElement], shapeElement);
+    expect(shape.rotationDeg).toBeUndefined();
+  });
+
+  it('setting rotationDeg writes a:xfrm/@rot in 60,000ths of a degree, and reads it back exactly', () => {
+    const shapeElement = buildTextBoxShape({ xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 }, 'Hi', 2);
+    const shape = new PptxShape([shapeElement], shapeElement);
+    shape.rotationDeg = 45;
+    expect(shape.rotationDeg).toBe(45);
+    const spPr = shapeElement.children.find((c) => c.type === 'element' && c.tag === 'p:spPr');
+    const xfrm = spPr?.type === 'element' ? spPr.children.find((c) => c.type === 'element' && c.tag === 'a:xfrm') : undefined;
+    expect(xfrm?.type === 'element' ? xfrm.attributes : undefined).toContainEqual({ name: 'rot', value: '2700000' });
+  });
+
+  it('setting rotationDeg to undefined removes a:xfrm/@rot without disturbing frame', () => {
+    const shapeElement = buildTextBoxShape({ xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 }, 'Hi', 2);
+    const shape = new PptxShape([shapeElement], shapeElement);
+    const frame = { xPt: 50, yPt: 60, widthPt: 300, heightPt: 150 };
+    shape.frame = frame;
+    shape.rotationDeg = 90;
+    shape.rotationDeg = undefined;
+    expect(shape.rotationDeg).toBeUndefined();
+    expect(shape.frame).toEqual(frame);
+  });
+
   it('remove() removes the shape and throws on further use', () => {
     const shapeElement = buildTextBoxShape({ xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 }, 'Hi', 2);
     const container: XmlNode[] = [shapeElement];
