@@ -94,7 +94,7 @@ function miIntrinsicDefault(content: string): MathVariant {
   return [...content].length === 1 ? 'italic' : 'normal';
 }
 
-// Whether `element` is an operator that stretches to its row's own content. The operator dictionary's own `stretchy` property is the default; MathML lets a document override it per element, and only an explicit stretchy="false" is honoured here, since stretchy="true" cannot make a glyph the font declares no MathVariants construction for stretchable anyway (metrics.stretch simply returns undefined for it and the operator draws at its base size).
+// Whether `element` is an operator that stretches to whatever it wraps or spans -- a row's own content (a vertical fence, via stretchRowOperators) or a munder/mover/munderover base's own width (a horizontal over/under-brace, via layoutUnderOverChild). The operator dictionary's own `stretchy` property is the default; MathML lets a document override it per element, and only an explicit stretchy="false" is honoured here, since stretchy="true" cannot make a glyph the font declares no MathVariants construction for stretchable anyway (metrics.stretch simply returns undefined for it and the operator draws at its base size).
 function isStretchyOperator(element: MathMlElement): boolean {
   if (elementLocalName(element) !== 'mo') {
     return false;
@@ -137,9 +137,53 @@ function stretchOperator(element: MathMlElement, targetSizePt: number, ctx: Layo
   return stretchedBox(result, text, ctx);
 }
 
+// Turns one resolved HORIZONTAL stretchy construction (an over/under-brace spanning its own munder/mover base) into a box holding a single 'assembled-glyphs' item. Deliberately a sibling of stretchedBox, not a shared axis-branching function -- the geometry genuinely differs on both axes measured:
+//
+// Width is `result.sizePt`, the extent the construction actually reached along the stretch axis -- NEVER `result.advanceWidthPt`, which for a horizontal construction is only the widest individual glyph's own natural hmtx advance (a handful of points), not the assembled construction's own total span (confirmed empirically against the real embedded font: a 100pt-target assembly reports sizePt≈100 and advanceWidthPt≈11.5).
+//
+// Ascent/descent come directly and UNCLAMPED from result.inkAscentPt/result.inkDescentPt -- no maths-axis centring the way stretchedBox applies for a symmetric fence, since an over/under-brace is script content that layoutUnderOver already stacks against the base's own ascent/descent edges using whatever ascent/descent this box reports. One of the two is legitimately NEGATIVE for both U+23DE and U+23DF (confirmed against the real font: the over-brace's own inkDescentPt, and the under-brace's own inkAscentPt, both come back negative) -- each glyph's own ink sits almost entirely on one side of its own natural drawing origin, and that is honest ink data, not a bug, so it is never clamped to zero here.
+function horizontallyStretchedBox(result: MathStretchResult, text: string, ctx: LayoutContext): MathBox {
+  const ascentPt = result.inkAscentPt;
+  const descentPt = result.inkDescentPt;
+  // Box-local, y-down: every placement shares the construction's own single baseline (`ascentPt` down from the box's own top), since offsetPt for a horizontal construction runs along x, not y -- unlike stretchedBox's vertical construction, where offsetPt varies each placement's own y and x stays fixed.
+  const placements: MathGlyphPlacement[] = result.placements.map((placement) => ({ glyphId: placement.glyphId, xPt: placement.offsetPt, yPt: ascentPt }));
+  const items: MathLayoutItem[] = [{ kind: 'assembled-glyphs', placements, text, sizePt: ctx.sizePt, color: ctx.color }];
+  return { widthPt: result.sizePt, ascentPt, descentPt, heightPt: ascentPt + descentPt, items };
+}
+
+// The stretched replacement box for one munder/mover/munderover over/under-script operator, or undefined to keep whatever ordinary layout the caller already has for it -- mirrors stretchOperator exactly, but targets a box's own WIDTH (the base's) rather than a row's height/depth.
+function stretchHorizontalOperator(element: MathMlElement, targetWidthPt: number, ctx: LayoutContext): MathBox | undefined {
+  const text = textContent(element).trim();
+  const codePoints = [...text];
+  // A multi-character operator has no single glyph to look a construction up for; the font's MathVariants data is keyed per glyph.
+  if (codePoints.length !== 1) {
+    return undefined;
+  }
+  const codePoint = codePoints[0]?.codePointAt(0);
+  if (codePoint === undefined) {
+    return undefined;
+  }
+  const result = ctx.metrics.stretch(codePoint, 'horizontal', targetWidthPt, ctx.sizePt);
+  if (result === undefined || result.kind === 'base') {
+    return undefined;
+  }
+  return horizontallyStretchedBox(result, text, ctx);
+}
+
+// Lays out one munder/mover/munderover over- or under-script element, stretching it horizontally to `targetWidthPt` (the base's own width, computed independently for the over and under script -- real \overbrace{...}^{label}/\underbrace{...}_{label} semantics need no synchronisation between the two) when it is a stretchy operator the font can genuinely construct at that width, and falling through to the ordinary layout otherwise -- an operator isStretchyOperator declines (not an <mo>, an explicit stretchy="false", or a glyph the dictionary doesn't mark stretchy), or one metrics.stretch has nothing to offer (no horizontal MathVariants construction for that glyph in this font, or the construction already reaches the target at its base size, MathStretchResult.kind === 'base').
+function layoutUnderOverChild(childElement: MathMlElement, targetWidthPt: number, scriptCtx: LayoutContext): MathBox {
+  if (isStretchyOperator(childElement)) {
+    const stretched = stretchHorizontalOperator(childElement, targetWidthPt, scriptCtx);
+    if (stretched !== undefined) {
+      return stretched;
+    }
+  }
+  return layoutNode(childElement, scriptCtx);
+}
+
 // Replaces each stretchy operator's own box with one stretched to cover the rest of the row. Per MathML3 3.2.5.8 the target is the maximum height and depth of the row's OTHER children -- a stretchy operator's own natural size never counts towards it, so several fences in one row all size to the same content rather than escalating off each other -- and a fence stretches symmetrically about the maths axis, which is what makes the target twice the larger of the two half-extents rather than the plain content height.
 //
-// Only the VERTICAL axis is wired up here. Horizontal stretching (an over/under-brace spanning its own base, U+23DE/U+23DF) needs a target derived from a box's width inside layoutUnderOver rather than from a row's height, and nothing in this module calls metrics.stretch with 'horizontal' yet -- see this package's own README for the exact boundary.
+// Only the VERTICAL axis is wired up here -- this function specifically stretches a row's fences to that row's own height/depth, which is inherently a vertical-extent target. Horizontal stretching (an over/under-brace spanning its own munder/mover/munderover base, U+23DE/U+23DF) needs a target derived from a single box's WIDTH instead, which is a different call site entirely: see stretchHorizontalOperator/layoutUnderOverChild below, called from layoutUnderOverElement rather than from here.
 function stretchRowOperators(children: readonly MathMlElement[], boxes: readonly MathBox[], ctx: LayoutContext): readonly MathBox[] {
   const stretchy = children.map(isStretchyOperator);
   if (!stretchy.includes(true)) {
@@ -337,15 +381,15 @@ function layoutUnderOverElement(element: MathMlElement, kind: 'munder' | 'mover'
   };
 
   if (kind === 'munder') {
-    const under = children[1] === undefined ? undefined : layoutNode(children[1], scriptCtx);
+    const under = children[1] === undefined ? undefined : layoutUnderOverChild(children[1], base.widthPt, scriptCtx);
     return layoutUnderOver(base, under, undefined, ctx, accentAttachment);
   }
   if (kind === 'mover') {
-    const over = children[1] === undefined ? undefined : layoutNode(children[1], scriptCtx);
+    const over = children[1] === undefined ? undefined : layoutUnderOverChild(children[1], base.widthPt, scriptCtx);
     return layoutUnderOver(base, undefined, over, ctx, accentAttachment);
   }
-  const under = children[1] === undefined ? undefined : layoutNode(children[1], scriptCtx);
-  const over = children[2] === undefined ? undefined : layoutNode(children[2], scriptCtx);
+  const under = children[1] === undefined ? undefined : layoutUnderOverChild(children[1], base.widthPt, scriptCtx);
+  const over = children[2] === undefined ? undefined : layoutUnderOverChild(children[2], base.widthPt, scriptCtx);
   return layoutUnderOver(base, under, over, ctx, accentAttachment);
 }
 

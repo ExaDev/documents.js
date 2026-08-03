@@ -499,3 +499,156 @@ describe('layoutFormula: stretchy fences', () => {
     expect(glyphRuns(box.items).map((run) => run.text)).toEqual(['(', ')']);
   });
 });
+
+// Horizontal stretchy-glyph assembly for an over/under-brace (U+23DE/U+23DF) spanning its own munder/mover/munderover base -- stretchOperator/stretchedBox's horizontal-axis sibling, stretchHorizontalOperator/horizontallyStretchedBox, exercised via layoutUnderOverChild.
+//
+// The over/under script of a munder/mover is laid out in scriptContext (a reduced sizePt, scriptPercentScaleDown of the outer size -- see layoutUnderOverElement), so the base/variant/assembly breakpoints below are NOT the same target widths that would trigger each outcome for a bare mo at the outer sizePt: the font's own base-glyph advance and every pre-built variant size are all measured at that SAME reduced size, which this suite's own breakpoint probing (against the real embedded font, not guessed) confirmed shifts every threshold narrower. `wideBase(charCount)` mirrors nestedFraction's own "make a real MathML construct wide/tall enough to force a stretch" trick, but growing WIDTH via a flat mrow of single-character mi's rather than height via nested fractions.
+describe('layoutFormula: horizontal stretchy over/under-brace', () => {
+  const OVER = '⏞'; // U+23DE TOP CURLY BRACKET
+  const UNDER = '⏟'; // U+23DF BOTTOM CURLY BRACKET
+
+  // A flat row of `charCount` single-character mi's -- width grows roughly linearly with charCount, with no ceiling the way a fixed-glyph base would have, letting this reach clean base/variant/assembly breakpoints purely by choosing charCount.
+  function wideBase(charCount: number): MathMlElement {
+    const letters = 'xyzabcuvwpqrstklmn';
+    const children: MathMlElement[] = [];
+    for (let i = 0; i < charCount; i++) {
+      children.push(mi(letters[i % letters.length]!));
+    }
+    return el('mrow', children);
+  }
+  function over(base: MathMlElement, operator: string = OVER): MathMlElement {
+    return el('mover', [base, mo(operator)]);
+  }
+  function under(base: MathMlElement, operator: string = UNDER): MathMlElement {
+    return el('munder', [base, mo(operator)]);
+  }
+  function layout(root: MathMlElement) {
+    return layoutFormula([root], { metrics: metrics(), sizePt: SIZE_PT, color: BLACK }).box;
+  }
+
+  it('leaves the brace as an ordinary unstretched glyph run over a narrow base', () => {
+    // A single narrow mi (empirically ~3.29pt wide at SIZE_PT, well under the ~5.3pt base-glyph advance the font reports for this brace at the over-script's own reduced sizePt) leaves nothing for the font to stretch to.
+    const { box, diagnostics } = layoutFormula([over(mi('i'))], { metrics: metrics(), sizePt: SIZE_PT, color: BLACK });
+    expect(diagnostics).toEqual([]);
+    expect(assembled(box.items)).toHaveLength(0);
+    expect(glyphRuns(box.items).map((run) => run.text)).toContain(OVER);
+  });
+
+  it('selects a larger pre-built horizontal variant for a moderately wide base', () => {
+    // wideBase(2) (empirically measured, real font): the brace's own font-reported stretch kind is 'variant' here, one pre-built glyph rather than a genuine multi-part assembly.
+    const box = layout(over(wideBase(2)));
+    const items = assembled(box.items);
+    expect(items).toHaveLength(1);
+    expect(items[0]!.placements).toHaveLength(1);
+    expect(items[0]!.text).toBe(OVER);
+  });
+
+  it('assembles the brace from real multi-part construction once the base is wide enough', () => {
+    // wideBase(5) already crosses into 'assembly' (empirically confirmed against the real font -- the pre-built variants top out well before this width), giving several placements sharing one y and strictly increasing x, the first at x=0.
+    const box = layout(over(wideBase(5)));
+    const [item] = assembled(box.items);
+    expect(item).toBeDefined();
+    expect(item!.placements.length).toBeGreaterThan(1);
+
+    const ys = new Set(item!.placements.map((p) => p.yPt));
+    expect(ys.size).toBe(1); // every part of a horizontal assembly shares one baseline y
+
+    expect(item!.placements[0]!.xPt).toBeCloseTo(0, 6);
+    const xs = item!.placements.map((p) => p.xPt);
+    for (let i = 1; i < xs.length; i++) {
+      expect(xs[i]!).toBeGreaterThan(xs[i - 1]!);
+    }
+  });
+
+  it('grows the assembly part count as the base widens further', () => {
+    // Empirically confirmed strictly increasing part counts against the real font at these widths: 5, then 11, then 23.
+    const counts = [5, 10, 20].map((n) => assembled(layout(over(wideBase(n))).items)[0]!.placements.length);
+    for (let i = 1; i < counts.length; i++) {
+      expect(counts[i]!).toBeGreaterThan(counts[i - 1]!);
+    }
+  });
+
+  it('gives the brace a small, shallow vertical footprint regardless of how far it stretches', () => {
+    // horizontallyStretchedBox's own ascentPt/descentPt come directly from the construction's real, unclamped ink -- which stays a small, roughly constant vertical extent (a handful of points) however wide the assembly grows, since only the WIDTH axis is being stretched. Recovered indirectly: layoutUnderOver's own ascentPt is base.ascentPt + stackGapMinPt + over.heightPt, so subtracting the bare base's own ascent and the font's own stackGapMinPt from the combined box's ascent recovers the brace's own heightPt without any internal export.
+    const gapPt = metrics().stackGapMinPt;
+    for (const n of [1, 5, 10, 20, 30]) {
+      const base = wideBase(n);
+      const baseAscentPt = layout(base).ascentPt;
+      const combinedAscentPt = layout(over(base)).ascentPt;
+      const braceHeightPt = combinedAscentPt - baseAscentPt - gapPt;
+      expect(braceHeightPt).toBeGreaterThan(0);
+      expect(braceHeightPt).toBeLessThan(SIZE_PT / 2); // "small" relative to the formula's own font size, not merely finite
+    }
+  });
+
+  it('mirrors the over-brace on the opposite side of the base, with the opposite ink-sign convention', () => {
+    // Verified empirically against the real font rather than assumed: the over-brace's own ink sits almost entirely ABOVE its natural drawing origin (a positive ascent, a NEGATIVE descent), while the under-brace's sits almost entirely BELOW its own origin (a negative ascent, a positive descent) -- genuinely opposite fields, not a mirrored pair of the same sign.
+    const overResult = metrics().stretch(OVER.codePointAt(0)!, 'horizontal', 40, SIZE_PT)!;
+    const underResult = metrics().stretch(UNDER.codePointAt(0)!, 'horizontal', 40, SIZE_PT)!;
+    expect(overResult).toBeDefined();
+    expect(underResult).toBeDefined();
+
+    expect(overResult.inkAscentPt).toBeGreaterThan(0);
+    expect(overResult.inkDescentPt).toBeLessThan(0);
+
+    expect(underResult.inkAscentPt).toBeLessThan(0);
+    expect(underResult.inkDescentPt).toBeGreaterThan(0);
+
+    // And the corresponding munder/mover boxes place the brace on the correct side: an overscript run sits above the base's own baseline, an underscript run below it.
+    const overRun = glyphRuns(layout(over(mi('i'))).items).find((r) => r.text === OVER)!;
+    const baseRunOver = glyphRuns(layout(over(mi('i'))).items).find((r) => r.text.codePointAt(0) === 0x1d456)!; // MATHEMATICAL ITALIC SMALL I
+    expect(overRun.yPt).toBeLessThan(baseRunOver.yPt);
+
+    const underRun = glyphRuns(layout(under(mi('i'))).items).find((r) => r.text === UNDER)!;
+    const baseRunUnder = glyphRuns(layout(under(mi('i'))).items).find((r) => r.text.codePointAt(0) === 0x1d456)!;
+    expect(underRun.yPt).toBeGreaterThan(baseRunUnder.yPt);
+  });
+
+  it('munderover stretches an over-brace and an under-brace independently, both reaching close to the same target width', () => {
+    const base = wideBase(10);
+    const construct = el('munderover', [base, mo(UNDER), mo(OVER)]);
+    const { box, diagnostics } = layoutFormula([construct], { metrics: metrics(), sizePt: SIZE_PT, color: BLACK });
+    expect(diagnostics).toEqual([]);
+    const items = assembled(box.items);
+    const overItem = items.find((item) => item.text === OVER);
+    const underItem = items.find((item) => item.text === UNDER);
+    expect(overItem).toBeDefined();
+    expect(underItem).toBeDefined();
+    expect(overItem!.placements.length).toBeGreaterThan(1);
+    // Both scripts stretch to the identical target (the base's own width), independently -- no shared/synchronised sizing between munderover's two scripts is needed for them to land on the same part count.
+    expect(underItem!.placements.length).toBe(overItem!.placements.length);
+    const overSpanPt = overItem!.placements.at(-1)!.xPt;
+    const underSpanPt = underItem!.placements.at(-1)!.xPt;
+    expect(overSpanPt).toBeCloseTo(underSpanPt, 1);
+  });
+
+  it('honours an explicit stretchy="false" override on the brace operator', () => {
+    // wideBase(20) is comfortably within assembly range for an unconstrained brace (see the part-count-growth test above), so this proves the override actually suppresses real stretching rather than merely landing below some threshold by coincidence.
+    const construct = el('mover', [wideBase(20), el('mo', [text(OVER)], [{ name: 'stretchy', value: 'false' }])]);
+    const box = layoutFormula([construct], { metrics: metrics(), sizePt: SIZE_PT, color: BLACK }).box;
+    expect(assembled(box.items)).toHaveLength(0);
+    expect(glyphRuns(box.items).map((run) => run.text)).toContain(OVER);
+  });
+
+  it('leaves the brace unstretched over a genuinely empty base', () => {
+    const construct = over(el('mrow', []));
+    const box = layoutFormula([construct], { metrics: metrics(), sizePt: SIZE_PT, color: BLACK }).box;
+    expect(assembled(box.items)).toHaveLength(0);
+    expect(glyphRuns(box.items).map((run) => run.text)).toContain(OVER);
+  });
+
+  it('composes with a nested vertical stretchy fence in its own base, proving the two stretch mechanisms do not interfere', () => {
+    // A vertical fence around the same wideBase(10) that already forces horizontal assembly on its own (see the part-count-growth test) -- both mechanisms must fire together: the parenthesis pair stretches vertically to the row's own content height, and the over-brace stretches horizontally to the whole base's own width, in the same layout pass.
+    const base = wideBase(10);
+    const fencedBase = el('mrow', [mo('('), base, mo(')')]);
+    const { box, diagnostics } = layoutFormula([over(fencedBase)], { metrics: metrics(), sizePt: SIZE_PT, color: BLACK });
+    expect(diagnostics).toEqual([]);
+    const items = assembled(box.items);
+    expect(items).toHaveLength(3); // '(', ')', and the over-brace, all genuinely stretched
+    const texts = items.map((item) => item.text).sort();
+    expect(texts).toEqual([')', '(', OVER].sort());
+    for (const item of items) {
+      expect(item.placements.length).toBeGreaterThanOrEqual(1);
+    }
+  });
+});
