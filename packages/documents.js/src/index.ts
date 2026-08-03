@@ -238,6 +238,18 @@ export { OdgBoxVector, OdgLineVector, OdgPathVector } from './edit/odg/vector';
 export type { BuildOdgPackageOptions } from './edit/odg/content';
 export { buildOdgPackage } from './edit/odg/content';
 
+// A genuine live-view editor over a mutable in-memory ContentDocument -- markdown has no XmlElement tree the way docx/pptx/odt/odp/ods/odg each do, so MarkdownEditor holds the plain ContentDocument object directly and every MarkdownParagraph/MarkdownRun/MarkdownTable/MarkdownTableCell it produces holds a direct reference into that object, exactly mirroring how OdtParagraph/OdtRun hold a reference into a real XmlElement (see src/edit/markdown/editor.ts's own module doc comment). MarkdownList is the flat, docx-style list handle this editor uses (see src/edit/markdown/list.ts) -- markdown has no structural list container the way ODF's text:list is.
+export type { CreateMarkdownEditorOptions, MarkdownBody } from './edit/markdown/editor';
+export { createMarkdownEditor, MarkdownEditor, openMarkdown } from './edit/markdown/editor';
+export type { ParagraphInit as MarkdownParagraphInit } from './edit/markdown/paragraph';
+export { MarkdownParagraph } from './edit/markdown/paragraph';
+export type { RunInit as MarkdownRunInit } from './edit/markdown/run';
+export { MarkdownRun } from './edit/markdown/run';
+export type { TableInit as MarkdownTableInit } from './edit/markdown/table';
+export { MarkdownTable, MarkdownTableCell, MarkdownTableRow } from './edit/markdown/table';
+export type { MarkdownListInit } from './edit/markdown/list';
+export { MarkdownList } from './edit/markdown/list';
+
 // A live-view editor over pdf-codec's own positioned-item model (LayoutDocument) -- NOT a content-stream/byte-level editor, see src/edit/pdf/editor.ts's own module doc comment for the rationale. PageInit is defined in page.ts (mirroring ParagraphInit living in paragraph.ts rather than editor.ts) since it's PdfPage's own initial shape, even though appendPage/insertPageAt (which consume it) live on PdfEditor.
 export type { PageInit } from './edit/pdf/page';
 export { PdfPage } from './edit/pdf/page';
