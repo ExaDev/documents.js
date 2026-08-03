@@ -114,6 +114,37 @@ export class DocxTableRow {
     }
     return out;
   }
+
+  // Merges colSpan grid columns of THIS row into one cell (ECMA-376 w:tcPr/w:gridSpan on the surviving anchor cell) -- the horizontal-merge primitive docx genuinely lacks today, unlike vertical merge, which is already a pure attribute setter on an existing w:tc (DocxTableCell.verticalMerge above). Docx omits a w:tc entirely for a column consumed by a merge (no covered-cell placeholder the way ODF has), so making this cell span colSpan columns means REMOVING the consumed cells' own w:tc elements from the row outright. Consumed cells' own content is discarded silently and unconditionally -- no check, no guard -- matching OdsSheet.mergeCells' own established precedent (src/edit/ods/sheet.ts) exactly: this is documented, intentional behaviour, not a silent trap.
+  mergeCellsHorizontally(startColumnIndex: number, colSpan: number): DocxTableCell {
+    if (!Number.isInteger(colSpan) || colSpan < 1) {
+      throw new Error(`mergeCellsHorizontally: colSpan must be a positive integer, got ${colSpan}`);
+    }
+    const cellElements: XmlElement[] = [];
+    for (const child of this.node.children) {
+      if (child.type === 'element' && child.tag === 'w:tc') {
+        cellElements.push(child);
+      }
+    }
+    const anchorElement = cellElements[startColumnIndex];
+    if (anchorElement === undefined) {
+      throw new Error(`mergeCellsHorizontally: column ${startColumnIndex} does not exist in this row`);
+    }
+    if (startColumnIndex + colSpan > cellElements.length) {
+      throw new Error(
+        `mergeCellsHorizontally: colSpan ${colSpan} starting at column ${startColumnIndex} exceeds this row's own ${cellElements.length} columns`,
+      );
+    }
+    for (let i = 1; i < colSpan; i++) {
+      const consumedElement = cellElements[startColumnIndex + i];
+      if (consumedElement !== undefined) {
+        removeChild(this.node.children, consumedElement);
+      }
+    }
+    const anchor = new DocxTableCell(anchorElement);
+    anchor.colSpan = colSpan;
+    return anchor;
+  }
 }
 
 function buildCell(): XmlElement {
@@ -168,6 +199,31 @@ export class DocxTable {
     const row = el('w:tr', {}, cells);
     node.children.push(row);
     return new DocxTableRow(row);
+  }
+
+  // Merges the rowSpan x colSpan rectangle anchored at (startRow, startColumn): pure sugar over DocxTableRow.mergeCellsHorizontally plus the already-existing verticalMerge attribute setter, not a new primitive of its own. Scoped to a table where every row still has one w:tc per grid column up to this point (no pre-existing narrower merge already consumed a cell this rectangle needs) -- docx's own per-row gridSpan means every covered row, not just the anchor row, needs its own horizontal merge to consume the same columns before vMerge marks it as a continuation.
+  mergeCells(startRow: number, startColumn: number, rowSpan: number, colSpan: number): DocxTableCell {
+    if (!Number.isInteger(rowSpan) || rowSpan < 1 || !Number.isInteger(colSpan) || colSpan < 1) {
+      throw new Error(`mergeCells: rowSpan and colSpan must be positive integers, got rowSpan=${rowSpan}, colSpan=${colSpan}`);
+    }
+    const rows = this.rows();
+    const anchorRow = rows[startRow];
+    if (anchorRow === undefined) {
+      throw new Error(`mergeCells: row ${startRow} does not exist in this table`);
+    }
+    const anchor = anchorRow.mergeCellsHorizontally(startColumn, colSpan);
+    if (rowSpan > 1) {
+      anchor.verticalMerge = 'restart';
+      for (let r = 1; r < rowSpan; r++) {
+        const coveredRow = rows[startRow + r];
+        if (coveredRow === undefined) {
+          throw new Error(`mergeCells: rowSpan ${rowSpan} starting at row ${startRow} exceeds this table's own ${rows.length} rows`);
+        }
+        const coveredAnchor = coveredRow.mergeCellsHorizontally(startColumn, colSpan);
+        coveredAnchor.verticalMerge = 'continue';
+      }
+    }
+    return anchor;
   }
 
   remove(): void {
