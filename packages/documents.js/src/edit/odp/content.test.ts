@@ -3,6 +3,7 @@ import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
 import type { ContentDocument, ContentVector } from 'document-schema.js';
 import type { Package, XmlElement } from 'odf.js';
 import { bytesToBase64, childrenWithTag, decodePackage, encodePackage, findChildElement, readDrawPageContent, rootElement } from 'odf.js';
+import { readOdpContent } from '../../odf/odp/read';
 import { rotationsOf, VECTOR_FIXTURE, vectorDrawingBlock, withoutRotation } from '../../test-support/vectors';
 import { buildOdpPackage } from './content';
 import { OdpEditor } from './editor';
@@ -133,6 +134,34 @@ describe('buildOdpPackage', () => {
       'draw:path',
       'draw:rect',
     ]);
+  });
+
+  it('recovers a written drawing block back out through readOdpContent, not just through odf.js\'s own readDrawPageContent', () => {
+    const size = { widthPt: 960, heightPt: 540 };
+    const content = presentationDoc([
+      {
+        size,
+        notes: '',
+        shapes: [
+          { frame: { xPt: 10, yPt: 10, widthPt: 200, heightPt: 50 }, ...ZERO_INSETS, blocks: [{ kind: 'paragraph', runs: [{ text: 'Before' }] }] },
+          { frame: { xPt: 0, yPt: 0, ...size }, ...ZERO_INSETS, blocks: [vectorDrawingBlock(size)] },
+          { frame: { xPt: 10, yPt: 480, widthPt: 200, heightPt: 50 }, ...ZERO_INSETS, blocks: [{ kind: 'paragraph', runs: [{ text: 'After' }] }] },
+        ],
+      },
+    ]);
+    const pkg = decodePackage(encodePackage(buildOdpPackage(content)));
+    const roundTripped = readOdpContent(pkg);
+    if (roundTripped.kind !== 'presentation') {
+      throw new Error('expected a presentation ContentDocument');
+    }
+    const shapes = roundTripped.slides[0]!.shapes;
+    expect(shapes.map((shape) => shape.blocks[0]?.kind)).toEqual(['paragraph', 'embeddedObject', 'paragraph']);
+    const drawingBlock = shapes[1]?.blocks[0];
+    if (drawingBlock?.kind !== 'embeddedObject' || drawingBlock.document.kind !== 'drawing') {
+      throw new Error('expected a drawing-kind embeddedObject block');
+    }
+    expect(withoutRotation(drawingBlock.document.pages[0]?.vectors ?? [])).toEqual(withoutRotation(VECTOR_FIXTURE));
+    expect(rotationsOf(drawingBlock.document.pages[0]?.vectors ?? [])).toEqual([undefined, undefined, undefined, undefined, expect.closeTo(30, 4)]);
   });
 
   it('translates a recovered drawing by its containing shape\'s own frame', () => {

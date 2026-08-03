@@ -1,16 +1,20 @@
-import type { ContentBlock, ContentDocument } from 'document-schema.js';
+import type { ContentDocument, ContentVector } from 'document-schema.js';
 import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
 import type { Package, XmlElement, XmlNode } from 'odf.js';
 import { findChildElement, readOdt, rootElement } from 'odf.js';
+import type { BlockPlacement } from '../../model/block-splice';
+import { spliceBlocks } from '../../model/block-splice';
+import { buildDrawingBlock } from '../../model/embedded-drawing';
 import { buildFormulaBlock } from '../../model/formula';
 import type { DetectedFormulaFrame } from '../formula/detect';
 import { collectFormulaFrames } from '../formula/detect';
+import { collectContainerVectors, isVectorElementTag } from '../vector/detect';
 
 // Package -> ContentDocument (the wordprocessing variant). A thin adapter over odf.js's own readOdt, mirroring src/ooxml/docx/read.ts's readDocxContent exactly: odf.js's OdtDocument is already { metadata, sections }, the identical shape readDocx produces, so this is nothing more than the envelope wrap. This is the concrete, load-bearing proof that odt and docx genuinely share one pivot and one layout engine -- convertWordprocessingToLayout (src/layout/engine.ts) takes a WordprocessingContentDocument and has no idea, and no way to tell, which format produced it.
 //
-// An embedded formula is a real ContentEmbeddedObjectBlock in the returned document, carrying its own MathML inside a 'formula'-kind ContentDocument (see src/model/formula.ts) -- there is no side-channel map returned alongside, and no caller needs to thread one anywhere.
+// An embedded formula or a recovered vector-only drawing is a real ContentEmbeddedObjectBlock in the returned document, carrying its own MathML/geometry inside a 'formula'/'drawing'-kind ContentDocument (see src/model/formula.ts and src/model/embedded-drawing.ts) -- there is no side-channel map returned alongside, and no caller needs to thread one anywhere.
 //
-// Embedded-formula detection is a second, independent pass over the SAME package's own raw content.xml, run after readOdt itself: odf.js's own readOdt (readDrawFrameContent, specifically) does not yet recognise a draw:frame containing a draw:object at all -- it reads a frame's own table/text-box/image content but silently produces no block whatsoever for anything else, including a formula. This pass finds a formula frame wherever it actually is (a direct child of office:text, one nested inside a draw:g group, and one anchored inline inside a paragraph's or table cell's own run content -- see collectFormulaFrames), and inserts each one's block at its TRUE position among the paragraphs/tables odf.js already read, not appended at the end of the section.
+// Both are recovered by a second, independent pass over the SAME package's own raw content.xml, run after readOdt itself: odf.js's own readOdt (readDrawFrameContent, specifically) does not yet recognise a draw:frame containing a draw:object at all, and ContentSection.blocks has no vector vocabulary of its own regardless. Formula detection (collectFormulaFrames, ../formula/detect.ts) is a deep, bespoke walk, since a formula frame can sit anywhere at all -- nested in a group, anchored inline in a run; vector detection (collectContainerVectors, ../vector/detect.ts) is a thin call straight through to odf.js's own readDrawPageContent, which already recurses into a group on its own. Both walks run independently over the identical text.children and produce their own placement list plus their own consumed-block-index set; the two lists are merged (concatenated, sorted by position, consumed sets unioned) into ONE combined spliceBlocks pass -- running two sequential splices here would count the second pass's own paragraph/container positions against the ALREADY-spliced (and therefore wrong) block indices the first pass produced.
 //
 // Detection is skipped outright for a document odf.js reads into more than one ContentSection: ODF itself has no notion of a docx-style w:sectPr page-setup boundary, so readOdt should never actually produce more than one -- this is a defensive guard against that assumption changing under this module, not an expected real-world case.
 export function readOdtContent(pkg: Package): ContentDocument {
@@ -23,9 +27,22 @@ export function readOdtContent(pkg: Package): ContentDocument {
     const text = body === undefined ? undefined : findChildElement(body.children, 'office:text');
     if (text !== undefined) {
       const section = odtDoc.sections[0]!;
-      const { placements, consumedBlockIndices } = collectFormulaPlacements(text.children, pkg);
-      if (placements.length > 0) {
-        odtDoc.sections[0] = { ...section, blocks: spliceFormulaBlocks(section.blocks, placements, consumedBlockIndices) };
+      const { placements: formulaPlacements, consumedBlockIndices: formulaConsumed } = collectFormulaPlacements(text.children, pkg);
+      const { placements: vectorPlacements, consumedBlockIndices: vectorConsumed } = collectVectorPlacements(text.children, pkg);
+
+      if (formulaPlacements.length > 0 || vectorPlacements.length > 0) {
+        const combined: BlockPlacement[] = [
+          ...formulaPlacements.map((placement): BlockPlacement => ({
+            index: placement.index,
+            build: (sourcePath) => buildFormulaBlock(placement.detected.formula, placement.detected.frame, sourcePath),
+          })),
+          ...vectorPlacements.map((placement): BlockPlacement => ({
+            index: placement.index,
+            build: (sourcePath) => ({ ...buildDrawingBlock(section.pageSize, placement.vectors), sourcePath }),
+          })),
+        ].sort((a, b) => a.index - b.index);
+        const consumedBlockIndices = new Set<number>([...formulaConsumed, ...vectorConsumed]);
+        odtDoc.sections[0] = { ...section, blocks: spliceBlocks(section.blocks, combined, consumedBlockIndices, (position) => `sections[0].blocks[${position}]`) };
       }
     }
   }
@@ -33,7 +50,11 @@ export function readOdtContent(pkg: Package): ContentDocument {
   return { kind: 'wordprocessing', formatVersion: CONTENT_FORMAT_VERSION, metadata: { ...odtDoc.metadata }, sections: odtDoc.sections };
 }
 
-// Where one detected formula belongs in the section's own block list: `index` is the position in odf.js's OWN (formula-free) blocks array immediately BEFORE which this formula's block is inserted. Placements are produced in document order and their indices are non-decreasing, so a single forward pass splices them all.
+// ---------------------------------------------------------------------------
+// Formula placement -- unchanged in behaviour from before this module also detected vectors, only renamed where it now shares a helper with the vector walk below.
+// ---------------------------------------------------------------------------
+
+// Where one detected formula belongs in the section's own block list: `index` is the position in odf.js's OWN (formula/vector-free) blocks array immediately BEFORE which this formula's block is inserted. Placements are produced in document order and their indices are non-decreasing, so a single forward pass splices them all.
 interface FormulaPlacement {
   readonly index: number;
   readonly detected: DetectedFormulaFrame;
@@ -49,23 +70,22 @@ interface FormulaPlacements {
   readonly consumedBlockIndices: ReadonlySet<number>;
 }
 
-interface CollectState extends BlockCountState {
+interface FormulaCollectState extends BlockCountState {
   readonly placements: FormulaPlacement[];
   readonly consumedBlockIndices: Set<number>;
 }
 
-function pushPlacements(out: FormulaPlacement[], index: number, detected: readonly DetectedFormulaFrame[]): void {
+function pushFormulaPlacements(out: FormulaPlacement[], index: number, detected: readonly DetectedFormulaFrame[]): void {
   for (const frame of detected) {
     out.push({ index, detected: frame });
   }
 }
 
-// True when every one of a paragraph's own children is one of the formula frames just detected inside it (or whitespace between them) -- i.e. the paragraph has no text and no other content of its own.
-function isFormulaOnlyParagraph(paragraph: XmlElement, detected: readonly DetectedFormulaFrame[]): boolean {
-  if (detected.length === 0) {
+// True when every one of a paragraph's own children is one of the recognised elements just detected inside it (or whitespace between them) -- i.e. the paragraph has no text and no other content of its own. Shared by the formula and vector walks below, each supplying its own recognised-element list, since a paragraph mixing a formula frame with a vector primitive is not a shape any known ODF producer creates.
+function isEmbeddedObjectOnlyParagraph(paragraph: XmlElement, recognisedElements: readonly XmlElement[]): boolean {
+  if (recognisedElements.length === 0) {
     return false;
   }
-  const frames = detected.map((entry) => entry.frameElement);
   for (const child of paragraph.children) {
     if (child.type === 'text') {
       if (child.value.trim().length > 0) {
@@ -76,7 +96,7 @@ function isFormulaOnlyParagraph(paragraph: XmlElement, detected: readonly Detect
     if (child.type !== 'element') {
       continue;
     }
-    if (!frames.includes(child)) {
+    if (!recognisedElements.includes(child)) {
       return false;
     }
   }
@@ -84,47 +104,47 @@ function isFormulaOnlyParagraph(paragraph: XmlElement, detected: readonly Detect
 }
 
 // One paragraph/heading's own contribution: its block, then every formula frame found inside it placed immediately after -- unless the paragraph is nothing but those frames, in which case the block is consumed and the formulas take its place.
-function pushParagraphPlacements(node: XmlElement, pkg: Package, state: CollectState): void {
+function pushFormulaParagraphPlacement(node: XmlElement, pkg: Package, state: FormulaCollectState): void {
   const detected = collectFormulaFrames(node.children, pkg);
   state.blockCount += 1;
-  if (isFormulaOnlyParagraph(node, detected)) {
+  if (isEmbeddedObjectOnlyParagraph(node, detected.map((entry) => entry.frameElement))) {
     state.consumedBlockIndices.add(state.blockCount - 1);
   }
-  pushPlacements(state.placements, state.blockCount, detected);
+  pushFormulaPlacements(state.placements, state.blockCount, detected);
 }
 
 // Mirrors odf.js's own readOdt/readBlocks walk (typed/odt/read.ts) exactly, counting how many ContentBlocks each office:text child contributes, so a formula frame's own insertion point is COUNTED rather than approximated. That count is what true positional interleaving needs and what this adapter previously did not have: "one raw XML child = one block" does not hold in general, since a single text:list unwraps into one ContentParagraph per list item at every nesting level, and a text:section contributes its whole nested block run.
 //
 // A formula anchored inline inside a paragraph (or inside a table's own cell content) is placed immediately AFTER that paragraph's/table's own block, the closest true position ContentBlock can express: ContentRun is text-only, so there is no inline slot inside a paragraph for an embedded object to occupy, and splitting the paragraph in two around the formula would invent a paragraph boundary the source never had. A formula in a container that contributes no block of its own (a top-level draw:frame, a draw:g group) is placed at the current index instead -- i.e. exactly where it sits, between the blocks either side of it.
 function collectFormulaPlacements(nodes: readonly XmlNode[], pkg: Package): FormulaPlacements {
-  const state: CollectState = { blockCount: 0, placements: [], consumedBlockIndices: new Set<number>() };
-  walkForPlacements(nodes, pkg, state);
+  const state: FormulaCollectState = { blockCount: 0, placements: [], consumedBlockIndices: new Set<number>() };
+  walkForFormulaPlacements(nodes, pkg, state);
   return { placements: state.placements, consumedBlockIndices: state.consumedBlockIndices };
 }
 
-function walkForPlacements(nodes: readonly XmlNode[], pkg: Package, state: CollectState): void {
+function walkForFormulaPlacements(nodes: readonly XmlNode[], pkg: Package, state: FormulaCollectState): void {
   for (const node of nodes) {
     if (node.type !== 'element') {
       continue;
     }
     if (node.tag === 'text:p' || node.tag === 'text:h') {
-      pushParagraphPlacements(node, pkg, state);
+      pushFormulaParagraphPlacement(node, pkg, state);
     } else if (node.tag === 'text:list') {
-      walkListForPlacements(node.children, pkg, state);
+      walkListForFormulaPlacements(node.children, pkg, state);
     } else if (node.tag === 'table:table') {
       state.blockCount += 1;
-      pushPlacements(state.placements, state.blockCount, collectFormulaFrames(node.children, pkg));
+      pushFormulaPlacements(state.placements, state.blockCount, collectFormulaFrames(node.children, pkg));
     } else if (node.tag === 'text:section') {
-      walkForPlacements(node.children, pkg, state);
+      walkForFormulaPlacements(node.children, pkg, state);
     } else {
       // Every other child contributes no block at all to readOdt's own output -- a draw:frame, a draw:g, a text:table-of-content placeholder, a text:sequence-decls. A formula found beneath one belongs at the current index, before whatever block the next content child produces.
-      pushPlacements(state.placements, state.blockCount, collectFormulaFrames([node], pkg));
+      pushFormulaPlacements(state.placements, state.blockCount, collectFormulaFrames([node], pkg));
     }
   }
 }
 
 // The list half of the same mirror: readOdt's own readListItems descends text:list-item children only, emitting one block per text:p/text:h and recursing one nesting level per nested text:list. Anything else inside a list item (including a bare draw:frame) contributes no block, exactly as at top level.
-function walkListForPlacements(itemNodes: readonly XmlNode[], pkg: Package, state: CollectState): void {
+function walkListForFormulaPlacements(itemNodes: readonly XmlNode[], pkg: Package, state: FormulaCollectState): void {
   for (const item of itemNodes) {
     if (item.type !== 'element' || item.tag !== 'text:list-item') {
       continue;
@@ -134,30 +154,103 @@ function walkListForPlacements(itemNodes: readonly XmlNode[], pkg: Package, stat
         continue;
       }
       if (itemChild.tag === 'text:p' || itemChild.tag === 'text:h') {
-        pushParagraphPlacements(itemChild, pkg, state);
+        pushFormulaParagraphPlacement(itemChild, pkg, state);
       } else if (itemChild.tag === 'text:list') {
-        walkListForPlacements(itemChild.children, pkg, state);
+        walkListForFormulaPlacements(itemChild.children, pkg, state);
       } else {
-        pushPlacements(state.placements, state.blockCount, collectFormulaFrames([itemChild], pkg));
+        pushFormulaPlacements(state.placements, state.blockCount, collectFormulaFrames([itemChild], pkg));
       }
     }
   }
 }
 
-// One forward pass over the original blocks, emitting every placement due before each one and skipping every block a formula-only paragraph contributed. Each formula block's own sourcePath names its FINAL index in the combined array (the array a consumer actually sees), matching how every other block's sourcePath addresses the document it is part of.
-function spliceFormulaBlocks(blocks: readonly ContentBlock[], placements: readonly FormulaPlacement[], consumedBlockIndices: ReadonlySet<number>): ContentBlock[] {
-  const out: ContentBlock[] = [];
-  let next = 0;
-  for (let index = 0; index <= blocks.length; index++) {
-    while (next < placements.length && placements[next]!.index === index) {
-      const { detected } = placements[next]!;
-      out.push(buildFormulaBlock(detected.formula, detected.frame, `sections[0].blocks[${out.length}]`));
-      next += 1;
+// ---------------------------------------------------------------------------
+// Vector placement -- the new walk, structurally mirroring the formula one above (same containers, same block-counting) but calling collectContainerVectors instead of collectFormulaFrames, and grouping every vector found within one container into a SINGLE placement: "all vectors within one container become one drawing block" is the write side's own convention too (OdtBody.appendVectors writes one paragraph holding every vector of one recovered drawing block), so there is no per-vector placement the way there is a per-frame one for formulas.
+//
+// Kept as its own, separate walk rather than unified with the formula one above via a shared generic traversal: a formula's detect() call produces zero-or-more items each becoming its OWN placement, while a vector's detect() call produces zero-or-more items that become AT MOST ONE combined placement -- two genuinely different cardinalities that a single generic walker would have to special-case anyway, so writing two small, purpose-built walks is the more honest abstraction of what each already does.
+// ---------------------------------------------------------------------------
+
+interface VectorPlacement {
+  readonly index: number;
+  readonly vectors: readonly ContentVector[];
+}
+
+interface VectorPlacements {
+  readonly placements: readonly VectorPlacement[];
+  readonly consumedBlockIndices: ReadonlySet<number>;
+}
+
+interface VectorCollectState extends BlockCountState {
+  readonly placements: VectorPlacement[];
+  readonly consumedBlockIndices: Set<number>;
+}
+
+function vectorTaggedChildren(node: XmlElement): XmlElement[] {
+  return node.children.filter((child): child is XmlElement => child.type === 'element' && isVectorElementTag(child.tag));
+}
+
+function pushVectorParagraphPlacement(node: XmlElement, pkg: Package, state: VectorCollectState): void {
+  const vectors = collectContainerVectors(node.children, pkg);
+  state.blockCount += 1;
+  if (vectors.length > 0 && isEmbeddedObjectOnlyParagraph(node, vectorTaggedChildren(node))) {
+    state.consumedBlockIndices.add(state.blockCount - 1);
+  }
+  if (vectors.length > 0) {
+    state.placements.push({ index: state.blockCount, vectors });
+  }
+}
+
+function collectVectorPlacements(nodes: readonly XmlNode[], pkg: Package): VectorPlacements {
+  const state: VectorCollectState = { blockCount: 0, placements: [], consumedBlockIndices: new Set<number>() };
+  walkForVectorPlacements(nodes, pkg, state);
+  return { placements: state.placements, consumedBlockIndices: state.consumedBlockIndices };
+}
+
+function walkForVectorPlacements(nodes: readonly XmlNode[], pkg: Package, state: VectorCollectState): void {
+  for (const node of nodes) {
+    if (node.type !== 'element') {
+      continue;
     }
-    const block = blocks[index];
-    if (block !== undefined && !consumedBlockIndices.has(index)) {
-      out.push(block);
+    if (node.tag === 'text:p' || node.tag === 'text:h') {
+      pushVectorParagraphPlacement(node, pkg, state);
+    } else if (node.tag === 'text:list') {
+      walkListForVectorPlacements(node.children, pkg, state);
+    } else if (node.tag === 'table:table') {
+      state.blockCount += 1;
+      const vectors = collectContainerVectors(node.children, pkg);
+      if (vectors.length > 0) {
+        state.placements.push({ index: state.blockCount, vectors });
+      }
+    } else if (node.tag === 'text:section') {
+      walkForVectorPlacements(node.children, pkg, state);
+    } else {
+      const vectors = collectContainerVectors([node], pkg);
+      if (vectors.length > 0) {
+        state.placements.push({ index: state.blockCount, vectors });
+      }
     }
   }
-  return out;
+}
+
+function walkListForVectorPlacements(itemNodes: readonly XmlNode[], pkg: Package, state: VectorCollectState): void {
+  for (const item of itemNodes) {
+    if (item.type !== 'element' || item.tag !== 'text:list-item') {
+      continue;
+    }
+    for (const itemChild of item.children) {
+      if (itemChild.type !== 'element') {
+        continue;
+      }
+      if (itemChild.tag === 'text:p' || itemChild.tag === 'text:h') {
+        pushVectorParagraphPlacement(itemChild, pkg, state);
+      } else if (itemChild.tag === 'text:list') {
+        walkListForVectorPlacements(itemChild.children, pkg, state);
+      } else {
+        const vectors = collectContainerVectors([itemChild], pkg);
+        if (vectors.length > 0) {
+          state.placements.push({ index: state.blockCount, vectors });
+        }
+      }
+    }
+  }
 }
