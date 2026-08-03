@@ -1,3 +1,11 @@
+# [1.9.0](https://github.com/ExaDev/pdf-codec/compare/v1.8.0...v1.9.0) (2026-08-03)
+
+
+### Features
+
+* apply real pair kerning during embedded-font text layout ([49e1e31](https://github.com/ExaDev/pdf-codec/commit/49e1e314e4eaf2d2880c6eea3f758ee286f09c6d))
+* read pair kerning from a font's own GPOS table ([2c14f2d](https://github.com/ExaDev/pdf-codec/commit/2c14f2da8e69c212b74330774f373c19ff36d515))
+
 # [1.8.0](https://github.com/ExaDev/pdf-codec/compare/v1.7.0...v1.8.0) (2026-08-03)
 
 
