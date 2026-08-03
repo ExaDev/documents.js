@@ -11,7 +11,7 @@ import type { OdsSheet } from './sheet';
 //
 // Column/row HIDDEN state (ContentSheetColumn/Row.hidden) now round-trips too, via OdsSheet.setColumnHidden/setRowHidden (table:visibility, independent of width/height styling -- see column-row.ts's own top-of-file note on why the two never collide).
 //
-// ContentSheetImage and embeddedObjects are still deliberately NOT written here -- OdsSheet's own scope has no image/embedded-object API of its own to drive from yet. A documented, bounded gap, mirroring this codebase's own established precedent (buildOdtPackage's identical image-write gap): every cell's own value/formula/displayText, merged ranges, print settings, column widths/row heights, and now hidden state, all build faithfully.
+// ContentSheetImage now writes a real floating draw:frame (OdsSheet.addImage, src/edit/ods/floating.ts), and ContentSheet.embeddedObjects writes a real embedded ODF formula sub-object for every objectKind === 'formula' entry (OdsSheet.addEmbeddedObject) -- every OTHER objectKind (wordprocessing/presentation/spreadsheet/drawing) is still a documented, bounded gap, mirroring buildOdtPackage's own identical narrowing for a 'drawing' embeddedObject block: embedding one would mean writing that document's own package as a nested OLE sub-object, and no writer for that exists anywhere in this codebase. Images/embeddedObjects are written LAST, after every column/row width/height/hidden call for this sheet, so a ContentSheetImage's own anchorRow/anchorColumn resolves its absolute position against the sheet's real, final column/row sizing rather than whatever it happened to declare at some earlier point in this loop.
 export function buildOdsPackage(content: ContentDocument): Package {
   if (content.kind !== 'spreadsheet') {
     throw new Error('buildOdsPackage requires a spreadsheet ContentDocument');
@@ -43,6 +43,12 @@ export function buildOdsPackage(content: ContentDocument): Package {
       if (row.hidden === true) {
         odsSheet.setRowHidden(row.index, true);
       }
+    }
+    for (const image of sheet.images) {
+      odsSheet.addImage(image);
+    }
+    for (const embeddedObject of sheet.embeddedObjects ?? []) {
+      odsSheet.addEmbeddedObject(embeddedObject);
     }
   }
   return editor.toPackage();

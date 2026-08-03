@@ -1,7 +1,8 @@
 import type { ContentDocument } from 'document-schema.js';
 import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
-import { readOds } from 'odf.js';
+import { attrValue, bytesToBase64, elementsWithTag, readOds, rootElement } from 'odf.js';
 import { describe, expect, it } from 'vitest';
+import { formulaDocument } from '../../model/formula';
 import { buildOdsPackage } from './content';
 
 type SpreadsheetDocument = Extract<ContentDocument, { kind: 'spreadsheet' }>;
@@ -79,5 +80,52 @@ describe('buildOdsPackage', () => {
     const dataSheet = document.sheets[0]!;
     expect(dataSheet.columns.find((c) => c.index === 0)?.hidden).toBe(true);
     expect(dataSheet.rows.find((r) => r.index === 3)?.hidden).toBe(true);
+  });
+
+  it('writes a ContentSheetImage as a real floating draw:frame under table:shapes', () => {
+    const content = spreadsheetDocument();
+    const pngBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
+    content.sheets[0]!.images.push({
+      kind: 'image',
+      format: 'png',
+      base64: bytesToBase64(pngBytes),
+      widthPt: 40,
+      heightPt: 30,
+      anchorRow: 0,
+      anchorColumn: 0,
+      offsetXPt: 0,
+      offsetYPt: 0,
+    });
+
+    const pkg = buildOdsPackage(content);
+    const part = pkg.parts['content.xml'];
+    if (part?.kind !== 'xml') {
+      throw new Error('expected content.xml');
+    }
+    const contentRootElement = rootElement(part.nodes);
+    if (contentRootElement === undefined) {
+      throw new Error('expected a content.xml root element');
+    }
+    const frame = elementsWithTag([contentRootElement], 'draw:frame')[0];
+    expect(frame).toBeDefined();
+    expect(attrValue(frame!, 'svg:width')).toBe('40pt');
+    expect(pkg.parts['Pictures/image1.png']?.kind).toBe('binary');
+
+    // readOds itself still hardcodes images: [] (odf.js does not read ods floating shapes back at all -- see src/layout/sheets.ts's own gotcha comment), so this checks the real written structure directly rather than a ContentDocument re-read.
+    expect(readOds(pkg).sheets[0]!.images).toEqual([]);
+  });
+
+  it('writes a formula-kind embeddedObject as a real ODF formula sub-document', () => {
+    const content = spreadsheetDocument();
+    content.sheets[0]!.embeddedObjects = [
+      {
+        objectKind: 'formula',
+        document: formulaDocument({ mathml: [{ type: 'element', tag: 'mi', attributes: [], children: [{ type: 'text', value: 'x' }] }] }),
+        frame: { xPt: 0, yPt: 0, widthPt: 20, heightPt: 10 },
+      },
+    ];
+
+    const pkg = buildOdsPackage(content);
+    expect(pkg.parts['Object 1/content.xml']?.kind).toBe('xml');
   });
 });

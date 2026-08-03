@@ -1,11 +1,12 @@
 import type { Package, XmlElement, XmlNode } from 'odf.js';
 import { parseCellReference } from 'odf.js';
 import { attr } from 'ooxml.js';
-import type { ContentSheetPrintSettings } from 'document-schema.js';
+import type { ContentEmbeddedObject, ContentSheetImage, ContentSheetPrintSettings } from 'document-schema.js';
 import { removeChild, setAttr } from '../../xml/edit';
 import { COVERED_CELL_TAG, resolveCellNode } from './address';
 import { OdsCell } from './cell';
 import { writeColumnHidden, writeColumnWidth, writeRowHeight, writeRowHidden } from './column-row';
+import { insertSheetEmbeddedObject, insertSheetImage } from './floating';
 import { readSheetPrintSettings, writeSheetPrintSettings } from './print-settings';
 
 const NAME_ATTR = 'table:name';
@@ -69,6 +70,16 @@ export class OdsSheet {
   // The row counterpart to setColumnHidden above.
   setRowHidden(index: number, hidden: boolean): void {
     writeRowHidden(this.live(), index, hidden);
+  }
+
+  // Adds a floating raster image, anchored at image.anchorRow/anchorColumn plus image.offsetXPt/offsetYPt -- see floating.ts's own top-of-file note for why a spreadsheet's own draw:frame needs this resolved to an absolute position rather than accepting an already-absolute Box the way OdpSlide.addImage does. Call this AFTER any setColumnWidth/setColumnHidden/setRowHeight/setRowHidden calls this sheet needs, so the anchor resolves against the real column/row sizing rather than whatever this sheet's columns/rows happened to declare beforehand.
+  addImage(image: ContentSheetImage): void {
+    insertSheetImage(this.pkg, this.live(), image);
+  }
+
+  // Adds an embedded object (currently only a real formula sub-object; every other objectKind is a documented, bounded gap -- see floating.ts's own insertSheetEmbeddedObject comment) at object.frame's own already-absolute position.
+  addEmbeddedObject(object: ContentEmbeddedObject): void {
+    insertSheetEmbeddedObject(this.pkg, this.live(), object);
   }
 
   // Resolves (individuating/gap-filling as needed) the cell at 0-based (row, column) and wraps it as an OdsCell -- rejecting a position covered by another cell's own merged range outright (see OdsCell's own class doc: a table:covered-table-cell is never wrapped), rather than silently handing back something whose value/formula/displayText setters would corrupt the merge.
