@@ -1,4 +1,4 @@
-import { createOdp, createPptx, openOdp, openPptx, readOdpContent, readPptxContent } from 'documents.js';
+import { createOdp, createOds, createPptx, odsToXlsx, openOdp, openPptx, readOdpContent, readPdf, readPptxContent, xlsxToPdf } from 'documents.js';
 import { describe, expect, it } from 'vitest';
 import type { Action } from './actions.js';
 import { appReducer, createInitialState } from './reducer.js';
@@ -46,6 +46,19 @@ function openPptxDocument(bytes: Uint8Array<ArrayBuffer>, path = '/tmp/deck.pptx
 
 function openOdpDocument(bytes: Uint8Array<ArrayBuffer>, path = '/tmp/deck.odp'): AppState {
   return appReducer(createInitialState(), { type: 'OPEN_FILE_SUCCESS', path, doc: { format: 'odp', editor: openOdp(bytes), path } });
+}
+
+// Real xlsx bytes with no XlsxEditor to build one directly: createOds() -> odsToXlsx() is documents.js's own PDF-bypassing bridge, reused here purely as a source of genuine xlsx bytes for the reducer tests below.
+function xlsxTestBytes(): Uint8Array<ArrayBuffer> {
+  const editor = createOds();
+  const sheet = editor.addSheet('Sheet1');
+  sheet.cell(0, 0).value = { kind: 'string', value: 'Total' };
+  return odsToXlsx(editor.toBytes());
+}
+
+// Mirrors format/open-document.ts's own xlsx branch exactly, so these reducer tests exercise OPEN_FILE_SUCCESS/UNDO against the identical XlsxOpenDocument shape the real TUI produces.
+function openXlsxDocument(bytes: Uint8Array<ArrayBuffer>, path = '/tmp/workbook.xlsx'): AppState {
+  return appReducer(createInitialState(), { type: 'OPEN_FILE_SUCCESS', path, doc: { format: 'xlsx', layout: readPdf(xlsxToPdf(bytes)), bytes, path } });
 }
 
 function markdownDocument(state: AppState): MarkdownOpenDocument {
@@ -304,6 +317,30 @@ describe('appReducer SET_SLIDE_NOTES on pptx', () => {
     const withNotes = appReducer(opened, { type: 'SET_SLIDE_NOTES', slideIndex: 0, notes: 'Remember to mention Q3 growth' });
     expect(withNotes.hasUnsavedChanges).toBe(true);
     expect(pptxDocument(withNotes).editor.slides()[0]?.notes).toBe('Remember to mention Q3 growth');
+  });
+});
+
+describe('appReducer xlsx (read-only PDF-preview) documents', () => {
+  it('opens with a status message pointing at the export-pdf flow, unlike every other format', () => {
+    const bytes = xlsxTestBytes();
+    const opened = openXlsxDocument(bytes, '/tmp/report.xlsx');
+
+    expect(opened.openDocument?.format).toBe('xlsx');
+    expect(opened.stack.map((screen) => screen.kind)).toEqual(['pdfPageList']);
+    expect(opened.status?.severity).toBe('info');
+    expect(opened.status?.text).toContain('read-only PDF preview');
+    expect(opened.status?.text).toContain('export pdf');
+
+    const docxOpened = appReducer(createInitialState(), { type: 'CREATE_DOCUMENT', format: 'docx' });
+    expect(docxOpened.status?.text).not.toContain('read-only');
+  });
+
+  it('has no undo history, the same as pdf and odb', () => {
+    const opened = openXlsxDocument(xlsxTestBytes());
+    const undone = appReducer(opened, { type: 'UNDO' });
+    expect(undone.status?.severity).toBe('warning');
+    expect(undone.status?.text).toContain('read-only');
+    expect(undone.openDocument).toBe(opened.openDocument);
   });
 });
 

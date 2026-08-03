@@ -100,13 +100,21 @@ export interface PdfOpenDocument {
   readonly path: string;
 }
 
-// The six formats that have a live-view editor, and therefore support every mutating action, `editor.toBytes()` saving, undo snapshots, and export to PDF. `odb`/`pdf` are read-only sources.
+// documents.js has no XlsxEditor at all -- there is no live-view object to hold, the way there is a `DocxEditor`/`OdtEditor`, and no `readXlsxContent` re-exported from documents.js's own public surface for this TUI to read a sheet grid from directly (see that package's own README: deliberately not re-exported, mirroring the readDocx/readPptx choice). What documents.js does have is a genuine `xlsxToPdf` conversion, so opening a .xlsx converts it through that once at open time and reads the result back with `readPdf`, exactly the same `LayoutDocument` shape a real .pdf opens as -- `layout` is what the pdf page-list/page-items/item-detail screens browse (see screens/editors/pdf/shared.ts's own broadened guard), reusing that whole screen family with no xlsx-specific viewer code at all. `bytes` is kept alongside so a real export re-runs `xlsxToPdf` with the caller's own fonts/diagnostics options at export time, rather than writing back the fixed preview conversion computed here.
+export interface XlsxOpenDocument {
+  readonly format: 'xlsx';
+  readonly layout: LayoutDocument;
+  readonly bytes: Uint8Array<ArrayBuffer>;
+  readonly path: string;
+}
+
+// The six formats that have a live-view editor, and therefore support every mutating action, `editor.toBytes()` saving, undo snapshots, and export to PDF. `odb`/`pdf`/`xlsx` are read-only sources.
 export type EditableOpenDocument = DocxOpenDocument | PptxOpenDocument | OdtOpenDocument | OdpOpenDocument | OdsOpenDocument | OdgOpenDocument;
 
 // Every format that can be written back to disk at all: the six live-view-editor formats above, plus markdown through its own plain `.source` string. This is a strictly broader question than "does this have a `.editor` object" -- every EditableOpenDocument call site (`mutate`/`reopenEditable` in reducer.ts, the `.editor.toBytes()` branches in exportToPdf/saveDocumentTo) assumes `.editor` exists, which is exactly why markdown is NOT folded into EditableOpenDocument itself despite also being writable. Screens that only need "can this be saved, and what extension does it get" (file-picker.tsx, save-as-prompt.tsx) should check WritableOpenDocument/isWritableDocument instead of EditableOpenDocument/isEditableDocument.
 export type WritableOpenDocument = EditableOpenDocument | MarkdownOpenDocument;
 
-export type OpenDocument = WritableOpenDocument | OdbOpenDocument | PdfOpenDocument;
+export type OpenDocument = WritableOpenDocument | OdbOpenDocument | PdfOpenDocument | XlsxOpenDocument;
 
 export type EditableFormat = EditableOpenDocument['format'];
 
@@ -262,6 +270,7 @@ export function rootScreenForFormat(format: OpenDocumentFormat): Screen {
     case 'markdown':
       return { kind: 'markdownLineList' };
     case 'pdf':
+    case 'xlsx':
       return { kind: 'pdfPageList' };
   }
 }

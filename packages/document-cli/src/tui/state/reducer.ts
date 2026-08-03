@@ -94,6 +94,8 @@ function documentWithPath(doc: OpenDocument, path: string): OpenDocument {
       return { format: 'markdown', source: doc.source, path };
     case 'pdf':
       return { format: 'pdf', layout: doc.layout, path };
+    case 'xlsx':
+      return { format: 'xlsx', layout: doc.layout, bytes: doc.bytes, path };
   }
 }
 
@@ -333,7 +335,8 @@ export function appReducer(state: AppState, action: Action): AppState {
           stack: [rootScreenForFormat(action.doc.format)],
         },
         'info',
-        `Opened ${action.path}`,
+        // xlsx has no editor to open at all -- action.doc is already a read-only PDF-preview conversion by the time it reaches here (see format/open-document.ts) -- so this is the one format whose "opened" message doubles as pointing the way to the one thing that can actually be done with it next.
+        action.doc.format === 'xlsx' ? `Opened ${action.path} as a read-only PDF preview -- press ':' then 'export pdf' to save it as a real PDF` : `Opened ${action.path}`,
       );
 
     case 'OPEN_FILE_ERROR':
@@ -715,7 +718,7 @@ export function appReducer(state: AppState, action: Action): AppState {
       if (doc === undefined) {
         return withStatus(state, 'info', 'There is nothing to undo');
       }
-      if (doc.format === 'odb' || doc.format === 'pdf') {
+      if (doc.format === 'odb' || doc.format === 'pdf' || doc.format === 'xlsx') {
         return withStatus(state, 'warning', `A ${doc.format} document is read-only, so it has no history to undo`);
       }
       const snapshot = state.undoStack.at(-1);

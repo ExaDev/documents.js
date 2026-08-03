@@ -1,5 +1,5 @@
 import { readFile, writeFile } from 'node:fs/promises';
-import { createDocx, createOdg, createOdp, createOds, createOdt, createPptx, decodeMarkdownText, encodeMarkdownText, openDocx, openOdg, openOdp, openOds, openOdt, openPptx, readOdbForms, readOdbReports, readOdbTables, readPdf } from 'documents.js';
+import { createDocx, createOdg, createOdp, createOds, createOdt, createPptx, decodeMarkdownText, encodeMarkdownText, openDocx, openOdg, openOdp, openOds, openOdt, openPptx, readOdbForms, readOdbReports, readOdbTables, readPdf, xlsxToPdf } from 'documents.js';
 import { decodePackage } from 'odf.js';
 import type { EditableFormat, OpenDocument } from '../state/types.js';
 import { detectFormat } from './detect-format.js';
@@ -41,8 +41,9 @@ export async function openDocumentAtPath(path: string): Promise<OpenDocument> {
     // No read/write round trip through markdown-codec here at all -- opening a .md file loads its raw text as `.source` verbatim, exactly the byte<->text boundary decodeMarkdownText already exists for (see documents.js's own src/markdown/text.ts). The ContentDocument pivot (readMarkdownContent) only ever enters on cross-format export -- see export-pdf.ts.
     case 'markdown':
       return { format, source: decodeMarkdownText(bytes), path };
+    // documents.js has no XlsxEditor and no readXlsxContent re-exported from its own public surface (see the doc comment on XlsxOpenDocument in state/types.ts), so a .xlsx opens read-only as a converted PDF preview: xlsxToPdf once here for the LayoutDocument the pdf page-list/page-items/item-detail screens already know how to browse, plus the original bytes kept alongside for a real export to re-run xlsxToPdf with the caller's own fonts/diagnostics later (see export-pdf.ts).
     case 'xlsx':
-      throw new Error('documents.js has no xlsx editor; convert the workbook to ods first (xlsxToOds) and open that');
+      return { format, layout: readPdf(xlsxToPdf(bytes)), bytes, path };
     case 'odf':
       throw new Error('A standalone .odf formula document has no editor; convert it to PDF (odfToPdf) instead');
   }
@@ -66,7 +67,7 @@ export function createNewDocument(format: EditableFormat): OpenDocument {
 }
 
 export async function saveDocumentTo(openDocument: OpenDocument, path: string): Promise<void> {
-  if (openDocument.format === 'odb' || openDocument.format === 'pdf') {
+  if (openDocument.format === 'odb' || openDocument.format === 'pdf' || openDocument.format === 'xlsx') {
     throw new Error(`A ${openDocument.format} document is opened read-only and cannot be written back`);
   }
   // Markdown has no editor object at all -- `.source` is written back to disk literally, the same byte<->text boundary opening it went through in reverse, never through markdown-codec's own readMarkdown/writeMarkdown.

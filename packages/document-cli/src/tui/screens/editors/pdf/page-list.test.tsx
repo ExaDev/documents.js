@@ -35,4 +35,14 @@ describe('PdfPageListScreen', () => {
     expect(frame).toContain('Page 1 -- 612×792pt, 1 text, 1 rect, 1 link');
     expect(frame).toContain('Page 2 -- 300×300pt, 1 text');
   });
+
+  // The whole point of xlsx opening as a read-only PDF preview (see state/types.ts's own XlsxOpenDocument doc comment): this screen -- and page-items.tsx/item-detail.tsx alongside it -- renders an open xlsx document exactly as it renders a real PDF, with no xlsx-specific branch anywhere in any of the three. requirePdfDocument (pdf/shared.ts) is the one broadened guard that makes this possible.
+  it('renders identically for an open xlsx document, since both share the identical LayoutDocument shape', async () => {
+    const { lastFrame } = render(<PdfHarness layout={SAMPLE_LAYOUT} format="xlsx" />);
+    const frame = await waitForFrame(lastFrame, (candidate) => candidate.includes('Page 1'));
+
+    expect(frame).toContain('Pages (2 of 2)');
+    expect(frame).toContain('Page 1 -- 612×792pt, 1 text, 1 rect, 1 link');
+    expect(frame).toContain('Page 2 -- 300×300pt, 1 text');
+  });
 });

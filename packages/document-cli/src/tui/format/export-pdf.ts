@@ -1,5 +1,5 @@
 import { writeFile } from 'node:fs/promises';
-import { docxToPdf, encodeMarkdownText, markdownToPdf, odgToPdf, odpToPdf, odsToPdf, odtToPdf, pptxToPdf, type DocumentToPdfOptions, type ProvidedFont } from 'documents.js';
+import { docxToPdf, encodeMarkdownText, markdownToPdf, odgToPdf, odpToPdf, odsToPdf, odtToPdf, pptxToPdf, xlsxToPdf, type DocumentToPdfOptions, type ProvidedFont } from 'documents.js';
 import { loadProvidedFonts } from '../../runtime/fonts.js';
 import type { Diagnostic, OpenDocument } from '../state/types.js';
 
@@ -36,6 +36,12 @@ export async function exportToPdf(openDocument: OpenDocument, destinationPath: s
   // The one place the ContentDocument pivot ever touches a markdown document in this TUI -- markdownToPdf runs directly on the raw source text, never on edit or save.
   if (openDocument.format === 'markdown') {
     const pdfBytes = markdownToPdf(encodeMarkdownText(openDocument.source), pdfOptions);
+    await writeFile(destinationPath, pdfBytes);
+    return;
+  }
+  // xlsx has no editor to read current bytes from (see state/types.ts's own XlsxOpenDocument doc comment) -- the original bytes captured at open time are re-converted here, with this call's own real fonts/diagnostics options, rather than reusing the fixed preview conversion `openDocumentAtPath` computed to build the read-only viewer.
+  if (openDocument.format === 'xlsx') {
+    const pdfBytes = xlsxToPdf(openDocument.bytes, pdfOptions);
     await writeFile(destinationPath, pdfBytes);
     return;
   }
