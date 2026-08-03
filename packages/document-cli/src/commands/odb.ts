@@ -8,8 +8,11 @@ import {
   OdbUnsupportedFormatError,
   odbToCsv,
   odbToXlsx,
+  readOdbForms,
+  readOdbReports,
   readOdbTables,
 } from 'documents.js';
+import { describeOdbForm, describeOdbReport, formatOdbFormLines, formatOdbReportLines, odbFormSummary } from '../odb-structure';
 import { createRuntimeSignal } from '../runtime/abort';
 import { createDiagnosticReporter } from '../runtime/diagnostics';
 import { EXIT_SUCCESS, EXIT_USAGE_ERROR, mapErrorToExit } from '../runtime/exit-codes';
@@ -25,7 +28,7 @@ interface OdbToCsvCliOptions extends OdbCliOptions {
 
 type AbortReason = 'interrupt' | 'timeout' | undefined;
 
-// Shared by all three odb commands -- OdbNoEmbeddedDataSourceError (no embedded engine at all) and OdbUnsupportedFormatError (a recognised-but-unimplemented HSQLDB script serialisation) can surface from readOdbTables regardless of which command called it, since odb-to-xlsx and odb-tables both extract every table exactly the way odb-to-csv does before either selects or skips a single one.
+// Shared by all five odb commands -- OdbNoEmbeddedDataSourceError (no embedded engine at all) and OdbUnsupportedFormatError (a recognised-but-unimplemented HSQLDB script serialisation) can surface from readOdbTables regardless of which command called it, since odb-to-xlsx and odb-tables both extract every table exactly the way odb-to-csv does before either selects or skips a single one. Neither error can arise from odb-forms/odb-reports at all (a form or report is a static ODF sub-document, resolved with no reference to the database's own storage engine), but they route through this same reporter anyway so an odf.js-level failure reads identically whichever odb command hit it.
 function reportOdbError(command: string, error: unknown, verbose: boolean, abortReason: AbortReason): number {
   if (error instanceof OdbNoEmbeddedDataSourceError || error instanceof OdbUnsupportedFormatError) {
     process.stderr.write(`[${command}] ${error.message}\n`);
@@ -120,6 +123,68 @@ async function runOdbTables(input: string, options: { readonly json: boolean }):
   }
 }
 
+// odb-forms and odb-reports both read STRUCTURE, not data: a form's own field-bound controls and a report's own band/group/formula layout live in static ODF sub-documents inside the package, resolved by odf.js without ever consulting the embedded database. That is why neither command needs (or offers) --table, an output path, or any of the conversion flags -- there is nothing to convert and nothing to write, only a structure to print.
+async function runOdbForms(input: string, options: { readonly json: boolean }): Promise<number> {
+  const command = 'odb-forms';
+  const { signal, getAbortReason } = createRuntimeSignal({});
+
+  try {
+    const inputBytes = await readInput(input, { signal });
+    const forms = readOdbForms(decodePackage(new Uint8Array(inputBytes)));
+
+    if (options.json) {
+      process.stdout.write(`${JSON.stringify(forms.map((form) => odbFormSummary(form)))}\n`);
+      return EXIT_SUCCESS;
+    }
+
+    if (forms.length === 0) {
+      process.stdout.write('This database declares no forms.\n');
+      return EXIT_SUCCESS;
+    }
+
+    for (const form of forms) {
+      process.stdout.write(`${describeOdbForm(form)}\n`);
+      for (const line of formatOdbFormLines(form)) {
+        process.stdout.write(`  ${line}\n`);
+      }
+    }
+    return EXIT_SUCCESS;
+  } catch (error) {
+    return reportOdbError(command, error, false, getAbortReason());
+  }
+}
+
+async function runOdbReports(input: string, options: { readonly json: boolean }): Promise<number> {
+  const command = 'odb-reports';
+  const { signal, getAbortReason } = createRuntimeSignal({});
+
+  try {
+    const inputBytes = await readInput(input, { signal });
+    const reports = readOdbReports(decodePackage(new Uint8Array(inputBytes)));
+
+    if (options.json) {
+      // Unlike a form (whose own `document` field carries the entire parsed sub-document -- see odbFormSummary), an OdbReport carries nothing but its own structure, so it serialises verbatim with no reshaping.
+      process.stdout.write(`${JSON.stringify(reports)}\n`);
+      return EXIT_SUCCESS;
+    }
+
+    if (reports.length === 0) {
+      process.stdout.write('This database declares no reports.\n');
+      return EXIT_SUCCESS;
+    }
+
+    for (const report of reports) {
+      process.stdout.write(`${describeOdbReport(report)}\n`);
+      for (const line of formatOdbReportLines(report)) {
+        process.stdout.write(`  ${line}\n`);
+      }
+    }
+    return EXIT_SUCCESS;
+  } catch (error) {
+    return reportOdbError(command, error, false, getAbortReason());
+  }
+}
+
 function registerOdbToXlsxCommand(program: Command): void {
   const command = program.command('odb-to-xlsx <input> [output]').description('extract every table an embedded .odb database declares into one xlsx workbook, one sheet per table');
   addOutOption(command);
@@ -155,8 +220,30 @@ function registerOdbTablesCommand(program: Command): void {
     });
 }
 
+function registerOdbFormsCommand(program: Command): void {
+  program
+    .command('odb-forms <input>')
+    .description("list every form an .odb declares, with each form's own data source and its field-bound controls")
+    .option('--json', 'emit the form structure as a JSON array instead of a human-readable report', false)
+    .action(async (input: string, options: { readonly json: boolean }) => {
+      process.exitCode = await runOdbForms(input, options);
+    });
+}
+
+function registerOdbReportsCommand(program: Command): void {
+  program
+    .command('odb-reports <input>')
+    .description("list every report an .odb declares, with each report's own data-source command, band/group structure, and rpt: formula expressions")
+    .option('--json', 'emit the report structure as a JSON array instead of a human-readable report', false)
+    .action(async (input: string, options: { readonly json: boolean }) => {
+      process.exitCode = await runOdbReports(input, options);
+    });
+}
+
 export function registerOdbCommands(program: Command): void {
   registerOdbToXlsxCommand(program);
   registerOdbToCsvCommand(program);
   registerOdbTablesCommand(program);
+  registerOdbFormsCommand(program);
+  registerOdbReportsCommand(program);
 }
