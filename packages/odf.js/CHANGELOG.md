@@ -1,3 +1,10 @@
+# [2.1.0](https://github.com/ExaDev/odf.js/compare/v2.0.0...v2.1.0) (2026-08-03)
+
+
+### Features
+
+* read cell- and page-anchored drawings from a spreadsheet ([425bec3](https://github.com/ExaDev/odf.js/commit/425bec3b7bc04e146e31481954ede5e25b873f6d))
+
 # [2.0.0](https://github.com/ExaDev/odf.js/compare/v1.13.2...v2.0.0) (2026-08-02)
 
 
