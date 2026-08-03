@@ -153,3 +153,17 @@ export function buildImageFrame(partPath: string, frame: Box): XmlElement {
     [el('draw:image', { 'xlink:href': partPath })],
   );
 }
+
+// Builds a fresh draw:frame containing a table:table DIRECTLY (no draw:text-box wrapper) for OdpSlide.addTable (slide.ts) -- odf.js's own readDrawFrameContent (typed/draw/shapes.ts) checks for a table:table child before it ever looks for draw:text-box/draw:image, so a table shape's own table:table sits at the same nesting depth those do, not inside one of them. The returned frame is a live OdpShape like any other -- rotationDeg works on it exactly the same way (resolveOdfShapeGeometry/applyOdfGeometry are generic over the frame's own content) -- while tableElement is handed back separately for the caller to wrap in an OdtTable (table.ts's own table:table content model is identical wherever it lives, see src/edit/odt/table.ts).
+export function buildTableFrame(frame: Box, tableElement: XmlElement): XmlElement {
+  return el(
+    'draw:frame',
+    {
+      'svg:x': formatOdfLength(frame.xPt),
+      'svg:y': formatOdfLength(frame.yPt),
+      'svg:width': formatOdfLength(frame.widthPt),
+      'svg:height': formatOdfLength(frame.heightPt),
+    },
+    [tableElement],
+  );
+}

@@ -11,6 +11,8 @@ import type { ImageInit, MediaContext } from './image';
 import { insertPictureShapeMedia } from './image';
 import { buildEmptyGroupSpTree, DML_NS, ensureNotesMaster, NOTES_MASTER_REL_TYPE, PML_NS } from './scaffold';
 import { buildTextBoxShape, PptxShape } from './shape';
+import type { PptxTableInit } from './table';
+import { buildDrawingTable, buildTableGraphicFrame, PptxTable } from './table';
 
 export interface TextBoxInit {
   readonly frame: Box;
@@ -19,6 +21,12 @@ export interface TextBoxInit {
 
 export interface SlideImageInit extends ImageInit {
   readonly frame: Box;
+}
+
+export interface SlideTableInit {
+  readonly frame: Box;
+  readonly table: PptxTableInit;
+  readonly rotationDeg?: number;
 }
 
 function directChild(parent: XmlElement, tag: string): XmlElement | undefined {
@@ -147,6 +155,16 @@ export class PptxSlide {
     const shapeElement = insertPictureShapeMedia(media, slideRoot, init.frame, init);
     spTree.children.push(shapeElement);
     return new PptxShape(spTree.children, shapeElement);
+  }
+
+  // A DrawingML table lives in its own p:graphicFrame, a shape kind distinct from p:sp/p:pic (see table.ts's own buildTableGraphicFrame) -- so it gets its own PptxTable view rather than a PptxShape.
+  addTable(init: SlideTableInit): PptxTable {
+    const spTree = findSpTree(this.live());
+    const id = nextIdIn(spTree);
+    const tableElement = buildDrawingTable(init.table);
+    const graphicFrame = buildTableGraphicFrame(init.frame, tableElement, id, init.rotationDeg);
+    spTree.children.push(graphicFrame);
+    return new PptxTable(tableElement);
   }
 
   get notes(): string {

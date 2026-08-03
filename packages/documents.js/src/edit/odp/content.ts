@@ -1,11 +1,11 @@
 import type { ContentDocument, ContentShape } from 'document-schema.js';
 import type { Package } from 'odf.js';
 import { base64ToBytes } from 'odf.js';
-import { populateParagraph } from '../odt/content';
+import { populateOdtTable, populateParagraph } from '../odt/content';
 import { createOdp } from './editor';
 import type { OdpSlide } from './slide';
 
-// ContentDocument -> a fresh odp Package, built entirely through the same edit/odp/* live-view primitives a caller would use by hand -- the odp-side counterpart to src/edit/pptx/content.ts's buildPptxPackage, and the write-side counterpart to src/odf/odp/read.ts's readOdpContent. Used by the PDF -> odp conversion path (src/layout/reconstruct.ts's own reconstructPresentation never produces a table block for a shape, so -- mirroring buildPptxPackage's own identical comment -- table shapes are out of scope here too), but written to handle any ContentShape a caller's own ContentDocument might carry.
+// ContentDocument -> a fresh odp Package, built entirely through the same edit/odp/* live-view primitives a caller would use by hand -- the odp-side counterpart to src/edit/pptx/content.ts's buildPptxPackage, and the write-side counterpart to src/odf/odp/read.ts's readOdpContent. Used by the PDF -> odp conversion path (src/layout/reconstruct.ts's own reconstructPresentation never produces a table block for a shape) and by the odp<->pptx bridge, which does.
 //
 // A shape's rotationDeg IS written back here (unlike buildPptxPackage's own documented gap for pptx, which has no a:xfrm/@rot setter yet) -- OdpShape.rotationDeg exists specifically because this task called for genuine draw:transform support, reusing odf.js's own transform.ts machinery (see shape.ts's own buildTransformAttr).
 export function buildOdpPackage(content: ContentDocument): Package {
@@ -38,6 +38,17 @@ function appendShape(slide: OdpSlide, shape: ContentShape): void {
     }
     return;
   }
+  if (shape.blocks.length === 1 && onlyBlock?.kind === 'table') {
+    const { shape: tableFrame, table } = slide.addTable({
+      frame: shape.frame,
+      table: { rows: onlyBlock.rows.length, columns: onlyBlock.columnWidthsPt.length, columnWidthsPt: onlyBlock.columnWidthsPt },
+    });
+    if (shape.rotationDeg !== undefined) {
+      tableFrame.rotationDeg = shape.rotationDeg;
+    }
+    populateOdtTable(table, onlyBlock);
+    return;
+  }
 
   const textShape = slide.addTextBox({ frame: shape.frame, text: '' });
   if (shape.rotationDeg !== undefined) {
@@ -48,7 +59,7 @@ function appendShape(slide: OdpSlide, shape: ContentShape): void {
   placeholder?.remove();
   for (const block of shape.blocks) {
     if (block.kind !== 'paragraph') {
-      continue; // a table or nested image inside a text shape is out of scope for this bridge -- PDF-reconstructed shapes never mix kinds (see reconstruct.ts), mirroring buildPptxPackage's own identical comment.
+      continue; // a nested table or image mixed alongside other blocks inside a single text shape is out of scope -- neither PDF-reconstructed shapes nor a real odp/pptx slide shape mix kinds this way, mirroring buildPptxPackage's own identical comment.
     }
     populateParagraph(textShape.appendParagraph(), block);
   }

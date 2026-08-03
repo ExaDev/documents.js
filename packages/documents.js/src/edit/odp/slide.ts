@@ -6,9 +6,11 @@ import { removeChild } from '../../xml/edit';
 import { el } from '../../xml/fragment';
 import { decodeOdfText } from '../../xml/odf-text';
 import { buildParagraph } from '../odt/paragraph';
+import type { TableInit } from '../odt/table';
+import { buildTable, OdtTable } from '../odt/table';
 import type { ImageInit, MediaContext } from './image';
 import { insertImageFrameMedia } from './image';
-import { buildTextBoxFrame, OdpShape } from './shape';
+import { buildTableFrame, buildTextBoxFrame, OdpShape } from './shape';
 
 export interface TextBoxInit {
   readonly frame: Box;
@@ -17,6 +19,11 @@ export interface TextBoxInit {
 
 export interface SlideImageInit extends ImageInit {
   readonly frame: Box;
+}
+
+export interface SlideTableInit {
+  readonly frame: Box;
+  readonly table: TableInit;
 }
 
 function directChild(parent: XmlElement, tag: string): XmlElement | undefined {
@@ -52,6 +59,12 @@ function buildNotesElement(pkg: Package, value: string): XmlElement {
 
 export interface SlideContext {
   readonly pkg: Package;
+}
+
+// The pair a table shape produces from OdpSlide.addTable: the frame itself (for frame/rotationDeg, exactly like any other OdpShape) and a live view over its table:table content (for cell population, exactly like a document-level OdtTable) -- two separate live views over the same draw:frame's own children, since OdpShape's own paragraphs()/text assume draw:text-box content a table shape doesn't have.
+export interface OdpTableShape {
+  readonly shape: OdpShape;
+  readonly table: OdtTable;
 }
 
 // A live view over a draw:page element's own shape list -- the odp equivalent of pptx/slide.ts's own PptxSlide. Unlike pptx's p:sldId/p:sldIdLst indirection, a draw:page's position among office:presentation's own children IS slide order (see odf.js's own typed/odp/read.ts top-of-file note), so this needs no id allocation of its own the way pptx/editor.ts's PptxEditor does.
@@ -98,6 +111,18 @@ export class OdpSlide {
     const frameElement = insertImageFrameMedia(media, init.frame, init);
     node.children.push(frameElement);
     return new OdpShape(node.children, frameElement, this.context.pkg);
+  }
+
+  // A table:table lives DIRECTLY inside its own draw:frame, no draw:text-box wrapper (see shape.ts's own buildTableFrame) -- so it gets its own OdtTable view (reused wholesale, see src/edit/odt/table.ts) rather than OdpShape's paragraphs()/text, which assume text-box content.
+  addTable(init: SlideTableInit): OdpTableShape {
+    const node = this.live();
+    const tableElement = buildTable(this.context.pkg, init.table);
+    const frameElement = buildTableFrame(init.frame, tableElement);
+    node.children.push(frameElement);
+    return {
+      shape: new OdpShape(node.children, frameElement, this.context.pkg),
+      table: new OdtTable(frameElement.children, tableElement, this.context.pkg),
+    };
   }
 
   // presentation:notes is a direct child of draw:page, typically wrapping a single draw:frame > draw:text-box with one text:p per line -- mirroring odf.js's own readSlideNotes (typed/odp/read.ts), which is not exported, so this is a small, deliberate reimplementation of the identical deep text:p search + decodeOdfText + join('\n') logic on the write side's own read-back path.

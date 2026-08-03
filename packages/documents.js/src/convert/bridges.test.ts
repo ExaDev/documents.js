@@ -448,9 +448,9 @@ describe('odp <-> pptx: shape rotation', () => {
   });
 });
 
-// minimalOdpBytes() (test-support/odp.ts) carries content buildOdpPackage/buildPptxPackage do NOT fully round-trip -- a rotated frame, a grouped pair of shapes, an image, and a TABLE SHAPE (a draw:frame whose content is a table:table directly, not inside a text box). This is a genuine, real fidelity finding for THIS bridge specifically, distinct from the PDF-pivot conversions' own already-documented table-in-shape gap: buildPptxPackage's own appendShape (src/edit/pptx/content.ts) silently drops any non-paragraph block inside a shape's own text-box loop, a scope narrowing whose own comment ("PDF-reconstructed shapes never mix kinds") assumed its only caller was the PDF-reconstruction path -- odpToPptx is a second, non-PDF-reconstructed caller for which that assumption no longer holds, and a real odp table shape silently becomes an EMPTY pptx text box rather than a table. Documented here, in the README's own Gotchas, and left as a bounded, tracked gap rather than fixed in this change -- closing it properly means teaching buildPptxPackage/buildOdpPackage to write real tables into a slide shape at all, a materially larger feature than this task's own explicit scope.
-describe('odp <-> pptx: real fidelity gap -- a table shape does not survive odpToPptx', () => {
-  it('carries the rotated title, the grouped shapes, the image, and the notes through odpToPptx, but silently drops the table shape\'s own content', () => {
+// minimalOdpBytes() (test-support/odp.ts) carries a rotated frame, a grouped pair of shapes, an image, and a TABLE SHAPE (a draw:frame whose content is a table:table directly, not inside a text box) -- the same real-shape variety odf.js's own readOdp fixture verified against genuine LibreOffice 26.2 output. buildOdpPackage/buildPptxPackage's own appendShape (src/edit/odp/content.ts, src/edit/pptx/content.ts) now writes a table block into a real table:table/a:tbl shape via OdpSlide.addTable/PptxSlide.addTable, so the table shape's own content survives this bridge exactly like every other shape kind on this fixture.
+describe('odp <-> pptx: a table shape survives odpToPptx', () => {
+  it('carries the rotated title, the grouped shapes, the image, the notes, and the table shape\'s own cell content through odpToPptx', () => {
     const pptxBytes = odpToPptx(minimalOdpBytes());
     const content = pptxContentOf(pptxBytes);
     expect(content.slides).toHaveLength(2);
@@ -465,8 +465,20 @@ describe('odp <-> pptx: real fidelity gap -- a table shape does not survive odpT
     // Slide 2: the image shape survives (buildPptxPackage's appendShape has a dedicated image branch)...
     const slide2 = content.slides[1]!;
     expect(slide2.shapes.some((shape) => shape.blocks.length === 1 && shape.blocks[0]?.kind === 'image')).toBe(true);
-    // ...but the table shape's own content is gone: every remaining shape is either the image or an empty text box, never a 'table' block.
-    expect(slide2.shapes.every((shape) => shape.blocks.every((block) => block.kind !== 'table'))).toBe(true);
+    // ...and the table shape's own cell content now survives too, as a real 'table' block.
+    const tableShape = slide2.shapes.find((shape) => shape.blocks.length === 1 && shape.blocks[0]?.kind === 'table');
+    const tableBlock = tableShape?.blocks[0];
+    expect(tableBlock?.kind).toBe('table');
+    if (tableBlock?.kind === 'table') {
+      expect(tableBlock.rows).toHaveLength(1);
+      expect(tableBlock.rows[0]?.cells).toHaveLength(2);
+      const cellText = (row: number, col: number): string => {
+        const block = tableBlock.rows[row]?.cells[col]?.blocks[0];
+        return block?.kind === 'paragraph' ? block.runs.map((r) => r.text).join('') : '';
+      };
+      expect(cellText(0, 0)).toBe('A1');
+      expect(cellText(0, 1)).toBe('B1');
+    }
   });
 });
 
