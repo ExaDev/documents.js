@@ -1,3 +1,10 @@
+# [2.1.0](https://github.com/ExaDev/document-schema.js/compare/v2.0.0...v2.1.0) (2026-08-03)
+
+
+### Features
+
+* add a style field to LayoutLine and LayoutPath for stroke dash patterns ([4f5f49b](https://github.com/ExaDev/document-schema.js/commit/4f5f49b803ea710425fce42d2c2825fc311461f8))
+
 # [2.0.0](https://github.com/ExaDev/document-schema.js/compare/v1.10.1...v2.0.0) (2026-08-02)
 
 
