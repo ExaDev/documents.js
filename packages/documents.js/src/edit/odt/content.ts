@@ -1,5 +1,6 @@
 import type { ContentBlock, ContentDocument, ContentEmbeddedObjectBlock, ContentParagraph, ContentTable } from 'document-schema.js';
 import type { Package } from 'odf.js';
+import { drawingOfBlock, embeddedDrawingVectors, FLOW_CONTAINER_ORIGIN } from '../../model/embedded-drawing';
 import { formulaOfBlock, formulaPlaceholderText } from '../../model/formula';
 import type { OdtBody } from './editor';
 import { createOdt } from './editor';
@@ -207,8 +208,14 @@ function appendBlock(body: OdtBody, block: ContentBlock): void {
 //
 // The plain-text stand-in (the formula's own StarMath annotation, or the literal "[formula]") remains the fallback for exactly one case, mirroring buildDocxPackage's own identical narrowing: a formula carrying no MathML nodes at all. Writing an empty formula sub-document would produce an object real consumers render as an empty box, and writing nothing at all would make the formula vanish without trace -- the silent-loss failure mode this codebase's conventions rule out.
 //
-// A reachable 'drawing' objectKind is still deliberately written as nothing here, for the reason buildDocxPackage's own appendEmbeddedObject states in full: there is no vector-primitive writer under src/edit/odt/ to write a rect/ellipse/line/path into a text document with, and degrading real geometry to a text stand-in would be noise rather than information.
+// A 'drawing' objectKind -- what reconstructWordprocessing wraps a page's recovered vector primitives in (src/layout/reconstruct.ts) -- becomes a paragraph carrying REAL draw:rect/draw:ellipse/draw:line/draw:path elements, page-anchored so the recovered page-absolute coordinates land where they were recovered from (OdtBody.appendVectors, src/edit/odt/editor.ts). Those elements are built by src/edit/odg/vector.ts's own writer, imported and reused rather than reimplemented: ODF's vector-primitive vocabulary is identical in a text document and a drawing, and odf.js's own readDrawPageContent reads both through one function.
+//
+// The remaining objectKinds (a nested wordprocessing/presentation/spreadsheet document) are still unhandled: no reader this package depends on produces one.
 function appendEmbeddedObject(body: OdtBody, block: ContentEmbeddedObjectBlock): void {
+  if (drawingOfBlock(block) !== undefined) {
+    body.appendVectors(embeddedDrawingVectors(block, FLOW_CONTAINER_ORIGIN));
+    return;
+  }
   const formula = formulaOfBlock(block);
   if (formula === undefined) {
     return;

@@ -1,12 +1,31 @@
 import { describe, expect, it } from 'vitest';
 import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
-import type { ContentDocument } from 'document-schema.js';
-import { bytesToBase64 } from 'odf.js';
+import type { ContentDocument, ContentVector } from 'document-schema.js';
+import type { Package, XmlElement } from 'odf.js';
+import { bytesToBase64, childrenWithTag, decodePackage, encodePackage, findChildElement, readDrawPageContent, rootElement } from 'odf.js';
+import { rotationsOf, VECTOR_FIXTURE, vectorDrawingBlock, withoutRotation } from '../../test-support/vectors';
 import { buildOdpPackage } from './content';
 import { OdpEditor } from './editor';
 
 function presentationDoc(slides: Extract<ContentDocument, { kind: 'presentation' }>['slides']): ContentDocument {
   return { kind: 'presentation', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, slides };
+}
+
+function firstDrawPage(pkg: Package): XmlElement {
+  const part = pkg.parts['content.xml'];
+  const root = part?.kind === 'xml' ? rootElement(part.nodes) : undefined;
+  const body = root === undefined ? undefined : findChildElement(root.children, 'office:body');
+  const presentation = body === undefined ? undefined : findChildElement(body.children, 'office:presentation');
+  const [page] = presentation === undefined ? [] : childrenWithTag(presentation, 'draw:page');
+  if (page === undefined) {
+    throw new Error('expected an office:presentation/draw:page element');
+  }
+  return page;
+}
+
+// A slide's vectors read back through odf.js's OWN readDrawPageContent -- the same reader readOdg uses for a real drawing page, and a genuinely independent oracle rather than an inverse written alongside this package's writer. readOdp itself cannot serve here: ContentSlide has a shapes array and no vectors array at all, which is exactly why buildOdpPackage writes vector primitives as page-level geometry rather than as shapes.
+function readSlideVectors(pkg: Package): ContentVector[] {
+  return readDrawPageContent(firstDrawPage(pkg).children, pkg).vectors;
 }
 
 const ZERO_INSETS = { insetLeftPt: 0, insetTopPt: 0, insetRightPt: 0, insetBottomPt: 0 };
@@ -94,5 +113,40 @@ describe('buildOdpPackage', () => {
     expect(slides).toHaveLength(2);
     expect(slides[0]!.notes).toBe('First slide notes');
     expect(slides[1]!.notes).toBe('');
+  });
+
+  it('writes a shape carrying a recovered drawing as real draw: vector primitives that survive a build-then-read round trip', () => {
+    const size = { widthPt: 960, heightPt: 540 };
+    const content = presentationDoc([
+      { size, notes: '', shapes: [{ frame: { xPt: 0, yPt: 0, ...size }, ...ZERO_INSETS, blocks: [vectorDrawingBlock(size)] }] },
+    ]);
+    // Re-encoded and re-decoded, so what is read back has genuinely been through the zip/XML serialiser rather than being the same in-memory tree the writer produced.
+    const pkg = decodePackage(encodePackage(buildOdpPackage(content)));
+    const recovered = readSlideVectors(pkg);
+    expect(withoutRotation(recovered)).toEqual(withoutRotation(VECTOR_FIXTURE));
+    expect(rotationsOf(recovered)).toEqual([undefined, undefined, undefined, undefined, expect.closeTo(30, 4)]);
+    // Each vector is page-level geometry on the draw:page itself, not a draw:frame -- and the containing ContentShape adds no empty text box of its own.
+    expect(firstDrawPage(pkg).children.filter((child) => child.type === 'element').map((child) => child.tag)).toEqual([
+      'draw:rect',
+      'draw:ellipse',
+      'draw:line',
+      'draw:path',
+      'draw:rect',
+    ]);
+  });
+
+  it('translates a recovered drawing by its containing shape\'s own frame', () => {
+    const size = { widthPt: 960, heightPt: 540 };
+    const content = presentationDoc([
+      { size, notes: '', shapes: [{ frame: { xPt: 100, yPt: 50, widthPt: 400, heightPt: 300 }, ...ZERO_INSETS, blocks: [vectorDrawingBlock({ widthPt: 400, heightPt: 300 })] }] },
+    ]);
+    const pkg = decodePackage(encodePackage(buildOdpPackage(content)));
+    const [firstVector] = readSlideVectors(pkg);
+    const [firstFixture] = VECTOR_FIXTURE;
+    if (firstVector?.kind !== 'rect' || firstFixture?.kind !== 'rect') {
+      throw new Error('expected the fixture to start with a rect');
+    }
+    expect(firstVector.frame.xPt).toBeCloseTo(firstFixture.frame.xPt + 100, 6);
+    expect(firstVector.frame.yPt).toBeCloseTo(firstFixture.frame.yPt + 50, 6);
   });
 });

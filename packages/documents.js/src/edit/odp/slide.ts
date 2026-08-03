@@ -1,3 +1,4 @@
+import type { ContentVector } from 'document-schema.js';
 import type { Package, XmlElement, XmlNode } from 'odf.js';
 import { formatOdfLength } from 'odf.js';
 import { elementsWithTag } from 'ooxml.js';
@@ -5,6 +6,8 @@ import type { Box } from '../../model/geometry';
 import { removeChild } from '../../xml/edit';
 import { el } from '../../xml/fragment';
 import { decodeOdfText } from '../../xml/odf-text';
+import type { OdgVector } from '../odg/vector';
+import { appendVectorTo } from '../odg/vector';
 import { buildParagraph } from '../odt/paragraph';
 import type { TableInit } from '../odt/table';
 import { buildTable, OdtTable } from '../odt/table';
@@ -123,6 +126,11 @@ export class OdpSlide {
       shape: new OdpShape(node.children, frameElement, this.context.pkg),
       table: new OdtTable(frameElement.children, tableElement, this.context.pkg),
     };
+  }
+
+  // A vector primitive (rect/ellipse/line/path) appended alongside this slide's shapes, in the SAME draw:page children list -- document order is paint order here exactly as it is for an odg page (see OdgPage's own note on why no draw:z-index is ever written). This reuses src/edit/odg/vector.ts's builders WHOLESALE, mirroring how OdpShape/OdtParagraph are themselves reused across formats elsewhere in this package: draw:rect/draw:ellipse/draw:line/draw:path carry byte-for-byte the same attribute vocabulary on a presentation's draw:page as on a drawing's, and odf.js's own readDrawPageContent reads both through one function. A slide is positioned against its page, so nothing here is text-flow anchored.
+  addVector(vector: ContentVector): OdgVector {
+    return appendVectorTo(this.live().children, this.context.pkg, vector);
   }
 
   // presentation:notes is a direct child of draw:page, typically wrapping a single draw:frame > draw:text-box with one text:p per line -- mirroring odf.js's own readSlideNotes (typed/odp/read.ts), which is not exported, so this is a small, deliberate reimplementation of the identical deep text:p search + decodeOdfText + join('\n') logic on the write side's own read-back path.

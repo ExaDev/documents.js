@@ -1,7 +1,8 @@
-import type { ContentFormula } from 'document-schema.js';
+import type { ContentFormula, ContentVector } from 'document-schema.js';
 import type { Package, XmlElement } from 'odf.js';
 import { decodePackage, encodePackage } from 'odf.js';
 import type { Box } from '../../model/geometry';
+import { buildVectorElement } from '../odg/vector';
 import { ensurePageBreakStyleName } from './automatic-styles';
 import { insertFormulaFrameMedia } from './formula';
 import { buildList, OdtList } from './list';
@@ -19,6 +20,7 @@ export interface OdtBody {
   appendList(): OdtList;
   appendPageBreak(): void;
   appendFormula(formula: ContentFormula, frame: Box): OdtParagraph;
+  appendVectors(vectors: readonly ContentVector[]): OdtParagraph;
 }
 
 function findContentRoot(pkg: Package): XmlElement {
@@ -76,6 +78,18 @@ class OdtBodyImpl implements OdtBody {
   appendFormula(formula: ContentFormula, frame: Box): OdtParagraph {
     const paragraphElement = buildParagraph(this.pkg);
     paragraphElement.children.push(insertFormulaFrameMedia(this.pkg, frame, formula));
+    this.officeText.children.push(paragraphElement);
+    return new OdtParagraph(this.officeText.children, paragraphElement, this.pkg);
+  }
+
+  // Appends a paragraph whose only content is a run of real vector primitives -- draw:rect/draw:ellipse/draw:line/draw:path elements built by src/edit/odg/vector.ts's shared writer, anchored to this one paragraph but positioned against the PAGE (see that module's own buildVectorElement note and style.ts's TEXT_FLOW_ANCHOR_ATTRS for why both halves of that anchoring are needed). The odt counterpart of appendFormula above: a text document has no container for bare geometry, so a paragraph carries it, exactly as one carries an embedded formula object.
+  //
+  // One paragraph holds the WHOLE run rather than one paragraph per vector: they came from a single embedded drawing block covering one page's worth of geometry, they are all positioned page-absolutely, and an extra empty paragraph per rect would add real, visible vertical space to the reflowed text for no gain.
+  appendVectors(vectors: readonly ContentVector[]): OdtParagraph {
+    const paragraphElement = buildParagraph(this.pkg);
+    for (const vector of vectors) {
+      paragraphElement.children.push(buildVectorElement(this.pkg, vector, { textFlowAnchored: true }));
+    }
     this.officeText.children.push(paragraphElement);
     return new OdtParagraph(this.officeText.children, paragraphElement, this.pkg);
   }

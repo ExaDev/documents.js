@@ -1,12 +1,40 @@
 import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
-import type { ContentDocument } from 'document-schema.js';
+import type { ContentDocument, ContentVector } from 'document-schema.js';
+import type { Package, XmlElement } from 'odf.js';
+import { childrenWithTag, decodePackage, encodePackage, findChildElement, readDrawPageContent, rootElement } from 'odf.js';
+import { attr } from 'ooxml.js';
 import { describe, expect, it } from 'vitest';
 import { readOdtContent } from '../../odf/odt/read';
+import { rotationsOf, VECTOR_FIXTURE, vectorDrawingBlock, withoutRotation } from '../../test-support/vectors';
 import { buildOdtPackage } from './content';
 import { OdtEditor } from './editor';
 
 function wordDoc(sections: Extract<ContentDocument, { kind: 'wordprocessing' }>['sections']): ContentDocument {
   return { kind: 'wordprocessing', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, sections };
+}
+
+function contentRoot(pkg: Package): XmlElement {
+  const part = pkg.parts['content.xml'];
+  const root = part?.kind === 'xml' ? rootElement(part.nodes) : undefined;
+  if (root === undefined) {
+    throw new Error('expected an xml content.xml part with a root element');
+  }
+  return root;
+}
+
+function officeText(pkg: Package): XmlElement {
+  const root = contentRoot(pkg);
+  const body = findChildElement(root.children, 'office:body');
+  const text = body === undefined ? undefined : findChildElement(body.children, 'office:text');
+  if (text === undefined) {
+    throw new Error('expected an office:body/office:text element');
+  }
+  return text;
+}
+
+// Every vector this package wrote into a text document's flow, read back through odf.js's OWN readDrawPageContent -- the same reader readOdg uses for a real drawing page -- rather than through an inverse written alongside the writer. A text-anchored vector lives inside the text:p it is anchored to (see OdtBody.appendVectors), so this hands that paragraph's children to the reader exactly as readOdg hands it a draw:page's.
+function readFlowVectors(pkg: Package): ContentVector[] {
+  return childrenWithTag(officeText(pkg), 'text:p').flatMap((paragraph) => readDrawPageContent(paragraph.children, pkg).vectors);
 }
 
 describe('buildOdtPackage', () => {
@@ -181,5 +209,53 @@ describe('buildOdtPackage', () => {
     expect(() => buildOdtPackage(content)).not.toThrow();
     const editor = new OdtEditor(buildOdtPackage(content));
     expect(editor.paragraphs().map((p) => p.text)).toEqual(['Before', 'After']);
+  });
+
+  it('writes a recovered drawing block as real draw: vector primitives that survive a build-then-read round trip', () => {
+    const content = wordDoc([
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+        blocks: [{ kind: 'paragraph', runs: [{ text: 'Before' }] }, vectorDrawingBlock({ widthPt: 612, heightPt: 792 }), { kind: 'paragraph', runs: [{ text: 'After' }] }],
+      },
+    ]);
+    // Re-encoded and re-decoded, so what is read back has genuinely been through the zip/XML serialiser rather than being the same in-memory tree the writer produced.
+    const pkg = decodePackage(encodePackage(buildOdtPackage(content)));
+    const recovered = readFlowVectors(pkg);
+    expect(withoutRotation(recovered)).toEqual(withoutRotation(VECTOR_FIXTURE));
+    expect(rotationsOf(recovered)).toEqual([undefined, undefined, undefined, undefined, expect.closeTo(30, 4)]);
+    // The surrounding text is untouched: the vectors sit in one anchor paragraph of their own between the two real ones.
+    expect(new OdtEditor(pkg).paragraphs().map((p) => p.text)).toEqual(['Before', '', 'After']);
+  });
+
+  // A vector's coordinates are page-absolute (that is what reconstructWordprocessing recovers), so an anchor paragraph is not enough on its own: without style:vertical-rel="page" every shape would be measured from wherever its anchor paragraph flowed to instead.
+  it('anchors each vector to its paragraph but positions it against the page, behind the text', () => {
+    const content = wordDoc([
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+        blocks: [vectorDrawingBlock({ widthPt: 612, heightPt: 792 })],
+      },
+    ]);
+    const pkg = decodePackage(encodePackage(buildOdtPackage(content)));
+    const [anchorParagraph] = childrenWithTag(officeText(pkg), 'text:p');
+    const vectorElements = anchorParagraph!.children.filter((child): child is XmlElement => child.type === 'element');
+    expect(vectorElements.map((element) => element.tag)).toEqual(['draw:rect', 'draw:ellipse', 'draw:line', 'draw:path', 'draw:rect']);
+    expect(vectorElements.map((element) => attr(element, 'text:anchor-type'))).toEqual(Array.from(vectorElements, () => 'paragraph'));
+
+    const automaticStyles = findChildElement(contentRoot(pkg).children, 'office:automatic-styles');
+    if (automaticStyles === undefined) {
+      throw new Error('expected an office:automatic-styles element');
+    }
+    const graphicProperties = childrenWithTag(automaticStyles, 'style:style')
+      .filter((style) => attr(style, 'style:family') === 'graphic')
+      .flatMap((style) => childrenWithTag(style, 'style:graphic-properties'));
+    expect(graphicProperties).toHaveLength(vectorElements.length);
+    for (const properties of graphicProperties) {
+      expect(attr(properties, 'style:horizontal-rel')).toBe('page');
+      expect(attr(properties, 'style:vertical-rel')).toBe('page');
+      expect(attr(properties, 'style:run-through')).toBe('background');
+      expect(attr(properties, 'style:wrap')).toBe('run-through');
+    }
   });
 });
