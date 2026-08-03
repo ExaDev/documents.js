@@ -1,6 +1,7 @@
 import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
 import type { ContentDocument } from 'document-schema.js';
 import { describe, expect, it } from 'vitest';
+import { readOdtContent } from '../../odf/odt/read';
 import { buildOdtPackage } from './content';
 import { OdtEditor } from './editor';
 
@@ -94,6 +95,75 @@ describe('buildOdtPackage', () => {
     expect(rows[0]!.cells()).toHaveLength(2);
     expect(rows[0]!.cells()[0]!.text).toBe('A1');
     expect(rows[1]!.cells()[1]!.text).toBe('B2');
+  });
+
+  it('a vertically merged (rowSpan) cell survives a build-then-read round trip as merged, not as two ordinary cells', () => {
+    const content = wordDoc([
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+        blocks: [
+          {
+            kind: 'table',
+            columnWidthsPt: [100, 100],
+            rows: [
+              { cells: [{ blocks: [{ kind: 'paragraph', runs: [{ text: 'A1' }] }], rowSpan: 2 }, { blocks: [{ kind: 'paragraph', runs: [{ text: 'B1' }] }] }] },
+              { cells: [{ blocks: [] }, { blocks: [{ kind: 'paragraph', runs: [{ text: 'B2' }] }] }] },
+            ],
+          },
+        ],
+      },
+    ]);
+    const pkg = buildOdtPackage(content);
+    const roundTripped = readOdtContent(pkg);
+    if (roundTripped.kind !== 'wordprocessing') {
+      throw new Error('expected a wordprocessing ContentDocument');
+    }
+    const tableBlock = roundTripped.sections[0]!.blocks[0];
+    expect(tableBlock?.kind).toBe('table');
+    if (tableBlock?.kind !== 'table') {
+      throw new Error('expected a table block');
+    }
+    // ODF keeps one array entry per grid position regardless of merges, so both rows still report two cells each.
+    expect(tableBlock.rows[0]?.cells).toHaveLength(2);
+    expect(tableBlock.rows[1]?.cells).toHaveLength(2);
+    expect(tableBlock.rows[0]?.cells[0]?.rowSpan).toBe(2);
+    expect(tableBlock.rows[0]?.cells[0]?.blocks[0]).toMatchObject({ kind: 'paragraph', runs: [{ text: 'A1' }] });
+    expect(tableBlock.rows[1]?.cells[0]?.rowSpan).toBeUndefined();
+    expect(tableBlock.rows[1]?.cells[0]?.blocks).toEqual([]);
+    expect(tableBlock.rows[0]?.cells[1]?.blocks[0]).toMatchObject({ kind: 'paragraph', runs: [{ text: 'B1' }] });
+    expect(tableBlock.rows[1]?.cells[1]?.blocks[0]).toMatchObject({ kind: 'paragraph', runs: [{ text: 'B2' }] });
+  });
+
+  it('a horizontally merged (colSpan) cell survives a build-then-read round trip as merged, not as two ordinary cells', () => {
+    const content = wordDoc([
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+        blocks: [
+          {
+            kind: 'table',
+            columnWidthsPt: [100, 100],
+            rows: [{ cells: [{ blocks: [{ kind: 'paragraph', runs: [{ text: 'A1' }] }], colSpan: 2 }, { blocks: [] }] }],
+          },
+        ],
+      },
+    ]);
+    const pkg = buildOdtPackage(content);
+    const roundTripped = readOdtContent(pkg);
+    if (roundTripped.kind !== 'wordprocessing') {
+      throw new Error('expected a wordprocessing ContentDocument');
+    }
+    const tableBlock = roundTripped.sections[0]!.blocks[0];
+    expect(tableBlock?.kind).toBe('table');
+    if (tableBlock?.kind !== 'table') {
+      throw new Error('expected a table block');
+    }
+    // ODF writes a real table:covered-table-cell placeholder for the consumed column, unlike docx's gridSpan-collapse -- so this row still reports two cells.
+    expect(tableBlock.rows[0]?.cells).toHaveLength(2);
+    expect(tableBlock.rows[0]?.cells[0]?.colSpan).toBe(2);
+    expect(tableBlock.rows[0]?.cells[0]?.blocks[0]).toMatchObject({ kind: 'paragraph', runs: [{ text: 'A1' }] });
+    expect(tableBlock.rows[0]?.cells[1]?.blocks).toEqual([]);
   });
 
   it('skips image blocks (documented gap: odf.js readOdt does not read them back)', () => {

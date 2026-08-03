@@ -29,6 +29,35 @@ describe('OdtTable', () => {
     expect(() => table.cell(0, 5)).toThrow(/column 5/);
   });
 
+  it('colSpan/rowSpan write and read table:number-columns/rows-spanned, and clearing them removes the attribute', () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 1, columns: 2 });
+    const cell = table.cell(0, 0);
+    expect(cell.colSpan).toBeUndefined();
+    expect(cell.rowSpan).toBeUndefined();
+    cell.colSpan = 2;
+    cell.rowSpan = 3;
+    expect(cell.colSpan).toBe(2);
+    expect(cell.rowSpan).toBe(3);
+    cell.colSpan = undefined;
+    cell.rowSpan = undefined;
+    expect(cell.colSpan).toBeUndefined();
+    expect(cell.rowSpan).toBeUndefined();
+  });
+
+  it('appendEmptyRow + appendCell/appendCoveredCell build a row cell by cell, matching appendRow\'s own uniform-grid cell count', () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 0, columns: 2 });
+    const row = table.appendEmptyRow();
+    const cell = row.appendCell();
+    cell.paragraphs()[0]!.appendRun({ text: 'A1' });
+    row.appendCoveredCell();
+    expect(table.rows()).toHaveLength(1);
+    // cells() only surfaces table:table-cell, not table:covered-table-cell, so the covered placeholder is invisible to it -- matching odf.js's own readTableRow, which reads a covered-table-cell as a distinct, contentless entry.
+    expect(table.rows()[0]!.cells()).toHaveLength(1);
+    expect(table.rows()[0]!.cells()[0]!.text).toBe('A1');
+  });
+
   it('remove() removes the table and throws on any further use', () => {
     const editor = createOdt();
     const table = editor.body.appendTable({ rows: 1, columns: 1 });
