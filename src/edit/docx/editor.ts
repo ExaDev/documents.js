@@ -1,5 +1,8 @@
 import type { Package, XmlElement } from 'ooxml.js';
 import { decodePackage, encodePackage, rootElement } from 'ooxml.js';
+import { resolveMetadataTimestamps } from '../../model/metadata';
+import type { ClockPort } from '../../ports/clock';
+import { systemClock } from '../../ports/clock';
 import { el } from '../../xml/fragment';
 import type { ImageMediaContext } from './paragraph';
 import { buildParagraph, DocxParagraph } from './paragraph';
@@ -141,6 +144,13 @@ export function openDocx(bytes: Uint8Array<ArrayBuffer>): DocxEditor {
   return new DocxEditor(decodePackage(bytes));
 }
 
-export function createDocx(): DocxEditor {
-  return new DocxEditor(createEmptyDocxPackage());
+export interface CreateDocxOptions {
+  readonly clock?: ClockPort;
+}
+
+// Creates a fresh docx with real docProps/core.xml creation/modification timestamps, matching every real document producer's own behaviour -- systemClock fires by default (options.clock overrides it, e.g. with fixedClock in a test), never behind an opt-in flag. See src/model/metadata.ts's resolveMetadataTimestamps for the exact precedence.
+export function createDocx(options?: CreateDocxOptions): DocxEditor {
+  const clock = options?.clock ?? systemClock;
+  const metadata = resolveMetadataTimestamps({}, clock);
+  return new DocxEditor(createEmptyDocxPackage({ metadata }));
 }

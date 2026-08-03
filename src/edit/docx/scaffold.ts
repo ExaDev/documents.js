@@ -1,5 +1,7 @@
+import type { LayoutMetadata } from 'document-schema.js';
 import type { Package, XmlNode } from 'ooxml.js';
 import { el } from '../../xml/fragment';
+import { addCoreProperties } from '../../opc/core-properties';
 
 const CONTENT_TYPES_NS = 'http://schemas.openxmlformats.org/package/2006/content-types';
 const RELS_NS = 'http://schemas.openxmlformats.org/package/2006/relationships';
@@ -16,8 +18,12 @@ function declaration(): XmlNode {
   };
 }
 
-// Builds a minimal but valid, openable docx package from nothing: [Content_Types].xml, the root relationship to word/document.xml, an empty body with a default US-Letter section, and a styles part with just the mandatory default Normal paragraph style.
-export function createEmptyDocxPackage(): Package {
+export interface CreateEmptyDocxPackageOptions {
+  readonly metadata?: LayoutMetadata;
+}
+
+// Builds a minimal but valid, openable docx package from nothing: [Content_Types].xml, the root relationship to word/document.xml, an empty body with a default US-Letter section, and a styles part with just the mandatory default Normal paragraph style. A caller passing no options gets byte-for-byte the same package as before docProps/core.xml support existed -- options.metadata is purely additive: only when it is supplied does a real docProps/core.xml part get written at all (see src/opc/core-properties.ts's addCoreProperties).
+export function createEmptyDocxPackage(options?: CreateEmptyDocxPackageOptions): Package {
   const contentTypes = el('Types', { xmlns: CONTENT_TYPES_NS }, [
     el('Default', { Extension: 'rels', ContentType: 'application/vnd.openxmlformats-package.relationships+xml' }),
     el('Default', { Extension: 'xml', ContentType: 'application/xml' }),
@@ -67,7 +73,7 @@ export function createEmptyDocxPackage(): Package {
     ]),
   ]);
 
-  return {
+  const pkg: Package = {
     parts: {
       '[Content_Types].xml': { kind: 'xml', nodes: [declaration(), contentTypes] },
       '_rels/.rels': { kind: 'xml', nodes: [declaration(), rootRels] },
@@ -76,4 +82,8 @@ export function createEmptyDocxPackage(): Package {
       'word/styles.xml': { kind: 'xml', nodes: [declaration(), styles] },
     },
   };
+  if (options?.metadata !== undefined) {
+    addCoreProperties(pkg, options.metadata);
+  }
+  return pkg;
 }

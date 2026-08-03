@@ -173,7 +173,9 @@ export { DEFAULT_LAYOUT_FONT } from './model/style';
 export { DocxBytesSchema, MarkdownBytesSchema, OdgBytesSchema, OdpBytesSchema, OdsBytesSchema, OdtBytesSchema, PdfBytesSchema, PptxBytesSchema, XlsxBytesSchema } from './model/bytes';
 
 // --- The live-view read+write editors: a real manipulation API for docx/pptx content, since ooxml.js's own typed readers explicitly forbid write-back. ---
+export type { CreateEmptyDocxPackageOptions } from './edit/docx/scaffold';
 export type { DocxBody } from './edit/docx/editor';
+export type { CreateDocxOptions } from './edit/docx/editor';
 export { createDocx, DocxEditor, openDocx } from './edit/docx/editor';
 export { DocxParagraph } from './edit/docx/paragraph';
 export { DocxRun } from './edit/docx/run';
@@ -182,16 +184,21 @@ export { DocxTable, DocxTableCell, DocxTableRow } from './edit/docx/table';
 export type { BuildDocxPackageOptions } from './edit/docx/content';
 export { buildDocxPackage } from './edit/docx/content';
 
+export type { CreateEmptyPptxPackageOptions } from './edit/pptx/scaffold';
 export type { SlideImageInit, SlideTableInit, TextBoxInit } from './edit/pptx/slide';
+export type { CreatePptxOptions } from './edit/pptx/editor';
 export { createPptx, openPptx, PptxEditor } from './edit/pptx/editor';
 export { PptxSlide } from './edit/pptx/slide';
 export type { DrawingParagraphInit, DrawingRunInit } from './edit/pptx/shape';
 export { PptxShape } from './edit/pptx/shape';
 export type { PptxTableInit } from './edit/pptx/table';
 export { PptxTable, PptxTableCell, PptxTableRow } from './edit/pptx/table';
+export type { BuildPptxPackageOptions } from './edit/pptx/content';
 export { buildPptxPackage } from './edit/pptx/content';
 
+export type { CreateEmptyOdtPackageOptions } from './edit/odt/scaffold';
 export type { OdtBody } from './edit/odt/editor';
+export type { CreateOdtOptions } from './edit/odt/editor';
 export { createOdt, OdtEditor, openOdt } from './edit/odt/editor';
 export type { ParagraphInit as OdtParagraphInit } from './edit/odt/paragraph';
 export { OdtParagraph } from './edit/odt/paragraph';
@@ -200,25 +207,35 @@ export { OdtRun } from './edit/odt/run';
 export { OdtList, OdtListItem } from './edit/odt/list';
 export type { TableInit as OdtTableInit } from './edit/odt/table';
 export { OdtTable, OdtTableCell, OdtTableRow } from './edit/odt/table';
+export type { BuildOdtPackageOptions } from './edit/odt/content';
 export { buildOdtPackage } from './edit/odt/content';
 
+export type { CreateEmptyOdpPackageOptions } from './edit/odp/scaffold';
 export type { SlideImageInit as OdpSlideImageInit, SlideTableInit as OdpSlideTableInit, TextBoxInit as OdpTextBoxInit } from './edit/odp/slide';
+export type { CreateOdpOptions } from './edit/odp/editor';
 export { createOdp, OdpEditor, openOdp } from './edit/odp/editor';
 export { OdpSlide } from './edit/odp/slide';
 export { OdpShape } from './edit/odp/shape';
+export type { BuildOdpPackageOptions } from './edit/odp/content';
 export { buildOdpPackage } from './edit/odp/content';
 
+export type { CreateEmptyOdsPackageOptions } from './edit/ods/scaffold';
+export type { CreateOdsOptions } from './edit/ods/editor';
 export { createOds, OdsEditor, openOds } from './edit/ods/editor';
 export { OdsSheet } from './edit/ods/sheet';
 export { OdsCell } from './edit/ods/cell';
+export type { BuildOdsPackageOptions } from './edit/ods/content';
 export { buildOdsPackage } from './edit/ods/content';
 
+export type { CreateEmptyOdgPackageOptions } from './edit/odg/scaffold';
 export type { PageImageInit as OdgPageImageInit, TextBoxInit as OdgTextBoxInit } from './edit/odg/page';
+export type { CreateOdgOptions } from './edit/odg/editor';
 export { createOdg, OdgEditor, openOdg } from './edit/odg/editor';
 export { OdgPage } from './edit/odg/page';
 // draw:frame content (text boxes/images) reuses OdpShape wholesale -- see edit/odg/page.ts's own top-of-file note; there is no separate OdgShape class.
 export type { BoxVectorInit as OdgBoxVectorInit, LineVectorInit as OdgLineVectorInit, OdgVector, OdgVectorKind, PathVectorInit as OdgPathVectorInit } from './edit/odg/vector';
 export { OdgBoxVector, OdgLineVector, OdgPathVector } from './edit/odg/vector';
+export type { BuildOdgPackageOptions } from './edit/odg/content';
 export { buildOdgPackage } from './edit/odg/content';
 
 // --- The hand-written PDF codec, now an external dependency -- see pdf-codec's own README (https://github.com/ExaDev/pdf-codec) for its internals. ---
@@ -285,6 +302,8 @@ export { buildMarkdownText } from './markdown/write';
 export { buildFormulaBlock, formulaDocument, formulaOfBlock, formulaPlaceholderText } from './model/formula';
 // The drawing counterpart to the formula helpers above: reconstructWordprocessing/reconstructPresentation carry a page's recovered vector primitives in an embedded-object block, since neither ContentSection nor ContentSlide has a vectors array of its own. buildDrawingBlock is what builds one; drawingOfBlock narrows back out of it, and is what a consumer distinguishing a recovered drawing from a recovered formula calls.
 export { buildDrawingBlock, drawingOfBlock } from './model/embedded-drawing';
+// The single write-side precedence rule every create*/build*Package entry point uses to stamp real docProps/core.xml (OOXML)/office:meta (ODF) creation/modification timestamps via an injected ClockPort -- exported directly for a caller composing their own package-building step the same way.
+export { resolveMetadataTimestamps } from './model/metadata';
 export type { PositionedFormula } from 'pdf-codec';
 export type { EngineLayoutOptions, WordprocessingLayoutResult } from './layout/engine';
 export { convertWordprocessingToLayout } from './layout/engine';

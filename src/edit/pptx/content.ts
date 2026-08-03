@@ -2,19 +2,30 @@ import type { ContentBlock, ContentDocument, ContentShape, ContentTable } from '
 import type { Package } from 'ooxml.js';
 import { base64ToBytes } from 'ooxml.js';
 import { drawingOfBlock, embeddedDrawingVectors } from '../../model/embedded-drawing';
+import { resolveMetadataTimestamps } from '../../model/metadata';
+import type { ClockPort } from '../../ports/clock';
+import { systemClock } from '../../ports/clock';
 import type { DrawingParagraphInit } from './shape';
-import { createPptx } from './editor';
+import { PptxEditor } from './editor';
+import { createEmptyPptxPackage } from './scaffold';
 import type { PptxSlide } from './slide';
 import type { PptxTable, PptxTableCell } from './table';
 
-// ContentDocument -> a fresh pptx Package, the write-side counterpart to src/ooxml/pptx/read.ts's readPptxContent. Used by the PDF->pptx conversion path.
+// clock resolves content.metadata's own createdIso/modifiedIso the same way createPptx does (src/model/metadata.ts's resolveMetadataTimestamps) -- systemClock by default, never overwriting a createdIso/modifiedIso the source content already carried.
+export interface BuildPptxPackageOptions {
+  readonly clock?: ClockPort;
+}
+
+// ContentDocument -> a fresh pptx Package, the write-side counterpart to src/ooxml/pptx/read.ts's readPptxContent. Used by the PDF->pptx conversion path. Constructs its own package directly (createEmptyPptxPackage + PptxEditor) rather than calling createPptx(), mirroring buildDocxPackage's own identical reasoning (src/edit/docx/content.ts): createPptx() always starts metadata from {}, but this function needs the SOURCE content's own metadata to reach resolveMetadataTimestamps.
 //
 // One remaining gap, bounded and tracked rather than silent: every slide shares one deck-wide size (p:sldSz is presentation-level, not per-slide) -- taken from the first slide, since PDF-reconstructed pages that come from a single source document invariably share one page size in practice.
-export function buildPptxPackage(content: ContentDocument): Package {
+export function buildPptxPackage(content: ContentDocument, options?: BuildPptxPackageOptions): Package {
   if (content.kind !== 'presentation') {
     throw new Error('buildPptxPackage requires a presentation ContentDocument');
   }
-  const editor = createPptx();
+  const clock = options?.clock ?? systemClock;
+  const metadata = resolveMetadataTimestamps(content.metadata, clock);
+  const editor = new PptxEditor(createEmptyPptxPackage({ metadata }));
   const firstSlide = content.slides[0];
   if (firstSlide !== undefined) {
     editor.slideSize = firstSlide.size;

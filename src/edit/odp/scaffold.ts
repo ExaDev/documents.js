@@ -1,7 +1,9 @@
+import type { LayoutMetadata } from 'document-schema.js';
 import type { Package, XmlElement, XmlNode } from 'odf.js';
 import { ODF_MEDIA_TYPES, setDocumentMediaType, syncManifest, xmlnsAttributes } from 'odf.js';
 import { SLIDE_SIZE_WIDESCREEN } from '../../model/geometry';
-import { el } from '../../xml/fragment';
+import { encodeXmlText } from '../../xml/entities';
+import { el, txt } from '../../xml/fragment';
 
 // The namespace prefixes odp's own content.xml/styles.xml actually use: office/style/text/table for the document structure and text/table content odt's own scaffold already needed; draw/svg for draw:page/draw:frame geometry and draw:image/draw:text-box content; presentation for presentation:notes; fo for style:page-layout-properties' fo:page-width/height; xlink for draw:image's own xlink:href. Mirrors odt/scaffold.ts's own CONTENT_NS_PREFIXES/STYLES_NS_PREFIXES reasoning exactly -- declared once at the root rather than piecemeal.
 const CONTENT_NS_PREFIXES = ['office', 'style', 'text', 'table', 'draw', 'presentation', 'fo', 'svg', 'xlink'] as const;
@@ -48,17 +50,53 @@ function buildContentXml(): XmlElement {
   ]);
 }
 
-function buildMetaXml(): XmlElement {
-  return el('office:document-meta', { ...xmlnsAttributes([...META_NS_PREFIXES]), 'office:version': ODF_VERSION }, [el('office:meta')]);
+// The office:meta children a LayoutMetadata value maps onto -- identical mapping to odt/scaffold.ts's own buildOfficeMeta (see that file's top-of-function comment for the full field-by-field rationale); duplicated here rather than shared, matching this directory's own existing convention of each format scaffold declaring its own small XML-building helpers.
+function buildOfficeMeta(metadata: LayoutMetadata | undefined): XmlElement[] {
+  if (metadata === undefined) {
+    return [];
+  }
+  const children: XmlElement[] = [];
+  if (metadata.title !== undefined) {
+    children.push(el('dc:title', {}, [txt(encodeXmlText(metadata.title))]));
+  }
+  if (metadata.author !== undefined) {
+    children.push(el('meta:initial-creator', {}, [txt(encodeXmlText(metadata.author))]));
+  }
+  if (metadata.subject !== undefined) {
+    children.push(el('dc:subject', {}, [txt(encodeXmlText(metadata.subject))]));
+  }
+  for (const keyword of metadata.keywords ?? []) {
+    children.push(el('meta:keyword', {}, [txt(encodeXmlText(keyword))]));
+  }
+  if (metadata.creator !== undefined) {
+    children.push(el('meta:generator', {}, [txt(encodeXmlText(metadata.creator))]));
+  }
+  if (metadata.createdIso !== undefined) {
+    children.push(el('meta:creation-date', {}, [txt(encodeXmlText(metadata.createdIso))]));
+  }
+  if (metadata.modifiedIso !== undefined) {
+    children.push(el('dc:date', {}, [txt(encodeXmlText(metadata.modifiedIso))]));
+  }
+  return children;
 }
 
-// Builds a minimal but genuinely valid, openable odp package from nothing: the mandatory mimetype part (via setDocumentMediaType), a content.xml with an empty office:automatic-styles and an empty office:body/office:presentation, a styles.xml with the page-layout -> master-page chain resolveDrawPageSize itself resolves for slide geometry, a minimal meta.xml, and a manifest listing every part (via syncManifest) -- the same shape odt/scaffold.ts's own createEmptyOdtPackage uses, and the same shape odf.js's own typed/odp/read.test.ts fixture (and this package's src/test-support/odp.ts fixture) independently verified against genuine LibreOffice 26.2 output.
-export function createEmptyOdpPackage(): Package {
+function buildMetaXml(metadata?: LayoutMetadata): XmlElement {
+  return el('office:document-meta', { ...xmlnsAttributes([...META_NS_PREFIXES]), 'office:version': ODF_VERSION }, [
+    el('office:meta', {}, buildOfficeMeta(metadata)),
+  ]);
+}
+
+export interface CreateEmptyOdpPackageOptions {
+  readonly metadata?: LayoutMetadata;
+}
+
+// Builds a minimal but genuinely valid, openable odp package from nothing: the mandatory mimetype part (via setDocumentMediaType), a content.xml with an empty office:automatic-styles and an empty office:body/office:presentation, a styles.xml with the page-layout -> master-page chain resolveDrawPageSize itself resolves for slide geometry, a minimal meta.xml, and a manifest listing every part (via syncManifest) -- the same shape odt/scaffold.ts's own createEmptyOdtPackage uses, and the same shape odf.js's own typed/odp/read.test.ts fixture (and this package's src/test-support/odp.ts fixture) independently verified against genuine LibreOffice 26.2 output. A caller passing no options gets byte-for-byte the same package as before office:meta population existed.
+export function createEmptyOdpPackage(options?: CreateEmptyOdpPackageOptions): Package {
   const pkg: Package = {
     parts: {
       'content.xml': { kind: 'xml', nodes: [declaration(), buildContentXml()] },
       'styles.xml': { kind: 'xml', nodes: [declaration(), buildStylesXml()] },
-      'meta.xml': { kind: 'xml', nodes: [declaration(), buildMetaXml()] },
+      'meta.xml': { kind: 'xml', nodes: [declaration(), buildMetaXml(options?.metadata)] },
     },
   };
   setDocumentMediaType(pkg, ODF_MEDIA_TYPES.odp);

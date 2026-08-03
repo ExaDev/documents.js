@@ -2,18 +2,29 @@ import type { ContentDocument, ContentShape } from 'document-schema.js';
 import type { Package } from 'odf.js';
 import { base64ToBytes } from 'odf.js';
 import { drawingOfBlock, embeddedDrawingVectors } from '../../model/embedded-drawing';
+import { resolveMetadataTimestamps } from '../../model/metadata';
+import type { ClockPort } from '../../ports/clock';
+import { systemClock } from '../../ports/clock';
 import { populateOdtTable, populateParagraph } from '../odt/content';
-import { createOdp } from './editor';
+import { OdpEditor } from './editor';
+import { createEmptyOdpPackage } from './scaffold';
 import type { OdpSlide } from './slide';
 
-// ContentDocument -> a fresh odp Package, built entirely through the same edit/odp/* live-view primitives a caller would use by hand -- the odp-side counterpart to src/edit/pptx/content.ts's buildPptxPackage, and the write-side counterpart to src/odf/odp/read.ts's readOdpContent. Used by the PDF -> odp conversion path and by the odp<->pptx bridge. Both now genuinely produce table blocks: reconstructPresentation synthesizes one whenever it detects a real drawn gridline lattice on a page (src/layout/reconstruct.ts's own gate), so the table branch below is reachable from either caller, not only the bridge.
+// clock resolves content.metadata's own createdIso/modifiedIso the same way createOdp does (src/model/metadata.ts's resolveMetadataTimestamps) -- systemClock by default, never overwriting a createdIso/modifiedIso the source content already carried.
+export interface BuildOdpPackageOptions {
+  readonly clock?: ClockPort;
+}
+
+// ContentDocument -> a fresh odp Package, built entirely through the same edit/odp/* live-view primitives a caller would use by hand -- the odp-side counterpart to src/edit/pptx/content.ts's buildPptxPackage, and the write-side counterpart to src/odf/odp/read.ts's readOdpContent. Used by the PDF -> odp conversion path and by the odp<->pptx bridge. Both now genuinely produce table blocks: reconstructPresentation synthesizes one whenever it detects a real drawn gridline lattice on a page (src/layout/reconstruct.ts's own gate), so the table branch below is reachable from either caller, not only the bridge. Constructs its own package directly (createEmptyOdpPackage + OdpEditor) rather than calling createOdp(), mirroring buildDocxPackage's own identical reasoning: createOdp() always starts metadata from {}, but this function needs the SOURCE content's own metadata to reach resolveMetadataTimestamps.
 //
 // A shape's rotationDeg IS written back here (unlike buildPptxPackage's own documented gap for pptx, which has no a:xfrm/@rot setter yet) -- OdpShape.rotationDeg exists specifically because this task called for genuine draw:transform support, reusing odf.js's own transform.ts machinery (see shape.ts's own buildTransformAttr).
-export function buildOdpPackage(content: ContentDocument): Package {
+export function buildOdpPackage(content: ContentDocument, options?: BuildOdpPackageOptions): Package {
   if (content.kind !== 'presentation') {
     throw new Error('buildOdpPackage requires a presentation ContentDocument');
   }
-  const editor = createOdp();
+  const clock = options?.clock ?? systemClock;
+  const metadata = resolveMetadataTimestamps(content.metadata, clock);
+  const editor = new OdpEditor(createEmptyOdpPackage({ metadata }));
   const firstSlide = content.slides[0];
   if (firstSlide !== undefined) {
     editor.slideSize = firstSlide.size;
