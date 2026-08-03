@@ -21,7 +21,7 @@ import { parseRptFormula } from './parser';
 //
 // A GROUP EXPRESSION MAY NOT DEPEND ON AN AGGREGATE, and this is checked up front rather than discovered mid-run. Group expressions decide the very instance boundaries an aggregate's row range is defined by, so a group expression reading an aggregate is genuinely circular; rather than pick one of the several plausible resolutions, this engine throws RptFormulaEvaluationError naming the dependency. The check is static (it walks the named-function reference graph before touching a row) so that an empty result set cannot make a circular report look like it succeeded.
 //
-// PAGE HEADERS AND PAGE FOOTERS ARE DELIBERATELY NOT PART OF THIS MODEL. Which rows land on which page is a layout decision this engine has no basis for making, so RptReportDefinition carries no page bands and runRptReport emits none; see src/odb/formula/definition.ts, which drops them explicitly rather than silently. In the real fixture both page bands carry only fixed-content labels and no rpt formula at all, so nothing evaluable is being skipped.
+// PAGE HEADERS AND PAGE FOOTERS ARE DELIBERATELY NOT PART OF THIS MODEL. Which rows land on which page is a layout decision this engine has no basis for making, so RptReportDefinition carries no page bands and runRptReport emits none; see src/odb/formula/definition.ts, which drops them explicitly rather than silently. In the real fixture both page bands carry only fixed-content labels and no rpt formula at all, so nothing evaluable is being skipped. A renderer that HAS decided its own page boundaries evaluates those bands itself, through evaluateRptBandOutsideData at the foot of this module -- the narrow entry point that exists precisely so deciding where pages fall stays the renderer's job while evaluating a formula stays this module's.
 
 export type RptBandKind = 'report-header' | 'group-header' | 'detail' | 'group-footer' | 'report-footer';
 
@@ -108,8 +108,12 @@ function identity(name: string): string {
   return name;
 }
 
+function prepareBandFormulas(band: RptBandDefinition): readonly (RptFormula | undefined)[] {
+  return band.formulas.map((formula) => (formula === undefined ? undefined : parseRptFormula(formula)));
+}
+
 function prepareBand(band: RptBandDefinition | undefined): PreparedBand {
-  return band?.formulas.map((formula) => (formula === undefined ? undefined : parseRptFormula(formula)));
+  return band === undefined ? undefined : prepareBandFormulas(band);
 }
 
 // The prepared, immutable half of a run: every formula parsed, every named function resolved and checked for cycles, every group expression checked for an aggregate dependency. Building this before any row is touched is what makes an unsupported function or a circular definition a failure of the report, not a failure that happens to surface on row 4.
@@ -422,4 +426,15 @@ export function runRptReport(definition: RptReportDefinition, resultSet: SqlResu
 
   emit(prepared.bands.reportFooter, 'report-footer', undefined, undefined, { kind: 'report' });
   return { bands };
+}
+
+// Evaluates one band that prints OUTSIDE the data -- belonging to no row, at report scope -- against the same definition (and therefore the same named rpt:functions) a full run would use. The page header and page footer are the real callers: this engine models no pages at all, so a renderer that has decided its own page boundaries evaluates those two bands itself.
+//
+// Report scope is the right scope for them, and not an approximation, under exactly one condition: the renderer has resolved the whole report onto a SINGLE logical page. A page's own rows are then every row, so a page band's aggregate covers precisely the rows the report footer's would. Under a real multi-page model it would not be, and this function would be the wrong tool -- which is why it names the property it assumes rather than presenting itself as generic page-band evaluation.
+//
+// Nothing needs special-casing for the two ways a page band can hold something this scope cannot answer, because both already fail correctly by construction: a per-row formula (field:[X], rpt:HASCHANGED, rpt:LEFT) throws for belonging to no row, exactly as it does in the report header, and rpt:PAGENUMBER or any other genuinely page-dependent function throws from the parser as an unsupported function. Neither is silently rendered as a blank or a plausible-looking wrong value.
+export function evaluateRptBandOutsideData(definition: RptReportDefinition, band: RptBandDefinition, resultSet: SqlResultSet): readonly (ContentCellValue | undefined)[] {
+  const prepared = new PreparedReport(definition, resultSet);
+  const evaluator = new FormulaEvaluator(prepared, new RunState(definition.groups.length, resultSet.rows.length));
+  return prepareBandFormulas(band).map((formula) => (formula === undefined ? undefined : evaluator.evaluate(formula, undefined, { kind: 'report' })));
 }
