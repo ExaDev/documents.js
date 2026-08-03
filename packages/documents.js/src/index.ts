@@ -334,6 +334,13 @@ export { parseSelect } from './odb/sql/parser';
 export type { SqlComparisonOperator, SqlPunctuation, SqlToken } from './odb/sql/lexer';
 export { tokenizeSql } from './odb/sql/lexer';
 export { HsqldbSqlEvaluationError, HsqldbSqlParseError, HsqldbSqlUnsupportedError } from './odb/sql/errors';
+// A Report Builder rpt formula engine (src/odb/formula/) over the result set src/odb/sql/ produces, so a .odb's own saved REPORT -- its groups, its named rpt:function definitions, and the totals in its footers -- can actually be evaluated against real data rather than only having its structure listed by readOdbReport. Exported as the same independently-usable pipeline stages the rest of the .odb surface follows: parseRptFormula (one rpt:formula attribute -> a validated AST), rptDefinitionFromReport (odf.js's own OdbReport -> the definition below), and runRptReport (definition + result set -> the band instances a renderer lays out, each carrying its own evaluated values). The function allowlist is closed -- rpt:HASCHANGED, rpt:LEFT, and rpt:SUM/COUNT/AVG/MIN/MAX, plus the separate field:[COLUMN] bound-field form -- and every other rpt function throws RptFormulaUnsupportedError naming it, the same policy src/odb/sql/ and src/hsqldb/script.ts follow. It evaluates formulas and resolves group breaks; it lays nothing out, so it emits no page headers or footers and there is no reverse direction.
+export type { RptBandDefinition, RptBandInstance, RptBandKind, RptGroupDefinition, RptNamedFunctionDefinition, RptReportDefinition, RptReportRun, RptScope } from './odb/formula/evaluate';
+export { runRptReport } from './odb/formula/evaluate';
+export type { RptAggregateFunction, RptFormula, RptReference } from './odb/formula/parser';
+export { parseRptFormula } from './odb/formula/parser';
+export { rptDefinitionFromReport } from './odb/formula/definition';
+export { RptFormulaEvaluationError, RptFormulaParseError, RptFormulaUnsupportedError, RptReportStructureError } from './odb/formula/errors';
 export type { OdbConversionOptions, OdbToCsvOptions } from './convert/convert';
 export { odbToCsv, odbToXlsx } from './convert/convert';
 export type { FirebirdBackupSummary, ReadFirebirdBackupResult } from './firebird/backup';
