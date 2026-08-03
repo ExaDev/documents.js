@@ -191,6 +191,14 @@ describe('convertWordprocessingToLayout: tables', () => {
     expect(lines).toContainEqual(expect.objectContaining({ x1Pt: 0, y1Pt: 30, x2Pt: 100, y2Pt: 30, color: red, widthPt: 2 }));
   });
 
+  it('carries a declared border\'s own dash style through onto the emitted LayoutLine, as of document-schema.js 2.1.0', () => {
+    const red = { r: 1, g: 0, b: 0 };
+    const table: ContentTable = { kind: 'table', columnWidthsPt: [100], rows: [{ heightPt: 20, cells: [{ blocks: [], borders: { top: { color: red, widthPt: 2, style: 'dashed' } } }] }] };
+    const layout = convert([section([table])]);
+    const [line] = layout.pages[0]!.items.filter((i): i is LayoutLine => i.kind === 'line');
+    expect(line).toMatchObject({ style: 'dashed', color: red, widthPt: 2 });
+  });
+
   it('attributes a cell\'s own background and borders to that cell\'s own sourcePath, falling back to the table\'s when it has none', () => {
     const red = { r: 1, g: 0, b: 0 };
     const table: ContentTable = {
