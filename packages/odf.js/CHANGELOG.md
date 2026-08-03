@@ -1,3 +1,10 @@
+## [2.2.5](https://github.com/ExaDev/odf.js/compare/v2.2.4...v2.2.5) (2026-08-03)
+
+
+### Bug Fixes
+
+* **ci:** wrap the sibling-bump commit body onto two lines under commitlint's limit ([b256dcc](https://github.com/ExaDev/odf.js/commit/b256dcc52471bb3ff5ff4ec19cdc011df3b39821))
+
 ## [2.2.4](https://github.com/ExaDev/odf.js/compare/v2.2.3...v2.2.4) (2026-08-03)
 
 ## [2.2.3](https://github.com/ExaDev/odf.js/compare/v2.2.2...v2.2.3) (2026-08-03)
