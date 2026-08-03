@@ -266,6 +266,9 @@ export type { DrawingLayoutOptions } from './layout/drawing';
 export { convertDrawingToLayout } from './layout/drawing';
 export type { ReconstructOptions } from './layout/reconstruct';
 export { reconstructDrawing, reconstructPresentation, reconstructSpreadsheet, reconstructWordprocessing } from './layout/reconstruct';
+// The heuristic re-typing reconstructSpreadsheet applies to every recovered cell, exported standalone so a caller can run it over their own text, replay the same decision, or interpret what the ReconstructOptions.onCellTypeInference sink reports. Read cell-typing.ts's own module doc before relying on a re-typed value: this is explicitly probabilistic recovery from a rendered string, not a fidelity guarantee.
+export type { CellTypeDeclineReason, CellTypeInference, CellTypeInferenceResult, CellTypeInferenceSink, CellTypeRule } from './layout/cell-typing';
+export { inferCellValue } from './layout/cell-typing';
 
 // --- Fourteen ergonomic conversions (docx/pptx/odt/odp/ods/odg/xlsx/markdown <-> PDF, all round-trip both ways). xlsx<->pdf (xlsxToPdf/pdfToXlsx) composes the ods<->xlsx bridge with the ods<->pdf layout pair internally -- xlsx has no layout engine of its own -- but is a real, direct, single-call conversion pair from a caller's own point of view, matching the other thirteen's own options shape exactly. markdown<->pdf (markdownToPdf/pdfToMarkdown) DOES lay markdown out directly, reusing convertWordprocessingToLayout/reconstructWordprocessing completely unmodified -- but pdfToMarkdown is the single lossiest conversion in the whole package (see convert.ts's own top-of-file comment and the README's Fidelity section). ---
 export type { DocumentToPdfOptions, PdfToDocumentOptions } from './convert/convert';

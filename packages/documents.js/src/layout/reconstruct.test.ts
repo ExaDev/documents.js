@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { ContentBlock, ContentDrawPage, ContentParagraph, ContentShape, ContentSheet, ContentSlide, ContentVector, LayoutDocument, LayoutImage, LayoutImageAsset, LayoutItem, LayoutPage, LayoutText } from 'document-schema.js';
+import type { ContentBlock, ContentDrawPage, ContentParagraph, ContentShape, ContentSheet, ContentSheetCell, ContentSlide, ContentVector, LayoutDocument, LayoutImage, LayoutImageAsset, LayoutItem, LayoutPage, LayoutText } from 'document-schema.js';
 import { STANDARD_METRICS } from 'pdf-codec';
 import { drawingOfBlock } from '../model/embedded-drawing';
+import type { CellTypeInference } from './cell-typing';
 import { reconstructDrawing, reconstructPresentation, reconstructSpreadsheet, reconstructWordprocessing } from './reconstruct';
 
 const RED = { r: 1, g: 0, b: 0 };
@@ -559,11 +560,12 @@ describe('reconstructSpreadsheet: text-position column clustering (no gridlines)
     expect(sheet!.cells[0]!.displayText).toBe('Hello World');
   });
 
-  it('every recovered cell is a bare string value, never re-parsed into a typed value', () => {
+  it('re-types an unambiguously numeric cell while keeping its own rendered text verbatim', () => {
     const items: LayoutItem[] = [text({ text: '42.5', xPt: 50, yPt: 200, widthPt: 30 })];
     const doc = reconstructSpreadsheet(docFrom([page(300, 300, items)]));
     const [sheet] = sheets(doc);
-    expect(sheet!.cells[0]!.value).toEqual({ kind: 'string', value: '42.5' });
+    expect(sheet!.cells[0]!.value).toEqual({ kind: 'number', value: 42.5 });
+    expect(sheet!.cells[0]!.displayText).toBe('42.5'); // the printed string is never replaced by the inferred value's own formatting
   });
 });
 
@@ -703,5 +705,36 @@ describe('reconstructPresentation: vector recovery', () => {
     const [slide] = slidesOf(reconstructPresentation(docFrom([page(960, 540, [text({ text: 'Title', xPt: 100, yPt: 400, widthPt: 60 })])])));
     expect(slide!.shapes).toHaveLength(1);
     expect(slide!.shapes[0]!.blocks[0]).toMatchObject({ kind: 'paragraph' });
+  });
+});
+
+// --- Heuristic cell re-typing, reported through the inference sink ---------------------------------------------
+
+describe('reconstructSpreadsheet: heuristic cell re-typing', () => {
+  function cellsFor(texts: readonly string[]): { cells: ContentSheetCell[]; inferences: CellTypeInference[] } {
+    const items: LayoutItem[] = texts.map((value, i) => text({ text: value, xPt: 50, yPt: 200 - i * 20, widthPt: 40 }));
+    const inferences: CellTypeInference[] = [];
+    const doc = reconstructSpreadsheet(docFrom([page(300, 300, items)]), { onCellTypeInference: (inference) => inferences.push(inference) });
+    const [sheet] = sheets(doc);
+    return { cells: sheet!.cells, inferences };
+  }
+
+  it('re-types confident cells and leaves ambiguous ones as strings, keeping every cell\'s own rendered text either way', () => {
+    const { cells } = cellsFor(['42.5', 'TRUE', '2024-01-15', '007', 'Acme Ltd']);
+    expect(cells.map((c) => c.value.kind)).toEqual(['number', 'boolean', 'date', 'string', 'string']);
+    expect(cells.map((c) => c.displayText)).toEqual(['42.5', 'TRUE', '2024-01-15', '007', 'Acme Ltd']);
+  });
+
+  it('reports both outcomes through the sink, so a caller can tell a confident guess from a deliberate refusal', () => {
+    const { inferences } = cellsFor(['42.5', '007', 'Acme Ltd']);
+    expect(inferences).toEqual([
+      { sheetIndex: 0, row: 0, column: 0, displayText: '42.5', outcome: 'retyped', value: { kind: 'number', value: 42.5 }, rule: 'plain-number' },
+      { sheetIndex: 0, row: 1, column: 0, displayText: '007', outcome: 'declined', reason: 'leading-zero-digits' },
+    ]); // 'Acme Ltd' was never number/date/boolean-shaped, so there was no inference to report at all
+  });
+
+  it('keeps the declined cell a plain string carrying the exact text it was declined on', () => {
+    const { cells } = cellsFor(['1,234']);
+    expect(cells[0]!.value).toEqual({ kind: 'string', value: '1,234' });
   });
 });

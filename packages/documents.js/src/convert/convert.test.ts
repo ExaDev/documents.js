@@ -5,6 +5,7 @@ import { decodePackage as decodeOoxmlPackage, readXlsxContent } from 'ooxml.js';
 import { describe, expect, it } from 'vitest';
 import { createDocx, openDocx } from '../edit/docx/editor';
 import { createOdg } from '../edit/odg/editor';
+import { createOds } from '../edit/ods/editor';
 import { openOdp } from '../edit/odp/editor';
 import { openOdt } from '../edit/odt/editor';
 import { createPptx, openPptx } from '../edit/pptx/editor';
@@ -471,7 +472,7 @@ describe('pdfToOdp', () => {
 });
 
 describe('pdfToOds', () => {
-  // gridOdsBytes (src/test-support/ods.ts) is a purpose-built fixture: three real, fully visible columns and three rows, gridlines AND headers explicitly enabled -- unlike minimalOdsBytes's own hidden column, which collapses two of its own gridline boundaries onto the same x position and would defeat this test's whole point. odsToPdf genuinely draws the LayoutLine lattice (src/layout/sheets.ts's renderGridlines) reconstructSpreadsheet's own gridline-detection path needs, so this proves the lattice path is what actually ran, not the text-clustering fallback. Every recovered cell is an honest bare string, never re-parsed into a typed value.
+  // gridOdsBytes (src/test-support/ods.ts) is a purpose-built fixture: three real, fully visible columns and three rows, gridlines AND headers explicitly enabled -- unlike minimalOdsBytes's own hidden column, which collapses two of its own gridline boundaries onto the same x position and would defeat this test's whole point. odsToPdf genuinely draws the LayoutLine lattice (src/layout/sheets.ts's renderGridlines) reconstructSpreadsheet's own gridline-detection path needs, so this proves the lattice path is what actually ran, not the text-clustering fallback. Every cell in this fixture is an ordinary word, so every one of them also stays a plain string through the heuristic re-typing step -- the point being that re-typing only fires on text that is genuinely number/date/boolean-shaped, never on arbitrary content; the sibling test below covers the case where it does fire.
   it('round-trips a real gridline lattice and every cell\'s text through odsToPdf then pdfToOds, detected via the drawn gridlines rather than text-position clustering', () => {
     const pdfBytes = odsToPdf(gridOdsBytes());
     const odsBytes = pdfToOds(pdfBytes);
@@ -485,7 +486,8 @@ describe('pdfToOds', () => {
     expect(sheet!.printSettings.gridlines).toBe(true); // confirms the gridline-lattice path was actually taken, not the text-clustering fallback
 
     for (const cell of sheet!.cells) {
-      expect(cell.value).toEqual({ kind: 'string', value: cell.displayText }); // honest recovery -- a bare string, never re-parsed into number/date/boolean, never claimed as a formula
+      expect(cell.value).toEqual({ kind: 'string', value: cell.displayText }); // ordinary words: nothing to infer, so nothing is inferred
+      expect(cell.formula).toBeUndefined(); // a formula is still never claimed -- nothing about a rendered value implies one was computed
     }
 
     const byRow = new Map<number, string[]>();
@@ -502,6 +504,27 @@ describe('pdfToOds', () => {
     ]);
   });
 
+
+  // The re-typing half of the same real pipeline, end to end and through real ODF bytes on both sides: a spreadsheet whose cells print as a number, a currency amount, a date, a boolean and a product code goes out through odsToPdf and comes back through pdfToOds with the first four typed and the fifth deliberately left alone. Column widths and row heights are set explicitly because a sheet built purely through createOds/cell() otherwise renders at a zero-size grid (src/edit/ods/content.ts's own documented gap), which would collapse every cell onto the same position before the PDF was ever written.
+  it('re-types confidently-shaped cells and leaves an ambiguous one alone, through a real odsToPdf then pdfToOds cycle', () => {
+    const editor = createOds();
+    const sheet = editor.sheets()[0]!;
+    sheet.printSettings = { pageSize: { widthPt: 400, heightPt: 300 }, margins: { topPt: 10, rightPt: 10, bottomPt: 10, leftPt: 10 }, gridlines: false, headers: false, pageOrder: 'downThenOver' };
+    const printed = ['1234.50', '2024-01-15', 'TRUE', '007'];
+    printed.forEach((value, i) => {
+      sheet.cell(0, i).value = { kind: 'string', value };
+      sheet.setColumnWidth(i, 80);
+    });
+    sheet.setRowHeight(0, 20);
+
+    const roundTripped = readOdsContent(decodePackage(pdfToOds(odsToPdf(editor.toBytes()))));
+    if (roundTripped.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    const cells = roundTripped.sheets[0]!.cells;
+    expect(cells.map((c) => c.displayText)).toEqual(printed); // the printed strings survive verbatim regardless of what was inferred from them
+    expect(cells.map((c) => c.value.kind)).toEqual(['number', 'date', 'boolean', 'string']); // '007' is the ambiguous one: a leading zero reads as an identifier, so it stays exactly as printed
+  });
 
   it('throws when the signal is already aborted', () => {
     const pdfBytes = odsToPdf(gridOdsBytes());
