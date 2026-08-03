@@ -1,6 +1,6 @@
 name: Dependabot auto-merge
 
-# Scoped to sibling ExaDev packages only -- dependabot.yml's own allow list restricts every PR Dependabot opens in this repo to document-schema.js, so gating on the actor alone is sufficient; the fetch-metadata step below is for audit logging, not for a merge decision. Auto-merge is enforced by main's own required status checks (Commitlint/Lint/Typecheck/Test/Smoke test) -- this workflow only requests the merge, GitHub itself withholds it until those report success.
+# Two auto-merge policies in one workflow. Sibling ExaDev packages (document-schema.js) merge unconditionally once green -- no cooldown, matching this family's existing convention. Every other (third-party) dependency merges only for a minor or patch bump; a major bump still opens a PR via Dependabot but is left for manual review. Third-party updates additionally carry dependabot.yml's own 7-day cooldown before Dependabot proposes them at all. Auto-merge is enforced by main's own CI actually passing on the PR's head commit -- this workflow only requests the merge, GitHub itself withholds it until checks conclude.
 
 on:
   pull_request:
@@ -20,7 +20,31 @@ jobs:
         uses: dependabot/fetch-metadata@v2
         with:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
+      - name: Decide whether to auto-merge
+        id: decide
+        env:
+          DEPENDENCY_NAMES: ${{ steps.metadata.outputs.dependency-names }}
+          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
+        run: |
+          siblings="document-schema.js"
+          is_sibling=false
+          for name in $(echo "$DEPENDENCY_NAMES" | tr ',' ' '); do
+            name=$(echo "$name" | xargs)
+            for sib in $siblings; do
+              if [ "$name" = "$sib" ]; then
+                is_sibling=true
+              fi
+            done
+          done
+          if [ "$is_sibling" = "true" ]; then
+            echo "merge=true" >> "$GITHUB_OUTPUT"
+          elif [ "$UPDATE_TYPE" = "version-update:semver-minor" ] || [ "$UPDATE_TYPE" = "version-update:semver-patch" ]; then
+            echo "merge=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "merge=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Enable auto-merge
+        if: steps.decide.outputs.merge == 'true'
         run: gh pr merge --auto --rebase "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
