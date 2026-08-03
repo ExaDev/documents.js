@@ -4,7 +4,9 @@ import { readOds } from 'odf.js';
 import { describe, expect, it } from 'vitest';
 import { buildOdsPackage } from './content';
 
-function spreadsheetDocument(): ContentDocument {
+type SpreadsheetDocument = Extract<ContentDocument, { kind: 'spreadsheet' }>;
+
+function spreadsheetDocument(): SpreadsheetDocument {
   return {
     kind: 'spreadsheet',
     formatVersion: CONTENT_FORMAT_VERSION,
@@ -66,5 +68,16 @@ describe('buildOdsPackage', () => {
     expect(document.sheets).toHaveLength(1);
     expect(document.sheets[0]?.name).toBe('Sheet1');
     expect(document.sheets[0]?.cells).toEqual([]);
+  });
+
+  it('writes column/row hidden state, reading back through odf.js\'s own readOds', () => {
+    const content = spreadsheetDocument();
+    content.sheets[0]!.columns.push({ index: 0, widthPt: 50, hidden: true });
+    content.sheets[0]!.rows.push({ index: 3, heightPt: 12, hidden: true });
+
+    const document = readOds(buildOdsPackage(content));
+    const dataSheet = document.sheets[0]!;
+    expect(dataSheet.columns.find((c) => c.index === 0)?.hidden).toBe(true);
+    expect(dataSheet.rows.find((r) => r.index === 3)?.hidden).toBe(true);
   });
 });

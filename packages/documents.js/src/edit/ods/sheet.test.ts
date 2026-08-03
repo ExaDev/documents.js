@@ -363,6 +363,67 @@ describe('OdsSheet.setColumnWidth / setRowHeight', () => {
   });
 });
 
+describe('OdsSheet.setColumnHidden / setRowHidden', () => {
+  it('a column/row no cell has touched yet is not hidden by default', () => {
+    const editor = createOds();
+    editor.sheets()[0]!.cell(0, 0).value = { kind: 'string', value: 'x' };
+    const content = readOdsContent(openOds(editor.toBytes()).toPackage());
+    if (content.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    expect(content.sheets[0]!.columns[0]?.hidden).toBeUndefined();
+    expect(content.sheets[0]!.rows[0]?.hidden).toBeUndefined();
+  });
+
+  it('set then get (via a real write -> reread round trip through odf.js\'s own readOds parser) round-trips hidden state', () => {
+    const editor = createOds();
+    const sheet = editor.sheets()[0]!;
+    sheet.cell(0, 0).value = { kind: 'string', value: 'x' };
+    sheet.setColumnHidden(0, true);
+    sheet.setRowHidden(0, true);
+
+    const content = readOdsContent(openOds(editor.toBytes()).toPackage());
+    if (content.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    expect(content.sheets[0]!.columns[0]?.hidden).toBe(true);
+    expect(content.sheets[0]!.rows[0]?.hidden).toBe(true);
+  });
+
+  it('preserves a width/height already set on the same column/row -- hidden and sizing never collide, since table:visibility is a plain attribute, not a style property', () => {
+    const editor = createOds();
+    const sheet = editor.sheets()[0]!;
+    sheet.cell(0, 0).value = { kind: 'string', value: 'x' };
+    sheet.setColumnWidth(0, 130);
+    sheet.setRowHeight(0, 40);
+    sheet.setColumnHidden(0, true);
+    sheet.setRowHidden(0, true);
+
+    const content = readOdsContent(openOds(editor.toBytes()).toPackage());
+    if (content.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    expect(content.sheets[0]!.columns[0]?.widthPt).toBeCloseTo(130, 5);
+    expect(content.sheets[0]!.rows[0]?.heightPt).toBeCloseTo(40, 5);
+    expect(content.sheets[0]!.columns[0]?.hidden).toBe(true);
+    expect(content.sheets[0]!.rows[0]?.hidden).toBe(true);
+  });
+
+  it('unhiding (passing false) removes table:visibility rather than leaving a stale "collapse"', () => {
+    const editor = createOds();
+    const sheet = editor.sheets()[0]!;
+    sheet.cell(0, 0).value = { kind: 'string', value: 'x' };
+    sheet.setColumnHidden(0, true);
+    sheet.setColumnHidden(0, false);
+
+    const content = readOdsContent(openOds(editor.toBytes()).toPackage());
+    if (content.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    expect(content.sheets[0]!.columns[0]?.hidden).toBeUndefined();
+  });
+});
+
 describe('OdsSheet.name', () => {
   it('get/set the sheet name', () => {
     const sheet = createOds().sheets()[0]!;

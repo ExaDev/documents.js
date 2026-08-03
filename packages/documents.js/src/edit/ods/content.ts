@@ -9,7 +9,9 @@ import type { OdsSheet } from './sheet';
 //
 // ContentSheetColumn.widthPt/ContentSheetRow.heightPt now round-trip too, via OdsSheet.setColumnWidth/setRowHeight (src/edit/ods/column-row.ts) -- discovered as a genuine, severity-escalating gap while composing xlsxToPdf (src/convert/convert.ts), not merely tidied up in passing: an explicit-but-unstyled column/row (the previous behaviour) reads back at widthPt/heightPt 0, and src/layout/sheets.ts's own resolveAxis treats that explicit zero as authoritative rather than falling back to a sane default, collapsing every cell in a rebuilt sheet onto the same physical position the moment that sheet is ever laid out again (xlsxToPdf's own xlsxToOds -> odsToPdf hop does exactly that) -- a previously "cosmetic when reopened in a real app" gap that becomes real data corruption once buildOdsPackage's own output stops being only ever a terminal deliverable. See column-row.ts's own top-of-file note for the full account.
 //
-// Column/row HIDDEN state, ContentSheetImage, and embeddedObjects are still deliberately NOT written here -- OdsSheet's own scope (address.ts, sheet.ts, print-settings.ts, column-row.ts) has no hidden-state/image API of its own to drive from yet. A documented, bounded gap, mirroring this codebase's own established precedent (buildOdtPackage's identical image/colSpan-write gaps): every cell's own value/formula/displayText, merged ranges (via OdsSheet.mergeCells), print settings, and now column widths/row heights, all build faithfully; a rebuilt sheet's own hidden columns/rows come back visible at their own real (now-correct) size instead.
+// Column/row HIDDEN state (ContentSheetColumn/Row.hidden) now round-trips too, via OdsSheet.setColumnHidden/setRowHidden (table:visibility, independent of width/height styling -- see column-row.ts's own top-of-file note on why the two never collide).
+//
+// ContentSheetImage and embeddedObjects are still deliberately NOT written here -- OdsSheet's own scope has no image/embedded-object API of its own to drive from yet. A documented, bounded gap, mirroring this codebase's own established precedent (buildOdtPackage's identical image-write gap): every cell's own value/formula/displayText, merged ranges, print settings, column widths/row heights, and now hidden state, all build faithfully.
 export function buildOdsPackage(content: ContentDocument): Package {
   if (content.kind !== 'spreadsheet') {
     throw new Error('buildOdsPackage requires a spreadsheet ContentDocument');
@@ -30,10 +32,16 @@ export function buildOdsPackage(content: ContentDocument): Package {
       if (column.widthPt !== undefined) {
         odsSheet.setColumnWidth(column.index, column.widthPt);
       }
+      if (column.hidden === true) {
+        odsSheet.setColumnHidden(column.index, true);
+      }
     }
     for (const row of sheet.rows) {
       if (row.heightPt !== undefined) {
         odsSheet.setRowHeight(row.index, row.heightPt);
+      }
+      if (row.hidden === true) {
+        odsSheet.setRowHidden(row.index, true);
       }
     }
   }

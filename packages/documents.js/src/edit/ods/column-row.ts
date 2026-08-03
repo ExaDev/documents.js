@@ -1,7 +1,7 @@
 import type { Package, XmlElement } from 'odf.js';
 import { findStyleElement, formatOdfLength, parseOdfLength } from 'odf.js';
 import { attr } from 'ooxml.js';
-import { directChildElement, setAttr } from '../../xml/edit';
+import { directChildElement, removeAttr, setAttr } from '../../xml/edit';
 import { el } from '../../xml/fragment';
 import { ensureAutomaticStyles, nextStyleName } from '../odt/automatic-styles';
 import {
@@ -16,9 +16,12 @@ import {
   replaceRun,
 } from './address';
 
+const VISIBILITY_ATTR = 'table:visibility';
+const VISIBILITY_COLLAPSE = 'collapse';
+
 // Discovered while composing xlsxToPdf/pdfToXlsx (src/convert/convert.ts): buildOdsPackage never wrote ContentSheetColumn.widthPt/ContentSheetRow.heightPt at all (see content.ts's own long-standing, already-documented gap), which was previously only a cosmetic loss -- a caller reopening the FINAL ods bytes in a real app got the app's own default column/row size instead of the source's. xlsxToPdf/pdfToXlsx compose xlsxToOds -> odsToPdf internally, though, so buildOdsPackage's output there is an INTERMEDIATE, immediately re-read by convertSpreadsheetToLayout (src/layout/sheets.ts) -- and its own resolveAxis treats an explicit-but-unstyled column/row (widthPt/heightPt 0, present precisely because address.ts's own cell-write individuation always creates a real table:table-column/table:table-row element) as a genuine "this column/row is zero-sized" reading that WINS over DEFAULT_COLUMN_WIDTH_PT/DEFAULT_ROW_HEIGHT_PT, not a missing entry the default would otherwise fill. Every column collapsing to width 0 and every row to height 0 puts every cell at the same physical (x, y) -- not a rounding loss but a total loss of the grid's own geometry, which is why this gap needed a real fix rather than another documented caveat: unlike buildOdsPackage's OTHER tracked write-gaps (images, embeddedObjects), this one turns into actual data corruption the moment its own output is fed back through a layout engine rather than only ever being a terminal deliverable.
 //
-// style:table-column-properties/style:table-row-properties can carry BOTH a size (style:column-width/style:row-height) and a manual page-break flag (fo:break-before="page", print-settings.ts's own manualBreaks writer) -- but a column/row is referenced by exactly ONE table:style-name, so naively minting a fresh, single-property style every time either write happens would silently clobber whichever property a PRIOR call already set (setting a manual break after a width was set would repoint the column at a break-only style, losing the width, and vice versa). applyColumnStyleProperties/applyRowStyleProperties below are the shared fix: each reads the column/row's CURRENT style (if any) for whichever property this call is NOT touching, merges it with the property this call IS touching, and mints one fresh style carrying the union -- preserving the same "always mint fresh, never mutate an existing entry" append-only convention print-settings.ts's own writeSheetPrintSettings and src/edit/odg/style.ts's own graphic-family writer already establish, just applied to the merged result rather than to a single property in isolation.
+// style:table-column-properties/style:table-row-properties can carry BOTH a size (style:column-width/style:row-height) and a manual page-break flag (fo:break-before="page", print-settings.ts's own manualBreaks writer) -- but a column/row is referenced by exactly ONE table:style-name, so naively minting a fresh, single-property style every time either write happens would silently clobber whichever property a PRIOR call already set (setting a manual break after a width was set would repoint the column at a break-only style, losing the width, and vice versa). applyColumnStyleProperties/applyRowStyleProperties below are the shared fix: each reads the column/row's CURRENT style (if any) for whichever property this call is NOT touching, merges it with the property this call IS touching, and mints one fresh style carrying the union -- preserving the same "always mint fresh, never mutate an existing entry" append-only convention print-settings.ts's own writeSheetPrintSettings and src/edit/odg/style.ts's own graphic-family writer already establish, just applied to the merged result rather than to a single property in isolation. Column/row HIDDEN state (writeColumnHidden/writeRowHidden below) needs none of this: table:visibility is a plain attribute directly on the column/row element, not a style property at all, so setting it never touches table:style-name or office:automatic-styles and can never collide with either of the above.
 
 interface ColumnStyleProperties {
   readonly widthPt?: number;
@@ -109,4 +112,25 @@ export function writeColumnManualBreak(pkg: Package, tableElement: XmlElement, i
 // The row counterpart to writeColumnManualBreak above.
 export function writeRowManualBreak(pkg: Package, tableElement: XmlElement, index: number): void {
   applyRowStyleProperties(pkg, tableElement, index, { manualBreak: true });
+}
+
+// table:visibility is a plain attribute directly on the table:table-column/table:table-row element itself, not a style property -- odf.js's own read-side isHidden (typed/ods/read.ts) checks exactly this attribute for the literal value "collapse" ("filter" is ODF's third visibility state, for an AutoFilter-hidden row; this editor only ever writes hidden/visible, matching ContentSheetColumn/Row.hidden's own boolean shape). Individuates (or gap-fills) the column/row the same way writeColumnWidth/writeRowHeight do -- calling this before, after, or instead of setting a width/height is equally safe, and never collides with applyColumnStyleProperties above since visibility lives on the element itself, not inside its style.
+export function writeColumnHidden(tableElement: XmlElement, index: number, hidden: boolean): void {
+  ensureColumnCoverage(tableElement, index + 1);
+  const columnElement = replaceRun(tableElement.children, isElementWithTag(COLUMN_TAG), index, COLUMN_REPEAT_ATTR, () => el(COLUMN_TAG), HEADER_COLUMNS_TAG);
+  if (hidden) {
+    setAttr(columnElement, VISIBILITY_ATTR, VISIBILITY_COLLAPSE);
+  } else {
+    removeAttr(columnElement, VISIBILITY_ATTR);
+  }
+}
+
+// The row counterpart to writeColumnHidden above, mirroring it exactly for table:table-row.
+export function writeRowHidden(tableElement: XmlElement, index: number, hidden: boolean): void {
+  const rowElement = replaceRun(tableElement.children, isElementWithTag(ROW_TAG), index, ROW_REPEAT_ATTR, () => el(ROW_TAG), HEADER_ROWS_TAG);
+  if (hidden) {
+    setAttr(rowElement, VISIBILITY_ATTR, VISIBILITY_COLLAPSE);
+  } else {
+    removeAttr(rowElement, VISIBILITY_ATTR);
+  }
 }
