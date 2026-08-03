@@ -1,7 +1,7 @@
 import type { SfntFont } from './sfnt';
 import { i16, sfntTableBytes, u16 } from './sfnt';
 
-// Parses the OpenType 'MATH' table (Microsoft's own spec: https://learn.microsoft.com/en-us/typography/opentype/spec/math) -- the MathConstants subtable in full (every named field, even the handful this package's own MathFontMetrics interface doesn't currently expose, since reading them all costs nothing extra once the table is being walked) and the MathGlyphInfo subtable's two per-glyph maps this package needs: MathItalicsCorrectionInfo and MathTopAccentAttachment. Deliberately does NOT parse MathVariants (the stretchy-glyph-assembly subtable) -- see math-font.ts's own module comment for that documented scope boundary. Table offsets below were derived from and cross-checked against the actual vendored STIXTwoMath-Regular.otf's own bytes while building this module, not transcribed from the spec alone.
+// Parses the OpenType 'MATH' table (Microsoft's own spec: https://learn.microsoft.com/en-us/typography/opentype/spec/math) -- the MathConstants subtable in full (every named field, even the handful this package's own MathFontMetrics interface doesn't currently expose, since reading them all costs nothing extra once the table is being walked), the MathGlyphInfo subtable's two per-glyph maps this package needs (MathItalicsCorrectionInfo and MathTopAccentAttachment), and the MathVariants subtable in full: both per-axis glyph-construction lists (the pre-built larger-variant sequences) and their GlyphAssembly part recipes. Table offsets below were derived from and cross-checked against the actual vendored STIXTwoMath-Regular.otf's own bytes while building this module, not transcribed from the spec alone.
 
 export interface MathConstants {
   readonly scriptPercentScaleDown: number; // already divided by 100 (0..1)
@@ -163,9 +163,110 @@ function parseMathGlyphInfo(bytes: Uint8Array<ArrayBuffer>, mathTableOffset: num
   };
 }
 
+// One pre-built, fixed-size larger form of a stretchy glyph (a MathGlyphVariantRecord): the glyph to draw, plus how far it extends along the stretch axis -- its own height for a vertical construction (a tall parenthesis, brace, or radical sign), its own width for a horizontal one (an over/under-brace). `advanceMeasurement` is in font design units, and is the value a variant-selection pass compares against its target size; it is NOT the glyph's hmtx advance width unless the axis happens to be horizontal.
+export interface MathGlyphVariant {
+  readonly glyphId: number;
+  readonly advanceMeasurement: number; // design units, along the construction's own stretch axis
+}
+
+// One reusable piece of a GlyphAssembly recipe (a GlyphPartRecord). `startConnectorLength`/`endConnectorLength` are how much of this part's own extent, at each end, is flat connecting material that may be overlapped with a neighbouring part without changing the drawn shape -- the metadata that makes a seamless join possible. `fullAdvance` is the part's own full extent along the stretch axis. An extender part is the one repeated as many times as needed to reach an arbitrary size; every other part is placed exactly once.
+export interface MathGlyphPart {
+  readonly glyphId: number;
+  readonly startConnectorLength: number; // design units
+  readonly endConnectorLength: number; // design units
+  readonly fullAdvance: number; // design units
+  readonly isExtender: boolean;
+}
+
+// A GlyphAssembly table: the recipe for building an arbitrarily large form of a stretchy glyph out of repeatable parts, used when no pre-built variant is large enough. Parts are listed in the order they are laid down along the stretch axis -- bottom to top for a vertical assembly, left to right for a horizontal one (spec, "GlyphAssembly Table") -- which is exactly the order assembleStretchyGlyph (math-stretch.ts) places them in.
+export interface MathGlyphAssembly {
+  readonly italicsCorrection: number; // design units
+  readonly parts: readonly MathGlyphPart[];
+}
+
+// A MathGlyphConstruction table: everything the font declares about stretching one base glyph along one axis. `variants` is the font's own pre-built sequence at increasing sizes (its first entry is conventionally the base glyph itself, unstretched); `assembly` is present only for a glyph the font can also build from parts, which is what makes an unbounded size reachable.
+export interface MathGlyphConstruction {
+  readonly variants: readonly MathGlyphVariant[];
+  readonly assembly?: MathGlyphAssembly;
+}
+
+// The MathVariants subtable: per-axis stretchy-glyph constructions, keyed by the base glyph ID they stretch. `minConnectorOverlap` is the font's own floor on how much two adjacent assembly parts must overlap -- overlapping by less leaves a visible seam where the two outlines fail to meet, so it is a lower bound on the overlap an assembly may use, never a target.
+export interface MathVariants {
+  readonly minConnectorOverlap: number; // design units
+  readonly vertical: ReadonlyMap<number, MathGlyphConstruction>;
+  readonly horizontal: ReadonlyMap<number, MathGlyphConstruction>;
+}
+
+const MATH_GLYPH_VARIANT_RECORD_SIZE = 4; // uint16 variantGlyph + UFWORD advanceMeasurement
+const GLYPH_PART_RECORD_SIZE = 10; // uint16 glyphID + three UFWORDs + uint16 partFlags
+const GLYPH_PART_FLAG_EXTENDER = 0x0001;
+const MATH_VARIANTS_HEADER_SIZE = 10; // uint16 minConnectorOverlap + two Offset16 coverages + two uint16 counts, before the two Offset16 construction arrays
+
+function parseGlyphAssembly(bytes: Uint8Array<ArrayBuffer>, assemblyOffset: number): MathGlyphAssembly {
+  const partCount = u16(bytes, assemblyOffset + MATH_VALUE_RECORD_SIZE);
+  const parts: MathGlyphPart[] = [];
+  for (let i = 0; i < partCount; i++) {
+    const recordOffset = assemblyOffset + MATH_VALUE_RECORD_SIZE + 2 + i * GLYPH_PART_RECORD_SIZE;
+    parts.push({
+      glyphId: u16(bytes, recordOffset),
+      startConnectorLength: u16(bytes, recordOffset + 2),
+      endConnectorLength: u16(bytes, recordOffset + 4),
+      fullAdvance: u16(bytes, recordOffset + 6),
+      isExtender: (u16(bytes, recordOffset + 8) & GLYPH_PART_FLAG_EXTENDER) !== 0,
+    });
+  }
+  return { italicsCorrection: i16(bytes, assemblyOffset), parts };
+}
+
+function parseGlyphConstruction(bytes: Uint8Array<ArrayBuffer>, constructionOffset: number): MathGlyphConstruction {
+  const assemblyOffset = u16(bytes, constructionOffset);
+  const variantCount = u16(bytes, constructionOffset + 2);
+  const variants: MathGlyphVariant[] = [];
+  for (let i = 0; i < variantCount; i++) {
+    const recordOffset = constructionOffset + 4 + i * MATH_GLYPH_VARIANT_RECORD_SIZE;
+    variants.push({ glyphId: u16(bytes, recordOffset), advanceMeasurement: u16(bytes, recordOffset + 2) });
+  }
+  return assemblyOffset === 0 ? { variants } : { variants, assembly: parseGlyphAssembly(bytes, constructionOffset + assemblyOffset) };
+}
+
+// One axis's coverage table plus its own parallel MathGlyphConstruction offset array, resolved to a base-glyph-ID -> construction lookup. `constructionArrayOffset` is where that axis's Offset16 array starts (the vertical array first, immediately after the MathVariants header; the horizontal array immediately after it), and each entry in it is measured from the MathVariants table's own start.
+function parseConstructionsForAxis(bytes: Uint8Array<ArrayBuffer>, variantsOffset: number, coverageOffset: number, count: number, constructionArrayOffset: number): ReadonlyMap<number, MathGlyphConstruction> {
+  const constructions = new Map<number, MathGlyphConstruction>();
+  if (coverageOffset === 0) {
+    return constructions;
+  }
+  for (const [glyphId, coverageIndex] of parseCoverageIndex(bytes, variantsOffset + coverageOffset)) {
+    if (coverageIndex >= count) {
+      continue; // a coverage table listing more glyphs than the construction array has entries: skip the unbacked tail rather than reading past it
+    }
+    constructions.set(glyphId, parseGlyphConstruction(bytes, variantsOffset + u16(bytes, constructionArrayOffset + coverageIndex * 2)));
+  }
+  return constructions;
+}
+
+function parseMathVariants(bytes: Uint8Array<ArrayBuffer>, mathTableOffset: number): MathVariants {
+  const variantsTableOffset = u16(bytes, mathTableOffset + 8);
+  if (variantsTableOffset === 0) {
+    return { minConnectorOverlap: 0, vertical: new Map(), horizontal: new Map() };
+  }
+  const variantsOffset = mathTableOffset + variantsTableOffset;
+  const verticalCoverageOffset = u16(bytes, variantsOffset + 2);
+  const horizontalCoverageOffset = u16(bytes, variantsOffset + 4);
+  const verticalCount = u16(bytes, variantsOffset + 6);
+  const horizontalCount = u16(bytes, variantsOffset + 8);
+  const verticalArrayOffset = variantsOffset + MATH_VARIANTS_HEADER_SIZE;
+  const horizontalArrayOffset = verticalArrayOffset + verticalCount * 2;
+  return {
+    minConnectorOverlap: u16(bytes, variantsOffset),
+    vertical: parseConstructionsForAxis(bytes, variantsOffset, verticalCoverageOffset, verticalCount, verticalArrayOffset),
+    horizontal: parseConstructionsForAxis(bytes, variantsOffset, horizontalCoverageOffset, horizontalCount, horizontalArrayOffset),
+  };
+}
+
 export interface MathTable {
   readonly constants: MathConstants;
   readonly glyphInfo: MathGlyphInfo;
+  readonly variants: MathVariants;
 }
 
 export function parseMathTable(font: SfntFont): MathTable {
@@ -176,5 +277,6 @@ export function parseMathTable(font: SfntFont): MathTable {
   return {
     constants: parseMathConstants(mathBytes, 0),
     glyphInfo: parseMathGlyphInfo(mathBytes, 0),
+    variants: parseMathVariants(mathBytes, 0),
   };
 }

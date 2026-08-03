@@ -10,7 +10,9 @@ import type { CmapLookup } from './cmap-table';
 import { buildCmapLookup } from './cmap-table';
 import type { HmtxTable } from './hmtx-table';
 import { parseHmtx } from './hmtx-table';
-import type { MathTable } from './math-table';
+import type { MathStretchAxis, MathStretchConstruction } from './math-stretch';
+import { assembleStretchyGlyph, scaleMathStretchConstruction } from './math-stretch';
+import type { MathGlyphConstruction, MathTable } from './math-table';
 import { parseMathTable } from './math-table';
 import type { SfntFont } from './sfnt';
 import { i16, parseSfnt, sfntTableBytes, u16 } from './sfnt';
@@ -32,6 +34,10 @@ export interface MathFont {
   glyphId(codePoint: number): number | undefined;
   // The glyph-space (1000-units-per-em, PDF's own /W convention regardless of the font's own unitsPerEm) advance width for `glyphId` -- the value math-font-write.ts writes into /W, and the same conversion factor content stream widths implicitly rely on.
   glyphSpaceWidth(glyphId: number): number;
+  // The font's own MathVariants.minConnectorOverlap, in design units -- the floor on assembly part overlap assembleStretchyGlyph (math-stretch.ts) needs alongside a construction from `stretchyConstruction` below.
+  readonly minConnectorOverlap: number;
+  // Everything the font declares about stretching the glyph for `codePoint` along `axis`, in design units, or `undefined` when the font's MathVariants subtable does not cover that glyph on that axis at all (i.e. the character is not stretchy in this font, whatever an operator dictionary may say about it). See LoadedMathFont.stretchGlyph below for the points-in/points-out form most callers want.
+  stretchyConstruction(codePoint: number, axis: MathStretchAxis): MathGlyphConstruction | undefined;
 }
 
 function toPt(designUnits: number, unitsPerEm: number, sizePt: number): number {
@@ -97,6 +103,8 @@ function metricsAtSize(cmap: CmapLookup, hmtx: HmtxTable, math: MathTable, units
 export interface LoadedMathFont {
   readonly font: MathFont;
   readonly metricsAt: (sizePt: number) => MathFontMetrics;
+  // Stretches the glyph for `codePoint` to `targetSizePt` along `axis`, when the operator is being set at `sizePt` -- the points-in/points-out entry point for OpenType MATH stretchy glyphs (a tall parenthesis around a big fraction, a radical sign sized to its own radicand, an over-brace spanning its own content). Every length on the returned construction is in points at `sizePt`, matching MathFontMetrics's own convention. Returns `undefined` when this font declares no stretching for that glyph on that axis, in which case the caller draws the base glyph unstretched.
+  readonly stretchGlyph: (codePoint: number, axis: MathStretchAxis, targetSizePt: number, sizePt: number) => MathStretchConstruction | undefined;
 }
 
 let cached: LoadedMathFont | undefined;
@@ -142,11 +150,28 @@ export function loadMathFont(): LoadedMathFont {
     descriptor: { unitsPerEm, ascent: ascentDesignUnits, descent: descentDesignUnits, capHeight, bboxMin, bboxMax, italicAngle: 0 },
     glyphId: (codePoint: number) => cmap(codePoint),
     glyphSpaceWidth: (glyphId: number) => (hmtx.advanceWidth(glyphId) * 1000) / unitsPerEm,
+    minConnectorOverlap: math.variants.minConnectorOverlap,
+    stretchyConstruction: (codePoint: number, axis: MathStretchAxis) => {
+      const glyphId = cmap(codePoint);
+      if (glyphId === undefined) {
+        return undefined;
+      }
+      return (axis === 'vertical' ? math.variants.vertical : math.variants.horizontal).get(glyphId);
+    },
   };
 
   cached = {
     font,
     metricsAt: (sizePt: number) => metricsAtSize(cmap, hmtx, math, unitsPerEm, ascentDesignUnits, descentDesignUnits, sizePt),
+    stretchGlyph: (codePoint: number, axis: MathStretchAxis, targetSizePt: number, sizePt: number) => {
+      const construction = font.stretchyConstruction(codePoint, axis);
+      if (construction === undefined) {
+        return undefined;
+      }
+      const designUnitsPerPt = unitsPerEm / sizePt;
+      const assembled = assembleStretchyGlyph(construction, { axis, targetSize: targetSizePt * designUnitsPerPt, minConnectorOverlap: math.variants.minConnectorOverlap });
+      return assembled === undefined ? undefined : scaleMathStretchConstruction(assembled, 1 / designUnitsPerPt);
+    },
   };
   return cached;
 }
