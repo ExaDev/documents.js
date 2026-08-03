@@ -1,3 +1,20 @@
+# [1.64.0](https://github.com/ExaDev/documents.js/compare/v1.63.0...v1.64.0) (2026-08-03)
+
+
+### Features
+
+* **docx:** expose comments, footnotes, headers/footers, and numbering definitions ([e7499e1](https://github.com/ExaDev/documents.js/commit/e7499e1fc21c2bd7fff95c4bacf203bb877a6e5a))
+* **docx:** recover an OOXML math equation as a real formula block ([10334ec](https://github.com/ExaDev/documents.js/commit/10334ecb707cd5e5a60fa38ea9ae8ae30b2f6734))
+* **hsqldb,firebird:** carry exactValue for BIGINT/DECIMAL values a double can't represent ([e5859a8](https://github.com/ExaDev/documents.js/commit/e5859a8c94b1c8731c01420bc9e0f4bd3e24e626))
+* **layout:** stretch justified inter-word gaps in pptx/odp shapes and sheet cells ([f88487c](https://github.com/ExaDev/documents.js/commit/f88487c64d334e289b437a47dba0e1675747dad1))
+* **odb:** add a bounded single-table SQL query engine ([c9a3a8e](https://github.com/ExaDev/documents.js/commit/c9a3a8e4996268cc782352860b42ec7951dc1fc4))
+* **odb:** add a Report Builder rpt formula evaluator ([6d01456](https://github.com/ExaDev/documents.js/commit/6d01456f4aa407bd3786d03e7d5fac33e75b9e59))
+* **odb:** render a Report to ContentDocument via the SQL engine and formula evaluator ([c749557](https://github.com/ExaDev/documents.js/commit/c7495572ab753f3bcd218ec779f1d31612c5e886))
+* **ods:** read/write printRange, scale/fitToPages, repeatRows/repeatColumns, manualBreaks ([4c86086](https://github.com/ExaDev/documents.js/commit/4c86086bdffaabfb560ff2dbfc1129d04e9ba87a))
+* **ods:** write column/row hidden state via table:visibility ([7f029d6](https://github.com/ExaDev/documents.js/commit/7f029d630186571a666bb5e5907eeafd47620042))
+* **ods:** write ContentSheetImage and formula embeddedObjects ([bbfd282](https://github.com/ExaDev/documents.js/commit/bbfd2827c9648f11332b6890e7f4a66683d8c192))
+* **odt:** write an embedded formula as a real ODF sub-document ([1dc2920](https://github.com/ExaDev/documents.js/commit/1dc2920305a20d3e61a2862f0afa0e3ea0dad111))
+
 # [1.63.0](https://github.com/ExaDev/documents.js/compare/v1.62.0...v1.63.0) (2026-08-03)
 
 
