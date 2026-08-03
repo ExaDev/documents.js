@@ -1,3 +1,10 @@
+## [1.2.9](https://github.com/ExaDev/document-cli/compare/v1.2.8...v1.2.9) (2026-08-03)
+
+
+### Bug Fixes
+
+* **ci:** wait for a real check-run to register before requesting auto-merge ([e1b83dc](https://github.com/ExaDev/document-cli/commit/e1b83dcc2699e28a2c1de642dc2e03b87a853b58))
+
 ## [1.2.8](https://github.com/ExaDev/document-cli/compare/v1.2.7...v1.2.8) (2026-08-03)
 
 
