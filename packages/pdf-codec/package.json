@@ -1,6 +1,6 @@
 {
   "name": "pdf-codec",
-  "version": "1.11.6",
+  "version": "1.11.7",
   "description": "Hand-written, dependency-minimal PDF codec: parses arbitrary real-world PDFs and generates new ones, built on document-schema.js's LayoutDocument pivot and Zod 4 codecs.",
   "type": "module",
   "repository": {
