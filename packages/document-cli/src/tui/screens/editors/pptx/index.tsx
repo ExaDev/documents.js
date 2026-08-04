@@ -4,6 +4,7 @@ import { buildPptxSlideFamilyAdapter, SlideFamilySlideList } from '../../shared/
 
 export { ShapeEditorScreen } from './shape-editor.js';
 export { SlideDetailScreen } from './slide-detail.js';
+export { SlideTableDetailScreen } from './slide-table-detail.js';
 
 export function PptxSlideListScreen(): ReactElement {
   const state = useAppState();

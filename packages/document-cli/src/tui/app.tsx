@@ -22,7 +22,7 @@ import { OdbTableRowsScreen } from './screens/editors/odb/table-rows.js';
 import { OdgPageListScreen } from './screens/editors/odg/page-list.js';
 import { OdgPageDetailScreen } from './screens/editors/odg/page-detail.js';
 import { OdgShapeOrVectorDetailScreen } from './screens/editors/odg/shape-or-vector-detail.js';
-import { NotesEditorScreen, OdpSlideListScreen, ShapeEditorScreen, SlideDetailScreen } from './screens/editors/odp/index.js';
+import { NotesEditorScreen, OdpSlideListScreen, ShapeEditorScreen, SlideDetailScreen, SlideTableDetailScreen } from './screens/editors/odp/index.js';
 import { OdsSheetListScreen } from './screens/editors/ods/sheet-list.js';
 import { OdsPrintSettingsEditorScreen } from './screens/editors/ods/print-settings-editor.js';
 import { OdsSpreadsheetGridScreen } from './screens/editors/ods/spreadsheet-grid.js';
@@ -81,6 +81,8 @@ function ScreenBody({ screen }: { readonly screen: Screen }): ReactElement {
       return <SlideDetailScreen screen={screen} />;
     case 'shapeEditor':
       return <ShapeEditorScreen screen={screen} />;
+    case 'slideTableDetail':
+      return <SlideTableDetailScreen screen={screen} />;
     case 'notesEditor':
       return <NotesEditorScreen screen={screen} />;
     case 'sheetList':

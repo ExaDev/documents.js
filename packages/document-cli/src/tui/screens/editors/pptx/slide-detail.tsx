@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { Box, Text, useInput } from 'ink';
 import { useState, type ReactElement } from 'react';
+import type { Box as GeometryBox } from 'documents.js';
 import { describeError } from '../../../errors.js';
 import { ListView } from '../../../components/list-view.js';
 import { TextField } from '../../../components/text-field.js';
@@ -8,6 +9,8 @@ import { useNavigationInput } from '../../../keybindings/use-navigation-input.js
 import { useAppDispatch, useAppState } from '../../../state/context.js';
 import { anyOverlayOpen, selectionKeyFor, type Screen } from '../../../state/types.js';
 import { assertPresentationDocument, defaultShapeFrame, describeSlideFamilyShape } from '../../shared/slide-family.js';
+import { summarizeSlideTables } from '../../shared/slide-table.js';
+import { parsePositiveIntField } from '../../shared/text.js';
 
 export interface SlideDetailScreenProps {
   readonly screen: Extract<Screen, { kind: 'slideDetail' }>;
@@ -20,12 +23,6 @@ const IMAGE_EXTENSION_TO_FORMAT: Readonly<Record<string, 'png' | 'jpeg'>> = { pn
 
 const DEFAULT_TABLE_ROWS = 2;
 const DEFAULT_TABLE_COLUMNS = 2;
-
-// Table dimensions are small positive integers -- a blank or non-numeric entry falls back to the same default the field was pre-filled with, and anything less than 1 (zero, negative, a fraction that floors to 0) does too, since documents.js's own SlideTableInit has no meaningful zero-row or zero-column table to build.
-function parsePositiveIntField(raw: string, fallback: number): number {
-  const parsed = Number.parseInt(raw, 10);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
-}
 
 function imageFormatFromPath(path: string): 'png' | 'jpeg' | undefined {
   const dotIndex = path.lastIndexOf('.');
@@ -43,6 +40,25 @@ async function readImageForShape(path: string): Promise<{ readonly format: 'png'
   return { format, bytes: new Uint8Array(await readFile(path)) };
 }
 
+// PptxSlide.shapes()/OdpSlide.shapes() never report a table graphicFrame/draw:frame at all -- it is invisible to that accessor by design (see documents.js's own doc comments) -- so a slide's own tables() need their own section in this screen's body list, separate from `shapes`, rather than being folded into the same array. `header` is skipped by the selectable-row-indices machinery below, mirroring paragraph-family.tsx's own ParagraphFamilyBodyList (which faces the identical "two separate enumeration accessors, no shared document-order index" problem for paragraphs/tables/lists).
+interface ShapeRow {
+  readonly kind: 'shape';
+  readonly index: number;
+  readonly text: string;
+  readonly frame: GeometryBox | undefined;
+}
+interface TablesHeaderRow {
+  readonly kind: 'tablesHeader';
+  readonly count: number;
+}
+interface TableRow {
+  readonly kind: 'table';
+  readonly index: number;
+  readonly rowCount: number;
+  readonly columnCount: number;
+}
+type SlideBodyRow = ShapeRow | TablesHeaderRow | TableRow;
+
 export function SlideDetailScreen(props: SlideDetailScreenProps): ReactElement {
   const state = useAppState();
   const dispatch = useAppDispatch();
@@ -51,7 +67,24 @@ export function SlideDetailScreen(props: SlideDetailScreenProps): ReactElement {
   const { slideIndex } = props.screen;
   const slide = doc.editor.slides()[slideIndex];
   const shapes = slide === undefined ? [] : slide.shapes();
-  const rows = shapes.map((shape, index) => ({ index, text: shape.text, frame: shape.frame }));
+  const tableSummaries = slide === undefined ? [] : summarizeSlideTables(doc, slideIndex);
+
+  const shapeRows: readonly SlideBodyRow[] = shapes.map((shape, index) => ({ kind: 'shape', index, text: shape.text, frame: shape.frame }));
+  const rows: readonly SlideBodyRow[] = [
+    ...shapeRows,
+    ...(tableSummaries.length > 0
+      ? [
+          { kind: 'tablesHeader', count: tableSummaries.length } as const,
+          ...tableSummaries.map((summary): SlideBodyRow => ({ kind: 'table', index: summary.index, rowCount: summary.rowCount, columnCount: summary.columnCount })),
+        ]
+      : []),
+  ];
+  const selectableRowIndices: readonly number[] = rows.reduce<number[]>((acc, row, index) => {
+    if (row.kind !== 'tablesHeader') {
+      acc.push(index);
+    }
+    return acc;
+  }, []);
 
   const [addMode, setAddMode] = useState<AddItemMode>('closed');
   const [draft, setDraft] = useState('');
@@ -60,19 +93,34 @@ export function SlideDetailScreen(props: SlideDetailScreenProps): ReactElement {
   const formIsOpen = addMode !== 'closed';
 
   const { selectedIndex } = useNavigationInput({
-    itemCount: rows.length,
+    itemCount: selectableRowIndices.length,
     isActive: !overlayOpen && !formIsOpen,
     onBack: () => {
       dispatch({ type: 'POP_SCREEN' });
     },
     onSelect: (index) => {
-      dispatch({ type: 'SET_SELECTION', key: selectionKeyFor(props.screen), index });
-      dispatch({ type: 'PUSH_SCREEN', screen: { kind: 'shapeEditor', slideIndex, shapeIndex: index } });
+      const rowIndex = selectableRowIndices[index];
+      const row = rowIndex === undefined ? undefined : rows[rowIndex];
+      if (row === undefined) {
+        return;
+      }
+      if (row.kind === 'shape') {
+        dispatch({ type: 'SET_SELECTION', key: selectionKeyFor(props.screen), index });
+        dispatch({ type: 'PUSH_SCREEN', screen: { kind: 'shapeEditor', slideIndex, shapeIndex: row.index } });
+        return;
+      }
+      if (row.kind === 'table') {
+        dispatch({ type: 'PUSH_SCREEN', screen: { kind: 'slideTableDetail', slideIndex, tableIndex: row.index } });
+      }
     },
     onAppend: () => {
       setAddMode('chooseKind');
     },
   });
+
+  // Only meaningful when `rows` is non-empty; ListView renders its own empty message before reading this prop when `rows` is empty, so -1 (a value no real row index can equal) is a safe "nothing to highlight" -- matching paragraph-family.tsx's own ParagraphFamilyBodyList convention exactly.
+  const resolvedRowIndex = selectableRowIndices[selectedIndex];
+  const listSelectedIndex = resolvedRowIndex ?? -1;
 
   // 't'/'i'/'b' choose the new item's kind; anything else (bar Esc) is ignored rather than falling through to the list navigation below, since useNavigationInput is already inactive for the whole add-item flow (see `formIsOpen` above).
   useInput(
@@ -142,20 +190,36 @@ export function SlideDetailScreen(props: SlideDetailScreenProps): ReactElement {
   return (
     <Box flexDirection="column">
       <Text bold>
-        Slide {slideIndex + 1} -- {rows.length} shape{rows.length === 1 ? '' : 's'}
+        Slide {slideIndex + 1} -- {shapes.length} shape{shapes.length === 1 ? '' : 's'}
       </Text>
       {slide === undefined ? (
         <Text color="yellow">This slide no longer exists -- press Esc to go back</Text>
       ) : (
         <ListView
           items={rows}
-          selectedIndex={selectedIndex}
+          selectedIndex={listSelectedIndex}
           emptyMessage="No shapes yet -- press 'a' to add one"
-          renderItem={(row, isSelected) => (
-            <Text color={isSelected ? 'cyan' : undefined} inverse={isSelected}>
-              {row.index + 1}. {describeSlideFamilyShape({ text: row.text, frame: row.frame })}
-            </Text>
-          )}
+          renderItem={(row, isSelected) => {
+            if (row.kind === 'tablesHeader') {
+              return (
+                <Text bold dimColor>
+                  Tables ({row.count})
+                </Text>
+              );
+            }
+            if (row.kind === 'table') {
+              return (
+                <Text color={isSelected ? 'cyan' : undefined} inverse={isSelected}>
+                  {'  '}Table {row.index + 1} ({row.rowCount}x{row.columnCount})
+                </Text>
+              );
+            }
+            return (
+              <Text color={isSelected ? 'cyan' : undefined} inverse={isSelected}>
+                {row.index + 1}. {describeSlideFamilyShape({ text: row.text, frame: row.frame })}
+              </Text>
+            );
+          }}
         />
       )}
       {addMode === 'chooseKind' ? <Text color="cyan">Add shape: t textbox, i image, b table, Esc cancel</Text> : undefined}
