@@ -1,3 +1,4 @@
+import { readOdsContent } from 'documents.js';
 import { Box, Text } from 'ink';
 import { render } from 'ink-testing-library';
 import { useEffect, type ReactElement } from 'react';
@@ -30,11 +31,17 @@ function GridHarness(): ReactElement {
   if (doc?.format !== 'ods' || top?.kind !== 'spreadsheetGrid') {
     return <Text>loading</Text>;
   }
+
+  // A1's own colSpan/rowSpan after a merge, read fresh through readOdsContent on every render -- the same "display-unsafe live accessor, read through the content pivot" convention this screen's own resolveSheet already follows (see shared.ts), used here purely as a test probe.
+  const content = readOdsContent(doc.editor.toPackage());
+  const anchor = content.kind === 'spreadsheet' ? content.sheets[0]?.cells.find((cell) => cell.row === 0 && cell.column === 0) : undefined;
+
   return (
     <Box flexDirection="column">
       <OdsSpreadsheetGridScreen />
       <Text>top:{top.kind}</Text>
       <Text>cellA1:{JSON.stringify(doc.editor.sheets()[0]?.cell(0, 0).value)}</Text>
+      <Text>anchorSpan:{anchor?.colSpan ?? 1}x{anchor?.rowSpan ?? 1}</Text>
     </Box>
   );
 }
@@ -95,6 +102,56 @@ describe('OdsSpreadsheetGridScreen', () => {
 
     const frame = await waitForFrame(lastFrame, (candidate) => candidate.includes('cellA1:{"kind":"number","value":42}'));
     expect(frame).not.toContain('Enter to commit');
+  });
+
+  it('merges a real rectangle of cells via the range-select-then-merge flow (m to anchor, move, m to commit)', async () => {
+    const { lastFrame, stdin } = renderHarness();
+    let frame = await waitForFrame(lastFrame, (candidate) => candidate.includes('A1'));
+    expect(frame).toContain('anchorSpan:1x1');
+    await settle();
+
+    // Seed A1 with a real string so the merged cell keeps something visible after committing.
+    stdin.write('T');
+    await waitForFrame(lastFrame, (candidate) => candidate.includes('Enter to commit'));
+    await settle();
+    stdin.write('otal');
+    await settle();
+    stdin.write('\r');
+    await waitForFrame(lastFrame, (candidate) => candidate.includes('cellA1:{"kind":"string","value":"Total"}'));
+    await settle();
+
+    // Anchor the merge at A1, move to B2 (the opposite corner), then commit.
+    stdin.write('m');
+    frame = await waitForFrame(lastFrame, (candidate) => candidate.includes('m/Enter to merge'));
+    // The hint text switched to the pending-merge variant.
+    expect(frame).not.toContain('to anchor a merge');
+    await settle();
+
+    stdin.write('l');
+    await settle();
+    stdin.write('j');
+    await settle();
+
+    stdin.write('m');
+    frame = await waitForFrame(lastFrame, (candidate) => candidate.includes('anchorSpan:2x2'));
+    expect(frame).toContain('to anchor a merge');
+    expect(frame).toContain('cellA1:{"kind":"string","value":"Total"}');
+  });
+
+  it('cancels a pending merge on Escape without touching the document', async () => {
+    const { lastFrame, stdin } = renderHarness();
+    await waitForFrame(lastFrame, (candidate) => candidate.includes('anchorSpan:1x1'));
+    await settle();
+
+    stdin.write('m');
+    await waitForFrame(lastFrame, (candidate) => candidate.includes('m/Enter to merge'));
+    await settle();
+
+    stdin.write('\x1B');
+    const frame = await waitForFrame(lastFrame, (candidate) => candidate.includes('to anchor a merge'));
+    expect(frame).toContain('anchorSpan:1x1');
+    // Esc cancelled the pending merge only -- the screen itself is still on top, not popped.
+    expect(frame).toContain('top:spreadsheetGrid');
   });
 
   it('switches to the compact non-empty-cells list on "t" and back to the grid', async () => {

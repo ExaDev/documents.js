@@ -17,12 +17,17 @@ const COMPACT_ADDRESS_WIDTH = 8;
 // This screen's own chrome beyond ListView's default reserved-rows count: a title line, a column-header line, the cell-info line below the grid, one hint line, and the app shell's StatusLine underneath everything -- the compact list view reuses this same figure via ListView's `reservedRows`.
 const GRID_CHROME_ROWS = 5;
 
-// 'h'/'j'/'k'/'l' move the cursor, and 'p'/'t' open print settings / toggle the compact view -- all six are claimed before the printable-character check below, so none of them can seed a type-to-edit. A real, honest, vim-shaped limitation: reach the editor with Enter first, then those letters type as ordinary characters like any other.
-const RESERVED_LETTERS: ReadonlySet<string> = new Set(['h', 'j', 'k', 'l', 'p', 't']);
+// 'h'/'j'/'k'/'l' move the cursor, 'p'/'t' open print settings / toggle the compact view, and 'm' anchors/commits a range-select merge -- all seven are claimed before the printable-character check below, so none of them can seed a type-to-edit. A real, honest, vim-shaped limitation: reach the editor with Enter first, then those letters type as ordinary characters like any other.
+const RESERVED_LETTERS: ReadonlySet<string> = new Set(['h', 'j', 'k', 'l', 'p', 't', 'm']);
 
 interface EditSession {
   readonly seedText: string;
   readonly seedKind: ContentCellValue['kind'];
+}
+
+interface CellAddress {
+  readonly row: number;
+  readonly column: number;
 }
 
 interface CompactRow {
@@ -61,6 +66,7 @@ export function OdsSpreadsheetGridScreen(): ReactElement {
   const [cursorColumn, setCursorColumn] = useState(0);
   const [viewMode, setViewMode] = useState<'grid' | 'compact'>('grid');
   const [editSession, setEditSession] = useState<EditSession | undefined>(undefined);
+  const [mergeAnchor, setMergeAnchor] = useState<CellAddress | undefined>(undefined);
 
   const { columns: terminalColumns, rows: terminalRows } = useWindowSize();
 
@@ -81,6 +87,16 @@ export function OdsSpreadsheetGridScreen(): ReactElement {
 
   function beginEdit(seedText: string, seedKind: ContentCellValue['kind']): void {
     setEditSession({ seedText, seedKind });
+  }
+
+  // Commits the rectangle between `anchor` and the current cursor cell (whichever corner is which -- 'm' can be pressed anywhere relative to the anchor) as a real MERGE_CELLS dispatch, then clears the pending anchor.
+  function commitMerge(anchor: CellAddress): void {
+    const startRow = Math.min(anchor.row, clampedRow);
+    const startColumn = Math.min(anchor.column, clampedColumn);
+    const rowSpan = Math.abs(clampedRow - anchor.row) + 1;
+    const colSpan = Math.abs(clampedColumn - anchor.column) + 1;
+    dispatch({ type: 'MERGE_CELLS', sheetIndex, startRow, startColumn, rowSpan, colSpan });
+    setMergeAnchor(undefined);
   }
 
   // Commands that apply in either view mode: print settings and the grid/compact toggle.
@@ -134,10 +150,26 @@ export function OdsSpreadsheetGridScreen(): ReactElement {
         return;
       }
       if (key.escape) {
+        if (mergeAnchor !== undefined) {
+          setMergeAnchor(undefined);
+          return;
+        }
         dispatch({ type: 'POP_SCREEN' });
         return;
       }
+      if (input === 'm') {
+        if (mergeAnchor === undefined) {
+          setMergeAnchor({ row: clampedRow, column: clampedColumn });
+        } else {
+          commitMerge(mergeAnchor);
+        }
+        return;
+      }
       if (key.return) {
+        if (mergeAnchor !== undefined) {
+          commitMerge(mergeAnchor);
+          return;
+        }
         const cell = cells.get(cellKey(clampedRow, clampedColumn));
         const seedKind: ContentCellValue['kind'] = cell === undefined || cell.value.kind === 'empty' ? 'string' : cell.value.kind;
         beginEdit(cell === undefined ? '' : rawEditableText(cell.value), seedKind);
@@ -230,9 +262,10 @@ export function OdsSpreadsheetGridScreen(): ReactElement {
               <Text dimColor>{`${row + 1}`.padStart(ROW_HEADER_WIDTH - 1)} </Text>
               {visibleColumns.map((column) => {
                 const isCursor = row === clampedRow && column === clampedColumn;
+                const isAnchor = row === mergeAnchor?.row && column === mergeAnchor?.column;
                 const cell = cells.get(cellKey(row, column));
                 return (
-                  <Text key={column} inverse={isCursor} color={isCursor ? 'cyan' : undefined}>
+                  <Text key={column} inverse={isCursor} color={isCursor ? 'cyan' : isAnchor ? 'yellow' : undefined}>
                     {padCell(cell === undefined ? '' : cell.displayText, CELL_WIDTH)}
                   </Text>
                 );
@@ -265,7 +298,9 @@ export function OdsSpreadsheetGridScreen(): ReactElement {
       )}
 
       <Text dimColor>
-        hjkl/arrows move, Enter/type to edit, p print settings, t {viewMode === 'grid' ? 'compact list' : 'grid'} view, Esc back
+        {mergeAnchor === undefined
+          ? `hjkl/arrows move, Enter/type to edit, m to anchor a merge, p print settings, t ${viewMode === 'grid' ? 'compact list' : 'grid'} view, Esc back`
+          : 'hjkl/arrows to the opposite corner, m/Enter to merge, Esc to cancel'}
       </Text>
     </Box>
   );
