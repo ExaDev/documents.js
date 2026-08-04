@@ -1,3 +1,10 @@
+## [1.1.7](https://github.com/ExaDev/document-mcp/compare/v1.1.6...v1.1.7) (2026-08-04)
+
+
+### Bug Fixes
+
+* stop describing xlsx as a rejected metadata_write source or target ([4c3a073](https://github.com/ExaDev/document-mcp/commit/4c3a073ee941dbad6456480c959cb62da883d3f8))
+
 ## [1.1.6](https://github.com/ExaDev/document-mcp/compare/v1.1.5...v1.1.6) (2026-08-04)
 
 ## [1.1.5](https://github.com/ExaDev/document-mcp/compare/v1.1.4...v1.1.5) (2026-08-04)
