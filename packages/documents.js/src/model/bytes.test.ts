@@ -47,6 +47,17 @@ describe('bytes', () => {
     expect(OdgBytesSchema.parse(odgBytes)).toBe(odgBytes);
   });
 
+  it('each ODF schema also accepts its own -template variant (.ott/.ots/.otp/.otg), since a template is the same package with a template mimetype', () => {
+    const ottBytes = odfBytes(ODF_MEDIA_TYPES.ott);
+    const otsBytes = odfBytes(ODF_MEDIA_TYPES.ots);
+    const otpBytes = odfBytes(ODF_MEDIA_TYPES.otp);
+    const otgBytes = odfBytes(ODF_MEDIA_TYPES.otg);
+    expect(OdtBytesSchema.parse(ottBytes)).toBe(ottBytes);
+    expect(OdsBytesSchema.parse(otsBytes)).toBe(otsBytes);
+    expect(OdpBytesSchema.parse(otpBytes)).toBe(otpBytes);
+    expect(OdgBytesSchema.parse(otgBytes)).toBe(otgBytes);
+  });
+
   it('the ODF schemas reject every other ODF media type, not just non-ODF input', () => {
     expect(OdtBytesSchema.safeParse(odsBytes).success).toBe(false);
     expect(OdtBytesSchema.safeParse(odpBytes).success).toBe(false);
@@ -66,9 +77,13 @@ describe('bytes', () => {
     expect(PptxBytesSchema.safeParse(odpBytes).success).toBe(true);
   });
 
-  it('rejects an ODF mimetype entry that is merely a byte-prefix of the expected media type (odt vs. ott)', () => {
-    const templateBytes = odfBytes('application/vnd.oasis.opendocument.text-template');
-    expect(OdtBytesSchema.safeParse(templateBytes).success).toBe(false);
+  it('the length check still tells a genuine mismatch from a byte-prefix coincidence: odt accepts its own template (ott) but rejects every other ODF type, including one whose media type is a byte-prefix of a DIFFERENT accepted type', () => {
+    // ott ('...text-template') is now accepted by OdtBytesSchema (see the template-acceptance test above), so the prefix relationship between odt and ott no longer demonstrates rejection. The length check still matters for cross-type separation: odt's own media type is a strict prefix of odp's ('...presentation' is longer), yet odt does not false-positive-match odp.
+    expect(OdtBytesSchema.safeParse(odpBytes).success).toBe(false);
+    expect(OdtBytesSchema.safeParse(odsBytes).success).toBe(false);
+    // And a fabricated mimetype that merely STARTS WITH an accepted one is still rejected, since the match is length-exact per candidate.
+    const prefixBytes = odfBytes(`${ODF_MEDIA_TYPES.odt}-not-a-real-type`);
+    expect(OdtBytesSchema.safeParse(prefixBytes).success).toBe(false);
   });
 
   it('rejects a deflated (non-stored) mimetype entry even with the correct content', () => {

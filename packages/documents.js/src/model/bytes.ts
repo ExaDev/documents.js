@@ -86,8 +86,8 @@ function readAsciiSlice(bytes: Uint8Array, offset: number, length: number): stri
   return new TextDecoder().decode(bytes.subarray(offset, offset + length));
 }
 
-// Reads the declared media type directly out of an ODF package's mimetype entry and compares it, byte for byte, against the expected type -- no zip central-directory parse, and no decodePackage() through odf.js, both of which would be needlessly expensive for what is meant to be a cheap pre-flight validation check.
-function hasOdfMimetypeEntry(bytes: Uint8Array, mediaType: string): boolean {
+// Reads the declared media type directly out of an ODF package's mimetype entry and checks it, byte for byte, against any of the accepted types -- no zip central-directory parse, and no decodePackage() through odf.js, both of which would be needlessly expensive for what is meant to be a cheap pre-flight validation check. Each accepted type is matched with its own exact length, so two types that share a byte-prefix (odt's '...opendocument.text' is a strict prefix of ott's '...opendocument.text-template') are still told apart correctly rather than one false-positive-matching the other.
+function hasOdfMimetypeEntry(bytes: Uint8Array, mediaTypes: readonly string[]): boolean {
   if (!startsWithBytes(bytes, ZIP_LOCAL_FILE_HEADER)) {
     return false;
   }
@@ -97,23 +97,27 @@ function hasOdfMimetypeEntry(bytes: Uint8Array, mediaType: string): boolean {
   if (readAsciiSlice(bytes, MIMETYPE_FILENAME_OFFSET, MIMETYPE_ENTRY_FILENAME.length) !== MIMETYPE_ENTRY_FILENAME) {
     return false;
   }
-  // The entry's declared content length must equal the target media type's length exactly, not merely start with it -- e.g. odt's media type ('...opendocument.text') is a strict byte-prefix of ott's ('...opendocument.text-template'), so a length check is what tells the two apart rather than a false-positive prefix match.
-  if (readUint32LE(bytes, COMPRESSED_SIZE_OFFSET) !== mediaType.length) {
-    return false;
-  }
-  return readAsciiSlice(bytes, MIMETYPE_CONTENT_OFFSET, mediaType.length) === mediaType;
-}
-
-function odfBytesSchema(label: string, mediaType: string) {
-  return z.instanceof(Uint8Array).refine((bytes) => hasOdfMimetypeEntry(bytes, mediaType), {
-    message: `not a valid ${label} file: the first zip entry is not a stored "mimetype" part declaring "${mediaType}"`,
+  return mediaTypes.some((mediaType) => {
+    // The entry's declared content length must equal the target media type's length exactly, not merely start with it.
+    if (readUint32LE(bytes, COMPRESSED_SIZE_OFFSET) !== mediaType.length) {
+      return false;
+    }
+    return readAsciiSlice(bytes, MIMETYPE_CONTENT_OFFSET, mediaType.length) === mediaType;
   });
 }
 
-export const OdtBytesSchema = odfBytesSchema('odt', ODF_MEDIA_TYPES.odt);
-export const OdsBytesSchema = odfBytesSchema('ods', ODF_MEDIA_TYPES.ods);
-export const OdpBytesSchema = odfBytesSchema('odp', ODF_MEDIA_TYPES.odp);
-export const OdgBytesSchema = odfBytesSchema('odg', ODF_MEDIA_TYPES.odg);
+function odfBytesSchema(label: string, mediaTypes: readonly string[]) {
+  const accepted = mediaTypes.map((type) => `"${type}"`).join(' or ');
+  return z.instanceof(Uint8Array).refine((bytes) => hasOdfMimetypeEntry(bytes, mediaTypes), {
+    message: `not a valid ${label} file: the first zip entry is not a stored "mimetype" part declaring ${accepted}`,
+  });
+}
+
+// Each schema accepts both the base media type and its -template sibling: an ODF template (.ott/.ots/.otp/.otg) is the same package as its non-template counterpart with only the mimetype's own "-template" suffix differing, so a .ott reads through the odt codec unchanged. The ergonomic conversions (odtToPdf etc.) never applied this schema and already accepted templates; this widens the schema-validated codec path and the exported pre-flight schemas to match.
+export const OdtBytesSchema = odfBytesSchema('odt', [ODF_MEDIA_TYPES.odt, ODF_MEDIA_TYPES.ott]);
+export const OdsBytesSchema = odfBytesSchema('ods', [ODF_MEDIA_TYPES.ods, ODF_MEDIA_TYPES.ots]);
+export const OdpBytesSchema = odfBytesSchema('odp', [ODF_MEDIA_TYPES.odp, ODF_MEDIA_TYPES.otp]);
+export const OdgBytesSchema = odfBytesSchema('odg', [ODF_MEDIA_TYPES.odg, ODF_MEDIA_TYPES.otg]);
 
 // MarkdownBytesSchema is architecturally different from every schema above: it is the one schema in this file asserting nothing about FORMAT STRUCTURE at all. Docx/pptx/xlsx check the generic ZIP local-file-header signature; PDF checks its own %PDF- magic header; odt/ods/odp/odg check ODF's own declared mimetype entry, byte for byte. Markdown is plain text with no header, no magic bytes, and no reserved byte sequence of its own -- CommonMark's own grammar has no "this is not markdown" rejection path at all (a genuinely unparseable line just becomes an ordinary paragraph), so there is no format-level check to write here, ever. The one thing actually worth validating at the bytes boundary is well-formed UTF-8, matching markdown-codec's own MarkdownBytesSchema (that package's src/codec.ts) exactly, so a malformed byte sequence is caught here, at the schema, rather than surfacing later as silently-mangled U+FFFD replacement characters deep inside readMarkdownContent's own output.
 function isWellFormedUtf8Text(bytes: Uint8Array): boolean {
