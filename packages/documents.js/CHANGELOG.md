@@ -1,3 +1,12 @@
+# [1.81.0](https://github.com/ExaDev/documents.js/compare/v1.80.3...v1.81.0) (2026-08-04)
+
+
+### Features
+
+* **codecs:** add a real xlsx content codec to DOCUMENT_FORMAT_CODECS ([743840a](https://github.com/ExaDev/documents.js/commit/743840a2d55bc1cfbc07f47687e2dc822e719e40))
+* **convert:** let buildDocumentBytes build xlsx from a DocumentPackage ([5e8805a](https://github.com/ExaDev/documents.js/commit/5e8805a6411e111c98de0c95a28d8c3bc8c99c9b))
+* **metadata:** let setDocumentMetadata rebuild xlsx in place ([637f0fa](https://github.com/ExaDev/documents.js/commit/637f0fa5d3bebe4ec4ac9af1f6c675423d26706e))
+
 ## [1.80.3](https://github.com/ExaDev/documents.js/compare/v1.80.2...v1.80.3) (2026-08-04)
 
 ## [1.80.2](https://github.com/ExaDev/documents.js/compare/v1.80.1...v1.80.2) (2026-08-04)
