@@ -2,13 +2,13 @@ import { Box, Text } from 'ink';
 import { useState, type Dispatch, type ReactElement } from 'react';
 import type { Box as GeometryBox, ContentStroke } from 'documents.js';
 import { ListView } from '../../../components/list-view.js';
-import { TextField } from '../../../components/text-field.js';
 import { useNavigationInput } from '../../../keybindings/use-navigation-input.js';
 import { describeError } from '../../../errors.js';
 import { readInput } from '../../../../runtime/io.js';
 import type { Action } from '../../../state/actions.js';
 import { useAppDispatch, useAppState } from '../../../state/context.js';
 import { anyOverlayOpen, type OdgOpenDocument } from '../../../state/types.js';
+import { FieldWizard, requireFieldValue, type FieldSpec } from '../../shared/field-wizard.js';
 import {
   buildPageItems,
   defaultTriangleSubpaths,
@@ -18,7 +18,6 @@ import {
   parseColorField,
   parseNumberField,
   parseStrokeField,
-  requireFieldValue,
   requireOdgDocument,
   requirePageDetailScreen,
   vectorKindLabel,
@@ -35,12 +34,6 @@ const ADD_KIND_OPTIONS: readonly { readonly kind: AddKind; readonly label: strin
   { kind: 'textbox', label: 'Text box' },
   { kind: 'image', label: 'Image' },
 ];
-
-interface FieldSpec {
-  readonly key: string;
-  readonly label: string;
-  readonly defaultValue: string;
-}
 
 const GEOMETRY_FIELDS: readonly FieldSpec[] = [
   { key: 'xPt', label: 'X (pt)', defaultValue: '40' },
@@ -168,45 +161,6 @@ async function applyAddKind(kind: AddKind, pageIndex: number, doc: OdgOpenDocume
       return;
     }
   }
-}
-
-function FieldWizard(props: { readonly fields: readonly FieldSpec[]; readonly onCancel: () => void; readonly onComplete: (values: Readonly<Record<string, string>>) => void }): ReactElement {
-  const [stepIndex, setStepIndex] = useState(0);
-  const [collected, setCollected] = useState<Record<string, string>>({});
-  const initialField = props.fields[0];
-  const [draft, setDraft] = useState(initialField === undefined ? '' : initialField.defaultValue);
-
-  const field = props.fields[stepIndex];
-  if (field === undefined) {
-    throw new Error(`FieldWizard stepIndex ${stepIndex} is out of range for ${props.fields.length} fields -- onComplete always fires before stepIndex can advance past the last field, so this indicates a bug in that advance.`);
-  }
-
-  return (
-    <Box flexDirection="column" borderStyle="round" paddingX={1}>
-      <Text bold>{field.label}</Text>
-      <TextField
-        value={draft}
-        isFocused
-        onChange={setDraft}
-        onCancel={props.onCancel}
-        onSubmit={(value) => {
-          const recorded = { ...collected, [field.key]: value };
-          const nextIndex = stepIndex + 1;
-          const nextField = props.fields[nextIndex];
-          if (nextField === undefined) {
-            props.onComplete(recorded);
-            return;
-          }
-          setCollected(recorded);
-          setDraft(nextField.defaultValue);
-          setStepIndex(nextIndex);
-        }}
-      />
-      <Text dimColor>
-        Step {stepIndex + 1} of {props.fields.length} -- Enter to continue, Esc to cancel
-      </Text>
-    </Box>
-  );
 }
 
 function AddItemFlow(props: { readonly pageIndex: number; readonly doc: OdgOpenDocument; readonly isActive: boolean; readonly onCancel: () => void; readonly onCreated: () => void }): ReactElement {

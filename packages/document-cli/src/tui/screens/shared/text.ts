@@ -18,3 +18,9 @@ export function parseNonNegativeIntField(raw: string, fallback: number): number 
   const parsed = Number.parseInt(raw, 10);
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : fallback;
 }
+
+// A field wizard's own free-form point-size number entry (a frame's x/y/width/height in pt, a fill/stroke component) -- unlike the two integer parsers above, any finite value (including 0 and negatives) is accepted, since a frame position or a colour component genuinely can be either. Originally local to odg/shared.ts; moved here once field-wizard.tsx's own generic FieldWizard needed the identical parse for a non-odg caller (paragraph-detail.tsx's image-insertion wizard) -- odg/shared.ts re-exports this rather than keeping its own duplicate.
+export function parseNumberField(raw: string, fallback: number): number {
+  const parsed = Number.parseFloat(raw);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}

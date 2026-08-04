@@ -1,5 +1,10 @@
 import { readOdgContent, type Box, type ContentStroke, type ContentSubpath, type ContentVector, type LayoutColor, type OdgVector, type OdpShape } from 'documents.js';
 import { currentScreen, type AppState, type OdgOpenDocument, type Screen } from '../../../state/types.js';
+import { parseNumberField } from '../../shared/text.js';
+
+// Both re-exported here so every existing local import of `parseNumberField`/`requireFieldValue` from './shared.js' keeps working unmodified -- the implementations themselves now live in screens/shared, since paragraph-detail.tsx and paragraph-family.tsx need the identical parse/lookup and neither is an odg concept.
+export { parseNumberField };
+export { requireFieldValue } from '../../shared/field-wizard.js';
 
 // Shared between page-list.tsx, page-detail.tsx and shape-or-vector-detail.tsx: the odg-document/screen narrowing every one of them needs, the vector/shape enumeration and live/read-only parity check every one of them relies on, and the small formatting/parsing helpers all three build their rows and forms from.
 
@@ -123,11 +128,6 @@ export function describeFillStroke(vector: ContentVector): string {
   return parts.length === 0 ? 'no fill or stroke' : parts.join(', ');
 }
 
-export function parseNumberField(raw: string, fallback: number): number {
-  const parsed = Number.parseFloat(raw);
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
-
 export function parseColorField(raw: string): LayoutColor | undefined {
   const trimmed = raw.trim();
   if (trimmed.length === 0) {
@@ -164,13 +164,4 @@ export function defaultTriangleSubpaths(widthPt: number, heightPt: number): read
       closed: true,
     },
   ];
-}
-
-// The add-item wizard walks every field of `fieldsForAddKind(kind)` in order and always records a value (its own default at minimum) before advancing, so a missing key at build time indicates a bug in that walk, not a legitimate empty state -- throwing here, rather than substituting a silent default, surfaces that bug instead of building a wrong action from it.
-export function requireFieldValue(values: Readonly<Record<string, string>>, key: string): string {
-  const value = values[key];
-  if (value === undefined) {
-    throw new Error(`Add-item field '${key}' was never recorded before building the action.`);
-  }
-  return value;
 }
