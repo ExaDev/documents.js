@@ -4,9 +4,11 @@ import { registerDocxExtrasCommand } from './commands/docx-extras';
 import { registerFontsCommand } from './commands/fonts';
 import { registerFormatsCommand } from './commands/formats';
 import { registerFromPackageCommand } from './commands/from-package';
+import { registerMetadataCommand } from './commands/metadata';
 import { registerOdbCommands } from './commands/odb';
 import { registerOdmCommand } from './commands/odm';
 import { registerPdfInspectCommand } from './commands/pdf-inspect';
+import { registerSetMetadataCommand } from './commands/set-metadata';
 import { EXIT_SUCCESS, EXIT_USAGE_ERROR } from './runtime/exit-codes';
 // resolveJsonModule lets rolldown (via tsdown) inline this package's own declared version straight into the bundle at build time -- no runtime fs read, no import-attribute syntax that would otherwise need to differ between the ESM and CJS build outputs.
 import { version } from '../package.json';
@@ -31,6 +33,8 @@ export function createProgram(): Command {
   registerPdfInspectCommand(program);
   registerFontsCommand(program);
   registerDocxExtrasCommand(program);
+  registerMetadataCommand(program);
+  registerSetMetadataCommand(program);
 
   return program;
 }
