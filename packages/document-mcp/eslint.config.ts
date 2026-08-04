@@ -4,7 +4,8 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['dist', 'coverage', 'node_modules'],
+    // test/smoke.test.mjs spawns the built dist/bin.js, deliberately outside tsconfig's "src" program (it tests build output) -- matches document-cli's own identical exclusion.
+    ignores: ['dist', 'coverage', 'node_modules', 'test'],
   },
   {
     // Pin the TSConfig root so the parser isn't confused by stray tsconfig.json files elsewhere in the tree. Required because lint-staged runs eslint at commit time.
