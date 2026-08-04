@@ -6,5 +6,6 @@ export * from './mathml';
 export * from './content';
 export * from './layout';
 export * from './package';
+export * from './codec';
 export * from './schema-io';
 export * from './content-json-schema-defs';
