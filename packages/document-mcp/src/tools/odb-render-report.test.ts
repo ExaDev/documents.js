@@ -3,8 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import type { ContentBlock, ContentDocument } from 'documents.js';
-import { bytesToBase64, decodePackage, OdbReportNotSpecifiedError, readDocxContent, readOdtContent, readPdf } from 'documents.js';
-import { decodePackage as decodeOdfPackage } from 'odf.js';
+import { bytesToBase64, decodeDocumentPackage, decodePackage, OdbReportNotSpecifiedError, readDocxContent, readOdtContent, readPdf } from 'documents.js';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createServer } from '../server';
 import { FORM_AND_REPORT_ODB_PATH, FORM_AND_REPORT_REPORT_NAME, loadFormAndReportOdbBytes } from '../test-support/odb-fixture';
@@ -163,7 +162,7 @@ describe('odb_render_report', () => {
       throw new Error('expected an inline bytesBase64 result');
     }
     const odtBytes = Buffer.from(structured.bytesBase64, 'base64');
-    const document = readOdtContent(decodeOdfPackage(new Uint8Array(odtBytes)));
+    const document = readOdtContent(decodeDocumentPackage('odt', new Uint8Array(odtBytes)));
     expectReportText(wordprocessingText(document));
   });
 

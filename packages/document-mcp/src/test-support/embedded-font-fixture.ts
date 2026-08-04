@@ -1,6 +1,6 @@
 // A real odt that genuinely embeds a source font face -- the shape extractOdfEmbeddedFonts (documents.js's src/fonts/odf.ts) actually reads, not a synthetic stand-in for it. documents.js's own live-view editors have no write side for font embedding at all (embedding a font is a source-application concern -- Word/PowerPoint/LibreOffice's own "Embed fonts in the document" option), so this starts from a real editor-built package (createOdt()) and adds exactly the part/declaration extractOdfEmbeddedFonts reads, using odf.js's own low-level XML/package primitives directly -- a genuine direct dependency of this package, unlike ooxml.js (see ooxml-fixture.ts, which stands in for that one). Ported from document-cli's own src/test-support/embedded-font-fixture.ts (buildOdtWithEmbeddedFont).
-import { createOdt, type Package } from 'documents.js';
-import { bytesToBase64, el, encodePackage, rootElement } from 'odf.js';
+import { createOdt, encodeDocumentPackage, type Package } from 'documents.js';
+import { bytesToBase64, el, rootElement } from 'odf.js';
 
 export interface EmbeddedFontFixtureOptions {
   readonly family: string;
@@ -32,5 +32,5 @@ export function buildOdtWithEmbeddedFont(options: EmbeddedFontFixtureOptions): U
     ]),
   );
 
-  return encodePackage(pkg);
+  return encodeDocumentPackage('odt', pkg);
 }
