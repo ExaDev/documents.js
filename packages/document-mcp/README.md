@@ -27,7 +27,6 @@ graph TD
     pdfcodec --> documents
     mdcodec --> documents
     documents --> mcp
-    odf --> mcp
     pdfcodec --> mcp
     documents --> cli
 
