@@ -1,3 +1,10 @@
+# [1.11.0](https://github.com/ExaDev/pdf-codec/compare/v1.10.10...v1.11.0) (2026-08-04)
+
+
+### Features
+
+* export readFontFace for inspecting standalone font files ([3b3db77](https://github.com/ExaDev/pdf-codec/commit/3b3db773e23e2bc7130307adc5e822527470a94d))
+
 ## [1.10.10](https://github.com/ExaDev/pdf-codec/compare/v1.10.9...v1.10.10) (2026-08-03)
 
 ## [1.10.9](https://github.com/ExaDev/pdf-codec/compare/v1.10.8...v1.10.9) (2026-08-03)
