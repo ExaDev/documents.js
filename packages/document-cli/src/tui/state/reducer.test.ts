@@ -4,6 +4,7 @@ import {
   createOds,
   createOdt,
   createPptx,
+  drawingOfBlock,
   odsToXlsx,
   openDocx,
   openOdg,
@@ -13,6 +14,7 @@ import {
   openPptx,
   readDocxContent,
   readOdpContent,
+  readOdsContent,
   readOdtContent,
   readPdf,
   readPptxContent,
@@ -22,6 +24,9 @@ import { describe, expect, it } from 'vitest';
 import type { Action } from './actions.js';
 import { appReducer, createInitialState } from './reducer.js';
 import type { AppState, DocxOpenDocument, MarkdownOpenDocument, OdgOpenDocument, OdpOpenDocument, OdsOpenDocument, OdtOpenDocument, PptxOpenDocument } from './types.js';
+
+// A real, minimal PNG -- the signature bytes plus a few arbitrary trailing ones, matching docx/paragraph-detail.test.tsx's own fixture. ADD_SHEET_IMAGE only stores/embeds these bytes and declares the media part's type from the caller's own explicit `format`, so a genuine decodable pixel grid is not needed to prove the round trip.
+const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
 
 function applyAll(actions: readonly Action[], from: AppState = createInitialState()): AppState {
   return actions.reduce<AppState>(appReducer, from);
@@ -85,6 +90,10 @@ function openOdpDocument(bytes: Uint8Array<ArrayBuffer>, path = '/tmp/deck.odp')
 
 function openOdtDocument(bytes: Uint8Array<ArrayBuffer>, path = '/tmp/doc.odt'): AppState {
   return appReducer(createInitialState(), { type: 'OPEN_FILE_SUCCESS', path, doc: { format: 'odt', editor: openOdt(bytes), path } });
+}
+
+function openOdsDocument(bytes: Uint8Array<ArrayBuffer>, path = '/tmp/workbook.ods'): AppState {
+  return appReducer(createInitialState(), { type: 'OPEN_FILE_SUCCESS', path, doc: { format: 'ods', editor: openOds(bytes), path } });
 }
 
 function openOdgDocument(bytes: Uint8Array<ArrayBuffer>, path = '/tmp/drawing.odg'): AppState {
@@ -214,6 +223,42 @@ describe('appReducer docx mutations', () => {
     const warned = appReducer(state, { type: 'APPEND_PARAGRAPH', text: 'x', styleId: undefined, alignment: undefined });
     expect(warned.status?.severity).toBe('warning');
     expect(warned.hasUnsavedChanges).toBe(false);
+  });
+});
+
+describe.each(['docx', 'odt'] as const)('appReducer SET_RUN_FONT_FAMILY / SET_RUN_FONT_SIZE on %s', (format) => {
+  it('sets a real font family and size through the live DocxRun/OdtRun setters, verified by re-decoding the package', () => {
+    const state = applyAll([
+      { type: 'CREATE_DOCUMENT', format },
+      { type: 'APPEND_PARAGRAPH', text: undefined, styleId: undefined, alignment: undefined },
+      { type: 'APPEND_RUN', blockIndex: 0, text: 'Hello' },
+    ]);
+
+    const withFamily = appReducer(state, { type: 'SET_RUN_FONT_FAMILY', blockIndex: 0, runIndex: 0, fontFamily: 'Georgia' });
+    const withSize = appReducer(withFamily, { type: 'SET_RUN_FONT_SIZE', blockIndex: 0, runIndex: 0, sizePt: 18 });
+    expect(withSize.hasUnsavedChanges).toBe(true);
+
+    const doc = state.openDocument;
+    if (doc?.format !== format) {
+      throw new Error(`expected an open ${format} document`);
+    }
+    const content = format === 'docx' ? readDocxContent(doc.editor.toPackage()) : readOdtContent(doc.editor.toPackage());
+    if (content.kind !== 'wordprocessing') {
+      throw new Error(`expected a wordprocessing ContentDocument, got ${content.kind}`);
+    }
+    const paragraph = content.sections[0]?.blocks[0];
+    if (paragraph?.kind !== 'paragraph') {
+      throw new Error(`expected a paragraph block, got ${paragraph?.kind}`);
+    }
+    expect(paragraph.runs[0]?.fontFamily).toBe('Georgia');
+    expect(paragraph.runs[0]?.sizePt).toBe(18);
+  });
+
+  it('reports a missing run rather than throwing', () => {
+    const state = appReducer(createInitialState(), { type: 'CREATE_DOCUMENT', format });
+    const missed = appReducer(state, { type: 'SET_RUN_FONT_FAMILY', blockIndex: 7, runIndex: 0, fontFamily: 'Georgia' });
+    expect(missed.status?.severity).toBe('warning');
+    expect(missed.hasUnsavedChanges).toBe(false);
   });
 });
 
@@ -411,6 +456,34 @@ describe('appReducer SET_LIST_ITEM_TEXT on odt', () => {
   });
 });
 
+describe('appReducer ADD_LIST on odt', () => {
+  it('creates a real, brand-new, empty list, navigable through the existing listEditor screen', () => {
+    const created = appReducer(createInitialState(), { type: 'CREATE_DOCUMENT', format: 'odt' });
+    const withList = appReducer(created, { type: 'ADD_LIST' });
+    expect(withList.hasUnsavedChanges).toBe(true);
+
+    const doc = odtDocument(withList);
+    expect(doc.editor.lists()).toHaveLength(1);
+
+    // Round-trips through re-decoding the package as a completely fresh document, not just the live in-memory object -- proving OdtBody.appendList() wrote a real, empty text:list, exactly the shape the listEditor screen's own 'a' (ADD_LIST_ITEM) then extends.
+    const reopened = openOdt(doc.editor.toBytes());
+    expect(reopened.lists()).toHaveLength(1);
+    expect(reopened.lists()[0]?.items()).toHaveLength(0);
+
+    // A second ADD_LIST appends a second list rather than replacing the first -- the new list's own index (adapter.lists().length computed before dispatch, per paragraph-family.tsx's own 'L' handler) is what a caller navigates the freshly pushed listEditor screen to.
+    const withSecondList = appReducer(withList, { type: 'ADD_LIST' });
+    expect(odtDocument(withSecondList).editor.lists()).toHaveLength(2);
+  });
+
+  it('warns instead of mutating when the open document is docx (lists are an odt-only concept)', () => {
+    const state = appReducer(createInitialState(), { type: 'CREATE_DOCUMENT', format: 'docx' });
+    const result = appReducer(state, { type: 'ADD_LIST' });
+    expect(result.status?.severity).toBe('warning');
+    expect(result.status?.text).toContain('odt');
+    expect(result.hasUnsavedChanges).toBe(false);
+  });
+});
+
 describe('appReducer ods mutations', () => {
   it('writes a cell value through the real OdsCell setter', () => {
     const created = applyAll([{ type: 'CREATE_DOCUMENT', format: 'ods' }, { type: 'ADD_SHEET', name: 'Data' }]);
@@ -424,6 +497,142 @@ describe('appReducer ods mutations', () => {
       throw new Error('expected the added sheet');
     }
     expect(sheet.cell(2, 3).value).toEqual({ kind: 'string', value: 'Total' });
+  });
+});
+
+describe('appReducer SET_CELL_FORMULA on ods', () => {
+  it('writes a real table:formula through the live OdsCell.formula setter, coexisting with the cell\'s own typed value, verified through readOdsContent', () => {
+    const created = applyAll([{ type: 'CREATE_DOCUMENT', format: 'ods' }, { type: 'ADD_SHEET', name: 'Data' }]);
+    const sheetIndex = odsDocument(created).editor.sheets().length - 1;
+    const seeded = appReducer(created, { type: 'SET_CELL_VALUE', sheetIndex, row: 0, column: 0, value: { kind: 'number', value: 42 } });
+
+    const withFormula = appReducer(seeded, { type: 'SET_CELL_FORMULA', sheetIndex, row: 0, column: 0, formula: 'of:=1+41' });
+    expect(withFormula.hasUnsavedChanges).toBe(true);
+
+    const content = readOdsContent(odsDocument(withFormula).editor.toPackage());
+    if (content.kind !== 'spreadsheet') {
+      throw new Error(`expected a spreadsheet ContentDocument, got ${content.kind}`);
+    }
+    // createOds() already seeds a default 'Sheet1' at index 0 -- ADD_SHEET appends 'Data' after it, so the sheet under test sits at `sheetIndex`, not index 0.
+    const cell = content.sheets[sheetIndex]?.cells.find((candidate) => candidate.row === 0 && candidate.column === 0);
+    expect(cell?.formula).toBe('of:=1+41');
+    // The formula coexists with the cell's own typed value -- setting one never clobbers the other.
+    expect(cell?.value).toEqual({ kind: 'number', value: 42 });
+
+    // A subsequent undefined formula clears it back out, again without touching the typed value.
+    const cleared = appReducer(withFormula, { type: 'SET_CELL_FORMULA', sheetIndex, row: 0, column: 0, formula: undefined });
+    const clearedContent = readOdsContent(odsDocument(cleared).editor.toPackage());
+    if (clearedContent.kind !== 'spreadsheet') {
+      throw new Error(`expected a spreadsheet ContentDocument, got ${clearedContent.kind}`);
+    }
+    const clearedCell = clearedContent.sheets[sheetIndex]?.cells.find((candidate) => candidate.row === 0 && candidate.column === 0);
+    expect(clearedCell?.formula).toBeUndefined();
+    expect(clearedCell?.value).toEqual({ kind: 'number', value: 42 });
+  });
+
+  it('warns rather than crashing for a sheet index that does not exist', () => {
+    const created = appReducer(createInitialState(), { type: 'CREATE_DOCUMENT', format: 'ods' });
+    const result = appReducer(created, { type: 'SET_CELL_FORMULA', sheetIndex: 4, row: 0, column: 0, formula: 'of:=1' });
+    expect(result.status?.severity).toBe('warning');
+    expect(result.hasUnsavedChanges).toBe(false);
+  });
+
+  it('warns rather than crashing when the open document is not ods', () => {
+    const created = appReducer(createInitialState(), { type: 'CREATE_DOCUMENT', format: 'docx' });
+    const result = appReducer(created, { type: 'SET_CELL_FORMULA', sheetIndex: 0, row: 0, column: 0, formula: 'of:=1' });
+    expect(result.status?.severity).toBe('warning');
+    expect(result.status?.text).toContain('ods');
+  });
+});
+
+describe('appReducer ADD_SHEET_IMAGE on ods', () => {
+  it('adds a real floating image, positioned by resolving the anchor cell against the sheet\'s own explicit column widths/row heights, verified through readOdsContent', () => {
+    // Explicit widths/heights for every column/row strictly before the anchor, set through the live editor BEFORE the image is added -- matching OdsSheet.addImage's own doc comment ("Call this AFTER any setColumnWidth/setColumnHidden/setRowHeight/setRowHidden calls this sheet needs") -- so the expected absolute position asserted below is derived from values this test itself set, never from OdsSheet.addImage's own internal default-size fallback.
+    const editor = createOds();
+    const sheet = editor.addSheet('Data');
+    const columnWidthsPt = [30, 40, 50];
+    const rowHeightsPt = [20, 25];
+    columnWidthsPt.forEach((widthPt, index) => {
+      sheet.setColumnWidth(index, widthPt);
+    });
+    rowHeightsPt.forEach((heightPt, index) => {
+      sheet.setRowHeight(index, heightPt);
+    });
+    const opened = openOdsDocument(editor.toBytes());
+    const sheetIndex = odsDocument(opened).editor.sheets().length - 1;
+
+    const withImage = appReducer(opened, {
+      type: 'ADD_SHEET_IMAGE',
+      sheetIndex,
+      anchorRow: rowHeightsPt.length,
+      anchorColumn: columnWidthsPt.length,
+      offsetXPt: 5,
+      offsetYPt: 10,
+      format: 'png',
+      bytes: PNG_BYTES,
+      widthPt: 80,
+      heightPt: 40,
+      altText: 'a logo',
+    });
+    expect(withImage.hasUnsavedChanges).toBe(true);
+
+    const content = readOdsContent(odsDocument(withImage).editor.toPackage());
+    if (content.kind !== 'spreadsheet') {
+      throw new Error(`expected a spreadsheet ContentDocument, got ${content.kind}`);
+    }
+    // createOds() already seeds a default 'Sheet1' at index 0 -- addSheet('Data') appends a second sheet after it, so the sheet under test sits at `sheetIndex`, not index 0.
+    const image = content.sheets[sheetIndex]?.images[0];
+    if (image === undefined) {
+      throw new Error('expected a real image on the added sheet');
+    }
+    // A spreadsheet's own table:shapes container (the direct parent of every floating image, always table:table's own first child) carries no per-cell anchor at all -- its svg:x/svg:y is always sheet-absolute -- so odf.js's own reader always reports anchorRow/anchorColumn 0 with that absolute position carried through as the offset (see odf.js's own typed/ods/read.ts top-of-file note: "cell (0,0)'s own top-left IS the sheet origin, so the two coordinate systems coincide exactly there"). This is a genuine, documented ODF format limitation, not a round-trip bug -- the WRITE side still resolved the given anchor correctly against the sheet's real column/row sizing, which is exactly what the derived offset values below prove.
+    expect(image.anchorRow).toBe(0);
+    expect(image.anchorColumn).toBe(0);
+    expect(image.offsetXPt).toBe(columnWidthsPt.reduce((sum, width) => sum + width, 0) + 5);
+    expect(image.offsetYPt).toBe(rowHeightsPt.reduce((sum, height) => sum + height, 0) + 10);
+    expect(image.format).toBe('png');
+    expect(image.widthPt).toBe(80);
+    expect(image.heightPt).toBe(40);
+    // altText does NOT round-trip here -- confirmed directly against the installed documents.js: OdsSheet.addImage's own write path (src/edit/ods/floating.ts's insertSheetImage) never writes a floating image's svg:title/svg:desc at all, even though odf.js's own reader (readDrawFrame, which every OTHER image-insertion path in this codebase already reads altText through) fully supports reading them back. A real, confirmed write-side gap in the installed documents.js dependency, not a bug in this action/reducer -- ADD_SHEET_IMAGE still forwards the caller's altText through to OdsSheet.addImage unconditionally (the field is a genuine, schema-valid ContentSheetImage member), so a future documents.js release that starts writing it needs no change on this side at all.
+    expect(image.altText).toBeUndefined();
+  });
+
+  it('warns rather than crashing for a sheet index that does not exist', () => {
+    const created = appReducer(createInitialState(), { type: 'CREATE_DOCUMENT', format: 'ods' });
+    const result = appReducer(created, {
+      type: 'ADD_SHEET_IMAGE',
+      sheetIndex: 4,
+      anchorRow: 0,
+      anchorColumn: 0,
+      offsetXPt: 0,
+      offsetYPt: 0,
+      format: 'png',
+      bytes: PNG_BYTES,
+      widthPt: 10,
+      heightPt: 10,
+      altText: undefined,
+    });
+    expect(result.status?.severity).toBe('warning');
+    expect(result.hasUnsavedChanges).toBe(false);
+  });
+
+  it('warns rather than crashing when the open document is not ods', () => {
+    const created = appReducer(createInitialState(), { type: 'CREATE_DOCUMENT', format: 'docx' });
+    const result = appReducer(created, {
+      type: 'ADD_SHEET_IMAGE',
+      sheetIndex: 0,
+      anchorRow: 0,
+      anchorColumn: 0,
+      offsetXPt: 0,
+      offsetYPt: 0,
+      format: 'png',
+      bytes: PNG_BYTES,
+      widthPt: 10,
+      heightPt: 10,
+      altText: undefined,
+    });
+    expect(result.status?.severity).toBe('warning');
+    expect(result.status?.text).toContain('ods');
   });
 });
 
@@ -737,6 +946,74 @@ describe('appReducer xlsx (read-only PDF-preview) documents', () => {
     expect(undone.status?.severity).toBe('warning');
     expect(undone.status?.text).toContain('read-only');
     expect(undone.openDocument).toBe(opened.openDocument);
+  });
+});
+
+describe('appReducer ADD_RECT / ADD_ELLIPSE / ADD_LINE / ADD_PATH on odp', () => {
+  it('adds each real vector kind to an odp slide, reachable through OdpSlide.addVector -- recovered by readOdpContent as a synthetic embedded drawing block, since ContentSlide itself has no vectors array', () => {
+    const editor = createOdp();
+    editor.addSlide();
+    const opened = openOdpDocument(editor.toBytes());
+
+    const withRect = appReducer(opened, { type: 'ADD_RECT', containerIndex: 0, init: { frame: { xPt: 10, yPt: 10, widthPt: 40, heightPt: 30 }, fill: { r: 1, g: 0, b: 0 } } });
+    const withEllipse = appReducer(withRect, { type: 'ADD_ELLIPSE', containerIndex: 0, init: { frame: { xPt: 60, yPt: 10, widthPt: 40, heightPt: 30 } } });
+    const withLine = appReducer(withEllipse, {
+      type: 'ADD_LINE',
+      containerIndex: 0,
+      init: { from: { xPt: 0, yPt: 100 }, to: { xPt: 100, yPt: 100 }, stroke: { color: { r: 0, g: 0, b: 0 }, widthPt: 1 } },
+    });
+    const withPath = appReducer(withLine, {
+      type: 'ADD_PATH',
+      containerIndex: 0,
+      init: {
+        frame: { xPt: 0, yPt: 150, widthPt: 50, heightPt: 50 },
+        subpaths: [{ start: { xPt: 0, yPt: 50 }, segments: [{ kind: 'line', to: { xPt: 25, yPt: 0 } }, { kind: 'line', to: { xPt: 50, yPt: 50 } }], closed: true }],
+      },
+    });
+    expect(withPath.hasUnsavedChanges).toBe(true);
+
+    const content = readOdpContent(odpDocument(withPath).editor.toPackage());
+    if (content.kind !== 'presentation') {
+      throw new Error(`expected a presentation ContentDocument, got ${content.kind}`);
+    }
+    const drawingShape = content.slides[0]?.shapes.find((shape) => shape.blocks[0]?.kind === 'embeddedObject');
+    const drawingBlock = drawingShape?.blocks[0];
+    if (drawingBlock?.kind !== 'embeddedObject') {
+      throw new Error('expected a synthetic embeddedObject shape carrying the four recovered vectors');
+    }
+    const drawing = drawingOfBlock(drawingBlock);
+    if (drawing === undefined) {
+      throw new Error('expected the embedded object to be a drawing document');
+    }
+    expect(drawing.pages[0]?.vectors.map((vector) => vector.kind)).toEqual(['rect', 'ellipse', 'line', 'path']);
+  });
+
+  it('warns rather than crashing for a slide index that does not exist', () => {
+    const editor = createOdp();
+    editor.addSlide();
+    const opened = openOdpDocument(editor.toBytes());
+
+    const result = appReducer(opened, { type: 'ADD_RECT', containerIndex: 5, init: { frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 } } });
+    expect(result.status?.severity).toBe('warning');
+    expect(result.hasUnsavedChanges).toBe(false);
+  });
+
+  it('warns rather than crashing when the open document is neither odg nor odp', () => {
+    const created = appReducer(createInitialState(), { type: 'CREATE_DOCUMENT', format: 'docx' });
+    const result = appReducer(created, { type: 'ADD_RECT', containerIndex: 0, init: { frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 } } });
+    expect(result.status?.severity).toBe('warning');
+    expect(result.status?.text).toContain('odg or odp');
+  });
+
+  // The rename of this action family's own addressing field from `pageIndex` to `containerIndex` (see actions.ts's own top-of-file note) must not have disturbed odg's own pre-existing behaviour.
+  it('still adds a real vector to an odg page, unchanged from before the containerIndex rename', () => {
+    const editor = createOdg();
+    editor.addPage();
+    const opened = openOdgDocument(editor.toBytes());
+
+    const withRect = appReducer(opened, { type: 'ADD_RECT', containerIndex: 0, init: { frame: { xPt: 10, yPt: 10, widthPt: 40, heightPt: 30 } } });
+    expect(withRect.hasUnsavedChanges).toBe(true);
+    expect(odgDocument(withRect).editor.pages()[0]?.vectors()).toHaveLength(1);
   });
 });
 

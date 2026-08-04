@@ -109,13 +109,13 @@ async function applyAddKind(kind: AddKind, pageIndex: number, doc: OdgOpenDocume
   switch (kind) {
     case 'rect': {
       const init = { frame: readFrame(values), fill: parseColorField(requireFieldValue(values, 'fill')), stroke: parseStrokeField(requireFieldValue(values, 'stroke')) };
-      dispatch({ type: 'ADD_RECT', pageIndex, init });
+      dispatch({ type: 'ADD_RECT', containerIndex: pageIndex, init });
       warnIfVectorAddedReadOnly(doc, pageIndex, dispatch, 'Rectangle');
       return;
     }
     case 'ellipse': {
       const init = { frame: readFrame(values), fill: parseColorField(requireFieldValue(values, 'fill')), stroke: parseStrokeField(requireFieldValue(values, 'stroke')) };
-      dispatch({ type: 'ADD_ELLIPSE', pageIndex, init });
+      dispatch({ type: 'ADD_ELLIPSE', containerIndex: pageIndex, init });
       warnIfVectorAddedReadOnly(doc, pageIndex, dispatch, 'Ellipse');
       return;
     }
@@ -123,7 +123,7 @@ async function applyAddKind(kind: AddKind, pageIndex: number, doc: OdgOpenDocume
       const from = { xPt: parseNumberField(requireFieldValue(values, 'fromXPt'), 0), yPt: parseNumberField(requireFieldValue(values, 'fromYPt'), 0) };
       const to = { xPt: parseNumberField(requireFieldValue(values, 'toXPt'), 100), yPt: parseNumberField(requireFieldValue(values, 'toYPt'), 0) };
       const stroke: ContentStroke = parseStrokeField(requireFieldValue(values, 'stroke')) ?? { color: { r: 0, g: 0, b: 0 }, widthPt: 1 };
-      dispatch({ type: 'ADD_LINE', pageIndex, init: { from, to, stroke } });
+      dispatch({ type: 'ADD_LINE', containerIndex: pageIndex, init: { from, to, stroke } });
       warnIfVectorAddedReadOnly(doc, pageIndex, dispatch, 'Line');
       return;
     }
@@ -135,7 +135,7 @@ async function applyAddKind(kind: AddKind, pageIndex: number, doc: OdgOpenDocume
         fill: parseColorField(requireFieldValue(values, 'fill')),
         stroke: parseStrokeField(requireFieldValue(values, 'stroke')),
       };
-      dispatch({ type: 'ADD_PATH', pageIndex, init });
+      dispatch({ type: 'ADD_PATH', containerIndex: pageIndex, init });
       warnIfVectorAddedReadOnly(doc, pageIndex, dispatch, 'Path');
       return;
     }

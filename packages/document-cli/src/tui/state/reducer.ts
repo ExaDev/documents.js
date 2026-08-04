@@ -1,4 +1,5 @@
 import {
+  bytesToBase64,
   decodeMarkdownText,
   encodeMarkdownText,
   openDocx,
@@ -235,6 +236,17 @@ function drawingDocument(state: AppState): OdgOpenDocument | undefined {
     return undefined;
   }
   return doc.format === 'odg' ? doc : undefined;
+}
+
+type VectorHostOpenDocument = OdgOpenDocument | OdpOpenDocument;
+
+// The odg-or-odp narrowing ADD_RECT/ADD_ELLIPSE/ADD_LINE/ADD_PATH share: odg hosts a vector primitive on a drawing page (OdgPage.addRect/etc, a real live-view class per kind), odp on a slide (OdpSlide.addVector, one generic method taking a real ContentVector) -- see documents.js's own README architecture entry on why odp reuses odg's vector writer wholesale rather than duplicating it.
+function vectorHostDocument(state: AppState): VectorHostOpenDocument | undefined {
+  const doc = state.openDocument;
+  if (doc === undefined) {
+    return undefined;
+  }
+  return doc.format === 'odg' || doc.format === 'odp' ? doc : undefined;
 }
 
 function markdownDocument(state: AppState): MarkdownOpenDocument | undefined {
@@ -532,6 +544,16 @@ export function appReducer(state: AppState, action: Action): AppState {
         run.color = action.color;
       });
 
+    case 'SET_RUN_FONT_FAMILY':
+      return withRun(state, action.blockIndex, action.runIndex, (run) => {
+        run.fontFamily = action.fontFamily;
+      });
+
+    case 'SET_RUN_FONT_SIZE':
+      return withRun(state, action.blockIndex, action.runIndex, (run) => {
+        run.sizePt = action.sizePt;
+      });
+
     case 'APPEND_TABLE': {
       const doc = wordprocessingDocument(state);
       if (doc === undefined) {
@@ -621,6 +643,20 @@ export function appReducer(state: AppState, action: Action): AppState {
       }
       return mutate(state, doc, () => {
         setTextContainerText(item, action.text);
+      });
+    }
+
+    // odt-only, matching SET_LIST_ITEM_TEXT's own narrowing: creates a real, brand-new, empty text:list via OdtBody.appendList() -- docx has no ADD_LIST_ITEM-shaped anchor to create a fresh list against (a docx paragraph gains list membership by copying an EXISTING paragraph's own numId/level, see ADD_LIST_ITEM above), so there is no equivalent "create a list from nothing" action to share.
+    case 'ADD_LIST': {
+      const doc = wordprocessingDocument(state);
+      if (doc === undefined) {
+        return wrongDocument(state, 'a docx or odt document');
+      }
+      if (doc.format !== 'odt') {
+        return wrongDocument(state, 'an odt document (lists are an odt-only concept)');
+      }
+      return mutate(state, doc, () => {
+        doc.editor.body.appendList();
       });
     }
 
@@ -806,6 +842,29 @@ export function appReducer(state: AppState, action: Action): AppState {
         sheet.cell(action.row, action.column).value = action.value;
       });
 
+    // A separate action/edit mode from SET_CELL_VALUE, not a variant of it -- see actions.ts's own doc comment: OdsCell.formula and .value are two independent attributes of the same real cell, both settable at once.
+    case 'SET_CELL_FORMULA':
+      return withSheet(state, action.sheetIndex, (sheet) => {
+        sheet.cell(action.row, action.column).formula = action.formula;
+      });
+
+    // OdsSheet.addImage takes a real ContentSheetImage, which -- unlike ADD_IMAGE/INSERT_PARAGRAPH_IMAGE's own SlideImageInit/ImageInit -- carries its bytes as `base64: string`, not a raw Uint8Array (document-schema.js's ContentImageBlockSchema, shared with every other embedded-image/object shape); the conversion happens here, once, rather than pushing bytesToBase64 out to every dispatch site.
+    case 'ADD_SHEET_IMAGE':
+      return withSheet(state, action.sheetIndex, (sheet) => {
+        sheet.addImage({
+          kind: 'image',
+          format: action.format,
+          base64: bytesToBase64(action.bytes),
+          widthPt: action.widthPt,
+          heightPt: action.heightPt,
+          altText: action.altText,
+          anchorRow: action.anchorRow,
+          anchorColumn: action.anchorColumn,
+          offsetXPt: action.offsetXPt,
+          offsetYPt: action.offsetYPt,
+        });
+      });
+
     case 'MERGE_CELLS': {
       const doc = spreadsheetDocument(state);
       if (doc === undefined) {
@@ -839,27 +898,50 @@ export function appReducer(state: AppState, action: Action): AppState {
     case 'ADD_ELLIPSE':
     case 'ADD_LINE':
     case 'ADD_PATH': {
-      const doc = drawingDocument(state);
+      const doc = vectorHostDocument(state);
       if (doc === undefined) {
-        return wrongDocument(state, 'an odg document');
+        return wrongDocument(state, 'an odg or odp document');
       }
-      const page = doc.editor.pages()[action.pageIndex];
-      if (page === undefined) {
-        return withStatus(state, 'warning', `There is no page at index ${action.pageIndex}`);
+      if (doc.format === 'odg') {
+        const page = doc.editor.pages()[action.containerIndex];
+        if (page === undefined) {
+          return withStatus(state, 'warning', `There is no page at index ${action.containerIndex}`);
+        }
+        return mutate(state, doc, () => {
+          switch (action.type) {
+            case 'ADD_RECT':
+              page.addRect(action.init);
+              return;
+            case 'ADD_ELLIPSE':
+              page.addEllipse(action.init);
+              return;
+            case 'ADD_LINE':
+              page.addLine(action.init);
+              return;
+            case 'ADD_PATH':
+              page.addPath(action.init);
+              return;
+          }
+        });
+      }
+      // odp has no per-kind convenience methods the way odg does -- OdpSlide.addVector is the ONE generic method every kind goes through, so the ContentVector literal is built here from the same OdgBoxVectorInit/OdgLineVectorInit/OdgPathVectorInit shape the odg branch above already consumes, rather than a second, odp-specific init type.
+      const slide = doc.editor.slides()[action.containerIndex];
+      if (slide === undefined) {
+        return withStatus(state, 'warning', `There is no slide at index ${action.containerIndex}`);
       }
       return mutate(state, doc, () => {
         switch (action.type) {
           case 'ADD_RECT':
-            page.addRect(action.init);
+            slide.addVector({ kind: 'rect', frame: action.init.frame, fill: action.init.fill, stroke: action.init.stroke });
             return;
           case 'ADD_ELLIPSE':
-            page.addEllipse(action.init);
+            slide.addVector({ kind: 'ellipse', frame: action.init.frame, fill: action.init.fill, stroke: action.init.stroke });
             return;
           case 'ADD_LINE':
-            page.addLine(action.init);
+            slide.addVector({ kind: 'line', from: action.init.from, to: action.init.to, stroke: action.init.stroke });
             return;
           case 'ADD_PATH':
-            page.addPath(action.init);
+            slide.addVector({ kind: 'path', frame: action.init.frame, subpaths: [...action.init.subpaths], fill: action.init.fill, stroke: action.init.stroke });
             return;
         }
       });

@@ -4,7 +4,7 @@ import type { Diagnostic, EditableFormat, OpenDocument, OverlayName, Screen, Sta
 // HOW A MUTATING ACTION ADDRESSES ITS TARGET. The rule is: address by index wherever the editor exposes an enumeration accessor to resolve that index against, and carry the live object itself only where it does not.
 //
 // - `blockIndex` indexes `editor.paragraphs()` for the paragraph/run/list actions, and `editor.tables()` for the table actions -- two separate arrays, matching the two accessors documents.js gives a docx/odt editor.
-// - `containerIndex` indexes `editor.slides()` for pptx/odp and `editor.pages()` for odg: a shape (`OdpShape`/`PptxShape`) lives on a slide or on a drawing page and is reached identically either way, so one action serves both.
+// - `containerIndex` indexes `editor.slides()` for pptx/odp and `editor.pages()` for odg: a shape (`OdpShape`/`PptxShape`) lives on a slide or on a drawing page and is reached identically either way, so one action serves both. ADD_RECT/ADD_ELLIPSE/ADD_LINE/ADD_PATH's own `containerIndex` follows the identical convention now that odp can host a vector primitive too (`OdpSlide.addVector`), not only odg (`OdgPage.addRect`/etc) -- it was `pageIndex` before odp gained a vector model of its own, renamed here for consistency with ADD_TEXTBOX/ADD_IMAGE rather than kept as an odg-only name.
 // - `sheetIndex` indexes `editor.sheets()`; `row`/`column` are OdsSheet.cell's own zero-based coordinates.
 // - The odg vector actions (SET_VECTOR_FILL/SET_VECTOR_STROKE) carry the LIVE vector object rather than an index: `OdgPage.vectors()` is a real, live accessor, but it recognises a narrower vector vocabulary than odf.js's own reader (see screens/editors/odg/shared.ts's own `vectorsParityMatch`), so an index into it does not reliably line up with the row a caller selected from the UI's own (wider-vocabulary) vector list. Passing the live object through directly sidesteps that mismatch entirely, and is safe for the same reason the reducer is impure: the object IS the document, so there is no stale copy to go out of sync.
 //
@@ -45,6 +45,11 @@ export type Action =
   | { readonly type: 'MERGE_TABLE_CELLS'; readonly tableIndex: number; readonly startRow: number; readonly startColumn: number; readonly rowSpan: number; readonly colSpan: number }
   | { readonly type: 'ADD_LIST_ITEM'; readonly blockIndex: number; readonly text: string }
   | { readonly type: 'SET_LIST_ITEM_TEXT'; readonly blockIndex: number; readonly itemIndex: number; readonly text: string }
+  // odt-only, matching ADD_LIST_ITEM/SET_LIST_ITEM_TEXT's own "lists are a genuinely separate ODF concept" framing: creates a brand-new, empty text:list via OdtBody.appendList() -- no payload, since there is nothing to seed a fresh list with beyond the empty list itself (the first item is added afterwards, via ADD_LIST_ITEM against the new list's own index).
+  | { readonly type: 'ADD_LIST' }
+  // Free-form font styling for a single run, resolved through the same withRun helper TOGGLE_RUN_BOLD/SET_RUN_COLOR already use -- both DocxRun and OdtRun carry real fontFamily/sizePt getters and setters (documents.js's src/edit/{docx,odt}/run.ts), so one action pair covers both formats identically.
+  | { readonly type: 'SET_RUN_FONT_FAMILY'; readonly blockIndex: number; readonly runIndex: number; readonly fontFamily: string }
+  | { readonly type: 'SET_RUN_FONT_SIZE'; readonly blockIndex: number; readonly runIndex: number; readonly sizePt: number }
   // Both docx's and odt's own insertImageAfter accept the identical ImageInit shape (format/bytes/widthPt/heightPt/altText) -- see documents.js's edit/{docx,odt}/image.ts -- so one action covers both, resolved through paragraph-family.ts's shared wordprocessingDocument narrowing exactly as APPEND_PARAGRAPH already is.
   | { readonly type: 'INSERT_PARAGRAPH_IMAGE'; readonly blockIndex: number; readonly format: 'png' | 'jpeg'; readonly bytes: Uint8Array<ArrayBuffer>; readonly widthPt: number; readonly heightPt: number; readonly altText: string | undefined }
   // docx's DocxParagraph.appendOfficeMath is PARAGRAPH-scoped -- unlike odt's own formula insertion below, it needs no frame at all, since OMML is inline markup within the paragraph rather than a separately-positioned embedded object.
@@ -63,13 +68,30 @@ export type Action =
   | { readonly type: 'SET_SLIDE_NOTES'; readonly slideIndex: number; readonly notes: string }
   | { readonly type: 'ADD_SHEET'; readonly name: string }
   | { readonly type: 'SET_CELL_VALUE'; readonly sheetIndex: number; readonly row: number; readonly column: number; readonly value: ContentCellValue }
+  // `table:formula`, verbatim -- a deliberately SEPARATE action/edit mode from SET_CELL_VALUE, since a real ODF cell carries a formula and a typed value as two independent, coexisting attributes (OdsCell.formula/`.value`), not alternative states of the same cell.
+  | { readonly type: 'SET_CELL_FORMULA'; readonly sheetIndex: number; readonly row: number; readonly column: number; readonly formula: string | undefined }
   | { readonly type: 'MERGE_CELLS'; readonly sheetIndex: number; readonly startRow: number; readonly startColumn: number; readonly rowSpan: number; readonly colSpan: number }
   | { readonly type: 'SET_SHEET_PRINT_SETTINGS'; readonly sheetIndex: number; readonly printSettings: ContentSheetPrintSettings }
+  // A floating, cell-anchored raster image (OdsSheet.addImage) -- `bytes` mirrors ADD_IMAGE/INSERT_PARAGRAPH_IMAGE's own raw-bytes convention, converted to the base64 ContentSheetImage itself requires only inside the reducer (bytesToBase64), not carried as base64 across the action boundary. `widthPt`/`heightPt` are required for the same reason INSERT_PARAGRAPH_IMAGE's are: ContentImageBlockSchema (which ContentSheetImageSchema extends) has no way to derive a rendered size from the source bytes alone.
+  | {
+      readonly type: 'ADD_SHEET_IMAGE';
+      readonly sheetIndex: number;
+      readonly anchorRow: number;
+      readonly anchorColumn: number;
+      readonly offsetXPt: number;
+      readonly offsetYPt: number;
+      readonly format: 'png' | 'jpeg';
+      readonly bytes: Uint8Array<ArrayBuffer>;
+      readonly widthPt: number;
+      readonly heightPt: number;
+      readonly altText: string | undefined;
+    }
   | { readonly type: 'ADD_PAGE' }
-  | { readonly type: 'ADD_RECT'; readonly pageIndex: number; readonly init: OdgBoxVectorInit }
-  | { readonly type: 'ADD_ELLIPSE'; readonly pageIndex: number; readonly init: OdgBoxVectorInit }
-  | { readonly type: 'ADD_LINE'; readonly pageIndex: number; readonly init: OdgLineVectorInit }
-  | { readonly type: 'ADD_PATH'; readonly pageIndex: number; readonly init: OdgPathVectorInit }
+  // `containerIndex` indexes `editor.pages()` for odg and `editor.slides()` for odp -- see this file's own top-of-file note on the rename from `pageIndex`.
+  | { readonly type: 'ADD_RECT'; readonly containerIndex: number; readonly init: OdgBoxVectorInit }
+  | { readonly type: 'ADD_ELLIPSE'; readonly containerIndex: number; readonly init: OdgBoxVectorInit }
+  | { readonly type: 'ADD_LINE'; readonly containerIndex: number; readonly init: OdgLineVectorInit }
+  | { readonly type: 'ADD_PATH'; readonly containerIndex: number; readonly init: OdgPathVectorInit }
   | { readonly type: 'SET_VECTOR_FILL'; readonly vector: OdgBoxVector | OdgPathVector; readonly fill: LayoutColor | undefined }
   | { readonly type: 'SET_VECTOR_STROKE'; readonly vector: OdgBoxVector | OdgLineVector | OdgPathVector; readonly stroke: ContentStroke }
   // Markdown has no live editor object to mutate in place (see MarkdownOpenDocument's own doc comment) -- the whole rejoined source is dispatched at once, rather than one action per line, so the reducer's own mutateMarkdown helper stays a single, genuinely pure "replace the string, push an undo snapshot" step.
