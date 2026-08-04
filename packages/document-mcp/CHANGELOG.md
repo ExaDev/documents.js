@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/ExaDev/document-mcp/compare/v1.0.0...v1.1.0) (2026-08-04)
+
+
+### Features
+
+* register document-mcp tool modules on the MCP server ([cad09ed](https://github.com/ExaDev/document-mcp/commit/cad09ed90f4478bdf3e61d1185dc586e469ae768))
+
 # 1.0.0 (2026-08-04)
 
 
