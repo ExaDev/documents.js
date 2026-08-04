@@ -41,7 +41,7 @@ describe('openDocumentAtPath for .xlsx', () => {
     expect(doc.bytes).toStrictEqual(bytes);
   });
 
-  it('cannot be written back to disk -- it is read-only, the same as .pdf and .odb', async () => {
+  it('cannot be written back to disk -- it is read-only, the same as .odb (.pdf gained a real live-view editor and is no longer in this group)', async () => {
     const bytes = xlsxTestBytes();
     const path = join(workspace, 'report.xlsx');
     await writeFile(path, bytes);
