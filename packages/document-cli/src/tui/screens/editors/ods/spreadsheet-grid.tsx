@@ -1,11 +1,17 @@
 import type { ContentCellValue } from 'documents.js';
 import { Box, Text, useInput, useWindowSize } from 'ink';
 import { cellReference, columnIndexToLetters } from 'odf.js';
-import { useState, type ReactElement } from 'react';
+import { useState, type Dispatch, type ReactElement } from 'react';
+import { describeError } from '../../../errors.js';
+import { readInput } from '../../../../runtime/io.js';
 import { ListView } from '../../../components/list-view.js';
+import { TextField } from '../../../components/text-field.js';
 import { useNavigationInput } from '../../../keybindings/use-navigation-input.js';
+import type { Action } from '../../../state/actions.js';
 import { useAppDispatch, useAppState } from '../../../state/context.js';
 import { anyOverlayOpen, currentScreen } from '../../../state/types.js';
+import { FieldWizard, requireFieldValue, type FieldSpec } from '../../shared/field-wizard.js';
+import { parseNumberField } from '../../shared/text.js';
 import { OdsCellEditor } from './cell-detail.js';
 import { cellKey, cellLookup, inferKind, KIND_BADGE, odsDocument, rawEditableText, resolveSheet, sheetExtent } from './shared.js';
 
@@ -17,8 +23,46 @@ const COMPACT_ADDRESS_WIDTH = 8;
 // This screen's own chrome beyond ListView's default reserved-rows count: a title line, a column-header line, the cell-info line below the grid, one hint line, and the app shell's StatusLine underneath everything -- the compact list view reuses this same figure via ListView's `reservedRows`.
 const GRID_CHROME_ROWS = 5;
 
-// 'h'/'j'/'k'/'l' move the cursor, 'p'/'t' open print settings / toggle the compact view, and 'm' anchors/commits a range-select merge -- all seven are claimed before the printable-character check below, so none of them can seed a type-to-edit. A real, honest, vim-shaped limitation: reach the editor with Enter first, then those letters type as ordinary characters like any other.
-const RESERVED_LETTERS: ReadonlySet<string> = new Set(['h', 'j', 'k', 'l', 'p', 't', 'm']);
+// 'h'/'j'/'k'/'l' move the cursor, 'p'/'t' open print settings / toggle the compact view, 'm' anchors/commits a range-select merge, 'f' opens formula editing, and 'i' opens the floating-image wizard -- all nine are claimed before the printable-character check below, so none of them can seed a type-to-edit. A real, honest, vim-shaped limitation: reach the editor with Enter first, then those letters type as ordinary characters like any other.
+const RESERVED_LETTERS: ReadonlySet<string> = new Set(['h', 'j', 'k', 'l', 'p', 't', 'm', 'f', 'i']);
+
+const IMAGE_EXTENSION_TO_FORMAT: Readonly<Record<string, 'png' | 'jpeg'>> = { png: 'png', jpg: 'jpeg', jpeg: 'jpeg' };
+
+function inferSheetImageFormat(path: string): 'png' | 'jpeg' | undefined {
+  const extension = path.slice(path.lastIndexOf('.') + 1).toLowerCase();
+  return IMAGE_EXTENSION_TO_FORMAT[extension];
+}
+
+// The sheet-image wizard's own field list -- unlike ADD_TEXTBOX/ADD_IMAGE's page-absolute frame, a spreadsheet floating image is anchored to a cell (see documents.js's own OdsSheet.addImage doc comment), so the anchor row/column come from the grid's own current cursor position (see applyAddSheetImage below) rather than being fields a caller types in here; only the cell-relative offset, the rendered size, and alt text are collected.
+const SHEET_IMAGE_FIELDS: readonly FieldSpec[] = [
+  { key: 'path', label: 'Image file path (.png/.jpg/.jpeg)', defaultValue: '' },
+  { key: 'widthPt', label: 'Width (pt)', defaultValue: '100' },
+  { key: 'heightPt', label: 'Height (pt)', defaultValue: '60' },
+  { key: 'offsetXPt', label: 'Offset X from anchor cell (pt)', defaultValue: '0' },
+  { key: 'offsetYPt', label: 'Offset Y from anchor cell (pt)', defaultValue: '0' },
+  { key: 'altText', label: 'Alt text, blank for none', defaultValue: '' },
+];
+
+// The one async step (reading the image file off disk) is why this whole function is async, matching paragraph-detail.tsx's/odg's own applyInsertImage/applyAddKind for the identical reason.
+async function applyAddSheetImage(sheetIndex: number, anchorRow: number, anchorColumn: number, values: Readonly<Record<string, string>>, dispatch: Dispatch<Action>): Promise<void> {
+  const path = requireFieldValue(values, 'path');
+  const format = inferSheetImageFormat(path);
+  if (format === undefined) {
+    dispatch({ type: 'SET_STATUS', severity: 'warning', text: `${path} is not a .png or .jpg/.jpeg file -- image not added` });
+    return;
+  }
+  try {
+    const bytes = new Uint8Array(await readInput(path));
+    const widthPt = parseNumberField(requireFieldValue(values, 'widthPt'), 100);
+    const heightPt = parseNumberField(requireFieldValue(values, 'heightPt'), 60);
+    const offsetXPt = parseNumberField(requireFieldValue(values, 'offsetXPt'), 0);
+    const offsetYPt = parseNumberField(requireFieldValue(values, 'offsetYPt'), 0);
+    const altTextRaw = requireFieldValue(values, 'altText').trim();
+    dispatch({ type: 'ADD_SHEET_IMAGE', sheetIndex, anchorRow, anchorColumn, offsetXPt, offsetYPt, format, bytes, widthPt, heightPt, altText: altTextRaw.length === 0 ? undefined : altTextRaw });
+  } catch (error) {
+    dispatch({ type: 'SET_STATUS', severity: 'error', text: `Could not read ${path}: ${describeError(error)}` });
+  }
+}
 
 interface EditSession {
   readonly seedText: string;
@@ -67,6 +111,10 @@ export function OdsSpreadsheetGridScreen(): ReactElement {
   const [viewMode, setViewMode] = useState<'grid' | 'compact'>('grid');
   const [editSession, setEditSession] = useState<EditSession | undefined>(undefined);
   const [mergeAnchor, setMergeAnchor] = useState<CellAddress | undefined>(undefined);
+  // Formula editing is a genuinely separate edit mode from `editSession` above, not a variant of it -- a real ODF cell carries a formula and a typed value as two independent, coexisting attributes (see actions.ts's own SET_CELL_FORMULA doc comment), so this never reuses the value-kind-cycle UI OdsCellEditor drives.
+  const [formulaEditing, setFormulaEditing] = useState(false);
+  const [formulaDraft, setFormulaDraft] = useState('');
+  const [imageWizardOpen, setImageWizardOpen] = useState(false);
 
   const { columns: terminalColumns, rows: terminalRows } = useWindowSize();
 
@@ -79,6 +127,7 @@ export function OdsSpreadsheetGridScreen(): ReactElement {
 
   const overlayOpen = anyOverlayOpen(state);
   const editing = editSession !== undefined;
+  const editingAnything = editing || formulaEditing || imageWizardOpen;
 
   function moveCursor(deltaRow: number, deltaColumn: number): void {
     setCursorRow((row) => Math.min(Math.max(row + deltaRow, 0), rowCount - 1));
@@ -110,7 +159,7 @@ export function OdsSpreadsheetGridScreen(): ReactElement {
         dispatch({ type: 'PUSH_SCREEN', screen: { kind: 'printSettingsEditor', sheetIndex } });
       }
     },
-    { isActive: !overlayOpen && !editing },
+    { isActive: !overlayOpen && !editingAnything },
   );
 
   // Grid-mode cursor movement and type-to-edit -- inactive while the compact list owns the keyboard instead.
@@ -165,6 +214,16 @@ export function OdsSpreadsheetGridScreen(): ReactElement {
         }
         return;
       }
+      if (input === 'f') {
+        const cell = cells.get(cellKey(clampedRow, clampedColumn));
+        setFormulaDraft(cell?.formula ?? '');
+        setFormulaEditing(true);
+        return;
+      }
+      if (input === 'i') {
+        setImageWizardOpen(true);
+        return;
+      }
       if (key.return) {
         if (mergeAnchor !== undefined) {
           commitMerge(mergeAnchor);
@@ -179,7 +238,7 @@ export function OdsSpreadsheetGridScreen(): ReactElement {
         beginEdit(input, inferKind(input));
       }
     },
-    { isActive: !overlayOpen && !editing && viewMode === 'grid' },
+    { isActive: !overlayOpen && !editingAnything && viewMode === 'grid' },
   );
 
   const compactRows: readonly CompactRow[] =
@@ -297,9 +356,43 @@ export function OdsSpreadsheetGridScreen(): ReactElement {
         />
       )}
 
+      {formulaEditing ? (
+        <Box>
+          <Text color="cyan">{cursorAddress} formula: </Text>
+          <TextField
+            value={formulaDraft}
+            isFocused={!overlayOpen}
+            placeholder="e.g. of:=[.A1]+[.A2]"
+            onChange={setFormulaDraft}
+            onSubmit={(value) => {
+              const trimmed = value.trim();
+              dispatch({ type: 'SET_CELL_FORMULA', sheetIndex, row: clampedRow, column: clampedColumn, formula: trimmed.length === 0 ? undefined : trimmed });
+              setFormulaEditing(false);
+            }}
+            onCancel={() => {
+              setFormulaEditing(false);
+            }}
+          />
+        </Box>
+      ) : undefined}
+
+      {imageWizardOpen ? (
+        <FieldWizard
+          fields={SHEET_IMAGE_FIELDS}
+          onCancel={() => {
+            setImageWizardOpen(false);
+          }}
+          onComplete={(values) => {
+            void applyAddSheetImage(sheetIndex, clampedRow, clampedColumn, values, dispatch).then(() => {
+              setImageWizardOpen(false);
+            });
+          }}
+        />
+      ) : undefined}
+
       <Text dimColor>
         {mergeAnchor === undefined
-          ? `hjkl/arrows move, Enter/type to edit, m to anchor a merge, p print settings, t ${viewMode === 'grid' ? 'compact list' : 'grid'} view, Esc back`
+          ? `hjkl/arrows move, Enter/type to edit, m to anchor a merge, p print settings, t ${viewMode === 'grid' ? 'compact list' : 'grid'} view, f formula, i image, Esc back`
           : 'hjkl/arrows to the opposite corner, m/Enter to merge, Esc to cancel'}
       </Text>
     </Box>
