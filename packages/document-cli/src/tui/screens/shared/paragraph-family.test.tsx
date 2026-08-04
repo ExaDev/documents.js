@@ -1,11 +1,11 @@
-import { formulaOfBlock, readDocxContent, readOdtContent, type ContentDocument } from 'documents.js';
+import { createMarkdownEditor, formulaOfBlock, readDocxContent, readMarkdownContent, readOdtContent, type ContentDocument } from 'documents.js';
 import { Text, useInput } from 'ink';
 import { render } from 'ink-testing-library';
 import { useEffect, type ReactElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { StatusLine } from '../../components/status-line.js';
 import { AppStateProvider, useAppDispatch, useAppState } from '../../state/context.js';
-import { currentScreen, type DocxOpenDocument, type OdtOpenDocument } from '../../state/types.js';
+import { currentScreen, type DocxOpenDocument, type MarkdownOpenDocument, type OdtOpenDocument } from '../../state/types.js';
 import { createParagraphFamilyAdapter, ParagraphFamilyBodyList } from './paragraph-family.js';
 
 // Ink's reconciler settles a `stdin.write()`-driven state update (and any effect it schedules, which can itself dispatch and schedule a further render) over more than one macrotask tick, not synchronously within the call, so a handful of `setImmediate` ticks are needed before reading `lastFrame()` or sending the next keystroke. A bare Escape additionally needs real elapsed time on top of that: Ink buffers it for up to 20ms (`pendingInputFlushDelayMilliseconds` in its own `App.js`) to disambiguate a lone Escape press from the start of a multi-byte ANSI sequence (an arrow key) -- confirmed necessary empirically: `setImmediate` ticks alone reliably delivered a plain character but silently dropped every Escape in this same harness. That real wait is only paid after an actual Escape write (`flush({ afterEscape: true })`), not on every flush, so the suite's total wall-clock time does not compound across the several non-Escape flushes each test also does.
@@ -94,12 +94,17 @@ function renderHarness() {
   );
 }
 
-// A generalised, docx-or-odt harness for the 'T' table-creation wizard tests below -- reused for both formats rather than duplicating DocxHarness, since the wizard itself is format-agnostic (APPEND_TABLE's own reducer case resolves the open docx/odt document uniformly, exactly as the module doc comment on createParagraphFamilyAdapter's own `appendParagraph` already establishes for paragraphs).
-function BodyListHarness({ format }: { readonly format: 'docx' | 'odt' }): ReactElement | null {
+// A generalised, docx/odt/markdown harness for the 'T' table-creation wizard tests below -- reused for all three formats rather than duplicating DocxHarness, since the wizard itself is genuinely format-agnostic (APPEND_TABLE's own reducer case resolves the open docx/odt/markdown document uniformly, exactly as the module doc comment on createParagraphFamilyAdapter's own `appendParagraph` already establishes for paragraphs). Markdown has no CREATE_DOCUMENT path (EditableFormat doesn't include it) -- a fresh MarkdownOpenDocument is built directly via createMarkdownEditor() and dispatched through OPEN_FILE_SUCCESS instead, the same real action openDocumentAtPath's own caller dispatches, matching reducer.test.ts's own openMarkdownDocument convention.
+function BodyListHarness({ format }: { readonly format: 'docx' | 'odt' | 'markdown' }): ReactElement | null {
   const state = useAppState();
   const dispatch = useAppDispatch();
 
   useEffect(() => {
+    if (format === 'markdown') {
+      const doc: MarkdownOpenDocument = { format: 'markdown', editor: createMarkdownEditor(), originalText: undefined, path: undefined };
+      dispatch({ type: 'OPEN_FILE_SUCCESS', path: 'untitled.md', doc });
+      return;
+    }
     dispatch({ type: 'CREATE_DOCUMENT', format });
   }, [format, dispatch]);
 
@@ -127,9 +132,22 @@ function BodyListHarness({ format }: { readonly format: 'docx' | 'odt' }): React
   );
 }
 
-// Reads the document's own first table block fresh through readDocxContent/readOdtContent on every render -- the real proof a wizard-driven APPEND_TABLE dispatch reached the package, and (for the merge tests) that the anchor cell carries the real colSpan/rowSpan a creation-time merge writes.
-function TableProbe({ doc }: { readonly doc: DocxOpenDocument | OdtOpenDocument }): ReactElement {
-  const content = doc.format === 'docx' ? readDocxContent(doc.editor.toPackage()) : readOdtContent(doc.editor.toPackage());
+type WordprocessingOpenDocument = DocxOpenDocument | OdtOpenDocument | MarkdownOpenDocument;
+
+// The one content-reading step genuinely specific to each format: docx/odt read through their own already-decoded package, markdown re-serialises its live editor to text first (readMarkdownContent takes text, not a package) -- mirroring format/read-metadata.ts's own per-format dispatch.
+function wordprocessingContentFor(doc: WordprocessingOpenDocument): ContentDocument {
+  if (doc.format === 'docx') {
+    return readDocxContent(doc.editor.toPackage());
+  }
+  if (doc.format === 'odt') {
+    return readOdtContent(doc.editor.toPackage());
+  }
+  return readMarkdownContent(doc.editor.toMarkdownText());
+}
+
+// Reads the document's own first table block fresh through readDocxContent/readOdtContent/readMarkdownContent on every render -- the real proof a wizard-driven APPEND_TABLE dispatch reached the package, and (for the merge tests) that the anchor cell carries the real colSpan/rowSpan a creation-time merge writes.
+function TableProbe({ doc }: { readonly doc: WordprocessingOpenDocument }): ReactElement {
+  const content = wordprocessingContentFor(doc);
   if (content.kind !== 'wordprocessing') {
     throw new Error(`expected a wordprocessing ContentDocument, got ${content.kind}`);
   }
@@ -148,9 +166,9 @@ function TableProbe({ doc }: { readonly doc: DocxOpenDocument | OdtOpenDocument 
 // ContentEmbeddedObjectBlock has no top-level re-export from documents.js (only the ContentBlock union itself does) -- narrowed via Extract from that union's own block-array element type instead, the same trick TableProbe above already uses for its table-block narrowing.
 type WordprocessingBlock = Extract<ContentDocument, { readonly kind: 'wordprocessing' }>['sections'][number]['blocks'][number];
 
-// Reads the document's own first embedded-formula block fresh through readDocxContent/readOdtContent on every render -- the real proof an 'm'-driven INSERT_ODT_FORMULA dispatch reached the package, mirroring TableProbe's own convention. docx never reaches this probe with a formula present, since paragraph-detail.tsx's own 'm' handler (paragraph-scoped, not this body-list screen's) is what docx uses instead.
-function FormulaProbe({ doc }: { readonly doc: DocxOpenDocument | OdtOpenDocument }): ReactElement {
-  const content = doc.format === 'docx' ? readDocxContent(doc.editor.toPackage()) : readOdtContent(doc.editor.toPackage());
+// Reads the document's own first embedded-formula block fresh through readDocxContent/readOdtContent/readMarkdownContent on every render -- the real proof an 'm'-driven INSERT_ODT_FORMULA dispatch reached the package, mirroring TableProbe's own convention. docx never reaches this probe with a formula present, since paragraph-detail.tsx's own 'm' handler (paragraph-scoped, not this body-list screen's) is what docx uses instead; markdown never reaches it with one present either, since CommonMark/GFM has no formula construct at all -- always 'none' for markdown.
+function FormulaProbe({ doc }: { readonly doc: WordprocessingOpenDocument }): ReactElement {
+  const content = wordprocessingContentFor(doc);
   if (content.kind !== 'wordprocessing') {
     throw new Error(`expected a wordprocessing ContentDocument, got ${content.kind}`);
   }
@@ -161,7 +179,7 @@ function FormulaProbe({ doc }: { readonly doc: DocxOpenDocument | OdtOpenDocumen
   return <Text>probe:formula={formula === undefined ? 'none' : `present root=${rootTag ?? '?'}`}</Text>;
 }
 
-function renderBodyListHarness(format: 'docx' | 'odt'): ReturnType<typeof render> {
+function renderBodyListHarness(format: 'docx' | 'odt' | 'markdown'): ReturnType<typeof render> {
   return render(
     <AppStateProvider>
       <BodyListHarness format={format} />
@@ -245,7 +263,7 @@ describe('ParagraphFamilyBodyList', () => {
 // A generous per-test timeout throughout this describe.each: each test makes several sequential flush() round trips (one per wizard step), and the default 10s unit-test timeout has been observed to run close under heavy concurrent load on this machine -- the same reasoning already documented on the "navigates ... with Enter" test above.
 const WIZARD_TEST_TIMEOUT_MS = 20_000;
 
-describe.each(['docx', 'odt'] as const)('ParagraphFamilyBodyList "T" table-creation wizard on %s', (format) => {
+describe.each(['docx', 'odt', 'markdown'] as const)('ParagraphFamilyBodyList "T" table-creation wizard on %s', (format) => {
   it(
     'adds a real table of the requested dimensions via the 2-step rows/columns wizard, no merge',
     async () => {
@@ -277,7 +295,9 @@ describe.each(['docx', 'odt'] as const)('ParagraphFamilyBodyList "T" table-creat
   );
 
   it(
-    'creates a table with cells pre-merged via the wizard\'s own merge step, in one APPEND_TABLE dispatch',
+    format === 'markdown'
+      ? "requests a merge via the wizard's own merge step, but a markdown table declines it with a warning (GFM tables have no cell-merge concept)"
+      : "creates a table with cells pre-merged via the wizard's own merge step, in one APPEND_TABLE dispatch",
     async () => {
       const { lastFrame, stdin } = renderBodyListHarness(format);
       await flush();
@@ -311,7 +331,13 @@ describe.each(['docx', 'odt'] as const)('ParagraphFamilyBodyList "T" table-creat
       stdin.write(ENTER);
       await flush();
 
-      expect(lastFrame()).toContain('probe:table=3x3 anchorColSpan=2 anchorRowSpan=2');
+      if (format === 'markdown') {
+        // The table is still created (3x3), just left unmerged -- see reducer.ts's own APPEND_TABLE case and reducer.test.ts's identical assertion at the state level.
+        expect(lastFrame()).toContain('probe:table=3x3 anchorColSpan=1 anchorRowSpan=1');
+        expect(lastFrame()).toContain('do not support merged cells');
+      } else {
+        expect(lastFrame()).toContain('probe:table=3x3 anchorColSpan=2 anchorRowSpan=2');
+      }
       expect(lastFrame()).toContain('ON tableView');
     },
     WIZARD_TEST_TIMEOUT_MS,
@@ -440,6 +466,16 @@ describe('ParagraphFamilyBodyList "m" formula insertion (odt body-scoped)', () =
 
   it('does not expose the formula flow for a docx document', async () => {
     const { lastFrame, stdin } = renderBodyListHarness('docx');
+    await flush();
+
+    stdin.write('m');
+    await flush();
+
+    expect(lastFrame()).not.toContain('Insert formula');
+  });
+
+  it('does not expose the formula flow for a markdown document either -- CommonMark/GFM has no formula construct at all', async () => {
+    const { lastFrame, stdin } = renderBodyListHarness('markdown');
     await flush();
 
     stdin.write('m');

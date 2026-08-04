@@ -8,6 +8,7 @@ import {
   drawingOfBlock,
   odsToXlsx,
   openDocx,
+  openMarkdown,
   openOdg,
   openOdp,
   openOds,
@@ -136,9 +137,9 @@ function markdownDocument(state: AppState): MarkdownOpenDocument {
   return doc;
 }
 
-// There is no CREATE_DOCUMENT path for markdown (documents.js has no createMarkdown()) -- a MarkdownOpenDocument only ever comes from opening a real file, so tests seed one directly through OPEN_FILE_SUCCESS, the same action openDocumentAtPath's own real caller dispatches.
+// There is no CREATE_DOCUMENT path for markdown (EditableFormat doesn't include it) -- a MarkdownOpenDocument only ever comes from opening a real file, so tests seed one directly through OPEN_FILE_SUCCESS, the same action openDocumentAtPath's own real caller dispatches, with a genuine live-view MarkdownEditor built via openMarkdown -- the same one open-document.ts's own markdown branch builds.
 function openMarkdownDocument(source: string, path = '/tmp/notes.md'): AppState {
-  return appReducer(createInitialState(), { type: 'OPEN_FILE_SUCCESS', path, doc: { format: 'markdown', source, path } });
+  return appReducer(createInitialState(), { type: 'OPEN_FILE_SUCCESS', path, doc: { format: 'markdown', editor: openMarkdown(source), originalText: source, path } });
 }
 
 describe('appReducer navigation', () => {
@@ -706,37 +707,87 @@ describe('appReducer MERGE_CELLS on ods', () => {
 });
 
 describe('appReducer markdown mutations', () => {
-  it('lands an opened markdown document on the line-list root screen', () => {
+  it('lands an opened markdown document on the bodyList root screen, with a real live-view editor and originalText kept alongside', () => {
     const state = openMarkdownDocument('# Title\n\nBody text');
-    expect(state.stack.map((screen) => screen.kind)).toEqual(['markdownLineList']);
-    expect(markdownDocument(state).source).toBe('# Title\n\nBody text');
+    expect(state.stack.map((screen) => screen.kind)).toEqual(['bodyList']);
+    const doc = markdownDocument(state);
+    expect(doc.originalText).toBe('# Title\n\nBody text');
+    expect(doc.editor.paragraphs()).toHaveLength(2);
+    expect(doc.editor.paragraphs()[1]?.text).toBe('Body text');
   });
 
-  it('replaces the whole source on SET_MARKDOWN_SOURCE and marks the document dirty', () => {
-    const state = openMarkdownDocument('one\ntwo\nthree');
-    const edited = appReducer(state, { type: 'SET_MARKDOWN_SOURCE', source: 'one\nTWO\nthree' });
-    expect(markdownDocument(edited).source).toBe('one\nTWO\nthree');
-    expect(edited.hasUnsavedChanges).toBe(true);
-    expect(edited.undoStack).toHaveLength(1);
+  it('appends a paragraph and a run through the same generic actions docx/odt already share, marking the document dirty', () => {
+    const opened = openMarkdownDocument('Intro');
+    const appended = appReducer(opened, { type: 'APPEND_PARAGRAPH', text: 'New paragraph', styleId: undefined, alignment: undefined });
+    expect(markdownDocument(appended).editor.paragraphs()).toHaveLength(2);
+    expect(appended.hasUnsavedChanges).toBe(true);
+    expect(appended.undoStack).toHaveLength(1);
+
+    const withRun = appReducer(appended, { type: 'APPEND_RUN', blockIndex: 1, text: ' more' });
+    expect(markdownDocument(withRun).editor.paragraphs()[1]?.text).toBe('New paragraph more');
   });
 
-  it('warns instead of mutating when the open document is the wrong format', () => {
-    const state = appReducer(createInitialState(), { type: 'CREATE_DOCUMENT', format: 'docx' });
-    const warned = appReducer(state, { type: 'SET_MARKDOWN_SOURCE', source: 'x' });
+  it('toggles bold/italic on a markdown run through the same generic action docx/odt already share', () => {
+    const opened = openMarkdownDocument('Intro');
+    const bolded = appReducer(opened, { type: 'TOGGLE_RUN_BOLD', blockIndex: 0, runIndex: 0 });
+    expect(markdownDocument(bolded).editor.paragraphs()[0]?.runs()[0]?.bold).toBe(true);
+
+    const italicised = appReducer(bolded, { type: 'TOGGLE_RUN_ITALIC', blockIndex: 0, runIndex: 0 });
+    expect(markdownDocument(italicised).editor.paragraphs()[0]?.runs()[0]?.italic).toBe(true);
+  });
+
+  // MarkdownRun/MarkdownParagraph genuinely have no underline/colour/font-family/font-size/alignment field at all -- these four actions are narrowed to docx/odt only in the reducer (styledWordprocessingDocument/withStyledRun), so dispatching one against a markdown document reports why rather than throwing or silently doing nothing.
+  it('warns rather than mutating for run/paragraph styling fields markdown has no counterpart for at all', () => {
+    const opened = openMarkdownDocument('Intro');
+
+    const underlineResult = appReducer(opened, { type: 'TOGGLE_RUN_UNDERLINE', blockIndex: 0, runIndex: 0 });
+    expect(underlineResult.status?.severity).toBe('warning');
+    expect(underlineResult.hasUnsavedChanges).toBe(false);
+
+    const colorResult = appReducer(opened, { type: 'SET_RUN_COLOR', blockIndex: 0, runIndex: 0, color: { r: 1, g: 0, b: 0 } });
+    expect(colorResult.status?.severity).toBe('warning');
+
+    const fontFamilyResult = appReducer(opened, { type: 'SET_RUN_FONT_FAMILY', blockIndex: 0, runIndex: 0, fontFamily: 'Calibri' });
+    expect(fontFamilyResult.status?.severity).toBe('warning');
+
+    const fontSizeResult = appReducer(opened, { type: 'SET_RUN_FONT_SIZE', blockIndex: 0, runIndex: 0, sizePt: 14 });
+    expect(fontSizeResult.status?.severity).toBe('warning');
+
+    const alignmentResult = appReducer(opened, { type: 'SET_PARAGRAPH_ALIGNMENT', blockIndex: 0, alignment: 'center' });
+    expect(alignmentResult.status?.severity).toBe('warning');
+
+    const imageResult = appReducer(opened, { type: 'INSERT_PARAGRAPH_IMAGE', blockIndex: 0, format: 'png', bytes: PNG_BYTES, widthPt: 10, heightPt: 10, altText: undefined });
+    expect(imageResult.status?.severity).toBe('warning');
+  });
+
+  // GFM tables have no cell-merge concept at all -- MarkdownTable has no mergeCells -- so a merge requested alongside table creation still creates the (unmerged) table and reports why the merge didn't happen, rather than silently dropping the merge or refusing to create the table.
+  it('creates a real markdown table via the shared APPEND_TABLE action, and declines a requested merge with a warning', () => {
+    const opened = openMarkdownDocument('Intro');
+    const created = appReducer(opened, { type: 'APPEND_TABLE', rows: 2, columns: 2, merge: { startRow: 0, startColumn: 0, rowSpan: 2, colSpan: 2 } });
+    expect(markdownDocument(created).editor.tables()).toHaveLength(1);
+    expect(created.status?.severity).toBe('warning');
+    expect(created.status?.text).toContain('do not support merged cells');
+  });
+
+  it('warns rather than mutating a wordprocessing action against a non-wordprocessing document', () => {
+    const state = appReducer(createInitialState(), { type: 'CREATE_DOCUMENT', format: 'ods' });
+    const warned = appReducer(state, { type: 'APPEND_PARAGRAPH', text: 'x', styleId: undefined, alignment: undefined });
     expect(warned.status?.severity).toBe('warning');
     expect(warned.hasUnsavedChanges).toBe(false);
   });
 });
 
 describe('appReducer undo', () => {
-  it('restores a markdown document to its source before the last SET_MARKDOWN_SOURCE', () => {
-    const opened = openMarkdownDocument('one\ntwo');
-    const edited = appReducer(opened, { type: 'SET_MARKDOWN_SOURCE', source: 'one\nTWO' });
+  // Proves undo generalises to markdown's own live-view MarkdownEditor with zero markdown-specific reducer code beyond toUndoSnapshot's own byte<->text branch -- the same encodeMarkdownText/decodeMarkdownText round trip through the shared undo stack every other mutating action already uses.
+  it('restores a markdown document to its paragraphs before the last edit', () => {
+    const opened = openMarkdownDocument('One\n\nTwo');
+    const edited = appReducer(opened, { type: 'APPEND_RUN', blockIndex: 1, text: ' more' });
+    expect(markdownDocument(edited).editor.paragraphs()[1]?.text).toBe('Two more');
     expect(edited.undoStack).toHaveLength(1);
 
     const undone = appReducer(edited, { type: 'UNDO' });
     expect(undone.undoStack).toHaveLength(0);
-    expect(markdownDocument(undone).source).toBe('one\ntwo');
+    expect(markdownDocument(undone).editor.paragraphs()[1]?.text).toBe('Two');
     expect(undone.hasUnsavedChanges).toBe(true);
   });
 
