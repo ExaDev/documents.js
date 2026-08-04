@@ -1,15 +1,26 @@
 import type { DocumentFormat } from 'documents.js';
 
-// 'md' and 'markdown' both read as the 'markdown' DocumentFormat -- the first many-to-one entry this table has ever had, deliberately breaking what was previously a perfect mirror between EXTENSION_TO_FORMAT and FORMAT_TO_EXTENSION (every other format's own extension is also its only recognised one). FORMAT_TO_EXTENSION below still names exactly one extension per format, so writing a markdown document always picks 'md' -- the shorter, far more common of the two on disk -- as canonical.
+// 'md' and 'markdown' both read as the 'markdown' DocumentFormat, and every ODF/OOXML template and macro-enabled variant reads as its base format -- the many-to-one entries this table carries, deliberately breaking what was previously a perfect mirror with FORMAT_TO_EXTENSION (every base format's own extension is also its canonical one). A template (.ott/.ots/.otp/.otg/.otf) is the same package as its non-template sibling with only the mimetype's own "-template" suffix differing, and a macro-enabled OOXML file (.docm/.xlsm/.pptm) is the same package with a vbaProject part this library reads past (macros are never executed or re-emitted); so both read through the base codec unchanged. FORMAT_TO_EXTENSION below still names exactly one extension per format, so writing always picks the canonical base extension.
 const EXTENSION_TO_FORMAT: Readonly<Record<string, DocumentFormat>> = {
   docx: 'docx',
+  dotx: 'docx',
+  docm: 'docx',
   pptx: 'pptx',
+  potx: 'pptx',
+  pptm: 'pptx',
   xlsx: 'xlsx',
+  xltx: 'xlsx',
+  xlsm: 'xlsx',
   odt: 'odt',
+  ott: 'odt',
   odp: 'odp',
+  otp: 'odp',
   ods: 'ods',
+  ots: 'ods',
   odg: 'odg',
+  otg: 'odg',
   odf: 'odf',
+  otf: 'odf',
   markdown: 'markdown',
   md: 'markdown',
   pdf: 'pdf',

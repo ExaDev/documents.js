@@ -53,6 +53,23 @@ describe('inferFormatFromExtension', () => {
     expect(inferFormatFromExtension('notes.md')).toBe('markdown');
     expect(inferFormatFromExtension('notes.markdown')).toBe('markdown');
   });
+
+  it('infers each ODF template extension as its base format', () => {
+    expect(inferFormatFromExtension('letter.ott')).toBe('odt');
+    expect(inferFormatFromExtension('budget.ots')).toBe('ods');
+    expect(inferFormatFromExtension('deck.otp')).toBe('odp');
+    expect(inferFormatFromExtension('drawing.otg')).toBe('odg');
+    expect(inferFormatFromExtension('formula.otf')).toBe('odf');
+  });
+
+  it('infers each OOXML template and macro-enabled extension as its base format', () => {
+    expect(inferFormatFromExtension('template.dotx')).toBe('docx');
+    expect(inferFormatFromExtension('deck.potx')).toBe('pptx');
+    expect(inferFormatFromExtension('book.xltx')).toBe('xlsx');
+    expect(inferFormatFromExtension('macro.docm')).toBe('docx');
+    expect(inferFormatFromExtension('macro.xlsm')).toBe('xlsx');
+    expect(inferFormatFromExtension('macro.pptm')).toBe('pptx');
+  });
 });
 
 describe('formatToExtension', () => {
