@@ -509,7 +509,7 @@ export function odmToPdf(bytes: Uint8Array<ArrayBuffer>, options?: OdmToPdfOptio
   return writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution, formulas, fonts });
 }
 
-// odb (ODF database front-end) Tier 1 support: readOdbTables(pkg) already does the real work (decoder selection over odf.js's own readOdbInventory, then src/hsqldb/script.ts's bounded HSQLDB TEXT-script parser) -- odbToXlsx/odbToCsv below are thin compositions over it, matching odsToXlsx's own "reader -> pivot -> writer" shape. Unlike every conversion above, .odb has no PDF conversion and no reverse (xlsx/csv -> odb) direction at all -- Reports require live SQL execution to render, categorically out of scope (see README) -- so, like odmToPdf, these are deliberately NOT wired into the DocumentConverter port (src/convert/port.ts): that port's {source, targetFormat} contract assumes a conversion has a natural place in DocumentFormat's own bytes-in/bytes-out shape, and odb's own asymmetry (one source format, two unrelated target shapes, one of which needs a table-selection option the other doesn't) doesn't fit it any better than odmToPdf's resolver-shaped conversion did.
+// odb (ODF database front-end) Tier 1 support: readOdbTables(pkg) already does the real work (decoder selection over odf.js's own readOdbInventory, then src/hsqldb/script.ts's bounded HSQLDB TEXT-script parser) -- odbToXlsx/odbToCsv below are thin compositions over it, matching odsToXlsx's own "reader -> pivot -> writer" shape. Unlike every conversion above, .odb has no PDF conversion of its own and no reverse (xlsx/csv -> odb) direction at all -- so, like odmToPdf, these are deliberately NOT wired into the DocumentConverter port (src/convert/port.ts): that port's {source, targetFormat} contract assumes a conversion has a natural place in DocumentFormat's own bytes-in/bytes-out shape, and odb's own asymmetry (one source format, two unrelated target shapes, one of which needs a table-selection option the other doesn't) doesn't fit it any better than odmToPdf's resolver-shaped conversion did. A rendered Report (src/odb/report/) is a different story -- see odbReportToDocx/odbReportToOdt/odbReportToPdf further down this section, which is why "Reports require live SQL execution to render" is no longer true: they do render, over a real SQL result set, through readOdbReportContent.
 export interface OdbConversionOptions extends DocumentBridgeOptions, HsqldbDecodeOptions {}
 
 export function odbToXlsx(bytes: Uint8Array<ArrayBuffer>, options?: OdbConversionOptions): Uint8Array<ArrayBuffer> {
@@ -532,4 +532,39 @@ export function odbToCsv(bytes: Uint8Array<ArrayBuffer>, options?: OdbToCsvOptio
   const tables = readOdbTables(pkg, { timeZone: options?.timeZone });
   throwIfAborted(options?.signal);
   return buildOdbTableCsv(tables, options?.table);
+}
+
+// readOdbReportContent (src/odb/report/content.ts) already turns a report into a real wordprocessing ContentDocument -- the three functions below are the last step, dispatching that ContentDocument to real docx/odt/pdf bytes, the same "read/render -> encode" shape every other ergonomic conversion in this file has. They take a ContentDocument rather than a Package: a rendered report has no source package of its own to round-trip through (readOdbReportContent already consumed the .odb), so there is nothing left to decode here, unlike odbToXlsx/odbToCsv above.
+export interface OdbReportToDocxOptions {
+  readonly signal?: AbortSignal;
+  // Forwarded to buildDocxPackage: the one construct-level degradation a rendered report's own text can hit, since a report control's own text is plain (no MathML formulas), but buildDocxPackage's own onMathDiagnostic parameter is otherwise silently ignored when there is nothing to report -- accepted here for the same "every docx-building entry point exposes the same diagnostic channel" consistency odtToDocx/docxToOdt already follow, not because a report is expected to trigger it.
+  readonly onMathDiagnostic?: (diagnostic: OmmlDiagnostic, context: { readonly sourcePath?: string }) => void;
+}
+
+// A rendered report's own ContentDocument -> real docx bytes, via buildDocxPackage -- the exact "encodePackage(buildDocxPackage(content))" shape docxToOdt's own reverse hop and every other ContentDocument-to-docx caller in this file already uses. buildDocxPackage itself throws if content is somehow not the wordprocessing variant readOdbReportContent always produces, so there is no separate guard to duplicate here.
+export function odbReportToDocx(content: ContentDocument, options?: OdbReportToDocxOptions): Uint8Array<ArrayBuffer> {
+  throwIfAborted(options?.signal);
+  return encodePackage(buildDocxPackage(content, { onMathDiagnostic: options?.onMathDiagnostic })); // ooxml.js's own encodePackage -- buildDocxPackage produces an OOXML package.
+}
+
+export interface OdbReportToOdtOptions {
+  readonly signal?: AbortSignal;
+}
+
+// A rendered report's own ContentDocument -> real odt bytes, mirroring odbReportToDocx exactly for the ODF side -- buildOdtPackage takes no onMathDiagnostic option at all (an embedded ODF formula is written as a real formula sub-object with no OMML translation step to degrade -- see src/odf-package/formula.ts), so OdbReportToOdtOptions carries nothing beyond signal.
+export function odbReportToOdt(content: ContentDocument, options?: OdbReportToOdtOptions): Uint8Array<ArrayBuffer> {
+  throwIfAborted(options?.signal);
+  return encodeOdfPackage(buildOdtPackage(content)); // odf.js's own encodePackage -- buildOdtPackage produces an ODF package.
+}
+
+// A rendered report's own ContentDocument -> real PDF bytes. Mirrors markdownToPdf's own pipeline exactly (createFontRegistry directly, not createDocumentFontRegistry): a rendered report has no source PACKAGE of its own to extract embedded fonts from, any more than markdown text does, so there is no sourceFonts slot to populate -- options.fonts/onFontSubstitution still reach a real FontRegistry, just one built from the caller's own faces and pdf-codec's vendored substitutes/standard 14 alone. options shape is DocumentToPdfOptions verbatim -- the same type docxToPdf/odtToPdf/markdownToPdf already use -- rather than a bespoke OdbReportToPdfOptions, so a caller already familiar with any other *ToPdf function in this package needs to learn nothing new here.
+export function odbReportToPdf(content: ContentDocument, options?: DocumentToPdfOptions): Uint8Array<ArrayBuffer> {
+  throwIfAborted(options?.signal);
+  if (content.kind !== 'wordprocessing') {
+    throw new Error('odbReportToPdf requires a wordprocessing ContentDocument');
+  }
+  const fonts = createFontRegistry({ fonts: options?.fonts, onSubstitution: options?.onFontSubstitution });
+  const { document: layout, formulas } = convertWordprocessingToLayout(content, { measurer: createFontMeasurer(fonts) });
+  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content, layout });
+  return writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution, formulas, fonts });
 }
