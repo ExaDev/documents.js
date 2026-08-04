@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/ExaDev/document-mcp/compare/v1.1.7...v1.2.0) (2026-08-04)
+
+
+### Features
+
+* infer ODF/OOXML template and macro-enabled extensions as their base format ([840ae1c](https://github.com/ExaDev/document-mcp/commit/840ae1c45f492a75aaaf914ab641aee6807b582a))
+
 ## [1.1.7](https://github.com/ExaDev/document-mcp/compare/v1.1.6...v1.1.7) (2026-08-04)
 
 
