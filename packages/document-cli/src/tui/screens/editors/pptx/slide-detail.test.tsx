@@ -141,7 +141,8 @@ describe('SlideDetailScreen "b" add-table affordance', () => {
     await waitForText(lastFrame, 'Slide 1 -- 0 shapes');
 
     await sendKey(stdin, 'a');
-    await waitForText(lastFrame, 'Add shape: t textbox, i image, b table, Esc cancel');
+    // odp additionally offers r/e/n/p vector-primitive kinds here (see this file's own vector-creation describe block below) -- pptx has no equivalent, whose own chooseKind test further down still expects the plain textbox/image/table hint verbatim.
+    await waitForText(lastFrame, 'Add shape: t textbox, i image, b table, r rect, e ellipse, n line, p path, Esc cancel');
 
     await sendKey(stdin, 'b');
     await waitForText(lastFrame, 'Rows:');
