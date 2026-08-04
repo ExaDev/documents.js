@@ -2,16 +2,27 @@ import { readFile } from 'node:fs/promises';
 import { base64ToBytes, type DocumentFormat, DocumentFormatSchema } from 'documents.js';
 import { z } from 'zod';
 
-// Ported from document-cli's src/format.ts (`EXTENSION_TO_FORMAT`/`inferFormatFromExtension`) so both entry points classify a path identically. 'md' and 'markdown' both read as the 'markdown' DocumentFormat -- the one many-to-one entry in this table; every other format's own extension is also its only recognised one.
+// Ported from document-cli's src/format.ts (`EXTENSION_TO_FORMAT`/`inferFormatFromExtension`) so both entry points classify a path identically. 'md' and 'markdown' both read as the 'markdown' DocumentFormat, and every ODF/OOXML template and macro-enabled variant reads as its base format -- the many-to-one entries in this table. A template (.ott/.ots/.otp/.otg/.otf) is the same package as its non-template sibling with only the mimetype's "-template" suffix differing, and a macro-enabled OOXML file (.docm/.xlsm/.pptm) is the same package with a vbaProject part this library reads past (macros are never executed or re-emitted); both read through the base codec unchanged.
 const EXTENSION_TO_FORMAT: Readonly<Record<string, DocumentFormat>> = {
   docx: 'docx',
+  dotx: 'docx',
+  docm: 'docx',
   pptx: 'pptx',
+  potx: 'pptx',
+  pptm: 'pptx',
   xlsx: 'xlsx',
+  xltx: 'xlsx',
+  xlsm: 'xlsx',
   odt: 'odt',
+  ott: 'odt',
   odp: 'odp',
+  otp: 'odp',
   ods: 'ods',
+  ots: 'ods',
   odg: 'odg',
+  otg: 'odg',
   odf: 'odf',
+  otf: 'odf',
   markdown: 'markdown',
   md: 'markdown',
   pdf: 'pdf',
