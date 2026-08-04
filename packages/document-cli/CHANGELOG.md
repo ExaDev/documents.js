@@ -1,3 +1,12 @@
+# [1.11.0](https://github.com/ExaDev/document-cli/compare/v1.10.0...v1.11.0) (2026-08-04)
+
+
+### Features
+
+* **tui:** add markdown open diagnostics and the :view-source command ([ec13b7c](https://github.com/ExaDev/document-cli/commit/ec13b7c347cf52a97ba31a4626b9b892ed0f2869))
+* **tui:** replace markdown line-editor state with a live-view MarkdownEditor ([c2be6f1](https://github.com/ExaDev/document-cli/commit/c2be6f1d0313391e25fc8f9e307d13c7779e086c))
+* **tui:** wire markdown into the shared paragraph/run/table screens ([85547b5](https://github.com/ExaDev/document-cli/commit/85547b57a77be825624ac534f16e5a163d992f6a))
+
 # [1.10.0](https://github.com/ExaDev/document-cli/compare/v1.9.0...v1.10.0) (2026-08-04)
 
 
