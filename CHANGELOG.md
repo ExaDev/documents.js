@@ -1,3 +1,10 @@
+# [1.79.0](https://github.com/ExaDev/documents.js/compare/v1.78.0...v1.79.0) (2026-08-04)
+
+
+### Features
+
+* add decodeOdbPackage for raw .odb -> Package decoding ([cbc12f6](https://github.com/ExaDev/documents.js/commit/cbc12f62905fc9f931ca5ced428c3d33fc581213))
+
 # [1.78.0](https://github.com/ExaDev/documents.js/compare/v1.77.3...v1.78.0) (2026-08-04)
 
 
