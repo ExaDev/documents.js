@@ -50,7 +50,7 @@ graph TD
 
 [`document-mcp`](https://github.com/ExaDev/document-mcp) is the sibling frontend over the identical `documents.js` library — an MCP server rather than a terminal CLI/TUI — so the two are independent consumers of one shared implementation, each exposing whatever subset of it suits a human at a terminal versus an MCP-speaking agent.
 
-The CLI and the TUI are deliberately not two separate implementations of the same logic. The TUI's own document-opening, saving, and PDF-export code (`src/tui/format/`) calls the identical `documents.js` functions the CLI commands call — `openDocx`/`createDocx`/`docxToPdf` and their five siblings per format, plus `readOdbTables`/`readPdf` for the two read-only sources — so there is exactly one place either surface can drift from what documents.js itself does: nowhere.
+The CLI and the TUI are deliberately not two separate implementations of the same logic. The TUI's own document-opening, saving, and PDF-export code (`src/tui/format/`) calls the identical `documents.js` functions the CLI commands call — `openDocx`/`createDocx`/`docxToPdf` and their five siblings per format, plus `readOdbTables`/`readPdf` for the two read-only sources — so there is exactly one place either surface can drift from what documents.js itself does: nowhere. This CLI adds no conversion logic of its own, so a conversion's fidelity — which pairs round-trip losslessly, which are a best-effort reconstruction, and why — is exactly what [`documents.js`'s own Fidelity section](https://github.com/ExaDev/documents.js#fidelity) documents, table included; it is not restated here.
 
 ## Getting started
 
