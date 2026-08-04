@@ -1,21 +1,5 @@
 import { type Command } from 'commander';
-import {
-  type DocumentFormat,
-  type LayoutMetadata,
-  decodeMarkdownText,
-  decodePackage,
-  readDocxContent,
-  readMarkdownContent,
-  readOdfFormulaContent,
-  readOdgContent,
-  readOdpContent,
-  readOdsContent,
-  readOdtContent,
-  readPdf,
-  readPptxContent,
-  xlsxToPdf,
-} from 'documents.js';
-import { decodePackage as decodeOdfPackage } from 'odf.js';
+import { readDocumentMetadata } from 'documents.js';
 import { inferFormatFromExtension } from '../format';
 import { createRuntimeSignal } from '../runtime/abort';
 import { EXIT_SUCCESS, EXIT_USAGE_ERROR, mapErrorToExit } from '../runtime/exit-codes';
@@ -25,32 +9,6 @@ import { KNOWN_DOCUMENT_FORMATS, formatError } from './shared';
 
 interface MetadataCliOptions {
   readonly json: boolean;
-}
-
-// Every DocumentFormat this command can pull a LayoutMetadata out of, dispatched by the same extension-inferred source format `convert`'s own generic command uses. docx/pptx read through ooxml.js's decodePackage (documents.js re-exports it under the same name); odt/odp/ods/odg/odf through odf.js's own decodePackage, aliased to keep the two apart at the one call site that needs both; markdown decodes its own UTF-8 byte<->text boundary first, since readMarkdownContent takes a string, not bytes; pdf reads its metadata directly, with no ContentDocument involved at all; xlsx has no readXlsxContent re-exported from documents.js's own public surface (see that package's own README, Architecture section), so it goes through the identical throwaway xlsxToPdf-then-readPdf preview this repo's own TUI already uses to open a .xlsx (src/tui/format/open-document.ts).
-function readMetadataForFormat(format: DocumentFormat, bytes: Uint8Array<ArrayBuffer>, signal: AbortSignal | undefined): LayoutMetadata {
-  switch (format) {
-    case 'docx':
-      return readDocxContent(decodePackage(bytes)).metadata;
-    case 'pptx':
-      return readPptxContent(decodePackage(bytes)).metadata;
-    case 'odt':
-      return readOdtContent(decodeOdfPackage(bytes)).metadata;
-    case 'odp':
-      return readOdpContent(decodeOdfPackage(bytes)).metadata;
-    case 'ods':
-      return readOdsContent(decodeOdfPackage(bytes)).metadata;
-    case 'odg':
-      return readOdgContent(decodeOdfPackage(bytes)).metadata;
-    case 'odf':
-      return readOdfFormulaContent(decodeOdfPackage(bytes)).metadata;
-    case 'markdown':
-      return readMarkdownContent(decodeMarkdownText(bytes)).metadata;
-    case 'pdf':
-      return readPdf(bytes, { signal }).metadata;
-    case 'xlsx':
-      return readPdf(xlsxToPdf(bytes, { signal }), { signal }).metadata;
-  }
 }
 
 async function runMetadata(input: string, options: MetadataCliOptions): Promise<number> {
@@ -65,7 +23,7 @@ async function runMetadata(input: string, options: MetadataCliOptions): Promise<
 
   try {
     const inputBytes = await readInput(input, { signal });
-    const metadata = readMetadataForFormat(source, new Uint8Array(inputBytes), signal);
+    const metadata = readDocumentMetadata(source, new Uint8Array(inputBytes), { signal });
 
     if (options.json) {
       process.stdout.write(`${JSON.stringify(metadata)}\n`);
