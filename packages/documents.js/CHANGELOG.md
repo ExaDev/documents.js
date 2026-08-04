@@ -1,3 +1,12 @@
+# [1.82.0](https://github.com/ExaDev/documents.js/compare/v1.81.9...v1.82.0) (2026-08-04)
+
+
+### Features
+
+* recover a docx equation embedded inside a table cell ([86c1435](https://github.com/ExaDev/documents.js/commit/86c1435448856a937576c58ca22bfa3502a063bd))
+* render floating spreadsheet images into the PDF layout ([c518810](https://github.com/ExaDev/documents.js/commit/c5188108b4c493d66c7ffbcaf374727cb07a78bd))
+* size embedded formulas to fit their declared frame via a two-pass fit ([bf12cd4](https://github.com/ExaDev/documents.js/commit/bf12cd4be812d6560005ac1b73685f46fe1cbae2))
+
 ## [1.81.9](https://github.com/ExaDev/documents.js/compare/v1.81.8...v1.81.9) (2026-08-04)
 
 
