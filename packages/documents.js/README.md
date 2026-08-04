@@ -185,7 +185,7 @@ import { decodePackage } from 'ooxml.js';
 
 const { comments, footnotes, headers, footers, numbering } = readDocxExtras(decodePackage(docxBytes));
 console.log(comments[0]?.author, comments[0]?.text, footnotes[0]?.text, headers[0], footers[0]);
-console.log(Object.values(numbering)[0]?.levels['0']?.format); // numbering is keyed by abstractNumId, each level by its own level index
+console.log(Object.values(numbering)[0]?.levels['0']?.format); // numbering is keyed by numId, each level by its own level index
 ```
 
 `openPptx`/`createPptx` and `PptxSlide`/`PptxShape` are the pptx equivalent (`slide.addTextBox`, `slide.addImage`, `shape.setParagraphs` for multi-paragraph styled text).
