@@ -1,31 +1,5 @@
 import { type Command } from 'commander';
-import {
-  type ContentDocument,
-  type DocumentFormat,
-  type LayoutDocument,
-  type LayoutMetadata,
-  buildDocxPackage,
-  buildMarkdownText,
-  buildOdgPackage,
-  buildOdpPackage,
-  buildOdsPackage,
-  buildOdtPackage,
-  buildPptxPackage,
-  decodeMarkdownText,
-  decodePackage,
-  encodeMarkdownText,
-  encodePackage,
-  readDocxContent,
-  readMarkdownContent,
-  readOdgContent,
-  readOdpContent,
-  readOdsContent,
-  readOdtContent,
-  readPdf,
-  readPptxContent,
-  writePdf,
-} from 'documents.js';
-import { decodePackage as decodeOdfPackage, encodePackage as encodeOdfPackage } from 'odf.js';
+import { type MetadataOverrides, setDocumentMetadata } from 'documents.js';
 import { inferFormatFromExtension } from '../format';
 import { createRuntimeSignal } from '../runtime/abort';
 import { createDiagnosticReporter } from '../runtime/diagnostics';
@@ -42,108 +16,12 @@ interface SetMetadataCliOptions extends ConversionCliFlags {
   readonly setKeywords?: string;
 }
 
-// Every format whose own ContentDocument this command can patch a metadata field on and rebuild from scratch through -- the seven formats sharing the readXContent -> buildXPackage round trip. Deliberately does NOT include 'pdf': a PDF's metadata is patched directly on its own LayoutDocument (see runSetMetadata below), never through this ContentDocument rebuild path at all.
-const REBUILD_FORMATS: Readonly<Record<'docx' | 'pptx' | 'odt' | 'odp' | 'ods' | 'odg' | 'markdown', true>> = {
-  docx: true,
-  pptx: true,
-  odt: true,
-  odp: true,
-  ods: true,
-  odg: true,
-  markdown: true,
-};
-
-type RebuildFormat = keyof typeof REBUILD_FORMATS;
-
-function isRebuildFormat(format: DocumentFormat): format is RebuildFormat {
-  return format in REBUILD_FORMATS;
-}
-
-function readContentForFormat(format: RebuildFormat, bytes: Uint8Array<ArrayBuffer>): ContentDocument {
-  switch (format) {
-    case 'docx':
-      return readDocxContent(decodePackage(bytes));
-    case 'pptx':
-      return readPptxContent(decodePackage(bytes));
-    case 'odt':
-      return readOdtContent(decodeOdfPackage(bytes));
-    case 'odp':
-      return readOdpContent(decodeOdfPackage(bytes));
-    case 'ods':
-      return readOdsContent(decodeOdfPackage(bytes));
-    case 'odg':
-      return readOdgContent(decodeOdfPackage(bytes));
-    case 'markdown':
-      return readMarkdownContent(decodeMarkdownText(bytes));
-  }
-}
-
-function buildBytesForRebuildFormat(format: RebuildFormat, content: ContentDocument): Uint8Array {
-  switch (format) {
-    case 'docx':
-      return encodePackage(buildDocxPackage(content));
-    case 'pptx':
-      return encodePackage(buildPptxPackage(content));
-    case 'odt':
-      return encodeOdfPackage(buildOdtPackage(content));
-    case 'odp':
-      return encodeOdfPackage(buildOdpPackage(content));
-    case 'ods':
-      return encodeOdfPackage(buildOdsPackage(content));
-    case 'odg':
-      return encodeOdfPackage(buildOdgPackage(content));
-    case 'markdown':
-      return encodeMarkdownText(buildMarkdownText(content));
-  }
-}
-
-interface MetadataOverrides {
-  readonly title?: string;
-  readonly author?: string;
-  readonly subject?: string;
-  // Mutable, matching LayoutMetadataSchema's own `keywords?: string[]` (document-schema.js) -- mergeMetadata's return must satisfy that shape exactly, and a `readonly string[]` here would not.
-  readonly keywords?: string[];
-}
-
-// Object-spreads the current metadata with only the overrides the caller actually passed a flag for -- an absent flag leaves that one field exactly as the source document already had it, rather than clearing it. Each override is its own conditional spread (not a bare `title: overrides.title ?? current.title`) so a flag that was never given cannot be told apart from one explicitly given an empty string; commander only ever produces `undefined` for a flag not passed, never `''`, so this distinction is real, not theoretical.
-function mergeMetadata(current: LayoutMetadata, overrides: MetadataOverrides): LayoutMetadata {
-  return {
-    ...current,
-    ...(overrides.title !== undefined ? { title: overrides.title } : {}),
-    ...(overrides.author !== undefined ? { author: overrides.author } : {}),
-    ...(overrides.subject !== undefined ? { subject: overrides.subject } : {}),
-    ...(overrides.keywords !== undefined ? { keywords: overrides.keywords } : {}),
-  };
-}
-
 // --set-keywords is one comma-separated flag rather than a repeatable one (matching how a caller would naturally paste a keyword list on a command line), split, trimmed, and with empty entries (a trailing comma, doubled commas) dropped.
 function parseKeywords(csv: string): string[] {
   return csv
     .split(',')
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0);
-}
-
-type WritePath = { readonly kind: 'pdf' } | { readonly kind: 'rebuild'; readonly format: RebuildFormat } | { readonly errorMessage: string };
-
-// set-metadata deliberately does not convert format: its own job is patching metadata in place, not choosing a target format, so source and target must resolve to the identical format -- 'pdf' direct-patches its own LayoutDocument (no ContentDocument, no layout engine, genuinely lossless for everything else on the page), every other REBUILD_FORMATS member rebuilds a fresh package from its own ContentDocument (lossy wherever that format's own build function is -- see buildDocxPackage's own docx-extras gotcha, restated in this command's --help text below). xlsx and odf are rejected outright in both directions: xlsx because documents.js does not re-export a ContentDocument-to-xlsx builder (mirroring from-package.ts's own rejection), odf (a standalone formula document) because it has no write path back out at all, matching from-package.ts's own reasoning for both. A caller wanting to change format and metadata together should run `convert`/`from-package` first, then set-metadata on the result.
-function classifyWritePath(source: DocumentFormat, target: DocumentFormat): WritePath {
-  if (source === 'pdf' && target === 'pdf') {
-    return { kind: 'pdf' };
-  }
-  if (target === 'xlsx' || source === 'xlsx') {
-    return { errorMessage: "'xlsx' is not a supported set-metadata source or target -- documents.js does not re-export a ContentDocument-to-xlsx builder or a readXlsxContent from its own public surface (see that package's own README, Architecture section); convert with 'xlsx-to-ods'/'ods-to-xlsx' first, then set metadata on the ods" };
-  }
-  if (target === 'odf' || source === 'odf') {
-    return { errorMessage: "'odf' (a standalone formula document) is not a supported set-metadata source or target -- it has no write path back out at all" };
-  }
-  if (!isRebuildFormat(source) || !isRebuildFormat(target)) {
-    return { errorMessage: `set-metadata only patches metadata in place; it does not convert format -- source ('${source}') and target ('${target}') must be the same format (or both 'pdf'). Run 'convert'/'from-package' first if you need a different target format.` };
-  }
-  if (source !== target) {
-    return { errorMessage: `set-metadata only patches metadata in place; it does not convert format -- source ('${source}') and target ('${target}') must be the same format. Run 'convert'/'from-package' first if you need a different target format.` };
-  }
-  return { kind: 'rebuild', format: source };
 }
 
 async function runSetMetadata(input: string, output: string | undefined, options: SetMetadataCliOptions): Promise<number> {
@@ -166,12 +44,6 @@ async function runSetMetadata(input: string, output: string | undefined, options
     return EXIT_USAGE_ERROR;
   }
 
-  const writePath = classifyWritePath(source, target.format);
-  if ('errorMessage' in writePath) {
-    process.stderr.write(`[${command}] ${writePath.errorMessage}\n`);
-    return EXIT_USAGE_ERROR;
-  }
-
   const overrides: MetadataOverrides = {
     title: options.setTitle,
     author: options.setAuthor,
@@ -184,19 +56,7 @@ async function runSetMetadata(input: string, output: string | undefined, options
 
   try {
     const inputBytes = await readInput(input, { signal });
-
-    const bytes =
-      writePath.kind === 'pdf'
-        ? (() => {
-            const layout = readPdf(new Uint8Array(inputBytes), { signal });
-            const patched: LayoutDocument = { ...layout, metadata: mergeMetadata(layout.metadata, overrides) };
-            return writePdf(patched, { signal });
-          })()
-        : (() => {
-            const content = readContentForFormat(writePath.format, new Uint8Array(inputBytes));
-            const nextContent: ContentDocument = { ...content, metadata: mergeMetadata(content.metadata, overrides) };
-            return buildBytesForRebuildFormat(writePath.format, nextContent);
-          })();
+    const bytes = setDocumentMetadata(source, target.format, new Uint8Array(inputBytes), overrides, { signal });
 
     await writeOutput(resolvedOutput, bytes);
 

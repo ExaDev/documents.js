@@ -44,6 +44,8 @@ beforeAll(async () => {
   await writeFile(join(workspace, 'source.docx'), buildDocxWithMetadata());
   await writeFile(join(workspace, 'extras.docx'), buildDocxWithExtras());
   await writeFile(join(workspace, 'source.pdf'), buildPdfWithMetadata());
+  // setDocumentMetadata (documents.js) validates its own source/target format pair internally rather than the CLI pre-checking it, so the input file is now genuinely read before that rejection fires -- unlike a placeholder path, this needs to exist. Its content is never parsed: the rejection below fires purely on the '.odf' extension, before any real ODF decoding is attempted.
+  await writeFile(join(workspace, 'formula.odf'), new Uint8Array([0]));
 });
 
 afterAll(async () => {
@@ -116,14 +118,14 @@ describe('set-metadata', () => {
     const { exitCode, stderr } = await runCli(['set-metadata', join(workspace, 'source.docx'), join(workspace, 'never.xlsx'), '--set-title', 'x']);
 
     expect(exitCode).not.toBe(EXIT_SUCCESS);
-    expect(stderr).toContain("'xlsx' is not a supported set-metadata source or target");
+    expect(stderr).toContain("'xlsx' is not a supported setDocumentMetadata source or target");
   });
 
   it('rejects a standalone odf formula document as a source, naming the missing write path', async () => {
     const { exitCode, stderr } = await runCli(['set-metadata', join(workspace, 'formula.odf'), join(workspace, 'never.odf'), '--set-title', 'x']);
 
     expect(exitCode).not.toBe(EXIT_SUCCESS);
-    expect(stderr).toContain("'odf' (a standalone formula document) is not a supported set-metadata source or target");
+    expect(stderr).toContain("'odf' (a standalone formula document) is not a supported setDocumentMetadata source or target");
   });
 
   it('rejects a cross-format request -- set-metadata patches metadata in place, it does not convert format', async () => {
