@@ -27,7 +27,7 @@ import { flipY } from '../model/geometry';
 import { throwIfAborted } from '../ports/abort';
 import type { PositionedFormula, StyledFragment, StyledRun, TextMeasurer } from 'pdf-codec';
 import { loadMathFont, wrapRunsToWidth } from 'pdf-codec';
-import { alignmentOffsetPt, formulaSizePtFromFrame, justifyLineGapsPt, lineNaturalHeightPt, pushCellBorderLines, registerImage, sumColumnWidthsPt, toStyledRuns } from './shared';
+import { alignmentOffsetPt, formulaSizePtForFrame, justifyLineGapsPt, lineNaturalHeightPt, pushCellBorderLines, registerImage, sumColumnWidthsPt, toStyledRuns } from './shared';
 
 // ContentDocument (the spreadsheet variant) -> LayoutDocument: ods/xlsx's own layout direction, genuinely distinct from both docx's flow/pagination (engine.ts) and pptx's direct placement (slides.ts). A sheet paginates over TWO axes at once (column bands x row bands, not just rows), print settings (range/scale/fit-to-page/repeat rows-columns/gridlines/headers/page order/manual breaks) drive the page grid directly rather than being ignored the way a docx section's margins alone would be, and cell overflow is bounded per cell (###, spill, truncate) rather than wrapped the way paragraph text is. This is also the first layout algorithm in the package genuinely long-running enough (a real sheet can carry tens of thousands of populated cells) to need cooperative cancellation wired into its own per-cell emission loop, not just checked once at the top of the function the way reconstruct.ts's own page/slide loops do.
 //
@@ -521,7 +521,7 @@ function renderAnchoredFormulas(
     if (columnPosition === undefined || rowPosition === undefined || hiddenColumnIndices.has(anchored.anchorColumn) || hiddenRowIndices.has(anchored.anchorRow)) {
       continue;
     }
-    const sizePt = formulaSizePtFromFrame(anchored.frame.heightPt);
+    const sizePt = formulaSizePtForFrame(anchored.formula.mathml, anchored.frame);
     const metrics = loadMathFont().metricsAt(sizePt);
     const { box } = layoutFormula(anchored.formula.mathml, { metrics, sizePt, color: COLOR_BLACK });
     const boxYDown: Box = {
