@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import type { CallToolResult, McpServer } from '@modelcontextprotocol/server';
 import {
   base64ToBytes,
+  decodeOdbPackage,
   type FontSubstitution,
   type OmmlDiagnostic,
   OdbReportNotSpecifiedError,
@@ -10,7 +11,6 @@ import {
   odbReportToPdf,
   readOdbReportContent,
 } from 'documents.js';
-import { decodePackage } from 'odf.js';
 import { z } from 'zod';
 import { DocumentInputSchema, type DocumentInput } from '../io/document-input';
 import { DocumentOutputSchema, resolveDocumentOutput } from '../io/document-output';
@@ -105,7 +105,7 @@ export function registerOdbRenderReportTools(server: McpServer): void {
     async ({ source, report, targetFormat, output, fonts }, ctx) => {
       const { signal } = ctx.mcpReq;
       const inputBytes = await resolveOdbBytes(source);
-      const pkg = decodePackage(inputBytes);
+      const pkg = decodeOdbPackage(inputBytes);
 
       let content;
       try {

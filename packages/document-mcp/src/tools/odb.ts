@@ -1,14 +1,13 @@
 import { readFile } from 'node:fs/promises';
 import type { McpServer } from '@modelcontextprotocol/server';
-import { base64ToBytes, evaluateSelect, odbToCsv, odbToXlsx, parseSelect, readOdbForms, readOdbInventory, readOdbReports, readOdbTables } from 'documents.js';
-import { decodePackage, type Package } from 'odf.js';
+import { base64ToBytes, decodeOdbPackage, evaluateSelect, odbToCsv, odbToXlsx, parseSelect, readOdbForms, readOdbInventory, readOdbReports, readOdbTables, type Package } from 'documents.js';
 import { z } from 'zod';
 import { DocumentInputSchema, type DocumentInput } from '../io/document-input';
 import { DocumentOutputSchema, resolveDocumentOutput } from '../io/document-output';
 
 // None of the six tools below wraps its callback in a try/catch: registerTool's own dispatcher (see odb-render-report.ts's identical note) converts ANY thrown error into a real `{ isError: true, content: [...] }` tool result automatically, using the error's own message -- confirmed against this package's own installed
 // @modelcontextprotocol/server (setToolRequestHandlers' tools/call handler wraps input validation, the callback,
-// and output validation in one try/catch), and documented at https://ts.sdk.modelcontextprotocol.io/v2/servers/errors. A thrown HsqldbSqlUnsupportedError/HsqldbSqlParseError/HsqldbSqlEvaluationError (odb_query), OdbNoEmbeddedDataSourceError/ OdbUnsupportedFormatError/OdbTableNotFoundError/OdbTableNotSpecifiedError (documents.js's own odb reader/exporters), or a decodePackage failure on malformed bytes therefore already reaches the caller as an isError result with that error's own message -- there is nothing for this file to catch or reshape.
+// and output validation in one try/catch), and documented at https://ts.sdk.modelcontextprotocol.io/v2/servers/errors. A thrown HsqldbSqlUnsupportedError/HsqldbSqlParseError/HsqldbSqlEvaluationError (odb_query), OdbNoEmbeddedDataSourceError/ OdbUnsupportedFormatError/OdbTableNotFoundError/OdbTableNotSpecifiedError (documents.js's own odb reader/exporters), or a decodeOdbPackage failure on malformed bytes therefore already reaches the caller as an isError result with that error's own message -- there is nothing for this file to catch or reshape.
 
 const ODB_SOURCE_DESCRIPTION =
   ".odb database to read. 'path' points at the .odb file on disk -- its extension is never used to infer a document format, since documents.js deliberately excludes 'odb' from DocumentFormat (an embedded database front end has no single natural target format -- tables, saved queries, and reports are three unrelated output shapes -- see that package's own README). 'bytesBase64' carries the .odb bytes inline; its 'format' field is required by the shared hybrid input shape but unused by every odb tool.";
@@ -22,9 +21,9 @@ async function resolveOdbBytes(source: DocumentInput): Promise<Uint8Array<ArrayB
   return base64ToBytes(source.bytesBase64);
 }
 
-/** Resolves an .odb DocumentInput straight through to a decoded odf.js Package -- the shape every read (as opposed to export) odb tool needs. */
+/** Resolves an .odb DocumentInput straight through to a decoded Package (via documents.js's own decodeOdbPackage) -- the shape every read (as opposed to export) odb tool needs. */
 async function resolveOdbPackage(source: DocumentInput): Promise<Package> {
-  return decodePackage(await resolveOdbBytes(source));
+  return decodeOdbPackage(await resolveOdbBytes(source));
 }
 
 /** Resolves a saved query's own SQL text by name against the .odb's own db:queries (read via readOdbInventory) -- odb_query's own equivalent of document-cli's resolveQuerySql, for the case where the caller named a saved query rather than supplying SQL directly. Throws, naming every available query, when the name doesn't resolve -- see this module's own top-of-file note on why a thrown Error is the right shape here. */
