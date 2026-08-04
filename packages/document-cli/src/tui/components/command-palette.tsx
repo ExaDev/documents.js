@@ -26,6 +26,7 @@ const COMMANDS: readonly CommandDefinition[] = [
   { name: 'open', usage: ':open <path>', description: 'Open a document from disk' },
   { name: 'close', usage: ':close', description: 'Close the open document' },
   { name: 'undo', usage: ':undo', description: 'Undo the last change' },
+  { name: 'view-source', usage: ':view-source', description: 'Compare a markdown document as opened vs. as it will save now' },
   { name: 'help', usage: ':help', description: 'Show the key bindings' },
   { name: 'quit', usage: ':quit', description: 'Leave the application' },
 ];
@@ -135,7 +136,12 @@ async function runCommand(line: string, state: AppState, dispatch: Dispatch<Acti
         return;
       }
       try {
-        dispatch({ type: 'OPEN_FILE_SUCCESS', path, doc: await openDocumentAtPath(path) });
+        const doc = await openDocumentAtPath(path, {
+          onDiagnostic: (diagnostic) => {
+            dispatch({ type: 'APPEND_DIAGNOSTIC', diagnostic });
+          },
+        });
+        dispatch({ type: 'OPEN_FILE_SUCCESS', path, doc });
       } catch (error) {
         dispatch({ type: 'OPEN_FILE_ERROR', message: `Could not open ${path}`, detail: describeError(error) });
       }
@@ -148,6 +154,14 @@ async function runCommand(line: string, state: AppState, dispatch: Dispatch<Acti
 
     case 'undo':
       dispatch({ type: 'UNDO' });
+      return;
+
+    case 'view-source':
+      if (doc?.format !== 'markdown') {
+        warn(dispatch, ':view-source only applies to an open markdown document');
+        return;
+      }
+      dispatch({ type: 'PUSH_SCREEN', screen: { kind: 'viewSource' } });
       return;
 
     case 'help':

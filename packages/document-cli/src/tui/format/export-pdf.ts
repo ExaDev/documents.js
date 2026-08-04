@@ -34,9 +34,9 @@ export async function exportToPdf(openDocument: OpenDocument, destinationPath: s
   // Loaded before anything is converted or written, so a bad font path fails with nothing half-written at the destination.
   const fonts = await loadProvidedFonts(options.fontFiles ?? [], { signal: options.signal });
   const pdfOptions = toPdfOptions(options, fonts);
-  // The one place the ContentDocument pivot ever touches a markdown document in this TUI -- markdownToPdf runs directly on the raw source text, never on edit or save.
+  // markdownToPdf runs on whatever MarkdownEditor.toMarkdownText() produces right now (re-serialised fresh, matching saveDocumentTo's own convention), not on `originalText` -- an export reflects in-progress edits exactly like every other format's own `editor.toBytes()` does below.
   if (openDocument.format === 'markdown') {
-    const pdfBytes = markdownToPdf(encodeMarkdownText(openDocument.source), pdfOptions);
+    const pdfBytes = markdownToPdf(encodeMarkdownText(openDocument.editor.toMarkdownText()), pdfOptions);
     await writeFile(destinationPath, pdfBytes);
     return;
   }

@@ -83,7 +83,11 @@ export function FilePickerScreen(): ReactElement {
   function openAtPath(path: string): void {
     void (async () => {
       try {
-        const doc = await openDocumentAtPath(path);
+        const doc = await openDocumentAtPath(path, {
+          onDiagnostic: (diagnostic) => {
+            dispatch({ type: 'APPEND_DIAGNOSTIC', diagnostic });
+          },
+        });
         dispatch({ type: 'OPEN_FILE_SUCCESS', path, doc });
       } catch (error) {
         dispatch({ type: 'OPEN_FILE_ERROR', message: `Could not open ${path}`, detail: describeError(error) });

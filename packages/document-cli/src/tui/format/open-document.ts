@@ -1,7 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
-import { createDocx, createOdg, createOdp, createOds, createOdt, createPdf, createPptx, decodeMarkdownText, encodeMarkdownText, openDocx, openOdg, openOdp, openOds, openOdt, openPdf, openPptx, readOdbForms, readOdbReports, readOdbTables, readPdf, xlsxToPdf } from 'documents.js';
+import { createDocx, createOdg, createOdp, createOds, createOdt, createPdf, createPptx, decodeMarkdownText, encodeMarkdownText, openDocx, openMarkdown, openOdg, openOdp, openOds, openOdt, openPdf, openPptx, readOdbForms, readOdbReports, readOdbTables, readPdf, xlsxToPdf } from 'documents.js';
 import { decodePackage } from 'odf.js';
-import type { EditableFormat, OpenDocument } from '../state/types.js';
+import type { Diagnostic, EditableFormat, OpenDocument } from '../state/types.js';
 import { detectFormat } from './detect-format.js';
 
 // The single place in the TUI that turns bytes into an open document. Every screen goes through here, so there is exactly one spot to look at when a format's opener changes, and exactly one import of odf.js's `decodePackage` -- documents.js re-exports ooxml.js's function under the same name, and that one cannot read an ODF package at all.
@@ -9,7 +9,12 @@ import { detectFormat } from './detect-format.js';
 // `.odb` is not a `DocumentFormat` member: documents.js deliberately keeps it out of the converter port (it has no PDF conversion and no write direction), so extension inference cannot classify it and this module checks for it directly.
 const ODB_EXTENSION = '.odb';
 
-export async function openDocumentAtPath(path: string): Promise<OpenDocument> {
+export interface OpenDocumentAtPathOptions {
+  // Only ever fires for a markdown document -- every other format's own opener (openDocx/openOdt/...) has no diagnostic sink of its own. Mirrors export-pdf.ts's own ExportToPdfOptions.onDiagnostic exactly, so a caller reports both the same way.
+  readonly onDiagnostic?: (diagnostic: Diagnostic) => void;
+}
+
+export async function openDocumentAtPath(path: string, options: OpenDocumentAtPathOptions = {}): Promise<OpenDocument> {
   const bytes = new Uint8Array(await readFile(path));
 
   if (path.toLowerCase().endsWith(ODB_EXTENSION)) {
@@ -40,9 +45,16 @@ export async function openDocumentAtPath(path: string): Promise<OpenDocument> {
       const editor = openPdf(bytes);
       return { format, editor, layout: editor.toLayoutDocument(), path };
     }
-    // No read/write round trip through markdown-codec here at all -- opening a .md file loads its raw text as `.source` verbatim, exactly the byte<->text boundary decodeMarkdownText already exists for (see documents.js's own src/markdown/text.ts). The ContentDocument pivot (readMarkdownContent) only ever enters on cross-format export -- see export-pdf.ts.
-    case 'markdown':
-      return { format, source: decodeMarkdownText(bytes), path };
+    // A real, structured MarkdownEditor now -- openMarkdown parses the decoded text into a genuine, mutable ContentDocument (see MarkdownOpenDocument's own doc comment). `originalText` keeps the literal text this document was opened with, for the read-only ':view-source' screen alone; it is never mutated and never fed back into the editor. Every diagnostic openMarkdown's own parse emits (a clamped heading level, dropped front-matter key, ...) is reported through the caller's onDiagnostic, the same channel exportToPdf's own onDiagnostic already populates state.diagnostics through.
+    case 'markdown': {
+      const text = decodeMarkdownText(bytes);
+      const editor = openMarkdown(text, {
+        sink: (diagnostic) => {
+          options.onDiagnostic?.({ severity: diagnostic.severity, message: diagnostic.message });
+        },
+      });
+      return { format, editor, originalText: text, path };
+    }
     // documents.js has no XlsxEditor and no readXlsxContent re-exported from its own public surface (see the doc comment on XlsxOpenDocument in state/types.ts), so a .xlsx opens read-only as a converted PDF preview: xlsxToPdf once here for the LayoutDocument the pdf page-list/page-items/item-detail screens already know how to browse, plus the original bytes kept alongside for a real export to re-run xlsxToPdf with the caller's own fonts/diagnostics later (see export-pdf.ts).
     case 'xlsx':
       return { format, layout: readPdf(xlsxToPdf(bytes)), bytes, path };
@@ -76,9 +88,9 @@ export async function saveDocumentTo(openDocument: OpenDocument, path: string): 
   if (openDocument.format === 'odb' || openDocument.format === 'xlsx') {
     throw new Error(`A ${openDocument.format} document is opened read-only and cannot be written back`);
   }
-  // Markdown has no editor object at all -- `.source` is written back to disk literally, the same byte<->text boundary opening it went through in reverse, never through markdown-codec's own readMarkdown/writeMarkdown.
+  // MarkdownEditor has no toBytes() (see MarkdownOpenDocument's own doc comment) -- every save re-serialises the whole document fresh through buildMarkdownText (via toMarkdownText()), even one with no edits at all this session. This is a deliberate, permanent consequence of structured editing, not something to work around: a live-view paragraph/run tree has no "untouched bytes" to leave alone the way a docx's XmlElement tree does, so the written text can legitimately differ from whatever was last on disk (heading style, bullet marker, line-ending normalisation -- see README.md's own markdown Gotchas).
   if (openDocument.format === 'markdown') {
-    await writeFile(path, encodeMarkdownText(openDocument.source));
+    await writeFile(path, encodeMarkdownText(openDocument.editor.toMarkdownText()));
     return;
   }
   await writeFile(path, openDocument.editor.toBytes());
