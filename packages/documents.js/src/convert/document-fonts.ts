@@ -21,10 +21,21 @@ function isFontSourceFormat(format: DocumentFormat): format is keyof typeof FONT
   return format in FONT_SOURCE_FORMATS;
 }
 
+// A recognised DocumentFormat that nonetheless has no source-embedded-font concept at all (xlsx, pdf, markdown, odf) -- a named class, matching this package's own convention for every other "recognised but unsupported" input across the .odb/odm surface (OdbTableNotSpecifiedError, OdbUnsupportedFormatError, ...), so a caller can narrow on it with instanceof rather than string-matching a thrown Error's own message.
+export class UnsupportedFontSourceFormatError extends Error {
+  readonly format: DocumentFormat;
+
+  constructor(format: DocumentFormat) {
+    super(`'${format}' documents carry no source-embedded font faces to extract -- expected one of docx, pptx, odt, odp, ods, odg`);
+    this.name = 'UnsupportedFontSourceFormatError';
+    this.format = format;
+  }
+}
+
 // Dispatches raw document bytes to extractSourceFonts (src/fonts/registry.ts) by DocumentFormat, so a caller holding a format + bytes -- rather than an already-decoded Package -- does not have to know which codec (ooxml.js's decodePackage or odf.js's) or which FontSourcePackage discriminant applies. docx/pptx decode via ooxml.js's own decodePackage; odt/odp/ods/odg via odf.js's, aliased to keep the two apart at this one call site that needs both, matching createDocumentFontRegistry's own callers elsewhere in this package (e.g. src/convert/convert.ts's docxToPdf/odtToPdf).
 export function extractSourceFontsForFormat(format: DocumentFormat, bytes: Uint8Array<ArrayBuffer>): readonly ProvidedFont[] {
   if (!isFontSourceFormat(format)) {
-    throw new Error(`'${format}' documents carry no source-embedded font faces to extract -- expected one of docx, pptx, odt, odp, ods, odg`);
+    throw new UnsupportedFontSourceFormatError(format);
   }
   const source: FontSourcePackage = format === 'docx' || format === 'pptx' ? { kind: format, package: decodeOoxmlPackage(bytes) } : { kind: 'odf', package: decodeOdfPackage(bytes) };
   return extractSourceFonts(source);
