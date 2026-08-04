@@ -1,3 +1,10 @@
+## [2.6.13](https://github.com/ExaDev/ooxml.js/compare/v2.6.12...v2.6.13) (2026-08-04)
+
+
+### Bug Fixes
+
+* **ci:** self-heal stranded sibling-dependency PRs after they fall behind main ([871eb4b](https://github.com/ExaDev/ooxml.js/commit/871eb4b041c65fd09a218ec0393b500315176a26))
+
 ## [2.6.12](https://github.com/ExaDev/ooxml.js/compare/v2.6.11...v2.6.12) (2026-08-04)
 
 ## [2.6.11](https://github.com/ExaDev/ooxml.js/compare/v2.6.10...v2.6.11) (2026-08-04)
