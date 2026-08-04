@@ -1,3 +1,12 @@
+# [1.6.0](https://github.com/ExaDev/document-cli/compare/v1.5.0...v1.6.0) (2026-08-04)
+
+
+### Features
+
+* **tui:** edit an odg vector's fill and stroke through the live editor ([17f794e](https://github.com/ExaDev/document-cli/commit/17f794eed2c3a4f9e21ba3d7ff1c69a0984946a6))
+* **tui:** rotate pptx shapes and edit real odt list-item text ([7f2762a](https://github.com/ExaDev/document-cli/commit/7f2762a7d19aa640d452b7b2c57bc0a941aa38a0))
+* **tui:** wire the built-in UNDO action up to Ctrl+Z and :undo ([617e17b](https://github.com/ExaDev/document-cli/commit/617e17bb5983857063f9a64f233da2fd1611a39d))
+
 # [1.5.0](https://github.com/ExaDev/document-cli/compare/v1.4.0...v1.5.0) (2026-08-04)
 
 
