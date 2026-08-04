@@ -2,7 +2,7 @@
 
 [![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/document-schema.js) [![npm](https://img.shields.io/badge/npm-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/document-schema.js) [![Release](https://img.shields.io/github/v/release/ExaDev/document-schema.js)](https://github.com/ExaDev/document-schema.js/releases/latest) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/document-schema.js/ci.yml?branch=main)](https://github.com/ExaDev/document-schema.js/actions)
 
-> The canonical, format-agnostic content and layout schema pivot shared by [ooxml.js](https://github.com/ExaDev/ooxml.js), [odf.js](https://github.com/ExaDev/odf.js), [documents.js](https://github.com/ExaDev/documents.js), and [pdf-codec](https://github.com/ExaDev/pdf-codec).
+> The canonical, format-agnostic content and layout schema pivot shared by [ooxml.js](https://github.com/ExaDev/ooxml.js), [odf.js](https://github.com/ExaDev/odf.js), [documents.js](https://github.com/ExaDev/documents.js), [pdf-codec](https://github.com/ExaDev/pdf-codec), and [markdown-codec](https://github.com/ExaDev/markdown-codec).
 
 Both `ooxml.js` and `documents.js` independently arrived at the same content vocabulary -- paragraphs, runs, tables, images, shapes, slides -- because `documents.js`'s docx/pptx-to-PDF pipeline needed a richer model than `ooxml.js`'s own readers originally produced, and that model was later ported back into `ooxml.js` itself. The result was two field-identical copies maintained in two places. This package is the fix: one schema, imported by every format package instead of redefined by each. It also sidesteps a circular dependency that would otherwise appear once `odf.js` exists, since `documents.js` depends on both `ooxml.js` and `odf.js`.
 
@@ -27,6 +27,7 @@ graph TD
     mdcodec --> documents
     documents --> cli
     odf --> cli
+    pdfcodec --> cli
 
     click schema "https://github.com/ExaDev/document-schema.js" "document-schema.js"
     click ooxml "https://github.com/ExaDev/ooxml.js" "ooxml.js"
@@ -41,7 +42,7 @@ graph TD
 
 `ContentDocument` (the semantic pivot) is a discriminated union of five kinds: `wordprocessing` (docx/odt-style sections of paragraphs/runs/tables/images), `presentation` (pptx/odp-style slides of shapes), `spreadsheet` (xlsx/ods-style sheets of cells, columns, rows, and print settings), `drawing` (odg-style pages of shapes plus vector primitives -- rect/ellipse/line/path), and `formula` (an equation, carrying its own MathML presentation-layer node tree plus the StarMath source when the producing format had one). `ContentEmbeddedObjectSchema` lets any of the five embed another whole `ContentDocument` -- including a `formula` one, which is what an embedded equation inside a document or slide now carries. `LayoutDocument` (the PDF-rendering pivot) is pages of positioned `LayoutItem`s -- `text`/`image`/`rect`/`line`/`ellipse`/`path`/`link` -- in PDF user-space coordinates, with `LayoutPathSchema` modelling a general vector path rather than only axis-aligned rectangles. `DocumentPackageSchema` is a small envelope pairing the two: `content` required, `layout` optional (it's a derived artifact, absent until something lays the content out), correlated via each item's own `sourcePath` when both are present -- a pairing this schema does not itself keep in sync or detect as stale.
 
-It contains only [Zod](https://zod.dev) schemas, their inferred types, and a handful of trivial schema-attached helpers (hex-colour conversion, recursive structural type guards for the mutually-recursive table/block/embedded-object types and for the MathML node tree). There is no XML, ZIP, PDF, or other binary handling here, and no `zod` dependency other than `zod` itself.
+It contains only [Zod](https://zod.dev) schemas, their inferred types, a handful of trivial schema-attached helpers (hex-colour conversion, recursive structural type guards for the mutually-recursive table/block/embedded-object types and for the MathML node tree), and two small structural interfaces (`ContentCodec`/`LayoutCodec`, see [Codecs](#codecs) below) that a sibling package's own format codec can implement -- no runtime code of their own either. There is no XML, ZIP, PDF, or other binary handling here, and no `zod` dependency other than `zod` itself.
 
 The GitHub repository is [`ExaDev/document-schema.js`](https://github.com/ExaDev/document-schema.js), matching the published npm package name.
 
@@ -61,6 +62,21 @@ Every module is also importable directly, without going through the barrel above
 import { schemaUriFor } from 'document-schema.js/schema-io';
 import { ColorSchema } from 'document-schema.js/color';
 ```
+
+## Codecs
+
+Alongside the schemas themselves, `ContentCodec`/`LayoutCodec` (`src/codec.ts`) are the format-agnostic *interfaces* a sibling package's own docx/pptx/odt/odp/ods/odg/xlsx/markdown/PDF codec can implement, so a caller working across formats can hold one of these instead of a format-specific function pair:
+
+```ts
+import type { ContentCodec, LayoutCodec } from 'document-schema.js';
+
+declare const docxCodec: ContentCodec; // read(bytes) -> ContentDocument; write(content) -> bytes -- write is optional
+declare const pdfCodec: LayoutCodec; // read(bytes) -> LayoutDocument; write(layout) -> bytes -- write is required
+```
+
+The two are deliberately separate interfaces rather than one `DocumentCodec` shaped like `DocumentPackage`, because the formats they model are asymmetric: most formats (docx/pptx/odt/odp/ods/odg/markdown) only ever produce *content* on read, with layout always a later, engine-driven step; PDF is the mirror image, producing *layout* cheaply on read and content only via a separate, expensive, lossy, opt-in reconstruction pass that is emphatically not part of "reading" a PDF. `ContentCodec.write` is deliberately optional -- this models a real, permanent asymmetry, not a temporary gap: the `odf` format (a standalone ODF formula document) has a reader but genuinely no builder at all, since recovering structured MathML from rendered glyphs is a categorically different, OCR-adjacent problem than generating them. `LayoutCodec.write` is not optional, since PDF -- the only format with a `LayoutCodec` implementation anywhere in this family -- always supports both directions equally readily. Both interfaces are generic over their own `TOptions` (defaulting to `unknown`) rather than sharing one options shape across every implementation, since each real format's own read/write options are format-specific today (an `AbortSignal`, a font-substitution callback, a diagnostic sink) and forcing them into one shared shape would either be too narrow for some formats or carry fields meaningless to others.
+
+Neither interface constructs a `DocumentPackage` itself: a codec's `read()` returns one half (content, or layout, never both), and composing a `DocumentPackage` from a `ContentCodec.read()` result plus a separately-run layout-engine pass is the caller's job, one level up from either interface -- `documents.js`'s own `DOCUMENT_FORMAT_CODECS` registry (`src/codecs/registry.ts`) is the concrete example, implementing a `ContentCodec`/`LayoutCodec` pair per format over its own existing read/build/layout functions.
 
 ## JSON Schema
 
@@ -139,10 +155,11 @@ try {
 
 - [ooxml.js](https://github.com/ExaDev/ooxml.js) — its `readDocx`/`readPptx`/`readXlsxContent` return `ContentSection[]`/`ContentSlide[]`/spreadsheet `ContentSheet[]` typed against this package's own schemas, not a locally-defined lookalike.
 - [odf.js](https://github.com/ExaDev/odf.js) — its ODF typed readers (`readOdt`, `readOdp`, `readOds`, `readOdg`, …) return the same shared types, so an ODF document and an OOXML document speak the identical pivot.
-- [documents.js](https://github.com/ExaDev/documents.js) — the primary consumer of both `ContentDocument` and `LayoutDocument`, which it converts between via its layout engines and its `pdf-codec` dependency, and of `DocumentPackage` as the `onDocument` side-channel value its conversion functions hand back.
+- [documents.js](https://github.com/ExaDev/documents.js) — the primary consumer of both `ContentDocument` and `LayoutDocument`, which it converts between via its layout engines and its `pdf-codec` dependency, and of `DocumentPackage` as the `onDocument` side-channel value its conversion functions hand back. Its own `DOCUMENT_FORMAT_CODECS` registry additionally implements this package's `ContentCodec`/`LayoutCodec` interfaces per format, over its existing read/build/layout functions.
 - [pdf-codec](https://github.com/ExaDev/pdf-codec) — the hand-written PDF codec extracted from `documents.js`: `readPdf`/`writePdf` and its own `pdfCodec` z.codec() pair operate entirely in terms of this package's `LayoutDocument` (plus the item kinds it's built from -- `LayoutItem`/`LayoutText`/`LayoutImage`/`LayoutRect`/`LayoutEllipse`/`LayoutLink`/`LayoutPath`/`LayoutSubpath`/`LayoutPathSegment`/`LayoutPage`/`LayoutImageAsset`/`LayoutMetadata`), `Color`/`LayoutFont` (aliased `LayoutColor`/`LayoutFont` at its own call sites), and `LAYOUT_FORMAT_VERSION`/`COLOR_BLACK`/`LayoutDocumentSchema` -- it never redeclares any of these itself, unlike its own `MathBox`/`PositionedFormula` mirror of `documents.js`'s MathML types (a deliberate, narrower exception -- see pdf-codec's own README).
+- [markdown-codec](https://github.com/ExaDev/markdown-codec) — the hand-written CommonMark+GFM codec: `readMarkdown`/`writeMarkdown` and its own `markdownCodec` z.codec() pair read and write this package's `ContentDocument` directly, the identical `wordprocessing` pivot `ooxml.js`'s `readDocx` and `odf.js`'s `readOdt` also produce.
 
-None of these four packages depend on each other for this vocabulary — each depends on `document-schema.js` directly, which is the whole point: one schema, not four independently-maintained, drift-prone copies.
+None of these five packages depend on each other for this vocabulary — each depends on `document-schema.js` directly, which is the whole point: one schema, not five independently-maintained, drift-prone copies.
 
 ## npm aliases
 
