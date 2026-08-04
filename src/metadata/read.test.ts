@@ -1,7 +1,7 @@
 import { decodePackage as decodeOdfPackage } from 'odf.js';
 import { decodePackage as decodeOoxmlPackage } from 'ooxml.js';
 import { readPdf } from 'pdf-codec';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { docxToPdf, odsToXlsx, xlsxToPdf } from '../convert/convert';
 import { readMarkdownContent } from '../markdown/read';
 import { decodeMarkdownText, encodeMarkdownText } from '../markdown/text';
@@ -75,8 +75,14 @@ describe('readDocumentMetadata', () => {
     expect(readDocumentMetadata('pdf', bytes)).toEqual(readPdf(bytes).metadata);
   });
 
+  // xlsxToPdf accepts no clock option of its own, so resolveMetadataTimestamps falls back to the real system clock on every call -- readDocumentMetadata's own internal xlsxToPdf and this test's own direct one are two independent conversions, each free to land on either side of a real second boundary. Freezing time for the duration of this one test makes both see the identical "now", rather than asserting on two genuinely separate wall-clock reads.
   it('xlsx: matches the xlsxToPdf-then-readPdf preview path', () => {
-    const bytes = odsToXlsx(minimalOdsBytes());
-    expect(readDocumentMetadata('xlsx', bytes)).toEqual(readPdf(xlsxToPdf(bytes)).metadata);
+    vi.useFakeTimers();
+    try {
+      const bytes = odsToXlsx(minimalOdsBytes());
+      expect(readDocumentMetadata('xlsx', bytes)).toEqual(readPdf(xlsxToPdf(bytes)).metadata);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
