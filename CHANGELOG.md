@@ -1,3 +1,10 @@
+# [1.77.0](https://github.com/ExaDev/documents.js/compare/v1.76.0...v1.77.0) (2026-08-04)
+
+
+### Features
+
+* throw a named error for an unsupported font-source format ([c7d0d3e](https://github.com/ExaDev/documents.js/commit/c7d0d3e5fc241e5e17f535a6e04e2de548b926eb))
+
 # [1.76.0](https://github.com/ExaDev/documents.js/compare/v1.75.2...v1.76.0) (2026-08-04)
 
 
