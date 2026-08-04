@@ -1,7 +1,6 @@
 // Real documents.js-editor-built fixtures carrying known LayoutMetadata, shared by metadata.test.ts and set-metadata.test.ts. Every format's own live-view editor (DocxEditor, OdtEditor, ...) has no metadata setter at all -- a genuine documents.js-level gap, restated in this repo's own set-metadata.ts and the TUI's own metadata.tsx -- so a fixture with real metadata baked in has no shortcut: build a plain document through the editor, read it back into a ContentDocument, patch `.metadata` directly, then rebuild through that format's own buildXPackage. This is exactly the "ContentDocument full rebuild" write path set-metadata.ts itself implements, applied once here to seed a starting fixture rather than to patch an existing one.
 
-import { type LayoutDocument, type LayoutMetadata, buildDocxPackage, buildOdtPackage, createDocx, createOdt, decodePackage, encodePackage, readDocxContent, readOdtContent, writePdf } from 'documents.js';
-import { decodePackage as decodeOdfPackage, encodePackage as encodeOdfPackage } from 'odf.js';
+import { type LayoutDocument, type LayoutMetadata, buildDocxPackage, buildOdtPackage, createDocx, createOdt, decodeDocumentPackage, decodePackage, encodeDocumentPackage, encodePackage, readDocxContent, readOdtContent, writePdf } from 'documents.js';
 
 export const METADATA_FIXTURE: LayoutMetadata = {
   title: 'Quarterly Report',
@@ -23,9 +22,9 @@ export function buildDocxWithMetadata(metadata: LayoutMetadata = METADATA_FIXTUR
 export function buildOdtWithMetadata(metadata: LayoutMetadata = METADATA_FIXTURE): Uint8Array<ArrayBuffer> {
   const editor = createOdt();
   editor.body.appendParagraph().appendRun({ text: BODY_TEXT });
-  const content = readOdtContent(decodeOdfPackage(editor.toBytes()));
+  const content = readOdtContent(decodeDocumentPackage('odt', editor.toBytes()));
   const withMetadata = { ...content, metadata };
-  return encodeOdfPackage(buildOdtPackage(withMetadata));
+  return encodeDocumentPackage('odt', buildOdtPackage(withMetadata));
 }
 
 // A minimal one-page PDF built directly from a hand-constructed LayoutDocument, rather than by converting the docx fixture above -- deterministic and independent of whether docxToPdf happens to carry ContentDocument.metadata across (it does, but this fixture should not depend on that fact to stay correct).

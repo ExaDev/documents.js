@@ -1,8 +1,8 @@
 // Real docx/pptx/odt fixtures that genuinely embed a source font face -- the shape `extractSourceFonts`/`extractOoxmlEmbeddedFonts`/`extractOdfEmbeddedFonts` (documents.js's own `src/fonts/*`) actually read, not a synthetic stand-in for it. documents.js's own live-view editors (`DocxEditor`/`PptxEditor`/`OdtEditor`) have no write side for font embedding at all -- embedding a font is a source-application concern (Word/PowerPoint/LibreOffice's own "Embed fonts in the document" option), never something this package's own editors produce -- so each builder here starts from a real editor-built package (`createDocx()`/`createPptx()`/`createOdt()`) and then adds exactly the parts/relationships/declarations documents.js's own extractors read, using only the low-level XML/package primitives documents.js and odf.js already re-export (never ooxml.js directly, which is not a dependency of this repo -- see `ooxml-fixture.ts`).
 //
 // The docx/pptx font part is stored CLEAR (unobfuscated), not XORed against a `w:fontKey`: documents.js's own `deobfuscateEmbeddedFont` sniffs the leading sfnt signature first and returns bytes unchanged whenever they already look like a real font, which is also pptx's own real-world convention (see that function's doc comment) -- so a clear part is both simpler to build and a genuine, spec-legal shape a docx producer can write.
-import { bytesToBase64, createDocx, createOdt, createPptx, encodePackage, rootElement, type Package, type XmlElement } from 'documents.js';
-import { bytesToBase64 as odfBytesToBase64, el as odfEl, encodePackage as encodeOdfPackage, rootElement as odfRootElement } from 'odf.js';
+import { bytesToBase64, createDocx, createOdt, createPptx, encodeDocumentPackage, encodePackage, rootElement, type Package, type XmlElement } from 'documents.js';
+import { bytesToBase64 as odfBytesToBase64, el as odfEl, rootElement as odfRootElement } from 'odf.js';
 import { el, xmlDeclaration } from './ooxml-fixture';
 
 const R_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
@@ -90,5 +90,5 @@ export function buildOdtWithEmbeddedFont(options: EmbeddedFontFixtureOptions): U
     ]),
   );
 
-  return encodeOdfPackage(pkg);
+  return encodeDocumentPackage('odt', pkg);
 }

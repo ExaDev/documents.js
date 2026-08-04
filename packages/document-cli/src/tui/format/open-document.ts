@@ -4,7 +4,7 @@ import { decodePackage } from 'odf.js';
 import type { Diagnostic, EditableFormat, OpenDocument } from '../state/types.js';
 import { detectFormat } from './detect-format.js';
 
-// The single place in the TUI that turns bytes into an open document. Every screen goes through here, so there is exactly one spot to look at when a format's opener changes, and exactly one import of odf.js's `decodePackage` -- documents.js re-exports ooxml.js's function under the same name, and that one cannot read an ODF package at all.
+// The single place in the TUI that turns bytes into an open document. Every screen goes through here, so there is exactly one spot to look at when a format's opener changes, and exactly one import of odf.js's `decodePackage` -- documents.js's own `decodeDocumentPackage(format, bytes)` dispatches to odf.js internally for every real `DocumentFormat` member (odt/odp/ods/odg/odf), but `.odb` is not one of those (see the note directly below), so it has no `DocumentFormat` string to pass and this module reaches for odf.js's `decodePackage` directly instead.
 
 // `.odb` is not a `DocumentFormat` member: documents.js deliberately keeps it out of the converter port (it has no PDF conversion and no write direction), so extension inference cannot classify it and this module checks for it directly.
 const ODB_EXTENSION = '.odb';
