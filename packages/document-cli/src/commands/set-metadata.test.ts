@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { decodePackage, readDocxContent, readDocxExtras, readPdf } from 'documents.js';
+import { createOds, decodeDocumentPackage, decodePackage, odsToXlsx, readDocxContent, readDocxExtras, readOdsContent, readPdf, xlsxToOds } from 'documents.js';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createProgram } from '../program';
 import { EXIT_SUCCESS } from '../runtime/exit-codes';
@@ -39,6 +39,8 @@ async function runCli(args: readonly string[]): Promise<CapturedRun> {
   return { exitCode: process.exitCode, stdout: stdoutChunks.join(''), stderr: stderrChunks.join('') };
 }
 
+const SHEET_CELL_TEXT = 'A cell surviving an xlsx metadata patch';
+
 beforeAll(async () => {
   workspace = await mkdtemp(join(tmpdir(), 'document-cli-set-metadata-'));
   await writeFile(join(workspace, 'source.docx'), buildDocxWithMetadata());
@@ -46,6 +48,17 @@ beforeAll(async () => {
   await writeFile(join(workspace, 'source.pdf'), buildPdfWithMetadata());
   // setDocumentMetadata (documents.js) validates its own source/target format pair internally rather than the CLI pre-checking it, so the input file is now genuinely read before that rejection fires -- unlike a placeholder path, this needs to exist. Its content is never parsed: the rejection below fires purely on the '.odf' extension, before any real ODF decoding is attempted.
   await writeFile(join(workspace, 'formula.odf'), new Uint8Array([0]));
+
+  const odsEditor = createOds();
+  const sheet = odsEditor.sheets()[0];
+  if (sheet === undefined) {
+    throw new Error('createOds() did not produce a default sheet');
+  }
+  sheet.cell(0, 0).value = { kind: 'string', value: SHEET_CELL_TEXT };
+  // See from-package.test.ts's own identical note: a cell()-materialized column/row otherwise reads back with no width/height style at all, which is irrelevant here but kept for consistency with the other xlsx fixture.
+  sheet.setColumnWidth(0, 72);
+  sheet.setRowHeight(0, 14);
+  await writeFile(join(workspace, 'source.xlsx'), odsToXlsx(odsEditor.toBytes()));
 });
 
 afterAll(async () => {
@@ -114,11 +127,29 @@ describe('set-metadata', () => {
     expect(patchedLayout.pages).toStrictEqual(sourceLayout.pages);
   });
 
-  it('rejects xlsx as a target outright, naming the ods-to-xlsx workaround', async () => {
+  it('patches an xlsx file in place now that documents.js wires a real xlsx content codec, leaving its cells untouched', async () => {
+    // xlsx used to be rejected outright here -- documents.js's own DOCUMENT_FORMAT_CODECS registry gained a real xlsx content codec this session, and setDocumentMetadata now rebuilds xlsx through the identical readXContent -> buildXPackage shape every other REBUILD_FORMATS member already used.
+    const outputPath = join(workspace, 'rebuilt.xlsx');
+    const { exitCode, stderr } = await runCli(['set-metadata', join(workspace, 'source.xlsx'), outputPath, '--set-title', 'New xlsx title', '--quiet']);
+
+    expect(stderr).toBe('');
+    expect(exitCode).toBe(EXIT_SUCCESS);
+
+    // Round-trips the patched xlsx back through the real xlsx-to-ods bridge to prove the bytes are a genuine, readable xlsx workbook carrying both the new title and the original cell.
+    const odsBackBytes = xlsxToOds(new Uint8Array(await readFile(outputPath)));
+    const content = readOdsContent(decodeDocumentPackage('ods', odsBackBytes));
+    if (content.kind !== 'spreadsheet') {
+      throw new Error(`expected a spreadsheet ContentDocument, got ${content.kind}`);
+    }
+    expect(content.metadata.title).toBe('New xlsx title');
+    expect(content.sheets[0]?.cells[0]?.value).toEqual({ kind: 'string', value: SHEET_CELL_TEXT });
+  });
+
+  it('still rejects a cross-format request into xlsx -- set-metadata patches metadata in place, it does not convert format', async () => {
     const { exitCode, stderr } = await runCli(['set-metadata', join(workspace, 'source.docx'), join(workspace, 'never.xlsx'), '--set-title', 'x']);
 
     expect(exitCode).not.toBe(EXIT_SUCCESS);
-    expect(stderr).toContain("'xlsx' is not a supported setDocumentMetadata source or target");
+    expect(stderr).toContain('does not convert format');
   });
 
   it('rejects a standalone odf formula document as a source, naming the missing write path', async () => {

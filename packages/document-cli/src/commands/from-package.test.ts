@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createDocx, openDocx } from 'documents.js';
+import { createDocx, createOds, decodeDocumentPackage, openDocx, readOdsContent, xlsxToOds } from 'documents.js';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createProgram } from '../program';
 import { EXIT_SUCCESS } from '../runtime/exit-codes';
@@ -33,6 +33,7 @@ async function runCli(args: readonly string[]): Promise<CapturedRun> {
 }
 
 const PARAGRAPH_TEXT = 'A paragraph dumped to a DocumentPackage and read back again';
+const SHEET_CELL_TEXT = 'A cell dumped to a DocumentPackage and rebuilt as xlsx';
 
 function docxWithParagraph(): Uint8Array<ArrayBuffer> {
   const editor = createDocx();
@@ -104,14 +105,36 @@ describe('from-package', () => {
     expect(stderr).toContain('requires a');
   });
 
-  it('rejects xlsx as a target outright, naming the ods-to-xlsx workaround', async () => {
+  it('builds a real xlsx from a spreadsheet-kind DocumentPackage now that documents.js wires a real xlsx content codec', async () => {
+    // xlsx used to be rejected outright here -- documents.js's own DOCUMENT_FORMAT_CODECS registry gained a real xlsx content codec (wrapping ooxml.js's readXlsxContent/buildXlsxPackage) this session, and buildDocumentBytes was simplified to dispatch through it like every other format instead of naming xlsx as a special exception.
+    const sheetPath = join(workspace, 'source-for-xlsx.ods');
+    const editor = createOds();
+    // createOds() already starts with one default sheet -- reuse it rather than addSheet('Sheet1'), which would create a second, identically-named sheet and leave the first (empty) one at sheets[0].
+    const sheet = editor.sheets()[0];
+    if (sheet === undefined) {
+      throw new Error('createOds() did not produce a default sheet');
+    }
+    sheet.cell(0, 0).value = { kind: 'string', value: SHEET_CELL_TEXT };
+    // A cell()-materialized column/row otherwise reads back with no width/height style at all (widthPt/heightPt 0), which fails DocumentPackage's own schema validation once the dumped package round-trips through JSON below.
+    sheet.setColumnWidth(0, 72);
+    sheet.setRowHeight(0, 14);
+    await writeFile(sheetPath, editor.toBytes());
+
     const packagePath = join(workspace, 'dumped-for-xlsx.package.json');
-    await runCli(['docx-to-pdf', join(workspace, 'source.docx'), join(workspace, 'unused3.pdf'), '--dump-package', packagePath]);
+    await runCli(['ods-to-pdf', sheetPath, join(workspace, 'unused3.pdf'), '--dump-package', packagePath]);
 
-    const { exitCode, stderr } = await runCli(['from-package', packagePath, join(workspace, 'never-written.xlsx')]);
+    const xlsxPath = join(workspace, 'rebuilt.xlsx');
+    const { exitCode } = await runCli(['from-package', packagePath, xlsxPath]);
+    expect(exitCode).toBe(EXIT_SUCCESS);
 
-    expect(exitCode).not.toBe(EXIT_SUCCESS);
-    expect(stderr).toContain("'xlsx' cannot be built from a DocumentPackage directly");
+    // Round-trips the rebuilt xlsx back through the real xlsx-to-ods bridge to prove the bytes are a genuine, readable xlsx workbook carrying the original cell, not just a file that happened to get written.
+    const xlsxBytes = new Uint8Array(await readFile(xlsxPath));
+    const odsBackBytes = xlsxToOds(xlsxBytes);
+    const content = readOdsContent(decodeDocumentPackage('ods', odsBackBytes));
+    if (content.kind !== 'spreadsheet') {
+      throw new Error(`expected a spreadsheet ContentDocument, got ${content.kind}`);
+    }
+    expect(content.sheets[0]?.cells[0]?.value).toEqual({ kind: 'string', value: SHEET_CELL_TEXT });
   });
 
   it('rejects a plain JSON file with no recognised $schema', async () => {
