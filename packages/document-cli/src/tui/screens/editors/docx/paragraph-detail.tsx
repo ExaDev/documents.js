@@ -13,6 +13,9 @@ import { FormulaPicker } from '../../shared/formula-picker.js';
 import { liveParagraphAt, paragraphFamilyDocument, type ParagraphFamilyLiveRun } from '../../shared/paragraph-family.js';
 import { parseNumberField } from '../../shared/text.js';
 
+// A run's own current sizePt has no sensible zero-ish fallback the way a blank colour prompt does (an empty hex input just means "no colour") -- a font size prompt that fails to parse falls back to the run's OWN current size (or, for a run with none set yet, this codebase's own standard body size) rather than silently writing 0pt.
+const DEFAULT_RUN_SIZE_PT = 12;
+
 // The image-insertion wizard's own field list -- unlike odg/page-detail.tsx's identically-shaped image fields, there is no x/y position to collect: DocxParagraph.insertImageAfter/OdtParagraph.insertImageAfter always append an inline image run at the end of the paragraph's own flow, not a page-absolutely-positioned frame.
 const IMAGE_FIELDS: readonly FieldSpec[] = [
   { key: 'path', label: 'Image file path (.png/.jpg/.jpeg)', defaultValue: '' },
@@ -77,6 +80,8 @@ export function ParagraphDetailScreen(): ReactElement {
   const dispatch = useAppDispatch();
   const [runIndex, setRunIndex] = useState(0);
   const [colorInput, setColorInput] = useState<string | undefined>(undefined);
+  const [fontFamilyInput, setFontFamilyInput] = useState<string | undefined>(undefined);
+  const [fontSizeInput, setFontSizeInput] = useState<string | undefined>(undefined);
   const [imageWizardOpen, setImageWizardOpen] = useState(false);
   const [formulaPickerOpen, setFormulaPickerOpen] = useState(false);
 
@@ -153,9 +158,17 @@ export function ParagraphDetailScreen(): ReactElement {
       }
       if (input === 'c') {
         setColorInput(selectedRun.color === undefined ? '' : layoutColorToHex(selectedRun.color).slice(1));
+        return;
+      }
+      if (input === 'f') {
+        setFontFamilyInput(selectedRun.fontFamily ?? '');
+        return;
+      }
+      if (input === 's') {
+        setFontSizeInput(selectedRun.sizePt === undefined ? '' : String(selectedRun.sizePt));
       }
     },
-    { isActive: !anyOverlayOpen(state) && colorInput === undefined && !imageWizardOpen && !formulaPickerOpen },
+    { isActive: !anyOverlayOpen(state) && colorInput === undefined && fontFamilyInput === undefined && fontSizeInput === undefined && !imageWizardOpen && !formulaPickerOpen },
   );
 
   if (screen.kind !== 'paragraphDetail') {
@@ -197,6 +210,53 @@ export function ParagraphDetailScreen(): ReactElement {
           />
         </Box>
       )}
+      {fontFamilyInput === undefined ? undefined : (
+        <Box>
+          <Text color="cyan">Font family: </Text>
+          <TextField
+            value={fontFamilyInput}
+            isFocused
+            placeholder="e.g. Calibri"
+            onChange={setFontFamilyInput}
+            onSubmit={(value) => {
+              const trimmed = value.trim();
+              if (trimmed.length === 0) {
+                dispatch({ type: 'SET_STATUS', severity: 'warning', text: 'A font family name cannot be blank' });
+              } else {
+                dispatch({ type: 'SET_RUN_FONT_FAMILY', blockIndex, runIndex: clampedRunIndex, fontFamily: trimmed });
+              }
+              setFontFamilyInput(undefined);
+            }}
+            onCancel={() => {
+              setFontFamilyInput(undefined);
+            }}
+          />
+        </Box>
+      )}
+      {fontSizeInput === undefined ? undefined : (
+        <Box>
+          <Text color="cyan">Font size (pt): </Text>
+          <TextField
+            value={fontSizeInput}
+            isFocused
+            placeholder="e.g. 12"
+            onChange={setFontSizeInput}
+            onSubmit={(value) => {
+              const currentSizePt = selectedRun?.sizePt ?? DEFAULT_RUN_SIZE_PT;
+              const sizePt = parseNumberField(value, currentSizePt);
+              if (sizePt <= 0) {
+                dispatch({ type: 'SET_STATUS', severity: 'warning', text: `"${value}" is not a positive font size` });
+              } else {
+                dispatch({ type: 'SET_RUN_FONT_SIZE', blockIndex, runIndex: clampedRunIndex, sizePt });
+              }
+              setFontSizeInput(undefined);
+            }}
+            onCancel={() => {
+              setFontSizeInput(undefined);
+            }}
+          />
+        </Box>
+      )}
       {imageWizardOpen ? (
         <FieldWizard
           fields={IMAGE_FIELDS}
@@ -225,7 +285,9 @@ export function ParagraphDetailScreen(): ReactElement {
           }}
         />
       ) : undefined}
-      <Text dimColor>&lt;- / -&gt; move, Enter edit text, b/i/u toggle, c colour, a append run, I image{doc.format === 'docx' ? ', m formula' : ''}, Esc back</Text>
+      <Text dimColor>
+        &lt;- / -&gt; move, Enter edit text, b/i/u toggle, c colour, f font, s size, a append run, I image{doc.format === 'docx' ? ', m formula' : ''}, Esc back
+      </Text>
     </Box>
   );
 }
