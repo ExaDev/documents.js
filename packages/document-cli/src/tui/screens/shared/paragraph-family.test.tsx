@@ -1,9 +1,10 @@
+import { readDocxContent, readOdtContent } from 'documents.js';
 import { Text, useInput } from 'ink';
 import { render } from 'ink-testing-library';
 import { useEffect, type ReactElement } from 'react';
 import { describe, expect, it } from 'vitest';
 import { AppStateProvider, useAppDispatch, useAppState } from '../../state/context.js';
-import { currentScreen } from '../../state/types.js';
+import { currentScreen, type DocxOpenDocument, type OdtOpenDocument } from '../../state/types.js';
 import { createParagraphFamilyAdapter, ParagraphFamilyBodyList } from './paragraph-family.js';
 
 // Ink's reconciler settles a `stdin.write()`-driven state update (and any effect it schedules, which can itself dispatch and schedule a further render) over more than one macrotask tick, not synchronously within the call, so a handful of `setImmediate` ticks are needed before reading `lastFrame()` or sending the next keystroke. A bare Escape additionally needs real elapsed time on top of that: Ink buffers it for up to 20ms (`pendingInputFlushDelayMilliseconds` in its own `App.js`) to disambiguate a lone Escape press from the start of a multi-byte ANSI sequence (an arrow key) -- confirmed necessary empirically: `setImmediate` ticks alone reliably delivered a plain character but silently dropped every Escape in this same harness. That real wait is only paid after an actual Escape write (`flush({ afterEscape: true })`), not on every flush, so the suite's total wall-clock time does not compound across the several non-Escape flushes each test also does.
@@ -92,6 +93,72 @@ function renderHarness() {
   );
 }
 
+// A generalised, docx-or-odt harness for the 'T' table-creation wizard tests below -- reused for both formats rather than duplicating DocxHarness, since the wizard itself is format-agnostic (APPEND_TABLE's own reducer case resolves the open docx/odt document uniformly, exactly as the module doc comment on createParagraphFamilyAdapter's own `appendParagraph` already establishes for paragraphs).
+function BodyListHarness({ format }: { readonly format: 'docx' | 'odt' }): ReactElement | null {
+  const state = useAppState();
+  const dispatch = useAppDispatch();
+
+  useEffect(() => {
+    dispatch({ type: 'CREATE_DOCUMENT', format });
+  }, [format, dispatch]);
+
+  const doc = state.openDocument;
+  if (doc?.format !== format) {
+    return null;
+  }
+
+  const adapter = createParagraphFamilyAdapter({
+    formatLabel: format,
+    paragraphs: () => doc.editor.paragraphs(),
+    tables: () => doc.editor.tables(),
+    dispatch,
+  });
+
+  const screen = currentScreen(state);
+  return (
+    <>
+      {screen.kind === 'bodyList' ? <ParagraphFamilyBodyList adapter={adapter} /> : undefined}
+      <TableProbe doc={doc} />
+      <Marker />
+    </>
+  );
+}
+
+// Reads the document's own first table block fresh through readDocxContent/readOdtContent on every render -- the real proof a wizard-driven APPEND_TABLE dispatch reached the package, and (for the merge tests) that the anchor cell carries the real colSpan/rowSpan a creation-time merge writes.
+function TableProbe({ doc }: { readonly doc: DocxOpenDocument | OdtOpenDocument }): ReactElement {
+  const content = doc.format === 'docx' ? readDocxContent(doc.editor.toPackage()) : readOdtContent(doc.editor.toPackage());
+  if (content.kind !== 'wordprocessing') {
+    throw new Error(`expected a wordprocessing ContentDocument, got ${content.kind}`);
+  }
+  const tableBlock = content.sections.flatMap((section) => section.blocks).find((block): block is Extract<(typeof content.sections)[number]['blocks'][number], { readonly kind: 'table' }> => block.kind === 'table');
+  if (tableBlock === undefined) {
+    return <Text>probe:table=none</Text>;
+  }
+  const anchor = tableBlock.rows[0]?.cells[0];
+  return (
+    <Text>
+      probe:table={tableBlock.rows.length}x{tableBlock.columnWidthsPt.length} anchorColSpan={anchor?.colSpan ?? 1} anchorRowSpan={anchor?.rowSpan ?? 1}
+    </Text>
+  );
+}
+
+function renderBodyListHarness(format: 'docx' | 'odt'): ReturnType<typeof render> {
+  return render(
+    <AppStateProvider>
+      <BodyListHarness format={format} />
+    </AppStateProvider>,
+  );
+}
+
+// The rows/columns/merge-rectangle TextFields all start pre-filled with their own default value and the cursor at the end (see export-options.test.tsx's own comment on this exact TextField behaviour) -- typing a digit appends to that default rather than replacing it, so a test wanting a specific value first clears the single pre-filled default digit with one backspace.
+const BACKSPACE = '\x7F';
+async function replaceField(stdin: { readonly write: (data: string) => void }, value: string): Promise<void> {
+  stdin.write(BACKSPACE);
+  await flush();
+  stdin.write(value);
+  await flush();
+}
+
 describe('ParagraphFamilyBodyList', () => {
   it('shows the empty-body hint before any paragraph exists', async () => {
     const { lastFrame } = renderHarness();
@@ -142,5 +209,100 @@ describe('ParagraphFamilyBodyList', () => {
     },
     // Generous relative to this suite's normal sub-second runtime: this test alone makes three round trips through Ink's real Escape-disambiguation wait (see `flush`'s own comment), and the default 10s unit-test timeout has been observed to run close under heavy concurrent load on this machine.
     20_000,
+  );
+});
+
+// A generous per-test timeout throughout this describe.each: each test makes several sequential flush() round trips (one per wizard step), and the default 10s unit-test timeout has been observed to run close under heavy concurrent load on this machine -- the same reasoning already documented on the "navigates ... with Enter" test above.
+const WIZARD_TEST_TIMEOUT_MS = 20_000;
+
+describe.each(['docx', 'odt'] as const)('ParagraphFamilyBodyList "T" table-creation wizard on %s', (format) => {
+  it(
+    'adds a real table of the requested dimensions via the 2-step rows/columns wizard, no merge',
+    async () => {
+      const { lastFrame, stdin } = renderBodyListHarness(format);
+      await flush();
+      expect(lastFrame()).toContain('probe:table=none');
+
+      stdin.write('T');
+      await flush();
+      expect(lastFrame()).toContain('Rows:');
+
+      await replaceField(stdin, '3');
+      stdin.write(ENTER);
+      await flush();
+      expect(lastFrame()).toContain('Columns:');
+
+      await replaceField(stdin, '4');
+      stdin.write(ENTER);
+      await flush();
+      expect(lastFrame()).toContain('Merge cells now? y/N');
+
+      stdin.write('n');
+      await flush();
+      expect(lastFrame()).toContain('probe:table=3x4 anchorColSpan=1 anchorRowSpan=1');
+      expect(lastFrame()).toContain('ON tableView');
+      expect(lastFrame()).not.toContain('Merge cells now?');
+    },
+    WIZARD_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'creates a table with cells pre-merged via the wizard\'s own merge step, in one APPEND_TABLE dispatch',
+    async () => {
+      const { lastFrame, stdin } = renderBodyListHarness(format);
+      await flush();
+
+      stdin.write('T');
+      await flush();
+      await replaceField(stdin, '3');
+      stdin.write(ENTER);
+      await flush();
+      await replaceField(stdin, '3');
+      stdin.write(ENTER);
+      await flush();
+      expect(lastFrame()).toContain('Merge cells now? y/N');
+
+      stdin.write('y');
+      await flush();
+      expect(lastFrame()).toContain('Merge start row (0-2):');
+      stdin.write(ENTER);
+      await flush();
+      expect(lastFrame()).toContain('Merge start column (0-2):');
+      stdin.write(ENTER);
+      await flush();
+      expect(lastFrame()).toContain('Merge row span (1-3):');
+
+      await replaceField(stdin, '2');
+      stdin.write(ENTER);
+      await flush();
+      expect(lastFrame()).toContain('Merge column span (1-3):');
+
+      await replaceField(stdin, '2');
+      stdin.write(ENTER);
+      await flush();
+
+      expect(lastFrame()).toContain('probe:table=3x3 anchorColSpan=2 anchorRowSpan=2');
+      expect(lastFrame()).toContain('ON tableView');
+    },
+    WIZARD_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'cancels the wizard on Escape without touching the document',
+    async () => {
+      const { lastFrame, stdin } = renderBodyListHarness(format);
+      await flush();
+
+      stdin.write('T');
+      await flush();
+      expect(lastFrame()).toContain('Rows:');
+
+      stdin.write(ESCAPE);
+      await flush({ afterEscape: true });
+      expect(lastFrame()).not.toContain('Rows:');
+      expect(lastFrame()).toContain('probe:table=none');
+      expect(lastFrame()).toContain('ON bodyList');
+    },
+    WIZARD_TEST_TIMEOUT_MS,
   );
 });

@@ -1,12 +1,13 @@
-import { Box, Text } from 'ink';
-import { useEffect, type Dispatch, type ReactElement } from 'react';
+import { Box, Text, useInput } from 'ink';
+import { useEffect, useState, type Dispatch, type ReactElement } from 'react';
 import type { Alignment, DocxParagraph, DocxRun, DocxTable, DocxTableCell, OdtParagraph, OdtRun, OdtTable, OdtTableCell } from 'documents.js';
 import { ListView } from '../../components/list-view.js';
+import { TextField } from '../../components/text-field.js';
 import { useNavigationInput, type NavigationInputOptions } from '../../keybindings/use-navigation-input.js';
 import type { Action } from '../../state/actions.js';
 import { useAppDispatch, useAppState } from '../../state/context.js';
 import { anyOverlayOpen, selectionKeyFor, type DocxOpenDocument, type OdtOpenDocument, type OpenDocument } from '../../state/types.js';
-import { truncatePreview } from './text.js';
+import { parseNonNegativeIntField, parsePositiveIntField, truncatePreview } from './text.js';
 
 // docx and odt share one paragraph/run/table model closely enough (see documents.js's own README: "readDocxContent and readOdtContent both produce the identical wordprocessing-variant ContentDocument shape") that DocxParagraph/OdtParagraph and DocxRun/OdtRun are structurally interchangeable for every screen in this family -- the union types below let every helper and screen here take whichever the open document actually is without a branch, mirroring state/reducer.ts's own `WordprocessingOpenDocument` narrowing (not exported from there, so restated here for this screen family's own use).
 export type ParagraphFamilyOpenDocument = DocxOpenDocument | OdtOpenDocument;
@@ -155,6 +156,12 @@ interface ListRow {
 }
 type BodyRow = HeaderRow | ParagraphRow | TableRow | ListRow;
 
+// 'T' opens a 2-step rows/columns wizard (mirroring pptx/odp's own slide-detail.tsx add-table wizard exactly), then an optional third "merge cells now?" prompt whose "yes" branch collects a merge rectangle (start row, start column, row span, column span) BEFORE a single APPEND_TABLE dispatch -- carried on that action's own `merge` field so the reducer builds the table and merges it in one mutate() pass, rather than needing a second MERGE_TABLE_CELLS dispatch that would have to already know the freshly-appended table's own index.
+type TableWizardStep = 'closed' | 'rows' | 'columns' | 'mergePrompt' | 'mergeStartRow' | 'mergeStartColumn' | 'mergeRowSpan' | 'mergeColSpan';
+
+const DEFAULT_TABLE_ROWS = 2;
+const DEFAULT_TABLE_COLUMNS = 2;
+
 // documents.js gives docx/odt editors two (or, for odt, three) SEPARATE enumeration accessors (paragraphs(), tables(), and odt's own lists()) with no shared document-order index between them at all -- there is no way to recover whether paragraph 3 came before or after table 1 in the real file. True interleaving is consequently not achievable from the public API; this renders two (or three) clearly-labelled sections instead, each in its own accessor's own order, which is the honest alternative the brief allows for.
 export function ParagraphFamilyBodyList(props: { readonly adapter: ParagraphFamilyAdapter }): ReactElement {
   const { adapter } = props;
@@ -190,9 +197,95 @@ export function ParagraphFamilyBodyList(props: { readonly adapter: ParagraphFami
     return acc;
   }, []);
 
+  const [tableWizard, setTableWizard] = useState<TableWizardStep>('closed');
+  const [wizardDraft, setWizardDraft] = useState('');
+  const [wizardRows, setWizardRows] = useState(DEFAULT_TABLE_ROWS);
+  const [wizardColumns, setWizardColumns] = useState(DEFAULT_TABLE_COLUMNS);
+  const [wizardStartRow, setWizardStartRow] = useState(0);
+  const [wizardStartColumn, setWizardStartColumn] = useState(0);
+  const [wizardRowSpan, setWizardRowSpan] = useState(1);
+  const wizardOpen = tableWizard !== 'closed';
+
+  const closeWizard = (): void => {
+    setTableWizard('closed');
+  };
+
+  // The reducer's own APPEND_TABLE case builds and (when `merge` is given) merges the table in one mutate() pass -- `tables.length` computed BEFORE dispatch is the freshly-appended table's own index, the same "impure reducer, capture the index first" convention `onAppend` below already uses for a freshly-appended paragraph.
+  const commitAppendTable = (merge: { readonly startRow: number; readonly startColumn: number; readonly rowSpan: number; readonly colSpan: number } | undefined): void => {
+    const newIndex = tables.length;
+    dispatch({ type: 'APPEND_TABLE', rows: wizardRows, columns: wizardColumns, merge });
+    closeWizard();
+    dispatch({ type: 'PUSH_SCREEN', screen: { kind: 'tableView', blockIndex: newIndex } });
+  };
+
+  // 'T' opens the wizard -- a separate useInput from the shared navigation hook below, matching odb/table-list.tsx's own 'f'/'r' split and docx/index.tsx's own 'x' handling: active only while nothing else (an overlay, the wizard itself) already owns the keyboard.
+  useInput(
+    (input) => {
+      if (input === 'T') {
+        setWizardDraft(String(DEFAULT_TABLE_ROWS));
+        setTableWizard('rows');
+      }
+    },
+    { isActive: !anyOverlayOpen(state) && !wizardOpen },
+  );
+
+  // The merge-prompt step is a single-key y/N prompt, not a TextField -- 'y' proceeds to the merge-rectangle picker, 'n'/Enter (the default "no") appends the table unmerged straight away.
+  useInput(
+    (input, key) => {
+      if (key.escape) {
+        closeWizard();
+        return;
+      }
+      if (input === 'y' || input === 'Y') {
+        setWizardDraft('0');
+        setTableWizard('mergeStartRow');
+        return;
+      }
+      if (input === 'n' || input === 'N' || key.return) {
+        commitAppendTable(undefined);
+      }
+    },
+    { isActive: !anyOverlayOpen(state) && tableWizard === 'mergePrompt' },
+  );
+
+  const submitWizardRows = (raw: string): void => {
+    setWizardRows(parsePositiveIntField(raw, DEFAULT_TABLE_ROWS));
+    setWizardDraft(String(DEFAULT_TABLE_COLUMNS));
+    setTableWizard('columns');
+  };
+
+  const submitWizardColumns = (raw: string): void => {
+    setWizardColumns(parsePositiveIntField(raw, DEFAULT_TABLE_COLUMNS));
+    setTableWizard('mergePrompt');
+  };
+
+  // Every merge-rectangle field is clamped to the just-chosen table's own dimensions (`wizardRows`/`wizardColumns`), so a merge built here can never itself throw the out-of-range error MERGE_TABLE_CELLS' own reducer case guards against -- the clamp is the UI's own responsibility, the reducer's own try/catch is the backstop for every OTHER caller of that action.
+  const submitWizardMergeStartRow = (raw: string): void => {
+    setWizardStartRow(Math.min(parseNonNegativeIntField(raw, 0), Math.max(0, wizardRows - 1)));
+    setWizardDraft('0');
+    setTableWizard('mergeStartColumn');
+  };
+
+  const submitWizardMergeStartColumn = (raw: string): void => {
+    setWizardStartColumn(Math.min(parseNonNegativeIntField(raw, 0), Math.max(0, wizardColumns - 1)));
+    setWizardDraft('1');
+    setTableWizard('mergeRowSpan');
+  };
+
+  const submitWizardMergeRowSpan = (raw: string): void => {
+    setWizardRowSpan(Math.min(parsePositiveIntField(raw, 1), Math.max(1, wizardRows - wizardStartRow)));
+    setWizardDraft('1');
+    setTableWizard('mergeColSpan');
+  };
+
+  const submitWizardMergeColSpan = (raw: string): void => {
+    const colSpan = Math.min(parsePositiveIntField(raw, 1), Math.max(1, wizardColumns - wizardStartColumn));
+    commitAppendTable({ startRow: wizardStartRow, startColumn: wizardStartColumn, rowSpan: wizardRowSpan, colSpan });
+  };
+
   const { selectedIndex } = usePersistedSelection(selectionKeyFor({ kind: 'bodyList' }), {
     itemCount: selectableRowIndices.length,
-    isActive: !anyOverlayOpen(state),
+    isActive: !anyOverlayOpen(state) && !wizardOpen,
     onBack: () => {
       dispatch({ type: 'POP_SCREEN' });
     },
@@ -261,7 +354,44 @@ export function ParagraphFamilyBodyList(props: { readonly adapter: ParagraphFami
           );
         }}
       />
-      <Text dimColor>Enter to open, a to append a paragraph, Esc back</Text>
+      {tableWizard === 'rows' ? (
+        <Box>
+          <Text color="cyan">Rows: </Text>
+          <TextField value={wizardDraft} isFocused onChange={setWizardDraft} onSubmit={submitWizardRows} onCancel={closeWizard} />
+        </Box>
+      ) : undefined}
+      {tableWizard === 'columns' ? (
+        <Box>
+          <Text color="cyan">Columns: </Text>
+          <TextField value={wizardDraft} isFocused onChange={setWizardDraft} onSubmit={submitWizardColumns} onCancel={closeWizard} />
+        </Box>
+      ) : undefined}
+      {tableWizard === 'mergePrompt' ? <Text color="cyan">Merge cells now? y/N</Text> : undefined}
+      {tableWizard === 'mergeStartRow' ? (
+        <Box>
+          <Text color="cyan">Merge start row (0-{Math.max(0, wizardRows - 1)}): </Text>
+          <TextField value={wizardDraft} isFocused onChange={setWizardDraft} onSubmit={submitWizardMergeStartRow} onCancel={closeWizard} />
+        </Box>
+      ) : undefined}
+      {tableWizard === 'mergeStartColumn' ? (
+        <Box>
+          <Text color="cyan">Merge start column (0-{Math.max(0, wizardColumns - 1)}): </Text>
+          <TextField value={wizardDraft} isFocused onChange={setWizardDraft} onSubmit={submitWizardMergeStartColumn} onCancel={closeWizard} />
+        </Box>
+      ) : undefined}
+      {tableWizard === 'mergeRowSpan' ? (
+        <Box>
+          <Text color="cyan">Merge row span (1-{Math.max(1, wizardRows - wizardStartRow)}): </Text>
+          <TextField value={wizardDraft} isFocused onChange={setWizardDraft} onSubmit={submitWizardMergeRowSpan} onCancel={closeWizard} />
+        </Box>
+      ) : undefined}
+      {tableWizard === 'mergeColSpan' ? (
+        <Box>
+          <Text color="cyan">Merge column span (1-{Math.max(1, wizardColumns - wizardStartColumn)}): </Text>
+          <TextField value={wizardDraft} isFocused onChange={setWizardDraft} onSubmit={submitWizardMergeColSpan} onCancel={closeWizard} />
+        </Box>
+      ) : undefined}
+      <Text dimColor>Enter to open, a to append a paragraph, T to append a table, Esc back</Text>
     </Box>
   );
 }
