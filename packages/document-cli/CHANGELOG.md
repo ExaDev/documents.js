@@ -1,3 +1,10 @@
+## [1.11.14](https://github.com/ExaDev/document-cli/compare/v1.11.13...v1.11.14) (2026-08-04)
+
+
+### Bug Fixes
+
+* list odb-query and odb-render-report in the formats command's own not-covered summary ([fe9cff7](https://github.com/ExaDev/document-cli/commit/fe9cff7c5130ac764e93fe1400ba449c91f32ff5))
+
 ## [1.11.13](https://github.com/ExaDev/document-cli/compare/v1.11.12...v1.11.13) (2026-08-04)
 
 ## [1.11.12](https://github.com/ExaDev/document-cli/compare/v1.11.11...v1.11.12) (2026-08-04)
