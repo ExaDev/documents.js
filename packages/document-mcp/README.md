@@ -4,7 +4,7 @@
 
 > An MCP (Model Context Protocol) server exposing [`documents.js`](https://github.com/ExaDev/documents.js)'s document-conversion, `.odb`, metadata, and font tooling as MCP tools, so an MCP-speaking agent can convert, inspect, and edit docx/pptx/odt/odp/ods/odg/odf/pdf/odb/xlsx/markdown documents without writing TypeScript against `documents.js` directly.
 
-`document-mcp` adds no conversion or editing logic of its own — it is a dispatch layer over `documents.js`'s existing conversion functions, `DocumentConverter` port, and `.odb`/PDF readers, wired up as MCP tools served over stdio. [`document-cli`](https://github.com/ExaDev/document-cli) is the sibling frontend over the identical `documents.js` library — a terminal CLI/TUI rather than an MCP server — so the two are independent consumers of one shared implementation and can expose different subsets of it.
+`document-mcp` adds no conversion or editing logic of its own — it is a dispatch layer over `documents.js`'s existing conversion functions, `DocumentConverter` port, and `.odb`/PDF readers, wired up as MCP tools served over stdio. [`document-cli`](https://github.com/ExaDev/document-cli) is the sibling frontend over the identical `documents.js` library — a terminal CLI/TUI rather than an MCP server — so the two are independent consumers of one shared implementation and can expose different subsets of it. A `convert_document` call's fidelity — which `(source, targetFormat)` pairs round-trip losslessly, which are a best-effort reconstruction, and why — is exactly what [`documents.js`'s own Fidelity section](https://github.com/ExaDev/documents.js#fidelity) documents, table included; it is not restated here.
 
 ```mermaid
 graph TD
