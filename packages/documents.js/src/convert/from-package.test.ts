@@ -1,6 +1,7 @@
 import type { DocumentPackage } from 'document-schema.js';
 import { DOCUMENT_PACKAGE_FORMAT_VERSION } from 'document-schema.js';
 import { decodePackage as decodeOdfPackage } from 'odf.js';
+import { decodePackage as decodeOoxmlPackage, readXlsxContent } from 'ooxml.js';
 import { readPdf } from 'pdf-codec';
 import { describe, expect, it } from 'vitest';
 import { openDocx } from '../edit/docx/editor';
@@ -101,8 +102,15 @@ describe('buildDocumentBytes', () => {
     expect(() => buildDocumentBytes(captured!, 'pdf')).toThrow(/has no layout/);
   });
 
-  it('throws naming the ods-to-xlsx workaround for the unsupported xlsx target', () => {
-    expect(() => buildDocumentBytes(spreadsheetPackage(), 'xlsx')).toThrow(/does not re-export a ContentDocument-to-xlsx builder/);
+  it('builds real xlsx bytes from a spreadsheet package', () => {
+    const bytes = buildDocumentBytes(spreadsheetPackage(), 'xlsx');
+    const content = readXlsxContent(decodeOoxmlPackage(bytes));
+    expect(content.kind).toBe('spreadsheet');
+    if (content.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    expect(content.sheets.length).toBeGreaterThan(0);
+    expect(content.sheets[0]?.cells.length).toBeGreaterThan(0);
   });
 
   it('throws for the unsupported odf target', () => {
