@@ -1,3 +1,11 @@
+# [1.8.0](https://github.com/ExaDev/document-cli/compare/v1.7.0...v1.8.0) (2026-08-04)
+
+
+### Features
+
+* **tui:** add a formula preset library and shared formula picker ([e8d50c9](https://github.com/ExaDev/document-cli/commit/e8d50c9239ca8ea201ab855a7583f16c7c74acb9))
+* **tui:** insert images and formulas into docx/odt paragraphs ([3d2ab25](https://github.com/ExaDev/document-cli/commit/3d2ab25bc5f828f59fa62ad8718fa61cd2c66e4a))
+
 # [1.7.0](https://github.com/ExaDev/document-cli/compare/v1.6.0...v1.7.0) (2026-08-04)
 
 
