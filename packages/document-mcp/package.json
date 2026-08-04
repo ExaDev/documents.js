@@ -69,7 +69,7 @@
   "packageManager": "pnpm@11.6.0",
   "dependencies": {
     "@modelcontextprotocol/server": "^2.0.0",
-    "documents.js": "^1.79.0",
+    "documents.js": "^1.81.8",
     "pdf-codec": "^1.11.0",
     "zod": "^4.2.0"
   },
