@@ -1,54 +1,25 @@
 import type { LayoutMetadata } from 'document-schema.js';
-import { decodePackage as decodeOdfPackage } from 'odf.js';
-import { decodePackage as decodeOoxmlPackage } from 'ooxml.js';
 import { readPdf } from 'pdf-codec';
+import { DOCUMENT_FORMAT_CODECS } from '../codecs/registry';
 import { xlsxToPdf } from '../convert/convert';
 import type { DocumentFormat } from '../convert/port';
-import { decodeMarkdownText } from '../markdown/text';
-import { readMarkdownContent } from '../markdown/read';
-import { readOdfFormulaContent } from '../odf/formula/read';
-import { readOdgContent } from '../odf/odg/read';
-import { readOdpContent } from '../odf/odp/read';
-import { readOdsContent } from '../odf/ods/read';
-import { readOdtContent } from '../odf/odt/read';
-import { readDocxContent } from '../ooxml/docx/read';
-import { readPptxContent } from '../ooxml/pptx/read';
-import { throwIfAborted } from '../ports/abort';
 
 export interface ReadDocumentMetadataOptions {
   readonly signal?: AbortSignal;
 }
 
-// Every DocumentFormat this function can pull a LayoutMetadata out of, dispatched purely by format: docx/pptx read through ooxml.js's own decodePackage; odt/odp/ods/odg/odf through odf.js's, aliased to keep the two apart at this one call site that needs both (mirroring createDocumentFontRegistry's own callers); markdown decodes its own UTF-8 byte<->text boundary first, since readMarkdownContent takes a string, not bytes; pdf reads its metadata directly, with no ContentDocument involved at all; xlsx has no readXlsxContent re-exported from this package's own public surface (see the README's Architecture section), so it goes through the same throwaway xlsxToPdf-then-readPdf preview every other xlsx-metadata-adjacent caller in this ecosystem already uses to open an xlsx without a dedicated reader of its own. Cancellation has no loop of its own to hook into for the seven synchronous single-pass readers (docx/pptx/odt/odp/ods/odg/odf) -- the signal is checked once before dispatching, matching odtToDocx's own reasoning (src/convert/convert.ts) for the identical shape of read -- while markdown/pdf/xlsx forward it into their own readers, which do have one.
+// Every DocumentFormat this function can pull a LayoutMetadata out of, dispatched via DOCUMENT_FORMAT_CODECS (src/codecs/registry.ts) rather than a hand-written per-format switch: docx/pptx/odt/odp/ods/odg/odf each resolve to that registry's own `content` codec, pdf to its `layout` codec -- both already carry each format's own cancellation policy (a one-time throwIfAborted for the seven synchronous single-pass readers, straight signal-forwarding for pdf, matching odtToDocx's own reasoning in src/convert/convert.ts for the identical shape of read). xlsx is the one format with no registry entry at all: it has no readXlsxContent re-exported from this package's own public surface (see the README's Architecture section), so it stays a named exception here, going through the same throwaway xlsxToPdf-then-readPdf preview every other xlsx-metadata-adjacent caller in this ecosystem already uses to open an xlsx without a dedicated reader of its own.
 export function readDocumentMetadata(format: DocumentFormat, bytes: Uint8Array<ArrayBuffer>, options?: ReadDocumentMetadataOptions): LayoutMetadata {
   const signal = options?.signal;
-  switch (format) {
-    case 'docx':
-      throwIfAborted(signal);
-      return readDocxContent(decodeOoxmlPackage(bytes)).metadata;
-    case 'pptx':
-      throwIfAborted(signal);
-      return readPptxContent(decodeOoxmlPackage(bytes)).metadata;
-    case 'odt':
-      throwIfAborted(signal);
-      return readOdtContent(decodeOdfPackage(bytes)).metadata;
-    case 'odp':
-      throwIfAborted(signal);
-      return readOdpContent(decodeOdfPackage(bytes)).metadata;
-    case 'ods':
-      throwIfAborted(signal);
-      return readOdsContent(decodeOdfPackage(bytes)).metadata;
-    case 'odg':
-      throwIfAborted(signal);
-      return readOdgContent(decodeOdfPackage(bytes)).metadata;
-    case 'odf':
-      throwIfAborted(signal);
-      return readOdfFormulaContent(decodeOdfPackage(bytes)).metadata;
-    case 'markdown':
-      return readMarkdownContent(decodeMarkdownText(bytes), { signal }).metadata;
-    case 'pdf':
-      return readPdf(bytes, { signal }).metadata;
-    case 'xlsx':
-      return readPdf(xlsxToPdf(bytes, { signal }), { signal }).metadata;
+  if (format === 'xlsx') {
+    return readPdf(xlsxToPdf(bytes, { signal }), { signal }).metadata;
   }
+  const codecs = DOCUMENT_FORMAT_CODECS[format];
+  if (codecs.content) {
+    return codecs.content.read(bytes, { signal }).metadata;
+  }
+  if (codecs.layout) {
+    return codecs.layout.read(bytes, { signal }).metadata;
+  }
+  throw new Error(`DocumentFormat '${format}' has neither a content nor a layout codec in DOCUMENT_FORMAT_CODECS, and is not 'xlsx' -- this is an internal invariant violation, not a caller error`);
 }
