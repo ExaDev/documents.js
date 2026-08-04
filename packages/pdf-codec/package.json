@@ -70,7 +70,7 @@
   "license": "MIT",
   "packageManager": "pnpm@11.6.0",
   "dependencies": {
-    "document-schema.js": "^2.3.1",
+    "document-schema.js": "^2.3.2",
     "fflate": "^0.8.3",
     "zod": "^4.4.3"
   },
