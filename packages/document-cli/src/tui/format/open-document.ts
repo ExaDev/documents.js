@@ -1,10 +1,9 @@
 import { readFile, writeFile } from 'node:fs/promises';
-import { createDocx, createOdg, createOdp, createOds, createOdt, createPdf, createPptx, decodeMarkdownText, encodeMarkdownText, openDocx, openMarkdown, openOdg, openOdp, openOds, openOdt, openPdf, openPptx, readOdbForms, readOdbReports, readOdbTables, readPdf, xlsxToPdf } from 'documents.js';
-import { decodePackage } from 'odf.js';
+import { createDocx, createOdg, createOdp, createOds, createOdt, createPdf, createPptx, decodeMarkdownText, decodeOdbPackage, encodeMarkdownText, openDocx, openMarkdown, openOdg, openOdp, openOds, openOdt, openPdf, openPptx, readOdbForms, readOdbReports, readOdbTables, readPdf, xlsxToPdf } from 'documents.js';
 import type { Diagnostic, EditableFormat, OpenDocument } from '../state/types.js';
 import { detectFormat } from './detect-format.js';
 
-// The single place in the TUI that turns bytes into an open document. Every screen goes through here, so there is exactly one spot to look at when a format's opener changes, and exactly one import of odf.js's `decodePackage` -- documents.js's own `decodeDocumentPackage(format, bytes)` dispatches to odf.js internally for every real `DocumentFormat` member (odt/odp/ods/odg/odf), but `.odb` is not one of those (see the note directly below), so it has no `DocumentFormat` string to pass and this module reaches for odf.js's `decodePackage` directly instead.
+// The single place in the TUI that turns bytes into an open document. Every screen goes through here, so there is exactly one spot to look at when a format's opener changes. documents.js's own `decodeDocumentPackage(format, bytes)` dispatches to odf.js internally for every real `DocumentFormat` member (odt/odp/ods/odg/odf), but `.odb` is not one of those (see the note directly below), so it has no `DocumentFormat` string to pass -- this module uses documents.js's own `decodeOdbPackage` instead, the .odb-specific sibling that decodes the identical raw ODF container without going through odf.js directly.
 
 // `.odb` is not a `DocumentFormat` member: documents.js deliberately keeps it out of the converter port (it has no PDF conversion and no write direction), so extension inference cannot classify it and this module checks for it directly.
 const ODB_EXTENSION = '.odb';
@@ -19,7 +18,7 @@ export async function openDocumentAtPath(path: string, options: OpenDocumentAtPa
 
   if (path.toLowerCase().endsWith(ODB_EXTENSION)) {
     // Decoded once and read three ways: tables come from the embedded database's own storage, forms and reports from static ODF sub-documents inside the same package. All three are resolved eagerly at open time rather than lazily per screen, because a `.odb` is opened read-only and none of the three can change afterwards -- there is nothing for a later read to pick up.
-    const pkg = decodePackage(bytes);
+    const pkg = decodeOdbPackage(bytes);
     return { format: 'odb', tables: readOdbTables(pkg), forms: readOdbForms(pkg), reports: readOdbReports(pkg), path };
   }
 

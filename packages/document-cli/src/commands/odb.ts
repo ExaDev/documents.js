@@ -1,13 +1,14 @@
 import { basename, dirname, extname, join } from 'node:path';
 import { type Command } from 'commander';
-import { decodePackage, type Package } from 'odf.js';
 import {
   type DocumentFormat,
+  type Package,
   OdbNoEmbeddedDataSourceError,
   OdbReportNotSpecifiedError,
   OdbTableNotFoundError,
   OdbTableNotSpecifiedError,
   OdbUnsupportedFormatError,
+  decodeOdbPackage,
   evaluateSelect,
   odbReportToDocx,
   odbReportToOdt,
@@ -133,7 +134,7 @@ async function runOdbTables(input: string, options: { readonly json: boolean }):
 
   try {
     const inputBytes = await readInput(input, { signal });
-    const pkg = decodePackage(new Uint8Array(inputBytes));
+    const pkg = decodeOdbPackage(new Uint8Array(inputBytes));
     const tables = readOdbTables(pkg);
 
     if (options.json) {
@@ -187,7 +188,7 @@ async function runOdbQuery(input: string, options: OdbQueryCliOptions): Promise<
 
   try {
     const inputBytes = await readInput(input, { signal });
-    const pkg = decodePackage(new Uint8Array(inputBytes));
+    const pkg = decodeOdbPackage(new Uint8Array(inputBytes));
     const resolved = resolveQuerySql(pkg, options);
     if ('errorMessage' in resolved) {
       process.stderr.write(`[${command}] ${resolved.errorMessage}\n`);
@@ -217,7 +218,7 @@ async function runOdbForms(input: string, options: { readonly json: boolean }): 
 
   try {
     const inputBytes = await readInput(input, { signal });
-    const forms = readOdbForms(decodePackage(new Uint8Array(inputBytes)));
+    const forms = readOdbForms(decodeOdbPackage(new Uint8Array(inputBytes)));
 
     if (options.json) {
       process.stdout.write(`${JSON.stringify(forms.map((form) => odbFormSummary(form)))}\n`);
@@ -247,7 +248,7 @@ async function runOdbReports(input: string, options: { readonly json: boolean })
 
   try {
     const inputBytes = await readInput(input, { signal });
-    const reports = readOdbReports(decodePackage(new Uint8Array(inputBytes)));
+    const reports = readOdbReports(decodeOdbPackage(new Uint8Array(inputBytes)));
 
     if (options.json) {
       // Unlike a form (whose own `document` field carries the entire parsed sub-document -- see odbFormSummary), an OdbReport carries nothing but its own structure, so it serialises verbatim with no reshaping.
@@ -306,7 +307,7 @@ async function runOdbRenderReport(input: string, output: string | undefined, opt
   try {
     const inputBytes = await readInput(input, { signal });
     const fonts = await loadProvidedFonts(options.fontFile ?? [], { signal });
-    const pkg = decodePackage(new Uint8Array(inputBytes));
+    const pkg = decodeOdbPackage(new Uint8Array(inputBytes));
     const content = readOdbReportContent(pkg, { report: options.report });
 
     // docx/odt need neither fonts nor signal -- building a fresh package from a ContentDocument is a single bounded synchronous pass, exactly as odbReportToDocx/odbReportToOdt's own signature (no fonts option at all) already states. pdf mirrors markdownToPdf's own pipeline: a rendered report has no source package of its own to extract embedded fonts from, so the caller-supplied faces plus the vendored substitutes and the standard 14 are the whole registry.

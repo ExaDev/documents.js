@@ -1,6 +1,5 @@
 import { readFile, writeFile } from 'node:fs/promises';
-import { odbReportToDocx, odbReportToOdt, odbReportToPdf, readOdbReportContent } from 'documents.js';
-import { decodePackage } from 'odf.js';
+import { decodeOdbPackage, odbReportToDocx, odbReportToOdt, odbReportToPdf, readOdbReportContent } from 'documents.js';
 import { loadProvidedFonts } from '../../runtime/fonts.js';
 import type { Diagnostic, OdbOpenDocument } from '../state/types.js';
 import { detectFormat } from './detect-format.js';
@@ -27,7 +26,7 @@ export async function renderOdbReportTo(doc: OdbOpenDocument, destinationPath: s
     throw new Error(`Cannot tell whether to render "${options.reportName}" as docx, odt, or pdf from '${destinationPath}' -- give the destination one of those three extensions`);
   }
   const fonts = await loadProvidedFonts(options.fontFiles ?? [], { signal: options.signal });
-  const pkg = decodePackage(new Uint8Array(await readFile(doc.path)));
+  const pkg = decodeOdbPackage(new Uint8Array(await readFile(doc.path)));
   const content = readOdbReportContent(pkg, { report: options.reportName });
   const bytes = format === 'docx' ? odbReportToDocx(content) : format === 'odt' ? odbReportToOdt(content) : odbReportToPdf(content, toPdfOptions(options, fonts));
   await writeFile(destinationPath, bytes);
