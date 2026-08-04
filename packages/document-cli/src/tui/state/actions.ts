@@ -153,8 +153,6 @@ export type Action =
   | { readonly type: 'SET_PDF_IMAGE_SOURCE'; readonly pageIndex: number; readonly itemIndex: number; readonly format: 'png' | 'jpeg'; readonly bytes: Uint8Array<ArrayBuffer> }
   | { readonly type: 'SET_PDF_LINK_URI'; readonly pageIndex: number; readonly itemIndex: number; readonly uri: string }
   | { readonly type: 'SET_PDF_LINK_FRAME'; readonly pageIndex: number; readonly itemIndex: number; readonly xPt: number; readonly yPt: number; readonly widthPt: number; readonly heightPt: number }
-  // Markdown has no live editor object to mutate in place (see MarkdownOpenDocument's own doc comment) -- the whole rejoined source is dispatched at once, rather than one action per line, so the reducer's own mutateMarkdown helper stays a single, genuinely pure "replace the string, push an undo snapshot" step.
-  | { readonly type: 'SET_MARKDOWN_SOURCE'; readonly source: string }
   | { readonly type: 'APPEND_DIAGNOSTIC'; readonly diagnostic: Diagnostic }
   | { readonly type: 'DISMISS_DIAGNOSTIC'; readonly index: number }
   | { readonly type: 'CLEAR_DIAGNOSTICS' }

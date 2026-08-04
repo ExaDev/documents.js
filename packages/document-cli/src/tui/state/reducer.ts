@@ -3,6 +3,7 @@ import {
   decodeMarkdownText,
   encodeMarkdownText,
   openDocx,
+  openMarkdown,
   openOdg,
   openOdp,
   openOds,
@@ -13,6 +14,10 @@ import {
   type DocxRun,
   type DocxTable,
   type DocxTableCell,
+  type MarkdownParagraph,
+  type MarkdownRun,
+  type MarkdownTable,
+  type MarkdownTableCell,
   type OdpShape,
   type OdsSheet,
   type OdtParagraph,
@@ -34,7 +39,7 @@ import {
 } from 'documents.js';
 import { createNewDocument } from '../format/open-document.js';
 import type { Action } from './actions.js';
-import { rootScreenForFormat, type AppState, type DocxOpenDocument, type EditableOpenDocument, type MarkdownOpenDocument, type OdgOpenDocument, type OdpOpenDocument, type OdsOpenDocument, type OdtOpenDocument, type OpenDocument, type OverlayName, type OverlayState, type PdfOpenDocument, type PptxOpenDocument, type StatusMessage } from './types.js';
+import { rootScreenForFormat, type AppState, type DocxOpenDocument, type EditableOpenDocument, type MarkdownOpenDocument, type OdgOpenDocument, type OdpOpenDocument, type OdsOpenDocument, type OdtOpenDocument, type OpenDocument, type OverlayName, type OverlayState, type PdfOpenDocument, type PptxOpenDocument, type StatusMessage, type WritableOpenDocument } from './types.js';
 
 // THIS REDUCER IS DELIBERATELY IMPURE FOR EVERY MUTATING ACTION, AND THAT IS THE DESIGN, NOT AN OVERSIGHT.
 //
@@ -106,7 +111,7 @@ function documentWithPath(doc: OpenDocument, path: string): OpenDocument {
     case 'odb':
       return { format: 'odb', tables: doc.tables, forms: doc.forms, reports: doc.reports, path };
     case 'markdown':
-      return { format: 'markdown', source: doc.source, path };
+      return { format: 'markdown', editor: doc.editor, originalText: doc.originalText, path };
     case 'xlsx':
       return { format: 'xlsx', layout: doc.layout, bytes: doc.bytes, path };
   }
@@ -133,15 +138,20 @@ function reopenEditable(doc: EditableOpenDocument, bytes: Uint8Array<ArrayBuffer
   }
 }
 
-// Snapshot BEFORE the mutation runs, so the pushed entry is the state to come back to, then run the mutation against the live tree and hand React a fresh outer object.
-function mutate(state: AppState, doc: EditableOpenDocument, apply: () => void): AppState {
-  const snapshot = doc.editor.toBytes();
+// markdown's own MarkdownEditor has no toBytes() at all (bytes are incidental to markdown -- see MarkdownOpenDocument's own doc comment): its undo snapshot is the encoded text `toMarkdownText()` produces right now, the same byte<->text boundary every other markdown-touching call site in this codebase (openDocumentAtPath, saveDocumentTo, exportToPdf) already uses.
+function toUndoSnapshot(doc: WritableOpenDocument): Uint8Array<ArrayBuffer> {
+  return doc.format === 'markdown' ? encodeMarkdownText(doc.editor.toMarkdownText()) : doc.editor.toBytes();
+}
+
+// Snapshot BEFORE the mutation runs, so the pushed entry is the state to come back to, then run the mutation against the live tree and hand React a fresh outer object. Takes any WritableOpenDocument, not just EditableOpenDocument, so markdown's own live-view MarkdownEditor shares this exact undo/mutate machinery with zero format-specific reducer code of its own -- see toUndoSnapshot above for the one place the two byte<->text boundaries genuinely differ.
+function mutate(state: AppState, doc: WritableOpenDocument, apply: () => void): AppState {
+  const snapshot = toUndoSnapshot(doc);
   apply();
   return { ...state, hasUnsavedChanges: true, undoStack: pushSnapshot(state.undoStack, snapshot) };
 }
 
 // mutate()'s own counterpart for an `apply` that can genuinely fail on bad caller input rather than only on a routing bug -- a merge rectangle that overruns a table/sheet's own bounds throws a real Error from documents.js's own mergeCells primitives (OdsSheet.mergeCells, DocxTable.mergeCells, OdtTable.mergeCells, this file's own mergePptxTableCells), and the UI screens that dispatch these actions bound their own row/column pickers against the target's current dimensions but cannot guarantee every dispatch stays in range (e.g. a screen driven by a scripted/test caller, or a race with a concurrent edit). Reports the thrown message as a warning status instead of letting it escape the reducer and crash the app. If `apply` throws after partially mutating the live tree (e.g. a docx table's own row-by-row mergeCells loop merging row 0 successfully before finding row 1 out of range), that partial mutation genuinely already happened -- this only prevents the crash and the false "nothing changed" undo-stack/hasUnsavedChanges bookkeeping, it does not roll the live tree back, matching the "the reducer is deliberately impure" caveat at the top of this file.
-function mutateGuarded(state: AppState, doc: EditableOpenDocument, apply: () => void): AppState {
+function mutateGuarded(state: AppState, doc: WritableOpenDocument, apply: () => void): AppState {
   try {
     return mutate(state, doc, apply);
   } catch (error) {
@@ -192,27 +202,26 @@ function mergePptxTableCells(table: PptxTable, startRow: number, startColumn: nu
   }
 }
 
-// Markdown's own counterpart to `mutate` above -- but genuinely pure, unlike every other mutating case in this reducer. A markdown document is a plain string value, not a live view over a mutable XmlElement tree, so there is nothing to `apply()` in place: this just returns a new outer state with `.source` replaced and the PREVIOUS source pushed onto the same undoStack the live-editor formats already share, encoded through the identical byte<->text boundary (`encodeMarkdownText`/`decodeMarkdownText`) markdownToPdf/markdownToDocx/markdownToOdt already use -- so UNDO's own restore step needs no markdown-specific stack at all, just a markdown-specific decode of whichever snapshot it pops.
-function mutateMarkdown(state: AppState, doc: MarkdownOpenDocument, source: string): AppState {
-  const snapshot = encodeMarkdownText(doc.source);
-  return {
-    ...state,
-    openDocument: { ...doc, source },
-    hasUnsavedChanges: true,
-    undoStack: pushSnapshot(state.undoStack, snapshot),
-  };
-}
-
 function wrongDocument(state: AppState, expected: string): AppState {
   const actual = state.openDocument === undefined ? 'no document' : state.openDocument.format;
   return withStatus(state, 'warning', `That action needs ${expected}; the open document is ${actual}`);
 }
 
-type WordprocessingOpenDocument = DocxOpenDocument | OdtOpenDocument;
+// The genuinely format-agnostic paragraph/run/table actions (APPEND_PARAGRAPH, SET_RUN_TEXT, TOGGLE_RUN_BOLD/ITALIC, APPEND_RUN, APPEND_TABLE, SET_TABLE_CELL_TEXT, ADD_LIST_ITEM's own non-odt branch) resolve through this widened union -- documents.js's MarkdownParagraph/MarkdownRun/MarkdownTable share exactly the subset of DocxParagraph/DocxRun/DocxTable's own shape those actions touch (text/bold/italic, appendRun/appendParagraph/appendTable). `styledWordprocessingDocument` below is the narrower, pre-markdown version of this same idea, kept for the actions that touch a field only docx/odt runs/paragraphs actually have (underline, colour, font family/size, alignment).
+type WordprocessingOpenDocument = DocxOpenDocument | OdtOpenDocument | MarkdownOpenDocument;
 type PresentationOpenDocument = PptxOpenDocument | OdpOpenDocument;
 type ShapeHostOpenDocument = PresentationOpenDocument | OdgOpenDocument;
 
 function wordprocessingDocument(state: AppState): WordprocessingOpenDocument | undefined {
+  const doc = state.openDocument;
+  if (doc === undefined) {
+    return undefined;
+  }
+  return doc.format === 'docx' || doc.format === 'odt' || doc.format === 'markdown' ? doc : undefined;
+}
+
+// The narrow, docx/odt-only counterpart to wordprocessingDocument above -- for actions that need a real per-run/per-paragraph styling field (underline, colour, font family/size, alignment) MarkdownRun/MarkdownParagraph simply do not carry, rather than a markdown branch that would have nothing to do.
+function styledWordprocessingDocument(state: AppState): DocxOpenDocument | OdtOpenDocument | undefined {
   const doc = state.openDocument;
   if (doc === undefined) {
     return undefined;
@@ -316,20 +325,17 @@ function vectorHostDocument(state: AppState): VectorHostOpenDocument | undefined
   return doc.format === 'odg' || doc.format === 'odp' ? doc : undefined;
 }
 
-function markdownDocument(state: AppState): MarkdownOpenDocument | undefined {
-  const doc = state.openDocument;
-  if (doc === undefined) {
-    return undefined;
-  }
-  return doc.format === 'markdown' ? doc : undefined;
-}
-
-function paragraphAt(doc: WordprocessingOpenDocument, blockIndex: number): DocxParagraph | OdtParagraph | undefined {
+function paragraphAt(doc: WordprocessingOpenDocument, blockIndex: number): DocxParagraph | OdtParagraph | MarkdownParagraph | undefined {
   return doc.editor.paragraphs()[blockIndex];
 }
 
-function tableAt(doc: WordprocessingOpenDocument, tableIndex: number): DocxTable | OdtTable | undefined {
+function tableAt(doc: WordprocessingOpenDocument, tableIndex: number): DocxTable | OdtTable | MarkdownTable | undefined {
   return doc.editor.tables()[tableIndex];
+}
+
+// The universal cell lookup every table kind supports, used in place of DocxTable/OdtTable's own `.cell(row, column)` shortcut -- MarkdownTable has no such shortcut (only `rows()`/`appendRow()`/`remove()`), so SET_TABLE_CELL_TEXT resolves a cell through the one traversal all three genuinely share.
+function tableCellAt(table: DocxTable | OdtTable | MarkdownTable, row: number, column: number): DocxTableCell | OdtTableCell | MarkdownTableCell | undefined {
+  return table.rows()[row]?.cells()[column];
 }
 
 function shapeAt(doc: ShapeHostOpenDocument, containerIndex: number, shapeIndex: number): PptxShape | OdpShape | undefined {
@@ -343,12 +349,31 @@ function sheetAt(doc: OdsOpenDocument, sheetIndex: number): OdsSheet | undefined
   return doc.editor.sheets()[sheetIndex];
 }
 
-function withRun(state: AppState, blockIndex: number, runIndex: number, apply: (run: DocxRun | OdtRun) => void): AppState {
+function withRun(state: AppState, blockIndex: number, runIndex: number, apply: (run: DocxRun | OdtRun | MarkdownRun) => void): AppState {
   const doc = wordprocessingDocument(state);
+  if (doc === undefined) {
+    return wrongDocument(state, 'a docx, odt or markdown document');
+  }
+  const paragraph = paragraphAt(doc, blockIndex);
+  if (paragraph === undefined) {
+    return withStatus(state, 'warning', `There is no paragraph at index ${blockIndex}`);
+  }
+  const run = paragraph.runs()[runIndex];
+  if (run === undefined) {
+    return withStatus(state, 'warning', `Paragraph ${blockIndex} has no run at index ${runIndex}`);
+  }
+  return mutate(state, doc, () => {
+    apply(run);
+  });
+}
+
+// withRun's narrow, docx/odt-only counterpart -- for TOGGLE_RUN_UNDERLINE/SET_RUN_COLOR/SET_RUN_FONT_FAMILY/SET_RUN_FONT_SIZE, none of which MarkdownRun has a field for at all (it carries bold/italic/strike/hyperlink/code, not underline/colour/fontFamily/sizePt).
+function withStyledRun(state: AppState, blockIndex: number, runIndex: number, apply: (run: DocxRun | OdtRun) => void): AppState {
+  const doc = styledWordprocessingDocument(state);
   if (doc === undefined) {
     return wrongDocument(state, 'a docx or odt document');
   }
-  const paragraph = paragraphAt(doc, blockIndex);
+  const paragraph = doc.editor.paragraphs()[blockIndex];
   if (paragraph === undefined) {
     return withStatus(state, 'warning', `There is no paragraph at index ${blockIndex}`);
   }
@@ -420,7 +445,7 @@ function setTextContainerText(container: TextContainerLike, text: string): void 
   }
 }
 
-function setCellText(cell: DocxTableCell | OdtTableCell, text: string): void {
+function setCellText(cell: DocxTableCell | OdtTableCell | MarkdownTableCell, text: string): void {
   setTextContainerText(cell, text);
 }
 
@@ -548,22 +573,28 @@ export function appReducer(state: AppState, action: Action): AppState {
     case 'SET_SELECTION':
       return { ...state, selection: { ...state.selection, [action.key]: action.index } };
 
+    // `alignment` is set through the shared body.appendParagraph call for docx/odt, but MarkdownParagraphInit has no alignment field at all (CommonMark/GFM has no per-paragraph alignment construct) -- so a markdown document drops it here rather than the wordprocessing union call silently disagreeing about which ParagraphInit shape it is.
     case 'APPEND_PARAGRAPH': {
       const doc = wordprocessingDocument(state);
       if (doc === undefined) {
-        return wrongDocument(state, 'a docx or odt document');
+        return wrongDocument(state, 'a docx, odt or markdown document');
       }
       return mutate(state, doc, () => {
+        if (doc.format === 'markdown') {
+          doc.editor.body.appendParagraph({ text: action.text, styleId: action.styleId });
+          return;
+        }
         doc.editor.body.appendParagraph({ text: action.text, styleId: action.styleId, alignment: action.alignment });
       });
     }
 
+    // Narrowed to docx/odt specifically (not the wider wordprocessingDocument union): MarkdownParagraph has no `.alignment` at all.
     case 'SET_PARAGRAPH_ALIGNMENT': {
-      const doc = wordprocessingDocument(state);
+      const doc = styledWordprocessingDocument(state);
       if (doc === undefined) {
         return wrongDocument(state, 'a docx or odt document');
       }
-      const paragraph = paragraphAt(doc, action.blockIndex);
+      const paragraph = doc.editor.paragraphs()[action.blockIndex];
       if (paragraph === undefined) {
         return withStatus(state, 'warning', `There is no paragraph at index ${action.blockIndex}`);
       }
@@ -575,7 +606,7 @@ export function appReducer(state: AppState, action: Action): AppState {
     case 'APPEND_RUN': {
       const doc = wordprocessingDocument(state);
       if (doc === undefined) {
-        return wrongDocument(state, 'a docx or odt document');
+        return wrongDocument(state, 'a docx, odt or markdown document');
       }
       const paragraph = paragraphAt(doc, action.blockIndex);
       if (paragraph === undefined) {
@@ -601,47 +632,63 @@ export function appReducer(state: AppState, action: Action): AppState {
         run.italic = !run.italic;
       });
 
+    // Narrowed to docx/odt (withStyledRun, not withRun): MarkdownRun has no underline field at all.
     case 'TOGGLE_RUN_UNDERLINE':
-      return withRun(state, action.blockIndex, action.runIndex, (run) => {
+      return withStyledRun(state, action.blockIndex, action.runIndex, (run) => {
         run.underline = !run.underline;
       });
 
+    // Narrowed to docx/odt: MarkdownRun has no colour field at all.
     case 'SET_RUN_COLOR':
-      return withRun(state, action.blockIndex, action.runIndex, (run) => {
+      return withStyledRun(state, action.blockIndex, action.runIndex, (run) => {
         run.color = action.color;
       });
 
+    // Narrowed to docx/odt: MarkdownRun has no font-family field at all.
     case 'SET_RUN_FONT_FAMILY':
-      return withRun(state, action.blockIndex, action.runIndex, (run) => {
+      return withStyledRun(state, action.blockIndex, action.runIndex, (run) => {
         run.fontFamily = action.fontFamily;
       });
 
+    // Narrowed to docx/odt: MarkdownRun has no font-size field at all.
     case 'SET_RUN_FONT_SIZE':
-      return withRun(state, action.blockIndex, action.runIndex, (run) => {
+      return withStyledRun(state, action.blockIndex, action.runIndex, (run) => {
         run.sizePt = action.sizePt;
       });
 
+    // MarkdownTable has no mergeCells at all -- GFM tables have no cell-merge concept -- so a merge requested against a freshly-created markdown table still creates the (unmerged) table and reports why the merge itself didn't happen, rather than either silently dropping the merge or refusing to create the table at all.
     case 'APPEND_TABLE': {
       const doc = wordprocessingDocument(state);
       if (doc === undefined) {
-        return wrongDocument(state, 'a docx or odt document');
+        return wrongDocument(state, 'a docx, odt or markdown document');
       }
-      return mutateGuarded(state, doc, () => {
+      let mergeUnsupported = false;
+      const nextState = mutateGuarded(state, doc, () => {
         const table = doc.editor.body.appendTable({ rows: action.rows, columns: action.columns });
-        if (action.merge !== undefined) {
-          table.mergeCells(action.merge.startRow, action.merge.startColumn, action.merge.rowSpan, action.merge.colSpan);
+        if (action.merge === undefined) {
+          return;
         }
+        if (!('mergeCells' in table)) {
+          mergeUnsupported = true;
+          return;
+        }
+        table.mergeCells(action.merge.startRow, action.merge.startColumn, action.merge.rowSpan, action.merge.colSpan);
       });
+      return mergeUnsupported ? withStatus(nextState, 'warning', 'Markdown tables do not support merged cells -- the table was created without merging') : nextState;
     }
 
+    // MarkdownTable has no mergeCells at all (see APPEND_TABLE above) -- resolved through the wide wordprocessingDocument union so the table lookup itself stays generic, with the same in-narrowing decline for a markdown table specifically.
     case 'MERGE_TABLE_CELLS': {
       const doc = wordprocessingDocument(state);
       if (doc === undefined) {
-        return wrongDocument(state, 'a docx or odt document');
+        return wrongDocument(state, 'a docx, odt or markdown document');
       }
       const table = tableAt(doc, action.tableIndex);
       if (table === undefined) {
         return withStatus(state, 'warning', `There is no table at index ${action.tableIndex}`);
+      }
+      if (!('mergeCells' in table)) {
+        return withStatus(state, 'warning', 'Markdown tables do not support merged cells');
       }
       return mutateGuarded(state, doc, () => {
         table.mergeCells(action.startRow, action.startColumn, action.rowSpan, action.colSpan);
@@ -651,22 +698,26 @@ export function appReducer(state: AppState, action: Action): AppState {
     case 'SET_TABLE_CELL_TEXT': {
       const doc = wordprocessingDocument(state);
       if (doc === undefined) {
-        return wrongDocument(state, 'a docx or odt document');
+        return wrongDocument(state, 'a docx, odt or markdown document');
       }
       const table = tableAt(doc, action.tableIndex);
       if (table === undefined) {
         return withStatus(state, 'warning', `There is no table at index ${action.tableIndex}`);
       }
+      const cell = tableCellAt(table, action.row, action.column);
+      if (cell === undefined) {
+        return withStatus(state, 'warning', `There is no cell at row ${action.row}, column ${action.column} of table ${action.tableIndex}`);
+      }
       return mutate(state, doc, () => {
-        setCellText(table.cell(action.row, action.column), action.text);
+        setCellText(cell, action.text);
       });
     }
 
-    // ODF models a list as a real `text:list`/`text:list-item` tree, OOXML as a flat per-paragraph numId/level membership -- so the two write paths genuinely differ rather than sharing one accessor. For odt the anchor block index selects which `text:list` to extend; for docx it selects the paragraph whose list membership a newly appended paragraph should copy.
+    // ODF models a list as a real `text:list`/`text:list-item` tree, OOXML and markdown both as a flat per-paragraph numId/level membership -- so odt's own write path genuinely differs from docx/markdown's shared one. For odt the anchor block index selects which `text:list` to extend; for docx/markdown it selects the paragraph whose list membership a newly appended paragraph should copy.
     case 'ADD_LIST_ITEM': {
       const doc = wordprocessingDocument(state);
       if (doc === undefined) {
-        return wrongDocument(state, 'a docx or odt document');
+        return wrongDocument(state, 'a docx, odt or markdown document');
       }
       if (doc.format === 'odt') {
         const list = doc.editor.lists()[action.blockIndex];
@@ -695,7 +746,7 @@ export function appReducer(state: AppState, action: Action): AppState {
     case 'SET_LIST_ITEM_TEXT': {
       const doc = wordprocessingDocument(state);
       if (doc === undefined) {
-        return wrongDocument(state, 'a docx or odt document');
+        return wrongDocument(state, 'a docx, odt or markdown document');
       }
       if (doc.format !== 'odt') {
         return wrongDocument(state, 'an odt document (lists are an odt-only concept)');
@@ -717,7 +768,7 @@ export function appReducer(state: AppState, action: Action): AppState {
     case 'ADD_LIST': {
       const doc = wordprocessingDocument(state);
       if (doc === undefined) {
-        return wrongDocument(state, 'a docx or odt document');
+        return wrongDocument(state, 'a docx, odt or markdown document');
       }
       if (doc.format !== 'odt') {
         return wrongDocument(state, 'an odt document (lists are an odt-only concept)');
@@ -727,13 +778,13 @@ export function appReducer(state: AppState, action: Action): AppState {
       });
     }
 
-    // Both DocxParagraph.insertImageAfter and OdtParagraph.insertImageAfter accept the identical ImageInit shape (documents.js's own edit/{docx,odt}/image.ts), so this resolves through the shared wordprocessingDocument/paragraphAt narrowing exactly as APPEND_PARAGRAPH/APPEND_RUN already do, rather than branching per format.
+    // Both DocxParagraph.insertImageAfter and OdtParagraph.insertImageAfter accept the identical ImageInit shape (documents.js's own edit/{docx,odt}/image.ts), so this resolves through the shared styledWordprocessingDocument narrowing exactly as APPEND_PARAGRAPH/APPEND_RUN's own wordprocessingDocument narrowing does -- deliberately excluding markdown, since MarkdownParagraph has no insertImageAfter at all.
     case 'INSERT_PARAGRAPH_IMAGE': {
-      const doc = wordprocessingDocument(state);
+      const doc = styledWordprocessingDocument(state);
       if (doc === undefined) {
         return wrongDocument(state, 'a docx or odt document');
       }
-      const paragraph = paragraphAt(doc, action.blockIndex);
+      const paragraph = doc.editor.paragraphs()[action.blockIndex];
       if (paragraph === undefined) {
         return withStatus(state, 'warning', `There is no paragraph at index ${action.blockIndex}`);
       }
@@ -1228,14 +1279,6 @@ export function appReducer(state: AppState, action: Action): AppState {
         item.heightPt = action.heightPt;
       });
 
-    case 'SET_MARKDOWN_SOURCE': {
-      const doc = markdownDocument(state);
-      if (doc === undefined) {
-        return wrongDocument(state, 'a markdown document');
-      }
-      return mutateMarkdown(state, doc, action.source);
-    }
-
     case 'APPEND_DIAGNOSTIC':
       return { ...state, diagnostics: [...state.diagnostics, action.diagnostic] };
 
@@ -1269,7 +1312,7 @@ export function appReducer(state: AppState, action: Action): AppState {
       if (snapshot === undefined) {
         return withStatus(state, 'info', 'There is nothing to undo');
       }
-      const restored: OpenDocument = doc.format === 'markdown' ? { ...doc, source: decodeMarkdownText(snapshot) } : reopenEditable(doc, snapshot);
+      const restored: OpenDocument = doc.format === 'markdown' ? { ...doc, editor: openMarkdown(decodeMarkdownText(snapshot)) } : reopenEditable(doc, snapshot);
       return withStatus(
         {
           ...state,

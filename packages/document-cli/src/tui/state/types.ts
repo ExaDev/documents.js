@@ -1,4 +1,4 @@
-import type { DocxEditor, HsqldbTable, LayoutDocument, OdbForm, OdbReport, OdgEditor, OdpEditor, OdsEditor, OdtEditor, PdfEditor, PptxEditor } from 'documents.js';
+import type { DocxEditor, HsqldbTable, LayoutDocument, MarkdownEditor, OdbForm, OdbReport, OdgEditor, OdpEditor, OdsEditor, OdtEditor, PdfEditor, PptxEditor } from 'documents.js';
 
 // RULE FOR EVERY SCREEN BUILT ON THIS STATE: documents.js's editor objects (DocxRun, OdtParagraph, PptxShape, OdsCell, OdgBoxVector, ...) are LIVE VIEWS over the mutable XML tree inside the decoded package -- `run.bold = true` edits that tree in place and produces no new object reference anywhere. Call the accessors (`editor.paragraphs()`, `slide.shapes()`, `sheet.cell(r, c)`) FRESH on every render and never cache their results in useState/useMemo: any mutation, from any screen, silently invalidates an array captured on an earlier render, and nothing in the type system or in React will tell you. `AppState.hasUnsavedChanges` flipping (and the new outer state object the reducer returns with it) is the ONLY re-render signal a mutation produces -- see the deliberate-impurity note in reducer.ts.
 
@@ -32,8 +32,7 @@ export type Screen =
   | { readonly kind: 'odbReportList' }
   | { readonly kind: 'odbReportDetail'; readonly reportName: string }
   | { readonly kind: 'odbReportRender'; readonly reportName: string }
-  | { readonly kind: 'markdownLineList' }
-  | { readonly kind: 'markdownLineEditor'; readonly lineIndex: number }
+  | { readonly kind: 'viewSource' }
   | { readonly kind: 'pdfPageList' }
   | { readonly kind: 'pdfPageItems'; readonly pageIndex: number }
   | { readonly kind: 'pdfItemDetail'; readonly pageIndex: number; readonly itemIndex: number }
@@ -90,11 +89,12 @@ export interface OdbOpenDocument {
   readonly path: string;
 }
 
-// Markdown carries no live-view editor either -- there is no `MarkdownEditor` the way there is a `DocxEditor`/`OdtEditor`, since documents.js's own markdown support is a thin read/write pair over a plain string, not an XmlElement tree to hold a mutable reference into (see documents.js's own README, "src/markdown/" architecture entry). Unlike `OdbOpenDocument`/`PdfOpenDocument`, though, a markdown document IS writable: `.source` is a real value this TUI edits and saves back to disk verbatim as UTF-8 text. `path` is always known because there is no "create a new markdown document" flow (documents.js has no createMarkdown() to call) -- a MarkdownOpenDocument only ever comes from opening a real .md/.markdown file.
+// Markdown now carries a genuine live-view editor: documents.js's `MarkdownEditor` (openMarkdown/createMarkdownEditor) mutates a real, mutable `ContentDocument` in memory -- `paragraph.appendRun({ text })` edits that document in place, the same live-view contract every other editor here follows, even though there is no `XmlElement` tree underneath it the way there is for docx/odt (see documents.js's own README, "src/edit/markdown/" architecture entry, and `MarkdownEditor.toMarkdownText()`, which re-serialises the whole document fresh on every call rather than exposing a `toBytes()`). `originalText` is the literal text this document was opened/saved with, kept ONLY for the read-only `:view-source` screen -- it is never mutated and never written back directly, so it stays decoupled from whatever `editor` currently holds. `path` is optional, matching every other editable format (`undefined` for a document created fresh with no path yet) -- though the TUI does not yet wire a "new markdown document" flow (`EditableFormat`/`CREATE_DOCUMENT` do not include markdown), so in practice a `MarkdownOpenDocument` only ever comes from opening a real .md/.markdown file, with `originalText` always set.
 export interface MarkdownOpenDocument {
   readonly format: 'markdown';
-  readonly source: string;
-  readonly path: string;
+  readonly editor: MarkdownEditor;
+  readonly originalText: string | undefined;
+  readonly path: string | undefined;
 }
 
 // A PDF opens through documents.js's own live-view `PdfEditor` (openPdf/createPdf) -- `layout` is `editor.toLayoutDocument()`, the exact same `LayoutDocument` object the editor mutates in place, kept alongside so every existing reader of `doc.layout` (the pdf/xlsx page-list/page-items/item-detail screen family, shared with XlsxOpenDocument below) keeps working unmodified: a mutation through `editor` is a mutation of the identical object `layout` already points to, not a separate snapshot that could drift out of sync. `path` is `undefined` for a freshly created blank PDF (`createPdf()`), matching every other EditableOpenDocument variant.
@@ -116,7 +116,7 @@ export interface XlsxOpenDocument {
 // The seven formats that have a live-view editor, and therefore support every mutating action, `editor.toBytes()` saving, undo snapshots. `odb`/`xlsx` are read-only sources; `pdf` joined this union once documents.js gained a real live-view `PdfEditor` -- see PdfOpenDocument's own doc comment. `pdf` is deliberately excluded from exportToPdf's own conversion set even though it is editable now: there is no docxToPdf-equivalent "convert a PDF to a PDF" function, and there does not need to be one -- editing and saving a PDF in place needs no conversion step at all.
 export type EditableOpenDocument = DocxOpenDocument | PptxOpenDocument | OdtOpenDocument | OdpOpenDocument | OdsOpenDocument | OdgOpenDocument | PdfOpenDocument;
 
-// Every format that can be written back to disk at all: the seven live-view-editor formats above, plus markdown through its own plain `.source` string. This is a strictly broader question than "does this have a `.editor` object" -- every EditableOpenDocument call site (`mutate`/`reopenEditable` in reducer.ts, the `.editor.toBytes()` branches in exportToPdf/saveDocumentTo) assumes `.editor` exists, which is exactly why markdown is NOT folded into EditableOpenDocument itself despite also being writable. Screens that only need "can this be saved, and what extension does it get" (file-picker.tsx, save-as-prompt.tsx) should check WritableOpenDocument/isWritableDocument instead of EditableOpenDocument/isEditableDocument.
+// Every format that can be written back to disk at all: the seven live-view-editor formats above, plus markdown through its own live-view MarkdownEditor. This is a strictly broader question than "does this have a `.editor` object" -- markdown genuinely does have one now, but `MarkdownEditor` has no `toBytes()` (it re-serialises the whole document fresh via `toMarkdownText()` instead, see MarkdownOpenDocument's own doc comment), which is exactly why markdown is NOT folded into EditableOpenDocument itself: every EditableOpenDocument call site (`reopenEditable` in reducer.ts, the `.editor.toBytes()` branches in exportToPdf/saveDocumentTo) assumes `.editor.toBytes()` exists verbatim. `mutate`/`mutateGuarded` (reducer.ts) DO take the wider `WritableOpenDocument`, via a small `toUndoSnapshot` helper that branches on the one place the two byte<->text boundaries genuinely differ. Screens that only need "can this be saved, and what extension does it get" (file-picker.tsx, save-as-prompt.tsx) should check WritableOpenDocument/isWritableDocument instead of EditableOpenDocument/isEditableDocument.
 export type WritableOpenDocument = EditableOpenDocument | MarkdownOpenDocument;
 
 export type OpenDocument = WritableOpenDocument | OdbOpenDocument | XlsxOpenDocument;
@@ -195,7 +195,7 @@ export function selectionKeyFor(screen: Screen): string {
     case 'pdfPageList':
     case 'exportOptions':
     case 'saveAsPrompt':
-    case 'markdownLineList':
+    case 'viewSource':
     case 'metadata':
       return screen.kind;
     case 'filePicker':
@@ -234,8 +234,6 @@ export function selectionKeyFor(screen: Screen): string {
       return `odbReportDetail:${screen.reportName}`;
     case 'odbReportRender':
       return `odbReportRender:${screen.reportName}`;
-    case 'markdownLineEditor':
-      return `markdownLineEditor:${screen.lineIndex}`;
   }
 }
 
@@ -268,6 +266,7 @@ export function rootScreenForFormat(format: OpenDocumentFormat): Screen {
   switch (format) {
     case 'docx':
     case 'odt':
+    case 'markdown':
       return { kind: 'bodyList' };
     case 'pptx':
     case 'odp':
@@ -278,8 +277,6 @@ export function rootScreenForFormat(format: OpenDocumentFormat): Screen {
       return { kind: 'pageList' };
     case 'odb':
       return { kind: 'odbTableList' };
-    case 'markdown':
-      return { kind: 'markdownLineList' };
     case 'pdf':
     case 'xlsx':
       return { kind: 'pdfPageList' };
