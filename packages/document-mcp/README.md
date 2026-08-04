@@ -29,6 +29,8 @@ graph TD
     documents --> mcp
     pdfcodec --> mcp
     documents --> cli
+    odf --> cli
+    pdfcodec --> cli
 
     click schema "https://github.com/ExaDev/document-schema.js" "document-schema.js"
     click ooxml "https://github.com/ExaDev/ooxml.js" "ooxml.js"
