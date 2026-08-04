@@ -1,3 +1,10 @@
+# [1.12.0](https://github.com/ExaDev/document-cli/compare/v1.11.18...v1.12.0) (2026-08-04)
+
+
+### Features
+
+* infer ODF/OOXML template and macro-enabled extensions as their base format ([236abb5](https://github.com/ExaDev/document-cli/commit/236abb51f3dad4129a9f32ad8dc4564eb398b22c))
+
 ## [1.11.18](https://github.com/ExaDev/document-cli/compare/v1.11.17...v1.11.18) (2026-08-04)
 
 ## [1.11.17](https://github.com/ExaDev/document-cli/compare/v1.11.16...v1.11.17) (2026-08-04)
