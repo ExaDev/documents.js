@@ -253,6 +253,18 @@ export function ParagraphFamilyBodyList(props: { readonly adapter: ParagraphFami
     { isActive: !anyOverlayOpen(state) && !wizardOpen && !formulaFlowOpen },
   );
 
+  // 'L' creates a brand-new, empty odt list (OdtBody.appendList()) and drills straight into it -- capital, matching 'T' beside it, and gated to the odt adapter exactly as the 'm' formula handler below is: docx has no equivalent "create a list from nothing" action (see actions.ts's own ADD_LIST doc comment). The new list's own index is `adapter.lists().length` computed BEFORE the dispatch runs, the same "impure reducer, capture the index first" convention `onAppend` below already uses for a freshly-appended paragraph.
+  useInput(
+    (input) => {
+      if (input === 'L' && adapter.lists !== undefined) {
+        const newIndex = adapter.lists().length;
+        dispatch({ type: 'ADD_LIST' });
+        dispatch({ type: 'PUSH_SCREEN', screen: { kind: 'listEditor', blockIndex: newIndex } });
+      }
+    },
+    { isActive: !anyOverlayOpen(state) && !wizardOpen && !formulaFlowOpen },
+  );
+
   // 'm' opens the formula flow -- odt only. docx's own formula insertion is paragraph-scoped (see paragraph-detail.tsx's own 'm' handler there), so this body-list screen exposes the key only when the open document is odt; a docx document simply has no body-level formula action to bind it to.
   useInput(
     (input) => {
@@ -456,7 +468,10 @@ export function ParagraphFamilyBodyList(props: { readonly adapter: ParagraphFami
           }}
         />
       ) : undefined}
-      <Text dimColor>Enter to open, a to append a paragraph, T to append a table{adapter.formatLabel === 'odt' ? ', m to insert a formula' : ''}, Esc back</Text>
+      <Text dimColor>
+        Enter to open, a to append a paragraph, T to append a table{adapter.lists !== undefined ? ', L to add a list' : ''}
+        {adapter.formatLabel === 'odt' ? ', m to insert a formula' : ''}, Esc back
+      </Text>
     </Box>
   );
 }
