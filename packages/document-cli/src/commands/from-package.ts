@@ -1,21 +1,5 @@
 import { type Command } from 'commander';
-import {
-  type DocumentFormat,
-  type DocumentPackage,
-  UnrecognizedDocumentSchemaError,
-  buildDocxPackage,
-  buildMarkdownText,
-  buildOdgPackage,
-  buildOdpPackage,
-  buildOdsPackage,
-  buildOdtPackage,
-  buildPptxPackage,
-  documentFromJson,
-  encodeMarkdownText,
-  encodePackage,
-  writePdf,
-} from 'documents.js';
-import { encodePackage as encodeOdfPackage } from 'odf.js';
+import { UnrecognizedDocumentSchemaError, buildDocumentBytes, documentFromJson } from 'documents.js';
 import { createRuntimeSignal } from '../runtime/abort';
 import { createDiagnosticReporter } from '../runtime/diagnostics';
 import { EXIT_INPUT_ERROR, EXIT_SUCCESS, EXIT_USAGE_ERROR, mapErrorToExit } from '../runtime/exit-codes';
@@ -25,36 +9,6 @@ import { addJsonOption, addOutOption, addQuietOption, addTimeoutOption, addVerbo
 
 interface FromPackageCliOptions extends ConversionCliFlags {
   readonly to?: string;
-}
-
-// Every target this command can build a DocumentPackage into, and how: 'pdf' writes the package's own LayoutDocument half directly (no font registry, no positioned formulas -- neither survives the JSON round trip, since both are side channels a DocumentPackage never carries, so a formula renders as nothing and an embedded font falls back to the standard 14 or a vendored substitute; see the documents.js README's own DocumentPackage gotcha), everything else builds a fresh package from the ContentDocument half through the identical buildXPackage function the matching pdf-to-X/bridge conversion already uses, then encodes it with that format's own codec (ooxml.js's for docx/pptx, odf.js's for odt/odp/ods/odg). 'xlsx' and 'odf' have no builder at all -- documents.js deliberately never re-exports ooxml.js's buildXlsxPackage (see the README's own Architecture note), and a formula document has no write path from ContentDocument to begin with -- so both are rejected outright rather than attempted.
-function buildBytesForTarget(pkg: DocumentPackage, target: DocumentFormat): Uint8Array {
-  if (target === 'pdf') {
-    if (pkg.layout === undefined) {
-      throw new Error("this DocumentPackage has no layout -- only a package dumped from a <format>-to-pdf or pdf-to-<format> conversion carries one; a bridge conversion's own dump (e.g. odt-to-docx) never does, so 'pdf' is not a reachable target from it");
-    }
-    return writePdf(pkg.layout);
-  }
-  switch (target) {
-    case 'docx':
-      return encodePackage(buildDocxPackage(pkg.content));
-    case 'pptx':
-      return encodePackage(buildPptxPackage(pkg.content));
-    case 'odt':
-      return encodeOdfPackage(buildOdtPackage(pkg.content));
-    case 'odp':
-      return encodeOdfPackage(buildOdpPackage(pkg.content));
-    case 'ods':
-      return encodeOdfPackage(buildOdsPackage(pkg.content));
-    case 'odg':
-      return encodeOdfPackage(buildOdgPackage(pkg.content));
-    case 'markdown':
-      return encodeMarkdownText(buildMarkdownText(pkg.content));
-    case 'xlsx':
-      throw new Error("'xlsx' cannot be built from a DocumentPackage directly -- documents.js does not re-export a ContentDocument-to-xlsx builder; convert to 'ods' here, then run 'ods-to-xlsx' on the result instead");
-    case 'odf':
-      throw new Error("'odf' (a standalone formula document) cannot be built from a DocumentPackage -- there is no ContentDocument-to-odf builder");
-  }
 }
 
 async function runFromPackage(input: string, output: string | undefined, options: FromPackageCliOptions): Promise<number> {
@@ -92,7 +46,7 @@ async function runFromPackage(input: string, output: string | undefined, options
       return EXIT_USAGE_ERROR;
     }
 
-    const bytes = buildBytesForTarget(result.value, target.format);
+    const bytes = buildDocumentBytes(result.value, target.format);
     await writeOutput(resolvedOutput, bytes);
 
     const reporter = createDiagnosticReporter({ json: options.json, quiet: options.quiet, command });
