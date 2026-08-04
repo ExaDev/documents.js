@@ -434,6 +434,9 @@ export { createLocalDocumentConverter } from './convert/local';
 // --- A DocumentPackage (content + optional layout) -> any DocumentFormat's own bytes -- the reverse of what every ergonomic X-to-PDF/PDF-to-X conversion's own onDocument callback hands back. ---
 export { buildDocumentBytes } from './convert/from-package';
 
+// --- Raw package decode/encode, dispatched by DocumentFormat -- the format-aware counterpart to ooxml.js's/odf.js's own decodePackage/encodePackage, for a caller holding a format + bytes rather than already knowing which of the two underlying codecs applies. Covers docx/pptx/xlsx (ooxml.js's OPC container) and odt/odp/ods/odg/odf (odf.js's ODF container); markdown and pdf have no raw-package concept at all and throw UnsupportedPackageFormatError. ---
+export { decodeDocumentPackage, encodeDocumentPackage, UnsupportedPackageFormatError } from './package-codec';
+
 // --- Every DocumentFormat's own source-embedded font faces, dispatched by format -- the DocumentFormat-aware counterpart to extractSourceFonts/FontSourcePackage above, for a caller holding a format + bytes rather than an already-decoded Package. ---
 export { extractSourceFontsForFormat, UnsupportedFontSourceFormatError } from './convert/document-fonts';
 
