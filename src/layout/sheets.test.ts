@@ -617,6 +617,26 @@ describe('convertSpreadsheetToLayout: multiple sheets', () => {
 // Real MathML rather than a stub: layoutFormula is genuinely invoked here (loadMathFont/the STIX MATH table drive the box), so an assertion on the resulting box's own dimensions would be an assertion about that font, not about this module. What this module owns is WHERE the box lands and WHETHER it is emitted at all, which is what every test below checks.
 const MI_X: MathMlNode[] = [{ type: 'element', tag: 'mi', attributes: [], children: [{ type: 'text', value: 'x' }] }];
 
+// A genuinely STACKED formula (a fraction inside a square root): its total height is well over twice its base font size, the case the single-pass height/2 heuristic over-estimates badly for -- the two-pass fit exists to size it to the declared frame instead.
+const SQRT_FRAC: MathMlNode[] = [
+  {
+    type: 'element',
+    tag: 'msqrt',
+    attributes: [],
+    children: [
+      {
+        type: 'element',
+        tag: 'mfrac',
+        attributes: [],
+        children: [
+          { type: 'element', tag: 'mn', attributes: [], children: [{ type: 'text', value: '123' }] },
+          { type: 'element', tag: 'mn', attributes: [], children: [{ type: 'text', value: '456' }] },
+        ],
+      },
+    ],
+  },
+];
+
 function formulaObject(anchorRow: number, anchorColumn: number, offsetXPt: number, offsetYPt: number, overrides: Partial<ContentEmbeddedObject> = {}): ContentEmbeddedObject {
   return {
     objectKind: 'formula',
@@ -648,6 +668,20 @@ describe('convertSpreadsheetToLayout: cell-anchored embedded formulas', () => {
     expect(positioned!.xPt).toBeCloseTo(0 + 20 + 3, 6);
     // Row 2 starts two 10pt rows down from the grid top; y-down 20 + 4, flipped through the 800pt page against the box's own height.
     expect(positioned!.yPt).toBeCloseTo(800 - (0 + 20 + 4) - positioned!.box.heightPt, 6);
+  });
+
+  it('sizes a stacked formula to fit its declared frame in both dimensions, rather than overflowing it', () => {
+    // A fraction-inside-a-square-root has a total height well over twice its base font size, so the old height/2 heuristic over-estimates and the laid-out box overflows the frame. The frame carries a real width+height (the ODF draw:frame geometry readOds provides); a docx OMML equation has widthPt 0 and falls back to the height-only path, which this test does not exercise.
+    const stacked = formulaObject(0, 0, 0, 0, {
+      document: { kind: 'formula', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, formula: { mathml: SQRT_FRAC } },
+      frame: { xPt: 0, yPt: 0, widthPt: 60, heightPt: 30 },
+    });
+    const s = sheet([stringCell(0, 0, 'A')], { columns: COLUMNS_20, rows: ROWS_10, embeddedObjects: [stacked] });
+    const { formulas } = convertResult([s]);
+    expect(formulas).toHaveLength(1);
+    // The fit invariant: the laid-out box must sit within the frame's declared width AND height, whichever is the binding constraint.
+    expect(formulas[0]!.box.heightPt).toBeLessThanOrEqual(30);
+    expect(formulas[0]!.box.widthPt).toBeLessThanOrEqual(60);
   });
 
   it('widens the print range to cover an anchor cell beyond the populated-cell extent, so the formula still renders', () => {
