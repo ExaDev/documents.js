@@ -1,3 +1,11 @@
+# [1.5.0](https://github.com/ExaDev/document-cli/compare/v1.4.0...v1.5.0) (2026-08-04)
+
+
+### Features
+
+* add a read-only metadata screen to the TUI ([0bbb80b](https://github.com/ExaDev/document-cli/commit/0bbb80bfd5c51d910c2d0fc1125af4a9848664a2))
+* add metadata and set-metadata commands ([d85312a](https://github.com/ExaDev/document-cli/commit/d85312af70745cee96fd65cfc4f02e3fcc884b91))
+
 # [1.4.0](https://github.com/ExaDev/document-cli/compare/v1.3.0...v1.4.0) (2026-08-04)
 
 
