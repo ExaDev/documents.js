@@ -15,6 +15,7 @@ export const GLOBAL_KEYS: readonly KeyBinding[] = [
   { keys: 'm', description: "Show the open document's metadata (read-only)" },
   { keys: 'Ctrl+S', description: 'Save the open document' },
   { keys: 'Ctrl+W', description: 'Close the open document' },
+  { keys: 'Ctrl+Z', description: 'Undo the last change' },
   { keys: 'q / Ctrl+C', description: 'Quit' },
   { keys: ':', description: 'Open the command palette' },
   { keys: '/', description: 'Search within the current screen' },

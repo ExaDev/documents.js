@@ -239,6 +239,10 @@ function AppShell({ startPath }: { readonly startPath?: string }): ReactElement 
         dispatch({ type: 'REQUEST_CLOSE' });
         return;
       }
+      if (key.ctrl && input === 'z') {
+        dispatch({ type: 'UNDO' });
+        return;
+      }
       if (input === ':') {
         dispatch({ type: 'OPEN_OVERLAY', overlay: 'commandPalette' });
         return;

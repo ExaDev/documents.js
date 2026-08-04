@@ -25,6 +25,7 @@ const COMMANDS: readonly CommandDefinition[] = [
   { name: 'new', usage: ':new docx|pptx|odt|odp|ods|odg', description: 'Create an empty document' },
   { name: 'open', usage: ':open <path>', description: 'Open a document from disk' },
   { name: 'close', usage: ':close', description: 'Close the open document' },
+  { name: 'undo', usage: ':undo', description: 'Undo the last change' },
   { name: 'help', usage: ':help', description: 'Show the key bindings' },
   { name: 'quit', usage: ':quit', description: 'Leave the application' },
 ];
@@ -143,6 +144,10 @@ async function runCommand(line: string, state: AppState, dispatch: Dispatch<Acti
 
     case 'close':
       dispatch({ type: 'REQUEST_CLOSE' });
+      return;
+
+    case 'undo':
+      dispatch({ type: 'UNDO' });
       return;
 
     case 'help':
