@@ -10,8 +10,8 @@ export interface ExportToPdfOptions {
   readonly fontFiles?: readonly string[];
 }
 
-// documents.js's `WinAnsiSubstitution` fields are `from`/`to` -- the character that could not be represented in a standard-14 font, and the one written in its place.
-function toPdfOptions(options: ExportToPdfOptions, fonts: readonly ProvidedFont[]): DocumentToPdfOptions {
+// documents.js's `WinAnsiSubstitution` fields are `from`/`to` -- the character that could not be represented in a standard-14 font, and the one written in its place. Exported so render-odb-report.ts's own odbReportToPdf call can build the identical DocumentToPdfOptions shape from its own RenderOdbReportOptions -- a structurally compatible superset of ExportToPdfOptions (same signal/onDiagnostic/fontFiles fields, plus reportName), so no adapter is needed at that call site.
+export function toPdfOptions(options: ExportToPdfOptions, fonts: readonly ProvidedFont[]): DocumentToPdfOptions {
   return {
     signal: options.signal,
     fonts,
