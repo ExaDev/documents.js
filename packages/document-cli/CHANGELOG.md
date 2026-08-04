@@ -1,3 +1,10 @@
+# [1.10.0](https://github.com/ExaDev/document-cli/compare/v1.9.0...v1.10.0) (2026-08-04)
+
+
+### Features
+
+* give pdf documents a real live-view editor in the TUI ([e8d57c3](https://github.com/ExaDev/document-cli/commit/e8d57c3006786a02d1f3378540dd0dc3862243db))
+
 # [1.9.0](https://github.com/ExaDev/document-cli/compare/v1.8.0...v1.9.0) (2026-08-04)
 
 
