@@ -1,7 +1,9 @@
+import { bytesToBase64 } from 'ooxml.js';
 import { describe, expect, it } from 'vitest';
-import type { ContentDocument, ContentEmbeddedObject, ContentSheet, ContentSheetCell, ContentSheetPrintSettings, LayoutItem, LayoutLine, LayoutRect, LayoutText, MathMlNode } from 'document-schema.js';
+import type { ContentDocument, ContentEmbeddedObject, ContentImageBlock, ContentSheet, ContentSheetCell, ContentSheetImage, ContentSheetPrintSettings, LayoutImage, LayoutItem, LayoutLine, LayoutRect, LayoutText, MathMlNode } from 'document-schema.js';
 import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
 import type { TextMeasurer } from 'pdf-codec';
+import { encodePng } from 'pdf-codec';
 import { DEFAULT_LAYOUT_FONT } from '../model/style';
 import { convertSpreadsheetToLayout } from './sheets';
 
@@ -737,5 +739,69 @@ describe('convertSpreadsheetToLayout: cell-anchored embedded formulas', () => {
     const { document: layout, formulas } = convertResult([first, second]);
     expect(layout.pages).toHaveLength(2);
     expect(formulas.map((f) => f.pageIndex)).toEqual([1]);
+  });
+});
+
+// A ContentSheetImage carries the identical anchor quartet a cell-anchored formula does, and resolves through the same axis lookup -- these tests hold that it now reaches the LayoutDocument as a real LayoutImage (it used to render nothing at all: sheets.ts emitted no image items, and convertSpreadsheetToLayout hardcoded images: {}).
+function tinyPngImage(anchorRow: number, anchorColumn: number, offsetXPt: number, offsetYPt: number, overrides: Partial<ContentSheetImage> = {}): ContentSheetImage {
+  const bytes = encodePng({ width: 2, height: 2, channels: 3, data: new Uint8Array([255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 0]) });
+  const base: ContentImageBlock = { kind: 'image', format: 'png', base64: bytesToBase64(bytes), widthPt: 50, heightPt: 30 };
+  return { ...base, anchorRow, anchorColumn, offsetXPt, offsetYPt, ...overrides };
+}
+
+function imageItems(items: readonly LayoutItem[]): LayoutImage[] {
+  return items.filter((i): i is LayoutImage => i.kind === 'image');
+}
+
+describe('convertSpreadsheetToLayout: cell-anchored images (ContentSheet.images)', () => {
+  it('renders a floating image at its own anchor cell plus its cell-relative offset, and registers the asset', () => {
+    const s = sheet([stringCell(0, 0, 'A')], { columns: COLUMNS_20, rows: ROWS_10, images: [tinyPngImage(0, 0, 3, 4)] });
+    const { document: layout } = convertResult([s]);
+
+    // The asset is registered exactly once in the document-wide image registry.
+    expect(Object.keys(layout.images)).toHaveLength(1);
+    const [asset] = Object.values(layout.images);
+    expect(asset!.format).toBe('png');
+
+    const images = imageItems(layout.pages[0]!.items);
+    expect(images).toHaveLength(1);
+    const [image] = images;
+    // Column 0 / row 0 both start at offset 0; the (3, 4) offset is a cell-local inset. x is unaffected by the y-flip; y flips the box's own top through the 800pt page.
+    expect(image!.xPt).toBeCloseTo(3, 6);
+    expect(image!.yPt).toBeCloseTo(800 - 4 - 30, 6);
+    expect(image!.widthPt).toBe(50);
+    expect(image!.heightPt).toBe(30);
+    // The imageId references the one registered asset, not a bare literal.
+    expect(image!.imageId).toBe(Object.keys(layout.images)[0]);
+  });
+
+  it('skips an image anchored in a hidden column or row, exactly as it skips that cell\'s own content and an anchored formula', () => {
+    const hiddenColumns = [{ index: 0, widthPt: 20 }, { index: 1, widthPt: 20, hidden: true }, { index: 2, widthPt: 20 }, { index: 3, widthPt: 20 }];
+    const hiddenRows = [{ index: 0, heightPt: 10 }, { index: 1, heightPt: 10, hidden: true }, { index: 2, heightPt: 10 }, { index: 3, heightPt: 10 }];
+    const hiddenColumnSheet = sheet([stringCell(0, 0, 'A')], { columns: hiddenColumns, rows: ROWS_10, images: [tinyPngImage(0, 1, 0, 0)] });
+    const hiddenRowSheet = sheet([stringCell(0, 0, 'A')], { columns: COLUMNS_20, rows: hiddenRows, images: [tinyPngImage(1, 0, 0, 0)] });
+    expect(imageItems(convert([hiddenColumnSheet]).pages[0]!.items)).toEqual([]);
+    expect(imageItems(convert([hiddenRowSheet]).pages[0]!.items)).toEqual([]);
+  });
+
+  it('widens the print range to cover an image anchor beyond the populated-cell extent, so the image still renders', () => {
+    // Only A1 is populated; without the image anchor participating in the range, column 3/row 3 would sit in no band and the image would silently never emit.
+    const s = sheet([stringCell(0, 0, 'A')], { columns: COLUMNS_20, rows: ROWS_10, images: [tinyPngImage(3, 3, 0, 0)] });
+    const { document: layout } = convertResult([s]);
+    const images = imageItems(layout.pages[0]!.items);
+    expect(images).toHaveLength(1);
+    // Column 3 starts three 20pt columns in; row 3 three 10pt rows down.
+    expect(images[0]!.xPt).toBeCloseTo(60, 6);
+    expect(images[0]!.yPt).toBeCloseTo(800 - 30 - 30, 6);
+  });
+
+  it('honors an explicit printRange rather than widening it, leaving an image anchored outside that range unrendered', () => {
+    const s = sheet([stringCell(0, 0, 'A')], {
+      columns: COLUMNS_20,
+      rows: ROWS_10,
+      printSettings: { ...basePrintSettings, printRange: { startRow: 0, startColumn: 0, endRow: 0, endColumn: 0 } },
+      images: [tinyPngImage(3, 3, 0, 0)],
+    });
+    expect(imageItems(convert([s]).pages[0]!.items)).toEqual([]);
   });
 });

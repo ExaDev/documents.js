@@ -6,9 +6,12 @@ import type {
   ContentFormula,
   ContentSheet,
   ContentSheetCell,
+  ContentSheetImage,
   ContentSheetPrintRange,
   ContentSheetPrintSettings,
   LayoutDocument,
+  LayoutImage,
+  LayoutImageAsset,
   LayoutItem,
   LayoutLine,
   LayoutPage,
@@ -24,7 +27,7 @@ import { flipY } from '../model/geometry';
 import { throwIfAborted } from '../ports/abort';
 import type { PositionedFormula, StyledFragment, StyledRun, TextMeasurer } from 'pdf-codec';
 import { loadMathFont, wrapRunsToWidth } from 'pdf-codec';
-import { alignmentOffsetPt, formulaSizePtFromFrame, justifyLineGapsPt, lineNaturalHeightPt, pushCellBorderLines, sumColumnWidthsPt, toStyledRuns } from './shared';
+import { alignmentOffsetPt, formulaSizePtFromFrame, justifyLineGapsPt, lineNaturalHeightPt, pushCellBorderLines, registerImage, sumColumnWidthsPt, toStyledRuns } from './shared';
 
 // ContentDocument (the spreadsheet variant) -> LayoutDocument: ods/xlsx's own layout direction, genuinely distinct from both docx's flow/pagination (engine.ts) and pptx's direct placement (slides.ts). A sheet paginates over TWO axes at once (column bands x row bands, not just rows), print settings (range/scale/fit-to-page/repeat rows-columns/gridlines/headers/page order/manual breaks) drive the page grid directly rather than being ignored the way a docx section's margins alone would be, and cell overflow is bounded per cell (###, spill, truncate) rather than wrapped the way paragraph text is. This is also the first layout algorithm in the package genuinely long-running enough (a real sheet can carry tens of thousands of populated cells) to need cooperative cancellation wired into its own per-cell emission loop, not just checked once at the top of the function the way reconstruct.ts's own page/slide loops do.
 //
@@ -121,14 +124,14 @@ function columnLetters(index: number): string {
 
 // --- Step 1: resolve the print range -----------------------------------------------------------
 
-// The sheet's own explicit table:print-ranges-derived range if set, else the full extent of populated cells (accounting for a merged anchor cell's own colSpan/rowSpan reaching beyond its own row/column) UNION every renderable formula's own anchor cell. undefined when the sheet has no explicit range, no cells, and no anchored formula at all -- nothing to lay out.
+// The sheet's own explicit table:print-ranges-derived range if set, else the full extent of populated cells (accounting for a merged anchor cell's own colSpan/rowSpan reaching beyond its own row/column) UNION every renderable formula's own anchor cell and every floating image's own anchor cell. undefined when the sheet has no explicit range, no cells, no anchored formula, and no floating image at all -- nothing to lay out.
 //
-// A cell-anchored drawing genuinely extends a sheet's used area in a real spreadsheet application (Calc/Excel both treat a cell an object is anchored to as part of the sheet's own used extent, and both print it), so a formula anchored below or to the right of the last populated cell must widen the range rather than fall outside every band and silently never render. The union is over anchor CELLS only, not over each formula's own rendered box: a formula overflowing past its anchor cell's bounds paints over whatever follows exactly as it does in Calc, the same way an oversized cell's own text already overflows here, rather than reserving further empty rows/columns nothing else occupies. Only formulas participate, not ContentSheet.images -- this module renders no images at all yet (a separate, pre-existing gap, see convertSpreadsheetToLayout's own note), and widening the printed area for content that then draws nothing would emit genuinely blank pages.
+// A cell-anchored drawing genuinely extends a sheet's used area in a real spreadsheet application (Calc/Excel both treat a cell an object is anchored to as part of the sheet's own used extent, and both print it), so a formula or image anchored below or to the right of the last populated cell must widen the range rather than fall outside every band and silently never render. The union is over anchor CELLS only, not over each formula's/image's own rendered box: a drawing overflowing past its anchor cell's bounds paints over whatever follows exactly as it does in Calc, the same way an oversized cell's own text already overflows here, rather than reserving further empty rows/columns nothing else occupies.
 function resolvePrintRange(sheet: ContentSheet, formulas: readonly AnchoredFormula[]): ContentSheetPrintRange | undefined {
   if (sheet.printSettings.printRange !== undefined) {
     return sheet.printSettings.printRange;
   }
-  if (sheet.cells.length === 0 && formulas.length === 0) {
+  if (sheet.cells.length === 0 && formulas.length === 0 && sheet.images.length === 0) {
     return undefined;
   }
   let startRow = Number.POSITIVE_INFINITY;
@@ -146,6 +149,12 @@ function resolvePrintRange(sheet: ContentSheet, formulas: readonly AnchoredFormu
     startColumn = Math.min(startColumn, formula.anchorColumn);
     endRow = Math.max(endRow, formula.anchorRow);
     endColumn = Math.max(endColumn, formula.anchorColumn);
+  }
+  for (const image of sheet.images) {
+    startRow = Math.min(startRow, image.anchorRow);
+    startColumn = Math.min(startColumn, image.anchorColumn);
+    endRow = Math.max(endRow, image.anchorRow);
+    endColumn = Math.max(endColumn, image.anchorColumn);
   }
   return { startRow, startColumn, endRow, endColumn };
 }
@@ -526,6 +535,38 @@ function renderAnchoredFormulas(
   }
 }
 
+// The image-side counterpart to renderAnchoredFormulas above: a ContentSheetImage carries the identical anchor quartet and resolves through the same axis lookup, but emits a real LayoutImage into the page's own items (an image IS a LayoutItem, unlike a formula's CID-font glyph runs which have no item kind and travel separately). Asset registration goes through the document-wide `images` record shared.ts's registerImage deduplicates into, exactly as engine.ts's layoutImageFlow and slides.ts's convertShape already do. The same skip rules apply: an anchor outside the resolved axis range, or in a hidden column/row, renders nothing -- matching how that cell's own content is skipped, and how renderAnchoredFormulas handles an anchored formula.
+function renderAnchoredImages(
+  sheetImages: readonly ContentSheetImage[],
+  columnAxis: PositionedAxis,
+  rowAxis: PositionedAxis,
+  gridLeftXPt: number,
+  gridTopYDownPt: number,
+  pageHeightPt: number,
+  hiddenColumnIndices: ReadonlySet<number>,
+  hiddenRowIndices: ReadonlySet<number>,
+  out: LayoutItem[],
+  images: Record<string, LayoutImageAsset>,
+): void {
+  for (const image of sheetImages) {
+    const columnPosition = columnAxis.positionByIndex.get(image.anchorColumn);
+    const rowPosition = rowAxis.positionByIndex.get(image.anchorRow);
+    if (columnPosition === undefined || rowPosition === undefined || hiddenColumnIndices.has(image.anchorColumn) || hiddenRowIndices.has(image.anchorRow)) {
+      continue;
+    }
+    const imageId = registerImage(image, images);
+    const boxYDown: Box = {
+      xPt: gridLeftXPt + columnAxis.offsetsPt[columnPosition]! + image.offsetXPt,
+      yPt: gridTopYDownPt + rowAxis.offsetsPt[rowPosition]! + image.offsetYPt,
+      widthPt: image.widthPt,
+      heightPt: image.heightPt,
+    };
+    const flipped = flipY(boxYDown, pageHeightPt);
+    const imageItem: LayoutImage = { kind: 'image', imageId, xPt: flipped.xPt, yPt: flipped.yPt, widthPt: image.widthPt, heightPt: image.heightPt, sourcePath: image.sourcePath };
+    out.push(imageItem);
+  }
+}
+
 // --- Orchestration: steps 1-6, plus per-page step 7 -----------------------------------------------
 
 // The print range's own [start, end] on one axis, with any repeat-band sub-range removed -- the repeat band is reserved and re-emitted separately on every page (step 3), never itself subject to banding.
@@ -548,7 +589,7 @@ function rangeIndices(start: number, end: number): number[] {
   return indices;
 }
 
-function convertSheetToPages(sheet: ContentSheet, measurer: TextMeasurer, signal: AbortSignal | undefined, out: LayoutPage[], formulasOut: PositionedFormula[]): void {
+function convertSheetToPages(sheet: ContentSheet, measurer: TextMeasurer, signal: AbortSignal | undefined, out: LayoutPage[], formulasOut: PositionedFormula[], images: Record<string, LayoutImageAsset>): void {
   throwIfAborted(signal);
   const formulas = anchoredFormulas(sheet);
   const range = resolvePrintRange(sheet, formulas);
@@ -663,18 +704,21 @@ function convertSheetToPages(sheet: ContentSheet, measurer: TextMeasurer, signal
 
     // pageIndex is this page's own index in the whole LayoutDocument, so it is read BEFORE the push -- `out` is shared across every sheet in the document, exactly as PositionedFormula.pageIndex requires.
     renderAnchoredFormulas(formulas, columnAxis, rowAxis, gridLeftXPt, gridTopYDownPt, pageSize.heightPt, out.length, hiddenColumnIndices, hiddenRowIndices, formulasOut);
+    // Images are LayoutItems (unlike formulas), so they push straight into this page's own `items` rather than a separate out-array -- appended after cell text so a floating image paints over the grid, matching how a real spreadsheet layers a floating draw:frame above the cells it overlaps.
+    renderAnchoredImages(sheet.images, columnAxis, rowAxis, gridLeftXPt, gridTopYDownPt, pageSize.heightPt, hiddenColumnIndices, hiddenRowIndices, items, images);
     out.push({ widthPt: pageSize.widthPt, heightPt: pageSize.heightPt, items });
   }
 }
 
 // ContentSheet.embeddedObjects now genuinely drives a formula-rendering branch here (renderAnchoredFormulas above), the sheets-side equivalent of engine.ts's and slides.ts's own, closing what was a two-sided upstream gap: odf.js's readOds had to learn to emit a cell-anchored formula sub-object at all, and document-schema.js's ContentEmbeddedObject had to gain somewhere to record which cell it is anchored to. Both landed -- odf.js 2.2.0's readOds walks each table:table-cell's children with a real TableCursor and classifies a formula sub-document (readOdfFormulaDocument) alongside the wordprocessing/presentation/spreadsheet/drawing kinds its 2.1.0 classifier already recognised, and document-schema.js 2.2.0 adds the optional anchorRow/anchorColumn/offsetXPt/offsetYPt quartet to ContentEmbeddedObject. That quartet is exactly what makes placement possible: a cell-anchored draw:frame's own svg:x/svg:y is relative to THAT CELL's own top-left corner, not the sheet's origin, so an anchor is needed to resolve the offset against this module's own axis geometry at layout time.
 //
-// ContentSheetImage rendering remains a separate, pre-existing gap in THIS module specifically: a sheet's own images carry the identical anchor quartet and would resolve through the same axis lookup, but nothing here emits a LayoutImage for one yet. It is a gap on the layout side alone now -- buildOdsPackage writes a real floating draw:frame/draw:image for every ContentSheetImage (OdsSheet.addImage, src/edit/ods/floating.ts), and odf.js 2.2.0's readOds reads one back.
+// ContentSheet.images drives the image-rendering branch alongside it (renderAnchoredImages above): a sheet's own floating images carry the identical anchor quartet a formula does and resolve through the same axis lookup, but emit a real LayoutImage into the page's own items (and register their bytes in the document-wide image registry shared.ts's registerImage deduplicates into, exactly as engine.ts/slides.ts already do). The print range widens to cover an image's anchor cell the same way it widens for a formula's -- see resolvePrintRange.
 export function convertSpreadsheetToLayout(doc: SpreadsheetContentDocument, options: SheetsLayoutOptions): SpreadsheetLayoutResult {
   const pages: LayoutPage[] = [];
   const formulas: PositionedFormula[] = [];
+  const images: Record<string, LayoutImageAsset> = {};
   for (const sheet of doc.sheets) {
-    convertSheetToPages(sheet, options.measurer, options.signal, pages, formulas);
+    convertSheetToPages(sheet, options.measurer, options.signal, pages, formulas, images);
   }
-  return { document: { formatVersion: LAYOUT_FORMAT_VERSION, metadata: doc.metadata, pages, images: {} }, formulas };
+  return { document: { formatVersion: LAYOUT_FORMAT_VERSION, metadata: doc.metadata, pages, images }, formulas };
 }
