@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       document-schema.js:
-        specifier: ^2.2.4
-        version: 2.2.4
+        specifier: ^2.3.0
+        version: 2.3.0
       fflate:
         specifier: ^0.8.3
         version: 0.8.3
@@ -1157,6 +1157,10 @@ packages:
 
   document-schema.js@2.2.4:
     resolution: {integrity: sha512-PTdBVwE9buhtrU+yyD60FLGL68KKk6dONoFKVzR9ngU29WKoWs/AngC4XlubsRb05EriLS6wj9lpOr2L2E0keQ==}
+    engines: {node: '>=20'}
+
+  document-schema.js@2.3.0:
+    resolution: {integrity: sha512-NYhSqxC4J0czg/YbxbpVjyNQteRCpvXyHqFjmnbOTqh3+Z4FMVJn0ZZSJoZByBPX1pqSLKg+Ld6g0Jw5+A18Ag==}
     engines: {node: '>=20'}
 
   dot-prop@5.3.0:
@@ -3744,6 +3748,10 @@ snapshots:
       path-type: 4.0.0
 
   document-schema.js@2.2.4:
+    dependencies:
+      zod: 4.4.3
+
+  document-schema.js@2.3.0:
     dependencies:
       zod: 4.4.3
 
