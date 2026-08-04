@@ -15,8 +15,8 @@ importers:
         specifier: ^0.8.3
         version: 0.8.3
       markdown-codec:
-        specifier: ^1.1.0
-        version: 1.1.0
+        specifier: ^1.1.1
+        version: 1.1.1
       odf.js:
         specifier: ^2.3.1
         version: 2.3.1
@@ -24,8 +24,8 @@ importers:
         specifier: ^2.6.11
         version: 2.6.11
       pdf-codec:
-        specifier: ^1.11.0
-        version: 1.11.0
+        specifier: ^1.11.1
+        version: 1.11.1
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -1155,10 +1155,6 @@ packages:
     resolution: {integrity: sha512-WkrWp9GR4KXfKGYzOLmTuGVi1UWFfws377n9cc55/tb6DuqyF6pcQ5AbiHEshaDpY9v6oaSr2XCDidGmMwdzIA==}
     engines: {node: '>=8'}
 
-  document-schema.js@2.2.4:
-    resolution: {integrity: sha512-PTdBVwE9buhtrU+yyD60FLGL68KKk6dONoFKVzR9ngU29WKoWs/AngC4XlubsRb05EriLS6wj9lpOr2L2E0keQ==}
-    engines: {node: '>=20'}
-
   document-schema.js@2.3.0:
     resolution: {integrity: sha512-NYhSqxC4J0czg/YbxbpVjyNQteRCpvXyHqFjmnbOTqh3+Z4FMVJn0ZZSJoZByBPX1pqSLKg+Ld6g0Jw5+A18Ag==}
     engines: {node: '>=20'}
@@ -1764,8 +1760,8 @@ packages:
     resolution: {integrity: sha512-hXdUTZYIVOt1Ex//jAQi+wTZZpUpwBj/0QsOzqegb3rGMMeJiSEu5xLHnYfBrRV4RH2+OCSOO95Is/7x1WJ4bw==}
     engines: {node: '>=10'}
 
-  markdown-codec@1.1.0:
-    resolution: {integrity: sha512-d5tufdONJUcfHRXWFBbK+7o3JSbHBKgl90TY053ZeKWHRWXMZ6NhaYP14u11Kr2mJbme5CJUgf9pJ0B6phjGAw==}
+  markdown-codec@1.1.1:
+    resolution: {integrity: sha512-ERl5vuTM7fK8p9HgkdDKmwtycIbEAsaLvrvQGr6Q0f1p8ljPhU0pIu9+/TDKcP7pKq5DgZOFtrAQj7Tn3SdavQ==}
     engines: {node: '>=20'}
 
   marked-terminal@7.3.0:
@@ -2057,8 +2053,8 @@ packages:
   pathe@2.0.3:
     resolution: {integrity: sha512-WUjGcAqP1gQacoQe+OBJsFA7Ld4DyXuUIjZ5cc75cLHvJ7dtNsTugphxIADwspS+AraAUePCKrSVtPLFj/F88w==}
 
-  pdf-codec@1.11.0:
-    resolution: {integrity: sha512-Xl0zMg5EzTTZTTVmhzGRrssG+A4oQ0RkUOzF646qBqWJ/an2+dSvJAs5HPzjRjVGJf89nYm0xRLKjhPNw63rrA==}
+  pdf-codec@1.11.1:
+    resolution: {integrity: sha512-EOzrR83cprHLDYDqzc4uXS9rYwmqDUO4c3IX0w43Yw2G76kpW0r0IiueYlVey0ATVOp/PDH1lt4MJIucDYBfJw==}
     engines: {node: '>=20'}
 
   picocolors@1.1.1:
@@ -3747,10 +3743,6 @@ snapshots:
     dependencies:
       path-type: 4.0.0
 
-  document-schema.js@2.2.4:
-    dependencies:
-      zod: 4.4.3
-
   document-schema.js@2.3.0:
     dependencies:
       zod: 4.4.3
@@ -4316,9 +4308,9 @@ snapshots:
     dependencies:
       semver: 7.8.5
 
-  markdown-codec@1.1.0:
+  markdown-codec@1.1.1:
     dependencies:
-      document-schema.js: 2.2.4
+      document-schema.js: 2.3.0
       zod: 4.4.3
 
   marked-terminal@7.3.0(marked@15.0.12):
@@ -4529,9 +4521,9 @@ snapshots:
 
   pathe@2.0.3: {}
 
-  pdf-codec@1.11.0:
+  pdf-codec@1.11.1:
     dependencies:
-      document-schema.js: 2.2.4
+      document-schema.js: 2.3.0
       fflate: 0.8.3
       zod: 4.4.3
 
