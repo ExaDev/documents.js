@@ -59,3 +59,10 @@ export function encodeDocumentPackage(format: DocumentFormat, pkg: Package): Uin
   }
   throw new UnsupportedPackageFormatError(format);
 }
+
+// .odb (an ODF database front-end) is, at the raw-zip-container level, an ordinary ODF package -- decoded by the identical odf.js decodePackage function every odt/odp/ods/odg/odf branch above already calls. It is deliberately NOT folded into decodeDocumentPackage's own DocumentFormat-keyed dispatch, because 'odb' is not, and cannot be, a DocumentFormat member: DocumentFormatSchema (src/convert/port.ts) excludes it on purpose, since a database front end has no single natural conversion target (its tables, its saved queries, and its reports are three unrelated output shapes -- see the README's own .odb Architecture/Gotchas entries). That exclusion is a statement about .odb as a CONVERSION target, though, not about whether its bytes are a real ODF zip -- they are, and every readOdb*/odbTo* function in src/odb/ already takes a decoded Package as its own starting point (readOdbTables, readOdbInventory, readOdbForms, readOdbReports, readOdbReportContent). decodeOdbPackage exists so a caller reaching for "give me a Package from these .odb bytes" has an honestly-named entry point instead of either reaching for odf.js's decodePackage directly (bypassing this package's own package-codec surface) or misreading decodeDocumentPackage('odb', bytes) as something that would type-check (it wouldn't -- 'odb' is not a DocumentFormat).
+//
+// There is no encodeOdbPackage counterpart: nothing in this package's .odb support ever writes a NEW .odb file. Every .odb function (readOdbTables, odbToXlsx, odbToCsv, readOdbForms, readOdbReports, readOdbReportContent) reads an existing .odb's own embedded data and either returns it as structured data or converts it into a different format entirely (xlsx, CSV, a rendered ContentDocument) -- none of them round-trip back into .odb bytes, so there is no encode direction to provide.
+export function decodeOdbPackage(bytes: Uint8Array<ArrayBuffer>): Package {
+  return decodeOdfPackage(bytes);
+}

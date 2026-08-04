@@ -2,10 +2,12 @@ import { decodePackage as decodeOdfPackage } from 'odf.js';
 import { decodePackage as decodeOoxmlPackage } from 'ooxml.js';
 import { describe, expect, it } from 'vitest';
 import { docxToPdf, odsToXlsx } from './convert/convert';
-import { decodeDocumentPackage, encodeDocumentPackage, UnsupportedPackageFormatError } from './package-codec';
+import { decodeDocumentPackage, decodeOdbPackage, encodeDocumentPackage, UnsupportedPackageFormatError } from './package-codec';
 import { encodeMarkdownText } from './markdown/text';
+import { readOdbTables } from './odb/read';
 import { richMarkdownText } from './test-support/markdown';
 import { FRACTION_FORMULA, odfFormulaBytes } from './test-support/odf';
+import { embeddedHsqldbOdbBytes, embeddedHsqldbOdbPackage } from './test-support/odb';
 import { minimalDocxBytes } from './test-support/docx';
 import { minimalOdgBytes } from './test-support/odg';
 import { minimalOdpBytes } from './test-support/odp';
@@ -56,6 +58,21 @@ describe('decodeDocumentPackage: ODF formats (odt/odp/ods/odg/odf)', () => {
   it('odf: matches odf.js decodePackage', () => {
     const bytes = odfFormulaBytes(FRACTION_FORMULA);
     expect(decodeDocumentPackage('odf', bytes)).toEqual(decodeOdfPackage(bytes));
+  });
+});
+
+describe('decodeOdbPackage', () => {
+  it('matches odf.js decodePackage on a real .odb package', () => {
+    const bytes = embeddedHsqldbOdbBytes();
+    expect(decodeOdbPackage(bytes)).toEqual(embeddedHsqldbOdbPackage());
+  });
+
+  it('produces a Package that readOdbTables can actually consume', () => {
+    const pkg = decodeOdbPackage(embeddedHsqldbOdbBytes());
+    const tables = readOdbTables(pkg);
+    expect(tables.map((table) => table.tableName).sort()).toEqual(['CUSTOMERS', 'ORDERS']);
+    const customers = tables.find((table) => table.tableName === 'CUSTOMERS');
+    expect(customers?.rows).toHaveLength(3);
   });
 });
 
