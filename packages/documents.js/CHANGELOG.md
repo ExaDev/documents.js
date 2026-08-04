@@ -1,3 +1,10 @@
+## [1.81.9](https://github.com/ExaDev/documents.js/compare/v1.81.8...v1.81.9) (2026-08-04)
+
+
+### Bug Fixes
+
+* stamp a real default width/height on a column/row OdsSheet materializes ([e294e0c](https://github.com/ExaDev/documents.js/commit/e294e0c81ed810cc1aa54ba5c64124ed56bf39ac))
+
 ## [1.81.8](https://github.com/ExaDev/documents.js/compare/v1.81.7...v1.81.8) (2026-08-04)
 
 ## [1.81.7](https://github.com/ExaDev/documents.js/compare/v1.81.6...v1.81.7) (2026-08-04)
