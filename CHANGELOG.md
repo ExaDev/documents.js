@@ -1,3 +1,16 @@
+# [1.76.0](https://github.com/ExaDev/documents.js/compare/v1.75.2...v1.76.0) (2026-08-04)
+
+
+### Features
+
+* build any DocumentFormat's bytes from a DocumentPackage ([208da27](https://github.com/ExaDev/documents.js/commit/208da279bf253de80c3c777060a84b3e5cbff3b6))
+* derive DocumentFormat from a real Zod schema ([1d818ef](https://github.com/ExaDev/documents.js/commit/1d818efafe82f3e60e32a2db3af3794480f38b77))
+* export DOCUMENT_FORMATS and the new metadata/font/package surface ([33283cd](https://github.com/ExaDev/documents.js/commit/33283cd804b5b18509080e246e9833f9dd4e24f9))
+* extract source-embedded font faces by DocumentFormat ([c9212be](https://github.com/ExaDev/documents.js/commit/c9212be299bb27849460023a00aee35b4282cc46))
+* patch a document's metadata in place across matching formats ([e740ef5](https://github.com/ExaDev/documents.js/commit/e740ef5511d979376ed344b7479596cc43f1a909))
+* read a document's metadata from any of the ten DocumentFormats ([49a48cb](https://github.com/ExaDev/documents.js/commit/49a48cb94924bb7cbeba9a55837c886025b16340))
+* render an .odb report to real docx/odt/pdf bytes ([8eb6c46](https://github.com/ExaDev/documents.js/commit/8eb6c4666658e8f262075b125bf3d74bf3620685))
+
 ## [1.75.2](https://github.com/ExaDev/documents.js/compare/v1.75.1...v1.75.2) (2026-08-04)
 
 ## [1.75.1](https://github.com/ExaDev/documents.js/compare/v1.75.0...v1.75.1) (2026-08-04)
