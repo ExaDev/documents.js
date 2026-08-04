@@ -18,6 +18,7 @@ import {
   type OdtTable,
   type OdtTableCell,
   type PptxShape,
+  type PptxTable,
 } from 'documents.js';
 import { createNewDocument } from '../format/open-document.js';
 import type { Action } from './actions.js';
@@ -121,6 +122,58 @@ function mutate(state: AppState, doc: EditableOpenDocument, apply: () => void): 
   const snapshot = doc.editor.toBytes();
   apply();
   return { ...state, hasUnsavedChanges: true, undoStack: pushSnapshot(state.undoStack, snapshot) };
+}
+
+// mutate()'s own counterpart for an `apply` that can genuinely fail on bad caller input rather than only on a routing bug -- a merge rectangle that overruns a table/sheet's own bounds throws a real Error from documents.js's own mergeCells primitives (OdsSheet.mergeCells, DocxTable.mergeCells, OdtTable.mergeCells, this file's own mergePptxTableCells), and the UI screens that dispatch these actions bound their own row/column pickers against the target's current dimensions but cannot guarantee every dispatch stays in range (e.g. a screen driven by a scripted/test caller, or a race with a concurrent edit). Reports the thrown message as a warning status instead of letting it escape the reducer and crash the app. If `apply` throws after partially mutating the live tree (e.g. a docx table's own row-by-row mergeCells loop merging row 0 successfully before finding row 1 out of range), that partial mutation genuinely already happened -- this only prevents the crash and the false "nothing changed" undo-stack/hasUnsavedChanges bookkeeping, it does not roll the live tree back, matching the "the reducer is deliberately impure" caveat at the top of this file.
+function mutateGuarded(state: AppState, doc: EditableOpenDocument, apply: () => void): AppState {
+  try {
+    return mutate(state, doc, apply);
+  } catch (error) {
+    return withStatus(state, 'warning', error instanceof Error ? error.message : String(error));
+  }
+}
+
+// The pptx-side counterpart to DocxTable.mergeCells/OdtTable.mergeCells: a DrawingML table has no such convenience on PptxTable itself (see documents.js's own edit/pptx/table.ts doc comment -- every row always carries exactly `columns` a:tc elements, and a merge is expressed purely via gridSpan/rowSpan/hMerge/vMerge attributes on cells that already exist, never by removing or retagging an element the way docx/ODF each do). The anchor cell gets colSpan/rowSpan; every other cell in the rectangle gets horizontalMerge (covered from the left, in the SAME row) and/or verticalMerge (covered from above) set, matching real PowerPoint output for a rectangular merge's interior/trailing cells (both attributes set together).
+function mergePptxTableCells(table: PptxTable, startRow: number, startColumn: number, rowSpan: number, colSpan: number): void {
+  if (!Number.isInteger(rowSpan) || rowSpan < 1 || !Number.isInteger(colSpan) || colSpan < 1) {
+    throw new Error(`mergeSlideTableCells: rowSpan and colSpan must be positive integers, got rowSpan=${rowSpan}, colSpan=${colSpan}`);
+  }
+  const rows = table.rows();
+  if (startRow + rowSpan > rows.length) {
+    throw new Error(`mergeSlideTableCells: rowSpan ${rowSpan} starting at row ${startRow} exceeds this table's own ${rows.length} rows`);
+  }
+  const anchorRow = rows[startRow];
+  if (anchorRow === undefined) {
+    throw new Error(`mergeSlideTableCells: row ${startRow} does not exist in this table`);
+  }
+  const columnCount = anchorRow.cells().length;
+  if (startColumn + colSpan > columnCount) {
+    throw new Error(`mergeSlideTableCells: colSpan ${colSpan} starting at column ${startColumn} exceeds this table's own ${columnCount} columns`);
+  }
+  for (let rowOffset = 0; rowOffset < rowSpan; rowOffset++) {
+    const row = rows[startRow + rowOffset];
+    if (row === undefined) {
+      throw new Error(`mergeSlideTableCells: row ${startRow + rowOffset} does not exist in this table`);
+    }
+    const cells = row.cells();
+    for (let columnOffset = 0; columnOffset < colSpan; columnOffset++) {
+      const cell = cells[startColumn + columnOffset];
+      if (cell === undefined) {
+        throw new Error(`mergeSlideTableCells: column ${startColumn + columnOffset} does not exist in row ${startRow + rowOffset}`);
+      }
+      if (rowOffset === 0 && columnOffset === 0) {
+        cell.colSpan = colSpan;
+        cell.rowSpan = rowSpan;
+        continue;
+      }
+      if (columnOffset > 0) {
+        cell.horizontalMerge = true;
+      }
+      if (rowOffset > 0) {
+        cell.verticalMerge = true;
+      }
+    }
+  }
 }
 
 // Markdown's own counterpart to `mutate` above -- but genuinely pure, unlike every other mutating case in this reducer. A markdown document is a plain string value, not a live view over a mutable XmlElement tree, so there is nothing to `apply()` in place: this just returns a new outer state with `.source` replaced and the PREVIOUS source pushed onto the same undoStack the live-editor formats already share, encoded through the identical byte<->text boundary (`encodeMarkdownText`/`decodeMarkdownText`) markdownToPdf/markdownToDocx/markdownToOdt already use -- so UNDO's own restore step needs no markdown-specific stack at all, just a markdown-specific decode of whichever snapshot it pops.
@@ -454,8 +507,25 @@ export function appReducer(state: AppState, action: Action): AppState {
       if (doc === undefined) {
         return wrongDocument(state, 'a docx or odt document');
       }
-      return mutate(state, doc, () => {
-        doc.editor.body.appendTable({ rows: action.rows, columns: action.columns });
+      return mutateGuarded(state, doc, () => {
+        const table = doc.editor.body.appendTable({ rows: action.rows, columns: action.columns });
+        if (action.merge !== undefined) {
+          table.mergeCells(action.merge.startRow, action.merge.startColumn, action.merge.rowSpan, action.merge.colSpan);
+        }
+      });
+    }
+
+    case 'MERGE_TABLE_CELLS': {
+      const doc = wordprocessingDocument(state);
+      if (doc === undefined) {
+        return wrongDocument(state, 'a docx or odt document');
+      }
+      const table = tableAt(doc, action.tableIndex);
+      if (table === undefined) {
+        return withStatus(state, 'warning', `There is no table at index ${action.tableIndex}`);
+      }
+      return mutateGuarded(state, doc, () => {
+        table.mergeCells(action.startRow, action.startColumn, action.rowSpan, action.colSpan);
       });
     }
 
@@ -545,6 +615,29 @@ export function appReducer(state: AppState, action: Action): AppState {
       }
       return mutate(state, doc, () => {
         slide.addTable({ frame: action.frame, table: { rows: action.rows, columns: action.columns } });
+      });
+    }
+
+    case 'MERGE_SLIDE_TABLE_CELLS': {
+      const doc = presentationDocument(state);
+      if (doc === undefined) {
+        return wrongDocument(state, 'a pptx or odp document');
+      }
+      if (doc.format === 'odp') {
+        const entry = doc.editor.slides()[action.slideIndex]?.tables()[action.tableIndex];
+        if (entry === undefined) {
+          return withStatus(state, 'warning', `There is no table at index ${action.tableIndex} on slide ${action.slideIndex}`);
+        }
+        return mutateGuarded(state, doc, () => {
+          entry.table.mergeCells(action.startRow, action.startColumn, action.rowSpan, action.colSpan);
+        });
+      }
+      const table = doc.editor.slides()[action.slideIndex]?.tables()[action.tableIndex];
+      if (table === undefined) {
+        return withStatus(state, 'warning', `There is no table at index ${action.tableIndex} on slide ${action.slideIndex}`);
+      }
+      return mutateGuarded(state, doc, () => {
+        mergePptxTableCells(table, action.startRow, action.startColumn, action.rowSpan, action.colSpan);
       });
     }
 
@@ -639,6 +732,20 @@ export function appReducer(state: AppState, action: Action): AppState {
       return withSheet(state, action.sheetIndex, (sheet) => {
         sheet.cell(action.row, action.column).value = action.value;
       });
+
+    case 'MERGE_CELLS': {
+      const doc = spreadsheetDocument(state);
+      if (doc === undefined) {
+        return wrongDocument(state, 'an ods document');
+      }
+      const sheet = sheetAt(doc, action.sheetIndex);
+      if (sheet === undefined) {
+        return withStatus(state, 'warning', `There is no sheet at index ${action.sheetIndex}`);
+      }
+      return mutateGuarded(state, doc, () => {
+        sheet.mergeCells(action.startRow, action.startColumn, action.rowSpan, action.colSpan);
+      });
+    }
 
     case 'SET_SHEET_PRINT_SETTINGS':
       return withSheet(state, action.sheetIndex, (sheet) => {

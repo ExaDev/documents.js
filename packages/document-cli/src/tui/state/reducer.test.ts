@@ -1,4 +1,23 @@
-import { createOdg, createOdp, createOds, createOdt, createPptx, odsToXlsx, openOdg, openOdp, openOdt, openPptx, readOdpContent, readPdf, readPptxContent, xlsxToPdf } from 'documents.js';
+import {
+  createOdg,
+  createOdp,
+  createOds,
+  createOdt,
+  createPptx,
+  odsToXlsx,
+  openDocx,
+  openOdg,
+  openOdp,
+  openOds,
+  openOdt,
+  openPptx,
+  readDocxContent,
+  readOdpContent,
+  readOdtContent,
+  readPdf,
+  readPptxContent,
+  xlsxToPdf,
+} from 'documents.js';
 import { describe, expect, it } from 'vitest';
 import type { Action } from './actions.js';
 import { appReducer, createInitialState } from './reducer.js';
@@ -198,6 +217,148 @@ describe('appReducer docx mutations', () => {
   });
 });
 
+describe('appReducer APPEND_TABLE and MERGE_TABLE_CELLS on docx/odt', () => {
+  it('appends a real docx table with cells pre-merged in one pass, verified through readDocxContent', () => {
+    const created = appReducer(createInitialState(), { type: 'CREATE_DOCUMENT', format: 'docx' });
+    const withTable = appReducer(created, {
+      type: 'APPEND_TABLE',
+      rows: 3,
+      columns: 3,
+      merge: { startRow: 0, startColumn: 0, rowSpan: 2, colSpan: 2 },
+    });
+    expect(withTable.hasUnsavedChanges).toBe(true);
+
+    const content = readDocxContent(docxDocument(withTable).editor.toPackage());
+    if (content.kind !== 'wordprocessing') {
+      throw new Error(`expected a wordprocessing ContentDocument, got ${content.kind}`);
+    }
+    const tableBlock = content.sections[0]?.blocks[0];
+    if (tableBlock?.kind !== 'table') {
+      throw new Error(`expected a table block, got ${tableBlock?.kind}`);
+    }
+    const anchor = tableBlock.rows[0]?.cells[0];
+    expect(anchor?.colSpan).toBe(2);
+    expect(anchor?.rowSpan).toBe(2);
+    // docx collapses a horizontal merge into one real w:tc -- row 0 now has 2 real cells (the merged one plus the untouched third column), not 3.
+    expect(tableBlock.rows[0]?.cells).toHaveLength(2);
+  });
+
+  it('appends a real odt table with cells pre-merged in one pass, verified through readOdtContent', () => {
+    const created = appReducer(createInitialState(), { type: 'CREATE_DOCUMENT', format: 'odt' });
+    const withTable = appReducer(created, {
+      type: 'APPEND_TABLE',
+      rows: 3,
+      columns: 3,
+      merge: { startRow: 0, startColumn: 0, rowSpan: 2, colSpan: 2 },
+    });
+    expect(withTable.hasUnsavedChanges).toBe(true);
+
+    const content = readOdtContent(odtDocument(withTable).editor.toPackage());
+    if (content.kind !== 'wordprocessing') {
+      throw new Error(`expected a wordprocessing ContentDocument, got ${content.kind}`);
+    }
+    const tableBlock = content.sections[0]?.blocks[0];
+    if (tableBlock?.kind !== 'table') {
+      throw new Error(`expected a table block, got ${tableBlock?.kind}`);
+    }
+    const anchor = tableBlock.rows[0]?.cells[0];
+    expect(anchor?.colSpan).toBe(2);
+    expect(anchor?.rowSpan).toBe(2);
+    // ODF always writes one real (possibly covered) cell per grid position, unlike docx -- row 0 still has all 3 columns.
+    expect(tableBlock.rows[0]?.cells).toHaveLength(3);
+  });
+
+  it('appends a plain docx table with no merge field at all, unchanged from before this feature existed', () => {
+    const created = appReducer(createInitialState(), { type: 'CREATE_DOCUMENT', format: 'docx' });
+    const withTable = appReducer(created, { type: 'APPEND_TABLE', rows: 2, columns: 2 });
+    expect(withTable.hasUnsavedChanges).toBe(true);
+    const table = docxDocument(withTable).editor.tables()[0];
+    expect(table?.rows()).toHaveLength(2);
+    expect(table?.rows()[0]?.cells()).toHaveLength(2);
+  });
+
+  it('merges cells in an already-built docx table after the fact (retrofit), verified through readDocxContent', () => {
+    const built = applyAll([
+      { type: 'CREATE_DOCUMENT', format: 'docx' },
+      { type: 'APPEND_TABLE', rows: 3, columns: 3 },
+    ]);
+    const merged = appReducer(built, { type: 'MERGE_TABLE_CELLS', tableIndex: 0, startRow: 1, startColumn: 1, rowSpan: 2, colSpan: 2 });
+    expect(merged.hasUnsavedChanges).toBe(true);
+
+    const content = readDocxContent(docxDocument(merged).editor.toPackage());
+    if (content.kind !== 'wordprocessing') {
+      throw new Error(`expected a wordprocessing ContentDocument, got ${content.kind}`);
+    }
+    const tableBlock = content.sections[0]?.blocks[0];
+    if (tableBlock?.kind !== 'table') {
+      throw new Error(`expected a table block, got ${tableBlock?.kind}`);
+    }
+    const anchor = tableBlock.rows[1]?.cells[1];
+    expect(anchor?.colSpan).toBe(2);
+    expect(anchor?.rowSpan).toBe(2);
+
+    // Round-trips through re-decoding the package as a completely fresh docx, not just the live in-memory object.
+    const reopenedContent = readDocxContent(openDocx(docxDocument(merged).editor.toBytes()).toPackage());
+    if (reopenedContent.kind !== 'wordprocessing') {
+      throw new Error(`expected a wordprocessing ContentDocument, got ${reopenedContent.kind}`);
+    }
+    const reopenedTable = reopenedContent.sections[0]?.blocks[0];
+    if (reopenedTable?.kind !== 'table') {
+      throw new Error(`expected a table block, got ${reopenedTable?.kind}`);
+    }
+    expect(reopenedTable.rows[1]?.cells[1]?.colSpan).toBe(2);
+    expect(reopenedTable.rows[1]?.cells[1]?.rowSpan).toBe(2);
+  });
+
+  it('merges cells in an already-built odt table after the fact (retrofit), verified through readOdtContent', () => {
+    const built = applyAll([
+      { type: 'CREATE_DOCUMENT', format: 'odt' },
+      { type: 'APPEND_TABLE', rows: 3, columns: 3 },
+    ]);
+    const merged = appReducer(built, { type: 'MERGE_TABLE_CELLS', tableIndex: 0, startRow: 1, startColumn: 1, rowSpan: 2, colSpan: 2 });
+    expect(merged.hasUnsavedChanges).toBe(true);
+
+    const content = readOdtContent(odtDocument(merged).editor.toPackage());
+    if (content.kind !== 'wordprocessing') {
+      throw new Error(`expected a wordprocessing ContentDocument, got ${content.kind}`);
+    }
+    const tableBlock = content.sections[0]?.blocks[0];
+    if (tableBlock?.kind !== 'table') {
+      throw new Error(`expected a table block, got ${tableBlock?.kind}`);
+    }
+    const anchor = tableBlock.rows[1]?.cells[1];
+    expect(anchor?.colSpan).toBe(2);
+    expect(anchor?.rowSpan).toBe(2);
+  });
+
+  it('surfaces a thrown merge error as a warning status instead of crashing (APPEND_TABLE with an out-of-range merge)', () => {
+    const created = appReducer(createInitialState(), { type: 'CREATE_DOCUMENT', format: 'docx' });
+    const result = appReducer(created, {
+      type: 'APPEND_TABLE',
+      rows: 2,
+      columns: 2,
+      merge: { startRow: 0, startColumn: 0, rowSpan: 5, colSpan: 2 },
+    });
+    expect(result.status?.severity).toBe('warning');
+  });
+
+  it('surfaces a thrown merge error as a warning status instead of crashing (MERGE_TABLE_CELLS out of range)', () => {
+    const built = applyAll([
+      { type: 'CREATE_DOCUMENT', format: 'docx' },
+      { type: 'APPEND_TABLE', rows: 2, columns: 2 },
+    ]);
+    const result = appReducer(built, { type: 'MERGE_TABLE_CELLS', tableIndex: 0, startRow: 0, startColumn: 0, rowSpan: 5, colSpan: 2 });
+    expect(result.status?.severity).toBe('warning');
+  });
+
+  it('warns rather than crashing for a table index that does not exist', () => {
+    const created = appReducer(createInitialState(), { type: 'CREATE_DOCUMENT', format: 'docx' });
+    const result = appReducer(created, { type: 'MERGE_TABLE_CELLS', tableIndex: 3, startRow: 0, startColumn: 0, rowSpan: 1, colSpan: 1 });
+    expect(result.status?.severity).toBe('warning');
+    expect(result.hasUnsavedChanges).toBe(false);
+  });
+});
+
 describe('appReducer SET_LIST_ITEM_TEXT on odt', () => {
   it('replaces a real list item\'s text and the change round-trips through re-decoding the package', () => {
     const editor = createOdt();
@@ -263,6 +424,60 @@ describe('appReducer ods mutations', () => {
       throw new Error('expected the added sheet');
     }
     expect(sheet.cell(2, 3).value).toEqual({ kind: 'string', value: 'Total' });
+  });
+});
+
+describe('appReducer MERGE_CELLS on ods', () => {
+  it('merges a real rectangle of cells through the live OdsSheet.mergeCells, and a covered cell is rejected by cell() afterwards', () => {
+    const created = applyAll([{ type: 'CREATE_DOCUMENT', format: 'ods' }, { type: 'ADD_SHEET', name: 'Data' }]);
+    const sheetIndex = odsDocument(created).editor.sheets().length - 1;
+    const seeded = appReducer(created, { type: 'SET_CELL_VALUE', sheetIndex, row: 0, column: 0, value: { kind: 'string', value: 'Merged' } });
+
+    const merged = appReducer(seeded, { type: 'MERGE_CELLS', sheetIndex, startRow: 0, startColumn: 0, rowSpan: 2, colSpan: 2 });
+    expect(merged.hasUnsavedChanges).toBe(true);
+
+    const sheet = odsDocument(merged).editor.sheets()[sheetIndex];
+    if (sheet === undefined) {
+      throw new Error('expected the added sheet');
+    }
+    expect(sheet.cell(0, 0).value).toEqual({ kind: 'string', value: 'Merged' });
+    expect(() => sheet.cell(0, 1)).toThrow(/covered/);
+    expect(() => sheet.cell(1, 0)).toThrow(/covered/);
+    expect(() => sheet.cell(1, 1)).toThrow(/covered/);
+
+    // Round-trips through re-decoding the package as a completely fresh workbook, not just the live in-memory object.
+    const reopened = openOds(odsDocument(merged).editor.toBytes());
+    const reopenedSheet = reopened.sheets()[sheetIndex];
+    if (reopenedSheet === undefined) {
+      throw new Error('expected the added sheet to survive a fresh decode');
+    }
+    expect(reopenedSheet.cell(0, 0).value).toEqual({ kind: 'string', value: 'Merged' });
+    expect(() => reopenedSheet.cell(0, 1)).toThrow(/covered/);
+  });
+
+  it('surfaces a thrown merge error as a warning status instead of crashing', () => {
+    const created = applyAll([{ type: 'CREATE_DOCUMENT', format: 'ods' }, { type: 'ADD_SHEET', name: 'Data' }]);
+    const sheetIndex = odsDocument(created).editor.sheets().length - 1;
+
+    const result = appReducer(created, { type: 'MERGE_CELLS', sheetIndex, startRow: 0, startColumn: 0, rowSpan: 0, colSpan: 2 });
+    expect(result.status?.severity).toBe('warning');
+    expect(result.status?.text).toContain('rowSpan');
+    // hasUnsavedChanges is unchanged from before this dispatch (ADD_SHEET already set it true) -- the guarded merge neither adds a further change nor resets it.
+    expect(result.hasUnsavedChanges).toBe(created.hasUnsavedChanges);
+  });
+
+  it('warns rather than crashing for a sheet index that does not exist', () => {
+    const created = appReducer(createInitialState(), { type: 'CREATE_DOCUMENT', format: 'ods' });
+    const result = appReducer(created, { type: 'MERGE_CELLS', sheetIndex: 4, startRow: 0, startColumn: 0, rowSpan: 1, colSpan: 1 });
+    expect(result.status?.severity).toBe('warning');
+    expect(result.hasUnsavedChanges).toBe(false);
+  });
+
+  it('warns rather than crashing when the open document is not ods', () => {
+    const created = appReducer(createInitialState(), { type: 'CREATE_DOCUMENT', format: 'docx' });
+    const result = appReducer(created, { type: 'MERGE_CELLS', sheetIndex: 0, startRow: 0, startColumn: 0, rowSpan: 1, colSpan: 1 });
+    expect(result.status?.severity).toBe('warning');
+    expect(result.status?.text).toContain('ods');
   });
 });
 
@@ -379,6 +594,83 @@ describe('appReducer ADD_SLIDE_TABLE', () => {
   it('warns rather than crashing when the open document is not a pptx or odp document', () => {
     const created = appReducer(createInitialState(), { type: 'CREATE_DOCUMENT', format: 'docx' });
     const result = appReducer(created, { type: 'ADD_SLIDE_TABLE', slideIndex: 0, frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 100 }, rows: 2, columns: 2 });
+    expect(result.status?.severity).toBe('warning');
+    expect(result.status?.text).toContain('pptx or odp');
+  });
+});
+
+describe('appReducer MERGE_SLIDE_TABLE_CELLS', () => {
+  it('merges a real rectangle of cells in a pptx slide table through the live PptxTable, verified through readPptxContent', () => {
+    const editor = createPptx();
+    editor.addSlide();
+    const opened = openPptxDocument(editor.toBytes());
+
+    const withTable = appReducer(opened, { type: 'ADD_SLIDE_TABLE', slideIndex: 0, frame: { xPt: 10, yPt: 10, widthPt: 200, heightPt: 100 }, rows: 3, columns: 3 });
+    const merged = appReducer(withTable, { type: 'MERGE_SLIDE_TABLE_CELLS', slideIndex: 0, tableIndex: 0, startRow: 0, startColumn: 0, rowSpan: 2, colSpan: 2 });
+    expect(merged.hasUnsavedChanges).toBe(true);
+
+    const content = readPptxContent(pptxDocument(merged).editor.toPackage());
+    if (content.kind !== 'presentation') {
+      throw new Error(`expected a presentation ContentDocument, got ${content.kind}`);
+    }
+    const tableBlock = content.slides[0]?.shapes[0]?.blocks[0];
+    if (tableBlock?.kind !== 'table') {
+      throw new Error(`expected a table block, got ${tableBlock?.kind}`);
+    }
+    // The anchor carries the real merge attributes; every other cell in the rectangle reads back with no blocks at all (hMerge/vMerge covered), matching readTableCell's own short-circuit -- see ooxml.js's own typed/pptx/read.js.
+    expect(tableBlock.rows[0]?.cells[0]?.colSpan).toBe(2);
+    expect(tableBlock.rows[0]?.cells[0]?.rowSpan).toBe(2);
+    expect(tableBlock.rows[0]?.cells[1]?.blocks).toEqual([]);
+    expect(tableBlock.rows[1]?.cells[0]?.blocks).toEqual([]);
+    expect(tableBlock.rows[1]?.cells[1]?.blocks).toEqual([]);
+    // The untouched third row/column stay real, ordinary cells.
+    expect(tableBlock.rows[2]?.cells[2]?.colSpan).toBeUndefined();
+  });
+
+  it('merges a real rectangle of cells in an odp slide table through the live OdtTable, verified through readOdpContent', () => {
+    const editor = createOdp();
+    editor.addSlide();
+    const opened = openOdpDocument(editor.toBytes());
+
+    const withTable = appReducer(opened, { type: 'ADD_SLIDE_TABLE', slideIndex: 0, frame: { xPt: 10, yPt: 10, widthPt: 200, heightPt: 100 }, rows: 3, columns: 3 });
+    const merged = appReducer(withTable, { type: 'MERGE_SLIDE_TABLE_CELLS', slideIndex: 0, tableIndex: 0, startRow: 1, startColumn: 1, rowSpan: 2, colSpan: 2 });
+    expect(merged.hasUnsavedChanges).toBe(true);
+
+    const content = readOdpContent(odpDocument(merged).editor.toPackage());
+    if (content.kind !== 'presentation') {
+      throw new Error(`expected a presentation ContentDocument, got ${content.kind}`);
+    }
+    const tableBlock = content.slides[0]?.shapes[0]?.blocks[0];
+    if (tableBlock?.kind !== 'table') {
+      throw new Error(`expected a table block, got ${tableBlock?.kind}`);
+    }
+    expect(tableBlock.rows[1]?.cells[1]?.colSpan).toBe(2);
+    expect(tableBlock.rows[1]?.cells[1]?.rowSpan).toBe(2);
+  });
+
+  it('surfaces a thrown merge error as a warning status instead of crashing', () => {
+    const editor = createPptx();
+    editor.addSlide();
+    const opened = openPptxDocument(editor.toBytes());
+    const withTable = appReducer(opened, { type: 'ADD_SLIDE_TABLE', slideIndex: 0, frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 100 }, rows: 2, columns: 2 });
+
+    const result = appReducer(withTable, { type: 'MERGE_SLIDE_TABLE_CELLS', slideIndex: 0, tableIndex: 0, startRow: 0, startColumn: 0, rowSpan: 5, colSpan: 2 });
+    expect(result.status?.severity).toBe('warning');
+  });
+
+  it('warns rather than crashing for a table index that does not exist', () => {
+    const editor = createPptx();
+    editor.addSlide();
+    const opened = openPptxDocument(editor.toBytes());
+
+    const result = appReducer(opened, { type: 'MERGE_SLIDE_TABLE_CELLS', slideIndex: 0, tableIndex: 0, startRow: 0, startColumn: 0, rowSpan: 1, colSpan: 1 });
+    expect(result.status?.severity).toBe('warning');
+    expect(result.hasUnsavedChanges).toBe(false);
+  });
+
+  it('warns rather than crashing when the open document is not pptx or odp', () => {
+    const created = appReducer(createInitialState(), { type: 'CREATE_DOCUMENT', format: 'docx' });
+    const result = appReducer(created, { type: 'MERGE_SLIDE_TABLE_CELLS', slideIndex: 0, tableIndex: 0, startRow: 0, startColumn: 0, rowSpan: 1, colSpan: 1 });
     expect(result.status?.severity).toBe('warning');
     expect(result.status?.text).toContain('pptx or odp');
   });

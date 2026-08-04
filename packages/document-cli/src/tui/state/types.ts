@@ -16,6 +16,7 @@ export type Screen =
   | { readonly kind: 'slideList' }
   | { readonly kind: 'slideDetail'; readonly slideIndex: number }
   | { readonly kind: 'shapeEditor'; readonly slideIndex: number; readonly shapeIndex: number }
+  | { readonly kind: 'slideTableDetail'; readonly slideIndex: number; readonly tableIndex: number }
   | { readonly kind: 'notesEditor'; readonly slideIndex: number }
   | { readonly kind: 'sheetList' }
   | { readonly kind: 'spreadsheetGrid'; readonly sheetIndex: number }
@@ -211,6 +212,8 @@ export function selectionKeyFor(screen: Screen): string {
       return `${screen.kind}:${screen.slideIndex}`;
     case 'shapeEditor':
       return `shapeEditor:${screen.slideIndex}:${screen.shapeIndex}`;
+    case 'slideTableDetail':
+      return `slideTableDetail:${screen.slideIndex}:${screen.tableIndex}`;
     case 'spreadsheetGrid':
     case 'printSettingsEditor':
       return `${screen.kind}:${screen.sheetIndex}`;

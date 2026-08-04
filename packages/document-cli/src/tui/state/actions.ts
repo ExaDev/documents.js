@@ -38,12 +38,17 @@ export type Action =
   | { readonly type: 'TOGGLE_RUN_ITALIC'; readonly blockIndex: number; readonly runIndex: number }
   | { readonly type: 'TOGGLE_RUN_UNDERLINE'; readonly blockIndex: number; readonly runIndex: number }
   | { readonly type: 'SET_RUN_COLOR'; readonly blockIndex: number; readonly runIndex: number; readonly color: LayoutColor }
-  | { readonly type: 'APPEND_TABLE'; readonly rows: number; readonly columns: number }
+  // `merge`, when present, is applied to the freshly built table in the SAME mutate() pass as APPEND_TABLE itself -- see reducer.ts's own APPEND_TABLE case -- rather than requiring a separate MERGE_TABLE_CELLS dispatch immediately afterwards, which would need the caller to already know the new table's own index.
+  | { readonly type: 'APPEND_TABLE'; readonly rows: number; readonly columns: number; readonly merge?: { readonly startRow: number; readonly startColumn: number; readonly rowSpan: number; readonly colSpan: number } }
   | { readonly type: 'SET_TABLE_CELL_TEXT'; readonly tableIndex: number; readonly row: number; readonly column: number; readonly text: string }
+  // Merges an already-built docx/odt table's own rectangle after the fact (DocxTable.mergeCells / OdtTable.mergeCells), as opposed to APPEND_TABLE's `merge` field, which merges a table at creation time.
+  | { readonly type: 'MERGE_TABLE_CELLS'; readonly tableIndex: number; readonly startRow: number; readonly startColumn: number; readonly rowSpan: number; readonly colSpan: number }
   | { readonly type: 'ADD_LIST_ITEM'; readonly blockIndex: number; readonly text: string }
   | { readonly type: 'SET_LIST_ITEM_TEXT'; readonly blockIndex: number; readonly itemIndex: number; readonly text: string }
   | { readonly type: 'ADD_SLIDE' }
   | { readonly type: 'ADD_SLIDE_TABLE'; readonly slideIndex: number; readonly frame: Box; readonly rows: number; readonly columns: number }
+  // `tableIndex` indexes `slide.tables()` -- PptxSlide.tables() returns PptxTable[] directly, OdpSlide.tables() returns OdpTableShape[] wrapping { shape, table: OdtTable } -- the reducer branches on `doc.format` to reach the right live handle either way (see the OdpSlide/PptxSlide doc comments in documents.js's own edit/{odp,pptx}/slide.ts).
+  | { readonly type: 'MERGE_SLIDE_TABLE_CELLS'; readonly slideIndex: number; readonly tableIndex: number; readonly startRow: number; readonly startColumn: number; readonly rowSpan: number; readonly colSpan: number }
   | { readonly type: 'ADD_TEXTBOX'; readonly containerIndex: number; readonly frame: Box; readonly text: string }
   | { readonly type: 'ADD_IMAGE'; readonly containerIndex: number; readonly frame: Box; readonly format: 'png' | 'jpeg'; readonly bytes: Uint8Array<ArrayBuffer>; readonly altText: string | undefined }
   | { readonly type: 'SET_SHAPE_TEXT'; readonly containerIndex: number; readonly shapeIndex: number; readonly text: string }
@@ -52,6 +57,7 @@ export type Action =
   | { readonly type: 'SET_SLIDE_NOTES'; readonly slideIndex: number; readonly notes: string }
   | { readonly type: 'ADD_SHEET'; readonly name: string }
   | { readonly type: 'SET_CELL_VALUE'; readonly sheetIndex: number; readonly row: number; readonly column: number; readonly value: ContentCellValue }
+  | { readonly type: 'MERGE_CELLS'; readonly sheetIndex: number; readonly startRow: number; readonly startColumn: number; readonly rowSpan: number; readonly colSpan: number }
   | { readonly type: 'SET_SHEET_PRINT_SETTINGS'; readonly sheetIndex: number; readonly printSettings: ContentSheetPrintSettings }
   | { readonly type: 'ADD_PAGE' }
   | { readonly type: 'ADD_RECT'; readonly pageIndex: number; readonly init: OdgBoxVectorInit }
