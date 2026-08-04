@@ -24,8 +24,8 @@ importers:
         specifier: ^2.3.5
         version: 2.3.5
       ooxml.js:
-        specifier: ^2.6.16
-        version: 2.6.16
+        specifier: ^2.6.17
+        version: 2.6.17
       pdf-codec:
         specifier: ^1.11.5
         version: 1.11.5
@@ -1158,10 +1158,6 @@ packages:
     resolution: {integrity: sha512-WkrWp9GR4KXfKGYzOLmTuGVi1UWFfws377n9cc55/tb6DuqyF6pcQ5AbiHEshaDpY9v6oaSr2XCDidGmMwdzIA==}
     engines: {node: '>=8'}
 
-  document-schema.js@2.3.1:
-    resolution: {integrity: sha512-UH2KqJAM7infpAt6hj/cdllDqxA2vet8aFQ1dcGmKWSX6URN97BYjS+MpOnV794d+1sqZu9K5bBSJkfDT4ExTg==}
-    engines: {node: '>=20'}
-
   document-schema.js@2.3.2:
     resolution: {integrity: sha512-NnQwzUWyq7713W0XqhqcpAuaX1OIt+p6NxXZz3nFvjs2g+m2EhmpvEsgNOFsgnOuO102QMBo1rdFEzw2TDK6HA==}
     engines: {node: '>=20'}
@@ -1949,8 +1945,8 @@ packages:
     resolution: {integrity: sha512-1FlR+gjXK7X+AsAHso35MnyN5KqGwJRi/31ft6x0M194ht7S+rWAvd7PHss9xSKMzE0asv1pyIHaJYq+BbacAQ==}
     engines: {node: '>=12'}
 
-  ooxml.js@2.6.16:
-    resolution: {integrity: sha512-36bn8RbMghx0hXLFs9xZ9RqW6N5KQ0Zgt34YAfl91gMv9yYVjNmPsPszp/s02K7ZvoPCTxjXpRxBaR9fzxfKAQ==}
+  ooxml.js@2.6.17:
+    resolution: {integrity: sha512-3CR0ife8kOVx537JA2ha4A334dt086SyCRXvI5FHJ+SPgQO/t2Vx7jpo9PQyN2H7XgNkt5Hq1rTcyFLGbKQ7mQ==}
     engines: {node: '>=20'}
 
   optionator@0.9.4:
@@ -3750,10 +3746,6 @@ snapshots:
     dependencies:
       path-type: 4.0.0
 
-  document-schema.js@2.3.1:
-    dependencies:
-      zod: 4.4.3
-
   document-schema.js@2.3.2:
     dependencies:
       zod: 4.4.3
@@ -4434,7 +4426,7 @@ snapshots:
     dependencies:
       mimic-fn: 4.0.0
 
-  ooxml.js@2.6.16:
+  ooxml.js@2.6.17:
     dependencies:
       document-schema.js: 2.3.2
       fast-xml-parser: 5.10.1
