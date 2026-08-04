@@ -1,10 +1,12 @@
 import { decodePackage as decodeOdfPackage } from 'odf.js';
+import { decodePackage as decodeOoxmlPackage, readXlsxContent } from 'ooxml.js';
 import { readPdf } from 'pdf-codec';
 import { describe, expect, it } from 'vitest';
-import { docxToPdf } from '../convert/convert';
+import { docxToPdf, odsToXlsx } from '../convert/convert';
 import { readOdpContent } from '../odf/odp/read';
 import { minimalDocxBytes } from '../test-support/docx';
 import { minimalOdpBytes } from '../test-support/odp';
+import { richOdsBytes } from '../test-support/ods';
 import { setDocumentMetadata } from './write';
 
 describe('setDocumentMetadata: rebuild path (docx/pptx/odt/odp/ods/odg/markdown)', () => {
@@ -40,11 +42,31 @@ describe('setDocumentMetadata: pdf direct-patch path', () => {
   });
 });
 
-describe('setDocumentMetadata: rejected formats', () => {
-  it('rejects xlsx as a source or target, naming the ods-to-xlsx bridge as the workaround', () => {
-    expect(() => setDocumentMetadata('xlsx', 'xlsx', new Uint8Array(), {})).toThrow(/not a supported setDocumentMetadata source or target/);
+// xlsx rebuilds through DOCUMENT_FORMAT_CODECS.xlsx.content (ooxml.js's readXlsxContent/buildXlsxPackage, src/codecs/registry.ts) exactly like every other rebuild format above -- real xlsx bytes (via the odsToXlsx bridge over richOdsBytes, the same real-fixture pattern src/convert/bridges.test.ts already uses) prove the round trip genuinely works, not merely that the type system accepts 'xlsx' as a RebuildFormat.
+describe('setDocumentMetadata: rebuild path (xlsx)', () => {
+  it('patches only the overridden field, leaving the source spreadsheet content untouched', () => {
+    const xlsxBytes = odsToXlsx(richOdsBytes());
+    const before = readXlsxContent(decodeOoxmlPackage(xlsxBytes));
+    expect(before.metadata.title).toBe('Rich Spreadsheet'); // richOdsBytes's own real dc:title, carried through odsToXlsx.
+
+    const patched = setDocumentMetadata('xlsx', 'xlsx', xlsxBytes, { author: 'New Author' });
+    const after = readXlsxContent(decodeOoxmlPackage(patched));
+    expect(after.metadata.title).toBe('Rich Spreadsheet');
+    expect(after.metadata.author).toBe('New Author');
+    if (after.kind !== 'spreadsheet' || before.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    expect(after.sheets[0]?.cells.length).toBe(before.sheets[0]?.cells.length);
   });
 
+  it('overrides the title when asked to', () => {
+    const xlsxBytes = odsToXlsx(richOdsBytes());
+    const patched = setDocumentMetadata('xlsx', 'xlsx', xlsxBytes, { title: 'Renamed Workbook' });
+    expect(readXlsxContent(decodeOoxmlPackage(patched)).metadata.title).toBe('Renamed Workbook');
+  });
+});
+
+describe('setDocumentMetadata: rejected formats', () => {
   it('rejects odf as a source or target, naming that it has no write path back out', () => {
     expect(() => setDocumentMetadata('odf', 'odf', new Uint8Array(), {})).toThrow(/no write path back out/);
   });

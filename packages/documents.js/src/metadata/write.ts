@@ -4,8 +4,8 @@ import { DOCUMENT_FORMAT_CODECS, requireArrayBufferBytes } from '../codecs/regis
 import type { DocumentFormat } from '../convert/port';
 import { throwIfAborted } from '../ports/abort';
 
-// Every format whose own ContentDocument setDocumentMetadata can patch a metadata field on and rebuild from scratch through -- the seven formats sharing the readXContent -> buildXPackage round trip. Deliberately does NOT include 'pdf': a PDF's metadata is patched directly on its own LayoutDocument (see setDocumentMetadata below), never through this ContentDocument rebuild path at all.
-const REBUILD_FORMATS: Readonly<Record<'docx' | 'pptx' | 'odt' | 'odp' | 'ods' | 'odg' | 'markdown', true>> = {
+// Every format whose own ContentDocument setDocumentMetadata can patch a metadata field on and rebuild from scratch through -- the eight formats sharing the readXContent -> buildXPackage round trip. xlsx joined this set once DOCUMENT_FORMAT_CODECS.xlsx.content gained a real read/write pair (src/codecs/registry.ts): it now fits the identical shape docx/pptx/odt/odp/ods/odg/markdown already share, so there is no reason left to special-case it out. Deliberately does NOT include 'pdf': a PDF's metadata is patched directly on its own LayoutDocument (see setDocumentMetadata below), never through this ContentDocument rebuild path at all.
+const REBUILD_FORMATS: Readonly<Record<'docx' | 'pptx' | 'odt' | 'odp' | 'ods' | 'odg' | 'markdown' | 'xlsx', true>> = {
   docx: true,
   pptx: true,
   odt: true,
@@ -13,6 +13,7 @@ const REBUILD_FORMATS: Readonly<Record<'docx' | 'pptx' | 'odt' | 'odp' | 'ods' |
   ods: true,
   odg: true,
   markdown: true,
+  xlsx: true,
 };
 
 type RebuildFormat = keyof typeof REBUILD_FORMATS;
@@ -59,13 +60,10 @@ function mergeMetadata(current: LayoutMetadata, overrides: MetadataOverrides): L
 
 type WritePath = { readonly kind: 'pdf' } | { readonly kind: 'rebuild'; readonly format: RebuildFormat } | { readonly errorMessage: string };
 
-// setDocumentMetadata deliberately does not convert format: its own job is patching metadata in place, not choosing a target format, so source and target must resolve to the identical format -- 'pdf' direct-patches its own LayoutDocument (no ContentDocument, no layout engine, genuinely lossless for everything else on the page), every other REBUILD_FORMATS member rebuilds a fresh package from its own ContentDocument (lossy wherever that format's own build function is -- see buildDocxPackage's own docx-extras gotcha: comments, footnotes, headers/footers, and numbering definitions do not survive the rebuild, since buildDocxPackage builds a fresh package from the ContentDocument alone, with no way to carry that data through). xlsx and odf are rejected outright in both directions: xlsx because this package does not re-export a ContentDocument-to-xlsx builder (mirroring buildDocumentBytes's own rejection, src/convert/from-package.ts), odf (a standalone formula document) because it has no write path back out at all, matching that same function's own reasoning for both. A caller wanting to change format and metadata together should convert first (e.g. via buildDocumentBytes or one of the ergonomic X-to-Y conversions), then call setDocumentMetadata on the result.
+// setDocumentMetadata deliberately does not convert format: its own job is patching metadata in place, not choosing a target format, so source and target must resolve to the identical format -- 'pdf' direct-patches its own LayoutDocument (no ContentDocument, no layout engine, genuinely lossless for everything else on the page), every other REBUILD_FORMATS member rebuilds a fresh package from its own ContentDocument (lossy wherever that format's own build function is -- see buildDocxPackage's own docx-extras gotcha: comments, footnotes, headers/footers, and numbering definitions do not survive the rebuild, since buildDocxPackage builds a fresh package from the ContentDocument alone, with no way to carry that data through). xlsx now rebuilds through this same path, via DOCUMENT_FORMAT_CODECS.xlsx.content (ooxml.js's readXlsxContent/buildXlsxPackage, src/codecs/registry.ts) -- it is no longer rejected. odf (a standalone formula document) is still rejected outright in both directions, since it has no write path back out at all. A caller wanting to change format and metadata together should convert first (e.g. via buildDocumentBytes or one of the ergonomic X-to-Y conversions), then call setDocumentMetadata on the result.
 function classifyWritePath(source: DocumentFormat, target: DocumentFormat): WritePath {
   if (source === 'pdf' && target === 'pdf') {
     return { kind: 'pdf' };
-  }
-  if (target === 'xlsx' || source === 'xlsx') {
-    return { errorMessage: "'xlsx' is not a supported setDocumentMetadata source or target -- this package does not re-export a ContentDocument-to-xlsx builder or a readXlsxContent from its own public surface (see the README's Architecture section); convert via xlsxToOds/odsToXlsx first, then set metadata on the ods" };
   }
   if (target === 'odf' || source === 'odf') {
     return { errorMessage: "'odf' (a standalone formula document) is not a supported setDocumentMetadata source or target -- it has no write path back out at all" };
