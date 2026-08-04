@@ -13,6 +13,8 @@ export interface HeadTable {
   readonly xMax: number;
   readonly yMax: number;
   readonly indexToLocFormat: 0 | 1; // 0 = short 'loca' (uint16 offsets, halved), 1 = long (uint32 offsets) -- see glyf.ts
+  // The style bit field (clause 5.2.2 "macStyle"): bit 0 BOLD, bit 1 ITALIC -- a different bit layout from 'OS/2's own fsSelection, and the fallback a font with no 'OS/2' table at all (a legacy Mac-only TrueType) still declares. Exposed raw, matching Os2Table.fsSelection's own "expose the bits, let the caller decide" convention.
+  readonly macStyle: number;
 }
 
 const HEAD_TABLE_SIZE = 54;
@@ -45,6 +47,7 @@ export function parseHead(font: SfntFont): HeadTable | undefined {
     xMax: i16(bytes, 40),
     yMax: i16(bytes, 42),
     indexToLocFormat,
+    macStyle: u16(bytes, 44),
   };
 }
 

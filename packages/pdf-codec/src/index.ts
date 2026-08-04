@@ -44,6 +44,9 @@ export { resolveStandardFont } from './fonts';
 export type { FontRegistry, FontRegistryOptions, FontSubstitution, ProvidedFont, ResolvedFace } from './font-registry';
 export { createFontRegistry, resolveFaceWithRegistry } from './font-registry';
 export type { EmbeddedFace, EmbeddedFaceMetrics, EmbeddedFaceSubstitution } from './embedded-font';
+// Standalone font-file inspection: a caller holding the raw bytes of a .ttf/.otf a user supplied (not a font already extracted from a source document) reads its own declared family/bold/italic triple.
+export type { FontFace } from './font-face';
+export { FontFaceParseError, readFontFace } from './font-face';
 
 // Bytes: generic byte-level primitives with zero PDF knowledge (CRC32, DEFLATE/zlib, a backtracking reader, a chunked writer).
 export { crc32 } from './bytes/crc32';
