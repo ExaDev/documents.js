@@ -1,11 +1,12 @@
 import type { ContentDocument } from 'document-schema.js';
 import { describe, expect, it } from 'vitest';
+import { odsToXlsx } from '../convert/convert';
 import { readOdfFormulaContent } from '../odf/formula/read';
 import { FRACTION_FORMULA, odfFormulaBytes } from '../test-support/odf';
 import { minimalDocxBytes } from '../test-support/docx';
 import { minimalOdgBytes } from '../test-support/odg';
 import { minimalOdpBytes } from '../test-support/odp';
-import { minimalOdsBytes } from '../test-support/ods';
+import { minimalOdsBytes, richOdsBytes } from '../test-support/ods';
 import { minimalOdtBytes } from '../test-support/odt';
 import { minimalPptxBytes } from '../test-support/pptx';
 import { encodeMarkdownText } from '../markdown/text';
@@ -15,7 +16,7 @@ import { DOCUMENT_FORMAT_CODECS } from './registry';
 
 // Proves each DOCUMENT_FORMAT_CODECS entry's own read/write pair is wired correctly on its own terms -- not merely that readDocumentMetadata/setDocumentMetadata/buildDocumentBytes happen to still work after being refactored onto this registry (their own test files cover that). Every format with both a content.read and a content.write is exercised as a genuine read -> write -> read round trip: the content a fresh read produces after writing back out must equal the content that went in.
 
-function requireContentCodec(format: 'docx' | 'pptx' | 'odt' | 'odp' | 'ods' | 'odg' | 'markdown') {
+function requireContentCodec(format: 'docx' | 'pptx' | 'odt' | 'odp' | 'ods' | 'odg' | 'markdown' | 'xlsx') {
   const content = DOCUMENT_FORMAT_CODECS[format].content;
   if (!content?.write) {
     throw new Error(`expected DOCUMENT_FORMAT_CODECS.${format}.content.write to be defined`);
@@ -99,6 +100,42 @@ describe('DOCUMENT_FORMAT_CODECS: content read/write round trips', () => {
     const rebuiltBytes = codec.write!(content);
     expect(codec.read(rebuiltBytes)).toEqual(content);
   });
+
+  // xlsx's own column-width unit conversion (ooxml.js's ptToColumnWidthChars/columnWidthCharsToPt, src/typed/xlsx/units.ts) is a best-effort algebraic inverse, not an exact one -- src/convert/bridges.test.ts's own COLUMN_WIDTH_TOLERANCE_PT documents up to ~1pt of drift per pt<->character-width hop. This registry round trip is a second such hop on top of whatever odsToXlsx's own bridge already introduced building the fixture, so widths are checked within tolerance rather than exact equality; every other field (sheet name, cell values/kinds/formula/merges) is checked exactly, since none of those go through a lossy unit conversion.
+  it('xlsx: read -> write -> read carries sheet cell values, kinds, formulas, and merges through exactly, and column widths within tolerance', () => {
+    const codec = requireContentCodec('xlsx');
+    const xlsxBytes = odsToXlsx(richOdsBytes());
+    const content = codec.read(xlsxBytes);
+    const rebuiltBytes = codec.write!(content);
+    const roundTripped = codec.read(rebuiltBytes);
+
+    expect(roundTripped.kind).toBe(content.kind);
+    if (content.kind !== 'spreadsheet' || roundTripped.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    expect(roundTripped.metadata.title).toBe(content.metadata.title);
+
+    const originalSheet = content.sheets[0]!;
+    const sheet = roundTripped.sheets[0]!;
+    expect(sheet.name).toBe(originalSheet.name);
+    expect(sheet.cells.length).toBe(originalSheet.cells.length);
+    for (const cell of originalSheet.cells) {
+      const match = sheet.cells.find((c) => c.row === cell.row && c.column === cell.column);
+      expect(match).toBeDefined();
+      expect(match?.value).toEqual(cell.value);
+      expect(match?.displayText).toBe(cell.displayText);
+      expect(match?.formula).toBe(cell.formula);
+      expect(match?.colSpan).toBe(cell.colSpan);
+    }
+
+    const XLSX_COLUMN_WIDTH_TOLERANCE_PT = 1;
+    expect(sheet.columns.length).toBe(originalSheet.columns.length);
+    for (const originalColumn of originalSheet.columns) {
+      const column = sheet.columns.find((c) => c.index === originalColumn.index);
+      expect(column).toBeDefined();
+      expect(Math.abs((column?.widthPt ?? 0) - (originalColumn.widthPt ?? 0))).toBeLessThanOrEqual(XLSX_COLUMN_WIDTH_TOLERANCE_PT);
+    }
+  });
 });
 
 describe('DOCUMENT_FORMAT_CODECS: odf has a content.read but genuinely no content.write', () => {
@@ -118,9 +155,9 @@ describe('DOCUMENT_FORMAT_CODECS: pdf has a layout codec, not a content codec', 
   });
 });
 
-describe('DOCUMENT_FORMAT_CODECS: xlsx has neither codec -- a real, honest gap', () => {
-  it('xlsx has no content and no layout entry', () => {
-    expect(DOCUMENT_FORMAT_CODECS.xlsx.content).toBeUndefined();
+describe('DOCUMENT_FORMAT_CODECS: xlsx has a content codec, no layout codec', () => {
+  it('xlsx has a content entry and no layout entry', () => {
+    expect(DOCUMENT_FORMAT_CODECS.xlsx.content).toBeDefined();
     expect(DOCUMENT_FORMAT_CODECS.xlsx.layout).toBeUndefined();
   });
 });

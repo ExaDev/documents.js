@@ -1,4 +1,5 @@
 import type { ContentCodec, LayoutCodec } from 'document-schema.js';
+import { buildXlsxPackage, readXlsxContent } from 'ooxml.js';
 import { readPdf, writePdf } from 'pdf-codec';
 import type { DocumentFormat } from '../convert/port';
 import { buildDocxPackage } from '../edit/docx/content';
@@ -43,7 +44,7 @@ export interface DocumentFormatCodecs {
   readonly layout?: LayoutCodec<DocumentCodecOptions>;
 }
 
-// xlsx has a real raw-package codec (decodeDocumentPackage/encodeDocumentPackage both cover it, since it's an ordinary OPC container) but no ContentDocument-level codec at all: this package deliberately does not re-export ooxml.js's own readXlsxContent/buildXlsxPackage (see the README's Architecture section), so xlsx's own entry below is genuinely empty -- a real, honest gap, not a fabricated reader/builder. odf (a standalone formula document) has a content.read but no content.write: odf.js has no write path for a formula document at all, so `write` is left unset rather than stubbed.
+// xlsx now has a real content codec too, wrapping ooxml.js's own readXlsxContent/buildXlsxPackage exactly the way every other OPC/ODF format's entry wraps its own readXContent/buildXPackage pair. This does not contradict the README's Architecture-section statement that documents.js does not re-export readXlsxContent/buildXlsxPackage as public API: that statement is about src/index.ts's own export surface (still true -- neither name is exported from there), not about whether this internal registry may call them. Wrapping them here, behind the same DocumentFormatCodecs shape every other format already uses, is what lets readDocumentMetadata/setDocumentMetadata/buildDocumentBytes treat xlsx uniformly with the rest of DocumentFormat rather than special-casing it -- see each of those modules' own comments for exactly which xlsx special-cases this closed. odf (a standalone formula document) has a content.read but no content.write: odf.js has no write path for a formula document at all, so `write` is left unset rather than stubbed.
 export const DOCUMENT_FORMAT_CODECS: Readonly<Record<DocumentFormat, DocumentFormatCodecs>> = {
   docx: {
     content: {
@@ -119,5 +120,13 @@ export const DOCUMENT_FORMAT_CODECS: Readonly<Record<DocumentFormat, DocumentFor
       write: (layout, options) => writePdf(layout, { signal: options?.signal }),
     },
   },
-  xlsx: {},
+  xlsx: {
+    content: {
+      read: (bytes, options) => {
+        throwIfAborted(options?.signal);
+        return readXlsxContent(decodeDocumentPackage('xlsx', requireArrayBufferBytes(bytes)));
+      },
+      write: (content) => encodeDocumentPackage('xlsx', buildXlsxPackage(content)),
+    },
+  },
 };
