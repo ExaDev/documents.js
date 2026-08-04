@@ -1,3 +1,13 @@
+# [1.7.0](https://github.com/ExaDev/document-cli/compare/v1.6.0...v1.7.0) (2026-08-04)
+
+
+### Features
+
+* **docx,odt:** merge table cells at creation and retrofit, add table wizard ([0ab41a4](https://github.com/ExaDev/document-cli/commit/0ab41a4a3a3014cd8c306925ef2b81383ce17249))
+* **ods:** merge spreadsheet cells via a range-select-then-merge grid flow ([4b081cd](https://github.com/ExaDev/document-cli/commit/4b081cd07dcb29b56d4cb335577c3b83b6f0a972))
+* **pptx,odp:** browse and merge cells in a slide's own tables ([ad44d1f](https://github.com/ExaDev/document-cli/commit/ad44d1f3fe7d4b2afc13b1faa15b7b96ce4ac0d1))
+* **state:** add cell-merge actions for ods sheets, docx/odt tables, slide tables ([867093d](https://github.com/ExaDev/document-cli/commit/867093d8d5a7f86172bf31130ff2faa2838a384a))
+
 # [1.6.0](https://github.com/ExaDev/document-cli/compare/v1.5.0...v1.6.0) (2026-08-04)
 
 
