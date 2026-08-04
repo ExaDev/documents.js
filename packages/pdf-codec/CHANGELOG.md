@@ -1,3 +1,10 @@
+## [1.11.3](https://github.com/ExaDev/pdf-codec/compare/v1.11.2...v1.11.3) (2026-08-04)
+
+
+### Bug Fixes
+
+* **ci:** self-heal sibling-dependency-update PRs stranded by CONFLICTING status ([173b086](https://github.com/ExaDev/pdf-codec/commit/173b086bcd81709cca9471cc52ec996959d61b6d))
+
 ## [1.11.2](https://github.com/ExaDev/pdf-codec/compare/v1.11.1...v1.11.2) (2026-08-04)
 
 ## [1.11.1](https://github.com/ExaDev/pdf-codec/compare/v1.11.0...v1.11.1) (2026-08-04)
