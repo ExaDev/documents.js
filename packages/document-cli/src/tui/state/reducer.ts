@@ -206,14 +206,6 @@ function shapeAt(doc: ShapeHostOpenDocument, containerIndex: number, shapeIndex:
   return doc.editor.slides()[containerIndex]?.shapes()[shapeIndex];
 }
 
-// Only odp/odg shapes are `OdpShape`, the one shape class with a real `draw:transform` rotation setter; `PptxShape` has none, so SET_SHAPE_ROTATION resolves through this narrower accessor and reports a warning rather than crashing when the open document is pptx.
-function rotatableShapeAt(doc: OdpOpenDocument | OdgOpenDocument, containerIndex: number, shapeIndex: number): OdpShape | undefined {
-  if (doc.format === 'odg') {
-    return doc.editor.pages()[containerIndex]?.shapes()[shapeIndex];
-  }
-  return doc.editor.slides()[containerIndex]?.shapes()[shapeIndex];
-}
-
 function sheetAt(doc: OdsOpenDocument, sheetIndex: number): OdsSheet | undefined {
   return doc.editor.sheets()[sheetIndex];
 }
@@ -264,11 +256,25 @@ function withSheet(state: AppState, sheetIndex: number, apply: (sheet: OdsSheet)
   });
 }
 
-// A cell's text is replaced rather than appended: documents.js gives a table cell `paragraphs()`/`appendParagraph()` and a read-only `text`, so the first paragraph's first run carries the new value and any further runs in it are removed.
-function setCellText(cell: DocxTableCell | OdtTableCell, text: string): void {
-  const existing = cell.paragraphs();
+// The small structural shape a "replace this container's whole text" write needs -- satisfied by DocxTableCell/OdtTableCell (paragraphs()/appendParagraph()) and equally by OdtListItem (the identical paragraphs()/appendParagraph() pair, see documents.js's src/edit/odt/list.ts), even though a table cell and a list item share no common base class or interface of their own.
+interface TextRunLike {
+  text: string;
+  remove(): void;
+}
+interface TextParagraphLike {
+  runs(): readonly TextRunLike[];
+  appendRun(init: { readonly text: string }): unknown;
+}
+interface TextContainerLike {
+  paragraphs(): readonly TextParagraphLike[];
+  appendParagraph(): TextParagraphLike;
+}
+
+// A container's text is replaced rather than appended: documents.js gives a table cell or list item `paragraphs()`/`appendParagraph()` and a read-only `text`, so the first paragraph's first run carries the new value and any further runs in it are removed. Generalised from a docx/odt-table-cell-only helper so SET_LIST_ITEM_TEXT can reuse the identical template against an OdtListItem.
+function setTextContainerText(container: TextContainerLike, text: string): void {
+  const existing = container.paragraphs();
   const first = existing[0];
-  const paragraph = first ?? cell.appendParagraph();
+  const paragraph = first ?? container.appendParagraph();
   const runs = paragraph.runs();
   const firstRun = runs[0];
   if (firstRun === undefined) {
@@ -279,6 +285,10 @@ function setCellText(cell: DocxTableCell | OdtTableCell, text: string): void {
   for (const extra of runs.slice(1)) {
     extra.remove();
   }
+}
+
+function setCellText(cell: DocxTableCell | OdtTableCell, text: string): void {
+  setTextContainerText(cell, text);
 }
 
 export function appReducer(state: AppState, action: Action): AppState {
@@ -492,6 +502,28 @@ export function appReducer(state: AppState, action: Action): AppState {
       });
     }
 
+    // odt-only, unlike ADD_LIST_ITEM: a list is a genuinely separate ODF concept (text:list/text:list-item) with no docx analogue -- OOXML's own list membership is flat paragraph metadata with no equivalent "list item" object to address by (blockIndex, itemIndex) at all.
+    case 'SET_LIST_ITEM_TEXT': {
+      const doc = wordprocessingDocument(state);
+      if (doc === undefined) {
+        return wrongDocument(state, 'a docx or odt document');
+      }
+      if (doc.format !== 'odt') {
+        return wrongDocument(state, 'an odt document (lists are an odt-only concept)');
+      }
+      const list = doc.editor.lists()[action.blockIndex];
+      if (list === undefined) {
+        return withStatus(state, 'warning', `There is no list at index ${action.blockIndex}`);
+      }
+      const item = list.items()[action.itemIndex];
+      if (item === undefined) {
+        return withStatus(state, 'warning', `List ${action.blockIndex} has no item at index ${action.itemIndex}`);
+      }
+      return mutate(state, doc, () => {
+        setTextContainerText(item, action.text);
+      });
+    }
+
     case 'ADD_SLIDE': {
       const doc = presentationDocument(state);
       if (doc === undefined) {
@@ -573,22 +605,11 @@ export function appReducer(state: AppState, action: Action): AppState {
         shape.frame = action.frame;
       });
 
-    case 'SET_SHAPE_ROTATION': {
-      const doc = shapeHostDocument(state);
-      if (doc === undefined) {
-        return wrongDocument(state, 'a pptx, odp or odg document');
-      }
-      if (doc.format === 'pptx') {
-        return withStatus(state, 'warning', 'documents.js has no rotation setter for a pptx shape; rotate the shape in odp instead');
-      }
-      const shape = rotatableShapeAt(doc, action.containerIndex, action.shapeIndex);
-      if (shape === undefined) {
-        return withStatus(state, 'warning', `There is no shape ${action.shapeIndex} at index ${action.containerIndex}`);
-      }
-      return mutate(state, doc, () => {
+    // PptxShape gained a real `rotationDeg` getter/setter alongside OdpShape's -- SET_SHAPE_ROTATION resolves through the same withShape helper SET_SHAPE_TEXT/SET_SHAPE_FRAME already use rather than a pptx-specific rejection.
+    case 'SET_SHAPE_ROTATION':
+      return withShape(state, action.containerIndex, action.shapeIndex, (shape) => {
         shape.rotationDeg = action.rotationDeg;
       });
-    }
 
     case 'SET_SLIDE_NOTES': {
       const doc = presentationDocument(state);

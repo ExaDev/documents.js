@@ -57,7 +57,7 @@ export interface ParagraphFamilyTable {
   rows(): readonly ParagraphFamilyTableRow[];
 }
 
-// odt keeps lists as a genuinely separate tree (OdtList/OdtListItem, reached via OdtEditor.lists()) rather than docx's flat per-paragraph list membership, and OdtListItem exposes no getter at all for its own content (see screens/editors/odt/list-editor.tsx) -- so this is the one adapter member that only ever gets an item count, and the one docx's own factory call simply omits.
+// odt keeps lists as a genuinely separate tree (OdtList/OdtListItem, reached via OdtEditor.lists()) rather than docx's flat per-paragraph list membership -- so this is the one adapter member docx's own factory call simply omits. It only ever carries an item count, not each item's own text (OdtListItem.text is real, but reading it here as well would mean this summary-row adapter fetching every item of every list just to render one row per list -- screens/editors/odt/list-editor.tsx reads each item's real text directly, once a list is actually opened).
 export interface ParagraphFamilyList {
   readonly itemCount: number;
 }

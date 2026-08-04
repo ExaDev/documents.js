@@ -3,7 +3,7 @@ import type { ReactElement } from 'react';
 import { useAppDispatch, useAppState } from '../../../state/context.js';
 import { createParagraphFamilyAdapter, ParagraphFamilyBodyList, type ParagraphFamilyList } from '../../shared/paragraph-family.js';
 
-// The odt-specific root of this screen family: same shared body list as docx's, but its adapter additionally supplies `lists`, since `OdtEditor` (unlike `DocxEditor`) keeps lists as a genuinely separate tree reached through its own `.lists()` accessor rather than flat per-paragraph metadata. `OdtList` itself exposes only `items().length` as readable content (see list-editor.tsx's own comment on why), so that is all this maps into `ParagraphFamilyList`.
+// The odt-specific root of this screen family: same shared body list as docx's, but its adapter additionally supplies `lists`, since `OdtEditor` (unlike `DocxEditor`) keeps lists as a genuinely separate tree reached through its own `.lists()` accessor rather than flat per-paragraph metadata. `ParagraphFamilyList` (this file's own shared adapter shape) only carries an item count, not each item's text -- list-editor.tsx reads each item's real `.text` directly once a list is opened, rather than through this summary-row adapter.
 export function OdtBodyListScreen(): ReactElement {
   const state = useAppState();
   const dispatch = useAppDispatch();

@@ -24,8 +24,6 @@ const FIELD_LABELS: Readonly<Record<Exclude<FieldKey, 'rotation'>, string>> = {
   height: 'Height (pt)',
 };
 
-const ROTATION_UNAVAILABLE_MESSAGE = 'documents.js has no rotation setter for a pptx shape; rotate the shape in odp instead';
-
 const POINT_DISPLAY_PRECISION = 100;
 
 function formatPoints(value: number | undefined): string {
@@ -54,9 +52,9 @@ function roundForDisplay(value: number): number {
   return Math.round(value * POINT_DISPLAY_PRECISION) / POINT_DISPLAY_PRECISION;
 }
 
-function initialDraftFor(key: FieldKey, shape: PptxShape | OdpShape, rotatableShape: OdpShape | undefined): string {
+function initialDraftFor(key: FieldKey, shape: PptxShape | OdpShape): string {
   if (key === 'rotation') {
-    const value = rotatableShape?.rotationDeg;
+    const value = shape.rotationDeg;
     return value === undefined ? '' : String(roundForDisplay(value));
   }
   if (key === 'text') {
@@ -78,8 +76,6 @@ function initialDraftFor(key: FieldKey, shape: PptxShape | OdpShape, rotatableSh
 interface FieldRowProps {
   readonly fieldKey: FieldKey;
   readonly shape: PptxShape | OdpShape;
-  readonly rotatableShape: OdpShape | undefined;
-  readonly isOdp: boolean;
   readonly isSelected: boolean;
   readonly isEditing: boolean;
   readonly draft: string;
@@ -90,20 +86,11 @@ interface FieldRowProps {
 
 // A "multi-line text area" isn't achievable with the one text-input primitive this repo has (ink-text-input, single-line, Enter always submits -- see components/text-field.tsx) -- so editing genuinely happens one line at a time via TextField, but the un-edited VIEW of the text field renders the shape's real, un-flattened `.text` (embedded newlines and all) across as many Ink `<Text>` lines as it actually has, which is the closest a terminal gets to a text area for content that already spans several lines.
 function FieldRow(props: FieldRowProps): ReactElement {
-  const { fieldKey, shape, rotatableShape, isOdp, isSelected, isEditing, draft, onDraftChange, onSubmit, onCancel } = props;
+  const { fieldKey, shape, isSelected, isEditing, draft, onDraftChange, onSubmit, onCancel } = props;
 
   if (fieldKey === 'rotation') {
     return (
-      <RotationField
-        rotationDeg={rotatableShape?.rotationDeg}
-        isEditable={isOdp}
-        isSelected={isSelected}
-        isEditing={isEditing}
-        draftValue={draft}
-        onDraftChange={onDraftChange}
-        onSubmit={onSubmit}
-        onCancel={onCancel}
-      />
+      <RotationField rotationDeg={shape.rotationDeg} isSelected={isSelected} isEditing={isEditing} draftValue={draft} onDraftChange={onDraftChange} onSubmit={onSubmit} onCancel={onCancel} />
     );
   }
 
@@ -141,10 +128,7 @@ export function ShapeEditorScreen(props: ShapeEditorScreenProps): ReactElement {
   const overlayOpen = anyOverlayOpen(state);
   const doc = assertPresentationDocument(state.openDocument);
   const { slideIndex, shapeIndex } = props.screen;
-  const isOdp = doc.format === 'odp';
   const shape = doc.editor.slides()[slideIndex]?.shapes()[shapeIndex];
-  // Only OdpShape has a real `rotationDeg` accessor at all (PptxShape has none, confirmed against the .d.ts), so rotation is resolved through a second, format-narrowed lookup rather than the generic `shape` above -- exactly mirroring `rotatableShapeAt` in state/reducer.ts.
-  const rotatableShape = doc.format === 'odp' ? doc.editor.slides()[slideIndex]?.shapes()[shapeIndex] : undefined;
 
   const [editingField, setEditingField] = useState<FieldKey | undefined>(undefined);
   const [draft, setDraft] = useState('');
@@ -163,12 +147,8 @@ export function ShapeEditorScreen(props: ShapeEditorScreenProps): ReactElement {
       if (key === undefined) {
         return;
       }
-      if (key === 'rotation' && !isOdp) {
-        dispatch({ type: 'SET_STATUS', severity: 'warning', text: ROTATION_UNAVAILABLE_MESSAGE });
-        return;
-      }
       dispatch({ type: 'SET_SELECTION', key: selectionKeyFor(props.screen), index });
-      setDraft(initialDraftFor(key, shape, rotatableShape));
+      setDraft(initialDraftFor(key, shape));
       setEditingField(key);
     },
   });
@@ -247,18 +227,7 @@ export function ShapeEditorScreen(props: ShapeEditorScreenProps): ReactElement {
         items={FIELD_KEYS}
         selectedIndex={selectedIndex}
         renderItem={(key, isSelected) => (
-          <FieldRow
-            fieldKey={key}
-            shape={shape}
-            rotatableShape={rotatableShape}
-            isOdp={isOdp}
-            isSelected={isSelected}
-            isEditing={editingField === key}
-            draft={draft}
-            onDraftChange={setDraft}
-            onSubmit={submitEdit}
-            onCancel={cancelEdit}
-          />
+          <FieldRow fieldKey={key} shape={shape} isSelected={isSelected} isEditing={editingField === key} draft={draft} onDraftChange={setDraft} onSubmit={submitEdit} onCancel={cancelEdit} />
         )}
       />
       <Text dimColor>Enter: edit field Esc: back</Text>

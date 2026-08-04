@@ -57,7 +57,6 @@ function Harness({ format, bytes }: { readonly format: 'pptx' | 'odp'; readonly 
   if (screen.kind !== 'shapeEditor') {
     return <OpenAtShapeEditor format={format} bytes={bytes} />;
   }
-  // StatusLine alongside the screen, matching app.tsx's own shell layout -- SET_STATUS (the pptx rotation warning this file tests) renders through StatusLine, not through ShapeEditorScreen itself.
   return (
     <Box flexDirection="column">
       <ShapeEditorScreen screen={screen} />
@@ -74,22 +73,15 @@ function renderShapeEditor(format: 'pptx' | 'odp', bytes: Uint8Array<ArrayBuffer
   );
 }
 
-describe('ShapeEditorScreen rotation row: pptx vs odp', () => {
-  it('renders the rotation row greyed out for a pptx shape', async () => {
+// PptxShape gained a real `rotationDeg` getter/setter alongside OdpShape's, so the rotation row now behaves identically for both formats -- these used to be two contrasting suites (pptx greyed out, odp editable); now each format gets its own copy of the same assertions rather than one leaning on the other for contrast.
+describe('ShapeEditorScreen rotation row: pptx', () => {
+  it('renders the rotation row as an editable, currently-unset value for a pptx shape', async () => {
     const { lastFrame } = renderShapeEditor('pptx', buildOnePptxShapeBytes());
     const frame = await waitForText(lastFrame, 'Slide 1, shape 1');
-    expect(frame).toContain('not available for pptx shapes');
-    expect(frame).not.toContain('(unset)');
-  });
-
-  it('renders the rotation row as an editable, currently-unset value for an odp shape', async () => {
-    const { lastFrame } = renderShapeEditor('odp', buildOneOdpShapeBytes());
-    const frame = await waitForText(lastFrame, 'Slide 1, shape 1');
     expect(frame).toContain('Rotation: (unset)');
-    expect(frame).not.toContain('not available for pptx shapes');
   });
 
-  it('warns rather than opening an editor when Enter is pressed on the rotation row for a pptx shape', async () => {
+  it('opens an editable rotation field on Enter for a pptx shape and commits a value on submit', async () => {
     const { lastFrame, stdin } = renderShapeEditor('pptx', buildOnePptxShapeBytes());
     await waitForText(lastFrame, 'Slide 1, shape 1');
 
@@ -98,9 +90,21 @@ describe('ShapeEditorScreen rotation row: pptx vs odp', () => {
       await sendKey(stdin, 'j');
     }
     await sendKey(stdin, ENTER_KEY);
-    const frame = await waitForText(lastFrame, 'documents.js has no rotation setter for a pptx shape');
-    // Still on the field list, not inside a TextField editor -- the warning replaces entering edit mode, it doesn't precede it.
+    await waitForText(lastFrame, 'Rotation (deg');
+
+    await sendKey(stdin, '3');
+    await sendKey(stdin, '0');
+    await sendKey(stdin, ENTER_KEY);
+    const frame = await waitForText(lastFrame, 'Rotation: 30°');
     expect(frame).not.toContain('Rotation (deg');
+  });
+});
+
+describe('ShapeEditorScreen rotation row: odp', () => {
+  it('renders the rotation row as an editable, currently-unset value for an odp shape', async () => {
+    const { lastFrame } = renderShapeEditor('odp', buildOneOdpShapeBytes());
+    const frame = await waitForText(lastFrame, 'Slide 1, shape 1');
+    expect(frame).toContain('Rotation: (unset)');
   });
 
   it('opens an editable rotation field on Enter for an odp shape and commits a value on submit', async () => {

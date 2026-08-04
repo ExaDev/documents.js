@@ -1,8 +1,8 @@
-import { createOdp, createOds, createPptx, odsToXlsx, openOdp, openPptx, readOdpContent, readPdf, readPptxContent, xlsxToPdf } from 'documents.js';
+import { createOdg, createOdp, createOds, createOdt, createPptx, odsToXlsx, openOdg, openOdp, openOdt, openPptx, readOdpContent, readPdf, readPptxContent, xlsxToPdf } from 'documents.js';
 import { describe, expect, it } from 'vitest';
 import type { Action } from './actions.js';
 import { appReducer, createInitialState } from './reducer.js';
-import type { AppState, DocxOpenDocument, MarkdownOpenDocument, OdpOpenDocument, OdsOpenDocument, PptxOpenDocument } from './types.js';
+import type { AppState, DocxOpenDocument, MarkdownOpenDocument, OdgOpenDocument, OdpOpenDocument, OdsOpenDocument, OdtOpenDocument, PptxOpenDocument } from './types.js';
 
 function applyAll(actions: readonly Action[], from: AppState = createInitialState()): AppState {
   return actions.reduce<AppState>(appReducer, from);
@@ -40,12 +40,36 @@ function odpDocument(state: AppState): OdpOpenDocument {
   return doc;
 }
 
+function odtDocument(state: AppState): OdtOpenDocument {
+  const doc = state.openDocument;
+  if (doc?.format !== 'odt') {
+    throw new Error('expected an open odt document');
+  }
+  return doc;
+}
+
+function odgDocument(state: AppState): OdgOpenDocument {
+  const doc = state.openDocument;
+  if (doc?.format !== 'odg') {
+    throw new Error('expected an open odg document');
+  }
+  return doc;
+}
+
 function openPptxDocument(bytes: Uint8Array<ArrayBuffer>, path = '/tmp/deck.pptx'): AppState {
   return appReducer(createInitialState(), { type: 'OPEN_FILE_SUCCESS', path, doc: { format: 'pptx', editor: openPptx(bytes), path } });
 }
 
 function openOdpDocument(bytes: Uint8Array<ArrayBuffer>, path = '/tmp/deck.odp'): AppState {
   return appReducer(createInitialState(), { type: 'OPEN_FILE_SUCCESS', path, doc: { format: 'odp', editor: openOdp(bytes), path } });
+}
+
+function openOdtDocument(bytes: Uint8Array<ArrayBuffer>, path = '/tmp/doc.odt'): AppState {
+  return appReducer(createInitialState(), { type: 'OPEN_FILE_SUCCESS', path, doc: { format: 'odt', editor: openOdt(bytes), path } });
+}
+
+function openOdgDocument(bytes: Uint8Array<ArrayBuffer>, path = '/tmp/drawing.odg'): AppState {
+  return appReducer(createInitialState(), { type: 'OPEN_FILE_SUCCESS', path, doc: { format: 'odg', editor: openOdg(bytes), path } });
 }
 
 // Real xlsx bytes with no XlsxEditor to build one directly: createOds() -> odsToXlsx() is documents.js's own PDF-bypassing bridge, reused here purely as a source of genuine xlsx bytes for the reducer tests below.
@@ -169,6 +193,58 @@ describe('appReducer docx mutations', () => {
   it('warns instead of mutating when the open document is the wrong format', () => {
     const state = appReducer(createInitialState(), { type: 'CREATE_DOCUMENT', format: 'ods' });
     const warned = appReducer(state, { type: 'APPEND_PARAGRAPH', text: 'x', styleId: undefined, alignment: undefined });
+    expect(warned.status?.severity).toBe('warning');
+    expect(warned.hasUnsavedChanges).toBe(false);
+  });
+});
+
+describe('appReducer SET_LIST_ITEM_TEXT on odt', () => {
+  it('replaces a real list item\'s text and the change round-trips through re-decoding the package', () => {
+    const editor = createOdt();
+    const list = editor.body.appendList();
+    list.addItem().appendParagraph({ text: 'first' });
+    list.addItem().appendParagraph({ text: 'second' });
+    const opened = openOdtDocument(editor.toBytes());
+    const blockIndex = odtDocument(opened).editor.lists().length - 1;
+
+    const edited = appReducer(opened, { type: 'SET_LIST_ITEM_TEXT', blockIndex, itemIndex: 1, text: 'SECOND, EDITED' });
+    expect(edited.hasUnsavedChanges).toBe(true);
+    const items = odtDocument(edited).editor.lists()[blockIndex]?.items();
+    expect(items?.[0]?.text).toBe('first');
+    expect(items?.[1]?.text).toBe('SECOND, EDITED');
+
+    // Re-decoding the saved bytes as a completely fresh package proves the edit was written into the real text:list-item tree, not just held on the live in-memory object.
+    const reopened = openOdt(odtDocument(edited).editor.toBytes());
+    const reopenedItems = reopened.lists()[blockIndex]?.items();
+    expect(reopenedItems?.[0]?.text).toBe('first');
+    expect(reopenedItems?.[1]?.text).toBe('SECOND, EDITED');
+  });
+
+  it('warns rather than crashing for a list index that does not exist', () => {
+    const editor = createOdt();
+    editor.body.appendList().addItem().appendParagraph({ text: 'only' });
+    const opened = openOdtDocument(editor.toBytes());
+
+    const result = appReducer(opened, { type: 'SET_LIST_ITEM_TEXT', blockIndex: 5, itemIndex: 0, text: 'x' });
+    expect(result.status?.severity).toBe('warning');
+    expect(result.hasUnsavedChanges).toBe(false);
+  });
+
+  it('warns rather than crashing for an item index that does not exist', () => {
+    const editor = createOdt();
+    const list = editor.body.appendList();
+    list.addItem().appendParagraph({ text: 'only' });
+    const opened = openOdtDocument(editor.toBytes());
+    const blockIndex = odtDocument(opened).editor.lists().length - 1;
+
+    const result = appReducer(opened, { type: 'SET_LIST_ITEM_TEXT', blockIndex, itemIndex: 3, text: 'x' });
+    expect(result.status?.severity).toBe('warning');
+    expect(result.hasUnsavedChanges).toBe(false);
+  });
+
+  it('warns instead of mutating when the open document is docx (lists are an odt-only concept)', () => {
+    const state = appReducer(createInitialState(), { type: 'CREATE_DOCUMENT', format: 'docx' });
+    const warned = appReducer(state, { type: 'SET_LIST_ITEM_TEXT', blockIndex: 0, itemIndex: 0, text: 'x' });
     expect(warned.status?.severity).toBe('warning');
     expect(warned.hasUnsavedChanges).toBe(false);
   });
@@ -320,6 +396,34 @@ describe('appReducer SET_SLIDE_NOTES on pptx', () => {
   });
 });
 
+describe('appReducer SET_SHAPE_ROTATION on pptx', () => {
+  it('rotates a real pptx shape, not just an odp one, and the rotation round-trips through re-decoding the package', () => {
+    const editor = createPptx();
+    const slide = editor.addSlide();
+    slide.addTextBox({ frame: { xPt: 10, yPt: 10, widthPt: 100, heightPt: 50 }, text: 'Title' });
+    const opened = openPptxDocument(editor.toBytes());
+
+    const rotated = appReducer(opened, { type: 'SET_SHAPE_ROTATION', containerIndex: 0, shapeIndex: 0, rotationDeg: 30 });
+    expect(rotated.hasUnsavedChanges).toBe(true);
+    // The live view means the shape object captured before the action already reflects the mutation.
+    expect(pptxDocument(rotated).editor.slides()[0]?.shapes()[0]?.rotationDeg).toBeCloseTo(30, 5);
+
+    // Re-decoding the saved bytes as a completely fresh package proves the rotation was written into the real docx/pptx tree, not just held on the live in-memory object.
+    const reopened = openPptx(pptxDocument(rotated).editor.toBytes());
+    expect(reopened.slides()[0]?.shapes()[0]?.rotationDeg).toBeCloseTo(30, 5);
+  });
+
+  it('warns rather than crashing for a shape index that does not exist', () => {
+    const editor = createPptx();
+    editor.addSlide();
+    const opened = openPptxDocument(editor.toBytes());
+
+    const result = appReducer(opened, { type: 'SET_SHAPE_ROTATION', containerIndex: 0, shapeIndex: 5, rotationDeg: 30 });
+    expect(result.status?.severity).toBe('warning');
+    expect(result.hasUnsavedChanges).toBe(false);
+  });
+});
+
 describe('appReducer xlsx (read-only PDF-preview) documents', () => {
   it('opens with a status message pointing at the export-pdf flow, unlike every other format', () => {
     const bytes = xlsxTestBytes();
@@ -341,6 +445,49 @@ describe('appReducer xlsx (read-only PDF-preview) documents', () => {
     expect(undone.status?.severity).toBe('warning');
     expect(undone.status?.text).toContain('read-only');
     expect(undone.openDocument).toBe(opened.openDocument);
+  });
+});
+
+describe('appReducer SET_VECTOR_FILL / SET_VECTOR_STROKE on odg', () => {
+  it('edits a real rect vector\'s fill and stroke, and the change round-trips through re-decoding the package', () => {
+    const editor = createOdg();
+    const page = editor.addPage();
+    page.addRect({ frame: { xPt: 10, yPt: 10, widthPt: 40, heightPt: 30 }, fill: { r: 1, g: 0, b: 0 } });
+    const opened = openOdgDocument(editor.toBytes());
+
+    const liveVector = odgDocument(opened).editor.pages()[0]?.vectors()[0];
+    if (liveVector === undefined || liveVector.kind === 'line') {
+      throw new Error('expected a rect vector');
+    }
+
+    const filled = appReducer(opened, { type: 'SET_VECTOR_FILL', vector: liveVector, fill: { r: 0, g: 1, b: 0 } });
+    expect(filled.hasUnsavedChanges).toBe(true);
+    // The live view means the vector object captured before the action already reflects the mutation.
+    expect(liveVector.fill).toEqual({ r: 0, g: 1, b: 0 });
+
+    const stroked = appReducer(filled, { type: 'SET_VECTOR_STROKE', vector: liveVector, stroke: { color: { r: 0, g: 0, b: 1 }, widthPt: 2 } });
+    expect(stroked.hasUnsavedChanges).toBe(true);
+    expect(liveVector.stroke).toEqual({ color: { r: 0, g: 0, b: 1 }, widthPt: 2 });
+
+    // Re-decoding the saved bytes as a completely fresh package proves both edits were written into the real draw:rect element, not just held on the live in-memory object.
+    const reopened = openOdg(odgDocument(stroked).editor.toBytes());
+    const reopenedVector = reopened.pages()[0]?.vectors()[0];
+    if (reopenedVector === undefined || reopenedVector.kind === 'line') {
+      throw new Error('expected a rect vector after re-decoding');
+    }
+    expect(reopenedVector.fill).toEqual({ r: 0, g: 1, b: 0 });
+    expect(reopenedVector.stroke).toEqual({ color: { r: 0, g: 0, b: 1 }, widthPt: 2 });
+  });
+
+  it('warns instead of mutating when the open document is the wrong format', () => {
+    const editor = createOdg();
+    const page = editor.addPage();
+    const rect = page.addRect({ frame: { xPt: 10, yPt: 10, widthPt: 40, heightPt: 30 } });
+    const state = appReducer(createInitialState(), { type: 'CREATE_DOCUMENT', format: 'docx' });
+
+    const result = appReducer(state, { type: 'SET_VECTOR_FILL', vector: rect, fill: { r: 1, g: 1, b: 1 } });
+    expect(result.status?.severity).toBe('warning');
+    expect(result.hasUnsavedChanges).toBe(false);
   });
 });
 

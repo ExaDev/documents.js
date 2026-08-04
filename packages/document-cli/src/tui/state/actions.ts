@@ -6,7 +6,7 @@ import type { Diagnostic, EditableFormat, OpenDocument, OverlayName, Screen, Sta
 // - `blockIndex` indexes `editor.paragraphs()` for the paragraph/run/list actions, and `editor.tables()` for the table actions -- two separate arrays, matching the two accessors documents.js gives a docx/odt editor.
 // - `containerIndex` indexes `editor.slides()` for pptx/odp and `editor.pages()` for odg: a shape (`OdpShape`/`PptxShape`) lives on a slide or on a drawing page and is reached identically either way, so one action serves both.
 // - `sheetIndex` indexes `editor.sheets()`; `row`/`column` are OdsSheet.cell's own zero-based coordinates.
-// - The odg vector actions (SET_VECTOR_FILL/SET_VECTOR_STROKE) carry the LIVE vector object instead, because `OdgPage` has `shapes()` but no vector enumeration accessor at all -- the only handle on an existing `draw:rect`/`draw:ellipse`/`draw:line`/`draw:path` is the reference `addRect`/`addEllipse`/`addLine`/`addPath` returned. Passing a live object through an action is safe here for the same reason the reducer is impure: the object IS the document, so there is no stale copy to go out of sync.
+// - The odg vector actions (SET_VECTOR_FILL/SET_VECTOR_STROKE) carry the LIVE vector object rather than an index: `OdgPage.vectors()` is a real, live accessor, but it recognises a narrower vector vocabulary than odf.js's own reader (see screens/editors/odg/shared.ts's own `vectorsParityMatch`), so an index into it does not reliably line up with the row a caller selected from the UI's own (wider-vocabulary) vector list. Passing the live object through directly sidesteps that mismatch entirely, and is safe for the same reason the reducer is impure: the object IS the document, so there is no stale copy to go out of sync.
 //
 // SET_VECTOR_STROKE's `stroke` is non-optional because `OdgLineVector.stroke`'s setter (unlike the box/path ones) does not accept `undefined`, and a write against the union of the three narrows to the intersection of their setter types.
 
@@ -41,6 +41,7 @@ export type Action =
   | { readonly type: 'APPEND_TABLE'; readonly rows: number; readonly columns: number }
   | { readonly type: 'SET_TABLE_CELL_TEXT'; readonly tableIndex: number; readonly row: number; readonly column: number; readonly text: string }
   | { readonly type: 'ADD_LIST_ITEM'; readonly blockIndex: number; readonly text: string }
+  | { readonly type: 'SET_LIST_ITEM_TEXT'; readonly blockIndex: number; readonly itemIndex: number; readonly text: string }
   | { readonly type: 'ADD_SLIDE' }
   | { readonly type: 'ADD_SLIDE_TABLE'; readonly slideIndex: number; readonly frame: Box; readonly rows: number; readonly columns: number }
   | { readonly type: 'ADD_TEXTBOX'; readonly containerIndex: number; readonly frame: Box; readonly text: string }
