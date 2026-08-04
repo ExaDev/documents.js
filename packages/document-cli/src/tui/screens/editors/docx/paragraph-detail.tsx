@@ -10,7 +10,7 @@ import { anyOverlayOpen, currentScreen, selectionKeyFor } from '../../../state/t
 import { isValidHexColorInput, layoutColorToHex } from '../../shared/color.js';
 import { FieldWizard, requireFieldValue, type FieldSpec } from '../../shared/field-wizard.js';
 import { FormulaPicker } from '../../shared/formula-picker.js';
-import { liveParagraphAt, paragraphFamilyDocument, type ParagraphFamilyLiveRun } from '../../shared/paragraph-family.js';
+import { liveParagraphAt, paragraphFamilyDocument, supportsRunStyleExtras, type ParagraphFamilyLiveRun } from '../../shared/paragraph-family.js';
 import { parseNumberField } from '../../shared/text.js';
 
 // A run's own current sizePt has no sensible zero-ish fallback the way a blank colour prompt does (an empty hex input just means "no colour") -- a font size prompt that fails to parse falls back to the run's OWN current size (or, for a run with none set yet, this codebase's own standard body size) rather than silently writing 0pt.
@@ -59,18 +59,21 @@ export interface ParagraphRunsViewProps {
   readonly selectedRunIndex: number | undefined;
 }
 
-// Shared between this screen (full editing, a real cursor) and table-cell-detail.tsx (read-only display of a cell's own paragraphs, no cursor at all -- documents.js gives a table cell no per-run styling actions, see that screen's own comment) so the same real-styling render logic is never duplicated.
+// Shared between this screen (full editing, a real cursor) and table-cell-detail.tsx (read-only display of a cell's own paragraphs, no cursor at all -- documents.js gives a table cell no per-run styling actions, see that screen's own comment) so the same real-styling render logic is never duplicated. `runs` can now be MarkdownRun[] as well as DocxRun[]/OdtRun[] (paragraph-family.tsx's own widened `ParagraphFamilyLiveRun`) -- `supportsRunStyleExtras` narrows each run before reading `.underline`/`.color`, since MarkdownRun has neither field at all; a markdown run renders with bold/italic only.
 export function ParagraphRunsView(props: ParagraphRunsViewProps): ReactElement {
   if (props.runs.length === 0) {
     return <Text dimColor>(no runs -- press 'a' to append one)</Text>;
   }
   return (
     <Box>
-      {props.runs.map((run, index) => (
-        <Text key={index} bold={run.bold} italic={run.italic} underline={run.underline} color={run.color === undefined ? undefined : layoutColorToHex(run.color)} inverse={index === props.selectedRunIndex}>
-          {run.text.length === 0 ? '<empty run>' : run.text}
-        </Text>
-      ))}
+      {props.runs.map((run, index) => {
+        const styled = supportsRunStyleExtras(run);
+        return (
+          <Text key={index} bold={run.bold} italic={run.italic} underline={styled && run.underline} color={styled && run.color !== undefined ? layoutColorToHex(run.color) : undefined} inverse={index === props.selectedRunIndex}>
+            {run.text.length === 0 ? '<empty run>' : run.text}
+          </Text>
+        );
+      })}
     </Box>
   );
 }
@@ -131,8 +134,8 @@ export function ParagraphDetailScreen(): ReactElement {
         dispatch({ type: 'PUSH_SCREEN', screen: { kind: 'runEditor', blockIndex, runIndex: newIndex } });
         return;
       }
-      // Uppercase, matching this codebase's own "uppercase variant when the lowercase letter is already taken" convention (see paragraph-family.tsx's own 'T' table wizard beside 'a' append) -- 'i' already toggles italic on this screen. Works for both docx and odt: both paragraph types share the identical insertImageAfter shape.
-      if (input === 'I') {
+      // Uppercase, matching this codebase's own "uppercase variant when the lowercase letter is already taken" convention (see paragraph-family.tsx's own 'T' table wizard beside 'a' append) -- 'i' already toggles italic on this screen. docx/odt only: MarkdownParagraph has no insertImageAfter at all (the reducer's own INSERT_PARAGRAPH_IMAGE case is narrowed to styledWordprocessingDocument for exactly this reason), so the key does nothing for a markdown document rather than opening a wizard whose submission would only produce a warning.
+      if (input === 'I' && doc?.format !== 'markdown') {
         setImageWizardOpen(true);
         return;
       }
@@ -150,6 +153,10 @@ export function ParagraphDetailScreen(): ReactElement {
       }
       if (input === 'i') {
         dispatch({ type: 'TOGGLE_RUN_ITALIC', blockIndex, runIndex: clampedRunIndex });
+        return;
+      }
+      // The four keys below all read/write a field MarkdownRun has no getter or setter for at all (underline, colour, font family, font size) -- disabled outright for a markdown document rather than opening a prompt that could only ever end in a wrongDocument warning from the reducer.
+      if (!supportsRunStyleExtras(selectedRun)) {
         return;
       }
       if (input === 'u') {
@@ -175,7 +182,7 @@ export function ParagraphDetailScreen(): ReactElement {
     return <Text color="red">ParagraphDetailScreen rendered outside a paragraphDetail screen.</Text>;
   }
   if (doc === undefined) {
-    return <Text color="red">ParagraphDetailScreen requires an open docx or odt document.</Text>;
+    return <Text color="red">ParagraphDetailScreen requires an open docx, odt or markdown document.</Text>;
   }
   if (paragraph === undefined) {
     return <Text color="red">There is no paragraph at index {screen.blockIndex}.</Text>;
@@ -242,7 +249,8 @@ export function ParagraphDetailScreen(): ReactElement {
             placeholder="e.g. 12"
             onChange={setFontSizeInput}
             onSubmit={(value) => {
-              const currentSizePt = selectedRun?.sizePt ?? DEFAULT_RUN_SIZE_PT;
+              // This field only ever opens via the 's' handler, itself gated behind supportsRunStyleExtras(selectedRun) -- but that guard lives in a separate closure (the useInput callback), so TypeScript has no way to carry the narrowing through to this one; re-checking it here is what lets `selectedRun.sizePt` read without a cast.
+              const currentSizePt = selectedRun !== undefined && supportsRunStyleExtras(selectedRun) ? (selectedRun.sizePt ?? DEFAULT_RUN_SIZE_PT) : DEFAULT_RUN_SIZE_PT;
               const sizePt = parseNumberField(value, currentSizePt);
               if (sizePt <= 0) {
                 dispatch({ type: 'SET_STATUS', severity: 'warning', text: `"${value}" is not a positive font size` });
@@ -286,7 +294,8 @@ export function ParagraphDetailScreen(): ReactElement {
         />
       ) : undefined}
       <Text dimColor>
-        &lt;- / -&gt; move, Enter edit text, b/i/u toggle, c colour, f font, s size, a append run, I image{doc.format === 'docx' ? ', m formula' : ''}, Esc back
+        &lt;- / -&gt; move, Enter edit text, b/i{doc.format === 'markdown' ? '' : '/u'} toggle{doc.format === 'markdown' ? '' : ', c colour, f font, s size'}, a append run{doc.format === 'markdown' ? '' : ', I image'}
+        {doc.format === 'docx' ? ', m formula' : ''}, Esc back
       </Text>
     </Box>
   );

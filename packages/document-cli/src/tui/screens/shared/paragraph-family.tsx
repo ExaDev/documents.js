@@ -1,28 +1,35 @@
 import { Box, Text, useInput } from 'ink';
 import { useEffect, useState, type Dispatch, type ReactElement } from 'react';
-import type { Alignment, Box as GeometryBox, DocxParagraph, DocxRun, DocxTable, DocxTableCell, MathMlNode, OdtParagraph, OdtRun, OdtTable, OdtTableCell } from 'documents.js';
+import type { Alignment, Box as GeometryBox, DocxParagraph, DocxRun, DocxTable, DocxTableCell, MarkdownParagraph, MarkdownRun, MarkdownTable, MarkdownTableCell, MathMlNode, OdtParagraph, OdtRun, OdtTable, OdtTableCell } from 'documents.js';
 import { ListView } from '../../components/list-view.js';
 import { TextField } from '../../components/text-field.js';
 import { useNavigationInput, type NavigationInputOptions } from '../../keybindings/use-navigation-input.js';
 import type { Action } from '../../state/actions.js';
 import { useAppDispatch, useAppState } from '../../state/context.js';
-import { anyOverlayOpen, selectionKeyFor, type DocxOpenDocument, type OdtOpenDocument, type OpenDocument } from '../../state/types.js';
+import { anyOverlayOpen, selectionKeyFor, type DocxOpenDocument, type MarkdownOpenDocument, type OdtOpenDocument, type OpenDocument } from '../../state/types.js';
 import { FieldWizard, requireFieldValue, type FieldSpec } from './field-wizard.js';
 import { FormulaPicker } from './formula-picker.js';
 import { parseNonNegativeIntField, parseNumberField, parsePositiveIntField, truncatePreview } from './text.js';
 
-// docx and odt share one paragraph/run/table model closely enough (see documents.js's own README: "readDocxContent and readOdtContent both produce the identical wordprocessing-variant ContentDocument shape") that DocxParagraph/OdtParagraph and DocxRun/OdtRun are structurally interchangeable for every screen in this family -- the union types below let every helper and screen here take whichever the open document actually is without a branch, mirroring state/reducer.ts's own `WordprocessingOpenDocument` narrowing (not exported from there, so restated here for this screen family's own use).
-export type ParagraphFamilyOpenDocument = DocxOpenDocument | OdtOpenDocument;
-export type ParagraphFamilyLiveParagraph = DocxParagraph | OdtParagraph;
-export type ParagraphFamilyLiveRun = DocxRun | OdtRun;
-export type ParagraphFamilyLiveTable = DocxTable | OdtTable;
-export type ParagraphFamilyLiveTableCell = DocxTableCell | OdtTableCell;
+// docx, odt and markdown share one paragraph/run/table model closely enough (see documents.js's own README: "readDocxContent and readOdtContent both produce the identical wordprocessing-variant ContentDocument shape", and readMarkdownContent is the third format sharing that same pivot) that DocxParagraph/OdtParagraph/MarkdownParagraph and DocxRun/OdtRun/MarkdownRun are structurally interchangeable for every screen in this family -- the union types below let every helper and screen here take whichever the open document actually is without a branch, mirroring state/reducer.ts's own `WordprocessingOpenDocument` narrowing (not exported from there, so restated here for this screen family's own use). MarkdownRun/MarkdownParagraph are a genuinely narrower shape than DocxRun/DocxParagraph's own (no underline/colour/fontFamily/sizePt on a run, no alignment on a paragraph) -- see `supportsRunStyleExtras` below for how call sites that need those fields narrow the union down to docx/odt only.
+export type ParagraphFamilyOpenDocument = DocxOpenDocument | OdtOpenDocument | MarkdownOpenDocument;
+export type ParagraphFamilyLiveParagraph = DocxParagraph | OdtParagraph | MarkdownParagraph;
+export type ParagraphFamilyLiveRun = DocxRun | OdtRun | MarkdownRun;
+export type ParagraphFamilyLiveTable = DocxTable | OdtTable | MarkdownTable;
+export type ParagraphFamilyLiveTableCell = DocxTableCell | OdtTableCell | MarkdownTableCell;
+
+// The docx/odt-only subset of ParagraphFamilyLiveRun that genuinely carries underline/colour/fontFamily/sizePt -- MarkdownRun has none of the four (it carries bold/italic/strike/hyperlink/code instead). `'underline' in run` is a real TypeScript `in`-narrowing check (not a cast): true for exactly the two run classes that declare that getter.
+export type ParagraphFamilyStyledRun = DocxRun | OdtRun;
+
+export function supportsRunStyleExtras(run: ParagraphFamilyLiveRun): run is ParagraphFamilyStyledRun {
+  return 'underline' in run;
+}
 
 export function paragraphFamilyDocument(openDocument: OpenDocument | undefined): ParagraphFamilyOpenDocument | undefined {
   if (openDocument === undefined) {
     return undefined;
   }
-  return openDocument.format === 'docx' || openDocument.format === 'odt' ? openDocument : undefined;
+  return openDocument.format === 'docx' || openDocument.format === 'odt' || openDocument.format === 'markdown' ? openDocument : undefined;
 }
 
 export function liveParagraphAt(doc: ParagraphFamilyOpenDocument, blockIndex: number): ParagraphFamilyLiveParagraph | undefined {
@@ -33,18 +40,18 @@ export function liveTableAt(doc: ParagraphFamilyOpenDocument, tableIndex: number
   return doc.editor.tables()[tableIndex];
 }
 
-// The read-only shape the body list needs for a preview -- deliberately a small structural subset of DocxRun/OdtRun (no colour/fontFamily/sizePt: those matter once you are inside a single paragraph, not for a one-line list row) so that `doc.editor.paragraphs()`/`doc.editor.tables()` can be handed to the adapter factory below completely unwrapped -- both DocxParagraph and OdtParagraph already satisfy these interfaces structurally.
+// The read-only shape the body list needs for a preview -- deliberately a small structural subset of DocxRun/OdtRun/MarkdownRun (no colour/fontFamily/sizePt: those matter once you are inside a single paragraph, not for a one-line list row) so that `doc.editor.paragraphs()`/`doc.editor.tables()` can be handed to the adapter factory below completely unwrapped -- DocxParagraph, OdtParagraph, and MarkdownParagraph all already satisfy these interfaces structurally. `underline`/`alignment` are genuinely optional keys, not merely `| undefined`-valued ones: MarkdownRun/MarkdownParagraph have no such property AT ALL (not even one reading `undefined`), so the key itself has to be absent-capable for a markdown paragraph's own `runs()`/`.alignment` to satisfy these interfaces without a wrapping adapter.
 export interface ParagraphFamilyRun {
   readonly text: string;
   readonly bold: boolean;
   readonly italic: boolean;
-  readonly underline: boolean;
+  readonly underline?: boolean;
 }
 
 export interface ParagraphFamilyParagraph {
   readonly text: string;
   readonly styleId: string | undefined;
-  readonly alignment: Alignment | undefined;
+  readonly alignment?: Alignment;
   runs(): readonly ParagraphFamilyRun[];
 }
 
@@ -66,7 +73,7 @@ export interface ParagraphFamilyList {
 }
 
 export interface ParagraphFamilyAdapter {
-  readonly formatLabel: 'docx' | 'odt';
+  readonly formatLabel: 'docx' | 'odt' | 'markdown';
   paragraphs(): readonly ParagraphFamilyParagraph[];
   tables(): readonly ParagraphFamilyTable[];
   lists?: () => readonly ParagraphFamilyList[];
@@ -74,7 +81,7 @@ export interface ParagraphFamilyAdapter {
 }
 
 export interface ParagraphFamilyAdapterOptions {
-  readonly formatLabel: 'docx' | 'odt';
+  readonly formatLabel: 'docx' | 'odt' | 'markdown';
   readonly paragraphs: () => readonly ParagraphFamilyParagraph[];
   readonly tables: () => readonly ParagraphFamilyTable[];
   readonly lists?: () => readonly ParagraphFamilyList[];

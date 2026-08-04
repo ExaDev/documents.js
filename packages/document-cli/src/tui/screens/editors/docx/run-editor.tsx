@@ -32,7 +32,7 @@ export function RunEditorScreen(): ReactElement {
     return <Text color="red">RunEditorScreen rendered outside a runEditor screen.</Text>;
   }
   if (doc === undefined) {
-    return <Text color="red">RunEditorScreen requires an open docx or odt document.</Text>;
+    return <Text color="red">RunEditorScreen requires an open docx, odt or markdown document.</Text>;
   }
   const paragraph = liveParagraphAt(doc, screen.blockIndex);
   if (paragraph === undefined) {

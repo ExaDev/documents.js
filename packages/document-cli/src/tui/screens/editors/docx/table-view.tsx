@@ -94,7 +94,7 @@ export function TableViewScreen(): ReactElement {
     return <Text color="red">TableViewScreen rendered outside a tableView screen.</Text>;
   }
   if (doc === undefined) {
-    return <Text color="red">TableViewScreen requires an open docx or odt document.</Text>;
+    return <Text color="red">TableViewScreen requires an open docx, odt or markdown document.</Text>;
   }
   if (table === undefined) {
     return <Text color="red">There is no table at index {screen.blockIndex}.</Text>;

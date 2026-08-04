@@ -38,7 +38,7 @@ export function TableCellDetailScreen(): ReactElement {
     return <Text color="red">TableCellDetailScreen rendered outside a tableCellDetail screen.</Text>;
   }
   if (doc === undefined) {
-    return <Text color="red">TableCellDetailScreen requires an open docx or odt document.</Text>;
+    return <Text color="red">TableCellDetailScreen requires an open docx, odt or markdown document.</Text>;
   }
   if (cell === undefined) {
     return (

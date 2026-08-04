@@ -11,7 +11,7 @@ import { describeError } from './errors.js';
 import { openDocumentAtPath } from './format/open-document.js';
 import { DocxBodyListScreen, ParagraphDetailScreen, RunEditorScreen, TableCellDetailScreen, TableViewScreen } from './screens/editors/docx/index.js';
 import { DocxExtrasScreen } from './screens/editors/docx/extras.js';
-import { MarkdownLineEditorScreen, MarkdownLineListScreen } from './screens/editors/markdown/index.js';
+import { MarkdownBodyListScreen, MarkdownViewSourceScreen } from './screens/editors/markdown/index.js';
 import { OdbFormDetailScreen } from './screens/editors/odb/form-detail.js';
 import { OdbFormListScreen } from './screens/editors/odb/form-list.js';
 import { OdbReportDetailScreen } from './screens/editors/odb/report-detail.js';
@@ -62,7 +62,10 @@ function ScreenBody({ screen }: { readonly screen: Screen }): ReactElement {
     case 'newDocumentPicker':
       return <NewDocumentPickerScreen />;
     case 'bodyList':
-      return format === 'odt' ? <OdtBodyListScreen /> : <DocxBodyListScreen />;
+      if (format === 'odt') {
+        return <OdtBodyListScreen />;
+      }
+      return format === 'markdown' ? <MarkdownBodyListScreen /> : <DocxBodyListScreen />;
     case 'docxExtras':
       return <DocxExtrasScreen />;
     case 'paragraphDetail':
@@ -113,10 +116,8 @@ function ScreenBody({ screen }: { readonly screen: Screen }): ReactElement {
       return <OdbReportDetailScreen />;
     case 'odbReportRender':
       return <OdbReportRenderScreen />;
-    case 'markdownLineList':
-      return <MarkdownLineListScreen />;
-    case 'markdownLineEditor':
-      return <MarkdownLineEditorScreen />;
+    case 'viewSource':
+      return <MarkdownViewSourceScreen />;
     case 'pdfPageList':
       return <PdfPageListScreen />;
     case 'pdfPageItems':
@@ -192,7 +193,11 @@ function AppShell({ startPath }: { readonly startPath?: string }): ReactElement 
     let cancelled = false;
     void (async () => {
       try {
-        const doc = await openDocumentAtPath(startPath);
+        const doc = await openDocumentAtPath(startPath, {
+          onDiagnostic: (diagnostic) => {
+            dispatch({ type: 'APPEND_DIAGNOSTIC', diagnostic });
+          },
+        });
         if (!cancelled) {
           // OPEN_FILE_SUCCESS resets the stack to that format's root screen itself, so there is no separate RESET_STACK to dispatch here.
           dispatch({ type: 'OPEN_FILE_SUCCESS', path: startPath, doc });
