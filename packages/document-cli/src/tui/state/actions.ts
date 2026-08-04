@@ -1,4 +1,26 @@
-import type { Alignment, Box, ContentCellValue, ContentSheetPrintSettings, ContentStroke, LayoutColor, MathMlNode, OdgBoxVector, OdgBoxVectorInit, OdgLineVector, OdgLineVectorInit, OdgPathVector, OdgPathVectorInit } from 'documents.js';
+import type {
+  Alignment,
+  Box,
+  ContentCellValue,
+  ContentSheetPrintSettings,
+  ContentStroke,
+  LayoutColor,
+  LayoutFont,
+  MathMlNode,
+  OdgBoxVector,
+  OdgBoxVectorInit,
+  OdgLineVector,
+  OdgLineVectorInit,
+  OdgPathVector,
+  OdgPathVectorInit,
+  PdfEllipseInit,
+  PdfImageInit,
+  PdfLineInit,
+  PdfLinkInit,
+  PdfPathInit,
+  PdfRectInit,
+  PdfTextInit,
+} from 'documents.js';
 import type { Diagnostic, EditableFormat, OpenDocument, OverlayName, Screen, StatusMessage } from './types.js';
 
 // HOW A MUTATING ACTION ADDRESSES ITS TARGET. The rule is: address by index wherever the editor exposes an enumeration accessor to resolve that index against, and carry the live object itself only where it does not.
@@ -94,6 +116,43 @@ export type Action =
   | { readonly type: 'ADD_PATH'; readonly containerIndex: number; readonly init: OdgPathVectorInit }
   | { readonly type: 'SET_VECTOR_FILL'; readonly vector: OdgBoxVector | OdgPathVector; readonly fill: LayoutColor | undefined }
   | { readonly type: 'SET_VECTOR_STROKE'; readonly vector: OdgBoxVector | OdgLineVector | OdgPathVector; readonly stroke: ContentStroke }
+  // PDF add/remove: `pageIndex` indexes `editor.pages()`/`editor.page()`, matching every other index-addressed container in this file. Each ADD_PDF_* action dispatches the exact PdfXInit shape the matching PdfPage.append<Kind> method itself takes, so the reducer needs no bespoke object-building of its own -- see documents.js's own src/edit/pdf/item.ts for each Init interface's real required fields.
+  | { readonly type: 'ADD_PDF_TEXT'; readonly pageIndex: number; readonly init: PdfTextInit }
+  | { readonly type: 'ADD_PDF_RECT'; readonly pageIndex: number; readonly init: PdfRectInit }
+  | { readonly type: 'ADD_PDF_ELLIPSE'; readonly pageIndex: number; readonly init: PdfEllipseInit }
+  | { readonly type: 'ADD_PDF_LINE'; readonly pageIndex: number; readonly init: PdfLineInit }
+  | { readonly type: 'ADD_PDF_PATH'; readonly pageIndex: number; readonly init: PdfPathInit }
+  | { readonly type: 'ADD_PDF_IMAGE'; readonly pageIndex: number; readonly init: PdfImageInit }
+  | { readonly type: 'ADD_PDF_LINK'; readonly pageIndex: number; readonly init: PdfLinkInit }
+  | { readonly type: 'REMOVE_PDF_ITEM'; readonly pageIndex: number; readonly itemIndex: number }
+  // PDF item field edits, one family per LayoutItem kind: addressed by (pageIndex, itemIndex) rather than a live object reference -- unlike the odg vector actions above, PdfPage.items() is an unambiguous, real enumeration accessor with no parity-mismatch risk (see reducer.ts's own withPdfItemMatching), so resolving the index fresh inside the reducer on every dispatch is safe.
+  | { readonly type: 'SET_PDF_TEXT_TEXT'; readonly pageIndex: number; readonly itemIndex: number; readonly text: string }
+  | { readonly type: 'SET_PDF_TEXT_POSITION'; readonly pageIndex: number; readonly itemIndex: number; readonly xPt: number; readonly yPt: number }
+  | { readonly type: 'SET_PDF_TEXT_FONT'; readonly pageIndex: number; readonly itemIndex: number; readonly font: LayoutFont }
+  | { readonly type: 'SET_PDF_TEXT_SIZE'; readonly pageIndex: number; readonly itemIndex: number; readonly sizePt: number }
+  | { readonly type: 'SET_PDF_TEXT_COLOR'; readonly pageIndex: number; readonly itemIndex: number; readonly color: LayoutColor }
+  | { readonly type: 'SET_PDF_TEXT_ROTATION'; readonly pageIndex: number; readonly itemIndex: number; readonly rotationDeg: number | undefined }
+  | { readonly type: 'SET_PDF_TEXT_WIDTH'; readonly pageIndex: number; readonly itemIndex: number; readonly widthPt: number | undefined }
+  | { readonly type: 'TOGGLE_PDF_TEXT_UNDERLINE'; readonly pageIndex: number; readonly itemIndex: number }
+  | { readonly type: 'SET_PDF_RECT_FRAME'; readonly pageIndex: number; readonly itemIndex: number; readonly xPt: number; readonly yPt: number; readonly widthPt: number; readonly heightPt: number }
+  | { readonly type: 'SET_PDF_RECT_FILL'; readonly pageIndex: number; readonly itemIndex: number; readonly fill: LayoutColor | undefined }
+  | { readonly type: 'SET_PDF_RECT_STROKE'; readonly pageIndex: number; readonly itemIndex: number; readonly stroke: ContentStroke | undefined }
+  | { readonly type: 'SET_PDF_ELLIPSE_FRAME'; readonly pageIndex: number; readonly itemIndex: number; readonly xPt: number; readonly yPt: number; readonly widthPt: number; readonly heightPt: number }
+  | { readonly type: 'SET_PDF_ELLIPSE_FILL'; readonly pageIndex: number; readonly itemIndex: number; readonly fill: LayoutColor | undefined }
+  | { readonly type: 'SET_PDF_ELLIPSE_STROKE'; readonly pageIndex: number; readonly itemIndex: number; readonly stroke: ContentStroke | undefined }
+  | { readonly type: 'SET_PDF_LINE_FROM'; readonly pageIndex: number; readonly itemIndex: number; readonly x1Pt: number; readonly y1Pt: number }
+  | { readonly type: 'SET_PDF_LINE_TO'; readonly pageIndex: number; readonly itemIndex: number; readonly x2Pt: number; readonly y2Pt: number }
+  | { readonly type: 'SET_PDF_LINE_COLOR'; readonly pageIndex: number; readonly itemIndex: number; readonly color: LayoutColor }
+  | { readonly type: 'SET_PDF_LINE_WIDTH'; readonly pageIndex: number; readonly itemIndex: number; readonly widthPt: number }
+  | { readonly type: 'SET_PDF_PATH_FILL'; readonly pageIndex: number; readonly itemIndex: number; readonly fill: LayoutColor | undefined }
+  | { readonly type: 'SET_PDF_PATH_FILL_RULE'; readonly pageIndex: number; readonly itemIndex: number; readonly fillRule: 'nonzero' | 'evenodd' | undefined }
+  | { readonly type: 'SET_PDF_PATH_STROKE'; readonly pageIndex: number; readonly itemIndex: number; readonly stroke: ContentStroke | undefined }
+  | { readonly type: 'SET_PDF_IMAGE_FRAME'; readonly pageIndex: number; readonly itemIndex: number; readonly xPt: number; readonly yPt: number; readonly widthPt: number; readonly heightPt: number }
+  | { readonly type: 'SET_PDF_IMAGE_ROTATION'; readonly pageIndex: number; readonly itemIndex: number; readonly rotationDeg: number | undefined }
+  // Re-embeds a fresh image, exactly like ADD_IMAGE/INSERT_PARAGRAPH_IMAGE: raw bytes across the action boundary, resolved into the document's own image registry inside the reducer (PdfImageItem.setImage), never base64.
+  | { readonly type: 'SET_PDF_IMAGE_SOURCE'; readonly pageIndex: number; readonly itemIndex: number; readonly format: 'png' | 'jpeg'; readonly bytes: Uint8Array<ArrayBuffer> }
+  | { readonly type: 'SET_PDF_LINK_URI'; readonly pageIndex: number; readonly itemIndex: number; readonly uri: string }
+  | { readonly type: 'SET_PDF_LINK_FRAME'; readonly pageIndex: number; readonly itemIndex: number; readonly xPt: number; readonly yPt: number; readonly widthPt: number; readonly heightPt: number }
   // Markdown has no live editor object to mutate in place (see MarkdownOpenDocument's own doc comment) -- the whole rejoined source is dispatched at once, rather than one action per line, so the reducer's own mutateMarkdown helper stays a single, genuinely pure "replace the string, push an undo snapshot" step.
   | { readonly type: 'SET_MARKDOWN_SOURCE'; readonly source: string }
   | { readonly type: 'APPEND_DIAGNOSTIC'; readonly diagnostic: Diagnostic }

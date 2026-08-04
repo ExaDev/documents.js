@@ -1,5 +1,5 @@
 import { readFile, writeFile } from 'node:fs/promises';
-import { createDocx, createOdg, createOdp, createOds, createOdt, createPptx, decodeMarkdownText, encodeMarkdownText, openDocx, openOdg, openOdp, openOds, openOdt, openPptx, readOdbForms, readOdbReports, readOdbTables, readPdf, xlsxToPdf } from 'documents.js';
+import { createDocx, createOdg, createOdp, createOds, createOdt, createPdf, createPptx, decodeMarkdownText, encodeMarkdownText, openDocx, openOdg, openOdp, openOds, openOdt, openPdf, openPptx, readOdbForms, readOdbReports, readOdbTables, readPdf, xlsxToPdf } from 'documents.js';
 import { decodePackage } from 'odf.js';
 import type { EditableFormat, OpenDocument } from '../state/types.js';
 import { detectFormat } from './detect-format.js';
@@ -36,8 +36,10 @@ export async function openDocumentAtPath(path: string): Promise<OpenDocument> {
       return { format, editor: openOds(bytes), path };
     case 'odg':
       return { format, editor: openOdg(bytes), path };
-    case 'pdf':
-      return { format, layout: readPdf(bytes), path };
+    case 'pdf': {
+      const editor = openPdf(bytes);
+      return { format, editor, layout: editor.toLayoutDocument(), path };
+    }
     // No read/write round trip through markdown-codec here at all -- opening a .md file loads its raw text as `.source` verbatim, exactly the byte<->text boundary decodeMarkdownText already exists for (see documents.js's own src/markdown/text.ts). The ContentDocument pivot (readMarkdownContent) only ever enters on cross-format export -- see export-pdf.ts.
     case 'markdown':
       return { format, source: decodeMarkdownText(bytes), path };
@@ -63,11 +65,15 @@ export function createNewDocument(format: EditableFormat): OpenDocument {
       return { format, editor: createOds(), path: undefined };
     case 'odg':
       return { format, editor: createOdg(), path: undefined };
+    case 'pdf': {
+      const editor = createPdf();
+      return { format, editor, layout: editor.toLayoutDocument(), path: undefined };
+    }
   }
 }
 
 export async function saveDocumentTo(openDocument: OpenDocument, path: string): Promise<void> {
-  if (openDocument.format === 'odb' || openDocument.format === 'pdf' || openDocument.format === 'xlsx') {
+  if (openDocument.format === 'odb' || openDocument.format === 'xlsx') {
     throw new Error(`A ${openDocument.format} document is opened read-only and cannot be written back`);
   }
   // Markdown has no editor object at all -- `.source` is written back to disk literally, the same byte<->text boundary opening it went through in reverse, never through markdown-codec's own readMarkdown/writeMarkdown.

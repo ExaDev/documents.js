@@ -11,7 +11,7 @@ interface CreatableFormat {
   readonly description: string;
 }
 
-// The six formats documents.js exposes a create<X>() live-view editor for. `.odb` and `.pdf` are deliberately excluded rather than listed and then disabled: `.odb` has no write direction at all (it only extracts an embedded database's tables) and a `.pdf` is opened as a parsed LayoutDocument, never as something this app creates from nothing.
+// The six formats this picker offers as a genuinely useful "start from a blank document" flow. `.odb` is excluded because it has no write direction at all (it only extracts an embedded database's tables). `.pdf` is a real `EditableFormat` too now (documents.js's `createPdf()` produces a live-view `PdfEditor` exactly like the six below) and `createNewDocument` handles it -- it is left off THIS list on UX grounds rather than a technical one: a blank single-page PDF with nothing on it is a far less useful starting point than opening an existing PDF and editing it (the pdf page-list/page-items/item-detail screens), so this picker does not surface it as a "new document" option.
 const CREATABLE_FORMATS: readonly CreatableFormat[] = [
   { format: 'docx', description: 'Word-processing document (OOXML)' },
   { format: 'pptx', description: 'Presentation slide deck (OOXML)' },

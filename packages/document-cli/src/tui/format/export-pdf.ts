@@ -27,8 +27,9 @@ function toPdfOptions(options: ExportToPdfOptions, fonts: readonly ProvidedFont[
 }
 
 export async function exportToPdf(openDocument: OpenDocument, destinationPath: string, options: ExportToPdfOptions): Promise<void> {
+  // `odb` has no export-to-PDF path because it is read-only with no `ContentDocument` to convert; `pdf` has no export-to-PDF path for a different reason -- it is genuinely editable now (see PdfOpenDocument's own doc comment), but there is no docxToPdf-equivalent "convert a PDF to a PDF" conversion function, and there does not need to be one. Saving an edited PDF in place is `saveDocumentTo`'s job, not this one.
   if (openDocument.format === 'odb' || openDocument.format === 'pdf') {
-    throw new Error(`A ${openDocument.format} document is already a read-only source; there is no export-to-PDF path for it`);
+    throw new Error(`A ${openDocument.format} document has no export-to-PDF path -- ${openDocument.format === 'pdf' ? 'save it directly instead' : 'it is a read-only source with nothing to convert'}`);
   }
   // Loaded before anything is converted or written, so a bad font path fails with nothing half-written at the destination.
   const fonts = await loadProvidedFonts(options.fontFiles ?? [], { signal: options.signal });

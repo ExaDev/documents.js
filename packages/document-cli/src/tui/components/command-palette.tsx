@@ -15,14 +15,14 @@ interface CommandDefinition {
   readonly description: string;
 }
 
-// Wide enough for the longest usage string above (`:new docx|pptx|odt|odp|ods|odg`) plus a space, so the description column lines up without measuring at render time.
-const USAGE_COLUMN_WIDTH = 32;
+// Wide enough for the longest usage string above (`:new docx|pptx|odt|odp|ods|odg|pdf`) plus a space, so the description column lines up without measuring at render time.
+const USAGE_COLUMN_WIDTH = 36;
 
 const COMMANDS: readonly CommandDefinition[] = [
   { name: 'save', usage: ':save', description: 'Write the open document back to its own path' },
   { name: 'saveas', usage: ':saveas <path>', description: 'Write the open document to a new path' },
   { name: 'export', usage: ':export pdf [path]', description: 'Render the open document to PDF' },
-  { name: 'new', usage: ':new docx|pptx|odt|odp|ods|odg', description: 'Create an empty document' },
+  { name: 'new', usage: ':new docx|pptx|odt|odp|ods|odg|pdf', description: 'Create an empty document' },
   { name: 'open', usage: ':open <path>', description: 'Open a document from disk' },
   { name: 'close', usage: ':close', description: 'Close the open document' },
   { name: 'undo', usage: ':undo', description: 'Undo the last change' },
@@ -121,7 +121,7 @@ async function runCommand(line: string, state: AppState, dispatch: Dispatch<Acti
     case 'new': {
       const format = args[0];
       if (format === undefined || !isEditableFormat(format)) {
-        warn(dispatch, 'Usage: :new docx|pptx|odt|odp|ods|odg');
+        warn(dispatch, 'Usage: :new docx|pptx|odt|odp|ods|odg|pdf');
         return;
       }
       dispatch({ type: 'CREATE_DOCUMENT', format });

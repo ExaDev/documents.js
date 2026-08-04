@@ -7,6 +7,7 @@ import {
   openOdp,
   openOds,
   openOdt,
+  openPdf,
   openPptx,
   type DocxParagraph,
   type DocxRun,
@@ -18,13 +19,22 @@ import {
   type OdtRun,
   type OdtTable,
   type OdtTableCell,
+  type PdfEllipseItem,
+  type PdfImageItem,
+  type PdfItem,
+  type PdfLineItem,
+  type PdfLinkItem,
+  type PdfPage,
+  type PdfPathItem,
+  type PdfRectItem,
+  type PdfTextItem,
   type PptxShape,
   type PptxTable,
   type MathMlNode,
 } from 'documents.js';
 import { createNewDocument } from '../format/open-document.js';
 import type { Action } from './actions.js';
-import { rootScreenForFormat, type AppState, type DocxOpenDocument, type EditableOpenDocument, type MarkdownOpenDocument, type OdgOpenDocument, type OdpOpenDocument, type OdsOpenDocument, type OdtOpenDocument, type OpenDocument, type OverlayName, type OverlayState, type PptxOpenDocument, type StatusMessage } from './types.js';
+import { rootScreenForFormat, type AppState, type DocxOpenDocument, type EditableOpenDocument, type MarkdownOpenDocument, type OdgOpenDocument, type OdpOpenDocument, type OdsOpenDocument, type OdtOpenDocument, type OpenDocument, type OverlayName, type OverlayState, type PdfOpenDocument, type PptxOpenDocument, type StatusMessage } from './types.js';
 
 // THIS REDUCER IS DELIBERATELY IMPURE FOR EVERY MUTATING ACTION, AND THAT IS THE DESIGN, NOT AN OVERSIGHT.
 //
@@ -91,12 +101,12 @@ function documentWithPath(doc: OpenDocument, path: string): OpenDocument {
       return { format: 'ods', editor: doc.editor, path };
     case 'odg':
       return { format: 'odg', editor: doc.editor, path };
+    case 'pdf':
+      return { format: 'pdf', editor: doc.editor, layout: doc.layout, path };
     case 'odb':
       return { format: 'odb', tables: doc.tables, forms: doc.forms, reports: doc.reports, path };
     case 'markdown':
       return { format: 'markdown', source: doc.source, path };
-    case 'pdf':
-      return { format: 'pdf', layout: doc.layout, path };
     case 'xlsx':
       return { format: 'xlsx', layout: doc.layout, bytes: doc.bytes, path };
   }
@@ -116,6 +126,10 @@ function reopenEditable(doc: EditableOpenDocument, bytes: Uint8Array<ArrayBuffer
       return { format: 'ods', editor: openOds(bytes), path: doc.path };
     case 'odg':
       return { format: 'odg', editor: openOdg(bytes), path: doc.path };
+    case 'pdf': {
+      const editor = openPdf(bytes);
+      return { format: 'pdf', editor, layout: editor.toLayoutDocument(), path: doc.path };
+    }
   }
 }
 
@@ -237,6 +251,59 @@ function drawingDocument(state: AppState): OdgOpenDocument | undefined {
   }
   return doc.format === 'odg' ? doc : undefined;
 }
+
+function pdfDocument(state: AppState): PdfOpenDocument | undefined {
+  const doc = state.openDocument;
+  if (doc === undefined) {
+    return undefined;
+  }
+  return doc.format === 'pdf' ? doc : undefined;
+}
+
+function pdfItemAt(doc: PdfOpenDocument, pageIndex: number, itemIndex: number): PdfItem | undefined {
+  return doc.editor.page(pageIndex)?.items()[itemIndex];
+}
+
+// One page-scoped action per ADD_PDF_* case: resolves `pageIndex` against `editor.page()` (a real, live PdfPage), then mutates through it -- the pdf-family counterpart to withSheet/withShape above.
+function withPdfPage(state: AppState, pageIndex: number, apply: (page: PdfPage) => void): AppState {
+  const doc = pdfDocument(state);
+  if (doc === undefined) {
+    return wrongDocument(state, 'a pdf document');
+  }
+  const page = doc.editor.page(pageIndex);
+  if (page === undefined) {
+    return withStatus(state, 'warning', `There is no page at index ${pageIndex}`);
+  }
+  return mutate(state, doc, () => {
+    apply(page);
+  });
+}
+
+// Resolves (pageIndex, itemIndex) fresh against the live editor on every dispatch -- PdfPage.items() is a real, unambiguous enumeration accessor with no parity-mismatch risk (unlike OdgPage.vectors(), see actions.ts's own top-of-file note on why the odg vector actions carry a live object instead), so addressing by index alone is safe here. `guard` narrows to the one PdfItem subtype the calling action's own field set assumes; a mismatch (the item changed kind under a stale index, or the wrong action was dispatched for this row) reports a warning rather than silently touching the wrong fields.
+function withPdfItemMatching<T extends PdfItem>(state: AppState, pageIndex: number, itemIndex: number, guard: (item: PdfItem) => item is T, kindLabel: string, apply: (item: T) => void): AppState {
+  const doc = pdfDocument(state);
+  if (doc === undefined) {
+    return wrongDocument(state, 'a pdf document');
+  }
+  const item = pdfItemAt(doc, pageIndex, itemIndex);
+  if (item === undefined) {
+    return withStatus(state, 'warning', `Page ${pageIndex} has no item at index ${itemIndex}`);
+  }
+  if (!guard(item)) {
+    return withStatus(state, 'warning', `Item ${itemIndex} on page ${pageIndex} is a ${item.kind} item, not ${kindLabel}`);
+  }
+  return mutate(state, doc, () => {
+    apply(item);
+  });
+}
+
+const isPdfTextItem = (item: PdfItem): item is PdfTextItem => item.kind === 'text';
+const isPdfRectItem = (item: PdfItem): item is PdfRectItem => item.kind === 'rect';
+const isPdfEllipseItem = (item: PdfItem): item is PdfEllipseItem => item.kind === 'ellipse';
+const isPdfLineItem = (item: PdfItem): item is PdfLineItem => item.kind === 'line';
+const isPdfPathItem = (item: PdfItem): item is PdfPathItem => item.kind === 'path';
+const isPdfImageItem = (item: PdfItem): item is PdfImageItem => item.kind === 'image';
+const isPdfLinkItem = (item: PdfItem): item is PdfLinkItem => item.kind === 'link';
 
 type VectorHostOpenDocument = OdgOpenDocument | OdpOpenDocument;
 
@@ -967,6 +1034,200 @@ export function appReducer(state: AppState, action: Action): AppState {
       });
     }
 
+    case 'ADD_PDF_TEXT':
+      return withPdfPage(state, action.pageIndex, (page) => {
+        page.appendText(action.init);
+      });
+
+    case 'ADD_PDF_RECT':
+      return withPdfPage(state, action.pageIndex, (page) => {
+        page.appendRect(action.init);
+      });
+
+    case 'ADD_PDF_ELLIPSE':
+      return withPdfPage(state, action.pageIndex, (page) => {
+        page.appendEllipse(action.init);
+      });
+
+    case 'ADD_PDF_LINE':
+      return withPdfPage(state, action.pageIndex, (page) => {
+        page.appendLine(action.init);
+      });
+
+    case 'ADD_PDF_PATH':
+      return withPdfPage(state, action.pageIndex, (page) => {
+        page.appendPath(action.init);
+      });
+
+    case 'ADD_PDF_IMAGE':
+      return withPdfPage(state, action.pageIndex, (page) => {
+        page.appendImage(action.init);
+      });
+
+    case 'ADD_PDF_LINK':
+      return withPdfPage(state, action.pageIndex, (page) => {
+        page.appendLink(action.init);
+      });
+
+    case 'REMOVE_PDF_ITEM': {
+      const doc = pdfDocument(state);
+      if (doc === undefined) {
+        return wrongDocument(state, 'a pdf document');
+      }
+      const item = pdfItemAt(doc, action.pageIndex, action.itemIndex);
+      if (item === undefined) {
+        return withStatus(state, 'warning', `Page ${action.pageIndex} has no item at index ${action.itemIndex}`);
+      }
+      return mutate(state, doc, () => {
+        item.remove();
+      });
+    }
+
+    case 'SET_PDF_TEXT_TEXT':
+      return withPdfItemMatching(state, action.pageIndex, action.itemIndex, isPdfTextItem, 'text', (item) => {
+        item.text = action.text;
+      });
+
+    case 'SET_PDF_TEXT_POSITION':
+      return withPdfItemMatching(state, action.pageIndex, action.itemIndex, isPdfTextItem, 'text', (item) => {
+        item.xPt = action.xPt;
+        item.yPt = action.yPt;
+      });
+
+    case 'SET_PDF_TEXT_FONT':
+      return withPdfItemMatching(state, action.pageIndex, action.itemIndex, isPdfTextItem, 'text', (item) => {
+        item.font = action.font;
+      });
+
+    case 'SET_PDF_TEXT_SIZE':
+      return withPdfItemMatching(state, action.pageIndex, action.itemIndex, isPdfTextItem, 'text', (item) => {
+        item.sizePt = action.sizePt;
+      });
+
+    case 'SET_PDF_TEXT_COLOR':
+      return withPdfItemMatching(state, action.pageIndex, action.itemIndex, isPdfTextItem, 'text', (item) => {
+        item.color = action.color;
+      });
+
+    case 'SET_PDF_TEXT_ROTATION':
+      return withPdfItemMatching(state, action.pageIndex, action.itemIndex, isPdfTextItem, 'text', (item) => {
+        item.rotationDeg = action.rotationDeg;
+      });
+
+    case 'SET_PDF_TEXT_WIDTH':
+      return withPdfItemMatching(state, action.pageIndex, action.itemIndex, isPdfTextItem, 'text', (item) => {
+        item.widthPt = action.widthPt;
+      });
+
+    case 'TOGGLE_PDF_TEXT_UNDERLINE':
+      return withPdfItemMatching(state, action.pageIndex, action.itemIndex, isPdfTextItem, 'text', (item) => {
+        item.underline = !(item.underline ?? false);
+      });
+
+    case 'SET_PDF_RECT_FRAME':
+      return withPdfItemMatching(state, action.pageIndex, action.itemIndex, isPdfRectItem, 'rect', (item) => {
+        item.xPt = action.xPt;
+        item.yPt = action.yPt;
+        item.widthPt = action.widthPt;
+        item.heightPt = action.heightPt;
+      });
+
+    case 'SET_PDF_RECT_FILL':
+      return withPdfItemMatching(state, action.pageIndex, action.itemIndex, isPdfRectItem, 'rect', (item) => {
+        item.fill = action.fill;
+      });
+
+    case 'SET_PDF_RECT_STROKE':
+      return withPdfItemMatching(state, action.pageIndex, action.itemIndex, isPdfRectItem, 'rect', (item) => {
+        item.stroke = action.stroke;
+      });
+
+    case 'SET_PDF_ELLIPSE_FRAME':
+      return withPdfItemMatching(state, action.pageIndex, action.itemIndex, isPdfEllipseItem, 'ellipse', (item) => {
+        item.xPt = action.xPt;
+        item.yPt = action.yPt;
+        item.widthPt = action.widthPt;
+        item.heightPt = action.heightPt;
+      });
+
+    case 'SET_PDF_ELLIPSE_FILL':
+      return withPdfItemMatching(state, action.pageIndex, action.itemIndex, isPdfEllipseItem, 'ellipse', (item) => {
+        item.fill = action.fill;
+      });
+
+    case 'SET_PDF_ELLIPSE_STROKE':
+      return withPdfItemMatching(state, action.pageIndex, action.itemIndex, isPdfEllipseItem, 'ellipse', (item) => {
+        item.stroke = action.stroke;
+      });
+
+    case 'SET_PDF_LINE_FROM':
+      return withPdfItemMatching(state, action.pageIndex, action.itemIndex, isPdfLineItem, 'line', (item) => {
+        item.x1Pt = action.x1Pt;
+        item.y1Pt = action.y1Pt;
+      });
+
+    case 'SET_PDF_LINE_TO':
+      return withPdfItemMatching(state, action.pageIndex, action.itemIndex, isPdfLineItem, 'line', (item) => {
+        item.x2Pt = action.x2Pt;
+        item.y2Pt = action.y2Pt;
+      });
+
+    case 'SET_PDF_LINE_COLOR':
+      return withPdfItemMatching(state, action.pageIndex, action.itemIndex, isPdfLineItem, 'line', (item) => {
+        item.color = action.color;
+      });
+
+    case 'SET_PDF_LINE_WIDTH':
+      return withPdfItemMatching(state, action.pageIndex, action.itemIndex, isPdfLineItem, 'line', (item) => {
+        item.widthPt = action.widthPt;
+      });
+
+    case 'SET_PDF_PATH_FILL':
+      return withPdfItemMatching(state, action.pageIndex, action.itemIndex, isPdfPathItem, 'path', (item) => {
+        item.fill = action.fill;
+      });
+
+    case 'SET_PDF_PATH_FILL_RULE':
+      return withPdfItemMatching(state, action.pageIndex, action.itemIndex, isPdfPathItem, 'path', (item) => {
+        item.fillRule = action.fillRule;
+      });
+
+    case 'SET_PDF_PATH_STROKE':
+      return withPdfItemMatching(state, action.pageIndex, action.itemIndex, isPdfPathItem, 'path', (item) => {
+        item.stroke = action.stroke;
+      });
+
+    case 'SET_PDF_IMAGE_FRAME':
+      return withPdfItemMatching(state, action.pageIndex, action.itemIndex, isPdfImageItem, 'image', (item) => {
+        item.xPt = action.xPt;
+        item.yPt = action.yPt;
+        item.widthPt = action.widthPt;
+        item.heightPt = action.heightPt;
+      });
+
+    case 'SET_PDF_IMAGE_ROTATION':
+      return withPdfItemMatching(state, action.pageIndex, action.itemIndex, isPdfImageItem, 'image', (item) => {
+        item.rotationDeg = action.rotationDeg;
+      });
+
+    case 'SET_PDF_IMAGE_SOURCE':
+      return withPdfItemMatching(state, action.pageIndex, action.itemIndex, isPdfImageItem, 'image', (item) => {
+        item.setImage(action.bytes, action.format);
+      });
+
+    case 'SET_PDF_LINK_URI':
+      return withPdfItemMatching(state, action.pageIndex, action.itemIndex, isPdfLinkItem, 'link', (item) => {
+        item.uri = action.uri;
+      });
+
+    case 'SET_PDF_LINK_FRAME':
+      return withPdfItemMatching(state, action.pageIndex, action.itemIndex, isPdfLinkItem, 'link', (item) => {
+        item.xPt = action.xPt;
+        item.yPt = action.yPt;
+        item.widthPt = action.widthPt;
+        item.heightPt = action.heightPt;
+      });
+
     case 'SET_MARKDOWN_SOURCE': {
       const doc = markdownDocument(state);
       if (doc === undefined) {
@@ -1001,7 +1262,7 @@ export function appReducer(state: AppState, action: Action): AppState {
       if (doc === undefined) {
         return withStatus(state, 'info', 'There is nothing to undo');
       }
-      if (doc.format === 'odb' || doc.format === 'pdf' || doc.format === 'xlsx') {
+      if (doc.format === 'odb' || doc.format === 'xlsx') {
         return withStatus(state, 'warning', `A ${doc.format} document is read-only, so it has no history to undo`);
       }
       const snapshot = state.undoStack.at(-1);

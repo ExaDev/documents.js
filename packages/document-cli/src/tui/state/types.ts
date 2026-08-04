@@ -1,4 +1,4 @@
-import type { DocxEditor, HsqldbTable, LayoutDocument, OdbForm, OdbReport, OdgEditor, OdpEditor, OdsEditor, OdtEditor, PptxEditor } from 'documents.js';
+import type { DocxEditor, HsqldbTable, LayoutDocument, OdbForm, OdbReport, OdgEditor, OdpEditor, OdsEditor, OdtEditor, PdfEditor, PptxEditor } from 'documents.js';
 
 // RULE FOR EVERY SCREEN BUILT ON THIS STATE: documents.js's editor objects (DocxRun, OdtParagraph, PptxShape, OdsCell, OdgBoxVector, ...) are LIVE VIEWS over the mutable XML tree inside the decoded package -- `run.bold = true` edits that tree in place and produces no new object reference anywhere. Call the accessors (`editor.paragraphs()`, `slide.shapes()`, `sheet.cell(r, c)`) FRESH on every render and never cache their results in useState/useMemo: any mutation, from any screen, silently invalidates an array captured on an earlier render, and nothing in the type system or in React will tell you. `AppState.hasUnsavedChanges` flipping (and the new outer state object the reducer returns with it) is the ONLY re-render signal a mutation produces -- see the deliberate-impurity note in reducer.ts.
 
@@ -97,11 +97,12 @@ export interface MarkdownOpenDocument {
   readonly path: string;
 }
 
-// A PDF opens as its parsed `LayoutDocument` (positioned glyph/image/vector items), not an editor -- this TUI browses a PDF and converts from it, it never edits one in place.
+// A PDF opens through documents.js's own live-view `PdfEditor` (openPdf/createPdf) -- `layout` is `editor.toLayoutDocument()`, the exact same `LayoutDocument` object the editor mutates in place, kept alongside so every existing reader of `doc.layout` (the pdf/xlsx page-list/page-items/item-detail screen family, shared with XlsxOpenDocument below) keeps working unmodified: a mutation through `editor` is a mutation of the identical object `layout` already points to, not a separate snapshot that could drift out of sync. `path` is `undefined` for a freshly created blank PDF (`createPdf()`), matching every other EditableOpenDocument variant.
 export interface PdfOpenDocument {
   readonly format: 'pdf';
+  readonly editor: PdfEditor;
   readonly layout: LayoutDocument;
-  readonly path: string;
+  readonly path: string | undefined;
 }
 
 // documents.js has no XlsxEditor at all -- there is no live-view object to hold, the way there is a `DocxEditor`/`OdtEditor`, and no `readXlsxContent` re-exported from documents.js's own public surface for this TUI to read a sheet grid from directly (see that package's own README: deliberately not re-exported, mirroring the readDocx/readPptx choice). What documents.js does have is a genuine `xlsxToPdf` conversion, so opening a .xlsx converts it through that once at open time and reads the result back with `readPdf`, exactly the same `LayoutDocument` shape a real .pdf opens as -- `layout` is what the pdf page-list/page-items/item-detail screens browse (see screens/editors/pdf/shared.ts's own broadened guard), reusing that whole screen family with no xlsx-specific viewer code at all. `bytes` is kept alongside so a real export re-runs `xlsxToPdf` with the caller's own fonts/diagnostics options at export time, rather than writing back the fixed preview conversion computed here.
@@ -112,13 +113,13 @@ export interface XlsxOpenDocument {
   readonly path: string;
 }
 
-// The six formats that have a live-view editor, and therefore support every mutating action, `editor.toBytes()` saving, undo snapshots, and export to PDF. `odb`/`pdf`/`xlsx` are read-only sources.
-export type EditableOpenDocument = DocxOpenDocument | PptxOpenDocument | OdtOpenDocument | OdpOpenDocument | OdsOpenDocument | OdgOpenDocument;
+// The seven formats that have a live-view editor, and therefore support every mutating action, `editor.toBytes()` saving, undo snapshots. `odb`/`xlsx` are read-only sources; `pdf` joined this union once documents.js gained a real live-view `PdfEditor` -- see PdfOpenDocument's own doc comment. `pdf` is deliberately excluded from exportToPdf's own conversion set even though it is editable now: there is no docxToPdf-equivalent "convert a PDF to a PDF" function, and there does not need to be one -- editing and saving a PDF in place needs no conversion step at all.
+export type EditableOpenDocument = DocxOpenDocument | PptxOpenDocument | OdtOpenDocument | OdpOpenDocument | OdsOpenDocument | OdgOpenDocument | PdfOpenDocument;
 
-// Every format that can be written back to disk at all: the six live-view-editor formats above, plus markdown through its own plain `.source` string. This is a strictly broader question than "does this have a `.editor` object" -- every EditableOpenDocument call site (`mutate`/`reopenEditable` in reducer.ts, the `.editor.toBytes()` branches in exportToPdf/saveDocumentTo) assumes `.editor` exists, which is exactly why markdown is NOT folded into EditableOpenDocument itself despite also being writable. Screens that only need "can this be saved, and what extension does it get" (file-picker.tsx, save-as-prompt.tsx) should check WritableOpenDocument/isWritableDocument instead of EditableOpenDocument/isEditableDocument.
+// Every format that can be written back to disk at all: the seven live-view-editor formats above, plus markdown through its own plain `.source` string. This is a strictly broader question than "does this have a `.editor` object" -- every EditableOpenDocument call site (`mutate`/`reopenEditable` in reducer.ts, the `.editor.toBytes()` branches in exportToPdf/saveDocumentTo) assumes `.editor` exists, which is exactly why markdown is NOT folded into EditableOpenDocument itself despite also being writable. Screens that only need "can this be saved, and what extension does it get" (file-picker.tsx, save-as-prompt.tsx) should check WritableOpenDocument/isWritableDocument instead of EditableOpenDocument/isEditableDocument.
 export type WritableOpenDocument = EditableOpenDocument | MarkdownOpenDocument;
 
-export type OpenDocument = WritableOpenDocument | OdbOpenDocument | PdfOpenDocument | XlsxOpenDocument;
+export type OpenDocument = WritableOpenDocument | OdbOpenDocument | XlsxOpenDocument;
 
 export type EditableFormat = EditableOpenDocument['format'];
 
@@ -126,7 +127,7 @@ export type WritableFormat = WritableOpenDocument['format'];
 
 export type OpenDocumentFormat = OpenDocument['format'];
 
-const EDITABLE_FORMATS: Readonly<Record<EditableFormat, true>> = { docx: true, pptx: true, odt: true, odp: true, ods: true, odg: true };
+const EDITABLE_FORMATS: Readonly<Record<EditableFormat, true>> = { docx: true, pptx: true, odt: true, odp: true, ods: true, odg: true, pdf: true };
 
 const WRITABLE_FORMATS: Readonly<Record<WritableFormat, true>> = { ...EDITABLE_FORMATS, markdown: true };
 
