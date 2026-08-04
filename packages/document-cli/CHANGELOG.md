@@ -1,3 +1,10 @@
+## [1.11.10](https://github.com/ExaDev/document-cli/compare/v1.11.9...v1.11.10) (2026-08-04)
+
+
+### Bug Fixes
+
+* **ci:** heal sibling-dependency-update PRs stranded by concurrent main pushes ([d26b276](https://github.com/ExaDev/document-cli/commit/d26b27602b75adea241c84e5b8ef06611c9c9463))
+
 ## [1.11.9](https://github.com/ExaDev/document-cli/compare/v1.11.8...v1.11.9) (2026-08-04)
 
 ## [1.11.8](https://github.com/ExaDev/document-cli/compare/v1.11.7...v1.11.8) (2026-08-04)
