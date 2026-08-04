@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { DocumentInputSchema, resolveDocumentInput } from '../io/document-input';
 import { DocumentOutputSchema, resolveDocumentOutput } from '../io/document-output';
 
-// Wraps a thrown error into an isError CallToolResult, carrying the thrown message verbatim. documents.js's own setDocumentMetadata throws precisely-worded rejections (an unsupported xlsx/odf source or target, a source/target format mismatch) that a caller needs to see exactly as thrown, not paraphrased or re-summarised.
+// Wraps a thrown error into an isError CallToolResult, carrying the thrown message verbatim. documents.js's own setDocumentMetadata throws precisely-worded rejections (an unsupported odf source or target, a source/target format mismatch) that a caller needs to see exactly as thrown, not paraphrased or re-summarised.
 function toErrorResult(error: unknown): CallToolResult {
   const message = error instanceof Error ? error.message : String(error);
   return { content: [{ type: 'text', text: message }], isError: true };
@@ -37,7 +37,7 @@ export function registerMetadataTools(server: McpServer): void {
     {
       title: 'Write document metadata',
       description:
-        "Patches a document's own title/author/subject/keywords, leaving every other field and every other flag as-is. Does not convert format -- the source document's own format and targetFormat must match (or both be 'pdf'); xlsx and odf are rejected outright as either a source or a target, in both directions. Convert the document to a different format first (e.g. with a documents.js conversion tool) if metadata needs to be set on the result of a format change.",
+        "Patches a document's own title/author/subject/keywords, leaving every other field and every other flag as-is. Does not convert format -- the source document's own format and targetFormat must match (or both be 'pdf'); odf (a standalone formula document) is rejected outright as either a source or a target, since it has no write path back out at all. Convert the document to a different format first (e.g. with a documents.js conversion tool) if metadata needs to be set on the result of a format change.",
       inputSchema: z.object({
         source: DocumentInputSchema.describe('The document to patch metadata on.'),
         targetFormat: DocumentFormatSchema.describe(

@@ -102,7 +102,7 @@ Every tool that takes or produces document bytes goes through the same two hybri
 | `convert_document` | Converts a document from one supported format to another via `documents.js`'s `DocumentConverter` port — docx, pptx, xlsx, odt, odp, ods, odg, odf, markdown, and pdf. Not every `(source, targetFormat)` pair is direct; call `list_document_conversions` first. |
 | `list_document_conversions` | Lists every `(source, target)` format pair `convert_document` actually supports. |
 | `metadata_read` | Reads a document's title/author/subject/keywords/creator/producer/created-and-modified timestamps. Works across every supported format, including xlsx and odf. |
-| `metadata_write` | Patches a document's title/author/subject/keywords in place. Does not convert format — source and target format must match (or both be `pdf`); xlsx and odf are rejected as either. |
+| `metadata_write` | Patches a document's title/author/subject/keywords in place. Does not convert format — source and target format must match (or both be `pdf`); odf (a standalone formula document) is rejected as either, since it has no write path back out at all. |
 | `fonts` | Lists every source-embedded font face a docx/pptx/odt/odp/ods/odg document carries (family, weight/style, byte length). |
 | `describe_font_file` | Reads a standalone `.ttf`/`.otf` font file and reports the family/bold/italic triple it declares about itself. |
 | `docx_extras` | Reads a docx's own comments, footnotes, headers, footers, and numbering definitions — data the `ContentDocument` pivot cannot carry, so no other tool sees it. |
