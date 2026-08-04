@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
-import { bytesToBase64, createDocx } from 'documents.js';
+import { base64ToBytes, bytesToBase64, createDocx, createOds, decodeDocumentPackage, odsToXlsx, readOdsContent, xlsxToOds } from 'documents.js';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createServer } from '../server';
 
@@ -112,7 +112,40 @@ describe('metadata_read / metadata_write', () => {
     expect(typeof readMetadata.modifiedIso).toBe('string');
   });
 
-  it('rejects an xlsx target with the original setDocumentMetadata error text, verbatim', async () => {
+  it('patches an xlsx file in place now that documents.js wires a real xlsx content codec, leaving its cells untouched', async () => {
+    // xlsx used to be rejected outright here -- documents.js's own DOCUMENT_FORMAT_CODECS registry gained a real xlsx content codec, and setDocumentMetadata now rebuilds xlsx through the identical readXContent -> buildXPackage shape every other REBUILD_FORMATS member already used.
+    const sheetCellText = 'A cell surviving an xlsx metadata patch via document-mcp';
+    const odsEditor = createOds();
+    const sheet = odsEditor.sheets()[0];
+    if (sheet === undefined) {
+      throw new Error('createOds() did not produce a default sheet');
+    }
+    sheet.cell(0, 0).value = { kind: 'string', value: sheetCellText };
+    sheet.setColumnWidth(0, 72);
+    sheet.setRowHeight(0, 14);
+    const xlsxBytes = odsToXlsx(odsEditor.toBytes());
+
+    const result = await pair.client.callTool({
+      name: 'metadata_write',
+      arguments: { source: { bytesBase64: bytesToBase64(xlsxBytes), format: 'xlsx' }, targetFormat: 'xlsx', setTitle: 'New xlsx title' },
+    });
+
+    expect(result.isError).toBeFalsy();
+    if (!isRecord(result.structuredContent) || typeof result.structuredContent.bytesBase64 !== 'string') {
+      throw new Error('expected an inline bytesBase64 result');
+    }
+
+    // Round-trips the patched xlsx back through the real xlsx-to-ods bridge to prove the bytes are a genuine, readable xlsx workbook carrying both the new title and the original cell.
+    const odsBackBytes = xlsxToOds(base64ToBytes(result.structuredContent.bytesBase64));
+    const content = readOdsContent(decodeDocumentPackage('ods', odsBackBytes));
+    if (content.kind !== 'spreadsheet') {
+      throw new Error(`expected a spreadsheet ContentDocument, got ${content.kind}`);
+    }
+    expect(content.metadata.title).toBe('New xlsx title');
+    expect(content.sheets[0]?.cells[0]?.value).toEqual({ kind: 'string', value: sheetCellText });
+  });
+
+  it('still rejects a cross-format request into xlsx -- metadata_write patches metadata in place, it does not convert format', async () => {
     const bytes = createDocx().toBytes();
 
     const result = await pair.client.callTool({
@@ -123,8 +156,6 @@ describe('metadata_read / metadata_write', () => {
     expect(result.isError).toBe(true);
     const [block] = result.content;
     expect(block?.type).toBe('text');
-    expect(block?.type === 'text' ? block.text : undefined).toBe(
-      "'xlsx' is not a supported setDocumentMetadata source or target -- this package does not re-export a ContentDocument-to-xlsx builder or a readXlsxContent from its own public surface (see the README's Architecture section); convert via xlsxToOds/odsToXlsx first, then set metadata on the ods",
-    );
+    expect(block?.type === 'text' ? block.text : undefined).toContain('does not convert format');
   });
 });
