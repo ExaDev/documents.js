@@ -70,7 +70,6 @@
   "dependencies": {
     "@modelcontextprotocol/server": "^2.0.0",
     "documents.js": "^1.79.0",
-    "odf.js": "^2.3.0",
     "pdf-codec": "^1.11.0",
     "zod": "^4.2.0"
   },
@@ -88,6 +87,7 @@
     "globals": "^17.8.0",
     "husky": "^9.1.7",
     "lint-staged": "^17.3.0",
+    "odf.js": "^2.3.1",
     "publint": "^0.3.22",
     "semantic-release": "^25.0.8",
     "tsdown": "^0.22.14",
