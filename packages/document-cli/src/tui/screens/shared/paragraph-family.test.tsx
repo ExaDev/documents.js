@@ -1,8 +1,9 @@
-import { readDocxContent, readOdtContent } from 'documents.js';
+import { formulaOfBlock, readDocxContent, readOdtContent, type ContentDocument } from 'documents.js';
 import { Text, useInput } from 'ink';
 import { render } from 'ink-testing-library';
 import { useEffect, type ReactElement } from 'react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { StatusLine } from '../../components/status-line.js';
 import { AppStateProvider, useAppDispatch, useAppState } from '../../state/context.js';
 import { currentScreen, type DocxOpenDocument, type OdtOpenDocument } from '../../state/types.js';
 import { createParagraphFamilyAdapter, ParagraphFamilyBodyList } from './paragraph-family.js';
@@ -119,6 +120,8 @@ function BodyListHarness({ format }: { readonly format: 'docx' | 'odt' }): React
     <>
       {screen.kind === 'bodyList' ? <ParagraphFamilyBodyList adapter={adapter} /> : undefined}
       <TableProbe doc={doc} />
+      <FormulaProbe doc={doc} />
+      <StatusLine />
       <Marker />
     </>
   );
@@ -142,6 +145,22 @@ function TableProbe({ doc }: { readonly doc: DocxOpenDocument | OdtOpenDocument 
   );
 }
 
+// ContentEmbeddedObjectBlock has no top-level re-export from documents.js (only the ContentBlock union itself does) -- narrowed via Extract from that union's own block-array element type instead, the same trick TableProbe above already uses for its table-block narrowing.
+type WordprocessingBlock = Extract<ContentDocument, { readonly kind: 'wordprocessing' }>['sections'][number]['blocks'][number];
+
+// Reads the document's own first embedded-formula block fresh through readDocxContent/readOdtContent on every render -- the real proof an 'm'-driven INSERT_ODT_FORMULA dispatch reached the package, mirroring TableProbe's own convention. docx never reaches this probe with a formula present, since paragraph-detail.tsx's own 'm' handler (paragraph-scoped, not this body-list screen's) is what docx uses instead.
+function FormulaProbe({ doc }: { readonly doc: DocxOpenDocument | OdtOpenDocument }): ReactElement {
+  const content = doc.format === 'docx' ? readDocxContent(doc.editor.toPackage()) : readOdtContent(doc.editor.toPackage());
+  if (content.kind !== 'wordprocessing') {
+    throw new Error(`expected a wordprocessing ContentDocument, got ${content.kind}`);
+  }
+  const blocks = content.sections.flatMap((section) => section.blocks);
+  const formulaBlock = blocks.find((block): block is Extract<WordprocessingBlock, { readonly kind: 'embeddedObject' }> => block.kind === 'embeddedObject');
+  const formula = formulaBlock === undefined ? undefined : formulaOfBlock(formulaBlock);
+  const rootTag = formula?.mathml[0]?.type === 'element' ? formula.mathml[0].tag : undefined;
+  return <Text>probe:formula={formula === undefined ? 'none' : `present root=${rootTag ?? '?'}`}</Text>;
+}
+
 function renderBodyListHarness(format: 'docx' | 'odt'): ReturnType<typeof render> {
   return render(
     <AppStateProvider>
@@ -157,6 +176,17 @@ async function replaceField(stdin: { readonly write: (data: string) => void }, v
   await flush();
   stdin.write(value);
   await flush();
+}
+
+// Confirms a just-typed draft actually reached the rendered frame, plus a further short real wait, before the caller sends anything else -- see paragraph-detail.test.tsx's own identical helper for the exact race this closes (ink-text-input's own onSubmit closes over whatever `originalValue` prop its own most recent render saw, and the frame showing the typed text is not, on its own, proof that render has fully settled). Used here for the formula picker's own raw-MathML entry, a longer, more varied string than the table wizard's own single-digit fields above.
+async function writeAndConfirm(stdin: { readonly write: (data: string) => void }, lastFrame: () => string | undefined, value: string): Promise<void> {
+  stdin.write(value);
+  await vi.waitFor(() => {
+    expect(lastFrame()).toContain(value);
+  });
+  await new Promise((resolve) => {
+    setTimeout(resolve, ESCAPE_FLUSH_MARGIN_MS);
+  });
 }
 
 describe('ParagraphFamilyBodyList', () => {
@@ -305,4 +335,116 @@ describe.each(['docx', 'odt'] as const)('ParagraphFamilyBodyList "T" table-creat
     },
     WIZARD_TEST_TIMEOUT_MS,
   );
+});
+
+describe('ParagraphFamilyBodyList "m" formula insertion (odt body-scoped)', () => {
+  it(
+    'inserts the first preset via the picker, then the frame wizard, as a real embedded ODF formula',
+    async () => {
+      const { lastFrame, stdin } = renderBodyListHarness('odt');
+      await flush();
+      expect(lastFrame()).toContain('probe:formula=none');
+
+      stdin.write('m');
+      await flush();
+      expect(lastFrame()).toContain('Insert formula');
+      expect(lastFrame()).toContain('Fraction: x / 2');
+
+      stdin.write(ENTER);
+      await flush();
+      expect(lastFrame()).toContain('X (pt)');
+
+      // Accept every frame field's own pre-filled default.
+      stdin.write(ENTER);
+      await flush();
+      expect(lastFrame()).toContain('Y (pt)');
+      stdin.write(ENTER);
+      await flush();
+      expect(lastFrame()).toContain('Width (pt)');
+      stdin.write(ENTER);
+      await flush();
+      expect(lastFrame()).toContain('Height (pt)');
+      stdin.write(ENTER);
+      await vi.waitFor(() => {
+        expect(lastFrame()).toContain('probe:formula=present root=mfrac');
+      });
+    },
+    WIZARD_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'inserts a raw MathML entry, parsed via parseXml, as a real embedded formula',
+    async () => {
+      const { lastFrame, stdin } = renderBodyListHarness('odt');
+      await flush();
+
+      stdin.write('m');
+      await flush();
+      // Six presets precede the "Raw MathML..." row -- navigate down to it.
+      for (let step = 0; step < 6; step += 1) {
+        stdin.write('j');
+        await flush();
+      }
+      expect(lastFrame()).toContain('Raw MathML...');
+      stdin.write(ENTER);
+      await flush();
+      expect(lastFrame()).toContain('Raw MathML (the children');
+
+      await writeAndConfirm(stdin, lastFrame, '<msup><mi>x</mi><mn>3</mn></msup>');
+      stdin.write(ENTER);
+      await flush();
+      expect(lastFrame()).toContain('X (pt)');
+
+      stdin.write(ENTER);
+      await flush();
+      stdin.write(ENTER);
+      await flush();
+      stdin.write(ENTER);
+      await flush();
+      stdin.write(ENTER);
+      await vi.waitFor(() => {
+        expect(lastFrame()).toContain('probe:formula=present root=msup');
+      });
+    },
+    WIZARD_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'reports a warning, not a crash, for raw MathML that fails to parse, and never opens the frame wizard',
+    async () => {
+      const { lastFrame, stdin } = renderBodyListHarness('odt');
+      await flush();
+
+      stdin.write('m');
+      await flush();
+      for (let step = 0; step < 6; step += 1) {
+        stdin.write('j');
+        await flush();
+      }
+      stdin.write(ENTER);
+      await flush();
+
+      // A closing tag missing its final '>' -- parseXml (fast-xml-parser) is lenient about several malformed shapes, but a truncated closing tag is a genuine, confirmed throw (see paragraph-detail.test.tsx's own identical fixture and comment).
+      await writeAndConfirm(stdin, lastFrame, '<mfrac><mi>x</mi></mfrac');
+      stdin.write(ENTER);
+      await vi.waitFor(() => {
+        expect(lastFrame()).toContain('Could not parse MathML');
+      });
+      expect(lastFrame()).toContain('probe:formula=none');
+      expect(lastFrame()).not.toContain('X (pt)');
+      // The picker itself stays open (back at the row list) so the user can retry, rather than the whole flow closing on a failed parse.
+      expect(lastFrame()).toContain('Insert formula');
+    },
+    WIZARD_TEST_TIMEOUT_MS,
+  );
+
+  it('does not expose the formula flow for a docx document', async () => {
+    const { lastFrame, stdin } = renderBodyListHarness('docx');
+    await flush();
+
+    stdin.write('m');
+    await flush();
+
+    expect(lastFrame()).not.toContain('Insert formula');
+  });
 });

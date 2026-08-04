@@ -1,4 +1,4 @@
-import type { Alignment, Box, ContentCellValue, ContentSheetPrintSettings, ContentStroke, LayoutColor, OdgBoxVector, OdgBoxVectorInit, OdgLineVector, OdgLineVectorInit, OdgPathVector, OdgPathVectorInit } from 'documents.js';
+import type { Alignment, Box, ContentCellValue, ContentSheetPrintSettings, ContentStroke, LayoutColor, MathMlNode, OdgBoxVector, OdgBoxVectorInit, OdgLineVector, OdgLineVectorInit, OdgPathVector, OdgPathVectorInit } from 'documents.js';
 import type { Diagnostic, EditableFormat, OpenDocument, OverlayName, Screen, StatusMessage } from './types.js';
 
 // HOW A MUTATING ACTION ADDRESSES ITS TARGET. The rule is: address by index wherever the editor exposes an enumeration accessor to resolve that index against, and carry the live object itself only where it does not.
@@ -45,6 +45,12 @@ export type Action =
   | { readonly type: 'MERGE_TABLE_CELLS'; readonly tableIndex: number; readonly startRow: number; readonly startColumn: number; readonly rowSpan: number; readonly colSpan: number }
   | { readonly type: 'ADD_LIST_ITEM'; readonly blockIndex: number; readonly text: string }
   | { readonly type: 'SET_LIST_ITEM_TEXT'; readonly blockIndex: number; readonly itemIndex: number; readonly text: string }
+  // Both docx's and odt's own insertImageAfter accept the identical ImageInit shape (format/bytes/widthPt/heightPt/altText) -- see documents.js's edit/{docx,odt}/image.ts -- so one action covers both, resolved through paragraph-family.ts's shared wordprocessingDocument narrowing exactly as APPEND_PARAGRAPH already is.
+  | { readonly type: 'INSERT_PARAGRAPH_IMAGE'; readonly blockIndex: number; readonly format: 'png' | 'jpeg'; readonly bytes: Uint8Array<ArrayBuffer>; readonly widthPt: number; readonly heightPt: number; readonly altText: string | undefined }
+  // docx's DocxParagraph.appendOfficeMath is PARAGRAPH-scoped -- unlike odt's own formula insertion below, it needs no frame at all, since OMML is inline markup within the paragraph rather than a separately-positioned embedded object.
+  | { readonly type: 'INSERT_DOCX_FORMULA'; readonly blockIndex: number; readonly mathml: readonly MathMlNode[] }
+  // odt's OdtBody.appendFormula is BODY-scoped only -- there is no paragraph-scoped odt formula insertion at all, since an embedded ODF formula is a whole nested sub-document referenced from a fresh paragraph the body itself appends, not markup placed inside an existing one. `frame` positions that new paragraph's own draw:frame.
+  | { readonly type: 'INSERT_ODT_FORMULA'; readonly mathml: readonly MathMlNode[]; readonly frame: Box }
   | { readonly type: 'ADD_SLIDE' }
   | { readonly type: 'ADD_SLIDE_TABLE'; readonly slideIndex: number; readonly frame: Box; readonly rows: number; readonly columns: number }
   // `tableIndex` indexes `slide.tables()` -- PptxSlide.tables() returns PptxTable[] directly, OdpSlide.tables() returns OdpTableShape[] wrapping { shape, table: OdtTable } -- the reducer branches on `doc.format` to reach the right live handle either way (see the OdpSlide/PptxSlide doc comments in documents.js's own edit/{odp,pptx}/slide.ts).

@@ -19,6 +19,7 @@ import {
   type OdtTableCell,
   type PptxShape,
   type PptxTable,
+  type MathMlNode,
 } from 'documents.js';
 import { createNewDocument } from '../format/open-document.js';
 import type { Action } from './actions.js';
@@ -344,6 +345,35 @@ function setCellText(cell: DocxTableCell | OdtTableCell, text: string): void {
   setTextContainerText(cell, text);
 }
 
+// documents.js's own MathMlNode (src/mathml/nodes.ts, what INSERT_ODT_FORMULA's own action field is typed with, matching appendOfficeMath's identical parameter type) declares every array field `readonly` -- but ContentFormula.mathml (document-schema.js's own, separately hand-written MathMlNode, what OdtBody.appendFormula's own `formula` parameter actually requires) declares the identical fields as plain mutable arrays. The two describe the same JSON shape at runtime; TypeScript still refuses a `readonly T[]` value at a `T[]`-typed target, at every nesting level (attributes, children), so a shallow spread of the top-level array is not enough. This rebuilds the tree as fresh, genuinely mutable objects/arrays, structurally satisfying document-schema.js's MathMlNode with no cast. documents.js's own MathMlNode collapses the cdata/comment/declaration/pi variants down to a bare `{ type }` with none of their other fields (that module's own doc comment: "MathML content never meaningfully contains any of them"), so there is nothing to carry across for those four kinds -- document-schema.js's schema still requires one, so an empty stand-in is supplied; neither a hand-authored preset (formula-presets.ts) nor a real parsed MathML formula ever produces one of these kinds in practice.
+interface MutableMathMlAttribute {
+  readonly name: string;
+  readonly value: string;
+}
+type MutableMathMlNode =
+  | { readonly type: 'text'; readonly value: string }
+  | { readonly type: 'cdata'; readonly value: string }
+  | { readonly type: 'comment'; readonly value: string }
+  | { readonly type: 'declaration'; readonly attributes: MutableMathMlAttribute[] }
+  | { readonly type: 'pi'; readonly target: string; readonly content: string }
+  | { readonly type: 'element'; readonly tag: string; readonly attributes: MutableMathMlAttribute[]; readonly children: MutableMathMlNode[] };
+
+function mutableMathMlNode(node: MathMlNode): MutableMathMlNode {
+  if (node.type === 'element') {
+    return { type: 'element', tag: node.tag, attributes: [...node.attributes], children: node.children.map(mutableMathMlNode) };
+  }
+  if (node.type === 'text') {
+    return { type: 'text', value: node.value };
+  }
+  if (node.type === 'cdata' || node.type === 'comment') {
+    return { type: node.type, value: '' };
+  }
+  if (node.type === 'declaration') {
+    return { type: 'declaration', attributes: [] };
+  }
+  return { type: 'pi', target: '', content: '' };
+}
+
 export function appReducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case 'PUSH_SCREEN':
@@ -591,6 +621,49 @@ export function appReducer(state: AppState, action: Action): AppState {
       }
       return mutate(state, doc, () => {
         setTextContainerText(item, action.text);
+      });
+    }
+
+    // Both DocxParagraph.insertImageAfter and OdtParagraph.insertImageAfter accept the identical ImageInit shape (documents.js's own edit/{docx,odt}/image.ts), so this resolves through the shared wordprocessingDocument/paragraphAt narrowing exactly as APPEND_PARAGRAPH/APPEND_RUN already do, rather than branching per format.
+    case 'INSERT_PARAGRAPH_IMAGE': {
+      const doc = wordprocessingDocument(state);
+      if (doc === undefined) {
+        return wrongDocument(state, 'a docx or odt document');
+      }
+      const paragraph = paragraphAt(doc, action.blockIndex);
+      if (paragraph === undefined) {
+        return withStatus(state, 'warning', `There is no paragraph at index ${action.blockIndex}`);
+      }
+      return mutate(state, doc, () => {
+        paragraph.insertImageAfter({ format: action.format, bytes: action.bytes, widthPt: action.widthPt, heightPt: action.heightPt, altText: action.altText });
+      });
+    }
+
+    // Deliberately narrowed to docx specifically, not through the shared wordprocessingDocument helper: odt's own formula insertion (INSERT_ODT_FORMULA below) is body-scoped, not paragraph-scoped, so there is no single paragraph-level action both formats can share the way image insertion above does.
+    case 'INSERT_DOCX_FORMULA': {
+      const doc = state.openDocument;
+      if (doc?.format !== 'docx') {
+        return wrongDocument(state, 'a docx document');
+      }
+      const paragraph = doc.editor.paragraphs()[action.blockIndex];
+      if (paragraph === undefined) {
+        return withStatus(state, 'warning', `There is no paragraph at index ${action.blockIndex}`);
+      }
+      let written = true;
+      const nextState = mutate(state, doc, () => {
+        written = paragraph.appendOfficeMath(action.mathml).written;
+      });
+      return written ? nextState : withStatus(nextState, 'warning', 'The formula produced no OMML content and was not written');
+    }
+
+    // odt's OdtBody.appendFormula has no docx counterpart at all (see the action's own doc comment) -- narrowed to odt specifically rather than through wordprocessingDocument.
+    case 'INSERT_ODT_FORMULA': {
+      const doc = state.openDocument;
+      if (doc?.format !== 'odt') {
+        return wrongDocument(state, 'an odt document');
+      }
+      return mutate(state, doc, () => {
+        doc.editor.body.appendFormula({ mathml: action.mathml.map(mutableMathMlNode) }, action.frame);
       });
     }
 

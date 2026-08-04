@@ -1,13 +1,15 @@
 import { Box, Text, useInput } from 'ink';
 import { useEffect, useState, type Dispatch, type ReactElement } from 'react';
-import type { Alignment, DocxParagraph, DocxRun, DocxTable, DocxTableCell, OdtParagraph, OdtRun, OdtTable, OdtTableCell } from 'documents.js';
+import type { Alignment, Box as GeometryBox, DocxParagraph, DocxRun, DocxTable, DocxTableCell, MathMlNode, OdtParagraph, OdtRun, OdtTable, OdtTableCell } from 'documents.js';
 import { ListView } from '../../components/list-view.js';
 import { TextField } from '../../components/text-field.js';
 import { useNavigationInput, type NavigationInputOptions } from '../../keybindings/use-navigation-input.js';
 import type { Action } from '../../state/actions.js';
 import { useAppDispatch, useAppState } from '../../state/context.js';
 import { anyOverlayOpen, selectionKeyFor, type DocxOpenDocument, type OdtOpenDocument, type OpenDocument } from '../../state/types.js';
-import { parseNonNegativeIntField, parsePositiveIntField, truncatePreview } from './text.js';
+import { FieldWizard, requireFieldValue, type FieldSpec } from './field-wizard.js';
+import { FormulaPicker } from './formula-picker.js';
+import { parseNonNegativeIntField, parseNumberField, parsePositiveIntField, truncatePreview } from './text.js';
 
 // docx and odt share one paragraph/run/table model closely enough (see documents.js's own README: "readDocxContent and readOdtContent both produce the identical wordprocessing-variant ContentDocument shape") that DocxParagraph/OdtParagraph and DocxRun/OdtRun are structurally interchangeable for every screen in this family -- the union types below let every helper and screen here take whichever the open document actually is without a branch, mirroring state/reducer.ts's own `WordprocessingOpenDocument` narrowing (not exported from there, so restated here for this screen family's own use).
 export type ParagraphFamilyOpenDocument = DocxOpenDocument | OdtOpenDocument;
@@ -162,6 +164,23 @@ type TableWizardStep = 'closed' | 'rows' | 'columns' | 'mergePrompt' | 'mergeSta
 const DEFAULT_TABLE_ROWS = 2;
 const DEFAULT_TABLE_COLUMNS = 2;
 
+// odt's OdtBody.appendFormula needs a frame to position the embedded formula's own draw:frame -- mirroring odg/page-detail.tsx's own GEOMETRY_FIELDS shape, with smaller defaults sized for a single inline formula rather than a whole drawing shape.
+const FORMULA_FRAME_FIELDS: readonly FieldSpec[] = [
+  { key: 'xPt', label: 'X (pt)', defaultValue: '40' },
+  { key: 'yPt', label: 'Y (pt)', defaultValue: '40' },
+  { key: 'widthPt', label: 'Width (pt)', defaultValue: '120' },
+  { key: 'heightPt', label: 'Height (pt)', defaultValue: '40' },
+];
+
+function readFormulaFrame(values: Readonly<Record<string, string>>): GeometryBox {
+  return {
+    xPt: parseNumberField(requireFieldValue(values, 'xPt'), 0),
+    yPt: parseNumberField(requireFieldValue(values, 'yPt'), 0),
+    widthPt: parseNumberField(requireFieldValue(values, 'widthPt'), 120),
+    heightPt: parseNumberField(requireFieldValue(values, 'heightPt'), 40),
+  };
+}
+
 // documents.js gives docx/odt editors two (or, for odt, three) SEPARATE enumeration accessors (paragraphs(), tables(), and odt's own lists()) with no shared document-order index between them at all -- there is no way to recover whether paragraph 3 came before or after table 1 in the real file. True interleaving is consequently not achievable from the public API; this renders two (or three) clearly-labelled sections instead, each in its own accessor's own order, which is the honest alternative the brief allows for.
 export function ParagraphFamilyBodyList(props: { readonly adapter: ParagraphFamilyAdapter }): ReactElement {
   const { adapter } = props;
@@ -206,6 +225,11 @@ export function ParagraphFamilyBodyList(props: { readonly adapter: ParagraphFami
   const [wizardRowSpan, setWizardRowSpan] = useState(1);
   const wizardOpen = tableWizard !== 'closed';
 
+  // odt-only, body-scoped formula insertion (OdtBody.appendFormula has no paragraph-scoped counterpart at all -- see paragraph-detail.tsx's own docx-only 'm' handler for the paragraph-scoped path docx uses instead). Two steps rather than one: FormulaPicker resolves the mathml first (preset or raw), then a FieldWizard collects the frame appendFormula needs to position the resulting draw:frame.
+  const [formulaFlow, setFormulaFlow] = useState<'closed' | 'picking' | 'frame'>('closed');
+  const [pendingFormulaMathml, setPendingFormulaMathml] = useState<readonly MathMlNode[] | undefined>(undefined);
+  const formulaFlowOpen = formulaFlow !== 'closed';
+
   const closeWizard = (): void => {
     setTableWizard('closed');
   };
@@ -226,7 +250,17 @@ export function ParagraphFamilyBodyList(props: { readonly adapter: ParagraphFami
         setTableWizard('rows');
       }
     },
-    { isActive: !anyOverlayOpen(state) && !wizardOpen },
+    { isActive: !anyOverlayOpen(state) && !wizardOpen && !formulaFlowOpen },
+  );
+
+  // 'm' opens the formula flow -- odt only. docx's own formula insertion is paragraph-scoped (see paragraph-detail.tsx's own 'm' handler there), so this body-list screen exposes the key only when the open document is odt; a docx document simply has no body-level formula action to bind it to.
+  useInput(
+    (input) => {
+      if (input === 'm' && adapter.formatLabel === 'odt') {
+        setFormulaFlow('picking');
+      }
+    },
+    { isActive: !anyOverlayOpen(state) && !wizardOpen && !formulaFlowOpen },
   );
 
   // The merge-prompt step is a single-key y/N prompt, not a TextField -- 'y' proceeds to the merge-rectangle picker, 'n'/Enter (the default "no") appends the table unmerged straight away.
@@ -285,7 +319,7 @@ export function ParagraphFamilyBodyList(props: { readonly adapter: ParagraphFami
 
   const { selectedIndex } = usePersistedSelection(selectionKeyFor({ kind: 'bodyList' }), {
     itemCount: selectableRowIndices.length,
-    isActive: !anyOverlayOpen(state) && !wizardOpen,
+    isActive: !anyOverlayOpen(state) && !wizardOpen && !formulaFlowOpen,
     onBack: () => {
       dispatch({ type: 'POP_SCREEN' });
     },
@@ -391,7 +425,38 @@ export function ParagraphFamilyBodyList(props: { readonly adapter: ParagraphFami
           <TextField value={wizardDraft} isFocused onChange={setWizardDraft} onSubmit={submitWizardMergeColSpan} onCancel={closeWizard} />
         </Box>
       ) : undefined}
-      <Text dimColor>Enter to open, a to append a paragraph, T to append a table, Esc back</Text>
+      {formulaFlow === 'picking' ? (
+        <FormulaPicker
+          isActive={!anyOverlayOpen(state)}
+          onCancel={() => {
+            setFormulaFlow('closed');
+          }}
+          onMathml={(mathml) => {
+            setPendingFormulaMathml(mathml);
+            setFormulaFlow('frame');
+          }}
+          onInvalidRawMathml={(message) => {
+            dispatch({ type: 'SET_STATUS', severity: 'warning', text: `Could not parse MathML: ${message}` });
+          }}
+        />
+      ) : undefined}
+      {formulaFlow === 'frame' ? (
+        <FieldWizard
+          fields={FORMULA_FRAME_FIELDS}
+          onCancel={() => {
+            setFormulaFlow('closed');
+            setPendingFormulaMathml(undefined);
+          }}
+          onComplete={(values) => {
+            if (pendingFormulaMathml !== undefined) {
+              dispatch({ type: 'INSERT_ODT_FORMULA', mathml: pendingFormulaMathml, frame: readFormulaFrame(values) });
+            }
+            setFormulaFlow('closed');
+            setPendingFormulaMathml(undefined);
+          }}
+        />
+      ) : undefined}
+      <Text dimColor>Enter to open, a to append a paragraph, T to append a table{adapter.formatLabel === 'odt' ? ', m to insert a formula' : ''}, Esc back</Text>
     </Box>
   );
 }

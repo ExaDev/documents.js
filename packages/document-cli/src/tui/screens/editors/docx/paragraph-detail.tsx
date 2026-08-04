@@ -1,11 +1,55 @@
 import { Box, Text, useInput } from 'ink';
-import { useEffect, useState, type ReactElement } from 'react';
-import { rgbHexToColor } from 'documents.js';
+import { useEffect, useState, type Dispatch, type ReactElement } from 'react';
+import { rgbHexToColor, type MathMlNode } from 'documents.js';
 import { TextField } from '../../../components/text-field.js';
+import { describeError } from '../../../errors.js';
+import { readInput } from '../../../../runtime/io.js';
+import type { Action } from '../../../state/actions.js';
 import { useAppDispatch, useAppState } from '../../../state/context.js';
 import { anyOverlayOpen, currentScreen, selectionKeyFor } from '../../../state/types.js';
 import { isValidHexColorInput, layoutColorToHex } from '../../shared/color.js';
+import { FieldWizard, requireFieldValue, type FieldSpec } from '../../shared/field-wizard.js';
+import { FormulaPicker } from '../../shared/formula-picker.js';
 import { liveParagraphAt, paragraphFamilyDocument, type ParagraphFamilyLiveRun } from '../../shared/paragraph-family.js';
+import { parseNumberField } from '../../shared/text.js';
+
+// The image-insertion wizard's own field list -- unlike odg/page-detail.tsx's identically-shaped image fields, there is no x/y position to collect: DocxParagraph.insertImageAfter/OdtParagraph.insertImageAfter always append an inline image run at the end of the paragraph's own flow, not a page-absolutely-positioned frame.
+const IMAGE_FIELDS: readonly FieldSpec[] = [
+  { key: 'path', label: 'Image file path (.png/.jpg/.jpeg)', defaultValue: '' },
+  { key: 'widthPt', label: 'Width (pt)', defaultValue: '100' },
+  { key: 'heightPt', label: 'Height (pt)', defaultValue: '60' },
+  { key: 'altText', label: 'Alt text, blank for none', defaultValue: '' },
+];
+
+function inferImageFormat(path: string): 'png' | 'jpeg' | undefined {
+  const extension = path.slice(path.lastIndexOf('.') + 1).toLowerCase();
+  if (extension === 'png') {
+    return 'png';
+  }
+  if (extension === 'jpg' || extension === 'jpeg') {
+    return 'jpeg';
+  }
+  return undefined;
+}
+
+// The one async step (reading the image file off disk) is why this whole function is async, matching odg/page-detail.tsx's own applyAddKind for the identical reason.
+async function applyInsertImage(blockIndex: number, values: Readonly<Record<string, string>>, dispatch: Dispatch<Action>): Promise<void> {
+  const path = requireFieldValue(values, 'path');
+  const format = inferImageFormat(path);
+  if (format === undefined) {
+    dispatch({ type: 'SET_STATUS', severity: 'warning', text: `${path} is not a .png or .jpg/.jpeg file -- image not inserted` });
+    return;
+  }
+  try {
+    const bytes = new Uint8Array(await readInput(path));
+    const widthPt = parseNumberField(requireFieldValue(values, 'widthPt'), 100);
+    const heightPt = parseNumberField(requireFieldValue(values, 'heightPt'), 60);
+    const altTextRaw = requireFieldValue(values, 'altText').trim();
+    dispatch({ type: 'INSERT_PARAGRAPH_IMAGE', blockIndex, format, bytes, widthPt, heightPt, altText: altTextRaw.length === 0 ? undefined : altTextRaw });
+  } catch (error) {
+    dispatch({ type: 'SET_STATUS', severity: 'error', text: `Could not read ${path}: ${describeError(error)}` });
+  }
+}
 
 export interface ParagraphRunsViewProps {
   readonly runs: readonly ParagraphFamilyLiveRun[];
@@ -33,6 +77,8 @@ export function ParagraphDetailScreen(): ReactElement {
   const dispatch = useAppDispatch();
   const [runIndex, setRunIndex] = useState(0);
   const [colorInput, setColorInput] = useState<string | undefined>(undefined);
+  const [imageWizardOpen, setImageWizardOpen] = useState(false);
+  const [formulaPickerOpen, setFormulaPickerOpen] = useState(false);
 
   const screen = currentScreen(state);
   const doc = paragraphFamilyDocument(state.openDocument);
@@ -80,6 +126,16 @@ export function ParagraphDetailScreen(): ReactElement {
         dispatch({ type: 'PUSH_SCREEN', screen: { kind: 'runEditor', blockIndex, runIndex: newIndex } });
         return;
       }
+      // Uppercase, matching this codebase's own "uppercase variant when the lowercase letter is already taken" convention (see paragraph-family.tsx's own 'T' table wizard beside 'a' append) -- 'i' already toggles italic on this screen. Works for both docx and odt: both paragraph types share the identical insertImageAfter shape.
+      if (input === 'I') {
+        setImageWizardOpen(true);
+        return;
+      }
+      // docx-only: appendOfficeMath is paragraph-scoped, but odt has no paragraph-scoped formula insertion at all (OdtBody.appendFormula is body-scoped -- see paragraph-family.tsx's own 'm' handler for that path).
+      if (input === 'm' && doc?.format === 'docx') {
+        setFormulaPickerOpen(true);
+        return;
+      }
       if (selectedRun === undefined) {
         return;
       }
@@ -99,7 +155,7 @@ export function ParagraphDetailScreen(): ReactElement {
         setColorInput(selectedRun.color === undefined ? '' : layoutColorToHex(selectedRun.color).slice(1));
       }
     },
-    { isActive: !anyOverlayOpen(state) && colorInput === undefined },
+    { isActive: !anyOverlayOpen(state) && colorInput === undefined && !imageWizardOpen && !formulaPickerOpen },
   );
 
   if (screen.kind !== 'paragraphDetail') {
@@ -141,7 +197,35 @@ export function ParagraphDetailScreen(): ReactElement {
           />
         </Box>
       )}
-      <Text dimColor>&lt;- / -&gt; move, Enter edit text, b/i/u toggle, c colour, a append run, Esc back</Text>
+      {imageWizardOpen ? (
+        <FieldWizard
+          fields={IMAGE_FIELDS}
+          onCancel={() => {
+            setImageWizardOpen(false);
+          }}
+          onComplete={(values) => {
+            void applyInsertImage(blockIndex, values, dispatch).then(() => {
+              setImageWizardOpen(false);
+            });
+          }}
+        />
+      ) : undefined}
+      {formulaPickerOpen ? (
+        <FormulaPicker
+          isActive={!anyOverlayOpen(state)}
+          onCancel={() => {
+            setFormulaPickerOpen(false);
+          }}
+          onMathml={(mathml: readonly MathMlNode[]) => {
+            dispatch({ type: 'INSERT_DOCX_FORMULA', blockIndex, mathml });
+            setFormulaPickerOpen(false);
+          }}
+          onInvalidRawMathml={(message) => {
+            dispatch({ type: 'SET_STATUS', severity: 'warning', text: `Could not parse MathML: ${message}` });
+          }}
+        />
+      ) : undefined}
+      <Text dimColor>&lt;- / -&gt; move, Enter edit text, b/i/u toggle, c colour, a append run, I image{doc.format === 'docx' ? ', m formula' : ''}, Esc back</Text>
     </Box>
   );
 }
