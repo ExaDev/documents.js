@@ -25,7 +25,6 @@ export function createServer(): McpServer {
   registerOdbRenderReportTools(server);
   registerOdmTools(server);
   registerPdfInspectTools(server);
-  // Further tool registration goes here as remaining tool modules land.
 
   return server;
 }
