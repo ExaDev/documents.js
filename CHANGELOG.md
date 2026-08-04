@@ -1,3 +1,10 @@
+# [1.83.0](https://github.com/ExaDev/documents.js/compare/v1.82.0...v1.83.0) (2026-08-04)
+
+
+### Features
+
+* accept ODF template packages in the byte schemas ([fa6488e](https://github.com/ExaDev/documents.js/commit/fa6488eefee026071af34c4f4280148c82684cc1))
+
 # [1.82.0](https://github.com/ExaDev/documents.js/compare/v1.81.9...v1.82.0) (2026-08-04)
 
 
