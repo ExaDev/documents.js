@@ -1,3 +1,16 @@
+# [1.4.0](https://github.com/ExaDev/document-cli/compare/v1.3.0...v1.4.0) (2026-08-04)
+
+
+### Bug Fixes
+
+* **pdf-inspect:** tag --full dump with $schema for round-tripping ([a6c838f](https://github.com/ExaDev/document-cli/commit/a6c838f007fad7e1148f4264ce994e85da20351b))
+
+
+### Features
+
+* **docx-extras:** add a command and TUI screen for docx-only extras ([0e4651f](https://github.com/ExaDev/document-cli/commit/0e4651fffb3eb00e5e61aa93b6d508a51a3e1d58))
+* **fonts:** add a command listing source-embedded font faces ([a6f8734](https://github.com/ExaDev/document-cli/commit/a6f873434b0df6e9d8fa0b831b6de78a6babb687))
+
 # [1.3.0](https://github.com/ExaDev/document-cli/compare/v1.2.11...v1.3.0) (2026-08-03)
 
 
