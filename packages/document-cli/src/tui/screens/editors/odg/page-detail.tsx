@@ -8,7 +8,7 @@ import { describeError } from '../../../errors.js';
 import { readInput } from '../../../../runtime/io.js';
 import type { Action } from '../../../state/actions.js';
 import { useAppDispatch, useAppState } from '../../../state/context.js';
-import { anyOverlayOpen } from '../../../state/types.js';
+import { anyOverlayOpen, type OdgOpenDocument } from '../../../state/types.js';
 import {
   buildPageItems,
   defaultTriangleSubpaths,
@@ -82,8 +82,22 @@ function readFrame(values: Readonly<Record<string, string>>): GeometryBox {
   };
 }
 
+// Only fired when the parity check (shared.ts's `vectorsParityMatch`, via `buildPageItems`) actually fails for this page -- the common case, a page whose vectors are all plain rect/ellipse/line/path, needs no warning at all any more, since editing a freshly-added vector genuinely works. This only fires when the page ALSO carries an element `OdgPage.vectors()` cannot wrap (a `draw:circle`/`polygon`/`polyline`/`custom-shape`), which pulls every vector on the page -- including the one just added -- back into read-only mode.
 function warnVectorIsViewOnly(dispatch: Dispatch<Action>, label: string): void {
-  dispatch({ type: 'SET_STATUS', severity: 'info', text: `${label} added -- documents.js exposes no way to enumerate an existing odg vector, so it will show in this list read-only and cannot be edited or removed from the TUI.` });
+  dispatch({
+    type: 'SET_STATUS',
+    severity: 'info',
+    text: `${label} added -- but this page also has a vector element documents.js's OdgPage.vectors() cannot wrap, so every vector on it (including this one) shows read-only in this list rather than risk pairing the wrong live handle to the wrong row.`,
+  });
+}
+
+// Re-derives the page's own items right after a vector-adding dispatch and reports the view-only warning only when that vector's own item genuinely came back without a live handle -- `doc.editor` is a live view over the mutable package, and the reducer's mutation already ran synchronously by the time `dispatch` returns, so this reads the real, post-mutation state rather than a stale one.
+function warnIfVectorAddedReadOnly(doc: OdgOpenDocument, pageIndex: number, dispatch: Dispatch<Action>, label: string): void {
+  const vectorItems = buildPageItems(doc, pageIndex).filter((item) => item.kind === 'vector');
+  const added = vectorItems.at(-1);
+  if (added !== undefined && added.liveVector === undefined) {
+    warnVectorIsViewOnly(dispatch, label);
+  }
 }
 
 function inferImageFormat(path: string): 'png' | 'jpeg' | undefined {
@@ -97,19 +111,19 @@ function inferImageFormat(path: string): 'png' | 'jpeg' | undefined {
   return undefined;
 }
 
-// The one async branch (reading an image file off disk) is why this whole function is async -- every other kind dispatches synchronously and resolves immediately.
-async function applyAddKind(kind: AddKind, pageIndex: number, values: Readonly<Record<string, string>>, dispatch: Dispatch<Action>): Promise<void> {
+// The one async branch (reading an image file off disk) is why this whole function is async -- every other kind dispatches synchronously and resolves immediately. `doc` is only needed to re-check vector parity after a vector-adding dispatch (warnIfVectorAddedReadOnly); textbox/image never touch it.
+async function applyAddKind(kind: AddKind, pageIndex: number, doc: OdgOpenDocument, values: Readonly<Record<string, string>>, dispatch: Dispatch<Action>): Promise<void> {
   switch (kind) {
     case 'rect': {
       const init = { frame: readFrame(values), fill: parseColorField(requireFieldValue(values, 'fill')), stroke: parseStrokeField(requireFieldValue(values, 'stroke')) };
       dispatch({ type: 'ADD_RECT', pageIndex, init });
-      warnVectorIsViewOnly(dispatch, 'Rectangle');
+      warnIfVectorAddedReadOnly(doc, pageIndex, dispatch, 'Rectangle');
       return;
     }
     case 'ellipse': {
       const init = { frame: readFrame(values), fill: parseColorField(requireFieldValue(values, 'fill')), stroke: parseStrokeField(requireFieldValue(values, 'stroke')) };
       dispatch({ type: 'ADD_ELLIPSE', pageIndex, init });
-      warnVectorIsViewOnly(dispatch, 'Ellipse');
+      warnIfVectorAddedReadOnly(doc, pageIndex, dispatch, 'Ellipse');
       return;
     }
     case 'line': {
@@ -117,7 +131,7 @@ async function applyAddKind(kind: AddKind, pageIndex: number, values: Readonly<R
       const to = { xPt: parseNumberField(requireFieldValue(values, 'toXPt'), 100), yPt: parseNumberField(requireFieldValue(values, 'toYPt'), 0) };
       const stroke: ContentStroke = parseStrokeField(requireFieldValue(values, 'stroke')) ?? { color: { r: 0, g: 0, b: 0 }, widthPt: 1 };
       dispatch({ type: 'ADD_LINE', pageIndex, init: { from, to, stroke } });
-      warnVectorIsViewOnly(dispatch, 'Line');
+      warnIfVectorAddedReadOnly(doc, pageIndex, dispatch, 'Line');
       return;
     }
     case 'path': {
@@ -129,7 +143,7 @@ async function applyAddKind(kind: AddKind, pageIndex: number, values: Readonly<R
         stroke: parseStrokeField(requireFieldValue(values, 'stroke')),
       };
       dispatch({ type: 'ADD_PATH', pageIndex, init });
-      warnVectorIsViewOnly(dispatch, 'Path');
+      warnIfVectorAddedReadOnly(doc, pageIndex, dispatch, 'Path');
       return;
     }
     case 'textbox': {
@@ -195,7 +209,7 @@ function FieldWizard(props: { readonly fields: readonly FieldSpec[]; readonly on
   );
 }
 
-function AddItemFlow(props: { readonly pageIndex: number; readonly isActive: boolean; readonly onCancel: () => void; readonly onCreated: () => void }): ReactElement {
+function AddItemFlow(props: { readonly pageIndex: number; readonly doc: OdgOpenDocument; readonly isActive: boolean; readonly onCancel: () => void; readonly onCreated: () => void }): ReactElement {
   const dispatch = useAppDispatch();
   const [kind, setKind] = useState<AddKind | undefined>(undefined);
 
@@ -237,7 +251,7 @@ function AddItemFlow(props: { readonly pageIndex: number; readonly isActive: boo
       fields={fieldsForAddKind(kind)}
       onCancel={props.onCancel}
       onComplete={(values) => {
-        void applyAddKind(kind, props.pageIndex, values, dispatch).then(props.onCreated);
+        void applyAddKind(kind, props.pageIndex, props.doc, values, dispatch).then(props.onCreated);
       }}
     />
   );
@@ -296,6 +310,7 @@ export function OdgPageDetailScreen(): ReactElement {
     return (
       <AddItemFlow
         pageIndex={pageIndex}
+        doc={doc}
         isActive={!overlayOpen}
         onCancel={() => {
           setIsAdding(false);
