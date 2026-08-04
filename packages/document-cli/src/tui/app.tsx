@@ -36,6 +36,7 @@ import { FilePickerScreen } from './screens/file-picker.js';
 import { LauncherScreen } from './screens/launcher.js';
 import { NewDocumentPickerScreen } from './screens/new-document-picker.js';
 import { SaveAsPromptScreen } from './screens/save-as-prompt.js';
+import { MetadataScreen } from './screens/shared/metadata.js';
 import { AppStateProvider, useAppDispatch, useAppState } from './state/context.js';
 import { saveOpenDocumentAction } from './state/save-document.js';
 import { anyOverlayOpen, currentScreen, type AppState, type Screen } from './state/types.js';
@@ -124,6 +125,8 @@ function ScreenBody({ screen }: { readonly screen: Screen }): ReactElement {
       return <ExportOptionsScreen />;
     case 'saveAsPrompt':
       return <SaveAsPromptScreen />;
+    case 'metadata':
+      return <MetadataScreen />;
   }
 }
 
@@ -250,6 +253,14 @@ function AppShell({ startPath }: { readonly startPath?: string }): ReactElement 
       }
       if (key.ctrl && input === 'd') {
         dispatch({ type: 'OPEN_OVERLAY', overlay: 'diagnosticsPanel' });
+        return;
+      }
+      if (input === 'm') {
+        if (state.openDocument === undefined) {
+          dispatch({ type: 'SET_STATUS', severity: 'warning', text: 'There is no open document to show metadata for' });
+          return;
+        }
+        dispatch({ type: 'PUSH_SCREEN', screen: { kind: 'metadata' } });
       }
     },
     { isActive: !overlayOpen },

@@ -37,7 +37,8 @@ export type Screen =
   | { readonly kind: 'pdfPageItems'; readonly pageIndex: number }
   | { readonly kind: 'pdfItemDetail'; readonly pageIndex: number; readonly itemIndex: number }
   | { readonly kind: 'exportOptions' }
-  | { readonly kind: 'saveAsPrompt' };
+  | { readonly kind: 'saveAsPrompt' }
+  | { readonly kind: 'metadata' };
 
 export type ScreenKind = Screen['kind'];
 
@@ -193,6 +194,7 @@ export function selectionKeyFor(screen: Screen): string {
     case 'exportOptions':
     case 'saveAsPrompt':
     case 'markdownLineList':
+    case 'metadata':
       return screen.kind;
     case 'filePicker':
       return `filePicker:${screen.purpose}:${screen.cwd}`;

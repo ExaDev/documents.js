@@ -1,0 +1,27 @@
+import { type LayoutMetadata, readDocxContent, readMarkdownContent, readOdgContent, readOdpContent, readOdsContent, readOdtContent, readPptxContent } from 'documents.js';
+import type { OpenDocument } from '../state/types.js';
+
+// The single place in the TUI that turns an OpenDocument into its own LayoutMetadata, mirroring export-pdf.ts's own per-format dispatch style. docx/pptx/odt/odp/ods/odg all read `doc.editor.toPackage()` -- the live view's own already-decoded package (ooxml.js's for docx/pptx, odf.js's for odt/odp/ods/odg; see state/types.ts's own RULE at the top of the file for why this is called fresh on every render rather than cached), fed straight into that format's own readXContent. markdown has no editor and no package at all -- `readMarkdownContent` runs directly on `doc.source`, the same raw text `.editor.toPackage()` stands in for elsewhere. pdf and xlsx both already carry a LayoutMetadata directly on `.layout` (xlsx's own `.layout` is the throwaway xlsxToPdf-then-readPdf preview open-document.ts already computed at open time -- see that module's own XlsxOpenDocument doc comment), so neither needs a read call here at all. odb has no document-level metadata concept anywhere in this codebase (it is a table/form/report container, not a single document with its own title/author/etc.) -- this throws rather than fabricating an empty LayoutMetadata, and the metadata screen itself is the one place that catches it and shows a plain message instead of crashing.
+export function metadataFor(doc: OpenDocument): LayoutMetadata {
+  switch (doc.format) {
+    case 'docx':
+      return readDocxContent(doc.editor.toPackage()).metadata;
+    case 'pptx':
+      return readPptxContent(doc.editor.toPackage()).metadata;
+    case 'odt':
+      return readOdtContent(doc.editor.toPackage()).metadata;
+    case 'odp':
+      return readOdpContent(doc.editor.toPackage()).metadata;
+    case 'ods':
+      return readOdsContent(doc.editor.toPackage()).metadata;
+    case 'odg':
+      return readOdgContent(doc.editor.toPackage()).metadata;
+    case 'markdown':
+      return readMarkdownContent(doc.source).metadata;
+    case 'pdf':
+    case 'xlsx':
+      return doc.layout.metadata;
+    case 'odb':
+      throw new Error('A .odb database has no document-level metadata -- it is a table/form/report container, not a single document with its own title/author/etc.');
+  }
+}

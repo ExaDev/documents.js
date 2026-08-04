@@ -12,6 +12,7 @@ export const GLOBAL_KEYS: readonly KeyBinding[] = [
   { keys: 'PageUp / PageDown', description: 'Scroll a page at a time' },
   { keys: 'Home / End', description: 'Jump to the first or last item' },
   { keys: 'a', description: 'Append a new item to the current list' },
+  { keys: 'm', description: "Show the open document's metadata (read-only)" },
   { keys: 'Ctrl+S', description: 'Save the open document' },
   { keys: 'Ctrl+W', description: 'Close the open document' },
   { keys: 'q / Ctrl+C', description: 'Quit' },
