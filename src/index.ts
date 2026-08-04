@@ -435,7 +435,7 @@ export { createLocalDocumentConverter } from './convert/local';
 export { buildDocumentBytes } from './convert/from-package';
 
 // --- Every DocumentFormat's own source-embedded font faces, dispatched by format -- the DocumentFormat-aware counterpart to extractSourceFonts/FontSourcePackage above, for a caller holding a format + bytes rather than an already-decoded Package. ---
-export { extractSourceFontsForFormat } from './convert/document-fonts';
+export { extractSourceFontsForFormat, UnsupportedFontSourceFormatError } from './convert/document-fonts';
 
 // --- Cross-format metadata read/write: a document's own title/author/subject/keywords/creator/producer/created/modified, resolved (and, for setDocumentMetadata, patched) by DocumentFormat across all ten formats this package supports. ---
 export type { ReadDocumentMetadataOptions } from './metadata/read';
