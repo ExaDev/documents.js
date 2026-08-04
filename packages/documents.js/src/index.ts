@@ -410,6 +410,9 @@ export { renderOdbReportContent } from './odb/report/render';
 export { OdbReportDataSourceError, odbReportCommandSql, resolveOdbReportRows } from './odb/report/source';
 export type { OdbConversionOptions, OdbToCsvOptions } from './convert/convert';
 export { odbToCsv, odbToXlsx } from './convert/convert';
+// readOdbReportContent's own last step: dispatching the rendered report's ContentDocument to real docx/odt/pdf bytes, the same "render -> encode" shape every other ergonomic conversion in this package has. odbReportToPdf's options are DocumentToPdfOptions verbatim (the same type docxToPdf/odtToPdf/markdownToPdf already use).
+export type { OdbReportToDocxOptions, OdbReportToOdtOptions } from './convert/convert';
+export { odbReportToDocx, odbReportToOdt, odbReportToPdf } from './convert/convert';
 export type { FirebirdBackupSummary, ReadFirebirdBackupResult } from './firebird/backup';
 export {
   FirebirdBackupFormatError,
@@ -424,7 +427,21 @@ export { FirebirdBackupParseError } from './firebird/reader';
 
 // --- The swappable conversion port, for a caller that wants to inject a different (e.g. remote) implementation later without changing call sites. ---
 export type { ConversionOptions, ConversionRequest, ConversionResult, Diagnostic, DocumentConverter, DocumentFormat, DocumentPayload } from './convert/port';
+// DocumentFormat's own Zod schema, and every member as a plain runtime array derived from it -- for a caller that wants to enumerate or validate against the full format set (a CLI's own usage-error text, an MCP tool's JSON-schema `enum` input) without hand-writing a second copy of the ten format literals that could drift out of sync with DocumentFormat itself.
+export { DocumentFormatSchema, DOCUMENT_FORMATS } from './convert/port';
 export { createLocalDocumentConverter } from './convert/local';
+
+// --- A DocumentPackage (content + optional layout) -> any DocumentFormat's own bytes -- the reverse of what every ergonomic X-to-PDF/PDF-to-X conversion's own onDocument callback hands back. ---
+export { buildDocumentBytes } from './convert/from-package';
+
+// --- Every DocumentFormat's own source-embedded font faces, dispatched by format -- the DocumentFormat-aware counterpart to extractSourceFonts/FontSourcePackage above, for a caller holding a format + bytes rather than an already-decoded Package. ---
+export { extractSourceFontsForFormat } from './convert/document-fonts';
+
+// --- Cross-format metadata read/write: a document's own title/author/subject/keywords/creator/producer/created/modified, resolved (and, for setDocumentMetadata, patched) by DocumentFormat across all ten formats this package supports. ---
+export type { ReadDocumentMetadataOptions } from './metadata/read';
+export { readDocumentMetadata } from './metadata/read';
+export type { MetadataOverrides, SetDocumentMetadataOptions } from './metadata/write';
+export { setDocumentMetadata } from './metadata/write';
 
 // --- Ports a caller can inject: deterministic clocks (for reproducible PDF output in tests) and cancellation. ---
 export type { ClockPort } from './ports/clock';
