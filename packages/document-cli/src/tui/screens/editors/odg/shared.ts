@@ -1,10 +1,12 @@
-import { readOdgContent, type Box, type ContentStroke, type ContentSubpath, type ContentVector, type LayoutColor, type OdgVector, type OdpShape } from 'documents.js';
+import { readOdgContent, type Box, type ContentVector, type LayoutColor, type OdgVector, type OdpShape } from 'documents.js';
 import { currentScreen, type AppState, type OdgOpenDocument, type Screen } from '../../../state/types.js';
 import { parseNumberField } from '../../shared/text.js';
+import { defaultTriangleSubpaths, parseColorField, parseStrokeField } from '../../shared/vector-fields.js';
 
-// Both re-exported here so every existing local import of `parseNumberField`/`requireFieldValue` from './shared.js' keeps working unmodified -- the implementations themselves now live in screens/shared, since paragraph-detail.tsx and paragraph-family.tsx need the identical parse/lookup and neither is an odg concept.
+// All re-exported here so every existing local import of `parseNumberField`/`requireFieldValue`/`parseColorField`/`parseStrokeField`/`defaultTriangleSubpaths` from './shared.js' keeps working unmodified -- the implementations themselves now live in screens/shared, since paragraph-detail.tsx/paragraph-family.tsx and (for the vector helpers) pptx/odp's own slide-detail.tsx need the identical parse/lookup and none of them is an odg-specific concept.
 export { parseNumberField };
 export { requireFieldValue } from '../../shared/field-wizard.js';
+export { defaultTriangleSubpaths, parseColorField, parseStrokeField };
 
 // Shared between page-list.tsx, page-detail.tsx and shape-or-vector-detail.tsx: the odg-document/screen narrowing every one of them needs, the vector/shape enumeration and live/read-only parity check every one of them relies on, and the small formatting/parsing helpers all three build their rows and forms from.
 
@@ -128,40 +130,3 @@ export function describeFillStroke(vector: ContentVector): string {
   return parts.length === 0 ? 'no fill or stroke' : parts.join(', ');
 }
 
-export function parseColorField(raw: string): LayoutColor | undefined {
-  const trimmed = raw.trim();
-  if (trimmed.length === 0) {
-    return undefined;
-  }
-  const [r, g, b] = trimmed.split(/\s+/).map((part) => Number.parseFloat(part));
-  if (r === undefined || g === undefined || b === undefined || ![r, g, b].every((value) => Number.isFinite(value))) {
-    return undefined;
-  }
-  return { r, g, b };
-}
-
-export function parseStrokeField(raw: string): ContentStroke | undefined {
-  const trimmed = raw.trim();
-  if (trimmed.length === 0) {
-    return undefined;
-  }
-  const [r, g, b, widthPt] = trimmed.split(/\s+/).map((part) => Number.parseFloat(part));
-  if (r === undefined || g === undefined || b === undefined || widthPt === undefined || ![r, g, b, widthPt].every((value) => Number.isFinite(value))) {
-    return undefined;
-  }
-  return { color: { r, g, b }, widthPt };
-}
-
-// A hand-rolled path shape rather than something the user types point-by-point into a terminal text field: a triangle spanning the given frame, local (viewBox-relative) coordinates matching `PathVectorInit.subpaths`' own convention.
-export function defaultTriangleSubpaths(widthPt: number, heightPt: number): readonly ContentSubpath[] {
-  return [
-    {
-      start: { xPt: 0, yPt: heightPt },
-      segments: [
-        { kind: 'line', to: { xPt: widthPt / 2, yPt: 0 } },
-        { kind: 'line', to: { xPt: widthPt, yPt: heightPt } },
-      ],
-      closed: true,
-    },
-  ];
-}
