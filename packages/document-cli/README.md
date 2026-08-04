@@ -14,6 +14,7 @@ graph TD
     pdfcodec("pdf-codec")
     mdcodec("markdown-codec")
     documents("documents.js")
+    mcp("document-mcp")
     cli("document-cli")
 
     schema --> ooxml
@@ -25,8 +26,11 @@ graph TD
     odf --> documents
     pdfcodec --> documents
     mdcodec --> documents
+    documents --> mcp
+    pdfcodec --> mcp
     documents --> cli
     odf --> cli
+    pdfcodec --> cli
 
     click schema "https://github.com/ExaDev/document-schema.js" "document-schema.js"
     click ooxml "https://github.com/ExaDev/ooxml.js" "ooxml.js"
@@ -34,6 +38,7 @@ graph TD
     click pdfcodec "https://github.com/ExaDev/pdf-codec" "pdf-codec"
     click mdcodec "https://github.com/ExaDev/markdown-codec" "markdown-codec"
     click documents "https://github.com/ExaDev/documents.js" "documents.js"
+    click mcp "https://github.com/ExaDev/document-mcp" "document-mcp"
     click cli "https://github.com/ExaDev/document-cli" "document-cli"
 
     style cli fill:#f9a825,stroke:#333,stroke-width:3px
@@ -42,6 +47,8 @@ graph TD
 ## Why
 
 `documents.js` is a library, not a tool — everything it does happens through function calls from TypeScript/JavaScript. Most people who want to convert a docx to a PDF, extract an `.odb` table to CSV, or poke at a PDF's structure from a terminal don't want to write a script to do it. `document-cli` is that missing entry point: every one of documents.js's 27 direct conversion pairs, its generic converter, its `.odm`/`.odb` extraction functions (including a bounded SQL engine over an `.odb`'s own tables and full report rendering), its PDF inspector, and its document metadata/source-font introspection become a single command-line invocation, and its seven live-view editors (docx/pptx/odt/odp/ods/odg/markdown) become a keyboard-driven terminal app that never needs a code editor open at all.
+
+[`document-mcp`](https://github.com/ExaDev/document-mcp) is the sibling frontend over the identical `documents.js` library — an MCP server rather than a terminal CLI/TUI — so the two are independent consumers of one shared implementation, each exposing whatever subset of it suits a human at a terminal versus an MCP-speaking agent.
 
 The CLI and the TUI are deliberately not two separate implementations of the same logic. The TUI's own document-opening, saving, and PDF-export code (`src/tui/format/`) calls the identical `documents.js` functions the CLI commands call — `openDocx`/`createDocx`/`docxToPdf` and their five siblings per format, plus `readOdbTables`/`readPdf` for the two read-only sources — so there is exactly one place either surface can drift from what documents.js itself does: nowhere.
 
