@@ -7,9 +7,7 @@ import type { OmmlDiagnostic } from '../../omml/shared';
 
 export type OmmlDiagnosticSink = (diagnostic: OmmlDiagnostic, context: { readonly sourcePath?: string }) => void;
 
-// The containers readDocx's own body walk descends into, mirrored exactly. w:tbl is deliberately absent: a paragraph inside a table cell becomes a block of that ContentTableCell rather than a top-level one, so it neither participates in this ordinal correspondence nor has a top-level position to splice a formula into -- an equation inside a table cell is consequently not recovered, a bounded, tracked gap mirroring buildDocxPackage's own "nested tables and images inside a table cell are out of scope" boundary on the write side.
-//
-// Positioning is DERIVED rather than approximated, and by a much shorter route than the odt side's own block-counting mirror needs: every w:p produces exactly one top-level ContentParagraph block and nothing else produces one at all (a w:tbl becomes a table block, a w:drawing an image block, w:pageBreakBefore a pageBreak block), so the Nth w:p in the body IS the Nth paragraph-kind block across the sections readDocx returned. This walk mirrors exactly the containers readDocx's own readSections/readBodyBlocks descend into, so that correspondence holds for a paragraph nested in a w:sdt, a w:ins, or an mc:AlternateContent branch too.
+// The containers readDocx's own body walk descends into, mirrored exactly. Every w:p produces exactly one top-level ContentParagraph block and nothing else produces one at all (a w:tbl becomes a table block, a w:drawing an image block, w:pageBreakBefore a pageBreak block), so the Nth w:p in the body IS the Nth paragraph-kind block across the sections readDocx returned. This walk mirrors exactly the containers readDocx's own readSections/readBodyBlocks descend into, so that correspondence holds for a paragraph nested in a w:sdt, a w:ins, or an mc:AlternateContent branch too.
 export function collectBodyParagraphs(nodes: readonly XmlNode[], out: XmlElement[]): void {
   for (const node of nodes) {
     if (node.type !== 'element') {
@@ -29,6 +27,30 @@ export function collectBodyParagraphs(nodes: readonly XmlNode[], out: XmlElement
       const target = childrenWithTag(node, 'mc:Fallback')[0] ?? childrenWithTag(node, 'mc:Choice')[0];
       if (target !== undefined) {
         collectBodyParagraphs(target.children, out);
+      }
+    }
+  }
+}
+
+// The table counterpart to collectBodyParagraphs: every w:tbl produces exactly one top-level ContentTable block (and every w:tbl nested inside a table cell produces exactly one cell-level table block), so the Nth w:tbl IS the Nth table-kind block at whichever level this is called for -- section.blocks for the body, or a cell's own blocks for a nested table. Descends into the same w:sdt/w:ins/mc:AlternateContent wrappers collectBodyParagraphs does, for the same reason and with the same branch preference.
+export function collectBodyTables(nodes: readonly XmlNode[], out: XmlElement[]): void {
+  for (const node of nodes) {
+    if (node.type !== 'element') {
+      continue;
+    }
+    if (node.tag === 'w:tbl') {
+      out.push(node);
+    } else if (node.tag === 'w:sdt') {
+      const content = childrenWithTag(node, 'w:sdtContent')[0];
+      if (content !== undefined) {
+        collectBodyTables(content.children, out);
+      }
+    } else if (node.tag === 'w:ins') {
+      collectBodyTables(node.children, out);
+    } else if (node.tag === 'mc:AlternateContent') {
+      const target = childrenWithTag(node, 'mc:Fallback')[0] ?? childrenWithTag(node, 'mc:Choice')[0];
+      if (target !== undefined) {
+        collectBodyTables(target.children, out);
       }
     }
   }

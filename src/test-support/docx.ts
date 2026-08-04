@@ -118,3 +118,20 @@ export function docxWithExtrasPackage(): Package {
     }),
   );
 }
+
+// A one-row, two-column table whose SECOND cell's paragraph carries nothing but an inline m:oMath equation -- the case spliceDocxEmbeddedObjects used to skip entirely (collectBodyParagraphs deliberately excluded w:tbl, so a cell's equation had no paragraph-ordinal correspondence and no top-level position to splice into). The first cell is ordinary text, so a correct recovery leaves it untouched and recovers only the second cell's equation.
+const TABLE_CELL_EQUATION_DOCUMENT_XML = enc(
+  '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><w:body><w:tbl><w:tblGrid><w:gridCol w:w="4500"/><w:gridCol w:w="4500"/></w:tblGrid><w:tr><w:tc><w:p><w:r><w:t>plain cell</w:t></w:r></w:p></w:tc><w:tc><w:p><m:oMath><m:r><m:t>x</m:t></m:r></m:oMath></w:p></w:tc></w:tr></w:tbl><w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr></w:body></w:document>',
+);
+
+export function docxWithTableCellEquationPackage(): Package {
+  return decodePackage(
+    zipPackage({
+      '[Content_Types].xml': CONTENT_TYPES_XML,
+      '_rels/.rels': ROOT_RELS_XML,
+      'word/document.xml': TABLE_CELL_EQUATION_DOCUMENT_XML,
+      'word/_rels/document.xml.rels': DOCUMENT_RELS_XML,
+      'word/styles.xml': STYLES_XML,
+    }),
+  );
+}
