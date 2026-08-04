@@ -7,6 +7,7 @@ export type Screen =
   | { readonly kind: 'filePicker'; readonly purpose: 'open' | 'saveAs' | 'exportTarget'; readonly cwd: string }
   | { readonly kind: 'newDocumentPicker' }
   | { readonly kind: 'bodyList' }
+  | { readonly kind: 'docxExtras' }
   | { readonly kind: 'paragraphDetail'; readonly blockIndex: number }
   | { readonly kind: 'runEditor'; readonly blockIndex: number; readonly runIndex: number }
   | { readonly kind: 'tableView'; readonly blockIndex: number }
@@ -181,6 +182,7 @@ export function selectionKeyFor(screen: Screen): string {
     case 'launcher':
     case 'newDocumentPicker':
     case 'bodyList':
+    case 'docxExtras':
     case 'slideList':
     case 'sheetList':
     case 'pageList':

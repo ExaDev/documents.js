@@ -10,6 +10,7 @@ import { StatusLine } from './components/status-line.js';
 import { describeError } from './errors.js';
 import { openDocumentAtPath } from './format/open-document.js';
 import { DocxBodyListScreen, ParagraphDetailScreen, RunEditorScreen, TableCellDetailScreen, TableViewScreen } from './screens/editors/docx/index.js';
+import { DocxExtrasScreen } from './screens/editors/docx/extras.js';
 import { MarkdownLineEditorScreen, MarkdownLineListScreen } from './screens/editors/markdown/index.js';
 import { OdbFormDetailScreen } from './screens/editors/odb/form-detail.js';
 import { OdbFormListScreen } from './screens/editors/odb/form-list.js';
@@ -61,6 +62,8 @@ function ScreenBody({ screen }: { readonly screen: Screen }): ReactElement {
       return <NewDocumentPickerScreen />;
     case 'bodyList':
       return format === 'odt' ? <OdtBodyListScreen /> : <DocxBodyListScreen />;
+    case 'docxExtras':
+      return <DocxExtrasScreen />;
     case 'paragraphDetail':
       return <ParagraphDetailScreen />;
     case 'runEditor':
