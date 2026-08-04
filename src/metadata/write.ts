@@ -1,23 +1,7 @@
 import type { ContentDocument, LayoutDocument, LayoutMetadata } from 'document-schema.js';
-import { decodePackage as decodeOdfPackage, encodePackage as encodeOdfPackage } from 'odf.js';
-import { decodePackage as decodeOoxmlPackage, encodePackage as encodeOoxmlPackage } from 'ooxml.js';
 import { readPdf, writePdf } from 'pdf-codec';
+import { DOCUMENT_FORMAT_CODECS, requireArrayBufferBytes } from '../codecs/registry';
 import type { DocumentFormat } from '../convert/port';
-import { buildDocxPackage } from '../edit/docx/content';
-import { buildOdgPackage } from '../edit/odg/content';
-import { buildOdpPackage } from '../edit/odp/content';
-import { buildOdsPackage } from '../edit/ods/content';
-import { buildOdtPackage } from '../edit/odt/content';
-import { buildPptxPackage } from '../edit/pptx/content';
-import { decodeMarkdownText, encodeMarkdownText } from '../markdown/text';
-import { readMarkdownContent } from '../markdown/read';
-import { buildMarkdownText } from '../markdown/write';
-import { readOdgContent } from '../odf/odg/read';
-import { readOdpContent } from '../odf/odp/read';
-import { readOdsContent } from '../odf/ods/read';
-import { readOdtContent } from '../odf/odt/read';
-import { readDocxContent } from '../ooxml/docx/read';
-import { readPptxContent } from '../ooxml/pptx/read';
 import { throwIfAborted } from '../ports/abort';
 
 // Every format whose own ContentDocument setDocumentMetadata can patch a metadata field on and rebuild from scratch through -- the seven formats sharing the readXContent -> buildXPackage round trip. Deliberately does NOT include 'pdf': a PDF's metadata is patched directly on its own LayoutDocument (see setDocumentMetadata below), never through this ContentDocument rebuild path at all.
@@ -37,42 +21,21 @@ function isRebuildFormat(format: DocumentFormat): format is RebuildFormat {
   return format in REBUILD_FORMATS;
 }
 
+// Both functions below dispatch through DOCUMENT_FORMAT_CODECS (src/codecs/registry.ts) rather than a hand-written per-format switch. Every RebuildFormat member has a real `content` codec in that registry (it's exactly the docx/pptx/odt/odp/ods/odg/markdown subset the registry itself populates one), so the fallback throws are internal-invariant guards for TypeScript's benefit, never expected to fire.
 function readContentForFormat(format: RebuildFormat, bytes: Uint8Array<ArrayBuffer>): ContentDocument {
-  switch (format) {
-    case 'docx':
-      return readDocxContent(decodeOoxmlPackage(bytes));
-    case 'pptx':
-      return readPptxContent(decodeOoxmlPackage(bytes));
-    case 'odt':
-      return readOdtContent(decodeOdfPackage(bytes));
-    case 'odp':
-      return readOdpContent(decodeOdfPackage(bytes));
-    case 'ods':
-      return readOdsContent(decodeOdfPackage(bytes));
-    case 'odg':
-      return readOdgContent(decodeOdfPackage(bytes));
-    case 'markdown':
-      return readMarkdownContent(decodeMarkdownText(bytes));
+  const content = DOCUMENT_FORMAT_CODECS[format].content;
+  if (!content) {
+    throw new Error(`RebuildFormat '${format}' has no content codec in DOCUMENT_FORMAT_CODECS -- this is an internal invariant violation, not a caller error`);
   }
+  return content.read(bytes);
 }
 
 function buildBytesForRebuildFormat(format: RebuildFormat, content: ContentDocument): Uint8Array<ArrayBuffer> {
-  switch (format) {
-    case 'docx':
-      return encodeOoxmlPackage(buildDocxPackage(content));
-    case 'pptx':
-      return encodeOoxmlPackage(buildPptxPackage(content));
-    case 'odt':
-      return encodeOdfPackage(buildOdtPackage(content));
-    case 'odp':
-      return encodeOdfPackage(buildOdpPackage(content));
-    case 'ods':
-      return encodeOdfPackage(buildOdsPackage(content));
-    case 'odg':
-      return encodeOdfPackage(buildOdgPackage(content));
-    case 'markdown':
-      return encodeMarkdownText(buildMarkdownText(content));
+  const codec = DOCUMENT_FORMAT_CODECS[format].content;
+  if (!codec?.write) {
+    throw new Error(`RebuildFormat '${format}' has no content.write codec in DOCUMENT_FORMAT_CODECS -- this is an internal invariant violation, not a caller error`);
   }
+  return requireArrayBufferBytes(codec.write(content));
 }
 
 export interface MetadataOverrides {
