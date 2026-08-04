@@ -39,7 +39,7 @@ export function buildOdsPackage(content: ContentDocument, options?: BuildOdsPack
       appendCell(odsSheet, cell);
     }
     for (const column of sheet.columns) {
-      // widthPt is optional (document-schema.js 2.0.0) precisely because not every producer behind a spreadsheet ContentDocument knows a column's own width -- ooxml.js's readXlsxContent genuinely omits it for an unstyled xlsx column, unlike odf.js's own readOds, which always resolves a concrete number (0 when unstyled). Skip the write entirely rather than inventing a width: an omitted style here reads back through OdsSheet's own scaffold-default column styling (or a reader's own DEFAULT_COLUMN_WIDTH_PT fallback, src/layout/sheets.ts), never a fabricated 0.
+      // widthPt is optional (document-schema.js 2.0.0) precisely because not every producer behind a spreadsheet ContentDocument knows a column's own width -- ooxml.js's readXlsxContent genuinely omits it for an unstyled xlsx column, unlike odf.js's own readOds, which always resolves a concrete number (0 when unstyled). Skip the write entirely rather than inventing a width: appendCell above already individuated this column via OdsSheet.cell(), which now stamps a real DEFAULT_COLUMN_WIDTH_PT-equivalent style on any column it touches for the first time (column-row.ts's own ensureColumnDefaultWidth) -- so an omitted widthPt here reads back at that same real default, never a fabricated/ambiguous 0.
       if (column.widthPt !== undefined) {
         odsSheet.setColumnWidth(column.index, column.widthPt);
       }
