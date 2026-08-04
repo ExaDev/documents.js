@@ -1,6 +1,5 @@
 import { type Command } from 'commander';
-import { decodePackage, extractSourceFonts, type DocumentFormat, type FontSourcePackage } from 'documents.js';
-import { decodePackage as decodeOdfPackage } from 'odf.js';
+import { extractSourceFontsForFormat } from 'documents.js';
 import { inferFormatFromExtension } from '../format';
 import { createRuntimeSignal } from '../runtime/abort';
 import { EXIT_SUCCESS, EXIT_USAGE_ERROR, mapErrorToExit } from '../runtime/exit-codes';
@@ -9,28 +8,6 @@ import { formatError } from './shared';
 
 interface FontsCliOptions {
   readonly json: boolean;
-}
-
-// The only formats `extractSourceFonts` (documents.js's `src/fonts/registry.ts`) knows how to read a source-embedded face from at all: docx/pptx via OOXML's own fontTable.xml/embeddedFontLst, odt/odp/ods/odg via ODF's own office:font-face-decls. xlsx has no OOXML font-embedding vocabulary of its own; pdf/markdown carry no source-package concept to embed a font declaration in; a standalone .odf formula document embeds only the STIX Two Math font pdf-codec itself carries, never a caller-resolvable face; .odb has no font concept at all.
-const FONT_SOURCE_FORMATS: Readonly<Record<'docx' | 'pptx' | 'odt' | 'odp' | 'ods' | 'odg', true>> = {
-  docx: true,
-  pptx: true,
-  odt: true,
-  odp: true,
-  ods: true,
-  odg: true,
-};
-
-function isFontSourceFormat(format: DocumentFormat): format is keyof typeof FONT_SOURCE_FORMATS {
-  return format in FONT_SOURCE_FORMATS;
-}
-
-// docx/pptx dispatch through ooxml.js's own decodePackage (re-exported from documents.js under its own name); odt/odp/ods/odg dispatch through odf.js's decodePackage instead, aliased on import exactly as commands/odb.ts already does to avoid the naming collision between the two same-named functions.
-function resolveFontSourcePackage(format: keyof typeof FONT_SOURCE_FORMATS, bytes: Uint8Array<ArrayBuffer>): FontSourcePackage {
-  if (format === 'docx' || format === 'pptx') {
-    return { kind: format, package: decodePackage(bytes) };
-  }
-  return { kind: 'odf', package: decodeOdfPackage(bytes) };
 }
 
 // ProvidedFont (pdf-codec, re-exported by documents.js) carries `bytes` directly, with no `byteLength` field of its own -- computed here rather than exposing the raw font bytes themselves, which no caller of this command's summary output has asked for and which would bloat --json output by however large the embedded face is.
@@ -51,14 +28,10 @@ async function runFonts(input: string, options: FontsCliOptions): Promise<number
       process.stderr.write(`[${command}] cannot infer a document format from '${input}'; expected one of docx, pptx, odt, odp, ods, odg\n`);
       return EXIT_USAGE_ERROR;
     }
-    if (!isFontSourceFormat(format)) {
-      process.stderr.write(`[${command}] '${format}' documents carry no source-embedded font faces this command can extract; expected one of docx, pptx, odt, odp, ods, odg\n`);
-      return EXIT_USAGE_ERROR;
-    }
 
     const inputBytes = await readInput(input, { signal });
-    const source = resolveFontSourcePackage(format, new Uint8Array(inputBytes));
-    const faces = extractSourceFonts(source);
+    // extractSourceFontsForFormat itself rejects a format with no source-embedded font concept (xlsx, pdf, markdown, odf), naming the six it supports -- no separate isFontSourceFormat guard needed here any more.
+    const faces = extractSourceFontsForFormat(format, new Uint8Array(inputBytes));
     const summaries: readonly FontFaceSummary[] = faces.map((face) => ({ family: face.family, bold: face.bold, italic: face.italic, byteLength: face.bytes.length }));
 
     if (options.json) {

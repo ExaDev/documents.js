@@ -10,6 +10,7 @@ import {
   OdmUnresolvedSectionError,
   PdfEncryptedError,
   PdfParseError,
+  UnsupportedFontSourceFormatError,
 } from 'documents.js';
 
 // Mirrors sysexits.h-style convention loosely: 0 is success, 1 is a generic failure, 2 is a usage error (matching coreutils' own convention for bad invocation), and the two signal-derived codes (124, 130) match `timeout(1)` and 128+SIGINT respectively, so a caller scripting against this CLI sees the same exit codes it would from any other well-behaved Unix tool.
@@ -42,6 +43,10 @@ export function mapErrorToExit(error: unknown, abortReason: 'interrupt' | 'timeo
   // odb-query's own bounded SQL engine (documents.js's src/odb/sql/): a real SQL construct it deliberately doesn't implement, input that isn't well-formed SQL under its grammar, or a statement that parsed but can't be executed against the data -- every one an ordinary unusable-input failure, not a "give me more information" one, since none of the three names a specific piece of missing input the way the EXIT_NEEDS_INFO group above does.
   if (error instanceof HsqldbSqlUnsupportedError || error instanceof HsqldbSqlParseError || error instanceof HsqldbSqlEvaluationError) {
     return EXIT_INPUT_ERROR;
+  }
+  // fonts' own extractSourceFontsForFormat: the given DocumentFormat is a real, recognised format, but not one with a source-embedded-font concept at all (xlsx, pdf, markdown, odf) -- a bad invocation choice, not an unusable file, so this maps like every other usage error rather than EXIT_INPUT_ERROR's "the file itself is the problem".
+  if (error instanceof UnsupportedFontSourceFormatError) {
+    return EXIT_USAGE_ERROR;
   }
   // PdfEncryptedError extends PdfParseError, so this branch is redundant with the default fall-through below -- kept explicit anyway so the mapping documents its intent (these two error classes are unusable-input failures, not a catch-all) rather than relying on an implicit default to cover a case this function is specifically supposed to name.
   if (error instanceof PdfEncryptedError || error instanceof PdfParseError) {

@@ -50,6 +50,8 @@ beforeAll(async () => {
   const plain = createDocx();
   plain.body.appendParagraph().appendRun({ text: 'No fonts embedded here.' });
   await writeFile(join(workspace, 'plain.docx'), plain.toBytes());
+  // extractSourceFontsForFormat (documents.js) validates the format itself rather than the CLI pre-checking it, so the input file is now genuinely read before that rejection fires -- unlike a bare nonexistent path, this needs to exist. Its content is never parsed: the rejection below fires purely on the '.xlsx' extension.
+  await writeFile(join(workspace, 'unused.xlsx'), new Uint8Array([0]));
 });
 
 afterAll(async () => {
@@ -106,7 +108,7 @@ describe('fonts', () => {
   });
 
   it('rejects a format with no source-embedded-font concept, naming the restriction', async () => {
-    const { exitCode, stderr } = await runCli(['fonts', 'unused.xlsx']);
+    const { exitCode, stderr } = await runCli(['fonts', join(workspace, 'unused.xlsx')]);
 
     expect(exitCode).toBe(EXIT_USAGE_ERROR);
     expect(stderr).toContain('xlsx');
