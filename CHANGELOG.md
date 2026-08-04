@@ -1,3 +1,12 @@
+# [1.78.0](https://github.com/ExaDev/documents.js/compare/v1.77.3...v1.78.0) (2026-08-04)
+
+
+### Features
+
+* add decodeDocumentPackage/encodeDocumentPackage raw-package dispatch ([7aa14cb](https://github.com/ExaDev/documents.js/commit/7aa14cbf39b17650b282f0620106934a662b485b))
+* add DOCUMENT_FORMAT_CODECS registry over document-schema.js's ContentCodec/LayoutCodec ([280e56f](https://github.com/ExaDev/documents.js/commit/280e56f8184245062b0c284ea21cefd6477a2342))
+* export decodeDocumentPackage/encodeDocumentPackage from the public barrel ([5385964](https://github.com/ExaDev/documents.js/commit/5385964649365ae0af5bee2963846d258d5ce453))
+
 ## [1.77.3](https://github.com/ExaDev/documents.js/compare/v1.77.2...v1.77.3) (2026-08-04)
 
 ## [1.77.2](https://github.com/ExaDev/documents.js/compare/v1.77.1...v1.77.2) (2026-08-04)
