@@ -4,6 +4,7 @@ import { createRuntimeSignal } from '../runtime/abort';
 import { createDiagnosticReporter, pdfDiagnosticToDiagnostic } from '../runtime/diagnostics';
 import { mapErrorToExit, EXIT_SUCCESS } from '../runtime/exit-codes';
 import { readInput } from '../runtime/io';
+import { formatMetadataLines, presentMetadataEntries } from '../runtime/metadata-format';
 import { formatError } from './shared';
 
 interface PdfInspectCliOptions {
@@ -25,15 +26,6 @@ function countImagesByFormat(images: Readonly<Record<string, LayoutImageAsset>>)
     counts.set(asset.format, (counts.get(asset.format) ?? 0) + 1);
   }
   return counts;
-}
-
-function isPresent<T>(entry: readonly [string, T | undefined]): entry is readonly [string, T] {
-  return entry[1] !== undefined;
-}
-
-// Checks typeof value === 'string', not Array.isArray(value) -- Array.isArray's own lib.es5.d.ts signature (`arg is any[]`) can't narrow a `readonly string[]` out of the else branch (a readonly array isn't assignable to the mutable `any[]` the predicate names, so TypeScript can't exclude it), leaving `value` typed `string | readonly string[]` there regardless of how the check is written. Testing the `string` arm directly narrows correctly in both branches.
-function formatMetadataValue(value: string | readonly string[]): string {
-  return typeof value === 'string' ? value : value.join(', ');
 }
 
 async function runPdfInspect(input: string, options: PdfInspectCliOptions): Promise<number> {
@@ -82,21 +74,10 @@ async function runPdfInspect(input: string, options: PdfInspectCliOptions): Prom
       process.stdout.write(`  page ${index + 1}: ${page.widthPt}pt x ${page.heightPt}pt${histogramText === '' ? '' : ` (${histogramText})`}\n`);
     });
 
-    const metadataEntries: readonly (readonly [string, string | readonly string[] | undefined])[] = [
-      ['title', layout.metadata.title],
-      ['author', layout.metadata.author],
-      ['subject', layout.metadata.subject],
-      ['keywords', layout.metadata.keywords],
-      ['creator', layout.metadata.creator],
-      ['producer', layout.metadata.producer],
-      ['createdIso', layout.metadata.createdIso],
-      ['modifiedIso', layout.metadata.modifiedIso],
-    ];
-    const presentMetadata = metadataEntries.filter(isPresent);
-    if (presentMetadata.length > 0) {
+    if (presentMetadataEntries(layout.metadata).length > 0) {
       process.stdout.write('metadata:\n');
-      for (const [key, value] of presentMetadata) {
-        process.stdout.write(`  ${key}: ${formatMetadataValue(value)}\n`);
+      for (const line of formatMetadataLines(layout.metadata)) {
+        process.stdout.write(`  ${line}\n`);
       }
     }
 
