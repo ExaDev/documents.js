@@ -1,7 +1,7 @@
 import { type Command } from 'commander';
 import { createLocalDocumentConverter } from 'documents.js';
 
-const COMMANDS_NOT_LISTED = 'odm-to-pdf, odb-to-csv, odb-to-xlsx, odb-tables, odb-forms, odb-reports, pdf-inspect, from-package';
+const COMMANDS_NOT_LISTED = 'odm-to-pdf, odb-to-csv, odb-to-xlsx, odb-tables, odb-forms, odb-reports, pdf-inspect, from-package, fonts, docx-extras';
 
 export function registerFormatsCommand(program: Command): void {
   program
