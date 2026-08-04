@@ -12,8 +12,8 @@ importers:
         specifier: ^15.0.0
         version: 15.0.0
       documents.js:
-        specifier: ^1.77.1
-        version: 1.77.1
+        specifier: ^1.78.0
+        version: 1.78.0
       ink:
         specifier: ^7.1.1
         version: 7.1.1(@types/react@19.2.18)(react@19.2.8)
@@ -1281,8 +1281,12 @@ packages:
     resolution: {integrity: sha512-PTdBVwE9buhtrU+yyD60FLGL68KKk6dONoFKVzR9ngU29WKoWs/AngC4XlubsRb05EriLS6wj9lpOr2L2E0keQ==}
     engines: {node: '>=20'}
 
-  documents.js@1.77.1:
-    resolution: {integrity: sha512-tLbDGd7hLkBQP4zLps0X2S75+NMA0EGBIFo8zjx6zUjuiLkVwUcOhNZxXUnhRSD591VeIIYvK5j9fA745IeSTw==}
+  document-schema.js@2.3.0:
+    resolution: {integrity: sha512-NYhSqxC4J0czg/YbxbpVjyNQteRCpvXyHqFjmnbOTqh3+Z4FMVJn0ZZSJoZByBPX1pqSLKg+Ld6g0Jw5+A18Ag==}
+    engines: {node: '>=20'}
+
+  documents.js@1.78.0:
+    resolution: {integrity: sha512-3IpMz5i8U083k3nCf2LHwCmf9dIO/47+rWZMGS50QmyoxsXwR8HZBzSQq9DGE8dSbc1JI80nG56qrFNJVyL9qw==}
     engines: {node: '>=20'}
 
   dot-prop@5.3.0:
@@ -2146,8 +2150,8 @@ packages:
     resolution: {integrity: sha512-g/QgapXdNWc0MJNYgqeeygtI3H1d3m+qFefpVwsQb7RVQuoJnBrwA1H1PTaSy5Fp0tYmRPNf6+M2lN1RczMo8w==}
     engines: {node: '>=20'}
 
-  odf.js@2.3.0:
-    resolution: {integrity: sha512-f9HpU+VMF/2mK9K2UO9r9ozvEKOiuOHdihxVNG9iocXwcj5eevLI131+qoPf/i5p3zJzMIIvxNeFIcyQySG5tw==}
+  odf.js@2.3.1:
+    resolution: {integrity: sha512-GkjBKVDxm6C5B6gmVxlHphG75Id5EgMz++wCW3Ylq/hMJvjQfZRCuuETIDrQdUs/NGtQnSD75Js1BsQQ3jO7ZA==}
     engines: {node: '>=20'}
 
   onetime@5.1.2:
@@ -2158,8 +2162,8 @@ packages:
     resolution: {integrity: sha512-1FlR+gjXK7X+AsAHso35MnyN5KqGwJRi/31ft6x0M194ht7S+rWAvd7PHss9xSKMzE0asv1pyIHaJYq+BbacAQ==}
     engines: {node: '>=12'}
 
-  ooxml.js@2.6.10:
-    resolution: {integrity: sha512-VDT4Jtv6WVAOmuy57xDWWXe0Ov8zU2gkWwf6o86+ay8z8e730PgpN2UTgb/PPNyxCTzustpY9meOu5dX9DAR7Q==}
+  ooxml.js@2.6.11:
+    resolution: {integrity: sha512-y/BukPEeM6rwbSbXmHVYpCcUY16xgw0b69o/99lCEEg+9+gKQ662eAiFZZmqYgVfrX95kPBGtiU+yvvD5ErELw==}
     engines: {node: '>=20'}
 
   optionator@0.9.4:
@@ -4186,13 +4190,17 @@ snapshots:
     dependencies:
       zod: 4.4.3
 
-  documents.js@1.77.1:
+  document-schema.js@2.3.0:
     dependencies:
-      document-schema.js: 2.2.4
+      zod: 4.4.3
+
+  documents.js@1.78.0:
+    dependencies:
+      document-schema.js: 2.3.0
       fflate: 0.8.3
       markdown-codec: 1.1.0
-      odf.js: 2.3.0
-      ooxml.js: 2.6.10
+      odf.js: 2.3.1
+      ooxml.js: 2.6.11
       pdf-codec: 1.11.0
       zod: 4.4.3
 
@@ -4841,7 +4849,7 @@ snapshots:
 
   markdown-codec@1.1.0:
     dependencies:
-      document-schema.js: 2.2.4
+      document-schema.js: 2.3.0
       zod: 4.4.3
 
   marked-terminal@7.3.0(marked@15.0.12):
@@ -4954,9 +4962,9 @@ snapshots:
       fflate: 0.8.3
       zod: 4.4.3
 
-  odf.js@2.3.0:
+  odf.js@2.3.1:
     dependencies:
-      document-schema.js: 2.2.4
+      document-schema.js: 2.3.0
       fast-xml-parser: 5.10.1
       fflate: 0.8.3
       zod: 4.4.3
@@ -4969,9 +4977,9 @@ snapshots:
     dependencies:
       mimic-fn: 4.0.0
 
-  ooxml.js@2.6.10:
+  ooxml.js@2.6.11:
     dependencies:
-      document-schema.js: 2.2.4
+      document-schema.js: 2.3.0
       fast-xml-parser: 5.10.1
       fflate: 0.8.3
       zod: 4.4.3
