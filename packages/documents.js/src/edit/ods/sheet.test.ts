@@ -66,6 +66,19 @@ describe('OdsSheet.mergeCells', () => {
     expect(anchor.attributes.some((a) => a.name === 'table:number-rows-spanned')).toBe(false);
   });
 
+  it('every column/row a merge touches reads back at a real default width/height, never an ambiguous 0, even though mergeCells never calls cell() itself', () => {
+    const editor = createOds();
+    editor.sheets()[0]!.mergeCells(0, 0, 2, 2);
+    const content = readOdsContent(openOds(editor.toBytes()).toPackage());
+    if (content.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    expect(content.sheets[0]!.columns.find((c) => c.index === 0)?.widthPt).toBeCloseTo(64, 5);
+    expect(content.sheets[0]!.columns.find((c) => c.index === 1)?.widthPt).toBeCloseTo(64, 5);
+    expect(content.sheets[0]!.rows.find((r) => r.index === 0)?.heightPt).toBeCloseTo(15, 5);
+    expect(content.sheets[0]!.rows.find((r) => r.index === 1)?.heightPt).toBeCloseTo(15, 5);
+  });
+
   it('anchor keeps its own value; every OTHER covered position becomes table:covered-table-cell and is rejected by cell()', () => {
     const sheet = createOds().sheets()[0]!;
     const anchor = sheet.mergeCells(1, 1, 2, 2);
@@ -286,15 +299,15 @@ describe('OdsSheet.printSettings: printRange, scale/fitToPages, repeatRows/repea
 });
 
 describe('OdsSheet.setColumnWidth / setRowHeight', () => {
-  it('a column/row no cell has touched yet reads back at width/height 0 (the pre-fix behaviour, still true until set)', () => {
+  it('a column/row touched only via cell() reads back at a real default width/height, never an ambiguous 0', () => {
     const editor = createOds();
     editor.sheets()[0]!.cell(0, 0).value = { kind: 'string', value: 'x' };
     const content = readOdsContent(openOds(editor.toBytes()).toPackage());
     if (content.kind !== 'spreadsheet') {
       throw new Error('expected a spreadsheet ContentDocument');
     }
-    expect(content.sheets[0]!.columns[0]?.widthPt).toBe(0);
-    expect(content.sheets[0]!.rows[0]?.heightPt).toBe(0);
+    expect(content.sheets[0]!.columns[0]?.widthPt).toBeCloseTo(64, 5);
+    expect(content.sheets[0]!.rows[0]?.heightPt).toBeCloseTo(15, 5);
   });
 
   it('set then get (via a real write -> reread round trip through odf.js\'s own readOds parser) round-trips the width/height', () => {
@@ -359,11 +372,26 @@ describe('OdsSheet.setColumnWidth / setRowHeight', () => {
       throw new Error('expected a spreadsheet ContentDocument');
     }
     expect(content.sheets[0]!.columns[0]?.widthPt).toBeCloseTo(150, 5);
-    expect(content.sheets[1]!.columns[0]?.widthPt).toBe(0);
+    // sheetB's own column was only ever touched by its own cell() call, never by sheetA's setColumnWidth -- it reads back at the ordinary cell()-materialization default (64pt), proving the two sheets' styles are genuinely independent rather than sharing one automatic style neither of them meant to share.
+    expect(content.sheets[1]!.columns[0]?.widthPt).toBeCloseTo(64, 5);
   });
 });
 
 describe('OdsSheet.setColumnHidden / setRowHidden', () => {
+  it('individuates a column/row no cell has ever touched with a real default width/height, not an ambiguous 0', () => {
+    const editor = createOds();
+    const sheet = editor.sheets()[0]!;
+    sheet.setColumnHidden(4, true);
+    sheet.setRowHidden(4, true);
+
+    const content = readOdsContent(openOds(editor.toBytes()).toPackage());
+    if (content.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    expect(content.sheets[0]!.columns.find((c) => c.index === 4)?.widthPt).toBeCloseTo(64, 5);
+    expect(content.sheets[0]!.rows.find((r) => r.index === 4)?.heightPt).toBeCloseTo(15, 5);
+  });
+
   it('a column/row no cell has touched yet is not hidden by default', () => {
     const editor = createOds();
     editor.sheets()[0]!.cell(0, 0).value = { kind: 'string', value: 'x' };

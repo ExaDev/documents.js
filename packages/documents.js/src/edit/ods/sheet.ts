@@ -5,7 +5,7 @@ import type { ContentEmbeddedObject, ContentSheetImage, ContentSheetPrintSetting
 import { removeChild, setAttr } from '../../xml/edit';
 import { COVERED_CELL_TAG, resolveCellNode } from './address';
 import { OdsCell } from './cell';
-import { writeColumnHidden, writeColumnWidth, writeRowHeight, writeRowHidden } from './column-row';
+import { ensureColumnDefaultWidth, ensureRowDefaultHeight, writeColumnHidden, writeColumnWidth, writeRowHeight, writeRowHidden } from './column-row';
 import { insertSheetEmbeddedObject, insertSheetImage } from './floating';
 import { readSheetPrintSettings, writeSheetPrintSettings } from './print-settings';
 
@@ -64,12 +64,12 @@ export class OdsSheet {
 
   // Sets or clears table:visibility="collapse" on the column at `index` -- a plain attribute directly on the element, independent of setColumnWidth's own style-based sizing (see column-row.ts's own top-of-file note). Safe to call in either order relative to setColumnWidth, and safe to call more than once (unhiding by passing false again removes the attribute rather than leaving a stale "collapse").
   setColumnHidden(index: number, hidden: boolean): void {
-    writeColumnHidden(this.live(), index, hidden);
+    writeColumnHidden(this.pkg, this.live(), index, hidden);
   }
 
   // The row counterpart to setColumnHidden above.
   setRowHidden(index: number, hidden: boolean): void {
-    writeRowHidden(this.live(), index, hidden);
+    writeRowHidden(this.pkg, this.live(), index, hidden);
   }
 
   // Adds a floating raster image, anchored at image.anchorRow/anchorColumn plus image.offsetXPt/offsetYPt -- see floating.ts's own top-of-file note for why a spreadsheet's own draw:frame needs this resolved to an absolute position rather than accepting an already-absolute Box the way OdpSlide.addImage does. Call this AFTER any setColumnWidth/setColumnHidden/setRowHeight/setRowHidden calls this sheet needs, so the anchor resolves against the real column/row sizing rather than whatever this sheet's columns/rows happened to declare beforehand.
@@ -84,10 +84,13 @@ export class OdsSheet {
 
   // Resolves (individuating/gap-filling as needed) the cell at 0-based (row, column) and wraps it as an OdsCell -- rejecting a position covered by another cell's own merged range outright (see OdsCell's own class doc: a table:covered-table-cell is never wrapped), rather than silently handing back something whose value/formula/displayText setters would corrupt the merge.
   cell(row: number, column: number): OdsCell {
-    const node = resolveCellNode(this.live(), row, column);
+    const tableElement = this.live();
+    const node = resolveCellNode(tableElement, row, column);
     if (node.tag === COVERED_CELL_TAG) {
       throw new Error(`cell (${row}, ${column}) is covered by a merged range -- address the merge's own anchor cell instead`);
     }
+    ensureColumnDefaultWidth(this.pkg, tableElement, column);
+    ensureRowDefaultHeight(this.pkg, tableElement, row);
     return new OdsCell(node, this.pkg);
   }
 
@@ -109,6 +112,13 @@ export class OdsSheet {
     const anchorNode = resolveCellNode(tableElement, startRow, startColumn);
     if (anchorNode.tag === COVERED_CELL_TAG) {
       throw new Error(`mergeCells: (${startRow}, ${startColumn}) is already covered by another merged range`);
+    }
+    // mergeCells never routes through cell() itself, so every distinct row/column the merge's own rectangle covers needs the same default-width/height stamping cell() applies -- once per distinct index, not once per cell.
+    for (let rowOffset = 0; rowOffset < rowSpan; rowOffset++) {
+      ensureRowDefaultHeight(this.pkg, tableElement, startRow + rowOffset);
+    }
+    for (let columnOffset = 0; columnOffset < colSpan; columnOffset++) {
+      ensureColumnDefaultWidth(this.pkg, tableElement, startColumn + columnOffset);
     }
     if (rowSpan > 1) {
       setAttr(anchorNode, 'table:number-rows-spanned', String(rowSpan));
