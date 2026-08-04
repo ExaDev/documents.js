@@ -1,3 +1,14 @@
+# [1.9.0](https://github.com/ExaDev/document-cli/compare/v1.8.0...v1.9.0) (2026-08-04)
+
+
+### Features
+
+* **tui:** add cell formula editing and floating image insertion to ods ([3a176e4](https://github.com/ExaDev/document-cli/commit/3a176e446f867fb3b325cc7f95c5f58ca509286b))
+* **tui:** add list/vector-host/formula/image/font-styling actions ([7b58296](https://github.com/ExaDev/document-cli/commit/7b58296f498174cff00c0d92a50cde44744d9f71))
+* **tui:** add odp vector-primitive creation to the slide-detail screen ([5fac7c0](https://github.com/ExaDev/document-cli/commit/5fac7c07c48df8e36a43966b8b7555f7e626bb36))
+* **tui:** add run font family and size editing to paragraph-detail ([7732487](https://github.com/ExaDev/document-cli/commit/77324876eb9b3652b1c104efc2c1efe62c5ce3aa))
+* **tui:** create a new odt list from the body list screen ([8bc4f28](https://github.com/ExaDev/document-cli/commit/8bc4f289d7fe206864e9a5fc441baf0b8a18287e))
+
 # [1.8.0](https://github.com/ExaDev/document-cli/compare/v1.7.0...v1.8.0) (2026-08-04)
 
 
