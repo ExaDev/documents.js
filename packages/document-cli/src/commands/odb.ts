@@ -1,36 +1,29 @@
 import { basename, dirname, extname, join } from 'node:path';
 import { type Command } from 'commander';
-import { decodePackage, encodePackage as encodeOdfPackage, type Package } from 'odf.js';
+import { decodePackage, type Package } from 'odf.js';
 import {
-  type ContentDocument,
   type DocumentFormat,
-  type FontSubstitution,
   OdbNoEmbeddedDataSourceError,
   OdbReportNotSpecifiedError,
   OdbTableNotFoundError,
   OdbTableNotSpecifiedError,
   OdbUnsupportedFormatError,
-  buildDocxPackage,
-  buildOdtPackage,
-  convertWordprocessingToLayout,
-  createFontMeasurer,
-  createFontRegistry,
-  encodePackage,
   evaluateSelect,
+  odbReportToDocx,
+  odbReportToOdt,
+  odbReportToPdf,
   odbToCsv,
   odbToXlsx,
   parseSelect,
-  type ProvidedFont,
   readOdbForms,
   readOdbInventory,
   readOdbReportContent,
   readOdbReports,
   readOdbTables,
-  writePdf,
 } from 'documents.js';
 import { describeOdbForm, describeOdbReport, formatOdbFormLines, formatOdbReportLines, odbFormSummary } from '../odb-structure';
 import { createRuntimeSignal } from '../runtime/abort';
-import { createDiagnosticReporter, createFontSubstitutionReporter, fontSubstitutionToDiagnostic, substitutionToDiagnostic, type DiagnosticReporter } from '../runtime/diagnostics';
+import { createDiagnosticReporter, createFontSubstitutionReporter, fontSubstitutionToDiagnostic, substitutionToDiagnostic } from '../runtime/diagnostics';
 import { EXIT_SUCCESS, EXIT_USAGE_ERROR, mapErrorToExit } from '../runtime/exit-codes';
 import { loadProvidedFonts } from '../runtime/fonts';
 import { readInput, resolveDefaultOutputPath, writeOutput } from '../runtime/io';
@@ -286,50 +279,6 @@ function isOdbReportTargetFormat(format: DocumentFormat): format is 'docx' | 'od
   return format in ODB_REPORT_TARGET_FORMATS;
 }
 
-// docx and odt are exactly from-package.ts's own buildBytesForTarget pattern: build a fresh package through the matching buildXPackage, encode it with that format's own codec. pdf is markdownToPdf's own pipeline shape (documents.js's src/convert/convert.ts) rather than createDocumentFontRegistry's -- a rendered report has no source package of its own to extract embedded fonts from, so createFontRegistry (caller-supplied faces plus the vendored substitutes and the standard 14) is the right registry, exactly as it is for markdown.
-function renderOdbReportBytes(
-  content: ContentDocument,
-  target: 'docx' | 'odt' | 'pdf',
-  options: {
-    readonly fonts: readonly ProvidedFont[];
-    readonly signal: AbortSignal;
-    readonly reporter: DiagnosticReporter;
-    readonly reportFontSubstitution: ((substitution: FontSubstitution) => void) | undefined;
-    readonly onDiagnosticCounted: () => void;
-  },
-): Uint8Array<ArrayBuffer> {
-  if (target === 'docx') {
-    return encodePackage(buildDocxPackage(content));
-  }
-  if (target === 'odt') {
-    return encodeOdfPackage(buildOdtPackage(content));
-  }
-  if (content.kind !== 'wordprocessing') {
-    throw new Error('readOdbReportContent returned a non-wordprocessing ContentDocument');
-  }
-  const fonts = createFontRegistry({
-    fonts: options.fonts,
-    onSubstitution: (substitution) => {
-      if (options.reportFontSubstitution !== undefined) {
-        options.reportFontSubstitution(substitution);
-        return;
-      }
-      options.onDiagnosticCounted();
-      options.reporter.report(fontSubstitutionToDiagnostic(substitution));
-    },
-  });
-  const { document: layout, formulas } = convertWordprocessingToLayout(content, { measurer: createFontMeasurer(fonts) });
-  return writePdf(layout, {
-    signal: options.signal,
-    onSubstitution: (substitution, context) => {
-      options.onDiagnosticCounted();
-      options.reporter.report(substitutionToDiagnostic(substitution, context.pageIndex));
-    },
-    formulas,
-    fonts,
-  });
-}
-
 async function runOdbRenderReport(input: string, output: string | undefined, options: OdbRenderReportCliOptions): Promise<number> {
   const command = 'odb-render-report';
   if (output !== undefined && options.out !== undefined && output !== options.out) {
@@ -360,15 +309,28 @@ async function runOdbRenderReport(input: string, output: string | undefined, opt
     const pkg = decodePackage(new Uint8Array(inputBytes));
     const content = readOdbReportContent(pkg, { report: options.report });
 
-    const bytes = renderOdbReportBytes(content, targetFormat, {
-      fonts,
-      signal,
-      reporter,
-      reportFontSubstitution,
-      onDiagnosticCounted: () => {
-        diagnosticCount += 1;
-      },
-    });
+    // docx/odt need neither fonts nor signal -- building a fresh package from a ContentDocument is a single bounded synchronous pass, exactly as odbReportToDocx/odbReportToOdt's own signature (no fonts option at all) already states. pdf mirrors markdownToPdf's own pipeline: a rendered report has no source package of its own to extract embedded fonts from, so the caller-supplied faces plus the vendored substitutes and the standard 14 are the whole registry.
+    const bytes =
+      targetFormat === 'docx'
+        ? odbReportToDocx(content)
+        : targetFormat === 'odt'
+          ? odbReportToOdt(content)
+          : odbReportToPdf(content, {
+              signal,
+              fonts,
+              onFontSubstitution: (substitution) => {
+                if (reportFontSubstitution !== undefined) {
+                  reportFontSubstitution(substitution);
+                  return;
+                }
+                diagnosticCount += 1;
+                reporter.report(fontSubstitutionToDiagnostic(substitution));
+              },
+              onSubstitution: (substitution, context) => {
+                diagnosticCount += 1;
+                reporter.report(substitutionToDiagnostic(substitution, context.pageIndex));
+              },
+            });
 
     await writeOutput(resolvedOutput, bytes);
     reporter.summarize({ output: resolvedOutput, bytes: bytes.byteLength, diagnosticCount });
