@@ -295,8 +295,8 @@ export { deobfuscateEmbeddedFont, deriveFontKey, FontDeobfuscationError, looksLi
 // --- MathML presentation-layer typesetting: a pure box-model layout engine (no PDF or ODF knowledge of its own -- see src/mathml/'s own module comments), consuming odf.js's readOdfFormula's own raw MathML tree via a locally-defined, structurally-compatible node type. odfToPdf (below) and the odt/odp embedded-formula layout paths (src/layout/engine.ts, src/layout/slides.ts) are its two real callers; exported directly too, for a caller that wants to lay out a formula (e.g. onto a custom page layout) without going through either. ---
 export type { LayoutFormulaOptions } from './mathml/layout';
 export { layoutFormula } from './mathml/layout';
-export type { MathAssembledGlyphs, MathBox, MathColor, MathDiagnostic, MathDiagnosticKind, MathGlyphPlacement, MathGlyphRun, MathLayoutItem, MathLayoutResult, MathRule, MathStroke } from './mathml/layout-types';
-export type { MathFontMetrics, MathGlyphMetrics, MathStretchAxis, MathStretchGlyph, MathStretchResult } from './mathml/metrics';
+export type { MathDiagnostic, MathDiagnosticKind, MathLayoutResult } from './mathml/layout-types';
+export type { MathAssembledGlyphs, MathBox, MathColor, MathFontMetrics, MathGlyphMetrics, MathGlyphPlacement, MathGlyphRun, MathLayoutItem, MathRule, MathStretchAxis, MathStretchGlyph, MathStretchResult, MathStroke } from 'document-schema.js';
 export type { MathMlAttribute, MathMlElement, MathMlNode, MathMlText } from './mathml/nodes';
 export { elementChildren, elementLocalName, firstChildByLocalName, isMathMlElement, localName, textContent as mathMlTextContent } from './mathml/nodes';
 export type { OperatorProperties } from './mathml/operators';
@@ -333,7 +333,7 @@ export { buildFormulaBlock, formulaDocument, formulaOfBlock, formulaPlaceholderT
 export { buildDrawingBlock, drawingOfBlock } from './model/embedded-drawing';
 // The single write-side precedence rule every create*/build*Package entry point uses to stamp real docProps/core.xml (OOXML)/office:meta (ODF) creation/modification timestamps via an injected ClockPort -- exported directly for a caller composing their own package-building step the same way.
 export { resolveMetadataTimestamps } from './model/metadata';
-export type { PositionedFormula } from 'pdf-codec';
+export type { PositionedFormula } from 'document-schema.js';
 export type { EngineLayoutOptions, WordprocessingLayoutResult } from './layout/engine';
 export { convertWordprocessingToLayout } from './layout/engine';
 export type { PresentationLayoutResult, SlidesLayoutOptions } from './layout/slides';

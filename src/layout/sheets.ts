@@ -25,7 +25,7 @@ import type { Alignment } from '../model/style';
 import { DEFAULT_LAYOUT_FONT } from '../model/style';
 import { flipY } from '../model/geometry';
 import { throwIfAborted } from '../ports/abort';
-import type { PositionedFormula, StyledFragment, StyledRun, TextMeasurer } from 'pdf-codec';
+import type { PositionedFormula, StyledFragment, StyledRun, TextMeasurer } from 'document-schema.js';
 import { loadMathFont, wrapRunsToWidth } from 'pdf-codec';
 import { alignmentOffsetPt, formulaSizePtForFrame, justifyLineGapsPt, lineNaturalHeightPt, pushCellBorderLines, registerImage, sumColumnWidthsPt, toStyledRuns } from './shared';
 

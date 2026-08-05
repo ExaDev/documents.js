@@ -1,7 +1,7 @@
 import { EMPTY_BOX, concatBoxesHorizontally, placeChild, shiftItems } from './compose';
 import { parseMathLength } from './length';
-import type { MathBox, MathColor, MathDiagnostic, MathGlyphPlacement, MathLayoutItem, MathLayoutResult } from './layout-types';
-import type { MathFontMetrics, MathStretchResult } from './metrics';
+import type { MathBox, MathColor, MathFontMetrics, MathGlyphPlacement, MathLayoutItem, MathStretchResult } from 'document-schema.js';
+import type { MathDiagnostic, MathLayoutResult } from './layout-types';
 import type { MathMlElement, MathMlNode } from './nodes';
 import { attrValue, elementChildren, elementLocalName, isMathMlElement, textContent } from './nodes';
 import { operatorProperties } from './operators';

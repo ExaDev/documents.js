@@ -3,7 +3,8 @@
 // The two Package types are structurally identical (src/interop.test.ts is the standing type-level proof), so the discriminant here is not about the container shape -- it selects which extractor to run, since where an embedded font is declared is genuinely format-specific.
 import type { Package as OoxmlPackage } from 'ooxml.js';
 import type { Package as OdfPackage } from 'odf.js';
-import type { FontRegistry, FontSubstitution, ProvidedFont } from 'pdf-codec';
+import type { FontRegistry } from 'pdf-codec';
+import type { FontSubstitution, ProvidedFont } from 'document-schema.js';
 import { createFontRegistry } from 'pdf-codec';
 import { extractOdfEmbeddedFonts } from './odf';
 import { extractOoxmlEmbeddedFonts } from './ooxml';

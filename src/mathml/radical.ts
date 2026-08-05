@@ -1,4 +1,4 @@
-import type { MathColor, MathRule, MathStroke } from './layout-types';
+import type { MathColor, MathRule, MathStroke } from 'document-schema.js';
 
 // Builds a real, hand-drawn radical sign -- a short down-then-up hook (MathStroke) plus a horizontal vinculum (MathRule) over the radicand -- rather than substituting the font's own bare U+221A glyph, which has no way to extend its own vinculum to cover an arbitrary-width radicand. Proportions are fixed fractions of the sign's own total height (signHeightPt = radicalExtraAscenderPt + ruleThicknessPt + gapPt + radicand.heightPt, computed by the caller), matching the classic three-segment radical shape real typesetting systems draw: a short initial downstroke, a longer diagonal upstroke to the sign's own top-left corner, then the vinculum running right from there across the full radicand width. `originXPt`/`originYPt` place the sign's own top-left corner (the bounding box corner, not any one stroke point) in the caller's coordinate space.
 export interface RadicalSign {

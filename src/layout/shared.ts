@@ -4,7 +4,7 @@ import { COLOR_BLACK } from '../model/color';
 import { layoutFormula } from '../mathml/layout';
 import type { Alignment, LayoutFont } from '../model/style';
 import { DEFAULT_LAYOUT_FONT } from '../model/style';
-import type { StyledRun, TextMeasurer, WrappedLine } from 'pdf-codec';
+import type { StyledRun, TextMeasurer, WrappedLine } from 'document-schema.js';
 import { crc32, decodePng, loadMathFont, readJpegInfo, wrapRunsToWidth } from 'pdf-codec';
 
 // Layout logic genuinely shared between src/layout/slides.ts (pptx, direct placement) and src/layout/engine.ts (docx, flow/pagination): run styling, line-height measurement, alignment, and image-asset registration have no format-specific knowledge of their own -- duplicating them between the two engines would just be two copies to keep in sync.

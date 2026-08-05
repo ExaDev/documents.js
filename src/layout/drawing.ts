@@ -2,7 +2,7 @@ import type { Box, ContentDocument, ContentDrawPage, ContentPathPoint, ContentVe
 import { LAYOUT_FORMAT_VERSION } from 'document-schema.js';
 import { flipY } from '../model/geometry';
 import { mergeByPaintOrder } from '../model/paint-order';
-import type { Point, TextMeasurer } from 'pdf-codec';
+import type { Point, TextMeasurer } from 'document-schema.js';
 import { rotatePointAboutCenter } from 'pdf-codec';
 import { convertShape } from './slides';
 

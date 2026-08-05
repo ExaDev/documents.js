@@ -1,5 +1,6 @@
 import type { DocumentPackage } from 'document-schema.js';
-import type { FontSubstitution, PdfDiagnostic, WinAnsiSubstitution } from 'pdf-codec';
+import type { PdfDiagnostic, WinAnsiSubstitution } from 'pdf-codec';
+import type { FontSubstitution } from 'document-schema.js';
 import { DIRECT_EDGES, resolveConversionPath } from './capability';
 import type { ConversionOptions, ConversionRequest, ConversionResult, Diagnostic, DocumentConverter, DocumentFormat } from './port';
 

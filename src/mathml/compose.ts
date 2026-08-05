@@ -1,4 +1,4 @@
-import type { MathBox, MathLayoutItem } from './layout-types';
+import type { MathBox, MathLayoutItem } from 'document-schema.js';
 
 export const EMPTY_BOX: MathBox = { widthPt: 0, heightPt: 0, ascentPt: 0, descentPt: 0, items: [] };
 
