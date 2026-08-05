@@ -12,7 +12,7 @@ export { PdfBytesSchema, pdfCodec } from './codec';
 
 // Formula/math: the structural port documents.js's own MathML layout engine (layoutFormula, staying in documents.js) produces real values against -- see src/math-types.ts and src/formula.ts for the full rationale.
 export type { PositionedFormula } from './formula';
-export type { MathAssembledGlyphs, MathBox, MathColor, MathFontMetrics, MathGlyphMetrics, MathGlyphPlacement, MathGlyphRun, MathLayoutItem, MathRule, MathStretchGlyph, MathStretchResult, MathStroke } from './math-types';
+export type { MathAssembledGlyphs, MathBox, MathColor, MathFontMetrics, MathGlyphMetrics, MathGlyphPlacement, MathGlyphRun, MathLayoutItem, MathRule, MathStretchAxis, MathStretchGlyph, MathStretchResult, MathStroke } from 'document-schema.js';
 export type { LoadedMathFont, MathFont, MathFontDescriptorMetrics } from './math-font';
 export { loadMathFont } from './math-font';
 // Per-glyph tight ink bounding boxes: the shape MathFont.glyphInkBounds reports in design units, and what MathGlyphMetrics.inkAscentPt/inkDescentPt are derived from. Exported so a layout engine outside this package (documents.js's own MathML engine is the caller this exists for) can size a token box from the glyphs it actually contains rather than from the font-wide nominal ascent/descent.
@@ -20,7 +20,7 @@ export type { GlyphInkBounds } from './glyph-bounds';
 
 // Stretchy glyphs: the OpenType MATH 'MathVariants' data (pre-built larger variants and part-assembly recipes) plus the assembly computation that turns it into placement data for one target size. The MathVariants types below are the one part of math-table.ts that does cross this package's own public boundary, since assembleStretchyGlyph takes a MathGlyphConstruction as its input -- the rest of that module stays internal.
 export type { MathGlyphAssembly, MathGlyphConstruction, MathGlyphPart, MathGlyphVariant, MathVariants } from './math-table';
-export type { MathStretchAxis, MathStretchConstruction, MathStretchOptions, MathStretchPlacement } from './math-stretch';
+export type { MathStretchConstruction, MathStretchOptions, MathStretchPlacement } from './math-stretch';
 export { assembleStretchyGlyph, scaleMathStretchConstruction } from './math-stretch';
 
 // Text layout: consumed by every layout engine built on this codec (line-wrapping, run styling, underline metrics).

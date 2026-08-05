@@ -1,3 +1,7 @@
+import type { Point } from 'document-schema.js';
+// Point is now owned by document-schema.js (the neutral shared-schema package); re-exported here so this package's barrel and internal callers keep importing it from './matrix'. The affine-matrix machinery below stays defined here (it is PDF cm/Tm operand convention).
+export type { Point };
+
 // A 6-element affine transformation matrix [a, b, c, d, e, f], representing: | a b 0 | | c d 0 | | e f 1 | exactly PDF's own cm/Tm operand convention (ISO 32000-1 section 8.3.4): a row vector [x y 1] is transformed by post-multiplying it by this matrix, [x' y' 1] = [x y 1] x M.
 export type Matrix = readonly [number, number, number, number, number, number];
 
@@ -15,11 +19,6 @@ export function multiplyMatrices(m: Matrix, n: Matrix): Matrix {
     e1 * a2 + f1 * c2 + e2,
     e1 * b2 + f1 * d2 + f2,
   ];
-}
-
-export interface Point {
-  readonly x: number;
-  readonly y: number;
 }
 
 export function applyMatrix(m: Matrix, point: Point): Point {

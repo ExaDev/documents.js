@@ -1,26 +1,12 @@
-import type { LayoutFont } from 'document-schema.js';
+import type { LayoutFont, TextMeasurer, UnderlineMetrics } from 'document-schema.js';
+// TextMeasurer + UnderlineMetrics are now owned by document-schema.js (the neutral shared-schema package); re-exported here so this package's barrel and internal callers keep importing them from './measure'. Only the concrete implementations below stay defined here.
+export type { TextMeasurer, UnderlineMetrics };
 import { STANDARD_METRICS } from './afm-widths';
 import type { EmbeddedFace } from './embedded-font';
 import { encodeForShowEmbedded } from './embedded-font';
 import type { FontRegistry, ResolvedFace } from './font-registry';
 import { resolveFaceWithRegistry } from './font-registry';
 import { encodeForShow } from './winansi';
-
-export interface UnderlineMetrics {
-  readonly offsetPt: number; // relative to the baseline; negative is below it
-  readonly thicknessPt: number;
-}
-
-// Every measurement needed to lay out and paginate text, backed by a concrete font implementation. Kept as an interface (not a concrete class) so src/pdf/text-layout.ts's wrap-point logic can be tested against a fake, exactly-predictable measurer (e.g. a fixed-width "monospace" fake) instead of the real standard-14 metrics -- and so a future embedded-font measurer can be substituted without touching any layout code.
-export interface TextMeasurer {
-  widthOfTextAtSize(text: string, font: LayoutFont, sizePt: number): number;
-  lineHeightAtSize(font: LayoutFont, sizePt: number): number;
-  ascenderAtSize(font: LayoutFont, sizePt: number): number;
-  descenderAtSize(font: LayoutFont, sizePt: number): number;
-  underlineAtSize(font: LayoutFont, sizePt: number): UnderlineMetrics;
-  // The PDF Tz (horizontal scaling) value, as a fraction (1.0 = no scaling), this font's actual glyphs must be drawn at so the *rendered* text lines up with what widthOfTextAtSize *measured*. This must come from the same measurer instance driving layout -- see the module doc below for why a mismatch here is worse than applying no correction at all.
-  horizontalScaleFor(font: LayoutFont): number;
-}
 
 // PDF glyph space: the 1000-units-per-em space every EmbeddedFaceMetrics field and every encodeForShowEmbedded width is already expressed in (ISO 32000-1 9.8.1), regardless of the font's own design grid -- embedded-font.ts does that conversion once, at parse time, so nothing here needs the face's own unitsPerEm.
 const GLYPH_SPACE_UNITS_PER_EM = 1000;

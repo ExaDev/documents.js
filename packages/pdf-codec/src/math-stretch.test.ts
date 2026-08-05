@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { assembleStretchyGlyph, scaleMathStretchConstruction } from './math-stretch';
-import type { MathStretchAxis, MathStretchConstruction } from './math-stretch';
+import type { MathStretchConstruction } from './math-stretch';
+import type { MathStretchAxis } from 'document-schema.js';
 import { loadMathFont } from './math-font';
 import type { MathGlyphConstruction, MathGlyphPart } from './math-table';
 

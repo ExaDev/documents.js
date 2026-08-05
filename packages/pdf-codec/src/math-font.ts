@@ -4,7 +4,7 @@
 //
 // A CID-keyed PDF composite font built this way needs no /CIDToGIDMap at all (that key exists only for /CIDFontType2): per ISO 32000-1 9.7.4.2, a /CIDFontType0 whose /FontFile3 is a "bare" (non-CID-keyed) CFF program is read with CID treated as directly indexing the CFF's own CharStrings INDEX by glyph order -- i.e. CID == GID -- which is exactly the numbering this module's own cmap-derived glyph IDs already use, so Identity-H text-showing (2-byte CIDs, big-endian) needs no further remapping anywhere in the write path.
 import { base64ToBytes } from './util/base64';
-import type { MathFontMetrics, MathGlyphMetrics, MathStretchResult } from './math-types';
+import type { MathFontMetrics, MathGlyphMetrics, MathStretchResult, MathStretchAxis } from 'document-schema.js';
 import { STIX_TWO_MATH_FONT_BASE64 } from './assets/stix-two-math-font';
 import type { CffGlyphBounds } from './cff-bounds';
 import { parseCffGlyphBounds } from './cff-bounds';
@@ -13,7 +13,7 @@ import { buildCmapLookup } from './cmap-table';
 import type { GlyphInkBounds } from './glyph-bounds';
 import type { HmtxTable } from './hmtx-table';
 import { parseHmtx } from './hmtx-table';
-import type { MathStretchAxis, MathStretchConstruction, MathStretchPlacement } from './math-stretch';
+import type { MathStretchConstruction, MathStretchPlacement } from './math-stretch';
 import { assembleStretchyGlyph, scaleMathStretchConstruction } from './math-stretch';
 import type { MathGlyphConstruction, MathTable } from './math-table';
 import { parseMathTable } from './math-table';

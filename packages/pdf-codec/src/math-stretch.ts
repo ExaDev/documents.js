@@ -1,11 +1,11 @@
+import type { MathStretchAxis } from 'document-schema.js';
 import type { MathGlyphAssembly, MathGlyphConstruction, MathGlyphPart, MathGlyphVariant } from './math-table';
 
 // Turns a font's own MathVariants data (math-table.ts) into concrete placement data for one stretchy glyph at one target size: which glyph(s) to draw, and where each one sits along the stretch axis. This is the OpenType MATH spec's own two-stage stretching model (spec, "MathVariants Table"), implemented in full -- first try the font's pre-built larger variants, and fall back to assembling from repeatable parts only when no variant is large enough.
 //
 // Every number in and out of this module is unit-agnostic: feed it design units and every result field is in design units; feed it points and every result field is in points. `scaleMathStretchConstruction` converts between the two, and math-font.ts's own LoadedMathFont.stretchGlyph is the points-in/points-out entry point most callers want.
-
-// Which extent a stretchy glyph is being stretched along: its height (a tall parenthesis, brace, bracket, or radical sign) or its width (an over/under-brace, a long arrow). A font declares a separate construction per axis, and a given glyph is usually covered by exactly one of them.
-export type MathStretchAxis = 'vertical' | 'horizontal';
+//
+// MathStretchAxis itself now lives in document-schema.js (the neutral shared-schema package); this module imports it from there and implements the stretching machinery over it.
 
 // One glyph placed inside an assembled construction. `offset` is measured along the stretch axis from the construction's own start -- the BOTTOM for a vertical construction and the LEFT for a horizontal one, matching the order OpenType lists assembly parts in (math-table.ts's MathGlyphAssembly) -- to this glyph's own corresponding edge. `advance` is that part's own full extent along the same axis, so a part occupies [offset, offset + advance) and consecutive parts deliberately overlap.
 export interface MathStretchPlacement {

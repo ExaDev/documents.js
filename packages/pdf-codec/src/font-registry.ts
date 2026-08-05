@@ -6,7 +6,9 @@
 //   3. a family match (same normalized family, but the exact bold/italic combination requested is missing) in `sourceFonts` then `fonts` -- substitutes that family's own regular face, since some real face in the right family beats falling all the way through to a standard-14 substitute, and reports the substitution via `onSubstitution`;
 //   4. an exact match in the vendored substitute table (font-substitutes.ts) -- embeds the matching Carlito/Caladea face and reports the substitution;
 //   5. resolveStandardFont(family, bold, italic) -- unconditional, and never skipped: every LayoutFont this registry is ever asked to resolve gets *some* ResolvedFace back, even when nothing above matched anything.
-import type { LayoutFont } from 'document-schema.js';
+import type { LayoutFont, ProvidedFont, FontSubstitution, FontRegistryOptions } from 'document-schema.js';
+// ProvidedFont/FontSubstitution/FontRegistryOptions are now owned by document-schema.js (the neutral shared-schema package); re-exported here so this package's barrel and internal callers keep importing them from './font-registry'. The FontRegistry interface and its PDF-specific ResolvedFace return type stay defined below.
+export type { ProvidedFont, FontSubstitution, FontRegistryOptions };
 import { inflateSync } from 'fflate';
 import type { StandardFontName } from './afm-widths';
 import { CALADEA_BOLD_FONT_DEFLATED_BASE64 } from './assets/caladea-bold';
@@ -26,36 +28,10 @@ import type { SfntFont } from './sfnt';
 import { parseSfnt } from './sfnt';
 import { base64ToBytes } from './util/base64';
 
-// A single face a caller (or the document source) hands in: raw, uncompressed sfnt bytes (a real .ttf/.otf/.otc payload, exactly what parseSfnt already expects) plus the family/bold/italic triple it should be matched against. Not memoised itself -- `bytes` is the caller's own array; FontRegistry.resolve is what memoises the parsed EmbeddedFace built from it.
-export interface ProvidedFont {
-  readonly family: string;
-  readonly bold: boolean;
-  readonly italic: boolean;
-  readonly bytes: Uint8Array<ArrayBuffer>;
-}
-
 // What FontRegistry.resolve settled on for one LayoutFont: either a real embeddable face (steps 1-4 above), or the standard-14 fallback (step 5) -- the same ResolvedFont shape resolveStandardFont already returns, carried through unchanged so a caller who only wants the standard-14 case can narrow on `kind` and read it exactly as before.
 export type ResolvedFace =
   | { readonly kind: 'embedded'; readonly face: EmbeddedFace }
   | { readonly kind: 'standard'; readonly standardName: StandardFontName; readonly matched: boolean };
-
-// Reported via `onSubstitution` whenever resolution didn't land on an exact-face match: either a family match one narrowed down to that family's own regular face ('missing-face'), or a fall-through to the vendored substitute table ('vendored-substitute'). Never raised for the standard-14 fallback itself -- that's today's unconditional baseline behavior, not a new event worth surfacing.
-export interface FontSubstitution {
-  readonly requestedFamily: string;
-  readonly requestedBold: boolean;
-  readonly requestedItalic: boolean;
-  readonly reason: 'missing-face' | 'vendored-substitute';
-  // The family whose face was actually embedded: the same requested family for 'missing-face' (only the weight/style narrowed), or the vendored family name ('carlito'/'caladea') for 'vendored-substitute'.
-  readonly resolvedFamily: string;
-}
-
-export interface FontRegistryOptions {
-  readonly sourceFonts?: readonly ProvidedFont[];
-  readonly fonts?: readonly ProvidedFont[];
-  // 'none' disables step 4 (the vendored substitute table) entirely, falling straight from step 3 to step 5 -- for a caller that wants only its own supplied faces, never this package's own vendored ones. Defaults to 'vendored'.
-  readonly substitutes?: 'vendored' | 'none';
-  readonly onSubstitution?: (substitution: FontSubstitution) => void;
-}
 
 export interface FontRegistry {
   resolve(font: LayoutFont): ResolvedFace;

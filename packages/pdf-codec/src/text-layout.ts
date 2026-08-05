@@ -1,36 +1,7 @@
-import type { Color as LayoutColor } from 'document-schema.js';
-import type { LayoutFont } from 'document-schema.js';
-import type { TextMeasurer } from './measure';
+import type { StyledRun, StyledFragment, WrappedLine, WrapOptions, TextMeasurer, LayoutFont, Color as LayoutColor } from 'document-schema.js';
 
-export interface StyledRun {
-  readonly text: string;
-  readonly font: LayoutFont;
-  readonly sizePt: number;
-  readonly color: LayoutColor;
-  readonly underline?: boolean;
-  // An external URI, carried through atomisation/wrapping unchanged so a caller (src/layout/slides.ts) can emit a LayoutLink covering each wrapped fragment's own position -- text-layout.ts itself never interprets this, purely a pass-through field.
-  readonly hyperlink?: string;
-  // The originating ContentRun's own sourcePath (see document-schema.js), carried through atomisation/wrapping unchanged so a caller can stamp it onto every LayoutText/LayoutLink fragment this run produces -- text-layout.ts itself never interprets this, purely a pass-through field. When one run's word is split across a line-wrap boundary or an emergency character-level split, every resulting fragment keeps this same value: the path identifies the source run, not the specific wrapped piece.
-  readonly sourcePath?: string;
-}
-
-export interface StyledFragment {
-  readonly text: string;
-  readonly font: LayoutFont;
-  readonly sizePt: number;
-  readonly color: LayoutColor;
-  readonly underline?: boolean;
-  readonly hyperlink?: string;
-  readonly sourcePath?: string;
-}
-
-export interface WrappedLine {
-  readonly fragments: readonly (StyledFragment & { readonly xOffsetPt: number })[];
-  readonly widthPt: number;
-  readonly maxSizePt: number;
-  readonly ascentPt: number;
-  readonly descentPt: number; // negative, per AFM convention
-}
+// StyledRun/StyledFragment/WrappedLine/WrapOptions + TextMeasurer are now owned by document-schema.js (the neutral shared-schema package); re-exported here so this package's barrel keeps importing them from './text-layout'. Only the wrap algorithms below stay defined here.
+export type { StyledRun, StyledFragment, WrappedLine, WrapOptions };
 
 interface BoxAtom {
   readonly kind: 'box';
@@ -176,10 +147,6 @@ function buildEmptyLine(runs: readonly StyledRun[], measurer: TextMeasurer): Wra
     ascentPt: measurer.ascenderAtSize(first.font, first.sizePt),
     descentPt: measurer.descenderAtSize(first.font, first.sizePt),
   };
-}
-
-export interface WrapOptions {
-  readonly breakLongWords?: boolean;
 }
 
 // Greedy first-fit line breaking over word-shaped atoms -- the same algorithm Word itself uses (an optimal-fit breaker like Knuth-Plass would produce different, not merely better, line breaks, which is the opposite of matching Word's own output). Never breaks inside a word, regardless of how many runs it spans; an over-long single word is emergency-split at the character level, always making at least one character of progress.
