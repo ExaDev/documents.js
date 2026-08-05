@@ -1,5 +1,8 @@
+import type { ContentCellBorders, ContentStrokeStyle, Color } from 'document-schema.js';
 import type { XmlElement, XmlNode } from 'ooxml.js';
 import { attr } from 'ooxml.js';
+import { colorToRgbHex, rgbHexToColor } from '../../model/color';
+import { ptToTwips, twipsToPt } from '../../model/units';
 import { directChildElement, insertInSchemaOrder, removeChild } from '../../xml/edit';
 import { el } from '../../xml/fragment';
 import type { ParagraphInit } from './paragraph';
@@ -14,8 +17,35 @@ export interface TableInit {
 // 12240 (US Letter page width, twips) - 2 x 1440 (1in margins), matching createEmptyDocxPackage's default section -- the content width a new table defaults to when no explicit widths are given.
 const DEFAULT_TABLE_WIDTH_TWIPS = 9360;
 
-// ECMA-376 CT_TcPrBase's own child element sequence, narrowed to the two elements this codebase ever writes -- w:gridSpan must precede w:vMerge when both are present on a merge-start cell.
-const TC_PR_CHILD_ORDER = ['w:gridSpan', 'w:vMerge'];
+// ECMA-376 CT_TcPrBase's own child element sequence, narrowed to the elements this codebase writes -- w:gridSpan before w:vMerge before w:tcBorders before w:shd when several are present on one cell.
+const TC_PR_CHILD_ORDER = ['w:gridSpan', 'w:vMerge', 'w:tcBorders', 'w:shd'];
+
+// ECMA-376 CT_TcBorders' own child sequence is top, start/left, bottom, end/right -- narrowed to the four edges this editor reads and writes (the reader at ooxml.js read.js falls back from w:start/w:end to w:left/w:right, so writing left/right is the form both Word and that reader accept).
+const TC_BORDERS_CHILD_ORDER = ['w:top', 'w:left', 'w:bottom', 'w:right'];
+
+// w:tcBorders/@w:sz is in eighth-points-of-a-point (1pt = 8 eighth-points), the unit ECMA-376 CT_Border uses for cell and paragraph borders -- distinct from both w:sz the run-size half-point and the twips w:ind/w:spacing use.
+const EIGHTH_POINTS_PER_POINT = 8;
+
+const DOCX_BORDER_STYLE_TO_VAL: Readonly<Record<ContentStrokeStyle, string>> = {
+  solid: 'single',
+  dashed: 'dashed',
+  dotted: 'dotted',
+  double: 'double',
+};
+
+// The reverse of ooxml.js read.js's BORDER_STYLE_MAP for the four vals this editor writes; any other val reads back as 'solid' (the same default read.js applies to unrecognised vals).
+function valToBorderStyle(val: string): ContentStrokeStyle {
+  if (val === 'dashed') {
+    return 'dashed';
+  }
+  if (val === 'dotted') {
+    return 'dotted';
+  }
+  if (val === 'double') {
+    return 'double';
+  }
+  return 'solid';
+}
 
 export type DocxVerticalMerge = 'restart' | 'continue';
 
@@ -79,6 +109,73 @@ export class DocxTableCell {
     insertInSchemaOrder(tcPr, value === 'restart' ? el('w:vMerge', { 'w:val': 'restart' }) : el('w:vMerge'), TC_PR_CHILD_ORDER);
   }
 
+  // Cell background fill (ECMA-376 w:tcPr/w:shd) -- w:val="clear" + w:color="auto" + w:fill=RRGGBB is the form ooxml.js's own reader accepts (it reads w:fill alone, treating "auto"/"none" as no fill). The write-side inverse of readCellShading, whose ContentTableCell.background this mirrors.
+  get background(): Color | undefined {
+    const tcPr = this.tcPrElement(false);
+    const shd = tcPr === undefined ? undefined : directChildElement(tcPr, 'w:shd');
+    const fill = shd === undefined ? undefined : attr(shd, 'w:fill');
+    if (fill === undefined || fill === 'auto' || fill === 'none') {
+      return undefined;
+    }
+    return rgbHexToColor(fill);
+  }
+
+  set background(value: Color | undefined) {
+    if (value === undefined) {
+      const tcPr = this.tcPrElement(false);
+      if (tcPr !== undefined) {
+        tcPr.children = tcPr.children.filter((c) => !(c.type === 'element' && c.tag === 'w:shd'));
+      }
+      return;
+    }
+    const tcPr = this.tcPrElement(true);
+    tcPr.children = tcPr.children.filter((c) => !(c.type === 'element' && c.tag === 'w:shd'));
+    insertInSchemaOrder(tcPr, el('w:shd', { 'w:val': 'clear', 'w:color': 'auto', 'w:fill': colorToRgbHex(value) }), TC_PR_CHILD_ORDER);
+  }
+
+  // Per-edge cell borders (ECMA-376 w:tcPr/w:tcBorders) -- each present edge is a w:top/w:left/w:bottom/w:right child carrying w:val (single/dashed/dotted/double), w:sz (eighth-points), w:color (RRGGBB). The write-side inverse of readCellBorders, whose ContentTableCell.borders this mirrors; the bridge bypasses PDF, so the border STYLE (solid/dashed/dotted/double) is carried too -- valid here even though PDF-pivot conversions render every border solid.
+  get borders(): ContentCellBorders | undefined {
+    const tcPr = this.tcPrElement(false);
+    const tcBorders = tcPr === undefined ? undefined : directChildElement(tcPr, 'w:tcBorders');
+    if (tcBorders === undefined) {
+      return undefined;
+    }
+    const borders: ContentCellBorders = {};
+    for (const edge of ['top', 'left', 'bottom', 'right'] as const) {
+      const element = directChildElement(tcBorders, `w:${edge}`);
+      const val = element === undefined ? undefined : attr(element, 'w:val');
+      if (element === undefined || val === undefined || val === 'nil' || val === 'none') {
+        continue;
+      }
+      const sz = attr(element, 'w:sz');
+      const colorVal = attr(element, 'w:color');
+      const color: Color = colorVal === undefined || colorVal === 'auto' ? { r: 0, g: 0, b: 0 } : rgbHexToColor(colorVal);
+      borders[edge] = { color, widthPt: Number(sz ?? String(EIGHTH_POINTS_PER_POINT)) / EIGHTH_POINTS_PER_POINT, style: valToBorderStyle(val) };
+    }
+    return Object.keys(borders).length === 0 ? undefined : borders;
+  }
+
+  set borders(value: ContentCellBorders | undefined) {
+    if (value === undefined) {
+      const tcPr = this.tcPrElement(false);
+      if (tcPr !== undefined) {
+        tcPr.children = tcPr.children.filter((c) => !(c.type === 'element' && c.tag === 'w:tcBorders'));
+      }
+      return;
+    }
+    const tcPr = this.tcPrElement(true);
+    tcPr.children = tcPr.children.filter((c) => !(c.type === 'element' && c.tag === 'w:tcBorders'));
+    const tcBorders = el('w:tcBorders');
+    for (const edge of TC_BORDERS_CHILD_ORDER) {
+      const border = value[edge === 'w:top' ? 'top' : edge === 'w:left' ? 'left' : edge === 'w:bottom' ? 'bottom' : 'right'];
+      if (border === undefined) {
+        continue;
+      }
+      tcBorders.children.push(el(edge, { 'w:val': DOCX_BORDER_STYLE_TO_VAL[border.style ?? 'solid'], 'w:sz': String(Math.round(border.widthPt * EIGHTH_POINTS_PER_POINT)), 'w:color': colorToRgbHex(border.color) }));
+    }
+    insertInSchemaOrder(tcPr, tcBorders, TC_PR_CHILD_ORDER);
+  }
+
   paragraphs(): DocxParagraph[] {
     const out: DocxParagraph[] = [];
     for (const child of this.node.children) {
@@ -105,6 +202,17 @@ export class DocxTableCell {
 export class DocxTableRow {
   constructor(private readonly node: XmlElement) {}
 
+  // w:trPr must be the FIRST child of w:tr (ECMA-376 CT_Row: trPr?, tblPrEx?, tc+), ahead of every w:tc -- a fixed-prefix invariant this row-property helper enforces by unshift, the same approach DocxTableCell.tcPrElement uses for w:tcPr inside w:tc.
+  private trPrElement(create: boolean): XmlElement | undefined {
+    const existing = directChildElement(this.node, 'w:trPr');
+    if (existing !== undefined || !create) {
+      return existing;
+    }
+    const created = el('w:trPr');
+    this.node.children.unshift(created);
+    return created;
+  }
+
   cells(): DocxTableCell[] {
     const out: DocxTableCell[] = [];
     for (const child of this.node.children) {
@@ -113,6 +221,26 @@ export class DocxTableRow {
       }
     }
     return out;
+  }
+
+  // Row height (ECMA-376 w:trPr/w:trHeight, value in twentieths-of-a-point). w:hRule="atLeast" preserves the source's intent -- a minimum row height that grows to fit taller content -- without clipping it the way "exact" would; odf.js's own reader resolves an ODF row height the same way (style:row-height is the value, content can still grow the row). This is the only row property this editor models because it is the only one ContentTableRow carries; readDocx does not populate row.heightPt (an ooxml.js reader gap), so this is genuinely one-directional -- only the odt -> docx bridge can carry a row height through today, never the reverse.
+  get heightPt(): number | undefined {
+    const trPr = this.trPrElement(false);
+    const trHeight = trPr === undefined ? undefined : directChildElement(trPr, 'w:trHeight');
+    const val = trHeight === undefined ? undefined : attr(trHeight, 'w:val');
+    return val === undefined ? undefined : twipsToPt(Number(val));
+  }
+
+  set heightPt(value: number | undefined) {
+    const trPr = this.trPrElement(value !== undefined);
+    if (trPr === undefined) {
+      return;
+    }
+    trPr.children = trPr.children.filter((c) => !(c.type === 'element' && c.tag === 'w:trHeight'));
+    if (value === undefined) {
+      return;
+    }
+    trPr.children.push(el('w:trHeight', { 'w:val': String(ptToTwips(value)), 'w:hRule': 'atLeast' }));
   }
 
   // Merges colSpan grid columns of THIS row into one cell (ECMA-376 w:tcPr/w:gridSpan on the surviving anchor cell) -- the horizontal-merge primitive docx genuinely lacks today, unlike vertical merge, which is already a pure attribute setter on an existing w:tc (DocxTableCell.verticalMerge above). Docx omits a w:tc entirely for a column consumed by a merge (no covered-cell placeholder the way ODF has), so making this cell span colSpan columns means REMOVING the consumed cells' own w:tc elements from the row outright. Consumed cells' own content is discarded silently and unconditionally -- no check, no guard -- matching OdsSheet.mergeCells' own established precedent (src/edit/ods/sheet.ts) exactly: this is documented, intentional behaviour, not a silent trap.

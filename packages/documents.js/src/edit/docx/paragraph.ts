@@ -4,7 +4,8 @@ import type { ContentListMembership, ContentVector } from 'document-schema.js';
 import type { MathMlNode } from '../../mathml/nodes';
 import type { OmmlWriteResult } from '../../omml/write';
 import { buildOfficeMathParagraph } from '../../omml/write';
-import { getOrCreateChildElement, removeChild } from '../../xml/edit';
+import { LINE_UNITS_PER_LINE, ptToTwips, twipsToPt } from '../../model/units';
+import { getOrCreateChildElement, removeAttr, removeChild, setAttr } from '../../xml/edit';
 import { el } from '../../xml/fragment';
 import type { ImageInit, MediaContext } from './image';
 import { insertImageMedia, nextDrawingId } from './image';
@@ -134,6 +135,140 @@ export class DocxParagraph {
       return;
     }
     setAlignment(this.pPr(true), value);
+  }
+
+  // w:spacing holds before/after/line together in one element (CT_PPrGeneral's own sequence puts it ahead of w:ind, both already in PPR_ORDER), so the three spacing setters share one get-or-create rather than each minting their own -- mirroring how the list setter shares one w:numPr for ilvl+numId. w:before/w:after are twentieths-of-a-point (pt times 20, same as every other WordprocessingML length); w:line is 240ths of a line under w:lineRule="auto", matching LINE_UNITS_PER_LINE. Inlined against this.live() (rather than routed through the literal-only pPr(true)/pPr(false) overload) so a runtime `create: boolean` is accepted.
+  private spacingElement(create: boolean): XmlElement | undefined {
+    const node = this.live();
+    const pPr = create ? ensureFirstChild(node, 'w:pPr') : directChild(node, 'w:pPr');
+    if (pPr === undefined) {
+      return undefined;
+    }
+    return create ? getOrCreateChildElement(pPr, 'w:spacing', PPR_ORDER, () => el('w:spacing')) : directChild(pPr, 'w:spacing');
+  }
+
+  get spacingBeforePt(): number | undefined {
+    const spacing = this.spacingElement(false);
+    const before = spacing === undefined ? undefined : attr(spacing, 'w:before');
+    return before === undefined ? undefined : twipsToPt(Number(before));
+  }
+
+  set spacingBeforePt(value: number | undefined) {
+    const spacing = this.spacingElement(value !== undefined);
+    if (spacing === undefined) {
+      return;
+    }
+    if (value === undefined) {
+      removeAttr(spacing, 'w:before');
+      return;
+    }
+    setAttr(spacing, 'w:before', String(ptToTwips(value)));
+  }
+
+  get spacingAfterPt(): number | undefined {
+    const spacing = this.spacingElement(false);
+    const after = spacing === undefined ? undefined : attr(spacing, 'w:after');
+    return after === undefined ? undefined : twipsToPt(Number(after));
+  }
+
+  set spacingAfterPt(value: number | undefined) {
+    const spacing = this.spacingElement(value !== undefined);
+    if (spacing === undefined) {
+      return;
+    }
+    if (value === undefined) {
+      removeAttr(spacing, 'w:after');
+      return;
+    }
+    setAttr(spacing, 'w:after', String(ptToTwips(value)));
+  }
+
+  // lineSpacing is a line-height multiplier (1.0 = single). It is written as w:line = round(multiplier times 240) with w:lineRule="auto"; ooxml.js's own reader populates lineSpacing ONLY when w:lineRule is "auto" (or absent) -- "exact"/"atLeast" are fixed-point spacing it leaves undefined -- so writing "auto" is what makes the multiplier round-trip rather than collapsing to undefined on read-back.
+  get lineSpacing(): number | undefined {
+    const spacing = this.spacingElement(false);
+    if (spacing === undefined) {
+      return undefined;
+    }
+    const lineRule = attr(spacing, 'w:lineRule');
+    if (lineRule === 'exact' || lineRule === 'atLeast') {
+      return undefined;
+    }
+    const line = attr(spacing, 'w:line');
+    return line === undefined ? undefined : Number(line) / LINE_UNITS_PER_LINE;
+  }
+
+  set lineSpacing(value: number | undefined) {
+    const spacing = this.spacingElement(value !== undefined);
+    if (spacing === undefined) {
+      return;
+    }
+    if (value === undefined) {
+      removeAttr(spacing, 'w:line');
+      removeAttr(spacing, 'w:lineRule');
+      return;
+    }
+    setAttr(spacing, 'w:line', String(Math.round(value * LINE_UNITS_PER_LINE)));
+    setAttr(spacing, 'w:lineRule', 'auto');
+  }
+
+  // w:ind holds left + firstLine/hanging together (CT_PPrGeneral puts it after w:spacing, both in PPR_ORDER). indentLeftPt is w:left (twentieths of a point); indentFirstLinePt is w:firstLine for a positive first-line indent and w:hanging for a negative one, exactly the pair ooxml.js's reader reads back (firstLine if present, else negative of hanging).
+  private indElement(create: boolean): XmlElement | undefined {
+    const node = this.live();
+    const pPr = create ? ensureFirstChild(node, 'w:pPr') : directChild(node, 'w:pPr');
+    if (pPr === undefined) {
+      return undefined;
+    }
+    return create ? getOrCreateChildElement(pPr, 'w:ind', PPR_ORDER, () => el('w:ind')) : directChild(pPr, 'w:ind');
+  }
+
+  get indentLeftPt(): number | undefined {
+    const ind = this.indElement(false);
+    const left = ind === undefined ? undefined : attr(ind, 'w:left');
+    return left === undefined ? undefined : twipsToPt(Number(left));
+  }
+
+  set indentLeftPt(value: number | undefined) {
+    const ind = this.indElement(value !== undefined);
+    if (ind === undefined) {
+      return;
+    }
+    if (value === undefined) {
+      removeAttr(ind, 'w:left');
+      return;
+    }
+    setAttr(ind, 'w:left', String(ptToTwips(value)));
+  }
+
+  get indentFirstLinePt(): number | undefined {
+    const ind = this.indElement(false);
+    if (ind === undefined) {
+      return undefined;
+    }
+    const firstLine = attr(ind, 'w:firstLine');
+    if (firstLine !== undefined) {
+      return twipsToPt(Number(firstLine));
+    }
+    const hanging = attr(ind, 'w:hanging');
+    return hanging === undefined ? undefined : -twipsToPt(Number(hanging));
+  }
+
+  set indentFirstLinePt(value: number | undefined) {
+    const ind = this.indElement(value !== undefined);
+    if (ind === undefined) {
+      return;
+    }
+    if (value === undefined) {
+      removeAttr(ind, 'w:firstLine');
+      removeAttr(ind, 'w:hanging');
+      return;
+    }
+    if (value >= 0) {
+      removeAttr(ind, 'w:hanging');
+      setAttr(ind, 'w:firstLine', String(ptToTwips(value)));
+    } else {
+      removeAttr(ind, 'w:firstLine');
+      setAttr(ind, 'w:hanging', String(ptToTwips(-value)));
+    }
   }
 
   get list(): ContentListMembership | undefined {

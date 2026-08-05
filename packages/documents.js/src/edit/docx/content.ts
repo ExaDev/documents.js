@@ -69,6 +69,21 @@ function populateParagraph(paragraph: DocxParagraph, block: ContentParagraph): v
   paragraph.styleId = block.styleId;
   paragraph.alignment = block.alignment;
   paragraph.list = block.list;
+  if (block.spacingBeforePt !== undefined) {
+    paragraph.spacingBeforePt = block.spacingBeforePt;
+  }
+  if (block.spacingAfterPt !== undefined) {
+    paragraph.spacingAfterPt = block.spacingAfterPt;
+  }
+  if (block.lineSpacing !== undefined) {
+    paragraph.lineSpacing = block.lineSpacing;
+  }
+  if (block.indentLeftPt !== undefined) {
+    paragraph.indentLeftPt = block.indentLeftPt;
+  }
+  if (block.indentFirstLinePt !== undefined) {
+    paragraph.indentFirstLinePt = block.indentFirstLinePt;
+  }
   for (const run of block.runs) {
     if (run.text === '\t') {
       paragraph.appendTab();
@@ -122,6 +137,9 @@ function appendTable(body: DocxBody, block: ContentTable): void {
   const verticalMerges = new Map<number, { rowsRemaining: number; gridSpan: number }>();
   block.rows.forEach((row) => {
     const tableRow = table.appendRow(row.cells.length);
+    if (row.heightPt !== undefined) {
+      tableRow.heightPt = row.heightPt;
+    }
     const domCells = tableRow.cells();
     let colIndex = 0;
     row.cells.forEach((cell, cellIndex) => {
@@ -146,6 +164,12 @@ function appendTable(body: DocxBody, block: ContentTable): void {
       if (cell.rowSpan !== undefined && cell.rowSpan > 1) {
         tableCell.verticalMerge = 'restart';
         verticalMerges.set(colIndex, { rowsRemaining: cell.rowSpan - 1, gridSpan: span });
+      }
+      if (cell.background !== undefined) {
+        tableCell.background = cell.background;
+      }
+      if (cell.borders !== undefined) {
+        tableCell.borders = cell.borders;
       }
       populateCellBlocks(tableCell, cell.blocks);
       colIndex += span;
