@@ -1,3 +1,10 @@
+# [2.4.0](https://github.com/ExaDev/document-schema.js/compare/v2.3.5...v2.4.0) (2026-08-05)
+
+
+### Features
+
+* host the layout/font/math port contracts pdf-codec used to own ([5490587](https://github.com/ExaDev/document-schema.js/commit/5490587cf707cef2b31396205e5ab1768b8676e2))
+
 ## [2.3.5](https://github.com/ExaDev/document-schema.js/compare/v2.3.4...v2.3.5) (2026-08-05)
 
 ## [2.3.4](https://github.com/ExaDev/document-schema.js/compare/v2.3.3...v2.3.4) (2026-08-04)
