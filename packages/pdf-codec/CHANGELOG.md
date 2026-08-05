@@ -1,3 +1,20 @@
+# [2.0.0](https://github.com/ExaDev/pdf-codec/compare/v1.11.11...v2.0.0) (2026-08-05)
+
+
+* refactor!: drop wrapRunsToWidth and rotatePointAboutCenter from the public API ([6aa5c99](https://github.com/ExaDev/pdf-codec/commit/6aa5c990b9eef7509d49b87be0d46bda3856e889))
+
+
+### Bug Fixes
+
+* update smoke export-parity check and README for the dropped primitives ([2475e33](https://github.com/ExaDev/pdf-codec/commit/2475e330d402414e63123bf79d99f6aea6448768))
+
+
+### BREAKING CHANGES
+
+* wrapRunsToWidth and rotatePointAboutCenter are no
+longer exported from pdf-codec. Import them from documents.js (or copy
+the ~5-line rotatePointAboutCenter) instead.
+
 ## [1.11.11](https://github.com/ExaDev/pdf-codec/compare/v1.11.10...v1.11.11) (2026-08-05)
 
 ## [1.11.10](https://github.com/ExaDev/pdf-codec/compare/v1.11.9...v1.11.10) (2026-08-05)
