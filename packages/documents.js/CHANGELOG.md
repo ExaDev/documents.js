@@ -1,3 +1,10 @@
+# [1.92.0](https://github.com/ExaDev/documents.js/compare/v1.91.8...v1.92.0) (2026-08-05)
+
+
+### Features
+
+* cross-variant content bridges (wordprocessing <-> presentation) ([dbc85cf](https://github.com/ExaDev/documents.js/commit/dbc85cf5ac39ca575a10d47454034bf22a60efd2))
+
 ## [1.91.8](https://github.com/ExaDev/documents.js/compare/v1.91.7...v1.91.8) (2026-08-05)
 
 ## [1.91.7](https://github.com/ExaDev/documents.js/compare/v1.91.6...v1.91.7) (2026-08-05)
