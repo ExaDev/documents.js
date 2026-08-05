@@ -74,7 +74,7 @@ function appendShape(slide: PptxSlide, shape: ContentShape): void {
     }
     paragraphs.push({
       alignment: block.alignment,
-      runs: block.runs.map((run) => ({ text: run.text, bold: run.bold, italic: run.italic, fontFamily: run.fontFamily, sizePt: run.sizePt, color: run.color })),
+      runs: block.runs.map((run) => ({ text: run.text, bold: run.bold, italic: run.italic, underline: run.underline, strike: run.strike, fontFamily: run.fontFamily, sizePt: run.sizePt, color: run.color })),
     });
   }
   const textBox = slide.addTextBox({ frame: shape.frame, text: '' });
@@ -92,7 +92,7 @@ function populateCellParagraphs(cell: PptxTableCell, blocks: readonly ContentBlo
     }
     paragraphs.push({
       alignment: block.alignment,
-      runs: block.runs.map((run) => ({ text: run.text, bold: run.bold, italic: run.italic, fontFamily: run.fontFamily, sizePt: run.sizePt, color: run.color })),
+      runs: block.runs.map((run) => ({ text: run.text, bold: run.bold, italic: run.italic, underline: run.underline, strike: run.strike, fontFamily: run.fontFamily, sizePt: run.sizePt, color: run.color })),
     });
   }
   cell.setParagraphs(paragraphs);

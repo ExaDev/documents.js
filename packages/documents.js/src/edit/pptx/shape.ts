@@ -152,6 +152,8 @@ export interface DrawingRunInit {
   readonly text: string;
   readonly bold?: boolean;
   readonly italic?: boolean;
+  readonly underline?: boolean;
+  readonly strike?: boolean;
   readonly fontFamily?: string;
   readonly sizePt?: number;
   readonly color?: LayoutColor;
@@ -176,6 +178,13 @@ function buildDrawingRun(init: DrawingRunInit): XmlElement {
   }
   if (init.italic === true) {
     rPrAttrs.i = '1';
+  }
+  // a:rPr/@u and a:rPr/@strike are attribute toggles on the same element as b/i (ECMA-376 21.1.2.3.2/21.1.2.3.15), so they mirror bold/italic exactly. ooxml.js's readPptx reads any @u != "none" as underlined and any @strike != "noStrike" as struck, so the single-underline ("sng") and single-strike ("sngStrike") values round-trip back as underline/strike === true.
+  if (init.underline === true) {
+    rPrAttrs.u = 'sng';
+  }
+  if (init.strike === true) {
+    rPrAttrs.strike = 'sngStrike';
   }
   if (init.sizePt !== undefined) {
     rPrAttrs.sz = String(Math.round(init.sizePt * HUNDREDTHS_POINT_PER_POINT));
