@@ -1,3 +1,11 @@
+# [1.85.0](https://github.com/ExaDev/documents.js/compare/v1.84.0...v1.85.0) (2026-08-05)
+
+
+### Features
+
+* carry paragraph spacing/indent and table cell decoration through the docx/odt bridge ([e2e5171](https://github.com/ExaDev/documents.js/commit/e2e5171bfd188c76727bfcb91bfe69c982626cb4))
+* carry run underline/strike through the odp/pptx bridge (pptx write side) ([393c947](https://github.com/ExaDev/documents.js/commit/393c9472d2ab292d337ca8f1ac62378efdb416dd))
+
 # [1.84.0](https://github.com/ExaDev/documents.js/compare/v1.83.0...v1.84.0) (2026-08-05)
 
 
