@@ -34,6 +34,7 @@ import { readMarkdownContent } from '../markdown/read';
 import { buildMarkdownText } from '../markdown/write';
 import { decodeMarkdownText, encodeMarkdownText } from '../markdown/text';
 import type { OmmlDiagnostic } from '../omml/shared';
+import type { MarkdownImageResolver } from 'markdown-codec';
 import type { PdfDiagnosticSink, ProvidedFont, WinAnsiSubstitution } from 'pdf-codec';
 import { createFontMeasurer, createFontRegistry, loadMathFont, readPdf, writePdf } from 'pdf-codec';
 import type { DocumentFontRegistryOptions } from '../fonts/registry';
@@ -51,6 +52,8 @@ export interface DocumentToPdfOptions extends DocumentFontRegistryOptions {
   readonly onDocument?: (pkg: DocumentPackage) => void;
   // Called once per OMML construct that degraded or was approximated while a docx's own equations were recovered as MathML (src/omml/read.ts). Only docxToPdf ever invokes it, and deliberately so rather than being declared on a docx-specific options type of its own: OOXML math is the one source vocabulary in this package whose READ direction involves a translation that can degrade at all -- every ODF-sourced conversion reads real MathML straight out of the source package with nothing to translate.
   readonly onMathDiagnostic?: (diagnostic: OmmlDiagnostic, context: { readonly sourcePath?: string }) => void;
+  // A synchronous resolver for markdown images with a non-data: destination (a relative path, a bare URL), threaded straight through to markdown-codec's own MarkdownImageResolver port. Only the markdown-sourced conversions (markdownToPdf) consult it; every other conversion sharing this options type ignores it -- the same precedent onMathDiagnostic already establishes for a docx-only option living on the shared type. documents.js itself performs no I/O (matching markdown-codec's own platform-neutral convention); a caller wanting local-file resolution supplies a resolver, and the Node entry points (document-cli, document-mcp) supply a filesystem resolver against the input file's own directory.
+  readonly images?: MarkdownImageResolver;
 }
 
 export function docxToPdf(bytes: Uint8Array<ArrayBuffer>, options?: DocumentToPdfOptions): Uint8Array<ArrayBuffer> {
@@ -138,11 +141,11 @@ export function odgToPdf(bytes: Uint8Array<ArrayBuffer>, options?: DocumentToPdf
   return writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution, fonts });
 }
 
-// markdown bytes -> PDF bytes: readMarkdownContent(decodeMarkdownText(bytes)) feeds convertWordprocessingToLayout completely unmodified -- the identical engine docxToPdf/odtToPdf feed, since readMarkdownContent produces the same WordprocessingContentDocument shape those two adapters do (see this file's own top-of-file comment). Markdown carries no page geometry of its own -- readMarkdownContent's own defaults (document-schema.js's PAGE_SIZE_A4, markdown-codec's own 1in DEFAULT_MARGINS) supply whatever ContentSection.pageSize/margins the layout engine needs; a caller wanting different page geometry calls readMarkdownContent directly with its own ReadMarkdownOptions.pageSize/margins rather than through this fixed-options ergonomic wrapper (see DocumentToPdfOptions -- unlike readDocxContent/readOdtContent, readMarkdownContent genuinely does take options, but DocumentToPdfOptions has no room for markdown-specific ones any more than it does for a docx/odt-specific option, so only `signal` is threaded through here).
+// markdown bytes -> PDF bytes: readMarkdownContent(decodeMarkdownText(bytes)) feeds convertWordprocessingToLayout completely unmodified -- the identical engine docxToPdf/odtToPdf feed, since readMarkdownContent produces the same WordprocessingContentDocument shape those two adapters do (see this file's own top-of-file comment). Markdown carries no page geometry of its own -- readMarkdownContent's own defaults (document-schema.js's PAGE_SIZE_A4, markdown-codec's own 1in DEFAULT_MARGINS) supply whatever ContentSection.pageSize/margins the layout engine needs; a caller wanting different page geometry calls readMarkdownContent directly with its own ReadMarkdownOptions.pageSize/margins rather than through this fixed-options ergonomic wrapper. `signal` and `images` (a MarkdownImageResolver for non-data: image destinations) are the two ReadMarkdownOptions fields threaded through here -- a markdown image with a relative path or bare URL otherwise degrades to alt-text, since markdown-codec resolves only data: URIs natively and performs no I/O itself.
 export function markdownToPdf(bytes: Uint8Array<ArrayBuffer>, options?: DocumentToPdfOptions): Uint8Array<ArrayBuffer> {
   throwIfAborted(options?.signal);
   const text = decodeMarkdownText(bytes);
-  const content = readMarkdownContent(text, { signal: options?.signal });
+  const content = readMarkdownContent(text, { signal: options?.signal, images: options?.images });
   // readMarkdownContent's declared return type is the full ContentDocument union, even though it always produces the wordprocessing variant in practice -- this both documents and enforces that, mirroring docxToPdf/odtToPdf's own guards above.
   if (content.kind !== 'wordprocessing') {
     throw new Error('readMarkdownContent returned a non-wordprocessing ContentDocument');
@@ -253,6 +256,8 @@ export interface DocumentBridgeOptions {
   readonly onDocument?: (pkg: DocumentPackage) => void;
   // Called once per formula construct that degraded or was approximated while an embedded formula crossed this bridge, in whichever direction the bridge translates: a MathML construct with no OMML counterpart when BUILDING a docx (src/omml/write.ts -- odtToDocx genuinely produces these; markdownToDocx threads the option for consistency but has no formula construct in its own source format to produce one from), and an OMML construct with no MathML counterpart when READING one (src/omml/read.ts -- docxToOdt and docxToMarkdown). pdfToDocx deliberately has no equivalent option -- reconstructWordprocessing recovers positioned glyphs, never a formula block, so there is nothing there to report.
   readonly onMathDiagnostic?: (diagnostic: OmmlDiagnostic, context: { readonly sourcePath?: string }) => void;
+  // A synchronous resolver for markdown images with a non-data: destination (a relative path, a bare URL), threaded straight through to markdown-codec's own MarkdownImageResolver port. Only the markdown-sourced bridges (markdownToDocx, markdownToOdt) consult it; the other eight bridges ignore it -- the same precedent onMathDiagnostic already establishes for a format-specific option living on the shared type. See DocumentToPdfOptions.images for the full rationale (no I/O in documents.js itself; the Node entry points supply a filesystem resolver).
+  readonly images?: MarkdownImageResolver;
 }
 
 // odt bytes -> docx bytes: readOdtContent(decodePackage(odtBytes)) feeds directly into buildDocxPackage, then ooxml.js's own encodePackage serializes the result -- no writePdf/readPdf, no measurer, no reconstruction. Cancellation has no loop to hook into the way writePdf/readPdf's own page/content-stream loops do (see src/ports/abort.ts's own module comment) -- read and build are each a single bounded pass over the source document -- so the signal is checked once before each of those two stages rather than threaded into buildDocxPackage/readOdtContent themselves, which accept no such option today. An embedded formula now crosses this bridge as REAL, editable OOXML math: buildDocxPackage translates the block's own MathML into genuine OMML (m:oMathPara > m:oMath -- see src/omml/write.ts) rather than degrading it to the plain-text stand-in it used to become. Only a construct OMML has no counterpart for degrades, individually and with a diagnostic reported through options.onMathDiagnostic.
@@ -337,7 +342,7 @@ export function xlsxToOds(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBrid
 export function markdownToDocx(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBridgeOptions): Uint8Array<ArrayBuffer> {
   throwIfAborted(options?.signal);
   const text = decodeMarkdownText(bytes);
-  const content = readMarkdownContent(text, { signal: options?.signal });
+  const content = readMarkdownContent(text, { signal: options?.signal, images: options?.images });
   // readMarkdownContent's declared return type is the full ContentDocument union, even though it always produces the wordprocessing variant in practice -- this both documents and enforces that, mirroring markdownToPdf's own guard above.
   if (content.kind !== 'wordprocessing') {
     throw new Error('readMarkdownContent returned a non-wordprocessing ContentDocument');
@@ -365,7 +370,7 @@ export function docxToMarkdown(bytes: Uint8Array<ArrayBuffer>, options?: Documen
 export function markdownToOdt(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBridgeOptions): Uint8Array<ArrayBuffer> {
   throwIfAborted(options?.signal);
   const text = decodeMarkdownText(bytes);
-  const content = readMarkdownContent(text, { signal: options?.signal });
+  const content = readMarkdownContent(text, { signal: options?.signal, images: options?.images });
   // readMarkdownContent's declared return type is the full ContentDocument union, even though it always produces the wordprocessing variant in practice -- this both documents and enforces that, mirroring markdownToPdf's own guard above.
   if (content.kind !== 'wordprocessing') {
     throw new Error('readMarkdownContent returned a non-wordprocessing ContentDocument');
