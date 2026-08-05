@@ -1,3 +1,16 @@
+# [1.86.0](https://github.com/ExaDev/documents.js/compare/v1.85.1...v1.86.0) (2026-08-05)
+
+
+### Bug Fixes
+
+* apply init.strike in odt buildRun and default frontMatter on in readMarkdownContent ([423c30f](https://github.com/ExaDev/documents.js/commit/423c30ff761b0e4ed42ae7f9a9d5a6af3e84b4e3))
+* synthesise w:numbering definitions so markdown/odt lists render in Word ([72733d3](https://github.com/ExaDev/documents.js/commit/72733d3274a3bdd4bffeb8c3482779351ed46d81))
+
+
+### Features
+
+* carry pptx shape name/insets, paragraph spacing, cell decoration ([06fbe17](https://github.com/ExaDev/documents.js/commit/06fbe17f68cf4e0c80250a82762e843418bd394e))
+
 ## [1.85.1](https://github.com/ExaDev/documents.js/compare/v1.85.0...v1.85.1) (2026-08-05)
 
 # [1.85.0](https://github.com/ExaDev/documents.js/compare/v1.84.0...v1.85.0) (2026-08-05)
