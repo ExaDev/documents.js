@@ -123,6 +123,9 @@ export function buildRun(pkg: Package, init: RunInit = {}): XmlElement {
   if (init.underline !== undefined) {
     run.underline = init.underline;
   }
+  if (init.strike !== undefined) {
+    run.strike = init.strike;
+  }
   if (init.fontFamily !== undefined) {
     run.fontFamily = init.fontFamily;
   }
