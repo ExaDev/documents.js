@@ -1,9 +1,12 @@
 import type { ContentDocument } from 'document-schema.js';
 import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
 import { describe, expect, it } from 'vitest';
+import { decodePackage as decodeOdfPackage } from 'odf.js';
+import { decodePackage as decodeOoxmlPackage } from 'ooxml.js';
 import { buildOdtPackage } from '../edit/odt/content';
 import { buildDocxPackage } from '../edit/docx/content';
 import { buildPptxPackage } from '../edit/pptx/content';
+import { markdownToDocx, markdownToOdt } from './convert';
 
 function docWithHyperlink(): ContentDocument {
   return {
@@ -78,5 +81,26 @@ describe('hyperlink write: pptx a:hlinkClick', () => {
     const relsXml = JSON.stringify(rels);
     expect(relsXml).toContain('https://example.org');
     expect(relsXml).toContain('TargetMode');
+  });
+});
+
+// markdown-codec's own lower/inline.ts already emits ContentRun.hyperlink for a markdown link, so once buildDocxPackage/buildOdtPackage learned to write run.hyperlink (above), a markdown link crossing the markdownToDocx/markdownToOdt bridge started carrying its own URL through for free -- no markdown-specific code needed on either side.
+describe('hyperlink write: markdown bridges inherit it for free', () => {
+  it('markdownToDocx wraps the link in w:hyperlink with an external relationship', () => {
+    const md = new TextEncoder().encode('Visit [Example](https://example.org) now.');
+    const pkg = decodeOoxmlPackage(markdownToDocx(md));
+    const docXml = JSON.stringify(pkg.parts['word/document.xml']);
+    expect(docXml).toContain('w:hyperlink');
+    const relsXml = JSON.stringify(pkg.parts['word/_rels/document.xml.rels']);
+    expect(relsXml).toContain('https://example.org');
+    expect(relsXml).toContain('TargetMode');
+  });
+
+  it('markdownToOdt wraps the link in text:a xlink:href', () => {
+    const md = new TextEncoder().encode('Visit [Example](https://example.org) now.');
+    const pkg = decodeOdfPackage(markdownToOdt(md));
+    const xml = JSON.stringify(pkg.parts['content.xml']);
+    expect(xml).toContain('text:a');
+    expect(xml).toContain('https://example.org');
   });
 });
