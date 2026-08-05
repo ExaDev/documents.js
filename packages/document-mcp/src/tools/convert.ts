@@ -53,6 +53,12 @@ const ConvertDocumentInputSchema = z.object({
     .describe(
       'When true, additionally report each individual font-substitution event as structured fontSubstitutions (which family/weight/style was requested, what it resolved to instead, and why). Every substitution is always reported as a plain diagnostic in `diagnostics` regardless of this flag -- this only controls whether the fuller, structured event is also collected.',
     ),
+  images: z
+    .record(z.string(), z.string())
+    .optional()
+    .describe(
+      'A map from a markdown image destination (the part in the parentheses of ![](..)) to its base64-encoded PNG/JPEG bytes, for resolving a markdown source\'s own non-data: images. Only consulted by a markdown-sourced conversion; every other conversion ignores it. A destination absent from the map degrades to alt text, matching documents.js\'s own MarkdownImageResolver port -- an MCP caller has no filesystem context to read a relative path from, so any image that is not a data: URI must be supplied here explicitly to be embedded.',
+    ),
 });
 
 // The full structuredContent shape convert_document returns -- exported so a caller building on top of this module (or a test verifying the tool's real output against its own declared contract) can parse/narrow a result with it directly, rather than re-declaring an equivalent shape.
@@ -81,7 +87,7 @@ export function registerConvertTools(server: McpServer): void {
       inputSchema: ConvertDocumentInputSchema,
       outputSchema: ConvertDocumentOutputSchema,
     },
-    async ({ source, targetFormat, output, fonts, onSubstitutionDiagnostics }, ctx) => {
+    async ({ source, targetFormat, output, fonts, onSubstitutionDiagnostics, images }, ctx) => {
       const { signal } = ctx.mcpReq;
       const { bytes, format } = await resolveDocumentInput(source, { signal });
 
@@ -93,6 +99,11 @@ export function registerConvertTools(server: McpServer): void {
           fonts: fonts?.map((font) => ({ family: font.family, bold: font.bold, italic: font.italic, bytes: base64ToBytes(font.bytesBase64) })),
           // Only wired under the flag: the local converter already records every substitution as a `font/substituted` Diagnostic in result.diagnostics below regardless of whether a callback is supplied, so an unconditional callback here would report the same event twice, once per channel.
           onFontSubstitution: onSubstitutionDiagnostics === true ? (substitution: FontSubstitution) => fontSubstitutions.push(substitution) : undefined,
+          // An MCP caller has no filesystem context, so it supplies any non-data: markdown image bytes explicitly as a destination -> base64 map; a destination absent from the map degrades to alt text, exactly as documents.js's MarkdownImageResolver port defines.
+          images: images === undefined ? undefined : (destination: string) => {
+            const base64 = images[destination];
+            return base64 === undefined ? undefined : { bytes: base64ToBytes(base64) };
+          },
         },
       );
 

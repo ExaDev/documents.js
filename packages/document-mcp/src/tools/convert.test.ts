@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
-import { bytesToBase64, createDocx } from 'documents.js';
+import { base64ToBytes, bytesToBase64, createDocx, decodeDocumentPackage, readDocxContent } from 'documents.js';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createServer } from '../server';
 import { ConvertDocumentOutputSchema, ListDocumentConversionsOutputSchema } from './convert';
@@ -123,6 +123,30 @@ describe('convert_document', () => {
     const structured = ConvertDocumentOutputSchema.parse(result.structuredContent);
     expect(structured.fontSubstitutions).toBeUndefined();
     expect(structured.diagnostics.some((diagnostic) => diagnostic.code === 'font/substituted')).toBe(true);
+  });
+
+  it('embeds a markdown source\'s own relative-path image when its bytes are supplied via the images map', async () => {
+    // An MCP caller has no filesystem context, so a non-data: image must be supplied explicitly as a destination -> base64 entry in `images`. A 1x1 PNG (the same one markdown-codec's own tests resolve) keyed by the destination used in the markdown.
+    const onePixelPngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+    const markdown = new TextEncoder().encode('![a local image](./local.png)\n');
+
+    const result = await pair.client.callTool({
+      name: 'convert_document',
+      arguments: { source: { bytesBase64: bytesToBase64(markdown), format: 'markdown' }, targetFormat: 'docx', images: { './local.png': onePixelPngBase64 } },
+    });
+
+    expect(result.isError).toBeFalsy();
+    const structured = ConvertDocumentOutputSchema.parse(result.structuredContent);
+    if (!('bytesBase64' in structured.output)) {
+      throw new Error('expected inline bytesBase64 output');
+    }
+    // Read the produced docx back through documents.js's own reader and confirm the image became a real ContentImageBlock rather than degrading to alt text.
+    const content = readDocxContent(decodeDocumentPackage('docx', base64ToBytes(structured.output.bytesBase64)));
+    if (content.kind !== 'wordprocessing') {
+      throw new Error('expected a wordprocessing ContentDocument');
+    }
+    const hasImage = content.sections.some((section) => section.blocks.some((block) => block.kind === 'image'));
+    expect(hasImage).toBe(true);
   });
 });
 
