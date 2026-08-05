@@ -1,3 +1,10 @@
+# [1.93.0](https://github.com/ExaDev/documents.js/compare/v1.92.9...v1.93.0) (2026-08-05)
+
+
+### Features
+
+* wire an opt-in clock into the X-to-PDF conversion path ([5e13c7b](https://github.com/ExaDev/documents.js/commit/5e13c7bd5eba36ce96dee270d71b4437cd102128))
+
 ## [1.92.9](https://github.com/ExaDev/documents.js/compare/v1.92.8...v1.92.9) (2026-08-05)
 
 ## [1.92.8](https://github.com/ExaDev/documents.js/compare/v1.92.7...v1.92.8) (2026-08-05)
