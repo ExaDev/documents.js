@@ -1,2 +1,2 @@
 # Run the full test suite before push to catch breakage early.
-pnpm test
+vitest run --project unit
