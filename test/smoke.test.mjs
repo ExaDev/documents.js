@@ -431,7 +431,7 @@ describe('dist/ end-to-end: odsToPdf with a cell-anchored formula, from the CJS 
 
     // And it really is placed at cell C4 rather than the sheet's origin: convertSpreadsheetToLayout's own reported position sits two 3cm columns plus the frame's own 0.4cm offset in from the page's left content edge, and three 0.45cm rows plus 0.2cm down from its top.
     const content = cjs.readOdsContent(cjs.decodePackage(odsWithAnchoredFormulaBytes()));
-    const { formulas } = cjs.convertSpreadsheetToLayout(content, { measurer: cjs.createFontMeasurer(cjs.createFontRegistry()) });
+    const { formulas } = cjs.convertSpreadsheetToLayout(content, { measurer: cjs.createFontMeasurer(cjs.createFontRegistry()), mathMetricsAt: (sizePt) => cjs.loadMathFont().metricsAt(sizePt) });
     expect(formulas).toHaveLength(1);
     const sheet = content.sheets[0];
     const cmToPt = (cm) => (cm / 2.54) * 72;

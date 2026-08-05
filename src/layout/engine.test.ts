@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 import type { ContentBlock, ContentDocument, ContentImageBlock, ContentParagraph, ContentRun, ContentSection, ContentTable, LayoutImage, LayoutItem, LayoutLine, LayoutLink, LayoutRect, LayoutText } from 'document-schema.js';
 import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
 import type { TextMeasurer } from 'pdf-codec';
-import { encodePng } from 'pdf-codec';
+import { encodePng, loadMathFont } from 'pdf-codec';
+const mathMetricsAt = (sizePt: number) => loadMathFont().metricsAt(sizePt);
 import { convertWordprocessingToLayout } from './engine';
 
 // Every character is sizePt/10 pt wide; lineHeightAtSize is 1.2x, ascender 0.8x, descender -0.2x -- the same fake-measurer convention already used across pdf-codec's own text-layout.test.ts, src/layout/slides.test.ts, and src/layout/shared.test.ts.
@@ -35,7 +36,7 @@ function doc(sections: ContentSection[]): Extract<ContentDocument, { kind: 'word
 }
 
 function convert(sections: ContentSection[]) {
-  return convertWordprocessingToLayout(doc(sections), { measurer: fakeMeasurer() }).document;
+  return convertWordprocessingToLayout(doc(sections), { measurer: fakeMeasurer(), mathMetricsAt }).document;
 }
 
 function textItems(items: readonly LayoutItem[]): LayoutText[] {

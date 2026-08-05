@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 import type { ContentDocument, ContentEmbeddedObject, ContentImageBlock, ContentSheet, ContentSheetCell, ContentSheetImage, ContentSheetPrintSettings, LayoutImage, LayoutItem, LayoutLine, LayoutRect, LayoutText, MathMlNode } from 'document-schema.js';
 import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
 import type { TextMeasurer } from 'pdf-codec';
-import { encodePng } from 'pdf-codec';
+import { encodePng, loadMathFont } from 'pdf-codec';
+const mathMetricsAt = (sizePt: number) => loadMathFont().metricsAt(sizePt);
 import { DEFAULT_LAYOUT_FONT } from '../model/style';
 import { convertSpreadsheetToLayout } from './sheets';
 
@@ -46,7 +47,7 @@ function doc(sheets: ContentSheet[]): Extract<ContentDocument, { kind: 'spreadsh
 }
 
 function convertResult(sheets: ContentSheet[], measurer: TextMeasurer = fakeMeasurer(), signal?: AbortSignal) {
-  return convertSpreadsheetToLayout(doc(sheets), { measurer, signal });
+  return convertSpreadsheetToLayout(doc(sheets), { measurer, mathMetricsAt, signal });
 }
 
 // The LayoutDocument half alone, which is all every geometry/text/gridline assertion below cares about -- the formula half has its own dedicated describe block, and reads convertResult directly.

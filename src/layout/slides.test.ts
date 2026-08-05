@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 import type { ContentDocument, ContentImageBlock, ContentParagraph, ContentRun, ContentShape, ContentSlide, ContentTable, LayoutImage, LayoutItem, LayoutLink, LayoutRect, LayoutText } from 'document-schema.js';
 import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
 import type { TextMeasurer } from 'pdf-codec';
-import { encodePng } from 'pdf-codec';
+import { encodePng, loadMathFont } from 'pdf-codec';
+const mathMetricsAt = (sizePt: number) => loadMathFont().metricsAt(sizePt);
 import { convertPresentationToLayout } from './slides';
 
 const BLACK = { r: 0, g: 0, b: 0 };
@@ -50,7 +51,7 @@ function presentationDoc(slides: ContentSlide[]): Extract<ContentDocument, { kin
 }
 
 function convert(slides: ContentSlide[]) {
-  return convertPresentationToLayout(presentationDoc(slides), { measurer: fakeMeasurer() }).document;
+  return convertPresentationToLayout(presentationDoc(slides), { measurer: fakeMeasurer(), mathMetricsAt }).document;
 }
 
 function textItems(items: readonly LayoutItem[]): LayoutText[] {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { FontSubstitution } from 'pdf-codec';
-import { createStandardFontMeasurer, writePdf } from 'pdf-codec';
+import { createStandardFontMeasurer, loadMathFont, writePdf } from 'pdf-codec';
+const mathMetricsAt = (sizePt: number) => loadMathFont().metricsAt(sizePt);
 import { decodePackage as decodeOdfPackage } from 'odf.js';
 import { encodePackage as encodeOoxmlPackage } from 'ooxml.js';
 import { openDocx } from '../edit/docx/editor';
@@ -113,7 +114,7 @@ function referenceDocxPdf(bytes: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffe
   if (content.kind !== 'wordprocessing') {
     throw new Error('readDocxContent returned a non-wordprocessing ContentDocument');
   }
-  const { document: layout, formulas } = convertWordprocessingToLayout(content, { measurer: createStandardFontMeasurer() });
+  const { document: layout, formulas } = convertWordprocessingToLayout(content, { measurer: createStandardFontMeasurer(), mathMetricsAt });
   return writePdf(layout, { formulas });
 }
 
@@ -122,7 +123,7 @@ function referencePptxPdf(bytes: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffe
   if (content.kind !== 'presentation') {
     throw new Error('readPptxContent returned a non-presentation ContentDocument');
   }
-  const { document: layout, formulas } = convertPresentationToLayout(content, { measurer: createStandardFontMeasurer() });
+  const { document: layout, formulas } = convertPresentationToLayout(content, { measurer: createStandardFontMeasurer(), mathMetricsAt });
   return writePdf(layout, { formulas });
 }
 
@@ -131,7 +132,7 @@ function referenceOdtPdf(bytes: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer
   if (content.kind !== 'wordprocessing') {
     throw new Error('readOdtContent returned a non-wordprocessing ContentDocument');
   }
-  const { document: layout, formulas } = convertWordprocessingToLayout(content, { measurer: createStandardFontMeasurer() });
+  const { document: layout, formulas } = convertWordprocessingToLayout(content, { measurer: createStandardFontMeasurer(), mathMetricsAt });
   return writePdf(layout, { formulas });
 }
 
@@ -140,7 +141,7 @@ function referenceOdpPdf(bytes: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer
   if (content.kind !== 'presentation') {
     throw new Error('readOdpContent returned a non-presentation ContentDocument');
   }
-  const { document: layout, formulas } = convertPresentationToLayout(content, { measurer: createStandardFontMeasurer() });
+  const { document: layout, formulas } = convertPresentationToLayout(content, { measurer: createStandardFontMeasurer(), mathMetricsAt });
   return writePdf(layout, { formulas });
 }
 
@@ -149,7 +150,7 @@ function referenceOdsPdf(bytes: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer
   if (content.kind !== 'spreadsheet') {
     throw new Error('readOdsContent returned a non-spreadsheet ContentDocument');
   }
-  const { document: layout, formulas } = convertSpreadsheetToLayout(content, { measurer: createStandardFontMeasurer() });
+  const { document: layout, formulas } = convertSpreadsheetToLayout(content, { measurer: createStandardFontMeasurer(), mathMetricsAt });
   return writePdf(layout, { formulas });
 }
 

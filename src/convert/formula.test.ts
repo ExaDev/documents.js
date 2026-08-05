@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { writeFileSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+const mathMetricsAt = (sizePt: number) => loadMathFont().metricsAt(sizePt);
 import { unzlibSync } from 'fflate';
 import { buildXml as buildOdfXml, zipPackage } from 'odf.js';
 import { describe, expect, it } from 'vitest';
@@ -731,7 +732,7 @@ describe('odsToPdf: a formula anchored to a spreadsheet cell', () => {
   });
 
   it('reports the same positioned formula through convertSpreadsheetToLayout\'s own result, on the page it was laid out onto', () => {
-    const { document: layout, formulas } = convertSpreadsheetToLayout(spreadsheetContent(), { measurer: createFontMeasurer(createFontRegistry()) });
+    const { document: layout, formulas } = convertSpreadsheetToLayout(spreadsheetContent(), { measurer: createFontMeasurer(createFontRegistry()), mathMetricsAt });
     expect(layout.pages).toHaveLength(1);
     expect(formulas).toHaveLength(1);
     expect(formulas[0]!.pageIndex).toBe(0);
