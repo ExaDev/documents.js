@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/ExaDev/document-mcp/compare/v1.2.3...v1.3.0) (2026-08-05)
+
+
+### Features
+
+* accept an images map for resolving markdown images over the MCP ([f9c0de6](https://github.com/ExaDev/document-mcp/commit/f9c0de6569d6d4f4335d9bdef9eaab2a6d3bbbfe))
+
 ## [1.2.3](https://github.com/ExaDev/document-mcp/compare/v1.2.2...v1.2.3) (2026-08-05)
 
 ## [1.2.2](https://github.com/ExaDev/document-mcp/compare/v1.2.1...v1.2.2) (2026-08-05)
