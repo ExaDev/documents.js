@@ -1,6 +1,6 @@
 import { decodePackage as decodeOdfPackage } from 'odf.js';
 import { decodePackage as decodeOoxmlPackage } from 'ooxml.js';
-import type { ProvidedFont } from 'pdf-codec';
+import type { ProvidedFont } from 'document-schema.js';
 import type { FontSourcePackage } from '../fonts/registry';
 import { extractSourceFonts } from '../fonts/registry';
 import type { DocumentFormat } from './port';

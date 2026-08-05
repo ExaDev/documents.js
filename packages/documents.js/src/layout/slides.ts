@@ -4,7 +4,7 @@ import { layoutFormula } from '../mathml/layout';
 import type { Box } from '../model/geometry';
 import { flipY } from '../model/geometry';
 import { formulaOfBlock } from '../model/formula';
-import type { Point, PositionedFormula, TextMeasurer } from 'pdf-codec';
+import type { Point, PositionedFormula, TextMeasurer } from 'document-schema.js';
 import { loadMathFont, rotatePointAboutCenter, wrapRunsToWidth } from 'pdf-codec';
 import { alignmentOffsetPt, effectiveStyledRuns, estimateRowHeightPt, formulaSizePtForFrame, justifyLineGapsPt, lineNaturalHeightPt, registerImage, sumColumnWidthsPt } from './shared';
 

@@ -3,7 +3,7 @@ import { COLOR_BLACK, LAYOUT_FORMAT_VERSION } from 'document-schema.js';
 import { layoutFormula } from '../mathml/layout';
 import { flipY } from '../model/geometry';
 import { formulaOfBlock, formulaPlaceholderText } from '../model/formula';
-import type { PositionedFormula, TextMeasurer } from 'pdf-codec';
+import type { PositionedFormula, TextMeasurer } from 'document-schema.js';
 import { loadMathFont, wrapRunsToWidth } from 'pdf-codec';
 import { alignmentOffsetPt, effectiveStyledRuns, estimateRowHeightPt, formulaSizePtForFrame, justifyLineGapsPt, lineNaturalHeightPt, pushCellBorderLines, registerImage, sumColumnWidthsPt } from './shared';
 

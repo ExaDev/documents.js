@@ -4,7 +4,7 @@
 //
 // A face this extractor recovers is deliberately NOT filtered by what the document actually uses. Word and PowerPoint both subset an embedded font to the glyphs the document contained at save time, so a character this package synthesises rather than reads (a list bullet, sheets.ts's own ### column-overflow marker) can legitimately be absent from a face that is otherwise exactly right for every real character on the page. That is a per-character concern, resolved per character by pdf-codec's own writePdf: a cmap miss on an embedded face reports through onMissingGlyph and falls back for that one character, never failing the run. Dropping the whole face here because one synthesised glyph might be missing would trade a faithful render for a substituted one over a character the source document never contained.
 import type { Package, Relationship, XmlElement } from 'ooxml.js';
-import type { ProvidedFont } from 'pdf-codec';
+import type { ProvidedFont } from 'document-schema.js';
 import { attr, base64ToBytes, childrenWithTag, decodeEntities, resolveRelationships, rootElement } from 'ooxml.js';
 import { deobfuscateEmbeddedFont } from './obfuscation';
 

@@ -4,7 +4,7 @@
 //
 // A face's weight/style comes from loext:font-style/loext:font-weight on the svg:font-face-uri when present. When absent -- the OASIS-standard attribute set carries no per-source style/weight at all, so a strictly-conforming producer legitimately writes none -- this falls back to the font's OWN OS/2 fsSelection bits, which is the better signal regardless: the loext attributes are a producer's claim about a file, fsSelection is that file's own declaration about itself. Only the family-level declaration cannot be recovered from the bytes, and that comes from svg:font-family (or style:name) on the enclosing style:font-face.
 import type { Package, XmlElement } from 'odf.js';
-import type { ProvidedFont } from 'pdf-codec';
+import type { ProvidedFont } from 'document-schema.js';
 import { attrValue, base64ToBytes, childrenWithTag, decodeXmlText, rootElement } from 'odf.js';
 import { parseSfnt } from 'pdf-codec/sfnt';
 import { parseOs2 } from 'pdf-codec/font-tables';

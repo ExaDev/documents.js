@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { loadMathFont } from 'pdf-codec';
 import { layoutFormula } from './layout';
-import type { MathAssembledGlyphs, MathGlyphRun, MathRule, MathStroke } from './layout-types';
-import type { MathFontMetrics } from './metrics';
+import type { MathAssembledGlyphs, MathFontMetrics, MathGlyphRun, MathRule, MathStroke } from 'document-schema.js';
 import type { MathMlElement, MathMlNode } from './nodes';
 
 // Real font metrics throughout -- src/mathml itself has zero dependency on pdf-codec (see this module's own README/architecture note), but its OWN test suite reaching into the real embedded font for realistic, non-synthetic assertions is a pragmatic, test-only exception: MathFontMetrics is a plain interface (metrics.ts), and pdf-codec's loadMathFont() is simply the most realistic implementation available to verify layout.ts's own geometry against.
