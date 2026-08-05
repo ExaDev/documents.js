@@ -3,7 +3,7 @@ import type { ContentDocument, ContentVector } from 'document-schema.js';
 import type { Package, XmlElement } from 'odf.js';
 import { bytesToBase64, childrenWithTag, decodePackage, encodePackage, findChildElement, readDrawPageContent, rootElement } from 'odf.js';
 import { attr } from 'ooxml.js';
-import { encodePng } from 'pdf-codec';
+import { encodePng } from 'byte-codec';
 import { describe, expect, it } from 'vitest';
 import { readOdtContent } from '../../odf/odt/read';
 import { rotationsOf, VECTOR_FIXTURE, vectorDrawingBlock, withoutRotation } from '../../test-support/vectors';

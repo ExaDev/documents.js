@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { encodePng } from 'pdf-codec';
+import { encodePng } from 'byte-codec';
 import { DEFAULT_LAYOUT_FONT } from '../../model/style';
 import { createPdf } from './editor';
 

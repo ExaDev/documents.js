@@ -1,6 +1,6 @@
 import { bytesToBase64 } from 'ooxml.js';
 import type { LayoutImageAsset } from 'document-schema.js';
-import { crc32, decodePng, readJpegInfo } from 'pdf-codec';
+import { crc32, decodePng, readJpegInfo } from 'byte-codec';
 
 // Generic splice-by-reference removal for a plain (non-XmlNode) array -- the LayoutPage[]/LayoutItem[] counterpart to src/xml/edit.ts's own removeChild, which is typed specifically for XmlNode and can't be reused here: PdfEditor/PdfPage/PdfItem hold live references directly into plain, Zod-inferred LayoutDocument objects (readPdf's/createPdf's own return value), never an XmlElement tree.
 export function spliceOut<T>(container: T[], node: T): void {

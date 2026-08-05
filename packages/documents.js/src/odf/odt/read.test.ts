@@ -1,5 +1,5 @@
 import { decodePackage, zipPackage } from 'odf.js';
-import { encodePng } from 'pdf-codec';
+import { encodePng } from 'byte-codec';
 import { describe, expect, it } from 'vitest';
 import { readOdtContent } from './read';
 
