@@ -255,7 +255,7 @@ The package splits into two independent layers sharing one thin format-detection
 ```sh
 pnpm build         # tsdown -> dist/ (a library build for src/index.ts, and a separate ESM-only bin build for src/cli.ts)
 pnpm typecheck     # tsc --noEmit
-pnpm lint          # eslint . --max-warnings 0
+pnpm lint          # eslint . --fix --cache --max-warnings 0
 pnpm test          # vitest run --project unit
 pnpm test:watch    # vitest --project unit
 pnpm test:smoke    # tsdown, then vitest run --project smoke -- spawns the built dist/cli.js as a real child process
