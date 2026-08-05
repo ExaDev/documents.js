@@ -1,3 +1,10 @@
+## [1.3.2](https://github.com/ExaDev/document-mcp/compare/v1.3.1...v1.3.2) (2026-08-05)
+
+
+### Bug Fixes
+
+* **deps:** pin pdf-codec to ^2.0.0 to match documents.js transitive resolution ([f71128e](https://github.com/ExaDev/document-mcp/commit/f71128e108ac8a9157e9ea3665fd4ac5a5b75f89))
+
 ## [1.3.1](https://github.com/ExaDev/document-mcp/compare/v1.3.0...v1.3.1) (2026-08-05)
 
 # [1.3.0](https://github.com/ExaDev/document-mcp/compare/v1.2.3...v1.3.0) (2026-08-05)
