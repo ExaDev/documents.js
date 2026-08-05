@@ -19,7 +19,7 @@ import { richOdsBytes } from '../test-support/ods';
 import { minimalOdtBytes } from '../test-support/odt';
 import { decodeMarkdownText, encodeMarkdownText } from '../markdown/text';
 import { richMarkdownText } from '../test-support/markdown';
-import { docxToMarkdown, docxToOdt, markdownToDocx, markdownToOdt, odpToPptx, odsToXlsx, odtToDocx, odtToMarkdown, pptxToOdp, xlsxToOds } from './convert';
+import { docxToMarkdown, docxToOdt, docxToPptx, markdownToDocx, markdownToOdt, odpToPptx, odsToXlsx, odtToDocx, odtToMarkdown, pptxToDocx, pptxToOdp, xlsxToOds } from './convert';
 
 // The dedicated round-trip suite for the six PDF-bypassing cross-format bridges (convert.ts's own "Six cross-format bridges" section) -- exercised via both directions and both starting points for each of the three pairs (odt<->docx, odp<->pptx, ods<->xlsx), per the project's own explicit "we should also have .odt <-> .docx roundtrip tests and similar for the other types" requirement. Real-file, real-LibreOffice verification (independently-produced odt/odp/ods opened through the bridge and back into LibreOffice) is a separate, manual, non-CI-gated step -- see this repo's own README Fidelity section and test:corpus precedent for why that class of check deliberately never runs inside `pnpm test`.
 
@@ -767,5 +767,53 @@ describe('docx <-> markdown: docx -> markdown -> docx', () => {
     expect(styledRun?.strike).toBe(true);
     // Colour has no markdown source construct at all -- the docxToMarkdown hop drops it, matching writeMarkdown's own documented CommonMark-vocabulary narrowing.
     expect(styledRun?.color).toBeUndefined();
+  });
+});
+
+// Cross-variant content bridges: wordprocessing <-> presentation (docx <-> pptx, odt <-> odp). Unlike the same-variant bridges above (direct ContentDocument copy), these cross a variant boundary via a semantic transform (src/convert/variant-bridges.ts) -- a flow document's blocks are split into slides, and a deck's blocks are concatenated into a flow. Both directions are approximations, but the blocks themselves (paragraphs, run styling, tables, images) survive intact.
+describe('cross-variant bridge: docx <-> pptx', () => {
+  it('splits a docx with headings into slides, and concatenates back', () => {
+    const editor = createDocx();
+    editor.body.appendParagraph({ styleId: 'Heading1' }).appendRun({ text: 'First heading' });
+    editor.body.appendParagraph().appendRun({ text: 'Content under first heading' });
+    editor.body.appendParagraph({ styleId: 'Heading2' }).appendRun({ text: 'Second heading' });
+    editor.body.appendParagraph().appendRun({ text: 'Content under second heading' });
+    const docxBytes = editor.toBytes();
+
+    // docx -> pptx: two headings produce two slides, each carrying its own content.
+    const pptxBytes = docxToPptx(docxBytes);
+    const pptxContent = readPptxContent(decodeOoxmlPackage(pptxBytes));
+    if (pptxContent.kind !== "presentation") { throw new Error("expected a presentation ContentDocument"); }
+    expect(pptxContent.slides.length).toBe(2);
+    // Each slide has one shape with the accumulated blocks.
+    expect(pptxContent.slides[0]?.shapes[0]?.blocks.length).toBe(2);
+    expect(pptxContent.slides[1]?.shapes[0]?.blocks.length).toBe(2);
+
+    // pptx -> docx: all slides concatenated into one flow document.
+    const docxBack = pptxToDocx(pptxBytes);
+    const docxBackContent = docxContentOf(docxBack);
+    // 4 paragraphs survived (2 headings + 2 content) across 2 slides.
+    const paragraphs = docxBackContent.sections[0]?.blocks.filter((b) => b.kind === 'paragraph') ?? [];
+    expect(paragraphs.length).toBe(4);
+  });
+
+  it('a docx with no headings produces a single slide carrying everything', () => {
+    const editor = createDocx();
+    editor.body.appendParagraph().appendRun({ text: 'Just one paragraph' });
+    editor.body.appendParagraph().appendRun({ text: 'And another' });
+    const pptxBytes = docxToPptx(editor.toBytes());
+    const pptxContent = readPptxContent(decodeOoxmlPackage(pptxBytes));
+    if (pptxContent.kind !== "presentation") { throw new Error("expected a presentation ContentDocument"); }
+    expect(pptxContent.slides.length).toBe(1);
+    expect(pptxContent.slides[0]?.shapes[0]?.blocks.length).toBe(2);
+  });
+
+  it('the layout engine was never called (the bridge bypasses PDF entirely)', () => {
+    const editor = createDocx();
+    editor.body.appendParagraph().appendRun({ text: 'test' });
+    const engineSpy = vi.spyOn(engineModule, 'convertWordprocessingToLayout');
+    docxToPptx(editor.toBytes());
+    expect(engineSpy).not.toHaveBeenCalled();
+    engineSpy.mockRestore();
   });
 });

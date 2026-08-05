@@ -2,7 +2,7 @@ import { decodePackage as decodeOdfPackage } from 'odf.js';
 import { decodePackage as decodeOoxmlPackage, readXlsxContent } from 'ooxml.js';
 import { readPdf } from 'pdf-codec';
 import { describe, expect, it } from 'vitest';
-import { openDocx } from '../edit/docx/editor';
+import { createDocx, openDocx } from '../edit/docx/editor';
 import { openOdp } from '../edit/odp/editor';
 import { openOdt } from '../edit/odt/editor';
 import { openPptx } from '../edit/pptx/editor';
@@ -18,7 +18,7 @@ import { minimalOdtBytes } from '../test-support/odt';
 import { minimalDocxBytes } from '../test-support/docx';
 import { minimalPptxBytes } from '../test-support/pptx';
 import { DIRECT_EDGES } from './capability';
-import { docxToMarkdown, docxToOdt, docxToPdf, markdownToDocx, markdownToOdt, markdownToPdf, odfToPdf, odgToPdf, odpToPdf, odpToPptx, odsToPdf, odsToXlsx, odtToDocx, odtToMarkdown, odtToPdf, pdfToDocx, pdfToMarkdown, pdfToOdg, pdfToOdp, pdfToOds, pdfToOdt, pdfToPptx, pdfToXlsx, pptxToOdp, pptxToPdf, xlsxToOds, xlsxToPdf } from './convert';
+import { docxToMarkdown, docxToOdt, docxToPdf, docxToPptx, markdownToDocx, markdownToOdt, markdownToPdf, odfToPdf, odgToPdf, odpToPdf, odpToPptx, odpToOdt, odsToPdf, odsToXlsx, odtToDocx, odtToMarkdown, odtToOdp, odtToPdf, pdfToDocx, pdfToMarkdown, pdfToOdg, pdfToOdp, pdfToOds, pdfToOdt, pdfToPptx, pdfToXlsx, pptxToDocx, pptxToOdp, pptxToPdf, xlsxToOds, xlsxToPdf } from './convert';
 import type { DocumentFormat } from './port';
 
 // A single table-driven test matrix covering every (source, target) pair DIRECT_EDGES (capability.ts) currently registers -- the actual capability graph the DocumentConverter port exposes, not a hand-copied list that can silently drift out of sync with it. Each MatrixEntry names the exact edge(s) (source/target format pairs) its own round trip exercises; the "matrix declares every registered edge" describe block below derives the expected edge set directly from DIRECT_EDGES and fails loudly if a registered edge has no entry here, or if an entry claims an edge that no longer exists -- so a future capability-graph change (a new bridge, a newly composed pair) cannot silently go uncovered.
@@ -360,6 +360,37 @@ const MATRIX_ENTRIES: readonly MatrixEntry[] = [
       expect(raw).toContain('/Subtype /Type0');
       expect(raw).toContain('/Encoding /Identity-H');
       expect(raw).toContain('/Subtype /CIDFontType0C');
+    },
+  },
+  {
+    name: 'docx <-> pptx (cross-variant bridge)',
+    edges: [
+      { source: 'docx', target: 'pptx' },
+      { source: 'pptx', target: 'docx' },
+    ],
+    // A cross-variant bridge: wordprocessing -> presentation splits the document at heading boundaries into slides. The blocks themselves survive intact; slide boundaries are a heuristic approximation. This checks the round trip runs without error and the text survives.
+    run: () => {
+      const editor = createDocx();
+      editor.body.appendParagraph({ styleId: 'Heading1' }).appendRun({ text: 'Slide title' });
+      editor.body.appendParagraph().appendRun({ text: 'Slide content' });
+      const pptxBytes = docxToPptx(editor.toBytes());
+      const docxBack = pptxToDocx(pptxBytes);
+      const text = openDocx(docxBack).paragraphs().map((p) => p.text).join(' ');
+      expect(text).toContain('Slide title');
+      expect(text).toContain('Slide content');
+    },
+  },
+  {
+    name: 'odt <-> odp (cross-variant bridge)',
+    edges: [
+      { source: 'odt', target: 'odp' },
+      { source: 'odp', target: 'odt' },
+    ],
+    run: () => {
+      const odpBytes = odtToOdp(minimalOdtBytes());
+      expect(odpBytes.length).toBeGreaterThan(0);
+      const odtBack = odpToOdt(odpBytes);
+      expect(odtBack.length).toBeGreaterThan(0);
     },
   },
 ];

@@ -31,6 +31,7 @@ import { odbTablesToSpreadsheetDocument } from '../odb/spreadsheet';
 import { readDocxContent } from '../ooxml/docx/read';
 import { readPptxContent } from '../ooxml/pptx/read';
 import { readMarkdownContent } from '../markdown/read';
+import { wordprocessingToPresentation, presentationToWordprocessing } from './variant-bridges';
 import { buildMarkdownText } from '../markdown/write';
 import { decodeMarkdownText, encodeMarkdownText } from '../markdown/text';
 import type { OmmlDiagnostic } from '../omml/shared';
@@ -396,6 +397,57 @@ export function odtToMarkdown(bytes: Uint8Array<ArrayBuffer>, options?: Document
   options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content });
   const text = buildMarkdownText(content);
   return encodeMarkdownText(text);
+}
+
+// Four cross-variant content bridges (wordprocessing <-> presentation), two pairs: docx <-> pptx and odt <-> odp. Unlike the same-variant bridges above (odt <-> docx etc.), which are a direct read -> build copy because both sides share one ContentDocument variant, these cross a VARIANT BOUNDARY via a real semantic transform (src/convert/variant-bridges.ts): a flow document's blocks are split into slides at heading/page-break boundaries (wordprocessing -> presentation), or every slide's shapes' blocks are concatenated into one flow section (presentation -> wordprocessing). Both directions are APPROXIMATIONS -- a flow document has no real slide boundaries, and a deck has no flow -- but the blocks themselves (paragraphs, tables, images, list membership, run styling) survive intact through both transforms. Bypasses PDF entirely: no layout engine, no font measurement, no geometry-based reconstruction.
+export function docxToPptx(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBridgeOptions): Uint8Array<ArrayBuffer> {
+  throwIfAborted(options?.signal);
+  const content = readDocxContent(decodePackage(bytes));
+  if (content.kind !== 'wordprocessing') {
+    throw new Error('readDocxContent returned a non-wordprocessing ContentDocument');
+  }
+  const presentation = wordprocessingToPresentation(content);
+  throwIfAborted(options?.signal);
+  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content: presentation });
+  return encodePackage(buildPptxPackage(presentation));
+}
+
+export function pptxToDocx(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBridgeOptions): Uint8Array<ArrayBuffer> {
+  throwIfAborted(options?.signal);
+  const content = readPptxContent(decodePackage(bytes));
+  if (content.kind !== 'presentation') {
+    throw new Error('readPptxContent returned a non-presentation ContentDocument');
+  }
+  const wordprocessing = presentationToWordprocessing(content);
+  throwIfAborted(options?.signal);
+  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content: wordprocessing });
+  return encodePackage(buildDocxPackage(wordprocessing, { onMathDiagnostic: options?.onMathDiagnostic }));
+}
+
+export function odtToOdp(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBridgeOptions): Uint8Array<ArrayBuffer> {
+  throwIfAborted(options?.signal);
+  const pkg = decodePackage(bytes); // odf.js's own decodePackage -- odt is an ODF package.
+  const content = readOdtContent(pkg);
+  if (content.kind !== 'wordprocessing') {
+    throw new Error('readOdtContent returned a non-wordprocessing ContentDocument');
+  }
+  const presentation = wordprocessingToPresentation(content);
+  throwIfAborted(options?.signal);
+  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content: presentation });
+  return encodePackage(buildOdpPackage(presentation));
+}
+
+export function odpToOdt(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBridgeOptions): Uint8Array<ArrayBuffer> {
+  throwIfAborted(options?.signal);
+  const pkg = decodePackage(bytes); // odf.js's own decodePackage -- odp is an ODF package.
+  const content = readOdpContent(pkg);
+  if (content.kind !== 'presentation') {
+    throw new Error('readOdpContent returned a non-presentation ContentDocument');
+  }
+  const wordprocessing = presentationToWordprocessing(content);
+  throwIfAborted(options?.signal);
+  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content: wordprocessing });
+  return encodePackage(buildOdtPackage(wordprocessing));
 }
 
 // xlsx bytes <-> PDF bytes: xlsx has no layout engine of its own -- there is no convertSpreadsheetToLayout-equivalent xlsx entry point, only ods's (see capability.ts's own FORMAT_CAPABILITIES.xlsx) -- so these two compose the existing ods<->xlsx bridge with the existing ods<->pdf layout-engine pair rather than duplicating one: xlsxToPdf is xlsxToOds followed by odsToPdf; pdfToXlsx is pdfToOds followed by odsToXlsx. Each hop's own bytes are decoded and rebuilt in full -- there is no shortcut reusing an already-parsed ContentDocument across the two calls -- but this is still a genuine, direct, single-call conversion pair from a caller's own point of view, not a composition they have to chain themselves; capability.ts's DIRECT_EDGES lists both as real edges for exactly that reason. Every existing fidelity caveat this composition inherits (the ods<->xlsx bridge's own percentage/currency/time/formula-dialect gaps; PDF -> ods's own "recovers what was printed, not what was entered" limit) is already documented at its own source and is not restated here. The `onDocument` callback reports only the LAST hop's own package, not the intermediate one: for xlsxToPdf that is odsToPdf's package (content + layout, exactly the shape every other X-to-PDF conversion above already reports); for pdfToXlsx that is odsToXlsx's package (content only, layout undefined, exactly the shape every PDF-bypassing bridge already reports) -- the final hop's own package is the one that actually reflects what was written to the returned bytes.
