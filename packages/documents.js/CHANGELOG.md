@@ -1,3 +1,10 @@
+# [1.90.0](https://github.com/ExaDev/documents.js/compare/v1.89.0...v1.90.0) (2026-08-05)
+
+
+### Features
+
+* **mathml:** render msqrt/mroot through the font's radical construction ([8a3fbb4](https://github.com/ExaDev/documents.js/commit/8a3fbb4607d3eedac44550edbd91384665c1908c))
+
 # [1.89.0](https://github.com/ExaDev/documents.js/compare/v1.88.0...v1.89.0) (2026-08-05)
 
 
