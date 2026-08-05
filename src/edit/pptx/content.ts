@@ -67,7 +67,7 @@ function appendShape(slide: PptxSlide, shape: ContentShape): void {
       rotationDeg: shape.rotationDeg,
       table: { rows: onlyBlock.rows.length, columns: onlyBlock.columnWidthsPt.length, columnWidthsPt: onlyBlock.columnWidthsPt },
     });
-    populatePptxTable(table, onlyBlock);
+    populatePptxTable(table, onlyBlock, (url) => slide.registerHyperlink(url));
     return;
   }
   const paragraphs: DrawingParagraphInit[] = [];
@@ -75,7 +75,7 @@ function appendShape(slide: PptxSlide, shape: ContentShape): void {
     if (block.kind !== 'paragraph') {
       continue; // a nested table or image mixed alongside other blocks inside a single text shape is out of scope -- neither PDF-reconstructed shapes nor a real pptx/odp slide shape mix kinds this way (see reconstruct.ts and the odp<->pptx table-in-shape fixture in bridges.test.ts)
     }
-    paragraphs.push(paragraphInitFromBlock(block));
+    paragraphs.push(paragraphInitFromBlock(block, (url) => slide.registerHyperlink(url)));
   }
   const textBox = slide.addTextBox({ frame: shape.frame, text: '' });
   if (shape.rotationDeg !== undefined) {
@@ -93,7 +93,7 @@ function appendShape(slide: PptxSlide, shape: ContentShape): void {
 }
 
 // Threads a ContentParagraph's full decoration surface -- runs, alignment, and the spacing/indent fields DrawingParagraphInit now carries -- into a DrawingParagraphInit. Used by both appendShape (a text-box shape's own paragraphs) and populateCellParagraphs (a table cell's own paragraphs), so the two stay in sync rather than each repeating the field list.
-function paragraphInitFromBlock(block: ContentParagraph): DrawingParagraphInit {
+function paragraphInitFromBlock(block: ContentParagraph, resolveHyperlinkRId?: (url: string) => string): DrawingParagraphInit {
   return {
     alignment: block.alignment,
     spacingBeforePt: block.spacingBeforePt,
@@ -101,23 +101,23 @@ function paragraphInitFromBlock(block: ContentParagraph): DrawingParagraphInit {
     lineSpacing: block.lineSpacing,
     indentLeftPt: block.indentLeftPt,
     indentFirstLinePt: block.indentFirstLinePt,
-    runs: block.runs.map((run) => ({ text: run.text, bold: run.bold, italic: run.italic, underline: run.underline, strike: run.strike, fontFamily: run.fontFamily, sizePt: run.sizePt, color: run.color })),
+    runs: block.runs.map((run) => ({ text: run.text, bold: run.bold, italic: run.italic, underline: run.underline, strike: run.strike, fontFamily: run.fontFamily, sizePt: run.sizePt, color: run.color, hyperlinkRId: run.hyperlink !== undefined && resolveHyperlinkRId !== undefined ? resolveHyperlinkRId(run.hyperlink) : undefined })),
   };
 }
 
-function populateCellParagraphs(cell: PptxTableCell, blocks: readonly ContentBlock[]): void {
+function populateCellParagraphs(cell: PptxTableCell, blocks: readonly ContentBlock[], resolveHyperlinkRId?: (url: string) => string): void {
   const paragraphs: DrawingParagraphInit[] = [];
   for (const block of blocks) {
     if (block.kind !== 'paragraph') {
       continue; // a nested table or image inside a table cell is out of scope, mirroring appendShape's own identical text-shape scope narrowing above
     }
-    paragraphs.push(paragraphInitFromBlock(block));
+    paragraphs.push(paragraphInitFromBlock(block, resolveHyperlinkRId));
   }
   cell.setParagraphs(paragraphs);
 }
 
 // Unlike docx's gridSpan-collapses-the-row model, ooxml.js's own readTable (typed/pptx/read.ts) always reads exactly `columns` cells per row regardless of merges -- a covered position is a real a:tc marked hMerge/vMerge="1" (see table.ts's own PptxTableCell), never an omitted or replaced element -- so ContentTable.rows[].cells already has one entry per grid column, in grid-column order, for a pptx-sourced table. That means colIndex === cellIndex directly, with no running-offset bookkeeping needed the way docx's own gridSpan-aware writer (src/edit/docx/content.ts) or ODF's own covered-table-cell writer (src/edit/odt/content.ts) each require.
-function populatePptxTable(table: PptxTable, block: ContentTable): void {
+function populatePptxTable(table: PptxTable, block: ContentTable, resolveHyperlinkRId?: (url: string) => string): void {
   const verticalMerges = new Map<number, number>();
   block.rows.forEach((row, rowIndex) => {
     let horizontalCoverRemaining = 0;
@@ -154,7 +154,7 @@ function populatePptxTable(table: PptxTable, block: ContentTable): void {
       if (cell.borders !== undefined) {
         tableCell.borders = cell.borders;
       }
-      populateCellParagraphs(tableCell, cell.blocks);
+      populateCellParagraphs(tableCell, cell.blocks, resolveHyperlinkRId);
     });
   });
 }

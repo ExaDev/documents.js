@@ -273,6 +273,7 @@ export interface DrawingRunInit {
   readonly fontFamily?: string;
   readonly sizePt?: number;
   readonly color?: LayoutColor;
+  readonly hyperlinkRId?: string;
 }
 
 export interface DrawingParagraphInit {
@@ -323,6 +324,9 @@ function buildDrawingRun(init: DrawingRunInit): XmlElement {
   }
   if (init.fontFamily !== undefined) {
     rPrChildren.push(el('a:latin', { typeface: init.fontFamily }));
+  }
+  if (init.hyperlinkRId !== undefined) {
+    rPrChildren.push(el('a:hlinkClick', { 'r:id': init.hyperlinkRId }));
   }
   const rPr = Object.keys(rPrAttrs).length > 0 || rPrChildren.length > 0 ? [el('a:rPr', rPrAttrs, rPrChildren)] : [];
   const tAttrs: Record<string, string> = needsSpacePreserve(init.text) ? { 'xml:space': 'preserve' } : {};
