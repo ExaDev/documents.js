@@ -1,3 +1,10 @@
+# [2.4.0](https://github.com/ExaDev/odf.js/compare/v2.3.9...v2.4.0) (2026-08-05)
+
+
+### Features
+
+* read text:a hyperlink elements into ContentRun.hyperlink ([6eac555](https://github.com/ExaDev/odf.js/commit/6eac555e5558003d3bdf66f1c967402c5d74c06f))
+
 ## [2.3.9](https://github.com/ExaDev/odf.js/compare/v2.3.8...v2.3.9) (2026-08-04)
 
 ## [2.3.8](https://github.com/ExaDev/odf.js/compare/v2.3.7...v2.3.8) (2026-08-04)
