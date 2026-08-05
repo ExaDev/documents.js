@@ -1,3 +1,12 @@
+## [1.0.2](https://github.com/ExaDev/byte-codec/compare/v1.0.1...v1.0.2) (2026-08-05)
+
+
+### Bug Fixes
+
+* remove unused imports in rename-dts script ([f5f358c](https://github.com/ExaDev/byte-codec/commit/f5f358c130687bfa366ad2f6508ddc02db183f28))
+* rename hashed dts files in build step for tsdown 0.12 compat ([5a055bd](https://github.com/ExaDev/byte-codec/commit/5a055bdf7a834d9876a096a3ad3d69c3d8e3e813))
+* upgrade tsdown to 0.22 for clean declaration filenames ([3e5c3e4](https://github.com/ExaDev/byte-codec/commit/3e5c3e4913e4a17c756b4d9a152630633c3ae8a5))
+
 ## [1.0.1](https://github.com/ExaDev/byte-codec/compare/v1.0.0...v1.0.1) (2026-08-05)
 
 
