@@ -225,6 +225,11 @@ export class PptxSlide {
     pkg.parts[notesPartPath] = { kind: 'xml', nodes: [buildMinimalNotesSlide(value)] };
   }
 
+  // Registers an external hyperlink relationship against this slide's own .rels part and returns the allocated r:id, for buildDrawingRun's a:hlinkClick@r:id. Exposes the slide's relationship capability without exposing the full private context.
+  registerHyperlink(url: string): string {
+    return addRelationship(this.context.pkg, this.context.slidePartPath, { type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink', target: url, targetMode: 'External' });
+  }
+
   remove(): void {
     removeChild(this.container, this.live());
     this.removed = true;
