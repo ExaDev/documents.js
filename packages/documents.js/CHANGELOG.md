@@ -1,3 +1,11 @@
+## [1.92.2](https://github.com/ExaDev/documents.js/compare/v1.92.1...v1.92.2) (2026-08-05)
+
+
+### Bug Fixes
+
+* remove .npmrc — use npx in hooks instead ([b868586](https://github.com/ExaDev/documents.js/commit/b868586da202f1d9df997b1f83a28cc168efb523))
+* use npx in husky hooks instead of pnpm exec + .npmrc ([5144f8d](https://github.com/ExaDev/documents.js/commit/5144f8dc83f9c1039cd44eacc1cdc40664e7d438))
+
 ## [1.92.1](https://github.com/ExaDev/documents.js/compare/v1.92.0...v1.92.1) (2026-08-05)
 
 # [1.92.0](https://github.com/ExaDev/documents.js/compare/v1.91.8...v1.92.0) (2026-08-05)
