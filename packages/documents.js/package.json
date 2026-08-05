@@ -73,7 +73,7 @@
   "dependencies": {
     "document-schema.js": "^2.3.4",
     "fflate": "^0.8.3",
-    "markdown-codec": "^1.1.7",
+    "markdown-codec": "^1.1.8",
     "odf.js": "^2.4.0",
     "ooxml.js": "^2.8.1",
     "pdf-codec": "^1.11.8",
