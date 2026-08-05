@@ -1,4 +1,4 @@
-import { readdirSync, copyFileSync, renameSync, existsSync } from 'node:fs';
+import { readdirSync, copyFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const dist = 'dist';
