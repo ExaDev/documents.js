@@ -3,8 +3,7 @@ import { COLOR_BLACK, LAYOUT_FORMAT_VERSION } from 'document-schema.js';
 import { layoutFormula } from '../mathml/layout';
 import { flipY } from '../model/geometry';
 import { formulaOfBlock, formulaPlaceholderText } from '../model/formula';
-import type { PositionedFormula, TextMeasurer } from 'document-schema.js';
-import { loadMathFont } from 'pdf-codec';
+import type { MathFontMetrics, PositionedFormula, TextMeasurer } from 'document-schema.js';
 import { wrapRunsToWidth } from './text-layout';
 import { alignmentOffsetPt, effectiveStyledRuns, estimateRowHeightPt, formulaSizePtForFrame, justifyLineGapsPt, lineNaturalHeightPt, pushCellBorderLines, registerImage, sumColumnWidthsPt } from './shared';
 
@@ -12,6 +11,7 @@ import { alignmentOffsetPt, effectiveStyledRuns, estimateRowHeightPt, formulaSiz
 
 export interface EngineLayoutOptions {
   readonly measurer: TextMeasurer;
+  readonly mathMetricsAt: (sizePt: number) => MathFontMetrics;
 }
 
 export interface WordprocessingLayoutResult {
@@ -208,15 +208,15 @@ function layoutFormulaFallback(block: ContentEmbeddedObjectBlock, section: Conte
   layoutParagraphFlow({ kind: 'paragraph', runs: [{ text: formulaPlaceholderText(formula) }] }, section, pages, state, contentLeftXDown, contentWidthPt, contentBottomYDown, measurer);
 }
 
-function layoutFormulaFlow(block: ContentEmbeddedObjectBlock, section: ContentSection, pages: LayoutPage[], state: FlowState, contentLeftXDown: number, contentWidthPt: number, contentBottomYDown: number, measurer: TextMeasurer, formulas: PositionedFormula[]): void {
+function layoutFormulaFlow(block: ContentEmbeddedObjectBlock, section: ContentSection, pages: LayoutPage[], state: FlowState, contentLeftXDown: number, contentWidthPt: number, contentBottomYDown: number, measurer: TextMeasurer, mathMetricsAt: (sizePt: number) => MathFontMetrics, formulas: PositionedFormula[]): void {
   const formula = formulaOfBlock(block);
   if (formula === undefined || formula.mathml.length === 0) {
     layoutFormulaFallback(block, section, pages, state, contentLeftXDown, contentWidthPt, contentBottomYDown, measurer);
     return;
   }
 
-  const sizePt = formulaSizePtForFrame(formula.mathml, block.frame);
-  const metrics = loadMathFont().metricsAt(sizePt);
+  const sizePt = formulaSizePtForFrame(formula.mathml, block.frame, mathMetricsAt);
+  const metrics = mathMetricsAt(sizePt);
   const { box } = layoutFormula(formula.mathml, { metrics, sizePt, color: COLOR_BLACK });
 
   ensureRoom(state, section, pages, box.heightPt, contentBottomYDown);
@@ -244,7 +244,7 @@ function paginateSection(section: ContentSection, measurer: TextMeasurer, images
     } else if (block.kind === 'image') {
       layoutImageFlow(block, section, pages, state, contentLeftXDown, contentBottomYDown, images);
     } else if (block.kind === 'embeddedObject' && block.objectKind === 'formula') {
-      layoutFormulaFlow(block, section, pages, state, contentLeftXDown, contentWidthPt, contentBottomYDown, measurer, formulas);
+      layoutFormulaFlow(block, section, pages, state, contentLeftXDown, contentWidthPt, contentBottomYDown, measurer, options.mathMetricsAt, formulas);
     }
     // Every other 'embeddedObject' objectKind (wordprocessing/presentation/spreadsheet/drawing) is not produced by any reader this package depends on yet (document-schema.js's forward-looking schema addition -- see edit/docx/content.ts's own note on the same gap), so there is nothing to lay out for those here today.
   }

@@ -7,7 +7,8 @@ import { createPptx } from '../edit/pptx/editor';
 import { readDocxContent } from '../ooxml/docx/read';
 import { readPptxContent } from '../ooxml/pptx/read';
 import type { TextMeasurer } from 'pdf-codec';
-import { createStandardFontMeasurer, encodePng } from 'pdf-codec';
+import { createStandardFontMeasurer, encodePng, loadMathFont } from 'pdf-codec';
+const mathMetricsAt = (sizePt: number) => loadMathFont().metricsAt(sizePt);
 import { convertWordprocessingToLayout } from './engine';
 import { convertPresentationToLayout } from './slides';
 
@@ -77,14 +78,14 @@ describe('sourcePath propagation: docx flow (engine.ts)', () => {
   it('copies a run\'s sourcePath onto the LayoutText it produces', () => {
     const { document: layout } = convertWordprocessingToLayout(
       wordprocessingDoc([section([paragraph([run('Hi', { sizePt: 10, sourcePath: 'sections[0].blocks[0].runs[0]' })])])]),
-      { measurer: fakeMeasurer() },
+      { measurer: fakeMeasurer(), mathMetricsAt },
     );
     const [text] = textItems(layout.pages[0]!.items);
     expect(text?.sourcePath).toBe('sections[0].blocks[0].runs[0]');
   });
 
   it('leaves sourcePath undefined for a run with none, rather than fabricating one', () => {
-    const { document: layout } = convertWordprocessingToLayout(wordprocessingDoc([section([paragraph([run('Hi', { sizePt: 10 })])])]), { measurer: fakeMeasurer() });
+    const { document: layout } = convertWordprocessingToLayout(wordprocessingDoc([section([paragraph([run('Hi', { sizePt: 10 })])])]), { measurer: fakeMeasurer(), mathMetricsAt });
     const [text] = textItems(layout.pages[0]!.items);
     expect(text?.sourcePath).toBeUndefined();
   });
@@ -95,7 +96,7 @@ describe('sourcePath propagation: docx flow (engine.ts)', () => {
       wordprocessingDoc([
         section([paragraph([run('Hel', { sizePt: 10, sourcePath: 'sections[0].blocks[0].runs[0]' }), run('lo', { sizePt: 10, sourcePath: 'sections[0].blocks[0].runs[1]' })])]),
       ]),
-      { measurer: fakeMeasurer() },
+      { measurer: fakeMeasurer(), mathMetricsAt },
     );
     const texts = textItems(layout.pages[0]!.items);
     expect(texts.map((t) => t.text)).toEqual(['Hel', 'lo']);
@@ -106,7 +107,7 @@ describe('sourcePath propagation: docx flow (engine.ts)', () => {
     // A single, hugely oversized word from one run: text-layout.ts's emergency character split forces it across several pages (see engine.test.ts's identical "Huge" scenario) -- every resulting LayoutText fragment must still trace back to this one source run.
     const { document: layout } = convertWordprocessingToLayout(
       wordprocessingDoc([section([paragraph([run('Huge', { sizePt: 1000, sourcePath: 'sections[0].blocks[0].runs[0]' })])])]),
-      { measurer: fakeMeasurer() },
+      { measurer: fakeMeasurer(), mathMetricsAt },
     );
     const texts = layout.pages.flatMap((p) => textItems(p.items));
     expect(texts.length).toBeGreaterThan(1); // confirms the word really was split across multiple fragments/pages
@@ -117,14 +118,14 @@ describe('sourcePath propagation: docx flow (engine.ts)', () => {
   it('copies a hyperlinked run\'s sourcePath onto its LayoutLink as well as its LayoutText', () => {
     const { document: layout } = convertWordprocessingToLayout(
       wordprocessingDoc([section([paragraph([run('link', { sizePt: 10, hyperlink: 'https://example.com', sourcePath: 'sections[0].blocks[0].runs[0]' })])])]),
-      { measurer: fakeMeasurer() },
+      { measurer: fakeMeasurer(), mathMetricsAt },
     );
     const [link] = linkItems(layout.pages[0]!.items);
     expect(link?.sourcePath).toBe('sections[0].blocks[0].runs[0]');
   });
 
   it('copies an image block\'s sourcePath onto its LayoutImage', () => {
-    const { document: layout } = convertWordprocessingToLayout(wordprocessingDoc([section([tinyPngBlock({ sourcePath: 'sections[0].blocks[0]' })])]), { measurer: fakeMeasurer() });
+    const { document: layout } = convertWordprocessingToLayout(wordprocessingDoc([section([tinyPngBlock({ sourcePath: 'sections[0].blocks[0]' })])]), { measurer: fakeMeasurer(), mathMetricsAt });
     const [image] = imageItems(layout.pages[0]!.items);
     expect(image?.sourcePath).toBe('sections[0].blocks[0]');
   });
@@ -136,7 +137,7 @@ describe('sourcePath propagation: docx flow (engine.ts)', () => {
       sourcePath: 'sections[0].blocks[0]',
       rows: [{ heightPt: 20, cells: [{ blocks: [], background: { r: 1, g: 0, b: 0 } }] }],
     };
-    const { document: layout } = convertWordprocessingToLayout(wordprocessingDoc([section([table])]), { measurer: fakeMeasurer() });
+    const { document: layout } = convertWordprocessingToLayout(wordprocessingDoc([section([table])]), { measurer: fakeMeasurer(), mathMetricsAt });
     const [rect] = rectItems(layout.pages[0]!.items);
     expect(rect?.sourcePath).toBe('sections[0].blocks[0]');
   });
@@ -148,7 +149,7 @@ describe('sourcePath propagation: docx flow (engine.ts)', () => {
       sourcePath: 'sections[0].blocks[0]',
       rows: [{ heightPt: 20, cells: [{ blocks: [paragraph([run('Cell', { sizePt: 10, sourcePath: 'sections[0].blocks[0].rows[0].cells[0].blocks[0].runs[0]' })])] }] }],
     };
-    const { document: layout } = convertWordprocessingToLayout(wordprocessingDoc([section([table])]), { measurer: fakeMeasurer() });
+    const { document: layout } = convertWordprocessingToLayout(wordprocessingDoc([section([table])]), { measurer: fakeMeasurer(), mathMetricsAt });
     const [text] = textItems(layout.pages[0]!.items);
     expect(text?.sourcePath).toBe('sections[0].blocks[0].rows[0].cells[0].blocks[0].runs[0]');
   });
@@ -157,14 +158,14 @@ describe('sourcePath propagation: docx flow (engine.ts)', () => {
 describe('sourcePath propagation: pptx direct placement (slides.ts)', () => {
   it('copies a run\'s sourcePath onto the LayoutText it produces', () => {
     const s = shape({ blocks: [paragraph([run('Hi', { sizePt: 10, sourcePath: 'slides[0].shapes[0].blocks[0].runs[0]' })])] });
-    const { document: layout } = convertPresentationToLayout(presentationDoc([slide([s])]), { measurer: fakeMeasurer() });
+    const { document: layout } = convertPresentationToLayout(presentationDoc([slide([s])]), { measurer: fakeMeasurer(), mathMetricsAt });
     const [text] = textItems(layout.pages[0]!.items);
     expect(text?.sourcePath).toBe('slides[0].shapes[0].blocks[0].runs[0]');
   });
 
   it('copies an image block\'s sourcePath onto its LayoutImage', () => {
     const s = shape({ blocks: [tinyPngBlock({ sourcePath: 'slides[0].shapes[0].blocks[0]' })] });
-    const { document: layout } = convertPresentationToLayout(presentationDoc([slide([s])]), { measurer: fakeMeasurer() });
+    const { document: layout } = convertPresentationToLayout(presentationDoc([slide([s])]), { measurer: fakeMeasurer(), mathMetricsAt });
     const [image] = imageItems(layout.pages[0]!.items);
     expect(image?.sourcePath).toBe('slides[0].shapes[0].blocks[0]');
   });
@@ -177,7 +178,7 @@ describe('sourcePath propagation: pptx direct placement (slides.ts)', () => {
       rows: [{ heightPt: 20, cells: [{ blocks: [], background: { r: 0, g: 1, b: 0 } }] }],
     };
     const s = shape({ blocks: [table] });
-    const { document: layout } = convertPresentationToLayout(presentationDoc([slide([s])]), { measurer: fakeMeasurer() });
+    const { document: layout } = convertPresentationToLayout(presentationDoc([slide([s])]), { measurer: fakeMeasurer(), mathMetricsAt });
     const [rect] = rectItems(layout.pages[0]!.items);
     expect(rect?.sourcePath).toBe('slides[0].shapes[0].blocks[0]');
   });
@@ -196,7 +197,7 @@ describe('sourcePath propagation: docx end-to-end (createDocx -> readDocxContent
     if (content.kind !== 'wordprocessing') {
       throw new Error('readDocxContent returned a non-wordprocessing ContentDocument');
     }
-    const { document: layout } = convertWordprocessingToLayout(content, { measurer: createStandardFontMeasurer() });
+    const { document: layout } = convertWordprocessingToLayout(content, { measurer: createStandardFontMeasurer(), mathMetricsAt });
 
     const texts = layout.pages.flatMap((p) => textItems(p.items));
     expect(texts.map((t) => t.text)).toEqual(['Bold', 'Red', 'Second']);
@@ -218,7 +219,7 @@ describe('sourcePath propagation: pptx end-to-end (createPptx -> readPptxContent
     if (content.kind !== 'presentation') {
       throw new Error('readPptxContent returned a non-presentation ContentDocument');
     }
-    const { document: layout } = convertPresentationToLayout(content, { measurer: createStandardFontMeasurer() });
+    const { document: layout } = convertPresentationToLayout(content, { measurer: createStandardFontMeasurer(), mathMetricsAt });
 
     const firstSlideTexts = textItems(layout.pages[0]!.items);
     const secondSlideTexts = textItems(layout.pages[1]!.items);

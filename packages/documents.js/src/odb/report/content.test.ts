@@ -1,7 +1,8 @@
 import type { ContentDocument } from 'document-schema.js';
 import { ContentDocumentSchema } from 'document-schema.js';
 import { readOdbInventory } from 'odf.js';
-import { createFontMeasurer, createFontRegistry, writePdf } from 'pdf-codec';
+import { createFontMeasurer, createFontRegistry, loadMathFont, writePdf } from 'pdf-codec';
+const mathMetricsAt = (sizePt: number) => loadMathFont().metricsAt(sizePt);
 import { describe, expect, it } from 'vitest';
 import { convertWordprocessingToLayout } from '../../layout/engine';
 import { PAGE_SIZE_A4 } from '../../model/geometry';
@@ -185,7 +186,7 @@ describe('the real SalesByRegion report rendered end to end from form-and-report
     }
     // The README's claim that a rendered report needs no odbToPdf of its own -- being an ordinary document of a variant this package already lays out -- proven rather than asserted.
     expect(() => ContentDocumentSchema.parse(document)).not.toThrow();
-    const { document: layout } = convertWordprocessingToLayout(document, { measurer: createFontMeasurer(createFontRegistry()) });
+    const { document: layout } = convertWordprocessingToLayout(document, { measurer: createFontMeasurer(createFontRegistry()), mathMetricsAt });
     expect(layout.pages.length).toBeGreaterThan(0);
     expect(writePdf(layout).length).toBeGreaterThan(0);
   });

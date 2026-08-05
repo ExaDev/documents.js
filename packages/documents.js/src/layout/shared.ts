@@ -1,11 +1,11 @@
 import { base64ToBytes } from 'ooxml.js';
-import type { Box, ContentBorder, ContentCellBorders, ContentImageBlock, ContentRun, ContentTableRow, LayoutImageAsset, LayoutItem, MathMlNode } from 'document-schema.js';
+import type { Box, ContentBorder, ContentCellBorders, ContentImageBlock, ContentRun, ContentTableRow, LayoutImageAsset, LayoutItem, MathFontMetrics, MathMlNode } from 'document-schema.js';
 import { COLOR_BLACK } from '../model/color';
 import { layoutFormula } from '../mathml/layout';
 import type { Alignment, LayoutFont } from '../model/style';
 import { DEFAULT_LAYOUT_FONT } from '../model/style';
 import type { StyledRun, TextMeasurer, WrappedLine } from 'document-schema.js';
-import { crc32, decodePng, loadMathFont, readJpegInfo } from 'pdf-codec';
+import { crc32, decodePng, readJpegInfo } from 'pdf-codec';
 import { wrapRunsToWidth } from './text-layout';
 
 // Layout logic genuinely shared between src/layout/slides.ts (pptx, direct placement) and src/layout/engine.ts (docx, flow/pagination): run styling, line-height measurement, alignment, and image-asset registration have no format-specific knowledge of their own -- duplicating them between the two engines would just be two copies to keep in sync.
@@ -16,8 +16,8 @@ export const NOMINAL_TEXT_SIZE_PT = 18;
 // An embedded formula has no surrounding run to inherit a font size from the way ordinary text does, so every layout engine in this package derives one from the embedded object's own declared frame (ContentEmbeddedObject.frame -- the ORIGINAL formula's own rendered size/position in the source document) via a two-pass fit, not a one-shot height heuristic: lay out once at a reference size to measure the formula's natural width and height, then rescale by the frame's own declared width and height so the laid-out box fits both, whichever is the binding constraint. layoutFormula's output is linear in sizePt (every measurement flows through toPt = designUnits / unitsPerEm * sizePt), so a single rescale reaches the fit with no iteration -- the old height/2 heuristic this replaced would overflow a genuinely stacked formula (a fraction inside a radical is taller than twice its base font size), rendering it larger than the frame the source document drew it at. Lives here rather than in any one engine because all three that render a formula (engine.ts's flow placement, slides.ts's shape placement, sheets.ts's cell-anchored placement) need the identical fit and there is nothing format-specific about it.
 const MIN_FORMULA_SIZE_PT = 8;
 const REFERENCE_FORMULA_SIZE_PT = 12;
-export function formulaSizePtForFrame(mathml: readonly MathMlNode[], frame: Box): number {
-  const referenceMetrics = loadMathFont().metricsAt(REFERENCE_FORMULA_SIZE_PT);
+export function formulaSizePtForFrame(mathml: readonly MathMlNode[], frame: Box, mathMetricsAt: (sizePt: number) => MathFontMetrics): number {
+  const referenceMetrics = mathMetricsAt(REFERENCE_FORMULA_SIZE_PT);
   const { box } = layoutFormula(mathml, { metrics: referenceMetrics, sizePt: REFERENCE_FORMULA_SIZE_PT, color: COLOR_BLACK });
   // A docx OMML equation records no geometry of its own, so equationFrame synthesises widthPt 0 -- there is nothing to fit a width against in that case, so height alone drives the size (the old heuristic's intent), via an infinite widthScale that never wins the min.
   const heightScale = frame.heightPt / box.heightPt;

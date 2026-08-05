@@ -25,8 +25,7 @@ import type { Alignment } from '../model/style';
 import { DEFAULT_LAYOUT_FONT } from '../model/style';
 import { flipY } from '../model/geometry';
 import { throwIfAborted } from '../ports/abort';
-import type { PositionedFormula, StyledFragment, StyledRun, TextMeasurer } from 'document-schema.js';
-import { loadMathFont } from 'pdf-codec';
+import type { MathFontMetrics, PositionedFormula, StyledFragment, StyledRun, TextMeasurer } from 'document-schema.js';
 import { wrapRunsToWidth } from './text-layout';
 import { alignmentOffsetPt, formulaSizePtForFrame, justifyLineGapsPt, lineNaturalHeightPt, pushCellBorderLines, registerImage, sumColumnWidthsPt, toStyledRuns } from './shared';
 
@@ -38,6 +37,7 @@ import { alignmentOffsetPt, formulaSizePtForFrame, justifyLineGapsPt, lineNatura
 
 export interface SheetsLayoutOptions {
   readonly measurer: TextMeasurer;
+  readonly mathMetricsAt: (sizePt: number) => MathFontMetrics;
   // The only layout engine in this package that needs one: a 50k-cell sheet's own cell-emission loop can run long enough to be worth cancelling mid-page, unlike a docx/pptx document's own, much smaller, page/slide count.
   readonly signal?: AbortSignal;
 }
@@ -515,6 +515,7 @@ function renderAnchoredFormulas(
   hiddenColumnIndices: ReadonlySet<number>,
   hiddenRowIndices: ReadonlySet<number>,
   out: PositionedFormula[],
+  mathMetricsAt: (sizePt: number) => MathFontMetrics,
 ): void {
   for (const anchored of formulas) {
     const columnPosition = columnAxis.positionByIndex.get(anchored.anchorColumn);
@@ -522,8 +523,8 @@ function renderAnchoredFormulas(
     if (columnPosition === undefined || rowPosition === undefined || hiddenColumnIndices.has(anchored.anchorColumn) || hiddenRowIndices.has(anchored.anchorRow)) {
       continue;
     }
-    const sizePt = formulaSizePtForFrame(anchored.formula.mathml, anchored.frame);
-    const metrics = loadMathFont().metricsAt(sizePt);
+    const sizePt = formulaSizePtForFrame(anchored.formula.mathml, anchored.frame, mathMetricsAt);
+    const metrics = mathMetricsAt(sizePt);
     const { box } = layoutFormula(anchored.formula.mathml, { metrics, sizePt, color: COLOR_BLACK });
     const boxYDown: Box = {
       xPt: gridLeftXPt + columnAxis.offsetsPt[columnPosition]! + anchored.offsetXPt,
@@ -590,7 +591,7 @@ function rangeIndices(start: number, end: number): number[] {
   return indices;
 }
 
-function convertSheetToPages(sheet: ContentSheet, measurer: TextMeasurer, signal: AbortSignal | undefined, out: LayoutPage[], formulasOut: PositionedFormula[], images: Record<string, LayoutImageAsset>): void {
+function convertSheetToPages(sheet: ContentSheet, measurer: TextMeasurer, signal: AbortSignal | undefined, out: LayoutPage[], formulasOut: PositionedFormula[], images: Record<string, LayoutImageAsset>, mathMetricsAt: (sizePt: number) => MathFontMetrics): void {
   throwIfAborted(signal);
   const formulas = anchoredFormulas(sheet);
   const range = resolvePrintRange(sheet, formulas);
@@ -704,7 +705,7 @@ function convertSheetToPages(sheet: ContentSheet, measurer: TextMeasurer, signal
     items.push(...textItems);
 
     // pageIndex is this page's own index in the whole LayoutDocument, so it is read BEFORE the push -- `out` is shared across every sheet in the document, exactly as PositionedFormula.pageIndex requires.
-    renderAnchoredFormulas(formulas, columnAxis, rowAxis, gridLeftXPt, gridTopYDownPt, pageSize.heightPt, out.length, hiddenColumnIndices, hiddenRowIndices, formulasOut);
+    renderAnchoredFormulas(formulas, columnAxis, rowAxis, gridLeftXPt, gridTopYDownPt, pageSize.heightPt, out.length, hiddenColumnIndices, hiddenRowIndices, formulasOut, mathMetricsAt);
     // Images are LayoutItems (unlike formulas), so they push straight into this page's own `items` rather than a separate out-array -- appended after cell text so a floating image paints over the grid, matching how a real spreadsheet layers a floating draw:frame above the cells it overlaps.
     renderAnchoredImages(sheet.images, columnAxis, rowAxis, gridLeftXPt, gridTopYDownPt, pageSize.heightPt, hiddenColumnIndices, hiddenRowIndices, items, images);
     out.push({ widthPt: pageSize.widthPt, heightPt: pageSize.heightPt, items });
@@ -719,7 +720,7 @@ export function convertSpreadsheetToLayout(doc: SpreadsheetContentDocument, opti
   const formulas: PositionedFormula[] = [];
   const images: Record<string, LayoutImageAsset> = {};
   for (const sheet of doc.sheets) {
-    convertSheetToPages(sheet, options.measurer, options.signal, pages, formulas, images);
+    convertSheetToPages(sheet, options.measurer, options.signal, pages, formulas, images, options.mathMetricsAt);
   }
   return { document: { formatVersion: LAYOUT_FORMAT_VERSION, metadata: doc.metadata, pages, images }, formulas };
 }

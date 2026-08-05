@@ -38,6 +38,9 @@ import type { MarkdownImageResolver } from 'markdown-codec';
 import type { PdfDiagnosticSink, WinAnsiSubstitution } from 'pdf-codec';
 import type { ProvidedFont } from 'document-schema.js';
 import { createFontMeasurer, createFontRegistry, loadMathFont, readPdf, writePdf } from 'pdf-codec';
+
+// A thin factory over pdf-codec's cached loadMathFont singleton, injected into each layout engine's options as `mathMetricsAt` so the layout engine never imports loadMathFont itself (the last direct pdf-codec runtime call the formula-placing engines had). The layout engine receives `(sizePt) => MathFontMetrics` and calls it at whatever size it needs, with no knowledge of where the metrics came from.
+const mathMetricsAt = (sizePt: number) => loadMathFont().metricsAt(sizePt);
 import type { DocumentFontRegistryOptions } from '../fonts/registry';
 import { createDocumentFontRegistry, extractSourceFonts } from '../fonts/registry';
 import { throwIfAborted } from '../ports/abort';
@@ -66,7 +69,7 @@ export function docxToPdf(bytes: Uint8Array<ArrayBuffer>, options?: DocumentToPd
   }
   // One registry, used for BOTH halves of the pipeline: the measurer that decides where lines break and the writer that emits the glyphs. Sharing it is load-bearing rather than tidy -- measuring against Helvetica's metrics and then rendering through a real embedded Carlito face would wrap text at positions that do not match what was drawn.
   const fonts = createDocumentFontRegistry({ kind: 'docx', package: pkg }, options);
-  const { document: layout, formulas } = convertWordprocessingToLayout(content, { measurer: createFontMeasurer(fonts) });
+  const { document: layout, formulas } = convertWordprocessingToLayout(content, { measurer: createFontMeasurer(fonts), mathMetricsAt });
   options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content, layout });
   return writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution, formulas, fonts });
 }
@@ -81,7 +84,7 @@ export function odtToPdf(bytes: Uint8Array<ArrayBuffer>, options?: DocumentToPdf
   }
   // ODF declares its embedded faces in office:font-face-decls rather than a relationship-linked font table, and stores them unobfuscated -- extractOdfEmbeddedFonts (reached through the 'odf' discriminant) is the only part of this that differs from docxToPdf's own call above.
   const fonts = createDocumentFontRegistry({ kind: 'odf', package: pkg }, options);
-  const { document: layout, formulas } = convertWordprocessingToLayout(content, { measurer: createFontMeasurer(fonts) });
+  const { document: layout, formulas } = convertWordprocessingToLayout(content, { measurer: createFontMeasurer(fonts), mathMetricsAt });
   options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content, layout });
   return writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution, formulas, fonts });
 }
@@ -94,7 +97,7 @@ export function pptxToPdf(bytes: Uint8Array<ArrayBuffer>, options?: DocumentToPd
   }
   // pptx declares its embedded faces in p:embeddedFontLst on the presentation part, not a docx-style font table -- one discriminant, one extractor, everything else identical to docxToPdf's own registry above.
   const fonts = createDocumentFontRegistry({ kind: 'pptx', package: pkg }, options);
-  const { document: layout, formulas } = convertPresentationToLayout(content, { measurer: createFontMeasurer(fonts) });
+  const { document: layout, formulas } = convertPresentationToLayout(content, { measurer: createFontMeasurer(fonts), mathMetricsAt });
   options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content, layout });
   // Threaded through for the same reason odpToPdf's is, even though readPptxContent produces no formula block today: a formula lives inside the ContentDocument now, so whether any given conversion can carry one is a property of its READER, not of its writePdf call -- discarding the engine's own formula output here would silently drop one the moment ooxml.js's reader learns to produce an OMML-sourced formula block.
   return writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution, formulas, fonts });
@@ -109,7 +112,7 @@ export function odpToPdf(bytes: Uint8Array<ArrayBuffer>, options?: DocumentToPdf
     throw new Error('readOdpContent returned a non-presentation ContentDocument');
   }
   const fonts = createDocumentFontRegistry({ kind: 'odf', package: pkg }, options);
-  const { document: layout, formulas } = convertPresentationToLayout(content, { measurer: createFontMeasurer(fonts) });
+  const { document: layout, formulas } = convertPresentationToLayout(content, { measurer: createFontMeasurer(fonts), mathMetricsAt });
   options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content, layout });
   return writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution, formulas, fonts });
 }
@@ -123,7 +126,7 @@ export function odsToPdf(bytes: Uint8Array<ArrayBuffer>, options?: DocumentToPdf
     throw new Error('readOdsContent returned a non-spreadsheet ContentDocument');
   }
   const fonts = createDocumentFontRegistry({ kind: 'odf', package: pkg }, options);
-  const { document: layout, formulas } = convertSpreadsheetToLayout(content, { measurer: createFontMeasurer(fonts), signal: options?.signal });
+  const { document: layout, formulas } = convertSpreadsheetToLayout(content, { measurer: createFontMeasurer(fonts), mathMetricsAt, signal: options?.signal });
   options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content, layout });
   return writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution, formulas, fonts });
 }
@@ -153,7 +156,7 @@ export function markdownToPdf(bytes: Uint8Array<ArrayBuffer>, options?: Document
   }
   // createFontRegistry directly rather than createDocumentFontRegistry: markdown is text, not a package, so there is no source document to extract embedded faces FROM -- but options.fonts is still real, usable input here (a caller rendering markdown in their own brand typeface), so it is wired rather than accepted and dropped.
   const fonts = createFontRegistry({ fonts: options?.fonts, onSubstitution: options?.onFontSubstitution });
-  const { document: layout, formulas } = convertWordprocessingToLayout(content, { measurer: createFontMeasurer(fonts) });
+  const { document: layout, formulas } = convertWordprocessingToLayout(content, { measurer: createFontMeasurer(fonts), mathMetricsAt });
   options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content, layout });
   return writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution, formulas, fonts });
 }
@@ -511,7 +514,7 @@ export function odmToPdf(bytes: Uint8Array<ArrayBuffer>, options?: OdmToPdfOptio
     sections: combinedSections,
   };
   const fonts = createFontRegistry({ sourceFonts, fonts: options?.fonts, onSubstitution: options?.onFontSubstitution });
-  const { document: layout, formulas } = convertWordprocessingToLayout(content, { measurer: createFontMeasurer(fonts) });
+  const { document: layout, formulas } = convertWordprocessingToLayout(content, { measurer: createFontMeasurer(fonts), mathMetricsAt });
   return writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution, formulas, fonts });
 }
 
@@ -570,7 +573,7 @@ export function odbReportToPdf(content: ContentDocument, options?: DocumentToPdf
     throw new Error('odbReportToPdf requires a wordprocessing ContentDocument');
   }
   const fonts = createFontRegistry({ fonts: options?.fonts, onSubstitution: options?.onFontSubstitution });
-  const { document: layout, formulas } = convertWordprocessingToLayout(content, { measurer: createFontMeasurer(fonts) });
+  const { document: layout, formulas } = convertWordprocessingToLayout(content, { measurer: createFontMeasurer(fonts), mathMetricsAt });
   options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content, layout });
   return writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution, formulas, fonts });
 }

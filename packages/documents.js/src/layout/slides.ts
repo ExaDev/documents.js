@@ -4,8 +4,7 @@ import { layoutFormula } from '../mathml/layout';
 import type { Box } from '../model/geometry';
 import { flipY } from '../model/geometry';
 import { formulaOfBlock } from '../model/formula';
-import type { Point, PositionedFormula, TextMeasurer } from 'document-schema.js';
-import { loadMathFont } from 'pdf-codec';
+import type { MathFontMetrics, Point, PositionedFormula, TextMeasurer } from 'document-schema.js';
 import { wrapRunsToWidth } from './text-layout';
 import { rotatePointAboutCenter } from '../model/geometry';
 import { alignmentOffsetPt, effectiveStyledRuns, estimateRowHeightPt, formulaSizePtForFrame, justifyLineGapsPt, lineNaturalHeightPt, registerImage, sumColumnWidthsPt } from './shared';
@@ -14,6 +13,7 @@ import { alignmentOffsetPt, effectiveStyledRuns, estimateRowHeightPt, formulaSiz
 
 export interface SlidesLayoutOptions {
   readonly measurer: TextMeasurer;
+  readonly mathMetricsAt: (sizePt: number) => MathFontMetrics;
 }
 
 export interface PresentationLayoutResult {
@@ -28,6 +28,7 @@ type PresentationContentDocument = Extract<ContentDocument, { kind: 'presentatio
 export interface ShapeFormulaContext {
   readonly pageIndex: number;
   readonly positioned: PositionedFormula[];
+  readonly mathMetricsAt: (sizePt: number) => MathFontMetrics;
 }
 
 interface ShapePlacement {
@@ -158,8 +159,8 @@ function layoutShapeFormula(block: ContentEmbeddedObjectBlock, flippedFrame: Box
   if (formula === undefined || formula.mathml.length === 0) {
     return;
   }
-  const sizePt = formulaSizePtForFrame(formula.mathml, block.frame);
-  const metrics = loadMathFont().metricsAt(sizePt);
+  const sizePt = formulaSizePtForFrame(formula.mathml, block.frame, formulaContext.mathMetricsAt);
+  const metrics = formulaContext.mathMetricsAt(sizePt);
   const { box } = layoutFormula(formula.mathml, { metrics, sizePt, color: COLOR_BLACK });
   formulaContext.positioned.push({ pageIndex: formulaContext.pageIndex, xPt: flippedFrame.xPt, yPt: flippedFrame.yPt, box });
 }
@@ -191,9 +192,9 @@ export function convertShape(shape: ContentShape, slideHeightPt: number, measure
   }
 }
 
-function convertSlide(slide: ContentSlide, slideIndex: number, measurer: TextMeasurer, images: Record<string, LayoutImageAsset>, positioned: PositionedFormula[]): LayoutPage {
+function convertSlide(slide: ContentSlide, slideIndex: number, measurer: TextMeasurer, images: Record<string, LayoutImageAsset>, positioned: PositionedFormula[], mathMetricsAt: (sizePt: number) => MathFontMetrics): LayoutPage {
   const items: LayoutItem[] = [];
-  const formulaContext: ShapeFormulaContext = { pageIndex: slideIndex, positioned };
+  const formulaContext: ShapeFormulaContext = { pageIndex: slideIndex, positioned, mathMetricsAt };
   for (const shape of slide.shapes) {
     convertShape(shape, slide.size.heightPt, measurer, images, items, formulaContext);
   }
@@ -204,6 +205,6 @@ function convertSlide(slide: ContentSlide, slideIndex: number, measurer: TextMea
 export function convertPresentationToLayout(doc: PresentationContentDocument, options: SlidesLayoutOptions): PresentationLayoutResult {
   const images: Record<string, LayoutImageAsset> = {};
   const formulas: PositionedFormula[] = [];
-  const pages = doc.slides.map((slide, slideIndex) => convertSlide(slide, slideIndex, options.measurer, images, formulas));
+  const pages = doc.slides.map((slide, slideIndex) => convertSlide(slide, slideIndex, options.measurer, images, formulas, options.mathMetricsAt));
   return { document: { formatVersion: LAYOUT_FORMAT_VERSION, metadata: doc.metadata, pages, images }, formulas };
 }
