@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { encodePng, PdfPasswordRequiredError, readPdf } from 'pdf-codec';
+import { encodePng } from 'byte-codec';
+import { PdfPasswordRequiredError, readPdf } from 'pdf-codec';
 import { DEFAULT_LAYOUT_FONT } from '../../model/style';
 import { encryptedPdf, minimalClassicXrefPdf, twoPageMultiTextPdf } from '../../test-support/pdf';
 import { createPdf, openPdf } from './editor';

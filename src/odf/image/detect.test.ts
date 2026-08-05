@@ -1,6 +1,6 @@
 import type { Package } from 'odf.js';
 import { bytesToBase64, el } from 'odf.js';
-import { encodePng } from 'pdf-codec';
+import { encodePng } from 'byte-codec';
 import { describe, expect, it } from 'vitest';
 import { collectImageFrames } from './detect';
 

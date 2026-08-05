@@ -1,6 +1,6 @@
 import type { Package, XmlElement } from 'odf.js';
 import { attrValue, bytesToBase64, childrenWithTag, decodeOdfText, elementsWithTag, readManifest, rootElement, validateManifest } from 'odf.js';
-import { encodePng } from 'pdf-codec';
+import { encodePng } from 'byte-codec';
 import { describe, expect, it } from 'vitest';
 import { createOdt } from './editor';
 import { buildParagraph, OdtParagraph } from './paragraph';
