@@ -357,12 +357,24 @@ function readRawCell(tc: XmlElement, context: DocxStyleContext, rels: ReadonlyMa
   };
 }
 
+// w:trHeight@w:val is in twips (ECMA-376 17.4.81); absent when the row has no explicit height, in which case heightPt stays undefined and the consumer falls back to its own default -- matching how readPageSize/readMargins leave pageSize/margins untouched rather than synthesising a value.
+function readRowHeightPt(tr: XmlElement): number | undefined {
+  const trPr = childrenWithTag(tr, 'w:trPr')[0];
+  if (trPr === undefined) {
+    return undefined;
+  }
+  const trHeight = childrenWithTag(trPr, 'w:trHeight')[0];
+  const val = trHeight === undefined ? undefined : attr(trHeight, 'w:val');
+  return val === undefined ? undefined : twipsToPt(Number(val));
+}
+
 // Column indices account for preceding cells' own gridSpan (a spanned cell occupies multiple grid columns); a vMerge-restart anchor's rowSpan is computed by scanning subsequent rows for a "continue" cell at the same column index, matching the anchor's own gridSpan -- ECMA-376 doesn't store the span count directly the way pptx's a:tc/@rowSpan does, so it must be derived.
 function readTable(tbl: XmlElement, context: DocxStyleContext, rels: ReadonlyMap<string, Relationship>, pkg: Package): ContentTable {
   const tblGrid = childrenWithTag(tbl, 'w:tblGrid')[0];
   const columnWidthsPt = tblGrid === undefined ? [] : childrenWithTag(tblGrid, 'w:gridCol').map((col) => twipsToPt(Number(attr(col, 'w:w') ?? '0')));
 
-  const rawRows: RawCell[][] = childrenWithTag(tbl, 'w:tr').map((tr) => childrenWithTag(tr, 'w:tc').map((tc) => readRawCell(tc, context, rels, pkg)));
+  const trs = childrenWithTag(tbl, 'w:tr');
+  const rawRows: RawCell[][] = trs.map((tr) => childrenWithTag(tr, 'w:tc').map((tc) => readRawCell(tc, context, rels, pkg)));
   const rowColumnIndices: number[][] = rawRows.map((row) => {
     const indices: number[] = [];
     let col = 0;
@@ -374,6 +386,7 @@ function readTable(tbl: XmlElement, context: DocxStyleContext, rels: ReadonlyMap
   });
 
   const rows = rawRows.map((row, rowIndex) => ({
+    heightPt: readRowHeightPt(trs[rowIndex]!),
     cells: row.map((cell, cellIndex): ContentTableCell => {
       if (cell.isVMergeContinuation) {
         return { blocks: [] };

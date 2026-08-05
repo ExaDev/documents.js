@@ -297,6 +297,22 @@ describe('readDocx: tables', () => {
     expect(table.rows[3]?.cells[0]?.blocks).toEqual([]);
     expect(asParagraph(table.rows[1]?.cells[1]?.blocks[0]).runs[0]?.text).toBe('Right1');
   });
+
+  it('reads w:trPr/w:trHeight@w:val (twips) into the row\'s own heightPt', () => {
+    const tableEl = el('w:tbl', {}, [
+      el('w:tblGrid', {}, [el('w:gridCol', { 'w:w': '2880' })]),
+      el('w:tr', {}, [
+        el('w:trPr', {}, [el('w:trHeight', { 'w:val': '560' })]),
+        el('w:tc', {}, [el('w:p', {}, [el('w:r', {}, [el('w:t', {}, [txt('cell')])])])]),
+      ]),
+    ]);
+    const body = el('w:body', {}, [tableEl, el('w:sectPr', {}, [el('w:pgSz', { 'w:w': '12240', 'w:h': '15840' })])]);
+    const document = el('w:document', {}, [body]);
+    const pkg: Package = { parts: { 'word/document.xml': { kind: 'xml', nodes: [document] } } };
+    const doc = readDocx(pkg);
+    const table = asTable(doc.sections[0]?.blocks[0]);
+    expect(table.rows[0]?.heightPt).toBeCloseTo(28, 5); // 560 twips / 20 = 28 pt
+  });
 });
 
 describe('readDocx: sourcePath', () => {
