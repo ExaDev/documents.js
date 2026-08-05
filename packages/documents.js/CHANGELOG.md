@@ -1,3 +1,10 @@
+## [1.87.5](https://github.com/ExaDev/documents.js/compare/v1.87.4...v1.87.5) (2026-08-05)
+
+
+### Bug Fixes
+
+* **ods:** stamp real default width/height on repeatColumns/repeatRows range ([ef4842a](https://github.com/ExaDev/documents.js/commit/ef4842a5fce7f580551f88b5ddf97f53766f6e80))
+
 ## [1.87.4](https://github.com/ExaDev/documents.js/compare/v1.87.3...v1.87.4) (2026-08-05)
 
 ## [1.87.3](https://github.com/ExaDev/documents.js/compare/v1.87.2...v1.87.3) (2026-08-05)
