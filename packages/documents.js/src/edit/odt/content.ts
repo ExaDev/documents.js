@@ -175,6 +175,9 @@ export function populateParagraph(paragraph: OdtParagraph, block: ContentParagra
     if (run.color !== undefined) {
       odtRun.color = run.color;
     }
+    if (run.hyperlink !== undefined) {
+      paragraph.wrapLastRunInHyperlink(run.hyperlink);
+    }
   }
 }
 

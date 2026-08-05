@@ -60,6 +60,17 @@ export class OdtParagraph {
     return new OdtRun(node.children, span, this.pkg);
   }
 
+  // Wraps the paragraph's last text:span child in a text:a xlink:href element, turning a just-appended run into a hyperlink. Called AFTER appendRun + all property setters, since the span's own style-name (bold/italic/etc.) must be set before wrapping -- the text:a is a parent container, not a style property. This is the write-side counterpart to odf.js's collectRuns text:a branch (which reads xlink:href back into ContentRun.hyperlink).
+  wrapLastRunInHyperlink(url: string): void {
+    const node = this.live();
+    const lastChildIndex = node.children.length - 1;
+    const lastChild = node.children[lastChildIndex];
+    if (lastChild?.type !== 'element' || lastChild?.tag !== 'text:span') {
+      return;
+    }
+    node.children[lastChildIndex] = el('text:a', { 'xlink:href': url, 'xlink:type': 'simple' }, [lastChild]);
+  }
+
   // A tab character inside a text node is not the same as a real tab-stop advance -- ODF represents one as its own text:tab element (see src/xml/odf-text.ts's encodeOdfText), never as a literal tab byte in text-node content.
   appendTab(): void {
     this.live().children.push(el('text:tab'));
