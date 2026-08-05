@@ -1,3 +1,16 @@
+# [1.91.0](https://github.com/ExaDev/documents.js/compare/v1.90.0...v1.91.0) (2026-08-05)
+
+
+### Bug Fixes
+
+* **mathml:** align the radical glyph's shelf with the vinculum rule ([c17972a](https://github.com/ExaDev/documents.js/commit/c17972a4d54d8285bc3f4f9ebc588c6609117594))
+* **ods:** stamp defaults on repeat-range exterior gap-fills too ([70ebddb](https://github.com/ExaDev/documents.js/commit/70ebddb8a23a14337b7c2a5ad1b0733f116c8bab))
+
+
+### Features
+
+* thread a MarkdownImageResolver through setDocumentMetadata's rebuild ([7be5199](https://github.com/ExaDev/documents.js/commit/7be51994fd91ff0b5401dae53d46243186be62c5))
+
 # [1.90.0](https://github.com/ExaDev/documents.js/compare/v1.89.0...v1.90.0) (2026-08-05)
 
 
