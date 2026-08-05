@@ -12,8 +12,8 @@ importers:
         specifier: ^15.0.0
         version: 15.0.0
       documents.js:
-        specifier: ^1.92.0
-        version: 1.92.0
+        specifier: ^1.92.1
+        version: 1.92.1
       ink:
         specifier: ^7.1.1
         version: 7.1.1(@types/react@19.2.18)(react@19.2.8)
@@ -1075,6 +1075,9 @@ packages:
     engines: {node: ^6 || ^7 || ^8 || ^9 || ^10 || ^11 || ^12 || >=13.7}
     hasBin: true
 
+  byte-codec@1.0.2:
+    resolution: {integrity: sha512-ut7LjyhoVEBs4gHJAZlOT1TEo9IDiSIHHDML6WWfITeHd3cs/5W5VbQR/3lSl4TUtpTy5ZqbCO++2GGjq0hltQ==}
+
   cac@7.0.0:
     resolution: {integrity: sha512-tixWYgm5ZoOD+3g6UTea91eow5z6AAHaho3g0V9CNSNb45gM8SmflpAc+GRd1InC4AqN/07Unrgp56Y94N9hJQ==}
     engines: {node: '>=20.19.0'}
@@ -1288,8 +1291,8 @@ packages:
     resolution: {integrity: sha512-NLBNkYUq830XCKr49ClkdxvYHXra9B5hx9o7G6ZL4hMulprzj4jdEXg4hyv1WoVrKiAzJCpI4pDgQ0eamgYx8g==}
     engines: {node: '>=20'}
 
-  documents.js@1.92.0:
-    resolution: {integrity: sha512-PhLRWmDDWAWGVi2h4bJqr7Jw/AUcJuanXBQWS4pGSaOEc8EGSJJ/bzE9oXSoUikKjFrhMIif26OqElJ1jNMdQg==}
+  documents.js@1.92.1:
+    resolution: {integrity: sha512-va9tjz5oe1vOMFuo/P8W32PfYV+JRciWN7FE00HaP/poupXAc+kCeqkcTHmvmgLBgUREFVoNVoavDD9mduCJag==}
     engines: {node: '>=20'}
 
   dot-prop@5.3.0:
@@ -4008,6 +4011,10 @@ snapshots:
       node-releases: 2.0.51
       update-browserslist-db: 1.2.3(browserslist@4.28.7)
 
+  byte-codec@1.0.2:
+    dependencies:
+      fflate: 0.8.3
+
   cac@7.0.0: {}
 
   callsites@3.1.0: {}
@@ -4203,8 +4210,9 @@ snapshots:
     dependencies:
       zod: 4.4.3
 
-  documents.js@1.92.0:
+  documents.js@1.92.1:
     dependencies:
+      byte-codec: 1.0.2
       document-schema.js: 2.4.0
       fflate: 0.8.3
       markdown-codec: 1.1.10
