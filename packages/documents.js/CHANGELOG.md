@@ -1,3 +1,10 @@
+# [1.84.0](https://github.com/ExaDev/documents.js/compare/v1.83.0...v1.84.0) (2026-08-05)
+
+
+### Features
+
+* carry run.strike (strikethrough) through the docx/odt bridge ([7fb6e32](https://github.com/ExaDev/documents.js/commit/7fb6e322336d32a73a6c8a33e2026f4573d2147f))
+
 # [1.83.0](https://github.com/ExaDev/documents.js/compare/v1.82.0...v1.83.0) (2026-08-04)
 
 
