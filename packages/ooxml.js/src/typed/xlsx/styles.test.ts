@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import type { Package } from '../../model/package';
 import { el } from '../../xml/fragment';
 import { parsePackage } from '../../package-io/read';
-import { CellFormatTable, DEFAULT_CELL_FORMAT_INDEX, GENERAL_NUM_FMT_ID, readCellFormatCodes } from './styles';
+import { CellFormatTable, DEFAULT_CELL_FORMAT_INDEX, GENERAL_NUM_FMT_ID, readCellFormatCodes, readCellStyles } from './styles';
 
 const FIXTURES_DIR = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');
 
@@ -108,5 +108,134 @@ describe('CellFormatTable: the write-side interner, mirroring SharedStringTable'
     expect(table.intern({ kind: 'builtin', id: 4 })).toBe(1);
     expect(table.intern({ kind: 'custom', code: '4' })).toBe(2);
     expect(table.cellFormats()).toEqual([GENERAL_NUM_FMT_ID, 4, 164]);
+  });
+});
+
+// --- readCellStyles: the richer per-cellXfs entry carrying decoration alongside the number format ---
+
+describe('readCellStyles: per-cellXfs background/borders/alignment (synthetic style sheets)', () => {
+  it('resolves a solid fill, per-edge borders, and inline alignment off the one <xf> a cell\'s s attribute indexes', () => {
+    const pkg = stylesPackage(
+      el('styleSheet', {}, [
+        el('fills', {}, [
+          el('fill', {}, [el('patternFill', { patternType: 'none' })]),
+          el('fill', {}, [el('patternFill', { patternType: 'gray125' })]),
+          el('fill', {}, [el('patternFill', { patternType: 'solid' }, [el('fgColor', { rgb: 'FFFF0000' })])]),
+        ]),
+        el('borders', {}, [
+          el('border', {}, [el('left'), el('right'), el('top'), el('bottom'), el('diagonal')]),
+          el('border', {}, [
+            el('left', { style: 'thin' }, [el('color', { rgb: 'FF000000' })]),
+            el('right', { style: 'mediumDashed' }, [el('color', { rgb: 'FF0000FF' })]),
+            el('top', { style: 'double' }, [el('color', { rgb: 'FF00FF00' })]),
+            el('bottom'),
+            el('diagonal'),
+          ]),
+        ]),
+        el('cellXfs', {}, [
+          el('xf', { numFmtId: '0' }),
+          el('xf', { numFmtId: '0', fillId: '2', borderId: '1' }, [el('alignment', { horizontal: 'right', vertical: 'top' })]),
+        ]),
+      ]),
+    );
+    const entries = readCellStyles(pkg);
+    expect(entries).toHaveLength(2);
+    expect(entries[0]).toEqual({ numberFormatCode: 'General' });
+    expect(entries[1]).toEqual({
+      numberFormatCode: 'General',
+      background: { r: 1, g: 0, b: 0 },
+      // thin solid left at 0.75pt, mediumDashed right at 1.5pt with style 'dashed', double top at 0.75pt with style 'double'
+      borders: {
+        left: { color: { r: 0, g: 0, b: 0 }, widthPt: 0.75 },
+        right: { color: { r: 0, g: 0, b: 1 }, widthPt: 1.5, style: 'dashed' },
+        top: { color: { r: 0, g: 1, b: 0 }, widthPt: 0.75, style: 'double' },
+      },
+      alignment: 'right',
+      verticalAlignment: 'top',
+    });
+  });
+
+  it('reads an empty entry for a styleSheet with no fills/borders and an unstyled <xf>', () => {
+    const pkg = stylesPackage(el('styleSheet', {}, [el('cellXfs', {}, [el('xf', { numFmtId: '0' })])]));
+    expect(readCellStyles(pkg)).toEqual([{ numberFormatCode: 'General' }]);
+  });
+
+  it('reports an out-of-range fillId/borderId as no decoration rather than throwing', () => {
+    const pkg = stylesPackage(el('styleSheet', {}, [el('cellXfs', {}, [el('xf', { numFmtId: '0', fillId: '99', borderId: '99' })])]));
+    expect(readCellStyles(pkg)).toEqual([{ numberFormatCode: 'General' }]);
+  });
+
+  it('collapses the dash-dot border tokens onto style "dashed" -- the closest ContentStrokeStyle member', () => {
+    const pkg = stylesPackage(
+      el('styleSheet', {}, [
+        el('borders', {}, [el('border', {}, [el('left', { style: 'dashDot' }, [el('color', { rgb: 'FF000000' })]), el('right'), el('top'), el('bottom'), el('diagonal')])]),
+        el('cellXfs', {}, [el('xf', { numFmtId: '0', borderId: '0' })]),
+      ]),
+    );
+    const entry = readCellStyles(pkg)[0];
+    if (entry === undefined) {
+      throw new Error('expected a cell style entry');
+    }
+    expect(entry.borders?.left).toEqual({ color: { r: 0, g: 0, b: 0 }, widthPt: 0.75, style: 'dashed' });
+  });
+
+  it('readCellFormatCodes still returns just the codes (the numFmt-only projection of readCellStyles)', () => {
+    const pkg = stylesPackage(
+      el('styleSheet', {}, [
+        el('fills', {}, [el('fill', {}, [el('patternFill', { patternType: 'solid' }, [el('fgColor', { rgb: 'FFFF0000' })])])]),
+        el('cellXfs', {}, [el('xf', { numFmtId: '0', fillId: '0' })]),
+      ]),
+    );
+    expect(readCellFormatCodes(pkg)).toEqual(['General']);
+  });
+});
+
+// --- CellFormatTable: the write-side decoration interning ---
+
+describe('CellFormatTable: interning decoration alongside the number format', () => {
+  it('emits the two reserved fills (none/gray125) plus one solid fill per distinct background colour', () => {
+    const table = new CellFormatTable();
+    table.intern({ kind: 'builtin', id: GENERAL_NUM_FMT_ID }, { background: { r: 1, g: 0, b: 0 } });
+    expect(table.fillDeclarations()).toEqual([
+      { patternType: 'none' },
+      { patternType: 'gray125' },
+      { patternType: 'solid', rgb: 'ff0000' },
+    ]);
+  });
+
+  it('references the reserved empty border at index 0, then one real border per distinct edge set', () => {
+    const table = new CellFormatTable();
+    table.intern({ kind: 'builtin', id: GENERAL_NUM_FMT_ID }, { borders: { left: { color: { r: 0, g: 0, b: 0 }, widthPt: 0.75 } } });
+    expect(table.borderDeclarations()).toEqual([
+      { edges: {} },
+      { edges: { left: { style: 'thin', rgb: '000000' } } },
+    ]);
+  });
+
+  it('buckets a ContentBorder width back to a named weight: 1.5pt solid -> medium', () => {
+    const table = new CellFormatTable();
+    table.intern({ kind: 'builtin', id: GENERAL_NUM_FMT_ID }, { borders: { top: { color: { r: 0, g: 0, b: 0 }, widthPt: 1.5 } } });
+    expect(table.borderDeclarations()[1]).toEqual({ edges: { top: { style: 'medium', rgb: '000000' } } });
+  });
+
+  it('writes a dashed border at medium weight as mediumDashed', () => {
+    const table = new CellFormatTable();
+    table.intern({ kind: 'builtin', id: GENERAL_NUM_FMT_ID }, { borders: { bottom: { color: { r: 0, g: 0, b: 0 }, widthPt: 1.5, style: 'dashed' } } });
+    expect(table.borderDeclarations()[1]).toEqual({ edges: { bottom: { style: 'mediumDashed', rgb: '000000' } } });
+  });
+
+  it('carries horizontal/vertical alignment on the cellFormatRecord and deduplicates identical format+decoration', () => {
+    const table = new CellFormatTable();
+    const first = table.intern({ kind: 'builtin', id: GENERAL_NUM_FMT_ID }, { alignment: 'center', verticalAlignment: 'middle' });
+    expect(first).toBe(1);
+    expect(table.intern({ kind: 'builtin', id: GENERAL_NUM_FMT_ID }, { alignment: 'center', verticalAlignment: 'middle' })).toBe(first);
+    const records = table.cellFormatRecords();
+    expect(records[first]).toEqual({ numFmtId: GENERAL_NUM_FMT_ID, fillId: 0, borderId: 0, alignment: { horizontal: 'center', vertical: 'middle' } });
+  });
+
+  it('keeps the default xf at index 0 free of decoration, so undecorated cells still share it', () => {
+    const table = new CellFormatTable();
+    expect(table.intern({ kind: 'builtin', id: GENERAL_NUM_FMT_ID })).toBe(DEFAULT_CELL_FORMAT_INDEX);
+    expect(table.cellFormatRecords()[0]).toEqual({ numFmtId: GENERAL_NUM_FMT_ID, fillId: 0, borderId: 0 });
   });
 });

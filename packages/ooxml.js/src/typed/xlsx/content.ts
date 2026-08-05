@@ -12,13 +12,14 @@ import { classifyNumberFormat } from './number-format';
 import { readPrintSettings } from './print-settings';
 import { readDate1904, serialToIsoDate, serialToIsoDateTime, serialToIsoTime } from './serial';
 import { loadSharedStrings } from './shared-strings';
-import { readCellFormatCodes } from './styles';
+import type { CellStyleEntry } from './styles';
+import { readCellStyles } from './styles';
 import { columnWidthCharsToPt, DEFAULT_ROW_HEIGHT_PT } from './units';
 import { readXmlBool } from './util';
 
 // Package -> ContentDocument (kind: 'spreadsheet'): a SpreadsheetML reader built geometry- and print-settings-rich, matching readOds's own established bar in the sibling odf.js package (real column widths, row heights, hidden rows/columns, merged ranges, every cell value kind this format actually distinguishes, and a genuinely populated ContentSheetPrintSettings), rather than the lossy cell-values-only projection typed/xlsx.ts's own readXlsx provides. Unlike readOds, this returns a full ContentDocument envelope directly (kind/formatVersion/metadata/sheets) rather than a bare {metadata, sheets} shape -- readXlsxContent and typed/xlsx/build.ts's buildXlsxPackage are designed as a matched read/write pair around ContentDocument specifically, so a caller can round-trip readXlsxContent(buildXlsxPackage(x)) without an extra wrapping/unwrapping step, and documents.js's own future ods<->xlsx bridge (bypassing PDF, the same way its existing odt<->docx/odp<->pptx bridges do) can treat this reader's own output as an already-correctly-shaped pivot value.
 //
-// SCOPE, stated up front rather than only at each individual site below: (1) xlsx's own cell-type vocabulary (t="n"/absent, "s", "str", "inlineStr", "b", "e") has no percentage/currency/date variant the way ODF's office:value-type does -- those are all just numeric cells with a number-format style applied, so recovering them means resolving the cell's own style index through xl/styles.xml to a numFmt code and classifying that code. This reader does exactly that (typed/xlsx/styles.ts resolves, typed/xlsx/number-format.ts classifies, typed/xlsx/serial.ts converts a date/time serial to ISO), so a numeric cell reads as ContentCellValue's 'percentage'/'currency'/'date'/'time'/'dateTime' kind whenever its format genuinely says so, and 'number' otherwise. What that classifier is NOT is a FORMATTER: nothing here renders a value through a format code, which is why (2) below still holds. Only genuinely numeric cells are ever reclassified -- an s/str/inlineStr/b/e/d cell already carries its own type in the file and is never second-guessed by a style. (2) displayText has no native xlsx equivalent to read verbatim the way ODF's text:p content or a cached string gives readOds for free -- see deriveDisplayText below for exactly how this reader constructs one instead. (3) ContentSheetCellSchema's own `runs` field (genuinely mixed inline formatting within one cell) is never populated -- xlsx rich-text runs (<is>/<si>'s own nested <r><rPr>...) use a distinct font-property vocabulary from docx/pptx's own run styling, and resolving it would duplicate a meaningful slice of that machinery for a rarely-used feature not in this reader's own required field list; only the concatenated plain text (via deriveDisplayText) is read.
+// SCOPE, stated up front rather than only at each individual site below: (1) xlsx's own cell-type vocabulary (t="n"/absent, "s", "str", "inlineStr", "b", "e") has no percentage/currency/date variant the way ODF's office:value-type does -- those are all just numeric cells with a number-format style applied, so recovering them means resolving the cell's own style index through xl/styles.xml to a numFmt code and classifying that code. This reader does exactly that (typed/xlsx/styles.ts resolves, typed/xlsx/number-format.ts classifies, typed/xlsx/serial.ts converts a date/time serial to ISO), so a numeric cell reads as ContentCellValue's 'percentage'/'currency'/'date'/'time'/'dateTime' kind whenever its format genuinely says so, and 'number' otherwise. What that classifier is NOT is a FORMATTER: nothing here renders a value through a format code, which is why (2) below still holds. Only genuinely numeric cells are ever reclassified -- an s/str/inlineStr/b/e/d cell already carries its own type in the file and is never second-guessed by a style. (2) displayText has no native xlsx equivalent to read verbatim the way ODF's text:p content or a cached string gives readOds for free -- see deriveDisplayText below for exactly how this reader constructs one instead. (3) ContentSheetCellSchema's own `runs` field (genuinely mixed inline formatting within one cell) is never populated -- xlsx rich-text runs (<is>/<si>'s own nested <r><rPr>...) use a distinct font-property vocabulary from docx/pptx's own run styling, and resolving it would duplicate a meaningful slice of that machinery for a rarely-used feature not in this reader's own required field list; only the concatenated plain text (via deriveDisplayText) is read. (4) The cell DECORATION fields (background/borders/alignment/verticalAlignment) ARE read now, resolved from the same cellXfs index the number format comes from: typed/xlsx/styles.ts's readCellStyles resolves each entry's fill bg colour, per-edge borders, and inline <alignment> straight off the <cellXfs><xf> the cell's own s attribute indexes, and readCell below copies whichever of them are present onto the ContentSheetCell -- mirroring how odf.js's readOds populates the same fields from a table:table-cell's style chain. Two genuine scope limits on that resolution live in styles.ts: a fill/border colour carried only as theme/indexed/tint/auto (not rgb) is left unread, and the dash-family border tokens (dashDot/dashDotDot/...) collapse to ContentStrokeStyle 'dashed' since the schema has no dash-dot member.
 
 const WORKBOOK_PATH = 'xl/workbook.xml';
 
@@ -149,9 +150,9 @@ function deriveDisplayText(value: ContentCellValue): string {
   }
 }
 
-// Everything needed to turn a bare numeric <v> into its real value kind, resolved ONCE per package rather than per cell: one classification per cellXfs entry (the array index is the value of a cell's own s attribute), and the workbook's own date epoch. A sheet of 50,000 numeric cells therefore classifies a handful of format codes, not 50,000.
-interface NumericFormatContext {
-  classes: readonly NumberFormatClass[];
+// Everything needed to turn a bare numeric <v> into its real value kind, AND to recover a cell's decoration (background/borders/alignment/verticalAlignment), resolved ONCE per package rather than per cell: one entry per cellXfs index (the array index is the value of a cell's own s attribute), and the workbook's own date epoch. A sheet of 50,000 numeric cells therefore classifies a handful of format codes, not 50,000, and looks up decoration by the same index it already reads for the number format.
+interface CellFormatContext {
+  entries: readonly CellStyleEntry[];
   date1904: boolean;
 }
 
@@ -160,23 +161,30 @@ const DEFAULT_CELL_STYLE_INDEX = 0;
 
 const PLAIN_NUMBER: NumberFormatClass = { kind: 'number' };
 
-function readNumericFormatContext(pkg: Package): NumericFormatContext {
+function readCellFormatContext(pkg: Package): CellFormatContext {
   return {
-    classes: readCellFormatCodes(pkg).map((code) => (code === undefined ? PLAIN_NUMBER : classifyNumberFormat(code))),
+    entries: readCellStyles(pkg),
     date1904: readDate1904(pkg),
   };
 }
 
-function numberFormatOf(cell: XmlElement, context: NumericFormatContext): NumberFormatClass {
+function entryOf(cell: XmlElement, context: CellFormatContext): CellStyleEntry | undefined {
   const raw = attr(cell, 's');
   const index = raw === undefined ? DEFAULT_CELL_STYLE_INDEX : Number.parseInt(raw, 10);
-  const resolved = Number.isInteger(index) ? context.classes[index] : undefined;
-  // An out-of-range or unresolvable style index carries no formatting information, which is a plain number -- the same outcome as a cell genuinely formatted General, reached without pretending the index resolved.
-  return resolved ?? PLAIN_NUMBER;
+  return Number.isInteger(index) ? context.entries[index] : undefined;
+}
+
+function numberFormatOf(cell: XmlElement, context: CellFormatContext): NumberFormatClass {
+  const entry = entryOf(cell, context);
+  if (entry?.numberFormatCode === undefined) {
+    // An out-of-range or unresolvable style index, or one whose numFmtId resolves to no code anywhere, carries no formatting information -- a plain number, the same outcome as a cell genuinely formatted General, reached without pretending the index resolved.
+    return PLAIN_NUMBER;
+  }
+  return classifyNumberFormat(entry.numberFormatCode);
 }
 
 // A percentage keeps its RAW stored fraction (0.4256, the number the file holds, displayed by Excel as 42.56%) -- ContentCellValue's own 'percentage' variant is documented as carrying the underlying value, not the scaled-up display number. A currency carries an ISO 4217 code only when the format genuinely named one ([$GBP-809]); a format identifying money by SYMBOL alone ([$£-809], or a quoted "$") leaves `currency` absent rather than guessing, which is the honest statement "this is money and we do not know which" -- '$' alone is USD, CAD, AUD and a dozen others. A date/time serial that names no real date (a negative serial, or the 1900 system's phantom 1900-02-29) degrades to the plain number it literally is rather than emitting an invalid ISO string.
-function resolveNumericValue(num: number, cell: XmlElement, context: NumericFormatContext): ContentCellValue {
+function resolveNumericValue(num: number, cell: XmlElement, context: CellFormatContext): ContentCellValue {
   const format = numberFormatOf(cell, context);
   switch (format.kind) {
     case 'percentage':
@@ -205,7 +213,7 @@ function resolveNumericValue(num: number, cell: XmlElement, context: NumericForm
 }
 
 // Maps a <c>'s own t attribute (ECMA-376 ST_CellType) plus its <v>/<is> content to ContentCellValue. t="n" and an absent t attribute are the identical case (ECMA-376's own schema default for CT_Cell/@t is "n"). A cell with no <v>, no <is>, and no <f> at all is genuinely empty (styling-only, or a covered/merged-away position LibreOffice itself still writes a bare styled <c> for -- see this package's own kitchen-sink fixture) and returns undefined, matching typed/xlsx.ts's own readXlsx precedent of dropping such cells rather than fabricating content for them.
-function readCellValue(cell: XmlElement, sharedStrings: readonly string[], numericFormats: NumericFormatContext): ResolvedCellValue | undefined {
+function readCellValue(cell: XmlElement, sharedStrings: readonly string[], numericFormats: CellFormatContext): ResolvedCellValue | undefined {
   const type = attr(cell, 't');
   if (type === 'inlineStr') {
     const is = childrenWithTag(cell, 'is')[0];
@@ -245,7 +253,7 @@ function readCellValue(cell: XmlElement, sharedStrings: readonly string[], numer
   return { value, displayText: deriveDisplayText(value) };
 }
 
-function readCell(cell: XmlElement, sharedStrings: readonly string[], numericFormats: NumericFormatContext): ContentSheetCell | undefined {
+function readCell(cell: XmlElement, sharedStrings: readonly string[], context: CellFormatContext): ContentSheetCell | undefined {
   const reference = attr(cell, 'r');
   const position = reference === undefined ? undefined : parseCellReference(reference);
   if (position === undefined) {
@@ -253,7 +261,7 @@ function readCell(cell: XmlElement, sharedStrings: readonly string[], numericFor
   }
   const formulaEl = childrenWithTag(cell, 'f')[0];
   const formula = formulaEl === undefined ? undefined : textContent(formulaEl);
-  const resolved = readCellValue(cell, sharedStrings, numericFormats);
+  const resolved = readCellValue(cell, sharedStrings, context);
   if (resolved === undefined) {
     if (formula === undefined) {
       return undefined;
@@ -264,6 +272,22 @@ function readCell(cell: XmlElement, sharedStrings: readonly string[], numericFor
   const cellEntry: ContentSheetCell = { row: position.row, column: position.column, value: resolved.value, displayText: resolved.displayText };
   if (formula !== undefined) {
     cellEntry.formula = formula;
+  }
+  // The cell's own decoration (background/borders/alignment/verticalAlignment) resolves through the SAME cellXfs index the number format above resolved through -- the entry's four optional fields mirror ContentSheetCellSchema's own four, and each is copied through only when present, so a cell whose xf declares none of them stays field-free rather than inheriting fabricated defaults. This is the xlsx-side counterpart to odf.js readOds's own table:style-name -> table-cell cascade resolution of the same four fields, resolved through xlsx's own <cellXfs> table instead of an ODF style chain.
+  const entry = entryOf(cell, context);
+  if (entry !== undefined) {
+    if (entry.background !== undefined) {
+      cellEntry.background = entry.background;
+    }
+    if (entry.borders !== undefined) {
+      cellEntry.borders = entry.borders;
+    }
+    if (entry.alignment !== undefined) {
+      cellEntry.alignment = entry.alignment;
+    }
+    if (entry.verticalAlignment !== undefined) {
+      cellEntry.verticalAlignment = entry.verticalAlignment;
+    }
   }
   return cellEntry;
 }
@@ -300,7 +324,7 @@ function applyMergedRanges(worksheet: XmlElement, cells: readonly ContentSheetCe
   }
 }
 
-function readCells(worksheet: XmlElement, sharedStrings: readonly string[], numericFormats: NumericFormatContext): ContentSheetCell[] {
+function readCells(worksheet: XmlElement, sharedStrings: readonly string[], context: CellFormatContext): ContentSheetCell[] {
   const sheetData = childrenWithTag(worksheet, 'sheetData')[0];
   if (sheetData === undefined) {
     return [];
@@ -308,7 +332,7 @@ function readCells(worksheet: XmlElement, sharedStrings: readonly string[], nume
   const cells: ContentSheetCell[] = [];
   for (const row of childrenWithTag(sheetData, 'row')) {
     for (const cell of childrenWithTag(row, 'c')) {
-      const read = readCell(cell, sharedStrings, numericFormats);
+      const read = readCell(cell, sharedStrings, context);
       if (read !== undefined) {
         cells.push(read);
       }
@@ -324,7 +348,7 @@ function readSheet(
   sheetIndex: number,
   sharedStrings: readonly string[],
   definedNamesBySheet: ReadonlyMap<number, SheetDefinedNames>,
-  numericFormats: NumericFormatContext,
+  context: CellFormatContext,
 ): ContentSheet {
   const worksheet = rootElement(pkg.parts[entry.path]);
   if (worksheet === undefined) {
@@ -332,7 +356,7 @@ function readSheet(
   }
   return {
     name: entry.name,
-    cells: readCells(worksheet, sharedStrings, numericFormats),
+    cells: readCells(worksheet, sharedStrings, context),
     columns: readColumns(worksheet),
     rows: readRows(worksheet),
     images: [],
@@ -348,9 +372,9 @@ function fallbackEmptyWorksheet(): XmlElement {
 export function readXlsxContent(pkg: Package): ContentDocument {
   const sharedStrings = loadSharedStrings(pkg);
   const definedNamesBySheet = readDefinedNamesBySheet(pkg);
-  const numericFormats = readNumericFormatContext(pkg);
+  const context = readCellFormatContext(pkg);
   const entries = resolveSheetEntries(pkg);
-  const sheets = entries.map((entry, sheetIndex) => readSheet(pkg, entry, sheetIndex, sharedStrings, definedNamesBySheet, numericFormats));
+  const sheets = entries.map((entry, sheetIndex) => readSheet(pkg, entry, sheetIndex, sharedStrings, definedNamesBySheet, context));
   return {
     kind: 'spreadsheet',
     formatVersion: CONTENT_FORMAT_VERSION,

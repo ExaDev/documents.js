@@ -406,3 +406,107 @@ describe('readXlsxContent: the number format governs numeric cells only (synthet
     expect(readStyledCell('yyyy-mm-dd hh:mm:ss', numericCell('46234.604166666666667'))?.value).toEqual({ kind: 'dateTime', value: '2026-07-31T14:30:00' });
   });
 });
+
+// Cell decoration (background/borders/alignment/verticalAlignment) resolves through the same cellXfs index the number format does. These build a package with a real xl/styles.xml carrying fills, borders, and inline <alignment> so a cell's own s attribute resolves to a genuinely decorated xf -- the boundaries the kitchen-sink fixture (all default styling) has no cell for.
+function buildDecoratedPackage(styleSheet: ReturnType<typeof el>, cell: ReturnType<typeof el>): Package {
+  return {
+    parts: {
+      'xl/workbook.xml': { kind: 'xml', nodes: [el('workbook', {}, [el('sheets', {}, [el('sheet', { name: 'Sheet1', 'r:id': 'rId1' })])])] },
+      'xl/_rels/workbook.xml.rels': {
+        kind: 'xml',
+        nodes: [
+          el('Relationships', {}, [
+            el('Relationship', { Id: 'rId1', Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet', Target: 'worksheets/sheet1.xml' }),
+          ]),
+        ],
+      },
+      'xl/styles.xml': { kind: 'xml', nodes: [styleSheet] },
+      'xl/worksheets/sheet1.xml': { kind: 'xml', nodes: [el('worksheet', {}, [el('sheetData', {}, [el('row', { r: '1' }, [cell])])])] },
+    },
+  };
+}
+
+function readDecoratedCell(styleSheet: ReturnType<typeof el>, cell: ReturnType<typeof el>) {
+  const result = readXlsxContent(buildDecoratedPackage(styleSheet, cell));
+  if (result.kind !== 'spreadsheet') {
+    throw new Error('expected a spreadsheet ContentDocument');
+  }
+  return result.sheets[0]?.cells[0];
+}
+
+describe('readXlsxContent: cell decoration (background/borders/alignment/verticalAlignment)', () => {
+  // A styleSheet whose cellXfs entry at index 1 carries a solid red fill (fgColor rgb), a thin solid left edge + a dashed blue right edge, a centred horizontal alignment, and a centred vertical alignment. Index 0 is the default General/no-decoration entry.
+  const styledSheet = el('styleSheet', {}, [
+    el('fills', {}, [
+      el('fill', {}, [el('patternFill', { patternType: 'none' })]),
+      el('fill', {}, [el('patternFill', { patternType: 'gray125' })]),
+      el('fill', {}, [el('patternFill', { patternType: 'solid' }, [el('fgColor', { rgb: 'FFFF0000' }), el('bgColor', { indexed: '64' })])]),
+    ]),
+    el('borders', {}, [
+      el('border', {}, [el('left'), el('right'), el('top'), el('bottom'), el('diagonal')]),
+      el('border', {}, [
+        el('left', { style: 'thin' }, [el('color', { rgb: 'FF000000' })]),
+        el('right', { style: 'dashed' }, [el('color', { rgb: 'FF0000FF' })]),
+        el('top'),
+        el('bottom'),
+        el('diagonal'),
+      ]),
+    ]),
+    el('cellXfs', {}, [
+      el('xf', { numFmtId: '0' }),
+      el('xf', { numFmtId: '0', fillId: '2', borderId: '1', applyFill: '1', applyBorder: '1', applyAlignment: '1' }, [el('alignment', { horizontal: 'center', vertical: 'center' })]),
+    ]),
+  ]);
+
+  it('reads a solid fill background from the solid pattern\'s fgColor rgb', () => {
+    const cell = readDecoratedCell(styledSheet, el('c', { r: 'A1', s: '1' }, [el('v', {}, [txt('42')])]));
+    expect(cell?.background).toEqual({ r: 1, g: 0, b: 0 });
+  });
+
+  it('reads each present border edge with its derived widthPt and style, and omits absent edges', () => {
+    const cell = readDecoratedCell(styledSheet, el('c', { r: 'A1', s: '1' }, [el('v', {}, [txt('42')])]));
+    expect(cell?.borders).toEqual({
+      left: { color: { r: 0, g: 0, b: 0 }, widthPt: 0.75 },
+      right: { color: { r: 0, g: 0, b: 1 }, widthPt: 0.75, style: 'dashed' },
+    });
+  });
+
+  it('reads horizontal and vertical alignment, mapping vertical "center" to the schema\'s "middle"', () => {
+    const cell = readDecoratedCell(styledSheet, el('c', { r: 'A1', s: '1' }, [el('v', {}, [txt('42')])]));
+    expect(cell?.alignment).toBe('center');
+    expect(cell?.verticalAlignment).toBe('middle');
+  });
+
+  it('leaves all four decoration fields unset on a cell whose s index carries none of them', () => {
+    const cell = readDecoratedCell(styledSheet, el('c', { r: 'A1', s: '0' }, [el('v', {}, [txt('42')])]));
+    expect(cell?.background).toBeUndefined();
+    expect(cell?.borders).toBeUndefined();
+    expect(cell?.alignment).toBeUndefined();
+    expect(cell?.verticalAlignment).toBeUndefined();
+  });
+
+  it('leaves horizontal="general" unread -- general means "use the value-kind default", the same semantics as an absent alignment', () => {
+    const generalSheet = el('styleSheet', {}, [
+      el('cellXfs', {}, [el('xf', { numFmtId: '0' }, [el('alignment', { horizontal: 'general', vertical: 'bottom' })])]),
+    ]);
+    const cell = readDecoratedCell(generalSheet, el('c', { r: 'A1' }, [el('v', {}, [txt('42')])]));
+    expect(cell?.alignment).toBeUndefined();
+    expect(cell?.verticalAlignment).toBeUndefined();
+  });
+
+  it('reads vertical="top" but leaves vertical="bottom" unread (the documented default)', () => {
+    const topSheet = el('styleSheet', {}, [el('cellXfs', {}, [el('xf', { numFmtId: '0' }, [el('alignment', { vertical: 'top' })])])]);
+    expect(readDecoratedCell(topSheet, el('c', { r: 'A1' }, [el('v', {}, [txt('1')])]))?.verticalAlignment).toBe('top');
+  });
+
+  it('leaves a theme/indexed-only fill colour unread rather than substituting a fixed colour', () => {
+    const themeSheet = el('styleSheet', {}, [
+      el('fills', {}, [
+        el('fill', {}, [el('patternFill', { patternType: 'none' })]),
+        el('fill', {}, [el('patternFill', { patternType: 'solid' }, [el('fgColor', { theme: '0' })])]),
+      ]),
+      el('cellXfs', {}, [el('xf', { numFmtId: '0' }), el('xf', { numFmtId: '0', fillId: '1' })]),
+    ]);
+    expect(readDecoratedCell(themeSheet, el('c', { r: 'A1', s: '1' }, [el('v', {}, [txt('1')])]))?.background).toBeUndefined();
+  });
+});

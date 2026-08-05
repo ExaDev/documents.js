@@ -5,7 +5,7 @@ import type { XmlElement } from '../../model/node';
 import type { Package } from '../../model/package';
 import { encodePackage } from '../../codec';
 import { parsePackage } from '../../package-io/read';
-import { decodeEntities, rootElement } from '../util';
+import { childrenWithTag, decodeEntities, rootElement } from '../util';
 import { buildXlsxPackage } from './build';
 import { readXlsxContent } from './content';
 import { BUILTIN_NUMBER_FORMATS } from './number-format';
@@ -510,5 +510,129 @@ describe('buildXlsxPackage: a formula cell with a cached STRING result writes t=
       throw new Error('expected a spreadsheet ContentDocument');
     }
     expect(roundTripped.sheets[0]?.cells[0]).toMatchObject({ value: { kind: 'string', value: 'ab' }, formula: 'CONCATENATE("a","b")' });
+  });
+});
+
+// Cell decoration (background/borders/alignment/verticalAlignment) is interned into the same cellXfs table as the number format and emitted as real <fills>/<borders>/<alignment>. This describes a round trip through buildXlsxPackage -> readXlsxContent, asserting both the written XML structure and the read-back ContentSheetCell fields, since the kitchen-sink ContentSheet above carries no decoration at all.
+const DECORATED_SHEET: ContentSheet = {
+  name: 'Decorated',
+  cells: [
+    {
+      row: 0,
+      column: 0,
+      value: { kind: 'string', value: 'Header' },
+      displayText: 'Header',
+      background: { r: 1, g: 0, b: 0 },
+      borders: {
+        left: { color: { r: 0, g: 0, b: 0 }, widthPt: 0.75 },
+        right: { color: { r: 0, g: 0, b: 0 }, widthPt: 0.75 },
+        top: { color: { r: 0, g: 0, b: 0 }, widthPt: 0.75 },
+        bottom: { color: { r: 0, g: 0, b: 0 }, widthPt: 0.75 },
+      },
+      alignment: 'center',
+      verticalAlignment: 'middle',
+    },
+    {
+      row: 1,
+      column: 0,
+      value: { kind: 'number', value: 42 },
+      displayText: '42',
+      background: { r: 1, g: 1, b: 0 },
+    },
+  ],
+  columns: [],
+  rows: [],
+  images: [],
+  printSettings: {
+    pageSize: PAGE_SIZE_A4,
+    margins: { topPt: 36, rightPt: 36, bottomPt: 36, leftPt: 36 },
+    gridlines: true,
+    headers: true,
+    pageOrder: 'downThenOver',
+  },
+};
+
+describe('buildXlsxPackage: writes cell decoration (fills/borders/alignment) into xl/styles.xml', () => {
+  const pkg = buildXlsxPackage({ kind: 'spreadsheet', formatVersion: CONTENT_FORMAT_VERSION, metadata: { title: undefined, author: undefined, subject: undefined, keywords: undefined, creator: undefined, producer: undefined, createdIso: undefined, modifiedIso: undefined }, sheets: [DECORATED_SHEET] });
+  const styles = rootElement(pkg.parts['xl/styles.xml']);
+  if (styles === undefined) {
+    throw new Error('expected xl/styles.xml to have a root element');
+  }
+  // Required-element accessor: the structure below is asserted to exist by the test's own intent, so a missing element is a genuine test failure (thrown here) rather than a silently-skipped assertion.
+  const required = (element: XmlElement | undefined, message: string): XmlElement => {
+    if (element === undefined) {
+      throw new Error(message);
+    }
+    return element;
+  };
+
+  it('writes the two reserved fills (none/gray125) before the solid fills, one per distinct background colour', () => {
+    const fillsEl = required(childrenWithTag(styles, 'fills')[0], 'expected a <fills> element');
+    const fills = childrenWithTag(fillsEl, 'fill');
+    expect(fills).toHaveLength(4); // none, gray125, red, yellow
+    const patternType = (fill: XmlElement | undefined): string | undefined =>
+      fill === undefined ? undefined : childrenWithTag(fill, 'patternFill')[0]?.attributes.find((a) => a.name === 'patternType')?.value;
+    expect(patternType(fills[0])).toBe('none');
+    expect(patternType(fills[1])).toBe('gray125');
+    expect(patternType(fills[2])).toBe('solid');
+    const solidFill = required(fills[2], 'expected a solid <fill> at index 2');
+    const solidRed = required(childrenWithTag(solidFill, 'patternFill')[0], 'expected a <patternFill>');
+    expect(childrenWithTag(solidRed, 'fgColor')[0]?.attributes.find((a) => a.name === 'rgb')?.value).toBe('FFff0000');
+  });
+
+  it('writes the reserved empty border at index 0, then the real per-edge border', () => {
+    const bordersEl = required(childrenWithTag(styles, 'borders')[0], 'expected a <borders> element');
+    const borders = childrenWithTag(bordersEl, 'border');
+    expect(borders).toHaveLength(2);
+    const reservedBorder = required(borders[0], 'expected a reserved <border> at index 0');
+    const realBorder = required(borders[1], 'expected a real <border> at index 1');
+    // reserved empty: every edge present but with no style attribute
+    const reservedLeft = childrenWithTag(reservedBorder, 'left')[0];
+    expect(reservedLeft?.attributes.find((a) => a.name === 'style')).toBeUndefined();
+    // real border: four thin edges with black colour
+    const realLeft = required(childrenWithTag(realBorder, 'left')[0], 'expected a real <left>');
+    expect(realLeft.attributes.find((a) => a.name === 'style')?.value).toBe('thin');
+    expect(childrenWithTag(realLeft, 'color')[0]?.attributes.find((a) => a.name === 'rgb')?.value).toBe('FF000000');
+  });
+
+  it('writes applyFill/applyBorder/applyAlignment and an inline <alignment> on the decorated xf', () => {
+    const cellXfsEl = required(childrenWithTag(styles, 'cellXfs')[0], 'expected a <cellXfs> element');
+    const xfs = childrenWithTag(cellXfsEl, 'xf');
+    // xf[0] = default General/no-decoration; xf[1] = red + bordered + centred; xf[2] = yellow only
+    const decorated = required(xfs[1], 'expected a decorated <xf> at index 1');
+    const attrs = decorated.attributes.map((a) => a.name);
+    expect(attrs).toContain('applyFill');
+    expect(attrs).toContain('applyBorder');
+    expect(attrs).toContain('applyAlignment');
+    const alignment = childrenWithTag(decorated, 'alignment')[0];
+    expect(alignment?.attributes.find((a) => a.name === 'horizontal')?.value).toBe('center');
+    expect(alignment?.attributes.find((a) => a.name === 'vertical')?.value).toBe('center');
+  });
+});
+
+describe('readXlsxContent(buildXlsxPackage(x)) round-trips cell decoration', () => {
+  const pkg = buildXlsxPackage({ kind: 'spreadsheet', formatVersion: CONTENT_FORMAT_VERSION, metadata: { title: undefined, author: undefined, subject: undefined, keywords: undefined, creator: undefined, producer: undefined, createdIso: undefined, modifiedIso: undefined }, sheets: [DECORATED_SHEET] });
+  const result = readXlsxContent(pkg);
+  if (result.kind !== 'spreadsheet') {
+    throw new Error('expected a spreadsheet ContentDocument');
+  }
+  const cells = result.sheets[0]?.cells ?? [];
+
+  it('preserves a cell background colour through the round trip', () => {
+    expect(cells[0]?.background).toEqual({ r: 1, g: 0, b: 0 });
+    expect(cells[1]?.background).toEqual({ r: 1, g: 1, b: 0 });
+  });
+
+  it('preserves per-edge borders, recovering the same thin solid width the writer emitted', () => {
+    const borders = cells[0]?.borders;
+    expect(borders?.left).toEqual({ color: { r: 0, g: 0, b: 0 }, widthPt: 0.75 });
+    expect(borders?.right).toEqual({ color: { r: 0, g: 0, b: 0 }, widthPt: 0.75 });
+    expect(borders?.top).toEqual({ color: { r: 0, g: 0, b: 0 }, widthPt: 0.75 });
+    expect(borders?.bottom).toEqual({ color: { r: 0, g: 0, b: 0 }, widthPt: 0.75 });
+  });
+
+  it('preserves horizontal and vertical alignment (middle round-trips through xlsx "center")', () => {
+    expect(cells[0]?.alignment).toBe('center');
+    expect(cells[0]?.verticalAlignment).toBe('middle');
   });
 });
