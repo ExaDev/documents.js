@@ -49,7 +49,7 @@
   "scripts": {
     "build": "tsdown && node scripts/generate-json-schemas.mjs",
     "prepublishOnly": "pnpm run lint && pnpm run typecheck && pnpm run build && publint && attw --pack",
-    "lint": "eslint . --max-warnings 0",
+    "lint": "eslint . --fix --cache --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --project unit",
     "test:watch": "vitest --project unit",

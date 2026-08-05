@@ -4,3 +4,4 @@ schemas/
 *.tsbuildinfo
 .DS_Store
 coverage/
+.eslintcache
