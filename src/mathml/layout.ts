@@ -459,13 +459,25 @@ function wrapRadical(radicand: MathBox, index: MathBox | undefined, ctx: LayoutC
   const degreeWidthPt = index === undefined ? 0 : metrics.radicalKernBeforeDegreePt + index.widthPt + metrics.radicalKernAfterDegreePt;
   const signOriginXPt = Math.max(0, degreeWidthPt);
 
-  const sign = buildRadicalSign(signOriginXPt, 0, signHeightPt, radicand.widthPt, ruleThicknessPt, ctx.color);
-
   const ascentPt = metrics.radicalExtraAscenderPt + ruleThicknessPt + gapPt + radicand.ascentPt;
   const descentPt = radicand.descentPt;
-  const widthPt = signOriginXPt + sign.widthPt + radicand.widthPt;
 
-  const items: MathLayoutItem[] = [sign.hook, sign.vinculum, ...placeChild(radicand, signOriginXPt + sign.widthPt, 0, ascentPt)];
+  const items: MathLayoutItem[] = [];
+  // Prefer the font's own vertical radical construction (its real √ MathVariants data, sized to the radicand) over the hand-drawn hook -- the font designer's glyph is the authentic radical silhouette this module's fixed-fraction approximation only echoes. The construction is stretched vertically to the full sign height; its own top shelf plus a separately drawn vinculum rule across the radicand width together form the bar (the shelf overlaps the rule's left segment, both solid at the bar height, so the overlap is invisible and the bar reads as one continuous line). 'base' (the font's smallest √ already reaches the target), 'variant' (a pre-built larger √), and 'assembly' (a multi-part construction) are all real radical glyphs and all used here; only a font that declares no √ construction at all (stretch returns undefined) falls back to the hand-drawn sign, so a different font backend with no radical MathVariants keeps rendering a radical rather than vanishing.
+  const stretched = ctx.metrics.stretch(0x221a, 'vertical', signHeightPt, ctx.sizePt);
+  let signWidthPt: number;
+  if (stretched !== undefined) {
+    // Top-align the construction's ink at the sign's own top (y = 0): the construction's drawing origin sits inkAscentPt down from the top, and each part a further offsetPt up the vertical axis.
+    const placements = stretched.placements.map((placement) => ({ glyphId: placement.glyphId, xPt: signOriginXPt, yPt: stretched.inkAscentPt - placement.offsetPt }));
+    items.push({ kind: 'assembled-glyphs', placements, text: '√', sizePt: ctx.sizePt, color: ctx.color });
+    items.push({ kind: 'rule', xPt: signOriginXPt, yPt: metrics.radicalExtraAscenderPt, widthPt: stretched.advanceWidthPt + radicand.widthPt, heightPt: ruleThicknessPt, color: ctx.color });
+    signWidthPt = stretched.advanceWidthPt;
+  } else {
+    const sign = buildRadicalSign(signOriginXPt, 0, signHeightPt, radicand.widthPt, ruleThicknessPt, ctx.color);
+    items.push(sign.hook, sign.vinculum);
+    signWidthPt = sign.widthPt;
+  }
+  items.push(...placeChild(radicand, signOriginXPt + signWidthPt, 0, ascentPt));
 
   if (index !== undefined) {
     // The degree sits raised from the sign's own bottom by radicalDegreeBottomRaisePercent% of the sign's own visible height (ascentPt + descentPt of the WHOLE radical, per the OpenType MATH spec's own definition) -- a real, font-driven placement, not a fixed fraction picked by this module.
@@ -474,6 +486,7 @@ function wrapRadical(radicand: MathBox, index: MathBox | undefined, ctx: LayoutC
     items.push(...shiftItems(index.items, metrics.radicalKernBeforeDegreePt, degreeBaselineFromTopPt - index.ascentPt));
   }
 
+  const widthPt = signOriginXPt + signWidthPt + radicand.widthPt;
   return { widthPt, ascentPt, descentPt, heightPt: ascentPt + descentPt, items };
 }
 
