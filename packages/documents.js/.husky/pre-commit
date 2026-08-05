@@ -1,2 +1,2 @@
 # Lint and auto-fix staged TypeScript files.
-npx lint-staged
+pnpm exec lint-staged
