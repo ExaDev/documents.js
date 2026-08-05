@@ -82,6 +82,8 @@ The two are deliberately separate interfaces rather than one `DocumentCodec` sha
 
 Neither interface constructs a `DocumentPackage` itself: a codec's `read()` returns one half (content, or layout, never both), and composing a `DocumentPackage` from a `ContentCodec.read()` result plus a separately-run layout-engine pass is the caller's job, one level up from either interface -- `documents.js`'s own `DOCUMENT_FORMAT_CODECS` registry (`src/codecs/registry.ts`) is the concrete example, implementing a `ContentCodec`/`LayoutCodec` pair per format over its own existing read/build/layout functions.
 
+Alongside the schemas and the codec interfaces, this package also hosts the **port contracts** a layout engine consumes — the interfaces and data shapes a neutral layer needs, independent of any concrete rendering backend. `src/text-layout.ts` (`TextMeasurer`, `StyledRun`, `WrappedLine`, `WrapOptions`), `src/font-port.ts` (`ProvidedFont`, `FontSubstitution`, `FontRegistryOptions`), `src/math-layout.ts` (`MathBox`, `MathLayoutItem`, `MathFontMetrics`, `PositionedFormula`), and `Point` in `src/geometry.ts` are all here, so a layout engine never reaches into a specific backend (pdf-codec) for its contracts — the backend implements them, the engine consumes them.
+
 ## JSON Schema
 
 Alongside the Zod schemas/types above, the package publishes three plain [JSON Schema](https://json-schema.org) files -- generated from the same Zod definitions via [`z.toJSONSchema()`](https://zod.dev/json-schema) at build time (`scripts/generate-json-schemas.mjs`) -- for non-TypeScript consumers that want to validate against or generate types from these shapes without depending on Zod at all:
