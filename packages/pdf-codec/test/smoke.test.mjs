@@ -12,8 +12,6 @@ const FUNCTIONS = [
   'writePdf',
   'loadMathFont',
   'createStandardFontMeasurer',
-  'wrapRunsToWidth',
-  'rotatePointAboutCenter',
   'resolveStandardFont',
   'crc32',
   'deflate',

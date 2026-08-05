@@ -125,20 +125,19 @@ The one thing a glyph ID cannot carry is meaning: an unencoded glyph gets no ToU
 
 `MathFontMetrics.stretch` is the layout-facing form of all this, and the one a layout engine actually calls: it resolves a construction at a target size and additionally **measures** it — `inkAscentPt`/`inkDescentPt` are the whole construction's real ink extent about its drawing origin, taken from actual glyph outlines. Without that a caller cannot place the result, since a construction's ink neither starts at its drawing origin (a large parenthesis variant straddles the baseline) nor is bounded by its advance-derived `size`.
 
-Building a layout engine on top of this codec (this is what `documents.js`'s own `src/layout/` does for docx/pptx/odt/odp/ods/odg): `TextMeasurer`/`createStandardFontMeasurer` and `wrapRunsToWidth` answer "how wide does this text render, and where does this line break" against the standard-14 metrics; `resolveStandardFont`/`STANDARD_METRICS` map an arbitrary requested family/weight/style onto one of the 14 standard PDF faces and that face's own AFM-derived metrics; `rotatePointAboutCenter` handles shape-rotation placement math. None of these do any PDF I/O themselves — they're the same primitives `writePdf`/`readPdf` use internally, exported so a caller assembling its own `LayoutDocument` (from any source format) can measure and wrap text identically to how this package will actually render it.
+Building a layout engine on top of this codec (this is what `documents.js`'s own `src/layout/` does for docx/pptx/odt/odp/ods/odg): `TextMeasurer`/`createStandardFontMeasurer` answer "how wide does this text render, and where does this line break" against the standard-14 metrics; `resolveStandardFont`/`STANDARD_METRICS` map an arbitrary requested family/weight/style onto one of the 14 standard PDF faces and that face's own AFM-derived metrics. The text-wrapping primitive (`wrapRunsToWidth`) and the shape-rotation geometry (`rotatePointAboutCenter`) a layout engine also needs now live in documents.js itself (they had no internal pdf-codec caller), so they are no longer exported here; the port types they consume (`TextMeasurer`, `StyledRun`, `WrappedLine`, `ProvidedFont`, the `MathBox`/`MathFontMetrics` family) live in `document-schema.js`, the neutral shared-schema package, so a layout engine never reaches into this backend for its contracts.
 
 Embedding real fonts instead of substituting standard-14 faces, via a `FontRegistry` (see `src/font-registry.ts` for the full source-document → caller-supplied → vendored-substitute → standard-14 resolution order). Pass the same registry to both the measurer and `writePdf`, so what was measured and what gets drawn come from one font:
 
 ```ts
-import { createFontMeasurer, createFontRegistry, wrapRunsToWidth, writePdf } from 'pdf-codec';
+import { createFontMeasurer, createFontRegistry, writePdf } from 'pdf-codec';
 
 // With no `fonts`/`sourceFonts` of its own, the registry still maps Calibri onto the vendored,
 // metric-compatible Carlito face this package embeds (and Cambria onto Caladea).
 const fonts = createFontRegistry();
 
 const measurer = createFontMeasurer(fonts);
-const lines = wrapRunsToWidth(runs, measurer, columnWidthPt);
-// ... build a LayoutDocument from `lines` ...
+// ... wrap text + build a LayoutDocument using the measurer (documents.js owns wrapRunsToWidth) ...
 const pdfBytes = writePdf(doc, { fonts, onMissingGlyph: (m) => console.warn('no glyph for', m.from) });
 ```
 
