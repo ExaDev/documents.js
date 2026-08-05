@@ -5,8 +5,6 @@ import { createOdt } from '../edit/odt/editor';
 import { buildDocxPackage } from '../edit/docx/content';
 import { decodePackage as decodeOdfPackage } from 'odf.js';
 import { decodePackage as decodeOoxmlPackage } from 'ooxml.js';
-import type { XmlElement, XmlNode } from 'ooxml.js';
-import { attr } from 'ooxml.js';
 import { readDocxContent } from '../ooxml/docx/read';
 import { readOdtContent } from '../odf/odt/read';
 import { docxToOdt, odtToDocx } from './convert';
@@ -156,8 +154,8 @@ describe('docx/odt decoration bridge', () => {
     expect(bottom?.widthPt).toBeCloseTo(BORDER_WIDTH_PT);
   });
 
-  // Row height is one-directional: ooxml.js's readDocx does not populate ContentTableRow.heightPt (a reader gap, out of scope here), so only the odt -> docx WRITE half can carry it -- buildDocxPackage, the write half odtToDocx composes. Verified at the XML level (w:trPr/w:trHeight) since reading it back through readDocxContent would always report undefined regardless of whether the writer emitted it.
-  it('writes row.heightPt as w:trHeight when building a docx from a ContentDocument', () => {
+  // Now genuinely round-trips both directions: ooxml.js 2.8.0's readDocx reads w:trHeight back into ContentTableRow.heightPt (a reader gap this session's own ooxml.js fix closed), so a docx built from a ContentDocument with row.heightPt set can be read straight back through readDocxContent, not merely inspected at the raw-XML level.
+  it('writes row.heightPt as w:trHeight and reads it back via readDocxContent', () => {
     const document: ContentDocument = {
       kind: 'wordprocessing',
       formatVersion: 2,
@@ -165,26 +163,12 @@ describe('docx/odt decoration bridge', () => {
       sections: [{ pageSize: { widthPt: 612, heightPt: 792 }, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 }, blocks: [{ kind: 'table', rows: [{ cells: [{ blocks: [{ kind: 'paragraph', runs: [{ text: 'tall' }] }] }], heightPt: 28 }], columnWidthsPt: [468] }] }],
     };
     const pkg = buildDocxPackage(document);
-    const doc = pkg.parts['word/document.xml'];
-    const root = doc?.kind === 'xml' ? (doc.nodes.find((n): n is XmlElement => n.type === 'element') ?? undefined) : undefined;
-    if (root === undefined) {
-      throw new Error('no document root element');
+    const roundTripped = readDocxContent(pkg);
+    if (roundTripped.kind !== 'wordprocessing') {
+      throw new Error('expected a wordprocessing document');
     }
-    let trHeight: string | undefined;
-    const walk = (node: XmlNode): void => {
-      if (node.type !== 'element') {
-        return;
-      }
-      if (node.tag === 'w:trHeight') {
-        trHeight = attr(node, 'w:val');
-        return;
-      }
-      for (const child of node.children) {
-        walk(child);
-      }
-    };
-    walk(root);
-    // 28pt * 20 twips/pt = 560 twips.
-    expect(trHeight).toBe('560');
+    const table = roundTripped.sections[0]?.blocks[0];
+    const row = table?.kind === 'table' ? table.rows[0] : undefined;
+    expect(row?.heightPt).toBeCloseTo(28, 5);
   });
 });
