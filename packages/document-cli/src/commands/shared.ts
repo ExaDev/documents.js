@@ -1,10 +1,12 @@
 import { writeFile } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
 import { type DocumentFormat, createLocalDocumentConverter, documentPackageWithSchema } from 'documents.js';
 import { inferFormatFromExtension, isDocumentFormat } from '../format';
 import { createRuntimeSignal } from '../runtime/abort';
 import { createDiagnosticReporter, createFontSubstitutionReporter } from '../runtime/diagnostics';
 import { EXIT_SUCCESS, EXIT_USAGE_ERROR, mapErrorToExit } from '../runtime/exit-codes';
 import { loadProvidedFonts } from '../runtime/fonts';
+import { createFilesystemMarkdownImageResolver } from '../runtime/markdown-images';
 import { readInput, resolveDefaultOutputPath, writeOutput } from '../runtime/io';
 
 // Every DocumentFormat this CLI's commands know how to name in a usage error -- shared between the generic `convert` command (commands/convert.ts) and `from-package` (commands/from-package.ts), the two commands whose target format is not already fixed by their own name.
@@ -78,6 +80,8 @@ export function buildConversionAction(
           fonts,
           // Only wired under the flag: without it, every substitution is still reported through result.diagnostics below (the local converter records one whether or not a callback was supplied), so an unconditional callback here would print the same event twice.
           onFontSubstitution: options.reportFontSubstitutions === true ? createFontSubstitutionReporter({ json: options.json, quiet: options.quiet, command }) : undefined,
+          // Resolve a markdown source's own non-data: image destinations against the input file's directory, so `convert notes.md` embeds `![](./image.png)` rather than degrading it to alt text. Ignored by every non-markdown conversion (the port threads it only to the markdown edges), so wiring it unconditionally is a no-op for docx/pptx/odt/... sources. For stdin (`-`) the base directory is the current working directory.
+          images: createFilesystemMarkdownImageResolver(input === '-' ? '.' : dirname(resolve(input))),
         },
       );
 
