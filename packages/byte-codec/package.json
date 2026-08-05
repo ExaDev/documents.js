@@ -37,8 +37,12 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "prepare": "husky",
+    "prepublishOnly": "tsdown",
     "lint:check": "eslint . --max-warnings 0"
   },
+  "files": [
+    "dist"
+  ],
   "packageManager": "pnpm@11.6.0",
   "dependencies": {
     "fflate": "^0.8.2"
