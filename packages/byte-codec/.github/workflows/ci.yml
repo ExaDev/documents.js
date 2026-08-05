@@ -63,15 +63,7 @@ jobs:
           node-version: '22'
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm test:coverage
-      - name: Upload coverage report
-        # Code Quality requires the org on GitHub Team/Enterprise Cloud, which ExaDev is not yet on, so the upload call itself will fail until that changes -- fail-on-error: false keeps that failure a log annotation instead of gating the release job below on a feature we can't turn on yet. Also guarded against fork PRs, which never hold the code-quality: write permission to upload.
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-        uses: actions/upload-code-coverage@v1
-        with:
-          file: coverage/cobertura-coverage.xml
-          language: typescript
-          label: unit
+      - run: pnpm test
           fail-on-error: false
 
   test-smoke:
@@ -86,11 +78,11 @@ jobs:
           node-version: '22'
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm test:smoke
+      - run: pnpm build && node -e "require('./dist/index.cjs')" && node --input-type=module -e "import('./dist/index.js').then(m => console.log(Object.keys(m).length + ' exports'))"
 
   release:
     name: Release
-    needs: [commitlint, lint, typecheck, test, test-smoke]
+    needs: [commitlint, lint, typecheck, test, smoke]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 15
