@@ -1,3 +1,10 @@
+## [1.0.1](https://github.com/ExaDev/byte-codec/compare/v1.0.0...v1.0.1) (2026-08-05)
+
+
+### Bug Fixes
+
+* add files field and prepublishOnly build step ([ab5a6bb](https://github.com/ExaDev/byte-codec/commit/ab5a6bb071591b040e53a090201371b949c64dcd))
+
 # 1.0.0 (2026-08-05)
 
 
