@@ -133,6 +133,21 @@ export function populateParagraph(paragraph: OdtParagraph, block: ContentParagra
   if (block.alignment !== undefined) {
     paragraph.alignment = block.alignment;
   }
+  if (block.spacingBeforePt !== undefined) {
+    paragraph.spacingBeforePt = block.spacingBeforePt;
+  }
+  if (block.spacingAfterPt !== undefined) {
+    paragraph.spacingAfterPt = block.spacingAfterPt;
+  }
+  if (block.lineSpacing !== undefined) {
+    paragraph.lineSpacing = block.lineSpacing;
+  }
+  if (block.indentLeftPt !== undefined) {
+    paragraph.indentLeftPt = block.indentLeftPt;
+  }
+  if (block.indentFirstLinePt !== undefined) {
+    paragraph.indentFirstLinePt = block.indentFirstLinePt;
+  }
   for (const run of block.runs) {
     if (run.text === '\t') {
       paragraph.appendTab();
@@ -211,6 +226,12 @@ export function populateOdtTable(table: OdtTable, block: ContentTable): void {
         for (let c = 0; c < span; c++) {
           verticalMerges.set(colIndex + c, cell.rowSpan - 1);
         }
+      }
+      if (cell.background !== undefined) {
+        tableCell.background = cell.background;
+      }
+      if (cell.borders !== undefined) {
+        tableCell.borders = cell.borders;
       }
       populateCellBlocks(tableCell, cell.blocks);
       colIndex += 1;

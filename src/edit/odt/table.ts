@@ -1,5 +1,6 @@
+import type { ContentCellBorders, ContentStrokeStyle, Color } from 'document-schema.js';
 import type { Package, XmlElement, XmlNode } from 'odf.js';
-import { formatOdfLength } from 'odf.js';
+import { formatOdfColor, formatOdfLength, parseOdfColor, parseOdfLength } from 'odf.js';
 import { attr } from 'ooxml.js';
 import { removeAttr, removeChild, setAttr } from '../../xml/edit';
 import { el } from '../../xml/fragment';
@@ -17,6 +18,106 @@ export interface TableInit {
 const DEFAULT_TABLE_WIDTH_PT = 468;
 
 const TABLE_COLUMN_STYLE_PREFIX = 'OdtCol';
+const TABLE_CELL_STYLE_PREFIX = 'OdtCell';
+
+// odf.js's own reader resolves a cell's background and borders out of style:table-cell-properties (fo:background-color and fo:border-left/right/top/bottom, each a "<width> <style> <color>" shorthand -- see typed/shared/table.ts readCellStyleDecoration). But odf.js's StyleRegistry/StyleProperties model only text/paragraph formatting and never emit a style:table-cell-properties element at all, exactly the same hole src/edit/odg/style.ts closes for style:graphic-properties. This is the table-cell counterpart: a small, self-contained, append-only writer scoped to exactly the two attributes a cell's background and borders need, reusing ensureAutomaticStyles/nextStyleName (the shared find-or-create office:automatic-styles + mint-next-name logic) rather than a third reimplementation of that lookup -- mirroring both internTableColumnWidth above and odg/style.ts's own graphic-family writer.
+
+const BORDER_EDGE_ATTRS: Readonly<Record<'top' | 'right' | 'bottom' | 'left', string>> = {
+  top: 'fo:border-top',
+  right: 'fo:border-right',
+  bottom: 'fo:border-bottom',
+  left: 'fo:border-left',
+};
+
+function formatBorderShorthand(color: Color, widthPt: number, style?: ContentStrokeStyle): string {
+  return `${formatOdfLength(widthPt)} ${style ?? 'solid'} ${formatOdfColor(color)}`;
+}
+
+function findCellPropertiesReadOnly(pkg: Package, element: XmlElement): XmlElement | undefined {
+  const styleName = attr(element, 'table:style-name');
+  if (styleName === undefined) {
+    return undefined;
+  }
+  const part = pkg.parts['content.xml'];
+  const root = part?.kind === 'xml' ? part.nodes.find((n): n is XmlElement => n.type === 'element') : undefined;
+  if (root === undefined) {
+    return undefined;
+  }
+  for (const child of root.children) {
+    if (child.type === 'element' && child.tag === 'office:automatic-styles') {
+      for (const style of child.children) {
+        if (style.type === 'element' && style.tag === 'style:style' && attr(style, 'style:name') === styleName && attr(style, 'style:family') === 'table-cell') {
+          for (const props of style.children) {
+            if (props.type === 'element' && props.tag === 'style:table-cell-properties') {
+              return props;
+            }
+          }
+        }
+      }
+    }
+  }
+  return undefined;
+}
+
+export interface CellDecoration {
+  readonly background?: Color;
+  readonly borders?: ContentCellBorders;
+}
+
+export function readCellDecoration(pkg: Package, element: XmlElement): CellDecoration {
+  const props = findCellPropertiesReadOnly(pkg, element);
+  if (props === undefined) {
+    return {};
+  }
+  let background: Color | undefined;
+  const backgroundValue = attr(props, 'fo:background-color');
+  if (backgroundValue !== undefined) {
+    background = parseOdfColor(backgroundValue);
+  }
+  const borders: ContentCellBorders = {};
+  (['top', 'right', 'bottom', 'left'] as const).forEach((edge) => {
+    const raw = attr(props, BORDER_EDGE_ATTRS[edge]);
+    if (raw === undefined) {
+      return;
+    }
+    const tokens = raw.trim().split(/\s+/);
+    const widthToken = tokens[0];
+    const styleToken = tokens[1];
+    const colorToken = tokens[2];
+    if (widthToken === undefined || styleToken === undefined || colorToken === undefined || styleToken === 'none' || styleToken === 'hidden') {
+      return;
+    }
+    const widthPt = parseOdfLength(widthToken);
+    const color = parseOdfColor(colorToken);
+    if (widthPt === undefined || widthPt <= 0 || color === undefined) {
+      return;
+    }
+    const style: ContentStrokeStyle | undefined = styleToken === 'solid' || styleToken === 'dashed' || styleToken === 'dotted' || styleToken === 'double' ? styleToken : undefined;
+    borders[edge] = style === undefined ? { color, widthPt } : { color, widthPt, style };
+  });
+  return { background, borders: Object.keys(borders).length === 0 ? undefined : borders };
+}
+
+// Mints a fresh style:style[family="table-cell"] automatic style carrying `decoration`'s background/borders in its style:table-cell-properties, and returns its style:name for a caller to set as the cell's own table:style-name. Each call mints its own style (never mutates an existing one), matching the append-only invariant every other hand-rolled style writer in this codebase follows.
+export function buildCellStyle(pkg: Package, decoration: CellDecoration): string {
+  const automaticStyles = ensureAutomaticStyles(pkg);
+  const name = nextStyleName(automaticStyles, 'style:style', TABLE_CELL_STYLE_PREFIX);
+  const propsAttrs: Record<string, string> = {};
+  if (decoration.background !== undefined) {
+    propsAttrs['fo:background-color'] = formatOdfColor(decoration.background);
+  }
+  if (decoration.borders !== undefined) {
+    (['top', 'right', 'bottom', 'left'] as const).forEach((edge) => {
+      const border = decoration.borders![edge];
+      if (border !== undefined) {
+        propsAttrs[BORDER_EDGE_ATTRS[edge]] = formatBorderShorthand(border.color, border.widthPt, border.style);
+      }
+    });
+  }
+  const properties = Object.keys(propsAttrs).length === 0 ? [] : [el('style:table-cell-properties', propsAttrs)];
+  automaticStyles.children.push(el('style:style', { 'style:name': name, 'style:family': 'table-cell' }, properties));
+  return name;
+}
 
 // odf.js's StyleRegistry cannot express a table column's width at all -- StylePropertiesSchema (src/styles/properties.ts) has no columnWidthPt field, so style:table-column-properties/@style:column-width (the only place ODF records it) is entirely outside what StyleRegistry.intern can produce. This is therefore hand-rolled, mirroring StyleRegistry.intern's own append-only, fingerprint-deduplicated contract by hand: reuse an existing table-column style if one with the exact same formatted width is already present, otherwise mint a fresh name (via automatic-styles.ts's nextStyleName) and append a new entry -- never mutate or remove an existing one.
 function internTableColumnWidth(pkg: Package, widthPt: number): string {
@@ -100,6 +201,27 @@ export class OdtTableCell {
       return;
     }
     setAttr(this.node, 'table:number-rows-spanned', String(value));
+  }
+
+  // Cell background and per-edge borders live in style:table-cell-properties (fo:background-color and fo:border-top/right/bottom/left) -- outside what odf.js's StyleRegistry can express, so each setter re-mints a fresh table-cell automatic style carrying BOTH the change and the other decoration already on the cell (read back via readCellDecoration), repointing table:style-name at the result. Mirrors src/edit/odg/style.ts's setGraphicFill/setGraphicStroke (read-current, merge, mint) so setting background then borders -- or vice versa -- lands both in one style rather than the second clobbering the first.
+  get background(): Color | undefined {
+    return readCellDecoration(this.pkg, this.node).background;
+  }
+
+  set background(value: Color | undefined) {
+    const current = readCellDecoration(this.pkg, this.node);
+    const name = buildCellStyle(this.pkg, { background: value, borders: current.borders });
+    setAttr(this.node, 'table:style-name', name);
+  }
+
+  get borders(): ContentCellBorders | undefined {
+    return readCellDecoration(this.pkg, this.node).borders;
+  }
+
+  set borders(value: ContentCellBorders | undefined) {
+    const current = readCellDecoration(this.pkg, this.node);
+    const name = buildCellStyle(this.pkg, { background: current.background, borders: value });
+    setAttr(this.node, 'table:style-name', name);
   }
 }
 
