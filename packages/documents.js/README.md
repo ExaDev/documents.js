@@ -23,7 +23,6 @@ graph TD
     schema --> pdfcodec
     schema --> mdcodec
     schema --> documents
-    schema --> bytecodec
     ooxml --> documents
     odf --> documents
     pdfcodec --> documents
