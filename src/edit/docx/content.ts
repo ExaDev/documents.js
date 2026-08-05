@@ -11,6 +11,9 @@ import type { OmmlDiagnostic } from '../../omml/shared';
 import type { DocxBody } from './editor';
 import { DocxEditor } from './editor';
 import { createEmptyDocxPackage } from './scaffold';
+import { buildNumberingRoot, declaration as numberingDeclaration, NUMBERING_CONTENT_TYPE, NUMBERING_REL_TYPE, NUMBERING_PART_PATH, type NumberingEntry } from './numbering';
+import { ensureContentTypeOverride } from '../../opc/content-types';
+import { addRelationship } from '../../opc/rels';
 import type { DocxParagraph } from './paragraph';
 import type { DocxTableCell } from './table';
 
@@ -27,8 +30,34 @@ export function buildDocxPackage(content: ContentDocument, options?: BuildDocxPa
   }
   const clock = options?.clock ?? systemClock;
   const metadata = resolveMetadataTimestamps(content.metadata, clock);
-  const editor = new DocxEditor(createEmptyDocxPackage({ metadata }));
-  content.sections.forEach((section, sectionIndex) => {
+  const pkg = createEmptyDocxPackage({ metadata });
+  // Pre-pass: collect every distinct list numId + its levels across all blocks (recursing into table cells), then synthesise a word/numbering.xml so the w:numPr/w:numId references DocxParagraph.list writes actually resolve in Word. Without this, numIds dangle and Word renders no bullets.
+  const numIdLevels = new Map<string, Set<number>>();
+  for (const section of content.sections) {
+    collectListNumIds(section.blocks, numIdLevels);
+  }
+  const remap = new Map<string, string>();
+  if (numIdLevels.size > 0) {
+    const entries: NumberingEntry[] = [];
+    let abstractNumId = 0;
+    let numId = 1;
+    for (const [sourceNumId, levels] of numIdLevels) {
+      const remapped = String(numId);
+      remap.set(sourceNumId, remapped);
+      entries.push({ sourceNumId, remappedNumId: remapped, abstractNumId: String(abstractNumId), levels: [...levels].sort((a, b) => a - b) });
+      abstractNumId += 1;
+      numId += 1;
+    }
+    const numberingRoot = buildNumberingRoot(entries);
+    pkg.parts[NUMBERING_PART_PATH] = { kind: 'xml', nodes: [numberingDeclaration(), numberingRoot] };
+    ensureContentTypeOverride(pkg, NUMBERING_PART_PATH, NUMBERING_CONTENT_TYPE);
+    addRelationship(pkg, 'word/document.xml', { type: NUMBERING_REL_TYPE, target: 'numbering.xml' });
+  }
+  const editor = new DocxEditor(pkg);
+  const sections = numIdLevels.size > 0
+    ? content.sections.map((section) => ({ ...section, blocks: remapListNumIds(section.blocks, remap) }))
+    : content.sections;
+  sections.forEach((section, sectionIndex) => {
     if (sectionIndex > 0) {
       // A section boundary becomes a page break -- distinct per-section page size/margins (w:sectPr per section) isn't modelled by this bridge yet, since createDocx()'s single scaffolded section covers every caller this function currently has.
       editor.body.appendPageBreak();
@@ -41,6 +70,43 @@ export function buildDocxPackage(content: ContentDocument, options?: BuildDocxPa
 // ooxml.js's readDocx (real docx image reading, 2.6.1+) always represents an inline image as TWO adjacent ContentBlocks sourced from the one physical <w:p>: a paragraph block carrying that paragraph's own (possibly all-empty) text runs, immediately followed by an image block for the w:drawing found inside it -- there is no signal in ContentDocument distinguishing that pairing from a genuinely separate, intentionally-blank paragraph that happens to sit immediately before an unrelated image. Writing both blocks back as two independent paragraphs (the naive per-block loop) is round-trip-safe for the rare separate-blank-paragraph case but wrong for the overwhelmingly common inline-image case, inserting a spurious extra empty paragraph before every image on every docx round trip. isMergeableImageParagraph/appendBlocks instead special-case exactly the pattern readDocx always produces for a genuine inline image (a paragraph whose runs are all empty text, directly followed by an image block) and write it back as the single physical paragraph it came from, by populating the paragraph's own properties/runs and then calling insertImageAfter on that SAME paragraph rather than a fresh one -- consuming both ContentBlocks in one step. A paragraph with any non-empty run text is never merged, since ooxml.js's own reader only ever emits the image as a trailing sibling of an all-empty-runs paragraph (confirmed against real readDocx output: a drawing inside a paragraph that also carries real text produces the drawing's own empty-text run inline within that SAME paragraph block, never as a separate block at all -- see this repo's README Gotchas).
 function isMergeableImageParagraph(block: ContentBlock): block is ContentParagraph {
   return block.kind === 'paragraph' && block.runs.every((run) => run.text === '');
+}
+
+// Walks blocks recursively (paragraphs at any level, including inside table cells), collecting every distinct list numId and the set of levels each uses -- the input to the numbering.xml synthesis pre-pass above.
+function collectListNumIds(blocks: readonly ContentBlock[], out: Map<string, Set<number>>): void {
+  for (const block of blocks) {
+    if (block.kind === 'paragraph' && block.list !== undefined) {
+      let levels = out.get(block.list.numId);
+      if (levels === undefined) {
+        levels = new Set<number>();
+        out.set(block.list.numId, levels);
+      }
+      levels.add(block.list.level);
+    } else if (block.kind === 'table') {
+      for (const row of block.rows) {
+        for (const cell of row.cells) {
+          collectListNumIds(cell.blocks, out);
+        }
+      }
+    }
+  }
+}
+
+// Remaps source ContentListMembership numIds through the numbering pre-pass's source-to-docx integer map, producing a new block list where every list paragraph's numId is the one the synthesised numbering.xml actually defines. Returns the input unchanged when the map is empty (the no-list case), avoiding a needless shallow clone.
+function remapListNumIds(blocks: readonly ContentBlock[], numIdMap: ReadonlyMap<string, string>): ContentBlock[] {
+  if (numIdMap.size === 0) {
+    return [...blocks];
+  }
+  return blocks.map((block) => {
+    if (block.kind === 'paragraph' && block.list !== undefined) {
+      const remapped = numIdMap.get(block.list.numId);
+      return remapped === undefined ? block : { ...block, list: { numId: remapped, level: block.list.level } };
+    }
+    if (block.kind === 'table') {
+      return { ...block, rows: block.rows.map((row) => ({ ...row, cells: row.cells.map((cell) => ({ ...cell, blocks: remapListNumIds(cell.blocks, numIdMap) })) })) };
+    }
+    return block;
+  });
 }
 
 function appendBlocks(body: DocxBody, blocks: readonly ContentBlock[], options: BuildDocxPackageOptions | undefined): void {
