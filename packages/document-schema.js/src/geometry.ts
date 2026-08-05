@@ -10,6 +10,12 @@ export const BoxSchema = z.object({
 });
 export type Box = z.infer<typeof BoxSchema>;
 
+// A 2D point. A runtime geometry value used by layout positioning (e.g. centre-pivot rotation), not a serialized content shape, so it carries no Zod schema alongside Box/PageSize/Margins.
+export interface Point {
+  readonly x: number;
+  readonly y: number;
+}
+
 export const PageSizeSchema = z.object({
   widthPt: z.number().positive(),
   heightPt: z.number().positive(),

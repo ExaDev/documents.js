@@ -9,3 +9,6 @@ export * from './package';
 export * from './codec';
 export * from './schema-io';
 export * from './content-json-schema-defs';
+export * from './text-layout';
+export * from './font-port';
+export * from './math-layout';
