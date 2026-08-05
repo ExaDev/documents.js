@@ -1,3 +1,10 @@
+## [1.0.3](https://github.com/ExaDev/byte-codec/compare/v1.0.2...v1.0.3) (2026-08-05)
+
+
+### Bug Fixes
+
+* make sibling-notification dispatch resilient ([eb7b3e7](https://github.com/ExaDev/byte-codec/commit/eb7b3e77d619148ca43afe21d546e25a0142022e))
+
 ## [1.0.2](https://github.com/ExaDev/byte-codec/compare/v1.0.1...v1.0.2) (2026-08-05)
 
 
