@@ -1,6 +1,7 @@
 import type { DocumentPackage } from 'document-schema.js';
 import type { MarkdownImageResolver } from 'markdown-codec';
 import type { FontSubstitution, ProvidedFont } from 'document-schema.js';
+import type { ClockPort } from '../ports/clock';
 import { z } from 'zod';
 
 // The conversion behaviour modelled as a swappable port/contract, not a hard-wired function -- this workspace's standing "portable runtime and storage boundaries" convention, even though the only implementation today (local.ts) is entirely synchronous under the hood. `convert()` itself stays async and takes a mandatory abort signal regardless of that: it's a portability contract for a future non-local adapter (a remote conversion service, say), not a reflection of the local implementation's own synchronicity.
@@ -47,6 +48,8 @@ export interface ConversionOptions {
   readonly onFontSubstitution?: (substitution: FontSubstitution) => void;
   // A synchronous resolver for markdown images with a non-data: destination (a relative path, a bare URL) -- the same live-callback shape as onFontSubstitution, with the same remote-adapter caveat: the local implementation honours it (threading it through to markdown-codec's MarkdownImageResolver port for the markdown-sourced conversions), a remote adapter would have no way to call back into the caller's process and would instead leave non-data: images degraded to alt-text. Only the markdown-sourced conversions consult it; every other conversion ignores it.
   readonly images?: MarkdownImageResolver;
+  // An injectable clock forwarded to the X-to-PDF conversion's own /CreationDate and /ModDate stamping (see DocumentToPdfOptions.clock) -- a fixed instant is fully serialisable, so a remote adapter honours it the same way the local one does.
+  readonly clock?: ClockPort;
 }
 
 export interface DocumentConverter {
