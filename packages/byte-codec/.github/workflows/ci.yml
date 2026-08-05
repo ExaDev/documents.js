@@ -140,6 +140,7 @@ jobs:
           repositories: |
             documents.js
       - name: Dispatch sibling-released event to downstream repos
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
@@ -148,7 +149,7 @@ jobs:
             gh api "repos/ExaDev/$repo/dispatches" \
               -f event_type=sibling-released \
               -F "client_payload[package]=byte-codec" \
-              -F "client_payload[version]=$version"
+              -F "client_payload[version]=$version" || true
           done
 
   publish-github-packages:
