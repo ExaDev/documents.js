@@ -1,3 +1,10 @@
+# [2.8.0](https://github.com/ExaDev/ooxml.js/compare/v2.7.0...v2.8.0) (2026-08-05)
+
+
+### Features
+
+* read w:trHeight into ContentTableRow.heightPt ([b6aaecd](https://github.com/ExaDev/ooxml.js/commit/b6aaecdbec6accd86dc606bdeffb2c4684ff829c))
+
 # [2.7.0](https://github.com/ExaDev/ooxml.js/compare/v2.6.19...v2.7.0) (2026-08-05)
 
 
