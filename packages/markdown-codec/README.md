@@ -133,7 +133,7 @@ Modelled on `pdf-codec`'s own layering (generic primitives outward to the two co
 ```sh
 pnpm build         # tsdown -> dist/ (ESM + CJS + .d.ts)
 pnpm typecheck     # tsc --noEmit
-pnpm lint          # eslint . --max-warnings 0
+pnpm lint          # eslint . --fix --cache --max-warnings 0
 pnpm test          # vitest run --project unit (includes the CommonMark/GFM conformance suites)
 pnpm test:watch    # vitest --project unit
 pnpm test:coverage # vitest run --project unit --coverage
