@@ -64,7 +64,6 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
-          fail-on-error: false
 
   test-smoke:
     name: Smoke test
@@ -82,7 +81,7 @@ jobs:
 
   release:
     name: Release
-    needs: [commitlint, lint, typecheck, test, smoke]
+    needs: [commitlint, lint, typecheck, test, test-smoke]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -198,8 +197,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: byte-codec.js, registry: 'https://registry.npmjs.org' }
-          - { name: pdf-parser.js, registry: 'https://registry.npmjs.org' }
+          - { name: document-bytes, registry: 'https://registry.npmjs.org' }
     steps:
       - uses: actions/checkout@v7
         with:
