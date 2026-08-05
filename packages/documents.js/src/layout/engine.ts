@@ -4,7 +4,8 @@ import { layoutFormula } from '../mathml/layout';
 import { flipY } from '../model/geometry';
 import { formulaOfBlock, formulaPlaceholderText } from '../model/formula';
 import type { PositionedFormula, TextMeasurer } from 'document-schema.js';
-import { loadMathFont, wrapRunsToWidth } from 'pdf-codec';
+import { loadMathFont } from 'pdf-codec';
+import { wrapRunsToWidth } from './text-layout';
 import { alignmentOffsetPt, effectiveStyledRuns, estimateRowHeightPt, formulaSizePtForFrame, justifyLineGapsPt, lineNaturalHeightPt, pushCellBorderLines, registerImage, sumColumnWidthsPt } from './shared';
 
 // ContentDocument (the wordprocessing variant) -> LayoutDocument: docx's hard direction. A docx page isn't a fixed canvas the way a pptx slide is -- content flows and paginates, so this engine tracks a vertical cursor per page and starts a new page whenever the next line (or table row) would overflow the current one, honoring explicit page breaks, w:pageBreakBefore, and a per-section page-size/margin change. Headers/footers and live PAGE/NUMPAGES substitution are not laid out here -- src/ooxml/docx/read.ts doesn't read them either, a deliberate, tracked narrowing from the plan's original scope (see that file's own module doc).

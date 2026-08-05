@@ -3,7 +3,7 @@ import { LAYOUT_FORMAT_VERSION } from 'document-schema.js';
 import { flipY } from '../model/geometry';
 import { mergeByPaintOrder } from '../model/paint-order';
 import type { Point, TextMeasurer } from 'document-schema.js';
-import { rotatePointAboutCenter } from 'pdf-codec';
+import { rotatePointAboutCenter } from '../model/geometry';
 import { convertShape } from './slides';
 
 // ContentDocument (the drawing variant, odf.js's .odg target) -> LayoutDocument: structurally the same shape as slides.ts's own pptx/odp direction (one ContentDrawPage per PDF page, direct placement, no pagination), extended with one new emission path -- ContentVector, the vector-primitive vocabulary a drawing carries that a slide typically doesn't. rect/ellipse/line vectors map onto the LayoutRect/LayoutEllipse/LayoutLine kinds documents.js already had before this module existed; 'path' is the one genuinely new LayoutItem kind (document-schema.js's LayoutPathSchema), constructed here as a plain value -- writePath (pdf-codec's content-write.ts) is what later turns that value into PDF content-stream operators, a separate, downstream concern from building it. ContentShape content (draw:frame text/image/table, and salvaged custom-shape text) reuses convertShape verbatim from slides.ts, which is what makes odg free-riding on odp's/pptx's own already-correct paragraph flow, image placement, and table layout, not a second reimplementation of any of it.

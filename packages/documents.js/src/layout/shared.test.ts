@@ -1,8 +1,9 @@
 import { bytesToBase64 } from 'ooxml.js';
 import { describe, expect, it } from 'vitest';
 import type { ContentCellBorders, ContentRun, ContentTableRow, LayoutImageAsset, LayoutItem, LayoutLine } from 'document-schema.js';
-import type { TextMeasurer } from 'pdf-codec';
-import { encodePng, wrapRunsToWidth } from 'pdf-codec';
+import type { TextMeasurer } from 'document-schema.js';
+import { encodePng } from 'pdf-codec';
+import { wrapRunsToWidth } from './text-layout';
 import { alignmentOffsetPt, effectiveStyledRuns, estimateRowHeightPt, justifyLineGapsPt, lineNaturalHeightPt, NOMINAL_TEXT_SIZE_PT, pushCellBorderLines, registerImage, runFont, sumColumnWidthsPt, toStyledRuns } from './shared';
 
 const RED = { r: 1, g: 0, b: 0 };

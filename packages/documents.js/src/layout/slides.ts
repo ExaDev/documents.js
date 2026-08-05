@@ -5,7 +5,9 @@ import type { Box } from '../model/geometry';
 import { flipY } from '../model/geometry';
 import { formulaOfBlock } from '../model/formula';
 import type { Point, PositionedFormula, TextMeasurer } from 'document-schema.js';
-import { loadMathFont, rotatePointAboutCenter, wrapRunsToWidth } from 'pdf-codec';
+import { loadMathFont } from 'pdf-codec';
+import { wrapRunsToWidth } from './text-layout';
+import { rotatePointAboutCenter } from '../model/geometry';
 import { alignmentOffsetPt, effectiveStyledRuns, estimateRowHeightPt, formulaSizePtForFrame, justifyLineGapsPt, lineNaturalHeightPt, registerImage, sumColumnWidthsPt } from './shared';
 
 // ContentDocument (the presentation variant) -> LayoutDocument: pptx's tractable layout direction. No pagination -- one slide is always exactly one PDF page (slide size maps directly to the page's own widthPt/heightPt) -- and no group-transform resolution either, since src/ooxml/pptx/read.ts already flattened every group into absolute shape positions at read time. What's left is genuinely just: wrap each shape's text within its own box (reusing the exact wrapRunsToWidth docx also uses), place images at their shape's frame, render table grids directly from explicit column widths/row heights, and apply the one deliberate Y-flip from OOXML's top-left/y-down space into PDF's bottom-left/y-up space.
