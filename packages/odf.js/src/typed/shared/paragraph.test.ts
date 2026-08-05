@@ -132,3 +132,28 @@ describe('readOdfParagraph: text:span run formatting', () => {
     expect(readOdfParagraph(p, { parts: {} }).runs[0]).toMatchObject({ text: 'unstyled span text', bold: undefined });
   });
 });
+
+describe('readOdfParagraph: text:a hyperlink recovery', () => {
+  it('reads a text:a/xlink:href wrapping a text:span, stamping hyperlink on the run while preserving the span formatting and text', () => {
+    const t1 = styleStyle('T1', 'text', {}, [textProps({ 'fo:font-weight': 'bold' })]);
+    const pkg: Package = { parts: { 'content.xml': contentPackage([t1]) } };
+    const p = el('text:p', {}, [el('text:a', { 'xlink:href': 'https://example.com' }, [el('text:span', { 'text:style-name': 'T1' }, [txt('link text')])])]);
+    const [run] = readOdfParagraph(p, pkg).runs;
+    expect(run).toMatchObject({ text: 'link text', bold: true, hyperlink: 'https://example.com' });
+  });
+
+  it('stamps hyperlink on plain text directly inside a text:a, with no span', () => {
+    const p = el('text:p', {}, [el('text:a', { 'xlink:href': 'https://example.com/plain' }, [txt('click here')])]);
+    expect(readOdfParagraph(p, { parts: {} }).runs[0]).toMatchObject({ text: 'click here', hyperlink: 'https://example.com/plain' });
+  });
+
+  it('does not stamp hyperlink on runs outside the text:a', () => {
+    const p = el('text:p', {}, [txt('before '), el('text:a', { 'xlink:href': 'https://example.com' }, [txt('link')]), txt(' after')]);
+    const runs = readOdfParagraph(p, { parts: {} }).runs;
+    expect(runs).toEqual([
+      { text: 'before ', bold: undefined, italic: undefined, underline: undefined, strike: undefined, fontFamily: undefined, sizePt: undefined, color: undefined },
+      { text: 'link', bold: undefined, italic: undefined, underline: undefined, strike: undefined, fontFamily: undefined, sizePt: undefined, color: undefined, hyperlink: 'https://example.com' },
+      { text: ' after', bold: undefined, italic: undefined, underline: undefined, strike: undefined, fontFamily: undefined, sizePt: undefined, color: undefined },
+    ]);
+  });
+});
