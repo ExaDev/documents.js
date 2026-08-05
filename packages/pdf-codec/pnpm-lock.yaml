@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      byte-codec:
+        specifier: 1.0.0
+        version: 1.0.0
       document-schema.js:
         specifier: ^2.4.0
         version: 2.4.0
@@ -965,6 +968,9 @@ packages:
   braces@3.0.3:
     resolution: {integrity: sha512-yQbXgO/OSZVD2IsiLlro+7Hf6Q18EJrKSEsdoMzKePKXct3gvD8oLcOQdIzGupr5Fj+EDe8gO/lxc1BzfMpxvA==}
     engines: {node: '>=8'}
+
+  byte-codec@1.0.0:
+    resolution: {integrity: sha512-HC0x+c2qDabbxYytbubdmm6rrCG5b6g1/0ma9VpKms1Bkj2CyakFp/pmv5P1E9FNOsQTmZbsS6knhDJdfjXhAg==}
 
   cac@7.0.0:
     resolution: {integrity: sha512-tixWYgm5ZoOD+3g6UTea91eow5z6AAHaho3g0V9CNSNb45gM8SmflpAc+GRd1InC4AqN/07Unrgp56Y94N9hJQ==}
@@ -3523,6 +3529,10 @@ snapshots:
   braces@3.0.3:
     dependencies:
       fill-range: 7.1.1
+
+  byte-codec@1.0.0:
+    dependencies:
+      fflate: 0.8.3
 
   cac@7.0.0: {}
 

@@ -46,32 +46,19 @@ export type { EmbeddedFace, EmbeddedFaceMetrics, EmbeddedFaceSubstitution } from
 export type { FontFace } from './font-face';
 export { FontFaceParseError, readFontFace } from './font-face';
 
-// Bytes: generic byte-level primitives with zero PDF knowledge (CRC32, DEFLATE/zlib, a backtracking reader, a chunked writer).
-export { crc32 } from './bytes/crc32';
-export type { DeflateLevel, InflateResult } from './bytes/flate';
-export { MAX_INFLATE_OUTPUT_BYTES, deflate, inflate, inflateTolerant } from './bytes/flate';
-export { ByteReader, isAsciiWhitespace } from './bytes/reader';
-export { ByteWriter, concatBytes } from './bytes/writer';
+// Bytes + generic image (PNG/JPEG): re-exported from byte-codec (the neutral shared package), where these pure utilities now live. pdf-codec keeps its own internal copies under src/bytes/ and src/image/ (its own read/write/interpret paths use them), but its PUBLIC surface sources them from byte-codec so a consumer does not need to reach into a PDF backend for generic byte/image code.
+export * from 'byte-codec';
 
-// Image: JPEG marker scanning (dimensions only, compressed bytes untouched), a hand-written PNG codec (palette/gray/RGB/alpha, multi-IDAT, all five scanline filters), a hand-written CCITT Group 3/Group 4 fax decoder, a hand-written JBIG2 decoder, and a hand-written JPEG 2000 decoder.
+// PDF-specific image codecs (CCITT fax, JBIG2, JPEG 2000) stay here -- they are genuine PDF-format concerns, not generic byte/image utilities.
 export type { CcittFaxImage, CcittFaxOptions } from './image/ccitt';
 export { decodeCcittFax } from './image/ccitt';
-// The JBIG2 decoder's own entry point, alongside the two errors it distinguishes: a malformed stream (Jbig2ParseError) and one using a JBIG2 feature this decoder does not implement (Jbig2UnsupportedError). Exported for the same reason decodeCcittFax is -- a caller holding a bare JBIG2 stream from somewhere other than a PDF should not have to reimplement it.
 export type { Jbig2DecodeOptions, Jbig2Image } from './image/jbig2';
 export { decodeJbig2Embedded } from './image/jbig2';
 export { Jbig2ParseError, Jbig2UnsupportedError } from './image/jbig2-errors';
-// The JPEG 2000 decoder's own two entry points -- full pixel decoding, and a metadata read that works on any conforming codestream including one whose pixels this decoder refuses -- alongside the JP2 box parser and the two errors they distinguish, exactly mirroring the JBIG2 surface above.
 export type { Jp2ChannelDefinition, Jp2ColourSpace, Jp2Container, Jp2ImageHeader } from './image/jp2-boxes';
 export { looksLikeBareCodestream, parseJp2Container } from './image/jp2-boxes';
 export type { Jpeg2000ComponentMetadata, Jpeg2000DecodeOptions, Jpeg2000Image, Jpeg2000Metadata } from './image/jpeg2000';
 export { decodeJpeg2000, readJpeg2000Metadata } from './image/jpeg2000';
 export type { Jpeg2000ProgressionOrder, Jpeg2000QuantizationStyle, Jpeg2000Transform } from './image/jpeg2000-codestream';
 export { Jpeg2000ParseError, Jpeg2000UnsupportedError } from './image/jpeg2000-errors';
-export type { JpegInfo } from './image/jpeg-info';
-export { readJpegInfo } from './image/jpeg-info';
-export type { PngDecodeOptions, RawImage } from './image/png-decode';
-export { decodePng } from './image/png-decode';
-export type { PngEncodeOptions } from './image/png-encode';
-export { encodePng } from './image/png-encode';
-export type { PngFilterType } from './image/png-filter';
 export { filterScanlines, unfilterScanlines } from './image/png-filter';
