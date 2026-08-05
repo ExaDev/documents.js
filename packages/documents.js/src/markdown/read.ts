@@ -6,7 +6,7 @@ import type { ContentDocument } from 'document-schema.js';
 //
 // Unlike readOdtContent/readOdpContent, this adapter runs no second embedded-formula detection pass over its own source: CommonMark/GFM has no embedded-object or formula construct at all for one to find, so there is nothing to detect even speculatively. (A formula reaching markdown from the OTHER direction still degrades to its own plain-text stand-in -- see src/markdown/write.ts's own markdownBlock.)
 export function readMarkdownContent(text: string, options?: ReadMarkdownOptions): ContentDocument {
-  const { document } = readMarkdown(text, options);
+  const { document } = readMarkdown(text, { frontMatter: true, ...options });
   // readMarkdown's declared return type is the full ContentDocument union, even though it always produces the wordprocessing variant in practice (markdown has no presentation/spreadsheet/drawing/formula equivalent to lower into) -- this both documents and enforces that, mirroring every other readXContent adapter's own kind guard in this package (readDocxContent, readOdtContent, readOdsContent, readOdgContent).
   if (document.kind !== 'wordprocessing') {
     throw new Error('readMarkdown returned a non-wordprocessing ContentDocument');
