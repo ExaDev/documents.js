@@ -34,9 +34,9 @@ import {
 } from './convert';
 import type { DocumentFormat } from './port';
 
-// This module models the real ContentDocument-variant compatibility this family already has (wordprocessing = {docx, odt, markdown}, presentation = {pptx, odp}, spreadsheet = {xlsx, ods}, drawing = {odg alone}) plus which nodes have a direct layout-engine path to/from LayoutDocument, then exposes a small, capped, one-intermediate-hop path resolver over that model. Every (source, target) pair this package actually supports (local.ts's own DIRECT_EDGES below) has either a direct layout-engine edge to/from pdf, a direct same-variant bridge, or -- for xlsx<->pdf specifically -- a real, ergonomic conversion function (xlsxToPdf/pdfToXlsx, convert.ts) that composes the ods<->xlsx bridge with the ods<->pdf layout edge internally, since xlsx shares the spreadsheet variant with ods but has no layout-engine edge of its own. resolveConversionPath can independently find that identical one-hop path by composing DIRECT_EDGES itself (xlsx -> ods -> pdf, via the ods<->xlsx bridge and ods<->pdf layout edge) -- see capability.test.ts's own dedicated proof of the resolver's own composition mechanism -- but DIRECT_EDGES lists xlsx<->pdf as a direct edge regardless, since resolveConversionPath always prefers a direct match over composing one, and xlsxToPdf/pdfToXlsx are real, single-call functions from a caller's own point of view, not something a caller has to chain themselves.
+// This module models the real ContentDocument-variant compatibility this family already has (wordprocessing = {docx, odt, markdown}, presentation = {pptx, odp}, spreadsheet = {xlsx, ods}, drawing = {odg alone}) plus which nodes have a direct layout-engine path to/from LayoutDocument (FORMAT_CAPABILITIES below), then exposes a direct-edge path resolver (resolveConversionPath) over DIRECT_EDGES. Every (source, target) pair this package actually supports is a direct edge in DIRECT_EDGES: a layout-engine edge to/from pdf, a same-variant bridge, or -- for xlsx<->pdf specifically -- a real, ergonomic conversion function (xlsxToPdf/pdfToXlsx, convert.ts) that composes the ods<->xlsx bridge with the ods<->pdf layout edge internally, registered as a direct edge since it is a real, single-call function from a caller's own point of view rather than something a caller has to chain themselves.
 //
-// markdown was wired in the identical way, not by leaning on resolveConversionPath's own composition ability: local.ts's DocumentConverter only ever EXECUTES a 'direct' strategy (see that file's own comment -- "a pair with neither a direct edge nor a one-hop composed path still rejects exactly as it always has"), never a composed one, so resolveConversionPath finding a theoretical markdown -> pdf -> docx path would not make that pair actually convertible through the port. markdownToDocx/docxToMarkdown and markdownToOdt/odtToMarkdown are consequently hand-written, real bridge functions (convert.ts), registered below as direct edges -- exactly the same reason xlsxToPdf/pdfToXlsx had to be hand-composed functions despite the resolver being able to "find" that identical path on its own.
+// markdown's bridges (markdownToDocx/docxToMarkdown, markdownToOdt/odtToMarkdown) are wired the same way -- hand-written, real bridge functions (convert.ts) registered as direct edges. local.ts's DocumentConverter only ever executes a direct edge, so any pair not in DIRECT_EDGES is unsupported and rejected (UnsupportedConversionError); there is no implicit multi-hop composition.
 
 // All five of document-schema.js's own ContentDocument kinds. 'formula' is a genuine member rather than a forward-looking one: readOdfFormulaContent produces a real `{kind:'formula', ...}` ContentDocument and odfToPdf consumes one, so `odf` below models it. Unlike the other four, it is a variant of exactly ONE format -- there is no second 'formula'-variant format to bridge it to, which is why a shared variant does not by itself imply a bridge edge exists (see DIRECT_EDGES below, the resolver's only actual input).
 export type ContentVariant = 'wordprocessing' | 'presentation' | 'spreadsheet' | 'drawing' | 'formula';
@@ -89,7 +89,7 @@ export interface BridgeEdge {
 
 export type ConversionEdge = ToPdfEdge | FromPdfEdge | BridgeEdge;
 
-// Every direct conversion this package implements today, in the exact order local.ts's own SUPPORTED_CONVERSIONS/the DocumentConverter port's `conversions` field have always listed them -- see local.test.ts's own exact-array assertion. This is the resolver's only input in this phase: resolveConversionPath is capable of composing a path this list doesn't contain directly (xlsx<->pdf, via ods -- see this module's own top-of-file comment), but local.ts does not yet act on a composed result.
+// Every direct conversion this package implements today, in the exact order local.ts's own SUPPORTED_CONVERSIONS/the DocumentConverter port's `conversions` field have always listed them -- see local.test.ts's own exact-array assertion. This is the resolver's only input: resolveConversionPath returns a direct edge from this list or rejects (UnsupportedConversionError) -- there is no implicit multi-hop composition.
 export const DIRECT_EDGES: readonly ConversionEdge[] = [
   { kind: 'toPdf', source: 'docx', target: 'pdf', convert: docxToPdf },
   { kind: 'toPdf', source: 'pptx', target: 'pdf', convert: pptxToPdf },
@@ -130,30 +130,23 @@ export const DIRECT_EDGES: readonly ConversionEdge[] = [
   { kind: 'bridge', source: 'odp', target: 'odt', convert: odpToOdt },
 ];
 
-export type ConversionStrategy =
-  | { readonly kind: 'direct'; readonly edge: ConversionEdge }
-  | { readonly kind: 'composed'; readonly via: DocumentFormat; readonly first: ConversionEdge; readonly second: ConversionEdge };
+// Thrown when a requested (source, target) pair has no direct edge in DIRECT_EDGES -- the local DocumentConverter (local.ts) rejects rather than silently routing through a lossy two-hop path. A named class matching this package's own OdmUnresolvedSectionError/HsqldbSqlUnsupportedError convention for "recognised but unsupported", so a caller can branch on it rather than string-matching a message.
+export class UnsupportedConversionError extends Error {
+  readonly source: DocumentFormat;
+  readonly target: DocumentFormat;
 
-// Capped, one-intermediate-hop path resolution over `edges` -- deliberately NOT an unbounded graph search: every real path in this family's format set resolves within one hop (a direct edge, or exactly one shared intermediate node with a direct edge on each leg), so there is no recursion and no need for one. Prefers a direct edge (today's hand-written docx<->odt, pptx<->odp, xlsx<->ods bridges, and every direct layout-engine <-> pdf edge) over composing one, and never proposes a same-format "conversion".
-export function resolveConversionPath(source: DocumentFormat, target: DocumentFormat, edges: readonly ConversionEdge[] = DIRECT_EDGES): ConversionStrategy | undefined {
+  constructor(source: DocumentFormat, target: DocumentFormat) {
+    super(`unsupported conversion: ${source} -> ${target}`);
+    this.name = 'UnsupportedConversionError';
+    this.source = source;
+    this.target = target;
+  }
+}
+
+// Direct-edge lookup over `edges` -- the ONLY strategy the local DocumentConverter (local.ts) ever executes. An earlier revision also composed a one-intermediate-hop path for a pair with no direct edge (xlsx -> ods -> pdf, odg -> pdf -> xlsx), but local.ts never ran a composed result -- it rejected anything that was not a direct edge -- so the composed arm was dead code, claiming to solve pairs the port refused. It is removed: the resolver now returns only what the port will actually execute, and every worthwhile composed route (xlsxToPdf/pdfToXlsx, which compose the ods<->xlsx bridge with the ods<->pdf edge internally) is already hand-written as its own direct edge in DIRECT_EDGES. Never proposes a same-format "conversion".
+export function resolveConversionPath(source: DocumentFormat, target: DocumentFormat, edges: readonly ConversionEdge[] = DIRECT_EDGES): ConversionEdge | undefined {
   if (source === target) {
     return undefined;
   }
-
-  const direct = edges.find((edge) => edge.source === source && edge.target === target);
-  if (direct !== undefined) {
-    return { kind: 'direct', edge: direct };
-  }
-
-  for (const first of edges) {
-    if (first.source !== source) {
-      continue;
-    }
-    const second = edges.find((edge) => edge.source === first.target && edge.target === target);
-    if (second !== undefined) {
-      return { kind: 'composed', via: first.target, first, second };
-    }
-  }
-
-  return undefined;
+  return edges.find((edge) => edge.source === source && edge.target === target);
 }

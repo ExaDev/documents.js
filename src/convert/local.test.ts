@@ -12,6 +12,7 @@ import { minimalOdsBytes } from '../test-support/ods';
 import { minimalOdtBytes } from '../test-support/odt';
 import { odsToXlsx } from './convert';
 import { createLocalDocumentConverter } from './local';
+import { UnsupportedConversionError } from './capability';
 
 function pdfHeader(bytes: Uint8Array<ArrayBuffer>): string {
   return new TextDecoder('latin1').decode(bytes.subarray(0, 5));
@@ -241,9 +242,11 @@ describe('createLocalDocumentConverter: convert', () => {
     expect(result.diagnostics).toEqual([]);
   });
 
-  it('rejects an unsupported conversion pair', async () => {
+  it('rejects an unsupported conversion pair with a named UnsupportedConversionError', async () => {
     const converter = createLocalDocumentConverter();
-    await expect(converter.convert({ source: { format: 'docx', bytes: buildSampleDocx('Hi') }, targetFormat: 'docx' }, { signal: new AbortController().signal })).rejects.toThrow(/unsupported conversion/);
+    const promise = converter.convert({ source: { format: 'docx', bytes: buildSampleDocx('Hi') }, targetFormat: 'docx' }, { signal: new AbortController().signal });
+    await expect(promise).rejects.toBeInstanceOf(UnsupportedConversionError);
+    await expect(promise).rejects.toThrow(/unsupported conversion/);
   });
 
   it('collects a char/substituted diagnostic for a character outside WinAnsi', async () => {
