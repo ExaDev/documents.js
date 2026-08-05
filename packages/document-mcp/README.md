@@ -52,7 +52,7 @@ Requires Node.js `>=20` and pnpm `11.6.0` (pinned via `packageManager` in `packa
 pnpm install
 pnpm build         # tsdown -> dist/ (ESM + CJS + .d.ts)
 pnpm typecheck     # tsc --noEmit
-pnpm lint          # eslint . --max-warnings 0
+pnpm lint          # eslint . --fix --cache --max-warnings 0
 pnpm test          # vitest run --project unit
 pnpm test:smoke    # rebuilds dist/, then spawns dist/bin.js as a real subprocess and drives it over genuine MCP stdio
 ```
