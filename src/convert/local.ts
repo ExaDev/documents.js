@@ -29,8 +29,8 @@ function fromPdfDiagnostic(diagnostic: PdfDiagnostic): Diagnostic {
 
 export function createLocalDocumentConverter(): DocumentConverter {
   return {
-    // 2 added ConversionResult's optional `package` field (see port.ts), which the local implementation below populates from every conversion function's own onDocument callback; 3 added convert()'s own ConversionOptions.fonts/onFontSubstitution, which an implementation is now expected to honour for every conversion that lays text out; 4 added ConversionOptions.images (a MarkdownImageResolver), honoured by the markdown-sourced to-PDF and bridge edges.
-    contractVersion: 4,
+    // 2 added ConversionResult's optional `package` field (see port.ts), which the local implementation below populates from every conversion function's own onDocument callback; 3 added convert()'s own ConversionOptions.fonts/onFontSubstitution, which an implementation is now expected to honour for every conversion that lays text out; 4 added ConversionOptions.images (a MarkdownImageResolver), honoured by the markdown-sourced to-PDF and bridge edges; 5 added ConversionOptions.clock, forwarded to every X-to-PDF conversion's /CreationDate and /ModDate stamping.
+    contractVersion: 5,
     conversions: SUPPORTED_CONVERSIONS,
     convert(request: ConversionRequest, options: ConversionOptions): Promise<ConversionResult> {
       const { source, targetFormat } = request;
@@ -54,7 +54,7 @@ export function createLocalDocumentConverter(): DocumentConverter {
       const edge = strategy.edge;
       if (edge.kind === 'toPdf') {
         // The only edge kind that resolves a font at all: it is the one that runs a layout engine and writes glyphs. odfToPdf accepts onDocument (it shares docx/odt/pptx/odp/ods/odg's own options type) but never invokes it -- see that function's own comment -- so `documentPackage` stays undefined for that one edge, and `package` on the returned result is correctly omitted; the same comment explains why it never reports a font substitution either.
-        const bytes = edge.convert(source.bytes, { signal: options.signal, onSubstitution: (s, c) => diagnostics.push(substitutionDiagnostic(s, c)), onDocument, fonts: options.fonts, onFontSubstitution, images: options.images });
+        const bytes = edge.convert(source.bytes, { signal: options.signal, onSubstitution: (s, c) => diagnostics.push(substitutionDiagnostic(s, c)), onDocument, fonts: options.fonts, onFontSubstitution, images: options.images, clock: options.clock });
         return Promise.resolve({ document: { format: edge.target, bytes }, diagnostics, package: documentPackage });
       }
       if (edge.kind === 'fromPdf') {

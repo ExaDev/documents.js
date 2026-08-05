@@ -32,8 +32,8 @@ function buildSamplePptx(text: string): Uint8Array<ArrayBuffer> {
 describe('createLocalDocumentConverter: shape', () => {
   it('reports contractVersion and the supported conversion pairs', () => {
     const converter = createLocalDocumentConverter();
-    // 4, not 3: convert()'s own ConversionOptions gained images (a MarkdownImageResolver), which an implementation is expected to honour for the markdown-sourced conversions -- see port.ts's own contractVersion comment on what does and does not warrant a bump.
-    expect(converter.contractVersion).toBe(4);
+    // 5, not 4: convert()'s own ConversionOptions gained clock (a ClockPort), forwarded to every X-to-PDF conversion's /CreationDate and /ModDate stamping -- see port.ts's own contractVersion comment on what does and does not warrant a bump.
+    expect(converter.contractVersion).toBe(5);
     expect(converter.conversions).toEqual([
       { source: 'docx', target: 'pdf' },
       { source: 'pptx', target: 'pdf' },
