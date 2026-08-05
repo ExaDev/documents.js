@@ -31,13 +31,13 @@
     }
   },
   "scripts": {
-    "build": "tsdown",
+    "build": "tsdown && node scripts/rename-dts.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --fix --cache --max-warnings 0",
     "test": "vitest run",
     "test:watch": "vitest",
     "prepare": "husky",
-    "prepublishOnly": "tsdown",
+    "prepublishOnly": "pnpm run build",
     "lint:check": "eslint . --max-warnings 0"
   },
   "files": [
@@ -59,7 +59,7 @@
     "husky": "^9.1.7",
     "lint-staged": "^17.2.0",
     "semantic-release": "^25.0.8",
-    "tsdown": "^0.22.14",
+    "tsdown": "^0.12.9",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.65.0",
     "vitest": "^4.1.10"
