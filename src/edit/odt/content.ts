@@ -148,6 +148,9 @@ export function populateParagraph(paragraph: OdtParagraph, block: ContentParagra
     if (run.underline === true) {
       odtRun.underline = true;
     }
+    if (run.strike === true) {
+      odtRun.strike = true;
+    }
     if (run.fontFamily !== undefined) {
       odtRun.fontFamily = run.fontFamily;
     }

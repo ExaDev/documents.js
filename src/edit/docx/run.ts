@@ -35,6 +35,7 @@ export interface RunInit {
   readonly bold?: boolean;
   readonly italic?: boolean;
   readonly underline?: boolean;
+  readonly strike?: boolean;
   readonly fontFamily?: string;
   readonly sizePt?: number;
   readonly color?: LayoutColor;
@@ -119,6 +120,14 @@ export class DocxRun {
     setToggle(this.rPr(true), 'w:i', value, RPR_ORDER);
   }
 
+  get strike(): boolean {
+    return getToggle(this.rPr(false), 'w:strike');
+  }
+
+  set strike(value: boolean) {
+    setToggle(this.rPr(true), 'w:strike', value, RPR_ORDER);
+  }
+
   get underline(): boolean {
     const rPr = this.rPr(false);
     const uElement = rPr === undefined ? undefined : directChild(rPr, 'w:u');
@@ -201,6 +210,9 @@ export function buildRun(init: RunInit = {}): XmlElement {
   }
   if (init.italic === true) {
     rPrChildren.push(el('w:i'));
+  }
+  if (init.strike === true) {
+    rPrChildren.push(el('w:strike'));
   }
   if (init.fontFamily !== undefined) {
     rPrChildren.push(el('w:rFonts', { 'w:ascii': init.fontFamily, 'w:hAnsi': init.fontFamily }));

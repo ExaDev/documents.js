@@ -10,6 +10,7 @@ export interface RunInit {
   readonly bold?: boolean;
   readonly italic?: boolean;
   readonly underline?: boolean;
+  readonly strike?: boolean;
   readonly fontFamily?: string;
   readonly sizePt?: number;
   readonly color?: LayoutColor;
@@ -66,6 +67,14 @@ export class OdtRun {
 
   set underline(value: boolean) {
     applyStyleChange(this.pkg, this.live(), 'text', { underline: value });
+  }
+
+  get strike(): boolean {
+    return readCurrentStyleProperties(this.pkg, this.live(), 'text').strike ?? false;
+  }
+
+  set strike(value: boolean) {
+    applyStyleChange(this.pkg, this.live(), 'text', { strike: value });
   }
 
   get fontFamily(): string | undefined {
