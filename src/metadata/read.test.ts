@@ -62,12 +62,12 @@ describe('readDocumentMetadata', () => {
     expect(readDocumentMetadata('odf', bytes)).toEqual(readOdfFormulaContent(decodeOdfPackage(bytes)).metadata);
   });
 
-  it('markdown: matches readMarkdownContent(...).metadata', () => {
-    // readDocumentMetadata calls readMarkdownContent with no options, matching the original dispatch this function was promoted from -- front matter is opt-in (markdown-codec's own DEFAULT_FRONT_MATTER is false), so a leading front-matter block is read as ordinary content here, not as metadata. This fixture (rather than the plain richMarkdownText) proves that is a genuine pass-through of readMarkdownContent's own default, not an accidental omission: the block is present in the source and deliberately not surfaced as metadata.
+  it('markdown: matches readMarkdownContent(...).metadata, with front-matter now surfaced by default', () => {
+    // readMarkdownContent now defaults frontMatter: true (src/markdown/read.ts), so a leading YAML front-matter block's title/author reach ContentDocument.metadata by default -- readDocumentMetadata dispatches through readMarkdownContent, so the title from the fixture's front matter is genuinely surfaced here, not dropped.
     const text = richMarkdownTextWithFrontMatter();
     const bytes = encodeMarkdownText(text);
     expect(readDocumentMetadata('markdown', bytes)).toEqual(readMarkdownContent(decodeMarkdownText(bytes)).metadata);
-    expect(readDocumentMetadata('markdown', bytes).title).toBeUndefined();
+    expect(readDocumentMetadata('markdown', bytes).title).toBe('Sample Report');
   });
 
   it('pdf: matches readPdf(...).metadata', () => {

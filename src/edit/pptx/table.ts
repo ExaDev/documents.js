@@ -1,9 +1,12 @@
+import type { Color, ContentBorder, ContentCellBorders } from 'document-schema.js';
+import { rgbHexToColor } from 'document-schema.js';
 import type { XmlElement } from 'ooxml.js';
 import { attr } from 'ooxml.js';
 import type { Box } from '../../model/geometry';
-import { ptToEmu } from '../../model/units';
+import { emuToPt, ptToEmu } from '../../model/units';
 import { directChildElement, removeAttr, setAttr } from '../../xml/edit';
 import { el } from '../../xml/fragment';
+import { drawingMlColorHex } from '../drawingml/vector';
 import type { DrawingParagraphInit } from './shape';
 import { buildDrawingParagraph, ROTATION_UNITS_PER_DEGREE } from './shape';
 
@@ -23,6 +26,10 @@ const TABLE_GRAPHIC_URI = 'http://schemas.openxmlformats.org/drawingml/2006/tabl
 // A live view over a DrawingML table cell (a:tc) -- the ContentTable-cell-shaped counterpart to DocxTableCell/OdtTableCell (src/edit/docx/table.ts, src/edit/odt/table.ts), but for a table living inside a slide's own p:graphicFrame rather than a document body. Unlike docx's gridSpan-collapses-the-row model, and matching ODF's covered-table-cell model in spirit, a DrawingML table's own a:tr always carries exactly `columns` a:tc elements regardless of merges (ooxml.js's own readTable confirms this: every row is `childrenWithTag(tr, "a:tc").map(readTableCell)` with no gridSpan-based skipping) -- a merge is expressed purely via attributes on the covered cell's own a:tc (hMerge/vMerge, boolean "1"), never by omitting or replacing the element the way docx/ODF each do in their own way.
 export class PptxTableCell {
   constructor(private readonly node: XmlElement) {}
+
+  get element(): XmlElement {
+    return this.node;
+  }
 
   get colSpan(): number | undefined {
     const value = attr(this.node, 'gridSpan');
@@ -66,6 +73,115 @@ export class PptxTableCell {
     } else {
       removeAttr(this.node, 'vMerge');
     }
+  }
+
+  // a:tcPr is the cell's own properties container (ECMA-376 21.1.3.8) -- find-or-create it, since every setter below either reads from or writes into it. buildTableCellElement already creates an empty a:tcPr as the cell's last child, so this is find-most-of-the-time rather than create-often.
+  private tcPrElement(create: true): XmlElement;
+  private tcPrElement(create: false): XmlElement | undefined;
+  private tcPrElement(create: boolean): XmlElement | undefined {
+    const existing = directChildElement(this.node, 'a:tcPr');
+    if (existing !== undefined || !create) {
+      return existing;
+    }
+    const created = el('a:tcPr');
+    this.node.children.push(created);
+    return created;
+  }
+
+  // a:tcPr/a:solidFill/a:srgbClr@val -- the cell's fill colour, read back by ooxml.js's own readTableCell (typed/pptx/read.ts) via readSolidFillColor. The hex is uppercase to match what real PowerPoint itself emits (a:srgbClr/@val is case-insensitive); rgbHexToColor parses either case identically.
+  get background(): Color | undefined {
+    const tcPr = this.tcPrElement(false);
+    if (tcPr === undefined) {
+      return undefined;
+    }
+    const solidFill = directChildElement(tcPr, 'a:solidFill');
+    const srgbClr = solidFill === undefined ? undefined : directChildElement(solidFill, 'a:srgbClr');
+    const hex = srgbClr === undefined ? undefined : attr(srgbClr, 'val');
+    return hex === undefined ? undefined : rgbHexToColor(hex);
+  }
+
+  set background(value: Color | undefined) {
+    const tcPr = this.tcPrElement(true);
+    const existing = directChildElement(tcPr, 'a:solidFill');
+    if (existing !== undefined) {
+      tcPr.children.splice(tcPr.children.indexOf(existing), 1);
+    }
+    if (value === undefined) {
+      return;
+    }
+    tcPr.children.push(el('a:solidFill', {}, [el('a:srgbClr', { val: drawingMlColorHex(value) })]));
+  }
+
+  // a:tcPr children a:lnL/a:lnR/a:lnT/a:lnB (ECMA-376 21.1.3.2/3/4/5) -- the four cell-border edges. Each a:lnX carries @w in EMU and an a:solidFill/a:srgbClr child naming the border colour. ooxml.js's own readTableCell does not currently read these (it reads only background), so a written border reaches the output file but does not yet round-trip through this package's own reader -- a real, tracked read-side gap rather than a write-side silence.
+  get borders(): ContentCellBorders | undefined {
+    const tcPr = this.tcPrElement(false);
+    if (tcPr === undefined) {
+      return undefined;
+    }
+    const left = this.readBorder(directChildElement(tcPr, 'a:lnL'));
+    const right = this.readBorder(directChildElement(tcPr, 'a:lnR'));
+    const top = this.readBorder(directChildElement(tcPr, 'a:lnT'));
+    const bottom = this.readBorder(directChildElement(tcPr, 'a:lnB'));
+    if (left === undefined && right === undefined && top === undefined && bottom === undefined) {
+      return undefined;
+    }
+    const borders: ContentCellBorders = {};
+    if (left !== undefined) {
+      borders.left = left;
+    }
+    if (right !== undefined) {
+      borders.right = right;
+    }
+    if (top !== undefined) {
+      borders.top = top;
+    }
+    if (bottom !== undefined) {
+      borders.bottom = bottom;
+    }
+    return borders;
+  }
+
+  set borders(value: ContentCellBorders | undefined) {
+    const tcPr = this.tcPrElement(true);
+    for (const tag of ['a:lnL', 'a:lnR', 'a:lnT', 'a:lnB'] as const) {
+      const existing = directChildElement(tcPr, tag);
+      if (existing !== undefined) {
+        tcPr.children.splice(tcPr.children.indexOf(existing), 1);
+      }
+    }
+    if (value === undefined) {
+      return;
+    }
+    const edges: readonly (readonly [keyof ContentCellBorders, 'a:lnL' | 'a:lnR' | 'a:lnT' | 'a:lnB'])[] = [
+      ['left', 'a:lnL'],
+      ['right', 'a:lnR'],
+      ['top', 'a:lnT'],
+      ['bottom', 'a:lnB'],
+    ];
+    for (const [key, tag] of edges) {
+      const border = value[key];
+      if (border === undefined) {
+        continue;
+      }
+      tcPr.children.push(el(tag, { w: String(ptToEmu(border.widthPt)) }, [el('a:solidFill', {}, [el('a:srgbClr', { val: drawingMlColorHex(border.color) })])]));
+    }
+  }
+
+  private readBorder(lnElement: XmlElement | undefined): ContentBorder | undefined {
+    if (lnElement === undefined) {
+      return undefined;
+    }
+    const w = attr(lnElement, 'w');
+    if (w === undefined) {
+      return undefined;
+    }
+    const solidFill = directChildElement(lnElement, 'a:solidFill');
+    const srgbClr = solidFill === undefined ? undefined : directChildElement(solidFill, 'a:srgbClr');
+    const hex = srgbClr === undefined ? undefined : attr(srgbClr, 'val');
+    if (hex === undefined) {
+      return undefined;
+    }
+    return { color: rgbHexToColor(hex), widthPt: emuToPt(Number.parseInt(w, 10)) };
   }
 
   // Replaces this cell's own a:txBody paragraph content -- mirrors PptxShape.setParagraphs (shape.ts) exactly, since a:tc's own a:txBody is the identical CT_TextBody content model a p:sp's is.
