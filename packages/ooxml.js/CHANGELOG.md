@@ -1,3 +1,10 @@
+# [2.7.0](https://github.com/ExaDev/ooxml.js/compare/v2.6.19...v2.7.0) (2026-08-05)
+
+
+### Features
+
+* read and write per-cell decoration (background/borders/alignment) in xlsx ([f3cd652](https://github.com/ExaDev/ooxml.js/commit/f3cd652c30411de752d98104c6667828bae91939))
+
 ## [2.6.19](https://github.com/ExaDev/ooxml.js/compare/v2.6.18...v2.6.19) (2026-08-04)
 
 ## [2.6.18](https://github.com/ExaDev/ooxml.js/compare/v2.6.17...v2.6.18) (2026-08-04)
