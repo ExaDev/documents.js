@@ -259,6 +259,23 @@ describe('OdsSheet.printSettings: printRange, scale/fitToPages, repeatRows/repea
     expect(sheetOut.rows.find((r) => r.index === 4)?.heightPt).toBeCloseTo(15, 5);
   });
 
+  it('repeatColumns beyond any touched cell also stamps the exterior gap-fill columns (positions between coverage and the range start), not only the in-range ones', () => {
+    const editor = createOds();
+    const sheet = editor.sheets()[0]!;
+    // Touch only column 0; repeatColumns starts at 3, so replaceRun gap-fills columns 1-2 (positions between coverage and the range start) -- those exterior gap-fills must also carry a real default width, never the ambiguous 0.
+    sheet.cell(0, 0).value = { kind: 'string', value: 'only cell' };
+    sheet.printSettings = { ...CUSTOM_PRINT_SETTINGS, repeatColumns: { start: 3, end: 5 } };
+
+    const content = readOdsContent(openOds(editor.toBytes()).toPackage());
+    if (content.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    const sheetOut = content.sheets[0]!;
+    // The exterior gap-fill (columns 1-2, a single number-columns-repeated run reported by odf.js at index 1) reads back at the real default, alongside the in-range columns 3-5.
+    expect(sheetOut.columns.find((c) => c.index === 1)?.widthPt).toBeCloseTo(64, 5);
+    expect(sheetOut.columns.find((c) => c.index === 3)?.widthPt).toBeCloseTo(64, 5);
+  });
+
   it('repeatColumns preserves a width already set on a column inside the range rather than overwriting it with the default', () => {
     const editor = createOds();
     const sheet = editor.sheets()[0]!;

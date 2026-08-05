@@ -280,16 +280,17 @@ function collectRangeElements(children: XmlNode[], tag: string, repeatAttr: stri
 function wrapRepeatRange(tableElement: XmlElement, memberTag: string, repeatAttr: string, wrapperTag: string, range: ContentSheetRepeatRange, buildEmpty: () => XmlElement, pkg: Package): void {
   replaceRun(tableElement.children, isElementWithTag(memberTag), range.start, repeatAttr, buildEmpty);
   replaceRun(tableElement.children, isElementWithTag(memberTag), range.end, repeatAttr, buildEmpty);
-  const found = collectRangeElements(tableElement.children, memberTag, repeatAttr, range.start, range.end);
-  if (found.length === 0) {
-    return;
-  }
-  for (const entry of found) {
+  // Stamp a real default width/height on EVERY member element from position 0 through range.end, not only the in-range ones the move collects below -- replaceRun's gap-fill (case 3, address.ts) appends a bare, unstyled run for any positions between the table's prior coverage and range.start, and those exterior gap-fills lie OUTSIDE [range.start, range.end] so the move's own collectRangeElements never reaches them. ensureColumnElementDefaultWidth/ensureRowElementDefaultHeight no-op on an element that already carries a width/height (a real source column/row, or one cell() already individuated), so scanning the whole [0, range.end] span stamps only the genuinely unstyled gap-fills -- the in-range ones AND the exterior ones alike.
+  for (const entry of collectRangeElements(tableElement.children, memberTag, repeatAttr, 0, range.end)) {
     if (memberTag === COLUMN_TAG) {
       ensureColumnElementDefaultWidth(pkg, entry.element);
     } else {
       ensureRowElementDefaultHeight(pkg, entry.element);
     }
+  }
+  const found = collectRangeElements(tableElement.children, memberTag, repeatAttr, range.start, range.end);
+  if (found.length === 0) {
+    return;
   }
   const firstPosition = found[0]!.position;
   const elements = found.map((entry) => entry.element);
