@@ -1,3 +1,10 @@
+# [1.13.0](https://github.com/ExaDev/document-cli/compare/v1.12.8...v1.13.0) (2026-08-05)
+
+
+### Features
+
+* resolve local markdown images against the input file's directory ([3f0e641](https://github.com/ExaDev/document-cli/commit/3f0e641ef7d90910e652ee6d9f28d0772172d27f))
+
 ## [1.12.8](https://github.com/ExaDev/document-cli/compare/v1.12.7...v1.12.8) (2026-08-05)
 
 ## [1.12.7](https://github.com/ExaDev/document-cli/compare/v1.12.6...v1.12.7) (2026-08-05)
