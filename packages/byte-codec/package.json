@@ -30,24 +30,37 @@
       "require": "./dist/*.cjs"
     }
   },
-  "scripts": {
-    "build": "tsdown && node scripts/rename-dts.mjs",
-    "typecheck": "tsc --noEmit",
-    "lint": "eslint . --fix --cache --max-warnings 0",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "prepare": "husky",
-    "prepublishOnly": "pnpm run build",
-    "lint:check": "eslint . --max-warnings 0"
-  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "files": [
     "dist"
   ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "registry": "https://registry.npmjs.org/"
+  },
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "prepublishOnly": "pnpm run lint && pnpm run typecheck && tsdown && publint && attw --pack",
+    "lint": "eslint . --fix --cache --max-warnings 0",
+    "lint:check": "eslint . --max-warnings 0",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepare": "husky"
+  },
   "packageManager": "pnpm@11.6.0",
   "dependencies": {
     "fflate": "^0.8.2"
   },
   "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
     "@commitlint/cli": "^21.2.1",
     "@commitlint/config-conventional": "^21.2.0",
     "@eslint/js": "^10.0.1",
@@ -58,13 +71,19 @@
     "globals": "^17.8.0",
     "husky": "^9.1.7",
     "lint-staged": "^17.2.0",
+    "publint": "^0.3.21",
     "semantic-release": "^25.0.8",
-    "tsdown": "^0.12.9",
-    "typescript": "^5.9.3",
+    "tsdown": "^0.22.13",
+    "typescript": "^6.0.3",
     "typescript-eslint": "^8.65.0",
     "vitest": "^4.1.10"
   },
   "lint-staged": {
     "*.ts": "eslint --fix"
+  },
+  "pnpm": {
+    "overrides": {
+      "rolldown": "1.2.1"
+    }
   }
 }
