@@ -125,24 +125,37 @@ describe('layoutFormula: mfrac', () => {
 });
 
 describe('layoutFormula: msqrt/mroot', () => {
-  it('draws a real hooked radical sign (a multi-point stroke) plus a vinculum rule over the radicand, not merely the base glyph', () => {
+  it('draws the font own stretched radical construction plus a vinculum rule over the radicand', () => {
     const { box, diagnostics } = layoutFormula([el('msqrt', [mi('x')])], { metrics: metrics(), sizePt: SIZE_PT, color: BLACK });
     expect(diagnostics).toEqual([]);
 
-    const hookList = strokes(box.items);
-    expect(hookList).toHaveLength(1);
-    expect(hookList[0]!.points.length).toBeGreaterThanOrEqual(3); // a real hook shape, not a two-point line
+    // The real embedded font declares a vertical √ MathVariants construction, so the hook is the font's own assembled glyph run (the authentic radical silhouette), not a hand-drawn approximation.
+    const signList = assembled(box.items).filter((item) => item.text === '√');
+    expect(signList).toHaveLength(1);
+    expect(signList[0]!.placements.length).toBeGreaterThanOrEqual(1);
 
     const ruleList = rules(box.items);
-    expect(ruleList).toHaveLength(1); // the vinculum
+    expect(ruleList).toHaveLength(1); // the vinculum across the radicand
 
     const runs = glyphRuns(box.items);
     expect(runs).toHaveLength(1);
     expect(runs[0]!.text.codePointAt(0)).toBe(0x1d465); // the radicand itself still renders (mathematical italic x)
 
-    // The radicand sits to the right of both the hook and the vinculum.
-    expect(runs[0]!.xPt).toBeGreaterThan(hookList[0]!.points[0]!.xPt);
-    expect(runs[0]!.xPt).toBeGreaterThanOrEqual(ruleList[0]!.xPt);
+    // The radicand sits to the right of the radical sign's advance, under the vinculum.
+    expect(ruleList[0]!.widthPt).toBeGreaterThan(0);
+    expect(runs[0]!.xPt).toBeGreaterThanOrEqual(signList[0]!.placements[0]!.xPt);
+  });
+
+  it('falls back to a hand-drawn hooked stroke when the font offers no radical construction', () => {
+    // A metrics port whose stretch returns undefined for every code point -- a font backend with no √ MathVariants data -- must keep rendering a real radical via the hand-drawn hook rather than vanishing.
+    const noStretch: MathFontMetrics = { ...metrics(), stretch: () => undefined };
+    const { box, diagnostics } = layoutFormula([el('msqrt', [mi('x')])], { metrics: noStretch, sizePt: SIZE_PT, color: BLACK });
+    expect(diagnostics).toEqual([]);
+
+    const hookList = strokes(box.items);
+    expect(hookList).toHaveLength(1);
+    expect(hookList[0]!.points.length).toBeGreaterThanOrEqual(3); // a real hook shape, not a two-point line
+    expect(rules(box.items)).toHaveLength(1); // the vinculum
   });
 
   it('mroot places a smaller degree box to the upper-left of the radical sign', () => {
