@@ -198,7 +198,7 @@ const out = encodeCompactPackage(compact); // CompactPackage -> OOXML bytes dire
 
 ```sh
 pnpm build          # tsdown -> dist/ (one ESM + CJS + .d.ts set per source module, via tsdown.config.ts)
-pnpm lint           # eslint . --max-warnings 0
+pnpm lint           # eslint . --fix --cache --max-warnings 0
 pnpm typecheck      # tsc --noEmit
 pnpm test           # vitest run
 pnpm test:watch     # vitest
