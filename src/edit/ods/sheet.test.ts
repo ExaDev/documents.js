@@ -239,6 +239,41 @@ describe('OdsSheet.printSettings: printRange, scale/fitToPages, repeatRows/repea
     expect(sheetOut.cells.find((c) => c.row === 5 && c.column === 2)?.value).toEqual({ kind: 'string', value: 'Data' });
   });
 
+  it('repeatColumns/repeatRows beyond any touched cell read back at a real default width/height, never an ambiguous 0', () => {
+    const editor = createOds();
+    const sheet = editor.sheets()[0]!;
+    // Touch only column 0 / row 0; the repeat range covers columns/rows that have never been individuated by a cell write.
+    sheet.cell(0, 0).value = { kind: 'string', value: 'only cell' };
+    sheet.printSettings = { ...CUSTOM_PRINT_SETTINGS, repeatColumns: { start: 3, end: 5 }, repeatRows: { start: 3, end: 4 } };
+
+    const content = readOdsContent(openOds(editor.toBytes()).toPackage());
+    if (content.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    const sheetOut = content.sheets[0]!;
+    // Every column/row the repeat range individuated reads back at the real default (64pt/15pt), not the ambiguous 0 an unstyled element produces.
+    expect(sheetOut.columns.find((c) => c.index === 3)?.widthPt).toBeCloseTo(64, 5);
+    expect(sheetOut.columns.find((c) => c.index === 4)?.widthPt).toBeCloseTo(64, 5);
+    expect(sheetOut.columns.find((c) => c.index === 5)?.widthPt).toBeCloseTo(64, 5);
+    expect(sheetOut.rows.find((r) => r.index === 3)?.heightPt).toBeCloseTo(15, 5);
+    expect(sheetOut.rows.find((r) => r.index === 4)?.heightPt).toBeCloseTo(15, 5);
+  });
+
+  it('repeatColumns preserves a width already set on a column inside the range rather than overwriting it with the default', () => {
+    const editor = createOds();
+    const sheet = editor.sheets()[0]!;
+    sheet.setColumnWidth(4, 111);
+    sheet.printSettings = { ...CUSTOM_PRINT_SETTINGS, repeatColumns: { start: 3, end: 5 } };
+
+    const content = readOdsContent(openOds(editor.toBytes()).toPackage());
+    if (content.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    const sheetOut = content.sheets[0]!;
+    expect(sheetOut.columns.find((c) => c.index === 4)?.widthPt).toBeCloseTo(111, 5);
+    expect(sheetOut.columns.find((c) => c.index === 3)?.widthPt).toBeCloseTo(64, 5);
+  });
+
   it('a cell written to a row AFTER it has been wrapped into repeatRows resolves to its real, existing position rather than a spurious duplicate', () => {
     const editor = createOds();
     const sheet = editor.sheets()[0]!;

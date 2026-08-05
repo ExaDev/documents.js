@@ -125,6 +125,35 @@ export function ensureRowDefaultHeight(pkg: Package, tableElement: XmlElement, i
   }
 }
 
+// Element-based counterparts to ensureColumnDefaultWidth/ensureRowDefaultHeight for print-settings.ts's wrapRepeatRange, which already holds the repeat-range's own column/row elements in hand (collectRangeElements hands them back directly) and must stamp a default on them WITHOUT a further replaceRun -- a repeat range's interior may still be a single repeated run, and calling the index-based helpers would split it into one element per position just to give each the identical default, needlessly exploding a compressed run. These mint the default-width/height style directly on whatever element is passed (a single-position element OR a repeated run covering several), so a repeated run keeps its compression and every position it covers inherits the default from the one style on it. No-op when the element already carries a width/height, whether set by setColumnWidth/setRowHeight or inherited from a styled run it was cloned out of -- exactly the cell()-helper semantics, just element-addressed.
+export function ensureColumnElementDefaultWidth(pkg: Package, columnElement: XmlElement): void {
+  if (currentColumnStyleProperties(pkg, columnElement).widthPt !== undefined) {
+    return;
+  }
+  const automaticStyles = ensureAutomaticStyles(pkg);
+  const styleName = nextStyleName(automaticStyles, 'style:style', 'OdsColumn');
+  automaticStyles.children.push(
+    el('style:style', { 'style:name': styleName, 'style:family': 'table-column' }, [
+      el('style:table-column-properties', { 'style:column-width': formatOdfLength(DEFAULT_COLUMN_WIDTH_PT) }),
+    ]),
+  );
+  setAttr(columnElement, 'table:style-name', styleName);
+}
+
+export function ensureRowElementDefaultHeight(pkg: Package, rowElement: XmlElement): void {
+  if (currentRowStyleProperties(pkg, rowElement).heightPt !== undefined) {
+    return;
+  }
+  const automaticStyles = ensureAutomaticStyles(pkg);
+  const styleName = nextStyleName(automaticStyles, 'style:style', 'OdsRow');
+  automaticStyles.children.push(
+    el('style:style', { 'style:name': styleName, 'style:family': 'table-row' }, [
+      el('style:table-row-properties', { 'style:row-height': formatOdfLength(DEFAULT_ROW_HEIGHT_PT) }),
+    ]),
+  );
+  setAttr(rowElement, 'table:style-name', styleName);
+}
+
 // Sets fo:break-before="page" on the column's own style, preserving any width already set -- the write-side counterpart to odf.js's own readColumnLayout manualBreak field, and the column half of print-settings.ts's own manualBreaks writer.
 export function writeColumnManualBreak(pkg: Package, tableElement: XmlElement, index: number): void {
   applyColumnStyleProperties(pkg, tableElement, index, { manualBreak: true });

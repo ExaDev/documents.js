@@ -18,7 +18,7 @@ import {
   readRunRepeatCount,
   replaceRun,
 } from './address';
-import { writeColumnManualBreak, writeRowManualBreak } from './column-row';
+import { ensureColumnElementDefaultWidth, ensureRowElementDefaultHeight, writeColumnManualBreak, writeRowManualBreak } from './column-row';
 
 const STYLES_PART_PATH = 'styles.xml';
 const CONTENT_PART_PATH = 'content.xml';
@@ -276,13 +276,20 @@ function collectRangeElements(children: XmlNode[], tag: string, repeatAttr: stri
   return found;
 }
 
-// Moves the real table:table-column/table:table-row elements covering [range.start, range.end] into a fresh table:table-header-columns/table:table-header-rows wrapper -- the structural transform odf.js's own readTable recognises as repeatColumns/repeatRows on the way back in. Individuates both boundaries first (replaceRun, exactly as every other column/row write in this editor does) so the range's own element runs align precisely with the requested indices before anything is moved. Callers are responsible for having already dissolved any stale prior wrapper of the same tag (writeSheetPrintSettings's own unconditional unwrapHeaderGroup call, below) -- this function only ever builds a fresh one, never merges into an existing one.
-function wrapRepeatRange(tableElement: XmlElement, memberTag: string, repeatAttr: string, wrapperTag: string, range: ContentSheetRepeatRange, buildEmpty: () => XmlElement): void {
+// Moves the real table:table-column/table:table-row elements covering [range.start, range.end] into a fresh table:table-header-columns/table:table-header-rows wrapper -- the structural transform odf.js's own readTable recognises as repeatColumns/repeatRows on the way back in. Individuates both boundaries first (replaceRun, exactly as every other column/row write in this editor does) so the range's own element runs align precisely with the requested indices before anything is moved. Stamps a real default width/height on every range element that lacks one before the move, so a repeatColumns/repeatRows range set beyond any cell a caller has touched does not produce the "explicit but unstyled" zero-width/height columns/rows (src/edit/ods/column-row.ts's own top-of-file note) the cell()-materialisation fix already closed for cell()/mergeCells()/setColumnHidden()/setRowHidden() -- the same hazard, reachable through print settings instead. Callers are responsible for having already dissolved any stale prior wrapper of the same tag (writeSheetPrintSettings's own unconditional unwrapHeaderGroup call, below) -- this function only ever builds a fresh one, never merges into an existing one.
+function wrapRepeatRange(tableElement: XmlElement, memberTag: string, repeatAttr: string, wrapperTag: string, range: ContentSheetRepeatRange, buildEmpty: () => XmlElement, pkg: Package): void {
   replaceRun(tableElement.children, isElementWithTag(memberTag), range.start, repeatAttr, buildEmpty);
   replaceRun(tableElement.children, isElementWithTag(memberTag), range.end, repeatAttr, buildEmpty);
   const found = collectRangeElements(tableElement.children, memberTag, repeatAttr, range.start, range.end);
   if (found.length === 0) {
     return;
+  }
+  for (const entry of found) {
+    if (memberTag === COLUMN_TAG) {
+      ensureColumnElementDefaultWidth(pkg, entry.element);
+    } else {
+      ensureRowElementDefaultHeight(pkg, entry.element);
+    }
   }
   const firstPosition = found[0]!.position;
   const elements = found.map((entry) => entry.element);
@@ -339,12 +346,12 @@ export function writeSheetPrintSettings(pkg: Package, tableElement: XmlElement, 
 
   unwrapHeaderGroup(tableElement, HEADER_COLUMNS_TAG);
   if (settings.repeatColumns !== undefined) {
-    wrapRepeatRange(tableElement, COLUMN_TAG, COLUMN_REPEAT_ATTR, HEADER_COLUMNS_TAG, settings.repeatColumns, () => el(COLUMN_TAG));
+    wrapRepeatRange(tableElement, COLUMN_TAG, COLUMN_REPEAT_ATTR, HEADER_COLUMNS_TAG, settings.repeatColumns, () => el(COLUMN_TAG), pkg);
   }
 
   unwrapHeaderGroup(tableElement, HEADER_ROWS_TAG);
   if (settings.repeatRows !== undefined) {
-    wrapRepeatRange(tableElement, ROW_TAG, ROW_REPEAT_ATTR, HEADER_ROWS_TAG, settings.repeatRows, () => el(ROW_TAG));
+    wrapRepeatRange(tableElement, ROW_TAG, ROW_REPEAT_ATTR, HEADER_ROWS_TAG, settings.repeatRows, () => el(ROW_TAG), pkg);
   }
 
   if (settings.manualBreaks !== undefined) {
