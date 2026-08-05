@@ -72,7 +72,7 @@
   "packageManager": "pnpm@11.6.0",
   "dependencies": {
     "commander": "^15.0.0",
-    "documents.js": "^1.85.0",
+    "documents.js": "^1.87.5",
     "ink": "^7.1.1",
     "ink-text-input": "^6.0.0",
     "odf.js": "^2.4.1",
