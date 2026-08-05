@@ -26,6 +26,16 @@ describe('setDocumentMetadata: rebuild path (docx/pptx/odt/odp/ods/odg/markdown)
     const bytes = setDocumentMetadata('odp', 'odp', minimalOdpBytes(), { keywords: ['quarterly', 'sales'] });
     expect(readOdpContent(decodeOdfPackage(bytes)).metadata.keywords).toEqual(['quarterly', 'sales']);
   });
+
+  it('a markdown rebuild preserves a relative-path image when an images resolver is supplied (rather than degrading it to alt text)', () => {
+    const onePixelPng = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='), (char) => char.codePointAt(0)!);
+    const markdown = new TextEncoder().encode('![a local image](./local.png)\n');
+    const resolver = (destination: string) => (destination === './local.png' ? { bytes: onePixelPng } : undefined);
+
+    const rebuilt = new TextDecoder().decode(setDocumentMetadata('markdown', 'markdown', markdown, { title: 'Patched' }, { images: resolver }));
+    // The resolved image is inlined back as a data: URI (buildMarkdownText re-serialises a ContentImageBlock), not lost to alt text -- the resolver reached the markdown content codec's read through SetDocumentMetadataOptions.images.
+    expect(rebuilt).toContain('data:image/png');
+  });
 });
 
 describe('setDocumentMetadata: pdf direct-patch path', () => {
