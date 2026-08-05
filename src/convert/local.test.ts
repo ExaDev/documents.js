@@ -32,8 +32,8 @@ function buildSamplePptx(text: string): Uint8Array<ArrayBuffer> {
 describe('createLocalDocumentConverter: shape', () => {
   it('reports contractVersion and the supported conversion pairs', () => {
     const converter = createLocalDocumentConverter();
-    // 3, not 2: convert()'s own ConversionOptions gained fonts/onFontSubstitution, which an implementation is expected to honour -- see port.ts's own contractVersion comment on what does and does not warrant a bump.
-    expect(converter.contractVersion).toBe(3);
+    // 4, not 3: convert()'s own ConversionOptions gained images (a MarkdownImageResolver), which an implementation is expected to honour for the markdown-sourced conversions -- see port.ts's own contractVersion comment on what does and does not warrant a bump.
+    expect(converter.contractVersion).toBe(4);
     expect(converter.conversions).toEqual([
       { source: 'docx', target: 'pdf' },
       { source: 'pptx', target: 'pdf' },
@@ -321,5 +321,22 @@ describe('createLocalDocumentConverter: fonts', () => {
       { signal: new AbortController().signal, fonts: [{ family: 'Calibri', bold: false, italic: false, bytes: caladeaRegularBytes() }] },
     );
     expect(result.diagnostics).toEqual([]);
+  });
+});
+
+describe('createLocalDocumentConverter: markdown image resolution', () => {
+  // The port threads options.images through to markdown-codec's MarkdownImageResolver port for the markdown-sourced conversions -- the port-level counterpart to src/convert/markdown-image.test.ts's own ergonomic-function assertions. A relative-path image that a resolver turns into real PNG bytes reaches the converted document's own ContentDocument as a genuine ContentImageBlock rather than the alt-text degradation it becomes with no resolver.
+  it('threads options.images through a markdown -> pdf conversion', async () => {
+    const onePixelPng = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='), (char) => char.codePointAt(0)!);
+    const converter = createLocalDocumentConverter();
+    const result = await converter.convert(
+      { source: { format: 'markdown', bytes: new TextEncoder().encode('![a local image](./local.png)') }, targetFormat: 'pdf' },
+      { signal: new AbortController().signal, images: (destination) => (destination === './local.png' ? { bytes: onePixelPng } : undefined) },
+    );
+    expect(result.package?.content.kind).toBe('wordprocessing');
+    if (result.package?.content.kind === 'wordprocessing') {
+      const hasImage = result.package.content.sections.some((section) => section.blocks.some((block) => block.kind === 'image'));
+      expect(hasImage).toBe(true);
+    }
   });
 });
