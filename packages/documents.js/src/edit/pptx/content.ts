@@ -1,4 +1,4 @@
-import type { ContentBlock, ContentDocument, ContentShape, ContentTable } from 'document-schema.js';
+import type { ContentBlock, ContentDocument, ContentParagraph, ContentShape, ContentTable } from 'document-schema.js';
 import type { Package } from 'ooxml.js';
 import { base64ToBytes } from 'ooxml.js';
 import { drawingOfBlock, embeddedDrawingVectors } from '../../model/embedded-drawing';
@@ -56,6 +56,9 @@ function appendShape(slide: PptxSlide, shape: ContentShape): void {
     if (shape.rotationDeg !== undefined) {
       imageShape.rotationDeg = shape.rotationDeg;
     }
+    if (shape.name !== undefined) {
+      imageShape.name = shape.name;
+    }
     return;
   }
   if (shape.blocks.length === 1 && onlyBlock?.kind === 'table') {
@@ -72,16 +75,34 @@ function appendShape(slide: PptxSlide, shape: ContentShape): void {
     if (block.kind !== 'paragraph') {
       continue; // a nested table or image mixed alongside other blocks inside a single text shape is out of scope -- neither PDF-reconstructed shapes nor a real pptx/odp slide shape mix kinds this way (see reconstruct.ts and the odp<->pptx table-in-shape fixture in bridges.test.ts)
     }
-    paragraphs.push({
-      alignment: block.alignment,
-      runs: block.runs.map((run) => ({ text: run.text, bold: run.bold, italic: run.italic, underline: run.underline, strike: run.strike, fontFamily: run.fontFamily, sizePt: run.sizePt, color: run.color })),
-    });
+    paragraphs.push(paragraphInitFromBlock(block));
   }
   const textBox = slide.addTextBox({ frame: shape.frame, text: '' });
   if (shape.rotationDeg !== undefined) {
     textBox.rotationDeg = shape.rotationDeg;
   }
+  if (shape.name !== undefined) {
+    textBox.name = shape.name;
+  }
+  // ContentShape's insets are required numbers (document-schema.js's ContentShapeSchema), so thread them unconditionally -- matching ooxml.js's own readPptx, which reads them back as defaults (91440/45720 EMU) when the source carried none. Setting them writes real lIns/tIns/rIns/bIns EMU attributes onto a:bodyPr.
+  textBox.insetLeftPt = shape.insetLeftPt;
+  textBox.insetTopPt = shape.insetTopPt;
+  textBox.insetRightPt = shape.insetRightPt;
+  textBox.insetBottomPt = shape.insetBottomPt;
   textBox.setParagraphs(paragraphs);
+}
+
+// Threads a ContentParagraph's full decoration surface -- runs, alignment, and the spacing/indent fields DrawingParagraphInit now carries -- into a DrawingParagraphInit. Used by both appendShape (a text-box shape's own paragraphs) and populateCellParagraphs (a table cell's own paragraphs), so the two stay in sync rather than each repeating the field list.
+function paragraphInitFromBlock(block: ContentParagraph): DrawingParagraphInit {
+  return {
+    alignment: block.alignment,
+    spacingBeforePt: block.spacingBeforePt,
+    spacingAfterPt: block.spacingAfterPt,
+    lineSpacing: block.lineSpacing,
+    indentLeftPt: block.indentLeftPt,
+    indentFirstLinePt: block.indentFirstLinePt,
+    runs: block.runs.map((run) => ({ text: run.text, bold: run.bold, italic: run.italic, underline: run.underline, strike: run.strike, fontFamily: run.fontFamily, sizePt: run.sizePt, color: run.color })),
+  };
 }
 
 function populateCellParagraphs(cell: PptxTableCell, blocks: readonly ContentBlock[]): void {
@@ -90,10 +111,7 @@ function populateCellParagraphs(cell: PptxTableCell, blocks: readonly ContentBlo
     if (block.kind !== 'paragraph') {
       continue; // a nested table or image inside a table cell is out of scope, mirroring appendShape's own identical text-shape scope narrowing above
     }
-    paragraphs.push({
-      alignment: block.alignment,
-      runs: block.runs.map((run) => ({ text: run.text, bold: run.bold, italic: run.italic, underline: run.underline, strike: run.strike, fontFamily: run.fontFamily, sizePt: run.sizePt, color: run.color })),
-    });
+    paragraphs.push(paragraphInitFromBlock(block));
   }
   cell.setParagraphs(paragraphs);
 }
@@ -129,6 +147,12 @@ function populatePptxTable(table: PptxTable, block: ContentTable): void {
         for (let c = 0; c < span; c++) {
           verticalMerges.set(colIndex + c, cell.rowSpan - 1);
         }
+      }
+      if (cell.background !== undefined) {
+        tableCell.background = cell.background;
+      }
+      if (cell.borders !== undefined) {
+        tableCell.borders = cell.borders;
       }
       populateCellParagraphs(tableCell, cell.blocks);
     });
