@@ -58,12 +58,13 @@ class DocxBodyImpl implements DocxBody {
   constructor(
     private readonly body: XmlElement,
     private readonly imageContext: ImageMediaContext,
+    private readonly pkg: Package,
   ) {}
 
   appendParagraph(init?: ParagraphInit): DocxParagraph {
     const paragraphElement = buildParagraph(init);
     this.body.children.splice(bodyInsertionPoint(this.body), 0, paragraphElement);
-    return new DocxParagraph(this.body.children, paragraphElement, this.imageContext);
+    return new DocxParagraph(this.body.children, paragraphElement, this.imageContext, this.pkg);
   }
 
   insertParagraphAt(index: number, init?: ParagraphInit): DocxParagraph {
@@ -71,7 +72,7 @@ class DocxBodyImpl implements DocxBody {
     const indices = bodyElementIndicesByTag(this.body, 'w:p');
     const insertAt = index < indices.length ? (indices[index] ?? bodyInsertionPoint(this.body)) : bodyInsertionPoint(this.body);
     this.body.children.splice(insertAt, 0, paragraphElement);
-    return new DocxParagraph(this.body.children, paragraphElement, this.imageContext);
+    return new DocxParagraph(this.body.children, paragraphElement, this.imageContext, this.pkg);
   }
 
   appendTable(init: TableInit): DocxTable {
@@ -100,7 +101,7 @@ export class DocxEditor {
       documentRoot,
       media: { pkg, partPath: DOCUMENT_PART_PATH, mediaDir: MEDIA_DIR },
     };
-    this.body = new DocxBodyImpl(body, imageContext);
+    this.body = new DocxBodyImpl(body, imageContext, this.pkg);
   }
 
   paragraphs(): DocxParagraph[] {

@@ -177,6 +177,9 @@ function populateParagraph(paragraph: DocxParagraph, block: ContentParagraph): v
     if (run.color !== undefined) {
       docxRun.color = run.color;
     }
+    if (run.hyperlink !== undefined) {
+      paragraph.wrapLastRunInHyperlink(run.hyperlink);
+    }
   }
 }
 

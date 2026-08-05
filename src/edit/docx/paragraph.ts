@@ -1,5 +1,6 @@
 import type { Package, XmlElement, XmlNode } from 'ooxml.js';
 import { attr } from 'ooxml.js';
+import { addRelationship } from '../../opc/rels';
 import type { ContentListMembership, ContentVector } from 'document-schema.js';
 import type { MathMlNode } from '../../mathml/nodes';
 import type { OmmlWriteResult } from '../../omml/write';
@@ -41,12 +42,14 @@ export class DocxParagraph {
   private readonly container: XmlNode[];
   private readonly node: XmlElement;
   private readonly imageContext: ImageMediaContext | undefined;
+  private readonly pkg: Package | undefined;
   private removed = false;
 
-  constructor(container: XmlNode[], node: XmlElement, imageContext?: ImageMediaContext) {
+  constructor(container: XmlNode[], node: XmlElement, imageContext?: ImageMediaContext, pkg?: Package) {
     this.container = container;
     this.node = node;
     this.imageContext = imageContext;
+    this.pkg = pkg;
   }
 
   private live(): XmlElement {
@@ -337,6 +340,21 @@ export class DocxParagraph {
     const drawing = insertImageMedia(this.imageContext.media, this.imageContext.documentRoot, image);
     const run = el('w:r', {}, [drawing]);
     node.children.push(run);
+  }
+
+  // Wraps the paragraph's last w:r child in a w:hyperlink element carrying an external r:id, turning a just-appended run into a clickable hyperlink. Called AFTER appendRun + all property setters, since w:hyperlink wraps the whole run. The relationship is registered against word/document.xml with TargetMode External. Requires the paragraph to carry a Package reference (threaded from DocxEditor); a paragraph without one (e.g. hand-constructed for testing) silently skips the wrapping.
+  wrapLastRunInHyperlink(url: string): void {
+    if (this.pkg === undefined) {
+      return;
+    }
+    const node = this.live();
+    const lastChildIndex = node.children.length - 1;
+    const lastChild = node.children[lastChildIndex];
+    if (lastChild?.type !== 'element' || lastChild?.tag !== 'w:r') {
+      return;
+    }
+    const rId = addRelationship(this.pkg, 'word/document.xml', { type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink', target: url, targetMode: 'External' });
+    node.children[lastChildIndex] = el('w:hyperlink', { 'r:id': rId }, [lastChild]);
   }
 
   remove(): void {
