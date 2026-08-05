@@ -29,7 +29,7 @@ function fromPdfDiagnostic(diagnostic: PdfDiagnostic): Diagnostic {
 export function createLocalDocumentConverter(): DocumentConverter {
   return {
     // 2 added ConversionResult's optional `package` field (see port.ts), which the local implementation below populates from every conversion function's own onDocument callback; 3 added convert()'s own ConversionOptions.fonts/onFontSubstitution, which an implementation is now expected to honour for every conversion that lays text out.
-    contractVersion: 3,
+    contractVersion: 4,
     conversions: SUPPORTED_CONVERSIONS,
     convert(request: ConversionRequest, options: ConversionOptions): Promise<ConversionResult> {
       const { source, targetFormat } = request;
@@ -53,7 +53,7 @@ export function createLocalDocumentConverter(): DocumentConverter {
       const edge = strategy.edge;
       if (edge.kind === 'toPdf') {
         // The only edge kind that resolves a font at all: it is the one that runs a layout engine and writes glyphs. odfToPdf accepts onDocument (it shares docx/odt/pptx/odp/ods/odg's own options type) but never invokes it -- see that function's own comment -- so `documentPackage` stays undefined for that one edge, and `package` on the returned result is correctly omitted; the same comment explains why it never reports a font substitution either.
-        const bytes = edge.convert(source.bytes, { signal: options.signal, onSubstitution: (s, c) => diagnostics.push(substitutionDiagnostic(s, c)), onDocument, fonts: options.fonts, onFontSubstitution });
+        const bytes = edge.convert(source.bytes, { signal: options.signal, onSubstitution: (s, c) => diagnostics.push(substitutionDiagnostic(s, c)), onDocument, fonts: options.fonts, onFontSubstitution, images: options.images });
         return Promise.resolve({ document: { format: edge.target, bytes }, diagnostics, package: documentPackage });
       }
       if (edge.kind === 'fromPdf') {
@@ -62,7 +62,7 @@ export function createLocalDocumentConverter(): DocumentConverter {
         return Promise.resolve({ document: { format: edge.target, bytes }, diagnostics, package: documentPackage });
       }
       // The ten PDF-bypassing cross-format bridges: no diagnostics, since there is no font substitution or PDF-parse degradation to report -- a direct ContentDocument-pivot copy either succeeds outright or throws (an input of the wrong kind), and no layout engine runs, so no face is ever resolved. Each still reports a package (content populated, layout always undefined -- see DocumentBridgeOptions.onDocument).
-      const bytes = edge.convert(source.bytes, { signal: options.signal, onDocument });
+      const bytes = edge.convert(source.bytes, { signal: options.signal, onDocument, images: options.images });
       return Promise.resolve({ document: { format: edge.target, bytes }, diagnostics, package: documentPackage });
     },
   };

@@ -1,4 +1,5 @@
 import type { DocumentPackage } from 'document-schema.js';
+import type { MarkdownImageResolver } from 'markdown-codec';
 import type { FontSubstitution, ProvidedFont } from 'pdf-codec';
 import { z } from 'zod';
 
@@ -44,6 +45,8 @@ export interface ConversionOptions {
   readonly fonts?: readonly ProvidedFont[];
   // Called once per requested family+bold+italic that resolved to something else -- a different face of the same family, or a vendored metric-compatible substitute. Reported through ConversionResult.diagnostics as well, so this callback is for a caller wanting the structured value rather than the rendered message.
   readonly onFontSubstitution?: (substitution: FontSubstitution) => void;
+  // A synchronous resolver for markdown images with a non-data: destination (a relative path, a bare URL) -- the same live-callback shape as onFontSubstitution, with the same remote-adapter caveat: the local implementation honours it (threading it through to markdown-codec's MarkdownImageResolver port for the markdown-sourced conversions), a remote adapter would have no way to call back into the caller's process and would instead leave non-data: images degraded to alt-text. Only the markdown-sourced conversions consult it; every other conversion ignores it.
+  readonly images?: MarkdownImageResolver;
 }
 
 export interface DocumentConverter {
