@@ -28,7 +28,7 @@ function fromPdfDiagnostic(diagnostic: PdfDiagnostic): Diagnostic {
 
 export function createLocalDocumentConverter(): DocumentConverter {
   return {
-    // 2 added ConversionResult's optional `package` field (see port.ts), which the local implementation below populates from every conversion function's own onDocument callback; 3 added convert()'s own ConversionOptions.fonts/onFontSubstitution, which an implementation is now expected to honour for every conversion that lays text out.
+    // 2 added ConversionResult's optional `package` field (see port.ts), which the local implementation below populates from every conversion function's own onDocument callback; 3 added convert()'s own ConversionOptions.fonts/onFontSubstitution, which an implementation is now expected to honour for every conversion that lays text out; 4 added ConversionOptions.images (a MarkdownImageResolver), honoured by the markdown-sourced to-PDF and bridge edges.
     contractVersion: 4,
     conversions: SUPPORTED_CONVERSIONS,
     convert(request: ConversionRequest, options: ConversionOptions): Promise<ConversionResult> {

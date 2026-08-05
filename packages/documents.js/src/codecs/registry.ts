@@ -9,6 +9,7 @@ import { buildOdsPackage } from '../edit/ods/content';
 import { buildOdtPackage } from '../edit/odt/content';
 import { buildPptxPackage } from '../edit/pptx/content';
 import { decodeMarkdownText, encodeMarkdownText } from '../markdown/text';
+import type { MarkdownImageResolver } from 'markdown-codec';
 import { readMarkdownContent } from '../markdown/read';
 import { buildMarkdownText } from '../markdown/write';
 import { readOdfFormulaContent } from '../odf/formula/read';
@@ -33,9 +34,10 @@ export function requireArrayBufferBytes(bytes: Uint8Array): Uint8Array<ArrayBuff
   return bytes;
 }
 
-// The one option every registry entry's read/write genuinely needs to know about -- an AbortSignal. Matches the shape every one of this registry's own callers (readDocumentMetadata, setDocumentMetadata) already threads through this exact call path, so parameterizing ContentCodec/LayoutCodec with this concrete type (rather than the default `unknown`) lets a caller forward its own signal straight through without a cast at either end.
+// The one option every registry entry's read/write genuinely needs to know about -- an AbortSignal -- plus an optional MarkdownImageResolver consulted only by the markdown content codec's read (every other codec ignores it). Matches the shape every one of this registry's own callers (readDocumentMetadata, setDocumentMetadata) already threads through this exact call path, so parameterizing ContentCodec/LayoutCodec with this concrete type (rather than the default `unknown`) lets a caller forward its own signal straight through without a cast at either end.
 export interface DocumentCodecOptions {
   readonly signal?: AbortSignal;
+  readonly images?: MarkdownImageResolver;
 }
 
 // Every DocumentFormat's own capability, expressed as data rather than as three independent switch statements re-deriving the same "given a format, which read/build function do I call" dispatch. A format's `content` entry wraps the identical readXContent/buildXPackage pair every ergonomic conversion in this package already uses for it (via decodeDocumentPackage/encodeDocumentPackage for the raw-package half); a format's `layout` entry wraps a LayoutDocument codec (pdf only, so far). Cancellation policy is preserved per format exactly as it was before this registry existed: docx/pptx/odt/odp/ods/odg/odf have no loop of their own to hook a signal into, so their own `read` checks it once via throwIfAborted before decoding; markdown/pdf do have one, so their own `read`/`write` forward the signal straight into the underlying reader/writer instead of checking it separately.
@@ -110,7 +112,7 @@ export const DOCUMENT_FORMAT_CODECS: Readonly<Record<DocumentFormat, DocumentFor
   },
   markdown: {
     content: {
-      read: (bytes, options) => readMarkdownContent(decodeMarkdownText(bytes), { signal: options?.signal }),
+      read: (bytes, options) => readMarkdownContent(decodeMarkdownText(bytes), { signal: options?.signal, images: options?.images }),
       write: (content) => encodeMarkdownText(buildMarkdownText(content)),
     },
   },

@@ -1,6 +1,8 @@
 import type { ContentDocument, LayoutDocument, LayoutMetadata } from 'document-schema.js';
+import type { MarkdownImageResolver } from 'markdown-codec';
 import { readPdf, writePdf } from 'pdf-codec';
 import { DOCUMENT_FORMAT_CODECS, requireArrayBufferBytes } from '../codecs/registry';
+import type { DocumentCodecOptions } from '../codecs/registry';
 import type { DocumentFormat } from '../convert/port';
 import { throwIfAborted } from '../ports/abort';
 
@@ -23,12 +25,12 @@ function isRebuildFormat(format: DocumentFormat): format is RebuildFormat {
 }
 
 // Both functions below dispatch through DOCUMENT_FORMAT_CODECS (src/codecs/registry.ts) rather than a hand-written per-format switch. Every RebuildFormat member has a real `content` codec in that registry (it's exactly the docx/pptx/odt/odp/ods/odg/markdown subset the registry itself populates one), so the fallback throws are internal-invariant guards for TypeScript's benefit, never expected to fire.
-function readContentForFormat(format: RebuildFormat, bytes: Uint8Array<ArrayBuffer>): ContentDocument {
+function readContentForFormat(format: RebuildFormat, bytes: Uint8Array<ArrayBuffer>, options: DocumentCodecOptions): ContentDocument {
   const content = DOCUMENT_FORMAT_CODECS[format].content;
   if (!content) {
     throw new Error(`RebuildFormat '${format}' has no content codec in DOCUMENT_FORMAT_CODECS -- this is an internal invariant violation, not a caller error`);
   }
-  return content.read(bytes);
+  return content.read(bytes, options);
 }
 
 function buildBytesForRebuildFormat(format: RebuildFormat, content: ContentDocument): Uint8Array<ArrayBuffer> {
@@ -79,6 +81,8 @@ function classifyWritePath(source: DocumentFormat, target: DocumentFormat): Writ
 
 export interface SetDocumentMetadataOptions {
   readonly signal?: AbortSignal;
+  // A MarkdownImageResolver forwarded to the markdown content codec's read during a markdown rebuild -- so patching a markdown document's metadata does not silently drop its non-data: images (they would degrade to alt text without a resolver, since the rebuild re-reads the markdown). Ignored by every non-markdown format. Same shape and rationale as DocumentToPdfOptions.images / ConversionOptions.images.
+  readonly images?: MarkdownImageResolver;
 }
 
 // Patches a document's own title/author/subject/keywords, leaving every other field and every other flag as-is. Two write paths: a pdf source/target patches the metadata directly on the parsed PDF (writePdf), with no layout engine involved at all -- genuinely lossless for everything else on the page. Every other supported format (docx, pptx, odt, odp, ods, odg, markdown) rebuilds a fresh package from that format's own ContentDocument -- see classifyWritePath's own comment for exactly what that costs for docx specifically. Overrides are applied via mergeMetadata: a field omitted from `overrides` is left exactly as the source document already had it.
@@ -96,7 +100,7 @@ export function setDocumentMetadata(sourceFormat: DocumentFormat, targetFormat: 
     return writePdf(patched, { signal: options?.signal });
   }
 
-  const content = readContentForFormat(writePath.format, bytes);
+  const content = readContentForFormat(writePath.format, bytes, { signal: options?.signal, images: options?.images });
   const nextContent: ContentDocument = { ...content, metadata: mergeMetadata(content.metadata, overrides) };
   return buildBytesForRebuildFormat(writePath.format, nextContent);
 }
