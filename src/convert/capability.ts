@@ -3,6 +3,7 @@ import {
   docxToMarkdown,
   docxToOdt,
   docxToPdf,
+  docxToPptx,
   markdownToDocx,
   markdownToOdt,
   markdownToPdf,
@@ -10,10 +11,12 @@ import {
   odgToPdf,
   odpToPdf,
   odpToPptx,
+  odpToOdt,
   odsToPdf,
   odsToXlsx,
   odtToDocx,
   odtToMarkdown,
+  odtToOdp,
   odtToPdf,
   pdfToDocx,
   pdfToMarkdown,
@@ -23,6 +26,7 @@ import {
   pdfToOdt,
   pdfToPptx,
   pdfToXlsx,
+  pptxToDocx,
   pptxToOdp,
   pptxToPdf,
   xlsxToOds,
@@ -119,6 +123,11 @@ export const DIRECT_EDGES: readonly ConversionEdge[] = [
   { kind: 'bridge', source: 'docx', target: 'markdown', convert: docxToMarkdown },
   { kind: 'bridge', source: 'markdown', target: 'odt', convert: markdownToOdt },
   { kind: 'bridge', source: 'odt', target: 'markdown', convert: odtToMarkdown },
+  // Four cross-variant content bridges (wordprocessing <-> presentation): docx <-> pptx and odt <-> odp. Unlike the same-variant bridges above, these cross a ContentDocument variant boundary via a semantic transform (src/convert/variant-bridges.ts), not a direct content copy. Approximate -- a flow document has no real slide boundaries -- but the blocks themselves survive intact, bypassing PDF entirely.
+  { kind: 'bridge', source: 'docx', target: 'pptx', convert: docxToPptx },
+  { kind: 'bridge', source: 'pptx', target: 'docx', convert: pptxToDocx },
+  { kind: 'bridge', source: 'odt', target: 'odp', convert: odtToOdp },
+  { kind: 'bridge', source: 'odp', target: 'odt', convert: odpToOdt },
 ];
 
 export type ConversionStrategy =
