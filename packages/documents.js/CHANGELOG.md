@@ -1,3 +1,11 @@
+# [1.87.0](https://github.com/ExaDev/documents.js/compare/v1.86.1...v1.87.0) (2026-08-05)
+
+
+### Features
+
+* write hyperlinks through the docx/odt bridge (w:hyperlink + text:a) ([15538ec](https://github.com/ExaDev/documents.js/commit/15538ec42fd895035bfc183af3565b6118ddff24))
+* write hyperlinks through the odp/pptx bridge (a:hlinkClick + slide rel) ([445160c](https://github.com/ExaDev/documents.js/commit/445160c098ee30449c3e6dfb67b4171c165de6d2))
+
 ## [1.86.1](https://github.com/ExaDev/documents.js/compare/v1.86.0...v1.86.1) (2026-08-05)
 
 # [1.86.0](https://github.com/ExaDev/documents.js/compare/v1.85.1...v1.86.0) (2026-08-05)
