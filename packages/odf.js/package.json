@@ -47,7 +47,7 @@
   "scripts": {
     "build": "tsdown",
     "prepublishOnly": "pnpm run lint && pnpm run typecheck && tsdown && publint && attw --pack",
-    "lint": "eslint . --max-warnings 0",
+    "lint": "eslint . --fix --cache --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --project unit",
     "test:watch": "vitest --project unit",
