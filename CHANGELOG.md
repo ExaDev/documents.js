@@ -1,3 +1,10 @@
+# [1.89.0](https://github.com/ExaDev/documents.js/compare/v1.88.0...v1.89.0) (2026-08-05)
+
+
+### Features
+
+* thread a MarkdownImageResolver through the DocumentConverter port ([f6e00d6](https://github.com/ExaDev/documents.js/commit/f6e00d6caf752d7f4af9bb7322c538164cb7da85))
+
 # [1.88.0](https://github.com/ExaDev/documents.js/compare/v1.87.5...v1.88.0) (2026-08-05)
 
 
