@@ -84,6 +84,9 @@ function populateParagraph(paragraph: DocxParagraph, block: ContentParagraph): v
     if (run.underline === true) {
       docxRun.underline = true;
     }
+    if (run.strike === true) {
+      docxRun.strike = true;
+    }
     if (run.fontFamily !== undefined) {
       docxRun.fontFamily = run.fontFamily;
     }

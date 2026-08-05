@@ -82,6 +82,7 @@ function buildRichDocx(): Uint8Array<ArrayBuffer> {
   const styledRun = styled.appendRun({ text: 'Bold italic coloured text' });
   styledRun.bold = true;
   styledRun.italic = true;
+  styledRun.strike = true;
   styledRun.color = { r: 0.8, g: 0, b: 0 };
 
   editor.body.appendParagraph().appendRun({ text: 'A second, plain paragraph.' });
@@ -118,6 +119,7 @@ function buildRichOdt(): Uint8Array<ArrayBuffer> {
   const styledRun = styled.appendRun({ text: 'Bold italic coloured text' });
   styledRun.bold = true;
   styledRun.italic = true;
+  styledRun.strike = true;
   styledRun.color = { r: 0.8, g: 0, b: 0 };
 
   editor.body.appendParagraph().appendRun({ text: 'A second, plain paragraph.' });
@@ -230,6 +232,7 @@ describe('odt <-> docx: docx -> odt -> docx', () => {
     const styledRun = styledBlock?.kind === 'paragraph' ? styledBlock.runs[0] : undefined;
     expect(styledRun?.bold).toBe(true);
     expect(styledRun?.italic).toBe(true);
+    expect(styledRun?.strike).toBe(true);
     expect(styledRun?.color?.r).toBeCloseTo(0.8, 5);
     expect(styledRun?.color?.g).toBeCloseTo(0, 5);
     expect(styledRun?.color?.b).toBeCloseTo(0, 5);
@@ -288,6 +291,7 @@ describe('odt <-> docx: odt -> docx -> odt', () => {
     const styledRun = styledBlock?.kind === 'paragraph' ? styledBlock.runs[0] : undefined;
     expect(styledRun?.bold).toBe(true);
     expect(styledRun?.italic).toBe(true);
+    expect(styledRun?.strike).toBe(true);
     expect(styledRun?.color?.r).toBeCloseTo(0.8, 5);
 
     const listBlocks = roundTripped.sections[0]!.blocks.slice(3, 7);
@@ -760,6 +764,7 @@ describe('docx <-> markdown: docx -> markdown -> docx', () => {
     const styledRun = styledBlock?.kind === 'paragraph' ? styledBlock.runs.find((r) => r.bold) : undefined;
     expect(styledRun?.bold).toBe(true);
     expect(styledRun?.italic).toBe(true);
+    expect(styledRun?.strike).toBe(true);
     // Colour has no markdown source construct at all -- the docxToMarkdown hop drops it, matching writeMarkdown's own documented CommonMark-vocabulary narrowing.
     expect(styledRun?.color).toBeUndefined();
   });
