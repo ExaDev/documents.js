@@ -1,3 +1,10 @@
+## [1.13.10](https://github.com/ExaDev/document-cli/compare/v1.13.9...v1.13.10) (2026-08-05)
+
+
+### Bug Fixes
+
+* **deps:** pin pdf-codec to ^2.0.0 to match documents.js transitive resolution ([727f11d](https://github.com/ExaDev/document-cli/commit/727f11d8832991096704a129ffb1c3aa05349cb6))
+
 ## [1.13.9](https://github.com/ExaDev/document-cli/compare/v1.13.8...v1.13.9) (2026-08-05)
 
 ## [1.13.8](https://github.com/ExaDev/document-cli/compare/v1.13.7...v1.13.8) (2026-08-05)
