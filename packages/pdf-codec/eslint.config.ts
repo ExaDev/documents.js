@@ -57,4 +57,22 @@ export default tseslint.config(
     files: ['src/index.ts'],
     rules: { 'local/no-side-effects-in-index': 'error' },
   },
+  {
+    // Worker-isomorphism guard: this codec runs in Cloudflare Workers (see test:workers in package.json and the workerd CI job), so runtime src statically bans node:* imports, bare Node builtin imports, and the Buffer global. Test files and src/test-support legitimately use node:fs for fixtures and are exempt -- they are not published. A pre-audit confirmed every runtime src module is already node-free, so this is a guardrail against regressions, not a migration.
+    files: ['src/**/*.ts'],
+    ignores: ['src/**/*.test.ts', 'src/test-support/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            { group: ['node:*', 'node:*/**'], message: 'This is a Worker-isomorphic library: node:* imports are banned in runtime src. Use a Web API or an isomorphic helper.' },
+            // Bare builtins use an anchored regex rather than `group`: no-restricted-imports `group` matches via the `ignore` package (gitignore semantics), which strips a leading `./` and matches path segments, so a `group: ['util']` entry false-positives on this repo's own `./util/base64` and `./util/abort` relative imports. The regex is tested against the raw import source (which keeps its `./` prefix), so `^util$` matches a real `import 'util'` but not `import './util/base64'`.
+            { regex: '^(fs|path|crypto|child_process|os|net|http|https|stream|util|buffer|url|zlib|readline|worker_threads|timers|events|assert)(/.*)?$', message: 'This is a Worker-isomorphic library: bare Node builtin imports are banned in runtime src. Use a Web API or an isomorphic helper.' },
+          ],
+        },
+      ],
+      'no-restricted-globals': ['error', { name: 'Buffer', message: 'Buffer is Node-only; this Worker-isomorphic library uses Uint8Array.' }],
+    },
+  },
 );
