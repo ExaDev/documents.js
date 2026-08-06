@@ -63,4 +63,22 @@ export default tseslint.config(
     files: ['src/index.ts'],
     rules: { 'local/no-side-effects-in-index': 'error' },
   },
+  {
+    // Static Worker-isomorphism guard for runtime src: this package's runtime code must run unchanged in a Cloudflare Worker (no Node-only builtins or globals), mirroring the runtime enforcement the vitest workers pool already applies at test time. Test files and src/test-support/** legitimately use node:fs etc for fixtures and are not published, so they are exempt here -- the runtime surface alone is what matters.
+    files: ['src/**/*.ts'],
+    ignores: ['src/**/*.test.ts', 'src/test-support/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            { group: ['node:*', 'node:*/**'], message: 'This is a Worker-isomorphic library: node:* imports are banned in runtime src. Use a Web API or an isomorphic helper.' },
+            // `regex` (not `group`) for the bare-builtins list: the `group` matcher uses gitignore semantics and normalises `./util` to `util`, which would false-positive on this package's own relative `./util` imports (src/edit/pdf/util.ts, src/edit/pdf/page.ts). An anchored regex matches only the exact bare specifier, which is the actual Node-builtin surface.
+            { regex: '^(fs|path|crypto|child_process|os|net|http|https|stream|util|buffer|url|zlib|readline|worker_threads|timers|events|assert)$', message: 'This is a Worker-isomorphic library: bare Node builtin imports are banned in runtime src. Use a Web API or an isomorphic helper.' },
+          ],
+        },
+      ],
+      'no-restricted-globals': ['error', { name: 'Buffer', message: 'Buffer is Node-only; this Worker-isomorphic library uses Uint8Array.' }],
+    },
+  },
 );
