@@ -1,3 +1,10 @@
+# [2.5.0](https://github.com/ExaDev/document-schema.js/compare/v2.4.8...v2.5.0) (2026-08-06)
+
+
+### Features
+
+* add canonical A1 cell-addressing utilities + FontFace type ([4285662](https://github.com/ExaDev/document-schema.js/commit/42856623ec34d3880859755855ae03c8c7dc0929))
+
 ## [2.4.8](https://github.com/ExaDev/document-schema.js/compare/v2.4.7...v2.4.8) (2026-08-06)
 
 ## [2.4.7](https://github.com/ExaDev/document-schema.js/compare/v2.4.6...v2.4.7) (2026-08-06)
