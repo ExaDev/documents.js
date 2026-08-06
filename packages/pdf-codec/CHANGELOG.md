@@ -1,3 +1,10 @@
+## [2.0.1](https://github.com/ExaDev/pdf-codec/compare/v2.0.0...v2.0.1) (2026-08-06)
+
+
+### Bug Fixes
+
+* use npx in husky hooks instead of pnpm exec + .npmrc ([367395c](https://github.com/ExaDev/pdf-codec/commit/367395cd147d5853b299dcbaffc5f07aa4ef755e))
+
 # [2.0.0](https://github.com/ExaDev/pdf-codec/compare/v1.11.11...v2.0.0) (2026-08-05)
 
 
