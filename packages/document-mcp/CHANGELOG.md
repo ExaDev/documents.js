@@ -1,3 +1,10 @@
+# [1.4.0](https://github.com/ExaDev/document-mcp/compare/v1.3.11...v1.4.0) (2026-08-06)
+
+
+### Features
+
+* cache typecheck/lint/test/build tasks with turbo ([588121a](https://github.com/ExaDev/document-mcp/commit/588121a146f28cefc3bd43e06a9a2e4a786cc691))
+
 ## [1.3.11](https://github.com/ExaDev/document-mcp/compare/v1.3.10...v1.3.11) (2026-08-06)
 
 ## [1.3.10](https://github.com/ExaDev/document-mcp/compare/v1.3.9...v1.3.10) (2026-08-06)
