@@ -4,7 +4,7 @@ import type { XmlElement, XmlNode } from '../../model/node';
 import { el, txt } from '../../xml/fragment';
 import { encodeXmlText } from '../../xml/entities';
 import { POINTS_PER_INCH } from '../shared/units';
-import { cellReference, rangeReference } from './a1';
+import { cellReference, rangeReference } from 'document-schema.js';
 import { buildPrintAreaValue, buildPrintTitlesValue, XLNM_PRINT_AREA, XLNM_PRINT_TITLES } from './defined-names';
 import type { CellNumberFormat } from './number-format';
 import {

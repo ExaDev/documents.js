@@ -1,7 +1,7 @@
 import type { ContentSheetPrintRange, ContentSheetRepeatRange } from 'document-schema.js';
 import type { Package } from '../../model/package';
 import { attr, childrenWithTag, rootElement, textContent } from '../util';
-import { columnIndexToLetters, columnLettersToIndex, parseRangeReference, rangeReference } from './a1';
+import { columnIndexToLetters, columnLettersToIndex, parseRangeReference, rangeReference } from 'document-schema.js';
 
 // xl/workbook.xml's own print-area and print-titles mechanism: NOT a per-sheet attribute of any kind, but two reserved, sheet-scoped workbook-level defined names -- confirmed against real LibreOffice output (see typed/xlsx/content.test.ts's own kitchen-sink fixture): <definedName localSheetId="0" name="_xlnm.Print_Area">Data!$A$1:$I$20</definedName> and <definedName localSheetId="0" name="_xlnm.Print_Titles">Data!$A:$A,Data!$1:$1</definedName>. ECMA-376 Part 1 SS18.2.6 reserves the "_xlnm." prefix for exactly this purpose (Print_Area, Print_Titles, and others this reader doesn't need); localSheetId is the 0-based index of the sheet the name applies to, in xl/workbook.xml's own <sheets> document order -- the SAME order typed/xlsx/content.ts's own sheet-resolution walk already produces, so a caller need only pass that same 0-based index through.
 

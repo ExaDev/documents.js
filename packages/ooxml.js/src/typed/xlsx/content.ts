@@ -4,7 +4,7 @@ import type { Package } from '../../model/package';
 import type { XmlElement } from '../../model/node';
 import { attr, childrenWithTag, elementsWithTag, resolveRelationships, rootElement, textContent } from '../util';
 import { readCoreProperties } from '../shared/metadata';
-import { parseCellReference, parseRangeReference } from './a1';
+import { parseCellReference, parseRangeReference } from 'document-schema.js';
 import type { SheetDefinedNames } from './defined-names';
 import { readDefinedNamesBySheet } from './defined-names';
 import type { NumberFormatClass } from './number-format';
