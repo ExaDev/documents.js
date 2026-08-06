@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       document-schema.js:
-        specifier: ^2.4.6
-        version: 2.4.6
+        specifier: ^2.4.7
+        version: 2.4.7
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -1467,8 +1467,8 @@ packages:
     resolution: {integrity: sha512-WkrWp9GR4KXfKGYzOLmTuGVi1UWFfws377n9cc55/tb6DuqyF6pcQ5AbiHEshaDpY9v6oaSr2XCDidGmMwdzIA==}
     engines: {node: '>=8'}
 
-  document-schema.js@2.4.6:
-    resolution: {integrity: sha512-dr+A/AocVUOZPsgvQ+1HFYG+1uwcsnfhUVEOcL5KQLAYAik4d6oYVDPHmgvQKGcS8wFZP9BRTJK4RrO49Uxvmw==}
+  document-schema.js@2.4.7:
+    resolution: {integrity: sha512-P/4KUpZ7PBXIezg3GDZzY3F+knUsbAa/osB5Sm7vho8qL+u8RWWu1hCTM7vo8zeMXVsT17knTfgDmUx+FigFeQ==}
     engines: {node: '>=20'}
 
   dot-prop@5.3.0:
@@ -4314,7 +4314,7 @@ snapshots:
     dependencies:
       path-type: 4.0.0
 
-  document-schema.js@2.4.6:
+  document-schema.js@2.4.7:
     dependencies:
       zod: 4.4.3
 
