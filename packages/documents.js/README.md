@@ -602,12 +602,13 @@ Dependency direction among this package's own local modules is downward and chec
 ## Build, test, and lint
 
 ```sh
-pnpm build         # tsdown -> dist/ (ESM + CJS + .d.ts)
-pnpm typecheck     # tsc --noEmit
-pnpm lint          # eslint . --fix --cache --max-warnings 0
-pnpm test          # vitest run --project unit
+pnpm build         # turbo run _build (tsdown -> dist/ (ESM + CJS + .d.ts))
+pnpm typecheck     # turbo run _typecheck _typecheck:node (tsc -p tsconfig.json for the web-only lib, then tsc -p tsconfig.node.json for the Node tsconfig)
+pnpm lint          # turbo run _lint (eslint . --fix --cache --max-warnings 0)
+pnpm test          # turbo run _test (vitest run --project unit)
+pnpm test:workers  # turbo run _test:workers (vitest run --config vitest.workers.config.ts -- exercises the library under the Cloudflare Workers runtime)
 pnpm test:watch    # vitest --project unit
-pnpm test:smoke    # rebuilds dist/, then verifies ESM/CJS parity, a real docxToPdf/pdfToDocx round trip, real odtToPdf/odpToPdf/odsToPdf/odgToPdf conversions (odgToPdf's own fixture carries a real curved path, proving writePath reaches the built dist/ bundle), a real createOdp/odpToPdf/pdfToOdp round trip, a real odsToPdf/pdfToOds round trip plus a separate createOds/printSettings/buildOdsPackage exercise, a real createOdg/odgToPdf/pdfToOdg round trip (a curved path, a filled rect, and text, built entirely through the odg live-view editor, converted to PDF and reconstructed back to odg via reconstructDrawing), a real odfToPdf conversion (a fraction, rendered via the embedded STIX Two Math font -- checked by confirming the built PDF contains a real /Type0/Identity-H/CIDFontType0C font resource, proving the base64-embedded font asset itself survived the tsdown build), a real odsToPdf conversion of a sheet carrying a cell-anchored formula (the same font-resource check, plus asserting convertSpreadsheetToLayout's own reported position lands at the anchor cell rather than the sheet's origin), a real markdownToPdf/pdfToMarkdown round trip plus a markdownToDocx bridge exercise, and real font resolution in docxToPdf (a Calibri run producing a genuine /Type0/Identity-H/CIDFontType2/FontFile2 Carlito font program, alongside an Arial control run that embeds nothing at all), from the built CJS bundle
+pnpm test:smoke    # turbo run _test:smoke (rebuilds dist/, then verifies ESM/CJS parity, a real docxToPdf/pdfToDocx round trip, real odtToPdf/odpToPdf/odsToPdf/odgToPdf conversions (odgToPdf's own fixture carries a real curved path, proving writePath reaches the built dist/ bundle), a real createOdp/odpToPdf/pdfToOdp round trip, a real odsToPdf/pdfToOds round trip plus a separate createOds/printSettings/buildOdsPackage exercise, a real createOdg/odgToPdf/pdfToOdg round trip (a curved path, a filled rect, and text, built entirely through the odg live-view editor, converted to PDF and reconstructed back to odg via reconstructDrawing), a real odfToPdf conversion (a fraction, rendered via the embedded STIX Two Math font -- checked by confirming the built PDF contains a real /Type0/Identity-H/CIDFontType0C font resource, proving the base64-embedded font asset itself survived the tsdown build), a real odsToPdf conversion of a sheet carrying a cell-anchored formula (the same font-resource check, plus asserting convertSpreadsheetToLayout's own reported position lands at the anchor cell rather than the sheet's origin), a real markdownToPdf/pdfToMarkdown round trip plus a markdownToDocx bridge exercise, and real font resolution in docxToPdf (a Calibri run producing a genuine /Type0/Identity-H/CIDFontType2/FontFile2 Carlito font program, alongside an Arial control run that embeds nothing at all), from the built CJS bundle)
 ```
 
 The optional real-world PDF conformance corpus (`test:corpus` in the family's earlier layout) now lives in `pdf-codec`'s own repository, since it exercises the PDF codec directly rather than anything docx/pptx/odt/odp/ods/odg-specific — see that package's own README.
@@ -732,15 +733,15 @@ The prose below is authoritative; this table is a quick-reference summary of it,
 
 | ↓ from \ to → | docx | pptx | xlsx | odt | odp | ods | odg | odf | markdown | pdf |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| **docx** | — | – | – | ✓ | – | – | – | – | ✗ | ~ |
-| **pptx** | – | — | – | – | ✓ | – | – | – | – | ~ |
-| **xlsx** | – | – | — | – | – | ~ | – | – | – | ~ |
-| **odt** | ✓ | – | – | — | – | – | – | – | ✗ | ~ |
-| **odp** | – | ✓ | – | – | — | – | – | – | – | ~ |
+| **docx** | — | ~ | – | ✓ | – | – | – | – | ✗ | ~ |
+| **pptx** | ~ | — | – | – | ✓ | – | – | – | – | ~ |
+| **xlsx** | – | – | — | – | – | ~ | – | – | ✗✗ | ~ |
+| **odt** | ✓ | – | – | — | ~ | – | – | – | ✗ | ~ |
+| **odp** | – | ✓ | – | ~ | — | – | – | – | – | ~ |
 | **ods** | – | – | ~ | – | – | — | – | – | – | ~ |
 | **odg** | – | – | – | – | – | – | — | – | – | ~ |
 | **odf** | – | – | – | – | – | – | – | — | – | → |
-| **markdown** | ~ | – | – | ~ | – | – | – | – | — | ~ |
+| **markdown** | ~ | – | ✗✗ | ~ | – | – | – | – | — | ~ |
 | **pdf** | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | – | ✗✗ | — |
 
 33 of the 90 possible directional pairs have a real, ergonomic conversion function; PDF is the one layout codec every content format but `odf` renders to and reconstructs from (it is not "the hub" — the `ContentDocument` and `LayoutDocument` pivots in `document-schema.js` are, and fourteen of the sixteen cross-format bridge functions already bypass PDF entirely for the seven pairs that share a content variant directly or through a semantic transform). `document-cli` and `document-mcp` add no conversion logic of their own, so this fidelity is identical across all three.
