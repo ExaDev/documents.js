@@ -14,8 +14,17 @@ export default tseslint.config(
     // Pin the TSConfig root so the parser isn't confused by stray tsconfig.json files elsewhere in the tree. Required because lint-staged runs eslint at commit time.
     //
     // `projectService` (global -- no `files` filter) powers the type-checked rules below; it must apply to every matched file or the type-checked configs crash on files outside the program.
+    //
+    // Two tsconfigs now exist: tsconfig.json is the vendor-neutral WEB gate (lib ES2024+WebWorker, types []), covering runtime src only; tsconfig.node.json covers the test files, test-support, the custom eslint rules, and the root config files under Node types. The TS project service discovers only tsconfig.json (the default-name config) by walking up from each file, so it resolves every runtime-src file to the web program automatically -- but a file tsconfig.json excludes (every test/config/eslint-rules file) is "not found" unless it is explicitly routed to the node program. `defaultProject` + `allowDefaultProject` is that routing: each non-src file falls back to tsconfig.node.json, so it still gets full type-checked lint under Node types (matching the model "runtime src -> web program, test/config files -> node program"). allowDefaultProject forbids `**`, so test files are matched by depth (src/*.test.ts for the top-level ones, src/*/*.test.ts for the per-module ones); the threshold is raised past its default of 8 because this repo legitimately routes its whole non-src surface through the node default project.
     languageOptions: {
-      parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },
+      parserOptions: {
+        projectService: {
+          defaultProject: 'tsconfig.node.json',
+          allowDefaultProject: ['src/*.test.ts', 'src/*/*.test.ts', 'src/test-support/*.ts', '*.config.ts', 'eslint-rules/*.ts'],
+          maximumDefaultProjectFileMatchCount_THIS_WILL_SLOW_DOWN_LINTING: 64,
+        },
+        tsconfigRootDir: import.meta.dirname,
+      },
       globals: { ...globals.node },
     },
   },

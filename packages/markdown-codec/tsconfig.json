@@ -5,8 +5,8 @@
     "target": "ES2024",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "lib": ["ES2024"],
-    "types": ["node"],
+    "lib": ["ES2024", "WebWorker"],
+    "types": [],
     "noEmit": true,
     "skipLibCheck": true,
     "isolatedModules": true,
@@ -15,15 +15,6 @@
     "esModuleInterop": true,
     "resolveJsonModule": true
   },
-  "include": [
-    "src",
-    "eslint-rules",
-    "tsdown.config.ts",
-    "vitest.config.ts",
-    "vitest.workers.config.ts",
-    "commitlint.config.ts",
-    "release.config.ts",
-    "eslint.config.ts",
-    "lint-staged.config.ts"
-  ]
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts", "src/test-support/**/*.ts"]
 }

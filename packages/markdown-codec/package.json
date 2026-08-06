@@ -48,7 +48,7 @@
     "build": "tsdown",
     "prepublishOnly": "pnpm run lint && pnpm run typecheck && tsdown && publint && attw --pack",
     "lint": "eslint . --fix --cache --max-warnings 0",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.node.json",
     "test": "vitest run --project unit",
     "test:workers": "vitest run --config vitest.workers.config.ts",
     "test:watch": "vitest --project unit",
