@@ -291,6 +291,10 @@ export { extractOoxmlEmbeddedFonts, OoxmlEmbeddedFontError } from './fonts/ooxml
 export { extractOdfEmbeddedFonts, OdfEmbeddedFontError } from './fonts/odf';
 // ECMA-376 Part 4, 2.8.1's own font obfuscation, sniff-first over both formats (see src/fonts/obfuscation.ts) -- exported for a caller holding a raw .odttf/.fntdata part of their own rather than a whole package.
 export { deobfuscateEmbeddedFont, deriveFontKey, FontDeobfuscationError, looksLikeSfnt } from './fonts/obfuscation';
+export { readFontFace as describeFontFace, FontFaceParseError } from 'pdf-codec';
+export type { FontFace } from 'document-schema.js';
+export { columnIndexToLetters, columnLettersToIndex, cellReference, parseCellReference, parseRangeReference, rangeReference } from 'document-schema.js';
+export type { CellPosition, CellRange } from 'document-schema.js';
 
 // --- MathML presentation-layer typesetting: a pure box-model layout engine (no PDF or ODF knowledge of its own -- see src/mathml/'s own module comments), consuming odf.js's readOdfFormula's own raw MathML tree via a locally-defined, structurally-compatible node type. odfToPdf (below) and the odt/odp embedded-formula layout paths (src/layout/engine.ts, src/layout/slides.ts) are its two real callers; exported directly too, for a caller that wants to lay out a formula (e.g. onto a custom page layout) without going through either. ---
 export type { LayoutFormulaOptions } from './mathml/layout';

@@ -1,5 +1,6 @@
 import type { Package, XmlElement, XmlNode } from 'odf.js';
-import { cellReference, findStyleElement, formatOdfLength, parseCellReference, parseMargins, parsePageSize, resolvePageLayoutProperties } from 'odf.js';
+import { findStyleElement, formatOdfLength, parseMargins, parsePageSize, resolvePageLayoutProperties } from 'odf.js';
+import { cellReference, parseCellReference } from 'document-schema.js';
 import { attr } from 'ooxml.js';
 import type { ContentSheetPrintRange, ContentSheetPrintSettings, ContentSheetRepeatRange } from 'document-schema.js';
 import type { Margins } from '../../model/geometry';
@@ -175,8 +176,8 @@ function parsePrintRanges(value: string): ContentSheetPrintRange | undefined {
 
 // The write-side inverse of parsePrintRanges above: "SheetName.A1:SheetName.D10", the exact shape odf.js's own reader (and real LibreOffice output) expects. Requires tableElement to already carry a table:name (true for every sheet this editor creates -- OdsEditor.addSheet always sets it before returning the OdsSheet a caller could reach writeSheetPrintSettings through).
 function formatPrintRange(sheetName: string, range: ContentSheetPrintRange): string {
-  const start = `${sheetName}.${cellReference(range.startColumn, range.startRow)}`;
-  const end = `${sheetName}.${cellReference(range.endColumn, range.endRow)}`;
+  const start = `${sheetName}.${cellReference(range.startRow, range.startColumn)}`;
+  const end = `${sheetName}.${cellReference(range.endRow, range.endColumn)}`;
   return `${start}:${end}`;
 }
 

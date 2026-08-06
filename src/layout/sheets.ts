@@ -17,7 +17,7 @@ import type {
   LayoutPage,
   LayoutText,
 } from 'document-schema.js';
-import { LAYOUT_FORMAT_VERSION } from 'document-schema.js';
+import { columnIndexToLetters, LAYOUT_FORMAT_VERSION } from 'document-schema.js';
 import { layoutFormula } from '../mathml/layout';
 import type { LayoutColor } from '../model/color';
 import { COLOR_BLACK, rgbHexToColor } from '../model/color';
@@ -110,18 +110,6 @@ const NUMERIC_OVERFLOW_TEXT = '###';
 const GRIDLINE_COLOR: LayoutColor = rgbHexToColor('#D0D0D0');
 const GRIDLINE_WIDTH_PT = 0.5;
 const HEADER_LABEL_COLOR: LayoutColor = rgbHexToColor('#606060');
-
-// --- Column-letter conversion (A, B, ..., Z, AA, AB, ...) -- a pure spreadsheet-addressing convention with no I/O dependency of its own, so written locally rather than importing odf.js's own columnIndexToLetters: src/layout/* imports only ./model (and sibling layout modules), never a format package. ---
-function columnLetters(index: number): string {
-  let n = index + 1;
-  let letters = '';
-  while (n > 0) {
-    const remainder = (n - 1) % 26;
-    letters = String.fromCharCode(65 + remainder) + letters;
-    n = Math.floor((n - 1) / 26);
-  }
-  return letters;
-}
 
 // --- Step 1: resolve the print range -----------------------------------------------------------
 
@@ -466,7 +454,7 @@ function renderHeaderLabels(gutter: HeaderGutter, columnAxis: PositionedAxis, ro
   const ascentPt = measurer.ascenderAtSize(DEFAULT_LAYOUT_FONT, HEADER_LABEL_SIZE_PT);
 
   columnAxis.indices.forEach((columnIndex, position) => {
-    const label = columnLetters(columnIndex);
+    const label = columnIndexToLetters(columnIndex);
     const widthPt = columnAxis.sizesPt[position]!;
     const labelWidthPt = measurer.widthOfTextAtSize(label, DEFAULT_LAYOUT_FONT, HEADER_LABEL_SIZE_PT);
     const xPt = gridLeftXPt + columnAxis.offsetsPt[position]! + alignmentOffsetPt('center', widthPt, labelWidthPt);
