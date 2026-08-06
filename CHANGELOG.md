@@ -1,3 +1,10 @@
+# [1.94.0](https://github.com/ExaDev/documents.js/compare/v1.93.1...v1.94.0) (2026-08-06)
+
+
+### Features
+
+* add a composed xlsx <-> markdown edge ([721479b](https://github.com/ExaDev/documents.js/commit/721479b42037107fce5b3dd96b85bfd23abc0c45)), closes [#136](https://github.com/ExaDev/documents.js/issues/136)
+
 ## [1.93.1](https://github.com/ExaDev/documents.js/compare/v1.93.0...v1.93.1) (2026-08-06)
 
 # [1.93.0](https://github.com/ExaDev/documents.js/compare/v1.92.9...v1.93.0) (2026-08-05)
