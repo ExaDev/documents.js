@@ -1,61 +1,33 @@
-// A1-style cell reference computation for the future ods reader. Unlike xlsx, where every c (cell) element carries its own explicit r="B7" attribute, an ODF table:table-cell carries NO cell-reference attribute at all -- a reader has to compute "B7" itself from a running column/row cursor as it walks table:table-row/table:table-cell elements in document order.
+// A1-style cell reference computation for ODF spreadsheet reading. The pure algorithms (columnIndexToLetters, columnLettersToIndex, parseCellReference, cellReference) now live in document-schema.js's canonical, format-agnostic, row-first a1 module -- this file preserves odf.js's own column-first public API and its stricter validation (throws on negative indices, uppercase-only parsing) as thin back-compat shims that delegate to the schema. TableCursor stays here: it is an ODF-reader concern (tracking position across table:number-columns-repeated/table:number-rows-repeated), not a model-level utility.
 //
-// The other structural difference from xlsx: a real ODF spreadsheet compresses long runs of identical trailing cells/rows with table:number-columns-repeated / table:number-rows-repeated rather than writing each one out. This is not a rare edge case -- confirmed directly against real LibreOffice-shipped .ots templates (`/Applications/LibreOffice.app/Contents/Resources/template/common/wizard/styles/*.ots`), whose content.xml ends its used sheet area with rows such as `<table:table-row table:number-rows-repeated="1016575"><table:table-cell table:number-columns-repeated="256"/></table:table-row>` -- a single row+cell pair standing in for over a million actual empty rows. A reader that materialized an object per repeated cell would attempt to allocate billions of objects on an ordinary file; TableCursor below exists so a caller can advance PAST a repeat count in O(1), reading off only the reference(s) it actually needs, never materializing the cells in between.
+// For why TableCursor exists at all: unlike xlsx, where every c (cell) element carries its own explicit r="B7" attribute, an ODF table:table-cell carries NO cell-reference attribute -- a reader computes "B7" from a running cursor. A real ODF spreadsheet compresses long runs of identical trailing cells (table:number-columns-repeated, confirmed against real LibreOffice .ots templates: a single row+cell pair standing in for over a million empty rows), and TableCursor advances PAST a repeat count in O(1), reading off only the reference(s) it needs, never materializing the cells in between.
 
-const ALPHABET_SIZE = 26; // The number of letters A-Z, i.e. spreadsheet column-letter encoding's base.
-const ALPHABET_START_CODE = 'A'.charCodeAt(0);
+import { columnIndexToLetters as schemaColumnIndexToLetters, columnLettersToIndex as schemaColumnLettersToIndex, cellReference as schemaCellReference, parseCellReference as schemaParseCellReference } from 'document-schema.js';
 
-// Converts a 0-based column index to its spreadsheet column-letter form: 0 -> "A", 25 -> "Z", 26 -> "AA", 701 -> "ZZ", 702 -> "AAA" -- the same bijective base-26 (no zero digit) scheme every spreadsheet format uses.
 export function columnIndexToLetters(index: number): string {
   if (!Number.isInteger(index) || index < 0) {
     throw new Error(`columnIndexToLetters: index must be a non-negative integer, got ${index}`);
   }
-  let remaining = index + 1; // Shift to 1-based: the bijective base-26 algorithm has no representation for "zero".
-  let letters = '';
-  while (remaining > 0) {
-    const digit = (remaining - 1) % ALPHABET_SIZE;
-    letters = String.fromCharCode(ALPHABET_START_CODE + digit) + letters;
-    remaining = Math.floor((remaining - 1) / ALPHABET_SIZE);
-  }
-  return letters;
+  return schemaColumnIndexToLetters(index);
 }
 
-// Builds an A1-style reference ("B7") from 0-based column/row indices.
 export function cellReference(columnIndex: number, rowIndex: number): string {
   if (!Number.isInteger(rowIndex) || rowIndex < 0) {
     throw new Error(`cellReference: rowIndex must be a non-negative integer, got ${rowIndex}`);
   }
-  return `${columnIndexToLetters(columnIndex)}${rowIndex + 1}`;
+  // document-schema.js's canonical cellReference is row-first (row, column); odf.js's public API is column-first (columnIndex, rowIndex) -- swap the args.
+  return schemaCellReference(rowIndex, columnIndex);
 }
 
-// The reverse of columnIndexToLetters: "A" -> 0, "Z" -> 25, "AA" -> 26, "XFD" -> 16383. Unlike columnIndexToLetters/cellReference (which construct a reference from a position THIS package already knows to be valid), this parses text a producer wrote into an XML attribute -- e.g. ods's own table:print-ranges cell-range-address strings (typed/ods/read.ts) -- so it returns undefined for anything that isn't a run of one or more uppercase A-Z letters rather than throwing.
 export function columnLettersToIndex(letters: string): number | undefined {
   if (!/^[A-Z]+$/.test(letters)) {
     return undefined;
   }
-  let index = 0;
-  for (const char of letters) {
-    index = index * ALPHABET_SIZE + (char.charCodeAt(0) - ALPHABET_START_CODE + 1);
-  }
-  return index - 1; // Shift back from the bijective base-26 1-based encoding to a 0-based column index.
+  return schemaColumnLettersToIndex(letters);
 }
 
-// The reverse of cellReference: parses an A1-style reference ("B7") into 0-based column/row indices, or undefined if it doesn't match the grammar -- for the same "this parses untrusted producer text, not this package's own construction" reason columnLettersToIndex is non-throwing.
 export function parseCellReference(reference: string): { column: number; row: number } | undefined {
-  const match = /^([A-Z]+)(\d+)$/.exec(reference);
-  if (match === null) {
-    return undefined;
-  }
-  const [, letters, digits] = match;
-  if (letters === undefined || digits === undefined) {
-    return undefined;
-  }
-  const column = columnLettersToIndex(letters);
-  const row = Number.parseInt(digits, 10) - 1;
-  if (column === undefined || row < 0) {
-    return undefined;
-  }
-  return { column, row };
+  return schemaParseCellReference(reference);
 }
 
 function validateRepeatCount(repeatCount: number, caller: string): void {
@@ -64,7 +36,6 @@ function validateRepeatCount(repeatCount: number, caller: string): void {
   }
 }
 
-// Tracks a spreadsheet reader's current (column, row) position while it walks table:table-row/table:table-cell elements in document order, advancing across table:number-columns-repeated/table:number-rows-repeated in O(1) without ever materializing the repeated cells -- see this module's own top-of-file note on why that matters for a real-world file. Intended usage for a future ods reader, one TableCursor per sheet: construct one cursor per sheet, then for each table:table-row element in document order call nextCell(repeatCount) once per table:table-cell child (in order) to obtain that cell's own reference before recording it, and finally call nextRow(repeatCount) once the row's cells are exhausted, before moving on to the next table:table-row.
 export class TableCursor {
   private columnCursor = 0;
   private rowCursor = 0;
@@ -77,7 +48,6 @@ export class TableCursor {
     return this.rowCursor;
   }
 
-  // The reference for the CURRENT cursor position (the first cell of this table:table-cell's repeat group), then advances the column cursor by repeatCount (table:number-columns-repeated, default 1) without materializing the repeatCount-1 cells in between. A repeated NON-empty cell (legal but rare in practice -- e.g. an identical formula result repeated across a row) is represented by exactly this one reference; a caller that needs every individual repeated cell's own address can still derive them (this.columnIndex before vs. after the call bounds the range), but the common case -- and the only one real-world files actually stress -- is a huge repeat count over empty cells, which this deliberately never expands.
   nextCell(repeatCount = 1): string {
     validateRepeatCount(repeatCount, 'TableCursor.nextCell');
     const reference = cellReference(this.columnCursor, this.rowCursor);
@@ -85,7 +55,6 @@ export class TableCursor {
     return reference;
   }
 
-  // Advances to the next table:table-row, honouring table:number-rows-repeated (default 1) and resetting the column cursor to 0 for the new row -- matching how every table:table-row's own table:table-cell children are always addressed from column A again.
   nextRow(repeatCount = 1): void {
     validateRepeatCount(repeatCount, 'TableCursor.nextRow');
     this.rowCursor += repeatCount;
