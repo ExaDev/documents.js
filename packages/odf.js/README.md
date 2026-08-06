@@ -17,6 +17,7 @@ graph TD
     odf("odf.js")
     pdfcodec("pdf-codec")
     mdcodec("markdown-codec")
+    bytecodec("byte-codec")
     documents("documents.js")
     mcp("document-mcp")
     cli("document-cli")
@@ -30,6 +31,8 @@ graph TD
     odf --> documents
     pdfcodec --> documents
     mdcodec --> documents
+    bytecodec --> pdfcodec
+    bytecodec --> documents
     documents --> mcp
     pdfcodec --> mcp
     documents --> cli
@@ -41,6 +44,7 @@ graph TD
     click odf "https://github.com/ExaDev/odf.js" "odf.js"
     click pdfcodec "https://github.com/ExaDev/pdf-codec" "pdf-codec"
     click mdcodec "https://github.com/ExaDev/markdown-codec" "markdown-codec"
+    click bytecodec "https://github.com/ExaDev/byte-codec" "byte-codec"
     click documents "https://github.com/ExaDev/documents.js" "documents.js"
     click mcp "https://github.com/ExaDev/document-mcp" "document-mcp"
     click cli "https://github.com/ExaDev/document-cli" "document-cli"
