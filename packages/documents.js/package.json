@@ -75,7 +75,7 @@
     "byte-codec": "^1.0.4",
     "document-schema.js": "^2.4.5",
     "fflate": "^0.8.3",
-    "markdown-codec": "^1.1.19",
+    "markdown-codec": "^1.1.20",
     "odf.js": "^2.4.12",
     "ooxml.js": "^2.8.13",
     "pdf-codec": "^2.0.4",
