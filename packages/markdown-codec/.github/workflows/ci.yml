@@ -47,6 +47,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
+      # attw (are-the-types-wrong) checks the built .d.ts emit against the package's exports map for resolution/shape errors the rest of CI cannot catch. It needs the built dist/ to analyse, so build first -- matching the prepublishOnly gate that previously was the only place attw ran.
+      - run: pnpm build
+      - run: pnpm exec attw --pack
 
   test:
     name: Test
