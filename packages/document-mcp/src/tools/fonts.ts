@@ -1,7 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import type { CallToolResult, McpServer } from '@modelcontextprotocol/server';
-import { base64ToBytes, extractSourceFontsForFormat } from 'documents.js';
-import { readFontFace } from 'pdf-codec';
+import { base64ToBytes, describeFontFace, extractSourceFontsForFormat } from 'documents.js';
 import { z } from 'zod';
 import { DocumentInputSchema, resolveDocumentInput } from '../io/document-input';
 
@@ -24,7 +23,7 @@ interface ResolvedFontFileInput {
   readonly source: string;
 }
 
-// Resolves FontFileInputSchema to raw bytes plus a source label for readFontFace's own error messages (which always name the file/label a parse failure came from) -- the path itself when given, or a generic label for inline bytes, which carry no filename of their own.
+// Resolves FontFileInputSchema to raw bytes plus a source label for describeFontFace's own error messages (which always name the file/label a parse failure came from) -- the path itself when given, or a generic label for inline bytes, which carry no filename of their own.
 async function resolveFontFileInput(input: z.infer<typeof FontFileInputSchema>): Promise<ResolvedFontFileInput> {
   if ('path' in input) {
     const buffer = await readFile(input.path);
@@ -38,7 +37,7 @@ function errorResult(message: string): CallToolResult {
   return { content: [{ type: 'text', text: message }], isError: true };
 }
 
-/** errorResult's counterpart for a caught exception: UnsupportedFontSourceFormatError (extractSourceFontsForFormat rejecting a format with no source-embedded-font concept -- xlsx/pdf/markdown/odf) and FontFaceParseError (readFontFace rejecting bytes that are not a recognised sfnt font, or a .ttc collection) both carry a self-contained, already-actionable message, so there is nothing to add beyond surfacing it verbatim. */
+/** errorResult's counterpart for a caught exception: UnsupportedFontSourceFormatError (extractSourceFontsForFormat rejecting a format with no source-embedded-font concept -- xlsx/pdf/markdown/odf) and FontFaceParseError (describeFontFace rejecting bytes that are not a recognised sfnt font, or a .ttc collection) both carry a self-contained, already-actionable message, so there is nothing to add beyond surfacing it verbatim. */
 function toErrorResult(error: unknown): CallToolResult {
   return errorResult(error instanceof Error ? error.message : String(error));
 }
@@ -76,14 +75,14 @@ export function registerFontTools(server: McpServer): void {
       title: 'Describe font file',
       description: 'Reads a standalone TrueType/OpenType font file (.ttf/.otf) and reports the family/bold/italic triple it declares about itself.',
       inputSchema: z.object({
-        // Deliberately bypasses documents.js here: documents.js's own font tooling covers extracting fonts a document already embeds (the `fonts` tool above), not describing an arbitrary font FILE, so this reads pdf-codec's readFontFace directly -- a genuine direct dependency of this package, not a workaround.
+        // describe_font_file inspects a standalone font FILE, not a document -- documents.js's own extractSourceFontsForFormat covers extracting fonts a document already embeds (the `fonts` tool above), and describeFontFace is its standalone-file counterpart, re-exported from documents.js so this package needs no direct pdf-codec runtime dependency.
         source: FontFileInputSchema.describe('The standalone .ttf/.otf font file to inspect -- not a document.'),
       }),
     },
     async ({ source }) => {
       try {
         const { bytes, source: label } = await resolveFontFileInput(source);
-        const face = readFontFace(bytes, label);
+        const face = describeFontFace(bytes, label);
         return jsonResult({ family: face.family, bold: face.bold, italic: face.italic });
       } catch (error) {
         return toErrorResult(error);
