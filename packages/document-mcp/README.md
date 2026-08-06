@@ -54,11 +54,12 @@ Requires Node.js `>=20` and pnpm `11.6.0` (pinned via `packageManager` in `packa
 
 ```sh
 pnpm install
-pnpm build         # tsdown -> dist/ (ESM + CJS + .d.ts)
-pnpm typecheck     # tsc --noEmit
-pnpm lint          # eslint . --fix --cache --max-warnings 0
-pnpm test          # vitest run --project unit
-pnpm test:smoke    # rebuilds dist/, then spawns dist/bin.js as a real subprocess and drives it over genuine MCP stdio
+pnpm build         # turbo -> tsdown -> dist/ (ESM + CJS + .d.ts)
+pnpm typecheck     # turbo -> tsc --noEmit
+pnpm lint          # turbo -> eslint . --fix --cache --max-warnings 0
+pnpm test          # turbo -> vitest run --project unit
+pnpm test:workers  # turbo -> vitest under the real Cloudflare Workers runtime (workerd) via @cloudflare/vitest-pool-workers, driving createServer() through an in-memory JSON-RPC pair
+pnpm test:smoke    # turbo -> tsdown then vitest --project smoke -- spawns dist/bin.js as a real subprocess driven over genuine MCP stdio
 ```
 
 Once published, run the server directly via `npx document-mcp` (stdio transport, no install step needed).
@@ -126,6 +127,10 @@ Every tool that takes or produces document bytes goes through the same two hybri
 - [documents.js](https://github.com/ExaDev/documents.js) — the library this server exposes.
 - [document-cli](https://github.com/ExaDev/document-cli) — the sibling CLI/TUI over the same library, whose toolchain this repository's scaffold mirrors.
 - [Model Context Protocol](https://modelcontextprotocol.io) — the protocol this server implements, via [`@modelcontextprotocol/server`](https://www.npmjs.com/package/@modelcontextprotocol/server).
+
+## Gotchas
+
+- **Runtime dependencies are `documents.js` + `@modelcontextprotocol/server` + `zod` only; `pdf-codec` and `odf.js` are devDependencies (test-support only).** Every runtime reach into either — `ProvidedFont`/`FontSubstitution`/`describeFontFace`/the `WinAnsi` substitution shape — goes through `documents.js`'s own re-exports, so a published install pulls in no direct `pdf-codec`/`odf.js` dependency. `odf.js` survives in `devDependencies` solely because `src/test-support/odm-fixture.ts` and `src/test-support/embedded-font-fixture.ts` build real ODF package fixtures from its low-level XML primitives (`zipPackage`/`el`/`rootElement`), and `src/test-support/` is excluded from the `tsdown` build — only `src/index.ts` and `src/bin.ts` are entry points — so neither fixture module ever ships in `dist/`.
 
 ## License
 
