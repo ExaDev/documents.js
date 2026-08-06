@@ -46,14 +46,19 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "tsdown",
+    "build": "turbo run _build",
+    "_build": "tsdown",
     "prepublishOnly": "pnpm run lint && pnpm run typecheck && tsdown && publint && attw --pack",
-    "lint": "eslint . --fix --cache --max-warnings 0",
+    "lint": "turbo run _lint",
+    "_lint": "eslint . --fix --cache --max-warnings 0",
     "lint:check": "eslint . --max-warnings 0",
-    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.node.json",
-    "test": "vitest run",
+    "typecheck": "turbo run _typecheck",
+    "_typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.node.json",
+    "test": "turbo run _test",
+    "_test": "vitest run",
     "test:watch": "vitest",
-    "test:workers": "vitest run --config vitest.workers.config.ts",
+    "test:workers": "turbo run _test:workers",
+    "_test:workers": "vitest run --config vitest.workers.config.ts",
     "prepare": "husky"
   },
   "packageManager": "pnpm@11.6.0",
@@ -76,6 +81,7 @@
     "publint": "^0.3.21",
     "semantic-release": "^25.0.8",
     "tsdown": "^0.22.13",
+    "turbo": "^2.10.8",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.65.0",
     "vitest": "^4.1.10"
