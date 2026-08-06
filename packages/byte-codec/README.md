@@ -38,6 +38,12 @@ pnpm add byte-codec
 npm install byte-codec
 ```
 
+## npm aliases
+
+This package also publishes under the following alternate npm name — the identical build, same version, republished by CI alongside the primary `byte-codec` package:
+
+- [document-bytes](https://www.npmjs.com/package/document-bytes)
+
 ## License
 
 MIT
