@@ -289,7 +289,19 @@ Whether that release actually published a new version is detected by diffing `pa
 
 ## Contributing
 
-Commits follow Conventional Commits (`feat:`, `fix:`, `test:`, `chore:`, …), enforced by commitlint (`commitlint.config.ts`) via a husky `commit-msg` hook and a CI `commitlint` job — semantic-release's version bump depends on these being well-formed, not just style. A husky `pre-commit` hook runs `lint-staged` (`eslint --fix` on staged `*.ts` files) and `pre-push` runs the test suite (`pnpm build`/`pnpm typecheck`/`pnpm lint`/`pnpm test`/`pnpm test:smoke` are all available directly too). There is a single `main` branch and no open pull request workflow established so far.
+Commits follow Conventional Commits (`feat:`, `fix:`, `test:`, `chore:`, …), enforced by commitlint (`commitlint.config.ts`) via a husky `commit-msg` hook and a CI `commitlint` job — semantic-release's version bump depends on these being well-formed, not just style. A husky `pre-commit` hook runs `lint-staged` (`eslint --fix` on staged `*.ts` files) and `pre-push` runs the test suite. The package's scripts are turbo-wrapped — every public command routes through `turbo run` to a matching `_<name>` script in `package.json`:
+
+```sh
+pnpm build         # tsdown (ESM + CJS + .d.ts)
+pnpm typecheck     # tsc -p tsconfig.json + tsconfig.node.json
+pnpm lint          # eslint . --fix --cache --max-warnings 0
+pnpm test          # vitest run --project unit
+pnpm test:workers  # vitest run --config vitest.workers.config.ts
+pnpm test:smoke    # tsdown && vitest run --project smoke
+pnpm test:corpus   # vitest run --project corpus (manual, gitignored fixtures)
+```
+
+There is a single `main` branch and no open pull request workflow established so far.
 
 ## References
 
