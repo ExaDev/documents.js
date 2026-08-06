@@ -173,6 +173,23 @@ try {
 
 None of these five packages depend on each other for this vocabulary — each depends on `document-schema.js` directly, which is the whole point: one schema, not five independently-maintained, drift-prone copies.
 
+## Build, test, and lint
+
+Requires Node.js `>=20` and pnpm `11.6.0` (pinned via `packageManager` in `package.json`).
+
+```sh
+pnpm install
+pnpm build         # turbo run _build -> tsdown && node scripts/generate-json-schemas.mjs (ESM + CJS + .d.ts in dist/, plus the three published .schema.json files in schemas/)
+pnpm typecheck     # turbo run _typecheck _typecheck:node -> tsc -p tsconfig.json && tsc -p tsconfig.node.json
+pnpm lint          # turbo run _lint -> eslint . --fix --cache --max-warnings 0
+pnpm test          # turbo run _test -> vitest run --project unit
+pnpm test:workers  # turbo run _test:workers -> vitest run --config vitest.workers.config.ts (runs the test/workers suite under the real Cloudflare Workers runtime via @cloudflare/vitest-pool-workers, turning "pure Zod, no Node-API usage" into a runtime-checked fact rather than an assertion)
+pnpm test:watch    # vitest --project unit
+pnpm test:smoke    # turbo run _test:smoke -> rebuilds dist/ and schemas/ first, then verifies the built ESM/CJS output loads and exposes the public surface, and that the three generated JSON Schema files exist and are correctly version-pinned
+```
+
+To run a single test file: `pnpm vitest run src/path/to/file.test.ts`.
+
 ## npm aliases
 
 This package also publishes under the following alternate npm names — the identical build, same version, republished by CI alongside the primary `document-schema.js` package:
