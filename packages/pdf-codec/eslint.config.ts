@@ -3,6 +3,7 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 import noPointlessReassignment from './eslint-rules/no-pointless-reassignment.js';
 import noSideEffectsInIndex from './eslint-rules/no-side-effects-in-index.js';
+import noNonBarrelIndex from './eslint-rules/no-non-barrel-index.js';
 
 export default tseslint.config(
   {
@@ -36,8 +37,8 @@ export default tseslint.config(
   },
   {
     // Local custom rule (eslint-rules/no-pointless-reassignment.ts) -- not published as a package, matching this family's own convention of keeping shared dev-tooling config as identical per-repo copies rather than a shared devDependency.
-    plugins: { local: { rules: { 'no-pointless-reassignment': noPointlessReassignment, 'no-side-effects-in-index': noSideEffectsInIndex } } },
-    rules: { 'local/no-pointless-reassignment': 'error' },
+    plugins: { local: { rules: { 'no-pointless-reassignment': noPointlessReassignment, 'no-side-effects-in-index': noSideEffectsInIndex, 'no-non-barrel-index': noNonBarrelIndex } } },
+    rules: { 'local/no-pointless-reassignment': 'error', 'local/no-non-barrel-index': 'error' },
   },
   {
     // Re-exports belong only in src/index.ts, the public barrel -- a re-export anywhere else risks silently surfacing the wrong thing under a name a consumer expects to mean something else.
