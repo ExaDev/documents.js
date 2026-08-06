@@ -20,6 +20,7 @@
     "eslint-rules",
     "tsdown.config.ts",
     "vitest.config.ts",
+    "vitest.workers.config.ts",
     "commitlint.config.ts",
     "release.config.ts",
     "eslint.config.ts",
