@@ -1,3 +1,5 @@
+## [2.4.14](https://github.com/ExaDev/odf.js/compare/v2.4.13...v2.4.14) (2026-08-06)
+
 ## [2.4.13](https://github.com/ExaDev/odf.js/compare/v2.4.12...v2.4.13) (2026-08-06)
 
 ## [2.4.12](https://github.com/ExaDev/odf.js/compare/v2.4.11...v2.4.12) (2026-08-06)
