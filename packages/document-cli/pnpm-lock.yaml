@@ -74,7 +74,7 @@ importers:
         version: 17.3.0
       odf.js:
         specifier: ^2.4.8
-        version: 2.4.8
+        version: 2.4.21
       pdf-codec:
         specifier: ^2.0.0
         version: 2.0.0
@@ -1724,10 +1724,6 @@ packages:
     resolution: {integrity: sha512-NLBNkYUq830XCKr49ClkdxvYHXra9B5hx9o7G6ZL4hMulprzj4jdEXg4hyv1WoVrKiAzJCpI4pDgQ0eamgYx8g==}
     engines: {node: '>=20'}
 
-  document-schema.js@2.4.3:
-    resolution: {integrity: sha512-eE4oenA/4OeWY8yFWA+aN/0c8tG2W88msOYFm4nQq1uR8I7ExEjKWU6V8ZN4ZagLKt+w1c7Eguh7vOkJdgsudQ==}
-    engines: {node: '>=20'}
-
   document-schema.js@2.5.1:
     resolution: {integrity: sha512-hhBvcQDF2nvcMplRrD+YF6OGx9+St4cb9anRETigF2OJ8qoDnE8q2CmCqHjBLHlDZwpjBk4hjDYC5f7Es4v8Yw==}
     engines: {node: '>=20'}
@@ -2609,12 +2605,8 @@ packages:
     resolution: {integrity: sha512-4a+OsYv9UktOJKE+l1A4OufDgdRF9PifWj+tJnHURo/P+WOxpG4GzUFL9qCalmWauao6ogiG+QvnCovwPoyAWA==}
     engines: {node: '>=12.20.0'}
 
-  odf.js@2.4.20:
-    resolution: {integrity: sha512-QnVpknuZDmOtpxZRN1iHn+QovriEiHJmCtcpSQsKbxOZ2eB4MNDuuSgSXRVOZ0ajpxpmm8spGXF2UcdTCkuylA==}
-    engines: {node: '>=20'}
-
-  odf.js@2.4.8:
-    resolution: {integrity: sha512-A79/VYKeYHV3/WRaa8YkE/Jd+aNIEXwpMbnSKjaqdqaB+Uvhhv3lApdULWWEt57tQvTp7CbBholXacbCW/DchA==}
+  odf.js@2.4.21:
+    resolution: {integrity: sha512-5Aew6UjrmbBlmeeeDb2mAXt4KN7C8JDMCZdqBfuf3VbGiiZU1IcoZ1ZhBJFJ15g51nICij7+YzfdAH1F4u+ifQ==}
     engines: {node: '>=20'}
 
   onetime@5.1.2:
@@ -2770,8 +2762,8 @@ packages:
     resolution: {integrity: sha512-C+VUP+8jis7EsQZIhDYmS5qlNtjv2yP4SNtjXK9AP1ZcTRlnSfuumaTnRfYZnYgUUYVIKqL0fRvmUGDV2fmp6g==}
     engines: {node: '>=4'}
 
-  postcss@8.5.25:
-    resolution: {integrity: sha512-DTPx3RWSSnWyzLxQnlH0rJP+EW5ekl16ZU4/psbIhA0e53kJfdgaN5vKM+xP7yJtXVu+nfdVFmlgFDEKAe4Pyw==}
+  postcss@8.5.26:
+    resolution: {integrity: sha512-u82N74LFzG8ca+dD8puPnplTXoGH4fTPpVGuIbt36G3qvNlkvfD0lEAZSxaly3KX8TS/L1A1gsCEmvKmBcVbkQ==}
     engines: {node: ^10 || ^12 || >=14}
 
   prelude-ls@1.2.1:
@@ -4990,10 +4982,6 @@ snapshots:
     dependencies:
       zod: 4.4.3
 
-  document-schema.js@2.4.3:
-    dependencies:
-      zod: 4.4.3
-
   document-schema.js@2.5.1:
     dependencies:
       zod: 4.4.3
@@ -5004,7 +4992,7 @@ snapshots:
       document-schema.js: 2.5.1
       fflate: 0.8.3
       markdown-codec: 1.2.0
-      odf.js: 2.4.20
+      odf.js: 2.4.21
       ooxml.js: 2.9.1
       pdf-codec: 2.1.0
       zod: 4.4.3
@@ -5805,16 +5793,9 @@ snapshots:
 
   obug@2.1.4: {}
 
-  odf.js@2.4.20:
+  odf.js@2.4.21:
     dependencies:
       document-schema.js: 2.5.1
-      fast-xml-parser: 5.10.1
-      fflate: 0.8.3
-      zod: 4.4.3
-
-  odf.js@2.4.8:
-    dependencies:
-      document-schema.js: 2.4.3
       fast-xml-parser: 5.10.1
       fflate: 0.8.3
       zod: 4.4.3
@@ -5955,7 +5936,7 @@ snapshots:
       find-up: 2.1.0
       load-json-file: 4.0.0
 
-  postcss@8.5.25:
+  postcss@8.5.26:
     dependencies:
       nanoid: 3.3.17
       picocolors: 1.1.1
@@ -6505,7 +6486,7 @@ snapshots:
     dependencies:
       lightningcss: 1.33.0
       picomatch: 4.0.5
-      postcss: 8.5.25
+      postcss: 8.5.26
       rolldown: 1.2.3
       tinyglobby: 0.2.17
     optionalDependencies:
