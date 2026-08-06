@@ -201,12 +201,13 @@ const out = encodeCompactPackage(compact); // CompactPackage -> OOXML bytes dire
 ## Build, test, and lint
 
 ```sh
-pnpm build          # tsdown -> dist/ (one ESM + CJS + .d.ts set per source module, via tsdown.config.ts)
-pnpm lint           # eslint . --fix --cache --max-warnings 0
-pnpm typecheck      # tsc --noEmit
-pnpm test           # vitest run
-pnpm test:watch     # vitest
-pnpm test:smoke     # builds dist/, then runs test/smoke.test.mjs to verify the built ESM and CJS artifacts both load and behave identically
+pnpm build          # turbo run _build (tsdown -> dist/: one ESM + CJS + .d.ts set per source module, via tsdown.config.ts)
+pnpm lint           # turbo run _lint (eslint . --fix --cache --max-warnings 0)
+pnpm typecheck      # turbo run _typecheck _typecheck:node (tsc against tsconfig.json + tsconfig.node.json, the dual-tsconfig setup)
+pnpm test           # turbo run _test (vitest run --project unit)
+pnpm test:watch     # vitest --project unit
+pnpm test:workers   # turbo run _test:workers (vitest run --config vitest.workers.config.ts)
+pnpm test:smoke     # turbo run _test:smoke (builds dist/, then runs test/smoke.test.mjs to verify the built ESM and CJS artifacts both load and behave identically)
 ```
 
 `pnpm prepublishOnly` runs `lint`, `typecheck`, `tsdown`, `publint`, and `@arethetypeswrong/cli` (`attw --pack`) — the full publish-readiness check — before a release.
