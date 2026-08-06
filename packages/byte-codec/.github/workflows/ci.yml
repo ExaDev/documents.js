@@ -64,6 +64,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
+      # Cloudflare Workers (workerd) runtime test -- pnpm install above already built the workerd binary (allowBuilds in pnpm-workspace.yaml), so this exercises the byte-codec primitives inside a Workers isolate, enforcing zero Node-only API usage on the tested paths at runtime.
+      - run: pnpm test:workers
 
   test-smoke:
     name: Smoke test
