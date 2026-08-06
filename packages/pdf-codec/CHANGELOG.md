@@ -1,3 +1,10 @@
+# [2.1.0](https://github.com/ExaDev/pdf-codec/compare/v2.0.10...v2.1.0) (2026-08-06)
+
+
+### Features
+
+* cache typecheck/lint/test/build tasks with turbo ([9609c3f](https://github.com/ExaDev/pdf-codec/commit/9609c3fee641685ae18810816d84f1d0ec69620b))
+
 ## [2.0.10](https://github.com/ExaDev/pdf-codec/compare/v2.0.9...v2.0.10) (2026-08-06)
 
 ## [2.0.9](https://github.com/ExaDev/pdf-codec/compare/v2.0.8...v2.0.9) (2026-08-06)
