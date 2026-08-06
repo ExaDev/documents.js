@@ -15,8 +15,8 @@ importers:
         specifier: ^1.0.4
         version: 1.0.4
       document-schema.js:
-        specifier: ^2.4.6
-        version: 2.4.6
+        specifier: ^2.4.5
+        version: 2.4.5
       fflate:
         specifier: ^0.8.3
         version: 0.8.3
@@ -5097,7 +5097,7 @@ snapshots:
 
   markdown-codec@1.1.19:
     dependencies:
-      document-schema.js: 2.4.5
+      document-schema.js: 2.4.6
       zod: 4.4.3
 
   marked-terminal@7.3.0(marked@15.0.12):
@@ -5213,7 +5213,7 @@ snapshots:
 
   odf.js@2.4.12:
     dependencies:
-      document-schema.js: 2.4.5
+      document-schema.js: 2.4.6
       fast-xml-parser: 5.10.1
       fflate: 0.8.3
       zod: 4.4.3
@@ -5224,7 +5224,7 @@ snapshots:
 
   ooxml.js@2.8.12:
     dependencies:
-      document-schema.js: 2.4.5
+      document-schema.js: 2.4.6
       fast-xml-parser: 5.10.1
       fflate: 0.8.3
       zod: 4.4.3
@@ -5325,7 +5325,7 @@ snapshots:
   pdf-codec@2.0.3:
     dependencies:
       byte-codec: 1.0.4
-      document-schema.js: 2.4.5
+      document-schema.js: 2.4.6
       fflate: 0.8.3
       zod: 4.4.3
 
