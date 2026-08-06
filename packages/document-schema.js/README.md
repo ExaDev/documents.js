@@ -52,6 +52,8 @@ graph TD
 
 It contains only [Zod](https://zod.dev) schemas, their inferred types, a handful of trivial schema-attached helpers (hex-colour conversion, recursive structural type guards for the mutually-recursive table/block/embedded-object types and for the MathML node tree), and two small structural interfaces (`ContentCodec`/`LayoutCodec`, see [Codecs](#codecs) below) that a sibling package's own format codec can implement -- no runtime code of their own either. There is no XML, ZIP, PDF, or other binary handling here, and no `zod` dependency other than `zod` itself.
 
+Beyond the schemas, the package ships two small format-agnostic helpers that live here rather than in any one format package because they operate on the content model itself: cell-addressing utilities in `src/a1.ts` (`columnIndexToLetters`/`columnLettersToIndex`, `cellReference(row, column)`/`parseCellReference`, `parseRangeReference`/`rangeReference`), shared by odf.js, ooxml.js, documents.js, document-cli, and document-mcp — the canonical A1-notation module, 0-based row/column indices with a row-first argument order matching `ContentSheetCell`'s own `{row, column}` field order; and the `FontFace` interface in `src/font-port.ts` (`{family, bold, italic}`, `ProvidedFont` minus `bytes`), the structured result of inspecting a standalone font file — a concept the content model already carries through its layout-side font fields.
+
 The GitHub repository is [`ExaDev/document-schema.js`](https://github.com/ExaDev/document-schema.js), matching the published npm package name.
 
 ## Usage
