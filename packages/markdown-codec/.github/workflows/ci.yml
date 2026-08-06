@@ -64,6 +64,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:coverage
+      # Cloudflare Workers (workerd) runtime test -- pnpm install above already built the workerd binary (allowBuilds in pnpm-workspace.yaml), enforcing zero Node-only API usage on the tested paths at runtime.
+      - run: pnpm test:workers
       - name: Upload coverage report
         # Code Quality requires the org on GitHub Team/Enterprise Cloud, which ExaDev is not yet on, so the upload call itself will fail until that changes -- fail-on-error: false keeps that failure a log annotation instead of gating the release job below on a feature we can't turn on yet. Also guarded against fork PRs, which never hold the code-quality: write permission to upload.
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
