@@ -1,6 +1,32 @@
 import js from '@eslint/js';
 import globals from 'globals';
+import type { Rule } from 'eslint';
 import tseslint from 'typescript-eslint';
+
+// Forward guard: every package has a single public convenience barrel at src/index.ts, and no other module may share the index.* basename -- an orphan index.* file is a second entry point callers will reach for, silently fragmenting the public surface. Bans any file whose basename matches index.[cm]?[tj]s other than the one allowed src/index.ts barrel.
+const noNonBarrelIndexRule: Rule.RuleModule = {
+  meta: {
+    type: 'problem',
+    schema: [],
+    messages: {
+      barrel:
+        'Only src/index.ts may be named index.* (the public convenience barrel); give any other module a descriptive filename.',
+    },
+  },
+  create(context) {
+    // ESLint 9+ flat-config API: `context.filename` is always the absolute path of the file being linted (the legacy `context.getFilename()` was removed). Guaranteed non-optional in the RuleContext type, so no fallback is needed.
+    const filename = context.filename;
+    const lastSlash = filename.lastIndexOf('/');
+    const basename = lastSlash === -1 ? filename : filename.substring(lastSlash + 1);
+    if (!/^index\.[cm]?[tj]s$/.test(basename)) return {};
+    if (filename.endsWith('/src/index.ts')) return {};
+    return {
+      Program(node) {
+        context.report({ node, messageId: 'barrel' });
+      },
+    };
+  },
+};
 
 export default tseslint.config(
   {
@@ -38,5 +64,9 @@ export default tseslint.config(
     rules: {
       '@typescript-eslint/no-empty-function': ['error', { allow: ['arrowFunctions', 'asyncFunctions'] }],
     },
+  },
+  {
+    plugins: { local: { rules: { 'no-non-barrel-index': noNonBarrelIndexRule } } },
+    rules: { 'local/no-non-barrel-index': 'error' },
   },
 );
