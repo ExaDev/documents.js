@@ -86,6 +86,18 @@ pnpm add odf.js
 npm install odf.js
 ```
 
+## Build, test, and lint
+
+```sh
+pnpm build         # turbo run _build -> tsdown (dist/: ESM + CJS + .d.ts)
+pnpm typecheck     # turbo run _typecheck -> tsc -p tsconfig.json && tsc -p tsconfig.node.json
+pnpm lint          # turbo run _lint -> eslint . --fix --cache --max-warnings 0
+pnpm test          # turbo run _test -> vitest run --project unit
+pnpm test:workers  # turbo run _test:workers -> vitest run --config vitest.workers.config.ts (the package parsing and ODF content readers run inside a real Cloudflare Workers isolate, proving they carry zero Node-only API usage)
+```
+
+To run a single test file: `pnpm vitest run src/path/to/file.test.ts`.
+
 ## Usage
 
 The lossless core — the only public surface stable enough to document with real examples right now:
