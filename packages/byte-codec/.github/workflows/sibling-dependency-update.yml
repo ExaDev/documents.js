@@ -175,5 +175,17 @@ jobs:
               sleep 3
             done
 
-            gh pr merge --auto --rebase "$pr_url"
+                        for _poll in $(seq 1 90); do
+              _pending=$(gh api "repos/${{ github.repository }}/commits/${head_sha}/check-runs" --paginate --jq '[.check_runs[] | select(.conclusion == null)] | length')
+              if [ "$_pending" -eq 0 ]; then
+                _failed=$(gh api "repos/${{ github.repository }}/commits/${head_sha}/check-runs" --paginate --jq '[.check_runs[] | select(.conclusion != "success" and .conclusion != "skipped")] | length')
+                if [ "$_failed" -gt 0 ]; then
+                  echo "CI failed on regenerated PR -- leaving it open for review"
+                  break
+                fi
+                gh pr merge --rebase "$pr_url"
+                break
+              fi
+              sleep 20
+            done
           done
