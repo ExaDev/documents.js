@@ -8,6 +8,13 @@ export interface ProvidedFont {
   readonly bytes: Uint8Array<ArrayBuffer>;
 }
 
+// The structured result of inspecting a standalone sfnt font file (.ttf/.otf): the family/bold/italic triple the file itself declares, without the raw bytes ProvidedFont carries. documents.js's `describeFontFace` produces this (wrapping pdf-codec's own font-file parser), so a caller wanting to turn an arbitrary font file into a ProvidedFont can discover its face triple first and then supply the bytes alongside it.
+export interface FontFace {
+  readonly family: string;
+  readonly bold: boolean;
+  readonly italic: boolean;
+}
+
 // Reported whenever font resolution did not land on an exact-face match: either a family match narrowed down to that family's own regular face ('missing-face'), or a fall-through to a vendored metric-compatible substitute ('vendored-substitute'). Never raised for the standard-14 fallback itself -- that is the unconditional baseline, not a new event worth surfacing.
 export interface FontSubstitution {
   readonly requestedFamily: string;

@@ -12,3 +12,4 @@ export * from './content-json-schema-defs';
 export * from './text-layout';
 export * from './font-port';
 export * from './math-layout';
+export * from './a1';
