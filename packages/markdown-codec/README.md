@@ -136,14 +136,15 @@ Modelled on `pdf-codec`'s own layering (generic primitives outward to the two co
 ## Build, test, and lint
 
 ```sh
-pnpm build         # tsdown -> dist/ (ESM + CJS + .d.ts)
-pnpm typecheck     # tsc --noEmit
-pnpm lint          # eslint . --fix --cache --max-warnings 0
-pnpm test          # vitest run --project unit (includes the CommonMark/GFM conformance suites)
+pnpm build         # turbo run _build (tsdown -> dist/, ESM + CJS + .d.ts)
+pnpm typecheck     # turbo run _typecheck _typecheck:node (tsc -p tsconfig.json && tsc -p tsconfig.node.json -- dual tsconfig)
+pnpm lint          # turbo run _lint (eslint . --fix --cache --max-warnings 0)
+pnpm test          # turbo run _test (vitest run --project unit, includes the CommonMark/GFM conformance suites)
+pnpm test:workers  # turbo run _test:workers (vitest run --config vitest.workers.config.ts -- the unit suite re-run under the real Cloudflare Workers/workerd runtime, turning markdown-codec's isomorphic design into a runtime-checked fact)
 pnpm test:watch    # vitest --project unit
-pnpm test:coverage # vitest run --project unit --coverage
-pnpm test:smoke    # rebuilds dist/, then verifies ESM/CJS export parity and runs a real readMarkdown/writeMarkdown/markdownCodec round trip against each built bundle independently
-pnpm test:corpus   # optional, gitignored real-world CommonMark/GFM sanity check -- see Fidelity below
+pnpm test:coverage # turbo run _test:coverage (vitest run --project unit --coverage)
+pnpm test:smoke    # turbo run _test:smoke (rebuilds dist/, then verifies ESM/CJS export parity and runs a real readMarkdown/writeMarkdown/markdownCodec round trip against each built bundle independently)
+pnpm test:corpus   # turbo run _test:corpus (optional, gitignored real-world CommonMark/GFM sanity check -- see Fidelity below)
 ```
 
 To run a single test file: `pnpm vitest run src/path/to/file.test.ts`.
