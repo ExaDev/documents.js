@@ -1,0 +1,6 @@
+{
+  // A no-op Worker whose only purpose is to host document-mcp's source as the module graph the workers test suite (test/workers/**) imports against under the real workerd runtime. document-mcp is a stdio MCP server by design (src/bin.ts wires createServer() to @modelcontextprotocol/server/stdio), so a full workerd run of its entry point is not the goal; the test instead drives the same createServer() the stdio bin uses through an in-memory client/server JSON-RPC pair (InMemoryTransport, no stdio), exercising only the tool handlers whose bodies call isomorphic documents.js/pdf-codec functions via inline base64 fixtures (no node:fs). src/index.ts is the package's own main entry point (re-exporting createServer), so it is the natural module graph root.
+  "name": "document-mcp-workers-test",
+  "main": "src/index.ts",
+  "compatibility_date": "2024-09-23"
+}
