@@ -18,7 +18,7 @@ import { minimalOdtBytes } from '../test-support/odt';
 import { minimalDocxBytes } from '../test-support/docx';
 import { minimalPptxBytes } from '../test-support/pptx';
 import { DIRECT_EDGES } from './capability';
-import { docxToMarkdown, docxToOdt, docxToPdf, docxToPptx, markdownToDocx, markdownToOdt, markdownToPdf, odfToPdf, odgToPdf, odpToPdf, odpToPptx, odpToOdt, odsToPdf, odsToXlsx, odtToDocx, odtToMarkdown, odtToOdp, odtToPdf, pdfToDocx, pdfToMarkdown, pdfToOdg, pdfToOdp, pdfToOds, pdfToOdt, pdfToPptx, pdfToXlsx, pptxToDocx, pptxToOdp, pptxToPdf, xlsxToOds, xlsxToPdf } from './convert';
+import { docxToMarkdown, docxToOdt, docxToPdf, docxToPptx, markdownToDocx, markdownToOdt, markdownToPdf, odfToPdf, odgToPdf, odpToPdf, odpToPptx, odpToOdt, odsToPdf, odsToXlsx, odtToDocx, odtToMarkdown, odtToOdp, odtToPdf, pdfToDocx, pdfToMarkdown, pdfToOdg, pdfToOdp, pdfToOds, pdfToOdt, pdfToPptx, pdfToXlsx, pptxToDocx, pptxToOdp, pptxToPdf, xlsxToOds, xlsxToPdf, xlsxToMarkdown, markdownToXlsx } from './convert';
 import type { DocumentFormat } from './port';
 
 // A single table-driven test matrix covering every (source, target) pair DIRECT_EDGES (capability.ts) currently registers -- the actual capability graph the DocumentConverter port exposes, not a hand-copied list that can silently drift out of sync with it. Each MatrixEntry names the exact edge(s) (source/target format pairs) its own round trip exercises; the "matrix declares every registered edge" describe block below derives the expected edge set directly from DIRECT_EDGES and fails loudly if a registered edge has no entry here, or if an entry claims an edge that no longer exists -- so a future capability-graph change (a new bridge, a newly composed pair) cannot silently go uncovered.
@@ -193,6 +193,25 @@ const MATRIX_ENTRIES: readonly MatrixEntry[] = [
         ['One', 'Two', 'Three'],
         ['Four', 'Five', 'Six'],
       ]);
+    },
+  },
+  {
+    name: 'xlsx <-> markdown (composed via pdf)',
+    edges: [
+      { source: 'xlsx', target: 'markdown' },
+      { source: 'markdown', target: 'xlsx' },
+    ],
+    // xlsx and markdown share no ContentDocument variant, so this pair routes through PDF internally (xlsxToPdf + pdfToMarkdown; markdownToPdf + pdfToXlsx) -- the single lossiest path in the package, but the only single-call route. gridOdsBytes gives odsToXlsx a real gridline-and-headers-enabled sheet to start from; the round trip is asserted structurally (a readable spreadsheet) rather than cell-for-cell, since two stacked lossy hops shed too much to compare values against the source.
+    run: () => {
+      const xlsxBytes = odsToXlsx(gridOdsBytes());
+
+      const markdownBytes = xlsxToMarkdown(xlsxBytes);
+      const roundTrippedBytes = markdownToXlsx(markdownBytes);
+      const roundTripped = readXlsxContent(decodeOoxmlPackage(roundTrippedBytes));
+      if (roundTripped.kind !== 'spreadsheet') {
+        throw new Error('expected a spreadsheet ContentDocument');
+      }
+      expect(roundTripped.sheets.length).toBeGreaterThanOrEqual(1);
     },
   },
   {

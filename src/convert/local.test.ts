@@ -67,6 +67,8 @@ describe('createLocalDocumentConverter: shape', () => {
       { source: 'pptx', target: 'docx' },
       { source: 'odt', target: 'odp' },
       { source: 'odp', target: 'odt' },
+      { source: 'xlsx', target: 'markdown' },
+      { source: 'markdown', target: 'xlsx' },
     ]);
   });
 
