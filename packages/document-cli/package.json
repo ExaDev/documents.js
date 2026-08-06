@@ -88,11 +88,9 @@
   "packageManager": "pnpm@11.6.0",
   "dependencies": {
     "commander": "^15.0.0",
-    "documents.js": "^1.94.0",
+    "documents.js": "^1.95.0",
     "ink": "^7.1.1",
     "ink-text-input": "^6.0.0",
-    "odf.js": "^2.4.8",
-    "pdf-codec": "^2.0.0",
     "react": "^19.2.8"
   },
   "devDependencies": {
@@ -112,6 +110,8 @@
     "husky": "^9.1.7",
     "ink-testing-library": "^4.0.0",
     "lint-staged": "^17.3.0",
+    "odf.js": "^2.4.8",
+    "pdf-codec": "^2.0.0",
     "publint": "^0.3.22",
     "semantic-release": "^25.0.8",
     "tsdown": "^0.22.14",

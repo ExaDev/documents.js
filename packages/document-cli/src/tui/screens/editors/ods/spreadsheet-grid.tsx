@@ -1,6 +1,5 @@
-import type { ContentCellValue } from 'documents.js';
+import { cellReference, columnIndexToLetters, type ContentCellValue } from 'documents.js';
 import { Box, Text, useInput, useWindowSize } from 'ink';
-import { cellReference, columnIndexToLetters } from 'odf.js';
 import { useState, type Dispatch, type ReactElement } from 'react';
 import { describeError } from '../../../errors.js';
 import { readInput } from '../../../../runtime/io.js';
@@ -250,7 +249,7 @@ export function OdsSpreadsheetGridScreen(): ReactElement {
             (cell): CompactRow => ({
               row: cell.row,
               column: cell.column,
-              address: cellReference(cell.column, cell.row),
+              address: cellReference(cell.row, cell.column),
               badge: KIND_BADGE[cell.value.kind],
               displayText: cell.displayText,
             }),
@@ -278,7 +277,7 @@ export function OdsSpreadsheetGridScreen(): ReactElement {
   });
 
   const cursorCell = cells.get(cellKey(clampedRow, clampedColumn));
-  const cursorAddress = cellReference(clampedColumn, clampedRow);
+  const cursorAddress = cellReference(clampedRow, clampedColumn);
   const cursorKind = cursorCell === undefined ? 'empty' : cursorCell.value.kind;
 
   const viewportRows = Math.max(1, terminalRows - GRID_CHROME_ROWS);
