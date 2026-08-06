@@ -47,6 +47,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
+      # attw (are-the-types-wrong) needs the built dist/, so build first. Mirrors the prepublishOnly check, now enforced on every push rather than only at publish.
+      - run: pnpm build
+      - run: pnpm exec attw --pack
 
   test:
     name: Test
