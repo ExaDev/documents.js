@@ -1,7 +1,32 @@
 import js from '@eslint/js';
+import type { Rule } from 'eslint';
 import reactHooks from 'eslint-plugin-react-hooks';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
+
+// Forward guard: only src/index.ts may be named index.* . The public barrel is the single allowed index filename; every other module gets a descriptive name so imports stay self-documenting and a stray index.ts never silently becomes a package entry point. Today only src/index.ts matches among .ts/.js files (the .tsx screens are outside the regex's scope), so this flags nothing yet -- it exists to prevent regressions.
+const noNonBarrelIndexRule: Rule.RuleModule = {
+  meta: {
+    type: 'problem',
+    schema: [],
+    messages: {
+      barrel:
+        'Only src/index.ts may be named index.* (the public convenience barrel); give any other module a descriptive filename.',
+    },
+  },
+  create(context) {
+    const filename = context.filename;
+    const lastSlash = filename.lastIndexOf('/');
+    const basename = lastSlash >= 0 ? filename.slice(lastSlash + 1) : filename;
+    if (!/^index\.[cm]?[tj]s$/.test(basename)) return {};
+    if (filename.endsWith('/src/index.ts')) return {};
+    return {
+      Program(node) {
+        context.report({ node, messageId: 'barrel' });
+      },
+    };
+  },
+};
 
 export default tseslint.config(
   {
@@ -45,5 +70,9 @@ export default tseslint.config(
     rules: {
       '@typescript-eslint/no-empty-function': ['error', { allow: ['arrowFunctions', 'asyncFunctions'] }],
     },
+  },
+  {
+    plugins: { local: { rules: { 'no-non-barrel-index': noNonBarrelIndexRule } } },
+    rules: { 'local/no-non-barrel-index': 'error' },
   },
 );
