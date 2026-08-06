@@ -1,0 +1,38 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "globalDependencies": ["pnpm-lock.yaml"],
+  "tasks": {
+    "_typecheck": {
+      "inputs": ["$TURBO_DEFAULT$", "tsconfig.json"],
+      "outputs": []
+    },
+    "_typecheck:node": {
+      "inputs": ["$TURBO_DEFAULT$", "tsconfig.node.json"],
+      "outputs": []
+    },
+    "_lint": {
+      "inputs": ["$TURBO_DEFAULT$", "eslint.config.ts"],
+      "outputs": [".eslintcache"]
+    },
+    "_test": {
+      "inputs": ["src/**", "vitest.config.ts", "vitest.unit.config.ts", "package.json"],
+      "outputs": []
+    },
+    "_test:workers": {
+      "inputs": ["src/**", "test/workers/**", "vitest.workers.config.ts", "wrangler.jsonc", "package.json"],
+      "outputs": []
+    },
+    "_test:coverage": {
+      "inputs": ["src/**", "vitest.config.ts", "vitest.unit.config.ts", "package.json"],
+      "outputs": ["coverage/**"]
+    },
+    "_test:smoke": {
+      "inputs": ["src/**", "tsdown.config.ts", "scripts/generate-json-schemas.mjs", "package.json", "vitest.config.ts", "vitest.smoke.config.ts", "test/smoke.test.mjs"],
+      "outputs": []
+    },
+    "_build": {
+      "inputs": ["src/**", "tsdown.config.ts", "scripts/generate-json-schemas.mjs", "package.json"],
+      "outputs": ["dist/**", "schemas/**"]
+    }
+  }
+}
