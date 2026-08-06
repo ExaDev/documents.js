@@ -47,6 +47,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
+      # attw (are-the-types-wrong) checks the built package's published types against real-world resolution -- it needs dist/ to exist, so it runs after pnpm build. Runs in CI on every push/PR rather than only at publish (where prepublishOnly also runs it), so a broken types export never reaches a release.
+      - run: pnpm build
+      - run: pnpm exec attw --pack
 
   test:
     name: Test
