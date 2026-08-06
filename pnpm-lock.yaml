@@ -21,8 +21,8 @@ importers:
         specifier: ^0.8.3
         version: 0.8.3
       markdown-codec:
-        specifier: ^1.2.0
-        version: 1.2.0
+        specifier: ^1.2.1
+        version: 1.2.1
       odf.js:
         specifier: ^2.4.20
         version: 2.4.20
@@ -2222,8 +2222,8 @@ packages:
     resolution: {integrity: sha512-hXdUTZYIVOt1Ex//jAQi+wTZZpUpwBj/0QsOzqegb3rGMMeJiSEu5xLHnYfBrRV4RH2+OCSOO95Is/7x1WJ4bw==}
     engines: {node: '>=10'}
 
-  markdown-codec@1.2.0:
-    resolution: {integrity: sha512-ok5UPUeEq99F4SQE21OblvQwJzkvzpRMJeu6H8iLBwripE/d4Y3KFN5qThMGeBQ+uJfeTbcEe4u4X7scVgFnxg==}
+  markdown-codec@1.2.1:
+    resolution: {integrity: sha512-CfJGu8u2qubuPtlACZDKmRZiCxh+FHYjcAMouhnSPrX5rwFbmWajKcUB3dpNgg+828Okg228ygA9Nd6PhAmwjQ==}
     engines: {node: '>=20'}
 
   marked-terminal@7.3.0:
@@ -5142,7 +5142,7 @@ snapshots:
     dependencies:
       semver: 7.8.5
 
-  markdown-codec@1.2.0:
+  markdown-codec@1.2.1:
     dependencies:
       document-schema.js: 2.5.1
       zod: 4.4.3
