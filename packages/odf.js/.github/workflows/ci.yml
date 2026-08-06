@@ -47,6 +47,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
+      # attw (are-the-types-wrong) checks the built package's types resolve correctly for consumers; it needs the built dist, so it builds first. Mirrors the prepublishOnly check, but on every push/PR rather than only at publish.
+      - run: pnpm build
+      - run: pnpm exec attw --pack
 
   test:
     name: Test
