@@ -5,3 +5,4 @@ dist/
 coverage/
 test/corpus/
 .eslintcache
+.turbo/
