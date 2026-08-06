@@ -1,3 +1,10 @@
+# [1.14.0](https://github.com/ExaDev/document-cli/compare/v1.13.19...v1.14.0) (2026-08-06)
+
+
+### Features
+
+* cache typecheck/lint/test/build tasks with turbo ([2b17d68](https://github.com/ExaDev/document-cli/commit/2b17d68828721b2da2cba61356c635f7aee37b62))
+
 ## [1.13.19](https://github.com/ExaDev/document-cli/compare/v1.13.18...v1.13.19) (2026-08-06)
 
 ## [1.13.18](https://github.com/ExaDev/document-cli/compare/v1.13.17...v1.13.18) (2026-08-06)
