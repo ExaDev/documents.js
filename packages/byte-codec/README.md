@@ -30,9 +30,12 @@ Requires Node.js `>=20` and pnpm `11.6.0`.
 
 ```sh
 pnpm install
-pnpm build      # tsdown -> dist/ (ESM + CJS + .d.ts)
-pnpm test       # vitest
-pnpm typecheck  # tsc --noEmit
+pnpm build          # tsdown -> dist/ (ESM + CJS + .d.ts)
+pnpm typecheck      # tsc -p tsconfig.json && tsc -p tsconfig.node.json (dual tsconfig)
+pnpm lint           # eslint . --fix --cache --max-warnings 0
+pnpm test           # vitest run
+pnpm test:watch     # vitest
+pnpm test:workers   # vitest run --config vitest.workers.config.ts
 ```
 
 ## What it provides
