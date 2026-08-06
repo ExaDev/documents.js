@@ -17,7 +17,7 @@ jobs:
   bump-and-open-pr:
     if: github.event_name == 'repository_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -65,25 +65,30 @@ jobs:
           pr_url=$(gh pr create --title "build(deps): bump ${PACKAGE} to ${VERSION}" --body "Automatic dependency bump triggered instantly by the ${PACKAGE} release." --base main --head "$branch")
           echo "pr_url=$pr_url" >> "$GITHUB_OUTPUT"
           echo "head_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-      - name: Wait for this repo own real CI to register on the PR
+      - name: Wait for all CI checks to pass, then rebase-merge
         if: steps.diff.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
-          for i in $(seq 1 30); do
-            found=$(gh api "repos/${{ github.repository }}/commits/${{ steps.pr.outputs.head_sha }}/check-runs" --jq '[.check_runs[] | select(.name == "Test")] | length')
-            if [ "$found" -gt 0 ]; then
-              echo "ci.yml own Test check has registered after $((i * 3))s"
+          pr_url="${{ steps.pr.outputs.pr_url }}"
+          head_sha="${{ steps.pr.outputs.head_sha }}"
+          repo="${{ github.repository }}"
+          for i in $(seq 1 90); do
+            pending=$(gh api "repos/${repo}/commits/${head_sha}/check-runs" --paginate --jq '[.check_runs[] | select(.conclusion == null)] | length')
+            if [ "$pending" -eq 0 ]; then
+              failed=$(gh api "repos/${repo}/commits/${head_sha}/check-runs" --paginate --jq '[.check_runs[] | select(.conclusion != "success" and .conclusion != "skipped")] | length')
+              if [ "$failed" -gt 0 ]; then
+                echo "::error::CI checks failed on this sibling-update PR. Leaving it open for manual review."
+                exit 1
+              fi
+              echo "All CI checks passed. Rebase-merging."
+              gh pr merge --rebase "$pr_url"
               exit 0
             fi
-            sleep 3
+            echo "Waiting for ${pending} CI check(s) to complete..."
+            sleep 20
           done
-          echo "::warning::ci.yml own Test check never registered after 90s -- proceeding anyway, but auto-merge may reject the PR as already clean or merge it immediately" >&2
-      - name: Enable auto-merge
-        if: steps.diff.outputs.changed == 'true'
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-        run: gh pr merge --auto --rebase "${{ steps.pr.outputs.pr_url }}"
+          echo "::warning::CI did not complete within 30 minutes. PR left open for manual merge." >&2
 
   heal-stranded-prs:
     # gh pr merge --auto above only ever fires once, right after a PR opens. If enough other commits land on main before this repo's own CI finishes on that PR, the PR's branch falls behind and GitHub marks it CONFLICTING -- and a conflicting PR can never auto-merge, no matter how green its own CI is, with nothing to ever retry it. This job runs on every push to main (the only time a previously-clean PR can newly become conflicting) and regenerates any bump PR this same workflow opened that is now stuck: closes the stale PR/branch and re-runs the identical bump against the new main, rather than attempting a real git rebase -- a plain `pnpm add <package>@<version>` is fully idempotent and deterministic, so there is no conflict to resolve, only a fresh diff to produce.
