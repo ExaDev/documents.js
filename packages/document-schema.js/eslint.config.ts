@@ -3,6 +3,7 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 import noPointlessReassignment from './eslint-rules/no-pointless-reassignment.js';
 import noSideEffectsInIndex from './eslint-rules/no-side-effects-in-index.js';
+import noNonBarrelIndex from './eslint-rules/no-non-barrel-index.js';
 
 export default tseslint.config(
   {
@@ -36,8 +37,8 @@ export default tseslint.config(
   },
   {
     // Local custom rules (eslint-rules/*.ts) -- not published as a package, matching this family's own convention of keeping shared dev-tooling config as identical per-repo copies rather than a shared devDependency.
-    plugins: { local: { rules: { 'no-pointless-reassignment': noPointlessReassignment, 'no-side-effects-in-index': noSideEffectsInIndex } } },
-    rules: { 'local/no-pointless-reassignment': 'error' },
+    plugins: { local: { rules: { 'no-pointless-reassignment': noPointlessReassignment, 'no-side-effects-in-index': noSideEffectsInIndex, 'no-non-barrel-index': noNonBarrelIndex } } },
+    rules: { 'local/no-pointless-reassignment': 'error', 'local/no-non-barrel-index': 'error' },
   },
   {
     // The structural counterpart to the re-export ban below: that rule says re-exports belong only in src/index.ts, this one says src/index.ts may contain only re-exports -- together pinning the barrel to exactly one shape, one that can never have a side effect at import time.
