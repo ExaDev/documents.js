@@ -61,4 +61,21 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // Static Worker-isomorphism guard: this is a runtime-published library that must run in a Cloudflare Worker (workerd) as well as Node, so node: imports and the Node-only Buffer global are banned in runtime src. Test files and test-support legitimately use node:fs for fixtures -- they are not published, so they are exempt here. typeof-process isomorphic checks remain legitimate, so `process` is deliberately not banned as a global; the import ban catches the real surface. The patterns use `regex` (tested against the import specifier) rather than `group`: `group` is gitignore-matched via the `ignore` package with allowRelativePaths, so a bare name like `util` or `path` matches ANY path segment and false-positives on relative imports such as `./util/base64` or `./typed/shared/path`; the anchored `regex` matches only exact builtin specifiers.
+    files: ['src/**/*.ts'],
+    ignores: ['src/**/*.test.ts', 'src/test-support/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            { regex: '^node:', message: 'This is a Worker-isomorphic library: node:* imports are banned in runtime src. Use a Web API or an isomorphic helper.' },
+            { regex: '^(fs|path|crypto|child_process|os|net|http|https|stream|util|buffer|url|zlib|readline|worker_threads|timers|events|assert)$', message: 'This is a Worker-isomorphic library: bare Node builtin imports are banned in runtime src. Use a Web API or an isomorphic helper.' },
+          ],
+        },
+      ],
+      'no-restricted-globals': ['error', { name: 'Buffer', message: 'Buffer is Node-only; this Worker-isomorphic library uses Uint8Array.' }],
+    },
+  },
 );
