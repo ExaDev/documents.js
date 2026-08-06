@@ -33,11 +33,18 @@ export default tseslint.config(
       // No type assertions anywhere: this codec narrows a raw markdown scan/parse result through its own AST node `kind` discriminant (or a type guard) instead -- never `as`. Use a guard or a Zod parse at the boundary rather than asserting.
       '@typescript-eslint/consistent-type-assertions': ['error', { assertionStyle: 'never' }],
       '@typescript-eslint/consistent-type-imports': ['error', { fixStyle: 'inline-type-imports' }],
-      // This package hand-writes its own CommonMark+GFM scanner/parser/renderer, the same way pdf-codec hand-writes its own PDF codec instead of wrapping pdf-lib/pdfjs-dist/mupdf -- pulling in any existing markdown library here would defeat the entire reason this package exists (a dependency-free, fully auditable implementation). Banned by name, not by guessing at import specifiers: every module of every one of these libraries is blocked, not just their main entry point.
+    },
+  },
+  {
+    // Runtime src is Worker-isomorphic (this codec runs unchanged in Cloudflare Workers -- see vitest.workers.config.ts and the Workers-runtime test job in CI), so it must not import node:* / bare Node builtins or use the Node-only Buffer global. Test files and test-support legitimately use node:fs for fixtures and are not published, so they are exempt. The markdown-library import ban below lives in this same src-scoped object (rather than a global one) because flat config replaces -- not merges -- a same-key rule: a separate node-only no-restricted-imports here would silently clobber the markdown ban for runtime src.
+    files: ['src/**/*.ts'],
+    ignores: ['src/**/*.test.ts', 'src/test-support/**'],
+    rules: {
       'no-restricted-imports': [
         'error',
         {
           patterns: [
+            // This package hand-writes its own CommonMark+GFM scanner/parser/renderer, the same way pdf-codec hand-writes its own PDF codec instead of wrapping pdf-lib/pdfjs-dist/mupdf -- pulling in any existing markdown library here would defeat the entire reason this package exists (a dependency-free, fully auditable implementation). Banned by name, not by guessing at import specifiers: every module of every one of these libraries is blocked, not just their main entry point.
             { group: ['micromark*', 'micromark*/**'], message: 'Hand-write the scanner/parser instead of depending on micromark -- see README Architecture.' },
             { group: ['remark*', 'remark*/**'], message: 'Hand-write the AST/transform instead of depending on remark -- see README Architecture.' },
             { group: ['marked', 'marked/**'], message: 'Hand-write the parser/renderer instead of depending on marked -- see README Architecture.' },
@@ -47,9 +54,13 @@ export default tseslint.config(
             { group: ['unified', 'unified/**'], message: 'Hand-write the pipeline instead of depending on unified -- see README Architecture.' },
             { group: ['turndown', 'turndown/**'], message: 'Hand-write the HTML-to-markdown conversion instead of depending on turndown -- see README Architecture.' },
             { group: ['showdown', 'showdown/**'], message: 'Hand-write the parser/renderer instead of depending on showdown -- see README Architecture.' },
+            { group: ['node:*', 'node:*/**'], message: 'This is a Worker-isomorphic library: node:* imports are banned in runtime src. Use a Web API or an isomorphic helper.' },
+            { group: ['fs', 'path', 'crypto', 'child_process', 'os', 'net', 'http', 'https', 'stream', 'util', 'buffer', 'url', 'zlib', 'readline', 'worker_threads', 'timers', 'events', 'assert'], message: 'This is a Worker-isomorphic library: bare Node builtin imports are banned in runtime src. Use a Web API or an isomorphic helper.' },
           ],
         },
       ],
+      // no-restricted-globals takes each restriction as a separate option element after the severity (not wrapped in an inner array) -- see the rule's arrayOfGlobals schema. Only Buffer is banned; typeof-process checks remain legitimate (the import ban above catches the real node: surface).
+      'no-restricted-globals': ['error', { name: 'Buffer', message: 'Buffer is Node-only; this Worker-isomorphic library uses Uint8Array.' }],
     },
   },
   {
