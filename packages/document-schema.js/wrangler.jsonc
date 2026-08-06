@@ -1,0 +1,6 @@
+{
+  // A no-op Worker whose only purpose is to host document-schema.js's source as the module graph the workers test suite (test/workers/**) imports against under the real workerd runtime -- there is no fetch handler to exercise, only the library's own Zod schemas parsing inside a Cloudflare Workers isolate to prove they carry zero Node-only API usage.
+  "name": "document-schema-workers-test",
+  "main": "src/index.ts",
+  "compatibility_date": "2024-09-23"
+}
