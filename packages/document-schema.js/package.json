@@ -1,6 +1,6 @@
 {
   "name": "document-schema.js",
-  "version": "2.4.7",
+  "version": "2.4.8",
   "description": "The canonical, format-agnostic content and layout schemas shared by ooxml.js, odf.js, and documents.js -- pure Zod schemas, no behaviour.",
   "type": "module",
   "repository": {
