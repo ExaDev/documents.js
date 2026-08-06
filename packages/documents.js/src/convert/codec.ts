@@ -27,6 +27,8 @@ import {
   pptxToPdf,
   xlsxToOds,
   xlsxToPdf,
+  xlsxToMarkdown,
+  markdownToXlsx,
 } from './convert';
 
 // docx bytes <-> PDF bytes, pptx bytes <-> PDF bytes, odt bytes <-> PDF bytes, odp bytes <-> PDF bytes, ods bytes <-> PDF bytes, and odg bytes <-> PDF bytes, each a schema-validated z.codec() pair over the already-independently-tested docxToPdf/pdfToDocx, pptxToPdf/pdfToPptx, odtToPdf/pdfToOdt, odpToPdf/pdfToOdp, odsToPdf/pdfToOds, and odgToPdf/pdfToOdg functions -- the no-options form only, for the same reason pdf/codec.ts's pdfCodec is: docxToPdf et al. accept a signal/onSubstitution/sink options object z.codec()'s fixed decode(input)/encode(output) signature has no room for. Neither direction is round-trip-lossless (see convert.ts's own module doc and the README's Fidelity section) -- the codec adds schema validation and Zod composability on top of the existing conversions, it does not change what they recover.
@@ -96,4 +98,10 @@ export const markdownDocxCodec = z.codec(MarkdownBytesSchema, DocxBytesSchema, {
 export const markdownOdtCodec = z.codec(MarkdownBytesSchema, OdtBytesSchema, {
   decode: (markdownBytes) => markdownToOdt(markdownBytes),
   encode: (odtBytes) => odtToMarkdown(odtBytes),
+});
+
+// xlsx bytes <-> markdown bytes: the no-options form over the two pdf-composed bridge functions (convert.ts), schema-validated both ways. The most lossy codec in this file by some margin -- decode stacks xlsxToPdf's spreadsheet render on top of pdfToMarkdown's geometry reconstruction, and encode stacks markdownToPdf's render on top of pdfToXlsx's reconstruction -- so neither direction is remotely round-trip-lossless; see convert.ts's own xlsxToMarkdown/markdownToXlsx comment for why this last-resort pair exists at all (a caller with xlsx bytes wanting text who cannot read the cells directly via readXlsxContent).
+export const xlsxMarkdownCodec = z.codec(XlsxBytesSchema, MarkdownBytesSchema, {
+  decode: (xlsxBytes) => xlsxToMarkdown(xlsxBytes),
+  encode: (markdownBytes) => markdownToXlsx(markdownBytes),
 });

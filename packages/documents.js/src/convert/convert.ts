@@ -278,6 +278,16 @@ export interface DocumentBridgeOptions {
   readonly images?: MarkdownImageResolver;
 }
 
+// Options for a composed edge whose two formats share no ContentDocument variant, so the only route is through PDF (today: xlsx <-> markdown). These are 'bridge' edges from DIRECT_EDGES's point of view (neither endpoint is pdf), but internally they compose a toPdf leg -- which lays content out, so fonts/onFontSubstitution/onSubstitution/clock reach it -- with a fromPdf leg, which reconstructs, so sink reaches it. That is a wider shape than the PDF-bypassing DocumentBridgeOptions above, and every field is optional deliberately: a DocumentBridgeOptions (what local.ts's port passes to any bridge edge) is assignable to this, which is exactly what lets these register as ordinary bridge edges without a new edge kind -- through the port they run with fonts/sink undefined (the defaults), while a direct ergonomic caller can supply them for finer control over the layout and reconstruction legs.
+export interface ComposedDocumentOptions extends DocumentFontRegistryOptions {
+  readonly signal?: AbortSignal;
+  readonly onSubstitution?: (substitution: WinAnsiSubstitution, context: { readonly pageIndex: number }) => void;
+  readonly clock?: ClockPort;
+  readonly images?: MarkdownImageResolver;
+  readonly sink?: PdfDiagnosticSink;
+  readonly onDocument?: (pkg: DocumentPackage) => void;
+}
+
 // odt bytes -> docx bytes: readOdtContent(decodePackage(odtBytes)) feeds directly into buildDocxPackage, then ooxml.js's own encodePackage serializes the result -- no writePdf/readPdf, no measurer, no reconstruction. Cancellation has no loop to hook into the way writePdf/readPdf's own page/content-stream loops do (see src/ports/abort.ts's own module comment) -- read and build are each a single bounded pass over the source document -- so the signal is checked once before each of those two stages rather than threaded into buildDocxPackage/readOdtContent themselves, which accept no such option today. An embedded formula now crosses this bridge as REAL, editable OOXML math: buildDocxPackage translates the block's own MathML into genuine OMML (m:oMathPara > m:oMath -- see src/omml/write.ts) rather than degrading it to the plain-text stand-in it used to become. Only a construct OMML has no counterpart for degrades, individually and with a diagnostic reported through options.onMathDiagnostic.
 export function odtToDocx(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBridgeOptions): Uint8Array<ArrayBuffer> {
   throwIfAborted(options?.signal);
@@ -477,6 +487,21 @@ export function pdfToXlsx(bytes: Uint8Array<ArrayBuffer>, options?: PdfToDocumen
   const odsBytes = pdfToOds(bytes, { signal: options?.signal, sink: options?.sink });
   throwIfAborted(options?.signal);
   return odsToXlsx(odsBytes, { signal: options?.signal, onDocument: options?.onDocument });
+}
+
+// xlsx <-> markdown: xlsx and markdown share no ContentDocument variant (spreadsheet vs wordprocessing), so -- unlike every PDF-bypassing bridge above -- there is no reader -> writer shortcut between them. The only route is through PDF, the same composed-edge shape xlsxToPdf/pdfToXlsx just above established for xlsx's own PDF pair: xlsxToMarkdown is xlsxToPdf followed by pdfToMarkdown; markdownToXlsx is markdownToPdf followed by pdfToXlsx. Both inherit BOTH legs' lossiness in full (a spreadsheet laid out to a PDF page, then that page reconstructed as wordprocessing text -- the single lossiest path in the package, since pdfToMarkdown is already the lossiest conversion on its own), which is exactly why these are a deliberate last-resort pair rather than a routine bridge: a caller wanting spreadsheet data as text should usually read the cells directly (readXlsxContent) rather than round-trip them through a rendered page. onDocument reports only the LAST hop's package (pdfToMarkdown's for xlsxToMarkdown, pdfToXlsx's for markdownToXlsx), matching xlsxToPdf's own documented convention for composed edges.
+export function xlsxToMarkdown(bytes: Uint8Array<ArrayBuffer>, options?: ComposedDocumentOptions): Uint8Array<ArrayBuffer> {
+  throwIfAborted(options?.signal);
+  const pdfBytes = xlsxToPdf(bytes, { signal: options?.signal, fonts: options?.fonts, onFontSubstitution: options?.onFontSubstitution, onSubstitution: options?.onSubstitution, clock: options?.clock });
+  throwIfAborted(options?.signal);
+  return pdfToMarkdown(pdfBytes, { signal: options?.signal, sink: options?.sink, onDocument: options?.onDocument });
+}
+
+export function markdownToXlsx(bytes: Uint8Array<ArrayBuffer>, options?: ComposedDocumentOptions): Uint8Array<ArrayBuffer> {
+  throwIfAborted(options?.signal);
+  const pdfBytes = markdownToPdf(bytes, { signal: options?.signal, fonts: options?.fonts, onFontSubstitution: options?.onFontSubstitution, onSubstitution: options?.onSubstitution, clock: options?.clock, images: options?.images });
+  throwIfAborted(options?.signal);
+  return pdfToXlsx(pdfBytes, { signal: options?.signal, sink: options?.sink, onDocument: options?.onDocument });
 }
 
 // odmToPdf -- the fourteenth conversion, and the one deliberately not shaped like the other twelve: a .odm master document doesn't carry its chapters' own content at all (readOdm's own module -- see odf.js's implementation report -- confirmed against real LibreOffice output that a text:section-source is always a bare external reference, never an embedded or cached copy), so producing a PDF requires a caller-supplied resolveSubDocument callback to hand back each chapter's own .odt bytes given its href. This is why odmToPdf takes an options object shape the other twelve conversions don't, and why it is not wired into the DocumentConverter port (src/convert/port.ts) -- that port's convert(request, options) contract is fixed single-bytes-in/bytes-out, and widening it with a resolver parameter for this one format would leak an odm-specific concern into every other conversion's own request shape. A caller wanting odmToPdf behind the port can wrap it in their own adapter.

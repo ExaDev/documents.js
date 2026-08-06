@@ -108,6 +108,8 @@ Every X → PDF conversion additionally accepts `fonts` (extra `ProvidedFont` fa
 
 Ten further conversions, five pairs, bypass PDF entirely: `odtToDocx`/`docxToOdt`, `odpToPptx`/`pptxToOdp`, `odsToXlsx`/`xlsxToOds`, and `markdownToDocx`/`docxToMarkdown`, `markdownToOdt`/`odtToMarkdown` each compose a direct `readXContent` → `buildYPackage` pivot copy, since both sides of each pair already read into and build from the identical `ContentDocument` variant — no layout engine, no font measurement, and no geometry-based reconstruction in between. See [Fidelity](#fidelity) for what that means in practice, and for markdown specifically, why "no layout/reconstruction lossiness" is not the same claim as "no lossiness at all".
 
+A further pair, `xlsxToMarkdown`/`markdownToXlsx`, is the one exception to "both sides share a variant": xlsx (spreadsheet) and markdown (wordprocessing) share no `ContentDocument` variant, so this pair routes through PDF internally (`xlsxToPdf` + `pdfToMarkdown`; `markdownToPdf` + `pdfToXlsx`) rather than copying a pivot directly. It is consequently the single lossiest conversion in the package — two stacked lossy hops (a spreadsheet rendered to a PDF page, then that page reconstructed as wordprocessing text) — and exists as a last resort for a caller with xlsx bytes who wants text and cannot read the cells directly via `readXlsxContent`. The `DocumentConverter` port routes it like any other bridge, and `xlsxMarkdownCodec` is its no-options `z.codec()` pair.
+
 ```ts
 import { odtToDocx, docxToOdt, markdownToDocx, docxToMarkdown } from 'documents.js';
 

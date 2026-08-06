@@ -363,10 +363,10 @@ export { docxPdfCodec, markdownPdfCodec, odgPdfCodec, odpPdfCodec, odsPdfCodec, 
 
 // --- Ten cross-format bridges, five pairs (odt<->docx, odp<->pptx, ods<->xlsx, markdown<->docx, markdown<->odt), bypassing PDF entirely -- see convert.ts's own module comment on this section for why these carry substantially higher fidelity than the fourteen PDF-pivot conversions above. markdownToDocx/docxToMarkdown and markdownToOdt/odtToMarkdown are hand-written bridge functions registered as direct edges (capability.ts's DIRECT_EDGES) -- see capability.ts's own module comment for why: local.ts's DocumentConverter only ever executes a direct edge, so wiring a pair into the port requires a real, callable, registered function; there is no implicit multi-hop composition. ---
 export type { DocumentBridgeOptions } from './convert/convert';
-export { docxToMarkdown, docxToOdt, markdownToDocx, markdownToOdt, odpToPptx, odsToXlsx, odtToDocx, odtToMarkdown, pptxToOdp, xlsxToOds, docxToPptx, pptxToDocx, odtToOdp, odpToOdt } from './convert/convert';
+export { docxToMarkdown, docxToOdt, markdownToDocx, markdownToOdt, odpToPptx, odsToXlsx, odtToDocx, odtToMarkdown, pptxToOdp, xlsxToOds, docxToPptx, pptxToDocx, odtToOdp, odpToOdt, xlsxToMarkdown, markdownToXlsx } from './convert/convert';
 
 // Schema-validated z.codec() pairs over the ten bridges above (odt bytes <-> docx bytes, odp bytes <-> pptx bytes, ods bytes <-> xlsx bytes, markdown bytes <-> docx bytes, markdown bytes <-> odt bytes), the no-extra-options form -- use odtToDocx/docxToOdt/odpToPptx/pptxToOdp/odsToXlsx/xlsxToOds/markdownToDocx/docxToMarkdown/markdownToOdt/odtToMarkdown directly for cancellation.
-export { markdownDocxCodec, markdownOdtCodec, odpPptxCodec, odsXlsxCodec, odtDocxCodec } from './convert/codec';
+export { markdownDocxCodec, markdownOdtCodec, odpPptxCodec, odsXlsxCodec, odtDocxCodec, xlsxMarkdownCodec } from './convert/codec';
 
 // --- odm (ODF master document, multiple chapters) -> PDF, the one conversion in this package shaped differently from every other: a .odm's chapters are external references (odf.js's readOdm never inlines them -- see odmToPdf's own module comment), so producing a PDF needs a caller-supplied resolveSubDocument callback to hand back each chapter's own .odt bytes. Not part of the twelve-conversion or six-bridge groups above, and not wired into the DocumentConverter port below -- see odmToPdf's own module comment for why. ---
 export type { OdmToPdfOptions } from './convert/convert';

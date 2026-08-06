@@ -31,6 +31,8 @@ import {
   pptxToPdf,
   xlsxToOds,
   xlsxToPdf,
+  xlsxToMarkdown,
+  markdownToXlsx,
 } from './convert';
 import type { DocumentFormat } from './port';
 
@@ -128,6 +130,9 @@ export const DIRECT_EDGES: readonly ConversionEdge[] = [
   { kind: 'bridge', source: 'pptx', target: 'docx', convert: pptxToDocx },
   { kind: 'bridge', source: 'odt', target: 'odp', convert: odtToOdp },
   { kind: 'bridge', source: 'odp', target: 'odt', convert: odpToOdt },
+  // Two pdf-composed bridge edges (xlsx <-> markdown): unlike every bridge above, these two formats share no ContentDocument variant, so they route through PDF internally (xlsxToPdf + pdfToMarkdown; markdownToPdf + pdfToXlsx) rather than copying a ContentDocument pivot directly. Registered as bridge edges (neither endpoint is pdf) so the port routes them; see convert.ts's xlsxToMarkdown/markdownToXlsx for the inherited-lossiness caveat and why this is a last-resort pair.
+  { kind: 'bridge', source: 'xlsx', target: 'markdown', convert: xlsxToMarkdown },
+  { kind: 'bridge', source: 'markdown', target: 'xlsx', convert: markdownToXlsx },
 ];
 
 // Thrown when a requested (source, target) pair has no direct edge in DIRECT_EDGES -- the local DocumentConverter (local.ts) rejects rather than silently routing through a lossy two-hop path. A named class matching this package's own OdmUnresolvedSectionError/HsqldbSqlUnsupportedError convention for "recognised but unsupported", so a caller can branch on it rather than string-matching a message.
