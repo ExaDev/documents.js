@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/ExaDev/markdown-codec/compare/v1.1.25...v1.2.0) (2026-08-06)
+
+
+### Features
+
+* cache typecheck/lint/test/build tasks with turbo ([14e9604](https://github.com/ExaDev/markdown-codec/commit/14e9604c6abaf486d07897402c4a962822ce8f39))
+
 ## [1.1.25](https://github.com/ExaDev/markdown-codec/compare/v1.1.24...v1.1.25) (2026-08-06)
 
 ## [1.1.24](https://github.com/ExaDev/markdown-codec/compare/v1.1.23...v1.1.24) (2026-08-06)
