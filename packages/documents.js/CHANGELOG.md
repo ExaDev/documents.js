@@ -1,3 +1,11 @@
+# [1.95.0](https://github.com/ExaDev/documents.js/compare/v1.94.8...v1.95.0) (2026-08-06)
+
+
+### Features
+
+* add describeFontFace + consume schema's canonical cell-addressing ([60a7b9c](https://github.com/ExaDev/documents.js/commit/60a7b9c5548c9c42afb12b69d5cf34e2f8b92cb8))
+* cache typecheck/lint/test/build tasks with turbo ([f55b2c4](https://github.com/ExaDev/documents.js/commit/f55b2c4dc79a37ed75fa917f6757c2c5f0065d95))
+
 ## [1.94.8](https://github.com/ExaDev/documents.js/compare/v1.94.7...v1.94.8) (2026-08-06)
 
 ## [1.94.7](https://github.com/ExaDev/documents.js/compare/v1.94.6...v1.94.7) (2026-08-06)
