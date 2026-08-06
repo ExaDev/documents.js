@@ -5,3 +5,4 @@ schemas/
 .DS_Store
 coverage/
 .eslintcache
+.turbo/
