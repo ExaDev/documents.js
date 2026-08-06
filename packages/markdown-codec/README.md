@@ -12,6 +12,7 @@ graph TD
     ooxml("ooxml.js")
     odf("odf.js")
     pdfcodec("pdf-codec")
+    bytecodec("byte-codec")
     mdcodec("markdown-codec")
     documents("documents.js")
     mcp("document-mcp")
@@ -20,11 +21,14 @@ graph TD
     schema --> ooxml
     schema --> odf
     schema --> pdfcodec
+    schema --> bytecodec
     schema --> mdcodec
     schema --> documents
+    bytecodec --> pdfcodec
     ooxml --> documents
     odf --> documents
     pdfcodec --> documents
+    bytecodec --> documents
     mdcodec --> documents
     documents --> mcp
     pdfcodec --> mcp
@@ -36,6 +40,7 @@ graph TD
     click ooxml "https://github.com/ExaDev/ooxml.js" "ooxml.js"
     click odf "https://github.com/ExaDev/odf.js" "odf.js"
     click pdfcodec "https://github.com/ExaDev/pdf-codec" "pdf-codec"
+    click bytecodec "https://github.com/ExaDev/byte-codec" "byte-codec"
     click mdcodec "https://github.com/ExaDev/markdown-codec" "markdown-codec"
     click documents "https://github.com/ExaDev/documents.js" "documents.js"
     click mcp "https://github.com/ExaDev/document-mcp" "document-mcp"
