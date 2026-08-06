@@ -1,3 +1,10 @@
+# [2.9.0](https://github.com/ExaDev/ooxml.js/compare/v2.8.19...v2.9.0) (2026-08-06)
+
+
+### Features
+
+* cache typecheck/lint/test/build tasks with turbo ([e725735](https://github.com/ExaDev/ooxml.js/commit/e725735d8da77fffd327d6b01e9ada41337687e2))
+
 ## [2.8.19](https://github.com/ExaDev/ooxml.js/compare/v2.8.18...v2.8.19) (2026-08-06)
 
 ## [2.8.18](https://github.com/ExaDev/ooxml.js/compare/v2.8.17...v2.8.18) (2026-08-06)
