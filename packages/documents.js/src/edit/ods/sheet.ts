@@ -1,5 +1,5 @@
 import type { Package, XmlElement, XmlNode } from 'odf.js';
-import { parseCellReference } from 'odf.js';
+import { parseCellReference } from 'document-schema.js';
 import { attr } from 'ooxml.js';
 import type { ContentEmbeddedObject, ContentSheetImage, ContentSheetPrintSettings } from 'document-schema.js';
 import { removeChild, setAttr } from '../../xml/edit';
@@ -94,7 +94,7 @@ export class OdsSheet {
     return new OdsCell(node, this.pkg);
   }
 
-  // The A1-style equivalent of cell(row, column) -- reuses odf.js's own parseCellReference (typed/shared/a1.ts) for the A1<->index conversion rather than reimplementing spreadsheet column-letter arithmetic a second time.
+  // The A1-style equivalent of cell(row, column) -- reuses document-schema.js's canonical parseCellReference for the A1<->index conversion rather than reimplementing spreadsheet column-letter arithmetic.
   cellAt(reference: string): OdsCell {
     const parsed = parseCellReference(reference);
     if (parsed === undefined) {

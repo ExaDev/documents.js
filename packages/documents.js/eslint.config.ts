@@ -13,15 +13,15 @@ export default tseslint.config(
   {
     // Pin the TSConfig root so the parser isn't confused by stray tsconfig.json files elsewhere in the tree. Required because lint-staged runs eslint at commit time.
     //
-    // `projectService` (global -- no `files` filter) powers the type-checked rules below; it must apply to every matched file or the type-checked configs crash on files outside the program.
+    // `project` (explicit tsconfig list) powers the type-checked rules below; listing both the web-primary tsconfig.json (runtime src) and tsconfig.node.json (tests + config files) ensures every matched file is in a program.
     languageOptions: {
-      parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },
+      parserOptions: { project: ['./tsconfig.json', './tsconfig.node.json'], tsconfigRootDir: import.meta.dirname },
       globals: { ...globals.node },
     },
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
-  // Type-checked tier: catches floating promises, misused async handlers, unsafe `any`, and invalid template expressions. Requires the `projectService` parser option set above.
+  // Type-checked tier: catches floating promises, misused async handlers, unsafe `any`, and invalid template expressions. Requires the `project` parser option set above.
   ...tseslint.configs.recommendedTypeChecked,
   ...tseslint.configs.stylisticTypeChecked,
   {
