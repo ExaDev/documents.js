@@ -43,6 +43,57 @@ export default tseslint.config(
     rules: { 'local/no-non-barrel-index': 'error' },
   },
   {
+    // Static Worker-isomorphism guard: byte-codec is a Worker-isomorphic library, so runtime src (the published code under src/) must not import node:* or bare Node builtins or use the Node-only Buffer global. Test files and test-support legitimately use node:fs for fixtures; they are not published and are exempted here.
+    files: ['src/**/*.ts'],
+    ignores: ['src/**/*.test.ts', 'src/test-support/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['node:*', 'node:*/**'],
+              message:
+                'This is a Worker-isomorphic library: node:* imports are banned in runtime src. Use a Web API or an isomorphic helper.',
+            },
+            {
+              group: [
+                'fs',
+                'path',
+                'crypto',
+                'child_process',
+                'os',
+                'net',
+                'http',
+                'https',
+                'stream',
+                'util',
+                'buffer',
+                'url',
+                'zlib',
+                'readline',
+                'worker_threads',
+                'timers',
+                'events',
+                'assert',
+              ],
+              message:
+                'This is a Worker-isomorphic library: bare Node builtin imports are banned in runtime src. Use a Web API or an isomorphic helper.',
+            },
+          ],
+        },
+      ],
+      'no-restricted-globals': [
+        'error',
+        {
+          name: 'Buffer',
+          message:
+            'Buffer is Node-only; this Worker-isomorphic library uses Uint8Array.',
+        },
+      ],
+    },
+  },
+  {
     ignores: ['dist/**', 'node_modules/**'],
   },
 );
