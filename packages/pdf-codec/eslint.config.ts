@@ -13,9 +13,9 @@ export default tseslint.config(
   {
     // Pin the TSConfig root so the parser isn't confused by stray tsconfig.json files elsewhere in the tree. Required because lint-staged runs eslint at commit time.
     //
-    // `projectService` (global -- no `files` filter) powers the type-checked rules below; it must apply to every matched file or the type-checked configs crash on files outside the program.
+    // The type-checked rules below need each linted file assigned to a TS program. This repo runs two disjoint programs: `tsconfig.json` is the vendor-neutral web-only gate (lib ES2024+WebWorker, no @types/node) covering runtime src, and `tsconfig.node.json` covers tests, test-support, eslint-rules, and root config files under Node types. The TS language service's projectService only auto-discovers `tsconfig.json`, so files exclusive to `tsconfig.node.json` would be unaffiliated; `project` lists both programs explicitly and matches each file to the one that includes it -- which also means eslint's type-checked tier enforces the web gate on runtime src itself.
     languageOptions: {
-      parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },
+      parserOptions: { project: ['./tsconfig.json', './tsconfig.node.json'], tsconfigRootDir: import.meta.dirname },
       globals: { ...globals.node },
     },
   },
