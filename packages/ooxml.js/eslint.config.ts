@@ -57,4 +57,19 @@ export default tseslint.config(
     files: ['src/index.ts'],
     rules: { 'local/no-side-effects-in-index': 'error' },
   },
+  {
+    // Static Worker-isomorphism guard for runtime src: this is a library consumed inside Cloudflare Workers, so node:* and bare-Node-builtin imports and the Node-only Buffer global are banned from published code. Test files and test-support legitimately use node:fs for fixtures and are not published, so they are exempt. The workerd runtime test (pnpm test:workers) enforces the same property dynamically; this rule catches violations at lint time before the runtime test ever runs.
+    files: ['src/**/*.ts'],
+    ignores: ['src/**/*.test.ts', 'src/test-support/**'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        patterns: [
+          { group: ['node:*', 'node:*/**'], message: 'This is a Worker-isomorphic library: node:* imports are banned in runtime src. Use a Web API or an isomorphic helper.' },
+          // `regex`, not `group`, for the bare builtins: no-restricted-imports matches `group` entries through the `ignore` package (gitignore semantics, allowRelativePaths), so a bare name like 'util' or 'path' would false-positive on relative imports of local files named the same (../util, ./util/base64). Anchoring with ^...$ matches only the exact bare specifier.
+          { regex: '^(fs|path|crypto|child_process|os|net|http|https|stream|util|buffer|url|zlib|readline|worker_threads|timers|events|assert)$', message: 'This is a Worker-isomorphic library: bare Node builtin imports are banned in runtime src. Use a Web API or an isomorphic helper.' },
+        ],
+      }],
+      'no-restricted-globals': ['error', { name: 'Buffer', message: 'Buffer is Node-only; this Worker-isomorphic library uses Uint8Array.' }],
+    },
+  },
 );
