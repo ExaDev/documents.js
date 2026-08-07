@@ -1,3 +1,10 @@
+# [2.6.0](https://github.com/ExaDev/odf.js/compare/v2.5.3...v2.6.0) (2026-08-07)
+
+
+### Features
+
+* add an autofix to the split-statement re-export rule ([028c845](https://github.com/ExaDev/odf.js/commit/028c8459ec4815216053f2b9f89c38e5a51a7c29))
+
 ## [2.5.3](https://github.com/ExaDev/odf.js/compare/v2.5.2...v2.5.3) (2026-08-07)
 
 ## [2.5.2](https://github.com/ExaDev/odf.js/compare/v2.5.1...v2.5.2) (2026-08-07)
