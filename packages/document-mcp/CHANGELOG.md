@@ -1,3 +1,10 @@
+# [1.5.0](https://github.com/ExaDev/document-mcp/compare/v1.4.5...v1.5.0) (2026-08-07)
+
+
+### Features
+
+* add Claude Code plugin marketplace support ([c53d5c5](https://github.com/ExaDev/document-mcp/commit/c53d5c5795d02270c4af7d2e0b33a238205d506b))
+
 ## [1.4.5](https://github.com/ExaDev/document-mcp/compare/v1.4.4...v1.4.5) (2026-08-07)
 
 ## [1.4.4](https://github.com/ExaDev/document-mcp/compare/v1.4.3...v1.4.4) (2026-08-07)
