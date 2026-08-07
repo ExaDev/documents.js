@@ -23,18 +23,8 @@ export default tseslint.config(
   {
     rules: {
       '@typescript-eslint/consistent-type-imports': ['error', { fixStyle: 'inline-type-imports' }],
-    },
-  },
-  {
-    // Re-exports belong only in src/index.ts, the public barrel -- a re-export anywhere else risks silently surfacing the wrong thing under a name a consumer expects to mean something else. The AST-selector ban here catches the single-statement forms; the bundle's own exadev/no-non-barrel-reexport (self-scoped away from src/index.ts) catches the split-statement form.
-    files: ['src/**/*.ts'],
-    ignores: ['src/index.ts'],
-    rules: {
-      'no-restricted-syntax': [
-        'error',
-        { selector: 'ExportAllDeclaration', message: 'Re-exports belong only in src/index.ts (the public barrel). Define or import this locally instead.' },
-        { selector: 'ExportNamedDeclaration[source]', message: 'Re-exports belong only in src/index.ts (the public barrel). Define or import this locally instead.' },
-      ],
+      // This package's src/index.ts is its public entry point (package.json exports), so it keeps one barrel: override the default 'banned' barrel-policy to 'single'. The umbrella catches both single- and split-statement re-exports outside src/index.ts, replacing the hand-rolled no-restricted-syntax block this config used to carry.
+      'exadev/barrel-policy': ['error', { mode: 'single' }],
     },
   },
   {
