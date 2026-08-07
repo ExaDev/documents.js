@@ -1,3 +1,10 @@
+# [1.96.0](https://github.com/ExaDev/documents.js/compare/v1.95.6...v1.96.0) (2026-08-07)
+
+
+### Features
+
+* **lint:** ban a re-export split across an import and a bare export ([450e68d](https://github.com/ExaDev/documents.js/commit/450e68dc6d240a0e6cb63c58746845d9611944ad))
+
 ## [1.95.6](https://github.com/ExaDev/documents.js/compare/v1.95.5...v1.95.6) (2026-08-07)
 
 ## [1.95.5](https://github.com/ExaDev/documents.js/compare/v1.95.4...v1.95.5) (2026-08-07)
