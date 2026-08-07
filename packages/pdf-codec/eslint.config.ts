@@ -1,10 +1,7 @@
 import js from '@eslint/js';
+import exadev from '@exadev/eslint-config';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
-import noPointlessReassignment from './eslint-rules/no-pointless-reassignment.js';
-import noSideEffectsInIndex from './eslint-rules/no-side-effects-in-index.js';
-import noNonBarrelIndex from './eslint-rules/no-non-barrel-index.js';
-import noNonBarrelReexport from './eslint-rules/no-non-barrel-reexport.js';
 
 export default tseslint.config(
   {
@@ -14,7 +11,7 @@ export default tseslint.config(
   {
     // Pin the TSConfig root so the parser isn't confused by stray tsconfig.json files elsewhere in the tree. Required because lint-staged runs eslint at commit time.
     //
-    // The type-checked rules below need each linted file assigned to a TS program. This repo runs two disjoint programs: `tsconfig.json` is the vendor-neutral web-only gate (lib ES2024+WebWorker, no @types/node) covering runtime src, and `tsconfig.node.json` covers tests, test-support, eslint-rules, and root config files under Node types. The TS language service's projectService only auto-discovers `tsconfig.json`, so files exclusive to `tsconfig.node.json` would be unaffiliated; `project` lists both programs explicitly and matches each file to the one that includes it -- which also means eslint's type-checked tier enforces the web gate on runtime src itself.
+    // The type-checked rules below need each linted file assigned to a TS program. This repo runs two disjoint programs: `tsconfig.json` is the vendor-neutral web-only gate (lib ES2024+WebWorker, no @types/node) covering runtime src, and `tsconfig.node.json` covers tests, test-support, and root config files under Node types. The TS language service's projectService only auto-discovers `tsconfig.json`, so files exclusive to `tsconfig.node.json` would be unaffiliated; `project` lists both programs explicitly and matches each file to the one that includes it -- which also means eslint's type-checked tier enforces the web gate on runtime src itself.
     languageOptions: {
       parserOptions: { project: ['./tsconfig.json', './tsconfig.node.json'], tsconfigRootDir: import.meta.dirname },
       globals: { ...globals.node },
@@ -37,15 +34,16 @@ export default tseslint.config(
     },
   },
   {
-    // Local custom rule (eslint-rules/no-pointless-reassignment.ts) -- not published as a package, matching this family's own convention of keeping shared dev-tooling config as identical per-repo copies rather than a shared devDependency.
-    plugins: { local: { rules: { 'no-pointless-reassignment': noPointlessReassignment, 'no-side-effects-in-index': noSideEffectsInIndex, 'no-non-barrel-index': noNonBarrelIndex, 'no-non-barrel-reexport': noNonBarrelReexport } } },
-    rules: { 'local/no-pointless-reassignment': 'error', 'local/no-non-barrel-index': 'error' },
+    // These four rules are sourced from the published @exadev/eslint-config package rather than kept as local per-repo copies.
+    plugins: { exadev },
+    rules: { 'exadev/no-pointless-reassignment': 'error', 'exadev/no-non-barrel-index': 'error' },
   },
   {
     // Re-exports belong only in src/index.ts, the public barrel -- a re-export anywhere else risks silently surfacing the wrong thing under a name a consumer expects to mean something else.
     files: ['src/**/*.ts'],
     ignores: ['src/index.ts'],
     rules: {
+      'exadev/no-non-barrel-reexport': 'error',
       'no-restricted-syntax': [
         'error',
         { selector: 'ExportAllDeclaration', message: 'Re-exports belong only in src/index.ts (the public barrel). Define or import this locally instead.' },
@@ -56,7 +54,7 @@ export default tseslint.config(
   {
     // The structural counterpart to the re-export ban above: that rule says re-exports belong only in src/index.ts, this one says src/index.ts may contain only re-exports -- together pinning the barrel to exactly one shape, one that can never have a side effect at import time.
     files: ['src/index.ts'],
-    rules: { 'local/no-side-effects-in-index': 'error' },
+    rules: { 'exadev/no-side-effects-in-index': 'error' },
   },
   {
     // Worker-isomorphism guard: this codec runs in Cloudflare Workers (see test:workers in package.json and the workerd CI job), so runtime src statically bans node:* imports, bare Node builtin imports, and the Buffer global. Test files and src/test-support legitimately use node:fs for fixtures and are exempt -- they are not published. A pre-audit confirmed every runtime src module is already node-free, so this is a guardrail against regressions, not a migration.

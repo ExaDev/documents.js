@@ -1,5 +1,5 @@
+import type { TextMeasurer } from 'document-schema.js';
 import { describe, expect, it } from 'vitest';
-import type { TextMeasurer } from './measure';
 import { wrapRunsToWidth, wrapTextToWidth } from './text-layout';
 
 // A fake monospace measurer: every character is exactly 1pt wide at size 10 (i.e. sizePt/10 pt per character), so wrap-point assertions can be exact integers rather than depending on real font metrics -- this is the whole reason TextMeasurer is an interface (src/pdf/measure.ts).

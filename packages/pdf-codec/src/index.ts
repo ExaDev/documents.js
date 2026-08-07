@@ -10,9 +10,8 @@ export { NOOP_DIAGNOSTIC_SINK, PdfEncryptedError, PdfParseError, PdfPasswordRequ
 export type { WinAnsiSubstitution } from './winansi';
 export { PdfBytesSchema, pdfCodec } from './codec';
 
-// Formula/math: the structural port documents.js's own MathML layout engine (layoutFormula, staying in documents.js) produces real values against -- see src/math-types.ts and src/formula.ts for the full rationale.
-export type { PositionedFormula } from './formula';
-export type { MathAssembledGlyphs, MathBox, MathColor, MathFontMetrics, MathGlyphMetrics, MathGlyphPlacement, MathGlyphRun, MathLayoutItem, MathRule, MathStretchAxis, MathStretchGlyph, MathStretchResult, MathStroke } from 'document-schema.js';
+// Formula/math: the structural port documents.js's own MathML layout engine (layoutFormula, staying in documents.js) produces real values against -- see src/math-types.ts for the full rationale.
+export type { MathAssembledGlyphs, MathBox, MathColor, MathFontMetrics, MathGlyphMetrics, MathGlyphPlacement, MathGlyphRun, MathLayoutItem, MathRule, MathStretchAxis, MathStretchGlyph, MathStretchResult, MathStroke, PositionedFormula } from 'document-schema.js';
 export type { LoadedMathFont, MathFont, MathFontDescriptorMetrics } from './math-font';
 export { loadMathFont } from './math-font';
 // Per-glyph tight ink bounding boxes: the shape MathFont.glyphInkBounds reports in design units, and what MathGlyphMetrics.inkAscentPt/inkDescentPt are derived from. Exported so a layout engine outside this package (documents.js's own MathML engine is the caller this exists for) can size a token box from the glyphs it actually contains rather than from the font-wide nominal ascent/descent.
@@ -24,13 +23,12 @@ export type { MathStretchConstruction, MathStretchOptions, MathStretchPlacement 
 export { assembleStretchyGlyph, scaleMathStretchConstruction } from './math-stretch';
 
 // Text layout: consumed by every layout engine built on this codec (line-wrapping, run styling, underline metrics).
-export type { UnderlineMetrics } from './measure';
-export type { FontMeasurerOptions, StandardFontMeasurerOptions, TextMeasurer, VerticalMetricPolicy } from './measure';
+export type { StyledFragment, StyledRun, TextMeasurer, UnderlineMetrics, WrapOptions, WrappedLine } from 'document-schema.js';
+export type { FontMeasurerOptions, StandardFontMeasurerOptions, VerticalMetricPolicy } from './measure';
 export { DEFAULT_VERTICAL_METRIC_POLICY, createFontMeasurer, createStandardFontMeasurer } from './measure';
-export type { StyledFragment, StyledRun, WrapOptions, WrappedLine } from './text-layout';
 
 // Geometry: shape/slide placement math. Point stays public (it is the neutral geometry type); rotatePointAboutCenter is no longer exported -- documents.js owns its own copy now, and pdf-codec had no internal production caller for it (only a test). wrapRunsToWidth likewise dropped below: documents.js owns its own text-wrapping primitive now.
-export type { Point } from './matrix';
+export type { Point } from 'document-schema.js';
 
 // Font resolution: mapping an arbitrary requested font family/weight/style onto one of the 14 standard PDF faces, and that face's own AFM-derived metrics.
 export type { FontMetrics, StandardFontName } from './afm-widths';
@@ -39,7 +37,8 @@ export type { ResolvedFont } from './fonts';
 export { resolveStandardFont } from './fonts';
 
 // Font registry: a swappable, source/caller/vendored/standard-14 precedence port in front of resolveStandardFont -- see src/font-registry.ts's own header comment for the full resolution order.
-export type { FontRegistry, FontRegistryOptions, FontSubstitution, ProvidedFont, ResolvedFace } from './font-registry';
+export type { FontRegistryOptions, FontSubstitution, ProvidedFont } from 'document-schema.js';
+export type { FontRegistry, ResolvedFace } from './font-registry';
 export { createFontRegistry, resolveFaceWithRegistry } from './font-registry';
 export type { EmbeddedFace, EmbeddedFaceMetrics, EmbeddedFaceSubstitution } from './embedded-font';
 // Standalone font-file inspection: a caller holding the raw bytes of a .ttf/.otf a user supplied (not a font already extracted from a source document) reads its own declared family/bold/italic triple.

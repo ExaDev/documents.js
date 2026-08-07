@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { LayoutPath } from 'document-schema.js';
+import type { LayoutPath, TextMeasurer } from 'document-schema.js';
 import type { ContentWriteContext } from './content-write';
 import { writeContentStream } from './content-write';
-import type { TextMeasurer } from './measure';
 
 // writePath's own dedicated test file, not folded into content-write.test.ts's shared describe blocks -- flagged as the single most error-prone piece of the odg slice (a hand-computed cubic-Bezier content stream is easy to get subtly wrong in a way byte-length or "contains" assertions wouldn't catch), so every case here asserts the FULL, EXACT emitted operator string against a hand-computed expected value, not just a shape/length check.
 

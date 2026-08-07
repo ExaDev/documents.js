@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { LayoutEllipse, LayoutImage, LayoutLine, LayoutLink, LayoutRect, LayoutText } from 'document-schema.js';
+import type { LayoutEllipse, LayoutImage, LayoutLine, LayoutLink, LayoutRect, LayoutText, TextMeasurer } from 'document-schema.js';
 import type { ContentWriteContext } from './content-write';
 import { writeContentStream } from './content-write';
 import type { EmbeddedFace } from './embedded-font';
 import { encodeForShowEmbedded, loadEmbeddedFace } from './embedded-font';
-import type { TextMeasurer } from './measure';
 import { formatNumber } from './serialize';
 import { parseSfnt } from './sfnt';
 import { carlitoRegularBytes } from './test-support/fonts';

@@ -1,7 +1,6 @@
 import type { StyledRun, StyledFragment, WrappedLine, WrapOptions, TextMeasurer, LayoutFont, Color as LayoutColor } from 'document-schema.js';
 
-// StyledRun/StyledFragment/WrappedLine/WrapOptions + TextMeasurer are now owned by document-schema.js (the neutral shared-schema package); re-exported here so this package's barrel keeps importing them from './text-layout'. Only the wrap algorithms below stay defined here.
-export type { StyledRun, StyledFragment, WrappedLine, WrapOptions };
+// StyledRun/StyledFragment/WrappedLine/WrapOptions + TextMeasurer are owned by document-schema.js (the neutral shared-schema package); imported here for the wrap algorithms below. A consumer needing these types itself imports them directly from document-schema.js.
 
 interface BoxAtom {
   readonly kind: 'box';

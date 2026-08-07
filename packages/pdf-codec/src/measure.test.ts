@@ -1,6 +1,7 @@
+import type { TextMeasurer } from 'document-schema.js';
 import { describe, expect, it } from 'vitest';
 import { createFontRegistry } from './font-registry';
-import type { TextMeasurer, VerticalMetricPolicy } from './measure';
+import type { VerticalMetricPolicy } from './measure';
 import { DEFAULT_VERTICAL_METRIC_POLICY, createFontMeasurer, createStandardFontMeasurer } from './measure';
 import { caladeaRegularBytes, carlitoRegularBytes } from './test-support/fonts';
 

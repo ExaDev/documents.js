@@ -6,9 +6,8 @@
 //   3. a family match (same normalized family, but the exact bold/italic combination requested is missing) in `sourceFonts` then `fonts` -- substitutes that family's own regular face, since some real face in the right family beats falling all the way through to a standard-14 substitute, and reports the substitution via `onSubstitution`;
 //   4. an exact match in the vendored substitute table (font-substitutes.ts) -- embeds the matching Carlito/Caladea face and reports the substitution;
 //   5. resolveStandardFont(family, bold, italic) -- unconditional, and never skipped: every LayoutFont this registry is ever asked to resolve gets *some* ResolvedFace back, even when nothing above matched anything.
-import type { LayoutFont, ProvidedFont, FontSubstitution, FontRegistryOptions } from 'document-schema.js';
-// ProvidedFont/FontSubstitution/FontRegistryOptions are now owned by document-schema.js (the neutral shared-schema package); re-exported here so this package's barrel and internal callers keep importing them from './font-registry'. The FontRegistry interface and its PDF-specific ResolvedFace return type stay defined below.
-export type { ProvidedFont, FontSubstitution, FontRegistryOptions };
+// ProvidedFont/FontRegistryOptions are owned by document-schema.js (the neutral shared-schema package); imported here for the resolution logic below. FontSubstitution is document-schema.js-owned too and is not otherwise used in this module -- all three are consumed directly from document-schema.js by other callers. The FontRegistry interface and its PDF-specific ResolvedFace return type stay defined below.
+import type { LayoutFont, ProvidedFont, FontRegistryOptions } from 'document-schema.js';
 import { inflateSync } from 'fflate';
 import type { StandardFontName } from './afm-widths';
 import { CALADEA_BOLD_FONT_DEFLATED_BASE64 } from './assets/caladea-bold';

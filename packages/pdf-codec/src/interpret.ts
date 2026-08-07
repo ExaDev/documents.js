@@ -1,6 +1,6 @@
-import { COLOR_BLACK, type Color as LayoutColor } from 'document-schema.js';
+import { COLOR_BLACK, type Color as LayoutColor, type Point } from 'document-schema.js';
 import { decodeStream } from './filters';
-import type { Matrix, Point } from './matrix';
+import type { Matrix } from './matrix';
 import { BEZIER_KAPPA, IDENTITY_MATRIX, applyMatrix, multiplyMatrices, translationMatrix } from './matrix';
 import type { PdfDict, PdfObject } from './objects';
 import { asArray, asName, asNumber, dictGet } from './objects';

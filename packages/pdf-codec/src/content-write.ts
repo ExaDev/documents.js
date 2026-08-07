@@ -1,13 +1,12 @@
 import type { LayoutEllipse, LayoutImage, LayoutItem, LayoutLine, LayoutPath, LayoutRect, LayoutSubpath, LayoutText } from 'document-schema.js';
 import type { Color as LayoutColor } from 'document-schema.js';
-import type { LayoutFont } from 'document-schema.js';
+import type { LayoutFont, TextMeasurer, UnderlineMetrics } from 'document-schema.js';
 import type { StandardFontName } from './afm-widths';
 import { ByteWriter } from './bytes/writer';
 import type { EmbeddedFace, EmbeddedFaceSubstitution, EmbeddedShow } from './embedded-font';
 import { encodeForShowEmbedded } from './embedded-font';
 import type { Matrix } from './matrix';
 import { BEZIER_KAPPA, multiplyMatrices, rotationMatrix, scaleMatrix, translationMatrix } from './matrix';
-import type { TextMeasurer, UnderlineMetrics } from './measure';
 import type { PdfObject } from './objects';
 import { pdfArray, pdfHexString, pdfNum } from './objects';
 import { formatNumber, writeObject } from './serialize';

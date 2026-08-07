@@ -1,6 +1,5 @@
-import type { LayoutFont } from 'document-schema.js';
+import type { FontSubstitution, LayoutFont } from 'document-schema.js';
 import { describe, expect, it, vi } from 'vitest';
-import type { FontSubstitution } from './font-registry';
 import { createFontRegistry } from './font-registry';
 import { resolveVendoredSubstituteFamily } from './font-substitutes';
 import { resolveStandardFont } from './fonts';

@@ -1,6 +1,5 @@
+// Point is owned by document-schema.js (the neutral shared-schema package); imported here for the affine-matrix machinery below (PDF cm/Tm operand convention). A consumer needing Point itself imports it directly from document-schema.js.
 import type { Point } from 'document-schema.js';
-// Point is now owned by document-schema.js (the neutral shared-schema package); re-exported here so this package's barrel and internal callers keep importing it from './matrix'. The affine-matrix machinery below stays defined here (it is PDF cm/Tm operand convention).
-export type { Point };
 
 // A 6-element affine transformation matrix [a, b, c, d, e, f], representing: | a b 0 | | c d 0 | | e f 1 | exactly PDF's own cm/Tm operand convention (ISO 32000-1 section 8.3.4): a row vector [x y 1] is transformed by post-multiplying it by this matrix, [x' y' 1] = [x y 1] x M.
 export type Matrix = readonly [number, number, number, number, number, number];

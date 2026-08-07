@@ -1,6 +1,5 @@
-import type { LayoutFont, TextMeasurer, UnderlineMetrics } from 'document-schema.js';
-// TextMeasurer + UnderlineMetrics are now owned by document-schema.js (the neutral shared-schema package); re-exported here so this package's barrel and internal callers keep importing them from './measure'. Only the concrete implementations below stay defined here.
-export type { TextMeasurer, UnderlineMetrics };
+// TextMeasurer is owned by document-schema.js (the neutral shared-schema package); imported here for the concrete implementations below. UnderlineMetrics is document-schema.js-owned too and is not otherwise used in this module -- both are consumed directly from document-schema.js by other callers.
+import type { LayoutFont, TextMeasurer } from 'document-schema.js';
 import { STANDARD_METRICS } from './afm-widths';
 import type { EmbeddedFace } from './embedded-font';
 import { encodeForShowEmbedded } from './embedded-font';

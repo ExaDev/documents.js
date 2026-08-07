@@ -1,8 +1,7 @@
+import type { MathBox, MathLayoutItem, PositionedFormula } from 'document-schema.js';
 import { describe, expect, it } from 'vitest';
-import type { PositionedFormula } from './formula';
 import { collectUsedGlyphs, writeFormulaContentStream } from './math-content-write';
 import { loadMathFont } from './math-font';
-import type { MathBox, MathLayoutItem } from 'document-schema.js';
 
 const BLACK = { r: 0, g: 0, b: 0 };
 const RESOURCE = 'MF';

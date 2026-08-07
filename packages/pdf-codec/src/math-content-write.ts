@@ -1,6 +1,5 @@
 import { ByteWriter } from './bytes/writer';
-import type { MathAssembledGlyphs, MathColor, MathGlyphRun, MathRule, MathStroke } from 'document-schema.js';
-import type { PositionedFormula } from './formula';
+import type { MathAssembledGlyphs, MathColor, MathGlyphRun, MathRule, MathStroke, PositionedFormula } from 'document-schema.js';
 import type { MathFont } from './math-font';
 import { pdfDict, pdfHexString, pdfName } from './objects';
 import { formatNumber, writeObject } from './serialize';
