@@ -1,10 +1,7 @@
 import js from '@eslint/js';
+import exadev from '@exadev/eslint-config';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
-import noPointlessReassignment from './eslint-rules/no-pointless-reassignment.js';
-import noSideEffectsInIndex from './eslint-rules/no-side-effects-in-index.js';
-import noNonBarrelIndex from './eslint-rules/no-non-barrel-index.js';
-import noNonBarrelReexport from './eslint-rules/no-non-barrel-reexport.js';
 
 export default tseslint.config(
   {
@@ -37,14 +34,14 @@ export default tseslint.config(
     },
   },
   {
-    // Local custom rules (eslint-rules/*.ts) -- not published as a package, matching this family's own convention of keeping shared dev-tooling config as identical per-repo copies rather than a shared devDependency.
-    plugins: { local: { rules: { 'no-pointless-reassignment': noPointlessReassignment, 'no-side-effects-in-index': noSideEffectsInIndex, 'no-non-barrel-index': noNonBarrelIndex, 'no-non-barrel-reexport': noNonBarrelReexport } } },
-    rules: { 'local/no-pointless-reassignment': 'error', 'local/no-non-barrel-index': 'error' },
+    // These four rules are sourced from the published @exadev/eslint-config package rather than kept as local per-repo copies.
+    plugins: { exadev },
+    rules: { 'exadev/no-pointless-reassignment': 'error', 'exadev/no-non-barrel-index': 'error' },
   },
   {
     // The structural counterpart to the re-export ban below: that rule says re-exports belong only in src/index.ts, this one says src/index.ts may contain only re-exports -- together pinning the barrel to exactly one shape, one that can never have a side effect at import time.
     files: ['src/index.ts'],
-    rules: { 'local/no-side-effects-in-index': 'error' },
+    rules: { 'exadev/no-side-effects-in-index': 'error' },
   },
   {
     // Re-exports belong only in src/index.ts, the public barrel -- a re-export anywhere else risks silently surfacing the wrong thing under a name a consumer expects to mean something else (e.g. this package's own ContentDocumentSchema colliding conceptually with documents.js's differently-shaped, same-named local schema).
@@ -56,7 +53,7 @@ export default tseslint.config(
         { selector: 'ExportAllDeclaration', message: 'Re-exports belong only in src/index.ts (the public barrel). Define or import this locally instead.' },
         { selector: 'ExportNamedDeclaration[source]', message: 'Re-exports belong only in src/index.ts (the public barrel). Define or import this locally instead.' },
       ],
-      'local/no-non-barrel-reexport': 'error',
+      'exadev/no-non-barrel-reexport': 'error',
     },
   },
   {
