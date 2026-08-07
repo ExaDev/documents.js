@@ -24,8 +24,8 @@ importers:
         specifier: ^1.2.4
         version: 1.2.4
       odf.js:
-        specifier: ^2.4.22
-        version: 2.4.22
+        specifier: ^2.5.0
+        version: 2.5.0
       ooxml.js:
         specifier: ^2.10.0
         version: 2.10.0
@@ -2400,8 +2400,8 @@ packages:
     resolution: {integrity: sha512-4a+OsYv9UktOJKE+l1A4OufDgdRF9PifWj+tJnHURo/P+WOxpG4GzUFL9qCalmWauao6ogiG+QvnCovwPoyAWA==}
     engines: {node: '>=12.20.0'}
 
-  odf.js@2.4.22:
-    resolution: {integrity: sha512-6tkvc2mbBr1lrrcehfS/5npXznc37nzABf2fcUHjKiA+Xzx0yV6bO2EGkCyat6gQrhvfdptoFs4gJ/EL7/P1qg==}
+  odf.js@2.5.0:
+    resolution: {integrity: sha512-b+beLxt4Q54sO1gG/gAoKbdKXg3gzuHW4q368yWz/YNRqtVcjEfYrGLRmAdVIKaTk6pjRpzipbCxyOMz6DBODQ==}
     engines: {node: '>=20'}
 
   onetime@6.0.0:
@@ -5258,7 +5258,7 @@ snapshots:
 
   obug@2.1.4: {}
 
-  odf.js@2.4.22:
+  odf.js@2.5.0:
     dependencies:
       document-schema.js: 2.5.2
       fast-xml-parser: 5.10.1
