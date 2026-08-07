@@ -86,7 +86,7 @@
     "markdown-codec": "^1.3.0",
     "odf.js": "^2.5.2",
     "ooxml.js": "^2.10.3",
-    "pdf-codec": "^2.1.4",
+    "pdf-codec": "^2.2.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
