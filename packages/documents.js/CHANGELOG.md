@@ -1,3 +1,10 @@
+## [1.96.2](https://github.com/ExaDev/documents.js/compare/v1.96.1...v1.96.2) (2026-08-07)
+
+
+### Bug Fixes
+
+* render literal braces correctly and catch split-statement default re-exports ([44bd155](https://github.com/ExaDev/documents.js/commit/44bd1550cb9eff0e3bfaffab95b6f63a5680387e))
+
 ## [1.96.1](https://github.com/ExaDev/documents.js/compare/v1.96.0...v1.96.1) (2026-08-07)
 
 # [1.96.0](https://github.com/ExaDev/documents.js/compare/v1.95.6...v1.96.0) (2026-08-07)
