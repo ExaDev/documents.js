@@ -1,5 +1,6 @@
 // Smoke test: the built dist/ artifact loads and works under both ESM and CJS. Run only via `pnpm test:smoke` (tsdown, then vitest scoped to the "smoke" project) -- never part of the default `pnpm test` file set, since it requires a fresh build to mean anything.
 import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { zipPackage, ODF_MEDIA_TYPES } from 'odf.js';
 import * as esm from '../dist/index.js';
@@ -470,5 +471,14 @@ describe('dist/ end-to-end: markdownToPdf then pdfToMarkdown, and markdownToDocx
       .join(' ');
     expect(docxText).toContain('Smoke Test Heading');
     expect(docxText).toContain('markdown');
+  });
+});
+
+// The launcher bin ships in dist/ (package.json's `bin` points at dist/bin.js) and dispatches to the sibling document-cli/document-mcp packages. A bin stripped of its #!/usr/bin/env node shebang would be broken at the OS level, and a bin that bundled or dropped node:child_process would fail at runtime, so this reads the built file directly and asserts both survived the tsdown build.
+describe('dist/bin.js ships as a working launcher', () => {
+  it('exists, retains its shebang, and keeps node:child_process external', () => {
+    const bin = readFileSync(new URL('../dist/bin.js', import.meta.url), 'utf8');
+    expect(bin.startsWith('#!/usr/bin/env node')).toBe(true);
+    expect(bin).toContain('node:child_process');
   });
 });

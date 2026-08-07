@@ -66,9 +66,9 @@ export default tseslint.config(
     rules: { 'local/no-side-effects-in-index': 'error' },
   },
   {
-    // Static Worker-isomorphism guard for runtime src: this package's runtime code must run unchanged in a Cloudflare Worker (no Node-only builtins or globals), mirroring the runtime enforcement the vitest workers pool already applies at test time. Test files and src/test-support/** legitimately use node:fs etc for fixtures and are not published, so they are exempt here -- the runtime surface alone is what matters.
+    // Static Worker-isomorphism guard for runtime src: this package's runtime code must run unchanged in a Cloudflare Worker (no Node-only builtins or globals), mirroring the runtime enforcement the vitest workers pool already applies at test time. Test files and src/test-support/** legitimately use node:fs etc for fixtures and are not published, so they are exempt here -- as is src/bin.ts, the launcher entry point, which spawns child processes (npx/pnpm/yarn/bunx) and so is Node-only by definition; it is an executed entry, never imported into the worker-isomorphic runtime, so exempting it leaves the importable surface pure. The runtime surface alone is what matters.
     files: ['src/**/*.ts'],
-    ignores: ['src/**/*.test.ts', 'src/test-support/**'],
+    ignores: ['src/**/*.test.ts', 'src/test-support/**', 'src/bin.ts'],
     rules: {
       'no-restricted-imports': [
         'error',
