@@ -64,12 +64,31 @@ claude mcp add --transport stdio document-mcp -- npx -y document-mcp
 
 ### Connecting from Codex CLI
 
-Add to `~/.codex/config.toml`:
+```sh
+codex mcp add document-mcp -- npx -y document-mcp
+```
+
+Or add to `~/.codex/config.toml`:
 
 ```toml
 [mcp_servers.document-mcp]
 command = "npx"
 args = ["-y", "document-mcp"]
+```
+
+### Connecting from OpenCode
+
+Add to `opencode.json`:
+
+```json
+{
+  "mcp": {
+    "document-mcp": {
+      "type": "local",
+      "command": ["npx", "-y", "document-mcp"]
+    }
+  }
+}
 ```
 
 ### Connecting from Claude Desktop
