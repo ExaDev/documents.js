@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { el, txt } from '../xml/fragment';
+import { parseOdfLength as parseLength } from '../typed/shared/units';
 import {
   formatPercentageMultiplier,
   formatPt,
-  parseLength,
   paragraphPropertiesToAttributes,
   parseParagraphProperties,
   parseStyleElementProperties,
