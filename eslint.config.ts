@@ -1,7 +1,7 @@
 import js from '@eslint/js';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
-import exadev from '@exadev/eslint-config';
+import exadevRecommendedTypeChecked from '@exadev/eslint-config';
 
 export default tseslint.config(
   {
@@ -18,28 +18,15 @@ export default tseslint.config(
     },
   },
   js.configs.recommended,
-  ...tseslint.configs.recommended,
-  // Type-checked tier: catches floating promises, misused async handlers, unsafe `any`, and invalid template expressions. Requires the `project` parser option set above.
-  ...tseslint.configs.recommendedTypeChecked,
-  ...tseslint.configs.stylisticTypeChecked,
-  {
-    // No inline eslint-disable / config comments anywhere -- an exception belongs in this file, scoped to the file or line it actually applies to, not hidden in the source it's disabling a rule for.
-    linterOptions: { noInlineConfig: true },
-  },
+  // Bundles typescript-eslint's own recommendedTypeChecked + stylisticTypeChecked (recommendedTypeChecked already subsumes plain tseslint.configs.recommended outright -- every one of its 46 rules is a strict subset of recommendedTypeChecked's 73), this package's own four exadev/* rules (self-scoped internally to the barrel, so no files/ignores wiring is needed here), linterOptions.noInlineConfig, consistent-type-assertions banning all type assertions, and ban-ts-comment banning @ts-expect-error outright alongside the preset's own existing @ts-ignore/@ts-nocheck bans -- both relaxed automatically in *.test.ts/*.spec.ts files. See @exadev/eslint-config's own README for the full rule set and rationale. The hand-written PDF codec (now the external pdf-codec dependency, formerly src/pdf/) established the no-type-assertions pattern by narrowing third-party-shaped values through PdfObject's own `kind` discriminant rather than a cast; every other module in this package follows the same convention.
+  ...exadevRecommendedTypeChecked,
   {
     rules: {
-      // No type assertions anywhere: narrow with a guard or parse with Zod instead. The hand-written PDF codec (now the external pdf-codec dependency, formerly src/pdf/) established this pattern by narrowing third-party-shaped values (raw bytes, loosely-typed parsed tokens) through PdfObject's own `kind` discriminant rather than a cast; every other module in this package follows the same convention.
-      '@typescript-eslint/consistent-type-assertions': ['error', { assertionStyle: 'never' }],
       '@typescript-eslint/consistent-type-imports': ['error', { fixStyle: 'inline-type-imports' }],
     },
   },
   {
-    // Custom rules sourced from the published @exadev/eslint-config package rather than kept as local per-repo copies -- previously identical eslint-rules/*.ts files duplicated across this whole repo family, now a single source of truth shared by all of them.
-    plugins: { exadev },
-    rules: { 'exadev/no-non-barrel-index': 'error', 'exadev/no-pointless-reassignment': 'error' },
-  },
-  {
-    // Re-exports belong only in src/index.ts, the public barrel -- a re-export anywhere else risks silently surfacing the wrong thing under a name a consumer expects to mean something else. Two rules, not one: the AST-selector ban below catches the single-statement forms (export * from / export {x} from); local/no-non-barrel-reexport catches the same coupling split across an import and a bare export instead, which neither selector can see since it needs to correlate two separate statements.
+    // Re-exports belong only in src/index.ts, the public barrel -- a re-export anywhere else risks silently surfacing the wrong thing under a name a consumer expects to mean something else. The AST-selector ban here catches the single-statement forms (export * from / export {x} from); the bundle's own exadev/no-non-barrel-reexport (self-scoped away from src/index.ts) catches the same coupling split across an import and a bare export instead, which the selector can't see since it needs to correlate two separate statements.
     files: ['src/**/*.ts'],
     ignores: [
       'src/index.ts',
@@ -54,13 +41,12 @@ export default tseslint.config(
         { selector: 'ExportAllDeclaration', message: 'Re-exports belong only in src/index.ts (the public barrel). Define or import this locally instead.' },
         { selector: 'ExportNamedDeclaration[source]', message: 'Re-exports belong only in src/index.ts (the public barrel). Define or import this locally instead.' },
       ],
-      'exadev/no-non-barrel-reexport': 'error',
     },
   },
   {
-    // The structural counterpart to the re-export ban above: that rule says re-exports belong only in src/index.ts, this one says src/index.ts may contain only re-exports -- together pinning the barrel to exactly one shape, one that can never have a side effect at import time.
-    files: ['src/index.ts'],
-    rules: { 'exadev/no-side-effects-in-index': 'error' },
+    // The bundle's own exadev/no-non-barrel-reexport already self-scopes away from src/index.ts; these four files are further, repo-specific exceptions the bundle has no way to know about -- the same deliberate re-export points named above.
+    files: ['src/odf-package/manifest.ts', 'src/model/geometry.ts', 'src/model/style.ts', 'src/model/color.ts'],
+    rules: { 'exadev/no-non-barrel-reexport': 'off' },
   },
   {
     // Static Worker-isomorphism guard for runtime src: this package's runtime code must run unchanged in a Cloudflare Worker (no Node-only builtins or globals), mirroring the runtime enforcement the vitest workers pool already applies at test time. Test files and src/test-support/** legitimately use node:fs etc for fixtures and are not published, so they are exempt here -- as is src/bin.ts, the launcher entry point, which spawns child processes (npx/pnpm/yarn/bunx) and so is Node-only by definition; it is an executed entry, never imported into the worker-isomorphic runtime, so exempting it leaves the importable surface pure. The runtime surface alone is what matters.
