@@ -102,7 +102,7 @@ jobs:
 
   release:
     name: Release
-    needs: [commitlint, lint, typecheck, test, test-smoke]
+    needs: [commitlint, lint, typecheck, test, test-smoke, validate-plugin]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 15

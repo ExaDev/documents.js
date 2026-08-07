@@ -52,8 +52,15 @@ const config: Options = {
     [
       '@semantic-release/git',
       {
-        assets: ['CHANGELOG.md', 'package.json'],
+        assets: ['CHANGELOG.md', 'package.json', '.claude-plugin/plugin.json'],
         message: 'chore(release): ${nextRelease.version} [skip ci]',
+      },
+    ],
+    [
+      '@semantic-release/exec',
+      {
+        // Sync the Claude Code plugin manifest version with the npm package version after semantic-release bumps package.json.
+        prepareCmd: 'node -e "const fs=require(\'fs\'); const p=JSON.parse(fs.readFileSync(\'.claude-plugin/plugin.json\',\'utf8\')); p.version=\'${nextRelease.version}\'; fs.writeFileSync(\'.claude-plugin/plugin.json\', JSON.stringify(p,null,2)+\'\\n\')"',
       },
     ],
   ],
