@@ -1,3 +1,10 @@
+## [2.10.2](https://github.com/ExaDev/ooxml.js/compare/v2.10.1...v2.10.2) (2026-08-07)
+
+
+### Bug Fixes
+
+* render literal braces correctly and catch split-statement default re-exports ([98cd285](https://github.com/ExaDev/ooxml.js/commit/98cd2850f9dd69a418bc3d33300232f68cbad6a5))
+
 ## [2.10.1](https://github.com/ExaDev/ooxml.js/compare/v2.10.0...v2.10.1) (2026-08-07)
 
 # [2.10.0](https://github.com/ExaDev/ooxml.js/compare/v2.9.5...v2.10.0) (2026-08-07)
