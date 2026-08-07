@@ -5,6 +5,7 @@
     "types": ["node"]
   },
   "include": [
+    "src/bin.ts",
     "src/**/*.test.ts",
     "src/test-support/**/*.ts",
     "eslint-rules/**/*.ts",
