@@ -80,6 +80,8 @@ Or from within a running Claude Code session:
 /plugin install document-mcp@exadev
 ```
 
+Run `/reload-plugins` to activate in an already-running session. In Claude Desktop or on claude.ai: **Customize → Plugins → Browse plugins**, search for `document-mcp`, and install.
+
 ### Connecting from Codex CLI
 
 ```sh
