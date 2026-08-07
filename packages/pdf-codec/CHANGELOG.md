@@ -1,3 +1,10 @@
+# [2.2.0](https://github.com/ExaDev/pdf-codec/compare/v2.1.4...v2.2.0) (2026-08-07)
+
+
+### Features
+
+* ban split-statement import-then-export re-exports ([d7b14c4](https://github.com/ExaDev/pdf-codec/commit/d7b14c4ecc01c70ed61983770ff7564e37c84c9a))
+
 ## [2.1.4](https://github.com/ExaDev/pdf-codec/compare/v2.1.3...v2.1.4) (2026-08-07)
 
 ## [2.1.3](https://github.com/ExaDev/pdf-codec/compare/v2.1.2...v2.1.3) (2026-08-07)
