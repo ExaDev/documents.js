@@ -2,6 +2,7 @@ import js from '@eslint/js';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 import noNonBarrelIndex from './eslint-rules/no-non-barrel-index.js';
+import noNonBarrelReexport from './eslint-rules/no-non-barrel-reexport.js';
 import noPointlessReassignment from './eslint-rules/no-pointless-reassignment.js';
 import noSideEffectsInIndex from './eslint-rules/no-side-effects-in-index.js';
 
@@ -37,11 +38,11 @@ export default tseslint.config(
   },
   {
     // Local custom rules (eslint-rules/*.ts) -- not published as a package, matching this family's own convention of keeping shared dev-tooling config as identical per-repo copies rather than a shared devDependency.
-    plugins: { local: { rules: { 'no-non-barrel-index': noNonBarrelIndex, 'no-pointless-reassignment': noPointlessReassignment, 'no-side-effects-in-index': noSideEffectsInIndex } } },
+    plugins: { local: { rules: { 'no-non-barrel-index': noNonBarrelIndex, 'no-non-barrel-reexport': noNonBarrelReexport, 'no-pointless-reassignment': noPointlessReassignment, 'no-side-effects-in-index': noSideEffectsInIndex } } },
     rules: { 'local/no-non-barrel-index': 'error', 'local/no-pointless-reassignment': 'error' },
   },
   {
-    // Re-exports belong only in src/index.ts, the public barrel -- a re-export anywhere else risks silently surfacing the wrong thing under a name a consumer expects to mean something else.
+    // Re-exports belong only in src/index.ts, the public barrel -- a re-export anywhere else risks silently surfacing the wrong thing under a name a consumer expects to mean something else. Two rules, not one: the AST-selector ban below catches the single-statement forms (export * from / export {x} from); local/no-non-barrel-reexport catches the same coupling split across an import and a bare export instead, which neither selector can see since it needs to correlate two separate statements.
     files: ['src/**/*.ts'],
     ignores: [
       'src/index.ts',
@@ -56,6 +57,7 @@ export default tseslint.config(
         { selector: 'ExportAllDeclaration', message: 'Re-exports belong only in src/index.ts (the public barrel). Define or import this locally instead.' },
         { selector: 'ExportNamedDeclaration[source]', message: 'Re-exports belong only in src/index.ts (the public barrel). Define or import this locally instead.' },
       ],
+      'local/no-non-barrel-reexport': 'error',
     },
   },
   {
