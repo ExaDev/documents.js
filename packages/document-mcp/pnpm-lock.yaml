@@ -64,8 +64,8 @@ importers:
         specifier: ^2.3.1
         version: 2.4.0
       pdf-codec:
-        specifier: ^2.1.1
-        version: 2.1.1
+        specifier: ^2.1.3
+        version: 2.1.3
       publint:
         specifier: ^0.3.22
         version: 0.3.23
@@ -1519,6 +1519,10 @@ packages:
     resolution: {integrity: sha512-hhBvcQDF2nvcMplRrD+YF6OGx9+St4cb9anRETigF2OJ8qoDnE8q2CmCqHjBLHlDZwpjBk4hjDYC5f7Es4v8Yw==}
     engines: {node: '>=20'}
 
+  document-schema.js@2.5.3:
+    resolution: {integrity: sha512-xI4EDKTqzNCKuXkeIMsQ0P0vnM9+vDap26pstM2RkgNmPOj3z3jDjwAr8eqPXANXbTmAumRnCuRPMaeOHRBCUg==}
+    engines: {node: '>=20'}
+
   documents.js@1.95.1:
     resolution: {integrity: sha512-zHhylfsX6DpZR3jUKIF5naM2ycKca2zr/rcRoNiibW05EAy5c4aRtJ/fUuftEVaC4g+D1c/eajzGhPwUzGpPhg==}
     engines: {node: '>=20'}
@@ -2451,12 +2455,12 @@ packages:
   pathe@2.0.3:
     resolution: {integrity: sha512-WUjGcAqP1gQacoQe+OBJsFA7Ld4DyXuUIjZ5cc75cLHvJ7dtNsTugphxIADwspS+AraAUePCKrSVtPLFj/F88w==}
 
-  pdf-codec@2.1.0:
-    resolution: {integrity: sha512-xwCMoAX/NPG5zezJ1WWL09WQgxCUSfW0CIGXYseZdFQQ0B1PXJPQ8bU4nDmZlV30P7+UkRN+QZZW0VY2FgKaZw==}
-    engines: {node: '>=20'}
-
   pdf-codec@2.1.1:
     resolution: {integrity: sha512-rxHPv2Yu6V8rCNSVxlDC5t7aPcF4dLuuY1DSpVi4lekhSkc2XFu6zA6VRvw6chy+gkQHHq9rvOjMoNl5jp+0zA==}
+    engines: {node: '>=20'}
+
+  pdf-codec@2.1.3:
+    resolution: {integrity: sha512-pDZpLyjx7pkCOYLYxK0ETZYMBWSkSm9/ewCZEe1D4MGpg6otTQdiwbfHIa41cTt7WwnnQ/FcfBq8Z7BIa1FtaA==}
     engines: {node: '>=20'}
 
   picocolors@1.1.1:
@@ -4438,6 +4442,10 @@ snapshots:
     dependencies:
       zod: 4.4.3
 
+  document-schema.js@2.5.3:
+    dependencies:
+      zod: 4.4.3
+
   documents.js@1.95.1:
     dependencies:
       byte-codec: 1.0.4
@@ -4446,7 +4454,7 @@ snapshots:
       markdown-codec: 1.2.0
       odf.js: 2.4.20
       ooxml.js: 2.9.1
-      pdf-codec: 2.1.0
+      pdf-codec: 2.1.1
       zod: 4.4.3
 
   dot-prop@5.3.0:
@@ -5285,17 +5293,17 @@ snapshots:
 
   pathe@2.0.3: {}
 
-  pdf-codec@2.1.0:
+  pdf-codec@2.1.1:
     dependencies:
       byte-codec: 1.0.4
       document-schema.js: 2.5.1
       fflate: 0.8.3
       zod: 4.4.3
 
-  pdf-codec@2.1.1:
+  pdf-codec@2.1.3:
     dependencies:
       byte-codec: 1.0.4
-      document-schema.js: 2.5.1
+      document-schema.js: 2.5.3
       fflate: 0.8.3
       zod: 4.4.3
 
