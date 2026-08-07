@@ -1,3 +1,10 @@
+## [1.5.7](https://github.com/ExaDev/document-mcp/compare/v1.5.6...v1.5.7) (2026-08-07)
+
+
+### Bug Fixes
+
+* gate release on plugin validation + sync plugin version via release ([aef7fce](https://github.com/ExaDev/document-mcp/commit/aef7fcedab2e8b9e703d87c80a861e2364f8b563))
+
 ## [1.5.6](https://github.com/ExaDev/document-mcp/compare/v1.5.5...v1.5.6) (2026-08-07)
 
 
