@@ -1,0 +1,14 @@
+{
+  "name": "exadev",
+  "owner": {
+    "name": "ExaDev",
+    "url": "https://github.com/ExaDev"
+  },
+  "plugins": [
+    {
+      "name": "document-mcp",
+      "source": ".",
+      "description": "MCP server exposing documents.js's document-conversion, .odb, metadata, and font tooling as MCP tools"
+    }
+  ]
+}
