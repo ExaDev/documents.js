@@ -1,3 +1,10 @@
+## [2.5.2](https://github.com/ExaDev/odf.js/compare/v2.5.1...v2.5.2) (2026-08-07)
+
+
+### Bug Fixes
+
+* render literal braces correctly and catch split-statement default re-exports ([22b149d](https://github.com/ExaDev/odf.js/commit/22b149dae15bf60cb943f1741d51a95055db3bc1))
+
 ## [2.5.1](https://github.com/ExaDev/odf.js/compare/v2.5.0...v2.5.1) (2026-08-07)
 
 # [2.5.0](https://github.com/ExaDev/odf.js/compare/v2.4.23...v2.5.0) (2026-08-07)
