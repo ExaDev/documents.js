@@ -1,10 +1,7 @@
 import js from '@eslint/js';
+import exadev from '@exadev/eslint-config';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
-import noNonBarrelReexport from './eslint-rules/no-non-barrel-reexport.js';
-import noPointlessReassignment from './eslint-rules/no-pointless-reassignment.js';
-import noSideEffectsInIndex from './eslint-rules/no-side-effects-in-index.js';
-import noNonBarrelIndex from './eslint-rules/no-non-barrel-index.js';
 
 export default tseslint.config(
   {
@@ -37,12 +34,12 @@ export default tseslint.config(
     },
   },
   {
-    // Local custom rules (eslint-rules/*.ts) -- not published as a package, matching this family's own convention of keeping shared dev-tooling config as identical per-repo copies rather than a shared devDependency.
-    plugins: { local: { rules: { 'no-pointless-reassignment': noPointlessReassignment, 'no-side-effects-in-index': noSideEffectsInIndex, 'no-non-barrel-index': noNonBarrelIndex, 'no-non-barrel-reexport': noNonBarrelReexport } } },
-    rules: { 'local/no-pointless-reassignment': 'error', 'local/no-non-barrel-index': 'error' },
+    // These four rules are sourced from the published @exadev/eslint-config package rather than kept as local per-repo copies.
+    plugins: { exadev },
+    rules: { 'exadev/no-pointless-reassignment': 'error', 'exadev/no-non-barrel-index': 'error' },
   },
   {
-    // Re-exports belong only in src/index.ts, the public barrel -- a re-export anywhere else risks silently surfacing the wrong thing under a name a consumer expects to mean something else. Two rules: the AST-selector ban below catches the single-statement forms; local/no-non-barrel-reexport catches the same coupling split across an import and a bare export instead, which no selector can see since it needs to correlate two separate statements.
+    // Re-exports belong only in src/index.ts, the public barrel -- a re-export anywhere else risks silently surfacing the wrong thing under a name a consumer expects to mean something else. Two rules: the AST-selector ban below catches the single-statement forms; exadev/no-non-barrel-reexport catches the same coupling split across an import and a bare export instead, which no selector can see since it needs to correlate two separate statements.
     files: ['src/**/*.ts'],
     ignores: ['src/index.ts'],
     rules: {
@@ -51,13 +48,13 @@ export default tseslint.config(
         { selector: 'ExportAllDeclaration', message: 'Re-exports belong only in src/index.ts (the public barrel). Define or import this locally instead.' },
         { selector: 'ExportNamedDeclaration[source]', message: 'Re-exports belong only in src/index.ts (the public barrel). Define or import this locally instead.' },
       ],
-      'local/no-non-barrel-reexport': 'error',
+      'exadev/no-non-barrel-reexport': 'error',
     },
   },
   {
     // The structural counterpart to the re-export ban above: that rule says re-exports belong only in src/index.ts, this one says src/index.ts may contain only re-exports -- together pinning the barrel to exactly one shape, one that can never have a side effect at import time.
     files: ['src/index.ts'],
-    rules: { 'local/no-side-effects-in-index': 'error' },
+    rules: { 'exadev/no-side-effects-in-index': 'error' },
   },
   {
     // Static Worker-isomorphism guard for runtime src: this is a library consumed inside Cloudflare Workers, so node:* and bare-Node-builtin imports and the Node-only Buffer global are banned from published code. Test files and test-support legitimately use node:fs for fixtures and are not published, so they are exempt. The workerd runtime test (pnpm test:workers) enforces the same property dynamically; this rule catches violations at lint time before the runtime test ever runs.
