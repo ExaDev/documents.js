@@ -1,3 +1,10 @@
+# [2.10.0](https://github.com/ExaDev/ooxml.js/compare/v2.9.5...v2.10.0) (2026-08-07)
+
+
+### Features
+
+* **lint:** ban a re-export split across an import and a bare export ([207a1fa](https://github.com/ExaDev/ooxml.js/commit/207a1faa898374b14b40f9fd2cf8516c4c343b4a))
+
 ## [2.9.5](https://github.com/ExaDev/ooxml.js/compare/v2.9.4...v2.9.5) (2026-08-06)
 
 ## [2.9.4](https://github.com/ExaDev/ooxml.js/compare/v2.9.3...v2.9.4) (2026-08-06)
