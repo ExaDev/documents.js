@@ -1,3 +1,11 @@
+# [1.97.0](https://github.com/ExaDev/documents.js/compare/v1.96.4...v1.97.0) (2026-08-07)
+
+
+### Features
+
+* add an autofix to the split-statement re-export rule ([430b243](https://github.com/ExaDev/documents.js/commit/430b24394bd09c15c8389b2a8edf358e2e14fd87))
+* add npx launcher bin dispatching to document-cli/document-mcp ([bac2354](https://github.com/ExaDev/documents.js/commit/bac235480f353971677bac7aff4edc3acd8ef9de))
+
 ## [1.96.4](https://github.com/ExaDev/documents.js/compare/v1.96.3...v1.96.4) (2026-08-07)
 
 ## [1.96.3](https://github.com/ExaDev/documents.js/compare/v1.96.2...v1.96.3) (2026-08-07)
