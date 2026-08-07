@@ -1,3 +1,10 @@
+# [2.11.0](https://github.com/ExaDev/ooxml.js/compare/v2.10.3...v2.11.0) (2026-08-07)
+
+
+### Features
+
+* add an autofix to the split-statement re-export rule ([17d820e](https://github.com/ExaDev/ooxml.js/commit/17d820e176f6ae77315904dc34ba079685a3db64))
+
 ## [2.10.3](https://github.com/ExaDev/ooxml.js/compare/v2.10.2...v2.10.3) (2026-08-07)
 
 ## [2.10.2](https://github.com/ExaDev/ooxml.js/compare/v2.10.1...v2.10.2) (2026-08-07)
