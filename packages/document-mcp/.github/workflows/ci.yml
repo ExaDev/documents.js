@@ -50,6 +50,14 @@ jobs:
       - run: pnpm build
       - run: pnpm exec attw --pack
 
+  validate-plugin:
+    name: Validate plugin manifest
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - run: npx @anthropic-ai/claude-code plugin validate --strict .
+
   test:
     name: Test
     runs-on: ubuntu-latest
