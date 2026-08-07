@@ -1,3 +1,10 @@
+# [2.6.0](https://github.com/ExaDev/document-schema.js/compare/v2.5.3...v2.6.0) (2026-08-07)
+
+
+### Features
+
+* ban split-statement import-then-export re-exports ([dd19319](https://github.com/ExaDev/document-schema.js/commit/dd19319e9285ac850cb04e58d9da8e1ab5778e08))
+
 ## [2.5.3](https://github.com/ExaDev/document-schema.js/compare/v2.5.2...v2.5.3) (2026-08-06)
 
 ## [2.5.2](https://github.com/ExaDev/document-schema.js/compare/v2.5.1...v2.5.2) (2026-08-06)
