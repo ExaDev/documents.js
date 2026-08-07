@@ -1,6 +1,6 @@
 export { packageCodec, xmlCodec, decodePackage, encodePackage } from './codec';
 export { parsePackage } from './package-io/read';
-export { serializePackage } from './package-io/write';
+export { serializePackage, MANIFEST_PART, MIMETYPE_PART } from './package-io/write';
 export { parseXml } from './xml/parse';
 export { buildXml } from './xml/build';
 export { unzipPackage, zipPackage } from './zip';
@@ -41,7 +41,7 @@ export type { OdfExtension } from './media-type';
 export { sniffImageFormat } from './image/sniff';
 export type { ImageFormat } from './image/sniff';
 
-export { readMimetype, writeMimetype, MIMETYPE_PART } from './mimetype';
+export { readMimetype, writeMimetype } from './mimetype';
 
 export { el, txt } from './xml/fragment';
 export { encodeXmlText } from './xml/entities';
@@ -53,7 +53,6 @@ export {
   syncManifest,
   validateManifest,
   setDocumentMediaType,
-  MANIFEST_PART,
   ManifestEntrySchema,
   ManifestSchema,
   ManifestProblemSchema,
@@ -67,7 +66,6 @@ export {
   parseStyleElementProperties,
   textPropertiesToAttributes,
   paragraphPropertiesToAttributes,
-  parseLength,
   formatPt,
   formatPercentageMultiplier,
 } from './styles/properties';
@@ -83,7 +81,7 @@ export { ensureSpan } from './styles/span';
 export { rootElement, findChildElement, childrenWithTag, elementsWithTag, attrValue } from './xml/query';
 export { decodeXmlText } from './xml/entities';
 
-export { parseOdfLength, formatOdfLength } from './typed/shared/units';
+export { parseOdfLength, parseOdfLength as parseLength, formatOdfLength } from './typed/shared/units';
 export type { LengthUnit } from './typed/shared/units';
 
 export { columnIndexToLetters, cellReference, columnLettersToIndex, parseCellReference, TableCursor } from './typed/shared/a1';

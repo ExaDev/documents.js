@@ -2,8 +2,6 @@ import type { Package } from './model/package';
 import { MIMETYPE_PART } from './package-io/write';
 import { base64ToBytes, bytesToBase64 } from './util/base64';
 
-export { MIMETYPE_PART };
-
 // Reads the raw "mimetype" part's bytes as a UTF-8 string, or undefined if the package has no mimetype part at all (or if that part was somehow parsed as XML rather than binary, which no valid mimetype content -- a bare media-type string -- would ever trigger). Returns undefined rather than throwing: a package with no mimetype part is malformed ODF, but reading that absence is not itself an error this function needs to report.
 export function readMimetype(pkg: Package): string | undefined {
   const part = pkg.parts[MIMETYPE_PART];

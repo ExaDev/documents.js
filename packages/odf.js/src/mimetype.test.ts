@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Package } from './model/package';
-import { readMimetype, writeMimetype, MIMETYPE_PART } from './mimetype';
+import { readMimetype, writeMimetype } from './mimetype';
+import { MIMETYPE_PART } from './package-io/write';
 import { encodePackage } from './codec';
 import { assertMimetypeEntryLayout } from './test-support/zip';
 

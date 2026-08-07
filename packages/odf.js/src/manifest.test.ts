@@ -4,6 +4,7 @@ import { bytesToBase64 } from './util/base64';
 import { buildXml } from './xml/build';
 import { el, txt } from './xml/fragment';
 import { readMimetype } from './mimetype';
+import { MANIFEST_PART } from './package-io/write';
 import {
   buildManifest,
   readManifest,
@@ -11,7 +12,6 @@ import {
   syncManifest,
   validateManifest,
   writeManifest,
-  MANIFEST_PART,
   type Manifest,
 } from './manifest';
 
