@@ -90,7 +90,7 @@ export { parseOdfColor, formatOdfColor } from './typed/shared/color';
 
 export { parsePageSize, parseMargins, parseBox, parseLinePoints } from './typed/shared/geometry';
 
-export { type Alignment, AlignmentSchema } from './typed/shared/style';
+export { type Alignment, AlignmentSchema } from 'document-schema.js';
 
 export { getOdfSpaceCount, measureOdfNodeLength, sumOdfNodeLength, decodeOdfText } from './typed/shared/text';
 

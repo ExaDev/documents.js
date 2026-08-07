@@ -23,28 +23,9 @@ export default tseslint.config(
   {
     rules: {
       '@typescript-eslint/consistent-type-imports': ['error', { fixStyle: 'inline-type-imports' }],
+      // This package's src/index.ts is its public entry point (package.json exports), so it keeps one barrel: override the default 'banned' barrel-policy to 'single'. The umbrella catches both single- and split-statement re-exports outside src/index.ts, replacing the hand-rolled no-restricted-syntax + no-non-barrel-reexport wiring this config used to carry.
+      'exadev/barrel-policy': ['error', { mode: 'single' }],
     },
-  },
-  {
-    // Re-exports belong only in src/index.ts, the public barrel -- a re-export anywhere else risks silently surfacing the wrong thing under a name a consumer expects to mean something else. The AST-selector ban here catches the single-statement forms; the bundle's own exadev/no-non-barrel-reexport (self-scoped away from src/index.ts) catches the split-statement form.
-    files: ['src/**/*.ts'],
-    ignores: [
-      'src/index.ts',
-      // A deliberate, pre-existing canonical re-export point: document-schema.js's Alignment/AlignmentSchema already IS ODF's paragraph-alignment vocabulary one-for-one, so this file re-exports it as the one place a reader looks for "ODF alignment" rather than duplicating it.
-      'src/typed/shared/style.ts',
-    ],
-    rules: {
-      'no-restricted-syntax': [
-        'error',
-        { selector: 'ExportAllDeclaration', message: 'Re-exports belong only in src/index.ts (the public barrel). Define or import this locally instead.' },
-        { selector: 'ExportNamedDeclaration[source]', message: 'Re-exports belong only in src/index.ts (the public barrel). Define or import this locally instead.' },
-      ],
-    },
-  },
-  {
-    // The bundle's own exadev/no-non-barrel-reexport already self-scopes away from src/index.ts (see the shared @exadev/eslint-config rule); this file is a further, repo-specific exception the bundle has no way to know about -- the same deliberate canonical re-export point named above.
-    files: ['src/typed/shared/style.ts'],
-    rules: { 'exadev/no-non-barrel-reexport': 'off' },
   },
   {
     // Static Worker-isomorphism guard: this is a runtime-published library that must run in a Cloudflare Worker (workerd) as well as Node, so node: imports and the Node-only Buffer global are banned in runtime src. Test files and test-support legitimately use node:fs for fixtures -- they are not published, so they are exempt here. typeof-process isomorphic checks remain legitimate, so `process` is deliberately not banned as a global; the import ban catches the real surface. The patterns use `regex` (tested against the import specifier) rather than `group`: `group` is gitignore-matched via the `ignore` package with allowRelativePaths, so a bare name like `util` or `path` matches ANY path segment and false-positives on relative imports such as `./util/base64` or `./typed/shared/path`; the anchored `regex` matches only exact builtin specifiers.
