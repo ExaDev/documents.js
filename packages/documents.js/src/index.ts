@@ -420,12 +420,11 @@ export { odbReportToDocx, odbReportToOdt, odbReportToPdf } from './convert/conve
 export type { FirebirdBackupSummary, ReadFirebirdBackupResult } from './firebird/backup';
 export {
   FirebirdBackupFormatError,
-  FirebirdCompositeRecordUnsupportedError,
-  FirebirdSchemaParseError,
   readFirebirdBackup,
   SUPPORTED_BACKUP_FORMAT_VERSION as FIREBIRD_SUPPORTED_BACKUP_FORMAT_VERSION,
 } from './firebird/backup';
-export { FirebirdDataParseError } from './firebird/data';
+export { FirebirdSchemaParseError } from './firebird/schema';
+export { FirebirdCompositeRecordUnsupportedError, FirebirdDataParseError } from './firebird/data';
 export { FirebirdUnsupportedFieldTypeError } from './firebird/blr-types';
 export { FirebirdBackupParseError } from './firebird/reader';
 
