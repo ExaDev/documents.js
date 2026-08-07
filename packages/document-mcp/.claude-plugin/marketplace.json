@@ -1,5 +1,6 @@
 {
   "name": "exadev",
+  "description": "ExaDev document tooling — MCP server for document conversion, .odb extraction, metadata, and font inspection via documents.js",
   "owner": {
     "name": "ExaDev",
     "url": "https://github.com/ExaDev"
