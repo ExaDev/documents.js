@@ -50,21 +50,15 @@ graph TD
 
 ## Getting started
 
-Requires Node.js `>=20` and pnpm `11.6.0` (pinned via `packageManager` in `package.json`).
+Run the server directly — no install step needed:
 
 ```sh
-pnpm install
-pnpm build         # turbo -> tsdown -> dist/ (ESM + CJS + .d.ts)
-pnpm typecheck     # turbo -> tsc --noEmit
-pnpm lint          # turbo -> eslint . --fix --cache --max-warnings 0
-pnpm test          # turbo -> vitest run --project unit
-pnpm test:workers  # turbo -> vitest under the real Cloudflare Workers runtime (workerd) via @cloudflare/vitest-pool-workers, driving createServer() through an in-memory JSON-RPC pair
-pnpm test:smoke    # turbo -> tsdown then vitest --project smoke -- spawns dist/bin.js as a real subprocess driven over genuine MCP stdio
+npx document-mcp
 ```
 
-Once published, run the server directly via `npx document-mcp` (stdio transport, no install step needed).
-
 ### Connecting from Claude Code / Claude Desktop
+
+Add an entry to the client's MCP server configuration (`claude mcp add` for Claude Code, or the `mcpServers` block in Claude Desktop's config file):
 
 Add an entry to the client's MCP server configuration (`claude mcp add` for Claude Code, or the `mcpServers` block in Claude Desktop's config file):
 
@@ -90,6 +84,20 @@ Or, for local development against a checkout of this repository rather than the 
     }
   }
 }
+```
+
+### Development
+
+Requires Node.js `>=20` and pnpm `11.6.0` (pinned via `packageManager` in `package.json`).
+
+```sh
+pnpm install
+pnpm build         # turbo -> tsdown -> dist/ (ESM + CJS + .d.ts)
+pnpm typecheck     # turbo -> tsc --noEmit
+pnpm lint          # turbo -> eslint . --fix --cache --max-warnings 0
+pnpm test          # turbo -> vitest run --project unit
+pnpm test:workers  # turbo -> vitest under the real Cloudflare Workers runtime (workerd) via @cloudflare/vitest-pool-workers, driving createServer() through an in-memory JSON-RPC pair
+pnpm test:smoke    # turbo -> tsdown then vitest --project smoke -- spawns dist/bin.js as a real subprocess driven over genuine MCP stdio
 ```
 
 ## Document I/O
