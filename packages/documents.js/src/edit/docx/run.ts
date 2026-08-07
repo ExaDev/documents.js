@@ -1,7 +1,7 @@
 import type { XmlElement, XmlNode } from 'ooxml.js';
 import { textContent } from 'ooxml.js';
-import type { LayoutColor } from '../../model/color';
-import { colorToRgbHex } from '../../model/color';
+import type { Color as LayoutColor } from 'document-schema.js';
+import { colorToRgbHex } from 'document-schema.js';
 import { removeChild, setAttr } from '../../xml/edit';
 import { encodeXmlText, needsSpacePreserve } from '../../xml/entities';
 import { el, txt } from '../../xml/fragment';

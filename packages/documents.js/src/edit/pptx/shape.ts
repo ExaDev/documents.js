@@ -1,9 +1,9 @@
 import type { XmlElement, XmlNode } from 'ooxml.js';
 import { attr, textContent } from 'ooxml.js';
-import type { Box } from '../../model/geometry';
-import type { LayoutColor } from '../../model/color';
+import type { Box } from 'document-schema.js';
+import type { Color as LayoutColor } from 'document-schema.js';
 import { emuToPt, ptToEmu } from '../../model/units';
-import type { Alignment } from '../../model/style';
+import type { Alignment } from 'document-schema.js';
 import { removeAttr, removeChild, setAttr } from '../../xml/edit';
 import { encodeXmlText, needsSpacePreserve } from '../../xml/entities';
 import { el, txt } from '../../xml/fragment';

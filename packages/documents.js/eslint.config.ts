@@ -28,11 +28,6 @@ export default tseslint.config(
     },
   },
   {
-    // Four non-barrel files deliberately re-export from sibling packages (odf.js / document-schema.js) under documents.js's own established names -- the barrel-policy umbrella flags re-exports outside src/index.ts, so these repo-specific exceptions turn it off for exactly those files.
-    files: ['src/odf-package/manifest.ts', 'src/model/geometry.ts', 'src/model/style.ts', 'src/model/color.ts'],
-    rules: { 'exadev/barrel-policy': 'off' },
-  },
-  {
     // Static Worker-isomorphism guard for runtime src: this package's runtime code must run unchanged in a Cloudflare Worker (no Node-only builtins or globals), mirroring the runtime enforcement the vitest workers pool already applies at test time. Test files and src/test-support/** legitimately use node:fs etc for fixtures and are not published, so they are exempt here -- as is src/bin.ts, the launcher entry point, which spawns child processes (npx/pnpm/yarn/bunx) and so is Node-only by definition; it is an executed entry, never imported into the worker-isomorphic runtime, so exempting it leaves the importable surface pure. The runtime surface alone is what matters.
     files: ['src/**/*.ts'],
     ignores: ['src/**/*.test.ts', 'src/test-support/**', 'src/bin.ts'],

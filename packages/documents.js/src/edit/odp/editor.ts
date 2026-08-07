@@ -1,7 +1,7 @@
 import type { Package, XmlElement } from 'odf.js';
 import { decodePackage, encodePackage, formatOdfLength, parseOdfLength } from 'odf.js';
 import { attr } from 'ooxml.js';
-import type { PageSize } from '../../model/geometry';
+import type { PageSize } from 'document-schema.js';
 import { resolveMetadataTimestamps } from '../../model/metadata';
 import type { ClockPort } from '../../ports/clock';
 import { systemClock } from '../../ports/clock';

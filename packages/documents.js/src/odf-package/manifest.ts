@@ -3,20 +3,7 @@ import { findChildElement, ODF_MEDIA_TYPES, rootElement, syncManifest as syncOdf
 
 // odf.js already owns META-INF/manifest.xml end to end -- reading, deriving, writing, syncing, and validating it -- unlike ooxml.js, which only ever reads OPC relationships and leaves writing new ones to this package's own src/opc/rels.ts. See odf.js's own src/manifest.ts for why: ODF's manifest is the one part every package unconditionally requires, and getting it right (every part listed, every media type correct, the root entry's type tied to the "mimetype" part) is exhaustive enough that odf.js provides first-class read AND write support directly.
 //
-// This file is therefore almost entirely a re-export: documents.js's own src/odf-package/ conventional entry point for manifest mechanics, mirroring src/opc/content-types.ts's role on the OOXML side. The one piece of real logic below, syncOdfManifest, exists because odf.js's own buildManifest deliberately does not guess a SUB-DOCUMENT's media type: it synthesises a manifest:file-entry for every "<dir>/content.xml" prefix it finds (subdocumentDirectories, src/manifest.ts) but resolves that directory entry's own media type by file extension, and a directory has none -- so it comes out empty unless a caller supplies a mediaTypeOverrides entry for it.
-export {
-  readManifest,
-  buildManifest,
-  writeManifest,
-  syncManifest,
-  validateManifest,
-  setDocumentMediaType,
-  MANIFEST_PART,
-  ManifestEntrySchema,
-  ManifestSchema,
-  ManifestProblemSchema,
-} from 'odf.js';
-export type { ManifestEntry, Manifest, ManifestProblem, BuildManifestOptions } from 'odf.js';
+// The one piece of real logic below, syncOdfManifest, exists because odf.js's own buildManifest deliberately does not guess a SUB-DOCUMENT's media type: it synthesises a manifest:file-entry for every "<dir>/content.xml" prefix it finds (subdocumentDirectories, src/manifest.ts) but resolves that directory entry's own media type by file extension, and a directory has none -- so it comes out empty unless a caller supplies a mediaTypeOverrides entry for it.
 
 const CONTENT_PART_SUFFIX = '/content.xml';
 const ROOT_CONTENT_PART = 'content.xml';

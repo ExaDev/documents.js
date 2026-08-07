@@ -1,7 +1,7 @@
 import type { ContentFormula, ContentVector } from 'document-schema.js';
 import type { Package, XmlElement } from 'odf.js';
 import { decodePackage, encodePackage } from 'odf.js';
-import type { Box } from '../../model/geometry';
+import type { Box } from 'document-schema.js';
 import { resolveMetadataTimestamps } from '../../model/metadata';
 import type { ClockPort } from '../../ports/clock';
 import { systemClock } from '../../ports/clock';

@@ -1,7 +1,7 @@
 import type { ContentVector } from 'document-schema.js';
 import type { Package, XmlElement, XmlNode } from 'ooxml.js';
 import { resolveRelationships, rootElement, textContent } from 'ooxml.js';
-import type { Box } from '../../model/geometry';
+import type { Box } from 'document-schema.js';
 import { ensureContentTypeOverride } from '../../opc/content-types';
 import { buildRelativeTarget } from '../../opc/paths';
 import { addRelationship } from '../../opc/rels';

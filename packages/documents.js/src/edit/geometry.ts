@@ -1,6 +1,6 @@
 import type { XmlElement } from 'odf.js';
 import { applyOdfTransform, formatOdfLength } from 'odf.js';
-import type { Box } from '../model/geometry';
+import type { Box } from 'document-schema.js';
 import { removeAttr, setAttr } from '../xml/edit';
 
 // The write side of ODF's own shape-geometry representation, shared by every editable element whose geometry odf.js resolves through the SAME resolveOdfShapeGeometry (typed/shared/transform.ts): a draw:frame (src/edit/odp/shape.ts's OdpShape, reused wholesale by odg), and the odg vector primitives draw:rect/draw:ellipse/draw:path (src/edit/odg/vector.ts). draw:line is the one exception and deliberately absent from this module's callers -- it carries two endpoints (svg:x1/y1/x2/y2) rather than a box, has no draw:transform handling in odf.js's own readDrawLineVector, and ContentVectorSchema's own 'line' variant has no rotationDeg field to write in the first place.

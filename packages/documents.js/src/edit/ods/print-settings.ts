@@ -3,8 +3,8 @@ import { findStyleElement, formatOdfLength, parseMargins, parsePageSize, resolve
 import { cellReference, parseCellReference } from 'document-schema.js';
 import { attr } from 'ooxml.js';
 import type { ContentSheetPrintRange, ContentSheetPrintSettings, ContentSheetRepeatRange } from 'document-schema.js';
-import type { Margins } from '../../model/geometry';
-import { PAGE_SIZE_A4 } from '../../model/geometry';
+import type { Margins } from 'document-schema.js';
+import { PAGE_SIZE_A4 } from 'document-schema.js';
 import { setAttr } from '../../xml/edit';
 import { el } from '../../xml/fragment';
 import { nextStyleName } from '../odt/automatic-styles';

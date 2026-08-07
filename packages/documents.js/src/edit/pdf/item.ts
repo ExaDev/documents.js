@@ -1,6 +1,6 @@
 import type { ContentStrokeStyle, LayoutEllipse, LayoutImage, LayoutImageAsset, LayoutItem, LayoutLine, LayoutLink, LayoutPath, LayoutRect, LayoutSubpath, LayoutText } from 'document-schema.js';
-import type { LayoutColor } from '../../model/color';
-import type { LayoutFont } from '../../model/style';
+import type { Color as LayoutColor } from 'document-schema.js';
+import type { LayoutFont } from 'document-schema.js';
 import { registerImageBytes, spliceOut } from './util';
 
 // Live-view classes over a page's own LayoutItem entries -- the PDF-editor equivalent of src/edit/docx/run.ts's DocxRun or src/edit/odg/vector.ts's OdgBoxVector/OdgLineVector/OdgPathVector, adapted to this package's own model: a LayoutItem is a plain, Zod-inferred object (not an XmlElement), so there is no attribute tree to read/write through -- every getter/setter here reads or mutates the actual object sitting inside the page's own `items` array directly, and saving is nothing more than writePdf(doc) (PdfEditor.toBytes()). `container` is that page's own `LayoutItem[]` array (the exact reference PdfPage.items()/append*/insert* hold), `node` is this item's own object inside it.

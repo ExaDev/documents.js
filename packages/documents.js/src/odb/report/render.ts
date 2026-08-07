@@ -2,7 +2,7 @@ import type { ContentBlock, ContentCellValue, ContentDocument, ContentParagraph,
 import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
 import type { OdbReport, OdbReportBand, OdbReportElement, OdbReportGroup } from 'odf.js';
 import { displayTextFor } from '../../hsqldb/script';
-import { PAGE_SIZE_A4 } from '../../model/geometry';
+import { PAGE_SIZE_A4 } from 'document-schema.js';
 import { odbReportGroupChain, rptBandDefinition, rptDefinitionFromReport } from '../formula/definition';
 import type { RptBandInstance, RptBandKind, RptReportDefinition } from '../formula/evaluate';
 import { evaluateRptBandOutsideData, runRptReport } from '../formula/evaluate';

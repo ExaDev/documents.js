@@ -2,7 +2,7 @@ import type { Color, ContentBorder, ContentCellBorders } from 'document-schema.j
 import { rgbHexToColor } from 'document-schema.js';
 import type { XmlElement } from 'ooxml.js';
 import { attr } from 'ooxml.js';
-import type { Box } from '../../model/geometry';
+import type { Box } from 'document-schema.js';
 import { emuToPt, ptToEmu } from '../../model/units';
 import { directChildElement, removeAttr, setAttr } from '../../xml/edit';
 import { el } from '../../xml/fragment';

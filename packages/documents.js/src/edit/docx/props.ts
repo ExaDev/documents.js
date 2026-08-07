@@ -1,7 +1,7 @@
 import type { XmlElement } from 'ooxml.js';
 import { attr } from 'ooxml.js';
-import type { LayoutColor } from '../../model/color';
-import { colorToRgbHex, rgbHexToColor } from '../../model/color';
+import type { Color as LayoutColor } from 'document-schema.js';
+import { colorToRgbHex, rgbHexToColor } from 'document-schema.js';
 import { halfPointsToPt, ptToHalfPoints } from '../../model/units';
 import { directChildElement, getOrCreateChildElement, insertInSchemaOrder, removeAttr, setAttr } from '../../xml/edit';
 import { el } from '../../xml/fragment';

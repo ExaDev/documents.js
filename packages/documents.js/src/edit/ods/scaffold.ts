@@ -1,7 +1,7 @@
 import type { LayoutMetadata } from 'document-schema.js';
 import type { Package, XmlElement, XmlNode } from 'odf.js';
 import { ODF_MEDIA_TYPES, setDocumentMediaType, syncManifest, xmlnsAttributes } from 'odf.js';
-import { PAGE_SIZE_A4 } from '../../model/geometry';
+import { PAGE_SIZE_A4 } from 'document-schema.js';
 import { encodeXmlText } from '../../xml/entities';
 import { el, txt } from '../../xml/fragment';
 

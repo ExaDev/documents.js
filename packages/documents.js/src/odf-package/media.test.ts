@@ -1,7 +1,6 @@
 import type { Package } from 'odf.js';
-import { base64ToBytes, decodePackage, encodePackage, setDocumentMediaType } from 'odf.js';
+import { base64ToBytes, decodePackage, encodePackage, readManifest, setDocumentMediaType } from 'odf.js';
 import { describe, expect, it } from 'vitest';
-import { readManifest } from './manifest';
 import { addImageMedia } from './media';
 
 const ODT_MEDIA_TYPE = 'application/vnd.oasis.opendocument.text';

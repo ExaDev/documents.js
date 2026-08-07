@@ -1,7 +1,7 @@
 import type { ContentFormula } from 'document-schema.js';
 import type { Package, XmlElement } from 'odf.js';
 import { formatOdfLength } from 'odf.js';
-import type { Box } from '../../model/geometry';
+import type { Box } from 'document-schema.js';
 import { addFormulaObject } from '../../odf-package/formula';
 import { el } from '../../xml/fragment';
 

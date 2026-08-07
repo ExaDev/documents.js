@@ -1,7 +1,7 @@
 import type { ContentDocument, ContentEmbeddedObjectBlock, ContentParagraph, ContentShape, ContentSlide, ContentTable, LayoutDocument, LayoutImage, LayoutImageAsset, LayoutItem, LayoutLink, LayoutPage, LayoutText } from 'document-schema.js';
 import { COLOR_BLACK, LAYOUT_FORMAT_VERSION } from 'document-schema.js';
 import { layoutFormula } from '../mathml/layout';
-import type { Box } from '../model/geometry';
+import type { Box } from 'document-schema.js';
 import { flipY } from '../model/geometry';
 import { formulaOfBlock } from '../model/formula';
 import type { MathFontMetrics, Point, PositionedFormula, TextMeasurer } from 'document-schema.js';
