@@ -23,30 +23,14 @@ export default tseslint.config(
   {
     rules: {
       '@typescript-eslint/consistent-type-imports': ['error', { fixStyle: 'inline-type-imports' }],
+      // This package's src/index.ts is its public entry point (package.json exports), so it keeps one barrel: override the default 'banned' barrel-policy to 'single'. The umbrella catches both single- and split-statement re-exports outside src/index.ts, replacing the hand-rolled no-restricted-syntax + no-non-barrel-reexport wiring this config used to carry.
+      'exadev/barrel-policy': ['error', { mode: 'single' }],
     },
   },
   {
-    // Re-exports belong only in src/index.ts, the public barrel -- a re-export anywhere else risks silently surfacing the wrong thing under a name a consumer expects to mean something else. The AST-selector ban here catches the single-statement forms (export * from / export {x} from); the bundle's own exadev/no-non-barrel-reexport (self-scoped away from src/index.ts) catches the same coupling split across an import and a bare export instead, which the selector can't see since it needs to correlate two separate statements.
-    files: ['src/**/*.ts'],
-    ignores: [
-      'src/index.ts',
-      'src/odf-package/manifest.ts', // deliberate pure re-export of odf.js's own manifest read/build/write/sync/validate functions -- odf.js already owns META-INF/manifest.xml end to end (see this file's own top comment)
-      'src/model/geometry.ts', // deliberate re-export of document-schema.js's Box/Margins/PageSize under documents.js's own established names, so every existing local caller keeps resolving them unchanged
-      'src/model/style.ts', // deliberate re-export of document-schema.js's Alignment/LayoutFont under documents.js's own established names, for the same reason as geometry.ts above
-      'src/model/color.ts', // deliberate re-export/alias of document-schema.js's Color as documents.js's own established LayoutColor name, for the same reason as geometry.ts above
-    ],
-    rules: {
-      'no-restricted-syntax': [
-        'error',
-        { selector: 'ExportAllDeclaration', message: 'Re-exports belong only in src/index.ts (the public barrel). Define or import this locally instead.' },
-        { selector: 'ExportNamedDeclaration[source]', message: 'Re-exports belong only in src/index.ts (the public barrel). Define or import this locally instead.' },
-      ],
-    },
-  },
-  {
-    // The bundle's own exadev/no-non-barrel-reexport already self-scopes away from src/index.ts; these four files are further, repo-specific exceptions the bundle has no way to know about -- the same deliberate re-export points named above.
+    // Four non-barrel files deliberately re-export from sibling packages (odf.js / document-schema.js) under documents.js's own established names -- the barrel-policy umbrella flags re-exports outside src/index.ts, so these repo-specific exceptions turn it off for exactly those files.
     files: ['src/odf-package/manifest.ts', 'src/model/geometry.ts', 'src/model/style.ts', 'src/model/color.ts'],
-    rules: { 'exadev/no-non-barrel-reexport': 'off' },
+    rules: { 'exadev/barrel-policy': 'off' },
   },
   {
     // Static Worker-isomorphism guard for runtime src: this package's runtime code must run unchanged in a Cloudflare Worker (no Node-only builtins or globals), mirroring the runtime enforcement the vitest workers pool already applies at test time. Test files and src/test-support/** legitimately use node:fs etc for fixtures and are not published, so they are exempt here -- as is src/bin.ts, the launcher entry point, which spawns child processes (npx/pnpm/yarn/bunx) and so is Node-only by definition; it is an executed entry, never imported into the worker-isomorphic runtime, so exempting it leaves the importable surface pure. The runtime surface alone is what matters.
