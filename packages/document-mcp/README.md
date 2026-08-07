@@ -56,6 +56,23 @@ Run the server directly — no install step needed:
 npx document-mcp
 ```
 
+The server uses **stdio transport** (runs as a local process). This is supported by Claude Code, Claude Desktop, Codex CLI, Codex Desktop, and OpenCode directly. Claude Web (claude.ai), Claude Mobile, and ChatGPT require a **remote HTTP** MCP server — see [Remote transport](#remote-transport-http) below.
+
+### Compatibility
+
+| Client | Transport | Direct support |
+|---|---|---|
+| Claude Code (CLI) | stdio | ✅ |
+| Claude Code (plugin) | stdio | ✅ |
+| Claude Desktop | stdio | ✅ |
+| Codex CLI | stdio | ✅ |
+| Codex Desktop | stdio | ✅ |
+| OpenCode | stdio | ✅ |
+| Claude Team/Enterprise (org) | stdio (per-machine) | ✅ via managed settings |
+| Claude Web (claude.ai) | HTTP/SSE only | ❌ needs remote transport |
+| Claude Mobile (iOS/Android) | HTTP/SSE only | ❌ needs remote transport |
+| ChatGPT (web/desktop) | HTTP only | ❌ needs remote transport |
+
 ### Connecting from Claude Code
 
 One-liner (adds the MCP server directly):
@@ -88,7 +105,9 @@ Run `/reload-plugins` to activate in an already-running session. In Claude Deskt
 codex mcp add document-mcp -- npx -y document-mcp
 ```
 
-Or add to `~/.codex/config.toml`:
+Or via the Codex Desktop app: **Settings → MCP Servers → + Add**.
+
+Or add to `~/.codex/config.toml` manually:
 
 ```toml
 [mcp_servers.document-mcp]
@@ -138,6 +157,22 @@ Or, for local development against a checkout of this repository rather than the 
   }
 }
 ```
+
+### Connecting from Claude Team/Enterprise (organization)
+
+Organization admins can deploy MCP server configurations centrally via **server-managed settings** (Admin Settings → Claude Code → Managed settings in the claude.ai console). A `managed-settings.json` entry for document-mcp enforces the connection across all Claude Code users in the org — no per-user setup needed. Admins can also allow/block specific MCP servers via `allowedMcpServers`/`blockedMcpServers` in the same file.
+
+### Remote transport (HTTP)
+
+Claude Web, Claude Mobile, and ChatGPT only accept **remote** (HTTP/SSE) MCP servers — a local stdio process is not reachable from a browser or phone. To use document-mcp on those platforms, run it behind an HTTP transport:
+
+```sh
+npx document-mcp --transport http --port 3000
+```
+
+Then add the server URL (e.g., `https://your-host:3000/mcp`) as a connector in Claude Web (**claude.ai/customize/connectors**) or ChatGPT (**Settings → Connectors → Advanced → Enable Developer Mode → Create**). Use a tunnel (Cloudflare Tunnel, ngrok) or deploy to a server with TLS — both platforms require HTTPS.
+
+> **Note:** the `--transport http` flag is not yet implemented. The server currently only supports stdio. Track this as a future capability — the MCP SDK supports SSE/streamable-http transports, so adding it is a matter of wiring the existing server to an HTTP listener.
 
 ### Development
 
