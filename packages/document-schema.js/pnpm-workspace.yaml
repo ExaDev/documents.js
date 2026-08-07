@@ -5,6 +5,8 @@ overrides:
 allowBuilds:
   esbuild: true
   workerd: true
-# @exadev/eslint-config@1.2.0 is a newly published first release of a package extracted from this family's own repos (the four local eslint-rules/*.ts implementations, now shared), so it is freshly published relative to the minimumReleaseAge policy -- excluded explicitly for this one pinned version rather than relaxing the policy generally.
+# Set low enough that a same-day sibling-package release (@exadev/eslint-config, or the ooxml.js/odf.js/pdf-codec/markdown-codec/documents.js family this package is itself a dependency of) never blocks CI, matching documents.js's own existing pnpm-workspace.yaml precedent.
+minimumReleaseAge: 60
+# Bare package name (no @version), per pnpm's own documented syntax (https://pnpm.io/settings#minimumreleaseageexclude -- "webpack" exempts every version, not just one) -- @exadev/eslint-config is this org's own sibling package (the four local eslint-rules/*.ts implementations, now shared across this whole repo family), published only via its own semantic-release CI with npm OIDC trusted publishing, so a version-agnostic exemption is a deliberate, low-risk carry-forward rather than an entry this file needs updating on every single release.
 minimumReleaseAgeExclude:
-  - '@exadev/eslint-config@1.2.0'
+  - '@exadev/eslint-config'
