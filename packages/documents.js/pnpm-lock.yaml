@@ -1618,10 +1618,6 @@ packages:
     resolution: {integrity: sha512-WkrWp9GR4KXfKGYzOLmTuGVi1UWFfws377n9cc55/tb6DuqyF6pcQ5AbiHEshaDpY9v6oaSr2XCDidGmMwdzIA==}
     engines: {node: '>=8'}
 
-  document-schema.js@2.7.0:
-    resolution: {integrity: sha512-tC1BVwu/obv9BCEeFvY9IRF1Mj7a6B69+qEzWTOIDph0e7cOeZlSJqRlR62rZ6yzULyFAvKN+BIhqIcmv74VQA==}
-    engines: {node: '>=20'}
-
   document-schema.js@2.7.2:
     resolution: {integrity: sha512-BfJh9Fvlnu8yHZ7FCO+Hq6Jo8XPik3iANmwDhOlKu7CQY4dH8z9x1SF1yXIi9OJwVCTnizUK8yHgK3jsrRiFwg==}
     engines: {node: '>=20'}
@@ -4566,10 +4562,6 @@ snapshots:
   dir-glob@3.0.1:
     dependencies:
       path-type: 4.0.0
-
-  document-schema.js@2.7.0:
-    dependencies:
-      zod: 4.4.3
 
   document-schema.js@2.7.2:
     dependencies:
