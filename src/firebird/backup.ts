@@ -1,6 +1,6 @@
 import type { HsqldbColumn, HsqldbTable } from '../hsqldb/script';
 import { FirebirdBackupReader } from './reader';
-import { readRelationSchema, FirebirdSchemaParseError } from './schema';
+import { readRelationSchema } from './schema';
 import type { FirebirdRelation } from './schema';
 import { readRelationData, FirebirdCompositeRecordUnsupportedError } from './data';
 
@@ -193,5 +193,3 @@ export function readFirebirdBackup(bytes: Uint8Array<ArrayBuffer>): ReadFirebird
     tables,
   };
 }
-
-export { FirebirdSchemaParseError, FirebirdCompositeRecordUnsupportedError };

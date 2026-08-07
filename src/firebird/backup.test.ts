@@ -1,7 +1,8 @@
 import { base64ToBytes } from 'odf.js';
 import { describe, expect, it } from 'vitest';
 import { BLOB_FIXTURE_FBK_BASE64, ORIGINAL_FIXTURE_FBK_BASE64, RICH_FIXTURE_FBK_BASE64 } from '../test-support/firebird';
-import { FirebirdBackupFormatError, FirebirdCompositeRecordUnsupportedError, readFirebirdBackup, SUPPORTED_BACKUP_FORMAT_VERSION } from './backup';
+import { FirebirdBackupFormatError, readFirebirdBackup, SUPPORTED_BACKUP_FORMAT_VERSION } from './backup';
+import { FirebirdCompositeRecordUnsupportedError } from './data';
 
 // Tests against two genuinely LibreOffice-generated Firebird embedded-database backup streams (src/test-support/firebird.ts documents exactly how each was produced and verified) -- not hand-authored gbak bytes, since the whole value of this reader is that it decodes REAL output correctly, not output shaped to match this reader's own assumptions.
 
