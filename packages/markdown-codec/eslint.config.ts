@@ -2,6 +2,7 @@ import js from '@eslint/js';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 import noNonBarrelIndex from './eslint-rules/no-non-barrel-index.js';
+import noNonBarrelReexport from './eslint-rules/no-non-barrel-reexport.js';
 import noPointlessReassignment from './eslint-rules/no-pointless-reassignment.js';
 import noSideEffectsInIndex from './eslint-rules/no-side-effects-in-index.js';
 
@@ -74,7 +75,7 @@ export default tseslint.config(
   },
   {
     // Local custom rule (eslint-rules/no-pointless-reassignment.ts) -- not published as a package, matching this family's own convention of keeping shared dev-tooling config as identical per-repo copies rather than a shared devDependency.
-    plugins: { local: { rules: { 'no-non-barrel-index': noNonBarrelIndex, 'no-pointless-reassignment': noPointlessReassignment, 'no-side-effects-in-index': noSideEffectsInIndex } } },
+    plugins: { local: { rules: { 'no-non-barrel-index': noNonBarrelIndex, 'no-non-barrel-reexport': noNonBarrelReexport, 'no-pointless-reassignment': noPointlessReassignment, 'no-side-effects-in-index': noSideEffectsInIndex } } },
     rules: { 'local/no-non-barrel-index': 'error', 'local/no-pointless-reassignment': 'error' },
   },
   {
@@ -87,6 +88,7 @@ export default tseslint.config(
         { selector: 'ExportAllDeclaration', message: 'Re-exports belong only in src/index.ts (the public barrel). Define or import this locally instead.' },
         { selector: 'ExportNamedDeclaration[source]', message: 'Re-exports belong only in src/index.ts (the public barrel). Define or import this locally instead.' },
       ],
+      'local/no-non-barrel-reexport': 'error',
     },
   },
   {
