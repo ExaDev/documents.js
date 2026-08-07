@@ -5,3 +5,6 @@ overrides:
 allowBuilds:
   esbuild: true
   workerd: true
+# @exadev/eslint-config@1.2.0 is a newly published first release of a package extracted from this family's own repos (the four local eslint-rules/*.ts implementations, now shared), so it is freshly published relative to the minimumReleaseAge policy -- excluded explicitly for this one pinned version rather than relaxing the policy generally.
+minimumReleaseAgeExclude:
+  - '@exadev/eslint-config@1.2.0'
