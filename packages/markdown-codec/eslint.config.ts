@@ -1,10 +1,7 @@
 import js from '@eslint/js';
+import exadev from '@exadev/eslint-config';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
-import noNonBarrelIndex from './eslint-rules/no-non-barrel-index.js';
-import noNonBarrelReexport from './eslint-rules/no-non-barrel-reexport.js';
-import noPointlessReassignment from './eslint-rules/no-pointless-reassignment.js';
-import noSideEffectsInIndex from './eslint-rules/no-side-effects-in-index.js';
 
 export default tseslint.config(
   {
@@ -16,12 +13,12 @@ export default tseslint.config(
     //
     // `projectService` (global -- no `files` filter) powers the type-checked rules below; it must apply to every matched file or the type-checked configs crash on files outside the program.
     //
-    // Two tsconfigs now exist: tsconfig.json is the vendor-neutral WEB gate (lib ES2024+WebWorker, types []), covering runtime src only; tsconfig.node.json covers the test files, test-support, the custom eslint rules, and the root config files under Node types. The TS project service discovers only tsconfig.json (the default-name config) by walking up from each file, so it resolves every runtime-src file to the web program automatically -- but a file tsconfig.json excludes (every test/config/eslint-rules file) is "not found" unless it is explicitly routed to the node program. `defaultProject` + `allowDefaultProject` is that routing: each non-src file falls back to tsconfig.node.json, so it still gets full type-checked lint under Node types (matching the model "runtime src -> web program, test/config files -> node program"). allowDefaultProject forbids `**`, so test files are matched by depth (src/*.test.ts for the top-level ones, src/*/*.test.ts for the per-module ones); the threshold is raised past its default of 8 because this repo legitimately routes its whole non-src surface through the node default project.
+    // Two tsconfigs now exist: tsconfig.json is the vendor-neutral WEB gate (lib ES2024+WebWorker, types []), covering runtime src only; tsconfig.node.json covers the test files, test-support, and the root config files under Node types. The TS project service discovers only tsconfig.json (the default-name config) by walking up from each file, so it resolves every runtime-src file to the web program automatically -- but a file tsconfig.json excludes (every test/config file) is "not found" unless it is explicitly routed to the node program. `defaultProject` + `allowDefaultProject` is that routing: each non-src file falls back to tsconfig.node.json, so it still gets full type-checked lint under Node types (matching the model "runtime src -> web program, test/config files -> node program"). allowDefaultProject forbids `**`, so test files are matched by depth (src/*.test.ts for the top-level ones, src/*/*.test.ts for the per-module ones); the threshold is raised past its default of 8 because this repo legitimately routes its whole non-src surface through the node default project.
     languageOptions: {
       parserOptions: {
         projectService: {
           defaultProject: 'tsconfig.node.json',
-          allowDefaultProject: ['src/*.test.ts', 'src/*/*.test.ts', 'src/test-support/*.ts', '*.config.ts', 'eslint-rules/*.ts'],
+          allowDefaultProject: ['src/*.test.ts', 'src/*/*.test.ts', 'src/test-support/*.ts', '*.config.ts'],
           maximumDefaultProjectFileMatchCount_THIS_WILL_SLOW_DOWN_LINTING: 64,
         },
         tsconfigRootDir: import.meta.dirname,
@@ -74,9 +71,9 @@ export default tseslint.config(
     },
   },
   {
-    // Local custom rule (eslint-rules/no-pointless-reassignment.ts) -- not published as a package, matching this family's own convention of keeping shared dev-tooling config as identical per-repo copies rather than a shared devDependency.
-    plugins: { local: { rules: { 'no-non-barrel-index': noNonBarrelIndex, 'no-non-barrel-reexport': noNonBarrelReexport, 'no-pointless-reassignment': noPointlessReassignment, 'no-side-effects-in-index': noSideEffectsInIndex } } },
-    rules: { 'local/no-non-barrel-index': 'error', 'local/no-pointless-reassignment': 'error' },
+    // These four rules are sourced from the published @exadev/eslint-config package rather than kept as local per-repo copies.
+    plugins: { exadev },
+    rules: { 'exadev/no-pointless-reassignment': 'error', 'exadev/no-non-barrel-index': 'error' },
   },
   {
     // Re-exports belong only in src/index.ts, the public barrel -- a re-export anywhere else risks silently surfacing the wrong thing under a name a consumer expects to mean something else.
@@ -88,12 +85,12 @@ export default tseslint.config(
         { selector: 'ExportAllDeclaration', message: 'Re-exports belong only in src/index.ts (the public barrel). Define or import this locally instead.' },
         { selector: 'ExportNamedDeclaration[source]', message: 'Re-exports belong only in src/index.ts (the public barrel). Define or import this locally instead.' },
       ],
-      'local/no-non-barrel-reexport': 'error',
+      'exadev/no-non-barrel-reexport': 'error',
     },
   },
   {
     // The structural counterpart to the re-export ban above: that rule says re-exports belong only in src/index.ts, this one says src/index.ts may contain only re-exports -- together pinning the barrel to exactly one shape, one that can never have a side effect at import time.
     files: ['src/index.ts'],
-    rules: { 'local/no-side-effects-in-index': 'error' },
+    rules: { 'exadev/no-side-effects-in-index': 'error' },
   },
 );
