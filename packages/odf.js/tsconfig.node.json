@@ -7,7 +7,6 @@
   "include": [
     "src/**/*.test.ts",
     "src/test-support/**/*.ts",
-    "eslint-rules/**/*.ts",
     "*.config.ts",
     "eslint.config.ts"
   ],
