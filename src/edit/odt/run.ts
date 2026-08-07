@@ -1,5 +1,5 @@
 import type { Package, XmlElement, XmlNode } from 'odf.js';
-import type { LayoutColor } from '../../model/color';
+import type { Color as LayoutColor } from 'document-schema.js';
 import { removeChild } from '../../xml/edit';
 import { el } from '../../xml/fragment';
 import { decodeOdfText, encodeOdfText } from '../../xml/odf-text';

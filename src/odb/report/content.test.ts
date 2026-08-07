@@ -5,7 +5,7 @@ import { createFontMeasurer, createFontRegistry, loadMathFont, writePdf } from '
 const mathMetricsAt = (sizePt: number) => loadMathFont().metricsAt(sizePt);
 import { describe, expect, it } from 'vitest';
 import { convertWordprocessingToLayout } from '../../layout/engine';
-import { PAGE_SIZE_A4 } from '../../model/geometry';
+import { PAGE_SIZE_A4 } from 'document-schema.js';
 import { formAndReportOdbPackage } from '../../test-support/odb-fixture';
 import { readOdbReports } from '../components';
 import { readOdbTables } from '../read';

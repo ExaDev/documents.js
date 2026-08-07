@@ -1,7 +1,7 @@
 import type { OdfTransformFunction, Package, XmlElement, XmlNode } from 'odf.js';
 import { attrValue, childrenWithTag, parseOdfTransform, readDrawFrame } from 'odf.js';
 import type { ContentFormula } from 'document-schema.js';
-import type { Box } from '../../model/geometry';
+import type { Box } from 'document-schema.js';
 import { flowAnchoredFrameBox } from '../shared/flow-anchor';
 import { readOdfEmbeddedFormula } from './read';
 

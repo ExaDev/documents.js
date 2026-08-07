@@ -1,7 +1,7 @@
 import type { ContentCellBorders, ContentStrokeStyle, Color } from 'document-schema.js';
 import type { XmlElement, XmlNode } from 'ooxml.js';
 import { attr } from 'ooxml.js';
-import { colorToRgbHex, rgbHexToColor } from '../../model/color';
+import { colorToRgbHex, rgbHexToColor } from 'document-schema.js';
 import { ptToTwips, twipsToPt } from '../../model/units';
 import { directChildElement, insertInSchemaOrder, removeChild } from '../../xml/edit';
 import { el } from '../../xml/fragment';

@@ -1,6 +1,6 @@
 import type { Package, XmlElement, XmlNode } from 'odf.js';
 import { formatOdfLength } from 'odf.js';
-import type { Box } from '../../model/geometry';
+import type { Box } from 'document-schema.js';
 import { addImageMedia } from '../../odf-package/media';
 import { el } from '../../xml/fragment';
 import { encodeOdfText } from '../../xml/odf-text';

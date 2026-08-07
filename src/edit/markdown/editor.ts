@@ -6,7 +6,7 @@ import type {
 } from 'document-schema.js';
 import type { NumIdMintState, ReadMarkdownOptions, WriteMarkdownOptions } from 'markdown-codec';
 import { createNumIdMintState, mintListNumId } from 'markdown-codec';
-import type { Margins, PageSize } from '../../model/geometry';
+import type { Margins, PageSize } from 'document-schema.js';
 import { resolveMetadataTimestamps } from '../../model/metadata';
 import { readMarkdownContent } from '../../markdown/read';
 import { buildMarkdownText } from '../../markdown/write';

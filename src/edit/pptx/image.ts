@@ -1,5 +1,5 @@
 import type { Package, XmlElement } from 'ooxml.js';
-import type { Box } from '../../model/geometry';
+import type { Box } from 'document-schema.js';
 import { addImageMedia } from '../../opc/media';
 import { buildPictureShape } from './shape';
 

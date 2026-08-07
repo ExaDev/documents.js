@@ -1,6 +1,6 @@
 import type { Package, XmlElement } from 'ooxml.js';
 import { decodePackage, encodePackage, resolveRelationships, rootElement } from 'ooxml.js';
-import type { PageSize } from '../../model/geometry';
+import type { PageSize } from 'document-schema.js';
 import { resolveMetadataTimestamps } from '../../model/metadata';
 import { emuToPt, ptToEmu } from '../../model/units';
 import type { ClockPort } from '../../ports/clock';

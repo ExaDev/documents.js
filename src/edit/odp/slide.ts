@@ -2,7 +2,7 @@ import type { ContentVector } from 'document-schema.js';
 import type { Package, XmlElement, XmlNode } from 'odf.js';
 import { formatOdfLength } from 'odf.js';
 import { elementsWithTag } from 'ooxml.js';
-import type { Box } from '../../model/geometry';
+import type { Box } from 'document-schema.js';
 import { removeChild } from '../../xml/edit';
 import { el } from '../../xml/fragment';
 import { decodeOdfText } from '../../xml/odf-text';

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_LAYOUT_FONT } from '../../model/style';
+import { DEFAULT_LAYOUT_FONT } from 'document-schema.js';
 import { createPdf } from './editor';
 
 const BLACK = { r: 0, g: 0, b: 0 };

@@ -1,7 +1,7 @@
 import type { Package, XmlElement, XmlNode } from 'odf.js';
 import { formatOdfLength, resolveOdfShapeGeometry } from 'odf.js';
 import { attr } from 'ooxml.js';
-import type { Box } from '../../model/geometry';
+import type { Box } from 'document-schema.js';
 import { removeChild } from '../../xml/edit';
 import { applyOdfGeometry } from '../geometry';
 import { el } from '../../xml/fragment';

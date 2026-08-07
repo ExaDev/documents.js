@@ -19,10 +19,10 @@ import type {
 } from 'document-schema.js';
 import { columnIndexToLetters, LAYOUT_FORMAT_VERSION } from 'document-schema.js';
 import { layoutFormula } from '../mathml/layout';
-import type { LayoutColor } from '../model/color';
-import { COLOR_BLACK, rgbHexToColor } from '../model/color';
-import type { Alignment } from '../model/style';
-import { DEFAULT_LAYOUT_FONT } from '../model/style';
+import type { Color as LayoutColor } from 'document-schema.js';
+import { COLOR_BLACK, rgbHexToColor } from 'document-schema.js';
+import type { Alignment } from 'document-schema.js';
+import { DEFAULT_LAYOUT_FONT } from 'document-schema.js';
 import { flipY } from '../model/geometry';
 import { throwIfAborted } from '../ports/abort';
 import type { MathFontMetrics, PositionedFormula, StyledFragment, StyledRun, TextMeasurer } from 'document-schema.js';

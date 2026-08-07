@@ -5,7 +5,7 @@ import { decodeHsqldbCachedTables } from '../hsqldb/cache';
 import type { HsqldbDecodeOptions } from '../hsqldb/rowformat';
 import type { HsqldbTable } from '../hsqldb/script';
 import { parseHsqldbScript } from '../hsqldb/script';
-import { readManifest } from '../odf-package/manifest';
+import { readManifest } from 'odf.js';
 import { readFirebirdBackup } from '../firebird/backup';
 
 // readOdbTables(pkg) is the decoder-selection shell for .odb (ODF database front-end) packages: it inspects what odf.js's own readOdbInventory and the package's own manifest-media-type-classified parts actually contain, and routes to the implemented decoders, or throws a specific, named diagnostic naming exactly what was found otherwise -- never a silent empty result. Every embedded storage shape HSQLDB and Firebird can produce is now decoded: src/hsqldb/script.ts's Tier 1 TEXT-script parser (hsqldb.script_format=0), extended by src/hsqldb/cache.ts's Tier 2 CACHED-table binary row-store decoder whenever a database/data part is present; src/firebird/backup.ts's Tier 3 gbak-backup-format reader for a Firebird-backed .odb; and src/hsqldb/binary-script.ts's Tier 4 whole-script BINARY/COMPRESSED reader (hsqldb.script_format=1 and =3, the latter being that identical byte stream under ordinary zlib DEFLATE -- see this module's own classifyScriptBytes comment). Tier 4's own recovered DDL feeds Tier 2 exactly as Tier 1's does, so a BINARY-format script belonging to a database with CACHED tables decodes end to end too. One failure mode remains permanently out of scope rather than merely unimplemented: an external-only connection, with no embedded engine to read from at all.

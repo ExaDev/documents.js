@@ -163,12 +163,13 @@ export {
 } from 'document-schema.js';
 
 // --- Shared model primitives used by both pivot models. ---
-export type { Box, Margins, PageSize } from './model/geometry';
-export { flipY, PAGE_SIZE_A4, PAGE_SIZE_LETTER, SLIDE_SIZE_STANDARD, SLIDE_SIZE_WIDESCREEN } from './model/geometry';
-export type { LayoutColor } from './model/color';
-export { COLOR_BLACK, rgbHexToColor } from './model/color';
-export type { Alignment, LayoutFont } from './model/style';
-export { DEFAULT_LAYOUT_FONT } from './model/style';
+export { flipY } from './model/geometry';
+export type { Box, Margins, PageSize } from 'document-schema.js';
+export { PAGE_SIZE_A4, PAGE_SIZE_LETTER, SLIDE_SIZE_STANDARD, SLIDE_SIZE_WIDESCREEN } from 'document-schema.js';
+export type { Color as LayoutColor } from 'document-schema.js';
+export { COLOR_BLACK, rgbHexToColor } from 'document-schema.js';
+export type { Alignment, LayoutFont } from 'document-schema.js';
+export { DEFAULT_LAYOUT_FONT } from 'document-schema.js';
 // Magic-byte-validated Uint8Array schemas, so a caller passing the wrong format -- to these functions directly, or as the input/output schema half of a z.codec() below -- gets a clear Zod validation error instead of a confusing failure three layers down. The Odt/Ods/Odp/Odg schemas check the package's actual declared media type (see src/model/bytes.ts), a stronger check than Docx/PptxBytesSchema's generic ZIP-signature check. MarkdownBytesSchema is architecturally different from every other schema here -- it checks only well-formed UTF-8, since markdown has no magic bytes or format-level header of its own to check (see src/model/bytes.ts's own comment).
 export { DocxBytesSchema, MarkdownBytesSchema, OdgBytesSchema, OdpBytesSchema, OdsBytesSchema, OdtBytesSchema, PdfBytesSchema, PptxBytesSchema, XlsxBytesSchema } from './model/bytes';
 

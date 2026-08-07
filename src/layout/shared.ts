@@ -1,9 +1,8 @@
 import { base64ToBytes } from 'ooxml.js';
 import type { Box, ContentBorder, ContentCellBorders, ContentImageBlock, ContentRun, ContentTableRow, LayoutImageAsset, LayoutItem, MathFontMetrics, MathMlNode } from 'document-schema.js';
-import { COLOR_BLACK } from '../model/color';
 import { layoutFormula } from '../mathml/layout';
-import type { Alignment, LayoutFont } from '../model/style';
-import { DEFAULT_LAYOUT_FONT } from '../model/style';
+import type { Alignment, LayoutFont } from 'document-schema.js';
+import { COLOR_BLACK, DEFAULT_LAYOUT_FONT } from 'document-schema.js';
 import type { StyledRun, TextMeasurer, WrappedLine } from 'document-schema.js';
 import { crc32, decodePng, readJpegInfo } from 'byte-codec';
 import { wrapRunsToWidth } from './text-layout';

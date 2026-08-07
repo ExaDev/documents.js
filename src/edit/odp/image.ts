@@ -1,5 +1,5 @@
 import type { Package, XmlElement } from 'odf.js';
-import type { Box } from '../../model/geometry';
+import type { Box } from 'document-schema.js';
 import { addImageMedia } from '../../odf-package/media';
 import { buildImageFrame } from './shape';
 

@@ -34,9 +34,9 @@ import type {
 import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
 import { resolveStandardFont, STANDARD_METRICS } from 'pdf-codec';
 import { buildDrawingBlock } from '../model/embedded-drawing';
-import type { Box, Margins } from '../model/geometry';
+import type { Box, Margins } from 'document-schema.js';
 import { flipY } from '../model/geometry';
-import type { Alignment } from '../model/style';
+import type { Alignment } from 'document-schema.js';
 import { throwIfAborted } from '../ports/abort';
 import type { CellTypeInference, CellTypeInferenceSink } from './cell-typing';
 import { inferCellValue } from './cell-typing';
