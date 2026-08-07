@@ -1,3 +1,10 @@
+## [1.5.4](https://github.com/ExaDev/document-mcp/compare/v1.5.3...v1.5.4) (2026-08-07)
+
+
+### Bug Fixes
+
+* omit plugin version so git SHA drives auto-updates ([649b932](https://github.com/ExaDev/document-mcp/commit/649b932bff13507e028756310dc6898ff0b50535))
+
 ## [1.5.3](https://github.com/ExaDev/document-mcp/compare/v1.5.2...v1.5.3) (2026-08-07)
 
 ## [1.5.2](https://github.com/ExaDev/document-mcp/compare/v1.5.1...v1.5.2) (2026-08-07)
