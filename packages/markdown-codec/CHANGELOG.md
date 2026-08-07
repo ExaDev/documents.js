@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/ExaDev/markdown-codec/compare/v1.2.5...v1.3.0) (2026-08-07)
+
+
+### Features
+
+* ban split-statement import-then-export re-exports ([38e01cb](https://github.com/ExaDev/markdown-codec/commit/38e01cb8667c57d2b6d5d301be57cd2cdb5c0d5a))
+
 ## [1.2.5](https://github.com/ExaDev/markdown-codec/compare/v1.2.4...v1.2.5) (2026-08-07)
 
 ## [1.2.4](https://github.com/ExaDev/markdown-codec/compare/v1.2.3...v1.2.4) (2026-08-07)
