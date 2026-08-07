@@ -30,8 +30,8 @@ importers:
         specifier: ^2.11.2
         version: 2.11.2
       pdf-codec:
-        specifier: ^2.2.1
-        version: 2.2.1
+        specifier: ^2.2.3
+        version: 2.2.3
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -2539,8 +2539,8 @@ packages:
   pathe@2.0.3:
     resolution: {integrity: sha512-WUjGcAqP1gQacoQe+OBJsFA7Ld4DyXuUIjZ5cc75cLHvJ7dtNsTugphxIADwspS+AraAUePCKrSVtPLFj/F88w==}
 
-  pdf-codec@2.2.1:
-    resolution: {integrity: sha512-Eo/LugLWcTugSiXO3/RZEwJq0MLt7Urx64ds0OPvqw68YS+KPb2XctXmH10+4xA/jWM56hbJYDbRunQQmZ1bxQ==}
+  pdf-codec@2.2.3:
+    resolution: {integrity: sha512-wWJIdNr3uUR/fcMkROtruVe8W97Im2Y95di/RI5D3ZHGk/ocQ22F2o7eDhBVQnGHrU1Ihn/vxoCAGvGe9cv9xA==}
     engines: {node: '>=20'}
 
   picocolors@1.1.1:
@@ -5396,10 +5396,10 @@ snapshots:
 
   pathe@2.0.3: {}
 
-  pdf-codec@2.2.1:
+  pdf-codec@2.2.3:
     dependencies:
       byte-codec: 1.0.4
-      document-schema.js: 2.7.0
+      document-schema.js: 2.7.2
       fflate: 0.8.3
       zod: 4.4.3
 
