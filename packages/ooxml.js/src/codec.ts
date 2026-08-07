@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { type Package, PackageSchema } from './model/package';
-import { type XmlNode, XmlNodeSchema } from './model/node';
+import { XmlNodeSchema } from './model/node';
 import { parsePackage } from './package-io/read';
 import { serializePackage } from './package-io/write';
 import { parseXml } from './xml/parse';
@@ -25,5 +25,3 @@ export function decodePackage(bytes: Uint8Array<ArrayBuffer>): Package {
 export function encodePackage(pkg: Package): Uint8Array<ArrayBuffer> {
   return z.encode(packageCodec, pkg);
 }
-
-export type { XmlNode };
