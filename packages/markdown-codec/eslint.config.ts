@@ -1,5 +1,5 @@
 import js from '@eslint/js';
-import exadev from '@exadev/eslint-config';
+import exadevRecommendedTypeChecked from '@exadev/eslint-config';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
@@ -27,18 +27,10 @@ export default tseslint.config(
     },
   },
   js.configs.recommended,
-  ...tseslint.configs.recommended,
-  // Type-checked tier: catches floating promises, misused async handlers, unsafe `any`, and invalid template expressions. Requires the `projectService` parser option set above.
-  ...tseslint.configs.recommendedTypeChecked,
-  ...tseslint.configs.stylisticTypeChecked,
-  {
-    // No inline eslint-disable / config comments anywhere -- an exception belongs in this file, scoped to the file or line it actually applies to, not hidden in the source it's disabling a rule for.
-    linterOptions: { noInlineConfig: true },
-  },
+  // Bundles typescript-eslint's own recommendedTypeChecked + stylisticTypeChecked (recommendedTypeChecked already subsumes plain tseslint.configs.recommended outright -- every one of its 46 rules is a strict subset of recommendedTypeChecked's 73), this package's own four exadev/* rules (self-scoped internally to the barrel, so no files/ignores wiring is needed here), linterOptions.noInlineConfig, consistent-type-assertions banning all type assertions, and ban-ts-comment banning @ts-expect-error outright alongside the preset's own existing @ts-ignore/@ts-nocheck bans -- both relaxed automatically in *.test.ts/*.spec.ts files. See @exadev/eslint-config's own README for the full rule set and rationale.
+  ...exadevRecommendedTypeChecked,
   {
     rules: {
-      // No type assertions anywhere: this codec narrows a raw markdown scan/parse result through its own AST node `kind` discriminant (or a type guard) instead -- never `as`. Use a guard or a Zod parse at the boundary rather than asserting.
-      '@typescript-eslint/consistent-type-assertions': ['error', { assertionStyle: 'never' }],
       '@typescript-eslint/consistent-type-imports': ['error', { fixStyle: 'inline-type-imports' }],
     },
   },
@@ -71,12 +63,7 @@ export default tseslint.config(
     },
   },
   {
-    // These four rules are sourced from the published @exadev/eslint-config package rather than kept as local per-repo copies.
-    plugins: { exadev },
-    rules: { 'exadev/no-pointless-reassignment': 'error', 'exadev/no-non-barrel-index': 'error' },
-  },
-  {
-    // Re-exports belong only in src/index.ts, the public barrel -- a re-export anywhere else risks silently surfacing the wrong thing under a name a consumer expects to mean something else.
+    // Re-exports belong only in src/index.ts, the public barrel -- a re-export anywhere else risks silently surfacing the wrong thing under a name a consumer expects to mean something else. The AST-selector ban here catches the single-statement forms; the bundle's own exadev/no-non-barrel-reexport (self-scoped away from src/index.ts) catches the split-statement form.
     files: ['src/**/*.ts'],
     ignores: ['src/index.ts'],
     rules: {
@@ -85,12 +72,6 @@ export default tseslint.config(
         { selector: 'ExportAllDeclaration', message: 'Re-exports belong only in src/index.ts (the public barrel). Define or import this locally instead.' },
         { selector: 'ExportNamedDeclaration[source]', message: 'Re-exports belong only in src/index.ts (the public barrel). Define or import this locally instead.' },
       ],
-      'exadev/no-non-barrel-reexport': 'error',
     },
-  },
-  {
-    // The structural counterpart to the re-export ban above: that rule says re-exports belong only in src/index.ts, this one says src/index.ts may contain only re-exports -- together pinning the barrel to exactly one shape, one that can never have a side effect at import time.
-    files: ['src/index.ts'],
-    rules: { 'exadev/no-side-effects-in-index': 'error' },
   },
 );
