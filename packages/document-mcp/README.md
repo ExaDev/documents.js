@@ -56,11 +56,25 @@ Run the server directly — no install step needed:
 npx document-mcp
 ```
 
-### Connecting from Claude Code / Claude Desktop
+### Connecting from Claude Code
 
-Add an entry to the client's MCP server configuration (`claude mcp add` for Claude Code, or the `mcpServers` block in Claude Desktop's config file):
+```sh
+claude mcp add --transport stdio document-mcp -- npx -y document-mcp
+```
 
-Add an entry to the client's MCP server configuration (`claude mcp add` for Claude Code, or the `mcpServers` block in Claude Desktop's config file):
+### Connecting from Codex CLI
+
+Add to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.document-mcp]
+command = "npx"
+args = ["-y", "document-mcp"]
+```
+
+### Connecting from Claude Desktop
+
+Add to the `mcpServers` block in Claude Desktop's config file (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
 
 ```json
 {
