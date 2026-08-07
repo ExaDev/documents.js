@@ -1,3 +1,10 @@
+# [2.5.0](https://github.com/ExaDev/odf.js/compare/v2.4.23...v2.5.0) (2026-08-07)
+
+
+### Features
+
+* ban split-statement import-then-export re-exports ([a3ac637](https://github.com/ExaDev/odf.js/commit/a3ac6379211d1121ddba0a7941bf441ebd9c8e31))
+
 ## [2.4.23](https://github.com/ExaDev/odf.js/compare/v2.4.22...v2.4.23) (2026-08-06)
 
 ## [2.4.22](https://github.com/ExaDev/odf.js/compare/v2.4.21...v2.4.22) (2026-08-06)
