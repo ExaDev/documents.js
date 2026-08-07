@@ -66,6 +66,15 @@ claude mcp add --transport stdio document-mcp -- npx -y document-mcp
 
 Or install as a Claude Code plugin (this repo is a plugin marketplace — includes auto-update on new releases):
 
+From the terminal:
+
+```sh
+claude plugin marketplace add ExaDev/document-mcp
+claude plugin install document-mcp@exadev
+```
+
+Or from within a running Claude Code session:
+
 ```
 /plugin marketplace add ExaDev/document-mcp
 /plugin install document-mcp@exadev
