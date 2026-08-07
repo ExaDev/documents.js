@@ -1,3 +1,10 @@
+# [2.7.0](https://github.com/ExaDev/document-schema.js/compare/v2.6.1...v2.7.0) (2026-08-07)
+
+
+### Features
+
+* add an autofix to the split-statement re-export rule ([2870b02](https://github.com/ExaDev/document-schema.js/commit/2870b02932ba03672b074dd3ff0fb499bbf6327e))
+
 ## [2.6.1](https://github.com/ExaDev/document-schema.js/compare/v2.6.0...v2.6.1) (2026-08-07)
 
 
