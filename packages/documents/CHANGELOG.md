@@ -1,3 +1,10 @@
+# [1.9.0](https://github.com/ExaDev/documents/compare/v1.8.0...v1.9.0) (2026-08-08)
+
+
+### Features
+
+* preview original and converted documents side by side ([61b80fd](https://github.com/ExaDev/documents/commit/61b80fde58520be30222ba6d789be87b0ca73339))
+
 # [1.8.0](https://github.com/ExaDev/documents/compare/v1.7.0...v1.8.0) (2026-08-08)
 
 
