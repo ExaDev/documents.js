@@ -1,4 +1,4 @@
-import { Alert, Button, Container, Group, Paper, Stack, Table, Text, TextInput, Title } from '@mantine/core';
+import { Alert, Button, Container, Paper, Stack, Table, TextInput, Title } from '@mantine/core';
 import { createFileRoute } from '@tanstack/react-router';
 import type { DocumentFormat } from 'documents.js';
 import { useState } from 'react';
@@ -7,6 +7,7 @@ import { createFileAccess } from '../adapters/fileAccess/createFileAccess';
 import { useReadMetadata, useWriteMetadata } from '../hooks/useMetadata';
 import type { OpenedFile } from '../ports/fileAccess';
 import { inferFormatFromFilename } from '../shared/extensionToFormat';
+import { FileUpload } from '../ui/FileUpload';
 
 export const Route = createFileRoute('/metadata')({
   component: MetadataPage,
@@ -21,26 +22,23 @@ function MetadataPage() {
   const writeMetadata = useWriteMetadata();
   const fileAccess = createFileAccess();
 
-  const handleOpen = () => {
-    void fileAccess.openFile({}).then((opened) => {
-      if (opened === undefined) return;
-      const inferred = inferFormatFromFilename(opened.name);
-      setFile(opened);
-      setFormat(inferred);
-      readMetadata.reset();
-      writeMetadata.reset();
-      if (inferred !== undefined) {
-        readMetadata.mutate(
-          { format: inferred, bytes: opened.bytes },
-          {
-            onSuccess: (metadata) => {
-              setTitle(metadata.title ?? '');
-              setAuthor(metadata.author ?? '');
-            },
+  const handleFile = (opened: OpenedFile) => {
+    const inferred = inferFormatFromFilename(opened.name);
+    setFile(opened);
+    setFormat(inferred);
+    readMetadata.reset();
+    writeMetadata.reset();
+    if (inferred !== undefined) {
+      readMetadata.mutate(
+        { format: inferred, bytes: opened.bytes },
+        {
+          onSuccess: (metadata) => {
+            setTitle(metadata.title ?? '');
+            setAuthor(metadata.author ?? '');
           },
-        );
-      }
-    });
+        },
+      );
+    }
   };
 
   const handleSave = () => {
@@ -61,12 +59,7 @@ function MetadataPage() {
         <Title order={2}>Document metadata</Title>
         <Paper withBorder p="md">
           <Stack gap="sm">
-            <Group justify="space-between">
-              <Text>{file?.name ?? 'No file selected'}</Text>
-              <Button variant="light" onClick={handleOpen}>
-                Choose file
-              </Button>
-            </Group>
+            <FileUpload file={file} onFile={handleFile} />
             {file !== undefined && format === undefined && (
               <Alert color="red">Could not recognise "{file.name}"'s format from its extension.</Alert>
             )}

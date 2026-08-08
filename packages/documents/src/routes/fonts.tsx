@@ -1,11 +1,11 @@
-import { Alert, Button, Container, Group, Paper, Stack, Table, Text, Title } from '@mantine/core';
+import { Alert, Container, Paper, Stack, Table, Text, Title } from '@mantine/core';
 import { createFileRoute } from '@tanstack/react-router';
 import { useState } from 'react';
 
-import { createFileAccess } from '../adapters/fileAccess/createFileAccess';
 import { useExtractSourceFonts } from '../hooks/useFonts';
 import type { OpenedFile } from '../ports/fileAccess';
 import { inferFormatFromFilename } from '../shared/extensionToFormat';
+import { FileUpload } from '../ui/FileUpload';
 
 export const Route = createFileRoute('/fonts')({
   component: FontsPage,
@@ -14,18 +14,14 @@ export const Route = createFileRoute('/fonts')({
 function FontsPage() {
   const [file, setFile] = useState<OpenedFile | undefined>(undefined);
   const extractFonts = useExtractSourceFonts();
-  const fileAccess = createFileAccess();
 
-  const handleOpen = () => {
-    void fileAccess.openFile({}).then((opened) => {
-      if (opened === undefined) return;
-      const format = inferFormatFromFilename(opened.name);
-      setFile(opened);
-      extractFonts.reset();
-      if (format !== undefined) {
-        extractFonts.mutate({ format, bytes: opened.bytes });
-      }
-    });
+  const handleFile = (opened: OpenedFile) => {
+    const format = inferFormatFromFilename(opened.name);
+    setFile(opened);
+    extractFonts.reset();
+    if (format !== undefined) {
+      extractFonts.mutate({ format, bytes: opened.bytes });
+    }
   };
 
   return (
@@ -33,12 +29,7 @@ function FontsPage() {
       <Stack gap="lg">
         <Title order={2}>Embedded fonts</Title>
         <Paper withBorder p="md">
-          <Group justify="space-between">
-            <Text>{file?.name ?? 'No file selected'}</Text>
-            <Button variant="light" onClick={handleOpen}>
-              Choose document
-            </Button>
-          </Group>
+          <FileUpload file={file} onFile={handleFile} loading={extractFonts.isPending} />
           {file !== undefined && inferFormatFromFilename(file.name) === undefined && (
             <Alert color="red" mt="sm">
               Could not recognise "{file.name}"'s format from its extension.

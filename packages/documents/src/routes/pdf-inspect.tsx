@@ -1,10 +1,10 @@
-import { Alert, Button, Container, Group, Paper, Stack, Table, Text, Title } from '@mantine/core';
+import { Alert, Container, Paper, Stack, Table, Text, Title } from '@mantine/core';
 import { createFileRoute } from '@tanstack/react-router';
 import { useState } from 'react';
 
-import { createFileAccess } from '../adapters/fileAccess/createFileAccess';
 import { usePdfInspect } from '../hooks/usePdfInspect';
 import type { OpenedFile } from '../ports/fileAccess';
+import { FileUpload } from '../ui/FileUpload';
 
 export const Route = createFileRoute('/pdf-inspect')({
   component: PdfInspectPage,
@@ -13,14 +13,10 @@ export const Route = createFileRoute('/pdf-inspect')({
 function PdfInspectPage() {
   const [file, setFile] = useState<OpenedFile | undefined>(undefined);
   const inspect = usePdfInspect();
-  const fileAccess = createFileAccess();
 
-  const handleOpen = () => {
-    void fileAccess.openFile({ accept: { 'application/pdf': ['.pdf'] } }).then((opened) => {
-      if (opened === undefined) return;
-      setFile(opened);
-      inspect.mutate({ bytes: opened.bytes });
-    });
+  const handleFile = (opened: OpenedFile) => {
+    setFile(opened);
+    inspect.mutate({ bytes: opened.bytes });
   };
 
   return (
@@ -28,12 +24,7 @@ function PdfInspectPage() {
       <Stack gap="lg">
         <Title order={2}>PDF inspect</Title>
         <Paper withBorder p="md">
-          <Group justify="space-between">
-            <Text>{file?.name ?? 'No file selected'}</Text>
-            <Button variant="light" onClick={handleOpen}>
-              Choose PDF
-            </Button>
-          </Group>
+          <FileUpload accept={{ 'application/pdf': ['.pdf'] }} formatHint="PDF" file={file} onFile={handleFile} loading={inspect.isPending} />
         </Paper>
 
         {inspect.isError && <Alert color="red">{inspect.error.message}</Alert>}

@@ -7,6 +7,7 @@ import { createFileAccess } from '../adapters/fileAccess/createFileAccess';
 import { useConversions } from '../hooks/useConversions';
 import { useConvert } from '../hooks/useConvert';
 import type { OpenedFile } from '../ports/fileAccess';
+import { FileUpload } from '../ui/FileUpload';
 
 // Layout route: convert.index.tsx and convert.$source.$target.tsx become its children (per TanStack Router's file-based nesting convention) and exist only to register typed path params in the route tree -- this component owns all the real state and UI directly, so it never remounts when the selected pair changes. That's the actual fix for "picking a new pair feels like leaving the page": the old sibling-routes structure fully remounted (destroying `file`/`convert` state) on every pair change, since convert.index.tsx and convert.$source.$target.tsx both parented directly to root.
 export const Route = createFileRoute('/convert')({
@@ -46,13 +47,9 @@ function ConvertLayout() {
     convert.reset();
   };
 
-  const handleOpen = () => {
-    void fileAccess.openFile({}).then((opened) => {
-      if (opened !== undefined) {
-        setFile(opened);
-        convert.reset();
-      }
-    });
+  const handleFile = (opened: OpenedFile) => {
+    setFile(opened);
+    convert.reset();
   };
 
   const handleConvert = () => {
@@ -99,12 +96,7 @@ function ConvertLayout() {
 
         <Paper withBorder p="md">
           <Stack gap="sm">
-            <Group justify="space-between">
-              <Text>{file?.name ?? 'No file selected'}</Text>
-              <Button variant="light" onClick={handleOpen}>
-                Choose file
-              </Button>
-            </Group>
+            <FileUpload file={file} onFile={handleFile} />
             <Button onClick={handleConvert} disabled={file === undefined || source === null || target === null} loading={convert.isPending}>
               Convert
             </Button>
