@@ -81,24 +81,28 @@ function isHidden(element: XmlElement): boolean {
   return attrValue(element, 'table:visibility') === 'collapse';
 }
 
-// A column's own width/manual-break, resolved through its table:style-name -> style:style[family="table-column"] -> style:table-column-properties -- the SAME single-level (no parent-chain) lookup table.ts's own resolveColumnWidthPt uses for odt/odp tables, reused here as "the same pattern" (typed/shared/table.ts's own helpers are private and width-only; this reader also needs fo:break-before from the identical style element, so it resolves the style ONCE and reads both from it rather than looking the style up twice). Column width missing/unresolvable defaults to 0pt, mirroring table.ts's own established convention.
+// Default dimensions for an unstyled column/row -- the real LibreOffice defaults, matching documents.js's own DEFAULT_COLUMN_WIDTH_PT/DEFAULT_ROW_HEIGHT_PT (src/layout/sheets.ts, src/edit/ods/column-row.ts). An unstyled column/row previously read as 0pt, which violated ContentSheet{Column,Row}Schema's own .positive() widthPt/heightPt constraint and produced a ContentDocument that failed its own schema; defaulting to the real positive dimensions closes that at the reader (the source), mirroring the editor's own setColumnWidth/setRowHeight default-stamping convention.
+const DEFAULT_COLUMN_WIDTH_PT = 64;
+const DEFAULT_ROW_HEIGHT_PT = 15;
+
+// A column's own width/manual-break, resolved through its table:style-name -> style:style[family="table-column"] -> style:table-column-properties -- the SAME single-level (no parent-chain) lookup table.ts's own resolveColumnWidthPt uses for odt/odp tables, reused here as "the same pattern" (typed/shared/table.ts's own helpers are private and width-only; this reader also needs fo:break-before from the identical style element, so it resolves the style ONCE and reads both from it rather than looking the style up twice). Column width missing/unresolvable defaults to DEFAULT_COLUMN_WIDTH_PT rather than 0pt, so the resulting ContentSheetColumn never violates its schema's .positive() widthPt constraint.
 function readColumnLayout(columnElement: XmlElement, pkg: Package): { widthPt: number; manualBreak: boolean } {
   const styleName = attrValue(columnElement, 'table:style-name');
   const styleElement = styleName === undefined ? undefined : findStyleElement(styleName, 'table-column', pkg);
   const properties = styleElement === undefined ? undefined : childrenWithTag(styleElement, 'style:table-column-properties')[0];
   const widthValue = properties === undefined ? undefined : attrValue(properties, 'style:column-width');
-  const widthPt = widthValue === undefined ? 0 : (parseOdfLength(widthValue) ?? 0);
+  const widthPt = widthValue === undefined ? DEFAULT_COLUMN_WIDTH_PT : (parseOdfLength(widthValue) ?? DEFAULT_COLUMN_WIDTH_PT);
   const manualBreak = (properties === undefined ? undefined : attrValue(properties, 'fo:break-before')) === 'page';
   return { widthPt, manualBreak };
 }
 
-// A row's own height/manual-break, the row-properties mirror of readColumnLayout above. Unlike table.ts's own row-height treatment (optional, since ContentTableRow.heightPt is optional), ContentSheetRowSchema.heightPt is REQUIRED, so an unresolvable height defaults to 0pt -- the same "unresolvable style -> 0" convention readColumnLayout already applies to width, extended here because the schema leaves no room for "no height specified" the way ContentTableRow does.
+// A row's own height/manual-break, the row-properties mirror of readColumnLayout above. Unlike table.ts's own row-height treatment (optional, since ContentTableRow.heightPt is optional), ContentSheetRowSchema.heightPt is REQUIRED and .positive(), so an unresolvable height defaults to DEFAULT_ROW_HEIGHT_PT (not 0pt, which would violate the schema) -- the same positive-default convention readColumnLayout now applies to width.
 function readRowLayout(rowElement: XmlElement, pkg: Package): { heightPt: number; manualBreak: boolean } {
   const styleName = attrValue(rowElement, 'table:style-name');
   const styleElement = styleName === undefined ? undefined : findStyleElement(styleName, 'table-row', pkg);
   const properties = styleElement === undefined ? undefined : childrenWithTag(styleElement, 'style:table-row-properties')[0];
   const heightValue = properties === undefined ? undefined : attrValue(properties, 'style:row-height');
-  const heightPt = heightValue === undefined ? 0 : (parseOdfLength(heightValue) ?? 0);
+  const heightPt = heightValue === undefined ? DEFAULT_ROW_HEIGHT_PT : (parseOdfLength(heightValue) ?? DEFAULT_ROW_HEIGHT_PT);
   const manualBreak = (properties === undefined ? undefined : attrValue(properties, 'fo:break-before')) === 'page';
   return { heightPt, manualBreak };
 }

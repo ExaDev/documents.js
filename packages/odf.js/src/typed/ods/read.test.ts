@@ -594,6 +594,16 @@ describe('readOds: cell background/borders/alignment/verticalAlignment (syntheti
     };
   }
 
+  it('defaults an unstyled column/row to a positive width/height (not 0, which would violate ContentSheet{Column,Row}Schema\'s .positive() constraint)', () => {
+    const table = el('table:table', { 'table:name': 'Sheet1' }, [
+      el('table:table-column', {}, []),
+      el('table:table-row', {}, [stringCell('a')]),
+    ]);
+    const { sheets } = readOds(sheetPackage([], table));
+    expect(sheets[0]?.columns[0]?.widthPt).toBe(64);
+    expect(sheets[0]?.rows[0]?.heightPt).toBe(15);
+  });
+
   it('resolves fo:background-color from the cell\'s own table:style-name -> table-cell family style', () => {
     const ce1 = tableCellStyle('ce1', { cellProperties: { 'fo:background-color': '#ff0000' } });
     const table = el('table:table', { 'table:name': 'Sheet1' }, [el('table:table-row', {}, [stringCell('red', { 'table:style-name': 'ce1' })])]);
