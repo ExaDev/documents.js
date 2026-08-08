@@ -1,3 +1,10 @@
+## [1.97.11](https://github.com/ExaDev/documents.js/compare/v1.97.10...v1.97.11) (2026-08-08)
+
+
+### Bug Fixes
+
+* fire onDocument on the last hop of a composed conversion, not the first ([a5ae5bb](https://github.com/ExaDev/documents.js/commit/a5ae5bbc8187422a0ddc73027e37c3508d99c111))
+
 ## [1.97.10](https://github.com/ExaDev/documents.js/compare/v1.97.9...v1.97.10) (2026-08-07)
 
 ## [1.97.9](https://github.com/ExaDev/documents.js/compare/v1.97.8...v1.97.9) (2026-08-07)
