@@ -73,8 +73,8 @@ importers:
         specifier: ^17.3.0
         version: 17.3.0
       odf.js:
-        specifier: ^2.6.4
-        version: 2.6.4
+        specifier: ^2.6.8
+        version: 2.6.8
       pdf-codec:
         specifier: ^2.0.0
         version: 2.0.0
@@ -1724,10 +1724,6 @@ packages:
     resolution: {integrity: sha512-NLBNkYUq830XCKr49ClkdxvYHXra9B5hx9o7G6ZL4hMulprzj4jdEXg4hyv1WoVrKiAzJCpI4pDgQ0eamgYx8g==}
     engines: {node: '>=20'}
 
-  document-schema.js@2.7.2:
-    resolution: {integrity: sha512-BfJh9Fvlnu8yHZ7FCO+Hq6Jo8XPik3iANmwDhOlKu7CQY4dH8z9x1SF1yXIi9OJwVCTnizUK8yHgK3jsrRiFwg==}
-    engines: {node: '>=20'}
-
   document-schema.js@2.7.4:
     resolution: {integrity: sha512-E5OYkmU2NQjOAL261EwMSjdEvJjTrdgY2qS/x1MomjxeMKK4wgvcsy3YqCgxhJ3d5l5PpppM0g5/w65WobUQow==}
     engines: {node: '>=20'}
@@ -2610,12 +2606,12 @@ packages:
     resolution: {integrity: sha512-4a+OsYv9UktOJKE+l1A4OufDgdRF9PifWj+tJnHURo/P+WOxpG4GzUFL9qCalmWauao6ogiG+QvnCovwPoyAWA==}
     engines: {node: '>=12.20.0'}
 
-  odf.js@2.6.4:
-    resolution: {integrity: sha512-C6+TuzGeGurIumnFJ4ye3b0Dt/9v+5pbDHfx2GSmaCnp5AxieGxHBgbKTBKwdf90uGG4avHFP4oomk/6iSjSBQ==}
-    engines: {node: '>=20'}
-
   odf.js@2.6.7:
     resolution: {integrity: sha512-2sh5akHH7B9AE98riAPo9qk/v2QQmIaW5Mcbt3C9MA1r/UHsc409AUkYC2RmDqxU1b7WFUBpQ92mhN1KTg4Hrw==}
+    engines: {node: '>=20'}
+
+  odf.js@2.6.8:
+    resolution: {integrity: sha512-kHl4VMYpUQJ0aF5wc58nxqrkoc3vgQockB1svgsbSSccdWNTLP3LjfEh4ny4HbtBKhG8lJ2Pph0uHTX6Spxe7A==}
     engines: {node: '>=20'}
 
   onetime@5.1.2:
@@ -4991,10 +4987,6 @@ snapshots:
     dependencies:
       zod: 4.4.3
 
-  document-schema.js@2.7.2:
-    dependencies:
-      zod: 4.4.3
-
   document-schema.js@2.7.4:
     dependencies:
       zod: 4.4.3
@@ -5806,14 +5798,14 @@ snapshots:
 
   obug@2.1.4: {}
 
-  odf.js@2.6.4:
+  odf.js@2.6.7:
     dependencies:
-      document-schema.js: 2.7.2
+      document-schema.js: 2.7.4
       fast-xml-parser: 5.10.1
       fflate: 0.8.3
       zod: 4.4.3
 
-  odf.js@2.6.7:
+  odf.js@2.6.8:
     dependencies:
       document-schema.js: 2.7.4
       fast-xml-parser: 5.10.1
