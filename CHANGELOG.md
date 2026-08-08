@@ -1,3 +1,10 @@
+# [1.99.0](https://github.com/ExaDev/documents.js/compare/v1.98.2...v1.99.0) (2026-08-08)
+
+
+### Features
+
+* add drawing↔presentation content-variant transform ([6e3409e](https://github.com/ExaDev/documents.js/commit/6e3409e190e742e6c6831734d31b8553f871c8b8))
+
 ## [1.98.2](https://github.com/ExaDev/documents.js/compare/v1.98.1...v1.98.2) (2026-08-08)
 
 ## [1.98.1](https://github.com/ExaDev/documents.js/compare/v1.98.0...v1.98.1) (2026-08-08)
