@@ -1,3 +1,10 @@
+# [1.4.0](https://github.com/ExaDev/documents/compare/v1.3.0...v1.4.0) (2026-08-08)
+
+
+### Features
+
+* add drag-and-drop upload, shared across every tool ([e57e8e1](https://github.com/ExaDev/documents/commit/e57e8e141af3b954eab38a4419464a310c03169a))
+
 # [1.3.0](https://github.com/ExaDev/documents/compare/v1.2.0...v1.3.0) (2026-08-08)
 
 
