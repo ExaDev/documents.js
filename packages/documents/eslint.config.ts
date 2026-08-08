@@ -36,11 +36,12 @@ export default tseslint.config(
     },
   },
   {
-    // Two exceptions imposed by TanStack Router's file-based routing convention, not by an avoidable authoring choice in this codebase:
+    // Three exceptions imposed by TanStack Router's own conventions, not by an avoidable authoring choice in this codebase:
     // - barrel-policy: index routes require literal "index.tsx" / "<segment>.index.tsx" filenames (the router's own file-based generator resolves them, never a bare directory import), which collides with barrel-policy's unrelated "no index.* files" concern.
     // - react-refresh/only-export-components: every route file's exported `Route` (createFileRoute/createRootRoute) references its component via a `component:` property, which the rule's fast-refresh-boundary heuristic flags regardless of allowExportNames -- allowlisting the export name doesn't cover a component being referenced from within another exported value.
+    // - only-throw-error: `redirect()`/`notFound()` are TanStack Router's documented control-flow mechanism -- both deliberately return a plain object, not an Error instance, that `beforeLoad`/`loader` are meant to `throw`. The router itself catches and interprets these; they are never an actual error propagating to a boundary.
     files: ['src/routes/**/*.tsx'],
-    rules: { 'exadev/barrel-policy': 'off', 'react-refresh/only-export-components': 'off' },
+    rules: { 'exadev/barrel-policy': 'off', 'react-refresh/only-export-components': 'off', '@typescript-eslint/only-throw-error': 'off' },
   },
   {
     files: ['src/workers/**/*.ts'],
