@@ -1,13 +1,29 @@
 import type { DocumentPackage } from 'document-schema.js';
 import type { PdfDiagnostic, WinAnsiSubstitution } from 'pdf-codec';
 import type { FontSubstitution } from 'document-schema.js';
-import { DIRECT_EDGES, UnsupportedConversionError } from './capability';
+import { UnsupportedConversionError } from './capability';
 import { convertDocument, resolveCompositionPlan } from './composition';
 import { odfToPdf } from './convert';
-import type { ConversionOptions, ConversionRequest, ConversionResult, Diagnostic, DocumentConverter, DocumentFormat } from './port';
+import type { ConversionOptions, ConversionRequest, ConversionResult, Diagnostic, DocumentConverter } from './port';
+import { DOCUMENT_FORMATS, type DocumentFormat } from './port';
 
-// Derived from DIRECT_EDGES (capability.ts), in the identical order that module declares them -- which is itself the same order this list has always had. xlsx<->pdf (xlsxToPdf/pdfToXlsx) is now one of those direct edges too, even though the functions behind it compose the ods<->xlsx bridge with the ods<->pdf layout edge internally rather than laying xlsx out directly -- see capability.ts's own top-of-file comment and FORMAT_CAPABILITIES.xlsx for why that composition still counts as a direct edge here.
-const SUPPORTED_CONVERSIONS: readonly { readonly source: DocumentFormat; readonly target: DocumentFormat }[] = DIRECT_EDGES.map((edge) => ({ source: edge.source, target: edge.target }));
+// Derived from the composition pathfinder (resolveCompositionPlan in composition.ts), not from a hand-maintained edge list: every (source, target) pair the pathfinder can route, plus the special-case odf -> pdf pair (the pathfinder deliberately excludes odf, since a standalone formula document renders through src/mathml's own formula-positioning path rather than a ContentDocument -> LayoutDocument layout engine -- local.ts routes it to the hand-written odfToPdf directly). Sorted by source then target so the array is deterministic and a test can assert it exactly.
+const SUPPORTED_CONVERSIONS: readonly { readonly source: DocumentFormat; readonly target: DocumentFormat }[] = (() => {
+  const pairs: { readonly source: DocumentFormat; readonly target: DocumentFormat }[] = [];
+  for (const source of DOCUMENT_FORMATS) {
+    for (const target of DOCUMENT_FORMATS) {
+      if (source === target) {
+        continue;
+      }
+      if (resolveCompositionPlan(source, target) !== undefined) {
+        pairs.push({ source, target });
+      }
+    }
+  }
+  pairs.push({ source: 'odf', target: 'pdf' });
+  pairs.sort((a, b) => a.source.localeCompare(b.source) || a.target.localeCompare(b.target));
+  return pairs;
+})();
 
 function substitutionDiagnostic(substitution: WinAnsiSubstitution, context: { readonly pageIndex: number }): Diagnostic {
   return {
@@ -53,7 +69,7 @@ export function createLocalDocumentConverter(): DocumentConverter {
         return Promise.resolve({ document: { format: targetFormat, bytes }, diagnostics, package: documentPackage });
       }
 
-      // resolveCompositionPlan (src/convert/composition.ts) returns the minimum-cost hop plan for a supported pair, or undefined for an unsupported one. An undefined result is an UnsupportedConversionError rather than a plain Error, so a caller can branch on it -- matching the rejection the previous resolveConversionPath-based path used.
+      // resolveCompositionPlan (src/convert/composition.ts) returns the minimum-cost hop plan for a supported pair, or undefined for an unsupported one. An undefined result is an UnsupportedConversionError rather than a plain Error, so a caller can branch on it.
       const plan = resolveCompositionPlan(source.format, targetFormat);
       if (plan === undefined) {
         return Promise.reject(new UnsupportedConversionError(source.format, targetFormat));

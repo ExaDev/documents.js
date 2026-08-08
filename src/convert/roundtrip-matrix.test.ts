@@ -13,17 +13,17 @@ import { FRACTION_FORMULA, odfFormulaBytes } from '../test-support/odf';
 import { minimalOdgBytes } from '../test-support/odg';
 import { richMarkdownText } from '../test-support/markdown';
 import { minimalOdpBytes } from '../test-support/odp';
-import { gridOdsBytes, richOdsBytes } from '../test-support/ods';
+import { gridOdsBytes, minimalOdsBytes, richOdsBytes } from '../test-support/ods';
 import { minimalOdtBytes } from '../test-support/odt';
 import { minimalDocxBytes } from '../test-support/docx';
 import { minimalPptxBytes } from '../test-support/pptx';
-import { DIRECT_EDGES } from './capability';
 import { docxToMarkdown, docxToOdt, docxToPdf, docxToPptx, markdownToDocx, markdownToOdt, markdownToPdf, odfToPdf, odgToPdf, odpToPdf, odpToPptx, odpToOdt, odsToPdf, odsToXlsx, odtToDocx, odtToMarkdown, odtToOdp, odtToPdf, pdfToDocx, pdfToMarkdown, pdfToOdg, pdfToOdp, pdfToOds, pdfToOdt, pdfToPptx, pdfToXlsx, pptxToDocx, pptxToOdp, pptxToPdf, xlsxToOds, xlsxToPdf, xlsxToMarkdown, markdownToXlsx } from './convert';
+import { createLocalDocumentConverter } from './local';
 import type { DocumentFormat } from './port';
 
-// A single table-driven test matrix covering every (source, target) pair DIRECT_EDGES (capability.ts) currently registers -- the actual capability graph the DocumentConverter port exposes, not a hand-copied list that can silently drift out of sync with it. Each MatrixEntry names the exact edge(s) (source/target format pairs) its own round trip exercises; the "matrix declares every registered edge" describe block below derives the expected edge set directly from DIRECT_EDGES and fails loudly if a registered edge has no entry here, or if an entry claims an edge that no longer exists -- so a future capability-graph change (a new bridge, a newly composed pair) cannot silently go uncovered.
+// A single table-driven test matrix covering representative (source, target) pairs the composition engine routes -- the deep round-trip entries below exercise the pairs that carry meaningful recoverable content, and a separate lightweight sweep ("every supported conversion produces valid output") covers the full SUPPORTED_CONVERSIONS set the DocumentConverter port exposes, including pairs the pathfinder newly routes that did not exist as hand-written edges before. Each MatrixEntry names the exact pair(s) its own round trip exercises; the completeness check below asserts every declared edge is a real supported conversion (a subset of the port's own conversions list), and the lightweight sweep iterates that list directly so a future capability-graph change (a new bridge, a newly composed pair) cannot silently go uncovered.
 //
-// Each entry converts a real fixture (reused from src/test-support/ wherever one already exists) from its own source format to its target format and back, then asserts the RECOVERABLE subset of content survives -- text, structure, specific known fields -- rather than byte-identity, per this package's own README Fidelity section: PDF-pivot conversions are a best-effort geometric reconstruction (no table/vector-shape recovery on the wordprocessing/presentation side), the ods<->xlsx and odg<->pdf pairs have their own documented, narrower format-boundary limits, and odf->pdf is a genuine one-way edge with no reverse at all (see port.ts's own note on why there is no pdf->odf). None of this duplicates the deep, multi-assertion fidelity suites already in convert.test.ts/bridges.test.ts/formula.test.ts -- those remain the authority on any one pair's exact boundary -- this file's job is breadth: proving every registered pair has at least one genuine, passing round trip, with no pair silently missing coverage.
+// Each deep entry converts a real fixture (reused from src/test-support/ wherever one already exists) from its own source format to its target format and back, then asserts the RECOVERABLE subset of content survives -- text, structure, specific known fields -- rather than byte-identity, per this package's own README Fidelity section: PDF-pivot conversions are a best-effort geometric reconstruction (no table/vector-shape recovery on the wordprocessing/presentation side), the ods<->xlsx and odg<->pdf pairs have their own documented, narrower format-boundary limits, and odf->pdf is a genuine one-way edge with no reverse at all (see port.ts's own note on why there is no pdf->odf). None of this duplicates the deep, multi-assertion fidelity suites already in convert.test.ts/bridges.test.ts/formula.test.ts -- those remain the authority on any one pair's exact boundary -- this file's job is breadth: proving every supported pair has at least one genuine, passing conversion, with no pair silently missing coverage.
 
 function edgeKey(edge: { readonly source: DocumentFormat; readonly target: DocumentFormat }): string {
   return `${edge.source}->${edge.target}`;
@@ -31,7 +31,7 @@ function edgeKey(edge: { readonly source: DocumentFormat; readonly target: Docum
 
 interface MatrixEntry {
   readonly name: string;
-  // The exact DIRECT_EDGES entries this round trip exercises, both hops -- used only by the completeness check below, never to drive the round trip itself (each entry's own `run` calls the real convert.ts functions directly).
+  // The exact pair(s) this round trip exercises, both hops -- used only by the completeness check below, never to drive the round trip itself (each entry's own `run` calls the real convert.ts functions directly).
   readonly edges: readonly { readonly source: DocumentFormat; readonly target: DocumentFormat }[];
   readonly run: () => void;
 }
@@ -414,16 +414,85 @@ const MATRIX_ENTRIES: readonly MatrixEntry[] = [
   },
 ];
 
-describe('round-trip matrix: every DIRECT_EDGES pair has a covering entry', () => {
-  it('the matrix declares exactly the edge set DIRECT_EDGES (capability.ts) currently registers -- no more, no fewer', () => {
-    const registeredEdgeKeys = DIRECT_EDGES.map((edge) => edgeKey(edge)).sort();
-    const declaredEdgeKeys = MATRIX_ENTRIES.flatMap((entry) => entry.edges.map((edge) => edgeKey(edge))).sort();
-    expect(declaredEdgeKeys).toEqual(registeredEdgeKeys);
+describe('round-trip matrix: deep entries cover representative supported pairs', () => {
+  it('every edge declared by a matrix entry is a real supported conversion (no entry claims a pair the port does not expose)', () => {
+    const supportedKeys = new Set(createLocalDocumentConverter().conversions.map((edge) => edgeKey(edge)));
+    const declaredEdgeKeys = MATRIX_ENTRIES.flatMap((entry) => entry.edges.map((edge) => edgeKey(edge)));
+    for (const key of declaredEdgeKeys) {
+      expect(supportedKeys.has(key), `matrix entry declares ${key}, which is not in the port's conversions`).toBe(true);
+    }
   });
 
-  it('no two entries declare the same edge (each registered edge is covered exactly once)', () => {
+  it('no two entries declare the same edge (each edge is covered exactly once)', () => {
     const declaredEdgeKeys = MATRIX_ENTRIES.flatMap((entry) => entry.edges.map((edge) => edgeKey(edge)));
     expect(new Set(declaredEdgeKeys).size).toBe(declaredEdgeKeys.length);
+  });
+});
+
+// --- Lightweight sweep: every pair the port exposes produces valid output of the target format without throwing. The pathfinder routes many pairs the deep entries above do not individually cover (e.g. odg -> docx via PDF, markdown -> pptx via the cross-variant transform, xlsx -> odp via three hops); this sweep proves none of those newly-exposed pairs errors or produces empty/garbage output. Pairs routed through multiple PDF hops are inherently lossy (geometry-based reconstruction stacked two or three deep), so the assertion here is "valid output of the target format", not content recovery -- the deep entries above remain the authority on recoverable content for the pairs they cover. ---
+
+function fixtureBytes(format: DocumentFormat): Uint8Array<ArrayBuffer> {
+  switch (format) {
+    case 'docx':
+      return minimalDocxBytes();
+    case 'pptx':
+      return minimalPptxBytes();
+    case 'odt':
+      return minimalOdtBytes();
+    case 'odp':
+      return minimalOdpBytes();
+    case 'ods':
+      return minimalOdsBytes();
+    case 'odg':
+      return minimalOdgBytes();
+    case 'xlsx':
+      return odsToXlsx(minimalOdsBytes());
+    case 'markdown':
+      return encodeMarkdownText('# Heading\n\nA paragraph of text.');
+    case 'odf':
+      return odfFormulaBytes(FRACTION_FORMULA);
+    case 'pdf':
+      // Generate a minimal PDF from a docx so the sweep has real PDF bytes for every pdf-sourced pair.
+      return docxToPdf(minimalDocxBytes());
+  }
+}
+
+function isValidOutput(format: DocumentFormat, bytes: Uint8Array<ArrayBuffer>): boolean {
+  if (bytes.length === 0) {
+    return false;
+  }
+  switch (format) {
+    case 'pdf':
+      return new TextDecoder('latin1').decode(bytes.subarray(0, 5)) === '%PDF-';
+    case 'docx':
+    case 'pptx':
+    case 'xlsx':
+    case 'odt':
+    case 'odp':
+    case 'ods':
+    case 'odg': {
+      // All package formats are ZIP containers (PK magic bytes).
+      return bytes[0] === 0x50 && bytes[1] === 0x4b;
+    }
+    case 'markdown':
+      return bytes.length > 0;
+    default:
+      return false;
+  }
+}
+
+const ALL_SUPPORTED_PAIRS = createLocalDocumentConverter().conversions;
+
+describe.each(ALL_SUPPORTED_PAIRS.map((pair) => [`${pair.source}->${pair.target}`, pair] as const))('lightweight sweep: %s', (_label, pair) => {
+  it('produces valid output of the target format without throwing', async () => {
+    const converter = createLocalDocumentConverter();
+    const sourceBytes = fixtureBytes(pair.source);
+    const result = await converter.convert(
+      { source: { format: pair.source, bytes: sourceBytes }, targetFormat: pair.target },
+      { signal: new AbortController().signal },
+    );
+    expect(result.document.format).toBe(pair.target);
+    expect(isValidOutput(pair.target, result.document.bytes)).toBe(true);
   });
 });
 

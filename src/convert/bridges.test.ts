@@ -643,7 +643,7 @@ describe('ods <-> xlsx: xlsx -> ods -> xlsx (double hop, starting from a genuine
 
 // --- markdown <-> docx, markdown <-> odt --------------------------------------------------------------------------
 //
-// markdownToDocx/docxToMarkdown and markdownToOdt/odtToMarkdown are hand-written bridge functions, not something resolveConversionPath's generic one-hop composition executes automatically -- see capability.ts's own module comment for why (local.ts's DocumentConverter only ever executes a 'direct' strategy, never a composed one).
+// markdownToDocx/docxToMarkdown and markdownToOdt/odtToMarkdown are hand-written bridge functions -- the composition engine's pathfinder (resolveCompositionPlan in composition.ts) routes them as same-variant bridge hops, and convertDocument's bridge executor runs the identical decode/read/build/encode sequence these functions already hard-code.
 
 describe('markdownToDocx/docxToMarkdown and markdownToOdt/odtToMarkdown never invoke the layout engine (no PDF-pivot regression)', () => {
   it('markdownToDocx does not call convertWordprocessingToLayout', () => {
