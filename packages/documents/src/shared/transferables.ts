@@ -15,3 +15,31 @@ export function collectTransferableBuffers(value: unknown, found: ArrayBufferLik
   }
   return found;
 }
+
+// experimental_transfer's transfer list is moved by reference, not copied: every ArrayBuffer it names is detached from its original Uint8Array once postMessage runs. Called from the client's outgoing (request) direction only (src/rpc/client.ts) -- it replaces each Uint8Array it finds with a fresh copy *inside the message about to be sent*, so the transfer detaches that throwaway copy instead of the caller's own retained buffer (e.g. an uploaded file's bytes, which the UI reuses across converting to several targets, reading metadata, etc.). The worker's response direction (src/workers/documents.worker.ts) uses collectTransferableBuffers directly instead -- a result's bytes are never needed again on that side, so detaching the original there is fine and avoids an unnecessary copy.
+export function cloneAndCollectTransferableBuffers(value: unknown, found: ArrayBufferLike[] = []): ArrayBufferLike[] {
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length; index += 1) {
+      const item: unknown = value[index];
+      if (item instanceof Uint8Array) {
+        const clone = new Uint8Array(item);
+        value[index] = clone;
+        found.push(clone.buffer);
+      } else {
+        cloneAndCollectTransferableBuffers(item, found);
+      }
+    }
+  } else if (isRecord(value)) {
+    for (const key of Object.keys(value)) {
+      const item = value[key];
+      if (item instanceof Uint8Array) {
+        const clone = new Uint8Array(item);
+        value[key] = clone;
+        found.push(clone.buffer);
+      } else {
+        cloneAndCollectTransferableBuffers(item, found);
+      }
+    }
+  }
+  return found;
+}

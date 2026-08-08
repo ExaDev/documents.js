@@ -2,7 +2,7 @@ import { createORPCClient } from '@orpc/client';
 import { RPCLink } from '@orpc/client/message-port';
 import type { RouterClient } from '@orpc/server';
 
-import { collectTransferableBuffers } from '../shared/transferables';
+import { cloneAndCollectTransferableBuffers } from '../shared/transferables';
 import type { AppRouter } from './router';
 
 let cachedClient: RouterClient<AppRouter> | undefined;
@@ -14,9 +14,9 @@ export function getRpcClient(): RouterClient<AppRouter> {
   const worker = new Worker(new URL('../workers/documents.worker.ts', import.meta.url), { type: 'module' });
   const link = new RPCLink({
     port: worker,
-    // Restores real Uint8Array instances across the boundary (see src/shared/transferables.ts) and moves document bytes by reference instead of copying them.
+    // Restores real Uint8Array instances across the boundary (see src/shared/transferables.ts). Clones before transferring so detaching the transferred buffer never invalidates bytes the caller still holds (e.g. an uploaded file reused across converting to several targets).
     experimental_transfer: (message) => {
-      const transfer = collectTransferableBuffers(message);
+      const transfer = cloneAndCollectTransferableBuffers(message);
       return transfer.length > 0 ? transfer : null;
     },
   });

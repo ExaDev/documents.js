@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { collectTransferableBuffers } from './transferables';
+import { cloneAndCollectTransferableBuffers, collectTransferableBuffers } from './transferables';
 
 describe('collectTransferableBuffers', () => {
   it('finds a top-level Uint8Array', () => {
@@ -23,5 +23,32 @@ describe('collectTransferableBuffers', () => {
     expect(collectTransferableBuffers('docx')).toEqual([]);
     expect(collectTransferableBuffers(null)).toEqual([]);
     expect(collectTransferableBuffers(42)).toEqual([]);
+  });
+});
+
+describe('cloneAndCollectTransferableBuffers', () => {
+  it('replaces a Uint8Array in the message with a clone and leaves the original untouched', () => {
+    const original = new Uint8Array([1, 2, 3]);
+    const message = { bytes: original };
+
+    const transfer = cloneAndCollectTransferableBuffers(message);
+
+    expect(message.bytes).not.toBe(original);
+    expect(Array.from(message.bytes)).toEqual([1, 2, 3]);
+    expect(transfer).toEqual([message.bytes.buffer]);
+    // The caller's own reference must still be a live, attached buffer -- reusable in a later call.
+    expect(original.buffer.byteLength).toBe(3);
+  });
+
+  it('clones Uint8Arrays nested inside arrays too', () => {
+    const original = new Uint8Array([9]);
+    const message = { chapters: [{ bytes: original }] };
+
+    cloneAndCollectTransferableBuffers(message);
+
+    const [chapter] = message.chapters;
+    if (chapter === undefined) throw new Error('expected a chapter');
+    expect(chapter.bytes).not.toBe(original);
+    expect(Array.from(chapter.bytes)).toEqual([9]);
   });
 });
