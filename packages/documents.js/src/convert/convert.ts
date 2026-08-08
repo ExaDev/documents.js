@@ -251,7 +251,7 @@ export function odpToOdt(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBridg
   return convertDocument('odp', 'odt', bytes, options);
 }
 
-// xlsx bytes <-> PDF bytes: xlsx has no layout engine of its own, so convertDocument's pathfinder resolves this as [xlsx -> ods bridge, ods -> pdf toPdf] -- the identical composed route the hand-written body used to hard-code. The `onDocument` callback reports the first hop's package under the composition engine's own "fires exactly once, on the first hop" convention (see convertDocument's own doc).
+// xlsx bytes <-> PDF bytes: xlsx has no layout engine of its own, so convertDocument's pathfinder resolves this as [xlsx -> ods bridge, ods -> pdf toPdf] -- the identical composed route the hand-written body used to hard-code. The `onDocument` callback reports the last hop's package under the composition engine's own "fires exactly once, on the last hop" convention (see convertDocument's own doc): for xlsxToPdf that is the odsToPdf hop's content+layout; for pdfToXlsx that is the odsToXlsx bridge hop's content-only package.
 
 // Forwards to convertDocument (src/convert/composition.ts).
 export function xlsxToPdf(bytes: Uint8Array<ArrayBuffer>, options?: DocumentToPdfOptions): Uint8Array<ArrayBuffer> {
@@ -263,7 +263,7 @@ export function pdfToXlsx(bytes: Uint8Array<ArrayBuffer>, options?: PdfToDocumen
   return convertDocument('pdf', 'xlsx', bytes, options);
 }
 
-// xlsx <-> markdown: xlsx and markdown share no ContentDocument variant (spreadsheet vs wordprocessing), so convertDocument's pathfinder resolves this as [xlsx -> ods, ods -> pdf, pdf -> markdown] -- three hops, both legs' lossiness inherited in full (the single lossiest path in the package). onDocument reports the first hop's package under the composition engine's own "fires exactly once" convention.
+// xlsx <-> markdown: xlsx and markdown share no ContentDocument variant (spreadsheet vs wordprocessing), so convertDocument's pathfinder resolves this as [xlsx -> ods, ods -> pdf, pdf -> markdown] -- three hops, both legs' lossiness inherited in full (the single lossiest path in the package). onDocument reports the last hop's package under the composition engine's own "fires exactly once, on the last hop" convention.
 
 // Forwards to convertDocument (src/convert/composition.ts).
 export function xlsxToMarkdown(bytes: Uint8Array<ArrayBuffer>, options?: ComposedDocumentOptions): Uint8Array<ArrayBuffer> {
