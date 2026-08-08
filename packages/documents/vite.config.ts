@@ -1,10 +1,45 @@
 import { tanstackRouter } from '@tanstack/router-plugin/vite';
 import { vanillaExtractPlugin } from '@vanilla-extract/vite-plugin';
 import react from '@vitejs/plugin-react';
+import { VitePWA } from 'vite-plugin-pwa';
 import { defineConfig } from 'vitest/config';
 
-// GitHub Pages serves this repo at /documents/ (exadev.github.io is already the org's own Pages root, so this app can never live at the bare domain). Local dev stays at '/'. Routing is hash-based (see src/router.tsx), so no 404.html SPA-fallback step is needed -- GitHub Pages only ever serves the single index.html at /documents/, and everything after '#' is resolved client-side.
+import { BACKGROUND_COLOR, BRAND_COLOR } from './src/design-tokens';
+
+// GitHub Pages serves this repo at /documents/ (exadev.github.io is already the org's own Pages root, so this app can never live at the bare domain). Local dev stays at '/'.
 const base = process.env.CI ? '/documents/' : '/';
+
+// documents.worker-*.js is ~3.7MB (by far the largest built asset) and is only ever constructed lazily inside getRpcClient() when a tool actually runs a job, never at page load. Workbox's default 2MiB precache size cutover would either silently exclude it or, if raised, block PWA install on downloading a chunk most users don't need on first paint -- excluded from the precache glob and instead cached at runtime on first use via a CacheFirst rule, which is safe because the filename is content-hashed by Vite's build (a new build is a new URL, so there is no staleness risk to revalidate against).
+const pwa = VitePWA({
+  registerType: 'autoUpdate',
+  manifest: {
+    name: 'documents',
+    short_name: 'documents',
+    description:
+      'Convert and edit docx, pptx, xlsx, odt, odp, ods, odg, pdf, and markdown documents entirely in your browser.',
+    theme_color: BRAND_COLOR,
+    background_color: BACKGROUND_COLOR,
+    display: 'standalone',
+    scope: './',
+    start_url: './',
+    icons: [
+      { src: 'icons/icon-192.svg', sizes: '192x192', type: 'image/svg+xml', purpose: 'any' },
+      { src: 'icons/icon-512.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'any' },
+      { src: 'icons/maskable-512.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'maskable' },
+    ],
+  },
+  workbox: {
+    globPatterns: ['**/*.{js,css,html,svg,woff2}'],
+    globIgnores: ['**/documents.worker-*.js'],
+    runtimeCaching: [
+      {
+        urlPattern: /documents\.worker-.*\.js$/,
+        handler: 'CacheFirst',
+        options: { cacheName: 'documents-worker', expiration: { maxEntries: 2, purgeOnQuotaError: true } },
+      },
+    ],
+  },
+});
 
 export default defineConfig({
   base,
@@ -13,6 +48,7 @@ export default defineConfig({
     tanstackRouter({ target: 'react', autoCodeSplitting: true }),
     react(),
     vanillaExtractPlugin(),
+    pwa,
   ],
   build: {
     target: 'es2022',
