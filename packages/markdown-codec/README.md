@@ -4,7 +4,7 @@
 
 > Hand-written CommonMark+GFM ⇄ `ContentDocument` codec, built on [document-schema.js](https://github.com/ExaDev/document-schema.js).
 
-`markdown-codec` is a sibling of [`pdf-codec`](https://github.com/ExaDev/pdf-codec): the same "hand-write the format instead of wrapping a third-party library" bet, aimed at CommonMark and its GitHub Flavored Markdown (GFM) extensions rather than PDF. No `micromark`/`remark`/`marked`/`markdown-it`/`commonmark`/`mdast`/`unified`/`turndown`/`showdown` dependency anywhere in this package — see `eslint.config.ts`'s `no-restricted-imports` rule, which bans importing any of them by name, matching this family's own zero-supply-chain-surface ethos: the only runtime dependencies are `document-schema.js` (the shared pivot) and `zod` (schema validation). `readMarkdown`/`writeMarkdown` read and write `document-schema.js`'s shared `ContentDocument` directly, the same pivot [`documents.js`](https://github.com/ExaDev/documents.js) already builds docx/pptx/odt/odp conversions around, so a caller can bridge markdown to any other format that pivot already supports without this package knowing anything about docx, PDF, or ODF.
+The same "hand-write the format instead of wrapping a third-party library" bet as [`pdf-codec`](https://github.com/ExaDev/pdf-codec), aimed at CommonMark and GFM. No `micromark`/`remark`/`marked`/`markdown-it`/`commonmark`/`mdast`/`unified`/`turndown`/`showdown` dependency (enforced by eslint `no-restricted-imports`). Runtime dependencies: `document-schema.js` (the shared pivot) and `zod`. `readMarkdown`/`writeMarkdown` read and write that pivot's `ContentDocument` directly — the same model [`documents.js`](https://github.com/ExaDev/documents.js) builds docx/pptx/odt/odp conversions around.
 
 ```mermaid
 graph TD
@@ -51,9 +51,7 @@ graph TD
 
 ## Status
 
-The scanner, block parser (`src/block/`), and inline parser (`src/inline/`) are complete hand-written implementations of CommonMark 0.31.2's own two-phase parsing algorithm, plus GFM's table/strikethrough/autolink/task-list-item extensions. `readMarkdown`/`writeMarkdown`/`markdownCodec` (`src/read.ts`/`src/write.ts`/`src/codec.ts`) are wired and real — front matter extraction, block/inline parsing, and lowering to `ContentDocument` compose in one call through `src/lower/lower.ts`'s `lowerMarkdown`; `src/emit/emit.ts`'s `emitMarkdown` is the structural inverse. Tooling (build, lint, typecheck, CI, release) is fully wired.
-
-The conformance suites (`src/conformance.test.ts`, `src/gfm-conformance.test.ts`) measure the real public surface end to end — `readMarkdown` → `writeMarkdown` → reparse → render to HTML — against the vendored CommonMark and GFM spec corpora, and are a materially stricter bar than measuring the bare parser alone: a round trip through `ContentDocument` has to survive `src/lower`'s own semantic mapping *and* `src/emit`'s own inverse rendering with no loss the reparse can detect. See [Fidelity](#fidelity) for what that measures and why the number is lower than 100%: it is dominated by what `ContentDocument` itself can represent, not by parsing gaps.
+The scanner, block parser, and inline parser are complete hand-written implementations of CommonMark 0.31.2's two-phase algorithm plus GFM's table/strikethrough/autolink/task-list-item extensions. `readMarkdown`/`writeMarkdown`/`markdownCodec` are wired and real. Conformance suites measure the full public surface (`readMarkdown` → `writeMarkdown` → reparse → render to HTML) against the vendored CommonMark/GFM corpora — see [Fidelity](#fidelity) for why the rate is below 100% (dominated by what `ContentDocument` can represent, not parsing gaps).
 
 ## Getting started
 
@@ -71,7 +69,7 @@ pnpm add markdown-codec
 npm install markdown-codec
 ```
 
-This package is published to [npmjs.org](https://www.npmjs.com/package/markdown-codec) via npm's OIDC trusted publishing — see [Release and publishing](#release-and-publishing) below for the full pipeline. [`documents.js`](https://github.com/ExaDev/documents.js) now consumes it via an ordinary semver range rather than the pinned git commit (`markdown-codec@github:ExaDev/markdown-codec#<commit>`) it depended on before this package's own trusted-publisher setup existed. `dist/` remains committed to the repository rather than gitignored — a holdover from that pre-publish period, when a git-tarball install needed a working build with no install-time compile step: pnpm's own git-dependency preparation sandbox proved unreliable at running a `tsdown` build reliably in CI (two independent, environment-specific failures surfaced while chasing this — a Node.js ESM-loader bug in tsdown's default config loader, then dts generation silently producing zero output under the same sandbox even after routing around the first bug), so shipping the build output directly sidestepped the whole class of problem rather than chasing a third variant of it. Now that a real npm release exists and every known consumer installs from the registry, `dist/` tracking no longer serves that original purpose and is a known cleanup rather than a load-bearing requirement.
+Published to [npmjs.org](https://www.npmjs.com/package/markdown-codec) via OIDC trusted publishing. `dist/` is committed rather than gitignored — a holdover from a pre-publish period when a git-tarball install needed a working build; now a known cleanup.
 
 ## Usage
 
@@ -92,9 +90,9 @@ const markdown = writeMarkdown(document, {
 });
 ```
 
-Both accept an optional `signal` (`AbortSignal`) and `sink` (a `MarkdownDiagnosticSink`, called once per recoverable read-side issue — a spec-legal-but-almost-certainly-a-typo construct such as an unclosed fence, in addition to a construct either side cannot represent losslessly — see [Gotchas](#gotchas-and-quirks) for the full construct-mapping list, one entry per lowering/emission `MarkdownDiagnosticCodes` code). `writeMarkdown` throws `MarkdownUnsupportedDocumentKindError` for a non-`'wordprocessing'` `ContentDocument` — markdown has no presentation/spreadsheet/drawing equivalent to render.
+Both accept an optional `signal` (`AbortSignal`) and `sink` (`MarkdownDiagnosticSink`, called once per recoverable issue or construct-mapping gap — see [Gotchas](#gotchas-and-quirks)). `writeMarkdown` throws `MarkdownUnsupportedDocumentKindError` for a non-`'wordprocessing'` `ContentDocument`.
 
-The same round trip is also available as a schema-validated [`z.codec()`](https://zod.dev) pair, mirroring `pdf-codec`'s own `pdfCodec` convention:
+The same round trip as a schema-validated [`z.codec()`](https://zod.dev) pair, mirroring `pdf-codec`'s `pdfCodec`:
 
 ```ts
 import { z } from 'zod';
@@ -104,85 +102,83 @@ const document = z.decode(markdownCodec, bytes); // throws if bytes are not well
 const bytes2 = z.encode(markdownCodec, document);
 ```
 
-`MarkdownBytesSchema` checks for well-formed UTF-8 — the one thing genuinely worth validating about arbitrary markdown bytes, since markdown has no magic-byte header of its own and CommonMark's grammar has no "this is not markdown" rejection path (worst case, an unparseable line becomes an ordinary paragraph). This is the no-extra-options form only — `readMarkdown`/`writeMarkdown` remain the entry points wherever a caller needs an `AbortSignal` or a diagnostic sink, since `z.codec()`'s fixed `decode(input)`/`encode(output)` signature has no room for side-channel options.
-
-Every construct-mapping gap either side cannot represent losslessly reports through the sink as a stable, namespaced code (e.g. `md/nested-emphasis-flattened`) — see `MarkdownDiagnosticCodes` (`src/diagnostics/diagnostics.ts`) and [Gotchas](#gotchas-and-quirks) below for the full, named list.
+`MarkdownBytesSchema` checks for well-formed UTF-8. The no-options form only; `readMarkdown`/`writeMarkdown` remain the entry points for an `AbortSignal` or diagnostic sink. Every construct-mapping gap reports through the sink as a stable code (e.g. `md/nested-emphasis-flattened`) — see `MarkdownDiagnosticCodes` and [Gotchas](#gotchas-and-quirks).
 
 ## Architecture
 
-Modelled on `pdf-codec`'s own layering (generic primitives outward to the two conversion directions), aimed at CommonMark+GFM instead of PDF:
+Modelled on `pdf-codec`'s own layering, aimed at CommonMark+GFM instead of PDF:
 
-- **`src/diagnostics/`** — the read-side diagnostic sink, matching `pdf-codec`'s own three-tier `PdfDiagnosticSink` policy: throw (`MarkdownParseError` and its subclasses — invalid UTF-8, input-too-large, nesting-limit-exceeded) for input this package cannot meaningfully process at all; recover-with-diagnostic for markdown that is spec-legal but almost certainly a typo (an unclosed fence, an unterminated HTML block, a table cell-count mismatch, a duplicate link reference, a list marker-type conflict); degrade-with-diagnostic for an individual construct `src/lower`'s or `src/emit`'s own `ContentDocument` mapping cannot represent, while the rest of the document still reads. `MarkdownDiagnosticCodes` names every code either tier can produce; `src/diagnostics/diagnostics.test.ts` asserts the whole table is reachable from real input.
-- **`src/ast/`** — this package's own markdown AST node types (document/block/inline discriminated union), Zod-first like every other model in this family: every node type inferred from its schema, never hand-written.
-- **`src/options/`** / **`src/defaults/`** — `readMarkdown`/`writeMarkdown`'s own options (GFM extension toggles, a diagnostic sink, an `AbortSignal`, `writeMarkdown`'s own style choices — heading/bullet/ordered-delimiter/emphasis/code-fence/thematic-break characters, line ending, front matter emission) and their default values.
-- **`src/scan/`** — the hand-written CommonMark line/character scanner feeding block parsing, plus `entity-table.ts` (auto-generated by `scripts/generate-entity-table.mjs` from `assets/html-entities/entities.json`, committed to the repository so this package never needs a filesystem read of the vendored asset at runtime).
-- **`src/block/`** — CommonMark's block-structure algorithm (open-block stack, continuation-line matching): paragraphs, headings, code blocks, block quotes, lists (including GFM task-list-item markers), thematic breaks, link reference definitions, GFM tables.
-- **`src/inline/`** — inline-level parsing within a block's own content: emphasis, code spans, links, autolinks, raw inline HTML, GFM strikethrough, line breaks.
-- **`src/html/`** — raw block/inline HTML recognition (CommonMark's own bounded seven-condition block-HTML rules and inline tag syntax — not a general HTML parser) plus `render.ts`, the real CommonMark-HTML conformance oracle `src/conformance.test.ts`/`src/gfm-conformance.test.ts` render parsed documents through — internal plumbing, never re-exported from `src/index.ts`.
-- **`src/image/`** — a hand-written PNG/JPEG dimension reader plus an isomorphic base64 codec, shared by `src/lower/image.ts`'s data: URI decoding and `src/emit/image.ts`'s re-encoding.
-- **`src/shared/`** — string-shape conventions `src/lower` (mint/read) and `src/emit` (read/write) must agree on exactly: `style-constants.ts` (heading/quote/code-block/rule/HTML-preformatted styleIds, the monospace font family, the blockquote per-level indent unit, the GFM task-checkbox glyph pair) and `list-id.ts` (the opaque `numId` grammar a list's own type/task/tightness is packed into, since `ContentListMembership` itself carries only `{numId, level}`). Most of this module's own surface (`headingStyleId`/`parseHeadingStyleId`/`MAX_HEADING_STYLE_LEVEL`/`QUOTE_STYLE_ID`/`CODE_BLOCK_STYLE_ID`/`HORIZONTAL_RULE_STYLE_ID`/`HTML_PREFORMATTED_STYLE_ID`/`MONOSPACE_FONT_FAMILY`/`QUOTE_INDENT_PT` from `style-constants.ts`, and `createNumIdMintState`/`mintListNumId`/`parseListNumId`/`mintedListType` plus the `ListNumIdInfo`/`ListNumIdMintOptions`/`NumIdMintState` types from `list-id.ts`) is re-exported from `src/index.ts`, not kept internal — so a sibling package building its own editor over a `ContentDocument` (`documents.js`'s `MarkdownEditor`) can mint and parse the identical styleId/numId strings this package's own lower/emit pair uses, rather than duplicating the grammar. `style-constants.ts`'s `TASK_CHECKBOX_UNCHECKED`/`TASK_CHECKBOX_CHECKED` glyphs stay unexported, since a checkbox glyph pair embedded in run text has no identity a caller could round-trip against the way a styleId or numId does.
-- **`src/lower/`** — the AST → `ContentDocument` lowering stage: the markdown-side counterpart to `ooxml.js`'s `readDocx`/`readPptx` and `odf.js`'s `readOdt`/`readOdp` — a thin adapter from a format-specific parse result onto the shared pivot, not a second parser. `lower.ts`'s own top-of-file table maps every construct (headings, emphasis/links/breaks via `inline.ts`, code blocks, blockquotes, lists via `src/shared/list-id.ts`, GFM tables via `table.ts`, images via `image.ts`'s `MarkdownImageResolver` port, raw HTML, front matter via `front-matter.ts`) onto its own `MarkdownDiagnosticCodes` gap.
-- **`src/emit/`** — the `ContentDocument` → markdown text emission stage (`writeMarkdown`'s build-side half), the structural inverse of `src/lower/` construct for construct — `emit.ts`'s own top-of-file table mirrors `lower.ts`'s.
-- **`src/read.ts`** / **`src/write.ts`** / **`src/codec.ts`** — the public `readMarkdown`/`writeMarkdown` entry points and their `z.codec()` pair (`markdownCodec`), matching `pdf-codec`'s own `pdfCodec` convention. `readMarkdown` operates on `document-schema.js`'s full `ContentDocument` envelope directly (`kind`/`formatVersion`/`metadata`/`sections`), not a bare `{metadata, sections}` shape a caller would need to wrap — see `src/read.ts`'s own top-of-file comment for the recorded reconciliation decision, reasoned from `ooxml.js`'s `readXlsxContent`/`buildXlsxPackage` precedent (the more recent design choice in this family, and the structurally closer fit: markdown has no PDF-pivot layout stage of its own, the same position xlsx⇄ods's bridge is in).
+- **`src/diagnostics/`** — three-tier diagnostic policy (throw/recover/degrade); `MarkdownDiagnosticCodes` names every code.
+- **`src/ast/`** — markdown AST node types (document/block/inline union), Zod-first.
+- **`src/options/`** / **`src/defaults/`** — read/write options (GFM toggles, sink, `AbortSignal`, write-side style) and defaults.
+- **`src/scan/`** — CommonMark line/character scanner, plus `entity-table.ts` (generated from `assets/html-entities/entities.json`).
+- **`src/block/`** — CommonMark block-structure algorithm (open-block stack, continuation matching): paragraphs, headings, code blocks, block quotes, lists (incl. GFM task-list-item), thematic breaks, link references, GFM tables.
+- **`src/inline/`** — emphasis, code spans, links, autolinks, raw HTML, GFM strikethrough, line breaks.
+- **`src/html/`** — raw HTML recognition (bounded rules, not a general parser) plus `render.ts` (conformance oracle; internal only).
+- **`src/image/`** — PNG/JPEG dimension reader and base64 codec, shared by `src/lower/` and `src/emit/`.
+- **`src/shared/`** — string-shape conventions `src/lower`/`src/emit` agree on (`style-constants.ts`, `list-id.ts`'s opaque `numId`). Re-exported so `documents.js`'s `MarkdownEditor` reuses the identical grammar.
+- **`src/lower/`** — AST → `ContentDocument` lowering (thin adapter, not a second parser); top-of-file table maps each construct to its diagnostic gap.
+- **`src/emit/`** — `ContentDocument` → markdown text emission, the structural inverse of `src/lower`.
+- **`src/read.ts`** / **`src/write.ts`** / **`src/codec.ts`** — public `readMarkdown`/`writeMarkdown` entry points and `markdownCodec` (`z.codec()` pair).
 
 ## Vendored assets
 
-`assets/` holds real, unmodified conformance corpora fetched directly from their canonical sources, each with its own `NOTICE.md` recording the exact source URL, commit/version, and confirmed licence. None of this is read at runtime by the shipped package — `assets/html-entities/entities.json` is compiled once into `src/scan/entity-table.ts` (a committed, generated source file) by `scripts/generate-entity-table.mjs`, and the two spec corpora are consumed only by the test suite (`src/test-support/spec-corpus.ts`) — so `package.json`'s `"files": ["dist"]` is correct as is; there is nothing under `assets/` a consumer of the published package ever needs.
+`assets/` holds real, unmodified conformance corpora (each with a `NOTICE.md` recording source, version, licence). None is read at runtime: `assets/html-entities/entities.json` is compiled into `src/scan/entity-table.ts`, and the spec corpora are test-only. So `package.json`'s `"files": ["dist"]` is correct.
 
-- **`assets/commonmark/`** — the official CommonMark spec (`spec.txt`) and its machine-readable conformance test corpus (`spec.json`, 652 examples), from the `commonmark/commonmark-spec` project, tag `0.31.2` (CC-BY-SA 4.0).
-- **`assets/gfm/`** — the official GitHub Flavored Markdown Spec (`spec.txt`), from `github/cmark-gfm` (CC-BY-SA 4.0).
-- **`assets/html-entities/`** — the WHATWG HTML5 named character reference table (`entities.json`), from the WHATWG HTML Standard (BSD 3-Clause, per the WHATWG's own "incorporated into source code" licence clause).
+- **`assets/commonmark/`** — CommonMark spec + corpus (652 examples), tag `0.31.2` (CC-BY-SA 4.0).
+- **`assets/gfm/`** — GitHub Flavored Markdown Spec (CC-BY-SA 4.0).
+- **`assets/html-entities/`** — WHATWG HTML5 named character reference table (BSD 3-Clause).
 
 ## Build, test, and lint
 
 ```sh
 pnpm build         # turbo run _build (tsdown -> dist/, ESM + CJS + .d.ts)
-pnpm typecheck     # turbo run _typecheck _typecheck:node (tsc -p tsconfig.json && tsc -p tsconfig.node.json -- dual tsconfig)
+pnpm typecheck     # turbo run _typecheck _typecheck:node (dual tsconfig)
 pnpm lint          # turbo run _lint (eslint . --fix --cache --max-warnings 0)
-pnpm test          # turbo run _test (vitest run --project unit, includes the CommonMark/GFM conformance suites)
-pnpm test:workers  # turbo run _test:workers (vitest run --config vitest.workers.config.ts -- the unit suite re-run under the real Cloudflare Workers/workerd runtime, turning markdown-codec's isomorphic design into a runtime-checked fact)
+pnpm test          # turbo run _test (vitest run --project unit, incl. CommonMark/GFM conformance)
+pnpm test:workers  # turbo run _test:workers (unit suite under the real Cloudflare Workers/workerd runtime)
 pnpm test:watch    # vitest --project unit
 pnpm test:coverage # turbo run _test:coverage (vitest run --project unit --coverage)
-pnpm test:smoke    # turbo run _test:smoke (rebuilds dist/, then verifies ESM/CJS export parity and runs a real readMarkdown/writeMarkdown/markdownCodec round trip against each built bundle independently)
-pnpm test:corpus   # turbo run _test:corpus (optional, gitignored real-world CommonMark/GFM sanity check -- see Fidelity below)
+pnpm test:smoke    # turbo run _test:smoke (rebuilds dist/, verifies ESM/CJS parity + a real round trip per bundle)
+pnpm test:corpus   # turbo run _test:corpus (optional, gitignored real-world sanity check -- see Fidelity)
 ```
 
 To run a single test file: `pnpm vitest run src/path/to/file.test.ts`.
 
 ## Conventions
 
-- **Zod-first schema/type/guard**, matching `pdf-codec`/`documents.js`: every model type is inferred from its Zod schema, never hand-written.
-- **No type assertions anywhere.** Every loosely-typed value is narrowed through a type guard or a Zod parse at the boundary.
-- **No markdown-parsing library dependency**, enforced by an eslint `no-restricted-imports` rule naming every mainstream alternative — this package hand-writes its own scanner, block parser, and inline parser against the CommonMark/GFM specs directly.
-- **`z.codec()` for the one schema-to-schema round trip this package owns**, matching `pdf-codec`'s `pdfCodec`/`documents.js`'s `docxPdfCodec` convention: `markdownCodec` wraps the already-independently-tested `readMarkdown`/`writeMarkdown` pair, adding automatic two-way schema validation, deliberately in the no-options form.
-- **A shrink-only conformance exclusion list.** Any spec example this package's real read → write → reparse → render pipeline does not yet reproduce byte for byte is named individually in `src/test-support/conformance-exclusions.ts`, with its own test asserting every named example genuinely still fails — the list can shrink as gaps close but can never quietly grow to hide a regression.
-- **Conventional commits**, enforced via commitlint + husky, matching the rest of this family.
+- **Zod-first schema/type/guard**, matching `pdf-codec`/`documents.js`: every model type inferred from its Zod schema.
+- **No type assertions.** Every loosely-typed value narrowed through a type guard or Zod parse at the boundary.
+- **No markdown-parsing library dependency**, enforced by eslint `no-restricted-imports`.
+- **`z.codec()` for the round trip** (`markdownCodec`), matching `pdf-codec`'s `pdfCodec`: wraps the independently-tested `readMarkdown`/`writeMarkdown` with automatic two-way schema validation (no-options form only).
+- **Shrink-only conformance exclusion list.** Every spec example the read → write → reparse → render pipeline does not reproduce byte for byte is named in `src/test-support/conformance-exclusions.ts`, with a test asserting it genuinely still fails — the list shrinks as gaps close, never quietly grows.
+- **Conventional commits**, enforced via commitlint + husky.
 
 ## Gotchas and quirks
 
-Every construct either `src/lower` (read) or `src/emit` (write) cannot represent losslessly is a documented, reachable `MarkdownDiagnosticCodes` entry, not a silent approximation:
+Every construct `src/lower`/`src/emit` cannot represent losslessly is a documented `MarkdownDiagnosticCodes` entry:
 
-- **`md/invented-page-geometry`** — markdown has no page concept of its own; every lowered document gets one `ContentSection` with A4 + 1in default page geometry (overridable via `ReadMarkdownOptions.pageSize`/`margins`). Fires unconditionally, once per lowered document.
-- **`md/nested-emphasis-flattened`** — emphasis nested inside the identical kind (emphasis-in-emphasis, strong-in-strong) flattens to one run rather than preserving the nesting; `src/emit/inline.ts`'s `pickEmphasisMarker` resolves the common single-boundary re-emission case but has no second fallback delimiter character for a genuine three-or-more-way clash between adjacent spans.
-- **`md/link-title-dropped`** — a link or image's own title attribute (`[text](url "title")`) has no `ContentRun`/`ContentImageBlock` field to survive on.
-- **`md/code-block-info-string-dropped`** — a fenced code block's own info string (the language tag after the opening fence) has no `ContentParagraph` field to survive on.
-- **`md/blockquote-nested-depth`** — a blockquote nested beyond one level is recorded only as an indent depth (`indentLeftPt`), never a genuine container boundary; two independent blockquotes back to back at the same depth are indistinguishable from one that spans both.
-- **`md/list-item-block-unlisted`** — a table or a resolved image directly inside a list item has no way to carry `ContentListMembership`, which lives only on `ContentParagraph`.
-- **`md/list-item-multi-block-flattened`** — a list item containing more than one non-nested-list block loses its own item-boundary identity once lowered; `ContentListMembership` carries only `{numId, level}`, with no field distinguishing "one item, several blocks" from "several items sharing this numId/level".
-- **`md/image-unresolved`** — an image with no `MarkdownImageResolver` supplied (or one that returns `undefined`, or resolved bytes that are neither a readable PNG nor JPEG) degrades to a hyperlinked text run of its own alt text, never an invalid `ContentImageBlock`.
-- **`md/raw-html-preserved-as-text` / `md/raw-html-dropped`** — raw HTML is preserved as literal text by default (styleId `HTMLPreformatted` for block-level HTML) or dropped entirely (`rawHtml: 'drop'`); this package's read side never sanitises or interprets it.
-- **`md/front-matter-key-unmapped`** — a leading YAML front matter block is not parsed by a real YAML/TOML engine; only `key: value` lines (plus one array special case for `keywords`) mapping onto five known `LayoutMetadata` fields are recognised, everything else is reported and dropped.
-- **`md/heading-level-clamped`** — a `ContentDocument` heading styleId beyond `Heading6` (never produced by this package's own read side, but reachable from another format's `ContentDocument` via the shared pivot) clamps to level 6, since neither ATX nor setext syntax spells a deeper level.
-- **`md/adjacent-links-merged`** and **`md/code-span-as-monospace-run`** — a run of adjacent hyperlinks sharing one destination merges into a single markdown link; a monospace-font run without a genuine code-span origin still emits as a code span, since `ContentDocument` has no separate "this was actually a code span" marker.
-- **`md/paragraph-indent-dropped`** — a paragraph carrying `indentLeftPt` with none of the five styleIds this package's own blockquote/code-block/rule/HTML-preformatted convention recognises is a genuine cross-format ambiguity (is it a quote, or another format's own paragraph indentation?) this package cannot resolve; the indent is dropped, the paragraph still renders.
-- **`md/list-numid-fallback`** — a `numId` this package never minted itself (another format's own list-identity scheme) falls back to a plain, tight, non-task bullet list, the documented cross-format contract for `src/shared/list-id.ts`'s opaque grammar.
-- **`md/table-cell-formatting-dropped`** and **`md/table-cell-multi-paragraph-joined`** — a GFM table cell's own run-level formatting beyond plain text, and a cell containing more than one paragraph, are both lossy: GFM's own table-cell grammar has no multi-paragraph or rich-formatting representation to write back to.
+- **`md/invented-page-geometry`** — no page concept in markdown; one `ContentSection` with A4 + 1in defaults (overridable). Fires once.
+- **`md/nested-emphasis-flattened`** — same-kind nested emphasis flattens to one run.
+- **`md/link-title-dropped`** — link/image title has no `ContentRun`/`ContentImageBlock` field.
+- **`md/code-block-info-string-dropped`** — fenced code info string has no `ContentParagraph` field.
+- **`md/blockquote-nested-depth`** — nesting beyond one level is indent depth only; same-depth blockquotes are indistinguishable.
+- **`md/list-item-block-unlisted`** — a table/image in a list item cannot carry `ContentListMembership` (paragraphs only).
+- **`md/list-item-multi-block-flattened`** — multi-block list items lose item-boundary identity.
+- **`md/image-unresolved`** — no resolver, `undefined` return, or non-PNG/JPEG bytes degrades to alt-text run.
+- **`md/raw-html-preserved-as-text` / `md/raw-html-dropped`** — raw HTML kept as literal text (default) or dropped; never interpreted.
+- **`md/front-matter-key-unmapped`** — no YAML/TOML engine; only five known `LayoutMetadata` keys recognised.
+- **`md/heading-level-clamped`** — styleId beyond `Heading6` (from another format) clamps to level 6.
+- **`md/adjacent-links-merged`** / **`md/code-span-as-monospace-run`** — same-destination adjacent links merge; monospace runs emit as code spans.
+- **`md/paragraph-indent-dropped`** — `indentLeftPt` without a recognised styleId; indent dropped, paragraph renders.
+- **`md/list-numid-fallback`** — a foreign `numId` falls back to a plain bullet list.
+- **`md/table-cell-formatting-dropped`** / **`md/table-cell-multi-paragraph-joined`** — GFM cells have no rich-formatting or multi-paragraph representation.
 
 ## Fidelity
 
-**Markdown → `ContentDocument` is dominated by target-schema limits, not parsing gaps — the inverse framing from `pdf-codec`'s own Fidelity section, where the *source* format (arbitrary real-world PDF) is what bounds fidelity.** Here, the hand-written parser understands everything CommonMark and GFM define — every construct in both specifications is recognised and structurally parsed correctly. What `ContentDocument` cannot hold is the limiting factor: it is a cross-format pivot shared with docx/pptx/odt/odp/ods/odg, shaped around what THOSE formats can represent, not around markdown's own richer container/precision model (no blockquote container node, no fenced-code-fence-character-choice field, no per-list-item multi-block boundary, no link/image title). Every one of these is a genuine, permanent structural mismatch between markdown's own grammar and the shared pivot's shape, not something a better parser could close.
+**Markdown → `ContentDocument` is dominated by target-schema limits, not parsing gaps.** The parser recognises every construct CommonMark and GFM define; the limiting factor is what `ContentDocument` can hold — a cross-format pivot shaped around docx/pptx/odt/odp/ods/odg, not markdown's richer model. Each gap is a permanent structural mismatch.
 
-**The real, reported round-trip conformance rate** — measured by `src/conformance.test.ts`/`src/gfm-conformance.test.ts` running the actual public surface (`readMarkdown` → `writeMarkdown` → reparse → render to HTML) against the vendored spec corpora, compared byte for byte against each example's own expected HTML — is:
+**Round-trip conformance rate** (read → write → reparse → render to HTML, compared byte for byte against expected HTML):
 
 | Corpus | Examples | Passing round trip | Rate |
 | --- | --- | --- | --- |
@@ -190,34 +186,34 @@ Every construct either `src/lower` (read) or `src/emit` (write) cannot represent
 | GFM tagged extensions (table/strikethrough/autolink/task-list, `assets/gfm/spec.txt`) | 23 | 22 | 95.7% |
 | Combined | 675 | 483 | 71.6% |
 
-Every one of the 192 examples not yet passing is named individually in `src/test-support/conformance-exclusions.ts`, attributed to one of a small, closed set of named, understood causes (a shrink-only list — see [Conventions](#conventions)): most commonly a soft line break collapsing to a literal space rather than surviving as a literal newline (the single largest reason by count), a dropped link/image title or code-fence info string, a flattened multi-block list item or nested blockquote, or several directly-touching emphasis spans that only leave two delimiter characters to resolve every boundary at once. None of these are "not yet gotten around to" placeholders — each is an architectural limitation of `ContentDocument`'s own shape, re-diagnosed and found reachable through many corpus examples at once, which is why `conformance-exclusions.ts`'s own reason strings are shared, named constants rather than one bespoke sentence per example.
+Every non-passing example is named individually in `src/test-support/conformance-exclusions.ts`, attributed to a closed set of causes (shrink-only — see [Conventions](#conventions)): most commonly a soft line break collapsing to a space, a dropped title/info string, a flattened list item/blockquote, or touching emphasis spans.
 
-This is also why `pdf-codec`'s own permanent "no round-trip-losslessness claim" framing applies here for the identical underlying reason but the opposite direction of blame: `pdf-codec` cannot promise fidelity because arbitrary real-world PDF vastly exceeds what any parser can safely assume about it; `markdown-codec`'s parser is complete, but `ContentDocument` itself is the narrower vessel a full CommonMark+GFM document is being poured into.
+**Optional real-world corpus.** `test/corpus/` (gitignored) holds a `pnpm test:corpus` project for a manual sanity check against sibling READMEs on disk — asserts no throw and real content on reparse, not byte fidelity. Not part of `pnpm test`; run locally before significant parser/lower/emit changes.
 
-**Optional real-world corpus.** `test/corpus/` (gitignored, never committed) holds a `pnpm test:corpus` vitest project for a manual sanity check against real, large, table-heavy, fence-heavy markdown a hand-built fixture can't fully stand in for — this family's own sibling repository READMEs (`documents.js`, `pdf-codec`, `odf.js`, `ooxml.js`, `document-schema.js`), read straight from their checkout locations on disk. It asserts only that `readMarkdown`/`writeMarkdown` don't throw and that a reparse still produces real content — not byte-for-byte fidelity, which real-world markdown was never going to hold to anyway. It is not part of `pnpm test` and never gates CI; run it locally before a significant change to `src/lower/`, `src/emit/`, or the scanner/block/inline layers.
+
 
 ## Release and publishing
 
-`.github/workflows/ci.yml` runs commitlint, lint, typecheck, the unit suite (including the conformance suites), and the smoke test on every push and pull request. On a push to `main` where those all pass, `release.config.ts` drives [semantic-release](https://semantic-release.gitbook.io/semantic-release): commit history since the last tag decides the version bump, `CHANGELOG.md` and `package.json` are committed back to `main`, a GitHub Release is cut, and the package publishes to [npmjs.org](https://www.npmjs.com/package/markdown-codec) via npm's OIDC trusted publishing, so no `NPM_TOKEN` exists anywhere in the pipeline.
+`.github/workflows/ci.yml` runs commitlint, lint, typecheck, unit suite (incl. conformance), and smoke test on every push/PR. On a push to `main` where those pass, `release.config.ts` drives [semantic-release](https://semantic-release.gitbook.io/semantic-release): commit history decides the version bump, `CHANGELOG.md` and `package.json` are committed back to `main`, a GitHub Release is cut, and the package publishes to [npmjs.org](https://www.npmjs.com/package/markdown-codec) via OIDC trusted publishing (no `NPM_TOKEN`).
 
-Whether that release actually published a new version is detected by diffing `package.json`'s version before and after the release step, not by trusting a third-party action's own detection. Four further jobs gate on that: one dispatches a `sibling-released` `repository_dispatch` event to `documents.js`, so that repo's own dependency-bump PR opens within seconds rather than waiting on Dependabot's next daily scan; one republishes the same build under the scoped `@exadev/markdown-codec` alias to GitHub Packages (which has no OIDC exchange of its own, so it authenticates with `GITHUB_TOKEN` instead); one republishes under the `mrkdwn.js` alias to npmjs.org via the identical OIDC exchange; and one packs the release into its own directory, generates an SPDX SBOM (`pnpm sbom`), and signs both an SBOM and a build-provenance attestation against that exact tarball — verifiable independently of the registry, and still present if the package is later unpublished.
+Release detection diffs `package.json`'s version before/after the release step. Four further jobs gate on that: a `sibling-released` `repository_dispatch` to `documents.js`; a republish under `@exadev/markdown-codec` to GitHub Packages (`GITHUB_TOKEN`); a republish under `mrkdwn.js` to npmjs.org (same OIDC exchange); and an SPDX SBOM + build-provenance attestation signed against the packed tarball.
 
 ## Contributing
 
-Commits follow Conventional Commits (`feat:`, `fix:`, `test:`, `chore:`, …), enforced by commitlint (`commitlint.config.ts`) via a husky `commit-msg` hook and a CI `commitlint` job — semantic-release's version bump depends on these being well-formed, not just style. A husky `pre-commit` hook runs `lint-staged` (`eslint --fix` on staged `*.ts` files) and `pre-push` runs the test suite. There is a single `main` branch and no open pull request workflow established so far.
+Conventional Commits enforced by commitlint (`commitlint.config.ts`) via a husky `commit-msg` hook and CI job — semantic-release's version bump depends on well-formed messages. `pre-commit` runs `lint-staged` (`eslint --fix` on staged `*.ts`); `pre-push` runs the test suite. Single `main` branch, no open PR workflow.
 
 ## References
 
-- [document-schema.js](https://github.com/ExaDev/document-schema.js) — the sibling package that owns the shared `ContentDocument` pivot this package reads and writes.
-- [pdf-codec](https://github.com/ExaDev/pdf-codec) — the sibling package this project's own scaffold, tooling, and "hand-write the format" philosophy are modelled on.
-- [documents.js](https://github.com/ExaDev/documents.js) — the consumer package that bridges markdown to docx/odt/PDF via this package's `ContentDocument` output: `markdownToPdf`/`pdfToMarkdown` through the shared wordprocessing layout engine docx/odt already use, and `markdownToDocx`/`docxToMarkdown`, `markdownToOdt`/`odtToMarkdown` as direct `ContentDocument`-to-`ContentDocument` bridges bypassing the PDF pivot entirely, the same way it already bridges odt⇄docx and odp⇄pptx. Markdown has no presentation/spreadsheet/drawing `ContentDocument` variant of its own, so pptx/odp/ods/odg are out of reach structurally, not merely unimplemented.
-- [CommonMark Spec](https://spec.commonmark.org/) — the base specification this package's scanner/block/inline parsers target.
-- [GitHub Flavored Markdown Spec](https://github.github.com/gfm/) — the GFM extensions layered on top of CommonMark.
-- [WHATWG HTML Standard § named character references](https://html.spec.whatwg.org/multipage/named-characters.html) — the entity table `assets/html-entities/` vendors.
+- [document-schema.js](https://github.com/ExaDev/document-schema.js) — owns the shared `ContentDocument` pivot.
+- [pdf-codec](https://github.com/ExaDev/pdf-codec) — the sibling whose scaffold, tooling, and "hand-write the format" philosophy this project mirrors.
+- [documents.js](https://github.com/ExaDev/documents.js) — bridges markdown to docx/odt/PDF via this package's `ContentDocument`. Markdown has no presentation/spreadsheet/drawing variant, so pptx/odp/ods/odg are structurally out of reach.
+- [CommonMark Spec](https://spec.commonmark.org/) — the base specification targeted.
+- [GitHub Flavored Markdown Spec](https://github.github.com/gfm/) — GFM extensions layered on top.
+- [WHATWG HTML § named character references](https://html.spec.whatwg.org/multipage/named-characters.html) — the entity table `assets/html-entities/` vendors.
 
 ## npm aliases
 
-This package also publishes under the following alternate npm name — the identical build, same version, republished by CI alongside the primary `markdown-codec` package:
+This package also publishes under the alternate name — identical build, same version, republished by CI:
 
 - [mrkdwn.js](https://www.npmjs.com/package/mrkdwn.js)
 
