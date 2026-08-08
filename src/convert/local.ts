@@ -1,7 +1,9 @@
 import type { DocumentPackage } from 'document-schema.js';
 import type { PdfDiagnostic, WinAnsiSubstitution } from 'pdf-codec';
 import type { FontSubstitution } from 'document-schema.js';
-import { DIRECT_EDGES, resolveConversionPath, UnsupportedConversionError } from './capability';
+import { DIRECT_EDGES, UnsupportedConversionError } from './capability';
+import { convertDocument, resolveCompositionPlan } from './composition';
+import { odfToPdf } from './convert';
 import type { ConversionOptions, ConversionRequest, ConversionResult, Diagnostic, DocumentConverter, DocumentFormat } from './port';
 
 // Derived from DIRECT_EDGES (capability.ts), in the identical order that module declares them -- which is itself the same order this list has always had. xlsx<->pdf (xlsxToPdf/pdfToXlsx) is now one of those direct edges too, even though the functions behind it compose the ods<->xlsx bridge with the ods<->pdf layout edge internally rather than laying xlsx out directly -- see capability.ts's own top-of-file comment and FORMAT_CAPABILITIES.xlsx for why that composition still counts as a direct edge here.
@@ -45,24 +47,30 @@ export function createLocalDocumentConverter(): DocumentConverter {
         options.onFontSubstitution?.(substitution);
       };
 
-      // resolveConversionPath (capability.ts) returns the direct edge for a supported pair, or undefined for an unsupported one -- there is no implicit multi-hop composition (an earlier revision's composed arm was dead code, since this converter only ever executes a direct edge). An undefined result is an UnsupportedConversionError rather than a plain Error, so a caller can branch on it.
-      const edge = resolveConversionPath(source.format, targetFormat);
-      if (edge === undefined) {
+      // odf -> pdf is a SPECIAL case: odf is deliberately excluded from the composition engine (src/convert/composition.ts's own module doc), since a standalone formula document renders through src/mathml's own formula-positioning path rather than a ContentDocument -> LayoutDocument layout engine. resolveCompositionPlan consequently returns undefined for it, so it is routed to the real odfToPdf function directly rather than through convertDocument. odfToPdf accepts onDocument (it shares DocumentToPdfOptions with the other to-PDF conversions) but never invokes it -- see that function's own comment -- so `documentPackage` stays undefined for this one pair, and `package` on the returned result is correctly omitted; the same comment explains why it never reports a font substitution either.
+      if (source.format === 'odf' && targetFormat === 'pdf') {
+        const bytes = odfToPdf(source.bytes, { signal: options.signal, fonts: options.fonts, onFontSubstitution });
+        return Promise.resolve({ document: { format: targetFormat, bytes }, diagnostics, package: documentPackage });
+      }
+
+      // resolveCompositionPlan (src/convert/composition.ts) returns the minimum-cost hop plan for a supported pair, or undefined for an unsupported one. An undefined result is an UnsupportedConversionError rather than a plain Error, so a caller can branch on it -- matching the rejection the previous resolveConversionPath-based path used.
+      const plan = resolveCompositionPlan(source.format, targetFormat);
+      if (plan === undefined) {
         return Promise.reject(new UnsupportedConversionError(source.format, targetFormat));
       }
-      if (edge.kind === 'toPdf') {
-        // The only edge kind that resolves a font at all: it is the one that runs a layout engine and writes glyphs. odfToPdf accepts onDocument (it shares docx/odt/pptx/odp/ods/odg's own options type) but never invokes it -- see that function's own comment -- so `documentPackage` stays undefined for that one edge, and `package` on the returned result is correctly omitted; the same comment explains why it never reports a font substitution either.
-        const bytes = edge.convert(source.bytes, { signal: options.signal, onSubstitution: (s, c) => diagnostics.push(substitutionDiagnostic(s, c)), onDocument, fonts: options.fonts, onFontSubstitution, images: options.images, clock: options.clock });
-        return Promise.resolve({ document: { format: edge.target, bytes }, diagnostics, package: documentPackage });
-      }
-      if (edge.kind === 'fromPdf') {
-        // No font options here: reconstruction reads a PDF's own already-positioned glyphs and never resolves a face to render with, so PdfToDocumentOptions has nothing to thread them into.
-        const bytes = edge.convert(source.bytes, { signal: options.signal, sink: (d) => diagnostics.push(fromPdfDiagnostic(d)), onDocument });
-        return Promise.resolve({ document: { format: edge.target, bytes }, diagnostics, package: documentPackage });
-      }
-      // The ten PDF-bypassing cross-format bridges: no diagnostics, since there is no font substitution or PDF-parse degradation to report -- a direct ContentDocument-pivot copy either succeeds outright or throws (an input of the wrong kind), and no layout engine runs, so no face is ever resolved. Each still reports a package (content populated, layout always undefined -- see DocumentBridgeOptions.onDocument).
-      const bytes = edge.convert(source.bytes, { signal: options.signal, onDocument, images: options.images });
-      return Promise.resolve({ document: { format: edge.target, bytes }, diagnostics, package: documentPackage });
+
+      // convertDocument runs the resolved plan end to end, threading the port's ConversionOptions through to whichever hop consumes each field: fonts/onFontSubstitution/onSubstitution/clock reach any toPdf hop (the only kind that lays text out and resolves a face), sink reaches any fromPdf hop (the only kind that reads a PDF and can report parse diagnostics), and signal/images reach every hop. The onDocument callback captures the DocumentPackage the first content-producing hop builds, mirroring the per-edge onDocument wiring the previous direct-edge path threaded into each edge kind individually.
+      const bytes = convertDocument(source.format, targetFormat, source.bytes, {
+        signal: options.signal,
+        fonts: options.fonts,
+        onFontSubstitution,
+        onSubstitution: (s, c) => diagnostics.push(substitutionDiagnostic(s, c)),
+        sink: (d) => diagnostics.push(fromPdfDiagnostic(d)),
+        images: options.images,
+        clock: options.clock,
+        onDocument,
+      });
+      return Promise.resolve({ document: { format: targetFormat, bytes }, diagnostics, package: documentPackage });
     },
   };
 }
