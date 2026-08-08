@@ -1,3 +1,10 @@
+# [1.7.0](https://github.com/ExaDev/documents/compare/v1.6.0...v1.7.0) (2026-08-08)
+
+
+### Features
+
+* add a dark mode toggle ([58e82bb](https://github.com/ExaDev/documents/commit/58e82bb6404d1aa26c71b65d5e0bfc68caa5cb33))
+
 # [1.6.0](https://github.com/ExaDev/documents/compare/v1.5.0...v1.6.0) (2026-08-08)
 
 
