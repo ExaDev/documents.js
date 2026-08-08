@@ -18,11 +18,11 @@ const NAV_ITEMS = [
   { to: '/metadata', label: 'Metadata', icon: IconTags },
   { to: '/pdf-inspect', label: 'PDF inspect', icon: IconFileSearch },
   { to: '/fonts', label: 'Fonts', icon: IconTypography },
+  { to: '/recent', label: 'Recent', icon: IconHistory },
 ] as const;
 
-// Tools already tracked as follow-up work -- headroom in the nav without inventing empty route files ahead of time. 'Recent' moves up to NAV_ITEMS once src/routes/recent.tsx exists.
+// Tools already tracked as follow-up work -- headroom in the nav without inventing empty route files ahead of time.
 const PLANNED_ITEMS = [
-  { label: 'Recent', icon: IconHistory },
   { label: 'Editors', icon: IconEdit },
   { label: '.odb', icon: IconDatabase },
   { label: '.odm', icon: IconBooks },

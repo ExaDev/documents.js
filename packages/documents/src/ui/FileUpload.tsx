@@ -5,7 +5,9 @@ import { IconCheck, IconFile, IconUpload, IconX } from '@tabler/icons-react';
 import { useMemo } from 'react';
 
 import { createFileAccess } from '../adapters/fileAccess/createFileAccess';
+import { recordRecentFile } from '../hooks/useRecentFiles';
 import type { OpenedFile } from '../ports/fileAccess';
+import { inferFormatFromFilename } from '../shared/extensionToFormat';
 
 export interface FileUploadProps {
   /** Passed straight through to FileAccessPort.openFile's `accept` -- normalised below into Dropzone's own (looser) Accept shape, so both consumers stay driven by a single value with no risk of drift. */
@@ -24,6 +26,13 @@ async function toOpenedFile(file: FileWithPath): Promise<OpenedFile> {
   return { bytes, name: file.name, handle: file.handle };
 }
 
+// Recorded here rather than per-route so every tool's opens land in Recent Files for free -- skipped when the filename's extension isn't recognised, since a format-less record wouldn't be reopenable as anything in particular.
+function recordIfRecognised(opened: OpenedFile) {
+  const format = inferFormatFromFilename(opened.name);
+  if (format === undefined) return;
+  void recordRecentFile({ format, name: opened.name, sizeBytes: opened.bytes.byteLength, handle: opened.handle });
+}
+
 export function FileUpload({ accept, formatHint, file, onFile, disabled, loading }: FileUploadProps) {
   const theme = useMantineTheme();
   const fileAccess = useMemo(() => createFileAccess(), []);
@@ -39,14 +48,19 @@ export function FileUpload({ accept, formatHint, file, onFile, disabled, loading
   const handleDrop = (files: FileWithPath[]) => {
     const [dropped] = files;
     if (dropped === undefined) return;
-    void toOpenedFile(dropped).then(onFile);
+    void toOpenedFile(dropped).then((opened) => {
+      recordIfRecognised(opened);
+      onFile(opened);
+    });
   };
 
   // Chromium's native picker (used elsewhere in the app -- e.g. Convert's "reuse this upload for a different target" flow relies on it returning a FileSystemFileHandle) is driven directly rather than Dropzone's own <input type=file> click path, so there is exactly one code path that ever calls showOpenFilePicker. activateOnClick=false leaves drag-and-drop untouched.
   const handleClick = () => {
     if (!fileAccess.supportsNativePicker()) return;
     void fileAccess.openFile({ accept }).then((opened) => {
-      if (opened !== undefined) onFile(opened);
+      if (opened === undefined) return;
+      recordIfRecognised(opened);
+      onFile(opened);
     });
   };
 

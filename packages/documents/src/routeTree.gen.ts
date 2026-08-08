@@ -14,6 +14,7 @@ import { Route as ConvertRouteImport } from './routes/convert'
 import { Route as FontsRouteImport } from './routes/fonts'
 import { Route as MetadataRouteImport } from './routes/metadata'
 import { Route as PdfInspectRouteImport } from './routes/pdf-inspect'
+import { Route as RecentRouteImport } from './routes/recent'
 import { Route as ConvertIndexRouteImport } from './routes/convert.index'
 import { Route as ConvertSourceTargetRouteImport } from './routes/convert.$source.$target'
 
@@ -42,6 +43,11 @@ const PdfInspectRoute = PdfInspectRouteImport.update({
   path: '/pdf-inspect',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RecentRoute = RecentRouteImport.update({
+  id: '/recent',
+  path: '/recent',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ConvertIndexRoute = ConvertIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -59,6 +65,7 @@ export interface FileRoutesByFullPath {
   '/fonts': typeof FontsRoute
   '/metadata': typeof MetadataRoute
   '/pdf-inspect': typeof PdfInspectRoute
+  '/recent': typeof RecentRoute
   '/convert/': typeof ConvertIndexRoute
   '/convert/$source/$target': typeof ConvertSourceTargetRoute
 }
@@ -67,6 +74,7 @@ export interface FileRoutesByTo {
   '/fonts': typeof FontsRoute
   '/metadata': typeof MetadataRoute
   '/pdf-inspect': typeof PdfInspectRoute
+  '/recent': typeof RecentRoute
   '/convert': typeof ConvertIndexRoute
   '/convert/$source/$target': typeof ConvertSourceTargetRoute
 }
@@ -77,6 +85,7 @@ export interface FileRoutesById {
   '/fonts': typeof FontsRoute
   '/metadata': typeof MetadataRoute
   '/pdf-inspect': typeof PdfInspectRoute
+  '/recent': typeof RecentRoute
   '/convert/': typeof ConvertIndexRoute
   '/convert/$source/$target': typeof ConvertSourceTargetRoute
 }
@@ -88,6 +97,7 @@ export interface FileRouteTypes {
     | '/fonts'
     | '/metadata'
     | '/pdf-inspect'
+    | '/recent'
     | '/convert/'
     | '/convert/$source/$target'
   fileRoutesByTo: FileRoutesByTo
@@ -96,6 +106,7 @@ export interface FileRouteTypes {
     | '/fonts'
     | '/metadata'
     | '/pdf-inspect'
+    | '/recent'
     | '/convert'
     | '/convert/$source/$target'
   id:
@@ -105,6 +116,7 @@ export interface FileRouteTypes {
     | '/fonts'
     | '/metadata'
     | '/pdf-inspect'
+    | '/recent'
     | '/convert/'
     | '/convert/$source/$target'
   fileRoutesById: FileRoutesById
@@ -115,6 +127,7 @@ export interface RootRouteChildren {
   FontsRoute: typeof FontsRoute
   MetadataRoute: typeof MetadataRoute
   PdfInspectRoute: typeof PdfInspectRoute
+  RecentRoute: typeof RecentRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -154,6 +167,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PdfInspectRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/recent': {
+      id: '/recent'
+      path: '/recent'
+      fullPath: '/recent'
+      preLoaderRoute: typeof RecentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/convert/': {
       id: '/convert/'
       path: '/'
@@ -190,6 +210,7 @@ const rootRouteChildren: RootRouteChildren = {
   FontsRoute: FontsRoute,
   MetadataRoute: MetadataRoute,
   PdfInspectRoute: PdfInspectRoute,
+  RecentRoute: RecentRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

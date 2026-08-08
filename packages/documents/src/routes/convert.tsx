@@ -10,6 +10,7 @@ import type { OpenedFile } from '../ports/fileAccess';
 import { DiagnosticsPanel } from '../ui/DiagnosticsPanel';
 import { FileUpload } from '../ui/FileUpload';
 import { notifyError, notifySuccess } from '../ui/notify';
+import { takePendingReopen } from '../ui/reopenMailbox';
 
 // Layout route: convert.index.tsx and convert.$source.$target.tsx become its children (per TanStack Router's file-based nesting convention) and exist only to register typed path params in the route tree -- this component owns all the real state and UI directly, so it never remounts when the selected pair changes. That's the actual fix for "picking a new pair feels like leaving the page": the old sibling-routes structure fully remounted (destroying `file`/`convert` state) on every pair change, since convert.index.tsx and convert.$source.$target.tsx both parented directly to root.
 export const Route = createFileRoute('/convert')({
@@ -21,10 +22,13 @@ function ConvertLayout() {
   const navigate = useNavigate();
   const conversions = useConversions();
 
-  // Lazy initializers, not an effect: this only needs to seed state once, from whatever the route's params are at the moment ConvertLayout first mounts (e.g. a deep link to /convert/docx/pdf) -- `params` merges the currently matched leaf route's params up into this parent route via `strict: false`. Syncing via an effect instead would set state synchronously during render's commit phase for no benefit here (the initial value never needs to react to a *later* params change; the navigate() effect below is what keeps params in sync with state, not the other way around after mount).
-  const [source, setSource] = useState<string | null>(() => params.source ?? null);
+  // Captured once via its own lazy initializer -- takePendingReopen clears the mailbox on read, so the source/file initializers below must read this already-resolved value rather than calling takePendingReopen() a second time (which would find it empty).
+  const [pendingReopen] = useState(() => takePendingReopen());
+
+  // Lazy initializers, not an effect: this only needs to seed state once, from whatever the route's params (or a Recent Files reopen) are at the moment ConvertLayout first mounts -- `params` merges the currently matched leaf route's params up into this parent route via `strict: false`. Syncing via an effect instead would set state synchronously during render's commit phase for no benefit here (the initial value never needs to react to a *later* params change; the navigate() effect below is what keeps params in sync with state, not the other way around after mount).
+  const [source, setSource] = useState<string | null>(() => params.source ?? pendingReopen?.format ?? null);
   const [target, setTarget] = useState<string | null>(() => params.target ?? null);
-  const [file, setFile] = useState<OpenedFile | undefined>(undefined);
+  const [file, setFile] = useState<OpenedFile | undefined>(() => pendingReopen?.file);
   const convert = useConvert();
   const fileAccess = createFileAccess();
 
