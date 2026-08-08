@@ -366,7 +366,7 @@ export { odfToPdf } from './convert/convert';
 // Schema-validated z.codec() pairs over the conversions above (docx/pptx/odt/odp/ods/odg/xlsx/markdown bytes <-> PDF bytes), the no-extra-options form -- use docxToPdf/pdfToDocx/pptxToPdf/pdfToPptx/odtToPdf/pdfToOdt/odpToPdf/pdfToOdp/odsToPdf/pdfToOds/odgToPdf/pdfToOdg/xlsxToPdf/pdfToXlsx/markdownToPdf/pdfToMarkdown directly for cancellation or diagnostics.
 export { docxPdfCodec, markdownPdfCodec, odgPdfCodec, odpPdfCodec, odsPdfCodec, odtPdfCodec, pptxPdfCodec, xlsxPdfCodec } from './convert/codec';
 
-// --- Ten cross-format bridges, five pairs (odt<->docx, odp<->pptx, ods<->xlsx, markdown<->docx, markdown<->odt), bypassing PDF entirely -- see convert.ts's own module comment on this section for why these carry substantially higher fidelity than the fourteen PDF-pivot conversions above. markdownToDocx/docxToMarkdown and markdownToOdt/odtToMarkdown are hand-written bridge functions registered as direct edges (capability.ts's DIRECT_EDGES) -- see capability.ts's own module comment for why: local.ts's DocumentConverter only ever executes a direct edge, so wiring a pair into the port requires a real, callable, registered function; there is no implicit multi-hop composition. ---
+// --- Ten cross-format bridges, five pairs (odt<->docx, odp<->pptx, ods<->xlsx, markdown<->docx, markdown<->odt), bypassing PDF entirely -- see convert.ts's own module comment on this section for why these carry substantially higher fidelity than the fourteen PDF-pivot conversions above. markdownToDocx/docxToMarkdown and markdownToOdt/odtToMarkdown are hand-written bridge functions -- the composition engine's pathfinder routes them as same-variant bridge hops, and convertDocument's bridge executor runs the identical decode/read/build/encode sequence these functions already hard-code. ---
 export type { DocumentBridgeOptions } from './convert/convert';
 export { docxToMarkdown, docxToOdt, markdownToDocx, markdownToOdt, odpToPptx, odsToXlsx, odtToDocx, odtToMarkdown, pptxToOdp, xlsxToOds, docxToPptx, pptxToDocx, odtToOdp, odpToOdt, xlsxToMarkdown, markdownToXlsx } from './convert/convert';
 
@@ -434,6 +434,10 @@ export type { ConversionOptions, ConversionRequest, ConversionResult, Diagnostic
 // DocumentFormat's own Zod schema, and every member as a plain runtime array derived from it -- for a caller that wants to enumerate or validate against the full format set (a CLI's own usage-error text, an MCP tool's JSON-schema `enum` input) without hand-writing a second copy of the ten format literals that could drift out of sync with DocumentFormat itself.
 export { DocumentFormatSchema, DOCUMENT_FORMATS } from './convert/port';
 export { createLocalDocumentConverter } from './convert/local';
+
+// --- The composition engine's first-class entry point and supporting types -- resolveCompositionPlan exposes the pathfinder directly (the minimum-cost hop plan between any two DocumentFormats, or undefined), and convertDocument runs that plan end to end through the real executors. UnifiedConversionOptions is the union of every option field any conversion hop accepts, threaded to whichever hop consumes each field. ConversionPlan/CompositionHop describe a resolved route's shape. See src/convert/composition.ts for the full architecture. ---
+export { convertDocument, resolveCompositionPlan } from './convert/composition';
+export type { UnifiedConversionOptions, ConversionPlan, CompositionHop } from './convert/composition';
 
 // --- A DocumentPackage (content + optional layout) -> any DocumentFormat's own bytes -- the reverse of what every ergonomic X-to-PDF/PDF-to-X conversion's own onDocument callback hands back. ---
 export { buildDocumentBytes } from './convert/from-package';

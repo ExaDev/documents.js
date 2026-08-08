@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { DIRECT_EDGES, FORMAT_CAPABILITIES, resolveConversionPath } from './capability';
+import { FORMAT_CAPABILITIES } from './capability';
+import { resolveCompositionPlan } from './composition';
 import type { DocumentFormat } from './port';
 
 describe('FORMAT_CAPABILITIES', () => {
@@ -36,39 +37,90 @@ describe('FORMAT_CAPABILITIES', () => {
   });
 });
 
-describe('resolveConversionPath', () => {
-  it('resolves every edge already in DIRECT_EDGES', () => {
-    for (const edge of DIRECT_EDGES) {
-      expect(resolveConversionPath(edge.source, edge.target)).toBe(edge);
+describe('resolveCompositionPlan', () => {
+  it('routes a same-variant pair as a single bridge hop (never through PDF)', () => {
+    // docx -> odt: both wordprocessing, so the pathfinder prefers the cost-1 bridge over any PDF route.
+    const plan = resolveCompositionPlan('docx', 'odt');
+    expect(plan).toBeDefined();
+    expect(plan!.hops).toHaveLength(1);
+    expect(plan!.hops[0]!.executor).toBe('bridge');
+    expect(plan!.hops[0]!.from).toBe('docx');
+    expect(plan!.hops[0]!.to).toBe('odt');
+  });
+
+  it('routes a cross-variant transform pair as a single bridge hop (never through PDF)', () => {
+    // docx (wordprocessing) -> pptx (presentation): the wordprocessing->presentation transform is registered, so the pathfinder routes it as a cost-2 bridge, beating any PDF route (cost 3 + 3 = 6).
+    const plan = resolveCompositionPlan('docx', 'pptx');
+    expect(plan).toBeDefined();
+    expect(plan!.hops).toHaveLength(1);
+    expect(plan!.hops[0]!.executor).toBe('bridge');
+  });
+
+  it('routes a toPdf pair as a single toPdf hop', () => {
+    const plan = resolveCompositionPlan('docx', 'pdf');
+    expect(plan).toBeDefined();
+    expect(plan!.hops).toHaveLength(1);
+    expect(plan!.hops[0]!.executor).toBe('toPdf');
+  });
+
+  it('routes a fromPdf pair as a single fromPdf hop', () => {
+    const plan = resolveCompositionPlan('pdf', 'docx');
+    expect(plan).toBeDefined();
+    expect(plan!.hops).toHaveLength(1);
+    expect(plan!.hops[0]!.executor).toBe('fromPdf');
+  });
+
+  it('composes xlsx -> pdf through ods (bridge then toPdf), since xlsx has no layout engine of its own', () => {
+    const plan = resolveCompositionPlan('xlsx', 'pdf');
+    expect(plan).toBeDefined();
+    expect(plan!.hops.map((h) => h.executor)).toEqual(['bridge', 'toPdf']);
+    expect(plan!.hops[0]!.from).toBe('xlsx');
+    expect(plan!.hops[0]!.to).toBe('ods');
+    expect(plan!.hops[1]!.from).toBe('ods');
+    expect(plan!.hops[1]!.to).toBe('pdf');
+  });
+
+  it('composes pdf -> xlsx through ods (fromPdf then bridge)', () => {
+    const plan = resolveCompositionPlan('pdf', 'xlsx');
+    expect(plan).toBeDefined();
+    expect(plan!.hops.map((h) => h.executor)).toEqual(['fromPdf', 'bridge']);
+  });
+
+  it('composes xlsx -> markdown through ods and pdf (three hops), the lossiest route in the package', () => {
+    const plan = resolveCompositionPlan('xlsx', 'markdown');
+    expect(plan).toBeDefined();
+    expect(plan!.hops).toHaveLength(3);
+  });
+
+  it('prefers a native bridge over a PDF route for docx -> odt (cost 1 beats cost 6)', () => {
+    // The pathfinder must prefer the direct same-variant bridge (cost 1) over a docx -> pdf -> odt route (cost 3 + 3 = 6).
+    const plan = resolveCompositionPlan('docx', 'odt');
+    expect(plan!.hops).toHaveLength(1);
+    expect(plan!.hops[0]!.executor).toBe('bridge');
+  });
+
+  it('prefers a cross-variant transform bridge over a PDF route for docx -> odp (cost 2 beats cost 6)', () => {
+    // docx (wordprocessing) -> odp (presentation): the transform bridge costs 2, the PDF route would cost 6.
+    const plan = resolveCompositionPlan('docx', 'odp');
+    expect(plan).toBeDefined();
+    expect(plan!.hops).toHaveLength(1);
+    expect(plan!.hops[0]!.executor).toBe('bridge');
+  });
+
+  it('returns undefined for same-format pairs', () => {
+    for (const format of Object.keys(FORMAT_CAPABILITIES) as DocumentFormat[]) {
+      expect(resolveCompositionPlan(format, format)).toBeUndefined();
     }
   });
 
-  it('never proposes a same-format conversion', () => {
-    for (const capability of Object.values(FORMAT_CAPABILITIES)) {
-      expect(resolveConversionPath(capability.format, capability.format)).toBeUndefined();
-    }
+  it('returns undefined for odf -> pdf (deliberately excluded from the composition engine)', () => {
+    // odf is a standalone formula document that renders through src/mathml's own formula-positioning path, not a ContentDocument -> LayoutDocument layout engine. The pathfinder excludes it; local.ts special-cases it with the hand-written odfToPdf.
+    expect(resolveCompositionPlan('odf', 'pdf')).toBeUndefined();
   });
 
-  it('resolves xlsx <-> pdf now that xlsxToPdf/pdfToXlsx exist, even though those functions compose ods<->xlsx + ods<->pdf internally', () => {
-    expect(resolveConversionPath('xlsx', 'pdf')).toBe(DIRECT_EDGES.find((edge) => edge.source === 'xlsx' && edge.target === 'pdf'));
-    expect(resolveConversionPath('pdf', 'xlsx')).toBe(DIRECT_EDGES.find((edge) => edge.source === 'pdf' && edge.target === 'xlsx'));
-  });
-
-  it('finds no path for xlsx <-> pdf over an edge set with no direct xlsx<->pdf edge, since the resolver no longer composes a multi-hop path', () => {
-    const edgesWithoutDirectXlsxPdf = DIRECT_EDGES.filter((edge) => !(edge.source === 'xlsx' && edge.target === 'pdf') && !(edge.source === 'pdf' && edge.target === 'xlsx'));
-
-    expect(resolveConversionPath('xlsx', 'pdf', edgesWithoutDirectXlsxPdf)).toBeUndefined();
-    expect(resolveConversionPath('pdf', 'xlsx', edgesWithoutDirectXlsxPdf)).toBeUndefined();
-  });
-
-  it('finds no path at all when the target is odf -- no edge in DIRECT_EDGES ever targets it, so nothing can reach it, composed or otherwise', () => {
-    // odf's own edge is one-way (odf -> pdf only, see FORMAT_CAPABILITIES.odf) -- so 'odf' never appears as a target anywhere in DIRECT_EDGES.
-    expect(resolveConversionPath('pdf', 'odf')).toBeUndefined();
-    expect(resolveConversionPath('docx', 'odf')).toBeUndefined();
-    expect(resolveConversionPath('xlsx', 'odf')).toBeUndefined();
-  });
-
-  it('finds no direct path for odg -> xlsx, since the resolver no longer composes a multi-hop route via pdf', () => {
-    expect(resolveConversionPath('odg', 'xlsx')).toBeUndefined();
+  it('returns undefined when odf is the target -- nothing in the composition graph routes to it', () => {
+    expect(resolveCompositionPlan('pdf', 'odf')).toBeUndefined();
+    expect(resolveCompositionPlan('docx', 'odf')).toBeUndefined();
+    expect(resolveCompositionPlan('xlsx', 'odf')).toBeUndefined();
   });
 });
