@@ -1,4 +1,4 @@
-import { Alert, Button, Container, Group, Paper, Select, Stack, Text, Title } from '@mantine/core';
+import { Alert, Box, Button, Container, Group, Paper, Select, Stack, Text, Title } from '@mantine/core';
 import { createFileRoute, useNavigate, useParams } from '@tanstack/react-router';
 import { DocumentFormatSchema } from 'documents.js';
 import { useEffect, useState } from 'react';
@@ -11,6 +11,7 @@ import { inferFormatFromFilename } from '../shared/extensionToFormat';
 import { DiagnosticsPanel } from '../ui/DiagnosticsPanel';
 import { FileUpload } from '../ui/FileUpload';
 import { notifyError, notifySuccess } from '../ui/notify';
+import { PdfPreview } from '../ui/PdfPreview';
 import { takePendingReopen } from '../ui/reopenMailbox';
 
 // Layout route: convert.index.tsx and convert.$source.$target.tsx become its children (per TanStack Router's file-based nesting convention) and exist only to register typed path params in the route tree -- this component owns all the real state and UI directly, so it never remounts when the selected pair changes. That's the actual fix for "picking a new pair feels like leaving the page": the old sibling-routes structure fully remounted (destroying `file`/`convert` state) on every pair change, since convert.index.tsx and convert.$source.$target.tsx both parented directly to root.
@@ -32,6 +33,9 @@ function ConvertLayout() {
   const [target, setTarget] = useState<string | null>(() => params.target ?? null);
   const [file, setFile] = useState<OpenedFile | undefined>(() => pendingReopen?.file);
   const convert = useConvert();
+  // Separate mutations from the same convert RPC, purely to produce a PDF rendition for side-by-side preview -- every documents.js format can render to PDF (odf included), so "preview this document" is just "convert it to PDF and drop it in an iframe". Skipped entirely when the format in question already is PDF, since the bytes are then already what the preview needs.
+  const originalPreview = useConvert();
+  const resultPreview = useConvert();
   const fileAccess = createFileAccess();
 
   // Only reflect a *complete* pair in the URL -- a half-picked pair isn't a meaningful thing to bookmark. `replace`, not `push`: changing formats mid-exploration is editing current tool state, not creating a new navigable history entry.
@@ -40,6 +44,15 @@ function ConvertLayout() {
       void navigate({ to: '/convert/$source/$target', params: { source, target }, replace: true });
     }
   }, [source, target, navigate]);
+
+  // Prefetches the original's PDF preview as soon as a file and its (auto-detected or manual) source are both known, rather than waiting for the user to click Convert -- so the "Original" preview panel is already populated the moment the "Done" panel appears. `mutate`'s identity is stable across renders (TanStack Query), so depending on it here doesn't retrigger this effect on every render.
+  const { mutate: mutateOriginalPreview } = originalPreview;
+  useEffect(() => {
+    if (file === undefined || source === null || source === 'pdf') return;
+    const parsedSource = DocumentFormatSchema.safeParse(source);
+    if (!parsedSource.success) return;
+    mutateOriginalPreview({ source: parsedSource.data, targetFormat: 'pdf', bytes: file.bytes });
+  }, [file, source, mutateOriginalPreview]);
 
   const sourceOptions = [...new Set((conversions.data ?? []).map((pair) => pair.source))].sort();
 
@@ -75,11 +88,20 @@ function ConvertLayout() {
     convert.mutate(
       { source: parsedSource.data, targetFormat: parsedTarget.data, bytes: file.bytes },
       {
-        onSuccess: (result) => notifySuccess('Converted', { diagnostics: result.diagnostics }),
+        onSuccess: (result) => {
+          notifySuccess('Converted', { diagnostics: result.diagnostics });
+          if (parsedTarget.data !== 'pdf') {
+            resultPreview.mutate({ source: parsedTarget.data, targetFormat: 'pdf', bytes: result.document.bytes });
+          }
+        },
         onError: (error) => notifyError('Conversion failed', error),
       },
     );
   };
+
+  // By the time convert.data exists, source/target reset to null/undefined the moment either changes again (handleSourceChange/handleTargetChange/handleFile all call convert.reset()), so these always describe the pair that actually produced convert.data -- no risk of pairing stale bytes with a since-changed format label.
+  const originalPdfBytes = source === 'pdf' ? file?.bytes : originalPreview.data?.document.bytes;
+  const convertedPdfBytes = target === 'pdf' ? convert.data?.document.bytes : resultPreview.data?.document.bytes;
 
   const handleDownload = () => {
     if (convert.data === undefined) return;
@@ -90,52 +112,73 @@ function ConvertLayout() {
   };
 
   return (
-    <Container size="sm" py="xl">
+    <Container size="xl" py="xl">
       <Stack gap="lg">
-        <Title order={2}>Convert a document</Title>
+        <Box maw={600}>
+          <Stack gap="lg">
+            <Title order={2}>Convert a document</Title>
 
-        <Paper withBorder p="md">
-          <Stack gap="sm">
-            <FileUpload file={file} onFile={handleFile} />
-            {file !== undefined && inferFormatFromFilename(file.name) === undefined && (
-              <Alert color="yellow">Could not detect "{file.name}"'s format from its extension -- pick "From" manually below.</Alert>
-            )}
+            <Paper withBorder p="md">
+              <Stack gap="sm">
+                <FileUpload file={file} onFile={handleFile} />
+                {file !== undefined && inferFormatFromFilename(file.name) === undefined && (
+                  <Alert color="yellow">Could not detect "{file.name}"'s format from its extension -- pick "From" manually below.</Alert>
+                )}
 
-            <Group grow>
-              <Select
-                label="From"
-                placeholder="Source format"
-                searchable
-                data={sourceOptions}
-                value={source}
-                onChange={handleSourceChange}
-                description={file !== undefined && inferFormatFromFilename(file.name) === source ? 'Detected from file' : undefined}
-              />
-              <Select
-                label="To"
-                placeholder="Target format"
-                searchable
-                data={targetData}
-                value={target}
-                onChange={handleTargetChange}
-                disabled={source === null}
-              />
-            </Group>
+                <Group grow>
+                  <Select
+                    label="From"
+                    placeholder="Source format"
+                    searchable
+                    data={sourceOptions}
+                    value={source}
+                    onChange={handleSourceChange}
+                    description={file !== undefined && inferFormatFromFilename(file.name) === source ? 'Detected from file' : undefined}
+                  />
+                  <Select
+                    label="To"
+                    placeholder="Target format"
+                    searchable
+                    data={targetData}
+                    value={target}
+                    onChange={handleTargetChange}
+                    disabled={source === null}
+                  />
+                </Group>
 
-            <Button onClick={handleConvert} disabled={file === undefined || source === null || target === null} loading={convert.isPending}>
-              Convert
-            </Button>
+                <Button onClick={handleConvert} disabled={file === undefined || source === null || target === null} loading={convert.isPending}>
+                  Convert
+                </Button>
+              </Stack>
+            </Paper>
           </Stack>
-        </Paper>
+        </Box>
 
         {convert.data && (
           <Paper withBorder p="md">
-            <Stack gap="sm">
+            <Stack gap="md">
               <Group justify="space-between">
                 <Text fw={500}>Done</Text>
                 <Button onClick={handleDownload}>Download</Button>
               </Group>
               <DiagnosticsPanel diagnostics={convert.data.diagnostics} />
+              <Group align="flex-start" grow wrap="nowrap">
+                <PdfPreview
+                  label="Original"
+                  format={source ?? ''}
+                  bytes={originalPdfBytes}
+                  loading={source !== 'pdf' && originalPreview.isPending}
+                  // React Query represents "no error" as null, not undefined -- normalised here since PdfPreview's own contract only knows "no error" as undefined.
+                  error={source !== 'pdf' && originalPreview.error !== null ? originalPreview.error : undefined}
+                />
+                <PdfPreview
+                  label="Converted"
+                  format={target ?? ''}
+                  bytes={convertedPdfBytes}
+                  loading={target !== 'pdf' && resultPreview.isPending}
+                  error={target !== 'pdf' && resultPreview.error !== null ? resultPreview.error : undefined}
+                />
+              </Group>
             </Stack>
           </Paper>
         )}
