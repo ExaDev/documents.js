@@ -1,3 +1,16 @@
+# [1.2.0](https://github.com/ExaDev/documents/compare/v1.1.0...v1.2.0) (2026-08-08)
+
+
+### Features
+
+* make the app installable as a PWA ([fc4564e](https://github.com/ExaDev/documents/commit/fc4564eb8ab9aff8584c45cb60eea041521ed8ba))
+* switch from hash routing to clean browser-history URLs ([f96cd23](https://github.com/ExaDev/documents/commit/f96cd237ee6d2667dd74a1f65ce3fef2fd283b99))
+
+
+### Reverts
+
+* Revert "feat: switch from hash routing to clean browser-history URLs" ([8f0ab54](https://github.com/ExaDev/documents/commit/8f0ab542955c655fe743375bed24ba25c4485275))
+
 # [1.1.0](https://github.com/ExaDev/documents/compare/v1.0.0...v1.1.0) (2026-08-08)
 
 
