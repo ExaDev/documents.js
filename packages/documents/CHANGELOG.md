@@ -1,3 +1,11 @@
+# [1.3.0](https://github.com/ExaDev/documents/compare/v1.2.0...v1.3.0) (2026-08-08)
+
+
+### Features
+
+* redesign convert as a layout route with searchable dropdowns ([1739101](https://github.com/ExaDev/documents/commit/17391016961c454aa45b826640211440e7368681))
+* replace the header-only nav with a persistent sidebar shell ([54d345b](https://github.com/ExaDev/documents/commit/54d345bfe63786eb8d5f27f68f27428cf0409694))
+
 # [1.2.0](https://github.com/ExaDev/documents/compare/v1.1.0...v1.2.0) (2026-08-08)
 
 
