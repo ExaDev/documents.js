@@ -1,0 +1,15 @@
+# Single-package repo -- this file exists only as the vehicle for pnpm-11 workspace-level settings (allowBuilds etc.), which cannot live in package.json. There is no `packages:` list because there are no workspace members to declare.
+allowBuilds:
+  esbuild: true
+# minimumReleaseAgeExclude is NOT honoured by `pnpm install --frozen-lockfile` (what CI runs) -- only minimumReleaseAge itself gates that path. Mirrors documents.js's own pnpm-workspace.yaml precedent: without this, the global 7-day release-age gate rejects a just-released version of one of these org-owned sibling packages and pnpm falls back to an old cached version whose dependency graph still points at a pre-npm-release git-hosted dependency needing build scripts pnpm 11 blocks by default.
+minimumReleaseAge: 60
+# Bare package names (no @version), per pnpm's documented syntax -- these are this org's own sibling packages, published only via their own semantic-release CI with npm OIDC trusted publishing, so a version-agnostic exemption is a deliberate, low-risk carry-forward, not a general relaxation.
+minimumReleaseAgeExclude:
+  - documents.js
+  - ooxml.js
+  - odf.js
+  - document-schema.js
+  - pdf-codec
+  - markdown-codec
+  - byte-codec
+  - '@exadev/eslint-config'

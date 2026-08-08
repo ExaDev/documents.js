@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2024", "WebWorker"],
+    "types": []
+  },
+  "include": ["src/workers/**/*.ts", "src/rpc/router.ts", "src/shared/**/*.ts"],
+  "exclude": ["src/**/*.test.ts"]
+}
