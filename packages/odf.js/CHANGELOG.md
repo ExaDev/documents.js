@@ -1,3 +1,10 @@
+## [2.6.8](https://github.com/ExaDev/odf.js/compare/v2.6.7...v2.6.8) (2026-08-08)
+
+
+### Bug Fixes
+
+* default unstyled ods column/row dimensions to positive values ([f347c73](https://github.com/ExaDev/odf.js/commit/f347c73ed5335b8076c3cf0c53401520776ef37c))
+
 ## [2.6.7](https://github.com/ExaDev/odf.js/compare/v2.6.6...v2.6.7) (2026-08-07)
 
 ## [2.6.6](https://github.com/ExaDev/odf.js/compare/v2.6.5...v2.6.6) (2026-08-07)
