@@ -1,7 +1,7 @@
 import { tanstackRouter } from '@tanstack/router-plugin/vite';
 import { vanillaExtractPlugin } from '@vanilla-extract/vite-plugin';
 import react from '@vitejs/plugin-react';
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 
 // GitHub Pages serves this repo at /documents/ (exadev.github.io is already the org's own Pages root, so this app can never live at the bare domain). Local dev stays at '/'. Routing is hash-based (see src/router.tsx), so no 404.html SPA-fallback step is needed -- GitHub Pages only ever serves the single index.html at /documents/, and everything after '#' is resolved client-side.
 const base = process.env.CI ? '/documents/' : '/';
@@ -29,5 +29,25 @@ export default defineConfig({
         },
       },
     },
+  },
+  test: {
+    passWithNoTests: false,
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'lcov', 'json-summary'],
+      reportsDirectory: 'coverage',
+      include: ['src/**/*.ts', 'src/**/*.tsx'],
+      exclude: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'src/test/**', 'src/main.tsx', 'src/**/*.css.ts', 'src/routeTree.gen.ts'],
+    },
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: 'unit',
+          environment: 'jsdom',
+          include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+        },
+      },
+    ],
   },
 });
