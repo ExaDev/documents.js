@@ -475,7 +475,7 @@ function isContentFormat(format: DocumentFormat): format is ContentFormat {
   return format !== 'pdf' && format !== 'odf';
 }
 
-// The entry point: resolves a path between source and target and executes each hop in order, feeding the previous hop's output bytes into the next hop's input. Options thread to whichever hop consumes each field (fonts/onFontSubstitution/onSubstitution/clock reach the toPdf hop; sink reaches the fromPdf hop; onMathDiagnostic/images reach bridge hops; signal reaches every hop), and onDocument fires exactly once -- on the first hop that builds a DocumentPackage -- mirroring the "each conversion invokes onDocument after its read" convention every function in convert.ts already follows, extended to a chain by suppressing the callback on every hop after the first. Throws UnsupportedConversionError (from capability.ts) for any pair the pathfinder cannot route, matching resolveConversionPath/local.ts's own rejection of an unsupported pair.
+// The entry point: resolves a path between source and target and executes each hop in order, feeding the previous hop's output bytes into the next hop's input. Options thread to whichever hop consumes each field (fonts/onFontSubstitution/onSubstitution/clock reach the toPdf hop; sink reaches the fromPdf hop; onMathDiagnostic/images reach bridge hops; signal reaches every hop), and onDocument fires exactly once -- on the LAST hop, so the caller receives the package that actually produced the output bytes (content+layout for a toPdf/fromPdf final hop, content-only for a bridge final hop) -- mirroring the convention the original hand-written composed functions already followed (each forwarded onDocument to its own last hop). Throws UnsupportedConversionError (from capability.ts) for any pair the pathfinder cannot route, matching resolveConversionPath/local.ts's own rejection of an unsupported pair.
 export function convertDocument(source: DocumentFormat, target: DocumentFormat, bytes: Uint8Array<ArrayBuffer>, options?: UnifiedConversionOptions): Uint8Array<ArrayBuffer> {
   const plan = resolveCompositionPlan(source, target);
   if (plan === undefined) {
@@ -487,8 +487,9 @@ export function convertDocument(source: DocumentFormat, target: DocumentFormat, 
     if (hop === undefined) {
       throw new Error('convertDocument: resolveCompositionPlan returned a malformed hop');
     }
-    // onDocument fires on the first hop only: pass the caller's options through unchanged for hop 0, then null out onDocument for every subsequent hop so the callback cannot fire twice.
-    const hopOptions: UnifiedConversionOptions | undefined = i === 0 ? options : options === undefined ? undefined : { ...options, onDocument: undefined };
+    // onDocument fires on the last hop only: null out onDocument for every hop before the last, then pass the caller's options through unchanged on the final hop so the callback receives the package that actually produced the output bytes. This mirrors the convention the original hand-written composed functions (xlsxToPdf/pdfToXlsx/xlsxToMarkdown/markdownToXlsx) already followed -- each forwarded onDocument to its own last hop, never the first -- so a caller of xlsxToPdf still receives the odsToPdf hop's content+layout package rather than the intermediate xlsx->ods bridge's content-only one.
+    const isLastHop = i === plan.hops.length - 1;
+    const hopOptions: UnifiedConversionOptions | undefined = isLastHop ? options : options === undefined ? undefined : { ...options, onDocument: undefined };
     if (hop.executor === 'toPdf') {
       if (!isContentFormat(hop.from)) {
         throw new Error(`convertDocument: toPdf source '${hop.from}' is not a content format`);
