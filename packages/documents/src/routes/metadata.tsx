@@ -8,6 +8,7 @@ import { useReadMetadata, useWriteMetadata } from '../hooks/useMetadata';
 import type { OpenedFile } from '../ports/fileAccess';
 import { inferFormatFromFilename } from '../shared/extensionToFormat';
 import { FileUpload } from '../ui/FileUpload';
+import { notifyError, notifySuccess } from '../ui/notify';
 
 export const Route = createFileRoute('/metadata')({
   component: MetadataPage,
@@ -36,6 +37,7 @@ function MetadataPage() {
             setTitle(metadata.title ?? '');
             setAuthor(metadata.author ?? '');
           },
+          onError: (error) => notifyError('Could not read metadata', error),
         },
       );
     }
@@ -47,8 +49,10 @@ function MetadataPage() {
       { sourceFormat: format, targetFormat: format, bytes: file.bytes, overrides: { title, author } },
       {
         onSuccess: (bytes) => {
+          notifySuccess('Metadata saved');
           void fileAccess.saveFile(bytes, { suggestedName: file.name, mimeType: 'application/octet-stream' });
         },
+        onError: (error) => notifyError('Could not save metadata', error),
       },
     );
   };
@@ -59,7 +63,7 @@ function MetadataPage() {
         <Title order={2}>Document metadata</Title>
         <Paper withBorder p="md">
           <Stack gap="sm">
-            <FileUpload file={file} onFile={handleFile} />
+            <FileUpload file={file} onFile={handleFile} loading={readMetadata.isPending} />
             {file !== undefined && format === undefined && (
               <Alert color="red">Could not recognise "{file.name}"'s format from its extension.</Alert>
             )}
@@ -99,8 +103,6 @@ function MetadataPage() {
             </Stack>
           </Paper>
         )}
-
-        {writeMetadata.isError && <Alert color="red">{writeMetadata.error.message}</Alert>}
       </Stack>
     </Container>
   );

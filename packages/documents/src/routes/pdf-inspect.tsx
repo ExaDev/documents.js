@@ -1,10 +1,11 @@
-import { Alert, Container, Paper, Stack, Table, Text, Title } from '@mantine/core';
+import { Container, Paper, Stack, Table, Text, Title } from '@mantine/core';
 import { createFileRoute } from '@tanstack/react-router';
 import { useState } from 'react';
 
 import { usePdfInspect } from '../hooks/usePdfInspect';
 import type { OpenedFile } from '../ports/fileAccess';
 import { FileUpload } from '../ui/FileUpload';
+import { notifyError } from '../ui/notify';
 
 export const Route = createFileRoute('/pdf-inspect')({
   component: PdfInspectPage,
@@ -16,7 +17,10 @@ function PdfInspectPage() {
 
   const handleFile = (opened: OpenedFile) => {
     setFile(opened);
-    inspect.mutate({ bytes: opened.bytes });
+    inspect.mutate(
+      { bytes: opened.bytes },
+      { onError: (error) => notifyError('Could not inspect PDF', error) },
+    );
   };
 
   return (
@@ -26,8 +30,6 @@ function PdfInspectPage() {
         <Paper withBorder p="md">
           <FileUpload accept={{ 'application/pdf': ['.pdf'] }} formatHint="PDF" file={file} onFile={handleFile} loading={inspect.isPending} />
         </Paper>
-
-        {inspect.isError && <Alert color="red">{inspect.error.message}</Alert>}
 
         {inspect.data && (
           <Paper withBorder p="md">

@@ -6,6 +6,7 @@ import { useExtractSourceFonts } from '../hooks/useFonts';
 import type { OpenedFile } from '../ports/fileAccess';
 import { inferFormatFromFilename } from '../shared/extensionToFormat';
 import { FileUpload } from '../ui/FileUpload';
+import { notifyError } from '../ui/notify';
 
 export const Route = createFileRoute('/fonts')({
   component: FontsPage,
@@ -20,7 +21,10 @@ function FontsPage() {
     setFile(opened);
     extractFonts.reset();
     if (format !== undefined) {
-      extractFonts.mutate({ format, bytes: opened.bytes });
+      extractFonts.mutate(
+        { format, bytes: opened.bytes },
+        { onError: (error) => notifyError('Could not read fonts', error) },
+      );
     }
   };
 
@@ -36,8 +40,6 @@ function FontsPage() {
             </Alert>
           )}
         </Paper>
-
-        {extractFonts.isError && <Alert color="red">{extractFonts.error.message}</Alert>}
 
         {extractFonts.data && (
           <Paper withBorder p="md">

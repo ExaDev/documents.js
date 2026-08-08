@@ -1,4 +1,4 @@
-import { Alert, Button, Container, Group, List, Paper, Select, Stack, Text, Title } from '@mantine/core';
+import { Button, Container, Group, Paper, Select, Stack, Text, Title } from '@mantine/core';
 import { createFileRoute, useNavigate, useParams } from '@tanstack/react-router';
 import { DocumentFormatSchema } from 'documents.js';
 import { useEffect, useState } from 'react';
@@ -7,7 +7,9 @@ import { createFileAccess } from '../adapters/fileAccess/createFileAccess';
 import { useConversions } from '../hooks/useConversions';
 import { useConvert } from '../hooks/useConvert';
 import type { OpenedFile } from '../ports/fileAccess';
+import { DiagnosticsPanel } from '../ui/DiagnosticsPanel';
 import { FileUpload } from '../ui/FileUpload';
+import { notifyError, notifySuccess } from '../ui/notify';
 
 // Layout route: convert.index.tsx and convert.$source.$target.tsx become its children (per TanStack Router's file-based nesting convention) and exist only to register typed path params in the route tree -- this component owns all the real state and UI directly, so it never remounts when the selected pair changes. That's the actual fix for "picking a new pair feels like leaving the page": the old sibling-routes structure fully remounted (destroying `file`/`convert` state) on every pair change, since convert.index.tsx and convert.$source.$target.tsx both parented directly to root.
 export const Route = createFileRoute('/convert')({
@@ -58,7 +60,13 @@ function ConvertLayout() {
     const parsedSource = DocumentFormatSchema.safeParse(source);
     const parsedTarget = DocumentFormatSchema.safeParse(target);
     if (!parsedSource.success || !parsedTarget.success) return;
-    convert.mutate({ source: parsedSource.data, targetFormat: parsedTarget.data, bytes: file.bytes });
+    convert.mutate(
+      { source: parsedSource.data, targetFormat: parsedTarget.data, bytes: file.bytes },
+      {
+        onSuccess: (result) => notifySuccess('Converted', { diagnostics: result.diagnostics }),
+        onError: (error) => notifyError('Conversion failed', error),
+      },
+    );
   };
 
   const handleDownload = () => {
@@ -103,12 +111,6 @@ function ConvertLayout() {
           </Stack>
         </Paper>
 
-        {convert.isError && (
-          <Alert color="red" title="Conversion failed">
-            {convert.error.message}
-          </Alert>
-        )}
-
         {convert.data && (
           <Paper withBorder p="md">
             <Stack gap="sm">
@@ -116,18 +118,7 @@ function ConvertLayout() {
                 <Text fw={500}>Done</Text>
                 <Button onClick={handleDownload}>Download</Button>
               </Group>
-              {convert.data.diagnostics.length > 0 && (
-                <List size="sm">
-                  {convert.data.diagnostics.map((diagnostic, index) => (
-                    <List.Item key={index}>
-                      <Text c={diagnostic.severity === 'warning' ? 'orange' : 'dimmed'} span>
-                        [{diagnostic.severity}]
-                      </Text>{' '}
-                      {diagnostic.message}
-                    </List.Item>
-                  ))}
-                </List>
-              )}
+              <DiagnosticsPanel diagnostics={convert.data.diagnostics} />
             </Stack>
           </Paper>
         )}
