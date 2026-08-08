@@ -1,29 +1,10 @@
-import { copyFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-
 import { tanstackRouter } from '@tanstack/router-plugin/vite';
 import { vanillaExtractPlugin } from '@vanilla-extract/vite-plugin';
 import react from '@vitejs/plugin-react';
-import type { Plugin } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import { defineConfig } from 'vitest/config';
 
 import { BACKGROUND_COLOR, BRAND_COLOR } from './src/design-tokens';
-
-// GitHub Pages has no server-side rewrites, so a deep link (e.g. /documents/metadata) hit directly falls through to Pages' own 404 handling -- which still serves whatever dist/404.html contains. A byte-identical copy of index.html there lets this app's own router take over and resolve the path client-side (the standard spa-github-pages trick). A real Vite plugin, not a shell `cp` step tacked onto package.json's build script, so it works the same way regardless of the invoking shell/OS.
-function spaFallback(): Plugin {
-  let outDir = '';
-  return {
-    name: 'documents:spa-404-fallback',
-    apply: 'build',
-    configResolved(config) {
-      outDir = resolve(config.root, config.build.outDir);
-    },
-    closeBundle() {
-      copyFileSync(resolve(outDir, 'index.html'), resolve(outDir, '404.html'));
-    },
-  };
-}
 
 // GitHub Pages serves this repo at /documents/ (exadev.github.io is already the org's own Pages root, so this app can never live at the bare domain). Local dev stays at '/'.
 const base = process.env.CI ? '/documents/' : '/';
@@ -68,8 +49,6 @@ export default defineConfig({
     react(),
     vanillaExtractPlugin(),
     pwa,
-    // Must run after `pwa`: it needs to copy the *final* index.html (with the SW-registration script vite-plugin-pwa injects), not a pre-PWA snapshot.
-    spaFallback(),
   ],
   build: {
     target: 'es2022',
