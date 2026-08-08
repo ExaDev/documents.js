@@ -33,7 +33,7 @@ import { throwIfAborted } from '../ports/abort';
 import { type ClockPort } from '../ports/clock';
 import { resolveMetadataTimestamps } from '../model/metadata';
 import { createDocumentFontRegistry, type FontSourcePackage } from '../fonts/registry';
-import { presentationToWordprocessing, wordprocessingToPresentation } from './variant-bridges';
+import { drawingToPresentation, presentationToDrawing, presentationToWordprocessing, wordprocessingToPresentation } from './variant-bridges';
 import { type ContentVariant, UnsupportedConversionError } from './capability';
 import { type DocumentFormat } from './port';
 
@@ -169,7 +169,7 @@ export const FORMAT_NODES: Readonly<Record<ContentFormat, FormatNode>> = {
 // The formats that have a direct layout-engine path to/from PDF (convertXToLayout + writePdf). xlsx is deliberately absent: it has no layout engine of its own, so the pathfinder routes xlsx <-> pdf through ods instead (xlsx -> ods bridge, then ods -> pdf toPdf), reproducing the composed route xlsxToPdf/pdfToXlsx already hard-code in convert.ts.
 const LAYOUT_CAPABLE: ReadonlySet<ContentFormat> = new Set<ContentFormat>(['docx', 'pptx', 'odt', 'odp', 'ods', 'odg', 'markdown']);
 
-// Cross-variant transforms keyed by `${fromVariant}->${toVariant}`. Each wrapper narrows its input with a runtime kind guard so the underlying transform receives its exact concrete variant type -- the same "no cast, narrow at the boundary" discipline every read/build closure above follows. Today only wordprocessing <-> presentation transforms exist (src/convert/variant-bridges.ts); the pathfinder derives its cross-variant edges from this object's keys, so adding a transform here is the single change needed to teach both the pathfinder and the bridge executor a new variant crossing.
+// Cross-variant transforms keyed by `${fromVariant}->${toVariant}`. Each wrapper narrows its input with a runtime kind guard so the underlying transform receives its exact concrete variant type -- the same "no cast, narrow at the boundary" discipline every read/build closure above follows. Today wordprocessing <-> presentation and drawing <-> presentation transforms exist (src/convert/variant-bridges.ts); the pathfinder derives its cross-variant edges from this object's keys, so adding a transform here is the single change needed to teach both the pathfinder and the bridge executor a new variant crossing.
 const TRANSFORMS: Readonly<Record<string, (doc: ContentDocument) => ContentDocument>> = {
   'wordprocessing->presentation': (doc) => {
     if (doc.kind !== 'wordprocessing') {
@@ -182,6 +182,18 @@ const TRANSFORMS: Readonly<Record<string, (doc: ContentDocument) => ContentDocum
       throw new Error('presentationToWordprocessing: expected a presentation ContentDocument');
     }
     return presentationToWordprocessing(doc);
+  },
+  'drawing->presentation': (doc) => {
+    if (doc.kind !== 'drawing') {
+      throw new Error('drawingToPresentation: expected a drawing ContentDocument');
+    }
+    return drawingToPresentation(doc);
+  },
+  'presentation->drawing': (doc) => {
+    if (doc.kind !== 'presentation') {
+      throw new Error('presentationToDrawing: expected a presentation ContentDocument');
+    }
+    return presentationToDrawing(doc);
   },
 };
 
