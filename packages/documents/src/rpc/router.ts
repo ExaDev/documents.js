@@ -4,7 +4,9 @@ import {
   describeFontFace,
   DocumentFormatSchema,
   DOCUMENT_FORMATS,
+  extractSourceFontsForFormat,
   readDocumentMetadata,
+  readPdf,
   setDocumentMetadata,
 } from 'documents.js';
 import { z } from 'zod';
@@ -104,6 +106,39 @@ export const router = {
       .input(z.object({ bytes: BytesSchema, label: z.string() }))
       .output(FontFaceSchema)
       .handler(({ input }) => describeFontFace(input.bytes, input.label)),
+
+    extractSourceFonts: os
+      .input(z.object({ format: DocumentFormatSchema, bytes: BytesSchema }))
+      .output(z.array(FontFaceSchema))
+      .handler(({ input }) =>
+        extractSourceFontsForFormat(input.format, input.bytes).map((font) => ({
+          family: font.family,
+          bold: font.bold,
+          italic: font.italic,
+        })),
+      ),
+  },
+
+  pdf: {
+    inspect: os
+      .input(z.object({ bytes: BytesSchema }))
+      .output(
+        z.object({
+          pageCount: z.number().int().nonnegative(),
+          itemKindCounts: z.record(z.string(), z.number().int().nonnegative()),
+          metadata: MetadataSchema,
+        }),
+      )
+      .handler(({ input, signal }) => {
+        const layout = readPdf(input.bytes, { signal });
+        const itemKindCounts: Record<string, number> = {};
+        for (const page of layout.pages) {
+          for (const item of page.items) {
+            itemKindCounts[item.kind] = (itemKindCounts[item.kind] ?? 0) + 1;
+          }
+        }
+        return { pageCount: layout.pages.length, itemKindCounts, metadata: layout.metadata };
+      }),
   },
 };
 
