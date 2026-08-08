@@ -14,6 +14,9 @@ function RootLayout() {
           <Group gap="lg">
             <Link to="/">Home</Link>
             <Link to="/convert">Convert</Link>
+            <Link to="/metadata">Metadata</Link>
+            <Link to="/pdf-inspect">PDF inspect</Link>
+            <Link to="/fonts">Fonts</Link>
           </Group>
         </Group>
       </AppShell.Header>
