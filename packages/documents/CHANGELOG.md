@@ -1,3 +1,10 @@
+# [1.6.0](https://github.com/ExaDev/documents/compare/v1.5.0...v1.6.0) (2026-08-08)
+
+
+### Features
+
+* add a Recent Files page with reopen-in-Convert ([c88b4d8](https://github.com/ExaDev/documents/commit/c88b4d8dd0f8a4e08d551cdaec74a714773c88a0))
+
 # [1.5.0](https://github.com/ExaDev/documents/compare/v1.4.0...v1.5.0) (2026-08-08)
 
 
