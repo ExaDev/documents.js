@@ -1,12 +1,13 @@
-import { Button, Container, Group, Paper, Select, Stack, Text, Title } from '@mantine/core';
+import { Alert, Button, Container, Group, Paper, Select, Stack, Text, Title } from '@mantine/core';
 import { createFileRoute, useNavigate, useParams } from '@tanstack/react-router';
 import { DocumentFormatSchema } from 'documents.js';
 import { useEffect, useState } from 'react';
 
 import { createFileAccess } from '../adapters/fileAccess/createFileAccess';
-import { useConversions } from '../hooks/useConversions';
+import { useConversions, useDocumentFormats } from '../hooks/useConversions';
 import { useConvert } from '../hooks/useConvert';
 import type { OpenedFile } from '../ports/fileAccess';
+import { inferFormatFromFilename } from '../shared/extensionToFormat';
 import { DiagnosticsPanel } from '../ui/DiagnosticsPanel';
 import { FileUpload } from '../ui/FileUpload';
 import { notifyError, notifySuccess } from '../ui/notify';
@@ -21,6 +22,7 @@ function ConvertLayout() {
   const params = useParams({ strict: false });
   const navigate = useNavigate();
   const conversions = useConversions();
+  const formats = useDocumentFormats();
 
   // Captured once via its own lazy initializer -- takePendingReopen clears the mailbox on read, so the source/file initializers below must read this already-resolved value rather than calling takePendingReopen() a second time (which would find it empty).
   const [pendingReopen] = useState(() => takePendingReopen());
@@ -40,7 +42,10 @@ function ConvertLayout() {
   }, [source, target, navigate]);
 
   const sourceOptions = [...new Set((conversions.data ?? []).map((pair) => pair.source))].sort();
-  const targetOptions = [...new Set((conversions.data ?? []).filter((pair) => pair.source === source).map((pair) => pair.target))].sort();
+
+  // Every known format is always listed -- ones the current source can't reach are disabled in place rather than filtered out, so picking "To" first still shows the full picture of what's possible, not a silently shrinking list.
+  const validTargets = new Set((conversions.data ?? []).filter((pair) => pair.source === source).map((pair) => pair.target));
+  const targetData = [...(formats.data ?? [])].sort().map((format) => ({ value: format, label: format, disabled: !validTargets.has(format) }));
 
   const handleSourceChange = (value: string | null) => {
     setSource(value);
@@ -56,6 +61,9 @@ function ConvertLayout() {
   const handleFile = (opened: OpenedFile) => {
     setFile(opened);
     convert.reset();
+    // Auto-detected format overrides "From" outright -- a fresh drop is the strongest signal of intent, stronger than whatever was previously selected. When the extension isn't recognised, "From" is left untouched (manual or previously-detected) and the Alert below explains why nothing changed.
+    const detected = inferFormatFromFilename(opened.name);
+    if (detected !== undefined) handleSourceChange(detected);
   };
 
   const handleConvert = () => {
@@ -86,29 +94,34 @@ function ConvertLayout() {
       <Stack gap="lg">
         <Title order={2}>Convert a document</Title>
 
-        <Group grow>
-          <Select
-            label="From"
-            placeholder="Source format"
-            searchable
-            data={sourceOptions}
-            value={source}
-            onChange={handleSourceChange}
-          />
-          <Select
-            label="To"
-            placeholder="Target format"
-            searchable
-            data={targetOptions}
-            value={target}
-            onChange={handleTargetChange}
-            disabled={source === null}
-          />
-        </Group>
-
         <Paper withBorder p="md">
           <Stack gap="sm">
             <FileUpload file={file} onFile={handleFile} />
+            {file !== undefined && inferFormatFromFilename(file.name) === undefined && (
+              <Alert color="yellow">Could not detect "{file.name}"'s format from its extension -- pick "From" manually below.</Alert>
+            )}
+
+            <Group grow>
+              <Select
+                label="From"
+                placeholder="Source format"
+                searchable
+                data={sourceOptions}
+                value={source}
+                onChange={handleSourceChange}
+                description={file !== undefined && inferFormatFromFilename(file.name) === source ? 'Detected from file' : undefined}
+              />
+              <Select
+                label="To"
+                placeholder="Target format"
+                searchable
+                data={targetData}
+                value={target}
+                onChange={handleTargetChange}
+                disabled={source === null}
+              />
+            </Group>
+
             <Button onClick={handleConvert} disabled={file === undefined || source === null || target === null} loading={convert.isPending}>
               Convert
             </Button>
