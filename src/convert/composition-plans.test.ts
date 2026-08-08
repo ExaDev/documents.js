@@ -1,12 +1,20 @@
+import type { ContentDocument, ContentParagraph } from 'document-schema.js';
+import { decodePackage as decodeOoxmlPackage } from 'ooxml.js';
+import { decodePackage as decodeOdfPackage } from 'odf.js';
 import { encodeMarkdownText } from '../markdown/text';
 import { createDocx } from '../edit/docx/editor';
 import { minimalOdtBytes } from '../test-support/odt';
 import { minimalOdpBytes } from '../test-support/odp';
+import { minimalPptxBytes } from '../test-support/pptx';
 import { richMarkdownText } from '../test-support/markdown';
 import { describe, expect, it } from 'vitest';
 import { convertDocument, resolveCompositionPlan } from './composition';
 import type { DocumentFormat } from './port';
 import { createLocalDocumentConverter } from './local';
+import { readDocxContent } from '../ooxml/docx/read';
+import { readPptxContent } from '../ooxml/pptx/read';
+import { readOdpContent } from '../odf/odp/read';
+import { readOdtContent } from '../odf/odt/read';
 
 describe('resolveCompositionPlan route verification', () => {
   // Every format pair the port exposes (minus the special-case odf -> pdf) must resolve. The pathfinder routes all pairs of non-odf formats within the 3-hop cap, so this covers every same-variant bridge, cross-variant transform, toPdf/fromPdf edge, and composed multi-hop route.
@@ -68,53 +76,93 @@ describe('resolveCompositionPlan route verification', () => {
   });
 });
 
-// --- Tests for the newly-exposed high-value cross-variant pairs (wordprocessing <-> presentation transform): these were unreachable through the former DIRECT_EDGES list (only docx<->pptx and odt<->odp were registered) but the pathfinder routes every wordprocessing-format <-> presentation-format pair through the same transform. Each test converts real fixture bytes through convertDocument and asserts the output is a valid package of the target format. ---
+// --- Tests for the newly-exposed high-value cross-variant pairs (wordprocessing <-> presentation transform): these were unreachable through the former DIRECT_EDGES list (only docx<->pptx and odt<->odp were registered) but the pathfinder routes every wordprocessing-format <-> presentation-format pair through the same transform. Each test converts real fixture bytes through convertDocument and decodes the output to assert REAL content survived -- not merely that the output is a non-empty ZIP, which a degraded/empty package would still satisfy. ---
 
 function isZip(bytes: Uint8Array<ArrayBuffer>): boolean {
   return bytes.length >= 2 && bytes[0] === 0x50 && bytes[1] === 0x4b;
 }
 
+// Joins every paragraph run's text across a ContentDocument. Throws for a non-wordprocessing doc so a test that accidentally targets the wrong kind fails loudly instead of silently comparing an empty string.
+function wordprocessingRunText(doc: ContentDocument): string {
+  if (doc.kind !== 'wordprocessing') {
+    throw new Error(`expected a wordprocessing ContentDocument, got ${doc.kind}`);
+  }
+  return doc.sections
+    .flatMap((section) => section.blocks)
+    .filter((block): block is ContentParagraph => block.kind === 'paragraph')
+    .flatMap((block) => block.runs.map((run) => run.text ?? ''))
+    .join('');
+}
+
 describe('convertDocument: newly-exposed cross-variant pairs', () => {
-  it('markdown -> pptx produces a valid pptx package', () => {
+  it('markdown -> pptx produces a real pptx whose slides carry the heading', () => {
     const bytes = convertDocument('markdown', 'pptx', encodeMarkdownText(richMarkdownText()));
     expect(isZip(bytes)).toBe(true);
+    const content = readPptxContent(decodeOoxmlPackage(bytes));
+    if (content.kind !== 'presentation') {
+      throw new Error(`expected a presentation ContentDocument, got ${content.kind}`);
+    }
+    expect(content.slides.length).toBeGreaterThanOrEqual(1);
+    const runText = content.slides.flatMap((slide) => slide.shapes).flatMap((shape) => shape.blocks).filter((block): block is ContentParagraph => block.kind === 'paragraph').flatMap((block) => block.runs.map((run) => run.text ?? '')).join('');
+    expect(runText).toContain('Report Title');
   });
 
-  it('pptx -> markdown produces non-empty markdown text', () => {
-    const bytes = convertDocument('pptx', 'markdown', convertDocument('markdown', 'pptx', encodeMarkdownText(richMarkdownText())));
+  it('pptx -> markdown (from a real pptx fixture) carries the slide text into the markdown', () => {
+    const bytes = convertDocument('pptx', 'markdown', minimalPptxBytes());
     expect(bytes.length).toBeGreaterThan(0);
+    expect(new TextDecoder().decode(bytes)).toContain('Slide text');
   });
 
-  it('markdown -> odp produces a valid odp package', () => {
+  it('markdown -> odp produces a real odp whose slides carry the heading', () => {
     const bytes = convertDocument('markdown', 'odp', encodeMarkdownText(richMarkdownText()));
     expect(isZip(bytes)).toBe(true);
+    const content = readOdpContent(decodeOdfPackage(bytes));
+    if (content.kind !== 'presentation') {
+      throw new Error(`expected a presentation ContentDocument, got ${content.kind}`);
+    }
+    expect(content.slides.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('odp -> markdown produces non-empty markdown text', () => {
+  it('odp -> markdown carries the slide text into the markdown', () => {
     const bytes = convertDocument('odp', 'markdown', minimalOdpBytes());
     expect(bytes.length).toBeGreaterThan(0);
+    expect(new TextDecoder().decode(bytes)).toContain('Hello from odp');
   });
 
-  it('docx -> odp produces a valid odp package', () => {
+  it('docx -> odp produces a real odp whose slides carry the heading', () => {
     const editor = createDocx();
     editor.body.appendParagraph({ styleId: 'Heading1' }).appendRun({ text: 'Slide title' });
     editor.body.appendParagraph().appendRun({ text: 'Slide content' });
     const bytes = convertDocument('docx', 'odp', editor.toBytes());
     expect(isZip(bytes)).toBe(true);
+    const content = readOdpContent(decodeOdfPackage(bytes));
+    if (content.kind !== 'presentation') {
+      throw new Error(`expected a presentation ContentDocument, got ${content.kind}`);
+    }
+    expect(content.slides.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('odp -> docx produces a valid docx package', () => {
+  it('odp -> docx produces a real docx whose paragraphs carry the slide text', () => {
     const bytes = convertDocument('odp', 'docx', minimalOdpBytes());
     expect(isZip(bytes)).toBe(true);
+    expect(wordprocessingRunText(readDocxContent(decodeOoxmlPackage(bytes)))).toContain('Hello from odp');
   });
 
-  it('odt -> pptx produces a valid pptx package', () => {
+  it('odt -> pptx produces a real pptx whose slides carry the heading', () => {
     const bytes = convertDocument('odt', 'pptx', minimalOdtBytes());
     expect(isZip(bytes)).toBe(true);
+    const content = readPptxContent(decodeOoxmlPackage(bytes));
+    if (content.kind !== 'presentation') {
+      throw new Error(`expected a presentation ContentDocument, got ${content.kind}`);
+    }
+    expect(content.slides.length).toBeGreaterThanOrEqual(1);
+    const runText = content.slides.flatMap((slide) => slide.shapes).flatMap((shape) => shape.blocks).filter((block): block is ContentParagraph => block.kind === 'paragraph').flatMap((block) => block.runs.map((run) => run.text ?? '')).join('');
+    expect(runText).toContain('Hello from odt');
   });
 
-  it('pptx -> odt produces a valid odt package', () => {
-    const bytes = convertDocument('pptx', 'odt', minimalOdpBytes());
+  it('pptx -> odt produces a real odt whose paragraphs carry the slide text', () => {
+    const bytes = convertDocument('pptx', 'odt', minimalPptxBytes());
     expect(isZip(bytes)).toBe(true);
+    expect(wordprocessingRunText(readOdtContent(decodeOdfPackage(bytes)))).toContain('Slide text');
   });
 });
