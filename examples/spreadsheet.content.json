@@ -1,0 +1,185 @@
+{
+  "$schema": "https://cdn.jsdelivr.net/npm/document-schema.js@2.7.4/schemas/content-document.schema.json",
+  "kind": "spreadsheet",
+  "formatVersion": 2,
+  "metadata": {
+    "title": "Grid Spreadsheet"
+  },
+  "sheets": [
+    {
+      "name": "Grid",
+      "cells": [
+        {
+          "row": 0,
+          "column": 0,
+          "value": {
+            "kind": "string",
+            "value": "Alpha"
+          },
+          "displayText": "Alpha",
+          "runs": [
+            {
+              "text": "Alpha"
+            }
+          ]
+        },
+        {
+          "row": 0,
+          "column": 1,
+          "value": {
+            "kind": "string",
+            "value": "Beta"
+          },
+          "displayText": "Beta",
+          "runs": [
+            {
+              "text": "Beta"
+            }
+          ]
+        },
+        {
+          "row": 0,
+          "column": 2,
+          "value": {
+            "kind": "string",
+            "value": "Gamma"
+          },
+          "displayText": "Gamma",
+          "runs": [
+            {
+              "text": "Gamma"
+            }
+          ]
+        },
+        {
+          "row": 1,
+          "column": 0,
+          "value": {
+            "kind": "string",
+            "value": "One"
+          },
+          "displayText": "One",
+          "runs": [
+            {
+              "text": "One"
+            }
+          ]
+        },
+        {
+          "row": 1,
+          "column": 1,
+          "value": {
+            "kind": "string",
+            "value": "Two"
+          },
+          "displayText": "Two",
+          "runs": [
+            {
+              "text": "Two"
+            }
+          ]
+        },
+        {
+          "row": 1,
+          "column": 2,
+          "value": {
+            "kind": "string",
+            "value": "Three"
+          },
+          "displayText": "Three",
+          "runs": [
+            {
+              "text": "Three"
+            }
+          ]
+        },
+        {
+          "row": 2,
+          "column": 0,
+          "value": {
+            "kind": "string",
+            "value": "Four"
+          },
+          "displayText": "Four",
+          "runs": [
+            {
+              "text": "Four"
+            }
+          ]
+        },
+        {
+          "row": 2,
+          "column": 1,
+          "value": {
+            "kind": "string",
+            "value": "Five"
+          },
+          "displayText": "Five",
+          "runs": [
+            {
+              "text": "Five"
+            }
+          ]
+        },
+        {
+          "row": 2,
+          "column": 2,
+          "value": {
+            "kind": "string",
+            "value": "Six"
+          },
+          "displayText": "Six",
+          "runs": [
+            {
+              "text": "Six"
+            }
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "index": 0,
+          "widthPt": 56.69291338582677
+        },
+        {
+          "index": 1,
+          "widthPt": 56.69291338582677
+        },
+        {
+          "index": 2,
+          "widthPt": 56.69291338582677
+        }
+      ],
+      "rows": [
+        {
+          "index": 0,
+          "heightPt": 17.00787401574803
+        },
+        {
+          "index": 1,
+          "heightPt": 17.00787401574803
+        },
+        {
+          "index": 2,
+          "heightPt": 17.00787401574803
+        }
+      ],
+      "images": [],
+      "printSettings": {
+        "pageSize": {
+          "widthPt": 400,
+          "heightPt": 300
+        },
+        "margins": {
+          "topPt": 56.69291338582677,
+          "rightPt": 56.69291338582677,
+          "bottomPt": 56.69291338582677,
+          "leftPt": 56.69291338582677
+        },
+        "gridlines": true,
+        "headers": true,
+        "pageOrder": "downThenOver"
+      }
+    }
+  ]
+}

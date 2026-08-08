@@ -1,0 +1,42 @@
+{
+  "$schema": "https://cdn.jsdelivr.net/npm/document-schema.js@2.7.4/schemas/content-document.schema.json",
+  "kind": "presentation",
+  "formatVersion": 2,
+  "metadata": {},
+  "slides": [
+    {
+      "size": {
+        "widthPt": 960,
+        "heightPt": 540
+      },
+      "shapes": [
+        {
+          "frame": {
+            "xPt": 72,
+            "yPt": 72,
+            "widthPt": 288,
+            "heightPt": 72
+          },
+          "insetLeftPt": 7.2,
+          "insetTopPt": 3.6,
+          "insetRightPt": 7.2,
+          "insetBottomPt": 3.6,
+          "blocks": [
+            {
+              "kind": "paragraph",
+              "runs": [
+                {
+                  "text": "Slide text",
+                  "sourcePath": "slides[0].shapes[0].blocks[0].runs[0]"
+                }
+              ],
+              "sourcePath": "slides[0].shapes[0].blocks[0]"
+            }
+          ],
+          "sourcePath": "slides[0].shapes[0]"
+        }
+      ],
+      "notes": ""
+    }
+  ]
+}
