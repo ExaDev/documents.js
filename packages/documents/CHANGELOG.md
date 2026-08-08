@@ -1,3 +1,10 @@
+# [1.8.0](https://github.com/ExaDev/documents/compare/v1.7.0...v1.8.0) (2026-08-08)
+
+
+### Features
+
+* auto-detect source format and disable incompatible targets ([651bb9d](https://github.com/ExaDev/documents/commit/651bb9d8f0247b5dd6481fb1f5d92221be67fac8))
+
 # [1.7.0](https://github.com/ExaDev/documents/compare/v1.6.0...v1.7.0) (2026-08-08)
 
 
