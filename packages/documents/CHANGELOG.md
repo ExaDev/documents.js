@@ -1,3 +1,10 @@
+# [1.10.0](https://github.com/ExaDev/documents/compare/v1.9.0...v1.10.0) (2026-08-08)
+
+
+### Features
+
+* add a System option to the color scheme switcher ([67c9008](https://github.com/ExaDev/documents/commit/67c900819657b4c895fe84f1ec3607e4551cf0d6))
+
 # [1.9.0](https://github.com/ExaDev/documents/compare/v1.8.0...v1.9.0) (2026-08-08)
 
 
