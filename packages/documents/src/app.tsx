@@ -1,4 +1,5 @@
 import { MantineProvider } from '@mantine/core';
+import { Notifications } from '@mantine/notifications';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider } from '@tanstack/react-router';
 
@@ -10,6 +11,7 @@ const queryClient = new QueryClient();
 export function App() {
   return (
     <MantineProvider theme={theme}>
+      <Notifications position="bottom-right" limit={4} />
       <QueryClientProvider client={queryClient}>
         <RouterProvider router={router} />
       </QueryClientProvider>
