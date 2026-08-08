@@ -1,3 +1,10 @@
+# [1.98.0](https://github.com/ExaDev/documents.js/compare/v1.97.11...v1.98.0) (2026-08-08)
+
+
+### Features
+
+* expose convertDocument and derive every routable pair from the composition pathfinder ([45267cf](https://github.com/ExaDev/documents.js/commit/45267cff041e2c3527cd977ab222edc068670b58))
+
 ## [1.97.11](https://github.com/ExaDev/documents.js/compare/v1.97.10...v1.97.11) (2026-08-08)
 
 
