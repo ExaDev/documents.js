@@ -1,3 +1,11 @@
+# [1.5.0](https://github.com/ExaDev/documents/compare/v1.4.0...v1.5.0) (2026-08-08)
+
+
+### Features
+
+* add toast notifications and a shared diagnostics panel ([212f73d](https://github.com/ExaDev/documents/commit/212f73df642b55664c5e920ba48067de8bc6edde))
+* wire toast notifications into the four tool routes ([76c2790](https://github.com/ExaDev/documents/commit/76c2790d24fece108c72fbc5ca8ca1e3f807012d))
+
 # [1.4.0](https://github.com/ExaDev/documents/compare/v1.3.0...v1.4.0) (2026-08-08)
 
 
