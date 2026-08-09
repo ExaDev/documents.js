@@ -1,3 +1,10 @@
+# [1.11.0](https://github.com/ExaDev/documents/compare/v1.10.0...v1.11.0) (2026-08-09)
+
+
+### Features
+
+* cycle color scheme with a single click instead of a dropdown ([7875aaa](https://github.com/ExaDev/documents/commit/7875aaa62128aee16eb5255087762b9e62324c81))
+
 # [1.10.0](https://github.com/ExaDev/documents/compare/v1.9.0...v1.10.0) (2026-08-08)
 
 
