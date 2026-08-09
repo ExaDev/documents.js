@@ -118,7 +118,8 @@ function ConvertLayout() {
   };
 
   return (
-    <Container size="xl" py="xl">
+    // Fixed rem cap, not fluid -- fluid would let the two preview panels stretch to absurd widths on an ultrawide monitor. 1600 is chosen to noticeably widen the Done panel's preview pair on a standard 1920px display (size="xl" = 1320px left most of a 1920px screen unused) while still bounding line length on wider screens. The upload/select controls stay comfortably narrow via their own `Box maw={600}` below, which is unaffected by this cap.
+    <Container size={1600} py="xl">
       <Stack gap="lg">
         <Box maw={600}>
           <Stack gap="lg">
