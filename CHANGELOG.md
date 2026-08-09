@@ -1,3 +1,11 @@
+## [1.99.5](https://github.com/ExaDev/documents.js/compare/v1.99.4...v1.99.5) (2026-08-09)
+
+
+### Bug Fixes
+
+* render a marker glyph and hanging indent for list items ([9f76346](https://github.com/ExaDev/documents.js/commit/9f76346d4b8d843ac66d575a245e5418fc76a27f))
+* resolve heading styleId to bold/size at layout time, not read time ([16ebca8](https://github.com/ExaDev/documents.js/commit/16ebca892d89caf05540a891d32974aab7d150b6))
+
 ## [1.99.4](https://github.com/ExaDev/documents.js/compare/v1.99.3...v1.99.4) (2026-08-08)
 
 ## [1.99.3](https://github.com/ExaDev/documents.js/compare/v1.99.2...v1.99.3) (2026-08-08)
