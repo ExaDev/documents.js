@@ -14,6 +14,8 @@ import {
   IconTypography,
 } from '@tabler/icons-react';
 
+import { relativeTime } from '../shared/relativeTime';
+
 // Not a route -- the '-' prefix keeps TanStack Router's file-based generator from treating this as one.
 const NAV_ITEMS = [
   { to: '/convert', label: 'Convert', icon: IconArrowsExchange },
@@ -37,6 +39,12 @@ const versionHref = __APP_RELEASE_TAG__ !== null ? `${__APP_REPO_URL__}/releases
 const VersionIcon = __APP_RELEASE_TAG__ !== null ? IconTag : IconGitCommit;
 
 export function Sidebar() {
+  // Computed at render time, not module scope, so it stays roughly fresh across a long-lived session -- Tooltip only mounts its content while open, so there's no need for a ticking interval to keep it accurate.
+  const tooltipLabel =
+    __APP_RELEASE_TAG__ !== null
+      ? `Released ${relativeTime(__APP_COMMIT_TIMESTAMP__)}`
+      : `Commit ${__APP_COMMIT_SHA__} · ${relativeTime(__APP_COMMIT_TIMESTAMP__)}`;
+
   return (
     <Stack h="100%" justify="space-between" gap={4}>
       <Stack gap={4}>
@@ -59,7 +67,7 @@ export function Sidebar() {
           </Tooltip>
         ))}
       </Stack>
-      <Tooltip label={`Commit ${__APP_COMMIT_SHA__}`} position="right">
+      <Tooltip label={tooltipLabel} position="right">
         <Anchor
           href={versionHref}
           target="_blank"

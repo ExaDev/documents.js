@@ -5,6 +5,7 @@ import { DocumentFormatSchema } from 'documents.js';
 
 import type { RecentFileRecord } from '../db/dexie';
 import { removeRecentFile, useRecentFiles } from '../hooks/useRecentFiles';
+import { relativeTime } from '../shared/relativeTime';
 import { notifyError } from './notify';
 import { setPendingReopen } from './reopenMailbox';
 
@@ -12,18 +13,6 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
-
-const MINUTE_MS = 60_000;
-const HOUR_MS = 60 * MINUTE_MS;
-const DAY_MS = 24 * HOUR_MS;
-
-function relativeTime(timestamp: number): string {
-  const elapsedMs = Date.now() - timestamp;
-  if (elapsedMs < MINUTE_MS) return 'just now';
-  if (elapsedMs < HOUR_MS) return `${Math.floor(elapsedMs / MINUTE_MS)}m ago`;
-  if (elapsedMs < DAY_MS) return `${Math.floor(elapsedMs / HOUR_MS)}h ago`;
-  return `${Math.floor(elapsedMs / DAY_MS)}d ago`;
 }
 
 export function RecentFilesPanel() {

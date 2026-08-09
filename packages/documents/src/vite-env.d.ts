@@ -4,3 +4,4 @@
 declare const __APP_COMMIT_SHA__: string;
 declare const __APP_RELEASE_TAG__: string | null;
 declare const __APP_REPO_URL__: string;
+declare const __APP_COMMIT_TIMESTAMP__: number;

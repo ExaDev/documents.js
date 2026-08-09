@@ -38,6 +38,8 @@ const commitSha = execGit(['rev-parse', 'HEAD']);
 const exactTag = tryExecGit(['describe', '--tags', '--exact-match', 'HEAD']);
 const releaseTag = exactTag !== undefined && /^v\d+\.\d+\.\d+$/.test(exactTag) ? exactTag : null;
 const repoUrl = parseGitHubRepoUrl(execGit(['remote', 'get-url', 'origin']));
+// %ct is the committer date as Unix seconds -- for a release commit this is effectively its release time (semantic-release commits, tags, and publishes the release in the same CI step), and for an ordinary commit it's simply when that commit was made. Multiplied to milliseconds for direct use with Date.now()-based relative time.
+const commitTimestampMs = Number(execGit(['show', '-s', '--format=%ct', 'HEAD'])) * 1000;
 
 // documents.worker-*.js is ~3.7MB (by far the largest built asset) and is only ever constructed lazily inside getRpcClient() when a tool actually runs a job, never at page load. Workbox's default 2MiB precache size cutover would either silently exclude it or, if raised, block PWA install on downloading a chunk most users don't need on first paint -- excluded from the precache glob and instead cached at runtime on first use via a CacheFirst rule, which is safe because the filename is content-hashed by Vite's build (a new build is a new URL, so there is no staleness risk to revalidate against).
 const pwa = VitePWA({
@@ -77,6 +79,7 @@ export default defineConfig({
     __APP_COMMIT_SHA__: JSON.stringify(commitSha),
     __APP_RELEASE_TAG__: JSON.stringify(releaseTag),
     __APP_REPO_URL__: JSON.stringify(repoUrl),
+    __APP_COMMIT_TIMESTAMP__: JSON.stringify(commitTimestampMs),
   },
   plugins: [
     // Must precede react(): the router plugin's route-tree codegen needs to run before plugin-react's JSX transform sees the generated imports.
