@@ -1,3 +1,10 @@
+# [1.13.0](https://github.com/ExaDev/documents/compare/v1.12.0...v1.13.0) (2026-08-09)
+
+
+### Features
+
+* show time since release or commit on the sidebar version link ([9ca6804](https://github.com/ExaDev/documents/commit/9ca68042878f657427cf208c5b0b4f5a91af8bbf))
+
 # [1.12.0](https://github.com/ExaDev/documents/compare/v1.11.0...v1.12.0) (2026-08-09)
 
 
