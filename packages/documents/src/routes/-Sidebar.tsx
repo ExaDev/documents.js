@@ -1,4 +1,4 @@
-import { NavLink, Stack, Tooltip } from '@mantine/core';
+import { Anchor, NavLink, Stack, Tooltip } from '@mantine/core';
 import { Link } from '@tanstack/react-router';
 import {
   IconArrowsExchange,
@@ -6,8 +6,10 @@ import {
   IconDatabase,
   IconEdit,
   IconFileSearch,
+  IconGitCommit,
   IconHistory,
   IconJson,
+  IconTag,
   IconTags,
   IconTypography,
 } from '@tabler/icons-react';
@@ -29,27 +31,49 @@ const PLANNED_ITEMS = [
   { label: 'Package / JSON', icon: IconJson },
 ] as const;
 
+// Build-time git state (see vite.config.ts's `define` block) rather than a dry-run prediction: whenever this build's HEAD is an exact semantic-release tag, CI's own job graph guarantees that tag already exists on disk (the deploy job checks out `ref: main` fresh, strictly after the release job pushed) -- there is nothing to predict, only real state to read.
+const versionLabel = __APP_RELEASE_TAG__ ?? __APP_COMMIT_SHA__.slice(0, 7);
+const versionHref = __APP_RELEASE_TAG__ !== null ? `${__APP_REPO_URL__}/releases/tag/${__APP_RELEASE_TAG__}` : `${__APP_REPO_URL__}/commit/${__APP_COMMIT_SHA__}`;
+const VersionIcon = __APP_RELEASE_TAG__ !== null ? IconTag : IconGitCommit;
+
 export function Sidebar() {
   return (
-    <Stack gap={4}>
-      {NAV_ITEMS.map((item) => (
-        <Link key={item.to} to={item.to} style={{ textDecoration: 'none', color: 'inherit' }}>
-          {({ isActive }) => (
-            <NavLink component="div" label={item.label} leftSection={<item.icon size={18} />} active={isActive} />
-          )}
-        </Link>
-      ))}
-      {PLANNED_ITEMS.map((item) => (
-        <Tooltip key={item.label} label="Coming soon" position="right">
-          <NavLink
-            component="div"
-            label={item.label}
-            leftSection={<item.icon size={18} />}
-            disabled
-            style={{ cursor: 'default' }}
-          />
-        </Tooltip>
-      ))}
+    <Stack h="100%" justify="space-between" gap={4}>
+      <Stack gap={4}>
+        {NAV_ITEMS.map((item) => (
+          <Link key={item.to} to={item.to} style={{ textDecoration: 'none', color: 'inherit' }}>
+            {({ isActive }) => (
+              <NavLink component="div" label={item.label} leftSection={<item.icon size={18} />} active={isActive} />
+            )}
+          </Link>
+        ))}
+        {PLANNED_ITEMS.map((item) => (
+          <Tooltip key={item.label} label="Coming soon" position="right">
+            <NavLink
+              component="div"
+              label={item.label}
+              leftSection={<item.icon size={18} />}
+              disabled
+              style={{ cursor: 'default' }}
+            />
+          </Tooltip>
+        ))}
+      </Stack>
+      <Tooltip label={`Commit ${__APP_COMMIT_SHA__}`} position="right">
+        <Anchor
+          href={versionHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          underline="never"
+          c="dimmed"
+          size="xs"
+          display="flex"
+          style={{ alignItems: 'center', gap: 6, padding: '8px 12px' }}
+        >
+          <VersionIcon size={14} />
+          {versionLabel}
+        </Anchor>
+      </Tooltip>
     </Stack>
   );
 }
