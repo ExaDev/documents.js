@@ -1,3 +1,10 @@
+# [1.15.0](https://github.com/ExaDev/documents/compare/v1.14.0...v1.15.0) (2026-08-09)
+
+
+### Features
+
+* preview spreadsheets as a data grid instead of PDF ([6322e57](https://github.com/ExaDev/documents/commit/6322e57e5cfaf82f8f273f6f55c24603b4b78a81))
+
 # [1.14.0](https://github.com/ExaDev/documents/compare/v1.13.0...v1.14.0) (2026-08-09)
 
 
