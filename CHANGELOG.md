@@ -1,3 +1,10 @@
+## [1.99.7](https://github.com/ExaDev/documents.js/compare/v1.99.6...v1.99.7) (2026-08-09)
+
+
+### Bug Fixes
+
+* stop redirecting [@exadev-scoped](https://github.com/exadev-scoped) installs through GitHub Packages ([b60a5eb](https://github.com/ExaDev/documents.js/commit/b60a5ebbf61a38e4d876023c9521801e861fa1df))
+
 ## [1.99.6](https://github.com/ExaDev/documents.js/compare/v1.99.5...v1.99.6) (2026-08-09)
 
 
