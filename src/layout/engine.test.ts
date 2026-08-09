@@ -271,3 +271,33 @@ describe('convertWordprocessingToLayout: indentation and alignment', () => {
     expect(nonFinalGapPt).toBeGreaterThan(finalGapPt);
   });
 });
+
+describe('convertWordprocessingToLayout: heading styles', () => {
+  it('renders a Heading1-styled paragraph bold and larger than the nominal body text size, resolved at layout time from styleId', () => {
+    const layout = convert([section([paragraph([run('Title')], { styleId: 'Heading1' })])]);
+    const [text] = textItems(layout.pages[0]!.items);
+    expect(text?.font.weight).toBe('bold');
+    expect(text?.sizePt).toBe(28);
+  });
+
+  it('does not override a run\'s own explicit bold/sizePt inside a heading', () => {
+    const layout = convert([section([paragraph([run('Title', { bold: false, sizePt: 9 })], { styleId: 'Heading2' })])]);
+    const [text] = textItems(layout.pages[0]!.items);
+    expect(text?.font.weight).toBe('normal');
+    expect(text?.sizePt).toBe(9);
+  });
+
+  it('leaves an ordinary (non-heading) paragraph at the nominal body size', () => {
+    const layout = convert([section([paragraph([run('Body')])])]);
+    const [text] = textItems(layout.pages[0]!.items);
+    expect(text?.font.weight).toBe('normal');
+    expect(text?.sizePt).toBe(18);
+  });
+
+  it('ignores a styleId that is not a recognised Heading1-6 style', () => {
+    const layout = convert([section([paragraph([run('Quote')], { styleId: 'Quote' })])]);
+    const [text] = textItems(layout.pages[0]!.items);
+    expect(text?.font.weight).toBe('normal');
+    expect(text?.sizePt).toBe(18);
+  });
+});

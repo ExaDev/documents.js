@@ -5,7 +5,7 @@ import { flipY } from '../model/geometry';
 import { formulaOfBlock, formulaPlaceholderText } from '../model/formula';
 import type { MathFontMetrics, PositionedFormula, TextMeasurer } from 'document-schema.js';
 import { wrapRunsToWidth } from './text-layout';
-import { alignmentOffsetPt, effectiveStyledRuns, estimateRowHeightPt, formulaSizePtForFrame, justifyLineGapsPt, lineNaturalHeightPt, pushCellBorderLines, registerImage, sumColumnWidthsPt } from './shared';
+import { alignmentOffsetPt, effectiveStyledRuns, estimateRowHeightPt, formulaSizePtForFrame, headingStyleFor, justifyLineGapsPt, lineNaturalHeightPt, pushCellBorderLines, registerImage, sumColumnWidthsPt } from './shared';
 
 // ContentDocument (the wordprocessing variant) -> LayoutDocument: docx's hard direction. A docx page isn't a fixed canvas the way a pptx slide is -- content flows and paginates, so this engine tracks a vertical cursor per page and starts a new page whenever the next line (or table row) would overflow the current one, honoring explicit page breaks, w:pageBreakBefore, and a per-section page-size/margin change. Headers/footers and live PAGE/NUMPAGES substitution are not laid out here -- src/ooxml/docx/read.ts doesn't read them either, a deliberate, tracked narrowing from the plan's original scope (see that file's own module doc).
 
@@ -60,7 +60,7 @@ function layoutParagraphFlow(
     state.cursorYDown += paragraph.spacingBeforePt ?? 0;
   }
 
-  const effectiveRuns = effectiveStyledRuns(paragraph.runs);
+  const effectiveRuns = effectiveStyledRuns(paragraph.runs, 1, headingStyleFor(paragraph.styleId));
   const fallbackRun = effectiveRuns[0]!;
   const paragraphLeftXDown = contentLeftXDown + (paragraph.indentLeftPt ?? 0);
   const paragraphWidthPt = Math.max(0, contentWidthPt - (paragraph.indentLeftPt ?? 0));
@@ -116,7 +116,7 @@ function layoutParagraphFlow(
 // A simpler variant for text inside a table cell: the row's own row-atomic placement (see layoutTableFlow) already guaranteed the whole row fits before any cell content is laid out, so no page-break checking happens per line here -- only wrapping and stacking, returning the new cursor position. Nested tables inside a cell are not laid out (read.ts can represent one recursively, but rendering one is out of v1 scope -- rare in practice, and cheap to add later without touching this function's contract).
 function layoutParagraphInCell(paragraph: ContentParagraph, cellLeftXDown: number, cellWidthPt: number, startYDown: number, pageHeightPt: number, measurer: TextMeasurer, out: LayoutItem[]): number {
   let cursorYDown = startYDown + (paragraph.spacingBeforePt ?? 0);
-  const effectiveRuns = effectiveStyledRuns(paragraph.runs);
+  const effectiveRuns = effectiveStyledRuns(paragraph.runs, 1, headingStyleFor(paragraph.styleId));
   const fallbackRun = effectiveRuns[0]!;
   const paragraphLeftXDown = cellLeftXDown + (paragraph.indentLeftPt ?? 0);
   const paragraphWidthPt = Math.max(0, cellWidthPt - (paragraph.indentLeftPt ?? 0));

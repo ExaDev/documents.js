@@ -27,19 +27,40 @@ export function formulaSizePtForFrame(mathml: readonly MathMlNode[], frame: Box,
 // A table row's own explicit height is present for essentially every real-world docx/pptx table; this is a nominal fallback exercised only for a hand-built or malformed table that omits it.
 const FALLBACK_ROW_HEIGHT_PT = 20;
 
-export function runFont(run: ContentRun): LayoutFont {
+// Word-processor-conventional heading sizes -- Word/LibreOffice's own Heading1..6 defaults supply these via built-in template styles. Both markdown-codec's lowerHeading and odf.js's readOdt independently set only an abstract styleId: "Heading{N}" on a heading paragraph (the two packages don't depend on each other, but happen to already agree on this exact string convention) and never bake concrete bold/sizePt onto its runs -- unlike docx, where ooxml.js resolves the WordprocessingML style cascade into concrete run formatting before this layout engine ever sees a docx-sourced ContentDocument at all. This is this layout engine's own resolution step for that gap, applied only as a fallback when a run has no explicit bold/sizePt of its own.
+//
+// Deliberately NOT baked onto ContentRun at read time instead (src/markdown/read.ts once tried exactly that): it broke markdown's own write-side round-trip, because writeMarkdown treats run.bold as "wrap in literal **...**" with no way to distinguish structural heading weight from authored inline emphasis -- baking it in would make every read-then-write round trip of a heading come back as `# **Heading**`. Resolving it here, at layout time, only affects what gets rendered to PDF/pptx-shape text -- the ContentDocument itself, and everything else that consumes it (editors, other conversions), is untouched.
+const HEADING_STYLES: Record<number, { bold: boolean; sizePt: number }> = {
+  1: { bold: true, sizePt: 28 },
+  2: { bold: true, sizePt: 22 },
+  3: { bold: true, sizePt: 18 },
+  4: { bold: true, sizePt: 14 },
+  5: { bold: true, sizePt: 12 },
+  6: { bold: true, sizePt: 11 },
+};
+
+// Resolves a paragraph's styleId into a heading style default, or undefined for a non-heading paragraph (including one carrying some other named style this package doesn't otherwise recognise).
+export function headingStyleFor(styleId: string | undefined): { bold: boolean; sizePt: number } | undefined {
+  if (styleId === undefined) return undefined;
+  const match = /^Heading([1-6])$/.exec(styleId);
+  if (match === null) return undefined;
+  return HEADING_STYLES[Number(match[1])];
+}
+
+export function runFont(run: ContentRun, headingBold?: boolean): LayoutFont {
+  const bold = run.bold ?? headingBold ?? false;
   return {
     family: run.fontFamily ?? DEFAULT_LAYOUT_FONT.family,
-    weight: run.bold === true ? 'bold' : 'normal',
+    weight: bold ? 'bold' : 'normal',
     style: run.italic === true ? 'italic' : 'normal',
   };
 }
 
-export function toStyledRuns(runs: readonly ContentRun[], fontScale = 1): StyledRun[] {
+export function toStyledRuns(runs: readonly ContentRun[], fontScale = 1, headingStyle?: { bold: boolean; sizePt: number }): StyledRun[] {
   return runs.map((run) => ({
     text: run.text,
-    font: runFont(run),
-    sizePt: (run.sizePt ?? NOMINAL_TEXT_SIZE_PT) * fontScale,
+    font: runFont(run, headingStyle?.bold),
+    sizePt: (run.sizePt ?? headingStyle?.sizePt ?? NOMINAL_TEXT_SIZE_PT) * fontScale,
     color: run.color ?? COLOR_BLACK,
     underline: run.underline,
     hyperlink: run.hyperlink,
@@ -48,8 +69,8 @@ export function toStyledRuns(runs: readonly ContentRun[], fontScale = 1): Styled
 }
 
 // A paragraph's runs, with a synthesised nominal fallback substituted when there are none at all -- so callers can wrap and measure unconditionally rather than special-casing an empty paragraph.
-export function effectiveStyledRuns(runs: readonly ContentRun[], fontScale = 1): StyledRun[] {
-  const styled = toStyledRuns(runs, fontScale);
+export function effectiveStyledRuns(runs: readonly ContentRun[], fontScale = 1, headingStyle?: { bold: boolean; sizePt: number }): StyledRun[] {
+  const styled = toStyledRuns(runs, fontScale, headingStyle);
   return styled.length > 0 ? styled : [{ text: '', font: DEFAULT_LAYOUT_FONT, sizePt: NOMINAL_TEXT_SIZE_PT * fontScale, color: COLOR_BLACK }];
 }
 
@@ -177,7 +198,7 @@ export function estimateRowHeightPt(row: ContentTableRow, measurer: TextMeasurer
       if (block.kind !== 'paragraph') {
         continue;
       }
-      const runs = effectiveStyledRuns(block.runs);
+      const runs = effectiveStyledRuns(block.runs, 1, headingStyleFor(block.styleId));
       const lines = wrapRunsToWidth(runs, measurer, cellWidthPt);
       for (const line of lines) {
         max = Math.max(max, lineNaturalHeightPt(line, measurer, runs[0]!));
