@@ -1,3 +1,10 @@
+# [1.14.0](https://github.com/ExaDev/documents/compare/v1.13.0...v1.14.0) (2026-08-09)
+
+
+### Features
+
+* preview markdown as rendered HTML instead of PDF ([4bdad4d](https://github.com/ExaDev/documents/commit/4bdad4dc30ab53b178fbfbc2d1fb98e40e24c55f))
+
 # [1.13.0](https://github.com/ExaDev/documents/compare/v1.12.0...v1.13.0) (2026-08-09)
 
 
