@@ -207,6 +207,9 @@ jobs:
       contents: read
       packages: write
       # Deliberately no id-token: write here -- see publish-aliases' own comment above for why this job is kept separate: pnpm attempts an OIDC exchange whenever id-token: write is available regardless of target registry, and GitHub Packages has no such exchange to attempt, which would then break its fallback to the GITHUB_TOKEN this job actually authenticates with.
+    # Job-level, not just on the final publish step: setup-node's registry-url+scope inputs below write `@exadev:registry=https://npm.pkg.github.com/` into .npmrc unconditionally, so `pnpm install --frozen-lockfile` also resolves @exadev/eslint-config (a devDependency already published under this same scope) through that registry -- and needs this same token to do it. With NODE_AUTH_TOKEN only set on the publish step, install failed with a 403 ("No authorization header was set for the request"; `[WARN] Failed to replace env in config: ${NODE_AUTH_TOKEN}` in the raw log gave away that the reference was resolving against an empty environment) -- confirmed pre-existing across multiple unrelated runs before this fix (ExaDev/documents.js#309).
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -228,8 +231,6 @@ jobs:
           npm pkg set name="@exadev/documents.js"
           npm pkg set publishConfig.registry="https://npm.pkg.github.com"
       - run: pnpm publish --access public --no-git-checks
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   attest:
     name: Attest SBOM and build provenance
