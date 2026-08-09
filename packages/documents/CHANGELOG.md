@@ -1,3 +1,10 @@
+## [1.16.1](https://github.com/ExaDev/documents/compare/v1.16.0...v1.16.1) (2026-08-09)
+
+
+### Bug Fixes
+
+* scale convert page previews with viewport instead of a fixed cap ([678e6f8](https://github.com/ExaDev/documents/commit/678e6f8131dafbe4458384385f73a81d94e30c54))
+
 # [1.16.0](https://github.com/ExaDev/documents/compare/v1.15.0...v1.16.0) (2026-08-09)
 
 
