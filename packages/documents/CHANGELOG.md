@@ -1,3 +1,10 @@
+# [1.16.0](https://github.com/ExaDev/documents/compare/v1.15.0...v1.16.0) (2026-08-09)
+
+
+### Features
+
+* widen convert page container so previews use more screen width ([51cbf42](https://github.com/ExaDev/documents/commit/51cbf42459f828168ee1386c9afdab2127ef7a85))
+
 # [1.15.0](https://github.com/ExaDev/documents/compare/v1.14.0...v1.15.0) (2026-08-09)
 
 
