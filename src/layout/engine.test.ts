@@ -301,3 +301,62 @@ describe('convertWordprocessingToLayout: heading styles', () => {
     expect(text?.sizePt).toBe(18);
   });
 });
+
+describe('convertWordprocessingToLayout: list markers', () => {
+  it('draws a bullet glyph in the indent gutter before a level-0 list item, left of the item\'s own text', () => {
+    const layout = convert([section([paragraph([run('Item', { sizePt: 10 })], { list: { numId: '1', level: 0 } })])]);
+    const items = textItems(layout.pages[0]!.items);
+    expect(items.map((i) => i.text)).toEqual(['•', 'Item']);
+    expect(items[0]!.xPt).toBeLessThan(items[1]!.xPt);
+  });
+
+  it('cycles the bullet glyph by nesting depth', () => {
+    const layout = convert([
+      section([
+        paragraph([run('One', { sizePt: 10 })], { list: { numId: '1', level: 0 } }),
+        paragraph([run('Two', { sizePt: 10 })], { list: { numId: '1', level: 1 } }),
+        paragraph([run('Three', { sizePt: 10 })], { list: { numId: '1', level: 2 } }),
+      ]),
+    ]);
+    const items = textItems(layout.pages[0]!.items);
+    const markers = items.filter((i) => ['One', 'Two', 'Three'].includes(i.text) === false).map((i) => i.text);
+    expect(markers).toEqual(['•', '-', '*']);
+  });
+
+  it('a docx/odt-conventional numId ("1", "list1") always degrades to a bullet -- ContentListMembership carries no format field to distinguish ordered from bullet for those sources', () => {
+    const layout = convert([
+      section([
+        paragraph([run('First', { sizePt: 10 })], { list: { numId: 'list1', level: 0 } }),
+        paragraph([run('Second', { sizePt: 10 })], { list: { numId: 'list1', level: 0 } }),
+      ]),
+    ]);
+    const items = textItems(layout.pages[0]!.items);
+    const markers = items.filter((i) => ['First', 'Second'].includes(i.text) === false).map((i) => i.text);
+    expect(markers).toEqual(['•', '•']);
+  });
+
+  it('renders real sequential numbers for a markdown-minted ordered-list numId, via markdown-codec\'s own public numId convention', () => {
+    const layout = convert([
+      section([
+        paragraph([run('First', { sizePt: 10 })], { list: { numId: 'md1:ordered@1', level: 0 } }),
+        paragraph([run('Second', { sizePt: 10 })], { list: { numId: 'md1:ordered@1', level: 0 } }),
+        paragraph([run('Third', { sizePt: 10 })], { list: { numId: 'md1:ordered@1', level: 0 } }),
+      ]),
+    ]);
+    const items = textItems(layout.pages[0]!.items);
+    const markers = items.filter((i) => ['First', 'Second', 'Third'].includes(i.text) === false).map((i) => i.text);
+    expect(markers).toEqual(['1.', '2.', '3.']);
+  });
+
+  it('starts an ordered list at its own declared start value', () => {
+    const layout = convert([section([paragraph([run('Item', { sizePt: 10 })], { list: { numId: 'md1:ordered@5', level: 0 } })])]);
+    const items = textItems(layout.pages[0]!.items);
+    expect(items[0]!.text).toBe('5.');
+  });
+
+  it('draws no marker at all for a paragraph with no list membership', () => {
+    const layout = convert([section([paragraph([run('Plain', { sizePt: 10 })])])]);
+    const items = textItems(layout.pages[0]!.items);
+    expect(items.map((i) => i.text)).toEqual(['Plain']);
+  });
+});
