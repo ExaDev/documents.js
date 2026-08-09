@@ -1,3 +1,10 @@
+# [1.12.0](https://github.com/ExaDev/documents/compare/v1.11.0...v1.12.0) (2026-08-09)
+
+
+### Features
+
+* link to the running version or commit at the bottom of the sidebar ([0fed9d3](https://github.com/ExaDev/documents/commit/0fed9d3e566a48ce52575db48ed818ea47e78592))
+
 # [1.11.0](https://github.com/ExaDev/documents/compare/v1.10.0...v1.11.0) (2026-08-09)
 
 
