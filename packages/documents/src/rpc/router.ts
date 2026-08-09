@@ -1,5 +1,6 @@
 import { os } from '@orpc/server';
 import {
+  ContentDocumentSchema,
   createLocalDocumentConverter,
   describeFontFace,
   DocumentFormatSchema,
@@ -9,6 +10,8 @@ import {
   readPdf,
   setDocumentMetadata,
 } from 'documents.js';
+import type { ContentBlock, ContentDocument, ContentParagraph } from 'documents.js';
+import { CODE_BLOCK_STYLE_ID, HORIZONTAL_RULE_STYLE_ID, parseHeadingStyleId, parseListNumId, QUOTE_STYLE_ID } from 'markdown-codec';
 import { z } from 'zod';
 
 // This module runs only inside src/workers/documents.worker.ts. It is the one place in the app allowed to call documents.js's real conversion/metadata functions -- everything on the main thread reaches it only through the oRPC client in src/rpc/client.ts.
@@ -27,11 +30,52 @@ const DiagnosticSchema = z.object({
   pageIndex: z.number().int().nonnegative().optional(),
 });
 
-// Deliberately omits ConversionResult's optional `package` field: DocumentPackage carries the full ContentDocument/LayoutDocument tree, which no current tool needs across the RPC boundary yet. Add it here (as its own zod schema, mirroring document-schema.js's) if a future tool needs the intermediate package.
+// `content` carries ConversionResult's own DocumentPackage.content -- createLocalDocumentConverter().convert() already computes this on every call via its internal onDocument callback, so surfacing it here costs nothing extra. Used by the Convert tool's markdown/spreadsheet previews (src/ui/MarkdownPreview.tsx, src/ui/SheetPreview.tsx) to render natively rather than round-tripping every format through PDF -- LayoutDocument is deliberately still omitted, since no tool needs it across the RPC boundary yet.
 const ConversionResultSchema = z.object({
   document: DocumentPayloadSchema,
   diagnostics: z.array(DiagnosticSchema),
+  content: ContentDocumentSchema.optional(),
 });
+
+// markdown-codec marks a heading paragraph with its own private styleId convention ("Heading1".."Heading6") and a list paragraph's ordered-vs-bullet distinction is encoded inside its own numId string ("md{n}:bullet|ordered@start", via parseListNumId) -- neither is part of document-schema.js's own schema, both are markdown-codec's internal vocabulary. Rewritten here, worker-side (the only place allowed to import markdown-codec), into a small convention this app documents and owns itself, so MarkdownPreview.tsx never needs to depend on markdown-codec's internal string formats -- only on what this router promises to hand it. Only ever applied to a markdown-sourced ContentDocument (see the convert handler's own call site below); a docx/odt-sourced document's styleId/numId values are untouched, since MarkdownPreview only ever renders a markdown source/target's own preview.
+function normalizeMarkdownStyling(document: ContentDocument): ContentDocument {
+  if (document.kind !== 'wordprocessing') return document;
+  return { ...document, sections: document.sections.map((section) => ({ ...section, blocks: section.blocks.map(normalizeMarkdownBlock) })) };
+}
+
+function normalizeMarkdownBlock(block: ContentBlock): ContentBlock {
+  if (block.kind === 'paragraph') return normalizeMarkdownParagraph(block);
+  if (block.kind === 'table') {
+    return {
+      ...block,
+      rows: block.rows.map((row) => ({
+        ...row,
+        cells: row.cells.map((cell) => ({ ...cell, blocks: cell.blocks.map(normalizeMarkdownBlock) })),
+      })),
+    };
+  }
+  return block;
+}
+
+function normalizeMarkdownParagraph(paragraph: ContentParagraph): ContentParagraph {
+  const headingLevel = paragraph.styleId === undefined ? undefined : parseHeadingStyleId(paragraph.styleId);
+  const styleId =
+    headingLevel !== undefined
+      ? `heading-${headingLevel}`
+      : paragraph.styleId === QUOTE_STYLE_ID
+        ? 'quote'
+        : paragraph.styleId === CODE_BLOCK_STYLE_ID
+          ? 'code-block'
+          : paragraph.styleId === HORIZONTAL_RULE_STYLE_ID
+            ? 'horizontal-rule'
+            : paragraph.styleId;
+  // Preserves the original numId as a suffix (not just the ordered/bullet type alone) so MarkdownPreview can still tell where one list ends and the next begins -- markdown-codec mints a fresh numId per list instance, so two adjacent same-type lists must not collapse into one <ul>/<ol>.
+  const list =
+    paragraph.list === undefined
+      ? undefined
+      : { ...paragraph.list, numId: `${parseListNumId(paragraph.list.numId)?.type ?? 'bullet'}:${paragraph.list.numId}` };
+  return { ...paragraph, styleId, list };
+}
 
 const ConversionPairSchema = z.object({ source: DocumentFormatSchema, target: DocumentFormatSchema });
 
@@ -74,9 +118,11 @@ export const router = {
         { source: { format: input.source, bytes: input.bytes }, targetFormat: input.targetFormat },
         { signal: signal ?? new AbortController().signal },
       );
+      const content = result.package?.content;
       return {
         document: result.document,
         diagnostics: result.diagnostics.map((diagnostic) => ({ ...diagnostic })),
+        content: content !== undefined && input.source === 'markdown' ? normalizeMarkdownStyling(content) : content,
       };
     }),
 

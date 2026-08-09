@@ -10,6 +10,7 @@ import type { OpenedFile } from '../ports/fileAccess';
 import { inferFormatFromFilename } from '../shared/extensionToFormat';
 import { DiagnosticsPanel } from '../ui/DiagnosticsPanel';
 import { FileUpload } from '../ui/FileUpload';
+import { MarkdownPreview } from '../ui/MarkdownPreview';
 import { notifyError, notifySuccess } from '../ui/notify';
 import { PdfPreview } from '../ui/PdfPreview';
 import { takePendingReopen } from '../ui/reopenMailbox';
@@ -163,21 +164,41 @@ function ConvertLayout() {
               </Group>
               <DiagnosticsPanel diagnostics={convert.data.diagnostics} />
               <Group align="flex-start" grow wrap="nowrap">
-                <PdfPreview
-                  label="Original"
-                  format={source ?? ''}
-                  bytes={originalPdfBytes}
-                  loading={source !== 'pdf' && originalPreview.isPending}
-                  // React Query represents "no error" as null, not undefined -- normalised here since PdfPreview's own contract only knows "no error" as undefined.
-                  error={source !== 'pdf' && originalPreview.error !== null ? originalPreview.error : undefined}
-                />
-                <PdfPreview
-                  label="Converted"
-                  format={target ?? ''}
-                  bytes={convertedPdfBytes}
-                  loading={target !== 'pdf' && resultPreview.isPending}
-                  error={target !== 'pdf' && resultPreview.error !== null ? resultPreview.error : undefined}
-                />
+                {source === 'markdown' ? (
+                  <MarkdownPreview
+                    label="Original"
+                    format={source}
+                    content={originalPreview.data?.content}
+                    loading={originalPreview.isPending}
+                    // React Query represents "no error" as null, not undefined -- normalised here since MarkdownPreview/PdfPreview's own contract only knows "no error" as undefined.
+                    error={originalPreview.error ?? undefined}
+                  />
+                ) : (
+                  <PdfPreview
+                    label="Original"
+                    format={source ?? ''}
+                    bytes={originalPdfBytes}
+                    loading={source !== 'pdf' && originalPreview.isPending}
+                    error={source !== 'pdf' && originalPreview.error !== null ? originalPreview.error : undefined}
+                  />
+                )}
+                {target === 'markdown' ? (
+                  <MarkdownPreview
+                    label="Converted"
+                    format={target}
+                    content={resultPreview.data?.content}
+                    loading={resultPreview.isPending}
+                    error={resultPreview.error ?? undefined}
+                  />
+                ) : (
+                  <PdfPreview
+                    label="Converted"
+                    format={target ?? ''}
+                    bytes={convertedPdfBytes}
+                    loading={target !== 'pdf' && resultPreview.isPending}
+                    error={target !== 'pdf' && resultPreview.error !== null ? resultPreview.error : undefined}
+                  />
+                )}
               </Group>
             </Stack>
           </Paper>
