@@ -1,7 +1,7 @@
-import { ActionIcon, AppShell, Burger, Group, Menu, Title, useMantineColorScheme } from '@mantine/core';
+import { ActionIcon, AppShell, Burger, Group, Title, Tooltip, useMantineColorScheme } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { createRootRoute, Outlet } from '@tanstack/react-router';
-import { IconCheck, IconDeviceDesktop, IconMoon, IconSun } from '@tabler/icons-react';
+import { IconDeviceDesktop, IconMoon, IconSun } from '@tabler/icons-react';
 
 import { Sidebar } from './-Sidebar';
 
@@ -9,17 +9,27 @@ export const Route = createRootRoute({
   component: RootLayout,
 });
 
-// 'auto' is Mantine's own name for "follow the OS preference" -- labelled "System" here since that's what every other app calls it, with its own distinct icon rather than resolving to whichever of light/dark it currently renders as. Showing the selected mode (not the resolved one) is what lets the menu's checkmark unambiguously mark which of the three is active.
+// 'auto' is Mantine's own name for "follow the OS preference" -- labelled "System" here since that's what every other app calls it. Order is the cycle order the header button steps through on each click.
 const COLOR_SCHEME_OPTIONS = [
   { value: 'light', label: 'Light', icon: IconSun },
   { value: 'dark', label: 'Dark', icon: IconMoon },
   { value: 'auto', label: 'System', icon: IconDeviceDesktop },
 ] as const;
 
+// A computed index into a fixed-length array is `T | undefined` under noUncheckedIndexedAccess even when the arithmetic guarantees it's always in range (modulo COLOR_SCHEME_OPTIONS.length) -- this asserts that invariant explicitly rather than papering over it with a fallback option, which would silently substitute a different-but-valid choice if the arithmetic were ever wrong.
+function optionAt(index: number) {
+  const option = COLOR_SCHEME_OPTIONS[index];
+  if (option === undefined) throw new Error(`Color scheme option index ${index} out of range`);
+  return option;
+}
+
 function RootLayout() {
   const [navOpened, { toggle: toggleNav }] = useDisclosure();
   const { colorScheme, setColorScheme } = useMantineColorScheme();
-  const ActiveIcon = COLOR_SCHEME_OPTIONS.find((option) => option.value === colorScheme)?.icon ?? IconDeviceDesktop;
+  const activeIndex = COLOR_SCHEME_OPTIONS.findIndex((option) => option.value === colorScheme);
+  const activeOption = optionAt(activeIndex === -1 ? 0 : activeIndex);
+  const nextOption = optionAt((Math.max(activeIndex, 0) + 1) % COLOR_SCHEME_OPTIONS.length);
+  const cycleColorScheme = () => setColorScheme(nextOption.value);
 
   return (
     <AppShell
@@ -33,25 +43,11 @@ function RootLayout() {
             <Burger opened={navOpened} onClick={toggleNav} hiddenFrom="sm" size="sm" />
             <Title order={4}>documents</Title>
           </Group>
-          <Menu position="bottom-end" shadow="sm" withArrow>
-            <Menu.Target>
-              <ActionIcon variant="subtle" size="lg" aria-label="Change color scheme">
-                <ActiveIcon size={18} />
-              </ActionIcon>
-            </Menu.Target>
-            <Menu.Dropdown>
-              {COLOR_SCHEME_OPTIONS.map((option) => (
-                <Menu.Item
-                  key={option.value}
-                  leftSection={<option.icon size={16} />}
-                  rightSection={colorScheme === option.value ? <IconCheck size={14} /> : undefined}
-                  onClick={() => setColorScheme(option.value)}
-                >
-                  {option.label}
-                </Menu.Item>
-              ))}
-            </Menu.Dropdown>
-          </Menu>
+          <Tooltip label={`Color scheme: ${activeOption.label} (click for ${nextOption.label})`}>
+            <ActionIcon variant="subtle" size="lg" aria-label={`Color scheme: ${activeOption.label}. Click to switch to ${nextOption.label}.`} onClick={cycleColorScheme}>
+              <activeOption.icon size={18} />
+            </ActionIcon>
+          </Tooltip>
         </Group>
       </AppShell.Header>
       <AppShell.Navbar p="xs">
