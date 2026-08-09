@@ -61,7 +61,7 @@ export default tseslint.config(
           patterns: [
             {
               group: ['documents.js', 'documents.js/**'],
-              allowImportNames: ['DocumentFormatSchema', 'DOCUMENT_FORMATS', 'DocumentFormat', 'Diagnostic', 'DocumentPayload', 'ContentDocument', 'ContentBlock', 'ContentParagraph', 'ContentRun'],
+              allowImportNames: ['DocumentFormatSchema', 'DOCUMENT_FORMATS', 'DocumentFormat', 'Diagnostic', 'DocumentPayload', 'ContentDocument', 'ContentBlock', 'ContentParagraph', 'ContentRun', 'ContentSheet', 'ContentSheetCell', 'columnIndexToLetters'],
               message: 'UI code may not import documents.js\'s conversion/editor functions directly -- go through the RPC client (src/rpc/client.ts). Only src/workers/** may call them.',
             },
             {

@@ -13,12 +13,17 @@ import { FileUpload } from '../ui/FileUpload';
 import { MarkdownPreview } from '../ui/MarkdownPreview';
 import { notifyError, notifySuccess } from '../ui/notify';
 import { PdfPreview } from '../ui/PdfPreview';
+import { SheetPreview } from '../ui/SheetPreview';
 import { takePendingReopen } from '../ui/reopenMailbox';
 
 // Layout route: convert.index.tsx and convert.$source.$target.tsx become its children (per TanStack Router's file-based nesting convention) and exist only to register typed path params in the route tree -- this component owns all the real state and UI directly, so it never remounts when the selected pair changes. That's the actual fix for "picking a new pair feels like leaving the page": the old sibling-routes structure fully remounted (destroying `file`/`convert` state) on every pair change, since convert.index.tsx and convert.$source.$target.tsx both parented directly to root.
 export const Route = createFileRoute('/convert')({
   component: ConvertLayout,
 });
+
+function isSheetFormat(format: string | null): boolean {
+  return format === 'xlsx' || format === 'ods';
+}
 
 function ConvertLayout() {
   const params = useParams({ strict: false });
@@ -170,7 +175,15 @@ function ConvertLayout() {
                     format={source}
                     content={originalPreview.data?.content}
                     loading={originalPreview.isPending}
-                    // React Query represents "no error" as null, not undefined -- normalised here since MarkdownPreview/PdfPreview's own contract only knows "no error" as undefined.
+                    // React Query represents "no error" as null, not undefined -- normalised here since MarkdownPreview/SheetPreview/PdfPreview's own contract only knows "no error" as undefined.
+                    error={originalPreview.error ?? undefined}
+                  />
+                ) : isSheetFormat(source) ? (
+                  <SheetPreview
+                    label="Original"
+                    format={source ?? ''}
+                    content={originalPreview.data?.content}
+                    loading={originalPreview.isPending}
                     error={originalPreview.error ?? undefined}
                   />
                 ) : (
@@ -186,6 +199,14 @@ function ConvertLayout() {
                   <MarkdownPreview
                     label="Converted"
                     format={target}
+                    content={resultPreview.data?.content}
+                    loading={resultPreview.isPending}
+                    error={resultPreview.error ?? undefined}
+                  />
+                ) : isSheetFormat(target) ? (
+                  <SheetPreview
+                    label="Converted"
+                    format={target ?? ''}
                     content={resultPreview.data?.content}
                     loading={resultPreview.isPending}
                     error={resultPreview.error ?? undefined}
