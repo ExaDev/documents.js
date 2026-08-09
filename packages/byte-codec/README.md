@@ -2,7 +2,7 @@
 
 [![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/byte-codec) [![npm](https://img.shields.io/badge/npm-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/byte-codec) [![Release](https://img.shields.io/github/v/release/ExaDev/byte-codec)](https://github.com/ExaDev/byte-codec/releases/latest) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/byte-codec/ci.yml?branch=main)](https://github.com/ExaDev/byte-codec/actions)
 
-> Generic byte-level primitives (ByteWriter, ByteReader, CRC-32, deflate/inflate) and PNG/JPEG image encoding/decoding with zero PDF knowledge — the shared utility package for the documents.js family.
+> Generic byte-level primitives (ByteWriter, ByteReader, CRC-32, deflate/inflate) and PNG/JPEG image encoding/decoding with zero PDF knowledge — the shared utility package for the [documents.js family](../README.md).
 
 Extracted from [pdf-codec](https://github.com/ExaDev/pdf-codec), where these utilities lived as a directory-isolated subgraph under `src/bytes/` + `src/image/` with no PDF imports. Both pdf-codec and documents.js consume them from this neutral home rather than one fetching byte utilities from a backend.
 
@@ -35,8 +35,10 @@ pnpm typecheck      # tsc -p tsconfig.json && tsc -p tsconfig.node.json (dual ts
 pnpm lint           # eslint . --fix --cache --max-warnings 0
 pnpm test           # vitest run
 pnpm test:watch     # vitest
-pnpm test:workers   # vitest run --config vitest.workers.config.ts
+pnpm test:workers   # vitest run --config vitest.workers.config.ts, inside a real Cloudflare Workers (workerd) isolate
 ```
+
+To run a single test file, pass its path to vitest directly, e.g. `pnpm exec vitest run src/bytes/crc32.test.ts`.
 
 ## What it provides
 
@@ -50,6 +52,12 @@ pnpm test:workers   # vitest run --config vitest.workers.config.ts
 | `image/png-decode` | `decodePng` (PNG bytes → raw pixels), `RawImage` |
 | `image/png-filter` | `filterScanlines`, `unfilterScanlines` (the five PNG scanline filters) |
 | `image/jpeg-info` | `readJpegInfo` (JPEG header reader: dimensions, components, progressive flag — no sample decoding) |
+
+## Conventions
+
+- Worker-isomorphic (see the [family-wide convention](../README.md#conventions)): runtime `src/` must not import `node:*`, a bare Node builtin, or use the `Buffer` global — enforced by a `no-restricted-imports`/`no-restricted-globals` ESLint rule and exercised in CI by running the test suite inside an actual `workerd` isolate (`pnpm test:workers`). Test files under `src/**/*.test.ts` are exempt and may use Node APIs for fixtures.
+- Only `src/index.ts` may be named `index.*` — a custom ESLint rule (`local/no-non-barrel-index`) rejects any other module using an `index` basename, since that would be a hidden entry point the `exports` map in `package.json` doesn't advertise.
+- Releases are fully automated: a push to `main` runs `semantic-release` in CI, which determines the version from Conventional Commit messages, publishes to npm via OIDC trusted publishing (no local `NPM_TOKEN` needed), and re-publishes the identical build under the [npm aliases](#npm-aliases) below. There is no manual publish step.
 
 ## Install
 
