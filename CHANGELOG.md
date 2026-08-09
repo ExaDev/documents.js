@@ -1,3 +1,10 @@
+## [1.99.6](https://github.com/ExaDev/documents.js/compare/v1.99.5...v1.99.6) (2026-08-09)
+
+
+### Bug Fixes
+
+* set NODE_AUTH_TOKEN job-wide so install can reach GitHub Packages too ([c4d7227](https://github.com/ExaDev/documents.js/commit/c4d7227574712aefa0e19dffeddc1bd0d16a95bf))
+
 ## [1.99.5](https://github.com/ExaDev/documents.js/compare/v1.99.4...v1.99.5) (2026-08-09)
 
 
