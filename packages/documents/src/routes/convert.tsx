@@ -118,8 +118,8 @@ function ConvertLayout() {
   };
 
   return (
-    // Fixed rem cap, not fluid -- fluid would let the two preview panels stretch to absurd widths on an ultrawide monitor. 1600 is chosen to noticeably widen the Done panel's preview pair on a standard 1920px display (size="xl" = 1320px left most of a 1920px screen unused) while still bounding line length on wider screens. The upload/select controls stay comfortably narrow via their own `Box maw={600}` below, which is unaffected by this cap.
-    <Container size={1600} py="xl">
+    // Fluid, not a fixed max-width -- Mantine's Container size prop is a static breakpoint (same cap at 1920px and 2560px alike), which is what previously left a growing dead margin on wide screens. The Done panel below applies its own clamp()-based max-width instead, so it scales continuously with viewport rather than jumping to one arbitrary number.
+    <Container fluid px="xl" py="xl">
       <Stack gap="lg">
         <Box maw={600}>
           <Stack gap="lg">
@@ -162,7 +162,8 @@ function ConvertLayout() {
         </Box>
 
         {convert.data && (
-          <Paper withBorder p="md">
+          // maxWidth scales with viewport via clamp() rather than jumping to one fixed breakpoint: never narrower than the controls column above (900px), grows at 85% of viewport width, never wider than 2200px so preview text doesn't sprawl on an ultrawide monitor. Below 900px (and always inside the fluid Container's own padding) it simply falls back to 100% of the available width.
+          <Paper withBorder p="md" style={{ maxWidth: 'clamp(900px, 85vw, 2200px)' }}>
             <Stack gap="md">
               <Group justify="space-between">
                 <Text fw={500}>Done</Text>
