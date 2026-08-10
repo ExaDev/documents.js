@@ -1,3 +1,18 @@
+# [1.18.0](https://github.com/ExaDev/documents/compare/v1.17.0...v1.18.0) (2026-08-10)
+
+
+### Bug Fixes
+
+* default spreadsheet cell vertical alignment to bottom, matching its schema ([9f5e711](https://github.com/ExaDev/documents/commit/9f5e711f7b758638a4a84341cfd12f17c9d7ed8e))
+* surface the creator metadata field dropped at the RPC boundary ([1c5e793](https://github.com/ExaDev/documents/commit/1c5e79354dbb0f4b8f92f18b737783d9fcc97700))
+
+
+### Features
+
+* add generic JSON-to-tree-data adapter for structured data views ([9b463f1](https://github.com/ExaDev/documents/commit/9b463f118edd75bac1300a0d229a298fdd98c757))
+* return sanitized document structure from pdf.inspect ([578b1d2](https://github.com/ExaDev/documents/commit/578b1d21ecc566cb0bb6f6d03bbd3768cc5764ef))
+* show document structure tree in Inspect panel ([9e21d4b](https://github.com/ExaDev/documents/commit/9e21d4bad2351a17ed64136a874ea811ca0f20f2))
+
 # [1.17.0](https://github.com/ExaDev/documents/compare/v1.16.1...v1.17.0) (2026-08-10)
 
 
