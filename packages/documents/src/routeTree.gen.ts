@@ -12,8 +12,8 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ConvertRouteImport } from './routes/convert'
 import { Route as FontsRouteImport } from './routes/fonts'
+import { Route as InspectRouteImport } from './routes/inspect'
 import { Route as MetadataRouteImport } from './routes/metadata'
-import { Route as PdfInspectRouteImport } from './routes/pdf-inspect'
 import { Route as RecentRouteImport } from './routes/recent'
 import { Route as ConvertIndexRouteImport } from './routes/convert.index'
 import { Route as ConvertSourceTargetRouteImport } from './routes/convert.$source.$target'
@@ -33,14 +33,14 @@ const FontsRoute = FontsRouteImport.update({
   path: '/fonts',
   getParentRoute: () => rootRouteImport,
 } as any)
+const InspectRoute = InspectRouteImport.update({
+  id: '/inspect',
+  path: '/inspect',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MetadataRoute = MetadataRouteImport.update({
   id: '/metadata',
   path: '/metadata',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PdfInspectRoute = PdfInspectRouteImport.update({
-  id: '/pdf-inspect',
-  path: '/pdf-inspect',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RecentRoute = RecentRouteImport.update({
@@ -63,8 +63,8 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/convert': typeof ConvertRouteWithChildren
   '/fonts': typeof FontsRoute
+  '/inspect': typeof InspectRoute
   '/metadata': typeof MetadataRoute
-  '/pdf-inspect': typeof PdfInspectRoute
   '/recent': typeof RecentRoute
   '/convert/': typeof ConvertIndexRoute
   '/convert/$source/$target': typeof ConvertSourceTargetRoute
@@ -72,8 +72,8 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/fonts': typeof FontsRoute
+  '/inspect': typeof InspectRoute
   '/metadata': typeof MetadataRoute
-  '/pdf-inspect': typeof PdfInspectRoute
   '/recent': typeof RecentRoute
   '/convert': typeof ConvertIndexRoute
   '/convert/$source/$target': typeof ConvertSourceTargetRoute
@@ -83,8 +83,8 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/convert': typeof ConvertRouteWithChildren
   '/fonts': typeof FontsRoute
+  '/inspect': typeof InspectRoute
   '/metadata': typeof MetadataRoute
-  '/pdf-inspect': typeof PdfInspectRoute
   '/recent': typeof RecentRoute
   '/convert/': typeof ConvertIndexRoute
   '/convert/$source/$target': typeof ConvertSourceTargetRoute
@@ -95,8 +95,8 @@ export interface FileRouteTypes {
     | '/'
     | '/convert'
     | '/fonts'
+    | '/inspect'
     | '/metadata'
-    | '/pdf-inspect'
     | '/recent'
     | '/convert/'
     | '/convert/$source/$target'
@@ -104,8 +104,8 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/fonts'
+    | '/inspect'
     | '/metadata'
-    | '/pdf-inspect'
     | '/recent'
     | '/convert'
     | '/convert/$source/$target'
@@ -114,8 +114,8 @@ export interface FileRouteTypes {
     | '/'
     | '/convert'
     | '/fonts'
+    | '/inspect'
     | '/metadata'
-    | '/pdf-inspect'
     | '/recent'
     | '/convert/'
     | '/convert/$source/$target'
@@ -125,8 +125,8 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ConvertRoute: typeof ConvertRouteWithChildren
   FontsRoute: typeof FontsRoute
+  InspectRoute: typeof InspectRoute
   MetadataRoute: typeof MetadataRoute
-  PdfInspectRoute: typeof PdfInspectRoute
   RecentRoute: typeof RecentRoute
 }
 
@@ -153,18 +153,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FontsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/inspect': {
+      id: '/inspect'
+      path: '/inspect'
+      fullPath: '/inspect'
+      preLoaderRoute: typeof InspectRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/metadata': {
       id: '/metadata'
       path: '/metadata'
       fullPath: '/metadata'
       preLoaderRoute: typeof MetadataRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/pdf-inspect': {
-      id: '/pdf-inspect'
-      path: '/pdf-inspect'
-      fullPath: '/pdf-inspect'
-      preLoaderRoute: typeof PdfInspectRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/recent': {
@@ -208,8 +208,8 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ConvertRoute: ConvertRouteWithChildren,
   FontsRoute: FontsRoute,
+  InspectRoute: InspectRoute,
   MetadataRoute: MetadataRoute,
-  PdfInspectRoute: PdfInspectRoute,
   RecentRoute: RecentRoute,
 }
 export const routeTree = rootRouteImport

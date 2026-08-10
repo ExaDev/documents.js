@@ -20,7 +20,7 @@ import { relativeTime } from '../shared/relativeTime';
 const NAV_ITEMS = [
   { to: '/convert', label: 'Convert', icon: IconArrowsExchange },
   { to: '/metadata', label: 'Metadata', icon: IconTags },
-  { to: '/pdf-inspect', label: 'PDF inspect', icon: IconFileSearch },
+  { to: '/inspect', label: 'Inspect', icon: IconFileSearch },
   { to: '/fonts', label: 'Fonts', icon: IconTypography },
   { to: '/recent', label: 'Recent', icon: IconHistory },
 ] as const;
