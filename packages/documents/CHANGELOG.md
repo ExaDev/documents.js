@@ -1,3 +1,11 @@
+# [1.17.0](https://github.com/ExaDev/documents/compare/v1.16.1...v1.17.0) (2026-08-10)
+
+
+### Features
+
+* generalize Inspect page to support every document format ([01c679d](https://github.com/ExaDev/documents/commit/01c679def33a0c0e46783d3c23c5ed954cfc06e7))
+* show document structure alongside Convert page previews ([897d724](https://github.com/ExaDev/documents/commit/897d724895866fe9853b00cb78469d05501fc5ff))
+
 ## [1.16.1](https://github.com/ExaDev/documents/compare/v1.16.0...v1.16.1) (2026-08-09)
 
 
