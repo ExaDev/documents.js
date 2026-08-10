@@ -84,6 +84,7 @@ const MetadataSchema = z.object({
   author: z.string().optional(),
   subject: z.string().optional(),
   keywords: z.array(z.string()).optional(),
+  creator: z.string().optional(),
   createdIso: z.string().optional(),
   modifiedIso: z.string().optional(),
   producer: z.string().optional(),
@@ -138,7 +139,8 @@ export const router = {
           sourceFormat: DocumentFormatSchema,
           targetFormat: DocumentFormatSchema,
           bytes: BytesSchema,
-          overrides: MetadataSchema.omit({ createdIso: true, modifiedIso: true, producer: true }),
+          // creator, like createdIso/modifiedIso/producer, is not an accepted MetadataOverrides field (documents.js's src/metadata/write.ts) -- it's read-only, not something a caller can set.
+          overrides: MetadataSchema.omit({ creator: true, createdIso: true, modifiedIso: true, producer: true }),
         }),
       )
       .output(BytesSchema)

@@ -77,6 +77,12 @@ function MetadataPage() {
               <TextInput label="Author" value={author} onChange={(event) => setAuthor(event.currentTarget.value)} />
               <Table>
                 <Table.Tbody>
+                  {readMetadata.data.creator !== undefined && (
+                    <Table.Tr>
+                      <Table.Td>Creator</Table.Td>
+                      <Table.Td>{readMetadata.data.creator}</Table.Td>
+                    </Table.Tr>
+                  )}
                   {readMetadata.data.createdIso !== undefined && (
                     <Table.Tr>
                       <Table.Td>Created</Table.Td>
