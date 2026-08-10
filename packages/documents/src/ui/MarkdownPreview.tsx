@@ -2,6 +2,9 @@ import { Badge, Group, LoadingOverlay, Paper, Stack, Text } from '@mantine/core'
 import type { ContentBlock, ContentDocument, ContentParagraph, ContentRun } from 'documents.js';
 import type { ReactNode } from 'react';
 
+import * as styles from './MarkdownPreview.css';
+import { flexColumn, previewFrame } from './previewPanel.css';
+
 export interface MarkdownPreviewProps {
   label: string;
   format: string;
@@ -13,7 +16,7 @@ export interface MarkdownPreviewProps {
 // Renders a markdown-sourced ContentDocument natively as HTML instead of round-tripping it through the PDF pipeline the way PdfPreview does for every other format -- markdown isn't paginated, so a print-layout PDF is a poor fit for it, and it sidesteps documents.js's own markdownToPdf entirely (see ExaDev/documents#1). The paragraph styleId/list.numId values consumed here are the small convention src/rpc/router.ts's normalizeMarkdownStyling rewrites markdown-codec's own private ones into -- never the raw "Heading1"/"md1:ordered@1" strings themselves, so this component has no dependency on markdown-codec's internal string formats.
 export function MarkdownPreview({ label, format, content, loading, error }: MarkdownPreviewProps) {
   return (
-    <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
+    <Stack gap={4} className={flexColumn}>
       <Group gap="xs">
         <Text size="sm" fw={500}>
           {label}
@@ -22,7 +25,7 @@ export function MarkdownPreview({ label, format, content, loading, error }: Mark
           {format}
         </Badge>
       </Group>
-      <Paper withBorder pos="relative" style={{ height: '70vh', overflow: 'auto', padding: 24 }}>
+      <Paper withBorder pos="relative" className={previewFrame({ scroll: true, padded: true })}>
         <LoadingOverlay visible={loading === true} />
         {error !== undefined ? (
           <Group h="100%" justify="center">
@@ -85,12 +88,12 @@ function renderBlock(block: ContentBlock): ReactNode {
   if (block.kind === 'paragraph') return renderParagraph(block);
   if (block.kind === 'table') {
     return (
-      <table style={{ borderCollapse: 'collapse', marginBlock: 12 }}>
+      <table className={styles.table}>
         <tbody>
           {block.rows.map((row, rowIndex) => (
             <tr key={rowIndex}>
               {row.cells.map((cell, cellIndex) => (
-                <td key={cellIndex} colSpan={cell.colSpan} rowSpan={cell.rowSpan} style={{ border: '1px solid var(--mantine-color-default-border)', padding: '4px 8px' }}>
+                <td key={cellIndex} colSpan={cell.colSpan} rowSpan={cell.rowSpan} className={styles.tableCell}>
                   {renderBlockGroups(cell.blocks)}
                 </td>
               ))}
@@ -101,7 +104,7 @@ function renderBlock(block: ContentBlock): ReactNode {
     );
   }
   if (block.kind === 'image') {
-    return <img src={`data:image/${block.format};base64,${block.base64}`} alt={block.altText ?? ''} style={{ maxWidth: '100%' }} />;
+    return <img src={`data:image/${block.format};base64,${block.base64}`} alt={block.altText ?? ''} className={styles.image} />;
   }
   // pageBreak and embeddedObject have no HTML equivalent worth rendering here -- markdown itself never produces either (see this file's own module comment), so this only matters if a non-markdown-sourced ContentDocument were ever passed in by mistake.
   return null;
@@ -112,26 +115,22 @@ function renderParagraph(paragraph: ContentParagraph): ReactNode {
   if (headingMatch !== null) {
     const level = Number(headingMatch[1]);
     const Tag = HEADING_TAGS[level];
-    if (Tag !== undefined) return <Tag style={{ marginBlock: '0.6em 0.3em' }}>{renderRuns(paragraph.runs)}</Tag>;
+    if (Tag !== undefined) return <Tag className={styles.heading}>{renderRuns(paragraph.runs)}</Tag>;
   }
   if (paragraph.styleId === 'quote') {
-    return (
-      <blockquote style={{ margin: '0.6em 0', paddingLeft: 12, borderLeft: '3px solid var(--mantine-color-default-border)', color: 'var(--mantine-color-dimmed)' }}>
-        {renderRuns(paragraph.runs)}
-      </blockquote>
-    );
+    return <blockquote className={styles.blockquote}>{renderRuns(paragraph.runs)}</blockquote>;
   }
   if (paragraph.styleId === 'code-block') {
     return (
-      <pre style={{ background: 'var(--mantine-color-default)', padding: 12, borderRadius: 4, overflowX: 'auto' }}>
+      <pre className={styles.codeBlock}>
         <code>{paragraph.runs.map((run) => run.text).join('')}</code>
       </pre>
     );
   }
   if (paragraph.styleId === 'horizontal-rule') {
-    return <hr style={{ border: 'none', borderTop: '1px solid var(--mantine-color-default-border)', margin: '1em 0' }} />;
+    return <hr className={styles.hr} />;
   }
-  return <p style={{ margin: '0.4em 0', lineHeight: 1.5 }}>{renderRuns(paragraph.runs)}</p>;
+  return <p className={styles.paragraph}>{renderRuns(paragraph.runs)}</p>;
 }
 
 function renderRuns(runs: readonly ContentRun[]): ReactNode {
@@ -143,9 +142,7 @@ function renderRuns(runs: readonly ContentRun[]): ReactNode {
     if (run.strike === true) node = <s>{node}</s>;
     // Markdown has no construct that sets a run's fontFamily other than inline code (markdown-codec lowers `` `x` `` to a run carrying fontFamily: "Courier New", confirmed against its actual output) -- checking for any explicit fontFamily is a safe, correct signal here specifically because this component only ever renders markdown-sourced content.
     if (run.fontFamily !== undefined) {
-      node = (
-        <code style={{ background: 'var(--mantine-color-default)', padding: '1px 4px', borderRadius: 3 }}>{node}</code>
-      );
+      node = <code className={styles.inlineCode}>{node}</code>;
     }
     if (run.hyperlink !== undefined) {
       node = (
@@ -200,11 +197,11 @@ function renderListNodes(nodes: readonly ListItemNode[]): ReactNode {
       </li>
     ));
     return group.ordered ? (
-      <ol key={groupIndex} style={{ margin: '0.3em 0', paddingLeft: 24 }}>
+      <ol key={groupIndex} className={styles.list}>
         {items}
       </ol>
     ) : (
-      <ul key={groupIndex} style={{ margin: '0.3em 0', paddingLeft: 24 }}>
+      <ul key={groupIndex} className={styles.list}>
         {items}
       </ul>
     );
