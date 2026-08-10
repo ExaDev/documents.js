@@ -140,7 +140,7 @@ function cellStyle(cell: ContentSheetCell | undefined): CSSProperties {
     border: '1px solid var(--mantine-color-default-border)',
     padding: '2px 8px',
     textAlign: cell?.alignment ?? defaultAlign,
-    verticalAlign: cell?.verticalAlignment ?? 'middle',
+    verticalAlign: cell?.verticalAlignment ?? 'bottom',
     color: kind === 'error' ? 'var(--mantine-color-red-6)' : undefined,
     background: cell?.background !== undefined ? `rgb(${cell.background.r * 255} ${cell.background.g * 255} ${cell.background.b * 255})` : undefined,
     whiteSpace: 'nowrap',
