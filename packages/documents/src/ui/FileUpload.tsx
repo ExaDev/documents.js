@@ -8,6 +8,7 @@ import { createFileAccess } from '../adapters/fileAccess/createFileAccess';
 import { recordRecentFile } from '../hooks/useRecentFiles';
 import type { OpenedFile } from '../ports/fileAccess';
 import { inferFormatFromFilename } from '../shared/extensionToFormat';
+import { dropzoneContent } from './FileUpload.css';
 
 export interface FileUploadProps {
   /** Passed straight through to FileAccessPort.openFile's `accept` -- normalised below into Dropzone's own (looser) Accept shape, so both consumers stay driven by a single value with no risk of drift. */
@@ -74,7 +75,7 @@ export function FileUpload({ accept, formatHint, file, onFile, disabled, loading
       loading={loading}
       disabled={disabled}
     >
-      <Group justify="center" gap="md" mih={120} style={{ pointerEvents: 'none' }}>
+      <Group justify="center" gap="md" mih={120} className={dropzoneContent}>
         <Dropzone.Accept>
           <IconCheck size={36} color={theme.colors.teal[6]} />
         </Dropzone.Accept>
