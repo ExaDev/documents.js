@@ -1,4 +1,4 @@
-import { Alert, Box, Button, Container, Group, Paper, Select, Stack, Text, Title } from '@mantine/core';
+import { Alert, Box, Button, Container, Group, Paper, Select, Spoiler, Stack, Text, Title } from '@mantine/core';
 import { createFileRoute, useNavigate, useParams } from '@tanstack/react-router';
 import { DocumentFormatSchema } from 'documents.js';
 import { useEffect, useState } from 'react';
@@ -6,10 +6,12 @@ import { useEffect, useState } from 'react';
 import { createFileAccess } from '../adapters/fileAccess/createFileAccess';
 import { useConversions, useDocumentFormats } from '../hooks/useConversions';
 import { useConvert } from '../hooks/useConvert';
+import { useInspectPdfBytes } from '../hooks/useInspect';
 import type { OpenedFile } from '../ports/fileAccess';
 import { inferFormatFromFilename } from '../shared/extensionToFormat';
 import { DiagnosticsPanel } from '../ui/DiagnosticsPanel';
 import { FileUpload } from '../ui/FileUpload';
+import { InspectPanel } from '../ui/InspectPanel';
 import { MarkdownPreview } from '../ui/MarkdownPreview';
 import { notifyError, notifySuccess } from '../ui/notify';
 import { PdfPreview } from '../ui/PdfPreview';
@@ -109,6 +111,21 @@ function ConvertLayout() {
   const originalPdfBytes = source === 'pdf' ? file?.bytes : originalPreview.data?.document.bytes;
   const convertedPdfBytes = target === 'pdf' ? convert.data?.document.bytes : resultPreview.data?.document.bytes;
 
+  // Structure inspection runs off the same PDF bytes the preview panels already produced -- it never re-converts, just parses a rendition that's already sitting there. Mirrors the preview prefetch effect above: fires as soon as its bytes exist rather than waiting for a click.
+  const originalInspect = useInspectPdfBytes();
+  const { mutate: mutateOriginalInspect } = originalInspect;
+  useEffect(() => {
+    if (originalPdfBytes === undefined) return;
+    mutateOriginalInspect(originalPdfBytes);
+  }, [originalPdfBytes, mutateOriginalInspect]);
+
+  const convertedInspect = useInspectPdfBytes();
+  const { mutate: mutateConvertedInspect } = convertedInspect;
+  useEffect(() => {
+    if (convertedPdfBytes === undefined) return;
+    mutateConvertedInspect(convertedPdfBytes);
+  }, [convertedPdfBytes, mutateConvertedInspect]);
+
   const handleDownload = () => {
     if (convert.data === undefined) return;
     void fileAccess.saveFile(convert.data.document.bytes, {
@@ -171,57 +188,67 @@ function ConvertLayout() {
               </Group>
               <DiagnosticsPanel diagnostics={convert.data.diagnostics} />
               <Group align="flex-start" grow wrap="nowrap">
-                {source === 'markdown' ? (
-                  <MarkdownPreview
-                    label="Original"
-                    format={source}
-                    content={originalPreview.data?.content}
-                    loading={originalPreview.isPending}
-                    // React Query represents "no error" as null, not undefined -- normalised here since MarkdownPreview/SheetPreview/PdfPreview's own contract only knows "no error" as undefined.
-                    error={originalPreview.error ?? undefined}
-                  />
-                ) : isSheetFormat(source) ? (
-                  <SheetPreview
-                    label="Original"
-                    format={source ?? ''}
-                    content={originalPreview.data?.content}
-                    loading={originalPreview.isPending}
-                    error={originalPreview.error ?? undefined}
-                  />
-                ) : (
-                  <PdfPreview
-                    label="Original"
-                    format={source ?? ''}
-                    bytes={originalPdfBytes}
-                    loading={source !== 'pdf' && originalPreview.isPending}
-                    error={source !== 'pdf' && originalPreview.error !== null ? originalPreview.error : undefined}
-                  />
-                )}
-                {target === 'markdown' ? (
-                  <MarkdownPreview
-                    label="Converted"
-                    format={target}
-                    content={resultPreview.data?.content}
-                    loading={resultPreview.isPending}
-                    error={resultPreview.error ?? undefined}
-                  />
-                ) : isSheetFormat(target) ? (
-                  <SheetPreview
-                    label="Converted"
-                    format={target ?? ''}
-                    content={resultPreview.data?.content}
-                    loading={resultPreview.isPending}
-                    error={resultPreview.error ?? undefined}
-                  />
-                ) : (
-                  <PdfPreview
-                    label="Converted"
-                    format={target ?? ''}
-                    bytes={convertedPdfBytes}
-                    loading={target !== 'pdf' && resultPreview.isPending}
-                    error={target !== 'pdf' && resultPreview.error !== null ? resultPreview.error : undefined}
-                  />
-                )}
+                <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
+                  {source === 'markdown' ? (
+                    <MarkdownPreview
+                      label="Original"
+                      format={source}
+                      content={originalPreview.data?.content}
+                      loading={originalPreview.isPending}
+                      // React Query represents "no error" as null, not undefined -- normalised here since MarkdownPreview/SheetPreview/PdfPreview's own contract only knows "no error" as undefined.
+                      error={originalPreview.error ?? undefined}
+                    />
+                  ) : isSheetFormat(source) ? (
+                    <SheetPreview
+                      label="Original"
+                      format={source ?? ''}
+                      content={originalPreview.data?.content}
+                      loading={originalPreview.isPending}
+                      error={originalPreview.error ?? undefined}
+                    />
+                  ) : (
+                    <PdfPreview
+                      label="Original"
+                      format={source ?? ''}
+                      bytes={originalPdfBytes}
+                      loading={source !== 'pdf' && originalPreview.isPending}
+                      error={source !== 'pdf' && originalPreview.error !== null ? originalPreview.error : undefined}
+                    />
+                  )}
+                  <Spoiler maxHeight={0} showLabel="Show structure" hideLabel="Hide structure">
+                    <InspectPanel data={originalInspect.data} loading={originalInspect.isPending} error={originalInspect.error ?? undefined} />
+                  </Spoiler>
+                </Stack>
+                <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
+                  {target === 'markdown' ? (
+                    <MarkdownPreview
+                      label="Converted"
+                      format={target}
+                      content={resultPreview.data?.content}
+                      loading={resultPreview.isPending}
+                      error={resultPreview.error ?? undefined}
+                    />
+                  ) : isSheetFormat(target) ? (
+                    <SheetPreview
+                      label="Converted"
+                      format={target ?? ''}
+                      content={resultPreview.data?.content}
+                      loading={resultPreview.isPending}
+                      error={resultPreview.error ?? undefined}
+                    />
+                  ) : (
+                    <PdfPreview
+                      label="Converted"
+                      format={target ?? ''}
+                      bytes={convertedPdfBytes}
+                      loading={target !== 'pdf' && resultPreview.isPending}
+                      error={target !== 'pdf' && resultPreview.error !== null ? resultPreview.error : undefined}
+                    />
+                  )}
+                  <Spoiler maxHeight={0} showLabel="Show structure" hideLabel="Hide structure">
+                    <InspectPanel data={convertedInspect.data} loading={convertedInspect.isPending} error={convertedInspect.error ?? undefined} />
+                  </Spoiler>
+                </Stack>
               </Group>
             </Stack>
           </Paper>
