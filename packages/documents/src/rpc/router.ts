@@ -6,11 +6,12 @@ import {
   DocumentFormatSchema,
   DOCUMENT_FORMATS,
   extractSourceFontsForFormat,
+  LayoutDocumentSchema,
   readDocumentMetadata,
   readPdf,
   setDocumentMetadata,
 } from 'documents.js';
-import type { ContentBlock, ContentDocument, ContentParagraph } from 'documents.js';
+import type { ContentBlock, ContentDocument, ContentParagraph, LayoutImageAsset } from 'documents.js';
 import { CODE_BLOCK_STYLE_ID, HORIZONTAL_RULE_STYLE_ID, parseHeadingStyleId, parseListNumId, QUOTE_STYLE_ID } from 'markdown-codec';
 import { z } from 'zod';
 
@@ -96,6 +97,28 @@ const FontFaceSchema = z.object({
   italic: z.boolean(),
 });
 
+// LayoutImageAsset.base64 embeds the full re-encoded image, unbounded in size -- never crosses the worker/main-thread boundary. byteLength is estimated from the base64 string's own length (each 4 base64 characters decode to 3 bytes) rather than actually decoding it, since the structural inspector only needs a size hint, not the bytes themselves.
+const SanitizedLayoutImageAssetSchema = z.object({
+  format: z.enum(['png', 'jpeg']),
+  widthPx: z.number().int().positive(),
+  heightPx: z.number().int().positive(),
+  byteLength: z.number().int().nonnegative(),
+});
+
+// Reuses LayoutDocumentSchema wholesale for pages/metadata/formatVersion -- only images is overridden, so the structure tree gets full real fidelity for everything except the one field with an unbounded payload.
+const SanitizedLayoutDocumentSchema = LayoutDocumentSchema.extend({
+  images: z.record(z.string(), SanitizedLayoutImageAssetSchema),
+});
+
+function sanitizeImageAsset(asset: LayoutImageAsset) {
+  return {
+    format: asset.format,
+    widthPx: asset.widthPx,
+    heightPx: asset.heightPx,
+    byteLength: Math.ceil((asset.base64.length * 3) / 4),
+  };
+}
+
 export const router = {
   formats: {
     list: os.output(z.array(DocumentFormatSchema)).handler(() => [...DOCUMENT_FORMATS]),
@@ -175,6 +198,7 @@ export const router = {
           pageCount: z.number().int().nonnegative(),
           itemKindCounts: z.record(z.string(), z.number().int().nonnegative()),
           metadata: MetadataSchema,
+          layout: SanitizedLayoutDocumentSchema,
         }),
       )
       .handler(({ input, signal }) => {
@@ -185,7 +209,13 @@ export const router = {
             itemKindCounts[item.kind] = (itemKindCounts[item.kind] ?? 0) + 1;
           }
         }
-        return { pageCount: layout.pages.length, itemKindCounts, metadata: layout.metadata };
+        const images = Object.fromEntries(Object.entries(layout.images).map(([id, asset]) => [id, sanitizeImageAsset(asset)]));
+        return {
+          pageCount: layout.pages.length,
+          itemKindCounts,
+          metadata: layout.metadata,
+          layout: { formatVersion: layout.formatVersion, metadata: layout.metadata, pages: layout.pages, images },
+        };
       }),
   },
 };
