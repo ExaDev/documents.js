@@ -1,8 +1,18 @@
 import { useMutation } from '@tanstack/react-query';
-import type { DocumentFormat } from 'documents.js';
+import type { DocumentFormat, LayoutDocument } from 'documents.js';
 
 import { getRpcClient } from '../rpc/client';
 import type { Diagnostic } from '../shared/diagnostics';
+
+// Plain mirror of pdf.inspect's own SanitizedLayoutImageAssetSchema (src/rpc/router.ts) -- LayoutImageAsset minus its unbounded base64 payload, plus an estimated byteLength in its place.
+export interface SanitizedLayoutImageAsset {
+  format: 'png' | 'jpeg';
+  widthPx: number;
+  heightPx: number;
+  byteLength: number;
+}
+
+export type SanitizedLayoutDocument = Omit<LayoutDocument, 'images'> & { images: Record<string, SanitizedLayoutImageAsset> };
 
 export interface InspectResult {
   pageCount: number;
@@ -12,11 +22,13 @@ export interface InspectResult {
     author?: string;
     subject?: string;
     keywords?: string[];
+    creator?: string;
     createdIso?: string;
     modifiedIso?: string;
     producer?: string;
   };
   diagnostics: readonly Diagnostic[];
+  layout: SanitizedLayoutDocument;
 }
 
 async function inspectPdfBytes(bytes: Uint8Array<ArrayBuffer>, diagnostics: readonly Diagnostic[] = []): Promise<InspectResult> {

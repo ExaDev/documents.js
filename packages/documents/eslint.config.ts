@@ -52,20 +52,23 @@ export default tseslint.config(
     languageOptions: { globals: { ...globals.node } },
   },
   {
-    // Import-boundary enforcement: UI/route code must go through the RPC client for anything that touches real document bytes -- only src/workers/** may call documents.js's conversion/editor functions directly. DocumentFormatSchema/DOCUMENT_FORMATS and the plain Diagnostic/DocumentPayload/DocumentFormat types are allowlisted: they have zero non-zod runtime imports (verified against documents.js's own source), so importing them directly (per barrel-policy's own guidance -- "import this value directly in the file that uses it" -- rather than re-exporting through a facade file) doesn't pull the conversion engine into the main bundle.
+    // Import-boundary enforcement: UI/route code must go through the RPC client for anything that touches real document bytes -- only src/workers/** may call documents.js's conversion/editor functions directly. Uses the typescript-eslint variant of no-restricted-imports (the base rule is turned off below to avoid double-reporting the same import) specifically for its `allowTypeImports` option: a type-only import is erased at compile time regardless of which name it is, so it can never pull the conversion engine into the main bundle -- allowImportNames only needs to name genuine runtime values (DocumentFormatSchema/DOCUMENT_FORMATS/columnIndexToLetters), not every type re-exported alongside them.
     files: ['src/routes/**/*.{ts,tsx}', 'src/features/**/*.{ts,tsx}', 'src/hooks/**/*.{ts,tsx}', 'src/ui/**/*.{ts,tsx}'],
     rules: {
-      'no-restricted-imports': [
+      'no-restricted-imports': 'off',
+      '@typescript-eslint/no-restricted-imports': [
         'error',
         {
           patterns: [
             {
               group: ['documents.js', 'documents.js/**'],
-              allowImportNames: ['DocumentFormatSchema', 'DOCUMENT_FORMATS', 'DocumentFormat', 'Diagnostic', 'DocumentPayload', 'ContentDocument', 'ContentBlock', 'ContentParagraph', 'ContentRun', 'ContentSheet', 'ContentSheetCell', 'columnIndexToLetters'],
+              allowTypeImports: true,
+              allowImportNames: ['DocumentFormatSchema', 'DOCUMENT_FORMATS', 'columnIndexToLetters'],
               message: 'UI code may not import documents.js\'s conversion/editor functions directly -- go through the RPC client (src/rpc/client.ts). Only src/workers/** may call them.',
             },
             {
               group: ['odf.js', 'odf.js/**', 'ooxml.js', 'ooxml.js/**', 'pdf-codec', 'pdf-codec/**', 'markdown-codec', 'markdown-codec/**'],
+              allowTypeImports: true,
               message: 'UI code may not import documents.js\'s sibling libraries directly -- go through the RPC client. Only src/workers/** may import these.',
             },
           ],

@@ -1,6 +1,7 @@
-import { Alert, Skeleton, Stack, Table, Text } from '@mantine/core';
+import { Alert, Skeleton, Stack, Table, Text, Title } from '@mantine/core';
 
 import type { InspectResult } from '../hooks/useInspect';
+import { StructureTree } from './StructureTree';
 
 export interface InspectPanelProps {
   data?: InspectResult;
@@ -37,6 +38,8 @@ export function InspectPanel({ data, loading, error }: InspectPanelProps) {
       </Table>
       {data.metadata.title !== undefined && <Text size="sm">Title: {data.metadata.title}</Text>}
       {data.metadata.producer !== undefined && <Text size="sm">Producer: {data.metadata.producer}</Text>}
+      <Title order={6}>Document structure</Title>
+      <StructureTree data={data.layout} />
     </Stack>
   );
 }
