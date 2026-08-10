@@ -73,8 +73,8 @@ importers:
         specifier: ^17.3.0
         version: 17.3.0
       odf.js:
-        specifier: ^2.6.9
-        version: 2.6.9
+        specifier: ^2.6.12
+        version: 2.6.12
       pdf-codec:
         specifier: ^2.0.0
         version: 2.0.0
@@ -1724,12 +1724,12 @@ packages:
     resolution: {integrity: sha512-NLBNkYUq830XCKr49ClkdxvYHXra9B5hx9o7G6ZL4hMulprzj4jdEXg4hyv1WoVrKiAzJCpI4pDgQ0eamgYx8g==}
     engines: {node: '>=20'}
 
-  document-schema.js@2.7.4:
-    resolution: {integrity: sha512-E5OYkmU2NQjOAL261EwMSjdEvJjTrdgY2qS/x1MomjxeMKK4wgvcsy3YqCgxhJ3d5l5PpppM0g5/w65WobUQow==}
-    engines: {node: '>=20'}
-
   document-schema.js@2.7.5:
     resolution: {integrity: sha512-j7sBZtWtOVMoyXouImkR3Lsg6hPV0VOzj2aFBY+e+b5IqZYv7/nBCurAlCzETtGO9qP0DQuKNwLekPAYW+XSRQ==}
+    engines: {node: '>=20'}
+
+  document-schema.js@2.7.6:
+    resolution: {integrity: sha512-Ynn8lc7/J5s1gdc96WKFEGkRWKLvWhhHhCdT5wkR8+i7xyGsdIfUmOKHfX81bPtvbVIfAGCNl8Fjp1xxajB9GA==}
     engines: {node: '>=20'}
 
   documents.js@1.99.7:
@@ -2614,8 +2614,8 @@ packages:
     resolution: {integrity: sha512-27I0Geh1AuDf+P0qvU47NbqRf8fAfKA6zWynoViMkuxGpOoMKGrTBRvDg7YeHRONlw5ELUuvc6lYQEAr37K1/g==}
     engines: {node: '>=20'}
 
-  odf.js@2.6.9:
-    resolution: {integrity: sha512-Qxj+kYHfE4n+1sODHveNBXNuOPOOqYJmTKWCcHN6y96HVL+AuFcLrW/AN/vV5JRLBvp7ZBkCVzk91hXHhMkREQ==}
+  odf.js@2.6.12:
+    resolution: {integrity: sha512-3w2+DC/ZAGY9Ej9JyAY7fyfja0ud6sjR+WwffMf97ESjC6QNqlHZVAlAuR7M3yt6zMcBugSVnInTwCJcq7Xg0A==}
     engines: {node: '>=20'}
 
   onetime@5.1.2:
@@ -4991,11 +4991,11 @@ snapshots:
     dependencies:
       zod: 4.4.3
 
-  document-schema.js@2.7.4:
+  document-schema.js@2.7.5:
     dependencies:
       zod: 4.4.3
 
-  document-schema.js@2.7.5:
+  document-schema.js@2.7.6:
     dependencies:
       zod: 4.4.3
 
@@ -5813,9 +5813,9 @@ snapshots:
       fflate: 0.8.3
       zod: 4.4.3
 
-  odf.js@2.6.9:
+  odf.js@2.6.12:
     dependencies:
-      document-schema.js: 2.7.4
+      document-schema.js: 2.7.6
       fast-xml-parser: 5.10.1
       fflate: 0.8.3
       zod: 4.4.3
