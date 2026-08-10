@@ -9,12 +9,14 @@ import { useConvert } from '../hooks/useConvert';
 import { useInspectPdfBytes } from '../hooks/useInspect';
 import type { OpenedFile } from '../ports/fileAccess';
 import { inferFormatFromFilename } from '../shared/extensionToFormat';
+import { donePanel } from '../ui/convertLayout.css';
 import { DiagnosticsPanel } from '../ui/DiagnosticsPanel';
 import { FileUpload } from '../ui/FileUpload';
 import { InspectPanel } from '../ui/InspectPanel';
 import { MarkdownPreview } from '../ui/MarkdownPreview';
 import { notifyError, notifySuccess } from '../ui/notify';
 import { PdfPreview } from '../ui/PdfPreview';
+import { flexColumn } from '../ui/previewPanel.css';
 import { SheetPreview } from '../ui/SheetPreview';
 import { takePendingReopen } from '../ui/reopenMailbox';
 
@@ -180,7 +182,7 @@ function ConvertLayout() {
 
         {convert.data && (
           // maxWidth scales with viewport via clamp() rather than jumping to one fixed breakpoint: never narrower than the controls column above (900px), grows at 85% of viewport width, never wider than 2200px so preview text doesn't sprawl on an ultrawide monitor. Below 900px (and always inside the fluid Container's own padding) it simply falls back to 100% of the available width.
-          <Paper withBorder p="md" style={{ maxWidth: 'clamp(900px, 85vw, 2200px)' }}>
+          <Paper withBorder p="md" className={donePanel}>
             <Stack gap="md">
               <Group justify="space-between">
                 <Text fw={500}>Done</Text>
@@ -188,7 +190,7 @@ function ConvertLayout() {
               </Group>
               <DiagnosticsPanel diagnostics={convert.data.diagnostics} />
               <Group align="flex-start" grow wrap="nowrap">
-                <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
+                <Stack gap={4} className={flexColumn}>
                   {source === 'markdown' ? (
                     <MarkdownPreview
                       label="Original"
@@ -219,7 +221,7 @@ function ConvertLayout() {
                     <InspectPanel data={originalInspect.data} loading={originalInspect.isPending} error={originalInspect.error ?? undefined} />
                   </Spoiler>
                 </Stack>
-                <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
+                <Stack gap={4} className={flexColumn}>
                   {target === 'markdown' ? (
                     <MarkdownPreview
                       label="Converted"
