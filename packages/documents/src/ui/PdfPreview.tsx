@@ -1,6 +1,8 @@
 import { Badge, Group, LoadingOverlay, Paper, Stack, Text } from '@mantine/core';
 
 import { usePdfObjectUrl } from '../hooks/usePdfObjectUrl';
+import { iframe as iframeStyle } from './PdfPreview.css';
+import { flexColumn, previewFrame } from './previewPanel.css';
 
 export interface PdfPreviewProps {
   label: string;
@@ -15,7 +17,7 @@ export function PdfPreview({ label, format, bytes, loading, error }: PdfPreviewP
   const url = usePdfObjectUrl(bytes);
 
   return (
-    <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
+    <Stack gap={4} className={flexColumn}>
       <Group gap="xs">
         <Text size="sm" fw={500}>
           {label}
@@ -24,7 +26,7 @@ export function PdfPreview({ label, format, bytes, loading, error }: PdfPreviewP
           {format}
         </Badge>
       </Group>
-      <Paper withBorder pos="relative" style={{ height: '70vh', overflow: 'hidden' }}>
+      <Paper withBorder pos="relative" className={previewFrame()}>
         <LoadingOverlay visible={loading === true} />
         {error !== undefined ? (
           <Group h="100%" justify="center">
@@ -39,7 +41,7 @@ export function PdfPreview({ label, format, bytes, loading, error }: PdfPreviewP
             </Text>
           </Group>
         ) : (
-          <iframe src={url} title={`${label} preview`} style={{ width: '100%', height: '100%', border: 'none' }} />
+          <iframe src={url} title={`${label} preview`} className={iframeStyle} />
         )}
       </Paper>
     </Stack>
