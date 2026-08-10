@@ -15,6 +15,7 @@ import {
 } from '@tabler/icons-react';
 
 import { relativeTime } from '../shared/relativeTime';
+import { disabledNavItem, navLink, versionAnchor } from './-Sidebar.css';
 
 // Not a route -- the '-' prefix keeps TanStack Router's file-based generator from treating this as one.
 const NAV_ITEMS = [
@@ -49,7 +50,7 @@ export function Sidebar() {
     <Stack h="100%" justify="space-between" gap={4}>
       <Stack gap={4}>
         {NAV_ITEMS.map((item) => (
-          <Link key={item.to} to={item.to} style={{ textDecoration: 'none', color: 'inherit' }}>
+          <Link key={item.to} to={item.to} className={navLink}>
             {({ isActive }) => (
               <NavLink component="div" label={item.label} leftSection={<item.icon size={18} />} active={isActive} />
             )}
@@ -62,7 +63,7 @@ export function Sidebar() {
               label={item.label}
               leftSection={<item.icon size={18} />}
               disabled
-              style={{ cursor: 'default' }}
+              className={disabledNavItem}
             />
           </Tooltip>
         ))}
@@ -76,7 +77,7 @@ export function Sidebar() {
           c="dimmed"
           size="xs"
           display="flex"
-          style={{ alignItems: 'center', gap: 6, padding: '8px 12px' }}
+          className={versionAnchor}
         >
           <VersionIcon size={14} />
           {versionLabel}
