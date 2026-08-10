@@ -7,6 +7,7 @@ import type { RecentFileRecord } from '../db/dexie';
 import { removeRecentFile, useRecentFiles } from '../hooks/useRecentFiles';
 import { relativeTime } from '../shared/relativeTime';
 import { notifyError } from './notify';
+import { iconFlexShrink, minWidthZero } from './RecentFilesPanel.css';
 import { setPendingReopen } from './reopenMailbox';
 
 function formatBytes(bytes: number): string {
@@ -61,9 +62,9 @@ export function RecentFilesPanel() {
     <Stack gap={4}>
       {files.map((record) => (
         <Group key={record.id} justify="space-between" wrap="nowrap" py={6} px="xs">
-          <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
-            <IconFile size={20} style={{ flexShrink: 0 }} />
-            <Stack gap={0} style={{ minWidth: 0 }}>
+          <Group gap="sm" wrap="nowrap" className={minWidthZero}>
+            <IconFile size={20} className={iconFlexShrink} />
+            <Stack gap={0} className={minWidthZero}>
               <Text size="sm" fw={500} truncate>
                 {record.name}
               </Text>
