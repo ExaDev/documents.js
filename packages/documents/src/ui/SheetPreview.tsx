@@ -1,8 +1,12 @@
 import { Badge, Group, LoadingOverlay, Paper, SegmentedControl, Stack, Text } from '@mantine/core';
+import { assignInlineVars } from '@vanilla-extract/dynamic';
 import { columnIndexToLetters } from 'documents.js';
 import type { ContentDocument, ContentSheet, ContentSheetCell } from 'documents.js';
-import type { CSSProperties, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { useState } from 'react';
+
+import { flexColumn, previewFrame } from './previewPanel.css';
+import * as styles from './SheetPreview.css';
 
 export interface SheetPreviewProps {
   label: string;
@@ -21,7 +25,7 @@ export function SheetPreview({ label, format, content, loading, error }: SheetPr
   const activeSheet = sheets?.[clampedIndex];
 
   return (
-    <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
+    <Stack gap={4} className={flexColumn}>
       <Group gap="xs">
         <Text size="sm" fw={500}>
           {label}
@@ -30,7 +34,7 @@ export function SheetPreview({ label, format, content, loading, error }: SheetPr
           {format}
         </Badge>
       </Group>
-      <Paper withBorder pos="relative" style={{ height: '70vh', overflow: 'auto' }}>
+      <Paper withBorder pos="relative" className={previewFrame({ scroll: true })}>
         <LoadingOverlay visible={loading === true} />
         {error !== undefined ? (
           <Group h="100%" justify="center">
@@ -52,7 +56,7 @@ export function SheetPreview({ label, format, content, loading, error }: SheetPr
                 value={String(clampedIndex)}
                 onChange={(value) => setActiveSheetIndex(Number(value))}
                 data={sheets.map((sheet, index) => ({ value: String(index), label: sheet.name }))}
-                style={{ margin: 8 }}
+                className={styles.segmentedControl}
               />
             )}
             {activeSheet !== undefined && renderSheetTable(activeSheet)}
@@ -62,29 +66,6 @@ export function SheetPreview({ label, format, content, loading, error }: SheetPr
     </Stack>
   );
 }
-
-const HEADER_CELL_STYLE: CSSProperties = {
-  position: 'sticky',
-  top: 0,
-  background: 'var(--mantine-color-default)',
-  border: '1px solid var(--mantine-color-default-border)',
-  padding: '2px 8px',
-  fontWeight: 500,
-  color: 'var(--mantine-color-dimmed)',
-  whiteSpace: 'nowrap',
-};
-
-const ROW_HEADER_CELL_STYLE: CSSProperties = {
-  ...HEADER_CELL_STYLE,
-  left: 0,
-  textAlign: 'right',
-};
-
-const CORNER_CELL_STYLE: CSSProperties = {
-  ...HEADER_CELL_STYLE,
-  left: 0,
-  zIndex: 1,
-};
 
 function renderSheetTable(sheet: ContentSheet): ReactNode {
   const cellMap = new Map<string, ContentSheetCell>();
@@ -103,12 +84,12 @@ function renderSheetTable(sheet: ContentSheet): ReactNode {
   }
 
   return (
-    <table style={{ borderCollapse: 'collapse', fontSize: 13 }}>
+    <table className={styles.table}>
       <thead>
         <tr>
-          <th style={CORNER_CELL_STYLE} />
+          <th className={styles.cornerCell} />
           {columns.map((column) => (
-            <th key={column.index} style={HEADER_CELL_STYLE}>
+            <th key={column.index} className={styles.headerCell}>
               {columnIndexToLetters(column.index)}
             </th>
           ))}
@@ -117,11 +98,11 @@ function renderSheetTable(sheet: ContentSheet): ReactNode {
       <tbody>
         {rows.map((row) => (
           <tr key={row.index}>
-            <th style={ROW_HEADER_CELL_STYLE}>{row.index + 1}</th>
+            <th className={styles.rowHeaderCell}>{row.index + 1}</th>
             {columns.map((column) => {
               const cell = cellMap.get(`${row.index}:${column.index}`);
               return (
-                <td key={column.index} colSpan={cell?.colSpan} rowSpan={cell?.rowSpan} style={cellStyle(cell)}>
+                <td key={column.index} colSpan={cell?.colSpan} rowSpan={cell?.rowSpan} className={cellClassName(cell)} style={cellBackgroundStyle(cell)}>
                   {cell?.displayText ?? ''}
                 </td>
               );
@@ -133,16 +114,18 @@ function renderSheetTable(sheet: ContentSheet): ReactNode {
   );
 }
 
-function cellStyle(cell: ContentSheetCell | undefined): CSSProperties {
+function cellClassName(cell: ContentSheetCell | undefined): string {
   const kind = cell?.value.kind;
   const defaultAlign = kind === 'number' || kind === 'percentage' || kind === 'currency' ? 'right' : kind === 'boolean' ? 'center' : 'left';
-  return {
-    border: '1px solid var(--mantine-color-default-border)',
-    padding: '2px 8px',
-    textAlign: cell?.alignment ?? defaultAlign,
+  return styles.cell({
+    align: cell?.alignment ?? defaultAlign,
     verticalAlign: cell?.verticalAlignment ?? 'bottom',
-    color: kind === 'error' ? 'var(--mantine-color-red-6)' : undefined,
-    background: cell?.background !== undefined ? `rgb(${cell.background.r * 255} ${cell.background.g * 255} ${cell.background.b * 255})` : undefined,
-    whiteSpace: 'nowrap',
-  };
+    error: kind === 'error',
+  });
+}
+
+function cellBackgroundStyle(cell: ContentSheetCell | undefined) {
+  return assignInlineVars({
+    [styles.cellBackgroundVar]: cell?.background !== undefined ? `rgb(${cell.background.r * 255} ${cell.background.g * 255} ${cell.background.b * 255})` : undefined,
+  });
 }
