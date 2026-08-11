@@ -9,6 +9,7 @@ import {
   extractSourceFontsForFormat,
   LayoutDocumentSchema,
   readDocxContent,
+  readDocxExtras,
   readDocumentMetadata,
   readOdfFormulaContent,
   readOdgContent,
@@ -53,18 +54,22 @@ function normalizeMarkdownStyling(document: ContentDocument): ContentDocument {
   return { ...document, sections: document.sections.map((section) => ({ ...section, blocks: section.blocks.map(normalizeMarkdownBlock) })) };
 }
 
-// docx and odt both carry heading paragraphs with styleId "Heading1".."Heading6" (docx: the raw w:pStyle/@w:val; odt: synthesized to the same convention by odf.js/src/typed/odt/read.ts). Rewritten here into the same "heading-{N}" convention normalizeMarkdownStyling produces, so every wordprocessing-kind source feeds its downstream preview component one consistent heading shape regardless of which format produced it. Non-heading styleIds are left untouched -- unlike markdown, docx/odt have no private styleId vocabulary this app needs to translate (quote/code-block detection is not attempted for docx/odt, since no mapping from a real docx/odt style name to those semantic roles exists).
+// docx and odt both carry heading paragraphs with styleId "Heading1".."Heading6" (docx: the raw w:pStyle/@w:val; odt: synthesized to the same convention by odf.js/src/typed/odt/read.ts). Rewritten here into the same "heading-{N}" convention normalizeMarkdownStyling produces. Blockquote and code-block styleIds are detected by heuristic name matching (docx: "Quote"/"IntenseQuote"; odt: "Quotations"; both: any styleId containing "Code"/"Source"/"Preformatted"), rewritten into the same "quote"/"code-block" convention markdown-codec uses.
 const WORDPROCESSING_HEADING_PATTERN = /^Heading([1-6])$/;
 
-function normalizeWordprocessingHeadings(document: ContentDocument): ContentDocument {
+function normalizeWordprocessingSemantics(document: ContentDocument): ContentDocument {
   if (document.kind !== 'wordprocessing') return document;
-  return { ...document, sections: document.sections.map((section) => ({ ...section, blocks: section.blocks.map(normalizeHeadingBlock) })) };
+  return { ...document, sections: document.sections.map((section) => ({ ...section, blocks: section.blocks.map(normalizeWordprocessingBlock) })) };
 }
 
-function normalizeHeadingBlock(block: ContentBlock): ContentBlock {
+function normalizeWordprocessingBlock(block: ContentBlock): ContentBlock {
   if (block.kind === 'paragraph' && block.styleId !== undefined) {
-    const match = WORDPROCESSING_HEADING_PATTERN.exec(block.styleId);
-    if (match !== null) return { ...block, styleId: `heading-${match[1]}` };
+    const headingMatch = WORDPROCESSING_HEADING_PATTERN.exec(block.styleId);
+    if (headingMatch !== null) return { ...block, styleId: `heading-${headingMatch[1]}` };
+    if (block.styleId.includes('Quote')) return { ...block, styleId: 'quote' };
+    if (block.styleId.includes('Code') || block.styleId.includes('Source') || block.styleId.includes('Preformatted')) {
+      return { ...block, styleId: 'code-block' };
+    }
     return block;
   }
   if (block.kind === 'table') {
@@ -72,17 +77,41 @@ function normalizeHeadingBlock(block: ContentBlock): ContentBlock {
       ...block,
       rows: block.rows.map((row) => ({
         ...row,
-        cells: row.cells.map((cell) => ({ ...cell, blocks: cell.blocks.map(normalizeHeadingBlock) })),
+        cells: row.cells.map((cell) => ({ ...cell, blocks: cell.blocks.map(normalizeWordprocessingBlock) })),
       })),
     };
   }
   return block;
 }
 
-// Dispatches source-format-specific ContentDocument normalization. Each branch rewrites format-specific styleId vocabulary into the app's own convention; formats with no private vocabulary (pdf, pptx, odp, etc.) pass through unchanged.
-function normalizeContentForSource(content: ContentDocument, source: DocumentFormat): ContentDocument {
+// docx list numIds are opaque w:numId values; the real ordered-vs-bullet info lives in NumberingDefinitions (readDocxExtras), keyed by the same numId. Resolved here into the "ordered:"/"bullet:" prefix convention markdown-codec and odf.js already use, so buildListForest can render <ol>/<ul> for every source.
+function normalizeDocxListKinds(document: ContentDocument, bytes: Uint8Array<ArrayBuffer>): ContentDocument {
+  if (document.kind !== 'wordprocessing') return document;
+  const extras = readDocxExtras(decodeDocumentPackage('docx', bytes));
+  const resolve = (numId: string, level: number): string => {
+    const format = extras.numbering[numId]?.levels[String(level)]?.format;
+    return format === 'bullet' || format === 'none' ? `bullet:${numId}` : `ordered:${numId}`;
+  };
+  const walkBlock = (block: ContentBlock): ContentBlock => {
+    if (block.kind === 'paragraph' && block.list !== undefined) {
+      return { ...block, list: { ...block.list, numId: resolve(block.list.numId, block.list.level) } };
+    }
+    if (block.kind === 'table') {
+      return { ...block, rows: block.rows.map((row) => ({ ...row, cells: row.cells.map((cell) => ({ ...cell, blocks: cell.blocks.map(walkBlock) })) })) };
+    }
+    return block;
+  };
+  return { ...document, sections: document.sections.map((section) => ({ ...section, blocks: section.blocks.map(walkBlock) })) };
+}
+
+// Dispatches source-format-specific ContentDocument normalization. Each branch rewrites format-specific styleId vocabulary into the app's own convention; formats with no private vocabulary (pdf, pptx, odp, etc.) pass through unchanged. bytes is needed only for docx list-kind resolution (readDocxExtras); other formats don't use it.
+function normalizeContentForSource(content: ContentDocument, source: DocumentFormat, bytes?: Uint8Array<ArrayBuffer>): ContentDocument {
   if (source === 'markdown') return normalizeMarkdownStyling(content);
-  if (source === 'docx' || source === 'odt') return normalizeWordprocessingHeadings(content);
+  if (source === 'docx') {
+    const normalized = normalizeWordprocessingSemantics(content);
+    return bytes !== undefined ? normalizeDocxListKinds(normalized, bytes) : normalized;
+  }
+  if (source === 'odt') return normalizeWordprocessingSemantics(content);
   return content;
 }
 
@@ -216,7 +245,7 @@ export const router = {
       return {
         document: result.document,
         diagnostics: result.diagnostics.map((diagnostic) => ({ ...diagnostic })),
-        content: content !== undefined ? normalizeContentForSource(content, input.source) : content,
+        content: content !== undefined ? normalizeContentForSource(content, input.source, input.bytes) : content,
       };
     }),
 
@@ -226,7 +255,7 @@ export const router = {
       .output(ContentDocumentSchema)
       .handler(async ({ input, signal }) => {
         const content = await readContentForFormat(input.format, input.bytes, signal);
-        return normalizeContentForSource(content, input.format);
+        return normalizeContentForSource(content, input.format, input.bytes);
       }),
   },
 
