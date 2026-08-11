@@ -15,7 +15,20 @@ export const tableCell = style({ border: `1px solid ${vars.colors.defaultBorder}
 
 export const image = style({ maxWidth: '100%' });
 
-// Neutral, non-committal list marker (a plain hyphen). Used by every non-markdown preview (WordProcessing, Slides) where ordered-vs-bullet cannot be determined from ContentDocument alone. Deliberately distinct from both the browser's bullet glyph and a number.
+// Standard list style for <ol>/<ul> when the list kind IS known (ordered: or bullet: prefix in numId). Same margins/indentation as MarkdownPreview's own list style.
+export const list = style({ margin: '0.3em 0', paddingLeft: 24 });
+
+// Blockquote, code block, and horizontal rule styles -- shared by every flowing-document preview (Markdown, WordProcessing, Slides) since all detect these via the same router-side styleId convention.
+export const blockquote = style({
+  margin: '0.6em 0',
+  paddingLeft: 12,
+  borderLeft: `3px solid ${vars.colors.defaultBorder}`,
+  color: vars.colors.dimmed,
+});
+
+export const codeBlock = style({ background: vars.colors.default, padding: 12, borderRadius: 4, overflowX: 'auto' });
+
+export const hr = style({ border: 'none', borderTop: `1px solid ${vars.colors.defaultBorder}`, margin: '1em 0' });
 export const neutralList = style({
   margin: '0.3em 0',
   paddingLeft: 24,

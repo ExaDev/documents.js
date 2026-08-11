@@ -3,8 +3,7 @@ import type { ContentBlock, ContentDocument, ContentParagraph } from 'documents.
 import type { ReactNode } from 'react';
 
 import { buildListForest, collectBlockGroups, HEADING_STYLE_PATTERN, HEADING_TAGS, renderImage, renderRuns, renderTable } from './contentBlocks';
-import { heading as headingStyle, paragraph as paragraphStyle } from './contentBlocks.css';
-import * as styles from './MarkdownPreview.css';
+import { blockquote as blockquoteStyle, codeBlock as codeBlockStyle, heading as headingStyle, hr as hrStyle, list as listStyle, paragraph as paragraphStyle } from './contentBlocks.css';
 import { flexColumn, previewFrame } from './previewPanel.css';
 
 export interface MarkdownPreviewProps {
@@ -85,17 +84,17 @@ function renderParagraph(paragraph: ContentParagraph): ReactNode {
     if (Tag !== undefined) return <Tag className={headingStyle}>{renderRunsMd(paragraph.runs)}</Tag>;
   }
   if (paragraph.styleId === 'quote') {
-    return <blockquote className={styles.blockquote}>{renderRunsMd(paragraph.runs)}</blockquote>;
+    return <blockquote className={blockquoteStyle}>{renderRunsMd(paragraph.runs)}</blockquote>;
   }
   if (paragraph.styleId === 'code-block') {
     return (
-      <pre className={styles.codeBlock}>
+      <pre className={codeBlockStyle}>
         <code>{paragraph.runs.map((run) => run.text).join('')}</code>
       </pre>
     );
   }
   if (paragraph.styleId === 'horizontal-rule') {
-    return <hr className={styles.hr} />;
+    return <hr className={hrStyle} />;
   }
   return <p className={paragraphStyle}>{renderRunsMd(paragraph.runs)}</p>;
 }
@@ -119,11 +118,11 @@ function renderListNodes(nodes: ReturnType<typeof buildListForest>): ReactNode {
       </li>
     ));
     return group.ordered ? (
-      <ol key={groupIndex} className={styles.list}>
+      <ol key={groupIndex} className={listStyle}>
         {items}
       </ol>
     ) : (
-      <ul key={groupIndex} className={styles.list}>
+      <ul key={groupIndex} className={listStyle}>
         {items}
       </ul>
     );

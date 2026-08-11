@@ -1,7 +1,7 @@
 import type { ContentBlock, ContentImageBlock, ContentParagraph, ContentRun, ContentTable } from 'documents.js';
 import type { ReactNode } from 'react';
 
-import { heading as headingStyle, image as imageStyle, inlineCode, neutralList, neutralListItem, paragraph as paragraphStyle, table as tableStyle, tableCell as tableCellStyle } from './contentBlocks.css';
+import { blockquote as blockquoteStyle, codeBlock as codeBlockStyle, heading as headingStyle, hr as hrStyle, image as imageStyle, inlineCode, list as listStyle, neutralList, neutralListItem, paragraph as paragraphStyle, table as tableStyle, tableCell as tableCellStyle } from './contentBlocks.css';
 
 // router.ts normalizes both markdown-codec's and docx/odt's real heading styleIds into this one lowercase-hyphenated convention, so a single client-side regex works for every wordprocessing-kind source.
 export const HEADING_STYLE_PATTERN = /^heading-([1-6])$/;
@@ -118,6 +118,15 @@ function renderBlockNeutral(block: ContentBlock): ReactNode {
       const Tag = HEADING_TAGS[Number(match[1])];
       if (Tag !== undefined) return <Tag className={headingStyle}>{renderRuns(block.runs)}</Tag>;
     }
+    if (block.styleId === 'quote') return <blockquote className={blockquoteStyle}>{renderRuns(block.runs)}</blockquote>;
+    if (block.styleId === 'code-block') {
+      return (
+        <pre className={codeBlockStyle}>
+          <code>{block.runs.map((run) => run.text).join('')}</code>
+        </pre>
+      );
+    }
+    if (block.styleId === 'horizontal-rule') return <hr className={hrStyle} />;
     return <p className={paragraphStyle}>{renderRuns(block.runs)}</p>;
   }
   if (block.kind === 'table') return renderTable(block, renderBlocksNeutral);
@@ -125,17 +134,34 @@ function renderBlockNeutral(block: ContentBlock): ReactNode {
   return null;
 }
 
+// Groups siblings by ordered-vs-bullet (from the numId prefix buildListForest extracts) and renders <ol> for ordered groups, <ul> with a neutral marker for the rest. The neutral marker is the fallback for sources whose numId carries no prefix (undetermined kind) -- non-committal, never confidently wrong.
 function renderListNodesNeutral(nodes: readonly ListItemNode[]): ReactNode {
-  return (
-    <ul className={neutralList}>
-      {nodes.map((node, nodeIndex) => (
-        <li key={nodeIndex} className={neutralListItem}>
-          {renderRuns(node.runs)}
-          {node.children.length > 0 && renderListNodesNeutral(node.children)}
-        </li>
-      ))}
-    </ul>
-  );
+  const groups: { ordered: boolean; nodes: ListItemNode[] }[] = [];
+  for (const node of nodes) {
+    const last = groups[groups.length - 1];
+    if (last?.ordered === node.ordered) {
+      last.nodes.push(node);
+    } else {
+      groups.push({ ordered: node.ordered, nodes: [node] });
+    }
+  }
+  return groups.map((group, groupIndex) => {
+    const items = group.nodes.map((node, nodeIndex) => (
+      <li key={nodeIndex} className={group.ordered ? undefined : neutralListItem}>
+        {renderRuns(node.runs)}
+        {node.children.length > 0 && renderListNodesNeutral(node.children)}
+      </li>
+    ));
+    return group.ordered ? (
+      <ol key={groupIndex} className={listStyle}>
+        {items}
+      </ol>
+    ) : (
+      <ul key={groupIndex} className={neutralList}>
+        {items}
+      </ul>
+    );
+  });
 }
 
 export function renderBlocksNeutral(blocks: readonly ContentBlock[]): ReactNode {
