@@ -19,6 +19,7 @@ import { notifyError, notifySuccess } from '../ui/notify';
 import { PdfPreview } from '../ui/PdfPreview';
 import { flexColumn } from '../ui/previewPanel.css';
 import { SheetPreview } from '../ui/SheetPreview';
+import { SlidesPreview } from '../ui/SlidesPreview';
 import { takePendingReopen } from '../ui/reopenMailbox';
 import { WordProcessingPreview } from '../ui/WordProcessingPreview';
 
@@ -35,7 +36,11 @@ function isWordProcessingFormat(format: string | null): boolean {
   return format === 'docx' || format === 'odt';
 }
 
-// Cheapest same-variant bridge target for previewing a format's native content -- avoids a full PDF layout pass for formats whose preview already renders the ContentDocument natively. Formats not yet covered by a native preview component fall through to 'pdf' (their only rendering path today).
+function isPresentationFormat(format: string | null): boolean {
+  return format === 'pptx' || format === 'odp';
+}
+
+// Cheapest same-variant bridge target for previewing a format's native content -- avoids a full PDF layout pass for formats whose preview already renders the ContentDocument natively. Formats not yet covered by a native preview component (odg, odf) or with no same-variant bridge (odg) fall through to 'pdf'.
 function previewBridgeTarget(format: DocumentFormat): DocumentFormat {
   switch (format) {
     case 'markdown':
@@ -48,14 +53,18 @@ function previewBridgeTarget(format: DocumentFormat): DocumentFormat {
       return 'odt';
     case 'odt':
       return 'docx';
+    case 'pptx':
+      return 'odp';
+    case 'odp':
+      return 'pptx';
     default:
       return 'pdf';
   }
 }
 
-// True for formats whose preview renders the ContentDocument natively (MarkdownPreview, SheetPreview, WordProcessingPreview) rather than a PDF rendition (PdfPreview). The structure panel derives its data client-side from .content for these, instead of calling pdf.inspect on PDF bytes.
+// True for formats whose preview renders the ContentDocument natively rather than a PDF rendition. odg (drawing) is NOT included -- it has no same-variant bridge (only odgToPdf exists), so it stays PDF-backed despite having a native renderer (SlidesPreview handles drawing-kind content).
 function isContentBackedPreview(format: string | null): boolean {
-  return format === 'markdown' || isSheetFormat(format) || isWordProcessingFormat(format);
+  return format === 'markdown' || isSheetFormat(format) || isWordProcessingFormat(format) || isPresentationFormat(format);
 }
 
 function ConvertLayout() {
@@ -251,6 +260,14 @@ function ConvertLayout() {
                       loading={originalPreview.isPending}
                       error={originalPreview.error ?? undefined}
                     />
+                  ) : isPresentationFormat(source) ? (
+                    <SlidesPreview
+                      label="Original"
+                      format={source ?? ''}
+                      content={originalPreview.data?.content}
+                      loading={originalPreview.isPending}
+                      error={originalPreview.error ?? undefined}
+                    />
                   ) : (
                     <PdfPreview
                       label="Original"
@@ -287,6 +304,14 @@ function ConvertLayout() {
                     />
                   ) : isWordProcessingFormat(target) ? (
                     <WordProcessingPreview
+                      label="Converted"
+                      format={target ?? ''}
+                      content={resultPreview.data?.content}
+                      loading={resultPreview.isPending}
+                      error={resultPreview.error ?? undefined}
+                    />
+                  ) : isPresentationFormat(target) ? (
+                    <SlidesPreview
                       label="Converted"
                       format={target ?? ''}
                       content={resultPreview.data?.content}
