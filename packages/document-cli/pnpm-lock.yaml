@@ -12,8 +12,8 @@ importers:
         specifier: ^15.0.0
         version: 15.0.0
       documents.js:
-        specifier: ^1.99.14
-        version: 1.99.14
+        specifier: ^1.99.15
+        version: 1.99.15
       ink:
         specifier: ^7.1.1
         version: 7.1.1(@types/react@19.2.18)(react@19.2.8)
@@ -1728,8 +1728,8 @@ packages:
     resolution: {integrity: sha512-Ynn8lc7/J5s1gdc96WKFEGkRWKLvWhhHhCdT5wkR8+i7xyGsdIfUmOKHfX81bPtvbVIfAGCNl8Fjp1xxajB9GA==}
     engines: {node: '>=20'}
 
-  documents.js@1.99.14:
-    resolution: {integrity: sha512-m6UjH9UydHLPVJ72N1A39G0J5H3KLacS9S61vw3oi3r3cABIcajmJ2Kd3ndLuOX+GCNl8guCHqM2RRErRE1/uA==}
+  documents.js@1.99.15:
+    resolution: {integrity: sha512-UGQck+KHGxiCCJwPFBb9AR0p3QzFptbmLCP9bIf0mH5uquxMMLYHWyNQd6yGEMGzjZFzzOQ9pSYk1HZM4e5ZXQ==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -4987,7 +4987,7 @@ snapshots:
     dependencies:
       zod: 4.4.3
 
-  documents.js@1.99.14:
+  documents.js@1.99.15:
     dependencies:
       byte-codec: 1.0.4
       document-schema.js: 2.7.6
