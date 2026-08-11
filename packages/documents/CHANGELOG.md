@@ -1,3 +1,18 @@
+# [1.19.0](https://github.com/ExaDev/documents/compare/v1.18.0...v1.19.0) (2026-08-11)
+
+
+### Bug Fixes
+
+* avoid materializing full base64 strings in structure tree leaves ([68c9d1d](https://github.com/ExaDev/documents/commit/68c9d1def2163fed888f0295fea3b5d76bcf2eb3))
+
+
+### Features
+
+* add native wordprocessing preview for docx and odt ([2766962](https://github.com/ExaDev/documents/commit/2766962dafe690d045aab54750540c84a62c2f05))
+* add variant-aware content summary for structure inspection ([169ef27](https://github.com/ExaDev/documents/commit/169ef275af20ca5a753f192e857609ec29513f7e))
+* branch structure inspection on PDF vs content backing ([e55df1f](https://github.com/ExaDev/documents/commit/e55df1f54c732a61d5f5a8dca6de172631fa9c2f))
+* normalize wordprocessing heading styleIds at the RPC boundary ([fa4e01e](https://github.com/ExaDev/documents/commit/fa4e01e9300ec29fdc83db3ec1c10b47adb25e10))
+
 # [1.18.0](https://github.com/ExaDev/documents/compare/v1.17.0...v1.18.0) (2026-08-10)
 
 
