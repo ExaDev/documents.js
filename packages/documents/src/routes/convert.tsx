@@ -20,6 +20,7 @@ import { PdfPreview } from '../ui/PdfPreview';
 import { flexColumn } from '../ui/previewPanel.css';
 import { SheetPreview } from '../ui/SheetPreview';
 import { takePendingReopen } from '../ui/reopenMailbox';
+import { WordProcessingPreview } from '../ui/WordProcessingPreview';
 
 // Layout route: convert.index.tsx and convert.$source.$target.tsx become its children (per TanStack Router's file-based nesting convention) and exist only to register typed path params in the route tree -- this component owns all the real state and UI directly, so it never remounts when the selected pair changes. That's the actual fix for "picking a new pair feels like leaving the page": the old sibling-routes structure fully remounted (destroying `file`/`convert` state) on every pair change, since convert.index.tsx and convert.$source.$target.tsx both parented directly to root.
 export const Route = createFileRoute('/convert')({
@@ -28,6 +29,10 @@ export const Route = createFileRoute('/convert')({
 
 function isSheetFormat(format: string | null): boolean {
   return format === 'xlsx' || format === 'ods';
+}
+
+function isWordProcessingFormat(format: string | null): boolean {
+  return format === 'docx' || format === 'odt';
 }
 
 // Cheapest same-variant bridge target for previewing a format's native content -- avoids a full PDF layout pass for formats whose preview already renders the ContentDocument natively. Formats not yet covered by a native preview component fall through to 'pdf' (their only rendering path today).
@@ -39,14 +44,18 @@ function previewBridgeTarget(format: DocumentFormat): DocumentFormat {
       return 'ods';
     case 'ods':
       return 'xlsx';
+    case 'docx':
+      return 'odt';
+    case 'odt':
+      return 'docx';
     default:
       return 'pdf';
   }
 }
 
-// True for formats whose preview renders the ContentDocument natively (MarkdownPreview, SheetPreview) rather than a PDF rendition (PdfPreview). The structure panel derives its data client-side from .content for these, instead of calling pdf.inspect on PDF bytes.
+// True for formats whose preview renders the ContentDocument natively (MarkdownPreview, SheetPreview, WordProcessingPreview) rather than a PDF rendition (PdfPreview). The structure panel derives its data client-side from .content for these, instead of calling pdf.inspect on PDF bytes.
 function isContentBackedPreview(format: string | null): boolean {
-  return format === 'markdown' || isSheetFormat(format);
+  return format === 'markdown' || isSheetFormat(format) || isWordProcessingFormat(format);
 }
 
 function ConvertLayout() {
@@ -234,6 +243,14 @@ function ConvertLayout() {
                       loading={originalPreview.isPending}
                       error={originalPreview.error ?? undefined}
                     />
+                  ) : isWordProcessingFormat(source) ? (
+                    <WordProcessingPreview
+                      label="Original"
+                      format={source ?? ''}
+                      content={originalPreview.data?.content}
+                      loading={originalPreview.isPending}
+                      error={originalPreview.error ?? undefined}
+                    />
                   ) : (
                     <PdfPreview
                       label="Original"
@@ -262,6 +279,14 @@ function ConvertLayout() {
                     />
                   ) : isSheetFormat(target) ? (
                     <SheetPreview
+                      label="Converted"
+                      format={target ?? ''}
+                      content={resultPreview.data?.content}
+                      loading={resultPreview.isPending}
+                      error={resultPreview.error ?? undefined}
+                    />
+                  ) : isWordProcessingFormat(target) ? (
+                    <WordProcessingPreview
                       label="Converted"
                       format={target ?? ''}
                       content={resultPreview.data?.content}

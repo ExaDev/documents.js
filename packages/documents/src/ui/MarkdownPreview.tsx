@@ -2,8 +2,8 @@ import { Badge, Group, LoadingOverlay, Paper, Stack, Text } from '@mantine/core'
 import type { ContentBlock, ContentDocument, ContentParagraph } from 'documents.js';
 import type { ReactNode } from 'react';
 
-import { buildListForest, collectBlockGroups, HEADING_STYLE_PATTERN, HEADING_TAGS, renderImage, renderRuns } from './contentBlocks';
-import { heading as headingStyle, paragraph as paragraphStyle, table as tableStyle, tableCell as tableCellStyle } from './contentBlocks.css';
+import { buildListForest, collectBlockGroups, HEADING_STYLE_PATTERN, HEADING_TAGS, renderImage, renderRuns, renderTable } from './contentBlocks';
+import { heading as headingStyle, paragraph as paragraphStyle } from './contentBlocks.css';
 import * as styles from './MarkdownPreview.css';
 import { flexColumn, previewFrame } from './previewPanel.css';
 
@@ -73,23 +73,7 @@ function renderBlockGroups(blocks: readonly ContentBlock[]): ReactNode {
 
 function renderBlock(block: ContentBlock): ReactNode {
   if (block.kind === 'paragraph') return renderParagraph(block);
-  if (block.kind === 'table') {
-    return (
-      <table className={tableStyle}>
-        <tbody>
-          {block.rows.map((row, rowIndex) => (
-            <tr key={rowIndex}>
-              {row.cells.map((cell, cellIndex) => (
-                <td key={cellIndex} colSpan={cell.colSpan} rowSpan={cell.rowSpan} className={tableCellStyle}>
-                  {renderBlockGroups(cell.blocks)}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    );
-  }
+  if (block.kind === 'table') return renderTable(block, renderBlockGroups);
   if (block.kind === 'image') return renderImage(block);
   return null;
 }

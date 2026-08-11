@@ -1,7 +1,7 @@
-import type { ContentBlock, ContentImageBlock, ContentParagraph, ContentRun } from 'documents.js';
+import type { ContentBlock, ContentImageBlock, ContentParagraph, ContentRun, ContentTable } from 'documents.js';
 import type { ReactNode } from 'react';
 
-import { image as imageStyle, inlineCode } from './contentBlocks.css';
+import { image as imageStyle, inlineCode, table as tableStyle, tableCell as tableCellStyle } from './contentBlocks.css';
 
 // router.ts normalizes both markdown-codec's and docx/odt's real heading styleIds into this one lowercase-hyphenated convention, so a single client-side regex works for every wordprocessing-kind source.
 export const HEADING_STYLE_PATTERN = /^heading-([1-6])$/;
@@ -35,6 +35,25 @@ export function renderRuns(runs: readonly ContentRun[], options?: RenderRunsOpti
 
 export function renderImage(block: ContentImageBlock): ReactNode {
   return <img src={`data:image/${block.format};base64,${block.base64}`} alt={block.altText ?? ''} className={imageStyle} />;
+}
+
+// Takes a renderBlocks callback so each component's own block-grouping logic (which dispatches to its own paragraph/list renderers) handles the recursion into cell content.
+export function renderTable(table: ContentTable, renderBlocks: (blocks: readonly ContentBlock[]) => ReactNode): ReactNode {
+  return (
+    <table className={tableStyle}>
+      <tbody>
+        {table.rows.map((row, rowIndex) => (
+          <tr key={rowIndex}>
+            {row.cells.map((cell, cellIndex) => (
+              <td key={cellIndex} colSpan={cell.colSpan} rowSpan={cell.rowSpan} className={tableCellStyle}>
+                {renderBlocks(cell.blocks)}
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
 }
 
 export interface ListItemNode {
