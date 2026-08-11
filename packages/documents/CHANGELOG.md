@@ -1,3 +1,10 @@
+# [1.22.0](https://github.com/ExaDev/documents/compare/v1.21.0...v1.22.0) (2026-08-11)
+
+
+### Features
+
+* preview odg drawings natively instead of through a PDF rendition ([d596f2f](https://github.com/ExaDev/documents/commit/d596f2f94d5a9d37bc8de84f8fd981116f9cc575))
+
 # [1.21.0](https://github.com/ExaDev/documents/compare/v1.20.0...v1.21.0) (2026-08-11)
 
 
