@@ -37,11 +37,11 @@ function isWordProcessingFormat(format: string | null): boolean {
   return format === 'docx' || format === 'odt';
 }
 
-function isPresentationFormat(format: string | null): boolean {
-  return format === 'pptx' || format === 'odp';
+function isSlidesFormat(format: string | null): boolean {
+  return format === 'pptx' || format === 'odp' || format === 'odg';
 }
 
-// Cheapest same-variant bridge target for previewing a format's native content -- avoids a full PDF layout pass for formats whose preview already renders the ContentDocument natively. Formats not yet covered by a native preview component (odg, odf) or with no same-variant bridge (odg) fall through to 'pdf'.
+// Cheapest same-variant bridge target for previewing a format's native content -- avoids a full PDF layout pass for formats whose preview already renders the ContentDocument natively. Formats with no same-variant bridge (odg, odf) fall through to 'pdf' -- their content is still populated as a side effect of the PDF conversion (executeToPdf calls onDocument), just without the efficiency win of a cheaper bridge.
 function previewBridgeTarget(format: DocumentFormat): DocumentFormat {
   switch (format) {
     case 'markdown':
@@ -63,9 +63,9 @@ function previewBridgeTarget(format: DocumentFormat): DocumentFormat {
   }
 }
 
-// True for formats whose preview renders the ContentDocument natively rather than a PDF rendition. odg (drawing) is NOT included -- it has no same-variant bridge (only odgToPdf exists), so it stays PDF-backed despite having a native renderer (SlidesPreview handles drawing-kind content). odf (formula) IS included -- its content is populated router-side via readOdfFormulaContent (the port wrapper doesn't forward onDocument for the odf special case), even though its bridge target is still 'pdf'.
+// True for every format whose preview renders the ContentDocument natively rather than a PDF rendition. odg and odf both fall through previewBridgeTarget to 'pdf' (no same-variant bridge exists), but their content is populated as a side effect of that PDF conversion (executeToPdf calls onDocument for odg; router.ts fills the gap for odf via readOdfFormulaContent), so the preview renders native content, not a PDF iframe.
 function isContentBackedPreview(format: string | null): boolean {
-  return format === 'markdown' || isSheetFormat(format) || isWordProcessingFormat(format) || isPresentationFormat(format) || format === 'odf';
+  return format !== 'pdf' && format !== null;
 }
 
 function ConvertLayout() {
@@ -261,7 +261,7 @@ function ConvertLayout() {
                       loading={originalPreview.isPending}
                       error={originalPreview.error ?? undefined}
                     />
-                  ) : isPresentationFormat(source) ? (
+                  ) : isSlidesFormat(source) ? (
                     <SlidesPreview
                       label="Original"
                       format={source ?? ''}
@@ -319,7 +319,7 @@ function ConvertLayout() {
                       loading={resultPreview.isPending}
                       error={resultPreview.error ?? undefined}
                     />
-                  ) : isPresentationFormat(target) ? (
+                  ) : isSlidesFormat(target) ? (
                     <SlidesPreview
                       label="Converted"
                       format={target ?? ''}
