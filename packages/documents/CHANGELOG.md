@@ -1,3 +1,15 @@
+# [1.21.0](https://github.com/ExaDev/documents/compare/v1.20.0...v1.21.0) (2026-08-11)
+
+
+### Bug Fixes
+
+* populate formula content for odf sources at the RPC boundary ([d42dc9c](https://github.com/ExaDev/documents/commit/d42dc9c47361de902695ee9d82ee5e8e70c6b5ab))
+
+
+### Features
+
+* add native formula preview for odf ([8059efb](https://github.com/ExaDev/documents/commit/8059efb5b971bd62c1e0f5bae8b772c47a9dfd35))
+
 # [1.20.0](https://github.com/ExaDev/documents/compare/v1.19.0...v1.20.0) (2026-08-11)
 
 
