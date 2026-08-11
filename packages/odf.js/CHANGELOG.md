@@ -1,3 +1,10 @@
+# [2.7.0](https://github.com/ExaDev/odf.js/compare/v2.6.12...v2.7.0) (2026-08-11)
+
+
+### Features
+
+* resolve ODF list ordered-vs-bullet from text:list-style definitions ([40a52b5](https://github.com/ExaDev/odf.js/commit/40a52b589d3c323c33d042903f38df7f88399535))
+
 ## [2.6.12](https://github.com/ExaDev/odf.js/compare/v2.6.11...v2.6.12) (2026-08-10)
 
 ## [2.6.11](https://github.com/ExaDev/odf.js/compare/v2.6.10...v2.6.11) (2026-08-10)
