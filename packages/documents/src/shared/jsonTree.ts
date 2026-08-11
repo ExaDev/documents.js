@@ -8,11 +8,19 @@ function isLeaf(value: unknown): boolean {
   return value === null || typeof value !== 'object';
 }
 
-// Cap rendered leaf length so a large value (an embedded image's base64, a long paragraph) doesn't produce a tree leaf wider than the panel. The start of the string is kept so the reader can still identify what it is.
+// Cap rendered leaf length so a large value (an embedded image's base64, a long paragraph) doesn't produce a tree leaf wider than the panel. The start of the string is kept so the reader can still identify what it is. Strings are checked for length BEFORE JSON.stringify so a multi-MB base64 blob is never materialized in full -- only its first N chars are stringified.
 const MAX_LEAF_LENGTH = 100;
+const RAW_STRING_CAP = MAX_LEAF_LENGTH + 2; // +2 for the JSON quotes JSON.stringify wraps the string in
 
 function formatLeaf(value: unknown): string {
-  const formatted = typeof value === 'string' ? JSON.stringify(value) : String(value);
+  if (typeof value === 'string') {
+    if (value.length > RAW_STRING_CAP) {
+      // -3 leaves room for the two JSON quotes JSON.stringify wraps the slice in, plus the ellipsis.
+      return `${JSON.stringify(value.slice(0, MAX_LEAF_LENGTH - 3))}…`;
+    }
+    return JSON.stringify(value);
+  }
+  const formatted = String(value);
   return formatted.length <= MAX_LEAF_LENGTH ? formatted : `${formatted.slice(0, MAX_LEAF_LENGTH - 1)}…`;
 }
 
