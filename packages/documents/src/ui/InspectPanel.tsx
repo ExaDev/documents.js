@@ -9,11 +9,25 @@ export interface InspectPanelProps {
   error?: unknown;
 }
 
-// Renders an InspectResult (page count, item-kind breakdown, a handful of metadata fields) -- shared by the Inspect page's own result panel and the Convert page's per-side "Show structure" disclosure, so the two never drift into rendering the same data two different ways.
+// Renders an InspectResult -- shared by the Inspect page's own result panel and the Convert page's per-side "Show structure" disclosure, so the two never drift into rendering the same data two different ways. Branches on `backing`: a PDF-backed result shows page count, per-item-kind breakdown, metadata, and the LayoutDocument tree; a content-backed result shows a variant-aware summary and the ContentDocument tree directly.
 export function InspectPanel({ data, loading, error }: InspectPanelProps) {
   if (loading === true) return <Skeleton height={120} />;
   if (error !== undefined) return <Alert color="red">Could not inspect this document.</Alert>;
   if (data === undefined) return null;
+
+  if (data.backing === 'content') {
+    return (
+      <Stack gap="sm">
+        {data.summary.map((line) => (
+          <Text key={line} size="sm">
+            {line}
+          </Text>
+        ))}
+        <Title order={6}>Document structure</Title>
+        <StructureTree data={data.content} />
+      </Stack>
+    );
+  }
 
   return (
     <Stack gap="sm">
