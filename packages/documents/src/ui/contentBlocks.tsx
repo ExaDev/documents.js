@@ -1,7 +1,7 @@
 import type { ContentBlock, ContentImageBlock, ContentParagraph, ContentRun, ContentTable } from 'documents.js';
 import type { ReactNode } from 'react';
 
-import { image as imageStyle, inlineCode, table as tableStyle, tableCell as tableCellStyle } from './contentBlocks.css';
+import { heading as headingStyle, image as imageStyle, inlineCode, neutralList, neutralListItem, paragraph as paragraphStyle, table as tableStyle, tableCell as tableCellStyle } from './contentBlocks.css';
 
 // router.ts normalizes both markdown-codec's and docx/odt's real heading styleIds into this one lowercase-hyphenated convention, so a single client-side regex works for every wordprocessing-kind source.
 export const HEADING_STYLE_PATTERN = /^heading-([1-6])$/;
@@ -106,4 +106,44 @@ export function collectBlockGroups(blocks: readonly ContentBlock[]): BlockGroup[
   }
   flushList();
   return groups;
+}
+
+// --- Complete neutral block renderer (shared by WordProcessingPreview and SlidesPreview) ---
+
+// Renders blocks with heading detection (via the shared heading-{N} convention), no quote/code/hr specialisation, and neutral list markers. This is the full block-to-JSX pipeline for any non-markdown flowing content -- a wordprocessing section, a presentation shape's text body, etc. MarkdownPreview has its own pipeline with markdown-specific quote/code/hr and ordered/bullet list handling.
+function renderBlockNeutral(block: ContentBlock): ReactNode {
+  if (block.kind === 'paragraph') {
+    const match = HEADING_STYLE_PATTERN.exec(block.styleId ?? '');
+    if (match !== null) {
+      const Tag = HEADING_TAGS[Number(match[1])];
+      if (Tag !== undefined) return <Tag className={headingStyle}>{renderRuns(block.runs)}</Tag>;
+    }
+    return <p className={paragraphStyle}>{renderRuns(block.runs)}</p>;
+  }
+  if (block.kind === 'table') return renderTable(block, renderBlocksNeutral);
+  if (block.kind === 'image') return renderImage(block);
+  return null;
+}
+
+function renderListNodesNeutral(nodes: readonly ListItemNode[]): ReactNode {
+  return (
+    <ul className={neutralList}>
+      {nodes.map((node, nodeIndex) => (
+        <li key={nodeIndex} className={neutralListItem}>
+          {renderRuns(node.runs)}
+          {node.children.length > 0 && renderListNodesNeutral(node.children)}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export function renderBlocksNeutral(blocks: readonly ContentBlock[]): ReactNode {
+  return collectBlockGroups(blocks).map((group, index) =>
+    group.kind === 'listGroup' ? (
+      <div key={index}>{renderListNodesNeutral(buildListForest(group.items))}</div>
+    ) : (
+      <div key={index}>{renderBlockNeutral(group)}</div>
+    ),
+  );
 }
