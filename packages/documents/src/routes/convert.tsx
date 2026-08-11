@@ -1,13 +1,12 @@
 import { Alert, Box, Button, Container, Group, Paper, Select, Spoiler, Stack, Text, Title } from '@mantine/core';
 import { createFileRoute, useNavigate, useParams } from '@tanstack/react-router';
 import { DocumentFormatSchema } from 'documents.js';
-import type { DocumentFormat } from 'documents.js';
 import { useEffect, useMemo, useState } from 'react';
 
 import { createFileAccess } from '../adapters/fileAccess/createFileAccess';
 import { useConversions, useDocumentFormats } from '../hooks/useConversions';
 import { useConvert } from '../hooks/useConvert';
-import { contentInspectResult, useInspectPdfBytes } from '../hooks/useInspect';
+import { contentInspectResult, useInspectPdfBytes, useReadContent } from '../hooks/useInspect';
 import type { OpenedFile } from '../ports/fileAccess';
 import { inferFormatFromFilename } from '../shared/extensionToFormat';
 import { donePanel } from '../ui/convertLayout.css';
@@ -41,29 +40,7 @@ function isSlidesFormat(format: string | null): boolean {
   return format === 'pptx' || format === 'odp' || format === 'odg';
 }
 
-// Cheapest same-variant bridge target for previewing a format's native content -- avoids a full PDF layout pass for formats whose preview already renders the ContentDocument natively. Formats with no same-variant bridge (odg, odf) fall through to 'pdf' -- their content is still populated as a side effect of the PDF conversion (executeToPdf calls onDocument), just without the efficiency win of a cheaper bridge.
-function previewBridgeTarget(format: DocumentFormat): DocumentFormat {
-  switch (format) {
-    case 'markdown':
-      return 'docx';
-    case 'xlsx':
-      return 'ods';
-    case 'ods':
-      return 'xlsx';
-    case 'docx':
-      return 'odt';
-    case 'odt':
-      return 'docx';
-    case 'pptx':
-      return 'odp';
-    case 'odp':
-      return 'pptx';
-    default:
-      return 'pdf';
-  }
-}
-
-// True for every format whose preview renders the ContentDocument natively rather than a PDF rendition. odg and odf both fall through previewBridgeTarget to 'pdf' (no same-variant bridge exists), but their content is populated as a side effect of that PDF conversion (executeToPdf calls onDocument for odg; router.ts fills the gap for odf via readOdfFormulaContent), so the preview renders native content, not a PDF iframe.
+// True for every format whose preview renders the ContentDocument natively via content.read rather than a PDF rendition. PDF itself is the only exception -- its "native" representation IS the PDF bytes rendered in an iframe.
 function isContentBackedPreview(format: string | null): boolean {
   return format !== 'pdf' && format !== null;
 }
@@ -82,9 +59,9 @@ function ConvertLayout() {
   const [target, setTarget] = useState<string | null>(() => params.target ?? null);
   const [file, setFile] = useState<OpenedFile | undefined>(() => pendingReopen?.file);
   const convert = useConvert();
-  // Separate mutations from the same convert RPC, purely to produce a content/bytes rendition for side-by-side preview. For formats with a native preview component (markdown, spreadsheet) this targets the cheapest same-variant bridge so .content is populated without a full PDF layout pass; for everything else it still targets 'pdf' since PdfPreview needs actual PDF bytes. Skipped entirely when the format in question already is PDF, since the bytes are then already what the preview needs.
-  const originalPreview = useConvert();
-  const resultPreview = useConvert();
+  // Content-backed previews read their ContentDocument directly via the content.read RPC -- no conversion, no target build/encode, no PDF layout pass. PDF (the only non-content-backed format) uses the uploaded file's own bytes in PdfPreview directly.
+  const originalContent = useReadContent();
+  const resultContent = useReadContent();
   const fileAccess = createFileAccess();
 
   // Only reflect a *complete* pair in the URL -- a half-picked pair isn't a meaningful thing to bookmark. `replace`, not `push`: changing formats mid-exploration is editing current tool state, not creating a new navigable history entry.
@@ -94,14 +71,14 @@ function ConvertLayout() {
     }
   }, [source, target, navigate]);
 
-  // Prefetches the original's preview rendition as soon as a file and its (auto-detected or manual) source are both known, rather than waiting for the user to click Convert -- so the "Original" preview panel is already populated the moment the "Done" panel appears. `mutate`'s identity is stable across renders (TanStack Query), so depending on it here doesn't retrigger this effect on every render.
-  const { mutate: mutateOriginalPreview } = originalPreview;
+  // Prefetches the original's content as soon as a file and its (auto-detected or manual) source are both known, rather than waiting for the user to click Convert -- so the "Original" preview panel is already populated the moment the "Done" panel appears. `mutate`'s identity is stable across renders (TanStack Query), so depending on it here doesn't retrigger this effect on every render. Skipped for PDF -- its bytes are already what PdfPreview needs.
+  const { mutate: mutateOriginalContent } = originalContent;
   useEffect(() => {
     if (file === undefined || source === null || source === 'pdf') return;
     const parsedSource = DocumentFormatSchema.safeParse(source);
     if (!parsedSource.success) return;
-    mutateOriginalPreview({ source: parsedSource.data, targetFormat: previewBridgeTarget(parsedSource.data), bytes: file.bytes });
-  }, [file, source, mutateOriginalPreview]);
+    mutateOriginalContent({ format: parsedSource.data, bytes: file.bytes });
+  }, [file, source, mutateOriginalContent]);
 
   const sourceOptions = [...new Set((conversions.data ?? []).map((pair) => pair.source))].sort();
 
@@ -140,7 +117,7 @@ function ConvertLayout() {
         onSuccess: (result) => {
           notifySuccess('Converted', { diagnostics: result.diagnostics });
           if (parsedTarget.data !== 'pdf') {
-            resultPreview.mutate({ source: parsedTarget.data, targetFormat: previewBridgeTarget(parsedTarget.data), bytes: result.document.bytes });
+            resultContent.mutate({ format: parsedTarget.data, bytes: result.document.bytes });
           }
         },
         onError: (error) => notifyError('Conversion failed', error),
@@ -148,30 +125,28 @@ function ConvertLayout() {
     );
   };
 
-  // By the time convert.data exists, source/target reset to null/undefined the moment either changes again (handleSourceChange/handleTargetChange/handleFile all call convert.reset()), so these always describe the pair that actually produced convert.data -- no risk of pairing stale bytes with a since-changed format label. These bytes are only consumed by PdfPreview (for PDF-backed formats) -- content-backed formats render from .content instead.
-  const originalPreviewBytes = source === 'pdf' ? file?.bytes : originalPreview.data?.document.bytes;
-  const convertedPreviewBytes = target === 'pdf' ? convert.data?.document.bytes : resultPreview.data?.document.bytes;
-
-  // For content-backed formats (markdown, spreadsheet), structure inspection derives directly from the .content the preview conversion already returned -- pure client-side, no second RPC. For PDF-backed formats, a separate pdf.inspect call parses the already-available PDF bytes.
-  const originalContent = isContentBackedPreview(source) ? originalPreview.data?.content : undefined;
-  const originalContentInspect = useMemo(() => (originalContent !== undefined ? contentInspectResult(originalContent) : undefined), [originalContent]);
+  // Structure inspection for content-backed formats derives directly from the ContentDocument already on hand (from content.read) -- pure client-side, no second RPC. For PDF, a separate pdf.inspect call parses the bytes directly.
+  const originalInspectData = useMemo(
+    () => isContentBackedPreview(source) && originalContent.data !== undefined ? contentInspectResult(originalContent.data) : undefined,
+    [source, originalContent.data],
+  );
   const originalInspect = useInspectPdfBytes();
   const { mutate: mutateOriginalInspect } = originalInspect;
   useEffect(() => {
-    if (isContentBackedPreview(source)) return;
-    if (originalPreviewBytes === undefined) return;
-    mutateOriginalInspect(originalPreviewBytes);
-  }, [source, originalPreviewBytes, mutateOriginalInspect]);
+    if (isContentBackedPreview(source) || file === undefined) return;
+    mutateOriginalInspect(file.bytes);
+  }, [source, file, mutateOriginalInspect]);
 
-  const convertedContent = isContentBackedPreview(target) ? resultPreview.data?.content : undefined;
-  const convertedContentInspect = useMemo(() => (convertedContent !== undefined ? contentInspectResult(convertedContent) : undefined), [convertedContent]);
+  const convertedInspectData = useMemo(
+    () => isContentBackedPreview(target) && resultContent.data !== undefined ? contentInspectResult(resultContent.data) : undefined,
+    [target, resultContent.data],
+  );
   const convertedInspect = useInspectPdfBytes();
   const { mutate: mutateConvertedInspect } = convertedInspect;
   useEffect(() => {
-    if (isContentBackedPreview(target)) return;
-    if (convertedPreviewBytes === undefined) return;
-    mutateConvertedInspect(convertedPreviewBytes);
-  }, [target, convertedPreviewBytes, mutateConvertedInspect]);
+    if (isContentBackedPreview(target) || convert.data === undefined) return;
+    mutateConvertedInspect(convert.data.document.bytes);
+  }, [target, convert.data, mutateConvertedInspect]);
 
   const handleDownload = () => {
     if (convert.data === undefined) return;
@@ -240,55 +215,53 @@ function ConvertLayout() {
                     <MarkdownPreview
                       label="Original"
                       format={source}
-                      content={originalPreview.data?.content}
-                      loading={originalPreview.isPending}
+                      content={originalContent.data}
+                      loading={originalContent.isPending}
                       // React Query represents "no error" as null, not undefined -- normalised here since MarkdownPreview/SheetPreview/PdfPreview's own contract only knows "no error" as undefined.
-                      error={originalPreview.error ?? undefined}
+                      error={originalContent.error ?? undefined}
                     />
                   ) : isSheetFormat(source) ? (
                     <SheetPreview
                       label="Original"
                       format={source ?? ''}
-                      content={originalPreview.data?.content}
-                      loading={originalPreview.isPending}
-                      error={originalPreview.error ?? undefined}
+                      content={originalContent.data}
+                      loading={originalContent.isPending}
+                      error={originalContent.error ?? undefined}
                     />
                   ) : isWordProcessingFormat(source) ? (
                     <WordProcessingPreview
                       label="Original"
                       format={source ?? ''}
-                      content={originalPreview.data?.content}
-                      loading={originalPreview.isPending}
-                      error={originalPreview.error ?? undefined}
+                      content={originalContent.data}
+                      loading={originalContent.isPending}
+                      error={originalContent.error ?? undefined}
                     />
                   ) : isSlidesFormat(source) ? (
                     <SlidesPreview
                       label="Original"
                       format={source ?? ''}
-                      content={originalPreview.data?.content}
-                      loading={originalPreview.isPending}
-                      error={originalPreview.error ?? undefined}
+                      content={originalContent.data}
+                      loading={originalContent.isPending}
+                      error={originalContent.error ?? undefined}
                     />
                   ) : source === 'odf' ? (
                     <FormulaPreview
                       label="Original"
                       format={source ?? ''}
-                      content={originalPreview.data?.content}
-                      loading={originalPreview.isPending}
-                      error={originalPreview.error ?? undefined}
+                      content={originalContent.data}
+                      loading={originalContent.isPending}
+                      error={originalContent.error ?? undefined}
                     />
                   ) : (
                     <PdfPreview
                       label="Original"
                       format={source ?? ''}
-                      bytes={originalPreviewBytes}
-                      loading={source !== 'pdf' && originalPreview.isPending}
-                      error={source !== 'pdf' && originalPreview.error !== null ? originalPreview.error : undefined}
+                      bytes={file?.bytes}
                     />
                   )}
                   <Spoiler maxHeight={0} showLabel="Show structure" hideLabel="Hide structure">
                     {isContentBackedPreview(source) ? (
-                      <InspectPanel data={originalContentInspect} loading={originalPreview.isPending} error={originalPreview.error ?? undefined} />
+                      <InspectPanel data={originalInspectData} loading={originalContent.isPending} error={originalContent.error ?? undefined} />
                     ) : (
                       <InspectPanel data={originalInspect.data} loading={originalInspect.isPending} error={originalInspect.error ?? undefined} />
                     )}
@@ -299,54 +272,52 @@ function ConvertLayout() {
                     <MarkdownPreview
                       label="Converted"
                       format={target}
-                      content={resultPreview.data?.content}
-                      loading={resultPreview.isPending}
-                      error={resultPreview.error ?? undefined}
+                      content={resultContent.data}
+                      loading={resultContent.isPending}
+                      error={resultContent.error ?? undefined}
                     />
                   ) : isSheetFormat(target) ? (
                     <SheetPreview
                       label="Converted"
                       format={target ?? ''}
-                      content={resultPreview.data?.content}
-                      loading={resultPreview.isPending}
-                      error={resultPreview.error ?? undefined}
+                      content={resultContent.data}
+                      loading={resultContent.isPending}
+                      error={resultContent.error ?? undefined}
                     />
                   ) : isWordProcessingFormat(target) ? (
                     <WordProcessingPreview
                       label="Converted"
                       format={target ?? ''}
-                      content={resultPreview.data?.content}
-                      loading={resultPreview.isPending}
-                      error={resultPreview.error ?? undefined}
+                      content={resultContent.data}
+                      loading={resultContent.isPending}
+                      error={resultContent.error ?? undefined}
                     />
                   ) : isSlidesFormat(target) ? (
                     <SlidesPreview
                       label="Converted"
                       format={target ?? ''}
-                      content={resultPreview.data?.content}
-                      loading={resultPreview.isPending}
-                      error={resultPreview.error ?? undefined}
+                      content={resultContent.data}
+                      loading={resultContent.isPending}
+                      error={resultContent.error ?? undefined}
                     />
                   ) : target === 'odf' ? (
                     <FormulaPreview
                       label="Converted"
                       format={target ?? ''}
-                      content={resultPreview.data?.content}
-                      loading={resultPreview.isPending}
-                      error={resultPreview.error ?? undefined}
+                      content={resultContent.data}
+                      loading={resultContent.isPending}
+                      error={resultContent.error ?? undefined}
                     />
                   ) : (
                     <PdfPreview
                       label="Converted"
                       format={target ?? ''}
-                      bytes={convertedPreviewBytes}
-                      loading={target !== 'pdf' && resultPreview.isPending}
-                      error={target !== 'pdf' && resultPreview.error !== null ? resultPreview.error : undefined}
+                      bytes={convert.data.document.bytes}
                     />
                   )}
                   <Spoiler maxHeight={0} showLabel="Show structure" hideLabel="Hide structure">
                     {isContentBackedPreview(target) ? (
-                      <InspectPanel data={convertedContentInspect} loading={resultPreview.isPending} error={resultPreview.error ?? undefined} />
+                      <InspectPanel data={convertedInspectData} loading={resultContent.isPending} error={resultContent.error ?? undefined} />
                     ) : (
                       <InspectPanel data={convertedInspect.data} loading={convertedInspect.isPending} error={convertedInspect.error ?? undefined} />
                     )}

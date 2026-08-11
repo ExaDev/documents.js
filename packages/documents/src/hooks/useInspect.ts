@@ -5,6 +5,18 @@ import { getRpcClient } from '../rpc/client';
 import type { Diagnostic } from '../shared/diagnostics';
 import { contentSummary } from '../shared/contentCounts';
 
+// Reads a ContentDocument directly from bytes via the content.read RPC endpoint -- no conversion, no PDF layout pass. Used by every content-backed preview (markdown, docx, odt, xlsx, ods, pptx, odp, odg, odf).
+export interface ReadContentInput {
+  format: DocumentFormat;
+  bytes: Uint8Array<ArrayBuffer>;
+}
+
+export function useReadContent() {
+  return useMutation({
+    mutationFn: (input: ReadContentInput) => getRpcClient().content.read(input),
+  });
+}
+
 // Plain mirror of pdf.inspect's own SanitizedLayoutImageAssetSchema (src/rpc/router.ts) -- LayoutImageAsset minus its unbounded base64 payload, plus an estimated byteLength in its place.
 export interface SanitizedLayoutImageAsset {
   format: 'png' | 'jpeg';
