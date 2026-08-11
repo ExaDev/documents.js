@@ -1,3 +1,10 @@
+## [1.99.15](https://github.com/ExaDev/documents.js/compare/v1.99.14...v1.99.15) (2026-08-11)
+
+
+### Bug Fixes
+
+* forward onDocument and clock for odf->pdf in the port wrapper ([d461129](https://github.com/ExaDev/documents.js/commit/d4611294883c27d2c9fbee97398e6fe94029ba3d))
+
 ## [1.99.14](https://github.com/ExaDev/documents.js/compare/v1.99.13...v1.99.14) (2026-08-10)
 
 ## [1.99.13](https://github.com/ExaDev/documents.js/compare/v1.99.12...v1.99.13) (2026-08-10)
