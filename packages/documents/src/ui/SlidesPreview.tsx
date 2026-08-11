@@ -15,7 +15,7 @@ export interface SlidesPreviewProps {
   error?: unknown;
 }
 
-// Renders a presentation (pptx/odp) or drawing (odg) ContentDocument natively as SVG instead of routing through a PDF rendition. Each slide/page is an SVG whose viewBox matches the original point dimensions, so the browser handles all scaling. Shapes (positioned text boxes) render as <foreignObject> containing HTML -- the browser handles text wrapping natively, an accepted fidelity trade-off vs documents.js's pixel-exact TextMeasurer. Vectors (rect, ellipse, line, path) render as native SVG elements. Known, bounded gaps: fontScale/lineSpacingReduction (OOXML autofit) are applied as approximate CSS multipliers, not the exact shrink-to-fit algorithm; 'double' stroke style renders as single (SVG has no native double stroke); embedded objects and page breaks inside shapes render nothing (same gap as WordProcessingPreview).
+// Renders a presentation (pptx/odp) or drawing (odg) ContentDocument natively as SVG instead of routing through a PDF rendition. Each slide/page is an SVG whose viewBox matches the original point dimensions, so the browser handles all scaling. Shapes (positioned text boxes) render as <foreignObject> containing HTML -- the browser handles text wrapping natively, an accepted fidelity trade-off vs documents.js's pixel-exact TextMeasurer. Vectors (rect, ellipse, line, path) render as native SVG elements. fontScale/lineSpacingReduction (OOXML autofit) are pre-computed scale factors in the ContentDocument, so applying them as CSS font-size/line-height multipliers is correct, not approximate. Known gaps: embedded objects and page breaks inside shapes render nothing (same gap as WordProcessingPreview).
 export function SlidesPreview({ label, format, content, loading, error }: SlidesPreviewProps) {
   const slides = content?.kind === 'presentation' ? content.slides : content?.kind === 'drawing' ? content.pages : undefined;
   const [activeIndex, setActiveIndex] = useState(0);
@@ -108,12 +108,36 @@ function renderShape(shape: ContentShape, key: number): ReactNode {
 }
 
 function renderVector(vector: ContentVector, key: number): ReactNode {
+  if (vector.stroke?.style === 'double') {
+    return renderDoubleStrokeVector(vector, vector.stroke, key);
+  }
+  return renderVectorSingle(vector, key, undefined);
+}
+
+// SVG has no native double stroke. Simulates it by stacking two elements: a thick stroke in the stroke color (3x width) underneath, and a thin stroke in the fill/gap color on top -- the thin overlay creates a gap in the center of the thick underlay, leaving two visible stroke-colored lines. For unfilled shapes, white is used as the gap color (matching the typical slide background).
+function renderDoubleStrokeVector(vector: ContentVector, stroke: ContentStroke, key: number): ReactNode {
+  const fill = 'fill' in vector ? colorToCss(vector.fill) : 'none';
+  const gapColor = fill === 'none' ? 'white' : fill;
+  return (
+    <g key={key}>
+      {renderVectorSingle(vector, `${key}-underlay`, { stroke: colorToCss(stroke.color), strokeWidth: stroke.widthPt * 3 })}
+      {renderVectorSingle(vector, `${key}-gap`, { stroke: gapColor, strokeWidth: stroke.widthPt })}
+    </g>
+  );
+}
+
+interface StrokeOverride {
+  stroke: string;
+  strokeWidth: number;
+}
+
+function renderVectorSingle(vector: ContentVector, key: string | number, strokeOverride: StrokeOverride | undefined): ReactNode {
+  const stroke = strokeOverride ?? strokeAttrs(vector.stroke);
   if (vector.kind === 'rect' || vector.kind === 'ellipse') {
     const { xPt, yPt, widthPt, heightPt } = vector.frame;
     const cx = xPt + widthPt / 2;
     const cy = yPt + heightPt / 2;
     const fill = colorToCss(vector.fill);
-    const stroke = strokeAttrs(vector.stroke);
     const transform = rotationTransform(vector.frame, vector.rotationDeg);
     if (vector.kind === 'rect') {
       return <rect key={key} x={xPt} y={yPt} width={widthPt} height={heightPt} fill={fill} transform={transform} {...stroke} />;
@@ -121,18 +145,10 @@ function renderVector(vector: ContentVector, key: number): ReactNode {
     return <ellipse key={key} cx={cx} cy={cy} rx={widthPt / 2} ry={heightPt / 2} fill={fill} transform={transform} {...stroke} />;
   }
   if (vector.kind === 'line') {
-    return <line key={key} x1={vector.from.xPt} y1={vector.from.yPt} x2={vector.to.xPt} y2={vector.to.yPt} {...strokeAttrs(vector.stroke)} />;
+    return <line key={key} x1={vector.from.xPt} y1={vector.from.yPt} x2={vector.to.xPt} y2={vector.to.yPt} {...stroke} />;
   }
-  // path
   return (
-    <path
-      key={key}
-      d={buildPathData(vector.subpaths)}
-      fill={colorToCss(vector.fill)}
-      fillRule={vector.fillRule}
-      transform={rotationTransform(vector.frame, vector.rotationDeg)}
-      {...strokeAttrs(vector.stroke)}
-    />
+    <path key={key} d={buildPathData(vector.subpaths)} fill={colorToCss(vector.fill)} fillRule={vector.fillRule} transform={rotationTransform(vector.frame, vector.rotationDeg)} {...stroke} />
   );
 }
 
