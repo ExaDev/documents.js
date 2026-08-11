@@ -1,3 +1,10 @@
+# [1.20.0](https://github.com/ExaDev/documents/compare/v1.19.0...v1.20.0) (2026-08-11)
+
+
+### Features
+
+* add native presentation preview for pptx and odp ([9f62e55](https://github.com/ExaDev/documents/commit/9f62e5588a16cf66e352c178d60ff98998e86c39))
+
 # [1.19.0](https://github.com/ExaDev/documents/compare/v1.18.0...v1.19.0) (2026-08-11)
 
 
