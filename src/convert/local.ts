@@ -63,9 +63,9 @@ export function createLocalDocumentConverter(): DocumentConverter {
         options.onFontSubstitution?.(substitution);
       };
 
-      // odf -> pdf is a SPECIAL case: odf is deliberately excluded from the composition engine (src/convert/composition.ts's own module doc), since a standalone formula document renders through src/mathml's own formula-positioning path rather than a ContentDocument -> LayoutDocument layout engine. resolveCompositionPlan consequently returns undefined for it, so it is routed to the real odfToPdf function directly rather than through convertDocument. odfToPdf accepts onDocument (it shares DocumentToPdfOptions with the other to-PDF conversions) but never invokes it -- see that function's own comment -- so `documentPackage` stays undefined for this one pair, and `package` on the returned result is correctly omitted; the same comment explains why it never reports a font substitution either.
+      // odf -> pdf is a SPECIAL case: odf is deliberately excluded from the composition engine (src/convert/composition.ts's own module doc), since a standalone formula document renders through src/mathml's own formula-positioning path rather than a ContentDocument -> LayoutDocument layout engine. resolveCompositionPlan consequently returns undefined for it, so it is routed to the real odfToPdf function directly rather than through convertDocument. onDocument is forwarded (matching the normal path's own wiring), so odfToPdf reports a genuine 'formula'-kind ContentDocument alongside an empty-items LayoutDocument (formula positioning happens inside writePdf, not as page items) -- `package` is populated for this pair just like every other X->pdf.
       if (source.format === 'odf' && targetFormat === 'pdf') {
-        const bytes = odfToPdf(source.bytes, { signal: options.signal, fonts: options.fonts, onFontSubstitution });
+        const bytes = odfToPdf(source.bytes, { signal: options.signal, fonts: options.fonts, onFontSubstitution, onDocument, clock: options.clock });
         return Promise.resolve({ document: { format: targetFormat, bytes }, diagnostics, package: documentPackage });
       }
 
