@@ -8,8 +8,15 @@ import {
   DOCUMENT_FORMATS,
   extractSourceFontsForFormat,
   LayoutDocumentSchema,
+  readDocxContent,
   readDocumentMetadata,
   readOdfFormulaContent,
+  readOdgContent,
+  readOdpContent,
+  readOdsContent,
+  readOdtContent,
+  readMarkdownContent,
+  readPptxContent,
   readPdf,
   setDocumentMetadata,
 } from 'documents.js';
@@ -145,6 +152,30 @@ const SanitizedLayoutDocumentSchema = LayoutDocumentSchema.extend({
   images: z.record(z.string(), SanitizedLayoutImageAssetSchema),
 });
 
+// Reads a ContentDocument directly from bytes, bypassing the conversion engine entirely -- no target build/encode, no PDF layout pass. Every format's standalone content reader is exported from documents.js except xlsx (deliberately not re-exported, see documents.js/src/index.ts:3), so xlsx falls back to the cheapest same-variant bridge (xlsx->ods) and reads .content from the result.
+async function readContentForFormat(format: DocumentFormat, bytes: Uint8Array<ArrayBuffer>, signal?: AbortSignal): Promise<ContentDocument> {
+  if (format === 'markdown') return readMarkdownContent(new TextDecoder().decode(bytes));
+  if (format === 'xlsx') {
+    const result = await createLocalDocumentConverter().convert(
+      { source: { format: 'xlsx', bytes }, targetFormat: 'ods' },
+      { signal: signal ?? new AbortController().signal },
+    );
+    if (result.package?.content === undefined) throw new Error('xlsx bridge conversion produced no content');
+    return result.package.content;
+  }
+  if (format === 'pdf') throw new Error('PDF has no standalone content reader');
+  const pkg = decodeDocumentPackage(format, bytes);
+  switch (format) {
+    case 'docx': return readDocxContent(pkg);
+    case 'pptx': return readPptxContent(pkg);
+    case 'odt': return readOdtContent(pkg);
+    case 'odp': return readOdpContent(pkg);
+    case 'ods': return readOdsContent(pkg);
+    case 'odg': return readOdgContent(pkg);
+    case 'odf': return readOdfFormulaContent(pkg);
+  }
+}
+
 function sanitizeImageAsset(asset: LayoutImageAsset) {
   return {
     format: asset.format,
@@ -188,6 +219,16 @@ export const router = {
         content: content !== undefined ? normalizeContentForSource(content, input.source) : content,
       };
     }),
+
+  content: {
+    read: os
+      .input(z.object({ format: DocumentFormatSchema, bytes: BytesSchema }))
+      .output(ContentDocumentSchema)
+      .handler(async ({ input, signal }) => {
+        const content = await readContentForFormat(input.format, input.bytes, signal);
+        return normalizeContentForSource(content, input.format);
+      }),
+  },
 
   metadata: {
     read: os
