@@ -13,9 +13,11 @@ import { parseOdfLength } from '../shared/units';
 //
 // This reader is deliberately thin: paragraph/run reading (readOdfParagraph) and table reading (readOdfTable) already live in typed/shared/ -- built for reuse across odt/ods/odp/odg, not odt-specific -- so this module's own job is the odt-SPECIFIC structure those shared readers have no opinion on: walking office:text's actual block sequence (paragraphs interleaved with lists and tables, in document order), turning a text:list's purely structural nesting into ContentParagraph.list (numId/level), mapping text:h's own text:outline-level onto a docx-equivalent styleId, and resolving the document's own page geometry from its first master page. readOdfParagraph is tag-agnostic (it never inspects which tag its own caller found it at) and reads text:h exactly as it reads text:p, so this reader calls straight through to it for both, then overrides ONLY the resulting styleId for a heading -- see readParagraphOrHeading below.
 //
-// SCOPE, matching ooxml.js's own readDocx's already-established, deliberately narrower gaps (see that module's own top-of-file note for the identical reasoning applied to OOXML): footnotes/endnotes, annotations/comments, header/footer content, inline frames/images (draw:frame inside text flow -- odp/odg's job, not odt's), fields beyond their cached/last-computed text value, change tracking (text:change-*), list marker DEFINITIONS (this reader only needs list MEMBERSHIP -- which list, what nesting level -- never the marker glyph/numbering-format itself), cell borders, explicit page breaks (fo:break-before/fo:break-after -- not modelled by styles/properties.ts's StyleProperties, so the cascade this reader relies on can't surface it; a genuinely separate, bounded follow-on), and documents with more than one master page (only the first is read, in document order -- see readFirstMasterPageGeometry below). A text:h or a nested text:list/text:table inside a table cell is also out of scope here, inherited directly from readOdfTable's own cell reading (table:table-cell content there is read as text:p only) -- not a gap introduced by this module. src/typed/formula/read.ts does not exist yet at the time this reader was written, so there is no formula-embedding recursion to account for either.
+// SCOPE, matching ooxml.js's own readDocx's already-established, deliberately narrower gaps (see that module's own top-of-file note for the identical reasoning applied to OOXML): footnotes/endnotes, annotations/comments, header/footer content, inline frames/images (draw:frame inside text flow -- odp/odg's job, not odt's), fields beyond their cached/last-computed text value, change tracking (text:change-*), cell borders, explicit page breaks (fo:break-before/fo:break-after -- not modelled by styles/properties.ts's StyleProperties, so the cascade this reader relies on can't surface it; a genuinely separate, bounded follow-on), and documents with more than one master page (only the first is read, in document order -- see readFirstMasterPageGeometry below). A text:h or a nested text:list/text:table inside a table cell is also out of scope here, inherited directly from readOdfTable's own cell reading (table:table-cell content there is read as text:p only) -- not a gap introduced by this module. src/typed/formula/read.ts does not exist yet at the time this reader was written, so there is no formula-embedding recursion to account for either. List marker GLYPHS (the exact bullet character or number format string) remain unread -- only the ordered-vs-bullet KIND is resolved (see resolveListKind below), since that is what downstream consumers need to render <ol> vs <ul>.
 //
 // LIST numId DERIVATION: ODF has no docx-style shared numId at all -- a docx w:numId identifies one entry in numbering.xml that many, textually unrelated w:p elements can reference by attribute; an ODF text:list is instead a purely STRUCTURAL container (its own list items are its own XML children), so "which list does this paragraph belong to" is answered by tree position, not by an attribute lookup. To give downstream consumers (document-schema.js's ContentListMembership, mirroring docx's numId/level pair) an equivalent stable identity, this reader mints numId as a monotonically increasing counter ("list1", "list2", ...), ONE PER TOP-LEVEL text:list ELEMENT ENCOUNTERED IN DOCUMENT ORDER -- never per text:style-name. A text:list's own text:style-name was deliberately rejected as the numId source: it names a REUSABLE list-style DEFINITION (the marker/numbering format), and real documents routinely apply the identical list-style to two unrelated, non-adjacent text:list elements (e.g. two independent bullet lists both created from the same "List 1" paragraph style) -- collapsing those into one numId would violate the one hard requirement this reader must satisfy ("different text:list elements get different [numIds]"). A monotonic per-encounter counter satisfies that requirement unconditionally, is stable/deterministic for a given document (same input -> same output, useful for tests), and needs no cross-referencing at all. Nesting is layered on top of this identity, not a separate list: a NESTED text:list (one found while walking a text:list-item's own children, per the OASIS content model for list nesting) keeps its ENCLOSING list's numId unchanged and only increments level -- exactly mirroring how a docx numId spans every nesting depth of one multi-level list, with w:ilvl (level here) distinguishing depth. Nesting depth itself is never separately counted or inferred from indentation: it is read directly off the actual XML nesting depth of text:list inside text:list-item inside text:list ..., per this reader's own explicit design brief.
+//
+// LIST KIND PREFIX: the minted numId is prefixed with "ordered:" or "bullet:" when the text:list's text:style-name resolves to a text:list-style whose level-1 child is text:list-level-style-number (ordered) or text:list-level-style-bullet/-image (bullet) -- see resolveListKind below. This encodes the ordered-vs-bullet kind into the opaque numId string (the same convention markdown-codec and documents.js's router-side docx normalization already use), so downstream consumers (the web app's buildListForest/renderer) can render <ol> vs <ul> without needing a separate field on ContentListMembership. An unresolved style-name leaves the numId unprefixed, and the consumer renders with a neutral marker.
 
 // A monotonically increasing counter for minting fresh top-level list numIds, threaded by reference through the whole document walk -- see this module's own top-of-file note on why a per-encounter counter, not text:style-name, is the numId source.
 interface ListIdState {
@@ -74,6 +76,29 @@ function readListItems(listElement: XmlElement, context: ContentListMembership, 
 }
 
 // Walks block-level content (text:p, text:h, text:list, table:table) in document order, at ONE nesting level -- office:text's own top-level children. text:section (ODF's generic grouping/columns wrapper) is unwrapped transparently, flattening its content into the caller's own block sequence -- it carries no semantic meaning ContentBlock has any vocabulary for. Anything else (text:sequence-decls, a bookmark, a field, change-tracking markup, an anchored draw:frame, text:soft-page-break, ...) is silently outside this reader's scope, matching the OUT OF SCOPE note at the top of this file. Table CELL content is not walked here at all -- readOdfTable owns that entirely (see this file's own top-of-file note on the scope it inherits from doing so).
+// Resolves a text:list's text:style-name to its ordered-vs-bullet kind by finding the corresponding text:list-style definition and inspecting its level-1 child tag. Searches both content.xml and styles.xml, in both office:automatic-styles and office:styles -- mirroring findPageLayoutElement's and cascade.ts's own both-parts-both-containers pattern. Returns undefined when the style-name is absent or unresolvable, so the caller leaves the numId unprefixed and the downstream consumer falls back to a neutral marker.
+function resolveListKind(pkg: Package, styleName: string | undefined): 'ordered' | 'bullet' | undefined {
+  if (styleName === undefined) return undefined;
+  for (const partPath of AUTOMATIC_STYLE_PARTS) {
+    const part = pkg.parts[partPath];
+    if (part?.kind !== 'xml') continue;
+    const root = rootElement(part.nodes);
+    if (root === undefined) continue;
+    for (const containerTag of ['office:automatic-styles', 'office:styles'] as const) {
+      const container = findChildElement(root.children, containerTag);
+      if (container === undefined) continue;
+      const listStyle = childrenWithTag(container, 'text:list-style').find((el) => attrValue(el, 'style:name') === styleName);
+      if (listStyle === undefined) continue;
+      // Real list-styles are homogeneous across levels; checking level 1 is sufficient.
+      if (childrenWithTag(listStyle, 'text:list-level-style-number').some((el) => attrValue(el, 'text:level') === '1')) return 'ordered';
+      if (childrenWithTag(listStyle, 'text:list-level-style-bullet').some((el) => attrValue(el, 'text:level') === '1')) return 'bullet';
+      if (childrenWithTag(listStyle, 'text:list-level-style-image').some((el) => attrValue(el, 'text:level') === '1')) return 'bullet';
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
 function readBlocks(nodes: readonly XmlNode[], pkg: Package, listIdState: ListIdState): ContentBlock[] {
   const blocks: ContentBlock[] = [];
   for (const node of nodes) {
@@ -83,7 +108,8 @@ function readBlocks(nodes: readonly XmlNode[], pkg: Package, listIdState: ListId
     if (node.tag === 'text:p' || node.tag === 'text:h') {
       blocks.push(readParagraphOrHeading(node, pkg, undefined));
     } else if (node.tag === 'text:list') {
-      const numId = `list${listIdState.next}`;
+      const kind = resolveListKind(pkg, attrValue(node, 'text:style-name'));
+      const numId = kind !== undefined ? `${kind}:list${listIdState.next}` : `list${listIdState.next}`;
       listIdState.next += 1;
       readListItems(node, { numId, level: 0 }, pkg, blocks);
     } else if (node.tag === 'table:table') {
