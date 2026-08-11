@@ -1,3 +1,17 @@
+# [1.23.0](https://github.com/ExaDev/documents/compare/v1.22.0...v1.23.0) (2026-08-11)
+
+
+### Bug Fixes
+
+* simulate double stroke style in SVG vector rendering ([768bb43](https://github.com/ExaDev/documents/commit/768bb432933a11caa95b8106beb00ef46273f82d))
+
+
+### Features
+
+* add content.read RPC endpoint for direct ContentDocument reads ([c700131](https://github.com/ExaDev/documents/commit/c70013109d5edccd90412799cf1c283004336dce))
+* detect blockquotes, code blocks, and docx list kinds in normalization ([d4c5a11](https://github.com/ExaDev/documents/commit/d4c5a11d9cf630ba0219cb7bc4c83e4e945c5236))
+* render blockquotes, code blocks, and ordered lists natively ([4cc5b2b](https://github.com/ExaDev/documents/commit/4cc5b2b34bc792859d05484bf02a39dc652b1d48))
+
 # [1.22.0](https://github.com/ExaDev/documents/compare/v1.21.0...v1.22.0) (2026-08-11)
 
 
