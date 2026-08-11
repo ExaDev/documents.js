@@ -11,7 +11,7 @@ import {
   readPdf,
   setDocumentMetadata,
 } from 'documents.js';
-import type { ContentBlock, ContentDocument, ContentParagraph, LayoutImageAsset } from 'documents.js';
+import type { ContentBlock, ContentDocument, ContentParagraph, DocumentFormat, LayoutImageAsset } from 'documents.js';
 import { CODE_BLOCK_STYLE_ID, HORIZONTAL_RULE_STYLE_ID, parseHeadingStyleId, parseListNumId, QUOTE_STYLE_ID } from 'markdown-codec';
 import { z } from 'zod';
 
@@ -38,10 +38,43 @@ const ConversionResultSchema = z.object({
   content: ContentDocumentSchema.optional(),
 });
 
-// markdown-codec marks a heading paragraph with its own private styleId convention ("Heading1".."Heading6") and a list paragraph's ordered-vs-bullet distinction is encoded inside its own numId string ("md{n}:bullet|ordered@start", via parseListNumId) -- neither is part of document-schema.js's own schema, both are markdown-codec's internal vocabulary. Rewritten here, worker-side (the only place allowed to import markdown-codec), into a small convention this app documents and owns itself, so MarkdownPreview.tsx never needs to depend on markdown-codec's internal string formats -- only on what this router promises to hand it. Only ever applied to a markdown-sourced ContentDocument (see the convert handler's own call site below); a docx/odt-sourced document's styleId/numId values are untouched, since MarkdownPreview only ever renders a markdown source/target's own preview.
+// markdown-codec marks a heading paragraph with its own private styleId convention ("Heading1".."Heading6") and a list paragraph's ordered-vs-bullet distinction is encoded inside its own numId string ("md{n}:bullet|ordered@start", via parseListNumId) -- neither is part of document-schema.js's own schema, both are markdown-codec's internal vocabulary. Rewritten here, worker-side (the only place allowed to import markdown-codec), into a small convention this app documents and owns itself, so MarkdownPreview.tsx never needs to depend on markdown-codec's internal string formats -- only on what this router promises to hand it. Only ever applied to a markdown-sourced ContentDocument (see the convert handler's own call site below).
 function normalizeMarkdownStyling(document: ContentDocument): ContentDocument {
   if (document.kind !== 'wordprocessing') return document;
   return { ...document, sections: document.sections.map((section) => ({ ...section, blocks: section.blocks.map(normalizeMarkdownBlock) })) };
+}
+
+// docx and odt both carry heading paragraphs with styleId "Heading1".."Heading6" (docx: the raw w:pStyle/@w:val; odt: synthesized to the same convention by odf.js/src/typed/odt/read.ts). Rewritten here into the same "heading-{N}" convention normalizeMarkdownStyling produces, so every wordprocessing-kind source feeds its downstream preview component one consistent heading shape regardless of which format produced it. Non-heading styleIds are left untouched -- unlike markdown, docx/odt have no private styleId vocabulary this app needs to translate (quote/code-block detection is not attempted for docx/odt, since no mapping from a real docx/odt style name to those semantic roles exists).
+const WORDPROCESSING_HEADING_PATTERN = /^Heading([1-6])$/;
+
+function normalizeWordprocessingHeadings(document: ContentDocument): ContentDocument {
+  if (document.kind !== 'wordprocessing') return document;
+  return { ...document, sections: document.sections.map((section) => ({ ...section, blocks: section.blocks.map(normalizeHeadingBlock) })) };
+}
+
+function normalizeHeadingBlock(block: ContentBlock): ContentBlock {
+  if (block.kind === 'paragraph' && block.styleId !== undefined) {
+    const match = WORDPROCESSING_HEADING_PATTERN.exec(block.styleId);
+    if (match !== null) return { ...block, styleId: `heading-${match[1]}` };
+    return block;
+  }
+  if (block.kind === 'table') {
+    return {
+      ...block,
+      rows: block.rows.map((row) => ({
+        ...row,
+        cells: row.cells.map((cell) => ({ ...cell, blocks: cell.blocks.map(normalizeHeadingBlock) })),
+      })),
+    };
+  }
+  return block;
+}
+
+// Dispatches source-format-specific ContentDocument normalization. Each branch rewrites format-specific styleId vocabulary into the app's own convention; formats with no private vocabulary (pdf, pptx, odp, etc.) pass through unchanged.
+function normalizeContentForSource(content: ContentDocument, source: DocumentFormat): ContentDocument {
+  if (source === 'markdown') return normalizeMarkdownStyling(content);
+  if (source === 'docx' || source === 'odt') return normalizeWordprocessingHeadings(content);
+  return content;
 }
 
 function normalizeMarkdownBlock(block: ContentBlock): ContentBlock {
@@ -146,7 +179,7 @@ export const router = {
       return {
         document: result.document,
         diagnostics: result.diagnostics.map((diagnostic) => ({ ...diagnostic })),
-        content: content !== undefined && input.source === 'markdown' ? normalizeMarkdownStyling(content) : content,
+        content: content !== undefined ? normalizeContentForSource(content, input.source) : content,
       };
     }),
 
