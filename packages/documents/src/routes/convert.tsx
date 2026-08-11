@@ -1,12 +1,13 @@
 import { Alert, Box, Button, Container, Group, Paper, Select, Spoiler, Stack, Text, Title } from '@mantine/core';
 import { createFileRoute, useNavigate, useParams } from '@tanstack/react-router';
 import { DocumentFormatSchema } from 'documents.js';
-import { useEffect, useState } from 'react';
+import type { DocumentFormat } from 'documents.js';
+import { useEffect, useMemo, useState } from 'react';
 
 import { createFileAccess } from '../adapters/fileAccess/createFileAccess';
 import { useConversions, useDocumentFormats } from '../hooks/useConversions';
 import { useConvert } from '../hooks/useConvert';
-import { useInspectPdfBytes } from '../hooks/useInspect';
+import { contentInspectResult, useInspectPdfBytes } from '../hooks/useInspect';
 import type { OpenedFile } from '../ports/fileAccess';
 import { inferFormatFromFilename } from '../shared/extensionToFormat';
 import { donePanel } from '../ui/convertLayout.css';
@@ -29,6 +30,25 @@ function isSheetFormat(format: string | null): boolean {
   return format === 'xlsx' || format === 'ods';
 }
 
+// Cheapest same-variant bridge target for previewing a format's native content -- avoids a full PDF layout pass for formats whose preview already renders the ContentDocument natively. Formats not yet covered by a native preview component fall through to 'pdf' (their only rendering path today).
+function previewBridgeTarget(format: DocumentFormat): DocumentFormat {
+  switch (format) {
+    case 'markdown':
+      return 'docx';
+    case 'xlsx':
+      return 'ods';
+    case 'ods':
+      return 'xlsx';
+    default:
+      return 'pdf';
+  }
+}
+
+// True for formats whose preview renders the ContentDocument natively (MarkdownPreview, SheetPreview) rather than a PDF rendition (PdfPreview). The structure panel derives its data client-side from .content for these, instead of calling pdf.inspect on PDF bytes.
+function isContentBackedPreview(format: string | null): boolean {
+  return format === 'markdown' || isSheetFormat(format);
+}
+
 function ConvertLayout() {
   const params = useParams({ strict: false });
   const navigate = useNavigate();
@@ -43,7 +63,7 @@ function ConvertLayout() {
   const [target, setTarget] = useState<string | null>(() => params.target ?? null);
   const [file, setFile] = useState<OpenedFile | undefined>(() => pendingReopen?.file);
   const convert = useConvert();
-  // Separate mutations from the same convert RPC, purely to produce a PDF rendition for side-by-side preview -- every documents.js format can render to PDF (odf included), so "preview this document" is just "convert it to PDF and drop it in an iframe". Skipped entirely when the format in question already is PDF, since the bytes are then already what the preview needs.
+  // Separate mutations from the same convert RPC, purely to produce a content/bytes rendition for side-by-side preview. For formats with a native preview component (markdown, spreadsheet) this targets the cheapest same-variant bridge so .content is populated without a full PDF layout pass; for everything else it still targets 'pdf' since PdfPreview needs actual PDF bytes. Skipped entirely when the format in question already is PDF, since the bytes are then already what the preview needs.
   const originalPreview = useConvert();
   const resultPreview = useConvert();
   const fileAccess = createFileAccess();
@@ -55,13 +75,13 @@ function ConvertLayout() {
     }
   }, [source, target, navigate]);
 
-  // Prefetches the original's PDF preview as soon as a file and its (auto-detected or manual) source are both known, rather than waiting for the user to click Convert -- so the "Original" preview panel is already populated the moment the "Done" panel appears. `mutate`'s identity is stable across renders (TanStack Query), so depending on it here doesn't retrigger this effect on every render.
+  // Prefetches the original's preview rendition as soon as a file and its (auto-detected or manual) source are both known, rather than waiting for the user to click Convert -- so the "Original" preview panel is already populated the moment the "Done" panel appears. `mutate`'s identity is stable across renders (TanStack Query), so depending on it here doesn't retrigger this effect on every render.
   const { mutate: mutateOriginalPreview } = originalPreview;
   useEffect(() => {
     if (file === undefined || source === null || source === 'pdf') return;
     const parsedSource = DocumentFormatSchema.safeParse(source);
     if (!parsedSource.success) return;
-    mutateOriginalPreview({ source: parsedSource.data, targetFormat: 'pdf', bytes: file.bytes });
+    mutateOriginalPreview({ source: parsedSource.data, targetFormat: previewBridgeTarget(parsedSource.data), bytes: file.bytes });
   }, [file, source, mutateOriginalPreview]);
 
   const sourceOptions = [...new Set((conversions.data ?? []).map((pair) => pair.source))].sort();
@@ -101,7 +121,7 @@ function ConvertLayout() {
         onSuccess: (result) => {
           notifySuccess('Converted', { diagnostics: result.diagnostics });
           if (parsedTarget.data !== 'pdf') {
-            resultPreview.mutate({ source: parsedTarget.data, targetFormat: 'pdf', bytes: result.document.bytes });
+            resultPreview.mutate({ source: parsedTarget.data, targetFormat: previewBridgeTarget(parsedTarget.data), bytes: result.document.bytes });
           }
         },
         onError: (error) => notifyError('Conversion failed', error),
@@ -109,24 +129,30 @@ function ConvertLayout() {
     );
   };
 
-  // By the time convert.data exists, source/target reset to null/undefined the moment either changes again (handleSourceChange/handleTargetChange/handleFile all call convert.reset()), so these always describe the pair that actually produced convert.data -- no risk of pairing stale bytes with a since-changed format label.
-  const originalPdfBytes = source === 'pdf' ? file?.bytes : originalPreview.data?.document.bytes;
-  const convertedPdfBytes = target === 'pdf' ? convert.data?.document.bytes : resultPreview.data?.document.bytes;
+  // By the time convert.data exists, source/target reset to null/undefined the moment either changes again (handleSourceChange/handleTargetChange/handleFile all call convert.reset()), so these always describe the pair that actually produced convert.data -- no risk of pairing stale bytes with a since-changed format label. These bytes are only consumed by PdfPreview (for PDF-backed formats) -- content-backed formats render from .content instead.
+  const originalPreviewBytes = source === 'pdf' ? file?.bytes : originalPreview.data?.document.bytes;
+  const convertedPreviewBytes = target === 'pdf' ? convert.data?.document.bytes : resultPreview.data?.document.bytes;
 
-  // Structure inspection runs off the same PDF bytes the preview panels already produced -- it never re-converts, just parses a rendition that's already sitting there. Mirrors the preview prefetch effect above: fires as soon as its bytes exist rather than waiting for a click.
+  // For content-backed formats (markdown, spreadsheet), structure inspection derives directly from the .content the preview conversion already returned -- pure client-side, no second RPC. For PDF-backed formats, a separate pdf.inspect call parses the already-available PDF bytes.
+  const originalContent = isContentBackedPreview(source) ? originalPreview.data?.content : undefined;
+  const originalContentInspect = useMemo(() => (originalContent !== undefined ? contentInspectResult(originalContent) : undefined), [originalContent]);
   const originalInspect = useInspectPdfBytes();
   const { mutate: mutateOriginalInspect } = originalInspect;
   useEffect(() => {
-    if (originalPdfBytes === undefined) return;
-    mutateOriginalInspect(originalPdfBytes);
-  }, [originalPdfBytes, mutateOriginalInspect]);
+    if (isContentBackedPreview(source)) return;
+    if (originalPreviewBytes === undefined) return;
+    mutateOriginalInspect(originalPreviewBytes);
+  }, [source, originalPreviewBytes, mutateOriginalInspect]);
 
+  const convertedContent = isContentBackedPreview(target) ? resultPreview.data?.content : undefined;
+  const convertedContentInspect = useMemo(() => (convertedContent !== undefined ? contentInspectResult(convertedContent) : undefined), [convertedContent]);
   const convertedInspect = useInspectPdfBytes();
   const { mutate: mutateConvertedInspect } = convertedInspect;
   useEffect(() => {
-    if (convertedPdfBytes === undefined) return;
-    mutateConvertedInspect(convertedPdfBytes);
-  }, [convertedPdfBytes, mutateConvertedInspect]);
+    if (isContentBackedPreview(target)) return;
+    if (convertedPreviewBytes === undefined) return;
+    mutateConvertedInspect(convertedPreviewBytes);
+  }, [target, convertedPreviewBytes, mutateConvertedInspect]);
 
   const handleDownload = () => {
     if (convert.data === undefined) return;
@@ -212,13 +238,17 @@ function ConvertLayout() {
                     <PdfPreview
                       label="Original"
                       format={source ?? ''}
-                      bytes={originalPdfBytes}
+                      bytes={originalPreviewBytes}
                       loading={source !== 'pdf' && originalPreview.isPending}
                       error={source !== 'pdf' && originalPreview.error !== null ? originalPreview.error : undefined}
                     />
                   )}
                   <Spoiler maxHeight={0} showLabel="Show structure" hideLabel="Hide structure">
-                    <InspectPanel data={originalInspect.data} loading={originalInspect.isPending} error={originalInspect.error ?? undefined} />
+                    {isContentBackedPreview(source) ? (
+                      <InspectPanel data={originalContentInspect} loading={originalPreview.isPending} error={originalPreview.error ?? undefined} />
+                    ) : (
+                      <InspectPanel data={originalInspect.data} loading={originalInspect.isPending} error={originalInspect.error ?? undefined} />
+                    )}
                   </Spoiler>
                 </Stack>
                 <Stack gap={4} className={flexColumn}>
@@ -242,13 +272,17 @@ function ConvertLayout() {
                     <PdfPreview
                       label="Converted"
                       format={target ?? ''}
-                      bytes={convertedPdfBytes}
+                      bytes={convertedPreviewBytes}
                       loading={target !== 'pdf' && resultPreview.isPending}
                       error={target !== 'pdf' && resultPreview.error !== null ? resultPreview.error : undefined}
                     />
                   )}
                   <Spoiler maxHeight={0} showLabel="Show structure" hideLabel="Hide structure">
-                    <InspectPanel data={convertedInspect.data} loading={convertedInspect.isPending} error={convertedInspect.error ?? undefined} />
+                    {isContentBackedPreview(target) ? (
+                      <InspectPanel data={convertedContentInspect} loading={resultPreview.isPending} error={resultPreview.error ?? undefined} />
+                    ) : (
+                      <InspectPanel data={convertedInspect.data} loading={convertedInspect.isPending} error={convertedInspect.error ?? undefined} />
+                    )}
                   </Spoiler>
                 </Stack>
               </Group>
