@@ -54,4 +54,15 @@ describe('toTreeData', () => {
     expect(toTreeData({})).toEqual([]);
     expect(toTreeData(null)).toEqual([]);
   });
+
+  it('truncates a leaf value longer than the cap, keeping the start so it stays identifiable', () => {
+    const longBase64 = `data:image/png;base64,${'A'.repeat(300)}`;
+    const nodes = toTreeData({ image: longBase64 });
+    const label = nodes[0]?.label as string;
+    // The label is "image: " + the capped value -- the value itself is truncated to MAX_LEAF_LENGTH (100), the key prefix is not part of the cap.
+    expect(label).toMatch(/…$/);
+    expect(label).toContain('data:image/png;base64,');
+    // No more than key + space + cap + ellipsis.
+    expect(label.length).toBeLessThanOrEqual('image: '.length + 100);
+  });
 });

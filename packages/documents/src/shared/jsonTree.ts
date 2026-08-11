@@ -8,9 +8,12 @@ function isLeaf(value: unknown): boolean {
   return value === null || typeof value !== 'object';
 }
 
+// Cap rendered leaf length so a large value (an embedded image's base64, a long paragraph) doesn't produce a tree leaf wider than the panel. The start of the string is kept so the reader can still identify what it is.
+const MAX_LEAF_LENGTH = 100;
+
 function formatLeaf(value: unknown): string {
-  if (typeof value === 'string') return JSON.stringify(value);
-  return String(value);
+  const formatted = typeof value === 'string' ? JSON.stringify(value) : String(value);
+  return formatted.length <= MAX_LEAF_LENGTH ? formatted : `${formatted.slice(0, MAX_LEAF_LENGTH - 1)}…`;
 }
 
 // A finite value set worth showing inline in a node's own label rather than requiring the reader to expand a whole extra level just to see which array-item kind they're looking at (e.g. a discriminated union's own `kind` field).
