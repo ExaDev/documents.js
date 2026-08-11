@@ -20,6 +20,7 @@ import { PdfPreview } from '../ui/PdfPreview';
 import { flexColumn } from '../ui/previewPanel.css';
 import { SheetPreview } from '../ui/SheetPreview';
 import { SlidesPreview } from '../ui/SlidesPreview';
+import { FormulaPreview } from '../ui/FormulaPreview';
 import { takePendingReopen } from '../ui/reopenMailbox';
 import { WordProcessingPreview } from '../ui/WordProcessingPreview';
 
@@ -62,9 +63,9 @@ function previewBridgeTarget(format: DocumentFormat): DocumentFormat {
   }
 }
 
-// True for formats whose preview renders the ContentDocument natively rather than a PDF rendition. odg (drawing) is NOT included -- it has no same-variant bridge (only odgToPdf exists), so it stays PDF-backed despite having a native renderer (SlidesPreview handles drawing-kind content).
+// True for formats whose preview renders the ContentDocument natively rather than a PDF rendition. odg (drawing) is NOT included -- it has no same-variant bridge (only odgToPdf exists), so it stays PDF-backed despite having a native renderer (SlidesPreview handles drawing-kind content). odf (formula) IS included -- its content is populated router-side via readOdfFormulaContent (the port wrapper doesn't forward onDocument for the odf special case), even though its bridge target is still 'pdf'.
 function isContentBackedPreview(format: string | null): boolean {
-  return format === 'markdown' || isSheetFormat(format) || isWordProcessingFormat(format) || isPresentationFormat(format);
+  return format === 'markdown' || isSheetFormat(format) || isWordProcessingFormat(format) || isPresentationFormat(format) || format === 'odf';
 }
 
 function ConvertLayout() {
@@ -268,6 +269,14 @@ function ConvertLayout() {
                       loading={originalPreview.isPending}
                       error={originalPreview.error ?? undefined}
                     />
+                  ) : source === 'odf' ? (
+                    <FormulaPreview
+                      label="Original"
+                      format={source ?? ''}
+                      content={originalPreview.data?.content}
+                      loading={originalPreview.isPending}
+                      error={originalPreview.error ?? undefined}
+                    />
                   ) : (
                     <PdfPreview
                       label="Original"
@@ -312,6 +321,14 @@ function ConvertLayout() {
                     />
                   ) : isPresentationFormat(target) ? (
                     <SlidesPreview
+                      label="Converted"
+                      format={target ?? ''}
+                      content={resultPreview.data?.content}
+                      loading={resultPreview.isPending}
+                      error={resultPreview.error ?? undefined}
+                    />
+                  ) : target === 'odf' ? (
+                    <FormulaPreview
                       label="Converted"
                       format={target ?? ''}
                       content={resultPreview.data?.content}
