@@ -1,3 +1,5 @@
+## [1.99.16](https://github.com/ExaDev/documents.js/compare/v1.99.15...v1.99.16) (2026-08-11)
+
 ## [1.99.15](https://github.com/ExaDev/documents.js/compare/v1.99.14...v1.99.15) (2026-08-11)
 
 
