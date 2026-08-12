@@ -1,3 +1,10 @@
+## [1.23.1](https://github.com/ExaDev/documents/compare/v1.23.0...v1.23.1) (2026-08-12)
+
+
+### Bug Fixes
+
+* remove odf content-read fallback now that documents.js forwards onDocument ([828f7ab](https://github.com/ExaDev/documents/commit/828f7ab64069124338172ea64bbc2f515ac53563))
+
 # [1.23.0](https://github.com/ExaDev/documents/compare/v1.22.0...v1.23.0) (2026-08-11)
 
 
