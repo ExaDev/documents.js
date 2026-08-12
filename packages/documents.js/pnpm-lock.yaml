@@ -31,8 +31,8 @@ importers:
         specifier: ^2.11.13
         version: 2.11.13
       pdf-codec:
-        specifier: ^2.2.12
-        version: 2.2.12
+        specifier: ^2.2.13
+        version: 2.2.13
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -1441,6 +1441,10 @@ packages:
     resolution: {integrity: sha512-p1r71e19hGzAXCJA+MbPz610rp8P1kS8wgpZ8QKmzYunqp2+BSVlVeS2xw6Ez517Yof9byv1f62svYgUzAM3Ig==}
     engines: {node: '>=20'}
 
+  byte-codec@1.1.4:
+    resolution: {integrity: sha512-4qLM5zJrE/mDcseSZOBpXYVecPBVlRbUQA16UUVqlexKdxUjz/EXRK/rokzP3artrUW0jd3Kxx3xSdPPeeoLsw==}
+    engines: {node: '>=20'}
+
   cac@7.0.0:
     resolution: {integrity: sha512-tixWYgm5ZoOD+3g6UTea91eow5z6AAHaho3g0V9CNSNb45gM8SmflpAc+GRd1InC4AqN/07Unrgp56Y94N9hJQ==}
     engines: {node: '>=20.19.0'}
@@ -2536,8 +2540,8 @@ packages:
   pathe@2.0.3:
     resolution: {integrity: sha512-WUjGcAqP1gQacoQe+OBJsFA7Ld4DyXuUIjZ5cc75cLHvJ7dtNsTugphxIADwspS+AraAUePCKrSVtPLFj/F88w==}
 
-  pdf-codec@2.2.12:
-    resolution: {integrity: sha512-sgL4UHd5ky3zvmB6STQHWK5AVObXegEbwds/hGuECfRJLWL+QCN6Lh+h4/CI94W6m+OAufepKz0l4/xZ5OA8FQ==}
+  pdf-codec@2.2.13:
+    resolution: {integrity: sha512-pHBqb+L+zp8Nw6rJjoraStp5gAex7ikjVGzz0MqdvayG5NBmeZyUrQO3GUjYwh860WkKVYlmzs3YYgcu0o6QIg==}
     engines: {node: '>=20'}
 
   picocolors@1.1.1:
@@ -4401,6 +4405,10 @@ snapshots:
     dependencies:
       fflate: 0.8.3
 
+  byte-codec@1.1.4:
+    dependencies:
+      fflate: 0.8.3
+
   cac@7.0.0: {}
 
   callsites@3.1.0: {}
@@ -5390,9 +5398,9 @@ snapshots:
 
   pathe@2.0.3: {}
 
-  pdf-codec@2.2.12:
+  pdf-codec@2.2.13:
     dependencies:
-      byte-codec: 1.0.4
+      byte-codec: 1.1.4
       document-schema.js: 2.7.6
       fflate: 0.8.3
       zod: 4.4.3
