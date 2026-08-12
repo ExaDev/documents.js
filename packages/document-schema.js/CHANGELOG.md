@@ -1,3 +1,10 @@
+## [2.7.9](https://github.com/ExaDev/document-schema.js/compare/v2.7.8...v2.7.9) (2026-08-12)
+
+
+### Bug Fixes
+
+* **commitlint:** exempt dependabot commits from body-max-line-length ([18df775](https://github.com/ExaDev/document-schema.js/commit/18df775972687f011c27b9612fe997f0ab8eb488))
+
 ## [2.7.8](https://github.com/ExaDev/document-schema.js/compare/v2.7.7...v2.7.8) (2026-08-12)
 
 ## [2.7.7](https://github.com/ExaDev/document-schema.js/compare/v2.7.6...v2.7.7) (2026-08-12)
