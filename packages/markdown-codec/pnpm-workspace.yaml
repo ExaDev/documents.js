@@ -6,5 +6,10 @@ allowBuilds:
 minimumReleaseAge: 60
 # Bare package names (no @version), per pnpm's own documented syntax (https://pnpm.io/settings#minimumreleaseageexclude -- "webpack" exempts every version, not just one) -- document-schema.js and @exadev/eslint-config are this org's own sibling packages, published only via their own semantic-release CI with npm OIDC trusted publishing, so a version-agnostic exemption is a deliberate, low-risk carry-forward rather than an entry this file needs updating on every single release.
 minimumReleaseAgeExclude:
+  - documents.js
+  - ooxml.js
+  - odf.js
   - document-schema.js
+  - pdf-codec
+  - byte-codec
   - '@exadev/eslint-config'
