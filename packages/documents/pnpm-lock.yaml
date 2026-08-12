@@ -66,8 +66,8 @@ importers:
         specifier: ^1.3.8
         version: 1.3.8
       odf.js:
-        specifier: ^2.6.10
-        version: 2.6.10
+        specifier: ^2.7.2
+        version: 2.7.2
       react:
         specifier: ^19.2.8
         version: 19.2.8
@@ -3673,12 +3673,12 @@ packages:
     resolution: {integrity: sha512-4a+OsYv9UktOJKE+l1A4OufDgdRF9PifWj+tJnHURo/P+WOxpG4GzUFL9qCalmWauao6ogiG+QvnCovwPoyAWA==}
     engines: {node: '>=12.20.0'}
 
-  odf.js@2.6.10:
-    resolution: {integrity: sha512-27I0Geh1AuDf+P0qvU47NbqRf8fAfKA6zWynoViMkuxGpOoMKGrTBRvDg7YeHRONlw5ELUuvc6lYQEAr37K1/g==}
-    engines: {node: '>=20'}
-
   odf.js@2.7.1:
     resolution: {integrity: sha512-M7SHyW/O8924rvvV6BFsOQ9gYgv4QpRWXOf6VbETFZ3fSk8E4pzvv1vQwNbYjfEfnW/IBwLocNH6ydc/hcNBIg==}
+    engines: {node: '>=20'}
+
+  odf.js@2.7.2:
+    resolution: {integrity: sha512-24XZxy7+oaMp4HKvhaYaQb4/xxhmso1F0DabZ77rf29benV1V3sZsVsXgp8R8zCtXnmwCQhoRp+AaliQtD5oAg==}
     engines: {node: '>=20'}
 
   onetime@6.0.0:
@@ -8653,14 +8653,14 @@ snapshots:
 
   obug@2.1.4: {}
 
-  odf.js@2.6.10:
+  odf.js@2.7.1:
     dependencies:
-      document-schema.js: 2.7.5
+      document-schema.js: 2.7.6
       fast-xml-parser: 5.10.1
       fflate: 0.8.3
       zod: 4.4.3
 
-  odf.js@2.7.1:
+  odf.js@2.7.2:
     dependencies:
       document-schema.js: 2.7.6
       fast-xml-parser: 5.10.1
@@ -8792,7 +8792,7 @@ snapshots:
   pdf-codec@2.2.13:
     dependencies:
       byte-codec: 1.1.5
-      document-schema.js: 2.7.5
+      document-schema.js: 2.7.6
       fflate: 0.8.3
       zod: 4.4.3
 
