@@ -63,8 +63,8 @@ importers:
         specifier: ^1.99.21
         version: 1.99.21
       markdown-codec:
-        specifier: ^1.3.12
-        version: 1.3.12
+        specifier: ^1.3.14
+        version: 1.3.14
       odf.js:
         specifier: ^2.7.4
         version: 2.7.4
@@ -3451,6 +3451,10 @@ packages:
 
   markdown-codec@1.3.12:
     resolution: {integrity: sha512-wrsGjNveqAYYLiQHcHGYiC1lReuQqlzCHzROjL60UTzCRzh5p9gwcpENXUqMqTWZ8Bv8OxaF2Of1/qqTcK9dXQ==}
+    engines: {node: '>=20'}
+
+  markdown-codec@1.3.14:
+    resolution: {integrity: sha512-1Fq0upB850XzVt2eDkpU7VnfTqdd7qxF9czr+jr9/Q+bNMMQXRXr+/X2exmJ2FImt+eoHIKD7t2YK3CdfdKatw==}
     engines: {node: '>=20'}
 
   marked-terminal@7.3.0:
@@ -8493,7 +8497,12 @@ snapshots:
 
   markdown-codec@1.3.12:
     dependencies:
-      document-schema.js: 2.7.6
+      document-schema.js: 2.7.7
+      zod: 4.4.3
+
+  markdown-codec@1.3.14:
+    dependencies:
+      document-schema.js: 2.7.7
       zod: 4.4.3
 
   marked-terminal@7.3.0(marked@15.0.12):
@@ -8638,7 +8647,7 @@ snapshots:
 
   odf.js@2.7.2:
     dependencies:
-      document-schema.js: 2.7.6
+      document-schema.js: 2.7.7
       fast-xml-parser: 5.10.1
       fflate: 0.8.3
       zod: 4.4.3
@@ -8656,7 +8665,7 @@ snapshots:
 
   ooxml.js@2.11.14:
     dependencies:
-      document-schema.js: 2.7.6
+      document-schema.js: 2.7.7
       fast-xml-parser: 5.10.1
       fflate: 0.8.3
       zod: 4.4.3
@@ -8775,7 +8784,7 @@ snapshots:
   pdf-codec@2.2.13:
     dependencies:
       byte-codec: 1.1.5
-      document-schema.js: 2.7.6
+      document-schema.js: 2.7.7
       fflate: 0.8.3
       zod: 4.4.3
 
