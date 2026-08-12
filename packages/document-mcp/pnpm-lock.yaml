@@ -67,8 +67,8 @@ importers:
         specifier: ^2.3.1
         version: 2.6.12
       pdf-codec:
-        specifier: ^2.2.11
-        version: 2.2.11
+        specifier: ^2.2.12
+        version: 2.2.12
       publint:
         specifier: ^0.3.22
         version: 0.3.23
@@ -2562,12 +2562,12 @@ packages:
   pathe@2.0.3:
     resolution: {integrity: sha512-WUjGcAqP1gQacoQe+OBJsFA7Ld4DyXuUIjZ5cc75cLHvJ7dtNsTugphxIADwspS+AraAUePCKrSVtPLFj/F88w==}
 
-  pdf-codec@2.2.10:
-    resolution: {integrity: sha512-g355XiF7PKb0ksdT8z82uKpyd2jccQsf9ivm4o/v5ML3MaTDVYDXgaVmwMUOJDmWkjxwpawnbL+vzB+Mg0JgUA==}
-    engines: {node: '>=20'}
-
   pdf-codec@2.2.11:
     resolution: {integrity: sha512-PV3oKIUfxqv9PtqnT1fW7mSMDeDnqHE2U8+vgcCg1pqXWUUNDY6PCOeXuvACL/zxcQKyX3loRHQ3zKcl9pXXkw==}
+    engines: {node: '>=20'}
+
+  pdf-codec@2.2.12:
+    resolution: {integrity: sha512-sgL4UHd5ky3zvmB6STQHWK5AVObXegEbwds/hGuECfRJLWL+QCN6Lh+h4/CI94W6m+OAufepKz0l4/xZ5OA8FQ==}
     engines: {node: '>=20'}
 
   picocolors@1.1.1:
@@ -4621,7 +4621,7 @@ snapshots:
       markdown-codec: 1.3.10
       odf.js: 2.7.0
       ooxml.js: 2.11.12
-      pdf-codec: 2.2.10
+      pdf-codec: 2.2.11
       zod: 4.4.3
 
   dot-prop@5.3.0:
@@ -5462,14 +5462,14 @@ snapshots:
 
   pathe@2.0.3: {}
 
-  pdf-codec@2.2.10:
+  pdf-codec@2.2.11:
     dependencies:
       byte-codec: 1.1.4
       document-schema.js: 2.7.6
       fflate: 0.8.3
       zod: 4.4.3
 
-  pdf-codec@2.2.11:
+  pdf-codec@2.2.12:
     dependencies:
       byte-codec: 1.1.4
       document-schema.js: 2.7.6
