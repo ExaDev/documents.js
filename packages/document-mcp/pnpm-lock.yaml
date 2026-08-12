@@ -67,8 +67,8 @@ importers:
         specifier: ^2.7.10
         version: 2.7.10
       pdf-codec:
-        specifier: ^2.2.20
-        version: 2.2.20
+        specifier: ^2.2.21
+        version: 2.2.21
       publint:
         specifier: ^0.3.22
         version: 0.3.23
