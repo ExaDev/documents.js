@@ -12,8 +12,8 @@ importers:
         specifier: ^15.0.0
         version: 15.0.0
       documents.js:
-        specifier: ^1.99.40
-        version: 1.99.40
+        specifier: ^1.99.42
+        version: 1.99.42
       ink:
         specifier: ^7.1.1
         version: 7.1.1(@types/react@19.2.18)(react@19.2.8)
@@ -1512,6 +1512,10 @@ packages:
     resolution: {integrity: sha512-lAHu8GlFD6na3Xn7CMoD6RoVa1Ljk7cnpftm43vKGQ42n80Tj6vgp45WiJ+8j/d5prr7tkfa0EoFbUhiJ+IW6A==}
     engines: {node: '>=20'}
 
+  byte-codec@1.1.9:
+    resolution: {integrity: sha512-LXJaz+hlOKTpNhKV0wCwWfCdys2evu4gAZ3a9aerHLnilQbpeEzsQPJoSIGlXvo2i7/nkxR5XilmtKu6T0GLcQ==}
+    engines: {node: '>=20'}
+
   cac@7.0.0:
     resolution: {integrity: sha512-tixWYgm5ZoOD+3g6UTea91eow5z6AAHaho3g0V9CNSNb45gM8SmflpAc+GRd1InC4AqN/07Unrgp56Y94N9hJQ==}
     engines: {node: '>=20.19.0'}
@@ -1728,8 +1732,8 @@ packages:
     resolution: {integrity: sha512-DAfB6av9akLHPYE/nkxTmy1JZQ/kfyqO5DY/5alYFchmVO9kNhqv3k2CEgkUmbuftffaXs0FamrkYkdXyLu/Ug==}
     engines: {node: '>=20'}
 
-  documents.js@1.99.40:
-    resolution: {integrity: sha512-81FU3LOrxzqvh5UgRuwLd9U8Q7BB9VS53g1oGnlUAPgbXfDAnYCmjewNjTgavcoklDSyu+u+2nL0i87iNm77jA==}
+  documents.js@1.99.42:
+    resolution: {integrity: sha512-VmYjx9OREP9frucMqeYuU6RXTbzkj9J6IWhLmJvPnTblsCPr+7jA/pVMTOVfXuDCFNiPEIDyDA4ZHeLHjTTgZg==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -2420,8 +2424,8 @@ packages:
     resolution: {integrity: sha512-hXdUTZYIVOt1Ex//jAQi+wTZZpUpwBj/0QsOzqegb3rGMMeJiSEu5xLHnYfBrRV4RH2+OCSOO95Is/7x1WJ4bw==}
     engines: {node: '>=10'}
 
-  markdown-codec@1.3.18:
-    resolution: {integrity: sha512-bfzgRwSNce82vYmflc8mstSi6LvnB/tFWtA27MPHfXowsHUjho0S3maJrv4h3yRV87K+GPjcp9G3iHm/sPEHug==}
+  markdown-codec@1.3.20:
+    resolution: {integrity: sha512-j3JR+c29OCSsJ3Zq7hmU9KOvbBSum01f144ebpPSH9QPAdMfiCTQyKkw6bEp5CCwq5yL0hHFsqCz8bTHHeORTg==}
     engines: {node: '>=20'}
 
   marked-terminal@7.3.0:
@@ -4792,6 +4796,10 @@ snapshots:
     dependencies:
       fflate: 0.8.3
 
+  byte-codec@1.1.9:
+    dependencies:
+      fflate: 0.8.3
+
   cac@7.0.0: {}
 
   callsites@3.1.0: {}
@@ -4987,12 +4995,12 @@ snapshots:
     dependencies:
       zod: 4.4.3
 
-  documents.js@1.99.40:
+  documents.js@1.99.42:
     dependencies:
-      byte-codec: 1.1.8
+      byte-codec: 1.1.9
       document-schema.js: 2.7.11
       fflate: 0.8.3
-      markdown-codec: 1.3.18
+      markdown-codec: 1.3.20
       odf.js: 2.7.12
       ooxml.js: 2.11.22
       pdf-codec: 2.2.21
@@ -5674,7 +5682,7 @@ snapshots:
     dependencies:
       semver: 7.8.5
 
-  markdown-codec@1.3.18:
+  markdown-codec@1.3.20:
     dependencies:
       document-schema.js: 2.7.11
       zod: 4.4.3
