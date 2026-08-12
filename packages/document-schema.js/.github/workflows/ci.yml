@@ -225,6 +225,8 @@ jobs:
       contents: read
       packages: write
       # Deliberately no id-token: write here -- see publish-aliases' own comment above for why this job is kept separate rather than folded into that matrix: GitHub Packages has no OIDC trusted-publishing exchange, and holding id-token: write makes pnpm attempt (and fail) that exchange anyway, which then breaks its fallback to the GITHUB_TOKEN this job actually authenticates with.
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -234,8 +236,7 @@ jobs:
         with:
           node-version: '22'
           cache: pnpm
-          registry-url: 'https://npm.pkg.github.com'
-          scope: '@exadev'
+          # Deliberately NOT setup-node's own registry-url/scope inputs (see ExaDev/documents.js#309): those write an @exadev:registry=https://npm.pkg.github.com/ *install-time* scope-to-registry mapping into .npmrc, and per setup-node's own docs an empty/omitted `scope` still falls back to the repository owner (ExaDev) when the target is GitHub Packages -- there is no way to get just the auth-token line out of that mechanism without also redirecting every @exadev-scoped *install* through it, which breaks `pnpm install` below: @exadev/eslint-config is a real devDependency published only to the default registry, never mirrored to GitHub Packages. publishConfig.registry (set explicitly below) already fully determines pnpm publish's *target* registry on its own; only the host-scoped auth token below is genuinely needed, added after install so install never sees any @exadev scope mapping at all.
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - name: Rewrite package name and registry for the GitHub Packages scope
@@ -243,9 +244,9 @@ jobs:
         run: |
           npm pkg set name="@exadev/document-content-model"
           npm pkg set publishConfig.registry="https://npm.pkg.github.com"
+      - name: Configure the GitHub Packages auth token for publish only
+        run: echo "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}" >> ~/.npmrc
       - run: pnpm publish --access public --no-git-checks
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   attest:
     name: Attest SBOM and build provenance
