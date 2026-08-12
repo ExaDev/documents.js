@@ -7,5 +7,9 @@ minimumReleaseAge: 60
 # Bare package names (no @version), per pnpm's own documented syntax (https://pnpm.io/settings#minimumreleaseageexclude -- "webpack" exempts every version, not just one) -- these are this org's own sibling packages, published only via their own semantic-release CI with npm OIDC trusted publishing, so a version-agnostic exemption is a deliberate, low-risk carry-forward rather than the version-pinned entries this file used to need updating on every single release, matching documents.js's/pdf-codec's/odf.js's/ooxml.js's own identical convention.
 minimumReleaseAgeExclude:
   - documents.js
+  - ooxml.js
   - odf.js
+  - document-schema.js
   - pdf-codec
+  - markdown-codec
+  - byte-codec
