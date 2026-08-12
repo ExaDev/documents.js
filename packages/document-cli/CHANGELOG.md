@@ -1,3 +1,10 @@
+## [1.14.35](https://github.com/ExaDev/document-cli/compare/v1.14.34...v1.14.35) (2026-08-12)
+
+
+### Bug Fixes
+
+* **commitlint:** exempt dependabot commits from body-max-line-length ([c488489](https://github.com/ExaDev/document-cli/commit/c488489e046eff0dd66b4bfdbd50772e5d84fa33))
+
 ## [1.14.34](https://github.com/ExaDev/document-cli/compare/v1.14.33...v1.14.34) (2026-08-12)
 
 ## [1.14.33](https://github.com/ExaDev/document-cli/compare/v1.14.32...v1.14.33) (2026-08-12)
