@@ -1,3 +1,10 @@
+## [2.7.6](https://github.com/ExaDev/odf.js/compare/v2.7.5...v2.7.6) (2026-08-12)
+
+
+### Bug Fixes
+
+* **ci:** skip commitlint for dependabot commits to avoid body-max-line-length failures ([5257b81](https://github.com/ExaDev/odf.js/commit/5257b812c9a7b4a09c32947c8cdb4e6cefdd1626))
+
 ## [2.7.5](https://github.com/ExaDev/odf.js/compare/v2.7.4...v2.7.5) (2026-08-12)
 
 ## [2.7.4](https://github.com/ExaDev/odf.js/compare/v2.7.3...v2.7.4) (2026-08-12)
