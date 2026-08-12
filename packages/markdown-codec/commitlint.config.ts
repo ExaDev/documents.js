@@ -5,4 +5,5 @@ export default {
   rules: {
     'type-enum': [2, 'always', commitTypes.map((t) => t.type)],
   },
+  ignores: [(message: string) => message.includes('Signed-off-by: dependabot[bot]')],
 };
