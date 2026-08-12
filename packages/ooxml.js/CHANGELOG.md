@@ -1,3 +1,5 @@
+## [2.11.15](https://github.com/ExaDev/ooxml.js/compare/v2.11.14...v2.11.15) (2026-08-12)
+
 ## [2.11.14](https://github.com/ExaDev/ooxml.js/compare/v2.11.13...v2.11.14) (2026-08-12)
 
 ## [2.11.13](https://github.com/ExaDev/ooxml.js/compare/v2.11.12...v2.11.13) (2026-08-12)
