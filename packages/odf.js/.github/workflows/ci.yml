@@ -153,13 +153,14 @@ jobs:
           private-key: ${{ secrets.AUTOMERGE_APP_PRIVATE_KEY }}
           repositories: |
             documents.js
+            documents
             document-cli
       - name: Dispatch sibling-released event to downstream repos
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           version="${{ needs.release.outputs.version }}"
-          for repo in documents.js document-cli; do
+          for repo in documents.js documents document-cli; do
             gh api "repos/ExaDev/$repo/dispatches" \
               -f event_type=sibling-released \
               -F "client_payload[package]=odf.js" \
