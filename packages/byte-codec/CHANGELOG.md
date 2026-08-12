@@ -1,3 +1,5 @@
+## [1.1.9](https://github.com/ExaDev/byte-codec/compare/v1.1.8...v1.1.9) (2026-08-12)
+
 ## [1.1.8](https://github.com/ExaDev/byte-codec/compare/v1.1.7...v1.1.8) (2026-08-12)
 
 ## [1.1.7](https://github.com/ExaDev/byte-codec/compare/v1.1.6...v1.1.7) (2026-08-12)
