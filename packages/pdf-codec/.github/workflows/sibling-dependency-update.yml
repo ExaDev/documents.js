@@ -9,6 +9,10 @@ on:
     branches: [main]
   workflow_dispatch: {}
 
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
   sync:
     uses: ExaDev/.github/.github/workflows/sibling-dependency-update.yml@main
