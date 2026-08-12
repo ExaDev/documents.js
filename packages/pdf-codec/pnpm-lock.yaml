@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       byte-codec:
-        specifier: ^1.1.5
-        version: 1.1.5
+        specifier: ^1.1.8
+        version: 1.1.8
       document-schema.js:
         specifier: ^2.7.10
         version: 2.7.10
@@ -1415,8 +1415,8 @@ packages:
     resolution: {integrity: sha512-yQbXgO/OSZVD2IsiLlro+7Hf6Q18EJrKSEsdoMzKePKXct3gvD8oLcOQdIzGupr5Fj+EDe8gO/lxc1BzfMpxvA==}
     engines: {node: '>=8'}
 
-  byte-codec@1.1.5:
-    resolution: {integrity: sha512-Ss/ERSMxi/U5JQfPCUGm6yQH57spjOjfr9j5EzjNvmF704OpB3WvoSvFp8Oiq7Bjq9y6pfyWeoo0BnVErJwE2w==}
+  byte-codec@1.1.8:
+    resolution: {integrity: sha512-lAHu8GlFD6na3Xn7CMoD6RoVa1Ljk7cnpftm43vKGQ42n80Tj6vgp45WiJ+8j/d5prr7tkfa0EoFbUhiJ+IW6A==}
     engines: {node: '>=20'}
 
   cac@7.0.0:
@@ -4338,7 +4338,7 @@ snapshots:
     dependencies:
       fill-range: 7.1.1
 
-  byte-codec@1.1.5:
+  byte-codec@1.1.8:
     dependencies:
       fflate: 0.8.3
 

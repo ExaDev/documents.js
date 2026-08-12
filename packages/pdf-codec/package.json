@@ -80,7 +80,7 @@
   "license": "MIT",
   "packageManager": "pnpm@11.6.0",
   "dependencies": {
-    "byte-codec": "^1.1.5",
+    "byte-codec": "^1.1.8",
     "document-schema.js": "^2.7.10",
     "fflate": "^0.8.3",
     "zod": "^4.4.3"
