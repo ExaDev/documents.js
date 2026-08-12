@@ -60,8 +60,8 @@ importers:
         specifier: ^4.4.0
         version: 4.4.0(dexie@4.4.4)(react@19.2.8)
       documents.js:
-        specifier: ^1.99.20
-        version: 1.99.20
+        specifier: ^1.99.21
+        version: 1.99.21
       markdown-codec:
         specifier: ^1.3.12
         version: 1.3.12
@@ -2444,8 +2444,8 @@ packages:
     resolution: {integrity: sha512-Ynn8lc7/J5s1gdc96WKFEGkRWKLvWhhHhCdT5wkR8+i7xyGsdIfUmOKHfX81bPtvbVIfAGCNl8Fjp1xxajB9GA==}
     engines: {node: '>=20'}
 
-  documents.js@1.99.20:
-    resolution: {integrity: sha512-RGRdd4vT/pernIsXCHZugrKHu5B5nI2b/tCCoXTjlzYdAd8H1Fh5gPjPWaKDo6UhkBCZ00xlec0sqytk84ZdKw==}
+  documents.js@1.99.21:
+    resolution: {integrity: sha512-OmQj72bezArwXdcLeIOc4LroZbRhwqW+mPbpzgQ09ThiEYEYRWGE2W5kbidtkoOQhXRtDwJF0adQzGcsErTjkw==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -3445,10 +3445,6 @@ packages:
     resolution: {integrity: sha512-hXdUTZYIVOt1Ex//jAQi+wTZZpUpwBj/0QsOzqegb3rGMMeJiSEu5xLHnYfBrRV4RH2+OCSOO95Is/7x1WJ4bw==}
     engines: {node: '>=10'}
 
-  markdown-codec@1.3.11:
-    resolution: {integrity: sha512-I9UM8sSVgtNJGNJ77b+n2eQlRzTxV87yDTEqkwE+7UYOtVHRwoJwn55YWc9dzDIN2cvkZ1/MVKTvHhy9NIPrrw==}
-    engines: {node: '>=20'}
-
   markdown-codec@1.3.12:
     resolution: {integrity: sha512-wrsGjNveqAYYLiQHcHGYiC1lReuQqlzCHzROjL60UTzCRzh5p9gwcpENXUqMqTWZ8Bv8OxaF2Of1/qqTcK9dXQ==}
     engines: {node: '>=20'}
@@ -3673,8 +3669,8 @@ packages:
     resolution: {integrity: sha512-1FlR+gjXK7X+AsAHso35MnyN5KqGwJRi/31ft6x0M194ht7S+rWAvd7PHss9xSKMzE0asv1pyIHaJYq+BbacAQ==}
     engines: {node: '>=12'}
 
-  ooxml.js@2.11.12:
-    resolution: {integrity: sha512-9i2LI9rehKxYI6xLtipwjzBtD2fOJzuaPzs+WM3DSey+GHTh8l/24Ys18yoKFg4FcSIfp61FUUIWKgHxxp+MdA==}
+  ooxml.js@2.11.14:
+    resolution: {integrity: sha512-UihuWqWvb2Q2dQCH1PeYpZMzKnlIF5/02NosZBr0VUR/pfgfhv6Yq9I9L9v2Si56q5nyxUWT+FXWc/VaXMQsNw==}
     engines: {node: '>=20'}
 
   openapi-types@12.1.3:
@@ -7356,14 +7352,14 @@ snapshots:
     dependencies:
       zod: 4.4.3
 
-  documents.js@1.99.20:
+  documents.js@1.99.21:
     dependencies:
       byte-codec: 1.1.5
       document-schema.js: 2.7.6
       fflate: 0.8.3
-      markdown-codec: 1.3.11
+      markdown-codec: 1.3.12
       odf.js: 2.7.2
-      ooxml.js: 2.11.12
+      ooxml.js: 2.11.14
       pdf-codec: 2.2.13
       zod: 4.4.3
 
@@ -8483,11 +8479,6 @@ snapshots:
     dependencies:
       semver: 7.8.5
 
-  markdown-codec@1.3.11:
-    dependencies:
-      document-schema.js: 2.7.6
-      zod: 4.4.3
-
   markdown-codec@1.3.12:
     dependencies:
       document-schema.js: 2.7.6
@@ -8644,7 +8635,7 @@ snapshots:
     dependencies:
       mimic-fn: 4.0.0
 
-  ooxml.js@2.11.12:
+  ooxml.js@2.11.14:
     dependencies:
       document-schema.js: 2.7.6
       fast-xml-parser: 5.10.1
