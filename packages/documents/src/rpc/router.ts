@@ -237,11 +237,7 @@ export const router = {
         { source: { format: input.source, bytes: input.bytes }, targetFormat: input.targetFormat },
         { signal: signal ?? new AbortController().signal },
       );
-      // odf (formula) is the one source whose conversion (odfToPdf) the port wrapper doesn't forward onDocument through, so result.package stays undefined and content never arrives via the normal path. readOdfFormulaContent reads the .odf directly -- the content IS available, just not wired through the port (a stale comment in local.ts led to onDocument being dropped; odfToPdf itself supports it). This fills the gap so the formula preview can render native MathML instead of a PDF rendition.
-      let content = result.package?.content;
-      if (content === undefined && input.source === 'odf') {
-        content = readOdfFormulaContent(decodeDocumentPackage('odf', input.bytes));
-      }
+      const content = result.package?.content;
       return {
         document: result.document,
         diagnostics: result.diagnostics.map((diagnostic) => ({ ...diagnostic })),
