@@ -67,8 +67,8 @@ importers:
         specifier: ^2.7.2
         version: 2.7.2
       pdf-codec:
-        specifier: ^2.2.15
-        version: 2.2.15
+        specifier: ^2.2.18
+        version: 2.2.18
       publint:
         specifier: ^0.3.22
         version: 0.3.23
@@ -1629,6 +1629,10 @@ packages:
     resolution: {integrity: sha512-VgMmKAyzJpWaFgc1Z2H3tBa4gn0iM0gd90ZKmfsOkWBnE3ZxriqtCMzoRE4oi/cBxtsC/6FltymctwJkTtMoQw==}
     engines: {node: '>=20'}
 
+  document-schema.js@2.7.9:
+    resolution: {integrity: sha512-oacNnOscno9X8C15LdqOJsCeZSClOn0P2PYwBn/t72r+gfQ5G9blVS6G4WKRowHRvSzRA+dEPAzC/o1rTVTCZA==}
+    engines: {node: '>=20'}
+
   documents.js@1.99.25:
     resolution: {integrity: sha512-FtPWk/J6KsmenHYBsJwwpXH6bs+OBBRC12VgoPRk7GRDQvqdjVkvYPrIay5cHFqxKZUtxduLXQQXAB3fYa9aNQ==}
     engines: {node: '>=20'}
@@ -2566,12 +2570,12 @@ packages:
   pathe@2.0.3:
     resolution: {integrity: sha512-WUjGcAqP1gQacoQe+OBJsFA7Ld4DyXuUIjZ5cc75cLHvJ7dtNsTugphxIADwspS+AraAUePCKrSVtPLFj/F88w==}
 
-  pdf-codec@2.2.15:
-    resolution: {integrity: sha512-P1/OTqfWACaYFoGO0shzH5/EiJFNUqEXlA9MfV5ePcrIbkUrhw6t3cedkH2j8q33t7UDEMHQFJvO5Y1STjaEeA==}
-    engines: {node: '>=20'}
-
   pdf-codec@2.2.17:
     resolution: {integrity: sha512-MYcKmlqe6rbz0dqI0pbeqQRfjqFmjuO8SwZoThO2kbQfseoYJ+3wksdURUt4IKkMcb1Bf0+tLPj/g11ucrXu4w==}
+    engines: {node: '>=20'}
+
+  pdf-codec@2.2.18:
+    resolution: {integrity: sha512-BP8a6LojMERB94oCZKgyvNTtTspCgpOvIREblzhYbZjWXGJaOH65Plw21QcEsFSHYFb7tGK+wvJsepf9DLpmtw==}
     engines: {node: '>=20'}
 
   picocolors@1.1.1:
@@ -4621,6 +4625,10 @@ snapshots:
     dependencies:
       zod: 4.4.3
 
+  document-schema.js@2.7.9:
+    dependencies:
+      zod: 4.4.3
+
   documents.js@1.99.25:
     dependencies:
       byte-codec: 1.1.7
@@ -5470,17 +5478,17 @@ snapshots:
 
   pathe@2.0.3: {}
 
-  pdf-codec@2.2.15:
+  pdf-codec@2.2.17:
     dependencies:
       byte-codec: 1.1.7
       document-schema.js: 2.7.8
       fflate: 0.8.3
       zod: 4.4.3
 
-  pdf-codec@2.2.17:
+  pdf-codec@2.2.18:
     dependencies:
       byte-codec: 1.1.7
-      document-schema.js: 2.7.8
+      document-schema.js: 2.7.9
       fflate: 0.8.3
       zod: 4.4.3
 
