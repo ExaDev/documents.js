@@ -1,3 +1,10 @@
+## [2.11.18](https://github.com/ExaDev/ooxml.js/compare/v2.11.17...v2.11.18) (2026-08-12)
+
+
+### Bug Fixes
+
+* ignore dependabot commits in commitlint body-length check ([527e6f3](https://github.com/ExaDev/ooxml.js/commit/527e6f388028ce5fa2b9748fc638ca67ba48eee3))
+
 ## [2.11.17](https://github.com/ExaDev/ooxml.js/compare/v2.11.16...v2.11.17) (2026-08-12)
 
 ## [2.11.16](https://github.com/ExaDev/ooxml.js/compare/v2.11.15...v2.11.16) (2026-08-12)
