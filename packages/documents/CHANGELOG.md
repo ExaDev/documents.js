@@ -1,3 +1,10 @@
+## [1.23.2](https://github.com/ExaDev/documents/compare/v1.23.1...v1.23.2) (2026-08-12)
+
+
+### Bug Fixes
+
+* bump on every conventional-commit type, not just feat/fix/perf ([1bd442d](https://github.com/ExaDev/documents/commit/1bd442df299d6ca2a34d8d68514caacbf7056a85))
+
 ## [1.23.1](https://github.com/ExaDev/documents/compare/v1.23.0...v1.23.1) (2026-08-12)
 
 
