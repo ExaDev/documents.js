@@ -1,3 +1,10 @@
+## [1.3.16](https://github.com/ExaDev/markdown-codec/compare/v1.3.15...v1.3.16) (2026-08-12)
+
+
+### Bug Fixes
+
+* **ci:** exempt dependabot commits from commitlint body-line-length ([f34e8c4](https://github.com/ExaDev/markdown-codec/commit/f34e8c47dafd49fe399eb0ca9d62a13fcaff6a3c))
+
 ## [1.3.15](https://github.com/ExaDev/markdown-codec/compare/v1.3.14...v1.3.15) (2026-08-12)
 
 ## [1.3.14](https://github.com/ExaDev/markdown-codec/compare/v1.3.13...v1.3.14) (2026-08-12)
