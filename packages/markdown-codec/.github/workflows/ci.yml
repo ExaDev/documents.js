@@ -153,12 +153,13 @@ jobs:
           private-key: ${{ secrets.AUTOMERGE_APP_PRIVATE_KEY }}
           repositories: |
             documents.js
+            documents
       - name: Dispatch sibling-released event to downstream repos
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           version="${{ needs.release.outputs.version }}"
-          for repo in documents.js; do
+          for repo in documents.js documents; do
             gh api "repos/ExaDev/$repo/dispatches" \
               -f event_type=sibling-released \
               -F "client_payload[package]=markdown-codec" \
