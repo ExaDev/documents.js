@@ -67,8 +67,8 @@ importers:
         specifier: ^2.3.1
         version: 2.6.12
       pdf-codec:
-        specifier: ^2.2.10
-        version: 2.2.10
+        specifier: ^2.2.11
+        version: 2.2.11
       publint:
         specifier: ^0.3.22
         version: 0.3.23
@@ -1435,10 +1435,6 @@ packages:
     resolution: {integrity: sha512-yQbXgO/OSZVD2IsiLlro+7Hf6Q18EJrKSEsdoMzKePKXct3gvD8oLcOQdIzGupr5Fj+EDe8gO/lxc1BzfMpxvA==}
     engines: {node: '>=8'}
 
-  byte-codec@1.0.4:
-    resolution: {integrity: sha512-p1r71e19hGzAXCJA+MbPz610rp8P1kS8wgpZ8QKmzYunqp2+BSVlVeS2xw6Ez517Yof9byv1f62svYgUzAM3Ig==}
-    engines: {node: '>=20'}
-
   byte-codec@1.1.4:
     resolution: {integrity: sha512-4qLM5zJrE/mDcseSZOBpXYVecPBVlRbUQA16UUVqlexKdxUjz/EXRK/rokzP3artrUW0jd3Kxx3xSdPPeeoLsw==}
     engines: {node: '>=20'}
@@ -1624,10 +1620,6 @@ packages:
   dir-glob@3.0.1:
     resolution: {integrity: sha512-WkrWp9GR4KXfKGYzOLmTuGVi1UWFfws377n9cc55/tb6DuqyF6pcQ5AbiHEshaDpY9v6oaSr2XCDidGmMwdzIA==}
     engines: {node: '>=8'}
-
-  document-schema.js@2.7.5:
-    resolution: {integrity: sha512-j7sBZtWtOVMoyXouImkR3Lsg6hPV0VOzj2aFBY+e+b5IqZYv7/nBCurAlCzETtGO9qP0DQuKNwLekPAYW+XSRQ==}
-    engines: {node: '>=20'}
 
   document-schema.js@2.7.6:
     resolution: {integrity: sha512-Ynn8lc7/J5s1gdc96WKFEGkRWKLvWhhHhCdT5wkR8+i7xyGsdIfUmOKHfX81bPtvbVIfAGCNl8Fjp1xxajB9GA==}
@@ -2572,6 +2564,10 @@ packages:
 
   pdf-codec@2.2.10:
     resolution: {integrity: sha512-g355XiF7PKb0ksdT8z82uKpyd2jccQsf9ivm4o/v5ML3MaTDVYDXgaVmwMUOJDmWkjxwpawnbL+vzB+Mg0JgUA==}
+    engines: {node: '>=20'}
+
+  pdf-codec@2.2.11:
+    resolution: {integrity: sha512-PV3oKIUfxqv9PtqnT1fW7mSMDeDnqHE2U8+vgcCg1pqXWUUNDY6PCOeXuvACL/zxcQKyX3loRHQ3zKcl9pXXkw==}
     engines: {node: '>=20'}
 
   picocolors@1.1.1:
@@ -4443,10 +4439,6 @@ snapshots:
     dependencies:
       fill-range: 7.1.1
 
-  byte-codec@1.0.4:
-    dependencies:
-      fflate: 0.8.3
-
   byte-codec@1.1.4:
     dependencies:
       fflate: 0.8.3
@@ -4616,10 +4608,6 @@ snapshots:
   dir-glob@3.0.1:
     dependencies:
       path-type: 4.0.0
-
-  document-schema.js@2.7.5:
-    dependencies:
-      zod: 4.4.3
 
   document-schema.js@2.7.6:
     dependencies:
@@ -5476,8 +5464,15 @@ snapshots:
 
   pdf-codec@2.2.10:
     dependencies:
-      byte-codec: 1.0.4
-      document-schema.js: 2.7.5
+      byte-codec: 1.1.4
+      document-schema.js: 2.7.6
+      fflate: 0.8.3
+      zod: 4.4.3
+
+  pdf-codec@2.2.11:
+    dependencies:
+      byte-codec: 1.1.4
+      document-schema.js: 2.7.6
       fflate: 0.8.3
       zod: 4.4.3
 
