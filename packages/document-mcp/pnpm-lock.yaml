@@ -67,8 +67,8 @@ importers:
         specifier: ^2.7.2
         version: 2.7.2
       pdf-codec:
-        specifier: ^2.2.14
-        version: 2.2.14
+        specifier: ^2.2.16
+        version: 2.2.16
       publint:
         specifier: ^0.3.22
         version: 0.3.23
@@ -2564,6 +2564,10 @@ packages:
 
   pdf-codec@2.2.14:
     resolution: {integrity: sha512-TsqGIY0Z/Q4+2eiI4nlp+IGbtZyHqXbMZwnCXEhKMrHNZKZQGVjqnTi80mwzD5hwIAKMtW1wYGK1hAs10d6N9Q==}
+    engines: {node: '>=20'}
+
+  pdf-codec@2.2.16:
+    resolution: {integrity: sha512-ktLd8mk/2+hSybjRNpyUHT/Adv7uwk4zNKvmky+ctARRFDVQWT8faeFuNuNZWxyAsU6y1ZL2/vZrkNxbbN9Tfg==}
     engines: {node: '>=20'}
 
   picocolors@1.1.1:
@@ -5357,7 +5361,7 @@ snapshots:
 
   ooxml.js@2.11.14:
     dependencies:
-      document-schema.js: 2.7.6
+      document-schema.js: 2.7.8
       fast-xml-parser: 5.10.1
       fflate: 0.8.3
       zod: 4.4.3
@@ -5458,7 +5462,14 @@ snapshots:
   pdf-codec@2.2.14:
     dependencies:
       byte-codec: 1.1.6
-      document-schema.js: 2.7.6
+      document-schema.js: 2.7.8
+      fflate: 0.8.3
+      zod: 4.4.3
+
+  pdf-codec@2.2.16:
+    dependencies:
+      byte-codec: 1.1.6
+      document-schema.js: 2.7.8
       fflate: 0.8.3
       zod: 4.4.3
 
