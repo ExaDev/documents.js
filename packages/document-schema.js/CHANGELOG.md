@@ -1,3 +1,5 @@
+## [2.7.11](https://github.com/ExaDev/document-schema.js/compare/v2.7.10...v2.7.11) (2026-08-12)
+
 ## [2.7.10](https://github.com/ExaDev/document-schema.js/compare/v2.7.9...v2.7.10) (2026-08-12)
 
 ## [2.7.9](https://github.com/ExaDev/document-schema.js/compare/v2.7.8...v2.7.9) (2026-08-12)
