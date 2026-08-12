@@ -76,8 +76,8 @@ importers:
         specifier: ^2.7.1
         version: 2.7.1
       pdf-codec:
-        specifier: ^2.0.0
-        version: 2.0.0
+        specifier: ^2.2.13
+        version: 2.2.13
       publint:
         specifier: ^0.3.22
         version: 0.3.23
@@ -1512,6 +1512,10 @@ packages:
     resolution: {integrity: sha512-p1r71e19hGzAXCJA+MbPz610rp8P1kS8wgpZ8QKmzYunqp2+BSVlVeS2xw6Ez517Yof9byv1f62svYgUzAM3Ig==}
     engines: {node: '>=20'}
 
+  byte-codec@1.1.4:
+    resolution: {integrity: sha512-4qLM5zJrE/mDcseSZOBpXYVecPBVlRbUQA16UUVqlexKdxUjz/EXRK/rokzP3artrUW0jd3Kxx3xSdPPeeoLsw==}
+    engines: {node: '>=20'}
+
   cac@7.0.0:
     resolution: {integrity: sha512-tixWYgm5ZoOD+3g6UTea91eow5z6AAHaho3g0V9CNSNb45gM8SmflpAc+GRd1InC4AqN/07Unrgp56Y94N9hJQ==}
     engines: {node: '>=20.19.0'}
@@ -1719,10 +1723,6 @@ packages:
   dir-glob@3.0.1:
     resolution: {integrity: sha512-WkrWp9GR4KXfKGYzOLmTuGVi1UWFfws377n9cc55/tb6DuqyF6pcQ5AbiHEshaDpY9v6oaSr2XCDidGmMwdzIA==}
     engines: {node: '>=8'}
-
-  document-schema.js@2.4.0:
-    resolution: {integrity: sha512-NLBNkYUq830XCKr49ClkdxvYHXra9B5hx9o7G6ZL4hMulprzj4jdEXg4hyv1WoVrKiAzJCpI4pDgQ0eamgYx8g==}
-    engines: {node: '>=20'}
 
   document-schema.js@2.7.6:
     resolution: {integrity: sha512-Ynn8lc7/J5s1gdc96WKFEGkRWKLvWhhHhCdT5wkR8+i7xyGsdIfUmOKHfX81bPtvbVIfAGCNl8Fjp1xxajB9GA==}
@@ -2736,12 +2736,12 @@ packages:
   pathe@2.0.3:
     resolution: {integrity: sha512-WUjGcAqP1gQacoQe+OBJsFA7Ld4DyXuUIjZ5cc75cLHvJ7dtNsTugphxIADwspS+AraAUePCKrSVtPLFj/F88w==}
 
-  pdf-codec@2.0.0:
-    resolution: {integrity: sha512-CjMD/KJAoawPJiTc/QZne1MUVSQ5X0IF+pRd6hT7ClBQBqwUCGg4M4J9y7m97qieZfAbyxWmbiZ7x01D7Wf1Rw==}
-    engines: {node: '>=20'}
-
   pdf-codec@2.2.10:
     resolution: {integrity: sha512-g355XiF7PKb0ksdT8z82uKpyd2jccQsf9ivm4o/v5ML3MaTDVYDXgaVmwMUOJDmWkjxwpawnbL+vzB+Mg0JgUA==}
+    engines: {node: '>=20'}
+
+  pdf-codec@2.2.13:
+    resolution: {integrity: sha512-pHBqb+L+zp8Nw6rJjoraStp5gAex7ikjVGzz0MqdvayG5NBmeZyUrQO3GUjYwh860WkKVYlmzs3YYgcu0o6QIg==}
     engines: {node: '>=20'}
 
   picocolors@1.1.1:
@@ -4792,6 +4792,10 @@ snapshots:
     dependencies:
       fflate: 0.8.3
 
+  byte-codec@1.1.4:
+    dependencies:
+      fflate: 0.8.3
+
   cac@7.0.0: {}
 
   callsites@3.1.0: {}
@@ -4978,10 +4982,6 @@ snapshots:
   dir-glob@3.0.1:
     dependencies:
       path-type: 4.0.0
-
-  document-schema.js@2.4.0:
-    dependencies:
-      zod: 4.4.3
 
   document-schema.js@2.7.6:
     dependencies:
@@ -5911,15 +5911,16 @@ snapshots:
 
   pathe@2.0.3: {}
 
-  pdf-codec@2.0.0:
-    dependencies:
-      document-schema.js: 2.4.0
-      fflate: 0.8.3
-      zod: 4.4.3
-
   pdf-codec@2.2.10:
     dependencies:
       byte-codec: 1.0.4
+      document-schema.js: 2.7.6
+      fflate: 0.8.3
+      zod: 4.4.3
+
+  pdf-codec@2.2.13:
+    dependencies:
+      byte-codec: 1.1.4
       document-schema.js: 2.7.6
       fflate: 0.8.3
       zod: 4.4.3
