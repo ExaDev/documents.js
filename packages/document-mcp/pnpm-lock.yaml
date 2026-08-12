@@ -12,8 +12,8 @@ importers:
         specifier: ^2.0.0
         version: 2.0.0
       documents.js:
-        specifier: ^1.99.16
-        version: 1.99.16
+        specifier: ^1.99.17
+        version: 1.99.17
       zod:
         specifier: ^4.2.0
         version: 4.4.3
@@ -1633,8 +1633,8 @@ packages:
     resolution: {integrity: sha512-Ynn8lc7/J5s1gdc96WKFEGkRWKLvWhhHhCdT5wkR8+i7xyGsdIfUmOKHfX81bPtvbVIfAGCNl8Fjp1xxajB9GA==}
     engines: {node: '>=20'}
 
-  documents.js@1.99.16:
-    resolution: {integrity: sha512-iq7koxrqlqEymCOoSTM15pX2XdjIN/ALURUxVx8qcFU9gyJ4ry5Km0ySUM3oh2CONhh/ogJtVRr+q7suEFnsYw==}
+  documents.js@1.99.17:
+    resolution: {integrity: sha512-8+06UXkshO6I3GjdkvOdhLUoedOeaVnB/DRbijnCYuNUT8pQutADv4YbybAxsIUCT6jGWqWXaowGupuRcLkUtw==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -4625,7 +4625,7 @@ snapshots:
     dependencies:
       zod: 4.4.3
 
-  documents.js@1.99.16:
+  documents.js@1.99.17:
     dependencies:
       byte-codec: 1.1.4
       document-schema.js: 2.7.6
