@@ -108,10 +108,18 @@ jobs:
       published: ${{ steps.before.outputs.version != steps.after.outputs.version }}
       version: ${{ steps.after.outputs.version }}
     steps:
+      # main requires status checks to merge, and the default GITHUB_TOKEN has no bypass for that -- @semantic-release/git's own push of the release commit is a direct push to main, so it needs a token from an actor the branch ruleset explicitly allows to bypass (see ExaDev/.github and each repo's own ruleset). Everything else in this job (release notes, GitHub Release creation, issue/PR comments, OIDC npm publish) keeps using secrets.GITHUB_TOKEN below, unaffected -- only checkout's own git credentials need the elevated token, since that's what the later `git push` inherits.
+      - name: Generate a token for the release push
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: "4473709"
+          private-key: ${{ secrets.AUTOMERGE_APP_PRIVATE_KEY }}
       - uses: actions/checkout@v7
         with:
           # semantic-release analyses the full commit history since the last release.
           fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
