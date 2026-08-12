@@ -1,3 +1,10 @@
+## [2.2.17](https://github.com/ExaDev/pdf-codec/compare/v2.2.16...v2.2.17) (2026-08-12)
+
+
+### Bug Fixes
+
+* **commitlint:** exempt dependabot commits from body-max-line-length ([d0b1474](https://github.com/ExaDev/pdf-codec/commit/d0b1474ba2c39c5995ce646925f59402a0462765))
+
 ## [2.2.16](https://github.com/ExaDev/pdf-codec/compare/v2.2.15...v2.2.16) (2026-08-12)
 
 ## [2.2.15](https://github.com/ExaDev/pdf-codec/compare/v2.2.14...v2.2.15) (2026-08-12)
