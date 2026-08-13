@@ -74,7 +74,7 @@ importers:
         version: 17.3.0
       odf.js:
         specifier: ^2.7.13
-        version: 2.7.13
+        version: 2.7.14
       pdf-codec:
         specifier: ^2.2.20
         version: 2.2.20
@@ -2609,10 +2609,6 @@ packages:
   obug@2.1.4:
     resolution: {integrity: sha512-4a+OsYv9UktOJKE+l1A4OufDgdRF9PifWj+tJnHURo/P+WOxpG4GzUFL9qCalmWauao6ogiG+QvnCovwPoyAWA==}
     engines: {node: '>=12.20.0'}
-
-  odf.js@2.7.13:
-    resolution: {integrity: sha512-D5LZgUZOcyUUwI90H8gcWT37ER3ftiFZaIEBd2jz703x2bZrHdT/kuL/tnugvd4p/3wXWPSlKQUK0l5A/uutYw==}
-    engines: {node: '>=20'}
 
   odf.js@2.7.14:
     resolution: {integrity: sha512-cVrTpc7PdeTp2/y2vwXRDQFME5fxQUs1oVLMUk4xpUSTzrVcWeGPccfihth2PvAu42l+khZJnNjQD8LdFOel4w==}
@@ -5805,13 +5801,6 @@ snapshots:
   object-assign@4.1.1: {}
 
   obug@2.1.4: {}
-
-  odf.js@2.7.13:
-    dependencies:
-      document-schema.js: 2.7.13
-      fast-xml-parser: 5.10.1
-      fflate: 0.8.3
-      zod: 4.4.3
 
   odf.js@2.7.14:
     dependencies:
