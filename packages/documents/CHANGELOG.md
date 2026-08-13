@@ -1,3 +1,5 @@
+## [1.23.10](https://github.com/ExaDev/documents/compare/v1.23.9...v1.23.10) (2026-08-13)
+
 ## [1.23.9](https://github.com/ExaDev/documents/compare/v1.23.8...v1.23.9) (2026-08-13)
 
 ## [1.23.8](https://github.com/ExaDev/documents/compare/v1.23.7...v1.23.8) (2026-08-13)
