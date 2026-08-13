@@ -12,8 +12,8 @@ importers:
         specifier: ^15.0.0
         version: 15.0.0
       documents.js:
-        specifier: ^1.99.51
-        version: 1.99.51
+        specifier: ^1.99.52
+        version: 1.99.52
       ink:
         specifier: ^7.1.1
         version: 7.1.1(@types/react@19.2.18)(react@19.2.8)
@@ -1728,16 +1728,12 @@ packages:
     resolution: {integrity: sha512-AQDb6GEEHcQFBLbn06TR7yJgQY3tDvjmvF0FCSrw+Eyk9/ZOpMWdc/SUKysjr+pZZWdWuc6/kl2G+gu6iZjj8Q==}
     engines: {node: '>=20'}
 
-  document-schema.js@2.7.11:
-    resolution: {integrity: sha512-DAfB6av9akLHPYE/nkxTmy1JZQ/kfyqO5DY/5alYFchmVO9kNhqv3k2CEgkUmbuftffaXs0FamrkYkdXyLu/Ug==}
-    engines: {node: '>=20'}
-
   document-schema.js@2.7.13:
     resolution: {integrity: sha512-EtgZlCftQRCRowPG7tmw95XZihy3SAFN4cy4hBVY9h+QJCJXq7mx/7ic0eUutouElrmDN9VKH2qdmz/XZIfeLw==}
     engines: {node: '>=20'}
 
-  documents.js@1.99.51:
-    resolution: {integrity: sha512-u+Vl6XiDt1Z9bjfDRBpYxecMLxRsd5i3XPjMzrXkZrQCDmvOwAROezqpdZGwtPrXj+pmSU45NGoHNspp+Sdavw==}
+  documents.js@1.99.52:
+    resolution: {integrity: sha512-bYi9Bacy2gnVtIe+9qqMgTnlevW+3yCCoAewZyK0iRarydi2r7YXJuK8WFPUPlXj5k21SNRCXiYDysRR4oAb4A==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -2613,10 +2609,6 @@ packages:
   obug@2.1.4:
     resolution: {integrity: sha512-4a+OsYv9UktOJKE+l1A4OufDgdRF9PifWj+tJnHURo/P+WOxpG4GzUFL9qCalmWauao6ogiG+QvnCovwPoyAWA==}
     engines: {node: '>=12.20.0'}
-
-  odf.js@2.7.12:
-    resolution: {integrity: sha512-0+OsLhjroxmBfF18/+Go6HVIImSLgSZwthynhCNt6XSRd9ZEyMj940vVQWbTtqUqy6ljUIWJTjQTLiQuyyMS7Q==}
-    engines: {node: '>=20'}
 
   odf.js@2.7.13:
     resolution: {integrity: sha512-D5LZgUZOcyUUwI90H8gcWT37ER3ftiFZaIEBd2jz703x2bZrHdT/kuL/tnugvd4p/3wXWPSlKQUK0l5A/uutYw==}
@@ -4999,21 +4991,17 @@ snapshots:
     dependencies:
       zod: 4.4.3
 
-  document-schema.js@2.7.11:
-    dependencies:
-      zod: 4.4.3
-
   document-schema.js@2.7.13:
     dependencies:
       zod: 4.4.3
 
-  documents.js@1.99.51:
+  documents.js@1.99.52:
     dependencies:
       byte-codec: 1.1.9
-      document-schema.js: 2.7.11
+      document-schema.js: 2.7.13
       fflate: 0.8.3
       markdown-codec: 1.3.21
-      odf.js: 2.7.12
+      odf.js: 2.7.13
       ooxml.js: 2.11.25
       pdf-codec: 2.2.23
       zod: 4.4.3
@@ -5696,7 +5684,7 @@ snapshots:
 
   markdown-codec@1.3.21:
     dependencies:
-      document-schema.js: 2.7.11
+      document-schema.js: 2.7.13
       zod: 4.4.3
 
   marked-terminal@7.3.0(marked@15.0.12):
@@ -5814,13 +5802,6 @@ snapshots:
 
   obug@2.1.4: {}
 
-  odf.js@2.7.12:
-    dependencies:
-      document-schema.js: 2.7.11
-      fast-xml-parser: 5.10.1
-      fflate: 0.8.3
-      zod: 4.4.3
-
   odf.js@2.7.13:
     dependencies:
       document-schema.js: 2.7.13
@@ -5838,7 +5819,7 @@ snapshots:
 
   ooxml.js@2.11.25:
     dependencies:
-      document-schema.js: 2.7.11
+      document-schema.js: 2.7.13
       fast-xml-parser: 5.10.1
       fflate: 0.8.3
       zod: 4.4.3
@@ -5948,7 +5929,7 @@ snapshots:
   pdf-codec@2.2.23:
     dependencies:
       byte-codec: 1.1.9
-      document-schema.js: 2.7.11
+      document-schema.js: 2.7.13
       fflate: 0.8.3
       zod: 4.4.3
 
