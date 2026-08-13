@@ -28,7 +28,7 @@ importers:
         specifier: ^2.7.13
         version: 2.7.13
       ooxml.js:
-        specifier: ^2.11.25
+        specifier: ^2.11.27
         version: 2.11.27
       pdf-codec:
         specifier: ^2.2.26
