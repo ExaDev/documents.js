@@ -67,8 +67,8 @@ importers:
         specifier: ^2.7.10
         version: 2.7.10
       pdf-codec:
-        specifier: ^2.2.23
-        version: 2.2.23
+        specifier: ^2.2.24
+        version: 2.2.24
       publint:
         specifier: ^0.3.22
         version: 0.3.23
@@ -1435,10 +1435,6 @@ packages:
     resolution: {integrity: sha512-yQbXgO/OSZVD2IsiLlro+7Hf6Q18EJrKSEsdoMzKePKXct3gvD8oLcOQdIzGupr5Fj+EDe8gO/lxc1BzfMpxvA==}
     engines: {node: '>=8'}
 
-  byte-codec@1.1.8:
-    resolution: {integrity: sha512-lAHu8GlFD6na3Xn7CMoD6RoVa1Ljk7cnpftm43vKGQ42n80Tj6vgp45WiJ+8j/d5prr7tkfa0EoFbUhiJ+IW6A==}
-    engines: {node: '>=20'}
-
   byte-codec@1.1.9:
     resolution: {integrity: sha512-LXJaz+hlOKTpNhKV0wCwWfCdys2evu4gAZ3a9aerHLnilQbpeEzsQPJoSIGlXvo2i7/nkxR5XilmtKu6T0GLcQ==}
     engines: {node: '>=20'}
@@ -1631,6 +1627,10 @@ packages:
 
   document-schema.js@2.7.11:
     resolution: {integrity: sha512-DAfB6av9akLHPYE/nkxTmy1JZQ/kfyqO5DY/5alYFchmVO9kNhqv3k2CEgkUmbuftffaXs0FamrkYkdXyLu/Ug==}
+    engines: {node: '>=20'}
+
+  document-schema.js@2.7.13:
+    resolution: {integrity: sha512-EtgZlCftQRCRowPG7tmw95XZihy3SAFN4cy4hBVY9h+QJCJXq7mx/7ic0eUutouElrmDN9VKH2qdmz/XZIfeLw==}
     engines: {node: '>=20'}
 
   documents.js@1.99.51:
@@ -2572,6 +2572,10 @@ packages:
 
   pdf-codec@2.2.23:
     resolution: {integrity: sha512-tVjDcQ+1oHEQMg6EQF6ZsMhDGzxb5ehauS5oc59k2/pm6MFXQYQvYtufXJuzM2P/N4Gt8Q9RJA87xLMKg6d1TA==}
+    engines: {node: '>=20'}
+
+  pdf-codec@2.2.24:
+    resolution: {integrity: sha512-MsDAA8eZ/c65NtQAWZNKqVNLPU3VCaVG+wBBSjM6AI4cebjfTX0DtFFYaS5iWO1Mn+eogxjE+BppoWT+doPVZQ==}
     engines: {node: '>=20'}
 
   picocolors@1.1.1:
@@ -4443,10 +4447,6 @@ snapshots:
     dependencies:
       fill-range: 7.1.1
 
-  byte-codec@1.1.8:
-    dependencies:
-      fflate: 0.8.3
-
   byte-codec@1.1.9:
     dependencies:
       fflate: 0.8.3
@@ -4622,6 +4622,10 @@ snapshots:
       zod: 4.4.3
 
   document-schema.js@2.7.11:
+    dependencies:
+      zod: 4.4.3
+
+  document-schema.js@2.7.13:
     dependencies:
       zod: 4.4.3
 
@@ -5476,8 +5480,15 @@ snapshots:
 
   pdf-codec@2.2.23:
     dependencies:
-      byte-codec: 1.1.8
+      byte-codec: 1.1.9
       document-schema.js: 2.7.11
+      fflate: 0.8.3
+      zod: 4.4.3
+
+  pdf-codec@2.2.24:
+    dependencies:
+      byte-codec: 1.1.9
+      document-schema.js: 2.7.13
       fflate: 0.8.3
       zod: 4.4.3
 
