@@ -10,7 +10,7 @@ importers:
     dependencies:
       document-schema.js:
         specifier: ^2.7.12
-        version: 2.7.12
+        version: 2.7.13
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -1603,8 +1603,8 @@ packages:
     resolution: {integrity: sha512-WkrWp9GR4KXfKGYzOLmTuGVi1UWFfws377n9cc55/tb6DuqyF6pcQ5AbiHEshaDpY9v6oaSr2XCDidGmMwdzIA==}
     engines: {node: '>=8'}
 
-  document-schema.js@2.7.12:
-    resolution: {integrity: sha512-bVs0scLORt8IouJp1ZdCF3y3u3FOJPdoZEAJlCXTp+hyKuwmFafNdxDQFkMT/NccJm+H/7vjUZ+2HPrMF+gx6g==}
+  document-schema.js@2.7.13:
+    resolution: {integrity: sha512-EtgZlCftQRCRowPG7tmw95XZihy3SAFN4cy4hBVY9h+QJCJXq7mx/7ic0eUutouElrmDN9VKH2qdmz/XZIfeLw==}
     engines: {node: '>=20'}
 
   dot-prop@5.3.0:
@@ -4526,7 +4526,7 @@ snapshots:
     dependencies:
       path-type: 4.0.0
 
-  document-schema.js@2.7.12:
+  document-schema.js@2.7.13:
     dependencies:
       zod: 4.4.3
 
