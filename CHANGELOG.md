@@ -1,3 +1,12 @@
+## [1.101.1](https://github.com/ExaDev/documents.js/compare/v1.101.0...v1.101.1) (2026-08-17)
+
+# [1.101.0](https://github.com/ExaDev/documents.js/compare/v1.100.1...v1.101.0) (2026-08-17)
+
+
+### Features
+
+* export readXlsxContent and buildXlsxPackage from the public surface ([a5e4b30](https://github.com/ExaDev/documents.js/commit/a5e4b305666c8a97be16b3eee5221e5dbf178874))
+
 ## [1.100.1](https://github.com/ExaDev/documents.js/compare/v1.100.0...v1.100.1) (2026-08-17)
 
 # [1.100.0](https://github.com/ExaDev/documents.js/compare/v1.99.78...v1.100.0) (2026-08-17)

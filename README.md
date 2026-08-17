@@ -226,6 +226,19 @@ import { emuToPt } from 'documents.js/model/units';
 import { buildOdtPackage } from 'documents.js/edit/odt/content';
 ```
 
+### Reading and building xlsx content directly
+
+Every other content format has its own standalone `readXContent`-shaped entry point (`readDocxContent`, `readPptxContent`, `readOdtContent`, `readOdpContent`, `readOdsContent`, `readOdgContent`) — xlsx is no longer the exception. `readXlsxContent`/`buildXlsxPackage` are `ooxml.js`'s own spreadsheet `ContentDocument` read/build pair — the same one the `ods⇄xlsx` bridge and every xlsx metadata-rebuild path already use internally — re-exported here directly rather than wrapped, since `readXlsxContent` already produces the right shape on its own:
+
+```ts
+import { buildXlsxPackage, decodeDocumentPackage, encodeDocumentPackage, readXlsxContent } from 'documents.js';
+
+const content = readXlsxContent(decodeDocumentPackage('xlsx', xlsxBytes)); // ContentDocument, kind: 'spreadsheet'
+const rebuiltBytes = encodeDocumentPackage('xlsx', buildXlsxPackage(content));
+```
+
+This pair is comparatively newer than the ODF/DrawingML readers above, and inherits their maturity level: percentage, currency, and date cell kinds round-trip with their semantic kind intact, but two narrower gaps are worth knowing before relying on it for more than read-only extraction — an ODS-style time-only value has no xlsx serial to write into and degrades to a plain string cell, and a written column width survives a read back only within about a point of its original value (an algebraic-inverse rounding artifact in the character-width unit conversion, not a dropped value). See `src/convert/bridges.test.ts`'s own `ods⇄xlsx` section for the exact, currently-tested numbers.
+
 ### Live-view editors
 
 Read-and-write editors for docx/pptx/odt/odp/ods/odg content, holding a direct reference into the real `Package`/`XmlElement` objects. Saving is `encodePackage(pkg)` — everything you didn't touch stays byte-faithful.
@@ -527,7 +540,7 @@ To run a single test file: `pnpm vitest run src/path/to/file.test.ts`.
 
 ## Gotchas and quirks
 
-- **`ooxml.js`'s typed readers are the basis for conversion** — `readDocxContent`/`readPptxContent` are thin wrappers, not independent walks. They are deliberately not re-exported (exposing both would invite using the wrong one). `readDocx`'s `comments`/`footnotes`/`headers`/`footers`/`numbering` are exposed via `readDocxExtras`. `readPptx` has no extras reader yet.
+- **`ooxml.js`'s typed readers are the basis for conversion** — `readDocxContent`/`readPptxContent` are thin wrappers, not independent walks. They are deliberately not re-exported (exposing both would invite using the wrong one). `readDocx`'s `comments`/`footnotes`/`headers`/`footers`/`numbering` are exposed via `readDocxExtras`. `readPptx` has no extras reader yet. xlsx is the one exception: `ooxml.js`'s `readXlsxContent`/`buildXlsxPackage` already read/write a spreadsheet `ContentDocument` directly (unlike `readDocx`/`readPptx`, which `readDocxContent`/`readPptxContent` wrap), so they're re-exported as-is rather than given a documents.js-local wrapper of their own — `readXlsx`, the separate lossy cell-values-only view, stays unexported for the same reason `readDocx`/`readPptx` do.
 - **ODF text content is not a plain string.** ODF represents runs of spaces as `<text:s>`, tabs as `<text:tab/>`, line breaks as `<text:line-break/>` — all elements, not text nodes. Every ODF text getter MUST call `decodeOdfText`, never `textContent()` — which silently drops them (no error, just shorter text).
 - **docx⇄PDF and pptx⇄PDF are explicitly not round-trip-lossless** — see [Fidelity](#fidelity). The cross-format bridge pairs are a genuinely different case.
 - **A `DocumentPackage` from `onDocument`/`ConversionResult.package` is a snapshot, not a live view** — mutating `content` afterwards leaves `layout` stale; nothing detects or rejects that.
@@ -651,7 +664,7 @@ Conventional Commits (`feat:`, `fix:`, `test:`, `chore:`, …), enforced by comm
 
 ## References
 
-- [ooxml.js](https://github.com/ExaDev/ooxml.js) — docx/pptx/xlsx ⇄ JSON handling and typed reading, including `readXlsxContent`/`buildXlsxPackage` (consumed by the `odsToXlsx`/`xlsxToOds` bridge and internal codecs, not re-exported).
+- [ooxml.js](https://github.com/ExaDev/ooxml.js) — docx/pptx/xlsx ⇄ JSON handling and typed reading, including `readXlsxContent`/`buildXlsxPackage` (consumed by the `odsToXlsx`/`xlsxToOds` bridge and internal codecs, and re-exported directly from this package's own surface — see [Reading and building xlsx content directly](#reading-and-building-xlsx-content-directly)).
 - [document-schema.js](https://github.com/ExaDev/document-schema.js) — owns `ContentDocument`/`LayoutDocument` and the port contracts; shared by all sibling packages.
 - [markdown-codec](https://github.com/ExaDev/markdown-codec) — CommonMark+GFM ⇄ `ContentDocument` handling. The third format (after docx/odt) sharing the wordprocessing pivot.
 - [pdf-codec](https://github.com/ExaDev/pdf-codec) — the hand-written PDF codec (`readPdf`/`writePdf`/`pdfCodec`), the embedded STIX Two Math font, and text-measurement/font-resolution primitives.
