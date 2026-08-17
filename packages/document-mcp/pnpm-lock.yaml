@@ -12,8 +12,8 @@ importers:
         specifier: ^2.0.0
         version: 2.0.0
       documents.js:
-        specifier: ^1.99.75
-        version: 1.99.75
+        specifier: ^1.101.0
+        version: 1.101.0
       zod:
         specifier: ^4.2.0
         version: 4.4.3
@@ -1625,8 +1625,12 @@ packages:
     resolution: {integrity: sha512-z+1XNFToTrERlxIgoeyFb4Rw5b2nP+EgFOMH/CQfIjo0V9+To0LG6jJe2JUbTUfaggvbBRAEfDAHDMPVcBPROQ==}
     engines: {node: '>=20'}
 
-  documents.js@1.99.75:
-    resolution: {integrity: sha512-1DlkX/TaWp5jDUtjUWn090NojmsPMcd17C+zy+Oy1W37qRf1TS0t191jXhgCAj6CCUQ36iyTYDeVxi3RKViFmg==}
+  document-schema.js@3.0.0:
+    resolution: {integrity: sha512-19ARydD8C5GjTlEq3UjYgi4imX77Wg56N8cjgEGhRsS1PF1PLqblY9sLjG/b+eQTXzN1SKvDLQSOKvUwWFUa4g==}
+    engines: {node: '>=20'}
+
+  documents.js@1.101.0:
+    resolution: {integrity: sha512-J8GDv12zKusOss0o4bZsbuNh9/ssRizhKKjcM+BKFTr6H06BnKIF3LnpY8Obx2E9isRq4hquq1Xp0EYwS2naSw==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -2258,8 +2262,8 @@ packages:
     resolution: {integrity: sha512-hXdUTZYIVOt1Ex//jAQi+wTZZpUpwBj/0QsOzqegb3rGMMeJiSEu5xLHnYfBrRV4RH2+OCSOO95Is/7x1WJ4bw==}
     engines: {node: '>=10'}
 
-  markdown-codec@1.3.31:
-    resolution: {integrity: sha512-ZpXyWzSKrarcFbRkw8hY/U/w870jdvLQp0SHEgJj3kC7KRngBtPXAKv7cdfIG/mmG6iAiRyPf/nVROuz24dbHQ==}
+  markdown-codec@1.4.1:
+    resolution: {integrity: sha512-H9UBoRdVxgEtZF88YIeF6atUC07zTPD6EiRiPFyb3rVOQun4MqhBVMo8v/s4ENKJTfC8Q7gMsoe22tfV3/VRnA==}
     engines: {node: '>=20'}
 
   marked-terminal@7.3.0:
@@ -4605,12 +4609,16 @@ snapshots:
     dependencies:
       zod: 4.4.3
 
-  documents.js@1.99.75:
+  document-schema.js@3.0.0:
+    dependencies:
+      zod: 4.4.3
+
+  documents.js@1.101.0:
     dependencies:
       byte-codec: 1.1.9
       document-schema.js: 2.7.17
       fflate: 0.8.3
-      markdown-codec: 1.3.31
+      markdown-codec: 1.4.1
       odf.js: 2.7.23
       ooxml.js: 2.11.32
       pdf-codec: 2.2.32
@@ -5220,9 +5228,9 @@ snapshots:
     dependencies:
       semver: 7.8.5
 
-  markdown-codec@1.3.31:
+  markdown-codec@1.4.1:
     dependencies:
-      document-schema.js: 2.7.17
+      document-schema.js: 3.0.0
       zod: 4.4.3
 
   marked-terminal@7.3.0(marked@15.0.12):
