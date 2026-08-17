@@ -2,7 +2,10 @@ import type { XmlElement, XmlNode } from 'ooxml.js';
 import { attr, textContent } from 'ooxml.js';
 import type { Box } from 'document-schema.js';
 import type { Color as LayoutColor } from 'document-schema.js';
+import type { MathMlNode } from '../../mathml/nodes';
 import { emuToPt, ptToEmu } from '../../model/units';
+import type { OmmlWriteResult } from '../../omml/write';
+import { buildOfficeMathParagraph } from '../../omml/write';
 import type { Alignment } from 'document-schema.js';
 import { removeAttr, removeChild, setAttr } from '../../xml/edit';
 import { encodeXmlText, needsSpacePreserve } from '../../xml/entities';
@@ -256,6 +259,23 @@ export class PptxShape {
     }
     const nonParagraphChildren = txBody.children.filter((c) => !(c.type === 'element' && c.tag === 'a:p'));
     txBody.children = [...nonParagraphChildren, ...paragraphs.map(buildDrawingParagraph)];
+  }
+
+  // Replaces the shape's whole text body with a single paragraph carrying a real OOXML equation -- the pptx counterpart to src/edit/docx/paragraph.ts's own DocxParagraph.appendOfficeMath, and what closes ExaDev/documents.js#563's "pptx has zero formula support" gap. m:oMathPara/m:oMath share the identical OMML markup Word and PowerPoint both consume (ECMA-376's math markup is host-application-agnostic -- src/omml/write.ts builds no WordprocessingML-specific wrapper around it), so this is genuinely the same translator docx already uses, not a second one. A formula whose MathML produces no OMML content at all (an empty m:oMath) writes nothing and reports written: false, exactly like the docx counterpart -- the caller falls back to a plain-text stand-in (src/edit/pptx/content.ts's own appendShape).
+  appendOfficeMath(mathml: readonly MathMlNode[]): OmmlWriteResult & { readonly written: boolean } {
+    const result = buildOfficeMathParagraph(mathml);
+    if (result.element === undefined) {
+      return { ...result, written: false };
+    }
+    const node = this.live();
+    let txBody = directChild(node, 'p:txBody');
+    if (txBody === undefined) {
+      txBody = el('p:txBody', {}, [el('a:bodyPr'), el('a:lstStyle')]);
+      node.children.push(txBody);
+    }
+    const nonParagraphChildren = txBody.children.filter((c) => !(c.type === 'element' && c.tag === 'a:p'));
+    txBody.children = [...nonParagraphChildren, el('a:p', {}, [result.element])];
+    return { ...result, written: true };
   }
 
   remove(): void {
