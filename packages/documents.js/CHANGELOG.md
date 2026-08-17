@@ -1,3 +1,24 @@
+# [2.0.0](https://github.com/ExaDev/documents.js/compare/v1.102.2...v2.0.0) (2026-08-17)
+
+
+* feat!: report pages and frame-stamped content instead of a layout half in DocumentPackage ([b6daa8c](https://github.com/ExaDev/documents.js/commit/b6daa8c403b87ef6e329d5dd2da9cbe3a9f70477))
+
+
+### Features
+
+* attach frames from the exact clustered items onto reconstructed content nodes ([5617ef0](https://github.com/ExaDev/documents.js/commit/5617ef0913c02e34c1f81c35bcedce6a6f71b0b8))
+
+
+### BREAKING CHANGES
+
+* DocumentPackage is document-schema.js 3's fused shape
+({ formatVersion: 2, content, pages }); onDocument and
+ConversionResult.package no longer report a layout,
+buildDocumentBytes(pkg, 'pdf') throws for a package with no pages and
+rebuilds from frames otherwise, convertDrawingToLayout returns
+{ document, pages } rather than a bare LayoutDocument, and content read
+by markdown-codec 2.0.0 carries headingLevel on heading paragraphs.
+
 ## [1.102.2](https://github.com/ExaDev/documents.js/compare/v1.102.1...v1.102.2) (2026-08-17)
 
 ## [1.102.1](https://github.com/ExaDev/documents.js/compare/v1.102.0...v1.102.1) (2026-08-17)
