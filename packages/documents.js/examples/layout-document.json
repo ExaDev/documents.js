@@ -1,5 +1,5 @@
 {
-  "$schema": "https://cdn.jsdelivr.net/npm/document-schema.js@2.7.4/schemas/layout-document.schema.json",
+  "$schema": "https://cdn.jsdelivr.net/npm/document-schema.js@3.2.0/schemas/layout-document.schema.json",
   "formatVersion": 1,
   "metadata": {},
   "pages": [
@@ -11,7 +11,7 @@
           "kind": "text",
           "text": "Hello,",
           "xPt": 72,
-          "yPt": 709.5263671875,
+          "yPt": 712.102,
           "font": {
             "family": "Calibri",
             "weight": "normal",
@@ -28,8 +28,8 @@
         {
           "kind": "text",
           "text": "world!",
-          "xPt": 100.208984375,
-          "yPt": 709.5263671875,
+          "xPt": 100.68008,
+          "yPt": 712.102,
           "font": {
             "family": "Calibri",
             "weight": "normal",
@@ -47,7 +47,7 @@
           "kind": "text",
           "text": "A1",
           "xPt": 72,
-          "yPt": 696.0986328125,
+          "yPt": 699.452,
           "font": {
             "family": "Calibri",
             "weight": "normal",
@@ -65,7 +65,7 @@
           "kind": "text",
           "text": "B1",
           "xPt": 306,
-          "yPt": 696.0986328125,
+          "yPt": 699.452,
           "font": {
             "family": "Calibri",
             "weight": "normal",

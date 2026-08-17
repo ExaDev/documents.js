@@ -1,10 +1,62 @@
-import type { Box, ContentDocument, ContentDrawPage, ContentPathPoint, ContentVector, LayoutDocument, LayoutImageAsset, LayoutItem, LayoutPage, LayoutPathSegment, LayoutSubpath } from 'document-schema.js';
-import { LAYOUT_FORMAT_VERSION } from 'document-schema.js';
+import type { Box, ContentDocument, ContentDrawPage, ContentPathPoint, ContentVector, LayoutDocument, LayoutImageAsset, LayoutItem, LayoutPage, LayoutPathSegment, LayoutSubpath, PageSize } from 'document-schema.js';
 import { flipY } from '../model/geometry';
 import { mergeByPaintOrder } from '../model/paint-order';
 import type { Point, TextMeasurer } from 'document-schema.js';
 import { rotatePointAboutCenter } from '../model/geometry';
 import { convertShape } from './slides';
+import { layoutDocumentOf, packagePagesOf, stampFrame } from './shared';
+
+export interface DrawingLayoutResult {
+  readonly document: LayoutDocument;
+  // The DocumentPackage's own pages array (each rendered page's size, indexed to match every content node's own frames[].pageIndex) -- the input `doc` argument itself comes back with frames stamped in place, which together with this array is the fused unified DocumentPackage a conversion reports through onDocument.
+  readonly pages: readonly PageSize[];
+}
+
+// The axis-aligned PDF-space bounding box of one emitted vector item, the geometry a content node's own frame records for it. An unrotated rect/ellipse is its own box exactly; a rotated vector (emitted as a path) and a freeform path bound by the tight hull of all their points INCLUDING cubic controls -- the identical hull convention reconstruct.ts's own pathBoundingFrame documents (a cubic lies within the convex hull of its control points, so the frame contains the rendered curve).
+function boundsOfPoints(points: readonly Point[]): Box {
+  let minX = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (const point of points) {
+    minX = Math.min(minX, point.x);
+    maxX = Math.max(maxX, point.x);
+    minY = Math.min(minY, point.y);
+    maxY = Math.max(maxY, point.y);
+  }
+  return { xPt: minX, yPt: minY, widthPt: maxX - minX, heightPt: maxY - minY };
+}
+
+function vectorItemBounds(item: Extract<LayoutItem, { kind: 'rect' | 'ellipse' | 'line' | 'path' }>): Box {
+  if (item.kind === 'rect' || item.kind === 'ellipse') {
+    return { xPt: item.xPt, yPt: item.yPt, widthPt: item.widthPt, heightPt: item.heightPt };
+  }
+  if (item.kind === 'line') {
+    return boundsOfPoints([{ x: item.x1Pt, y: item.y1Pt }, { x: item.x2Pt, y: item.y2Pt }]);
+  }
+  const points: Point[] = [];
+  for (const subpath of item.subpaths) {
+    points.push({ x: subpath.startXPt, y: subpath.startYPt });
+    for (const segment of subpath.segments) {
+      if (segment.kind === 'cubic') {
+        points.push({ x: segment.c1xPt, y: segment.c1yPt });
+        points.push({ x: segment.c2xPt, y: segment.c2yPt });
+      }
+      points.push({ x: segment.xPt, y: segment.yPt });
+    }
+  }
+  return boundsOfPoints(points);
+}
+
+// Emits the vector's item(s) and stamps the vector node's own frame from the item that was emitted -- one frame per vector per page, at the exact placement the item carries (rotation already resolved into the geometry for rotated kinds).
+function emitVector(vector: ContentVector, pageIndex: number, pageHeightPt: number, out: LayoutItem[]): void {
+  const before = out.length;
+  convertVector(vector, pageHeightPt, out);
+  const emitted = out.length > before ? out[out.length - 1] : undefined;
+  if (emitted !== undefined && (emitted.kind === 'rect' || emitted.kind === 'ellipse' || emitted.kind === 'line' || emitted.kind === 'path')) {
+    stampFrame(vector, pageIndex, vectorItemBounds(emitted));
+  }
+}
 
 // ContentDocument (the drawing variant, odf.js's .odg target) -> LayoutDocument: structurally the same shape as slides.ts's own pptx/odp direction (one ContentDrawPage per PDF page, direct placement, no pagination), extended with one new emission path -- ContentVector, the vector-primitive vocabulary a drawing carries that a slide typically doesn't. rect/ellipse/line vectors map onto the LayoutRect/LayoutEllipse/LayoutLine kinds documents.js already had before this module existed; 'path' is the one genuinely new LayoutItem kind (document-schema.js's LayoutPathSchema), constructed here as a plain value -- writePath (pdf-codec's content-write.ts) is what later turns that value into PDF content-stream operators, a separate, downstream concern from building it. ContentShape content (draw:frame text/image/table, and salvaged custom-shape text) reuses convertShape verbatim from slides.ts, which is what makes odg free-riding on odp's/pptx's own already-correct paragraph flow, image placement, and table layout, not a second reimplementation of any of it.
 //
@@ -155,7 +207,8 @@ function convertPathVector(vector: PathVector, pageHeightPt: number, out: Layout
   out.push({ kind: 'path', subpaths, fill: vector.fill, fillRule: vector.fillRule, stroke: vector.stroke, sourcePath: vector.sourcePath });
 }
 
-function convertVector(vector: ContentVector, pageHeightPt: number, out: LayoutItem[]): void {
+// Exported for reuse by src/convert/from-package.ts's frames-to-layout inverse: re-running the ONE vector-to-item conversion (against a package's own recorded page height) is what keeps a rebuilt LayoutDocument's vector geometry identical to what a fresh layout pass would emit, rather than a second, drifting reimplementation of the same placements.
+export function convertVector(vector: ContentVector, pageHeightPt: number, out: LayoutItem[]): void {
   if (vector.kind === 'rect') {
     convertRectVector(vector, pageHeightPt, out);
   } else if (vector.kind === 'ellipse') {
@@ -167,21 +220,23 @@ function convertVector(vector: ContentVector, pageHeightPt: number, out: LayoutI
   }
 }
 
-function convertPage(page: ContentDrawPage, measurer: TextMeasurer, images: Record<string, LayoutImageAsset>): LayoutPage {
+function convertPage(page: ContentDrawPage, pageIndex: number, measurer: TextMeasurer, images: Record<string, LayoutImageAsset>): LayoutPage {
   const items: LayoutItem[] = [];
   // One merged walk in true paint order, rather than the two sequential arrays the page stores them in -- see src/model/paint-order.ts for how the merge resolves, and for what a page missing the field anywhere falls back to.
   for (const entry of mergeByPaintOrder(page.vectors, page.shapes)) {
     if (entry.kind === 'vector') {
-      convertVector(entry.value, page.size.heightPt, items);
+      emitVector(entry.value, pageIndex, page.size.heightPt, items);
     } else {
-      convertShape(entry.value, page.size.heightPt, measurer, images, items);
+      convertShape(entry.value, page.size.heightPt, pageIndex, measurer, images, items);
     }
   }
   return { widthPt: page.size.widthPt, heightPt: page.size.heightPt, items };
 }
 
-export function convertDrawingToLayout(doc: DrawingContentDocument, options: DrawingLayoutOptions): LayoutDocument {
+// BREAKING (documents.js 2.0.0): returns a DrawingLayoutResult ({ document, pages }) rather than a bare LayoutDocument, matching the shape the other three engines already return -- the pages half of the fused DocumentPackage, alongside the frames stamped in place on `doc`'s own nodes.
+export function convertDrawingToLayout(doc: DrawingContentDocument, options: DrawingLayoutOptions): DrawingLayoutResult {
   const images: Record<string, LayoutImageAsset> = {};
-  const pages = doc.pages.map((page) => convertPage(page, options.measurer, images));
-  return { formatVersion: LAYOUT_FORMAT_VERSION, metadata: doc.metadata, pages, images };
+  const pages = doc.pages.map((page, pageIndex) => convertPage(page, pageIndex, options.measurer, images));
+  // `doc` itself now carries every placement this pass computed, stamped in place on its own nodes (frames); the returned pages array plus that mutated content is the fused unified DocumentPackage a conversion reports through onDocument.
+  return { document: layoutDocumentOf(doc.metadata, pages, images), pages: packagePagesOf(pages) };
 }

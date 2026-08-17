@@ -1,13 +1,51 @@
 import { base64ToBytes } from 'ooxml.js';
-import type { Box, ContentBorder, ContentCellBorders, ContentImageBlock, ContentRun, ContentTableRow, LayoutImageAsset, LayoutItem, MathFontMetrics, MathMlNode } from 'document-schema.js';
+import type { Box, ContentBorder, ContentCellBorders, ContentImageBlock, ContentRun, ContentTableRow, LayoutDocument, LayoutFrame, LayoutImageAsset, LayoutItem, LayoutPage, LayoutText, MathFontMetrics, MathMlNode, PageSize, TextMeasurer, WrappedLine } from 'document-schema.js';
+import { LAYOUT_FORMAT_VERSION } from 'document-schema.js';
 import { layoutFormula } from '../mathml/layout';
-import type { Alignment, LayoutFont } from 'document-schema.js';
+import type { Alignment, LayoutFont, LayoutMetadata, StyledRun } from 'document-schema.js';
 import { COLOR_BLACK, DEFAULT_LAYOUT_FONT } from 'document-schema.js';
-import type { StyledRun, TextMeasurer, WrappedLine } from 'document-schema.js';
 import { crc32, decodePng, readJpegInfo } from 'byte-codec';
 import { wrapRunsToWidth } from './text-layout';
+import type { SourcedFragment, SourcedRun } from './text-layout';
 
 // Layout logic genuinely shared between src/layout/slides.ts (pptx, direct placement) and src/layout/engine.ts (docx, flow/pagination): run styling, line-height measurement, alignment, and image-asset registration have no format-specific knowledge of their own -- duplicating them between the two engines would just be two copies to keep in sync.
+
+// Records one rendered placement onto a content node's own frames array, in place -- the single mechanism every layout engine and reconstructor in this package uses to fuse positions into the content tree (the schema's DocumentPackage design: a node's frames ARE its rendered page positions, in PDF user space, so no second LayoutDocument needs to be correlated back by sourcePath). Mutating the caller's own content tree here is the deliberate design, not an oversight: the correspondence between a node and its position is in hand at exactly this moment and would otherwise be thrown away (see ExaDev/documents.js#569).
+export function stampFrame(node: { frames?: LayoutFrame[] }, pageIndex: number, box: Box): void {
+  const frame: LayoutFrame = { pageIndex, xPt: box.xPt, yPt: box.yPt, widthPt: box.widthPt, heightPt: box.heightPt };
+  if (node.frames === undefined) {
+    node.frames = [frame];
+  } else {
+    node.frames.push(frame);
+  }
+}
+
+// The bounding box of one rendered text placement: the fragment's own measured width, and the vertical extent its line's ascent/descent give around the baseline the item's yPt carries. widthOfTextAtSize is the identical measurement the wrapping pass already made for this fragment, so the frame's width and the emitted LayoutText agree by construction.
+export function textBoxForFragment(item: LayoutText, textWidthPt: number, ascentPt: number, descentPt: number): Box {
+  return { xPt: item.xPt, yPt: item.yPt + descentPt, widthPt: textWidthPt, heightPt: ascentPt - descentPt };
+}
+
+// Stamps one emitted LayoutText's box onto the ContentRun node that fragment came from -- the per-fragment stamping step every text-laying engine (engine.ts's flow and cell paths, slides.ts's shape path) runs right after pushing the item. A fragment with no runIndex (an empty paragraph's synthesised fallback run) or one whose index resolves to no node stamps nothing: there is no real content node to position, and fabricating a position on some other node would be worse than leaving it unplaced. The item is an argument rather than re-derived here so the frame always matches the exact item that was emitted, justify offsets and all.
+export function stampFragmentFrame(runs: readonly ContentRun[], fragment: SourcedFragment, pageIndex: number, item: LayoutText, measurer: TextMeasurer, line: { readonly ascentPt: number; readonly descentPt: number }): void {
+  if (fragment.runIndex === undefined) {
+    return;
+  }
+  const run = runs[fragment.runIndex];
+  if (run === undefined) {
+    return;
+  }
+  stampFrame(run, pageIndex, textBoxForFragment(item, measurer.widthOfTextAtSize(fragment.text, fragment.font, fragment.sizePt), line.ascentPt, line.descentPt));
+}
+
+// Every LayoutDocument this package's own engines produce carries the package's pages array directly derivable from its own pages -- each rendered page's own size, indexed to match every node's own frames[].pageIndex (document-schema.js's DocumentPackageSchema contract). One helper rather than four per-engine copies of the same map.
+export function packagePagesOf(pages: readonly LayoutPage[]): PageSize[] {
+  return pages.map((page) => ({ widthPt: page.widthPt, heightPt: page.heightPt }));
+}
+
+// The LayoutDocument every engine's result carries as its `document` half -- pdf-codec's writePdf contract, unchanged by the frames fusion (the internal LayoutDocument stays the one shape writePdf consumes; frames are the additional record fused onto content).
+export function layoutDocumentOf(metadata: LayoutMetadata, pages: LayoutPage[], images: Record<string, LayoutImageAsset>): LayoutDocument {
+  return { formatVersion: LAYOUT_FORMAT_VERSION, metadata, pages, images };
+}
 
 // A nominal fallback text size, used only when a ContentRun/paragraph has no resolvable size of its own (a wholly empty paragraph, or a run whose cascade never set one) -- ContentParagraph/ContentRun don't retain the cascade-resolved default for this case, only what ended up on an actual run.
 export const NOMINAL_TEXT_SIZE_PT = 18;
@@ -56,8 +94,8 @@ export function runFont(run: ContentRun, headingBold?: boolean): LayoutFont {
   };
 }
 
-export function toStyledRuns(runs: readonly ContentRun[], fontScale = 1, headingStyle?: { bold: boolean; sizePt: number }): StyledRun[] {
-  return runs.map((run) => ({
+export function toStyledRuns(runs: readonly ContentRun[], fontScale = 1, headingStyle?: { bold: boolean; sizePt: number }): SourcedRun[] {
+  return runs.map((run, runIndex) => ({
     text: run.text,
     font: runFont(run, headingStyle?.bold),
     sizePt: (run.sizePt ?? headingStyle?.sizePt ?? NOMINAL_TEXT_SIZE_PT) * fontScale,
@@ -65,11 +103,12 @@ export function toStyledRuns(runs: readonly ContentRun[], fontScale = 1, heading
     underline: run.underline,
     hyperlink: run.hyperlink,
     sourcePath: run.sourcePath,
+    runIndex,
   }));
 }
 
-// A paragraph's runs, with a synthesised nominal fallback substituted when there are none at all -- so callers can wrap and measure unconditionally rather than special-casing an empty paragraph.
-export function effectiveStyledRuns(runs: readonly ContentRun[], fontScale = 1, headingStyle?: { bold: boolean; sizePt: number }): StyledRun[] {
+// A paragraph's runs, with a synthesised nominal fallback substituted when there are none at all -- so callers can wrap and measure unconditionally rather than special-casing an empty paragraph. The synthesised run carries no runIndex: it corresponds to no ContentRun node, so a stamping caller finds nothing to stamp -- the correct outcome, not a guard to work around.
+export function effectiveStyledRuns(runs: readonly ContentRun[], fontScale = 1, headingStyle?: { bold: boolean; sizePt: number }): SourcedRun[] {
   const styled = toStyledRuns(runs, fontScale, headingStyle);
   return styled.length > 0 ? styled : [{ text: '', font: DEFAULT_LAYOUT_FONT, sizePt: NOMINAL_TEXT_SIZE_PT * fontScale, color: COLOR_BLACK }];
 }

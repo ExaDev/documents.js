@@ -356,7 +356,7 @@ export type { PresentationLayoutResult, SlidesLayoutOptions } from './layout/sli
 export { convertPresentationToLayout } from './layout/slides';
 export type { SheetsLayoutOptions, SpreadsheetLayoutResult } from './layout/sheets';
 export { convertSpreadsheetToLayout } from './layout/sheets';
-export type { DrawingLayoutOptions } from './layout/drawing';
+export type { DrawingLayoutOptions, DrawingLayoutResult } from './layout/drawing';
 export { convertDrawingToLayout } from './layout/drawing';
 export type { ReconstructOptions } from './layout/reconstruct';
 export { reconstructDrawing, reconstructPresentation, reconstructSpreadsheet, reconstructWordprocessing } from './layout/reconstruct';
@@ -450,8 +450,8 @@ export { createLocalDocumentConverter } from './convert/local';
 export { convertDocument, resolveCompositionPlan } from './convert/composition';
 export type { UnifiedConversionOptions, ConversionPlan, CompositionHop } from './convert/composition';
 
-// --- A DocumentPackage (content + optional layout) -> any DocumentFormat's own bytes -- the reverse of what every ergonomic X-to-PDF/PDF-to-X conversion's own onDocument callback hands back. ---
-export { buildDocumentBytes } from './convert/from-package';
+// --- A DocumentPackage (content + its fused positions) -> any DocumentFormat's own bytes -- the reverse of what every ergonomic X-to-PDF/PDF-to-X conversion's own onDocument callback hands back -- plus the frames-to-layout inverse the pdf target rebuilds through (exported for a caller wanting the pdf-codec view of a package's positions without writing bytes). ---
+export { buildDocumentBytes, layoutDocumentFromPackage } from './convert/from-package';
 
 // --- Raw package decode/encode, dispatched by DocumentFormat -- the format-aware counterpart to ooxml.js's/odf.js's own decodePackage/encodePackage, for a caller holding a format + bytes rather than already knowing which of the two underlying codecs applies. Covers docx/pptx/xlsx (ooxml.js's OPC container) and odt/odp/ods/odg/odf (odf.js's ODF container); markdown and pdf have no raw-package concept at all and throw UnsupportedPackageFormatError. decodeOdbPackage is the .odb-specific sibling: 'odb' is deliberately not a DocumentFormat member (see src/odb/'s own Architecture/Gotchas entries), but its bytes are an ordinary ODF package decoded by the identical odf.js decodePackage every readOdb*/odbTo* function in this package already starts from -- there is no encodeOdbPackage, since nothing here ever writes a new .odb file. ---
 export { decodeDocumentPackage, decodeOdbPackage, encodeDocumentPackage, UnsupportedPackageFormatError } from './package-codec';

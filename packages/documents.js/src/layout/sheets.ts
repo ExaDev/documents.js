@@ -16,8 +16,9 @@ import type {
   LayoutLine,
   LayoutPage,
   LayoutText,
+  PageSize,
 } from 'document-schema.js';
-import { columnIndexToLetters, LAYOUT_FORMAT_VERSION } from 'document-schema.js';
+import { columnIndexToLetters } from 'document-schema.js';
 import { layoutFormula } from '../mathml/layout';
 import type { Color as LayoutColor } from 'document-schema.js';
 import { COLOR_BLACK, rgbHexToColor } from 'document-schema.js';
@@ -27,7 +28,7 @@ import { flipY } from '../model/geometry';
 import { throwIfAborted } from '../ports/abort';
 import type { MathFontMetrics, PositionedFormula, StyledFragment, StyledRun, TextMeasurer } from 'document-schema.js';
 import { wrapRunsToWidth } from './text-layout';
-import { alignmentOffsetPt, formulaSizePtForFrame, justifyLineGapsPt, lineNaturalHeightPt, pushCellBorderLines, registerImage, sumColumnWidthsPt, toStyledRuns } from './shared';
+import { alignmentOffsetPt, formulaSizePtForFrame, justifyLineGapsPt, lineNaturalHeightPt, layoutDocumentOf, packagePagesOf, pushCellBorderLines, registerImage, stampFragmentFrame, stampFrame, sumColumnWidthsPt, toStyledRuns } from './shared';
 
 // ContentDocument (the spreadsheet variant) -> LayoutDocument: ods/xlsx's own layout direction, genuinely distinct from both docx's flow/pagination (engine.ts) and pptx's direct placement (slides.ts). A sheet paginates over TWO axes at once (column bands x row bands, not just rows), print settings (range/scale/fit-to-page/repeat rows-columns/gridlines/headers/page order/manual breaks) drive the page grid directly rather than being ignored the way a docx section's margins alone would be, and cell overflow is bounded per cell (###, spill, truncate) rather than wrapped the way paragraph text is. This is also the first layout algorithm in the package genuinely long-running enough (a real sheet can carry tens of thousands of populated cells) to need cooperative cancellation wired into its own per-cell emission loop, not just checked once at the top of the function the way reconstruct.ts's own page/slide loops do.
 //
@@ -46,6 +47,8 @@ export interface SpreadsheetLayoutResult {
   readonly document: LayoutDocument;
   // Every cell-anchored embedded formula actually rendered via src/mathml, already positioned in PDF page space (bottom-left origin, y-up) -- pdf-codec's write.ts's own WritePdfOptions.formulas consumes this directly. Structurally identical to src/layout/engine.ts's WordprocessingLayoutResult.formulas and src/layout/slides.ts's PresentationLayoutResult.formulas; see the former's own comment for why a formula's CID-font glyph runs can't travel through LayoutDocument.pages[].items itself.
   readonly formulas: readonly PositionedFormula[];
+  // The DocumentPackage's own pages array (each rendered page's size, indexed to match every content node's own frames[].pageIndex) -- the input `doc` argument itself comes back with frames stamped in place, which together with this array is the fused unified package a conversion reports through onDocument.
+  readonly pages: readonly PageSize[];
 }
 
 type SpreadsheetContentDocument = Extract<ContentDocument, { kind: 'spreadsheet' }>;
@@ -93,7 +96,7 @@ const DEFAULT_COLUMN_WIDTH_PT = 64;
 const DEFAULT_ROW_HEIGHT_PT = 15;
 
 // A nominal fallback text size for a cell with no runs of its own (the common case -- ContentSheetCell.runs is populated only for genuinely mixed inline formatting, per its own schema comment) and therefore no resolvable size anywhere in the model. Deliberately its own constant, distinct from shared.ts's NOMINAL_TEXT_SIZE_PT (18pt, a docx/pptx PARAGRAPH fallback) -- applying that size to an ordinary spreadsheet cell would visually swamp a real row height. Matches Excel/Calc's own common 10-11pt body-cell default.
-const NOMINAL_CELL_TEXT_SIZE_PT = 10;
+export const NOMINAL_CELL_TEXT_SIZE_PT = 10;
 // The row/column header-gutter's own label size -- smaller again, matching Excel/Calc's own small grey header-label chrome.
 const HEADER_LABEL_SIZE_PT = 8;
 
@@ -377,6 +380,7 @@ function verticalLineTopYDownPt(verticalAlignment: 'top' | 'middle' | 'bottom', 
 function renderCellText(
   cell: ContentSheetCell,
   frameYDown: Box,
+  pageIndex: number,
   rowCells: ReadonlyMap<number, ContentSheetCell> | undefined,
   columnAxis: PositionedAxis,
   pageHeightPt: number,
@@ -444,6 +448,8 @@ function renderCellText(
       sourcePath: fragment.sourcePath,
     };
     out.push(textItem);
+    // Stamps the run the fragment came from; a synthesised fallback run (a cell with no runs of its own) or an overflow replacement ('###' stand-in text) has no originating node, and stamps nothing -- the run's own text genuinely did not render there.
+    stampFragmentFrame(cell.runs ?? [], fragment, pageIndex, textItem, measurer, naturalLine);
   });
 }
 
@@ -522,6 +528,7 @@ function renderAnchoredFormulas(
     };
     const flipped = flipY(boxYDown, pageHeightPt);
     out.push({ pageIndex, xPt: flipped.xPt, yPt: flipped.yPt, box });
+    // No frame is stamped here, unlike engine.ts's and slides.ts's own formula placements: a sheet-anchored embedded object is a ContentEmbeddedObject, the one embedded-object shape document-schema.js deliberately left WITHOUT a frames field (only the in-flow ContentEmbeddedObjectBlock carries one), so there is no node field to stamp -- the rendered position lives in the PositionedFormula array this loop already records.
   }
 }
 
@@ -533,6 +540,7 @@ function renderAnchoredImages(
   gridLeftXPt: number,
   gridTopYDownPt: number,
   pageHeightPt: number,
+  pageIndex: number,
   hiddenColumnIndices: ReadonlySet<number>,
   hiddenRowIndices: ReadonlySet<number>,
   out: LayoutItem[],
@@ -554,6 +562,7 @@ function renderAnchoredImages(
     const flipped = flipY(boxYDown, pageHeightPt);
     const imageItem: LayoutImage = { kind: 'image', imageId, xPt: flipped.xPt, yPt: flipped.yPt, widthPt: image.widthPt, heightPt: image.heightPt, sourcePath: image.sourcePath };
     out.push(imageItem);
+    stampFrame(image, pageIndex, { xPt: imageItem.xPt, yPt: imageItem.yPt, widthPt: imageItem.widthPt, heightPt: imageItem.heightPt });
   }
 }
 
@@ -674,11 +683,13 @@ function convertSheetToPages(sheet: ContentSheet, measurer: TextMeasurer, signal
         if (cellFrame === undefined) {
           continue;
         }
+        // The cell's own placement stamps the CELL node once per page it renders on (a repeat-row cell, or a cell re-printed across column bands, genuinely occupies several pages); the runs inside stamp their own finer-grained frames through renderCellText below.
+        stampFrame(cell, out.length, flipY(cellFrame, pageSize.heightPt));
         renderCellBackground(cell, cellFrame, pageSize.heightPt, backgroundItems);
         if (cell.borders !== undefined) {
           pushCellBorderLines(cell.borders, cellFrame, pageSize.heightPt, cell.sourcePath, borderItems);
         }
-        renderCellText(cell, cellFrame, rowCells, columnAxis, pageSize.heightPt, measurer, textItems);
+        renderCellText(cell, cellFrame, out.length, rowCells, columnAxis, pageSize.heightPt, measurer, textItems);
       }
     }
 
@@ -695,7 +706,7 @@ function convertSheetToPages(sheet: ContentSheet, measurer: TextMeasurer, signal
     // pageIndex is this page's own index in the whole LayoutDocument, so it is read BEFORE the push -- `out` is shared across every sheet in the document, exactly as PositionedFormula.pageIndex requires.
     renderAnchoredFormulas(formulas, columnAxis, rowAxis, gridLeftXPt, gridTopYDownPt, pageSize.heightPt, out.length, hiddenColumnIndices, hiddenRowIndices, formulasOut, mathMetricsAt);
     // Images are LayoutItems (unlike formulas), so they push straight into this page's own `items` rather than a separate out-array -- appended after cell text so a floating image paints over the grid, matching how a real spreadsheet layers a floating draw:frame above the cells it overlaps.
-    renderAnchoredImages(sheet.images, columnAxis, rowAxis, gridLeftXPt, gridTopYDownPt, pageSize.heightPt, hiddenColumnIndices, hiddenRowIndices, items, images);
+    renderAnchoredImages(sheet.images, columnAxis, rowAxis, gridLeftXPt, gridTopYDownPt, pageSize.heightPt, out.length, hiddenColumnIndices, hiddenRowIndices, items, images);
     out.push({ widthPt: pageSize.widthPt, heightPt: pageSize.heightPt, items });
   }
 }
@@ -710,5 +721,6 @@ export function convertSpreadsheetToLayout(doc: SpreadsheetContentDocument, opti
   for (const sheet of doc.sheets) {
     convertSheetToPages(sheet, options.measurer, options.signal, pages, formulas, images, options.mathMetricsAt);
   }
-  return { document: { formatVersion: LAYOUT_FORMAT_VERSION, metadata: doc.metadata, pages, images }, formulas };
+  // `doc` itself now carries every placement this pass computed, stamped in place on its own nodes (frames); the returned pages array plus that mutated content is the fused unified DocumentPackage a conversion reports through onDocument.
+  return { document: layoutDocumentOf(doc.metadata, pages, images), formulas, pages: packagePagesOf(pages) };
 }

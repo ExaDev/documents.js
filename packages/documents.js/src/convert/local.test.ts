@@ -305,14 +305,14 @@ describe('createLocalDocumentConverter: convert', () => {
     expect(result.diagnostics.some((d) => d.code === 'pdf/xref-recovered')).toBe(true);
   });
 
-  it('returns a package with correlated content and layout for a PDF-pivot conversion (docx -> pdf)', async () => {
+  it('returns a package with frame-stamped content and pages for a PDF-pivot conversion (docx -> pdf)', async () => {
     const converter = createLocalDocumentConverter();
     const result = await converter.convert({ source: { format: 'docx', bytes: buildSampleDocx('Hi') }, targetFormat: 'pdf' }, { signal: new AbortController().signal });
 
     expect(result.package).toBeDefined();
     const pkg = result.package!;
     expect(pkg.content.kind).toBe('wordprocessing');
-    expect(pkg.layout).toBeDefined();
+    expect(pkg.pages).toBeDefined();
     if (pkg.content.kind !== 'wordprocessing') {
       throw new Error('expected a wordprocessing ContentDocument');
     }
@@ -322,18 +322,19 @@ describe('createLocalDocumentConverter: convert', () => {
     }
     const run = paragraph.runs[0];
     expect(run?.sourcePath).toBeDefined();
-    const layoutText = pkg.layout?.pages[0]?.items.find((item) => item.kind === 'text' && item.sourcePath === run?.sourcePath);
-    expect(layoutText).toBeDefined();
+    // The layout pass fused the run's rendered position onto the run node itself, on a page the package's own pages array describes.
+    expect(run?.frames?.length).toBeGreaterThan(0);
+    expect(run?.frames?.[0]?.pageIndex).toBe(0);
   });
 
-  it('returns a package with content only (layout undefined) for a PDF-bypassing bridge conversion (odt -> docx)', async () => {
+  it('returns a package with content only (pages undefined) for a PDF-bypassing bridge conversion (odt -> docx)', async () => {
     const converter = createLocalDocumentConverter();
     const result = await converter.convert({ source: { format: 'odt', bytes: minimalOdtBytes() }, targetFormat: 'docx' }, { signal: new AbortController().signal });
 
     expect(result.package).toBeDefined();
     const pkg = result.package!;
     expect(pkg.content.kind).toBe('wordprocessing');
-    expect(pkg.layout).toBeUndefined();
+    expect(pkg.pages).toBeUndefined();
   });
 });
 

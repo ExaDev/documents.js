@@ -159,7 +159,7 @@ function referenceOdgPdf(bytes: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer
   if (content.kind !== 'drawing') {
     throw new Error('readOdgContent returned a non-drawing ContentDocument');
   }
-  return writePdf(convertDrawingToLayout(content, { measurer: createStandardFontMeasurer() }));
+  return writePdf(convertDrawingToLayout(content, { measurer: createStandardFontMeasurer() }).document);
 }
 
 const BYTE_IDENTITY_CASES: readonly { readonly name: string; readonly actual: () => Uint8Array<ArrayBuffer>; readonly reference: () => Uint8Array<ArrayBuffer> }[] = [
