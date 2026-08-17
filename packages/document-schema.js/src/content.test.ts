@@ -205,6 +205,12 @@ function spreadsheetDocument(): ContentDocument {
             value: { kind: 'currency', value: 125000, currency: 'USD' },
             formula: '=SUM(B2:B10)',
             displayText: '$125,000.00',
+            comment: {
+              text: 'Excludes the late Q4 bookings.',
+              author: 'Joseph Mearman',
+              createdAt: '2026-08-17T09:30:00Z',
+              replies: [{ text: 'Confirmed against the ledger.', author: 'Robin Achebe' }],
+            },
           },
           { row: 1, column: 1, value: { kind: 'percentage', value: 0.235 }, displayText: '23.5%' },
           { row: 2, column: 1, value: { kind: 'boolean', value: true }, displayText: 'TRUE' },
@@ -626,6 +632,76 @@ describe('frames (the FusedNode pattern)', () => {
     expect(
       ContentRunSchema.safeParse({ text: 'Bad', frames: [{ pageIndex: -1, xPt: 0, yPt: 0, widthPt: 1, heightPt: 1 }] })
         .success,
+    ).toBe(false);
+  });
+});
+
+describe('ContentSheetCell comment', () => {
+  it('accepts a legacy-style note -- text alone, or with author and createdAt, no replies', () => {
+    const bare = ContentSheetCellSchema.parse({
+      row: 0,
+      column: 0,
+      value: { kind: 'string', value: 'x' },
+      displayText: 'x',
+      comment: { text: 'Check this figure.' },
+    });
+    expect(bare.comment).toEqual({ text: 'Check this figure.' });
+
+    const attributed = ContentSheetCellSchema.parse({
+      row: 0,
+      column: 0,
+      value: { kind: 'string', value: 'x' },
+      displayText: 'x',
+      comment: { text: 'Check this figure.', author: 'Robin Achebe', createdAt: '2026-08-17T09:30:00Z' },
+    });
+    expect(attributed.comment?.replies).toBeUndefined();
+  });
+
+  it('accepts a threaded comment and preserves reply order', () => {
+    const parsed = ContentSheetCellSchema.parse({
+      row: 3,
+      column: 7,
+      value: { kind: 'number', value: 42 },
+      displayText: '42',
+      comment: {
+        text: 'Excludes the late Q4 bookings.',
+        author: 'Joseph Mearman',
+        replies: [
+          { text: 'Confirmed against the ledger.', author: 'Robin Achebe' },
+          { text: 'Noted.', author: 'Joseph Mearman' },
+        ],
+      },
+    });
+    expect(parsed.comment?.replies?.map((reply) => reply.text)).toEqual([
+      'Confirmed against the ledger.',
+      'Noted.',
+    ]);
+  });
+
+  it('parses correctly when comment is omitted, matching every other optional field', () => {
+    expect(
+      ContentSheetCellSchema.parse({ row: 0, column: 0, value: { kind: 'empty' }, displayText: '' }).comment,
+    ).toBeUndefined();
+  });
+
+  it('rejects a comment with no text, and a reply with no text', () => {
+    expect(
+      ContentSheetCellSchema.safeParse({
+        row: 0,
+        column: 0,
+        value: { kind: 'empty' },
+        displayText: '',
+        comment: { author: 'Robin Achebe' },
+      }).success,
+    ).toBe(false);
+    expect(
+      ContentSheetCellSchema.safeParse({
+        row: 0,
+        column: 0,
+        value: { kind: 'empty' },
+        displayText: '',
+        comment: { text: 'Root', replies: [{ author: 'Robin Achebe' }] },
+      }).success,
     ).toBe(false);
   });
 });

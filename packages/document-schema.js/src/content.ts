@@ -317,7 +317,16 @@ export const ContentCellValueSchema = z.discriminatedUnion('kind', [
 ]);
 export type ContentCellValue = z.infer<typeof ContentCellValueSchema>;
 
-// row/column are the cell's own position, not implied by array index -- ContentSheetSchema.cells is sparse, since real sheets are sparse. displayText is the producer's own rendered string for `value` (its number-format/locale/currency-symbol applied already) and is required on every cell that exists in this array, since a cell with nothing to display simply isn't included; it is what makes spreadsheet-to-PDF rendering tractable without this package reimplementing a number-format/locale engine. formula, if present, is carried verbatim in whatever syntax the source format used. colSpan/rowSpan are set on the anchor cell only, matching how ContentTableCell already handles merged cells. alignment is an override of the existing value-kind default (numeric right, boolean/error centre, string left); absent means that default still applies. verticalAlignment has no value-kind default to fall back to, so its own absence means 'bottom' outright, matching a real spreadsheet's own typical default.
+// A cell-anchored annotation, one shape deliberately covering both mechanisms a real spreadsheet uses for comments -- xlsx's legacy single notes and its newer threaded comments alike: a legacy note is a comment whose replies stay absent, a threaded comment is one whose replies array is populated, so no separate union or kind discriminant is needed. Replies are flat -- a reply never carries replies of its own -- matching how threaded comments nest in the source formats. createdAt is an ISO 8601 date-time in the source format's own spelling and precision (e.g. '2026-08-17T09:30:00Z'), present only when the source recorded one; a wire contract stated here rather than a validated one, for the same reason as ContentCellValueSchema's own temporal strings above -- a regex would turn a producer not yet normalised to ISO 8601 into a hard parse failure.
+export const ContentSheetCellCommentSchema = z.object({
+  text: z.string(),
+  author: z.string().optional(),
+  createdAt: z.string().optional(),
+  replies: z.array(z.object({ text: z.string(), author: z.string().optional() })).optional(),
+});
+export type ContentSheetCellComment = z.infer<typeof ContentSheetCellCommentSchema>;
+
+// row/column are the cell's own position, not implied by array index -- ContentSheetSchema.cells is sparse, since real sheets are sparse. displayText is the producer's own rendered string for `value` (its number-format/locale/currency-symbol applied already) and is required on every cell that exists in this array, since a cell with nothing to display simply isn't included; it is what makes spreadsheet-to-PDF rendering tractable without this package reimplementing a number-format/locale engine. formula, if present, is carried verbatim in whatever syntax the source format used. colSpan/rowSpan are set on the anchor cell only, matching how ContentTableCell already handles merged cells. alignment is an override of the existing value-kind default (numeric right, boolean/error centre, string left); absent means that default still applies. verticalAlignment has no value-kind default to fall back to, so its own absence means 'bottom' outright, matching a real spreadsheet's own typical default. comment, when present, is the cell's annotation (ContentSheetCellCommentSchema above) and never affects rendering -- it is carried for fidelity, so inspecting or round-tripping a document does not silently drop what the author pinned to that cell.
 export const ContentSheetCellSchema = z.object({
   row: z.number().int().nonnegative(),
   column: z.number().int().nonnegative(),
@@ -331,6 +340,7 @@ export const ContentSheetCellSchema = z.object({
   borders: ContentCellBordersSchema.optional(),
   alignment: AlignmentSchema.optional(), // override; absent means the existing value-kind default
   verticalAlignment: z.enum(['top', 'middle', 'bottom']).optional(), // absent means 'bottom'
+  comment: ContentSheetCellCommentSchema.optional(), // a cell-anchored annotation -- a legacy note or a threaded comment; see ContentSheetCellCommentSchema above
   sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
   frames: z.array(LayoutFrameSchema).optional(), // this cell's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
 });
