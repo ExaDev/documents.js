@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Package } from '../../model/package';
 import type { XmlElement } from '../../model/node';
+import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
 import { el, txt } from '../../xml/fragment';
 import { readOdfFormula, readOdfFormulaDocument } from './read';
 
@@ -139,7 +140,7 @@ describe('readOdfFormulaDocument', () => {
     if (document.kind !== 'formula') {
       throw new Error('expected a formula-kind ContentDocument');
     }
-    expect(document.formatVersion).toBe(2);
+    expect(document.formatVersion).toBe(CONTENT_FORMAT_VERSION);
     expect(document.metadata.title).toBe('Pythagoras');
     expect(document.formula.starMath).toBe('f(x) = {x^2} over {2} + sqrt {x}');
     expect(document.formula.mathml).toEqual(readOdfFormula(realFormulaPackage()).mathml);
