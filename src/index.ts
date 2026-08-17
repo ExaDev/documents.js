@@ -334,6 +334,15 @@ export { readOdfEmbeddedFormula, readOdfFormulaContent } from './odf/formula/rea
 export { decodeMarkdownText, encodeMarkdownText } from './markdown/text';
 export { readMarkdownContent } from './markdown/read';
 export { buildMarkdownText } from './markdown/write';
+// The one-way ContentDocument -> Markdown text renderer covering all five ContentDocument kinds, not just 'wordprocessing' -- buildMarkdownText/writeMarkdown above throw MarkdownUnsupportedDocumentKindError for the other four. renderContentDocumentToMarkdown delegates straight to buildMarkdownText for 'wordprocessing' and otherwise flattens slides/sheets/drawing pages/a bare formula into the same ContentBlock vocabulary first, reporting every degrade decision through its own onDiagnostic option (see src/markdown/render.ts's own module comment).
+export type {
+  MarkdownRenderDiagnostic,
+  MarkdownRenderDiagnosticCode,
+  MarkdownRenderDiagnosticSeverity,
+  MarkdownRenderDiagnosticSink,
+  RenderMarkdownOptions,
+} from './markdown/render';
+export { MarkdownRenderDiagnosticCodes, renderContentDocumentToMarkdown } from './markdown/render';
 // A formula travels inside a ContentDocument now (document-schema.js's own 'formula' variant), not alongside one -- these are the small helpers for building and reading that shape: the 'formula'-kind envelope, the embedded-object block an odt/odp reader produces for an inline formula, the narrowing back out of such a block, and the plain-text stand-in for a consumer with no MathML rendering of its own.
 export { buildFormulaBlock, formulaDocument, formulaOfBlock, formulaPlaceholderText } from './model/formula';
 // The drawing counterpart to the formula helpers above: reconstructWordprocessing/reconstructPresentation carry a page's recovered vector primitives in an embedded-object block, since neither ContentSection nor ContentSlide has a vectors array of its own. buildDrawingBlock is what builds one; drawingOfBlock narrows back out of it, and is what a consumer distinguishing a recovered drawing from a recovered formula calls.
