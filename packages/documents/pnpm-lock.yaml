@@ -66,8 +66,8 @@ importers:
         specifier: ^2.0.0
         version: 2.0.0
       odf.js:
-        specifier: ^3.0.1
-        version: 3.0.1
+        specifier: ^3.0.2
+        version: 3.0.2
       react:
         specifier: ^19.2.8
         version: 19.2.8
@@ -2434,6 +2434,10 @@ packages:
     resolution: {integrity: sha512-XDu/+fo56WrXrcR3f16xH5lYEQX+3b4W6kJELRNFwrrWxOqhQBQepXMkCi+niSrgCEIcfaC1IeaGPlZ8oj5gSw==}
     engines: {node: '>=20'}
 
+  document-schema.js@3.3.0:
+    resolution: {integrity: sha512-Jcg+sLEKF6T2w6WdCD1S0DcKFt1Kpk/rO1AZlE7fi0pqN4Ys8tN3qeY97DPc78QRy+EkbCW5hKLwM0EyV+Ojqw==}
+    engines: {node: '>=20'}
+
   documents.js@2.3.0:
     resolution: {integrity: sha512-FTQIA9PRiHYPjn2NFEVdUp3rlvfd7smFs+HU6WAYhPFC47V4TzHBkIWhq9ptIbhtpldAThESKh61eLYYQrHd5A==}
     engines: {node: '>=20'}
@@ -3650,6 +3654,10 @@ packages:
 
   odf.js@3.0.1:
     resolution: {integrity: sha512-gVTXbQc6oHy1y1m7VxXXCQFU0HkTYoTSg7j/CH2Q+hSPulzOV4SCyPucS4CilSpmruckRONILpIMCi8DX4bFrA==}
+    engines: {node: '>=20'}
+
+  odf.js@3.0.2:
+    resolution: {integrity: sha512-7GjprsV1KIZ5YijknnVUADvoCnga/haQmHxrpVLadCohNEf+tTNSbZuZ/KP0k9iux8H+nGERvnWBWc/G9uJ8tw==}
     engines: {node: '>=20'}
 
   onetime@6.0.0:
@@ -7333,6 +7341,10 @@ snapshots:
     dependencies:
       zod: 4.4.3
 
+  document-schema.js@3.3.0:
+    dependencies:
+      zod: 4.4.3
+
   documents.js@2.3.0:
     dependencies:
       byte-codec: 1.1.9
@@ -8607,6 +8619,13 @@ snapshots:
   odf.js@3.0.1:
     dependencies:
       document-schema.js: 3.2.0
+      fast-xml-parser: 5.10.1
+      fflate: 0.8.3
+      zod: 4.4.3
+
+  odf.js@3.0.2:
+    dependencies:
+      document-schema.js: 3.3.0
       fast-xml-parser: 5.10.1
       fflate: 0.8.3
       zod: 4.4.3
