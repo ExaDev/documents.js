@@ -1,4 +1,4 @@
-import type { ContentBlock, ContentRun } from 'document-schema';
+import type { ContentBlock, ContentRun } from 'document-schema.js';
 import { isOutlineNode } from './node';
 import type { OutlineChild, OutlineLeaf } from './node';
 import { stableContentHash } from './hash';

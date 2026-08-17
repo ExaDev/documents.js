@@ -1,4 +1,4 @@
-// Fixture builders for every ContentDocument kind, shaped against the real document-schema 3.3.0 field requirements -- every builder's output is asserted to pass ContentDocumentSchema.parse in the tests that use it, so a schema change in document-schema breaks these fixtures loudly instead of silently testing against a shape that no longer exists. Never imported by src/index.ts and never reaching dist/ -- test-only, mirroring the family's test-support convention.
+// Fixture builders for every ContentDocument kind, shaped against the real document-schema.js 3.3.0 field requirements -- every builder's output is asserted to pass ContentDocumentSchema.parse in the tests that use it, so a schema change in document-schema.js breaks these fixtures loudly instead of silently testing against a shape that no longer exists. Never imported by src/index.ts and never reaching dist/ -- test-only, mirroring the family's test-support convention.
 import type {
   ContentBlock,
   ContentDocument,
@@ -11,7 +11,7 @@ import type {
   ContentSheetImage,
   ContentSlide,
   ContentVector,
-} from 'document-schema';
+} from 'document-schema.js';
 
 export function textRun(text: string): ContentRun {
   return { text };

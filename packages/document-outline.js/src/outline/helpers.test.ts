@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ContentBlock } from 'document-schema';
+import type { ContentBlock } from 'document-schema.js';
 import { buildOutline } from './build';
 import { flattenOutline, leafContentHash, outlineLeafText } from './helpers';
 import {

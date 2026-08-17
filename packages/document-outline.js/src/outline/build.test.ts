@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ContentDocumentSchema, type ContentDocument } from 'document-schema';
+import { ContentDocumentSchema, type ContentDocument } from 'document-schema.js';
 import { buildOutline } from './build';
 import {
   drawPage,
@@ -20,7 +20,7 @@ import {
   wordprocessingDoc,
 } from '../test-support/fixtures';
 
-// Every per-kind fixture is asserted valid against the canonical schema before its outline is checked, so these tests exercise the builder against real ContentDocument shapes -- the actual field requirements of document-schema 3.3.0 -- not approximations that merely happen to type-check.
+// Every per-kind fixture is asserted valid against the canonical schema before its outline is checked, so these tests exercise the builder against real ContentDocument shapes -- the actual field requirements of document-schema.js 3.3.0 -- not approximations that merely happen to type-check.
 function expectSchemaValid(doc: ContentDocument): void {
   const result = ContentDocumentSchema.safeParse(doc);
   expect(result.success ? 'valid' : `invalid: ${JSON.stringify(result.error.issues[0])}`).toBe('valid');

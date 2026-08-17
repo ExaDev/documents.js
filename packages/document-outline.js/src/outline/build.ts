@@ -1,4 +1,4 @@
-import type { ContentDocument, ContentParagraph } from 'document-schema';
+import type { ContentDocument, ContentParagraph } from 'document-schema.js';
 import type { OutlineChild, OutlineLeaf, OutlineNode } from './node';
 
 type WordprocessingDocument = Extract<ContentDocument, { kind: 'wordprocessing' }>;

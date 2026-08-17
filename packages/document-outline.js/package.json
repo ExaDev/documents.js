@@ -63,7 +63,7 @@
   },
   "packageManager": "pnpm@11.6.0",
   "dependencies": {
-    "document-schema": "^3.3.0",
+    "document-schema.js": "^3.3.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
