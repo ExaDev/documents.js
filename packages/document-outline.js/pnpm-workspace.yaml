@@ -1,5 +1,18 @@
-# workerd (the Cloudflare Workers runtime vitest-pool-workers drives the workers tests through) and esbuild (its bundler) both ship native binaries installed via a postinstall script -- pnpm 11 ignores those by default, so allow them explicitly. This file's existence also brings document-outline.js to family parity (every other repo carries a pnpm-workspace.yaml). minimumReleaseAge is set to 0 here, scoped to this repo only: document-schema 3.3.0 -- the exact version this package exists to build on, and every future sibling release the automation bumps it to -- publishes same-day via the family's automated release pipeline, so the machine-global 7-day freshness window would block every fresh install of this repo's own foundation dependency.
-minimumReleaseAge: 0
+# workerd (the Cloudflare Workers runtime vitest-pool-workers drives the workers tests through) and esbuild (its bundler) both ship native binaries installed via a postinstall script -- pnpm 11 ignores those by default, so allow them explicitly. This file's existence also brings document-outline.js to family parity (every other repo carries a pnpm-workspace.yaml).
 allowBuilds:
   esbuild: true
   workerd: true
+# minimumReleaseAge: 60 is the value every family repo carries (documents.js, ooxml.js, odf.js, markdown-codec, document-schema.js): low enough that a same-day sibling release never blocks CI for long -- a frozen-lockfile install inside the hour fails once and the retry passes once the window closes -- while still gating every third-party dependency (zod, vitest, eslint, ...) behind an hour of public availability rather than disabling the freshness gate outright.
+minimumReleaseAge: 60
+# minimumReleaseAgeExclude is NOT honoured by `pnpm install --frozen-lockfile` (the mode CI runs): pnpm's own "verify an already-resolved lockfile" pass ignores per-package excludes entirely and re-checks every entry's raw publish age against minimumReleaseAge with no exceptions -- confirmed by direct reproduction against real pnpm versions, and matches multiple open upstream reports (pnpm/pnpm#10361, #9997, #10438). `pnpm add <exact-version>` has its own separate, more permissive "explicit informed consent" path that DOES honour this list and proceed -- which is why a local `pnpm add` can succeed while the exact same dependency then fails CI's `--frozen-lockfile` install moments later. minimumReleaseAge itself (which frozen-lockfile verification DOES respect) is the only lever that unblocks CI for a same-day sibling-package release; the exclude list below serves the sibling-dependency-update workflow's own `pnpm add` bump path.
+
+# Bare package names (no @version), per pnpm's own documented syntax (https://pnpm.io/settings#minimumreleaseageexclude -- "webpack" exempts every version, not just one) -- these are this org's own sibling packages, published only via their own semantic-release CI with npm OIDC trusted publishing, so a version-agnostic exemption is a deliberate, low-risk carry-forward rather than an entry this file needs updating on every single release. The list is the family-wide set every sibling repo carries, so this repo gaining another sibling dependency later needs no edit here.
+minimumReleaseAgeExclude:
+  - documents.js
+  - ooxml.js
+  - odf.js
+  - document-schema.js
+  - pdf-codec
+  - markdown-codec
+  - byte-codec
+  - '@exadev/eslint-config'
