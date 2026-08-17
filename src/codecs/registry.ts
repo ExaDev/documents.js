@@ -15,6 +15,9 @@ import { buildMarkdownText } from '../markdown/write';
 import { decodeCsvText, encodeCsvText } from '../csv/text';
 import { readCsvContent } from '../csv/read';
 import { buildCsvText } from '../csv/write';
+import { decodeSvgText, encodeSvgText } from '../svg/text';
+import { readSvgContent } from '../svg/read';
+import { buildSvgText } from '../svg/write';
 import { readOdfFormulaContent } from '../odf/formula/read';
 import { readOdgContent } from '../odf/odg/read';
 import { readOdpContent } from '../odf/odp/read';
@@ -124,6 +127,13 @@ export const DOCUMENT_FORMAT_CODECS: Readonly<Record<DocumentFormat, DocumentFor
     content: {
       read: (bytes) => readCsvContent(decodeCsvText(bytes)),
       write: (content) => encodeCsvText(buildCsvText(content)),
+    },
+  },
+  // The svg entry is the csv entry's structural twin: decode straight from bytes to text (no package), read into a drawing ContentDocument, write the reverse. DocumentCodecOptions carries no page/onSvgDiagnostic, so this codec writes page 0 of a drawing with no diagnostic channel -- a caller wanting a different page of a multi-page document or the reader's scope-limit diagnostics uses the named conversions (convert.ts's svgToPdf/odgToSvg and their kin), which thread { page, onSvgDiagnostic } through UnifiedConversionOptions; a multi-page write through THIS codec throws buildSvgText's own SvgMultiPageNotSpecifiedError rather than silently truncating. decodeSvgText is a fatal decoder with no loop of its own, so no separate signal check is needed -- the same reasoning as the csv entry beside it.
+  svg: {
+    content: {
+      read: (bytes) => readSvgContent(decodeSvgText(bytes)),
+      write: (content) => encodeSvgText(buildSvgText(content)),
     },
   },
   pdf: {

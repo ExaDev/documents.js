@@ -47,8 +47,8 @@ function fromPdfDiagnostic(diagnostic: PdfDiagnostic): Diagnostic {
 
 export function createLocalDocumentConverter(): DocumentConverter {
   return {
-    // 2 added ConversionResult's optional `package` field (see port.ts), which the local implementation below populates from every conversion function's own onDocument callback; 3 added convert()'s own ConversionOptions.fonts/onFontSubstitution, which an implementation is now expected to honour for every conversion that lays text out; 4 added ConversionOptions.images (a MarkdownImageResolver), honoured by the markdown-sourced to-PDF and bridge edges; 5 added ConversionOptions.clock, forwarded to every X-to-PDF conversion's /CreationDate and /ModDate stamping.
-    contractVersion: 5,
+    // 2 added ConversionResult's optional `package` field (see port.ts), which the local implementation below populates from every conversion function's own onDocument callback; 3 added convert()'s own ConversionOptions.fonts/onFontSubstitution, which an implementation is now expected to honour for every conversion that lays text out; 4 added ConversionOptions.images (a MarkdownImageResolver), honoured by the markdown-sourced to-PDF and bridge edges; 5 added ConversionOptions.clock, forwarded to every X-to-PDF conversion's /CreationDate and /ModDate stamping; 6 added ConversionOptions.page, forwarded to any svg-target hop (drawing pages are anonymous, so an index selects the page the way `sheet` names a sheet).
+    contractVersion: 6,
     conversions: SUPPORTED_CONVERSIONS,
     convert(request: ConversionRequest, options: ConversionOptions): Promise<ConversionResult> {
       const { source, targetFormat } = request;
@@ -75,7 +75,7 @@ export function createLocalDocumentConverter(): DocumentConverter {
         return Promise.reject(new UnsupportedConversionError(source.format, targetFormat));
       }
 
-      // convertDocument runs the resolved plan end to end, threading the port's ConversionOptions through to whichever hop consumes each field: fonts/onFontSubstitution/onSubstitution/clock reach any toPdf hop (the only kind that lays text out and resolves a face), sink reaches any fromPdf hop (the only kind that reads a PDF and can report parse diagnostics), delimiter/sheet reach any csv hop, and signal/images reach every hop. The onDocument callback captures the DocumentPackage the first content-producing hop builds, mirroring the per-edge onDocument wiring the previous direct-edge path threaded into each edge kind individually.
+      // convertDocument runs the resolved plan end to end, threading the port's ConversionOptions through to whichever hop consumes each field: fonts/onFontSubstitution/onSubstitution/clock reach any toPdf hop (the only kind that lays text out and resolves a face), sink reaches any fromPdf hop (the only kind that reads a PDF and can report parse diagnostics), delimiter/sheet reach any csv hop, page reaches any svg-target hop, and signal/images reach every hop. The onDocument callback captures the DocumentPackage the first content-producing hop builds, mirroring the per-edge onDocument wiring the previous direct-edge path threaded into each edge kind individually.
       const bytes = convertDocument(source.format, targetFormat, source.bytes, {
         signal: options.signal,
         fonts: options.fonts,
@@ -85,6 +85,7 @@ export function createLocalDocumentConverter(): DocumentConverter {
         images: options.images,
         delimiter: options.delimiter,
         sheet: options.sheet,
+        page: options.page,
         clock: options.clock,
         onDocument,
       });

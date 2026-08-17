@@ -2,7 +2,7 @@
 
 [![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/documents.js) [![npm](https://img.shields.io/badge/npm-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/documents.js) [![Release](https://img.shields.io/github/v/release/ExaDev/documents.js)](https://github.com/ExaDev/documents.js/releases/latest) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/documents.js/ci.yml?branch=main)](https://github.com/ExaDev/documents.js/actions)
 
-> Converts between any two compatible document formats through a shared content/layout pivot. docx, pptx, odt, odp, ods, odg, xlsx, csv (TSV is the same format with a tab delimiter), and markdown all read into and build from the same `ContentDocument`/`LayoutDocument` model, with PDF as the one format every variant can reach. A composition engine (`convertDocument`) routes 91 (source, target) pairs across the nine content formats and PDF, including eighteen PDF-pivot round trips (the seven layout-engine formats, plus xlsx and csv composing through ods), twenty-two cross-format bridge functions (same-variant direct copies, cross-variant semantic transforms, and PDF-composed), plus special-case conversions for `.odm` master documents, `.odb` database front-ends (HSQLDB and Firebird, four storage tiers), standalone `.odf` formula documents, and a bounded SQL/rpt-formula engine for `.odb` reports. Also includes: read-and-write live-view editors for all six editable formats, docx comment/footnote/header-footer exposure via `readDocxExtras`, real font resolution (source-embedded faces ahead of caller-supplied, vendored substitutes, and the standard 14), a hand-written MathML typesetting engine with embedded-font PDF rendering and a matching MathML ⇄ OMML translator, and a fully hand-written PDF codec. Built on [ooxml.js](https://github.com/ExaDev/ooxml.js), [odf.js](https://github.com/ExaDev/odf.js), [pdf-codec](https://github.com/ExaDev/pdf-codec), [markdown-codec](https://github.com/ExaDev/markdown-codec), and [document-schema.js](https://github.com/ExaDev/document-schema.js).
+> Converts between any two compatible document formats through a shared content/layout pivot. docx, pptx, odt, odp, ods, odg, xlsx, csv (TSV is the same format with a tab delimiter), svg, and markdown all read into and build from the same `ContentDocument`/`LayoutDocument` model, with PDF as the one format every variant can reach. A composition engine (`convertDocument`) routes 111 (source, target) pairs across the ten content formats and PDF, including twenty PDF-pivot round trips (the eight layout-engine formats, plus xlsx and csv composing through ods), twenty-four cross-format bridge functions (same-variant direct copies, cross-variant semantic transforms, and PDF-composed), plus special-case conversions for `.odm` master documents, `.odb` database front-ends (HSQLDB and Firebird, four storage tiers), standalone `.odf` formula documents, and a bounded SQL/rpt-formula engine for `.odb` reports. Also includes: read-and-write live-view editors for all six editable formats, docx comment/footnote/header-footer exposure via `readDocxExtras`, real font resolution (source-embedded faces ahead of caller-supplied, vendored substitutes, and the standard 14), a hand-written MathML typesetting engine with embedded-font PDF rendering and a matching MathML ⇄ OMML translator, and a fully hand-written PDF codec. Built on [ooxml.js](https://github.com/ExaDev/ooxml.js), [odf.js](https://github.com/ExaDev/odf.js), [pdf-codec](https://github.com/ExaDev/pdf-codec), [markdown-codec](https://github.com/ExaDev/markdown-codec), and [document-schema.js](https://github.com/ExaDev/document-schema.js).
 
 `documents.js` extends `ooxml.js` in two directions `ooxml.js` deliberately does not cover: full PDF support (parsing and generating, via `pdf-codec`), and a read-**and-write** manipulation API for docx/pptx content — `ooxml.js`'s own typed readers are one-way. The PDF codec is hand-written against ISO 32000-1, with no external PDF library as a dependency — see [Fidelity](#fidelity) and pdf-codec's own README for the honest trade-off (not as robust against adversarial PDFs as a 15+-year-hardened library; fully auditable and dependency-free instead). `src/mathml/` (the MathML typesetting engine) stays in this package and is hand-written too, for the same supply-chain reason.
 
@@ -72,7 +72,7 @@ npm install documents.js
 
 ### The generic entry point: `convertDocument`
 
-A single function, `convertDocument`, sits behind every named conversion and reaches every pair the composition engine can route — all 91 supported (source, target) combinations. The named functions below are thin one-line forwarders to it; they remain the ergonomic layer for a caller who wants a fixed pair and autocomplete discovery, while `convertDocument` is the first-class entry point for a caller working from a runtime format pair (CLI, MCP tool, matrix enumeration).
+A single function, `convertDocument`, sits behind every named conversion and reaches every pair the composition engine can route — all 111 supported (source, target) combinations. The named functions below are thin one-line forwarders to it; they remain the ergonomic layer for a caller who wants a fixed pair and autocomplete discovery, while `convertDocument` is the first-class entry point for a caller working from a runtime format pair (CLI, MCP tool, matrix enumeration).
 
 ```ts
 import { convertDocument } from 'documents.js';
@@ -89,10 +89,10 @@ const odtBytes = convertDocument('docx', 'odt', docxBytes, { onMathDiagnostic: (
 
 ### PDF-pivot conversions
 
-The fourteen round-trip ergonomic conversions between the formats with their own layout engine and PDF (docx/pptx/odt/odp/ods/odg/markdown ⇄ PDF, all round-tripping both ways), plus `xlsxToPdf`/`pdfToXlsx` and `csvToPdf`/`pdfToCsv` (each composing its ods bridge with the ods⇄pdf layout pair internally — neither xlsx nor csv has a layout engine of its own):
+The sixteen round-trip ergonomic conversions between the formats with their own layout engine and PDF (docx/pptx/odt/odp/ods/odg/markdown/svg ⇄ PDF, all round-tripping both ways), plus `xlsxToPdf`/`pdfToXlsx` and `csvToPdf`/`pdfToCsv` (each composing its ods bridge with the ods⇄pdf layout pair internally — neither xlsx nor csv has a layout engine of its own):
 
 ```ts
-import { csvToPdf, docxToPdf, markdownToPdf, odgToPdf, odpToPdf, odsToPdf, odtToPdf, pdfToCsv, pdfToDocx, pdfToMarkdown, pdfToOdg, pdfToOdp, pdfToOds, pdfToOdt, pdfToPptx, pdfToXlsx, pptxToPdf, xlsxToPdf } from 'documents.js';
+import { csvToPdf, docxToPdf, markdownToPdf, odgToPdf, odpToPdf, odsToPdf, odtToPdf, pdfToCsv, pdfToDocx, pdfToMarkdown, pdfToOdg, pdfToOdp, pdfToOds, pdfToOdt, pdfToPptx, pdfToSvg, pdfToXlsx, pptxToPdf, svgToPdf, xlsxToPdf } from 'documents.js';
 
 const pdfBytes = docxToPdf(docxBytes);
 const docxBytes2 = pdfToDocx(pdfBytes);
@@ -120,13 +120,16 @@ const markdownBytes2 = pdfToMarkdown(pdfFromMarkdown); // the lossiest conversio
 
 const pdfFromCsv = csvToPdf(csvBytes); // composes csvToOds -> odsToPdf internally
 const csvBytes2 = pdfToCsv(pdfFromCsv); // composes pdfToOds -> odsToCsv internally; recovers what was printed, then heuristically re-types it
+
+const pdfFromSvg = svgToPdf(svgBytes); // reads the six shape primitives into a drawing ContentDocument, then the same drawing layout engine odgToPdf feeds renders it
+const svgBytes2 = pdfToSvg(pdfFromSvg); // readPdf -> reconstructDrawing -> buildSvgText: vector geometry recovers near-1:1, while recovered text boxes sit outside the svg writer's vector-only scope (reported per shape, never silently dropped)
 ```
 
 Each accepts an optional `signal` (`AbortSignal`) and either `onSubstitution` (X → PDF, called per character not representable in a standard-14 font) or `sink` (PDF → X, called per recoverable parse diagnostic). Every X → PDF conversion additionally accepts `fonts` (extra `ProvidedFont` faces) and `onFontSubstitution` (per family+weight+style that resolved to something else). Neither is needed for the common case — see [Fonts](#fonts).
 
 ### Cross-format bridges
 
-Twenty-two bridge functions across eleven pairs bypass the PDF pivot where a direct path exists. Seven same-variant direct-copy pairs (`odtToDocx`/`docxToOdt`, `odpToPptx`/`pptxToOdp`, `odsToXlsx`/`xlsxToOds`, `csvToOds`/`odsToCsv`, `csvToXlsx`/`xlsxToCsv`, `markdownToDocx`/`docxToMarkdown`, `markdownToOdt`/`odtToMarkdown`) compose a direct `readXContent` → `buildYPackage` pivot copy — the csv pairs are one hop to its spreadsheet siblings, so csv never needs PDF to reach ods or xlsx. Two cross-variant semantic-transform pairs (`docxToPptx`/`pptxToDocx`, `odtToOdp`/`odpToOdt`) go through `src/convert/variant-bridges.ts`. Two PDF-composed pairs (`xlsxToMarkdown`/`markdownToXlsx`, `csvToMarkdown`/`markdownToCsv`) route through PDF internally — the lossiest conversions in the package.
+Twenty-four bridge functions across twelve pairs bypass the PDF pivot where a direct path exists. Eight same-variant direct-copy pairs (`odtToDocx`/`docxToOdt`, `odpToPptx`/`pptxToOdp`, `odsToXlsx`/`xlsxToOds`, `csvToOds`/`odsToCsv`, `csvToXlsx`/`xlsxToCsv`, `svgToOdg`/`odgToSvg`, `markdownToDocx`/`docxToMarkdown`, `markdownToOdt`/`odtToMarkdown`) compose a direct `readXContent` → `buildYPackage` pivot copy — the csv pairs are one hop to its spreadsheet siblings, so csv never needs PDF to reach ods or xlsx, and `svgToOdg`/`odgToSvg` bridge svg to its drawing sibling odg the same way. Two cross-variant semantic-transform pairs (`docxToPptx`/`pptxToDocx`, `odtToOdp`/`odpToOdt`) go through `src/convert/variant-bridges.ts`. Two PDF-composed pairs (`xlsxToMarkdown`/`markdownToXlsx`, `csvToMarkdown`/`markdownToCsv`) route through PDF internally — the lossiest conversions in the package.
 
 ```ts
 import { odtToDocx, docxToOdt, markdownToDocx, docxToMarkdown } from 'documents.js';
@@ -138,7 +141,7 @@ const docxFromMarkdown = markdownToDocx(markdownBytes);
 const markdownBytes3 = docxToMarkdown(docxFromMarkdown); // colour, font family/size, and explicit alignment have no markdown source construct -- dropped on this hop
 ```
 
-Each takes an optional `{ signal }` — no `onSubstitution`/`sink`, since there is no font substitution or PDF-parse degradation. `odtToDocx`/`markdownToDocx`/`docxToOdt`/`docxToMarkdown` additionally take `onMathDiagnostic`, called per formula construct that degraded crossing the bridge. The csv-sourced bridges (`csvToOds`, `csvToXlsx`, `csvToMarkdown`, `csvToPdf`) take `{ delimiter }` — `'\t'` parses the same format as TSV, since a delimiter is a parse option, not a different document format — and `onCellTypeInference`, the per-decision audit channel the read shares with `pdfToOds`. The csv-target bridges (`odsToCsv`, `xlsxToCsv`, `markdownToCsv`, `pdfToCsv`) take `{ delimiter, sheet }`: csv has no second sheet, so writing a multi-sheet source refuses with `CsvSheetNotSpecifiedError` naming every sheet until a caller selects one.
+Each takes an optional `{ signal }` — no `onSubstitution`/`sink`, since there is no font substitution or PDF-parse degradation. `odtToDocx`/`markdownToDocx`/`docxToOdt`/`docxToMarkdown` additionally take `onMathDiagnostic`, called per formula construct that degraded crossing the bridge. The csv-sourced bridges (`csvToOds`, `csvToXlsx`, `csvToMarkdown`, `csvToPdf`) take `{ delimiter }` — `'\t'` parses the same format as TSV, since a delimiter is a parse option, not a different document format — and `onCellTypeInference`, the per-decision audit channel the read shares with `pdfToOds`. The csv-target bridges (`odsToCsv`, `xlsxToCsv`, `markdownToCsv`, `pdfToCsv`) take `{ delimiter, sheet }`: csv has no second sheet, so writing a multi-sheet source refuses with `CsvSheetNotSpecifiedError` naming every sheet until a caller selects one. The svg-sourced bridges (`svgToOdg`, `svgToPdf`) take `onSvgDiagnostic`, the reader's per-scope-limit channel; the svg-target bridges (`odgToSvg`, `pdfToSvg`) take `{ page, onSvgDiagnostic }`: an svg is a single drawing, so writing a multi-page source refuses with `SvgMultiPageNotSpecifiedError` naming the page count until `{ page }` selects one (an index, because drawing pages are anonymous where sheets are named).
 
 ### The `DocumentConverter` port
 
@@ -154,12 +157,12 @@ const { document, diagnostics } = await converter.convert(
 );
 ```
 
-`DocumentFormat` includes `docx`/`pptx`/`xlsx`/`odt`/`odp`/`ods`/`odg`/`odf`/`csv`/`markdown`/`pdf` — eleven members. The port's `conversions` list is derived from `resolveCompositionPlan` plus the `odf`→`pdf` special case — 91 pairs total. `DocumentFormat` is inferred from `DocumentFormatSchema` (a real Zod schema); `DOCUMENT_FORMATS` is exported as a plain array derived from the same schema:
+`DocumentFormat` includes `docx`/`pptx`/`xlsx`/`odt`/`odp`/`ods`/`odg`/`svg`/`odf`/`csv`/`markdown`/`pdf` — twelve members. The port's `conversions` list is derived from `resolveCompositionPlan` plus the `odf`→`pdf` special case — 111 pairs total. `DocumentFormat` is inferred from `DocumentFormatSchema` (a real Zod schema); `DOCUMENT_FORMATS` is exported as a plain array derived from the same schema:
 
 ```ts
 import { DOCUMENT_FORMATS, DocumentFormatSchema } from 'documents.js';
 
-console.log(DOCUMENT_FORMATS); // ['docx', 'pptx', 'xlsx', 'odt', 'odp', 'ods', 'odg', 'odf', 'csv', 'markdown', 'pdf']
+console.log(DOCUMENT_FORMATS); // ['docx', 'pptx', 'xlsx', 'odt', 'odp', 'ods', 'odg', 'svg', 'odf', 'csv', 'markdown', 'pdf']
 DocumentFormatSchema.parse(userSuppliedFormat); // throws a ZodError for anything outside that list
 ```
 
@@ -205,7 +208,7 @@ const docxBytesAgain = buildDocumentBytes(captured, 'docx');
 
 ### Package decode/encode, metadata, and deep imports
 
-`decodeDocumentPackage`/`encodeDocumentPackage` dispatch docx/pptx/xlsx through `ooxml.js`'s OPC codec and odt/odp/ods/odg/odf through `odf.js`'s ODF codec, throwing `UnsupportedPackageFormatError` for `markdown`/`csv`/`pdf` (none of the three is a package — they are plain text and bytes respectively). `decodeOdbPackage` is the `.odb`-specific sibling (`.odb` is not a `DocumentFormat` member):
+`decodeDocumentPackage`/`encodeDocumentPackage` dispatch docx/pptx/xlsx through `ooxml.js`'s OPC codec and odt/odp/ods/odg/odf through `odf.js`'s ODF codec, throwing `UnsupportedPackageFormatError` for `markdown`/`csv`/`svg`/`pdf` (none of the four is a package — the first three are plain text, pdf is bytes). `decodeOdbPackage` is the `.odb`-specific sibling (`.odb` is not a `DocumentFormat` member):
 
 ```ts
 import { decodeDocumentPackage, decodeOdbPackage, encodeDocumentPackage } from 'documents.js';
@@ -215,7 +218,7 @@ const docxBytesAgain = encodeDocumentPackage('docx', pkg);
 const odbPkg = decodeOdbPackage(odbBytes);
 ```
 
-`readDocumentMetadata`/`setDocumentMetadata` read or patch metadata across any `DocumentFormat`. `setDocumentMetadata` patches in place (source/target formats must match); `odf` is rejected in both directions, and `csv` is rejected in both directions too (RFC 4180 text has no metadata container) — `readDocumentMetadata('csv', ...)` answers an empty `LayoutMetadata` for the same reason. `readDocumentMetadata('xlsx', ...)` is a named exception: it renders via `xlsxToPdf` and reads the PDF's metadata, because a direct read and the PDF-preview path genuinely disagree on `createdIso`/`modifiedIso`/`producer`.
+`readDocumentMetadata`/`setDocumentMetadata` read or patch metadata across any `DocumentFormat`. `setDocumentMetadata` patches in place (source/target formats must match); `odf` is rejected in both directions, and `csv` is rejected in both directions too (RFC 4180 text has no metadata container) — `readDocumentMetadata('csv', ...)` answers an empty `LayoutMetadata` for the same reason. `svg` reads its root `<title>` as `metadata.title` and is rejected as a `setDocumentMetadata` source/target for the mirror-image reason: `<title>` is svg's whole metadata surface, so any other override would be silently dropped by the rebuild. `readDocumentMetadata('xlsx', ...)` is a named exception: it renders via `xlsxToPdf` and reads the PDF's metadata, because a direct read and the PDF-preview path genuinely disagree on `createdIso`/`modifiedIso`/`producer`.
 
 ```ts
 import { readDocumentMetadata, setDocumentMetadata } from 'documents.js';
@@ -233,7 +236,7 @@ import { buildOdtPackage } from 'documents.js/edit/odt/content';
 
 ### Reading and building xlsx content directly
 
-Every other content format has its own standalone `readXContent`-shaped entry point (`readDocxContent`, `readPptxContent`, `readOdtContent`, `readOdpContent`, `readOdsContent`, `readOdgContent`) — xlsx is no longer the exception. `readXlsxContent`/`buildXlsxPackage` are `ooxml.js`'s own spreadsheet `ContentDocument` read/build pair — the same one the `ods⇄xlsx` bridge and every xlsx metadata-rebuild path already use internally — re-exported here directly rather than wrapped, since `readXlsxContent` already produces the right shape on its own. csv's `readCsvContent`/`buildCsvText` are the same kind of directly-exported stage pair, one level further in: they operate on RFC 4180 text rather than a decoded package (see `src/csv/` under Architecture).
+Every other content format has its own standalone `readXContent`-shaped entry point (`readDocxContent`, `readPptxContent`, `readOdtContent`, `readOdpContent`, `readOdsContent`, `readOdgContent`) — xlsx is no longer the exception. `readXlsxContent`/`buildXlsxPackage` are `ooxml.js`'s own spreadsheet `ContentDocument` read/build pair — the same one the `ods⇄xlsx` bridge and every xlsx metadata-rebuild path already use internally — re-exported here directly rather than wrapped, since `readXlsxContent` already produces the right shape on its own. csv's `readCsvContent`/`buildCsvText` are the same kind of directly-exported stage pair, one level further in: they operate on RFC 4180 text rather than a decoded package (see `src/csv/` under Architecture). svg's `readSvgContent`/`buildSvgText` are the drawing-variant counterpart of csv's pair, operating on SVG text rather than a decoded package (see `src/svg/` under Architecture).
 
 ```ts
 import { buildXlsxPackage, decodeDocumentPackage, encodeDocumentPackage, readXlsxContent } from 'documents.js';
@@ -329,7 +332,7 @@ const layout = readPdf(pdfBytes); // -> LayoutDocument: pages of positioned text
 const bytes = writePdf(layout);
 ```
 
-The ten PDF round trips and fourteen PDF-bypassing bridge directions are also available as schema-validated [`z.codec()`](https://zod.dev) pairs (`pdfCodec`, `docxPdfCodec`, `pptxPdfCodec`, `odtPdfCodec`, `odpPdfCodec`, `odsPdfCodec`, `odgPdfCodec`, `xlsxPdfCodec`, `csvPdfCodec`, `markdownPdfCodec`, `odtDocxCodec`, `odpPptxCodec`, `odsXlsxCodec`, `odsCsvCodec`, `xlsxCsvCodec`, `markdownDocxCodec`, `markdownOdtCodec`) — the no-options form, adding automatic two-way schema validation. The two PDF-composed pairs have codec forms too (`xlsxMarkdownCodec`, `csvMarkdownCodec`):
+The eleven PDF round trips and sixteen PDF-bypassing bridge directions are also available as schema-validated [`z.codec()`](https://zod.dev) pairs (`pdfCodec`, `docxPdfCodec`, `pptxPdfCodec`, `odtPdfCodec`, `odpPdfCodec`, `odsPdfCodec`, `odgPdfCodec`, `svgPdfCodec`, `xlsxPdfCodec`, `csvPdfCodec`, `markdownPdfCodec`, `odtDocxCodec`, `odpPptxCodec`, `odsXlsxCodec`, `odsCsvCodec`, `xlsxCsvCodec`, `odgSvgCodec`, `markdownDocxCodec`, `markdownOdtCodec`) — the no-options form, adding automatic two-way schema validation. The two PDF-composed pairs have codec forms too (`xlsxMarkdownCodec`, `csvMarkdownCodec`):
 
 ```ts
 import { z } from 'zod';
@@ -508,6 +511,7 @@ The package is layered from generic primitives outward to the two conversion dir
 - **`src/odf/`** — ODF-side counterparts: `readOdtContent`/`readOdpContent`/`readOdsContent`/`readOdgContent` are thin adapters over `odf.js`. `formula/read.ts`/`formula/detect.ts` handle embedded formula detection (genuinely new work with no `odf.js`-side equivalent).
 - **`src/markdown/`** — third adapter family, via `markdown-codec`. `readMarkdownContent` passes `readMarkdown`'s result straight through (it already produces a full `ContentDocument`). `buildMarkdownText` wraps `writeMarkdown`. `text.ts` is the byte↔text boundary. `MarkdownEditor` holds a mutable in-memory `ContentDocument`.
 - **`src/csv/`** — fourth adapter family, sharing the spreadsheet variant with xlsx/ods. `records.ts` is the RFC 4180 record parser/writer (one shared `quoteCsvField`, also used by the `.odb` CSV exporter); `text.ts` is the byte↔text boundary, rejecting malformed UTF-8; `read.ts` turns records into a spreadsheet `ContentDocument` (first record as verbatim string header, data cells through the same cell-typing heuristic `pdfToOds` uses); `write.ts` turns one sheet of a spreadsheet `ContentDocument` back into records via each cell's `displayText`. TSV is the same format with `{ delimiter: '\t' }` on either side.
+- **`src/svg/`** — fifth adapter family, sharing the drawing variant with odg. `text.ts` is the byte↔text boundary, rejecting malformed UTF-8; `read.ts` maps the six SVG shape primitives (rect/circle/ellipse/line/polyline/polygon/path) onto a one-page drawing `ContentDocument`, with transform lists composed as 2×3 affines and CSS lengths and the viewBox map resolved into page points; `write.ts` writes the six primitives back out, one shape element each; `path.ts` is the full SVG path-data grammar (M/L/H/V/C/S/Z plus Q/T/A and the relative forms — S/Q/T convert exactly, A is the one bounded approximation at ≤90° per cubic); `transform.ts` parses and composes the transform attribute and classifies the result by frame representability; `units.ts` resolves CSS length units and the viewBox; `paint.ts` resolves fill/stroke presentation attributes and dash styles; `diagnostics.ts` is the shared scope-limit vocabulary.
 - **`src/layout/`** — the pure conversion algorithms: `engine.ts` (wordprocessing → layout: flow, line-breaking, pagination), `slides.ts` (presentation → layout: direct placement), `sheets.ts` (spreadsheet → layout: grid, print settings, the first algorithm accepting `AbortSignal`), `drawing.ts` (drawing → layout: vector primitives + shape reuse), `reconstruct.ts` (layout → content: baseline clustering for wordprocessing/presentation, near-1:1 mapping for drawing, gridline-lattice-or-text-clustering for spreadsheet).
 - **`src/hsqldb/`** — `.odb` decoders, four tiers: `script.ts` (TEXT-script DDL/DML parser), `rowformat.ts`/`cache.ts` (CACHED binary row-store), `binary-script.ts` (BINARY/COMPRESSED whole-script). All import only `document-schema.js` — no odf.js knowledge.
 - **`src/firebird/`** — Tier 3: gbak logical-backup reader. `reader.ts` (attribute framing + RLE decompression + XDR decoding), `schema.ts`/`data.ts` (table/row walking). No ratified spec — built against Firebird's own engine source.
@@ -555,8 +559,15 @@ To run a single test file: `pnpm vitest run src/path/to/file.test.ts`.
 - **`readPdf` recovers rect/ellipse/line as their own `LayoutRect`/`LayoutEllipse`/`LayoutLine` kinds** via pdf-codec's shape-pattern detection — an axis-aligned closed four-corner subpath is a rect, four kappa-ratio cubics at cardinal points is an ellipse, an open single straight stroke is a line. A false positive changes kind, never geometry. Off-axis rotations, freeform curves, and multi-subpath figures narrow to `LayoutPath`.
 - **`pdfToOds` re-types cells heuristically — this is probabilistic, not a fidelity guarantee.** A rendered PDF never carries a cell's typed value, only the printed string. Re-typing fires only where the string has exactly one defensible reading: the decimal must be exactly representable as a JS number; separators must be unambiguous (`"1,234"` is declined — competing European reading is 1.234); leading zeros decline (`"007"`); dates must self-state their component roles (ISO or named month accepted; `"01/02/2024"` declined). `TRUE`/`FALSE` re-type as booleans; `Yes`/`No` are declined. `displayText` always carries the rendered string verbatim. `onCellTypeInference` reports every decision. A formula is never claimed.
 - **The csv read shares `pdfToOds`'s cell-typing heuristic, with the same decision-only audit channel.** The first record is a verbatim string header (never re-typed, even when it looks like data); data cells re-type through `inferCellValue` exactly as the PDF reconstructor does — declines keep the plain string, `displayText` always carries the raw field text, and `onCellTypeInference` fires per decision, staying silent for header cells and no-candidate text. The parser drops blank records, so a record of one empty field alone cannot round-trip. Writing csv takes exactly one sheet: a multi-sheet source refuses with `CsvSheetNotSpecifiedError` naming every sheet until `{ sheet }` selects one. TSV is not a separate format — `{ delimiter: '\t' }` on either side parses or writes the same grid.
+- **The svg read's scope limits are named diagnostics, never silent drops.** Text, images, `use` references, gradients/patterns, CSS style blocks, and out-of-scope opacity are each reported through `onSvgDiagnostic` with a code from `SVG_DIAGNOSTIC_CODES` (`svg/text-unsupported`, `svg/image-unsupported`, `svg/use-unsupported`, `svg/gradient-unsupported`, `svg/css-style-ignored`, `svg/opacity-ignored`, …) — the same contract as markdown's construct-mapping vocabulary. A plain vector SVG (the six shape primitives, transforms, paint) reads silently.
+- **An absent SVG fill paints black — the SVG spec default, and the one visible svg⇄odg asymmetry.** The svg reader turns a missing `fill` attribute into a black fill; the svg writer leaves the drawing frame's absent fill unset rather than second-guessing it. Round-tripping odg→svg→odg therefore converts an unfilled odg shape into a black-filled one, mirroring what a browser would render from the same markup.
+- **A rootless size falls back to the CSS default, and a stretched viewBox says so.** When neither `width`/`height` nor a `viewBox` is present, the read assumes the CSS default 300×150px viewport ({225, 112.5}pt) and reports `svg/default-size-assumed`; when `width`/`height` and the viewBox disagree in aspect ratio, the read maps through the stretched viewport and reports `svg/preserve-aspect-ratio-stretched` rather than silently re-proportioning the geometry.
+- **Writing svg takes exactly one page.** An svg is a single drawing, so a multi-page source refuses with `SvgMultiPageNotSpecifiedError` naming the page count until `{ page }` selects one (an index, because drawing pages are anonymous where csv's sheets are named — the same contract one variant over).
+- **svg→csv and svg→markdown honestly produce empty output.** The svg read has no text in scope, and neither csv nor markdown has a vocabulary for vectors, so the composition routes (via PDF into the spreadsheet/text readers) yield a document with nothing to emit — pinned as expected-empty in the round-trip matrix rather than dressed up as a conversion.
+- **A rotated rect or ellipse stays a frame, with `rotationDeg`.** The read composes the transform list into one 2×3 affine and classifies it: an axis-aligned map (any scale, mirrors included) folds into the frame; a similarity rotation keeps the frame and records `rotationDeg` about the frame's centre; a shear or rotation-composed non-uniform scale narrows to a path. The affine itself is exact in every case — only which container carries it changes.
+- **The path grammar's one approximation is the elliptical arc.** `A` converts endpoint-to-centre parameterisation exactly (F.6.5, with the F.6.5.6 radii correction), then approximates each arc segment with kappa-bounded cubics at ≤90° per cubic; S/Q/T convert exactly (a quadratic elevates to an exact cubic, T reflects the previous quadratic's own control).
 - **`reconstructWordprocessing`/`reconstructPresentation` recover vector primitives too**, in a nested drawing document — a rule under a heading, an underline, a cell background are all recovered as vectors (intended — discarding real content because it might be incidental is ruled out). A table's gridlines are excluded from vector recovery when the lattice claims them.
-- **Recovered vectors round-trip through all four readers** — `buildDocxPackage`/`buildPptxPackage` write real DrawingML; `buildOdtPackage`/`buildOdpPackage` write real `draw:rect`/`draw:ellipse`/`draw:line`/`draw:path`. The six PDF-bypassing bridges carry vector geometry across too.
+- **Recovered vectors round-trip through all five vector-writing readers** — `buildDocxPackage`/`buildPptxPackage` write real DrawingML; `buildOdtPackage`/`buildOdpPackage` write real `draw:rect`/`draw:ellipse`/`draw:line`/`draw:path`; `buildSvgText` writes real SVG shape elements. The PDF-bypassing bridges between vector-carrying formats (odt⇄docx, odp⇄pptx, odt⇄odp, svg⇄odg) carry vector geometry across too.
 - **Each format wraps a vector shape differently.** OOXML: pptx gets a plain `p:sp`; docx gets a `w:drawing`/`wp:anchor` with `behindDoc="1"`/`wp:wrapNone` carrying a `wps:wsp`. ODF: odp appends to `draw:page`; odt anchors in a `text:p` with `style:horizontal-rel`/`style:vertical-rel="page"` (page-absolute coordinates) and `style:run-through="background"`.
 - **`ContentStroke.style` is not written by vector writers.** `LayoutLine`/`LayoutPath` carry the enum, but neither ODF nor DrawingML vector writers read it — a hand-built vector with `stroke.style` paints solid. Cell borders are a separate path that does set the style.
 - **`pdfToOds` recovers what was printed, not what was entered.** `reconstructSpreadsheet` tries a real gridline lattice first (`MIN_GRIDLINE_COUNT_PER_AXIS = 3`), using line positions directly as cell boundaries; absent one, clusters text into a grid from geometry. Column widths/row heights are measured, never invented. No print range/scale/repeat-rows/manual-breaks are inferred.
@@ -623,21 +634,22 @@ To run a single test file: `pnpm vitest run src/path/to/file.test.ts`.
 
 Read as **row → column**. `✓` lossless, `~` bounded, `✗` lossy, `✗✗` severe, `→` one-way, `–` no conversion. `.odm`/`.odb` sit outside this table.
 
-| ↓ from \ to → | docx | pptx | xlsx | odt | odp | ods | odg | odf | markdown | csv | pdf |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| **docx** | — | ~ | – | ✓ | – | – | – | – | ✗ | ✗ | ~ |
-| **pptx** | ~ | — | – | – | ✓ | – | – | – | – | ✗ | ~ |
-| **xlsx** | – | – | — | – | – | ~ | – | – | ✗✗ | ~ | ~ |
-| **odt** | ✓ | – | – | — | ~ | – | – | – | ✗ | ✗ | ~ |
-| **odp** | – | ✓ | – | ~ | — | – | – | – | – | ✗ | ~ |
-| **ods** | – | – | ~ | – | – | — | – | – | – | ~ | ~ |
-| **odg** | – | – | – | – | – | – | — | – | – | ✗ | ~ |
-| **odf** | – | – | – | – | – | – | – | — | – | – | → |
-| **markdown** | ~ | – | ✗✗ | ~ | – | – | – | – | — | ✗✗ | ~ |
-| **csv** | ✗ | ✗ | ✓ | ✗ | ✗ | ✓ | ✗ | – | ✗✗ | — | ~ |
-| **pdf** | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | – | ✗✗ | ✗ | — |
+| ↓ from \ to → | docx | pptx | xlsx | odt | odp | ods | odg | svg | odf | markdown | csv | pdf |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| **docx** | — | ~ | – | ✓ | – | – | – | ✗ | – | ✗ | ✗ | ~ |
+| **pptx** | ~ | — | – | – | ✓ | – | – | ✗ | – | – | ✗ | ~ |
+| **xlsx** | – | – | — | – | – | ~ | – | ✗ | – | ✗✗ | ~ | ~ |
+| **odt** | ✓ | – | – | — | ~ | – | – | ✗ | – | ✗ | ✗ | ~ |
+| **odp** | – | ✓ | – | ~ | — | – | – | ✗ | – | – | ✗ | ~ |
+| **ods** | – | – | ~ | – | – | — | – | ✗ | – | – | ~ | ~ |
+| **odg** | – | – | – | – | – | – | — | ✓ | – | – | ✗ | ~ |
+| **svg** | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | — | – | ✗✗ | ✗✗ | ~ |
+| **odf** | – | – | – | – | – | – | – | – | — | – | – | → |
+| **markdown** | ~ | – | ✗✗ | ~ | – | – | – | ✗✗ | – | — | ✗✗ | ~ |
+| **csv** | ✗ | ✗ | ✓ | ✗ | ✗ | ✓ | ✗ | ✗ | – | ✗✗ | — | ~ |
+| **pdf** | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | – | ✗✗ | ✗ | — |
 
-91 of 110 directional pairs are routable. The `ContentDocument`/`LayoutDocument` pivots are the hub, not PDF — eighteen bridges bypass PDF entirely.
+111 of 132 directional pairs are routable. The `ContentDocument`/`LayoutDocument` pivots are the hub, not PDF — twenty bridges bypass PDF entirely.
 
 **X → PDF** is a genuine layout render: positioned text, images, tables, lists, vector primitives, styled through the full cascade. It is a faithful visual approximation, not pixel-identical — closeness depends on font availability.
 
@@ -647,11 +659,13 @@ Read as **row → column**. `✓` lossless, `~` bounded, `✗` lossy, `✗✗` s
 
 **PDF → odg** is near-1:1 mapping (no clustering needed). Kind narrows upstream: rotated rects, freeform curves, multi-subpath figures become `path`.
 
+**svg ⇄ PDF and PDF → svg** lay out through the same drawing engine odg feeds, so `svgToPdf` is bounded only by the svg read's documented scope; `pdfToSvg` reuses `pdfToOdg`'s near-1:1 vector recovery writing SVG shape elements instead. Recovered text boxes sit outside the svg writer's vector-only scope — reported per shape via `onSvgDiagnostic`, never silently dropped — and svg→csv/svg→markdown honestly produce empty output (no text in the read's scope, no vector vocabulary in the target).
+
 **PDF → ods** recovers what was printed, not what was entered. The printed string always survives in `displayText`; re-typed `value` is explicitly probabilistic inference.
 
 **`markdownToPdf`/`pdfToMarkdown`** is the lossiest round trip: `markdownToPdf` is faithful, but `pdfToMarkdown` stacks reconstruction lossiness PLUS markdown's coarser vocabulary (no colour, font, size, alignment). The PDF-composed markdown bridges (`xlsxToMarkdown`/`markdownToXlsx`, `csvToMarkdown`/`markdownToCsv`) stack the same two losses in both directions — hence their `✗✗` cells.
 
-**The five same-variant bridge pairs** (odt⇄docx, odp⇄pptx, ods⇄xlsx, csv⇄ods, csv⇄xlsx) bypass PDF entirely — no layout engine, no reconstruction. Text, styling, tables, lists, rotated shapes survive completely. `ods⇄xlsx` has small format-boundary limits (time cells, formula dialects). Embedded formulas survive `odtToDocx` as real OOXML math. The csv pairs are bounded by what csv itself carries: toward ods/xlsx nothing the csv had is lost, while writing to csv collapses each cell to its `displayText` — formulas become their rendered values, formatting disappears, and a multi-sheet source must name the sheet it wants.
+**The six same-variant bridge pairs** (odt⇄docx, odp⇄pptx, ods⇄xlsx, csv⇄ods, csv⇄xlsx, svg⇄odg) bypass PDF entirely — no layout engine, no reconstruction. Text, styling, tables, lists, rotated shapes survive completely. `ods⇄xlsx` has small format-boundary limits (time cells, formula dialects). Embedded formulas survive `odtToDocx` as real OOXML math. The csv pairs are bounded by what csv itself carries: toward ods/xlsx nothing the csv had is lost, while writing to csv collapses each cell to its `displayText` — formulas become their rendered values, formatting disappears, and a multi-sheet source must name the sheet it wants. The svg pair carries the six vector primitives losslessly in both directions; its one asymmetry is paint defaults — SVG's absent-fill-is-black versus a drawing frame's no-fill.
 
 **The two markdown bridge pairs** bypass PDF too, but markdown's grammar has no construct for colour/font/size/alignment — `docxToMarkdown`/`odtToMarkdown` drop them (format-boundary loss, not approximation).
 

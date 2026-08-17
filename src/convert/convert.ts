@@ -31,8 +31,9 @@ import { resolveMetadataTimestamps } from '../model/metadata';
 import type { ClockPort } from '../ports/clock';
 import { convertDocument } from './composition';
 import type { CellTypeInferenceSink } from '../layout/cell-typing';
+import type { SvgDiagnosticSink } from '../svg/diagnostics';
 
-// The ergonomic X <-> PDF conversions (docx/pptx/odt/odp/ods/odg/markdown/csv, all round-trip both ways). Each is a thin forwarder to convertDocument (src/convert/composition.ts), which resolves the composition plan for the pair and runs the real decode/read/layout/build/encode primitives -- reproducing the exact sequence and option-threading the hand-written body below used to inline. The four special cases further down this file (odfToPdf, odmToPdf, odbToXlsx, odbToCsv) stay as their real hand-written bodies, since none is a composition-graph pair (formula one-way, resolver callback, table extraction).
+// The ergonomic X <-> PDF conversions (docx/pptx/odt/odp/ods/odg/markdown/csv/svg, all round-trip both ways). Each is a thin forwarder to convertDocument (src/convert/composition.ts), which resolves the composition plan for the pair and runs the real decode/read/layout/build/encode primitives -- reproducing the exact sequence and option-threading the hand-written body below used to inline. The four special cases further down this file (odfToPdf, odmToPdf, odbToXlsx, odbToCsv) stay as their real hand-written bodies, since none is a composition-graph pair (formula one-way, resolver callback, table extraction).
 
 // `fonts` and `onFontSubstitution` are inherited from DocumentFontRegistryOptions (src/fonts/registry.ts) rather than redeclared here, so the ergonomic conversions and createDocumentFontRegistry describe the same two options in exactly one place. Every X-to-PDF conversion below builds a real FontRegistry from the SOURCE PACKAGE'S OWN embedded faces first, then those caller-supplied faces, then pdf-codec's vendored Carlito/Caladea substitutes, then the standard 14 -- which is why a document that embeds nothing, and asks for no family a vendored substitute covers, still writes byte-identical output to the standard-font-only pipeline this package had before (see convert-fonts.test.ts's own byte-identity proof).
 export interface DocumentToPdfOptions extends DocumentFontRegistryOptions {
@@ -99,9 +100,27 @@ export interface CsvWriteOptions {
   readonly sheet?: string;
 }
 
+// The two svg option groups the named svg conversions below intersect into the shared options type each uses, exactly the way CsvReadOptions/CsvWriteOptions above already do for csv: every svg-SOURCED conversion reads with { onSvgDiagnostic } (readSvgContent's own option, src/svg/read.ts) and every svg-TARGET one writes with { page, onSvgDiagnostic } (buildSvgText's own two, src/svg/write.ts).
+export interface SvgReadOptions {
+  // Called once per scope limit or bounded approximation the svg reader made while mapping SVG markup onto ContentVectors (src/svg/diagnostics.ts's own vocabulary) -- the audit channel for every degrade this reader performs, reported at the read boundary where it happens.
+  readonly onSvgDiagnostic?: SvgDiagnosticSink;
+}
+
+export interface SvgWriteOptions {
+  // Selects which page of a multi-page drawing document to write as svg. Required whenever the document has more than one page -- omitting it then throws SvgMultiPageNotSpecifiedError, rather than guessing (the same contract CsvWriteOptions.sheet holds for sheets, carried by index here because drawing pages are anonymous). May be omitted when the document has exactly one page.
+  readonly page?: number;
+  // Called once per construct the svg writer could not express in SVG markup and skipped or degraded (a ContentShape, a 'double' stroke style) -- the write-side mirror of SvgReadOptions.onSvgDiagnostic, sharing the same diagnostic vocabulary.
+  readonly onSvgDiagnostic?: SvgDiagnosticSink;
+}
+
 // csv bytes -> PDF bytes: csv has no layout engine of its own (exactly like xlsx), so convertDocument's pathfinder resolves this as [csv -> ods bridge, ods -> pdf toPdf] -- the reader parses RFC 4180 text into a spreadsheet ContentDocument (first record as the header row, data cells re-typed by inferCellValue with onCellTypeInference auditing each decision), then ods's own layout engine renders it. `onDocument` reports the last hop's package under the composition engine's own "fires exactly once, on the last hop" convention: the odsToPdf hop's content+layout.
 export function csvToPdf(bytes: Uint8Array<ArrayBuffer>, options?: DocumentToPdfOptions & CsvReadOptions): Uint8Array<ArrayBuffer> {
   return convertDocument('csv', 'pdf', bytes, options);
+}
+
+// svg bytes -> PDF bytes: svg HAS a layout engine path of its own (unlike csv/xlsx) -- convertDocument resolves this as a single [svg -> pdf toPdf] hop, readSvgContent mapping the six shape primitives onto a drawing ContentDocument and the same convertDrawingToLayout engine odgToPdf feeds rendering it. onSvgDiagnostic is the reader's scope-limit channel (text/gradients/images/CSS/use degrade under it, never silently); fonts/onFontSubstitution are accepted through the shared DocumentToPdfOptions and consulted for the drawing engine's shape-text pass exactly as they are for odg.
+export function svgToPdf(bytes: Uint8Array<ArrayBuffer>, options?: DocumentToPdfOptions & SvgReadOptions): Uint8Array<ArrayBuffer> {
+  return convertDocument('svg', 'pdf', bytes, options);
 }
 
 const STANDALONE_FORMULA_SIZE_PT = 18; // larger than a typical embedded formula (see engine.ts's own formulaSizePtForFrame), since a standalone .odf's own formula is usually the whole document's content, not a small inline element.
@@ -185,7 +204,12 @@ export function pdfToCsv(bytes: Uint8Array<ArrayBuffer>, options?: PdfToDocument
   return convertDocument('pdf', 'csv', bytes, options);
 }
 
-// The same-variant cross-format bridges (odt<->docx, odp<->pptx, ods<->xlsx, csv<->ods, csv<->xlsx, and -- further down this section -- markdown<->docx, markdown<->odt), each bypassing PDF entirely. Every conversion above this point pivots through a LayoutDocument; these pairs don't have that problem: both formats in each pair already read into and build from the identical ContentDocument variant, so the bridge is nothing more than reader -> writer, with no layout engine, no font measurement, and no geometry-based reconstruction in between. Each forwarder below hands the pair to convertDocument (src/convert/composition.ts), whose pathfinder resolves it as a single same-variant bridge hop and runs the identical decode/read/build/encode sequence.
+// pdf bytes -> svg bytes: the reverse of svgToPdf above -- convertDocument resolves this as a single [pdf -> svg fromPdf] hop, reconstructDrawing mapping readPdf's recovered vector items near-1:1 into a drawing ContentDocument and buildSvgText writing the six shape primitives back out. `page` selects which page of a multi-page PDF becomes the (single-page) svg, the same caller decision CsvWriteOptions.sheet holds for sheets; omitting it on a multi-page PDF throws SvgMultiPageNotSpecifiedError rather than truncating.
+export function pdfToSvg(bytes: Uint8Array<ArrayBuffer>, options?: PdfToDocumentOptions & SvgWriteOptions): Uint8Array<ArrayBuffer> {
+  return convertDocument('pdf', 'svg', bytes, options);
+}
+
+// The same-variant cross-format bridges (odt<->docx, odp<->pptx, ods<->xlsx, csv<->ods, csv<->xlsx, svg<->odg, and -- further down this section -- markdown<->docx, markdown<->odt), each bypassing PDF entirely. Every conversion above this point pivots through a LayoutDocument; these pairs don't have that problem: both formats in each pair already read into and build from the identical ContentDocument variant, so the bridge is nothing more than reader -> writer, with no layout engine, no font measurement, and no geometry-based reconstruction in between. Each forwarder below hands the pair to convertDocument (src/convert/composition.ts), whose pathfinder resolves it as a single same-variant bridge hop and runs the identical decode/read/build/encode sequence.
 export interface DocumentBridgeOptions {
   readonly signal?: AbortSignal;
   // Called exactly once, synchronously, with the DocumentPackage this bridge built internally, before the function returns its bytes -- mirroring DocumentToPdfOptions/PdfToDocumentOptions's own onDocument. A bridge never runs a layout engine (see this section's own top-of-block comment), so `layout` is always left undefined here -- DocumentPackageSchema already models layout as optional for exactly this case, and running a layout conversion purely to populate a field no caller asked for would be wasted work.
@@ -276,6 +300,18 @@ export function csvToOds(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBridg
 // Forwards to convertDocument (src/convert/composition.ts).
 export function odsToCsv(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBridgeOptions & CsvWriteOptions): Uint8Array<ArrayBuffer> {
   return convertDocument('ods', 'csv', bytes, options);
+}
+
+// svg <-> odg: svg is the drawing family's plain-text member -- it reads into and builds from the same drawing ContentDocument variant as odg (see capability.ts), so these resolve as single same-variant bridge hops, the svg side decoding/encoding plain text with no package in between. The svg-sourced direction intersects SvgReadOptions (onSvgDiagnostic reaches readSvgContent's own scope-limit channel) and the svg-target one SvgWriteOptions (page/onSvgDiagnostic reach buildSvgText's own writer); every non-svg field of DocumentBridgeOptions threads exactly as it does for the bridges above. Geometry crosses losslessly in both directions because both sides speak the identical six-primitive ContentVector vocabulary -- the one honest asymmetry is paint defaults (an SVG shape with no fill attribute reads as black-filled, the SVG specification's own default).
+
+// Forwards to convertDocument (src/convert/composition.ts).
+export function svgToOdg(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBridgeOptions & SvgReadOptions): Uint8Array<ArrayBuffer> {
+  return convertDocument('svg', 'odg', bytes, options);
+}
+
+// Forwards to convertDocument (src/convert/composition.ts).
+export function odgToSvg(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBridgeOptions & SvgWriteOptions): Uint8Array<ArrayBuffer> {
+  return convertDocument('odg', 'svg', bytes, options);
 }
 
 // Four cross-variant content bridges (wordprocessing <-> presentation), two pairs: docx <-> pptx and odt <-> odp. These cross a VARIANT BOUNDARY via a real semantic transform (src/convert/variant-bridges.ts), which convertDocument's pathfinder resolves as a single cross-variant bridge hop. Both directions are APPROXIMATIONS -- a flow document has no real slide boundaries, and a deck has no flow -- but the blocks themselves (paragraphs, tables, images, list membership, run styling) survive intact through both transforms.
