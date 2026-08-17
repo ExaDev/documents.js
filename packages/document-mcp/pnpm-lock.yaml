@@ -12,8 +12,8 @@ importers:
         specifier: ^2.0.0
         version: 2.0.0
       documents.js:
-        specifier: ^2.1.0
-        version: 2.1.0
+        specifier: ^2.3.0
+        version: 2.3.0
       zod:
         specifier: ^4.2.0
         version: 4.4.3
@@ -1629,8 +1629,8 @@ packages:
     resolution: {integrity: sha512-XDu/+fo56WrXrcR3f16xH5lYEQX+3b4W6kJELRNFwrrWxOqhQBQepXMkCi+niSrgCEIcfaC1IeaGPlZ8oj5gSw==}
     engines: {node: '>=20'}
 
-  documents.js@2.1.0:
-    resolution: {integrity: sha512-vJ6NplE4yJrozL1YmhCUMs2hD+Vu7KXnqTR+FhNKDeD62OAoxYHEILyQI0wBf9h5eYhWQWMGbBrR9HzjaTcvkg==}
+  documents.js@2.3.0:
+    resolution: {integrity: sha512-FTQIA9PRiHYPjn2NFEVdUp3rlvfd7smFs+HU6WAYhPFC47V4TzHBkIWhq9ptIbhtpldAThESKh61eLYYQrHd5A==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -2859,6 +2859,10 @@ packages:
   tagged-tag@1.0.0:
     resolution: {integrity: sha512-yEFYrVhod+hdNyx7g5Bnkkb0G6si8HJurOoOEgC8B/O0uXLHlaey/65KRv6cuWBNhBgHKAROVpc7QyYqE5gFng==}
     engines: {node: '>=20'}
+
+  temml@0.13.4:
+    resolution: {integrity: sha512-k1yolMBswx34Jw9hZn5Xh2/GBlwqlW+wiN7QaUYUMhSa1ypfti6rlCfSmCxWyooxH1G32C/Z+qVvgAsBOELZBQ==}
+    engines: {node: '>=18.13.0'}
 
   temp-dir@3.0.0:
     resolution: {integrity: sha512-nHc6S/bwIilKHNRgK/3jlhDoIHcp45YgyiwcAk46Tr0LfEqGBVpmiAyuiuxeVE44m3mXnEeVhaipLOEWmH+Njw==}
@@ -4617,7 +4621,7 @@ snapshots:
     dependencies:
       zod: 4.4.3
 
-  documents.js@2.1.0:
+  documents.js@2.3.0:
     dependencies:
       byte-codec: 1.1.9
       document-schema.js: 3.2.0
@@ -4626,6 +4630,7 @@ snapshots:
       odf.js: 3.0.1
       ooxml.js: 2.16.0
       pdf-codec: 2.2.35
+      temml: 0.13.4
       zod: 4.4.3
 
   dot-prop@5.3.0:
@@ -5825,6 +5830,8 @@ snapshots:
       supports-color: 7.2.0
 
   tagged-tag@1.0.0: {}
+
+  temml@0.13.4: {}
 
   temp-dir@3.0.0: {}
 
