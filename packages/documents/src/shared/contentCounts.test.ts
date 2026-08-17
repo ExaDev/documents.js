@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { ContentDocument } from 'documents.js';
+import { CONTENT_FORMAT_VERSION, type ContentDocument } from 'documents.js';
 
 import { contentSummary } from './contentCounts';
 
@@ -10,7 +10,7 @@ const PAGE_SIZE = { widthPt: 595, heightPt: 842 };
 function wordprocessing(sections: number, blocksPerSection: number): ContentDocument {
   return {
     kind: 'wordprocessing',
-    formatVersion: 2,
+    formatVersion: CONTENT_FORMAT_VERSION,
     metadata: {},
     sections: Array.from({ length: sections }, () => ({
       pageSize: PAGE_SIZE,
@@ -23,7 +23,7 @@ function wordprocessing(sections: number, blocksPerSection: number): ContentDocu
 function spreadsheet(sheets: number, cellsPerSheet: number): ContentDocument {
   return {
     kind: 'spreadsheet',
-    formatVersion: 2,
+    formatVersion: CONTENT_FORMAT_VERSION,
     metadata: {},
     sheets: Array.from({ length: sheets }, (_, i) => ({
       name: `Sheet${i}`,
@@ -53,7 +53,7 @@ describe('contentSummary', () => {
   it('counts blocks inside table cells, not just the table itself', () => {
     const doc: ContentDocument = {
       kind: 'wordprocessing',
-      formatVersion: 2,
+      formatVersion: CONTENT_FORMAT_VERSION,
       metadata: {},
       sections: [
         {
@@ -86,7 +86,7 @@ describe('contentSummary', () => {
   });
 
   it('summarises a formula document', () => {
-    const doc = { kind: 'formula', formatVersion: 2, metadata: {}, formula: { mathml: [] } } as ContentDocument;
+    const doc = { kind: 'formula', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, formula: { mathml: [] } } as ContentDocument;
     expect(contentSummary(doc)).toEqual(['formula']);
   });
 });
