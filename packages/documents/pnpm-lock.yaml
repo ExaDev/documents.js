@@ -60,8 +60,8 @@ importers:
         specifier: ^4.4.0
         version: 4.4.0(dexie@4.4.4)(react@19.2.8)
       documents.js:
-        specifier: ^1.99.67
-        version: 1.99.67
+        specifier: ^1.99.68
+        version: 1.99.68
       markdown-codec:
         specifier: ^1.3.29
         version: 1.3.29
@@ -2440,16 +2440,12 @@ packages:
     resolution: {integrity: sha512-WkrWp9GR4KXfKGYzOLmTuGVi1UWFfws377n9cc55/tb6DuqyF6pcQ5AbiHEshaDpY9v6oaSr2XCDidGmMwdzIA==}
     engines: {node: '>=8'}
 
-  document-schema.js@2.7.13:
-    resolution: {integrity: sha512-EtgZlCftQRCRowPG7tmw95XZihy3SAFN4cy4hBVY9h+QJCJXq7mx/7ic0eUutouElrmDN9VKH2qdmz/XZIfeLw==}
-    engines: {node: '>=20'}
-
   document-schema.js@2.7.15:
     resolution: {integrity: sha512-R5sH0HbVhckWMN8CxUAn/mlx9itfefGWhJPk9EYGeexD1jQeecJmSvBzxA3v/gBe9iX3ngoA2vUeoKCPs2DOTg==}
     engines: {node: '>=20'}
 
-  documents.js@1.99.67:
-    resolution: {integrity: sha512-tFJaUZfyJxBLWa3CuS10kgg6Q5w9MGZyghI9N6Q+0AjA3oPj87zZzilkx/YfqfsWbK/QEzFSjJ901JYEFS/cBQ==}
+  documents.js@1.99.68:
+    resolution: {integrity: sha512-lLIr8LxPpkN4qJ23Cl6lECh3OcICN0k7zESBI30rsdTafOUjZNzI2md6BUkt74rvuIPxN2syVauYf5ra1ARtTA==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -3449,10 +3445,6 @@ packages:
     resolution: {integrity: sha512-hXdUTZYIVOt1Ex//jAQi+wTZZpUpwBj/0QsOzqegb3rGMMeJiSEu5xLHnYfBrRV4RH2+OCSOO95Is/7x1WJ4bw==}
     engines: {node: '>=10'}
 
-  markdown-codec@1.3.28:
-    resolution: {integrity: sha512-5rRDHI3JrixWI7XHpPCGKAUcb3WW9upbBMIczLsYCCmt9RXJem+6CmjbuzkeihR4H039eTDveHb/Ut5h1vg2wA==}
-    engines: {node: '>=20'}
-
   markdown-codec@1.3.29:
     resolution: {integrity: sha512-/2hDFvnzGIpXKphAqvxuhEQ07Mz3cns46/1vWYi/qCXVp2mGD7Bwa+XXCv6v45CZNZlMOayZYVlfn08nDKUgeg==}
     engines: {node: '>=20'}
@@ -3669,10 +3661,6 @@ packages:
     resolution: {integrity: sha512-4a+OsYv9UktOJKE+l1A4OufDgdRF9PifWj+tJnHURo/P+WOxpG4GzUFL9qCalmWauao6ogiG+QvnCovwPoyAWA==}
     engines: {node: '>=12.20.0'}
 
-  odf.js@2.7.14:
-    resolution: {integrity: sha512-cVrTpc7PdeTp2/y2vwXRDQFME5fxQUs1oVLMUk4xpUSTzrVcWeGPccfihth2PvAu42l+khZJnNjQD8LdFOel4w==}
-    engines: {node: '>=20'}
-
   odf.js@2.7.15:
     resolution: {integrity: sha512-JFJkBPo1UwsVq99S4gcBLvB5wC+f8qYpF6W8NIX9i0x8iaDYgzS9GhvGo5Pq4dbovmvmN0MJdkdMW2cvkRUCPA==}
     engines: {node: '>=20'}
@@ -3681,8 +3669,8 @@ packages:
     resolution: {integrity: sha512-1FlR+gjXK7X+AsAHso35MnyN5KqGwJRi/31ft6x0M194ht7S+rWAvd7PHss9xSKMzE0asv1pyIHaJYq+BbacAQ==}
     engines: {node: '>=12'}
 
-  ooxml.js@2.11.28:
-    resolution: {integrity: sha512-i5fkZX7qRCYAHUGtFIM+vKUfDuUTNxGe8tk+HczDu/suTYtldkaF+B+oeXbuIgfj8GH3WeZK2P5Go9+xcvgaXw==}
+  ooxml.js@2.11.30:
+    resolution: {integrity: sha512-Fu8DGkv4N9Xn2OvLrAhpIXxbOLTDuIC8pkgwlF3kXs/bq6KZYvkV8SQm5BDS25I3pyiZaJOhelS4ZS2Fird5bQ==}
     engines: {node: '>=20'}
 
   openapi-types@12.1.3:
@@ -7360,22 +7348,18 @@ snapshots:
     dependencies:
       path-type: 4.0.0
 
-  document-schema.js@2.7.13:
-    dependencies:
-      zod: 4.4.3
-
   document-schema.js@2.7.15:
     dependencies:
       zod: 4.4.3
 
-  documents.js@1.99.67:
+  documents.js@1.99.68:
     dependencies:
       byte-codec: 1.1.9
-      document-schema.js: 2.7.13
+      document-schema.js: 2.7.15
       fflate: 0.8.3
-      markdown-codec: 1.3.28
-      odf.js: 2.7.14
-      ooxml.js: 2.11.28
+      markdown-codec: 1.3.29
+      odf.js: 2.7.15
+      ooxml.js: 2.11.30
       pdf-codec: 2.2.26
       zod: 4.4.3
 
@@ -8495,11 +8479,6 @@ snapshots:
     dependencies:
       semver: 7.8.5
 
-  markdown-codec@1.3.28:
-    dependencies:
-      document-schema.js: 2.7.15
-      zod: 4.4.3
-
   markdown-codec@1.3.29:
     dependencies:
       document-schema.js: 2.7.15
@@ -8645,13 +8624,6 @@ snapshots:
 
   obug@2.1.4: {}
 
-  odf.js@2.7.14:
-    dependencies:
-      document-schema.js: 2.7.15
-      fast-xml-parser: 5.10.1
-      fflate: 0.8.3
-      zod: 4.4.3
-
   odf.js@2.7.15:
     dependencies:
       document-schema.js: 2.7.15
@@ -8663,7 +8635,7 @@ snapshots:
     dependencies:
       mimic-fn: 4.0.0
 
-  ooxml.js@2.11.28:
+  ooxml.js@2.11.30:
     dependencies:
       document-schema.js: 2.7.15
       fast-xml-parser: 5.10.1
