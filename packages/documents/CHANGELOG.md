@@ -1,3 +1,10 @@
+# [1.24.0](https://github.com/ExaDev/documents/compare/v1.23.55...v1.24.0) (2026-08-17)
+
+
+### Features
+
+* **rpc:** detect headings via ContentParagraph.headingLevel, read xlsx content directly ([0e6a227](https://github.com/ExaDev/documents/commit/0e6a2273e106d3ec1bb1e127dbbbb52b7df5ac1d))
+
 ## [1.23.55](https://github.com/ExaDev/documents/compare/v1.23.54...v1.23.55) (2026-08-17)
 
 ## [1.23.54](https://github.com/ExaDev/documents/compare/v1.23.53...v1.23.54) (2026-08-17)
