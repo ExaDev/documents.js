@@ -1,4 +1,5 @@
 import type { ContentDocument, ContentStrokeStyle } from 'document-schema.js';
+import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
 import { describe, expect, it } from 'vitest';
 import { createDocx } from '../edit/docx/editor';
 import { createOdt } from '../edit/odt/editor';
@@ -158,7 +159,7 @@ describe('docx/odt decoration bridge', () => {
   it('writes row.heightPt as w:trHeight and reads it back via readDocxContent', () => {
     const document: ContentDocument = {
       kind: 'wordprocessing',
-      formatVersion: 2,
+      formatVersion: CONTENT_FORMAT_VERSION,
       metadata: {},
       sections: [{ pageSize: { widthPt: 612, heightPt: 792 }, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 }, blocks: [{ kind: 'table', rows: [{ cells: [{ blocks: [{ kind: 'paragraph', runs: [{ text: 'tall' }] }] }], heightPt: 28 }], columnWidthsPt: [468] }] }],
     };

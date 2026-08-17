@@ -111,7 +111,8 @@ export function odfToPdf(bytes: Uint8Array<ArrayBuffer>, options?: DocumentToPdf
     pages: [{ widthPt: PAGE_SIZE_A4.widthPt, heightPt: PAGE_SIZE_A4.heightPt, items: [] }],
     images: {},
   };
-  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content, layout });
+  // The reported package carries the one real A4 page it renders (pages) and no node frames -- a formula document's content has no renderable-item placements at all, since the formula's glyphs travel through writePdf's own formulas side channel rather than as page content.
+  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content, pages: [{ widthPt: PAGE_SIZE_A4.widthPt, heightPt: PAGE_SIZE_A4.heightPt }] });
   throwIfAborted(options?.signal);
   return writePdf(layout, { signal: options?.signal, formulas: [{ pageIndex: 0, xPt: flipped.xPt, yPt: flipped.yPt, box }] });
 }
@@ -434,7 +435,7 @@ export function odbReportToPdf(content: ContentDocument, options?: DocumentToPdf
     throw new Error('odbReportToPdf requires a wordprocessing ContentDocument');
   }
   const fonts = createFontRegistry({ fonts: options?.fonts, onSubstitution: options?.onFontSubstitution });
-  const { document: layout, formulas } = convertWordprocessingToLayout(content, { measurer: createFontMeasurer(fonts), mathMetricsAt });
-  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content, layout });
+  const { document: layout, formulas, pages } = convertWordprocessingToLayout(content, { measurer: createFontMeasurer(fonts), mathMetricsAt });
+  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content, pages: [...pages] });
   return writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution, formulas, fonts });
 }

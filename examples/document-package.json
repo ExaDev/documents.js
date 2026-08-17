@@ -1,9 +1,9 @@
 {
-  "$schema": "https://cdn.jsdelivr.net/npm/document-schema.js@2.7.4/schemas/document-package.schema.json",
-  "formatVersion": 1,
+  "$schema": "https://cdn.jsdelivr.net/npm/document-schema.js@3.2.0/schemas/document-package.schema.json",
+  "formatVersion": 2,
   "content": {
     "kind": "wordprocessing",
-    "formatVersion": 2,
+    "formatVersion": 3,
     "metadata": {},
     "sections": [
       {
@@ -25,7 +25,23 @@
                 "text": "Hello, world!",
                 "fontFamily": "Calibri",
                 "sizePt": 11,
-                "sourcePath": "sections[0].blocks[0].runs[0]"
+                "sourcePath": "sections[0].blocks[0].runs[0]",
+                "frames": [
+                  {
+                    "pageIndex": 0,
+                    "xPt": 72,
+                    "yPt": 706.572265625,
+                    "widthPt": 25.72216796875,
+                    "heightPt": 13.427734375
+                  },
+                  {
+                    "pageIndex": 0,
+                    "xPt": 100.208984375,
+                    "yPt": 706.572265625,
+                    "widthPt": 29.283203125,
+                    "heightPt": 13.427734375
+                  }
+                ]
               }
             ],
             "sourcePath": "sections[0].blocks[0]"
@@ -48,10 +64,28 @@
                             "text": "A1",
                             "fontFamily": "Calibri",
                             "sizePt": 11,
-                            "sourcePath": "sections[0].blocks[1].rows[0].cells[0].blocks[0].runs[0]"
+                            "sourcePath": "sections[0].blocks[1].rows[0].cells[0].blocks[0].runs[0]",
+                            "frames": [
+                              {
+                                "pageIndex": 0,
+                                "xPt": 72,
+                                "yPt": 693.14453125,
+                                "widthPt": 11.93994140625,
+                                "heightPt": 13.427734375
+                              }
+                            ]
                           }
                         ],
                         "sourcePath": "sections[0].blocks[1].rows[0].cells[0].blocks[0]"
+                      }
+                    ],
+                    "frames": [
+                      {
+                        "pageIndex": 0,
+                        "xPt": 72,
+                        "yPt": 686.572265625,
+                        "widthPt": 234,
+                        "heightPt": 20
                       }
                     ]
                   },
@@ -64,10 +98,28 @@
                             "text": "B1",
                             "fontFamily": "Calibri",
                             "sizePt": 11,
-                            "sourcePath": "sections[0].blocks[1].rows[0].cells[1].blocks[0].runs[0]"
+                            "sourcePath": "sections[0].blocks[1].rows[0].cells[1].blocks[0].runs[0]",
+                            "frames": [
+                              {
+                                "pageIndex": 0,
+                                "xPt": 306,
+                                "yPt": 693.14453125,
+                                "widthPt": 11.55859375,
+                                "heightPt": 13.427734375
+                              }
+                            ]
                           }
                         ],
                         "sourcePath": "sections[0].blocks[1].rows[0].cells[1].blocks[0]"
+                      }
+                    ],
+                    "frames": [
+                      {
+                        "pageIndex": 0,
+                        "xPt": 306,
+                        "yPt": 686.572265625,
+                        "widthPt": 234,
+                        "heightPt": 20
                       }
                     ]
                   }
@@ -80,89 +132,10 @@
       }
     ]
   },
-  "layout": {
-    "formatVersion": 1,
-    "metadata": {},
-    "pages": [
-      {
-        "widthPt": 612,
-        "heightPt": 792,
-        "items": [
-          {
-            "kind": "text",
-            "text": "Hello,",
-            "xPt": 72,
-            "yPt": 709.5263671875,
-            "font": {
-              "family": "Calibri",
-              "weight": "normal",
-              "style": "normal"
-            },
-            "sizePt": 11,
-            "color": {
-              "r": 0,
-              "g": 0,
-              "b": 0
-            },
-            "sourcePath": "sections[0].blocks[0].runs[0]"
-          },
-          {
-            "kind": "text",
-            "text": "world!",
-            "xPt": 100.208984375,
-            "yPt": 709.5263671875,
-            "font": {
-              "family": "Calibri",
-              "weight": "normal",
-              "style": "normal"
-            },
-            "sizePt": 11,
-            "color": {
-              "r": 0,
-              "g": 0,
-              "b": 0
-            },
-            "sourcePath": "sections[0].blocks[0].runs[0]"
-          },
-          {
-            "kind": "text",
-            "text": "A1",
-            "xPt": 72,
-            "yPt": 696.0986328125,
-            "font": {
-              "family": "Calibri",
-              "weight": "normal",
-              "style": "normal"
-            },
-            "sizePt": 11,
-            "color": {
-              "r": 0,
-              "g": 0,
-              "b": 0
-            },
-            "sourcePath": "sections[0].blocks[1].rows[0].cells[0].blocks[0].runs[0]"
-          },
-          {
-            "kind": "text",
-            "text": "B1",
-            "xPt": 306,
-            "yPt": 696.0986328125,
-            "font": {
-              "family": "Calibri",
-              "weight": "normal",
-              "style": "normal"
-            },
-            "sizePt": 11,
-            "color": {
-              "r": 0,
-              "g": 0,
-              "b": 0
-            },
-            "sourcePath": "sections[0].blocks[1].rows[0].cells[1].blocks[0].runs[0]"
-          }
-        ]
-      }
-    ],
-    "images": {}
-  }
+  "pages": [
+    {
+      "widthPt": 612,
+      "heightPt": 792
+    }
+  ]
 }

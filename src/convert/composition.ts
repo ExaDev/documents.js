@@ -2,7 +2,7 @@
 //
 // odf (a standalone formula document) and odm (an ODF master document) are deliberately NOT part of this engine: odfToPdf renders through src/mathml's own formula-positioning path rather than a ContentDocument -> LayoutDocument layout engine, and odmToPdf needs a caller-supplied resolveSubDocument callback that a fixed bytes-in/bytes-out contract cannot express. Both stay as the dedicated functions in convert.ts.
 
-import { DOCUMENT_PACKAGE_FORMAT_VERSION, type ContentDocument, type DocumentPackage, type FontSubstitution, type LayoutDocument, type MathFontMetrics, type PositionedFormula, type ProvidedFont } from 'document-schema.js';
+import { DOCUMENT_PACKAGE_FORMAT_VERSION, type ContentDocument, type DocumentPackage, type FontSubstitution, type LayoutDocument, type MathFontMetrics, type PageSize, type PositionedFormula, type ProvidedFont } from 'document-schema.js';
 import { buildXlsxPackage, decodePackage as decodeOoxmlPackage, encodePackage as encodeOoxmlPackage, readXlsxContent, type Package as OoxmlPackage } from 'ooxml.js';
 import { decodePackage as decodeOdfPackage, encodePackage as encodeOdfPackage } from 'odf.js';
 import { createFontMeasurer, createFontRegistry, loadMathFont, readPdf, writePdf, type FontRegistry, type PdfDiagnosticSink, type WinAnsiSubstitution } from 'pdf-codec';
@@ -247,7 +247,7 @@ function executeBridge(source: ContentFormat, target: ContentFormat, bytes: Uint
   throwIfAborted(options?.signal);
   options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content: buildContent });
 
-  // Build + encode the target. A bridge never runs a layout engine, so the reported DocumentPackage carries content only -- the identical `layout`-less shape convert.ts's own bridges report.
+  // Build + encode the target. A bridge never runs a layout engine, so the reported DocumentPackage carries content only, with no pages array and no node frames -- the identical layoutless shape convert.ts's own bridges report.
   if (targetNode.family === 'markdown') {
     const text = targetNode.build(buildContent);
     return targetNode.encode(text);
@@ -280,30 +280,36 @@ function executeToPdf(format: ContentFormat, bytes: Uint8Array<ArrayBuffer>, opt
   }
   const measurer = createFontMeasurer(fonts);
 
-  // Layout by variant. The first three engines return { document, formulas } (positioned MathML the wordprocessing/presentation/spreadsheet engines lay out via src/mathml); drawing returns a bare LayoutDocument and takes no mathMetricsAt, so writePdf omits `formulas` for it -- the exact odgToPdf divergence.
+  // Layout by variant. Every engine returns { document, pages } plus (for the three that render embedded formulas) positioned MathML; the drawing engine takes no mathMetricsAt and produces no positioned formulas, so writePdf omits `formulas` for it -- the exact odgToPdf divergence. Each engine also stamps the placements it computed onto `content`'s own nodes in place (frames), so the content reported below is the fused unified package half, not the bare read output.
   let layout: LayoutDocument;
+  let pages: readonly PageSize[];
   let formulas: readonly PositionedFormula[] | undefined;
   switch (content.kind) {
     case 'wordprocessing': {
       const result = LAYOUT_ENGINES.wordprocessing(content, { measurer, mathMetricsAt });
       layout = result.document;
+      pages = result.pages;
       formulas = result.formulas;
       break;
     }
     case 'presentation': {
       const result = LAYOUT_ENGINES.presentation(content, { measurer, mathMetricsAt });
       layout = result.document;
+      pages = result.pages;
       formulas = result.formulas;
       break;
     }
     case 'spreadsheet': {
       const result = LAYOUT_ENGINES.spreadsheet(content, { measurer, mathMetricsAt, signal: options?.signal });
       layout = result.document;
+      pages = result.pages;
       formulas = result.formulas;
       break;
     }
     case 'drawing': {
-      layout = LAYOUT_ENGINES.drawing(content, { measurer });
+      const result = LAYOUT_ENGINES.drawing(content, { measurer });
+      layout = result.document;
+      pages = result.pages;
       break;
     }
     default: {
@@ -311,7 +317,7 @@ function executeToPdf(format: ContentFormat, bytes: Uint8Array<ArrayBuffer>, opt
     }
   }
 
-  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content, layout });
+  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content, pages: [...pages] });
 
   if (formulas === undefined) {
     return writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution, fonts });
@@ -324,7 +330,9 @@ function executeFromPdf(target: ContentFormat, bytes: Uint8Array<ArrayBuffer>, o
   const node = FORMAT_NODES[target];
   const layout = readPdf(bytes, { signal: options?.signal, sink: options?.sink });
   const content = RECONSTRUCTORS[node.variant](layout, { signal: options?.signal });
-  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content, layout });
+  // The pages half derives from the read LayoutDocument's own pages -- every rendered page's size, indexed to match the frames the reconstructor attached to the content it built.
+  const pages = layout.pages.map((page) => ({ widthPt: page.widthPt, heightPt: page.heightPt }));
+  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content, pages });
 
   if (node.family === 'markdown') {
     const text = node.build(content);

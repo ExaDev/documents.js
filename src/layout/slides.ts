@@ -1,5 +1,5 @@
-import type { ContentDocument, ContentEmbeddedObjectBlock, ContentParagraph, ContentShape, ContentSlide, ContentTable, LayoutDocument, LayoutImage, LayoutImageAsset, LayoutItem, LayoutLink, LayoutPage, LayoutText } from 'document-schema.js';
-import { COLOR_BLACK, LAYOUT_FORMAT_VERSION } from 'document-schema.js';
+import type { ContentDocument, ContentEmbeddedObjectBlock, ContentParagraph, ContentShape, ContentSlide, ContentTable, LayoutDocument, LayoutImage, LayoutImageAsset, LayoutItem, LayoutLink, LayoutPage, LayoutText, PageSize } from 'document-schema.js';
+import { COLOR_BLACK } from 'document-schema.js';
 import { layoutFormula } from '../mathml/layout';
 import type { Box } from 'document-schema.js';
 import { flipY } from '../model/geometry';
@@ -7,7 +7,7 @@ import { formulaOfBlock } from '../model/formula';
 import type { MathFontMetrics, Point, PositionedFormula, TextMeasurer } from 'document-schema.js';
 import { wrapRunsToWidth } from './text-layout';
 import { rotatePointAboutCenter } from '../model/geometry';
-import { alignmentOffsetPt, effectiveStyledRuns, estimateRowHeightPt, formulaSizePtForFrame, justifyLineGapsPt, lineNaturalHeightPt, registerImage, sumColumnWidthsPt } from './shared';
+import { alignmentOffsetPt, effectiveStyledRuns, estimateRowHeightPt, formulaSizePtForFrame, justifyLineGapsPt, lineNaturalHeightPt, layoutDocumentOf, packagePagesOf, registerImage, stampFragmentFrame, stampFrame, sumColumnWidthsPt } from './shared';
 
 // ContentDocument (the presentation variant) -> LayoutDocument: pptx's tractable layout direction. No pagination -- one slide is always exactly one PDF page (slide size maps directly to the page's own widthPt/heightPt) -- and no group-transform resolution either, since src/ooxml/pptx/read.ts already flattened every group into absolute shape positions at read time. What's left is genuinely just: wrap each shape's text within its own box (reusing the exact wrapRunsToWidth docx also uses), place images at their shape's frame, render table grids directly from explicit column widths/row heights, and apply the one deliberate Y-flip from OOXML's top-left/y-down space into PDF's bottom-left/y-up space.
 
@@ -20,6 +20,8 @@ export interface PresentationLayoutResult {
   readonly document: LayoutDocument;
   // Every embedded formula actually rendered via src/mathml, already positioned in PDF page space -- see src/layout/engine.ts's own WordprocessingLayoutResult.formulas for why this can't travel through LayoutDocument.pages[].items itself.
   readonly formulas: readonly PositionedFormula[];
+  // The DocumentPackage's own pages array (each rendered page's size, indexed to match every content node's own frames[].pageIndex) -- the input `doc` argument itself comes back with frames stamped in place, which together with this array is the fused unified package a conversion reports through onDocument.
+  readonly pages: readonly PageSize[];
 }
 
 type PresentationContentDocument = Extract<ContentDocument, { kind: 'presentation' }>;
@@ -53,6 +55,7 @@ function layoutParagraph(
   contentWidthPt: number,
   startYDown: number,
   slideHeightPt: number,
+  pageIndex: number,
   placement: ShapePlacement,
   fontScale: number,
   spacingScale: number,
@@ -94,6 +97,8 @@ function layoutParagraph(
         sourcePath: fragment.sourcePath,
       };
       out.push(textItem);
+      // One frame per rendered placement, on the run that placement renders (the placement transform is already baked into the item's own xPt/yPt, so the frame matches the placed geometry exactly); a hyperlinked fragment's LayoutLink rides the same placement and stamps nothing additional.
+      stampFragmentFrame(paragraph.runs, fragment, pageIndex, textItem, measurer, line);
 
       if (fragment.hyperlink !== undefined) {
         const fragmentWidthPt = measurer.widthOfTextAtSize(fragment.text, fragment.font, fragment.sizePt);
@@ -118,7 +123,7 @@ function layoutParagraph(
 }
 
 // Renders a table's grid directly from its own explicit column widths and row heights (falling back to content-derived estimates only when a row's own height is missing) rather than proportionally estimating, since pptx tables -- unlike docx's -- already carry this geometry. Cell background rects are skipped entirely when the containing shape is rotated: LayoutRect has no rotation field of its own, and a misplaced (unrotated) rect would be a worse defect than a missing one for what is, in practice, a rare case.
-function layoutTable(table: ContentTable, contentLeftXDown: number, contentWidthPt: number, startYDown: number, slideHeightPt: number, placement: ShapePlacement, measurer: TextMeasurer, out: LayoutItem[]): number {
+function layoutTable(table: ContentTable, contentLeftXDown: number, contentWidthPt: number, startYDown: number, slideHeightPt: number, pageIndex: number, placement: ShapePlacement, measurer: TextMeasurer, out: LayoutItem[]): number {
   let cursorYDown = startYDown;
   const gridWidthPt = table.columnWidthsPt.reduce((sum, w) => sum + w, 0);
   const scale = gridWidthPt > 0 ? contentWidthPt / gridWidthPt : 1;
@@ -132,8 +137,12 @@ function layoutTable(table: ContentTable, contentLeftXDown: number, contentWidth
       const span = cell.colSpan ?? 1;
       const cellWidthPt = sumColumnWidthsPt(table.columnWidthsPt, colIndex, span) * scale;
 
+      // The cell's own frame stamps the CELL node (PDF-space, unrotated -- the same no-rotation constraint the background rect below already obeys); the runs inside stamp their own frames through layoutParagraph below.
+      const cellFrame = flipY({ xPt: cellXDown, yPt: cursorYDown, widthPt: cellWidthPt, heightPt: rowHeightPt }, slideHeightPt);
+      if (placement.layoutRotationDeg === undefined) {
+        stampFrame(cell, pageIndex, cellFrame);
+      }
       if (cell.background !== undefined && placement.layoutRotationDeg === undefined) {
-        const cellFrame = flipY({ xPt: cellXDown, yPt: cursorYDown, widthPt: cellWidthPt, heightPt: rowHeightPt }, slideHeightPt);
         // ContentTableCell has no sourcePath of its own (only ContentTable does -- see document-schema.js), so a per-cell background rect can only be attributed at the table's own granularity, not to the specific cell.
         out.push({ kind: 'rect', xPt: cellFrame.xPt, yPt: cellFrame.yPt, widthPt: cellFrame.widthPt, heightPt: cellFrame.heightPt, fill: cell.background, sourcePath: table.sourcePath });
       }
@@ -141,7 +150,7 @@ function layoutTable(table: ContentTable, contentLeftXDown: number, contentWidth
       let cellCursorYDown = cursorYDown;
       for (const block of cell.blocks) {
         if (block.kind === 'paragraph') {
-          cellCursorYDown = layoutParagraph(block, cellXDown, cellWidthPt, cellCursorYDown, slideHeightPt, placement, 1, 1, measurer, out);
+          cellCursorYDown = layoutParagraph(block, cellXDown, cellWidthPt, cellCursorYDown, slideHeightPt, pageIndex, placement, 1, 1, measurer, out);
         }
       }
 
@@ -163,11 +172,15 @@ function layoutShapeFormula(block: ContentEmbeddedObjectBlock, flippedFrame: Box
   const metrics = formulaContext.mathMetricsAt(sizePt);
   const { box } = layoutFormula(formula.mathml, { metrics, sizePt, color: COLOR_BLACK });
   formulaContext.positioned.push({ pageIndex: formulaContext.pageIndex, xPt: flippedFrame.xPt, yPt: flippedFrame.yPt, box });
+  // The block's frame records where the formula was placed even though its glyphs render through the formulas side channel rather than as a LayoutItem -- see engine.ts's identical note on its own formula-flow stamp.
+  stampFrame(block, formulaContext.pageIndex, flippedFrame);
 }
 
 // Exported for reuse by src/layout/drawing.ts: a drawing page's own ContentShape entries (draw:frame text/table/image content, and unrecognised custom-shape presets salvaged as text -- see odf.js's typed/draw/shapes.ts) are the exact same ContentShapeSchema-typed value a slide's shapes are, so odg gets slide-quality paragraph flow, image placement, and table layout for free rather than a second, drifting copy of this function. `formulaContext` is optional and appended last precisely so drawing.ts's own existing 5-argument call site keeps compiling unchanged -- readOdgContent runs no embedded-formula detection pass of its own (src/odf/odg/read.ts), so a drawing page never carries a formula block for that call site to need one for, and convertDrawingToLayout has no PositionedFormula output to record one into either.
-export function convertShape(shape: ContentShape, slideHeightPt: number, measurer: TextMeasurer, images: Record<string, LayoutImageAsset>, out: LayoutItem[], formulaContext?: ShapeFormulaContext): void {
+export function convertShape(shape: ContentShape, slideHeightPt: number, pageIndex: number, measurer: TextMeasurer, images: Record<string, LayoutImageAsset>, out: LayoutItem[], formulaContext?: ShapeFormulaContext): void {
   const flippedFrame = flipY(shape.frame, slideHeightPt);
+  // The shape's own placement, stamped on the shape node itself (PDF-space) -- a shape with no renderable content of its own (an empty text box) still records where it sat, and a consumer walking frames knows which page a shape belongs to without consulting any second tree.
+  stampFrame(shape, pageIndex, flippedFrame);
   const placement = shapePlacement(flippedFrame, shape.rotationDeg);
   const contentLeftXDown = shape.frame.xPt + shape.insetLeftPt;
   const contentWidthPt = Math.max(0, shape.frame.widthPt - shape.insetLeftPt - shape.insetRightPt);
@@ -177,14 +190,15 @@ export function convertShape(shape: ContentShape, slideHeightPt: number, measure
 
   for (const block of shape.blocks) {
     if (block.kind === 'paragraph') {
-      cursorYDown = layoutParagraph(block, contentLeftXDown, contentWidthPt, cursorYDown, slideHeightPt, placement, fontScale, spacingScale, measurer, out);
+      cursorYDown = layoutParagraph(block, contentLeftXDown, contentWidthPt, cursorYDown, slideHeightPt, pageIndex, placement, fontScale, spacingScale, measurer, out);
     } else if (block.kind === 'image') {
       const imageId = registerImage(block, images);
       const placed = placement.place({ x: flippedFrame.xPt, y: flippedFrame.yPt });
       const imageItem: LayoutImage = { kind: 'image', imageId, xPt: placed.x, yPt: placed.y, widthPt: flippedFrame.widthPt, heightPt: flippedFrame.heightPt, rotationDeg: placement.layoutRotationDeg, sourcePath: block.sourcePath };
       out.push(imageItem);
+      stampFrame(block, pageIndex, { xPt: placed.x, yPt: placed.y, widthPt: imageItem.widthPt, heightPt: imageItem.heightPt });
     } else if (block.kind === 'table') {
-      cursorYDown = layoutTable(block, contentLeftXDown, contentWidthPt, cursorYDown, slideHeightPt, placement, measurer, out);
+      cursorYDown = layoutTable(block, contentLeftXDown, contentWidthPt, cursorYDown, slideHeightPt, pageIndex, placement, measurer, out);
     } else if (block.kind === 'embeddedObject' && block.objectKind === 'formula' && formulaContext !== undefined) {
       layoutShapeFormula(block, flippedFrame, formulaContext);
     }
@@ -196,7 +210,7 @@ function convertSlide(slide: ContentSlide, slideIndex: number, measurer: TextMea
   const items: LayoutItem[] = [];
   const formulaContext: ShapeFormulaContext = { pageIndex: slideIndex, positioned, mathMetricsAt };
   for (const shape of slide.shapes) {
-    convertShape(shape, slide.size.heightPt, measurer, images, items, formulaContext);
+    convertShape(shape, slide.size.heightPt, slideIndex, measurer, images, items, formulaContext);
   }
   // Notes are carried as a private page-dictionary entry (LayoutPage.notes, see pdf/write.ts), never painted as visible content -- PDF has no native concept of hidden presenter notes, so this is purely a round-trip mechanism for this package's own pptxToPdf/pdfToPptx pair, not a real PDF feature.
   return { widthPt: slide.size.widthPt, heightPt: slide.size.heightPt, items, ...(slide.notes.length > 0 ? { notes: slide.notes } : {}) };
@@ -206,5 +220,6 @@ export function convertPresentationToLayout(doc: PresentationContentDocument, op
   const images: Record<string, LayoutImageAsset> = {};
   const formulas: PositionedFormula[] = [];
   const pages = doc.slides.map((slide, slideIndex) => convertSlide(slide, slideIndex, options.measurer, images, formulas, options.mathMetricsAt));
-  return { document: { formatVersion: LAYOUT_FORMAT_VERSION, metadata: doc.metadata, pages, images }, formulas };
+  // `doc` itself now carries every placement this pass computed, stamped in place on its own nodes (frames); the returned pages array plus that mutated content is the fused unified DocumentPackage a conversion reports through onDocument.
+  return { document: layoutDocumentOf(doc.metadata, pages, images), formulas, pages: packagePagesOf(pages) };
 }

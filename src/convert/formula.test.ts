@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 const mathMetricsAt = (sizePt: number) => loadMathFont().metricsAt(sizePt);
 import { unzlibSync } from 'fflate';
+import { PAGE_SIZE_A4 } from 'document-schema.js';
 import { buildXml as buildOdfXml, zipPackage } from 'odf.js';
 import { describe, expect, it } from 'vitest';
 import { FRACTION_FORMULA, MATRIX_FORMULA, odfFormulaBytes, SQRT_FORMULA, STRETCHY_FENCE_FORMULA, SUBSUP_FORMULA } from '../test-support/odf';
@@ -326,9 +327,9 @@ describe('a formula as a real ContentDocument, not a side-channel map', () => {
     }
     expect(captured.content.formula.starMath).toBe('{a} over {b}');
     expect(captured.content.formula.mathml.length).toBeGreaterThan(0);
-    // The layout half is a genuine single A4 page carrying no items, by construction: the formula renders through writePdf's own separate formula positioning, never as page content.
-    expect(captured.layout?.pages).toHaveLength(1);
-    expect(captured.layout?.pages[0]?.items).toHaveLength(0);
+    // The pages half is a genuine single A4 page and no node carries any frame, by construction: the formula renders through writePdf's own separate formula positioning, never as page content, so there are no item placements to fuse onto content.
+    expect(captured.pages).toHaveLength(1);
+    expect(captured.pages?.[0]).toEqual(PAGE_SIZE_A4);
   });
 
   it('carries an odt formula through onDocument as part of the ContentDocument the conversion built', () => {
