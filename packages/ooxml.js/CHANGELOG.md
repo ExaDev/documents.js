@@ -1,3 +1,10 @@
+# [2.15.0](https://github.com/ExaDev/ooxml.js/compare/v2.14.0...v2.15.0) (2026-08-17)
+
+
+### Features
+
+* read pptx SmartArt graphic frames' node text in diagram order ([1d54192](https://github.com/ExaDev/ooxml.js/commit/1d5419264b7180d6c1204f078eae927439f09f46))
+
 # [2.14.0](https://github.com/ExaDev/ooxml.js/compare/v2.13.1...v2.14.0) (2026-08-17)
 
 
