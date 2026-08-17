@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CsvBytesSchema, DocxBytesSchema, MarkdownBytesSchema, OdgBytesSchema, OdpBytesSchema, OdsBytesSchema, OdtBytesSchema, PdfBytesSchema, PptxBytesSchema, XlsxBytesSchema } from '../model/bytes';
+import { CsvBytesSchema, DocxBytesSchema, MarkdownBytesSchema, OdgBytesSchema, OdpBytesSchema, OdsBytesSchema, OdtBytesSchema, PdfBytesSchema, PptxBytesSchema, SvgBytesSchema, XlsxBytesSchema } from '../model/bytes';
 import {
   csvToMarkdown,
   csvToOds,
@@ -13,6 +13,7 @@ import {
   markdownToOdt,
   markdownToPdf,
   odgToPdf,
+  odgToSvg,
   odpToPdf,
   odpToPptx,
   odsToCsv,
@@ -29,9 +30,12 @@ import {
   pdfToOds,
   pdfToOdt,
   pdfToPptx,
+  pdfToSvg,
   pdfToXlsx,
   pptxToOdp,
   pptxToPdf,
+  svgToOdg,
+  svgToPdf,
   xlsxToCsv,
   xlsxToOds,
   xlsxToPdf,
@@ -82,6 +86,12 @@ export const markdownPdfCodec = z.codec(MarkdownBytesSchema, PdfBytesSchema, {
   encode: (pdfBytes) => pdfToMarkdown(pdfBytes),
 });
 
+// svg bytes <-> PDF bytes: a schema-validated z.codec() pair over svgToPdf/pdfToSvg (convert.ts), which -- like markdownPdfCodec above and unlike csvPdfCodec/xlsxPdfCodec below -- DOES lay its source out directly (svgToPdf feeds the drawing ContentDocument readSvgContent produced into the same convertDrawingToLayout engine odgPdfCodec feeds). Decode-side lossiness is the reader's documented scope limits (text, gradients, filters, images, CSS, and <use> degrade under diagnostics, never silently); encode-side is reconstructDrawing's near-1:1 mapping with the kind-narrowing every pdf-to-content recovery performs. Still the no-options form only: svgToPdf accepts onSvgDiagnostic and pdfToSvg accepts page/onSvgDiagnostic, neither of which z.codec()'s fixed decode(input)/encode(output) signature has room for -- and the encode leg WILL throw SvgMultiPageNotSpecifiedError on a multi-page PDF, since page selection is exactly such an option.
+export const svgPdfCodec = z.codec(SvgBytesSchema, PdfBytesSchema, {
+  decode: (svgBytes) => svgToPdf(svgBytes),
+  encode: (pdfBytes) => pdfToSvg(pdfBytes),
+});
+
 // odt bytes <-> docx bytes, odp bytes <-> pptx bytes, ods bytes <-> xlsx bytes, markdown bytes <-> docx bytes, and markdown bytes <-> odt bytes: schema-validated z.codec() pairs over the cross-format bridge functions (convert.ts), which unlike every PDF-pivot codec above bypass PDF entirely -- see convert.ts's own module comment on that section. The blanket "not round-trip-lossless doesn't apply to these" claim this comment used to make here is genuinely false for the two markdown pairs below, and is now stated precisely rather than glossed over: odtDocxCodec/odpPptxCodec/odsXlsxCodec decode/encode a direct ContentDocument pivot copy with no layout or reconstruction step, so those three really do carry no PDF-pivot-style lossiness of their own -- but markdownDocxCodec/markdownOdtCodec still lose everything CommonMark/GFM itself cannot represent (colour, font family/size, explicit alignment, page geometry) on the DECODE side (markdown -> docx/odt), simply because that information was never in the markdown source to begin with; ENCODE (docx/odt -> markdown) then discards it a second time on the way back down, same as it always would. That is not the PDF-pivot's geometry-based reconstruction lossiness -- there is still no layout engine and no geometric guessing anywhere in either direction -- but it is real, format-boundary lossiness all the same, and pretending otherwise here would misdescribe what markdownDocxCodec/markdownOdtCodec actually preserve. Still the no-options form only, for the same reason as above: odtToDocx et al. (and now markdownToDocx et al.) accept a signal option z.codec()'s fixed decode(input)/encode(output) signature has no room for.
 export const odtDocxCodec = z.codec(OdtBytesSchema, DocxBytesSchema, {
   decode: (odtBytes) => odtToDocx(odtBytes),
@@ -129,6 +139,12 @@ export const odsCsvCodec = z.codec(OdsBytesSchema, CsvBytesSchema, {
 export const xlsxCsvCodec = z.codec(XlsxBytesSchema, CsvBytesSchema, {
   decode: (xlsxBytes) => xlsxToCsv(xlsxBytes),
   encode: (csvBytes) => csvToXlsx(csvBytes),
+});
+
+// odg bytes <-> svg bytes: a schema-validated z.codec() pair over the same-variant drawing bridge (convert.ts) -- a direct ContentDocument pivot copy with no layout engine and no reconstruction, exactly like odsXlsxCodec above. Both sides speak the identical six-primitive ContentVector vocabulary, so geometry crosses losslessly; the one boundary is paint defaults (an SVG shape with no fill attribute reads as black-filled, the SVG specification's own default). The no-options encode leg throws SvgMultiPageNotSpecifiedError on a multi-page odg rather than silently truncating -- the identical contract the registry codec (src/codecs/registry.ts) documents for its own svg write.
+export const odgSvgCodec = z.codec(OdgBytesSchema, SvgBytesSchema, {
+  decode: (odgBytes) => odgToSvg(odgBytes),
+  encode: (svgBytes) => svgToOdg(svgBytes),
 });
 
 // csv bytes <-> markdown bytes: the no-options form over the two pdf-composed bridge functions (convert.ts), routing csv -> ods -> pdf -> markdown and markdown -> pdf -> ods -> csv. Lossy in the same stacked way as xlsxMarkdownCodec above -- the spreadsheet render and the markdown reconstruction each add their own loss -- with csv read's heuristic re-typing on top on the decode side.

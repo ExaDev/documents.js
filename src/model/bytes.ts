@@ -133,3 +133,14 @@ export const MarkdownBytesSchema = z.instanceof(Uint8Array).refine(isWellFormedU
 
 // CsvBytesSchema rests on the identical no-magic-bytes architecture as MarkdownBytesSchema above: csv shares markdown's plain-text nature (no header, no reserved byte sequence -- RFC 4180 text is just fields and delimiters), so well-formed UTF-8 is the one honest bytes-level check, and the same fatal-decode refinement covers both. The parse errors that ARE specific to csv (an unterminated quoted field) surface as CsvParseError from parseCsvRecords, which is where the text is actually understood.
 export const CsvBytesSchema = z.instanceof(Uint8Array).refine(isWellFormedUtf8Text, { message: 'not well-formed UTF-8 text' });
+
+// SvgBytesSchema shares the plain-text architecture above but can honestly check one step more structure: SVG, unlike csv/markdown, HAS a recognisable root -- an XML document whose outermost element is <svg>. The check is deliberately loose (a case-insensitive substring, not an XML parse, so a DOCTYPE, XML declaration, or comment ahead of the root still passes and trailing junk is left to the reader), because this schema's job is pre-flight rejection of obviously-wrong bytes, not validation. A fatal decode already proved well-formed UTF-8 by the time the substring is tested, so decoding it again here cannot mangle.
+export const SvgBytesSchema = z.instanceof(Uint8Array).refine(
+  (bytes) => {
+    if (!isWellFormedUtf8Text(bytes)) {
+      return false;
+    }
+    return new TextDecoder().decode(bytes).toLowerCase().includes('<svg');
+  },
+  { message: 'not a valid SVG file: not well-formed UTF-8 text containing an <svg root element' },
+);

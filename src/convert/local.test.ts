@@ -33,9 +33,9 @@ function buildSamplePptx(text: string): Uint8Array<ArrayBuffer> {
 describe('createLocalDocumentConverter: shape', () => {
   it('reports contractVersion and the supported conversion pairs', () => {
     const converter = createLocalDocumentConverter();
-    // 5, not 4: convert()'s own ConversionOptions gained clock (a ClockPort), forwarded to every X-to-PDF conversion's /CreationDate and /ModDate stamping -- see port.ts's own contractVersion comment on what does and does not warrant a bump.
-    expect(converter.contractVersion).toBe(5);
-    // SUPPORTED_CONVERSIONS is now derived from the composition pathfinder (resolveCompositionPlan) rather than a hand-maintained DIRECT_EDGES list. The pathfinder routes every pair of non-odf formats (each reaches all 9 others within the 3-hop cap), plus the special-case odf -> pdf pair -- 91 pairs total, sorted by source then target for determinism. csv joins as a full spreadsheet-variant member: same-variant bridges to ods/xlsx directly, everything else composed through the identical ods pivot xlsx uses.
+    // 6, not 5: convert()'s own ConversionOptions gained page, forwarded to any svg-target hop (drawing pages are anonymous, so an index selects the page the way sheet names a sheet) -- see port.ts's own contractVersion comment on what does and does not warrant a bump.
+    expect(converter.contractVersion).toBe(6);
+    // SUPPORTED_CONVERSIONS is now derived from the composition pathfinder (resolveCompositionPlan) rather than a hand-maintained DIRECT_EDGES list. The pathfinder routes every pair of non-odf formats (each reaches all 10 others within the 3-hop cap), plus the special-case odf -> pdf pair -- 111 pairs total, sorted by source then target for determinism. csv joins as a full spreadsheet-variant member: same-variant bridges to ods/xlsx directly, everything else composed through the identical ods pivot xlsx uses. svg joins as the drawing family's plain-text member the same way: a same-variant bridge to odg directly plus its own pdf layout pair, everything else composed through those two edges.
     expect(converter.conversions).toEqual([
       { source: 'csv', target: 'docx' },
       { source: 'csv', target: 'markdown' },
@@ -45,6 +45,7 @@ describe('createLocalDocumentConverter: shape', () => {
       { source: 'csv', target: 'odt' },
       { source: 'csv', target: 'pdf' },
       { source: 'csv', target: 'pptx' },
+      { source: 'csv', target: 'svg' },
       { source: 'csv', target: 'xlsx' },
       { source: 'docx', target: 'csv' },
       { source: 'docx', target: 'markdown' },
@@ -54,6 +55,7 @@ describe('createLocalDocumentConverter: shape', () => {
       { source: 'docx', target: 'odt' },
       { source: 'docx', target: 'pdf' },
       { source: 'docx', target: 'pptx' },
+      { source: 'docx', target: 'svg' },
       { source: 'docx', target: 'xlsx' },
       { source: 'markdown', target: 'csv' },
       { source: 'markdown', target: 'docx' },
@@ -63,6 +65,7 @@ describe('createLocalDocumentConverter: shape', () => {
       { source: 'markdown', target: 'odt' },
       { source: 'markdown', target: 'pdf' },
       { source: 'markdown', target: 'pptx' },
+      { source: 'markdown', target: 'svg' },
       { source: 'markdown', target: 'xlsx' },
       { source: 'odf', target: 'pdf' },
       { source: 'odg', target: 'csv' },
@@ -73,6 +76,7 @@ describe('createLocalDocumentConverter: shape', () => {
       { source: 'odg', target: 'odt' },
       { source: 'odg', target: 'pdf' },
       { source: 'odg', target: 'pptx' },
+      { source: 'odg', target: 'svg' },
       { source: 'odg', target: 'xlsx' },
       { source: 'odp', target: 'csv' },
       { source: 'odp', target: 'docx' },
@@ -82,6 +86,7 @@ describe('createLocalDocumentConverter: shape', () => {
       { source: 'odp', target: 'odt' },
       { source: 'odp', target: 'pdf' },
       { source: 'odp', target: 'pptx' },
+      { source: 'odp', target: 'svg' },
       { source: 'odp', target: 'xlsx' },
       { source: 'ods', target: 'csv' },
       { source: 'ods', target: 'docx' },
@@ -91,6 +96,7 @@ describe('createLocalDocumentConverter: shape', () => {
       { source: 'ods', target: 'odt' },
       { source: 'ods', target: 'pdf' },
       { source: 'ods', target: 'pptx' },
+      { source: 'ods', target: 'svg' },
       { source: 'ods', target: 'xlsx' },
       { source: 'odt', target: 'csv' },
       { source: 'odt', target: 'docx' },
@@ -100,6 +106,7 @@ describe('createLocalDocumentConverter: shape', () => {
       { source: 'odt', target: 'ods' },
       { source: 'odt', target: 'pdf' },
       { source: 'odt', target: 'pptx' },
+      { source: 'odt', target: 'svg' },
       { source: 'odt', target: 'xlsx' },
       { source: 'pdf', target: 'csv' },
       { source: 'pdf', target: 'docx' },
@@ -109,6 +116,7 @@ describe('createLocalDocumentConverter: shape', () => {
       { source: 'pdf', target: 'ods' },
       { source: 'pdf', target: 'odt' },
       { source: 'pdf', target: 'pptx' },
+      { source: 'pdf', target: 'svg' },
       { source: 'pdf', target: 'xlsx' },
       { source: 'pptx', target: 'csv' },
       { source: 'pptx', target: 'docx' },
@@ -118,7 +126,18 @@ describe('createLocalDocumentConverter: shape', () => {
       { source: 'pptx', target: 'ods' },
       { source: 'pptx', target: 'odt' },
       { source: 'pptx', target: 'pdf' },
+      { source: 'pptx', target: 'svg' },
       { source: 'pptx', target: 'xlsx' },
+      { source: 'svg', target: 'csv' },
+      { source: 'svg', target: 'docx' },
+      { source: 'svg', target: 'markdown' },
+      { source: 'svg', target: 'odg' },
+      { source: 'svg', target: 'odp' },
+      { source: 'svg', target: 'ods' },
+      { source: 'svg', target: 'odt' },
+      { source: 'svg', target: 'pdf' },
+      { source: 'svg', target: 'pptx' },
+      { source: 'svg', target: 'xlsx' },
       { source: 'xlsx', target: 'csv' },
       { source: 'xlsx', target: 'docx' },
       { source: 'xlsx', target: 'markdown' },
@@ -128,6 +147,7 @@ describe('createLocalDocumentConverter: shape', () => {
       { source: 'xlsx', target: 'odt' },
       { source: 'xlsx', target: 'pdf' },
       { source: 'xlsx', target: 'pptx' },
+      { source: 'xlsx', target: 'svg' },
     ]);
   });
 
@@ -138,6 +158,10 @@ describe('createLocalDocumentConverter: shape', () => {
     expect(converter.conversions).toContainEqual({ source: 'csv', target: 'pdf' });
     expect(converter.conversions).toContainEqual({ source: 'pdf', target: 'csv' });
     expect(converter.conversions).toContainEqual({ source: 'xlsx', target: 'pdf' });
+    expect(converter.conversions).toContainEqual({ source: 'pdf', target: 'xlsx' });
+    // svg <-> pdf is a DIRECT layout pair, not a composed one (svg rides the drawing layout engine the way odg does), pinned here alongside the composed pairs so the distinction survives any future reordering.
+    expect(converter.conversions).toContainEqual({ source: 'svg', target: 'pdf' });
+    expect(converter.conversions).toContainEqual({ source: 'pdf', target: 'svg' });
     expect(converter.conversions).toContainEqual({ source: 'pdf', target: 'xlsx' });
   });
 });
