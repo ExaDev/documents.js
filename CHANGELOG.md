@@ -1,3 +1,5 @@
+## [1.102.2](https://github.com/ExaDev/documents.js/compare/v1.102.1...v1.102.2) (2026-08-17)
+
 ## [1.102.1](https://github.com/ExaDev/documents.js/compare/v1.102.0...v1.102.1) (2026-08-17)
 
 # [1.102.0](https://github.com/ExaDev/documents.js/compare/v1.101.2...v1.102.0) (2026-08-17)
