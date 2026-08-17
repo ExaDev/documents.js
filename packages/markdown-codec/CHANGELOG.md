@@ -1,3 +1,15 @@
+# [2.0.0](https://github.com/ExaDev/markdown-codec/compare/v1.4.2...v2.0.0) (2026-08-17)
+
+
+* feat!: populate canonical headingLevel on read and clamp write-side levels via the shared helper ([32bc2de](https://github.com/ExaDev/markdown-codec/commit/32bc2de55c5945356ec6375c763043f598192c0c)), closes [#-depth](https://github.com/ExaDev/markdown-codec/issues/-depth)
+
+
+### BREAKING CHANGES
+
+* readMarkdown's emitted ContentDocuments now carry
+CONTENT_FORMAT_VERSION 3 and validate against document-schema.js 3;
+consumers still validating against schema 2 must move to 3.
+
 ## [1.4.2](https://github.com/ExaDev/markdown-codec/compare/v1.4.1...v1.4.2) (2026-08-17)
 
 ## [1.4.1](https://github.com/ExaDev/markdown-codec/compare/v1.4.0...v1.4.1) (2026-08-17)
