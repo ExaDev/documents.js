@@ -49,6 +49,33 @@ describe('code spans', () => {
   });
 });
 
+describe('inline math (ExaDev/markdown-codec#53)', () => {
+  it('recognises \\( \\) as inline math, literal excluding the delimiters', () => {
+    expect(parse('\\(E = mc^2\\)')).toEqual([{ type: 'mathInline', literal: 'E = mc^2' }]);
+  });
+
+  it('closes at the first \\), no nested-\\(-awareness', () => {
+    expect(parse('\\(f(x)\\)')).toEqual([{ type: 'mathInline', literal: 'f(x)' }]);
+  });
+
+  it('treats an unmatched \\( as today\'s ordinary backslash escape of "("', () => {
+    expect(parse('\\(no closer here')).toEqual([{ type: 'text', value: '(no closer here' }]);
+  });
+
+  it('allows an empty span', () => {
+    expect(parse('\\(\\)')).toEqual([{ type: 'mathInline', literal: '' }]);
+  });
+
+  it('does not recognise single-dollar $...$ or bare $$ as math -- only \\( \\)', () => {
+    expect(parse('$x^2$')).toEqual([{ type: 'text', value: '$x^2$' }]);
+    expect(parse('$$x^2$$')).toEqual([{ type: 'text', value: '$$x^2$$' }]);
+  });
+
+  it('does not recognise \\( \\) inside a code span -- the span is sliced verbatim, never re-dispatched', () => {
+    expect(parse('`\\(x\\)`')).toEqual([{ type: 'codeSpan', literal: '\\(x\\)' }]);
+  });
+});
+
 describe('emphasis, strong emphasis, and the flanking rules', () => {
   it('records which marker character produced the emphasis', () => {
     expect(parse('_foo_')).toEqual([{ type: 'emphasis', marker: '_', children: [{ type: 'text', value: 'foo' }] }]);

@@ -35,8 +35,14 @@ export const HORIZONTAL_RULE_STYLE_ID = 'HorizontalRule';
 // Ditto for a block of preserved raw HTML.
 export const HTML_PREFORMATTED_STYLE_ID = 'HTMLPreformatted';
 
+// Ditto for a $$...$$ display-math block (ExaDev/markdown-codec#53) -- preserved raw LaTeX text, not converted to MathML by this package (see src/lower/lower.ts's own top-of-file note).
+export const MATH_BLOCK_STYLE_ID = 'MathBlock';
+
 // A code span/code block's own ContentRun.fontFamily -- a genuinely monospace font every mainstream Word/LibreOffice install carries, matching this whole family's own "standard, not invented" font-naming convention (see documents.js's own standard-14 substitution).
 export const MONOSPACE_FONT_FAMILY = 'Courier New';
+
+// An inline math run's own ContentRun.fontFamily marker (ExaDev/markdown-codec#53), the identical opportunistic-reuse trick MONOSPACE_FONT_FAMILY already plays for a code span -- a real Word/LibreOffice math font (the one Word itself uses for OOXML equation runs), not an invented sentinel, so a run genuinely styled this way for an unrelated reason degrades exactly as gracefully as a genuinely-monospace non-code-span run already does. Load-bearing, not cosmetic: escapeMarkdownText (src/emit/inline.ts) backslash-escapes every literal '(' and ')' in ORDINARY text, so an inline math run's own \( \) delimiters cannot be recovered by pattern-matching the written-out text after the fact (that was tried and reverted -- any ordinary parenthetical remark escapes to the identical \(...\) shape and would be misrecognised as math on reparse); this marker is what lets src/emit/inline.ts's own renderLeaf single out a genuine preserved-math run and skip escaping for that one run only.
+export const MATH_INLINE_FONT_MARKER = 'Cambria Math';
 
 // Points per level of blockquote nesting src/lower/src/emit agree on for ContentParagraph.indentLeftPt -- 0.5in, a common real-world blockquote/list indent increment (matching, e.g., Word's own default list-indent step). document-schema.js's own indentLeftPt carries no "this many quote levels" semantic of its own, so SOME fixed per-level unit has to be picked for the two directions to agree; this is that choice, made once, here.
 export const QUOTE_INDENT_PT = 36;

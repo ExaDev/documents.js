@@ -18,7 +18,7 @@ import { DEFAULT_BULLET_LIST_MARKER, DEFAULT_CODE_FENCE_CHAR, DEFAULT_EMPHASIS_M
 import type { MarkdownHeadingStyle, WriteMarkdownOptions } from '../options/options';
 import type { ListNumIdInfo } from '../shared/list-id';
 import { parseListNumId } from '../shared/list-id';
-import { CODE_BLOCK_STYLE_ID, HORIZONTAL_RULE_STYLE_ID, HTML_PREFORMATTED_STYLE_ID, MAX_HEADING_STYLE_LEVEL, QUOTE_INDENT_PT, QUOTE_STYLE_ID, TASK_CHECKBOX_CHECKED, TASK_CHECKBOX_UNCHECKED, parseHeadingStyleId } from '../shared/style-constants';
+import { CODE_BLOCK_STYLE_ID, HORIZONTAL_RULE_STYLE_ID, HTML_PREFORMATTED_STYLE_ID, MATH_BLOCK_STYLE_ID, MAX_HEADING_STYLE_LEVEL, QUOTE_INDENT_PT, QUOTE_STYLE_ID, TASK_CHECKBOX_CHECKED, TASK_CHECKBOX_UNCHECKED, parseHeadingStyleId } from '../shared/style-constants';
 import { emitFrontMatter } from './front-matter';
 import { emitImage } from './image';
 import type { InlineEmitContext } from './inline';
@@ -72,7 +72,7 @@ function codeFenceFor(literal: string, fenceChar: string): string {
   return fenceChar.repeat(Math.max(MIN_CODE_FENCE_LENGTH, longestRunLength(literal, fenceChar) + 1));
 }
 
-const QUOTABLE_STYLE_IDS: ReadonlySet<string> = new Set([QUOTE_STYLE_ID, CODE_BLOCK_STYLE_ID, HORIZONTAL_RULE_STYLE_ID, HTML_PREFORMATTED_STYLE_ID]);
+const QUOTABLE_STYLE_IDS: ReadonlySet<string> = new Set([QUOTE_STYLE_ID, CODE_BLOCK_STYLE_ID, HORIZONTAL_RULE_STYLE_ID, HTML_PREFORMATTED_STYLE_ID, MATH_BLOCK_STYLE_ID]);
 
 function isQuotableStyle(styleId: string | undefined): boolean {
   if (styleId === undefined) {
@@ -101,6 +101,11 @@ function renderParagraphBody(paragraph: ContentParagraph, context: EmitContext):
   }
   if (paragraph.styleId === HTML_PREFORMATTED_STYLE_ID) {
     return paragraph.runs.map((run) => run.text).join('');
+  }
+  if (paragraph.styleId === MATH_BLOCK_STYLE_ID) {
+    // A fresh $$ pair regenerated around the preserved literal -- src/lower/lower.ts's own lowerMathBlock never kept the original delimiter lines either, exactly mirroring how a fenced code block regenerates its own fence (codeFenceFor) rather than preserving the source fence's exact character/length.
+    const literal = paragraph.runs.map((run) => run.text).join('');
+    return `$$\n${literal}\n$$`;
   }
   const headingLevel = paragraph.styleId === undefined ? undefined : parseHeadingStyleId(paragraph.styleId);
   if (headingLevel !== undefined) {

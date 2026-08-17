@@ -1,4 +1,4 @@
-import { i as MarkdownDiagnosticSink } from "../diagnostics-DmuWc7d8.cjs";
+import { i as MarkdownDiagnosticSink } from "../diagnostics-B72W0P_E.cjs";
 import { n as MarkdownImageResolver } from "../image-C4KYmz_L.cjs";
 import { Margins, PageSize } from "document-schema.js";
 //#region src/options/options.d.ts

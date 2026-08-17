@@ -52,8 +52,8 @@ const NUL_PATTERN = /\0/g;
 
 const LINE_ENDING_PATTERN = /\r\n|\n|\r/;
 
-// A cheap first filter before the block-start list is tried at all: no block start, and no paragraph promotion, can begin with any other character. `|` and `:` are here for the GFM table delimiter row (`| --- |`, `:-: | ---:`), the only construct in this package that can start with either.
-const MAYBE_SPECIAL_PATTERN = /^[#`~*+_=<>0-9|:-]/;
+// A cheap first filter before the block-start list is tried at all: no block start, and no paragraph promotion, can begin with any other character. `|` and `:` are here for the GFM table delimiter row (`| --- |`, `:-: | ---:`), the only construct in this package that can start with either. `$` is here for a $$ math block's own opening line (ExaDev/markdown-codec#53).
+const MAYBE_SPECIAL_PATTERN = /^[#$`~*+_=<>0-9|:-]/;
 
 // spec 0.31.2, "ATX headings": one to six `#` characters, followed by spaces/tabs or the end of the line.
 const ATX_MARKER_PATTERN = /^#{1,6}(?:[ \t]+|$)/;
@@ -63,6 +63,10 @@ const ATX_TRAILING_CLOSING_SEQUENCE_PATTERN = /[ \t]+#+[ \t]*$/;
 // spec 0.31.2, "Fenced code blocks": at least three backticks or tildes. A backtick fence's own info string may not contain a backtick, which the lookahead enforces at the point of matching rather than after the fact.
 const CODE_FENCE_PATTERN = /^`{3,}(?!.*`)|^~{3,}/;
 const CLOSING_CODE_FENCE_PATTERN = /^(?:`{3,}|~{3,})(?=[ \t]*$)/;
+
+// Pandoc/GitHub math-extension display math (ExaDev/markdown-codec#53): a line consisting of exactly $$, optionally followed by trailing spaces/tabs and nothing else -- deliberately stricter than the code-fence pattern above (no "info string", no variable length): both the opening and the closing line must match this exact shape, which is what makes a bare "$$" line on its own unambiguous rather than colliding with GFM's own single-dollar-free inline math (this package never adds inline $$ recognition at all, only \( \)).
+const MATH_BLOCK_MARKER_PATTERN = /^\$\$[ \t]*$/;
+const MATH_BLOCK_MARKER_LENGTH = 2;
 
 // spec 0.31.2, "Setext headings": a sequence of `=` or of `-`, optionally followed by spaces/tabs, and nothing else.
 const SETEXT_UNDERLINE_PATTERN = /^(?:=+|-+)[ \t]*$/;
@@ -171,6 +175,10 @@ class BlockParser {
     }
     if (node.kind === 'htmlBlock' && !HTML_BLOCK_BLANK_LINE_END_TYPES.includes(node.htmlBlockType)) {
       this.sink({ code: MarkdownDiagnosticCodes.UNTERMINATED_HTML_BLOCK, severity: 'warning', message: `HTML block (type ${String(node.htmlBlockType)}) starting at line ${String(node.startLine)} never met its own end condition before the end of the document`, line: node.startLine });
+      return;
+    }
+    if (node.kind === 'mathBlock') {
+      this.sink({ code: MarkdownDiagnosticCodes.UNCLOSED_MATH_BLOCK, severity: 'warning', message: `math block starting at line ${String(node.startLine)} was never closed by a matching closing $$ before the end of the document`, line: node.startLine });
     }
   }
 
@@ -221,6 +229,8 @@ class BlockParser {
         return this.continueListItem(node);
       case 'codeBlock':
         return this.continueCodeBlock(node);
+      case 'mathBlock':
+        return this.continueMathBlock(node);
       case 'htmlBlock':
         // Types 1-5 end on a line whose own text meets their end condition, checked once that line's text has been added (see addTextToContainer); types 6 and 7 end at a blank line instead.
         return this.line.blank && HTML_BLOCK_BLANK_LINE_END_TYPES.includes(node.htmlBlockType) ? 'not-matched' : 'matched';
@@ -301,6 +311,15 @@ class BlockParser {
     return 'matched';
   }
 
+  // A closing $$ line is never added to the block's own content (matching continueCodeBlock's own closing-fence handling) -- finalize runs directly off the line the closer matched, and the line's processing ends there ('finished').
+  private continueMathBlock(node: BlockNode): ContinueResult {
+    if (!this.line.indented && MATH_BLOCK_MARKER_PATTERN.test(this.line.restFromNextNonspace())) {
+      this.finalize(node);
+      return 'finished';
+    }
+    return 'matched';
+  }
+
   // Step 2: try block starts against the deepest matched container until one produces a leaf block, none matches, or the line is plainly ordinary text.
   private openNewBlocks(matchedContainer: BlockNode): BlockNode {
     let container = matchedContainer;
@@ -329,6 +348,7 @@ class BlockParser {
       () => this.tryBlockquoteStart(),
       () => this.tryAtxHeadingStart(),
       () => this.tryCodeFenceStart(),
+      () => this.tryMathBlockStart(),
       () => this.tryHtmlBlockStart(container),
       () => this.tryPromoteParagraph(container),
       () => this.tryThematicBreakStart(),
@@ -393,6 +413,21 @@ class BlockParser {
     block.fenceOffset = this.line.indent;
     this.line.advanceToNextNonspace();
     this.line.advance(fence.length);
+    return 'leaf';
+  }
+
+  // A $$ line -- the whole line, nothing else (MATH_BLOCK_MARKER_PATTERN) -- opens a math block, interrupting an open paragraph exactly as a code fence does. The cursor advances past "$$" only, not to end of line, leaving whatever (should only be trailing whitespace) remains as the block's own first content line -- finalizeMathBlock strips that first line back off, mirroring finalizeCodeBlock's own info-string slot.
+  private tryMathBlockStart(): BlockStartResult {
+    if (this.line.indented) {
+      return 'none';
+    }
+    if (!MATH_BLOCK_MARKER_PATTERN.test(this.line.restFromNextNonspace())) {
+      return 'none';
+    }
+    this.closeUnmatchedBlocks();
+    this.addChild('mathBlock');
+    this.line.advanceToNextNonspace();
+    this.line.advance(MATH_BLOCK_MARKER_LENGTH);
     return 'leaf';
   }
 
@@ -605,6 +640,9 @@ class BlockParser {
       case 'codeBlock':
         this.finalizeCodeBlock(node);
         return;
+      case 'mathBlock':
+        this.finalizeMathBlock(node);
+        return;
       case 'htmlBlock':
         node.literal = node.content.replace(TRAILING_HTML_BLANK_LINES_PATTERN, '');
         return;
@@ -625,6 +663,12 @@ class BlockParser {
     const breakIndex = node.content.indexOf('\n');
     node.infoString = unescapeString(node.content.slice(0, breakIndex).trim());
     node.literal = node.content.slice(breakIndex + 1);
+  }
+
+  // Mirrors finalizeCodeBlock's own fenced branch: the opening "$$" line's own (whitespace-only) remainder is always present as content's first line -- see tryMathBlockStart -- and is stripped off here the same way an opening fence's info-string line is.
+  private finalizeMathBlock(node: BlockNode): void {
+    const breakIndex = node.content.indexOf('\n');
+    node.literal = breakIndex === -1 ? '' : node.content.slice(breakIndex + 1);
   }
 }
 
@@ -708,6 +752,8 @@ function toAstBlock(node: BlockNode, references: LinkReferenceMap, options: Mark
       return { type: 'htmlBlock', literal: node.literal };
     case 'thematicBreak':
       return { type: 'thematicBreak' };
+    case 'mathBlock':
+      return { type: 'mathBlock', literal: node.literal };
     case 'table':
       return toTableNode(node, references, options);
     case 'document':

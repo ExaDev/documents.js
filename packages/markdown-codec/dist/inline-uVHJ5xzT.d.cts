@@ -1,5 +1,5 @@
-import { g as MarkdownInlineNode } from "./ast-BXYwy08e.js";
-import { n as LinkReferenceMap } from "./link-Dv4kxVjk.js";
+import { g as MarkdownInlineNode } from "./ast-DbjiuYr8.cjs";
+import { n as LinkReferenceMap } from "./link-Dv4kxVjk.cjs";
 //#region src/inline/inline.d.ts
 interface InlineParseOptions {
   readonly gfmAutolinks?: boolean;

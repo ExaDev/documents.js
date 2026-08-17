@@ -46,6 +46,13 @@ function lowerInlineNode(node, style, context) {
 				message: "inline raw HTML was preserved as literal text; it will not be rendered as HTML by any consumer of the resulting ContentDocument"
 			});
 			return node.literal.length === 0 ? [] : [buildRun(node.literal, style)];
+		case "mathInline":
+			context.sink({
+				code: require_diagnostics_diagnostics.MarkdownDiagnosticCodes.MATH_INLINE_PRESERVED_AS_TEXT,
+				severity: "info",
+				message: "inline math (\\( \\)) was preserved as literal raw LaTeX text; it is not parsed as LaTeX or converted to MathML by this package"
+			});
+			return [buildRun(node.literal, style, require_shared_style_constants.MATH_INLINE_FONT_MARKER)];
 		case "autolink": {
 			const destination = node.email ? `mailto:${node.destination}` : node.destination;
 			return [buildRun(node.destination, {

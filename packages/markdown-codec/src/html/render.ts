@@ -99,6 +99,9 @@ function renderInline(node: MarkdownInlineNode): string {
       return '<br />\n';
     case 'softBreak':
       return '\n';
+    case 'mathInline':
+      // Math (ExaDev/markdown-codec#53) is a Pandoc/GFM extension outside CommonMark/GFM proper -- neither vendored corpus this renderer exists to check against (src/conformance.test.ts, src/gfm-conformance.test.ts) carries a math example, so there is no cmark-produced expected HTML to match here. The \( \) delimiters are reconstructed around the escaped literal -- matching what the real write path (src/emit/inline.ts's renderLeaf) actually produces -- so an EMPTY math span (a genuine, if unlikely, corpus edge case: two backslash escapes sitting directly adjacent, e.g. "\(\)") renders as "\(\)" here too rather than as nothing, keeping this internal oracle consistent with the real writer it exists to cross-check other constructs against.
+      return `\\(${escapeHtml(node.literal)}\\)`;
   }
 }
 
@@ -164,6 +167,12 @@ class HtmlRenderer {
         return;
       case 'table':
         this.renderTable(node);
+        return;
+      case 'mathBlock':
+        // See renderInline's own mathInline case: the $$ delimiters are reconstructed around the escaped literal, matching src/emit/emit.ts's own real MATH_BLOCK_STYLE_ID branch.
+        this.cr();
+        this.out += `$$\n${escapeHtml(node.literal)}\n$$\n`;
+        this.cr();
         return;
       case 'document':
       case 'listItem':

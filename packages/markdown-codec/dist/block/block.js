@@ -13,12 +13,14 @@ const TASK_LIST_MARKER_PATTERN = /^\[([ xX])\][ \t]/;
 const NUL_REPLACEMENT = "�";
 const NUL_PATTERN = /\0/g;
 const LINE_ENDING_PATTERN = /\r\n|\n|\r/;
-const MAYBE_SPECIAL_PATTERN = /^[#`~*+_=<>0-9|:-]/;
+const MAYBE_SPECIAL_PATTERN = /^[#$`~*+_=<>0-9|:-]/;
 const ATX_MARKER_PATTERN = /^#{1,6}(?:[ \t]+|$)/;
 const ATX_ONLY_CLOSING_SEQUENCE_PATTERN = /^[ \t]*#+[ \t]*$/;
 const ATX_TRAILING_CLOSING_SEQUENCE_PATTERN = /[ \t]+#+[ \t]*$/;
 const CODE_FENCE_PATTERN = /^`{3,}(?!.*`)|^~{3,}/;
 const CLOSING_CODE_FENCE_PATTERN = /^(?:`{3,}|~{3,})(?=[ \t]*$)/;
+const MATH_BLOCK_MARKER_PATTERN = /^\$\$[ \t]*$/;
+const MATH_BLOCK_MARKER_LENGTH = 2;
 const SETEXT_UNDERLINE_PATTERN = /^(?:=+|-+)[ \t]*$/;
 const THEMATIC_BREAK_PATTERN = /^(?:\*[ \t]*){3,}$|^(?:_[ \t]*){3,}$|^(?:-[ \t]*){3,}$/;
 const BLANK_CONTENT_PATTERN = /^[ \t\n]*$/;
@@ -82,10 +84,19 @@ var BlockParser = class {
 			});
 			return;
 		}
-		if (node.kind === "htmlBlock" && !HTML_BLOCK_BLANK_LINE_END_TYPES.includes(node.htmlBlockType)) this.sink({
-			code: MarkdownDiagnosticCodes.UNTERMINATED_HTML_BLOCK,
+		if (node.kind === "htmlBlock" && !HTML_BLOCK_BLANK_LINE_END_TYPES.includes(node.htmlBlockType)) {
+			this.sink({
+				code: MarkdownDiagnosticCodes.UNTERMINATED_HTML_BLOCK,
+				severity: "warning",
+				message: `HTML block (type ${String(node.htmlBlockType)}) starting at line ${String(node.startLine)} never met its own end condition before the end of the document`,
+				line: node.startLine
+			});
+			return;
+		}
+		if (node.kind === "mathBlock") this.sink({
+			code: MarkdownDiagnosticCodes.UNCLOSED_MATH_BLOCK,
 			severity: "warning",
-			message: `HTML block (type ${String(node.htmlBlockType)}) starting at line ${String(node.startLine)} never met its own end condition before the end of the document`,
+			message: `math block starting at line ${String(node.startLine)} was never closed by a matching closing $$ before the end of the document`,
 			line: node.startLine
 		});
 	}
@@ -118,6 +129,7 @@ var BlockParser = class {
 			case "blockquote": return this.continueBlockquote();
 			case "listItem": return this.continueListItem(node);
 			case "codeBlock": return this.continueCodeBlock(node);
+			case "mathBlock": return this.continueMathBlock(node);
 			case "htmlBlock": return this.line.blank && HTML_BLOCK_BLANK_LINE_END_TYPES.includes(node.htmlBlockType) ? "not-matched" : "matched";
 			case "paragraph":
 			case "table": return this.line.blank ? "not-matched" : "matched";
@@ -171,6 +183,13 @@ var BlockParser = class {
 		for (let remaining = node.fenceOffset; remaining > 0 && this.line.peek() === " "; remaining -= 1) this.line.advance(1);
 		return "matched";
 	}
+	continueMathBlock(node) {
+		if (!this.line.indented && MATH_BLOCK_MARKER_PATTERN.test(this.line.restFromNextNonspace())) {
+			this.finalize(node);
+			return "finished";
+		}
+		return "matched";
+	}
 	openNewBlocks(matchedContainer) {
 		let container = matchedContainer;
 		let matchedLeaf = container.kind !== "paragraph" && container.kind !== "table" && acceptsLines(container.kind);
@@ -195,6 +214,7 @@ var BlockParser = class {
 			() => this.tryBlockquoteStart(),
 			() => this.tryAtxHeadingStart(),
 			() => this.tryCodeFenceStart(),
+			() => this.tryMathBlockStart(),
 			() => this.tryHtmlBlockStart(container),
 			() => this.tryPromoteParagraph(container),
 			() => this.tryThematicBreakStart(),
@@ -241,6 +261,15 @@ var BlockParser = class {
 		block.fenceOffset = this.line.indent;
 		this.line.advanceToNextNonspace();
 		this.line.advance(fence.length);
+		return "leaf";
+	}
+	tryMathBlockStart() {
+		if (this.line.indented) return "none";
+		if (!MATH_BLOCK_MARKER_PATTERN.test(this.line.restFromNextNonspace())) return "none";
+		this.closeUnmatchedBlocks();
+		this.addChild("mathBlock");
+		this.line.advanceToNextNonspace();
+		this.line.advance(MATH_BLOCK_MARKER_LENGTH);
 		return "leaf";
 	}
 	tryHtmlBlockStart(container) {
@@ -373,6 +402,9 @@ var BlockParser = class {
 			case "codeBlock":
 				this.finalizeCodeBlock(node);
 				return;
+			case "mathBlock":
+				this.finalizeMathBlock(node);
+				return;
 			case "htmlBlock":
 				node.literal = node.content.replace(TRAILING_HTML_BLANK_LINES_PATTERN, "");
 				return;
@@ -390,6 +422,10 @@ var BlockParser = class {
 		const breakIndex = node.content.indexOf("\n");
 		node.infoString = unescapeString(node.content.slice(0, breakIndex).trim());
 		node.literal = node.content.slice(breakIndex + 1);
+	}
+	finalizeMathBlock(node) {
+		const breakIndex = node.content.indexOf("\n");
+		node.literal = breakIndex === -1 ? "" : node.content.slice(breakIndex + 1);
 	}
 };
 function toInlineChildren(content, references, options) {
@@ -500,6 +536,10 @@ function toAstBlock(node, references, options) {
 			literal: node.literal
 		};
 		case "thematicBreak": return { type: "thematicBreak" };
+		case "mathBlock": return {
+			type: "mathBlock",
+			literal: node.literal
+		};
 		case "table": return toTableNode(node, references, options);
 		case "document":
 		case "listItem": return;

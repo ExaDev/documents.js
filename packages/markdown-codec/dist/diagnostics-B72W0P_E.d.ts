@@ -10,6 +10,7 @@ type MarkdownDiagnosticSink = (diagnostic: MarkdownDiagnostic) => void;
 declare const NOOP_MARKDOWN_DIAGNOSTIC_SINK: MarkdownDiagnosticSink;
 declare const MarkdownDiagnosticCodes: {
   readonly UNCLOSED_FENCE: "md/unclosed-fence";
+  readonly UNCLOSED_MATH_BLOCK: "md/unclosed-math-block";
   readonly UNTERMINATED_HTML_BLOCK: "md/unterminated-html-block";
   readonly TABLE_CELL_COUNT_MISMATCH: "md/table-cell-count-mismatch";
   readonly DUPLICATE_LINK_REFERENCE: "md/duplicate-link-reference";
@@ -24,6 +25,8 @@ declare const MarkdownDiagnosticCodes: {
   readonly IMAGE_UNRESOLVED: "md/image-unresolved";
   readonly RAW_HTML_PRESERVED_AS_TEXT: "md/raw-html-preserved-as-text";
   readonly RAW_HTML_DROPPED: "md/raw-html-dropped";
+  readonly MATH_BLOCK_PRESERVED_AS_TEXT: "md/math-block-preserved-as-text";
+  readonly MATH_INLINE_PRESERVED_AS_TEXT: "md/math-inline-preserved-as-text";
   readonly FRONT_MATTER_KEY_UNMAPPED: "md/front-matter-key-unmapped";
   readonly HEADING_LEVEL_CLAMPED: "md/heading-level-clamped";
   readonly ADJACENT_LINKS_MERGED: "md/adjacent-links-merged";

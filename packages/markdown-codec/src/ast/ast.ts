@@ -26,7 +26,8 @@ export type MarkdownBlockNode =
   | MarkdownHtmlBlockNode
   | MarkdownTableNode
   | MarkdownTableRowNode
-  | MarkdownTableCellNode;
+  | MarkdownTableCellNode
+  | MarkdownMathBlockNode;
 
 export interface MarkdownDocumentNode {
   readonly type: 'document';
@@ -130,6 +131,13 @@ export interface MarkdownTableCellNode {
   readonly position?: MarkdownPosition;
 }
 
+// Pandoc/GitHub math-extension display math: a $$ line, raw LaTeX content, a closing $$ line (ExaDev/markdown-codec#53). Modelled on MarkdownCodeBlockNode's own fenced convention -- literal is the content BETWEEN the two delimiter lines, never including them (src/block/block.ts's tryMathBlockStart/finalizeMathBlock regenerate a fresh $$ pair on the way back out, exactly as a fenced code block regenerates its own fence rather than preserving the original). Never parsed as LaTeX or converted to MathML by this package -- src/lower/lower.ts preserves it as literal text; that conversion is a documents.js question (ExaDev/documents.js#563).
+export interface MarkdownMathBlockNode {
+  readonly type: 'mathBlock';
+  readonly literal: string;
+  readonly position?: MarkdownPosition;
+}
+
 // --- Inline nodes ---
 
 export type MarkdownInlineNode =
@@ -144,7 +152,8 @@ export type MarkdownInlineNode =
   | MarkdownHardBreakNode
   | MarkdownSoftBreakNode
   | MarkdownRawHtmlNode
-  | MarkdownEntityNode;
+  | MarkdownEntityNode
+  | MarkdownMathInlineNode;
 
 export type MarkdownEmphasisMarker = '_' | '*';
 
@@ -233,6 +242,13 @@ export interface MarkdownEntityNode {
   readonly position?: MarkdownPosition;
 }
 
+// Pandoc/GitHub math-extension inline math: \( \) (ExaDev/markdown-codec#53). Deliberately NOT single-dollar $...$ -- the classic currency false-positive failure mode. Modelled on MarkdownCodeSpanNode's own convention: literal is the INNER LaTeX only, \( and \) excluded -- src/lower/inline.ts marks the lowered run with a dedicated ContentRun.fontFamily (MATH_INLINE_FONT_MARKER, src/shared/style-constants.ts, the same opportunistic-reuse trick a code span's own Courier New marker already plays) rather than folding the delimiters into the run's own text, because escapeMarkdownText (src/emit/inline.ts) backslash-escapes literal '(' and ')' in ORDINARY text -- a self-describing "\(...\) in the text is always math" rule would misrecognise any ordinary escaped parenthetical remark as math on reparse. Never parsed as LaTeX or converted to MathML by this package -- that conversion is a documents.js question (ExaDev/documents.js#563).
+export interface MarkdownMathInlineNode {
+  readonly type: 'mathInline';
+  readonly literal: string;
+  readonly position?: MarkdownPosition;
+}
+
 const BLOCK_NODE_TYPES: ReadonlySet<string> = new Set<MarkdownBlockNode['type']>([
   'document',
   'paragraph',
@@ -246,6 +262,7 @@ const BLOCK_NODE_TYPES: ReadonlySet<string> = new Set<MarkdownBlockNode['type']>
   'table',
   'tableRow',
   'tableCell',
+  'mathBlock',
 ]);
 
 export function isMarkdownBlockNode(node: MarkdownNode): node is MarkdownBlockNode {

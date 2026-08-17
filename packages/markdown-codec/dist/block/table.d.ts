@@ -1,4 +1,4 @@
-import { k as MarkdownTableAlignment } from "../ast-BXYwy08e.js";
+import { j as MarkdownTableAlignment } from "../ast-DbjiuYr8.js";
 //#region src/block/table.d.ts
 declare function splitTableRow(line: string): string[];
 declare function parseTableDelimiterRow(line: string): MarkdownTableAlignment[] | undefined;

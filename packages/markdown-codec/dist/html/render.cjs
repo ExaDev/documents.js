@@ -79,6 +79,7 @@ function renderInline(node) {
 		case "rawHtml": return node.literal;
 		case "hardBreak": return "<br />\n";
 		case "softBreak": return "\n";
+		case "mathInline": return `\\(${escapeHtml(node.literal)}\\)`;
 	}
 }
 function renderInlines(nodes) {
@@ -133,6 +134,11 @@ var HtmlRenderer = class {
 				return;
 			case "table":
 				this.renderTable(node);
+				return;
+			case "mathBlock":
+				this.cr();
+				this.out += `$$\n${escapeHtml(node.literal)}\n$$\n`;
+				this.cr();
 				return;
 			case "document":
 			case "listItem":

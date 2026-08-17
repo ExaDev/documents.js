@@ -15,12 +15,14 @@ const ADJACENT_SAME_DEPTH = 'two independent containers back to back at the same
 const IMAGE_SRC_UNPRESERVABLE = 'an image with no data: URI destination has no bytes for this test harness to embed (no MarkdownImageResolver was supplied, matching how readMarkdown is actually called here), so it degrades to a hyperlinked text run (MarkdownDiagnosticCodes.IMAGE_UNRESOLVED) -- and even supplying one would not help this specific byte-for-byte comparison, since embedding real bytes re-renders as a data: URI, replacing rather than preserving the original external src the expected HTML still names';
 const EMPHASIS_TORTURE = 'several directly-touching nested or sibling emphasis/strong spans (occasionally one crossing a hyperlink\'s own text boundary) leave only CommonMark\'s two delimiter characters to resolve every adjacent boundary at once -- src/emit/inline.ts\'s pickEmphasisMarker resolves the common single-boundary case (intraword adjacency, one sibling touching one wrap) but a genuine three-or-more-way clash has no second fallback character left; a same-kind nesting (emphasis-in-emphasis, strong-in-strong) is additionally flattened outright before this is ever reached (MarkdownDiagnosticCodes.NESTED_EMPHASIS_FLATTENED)';
 const RAW_TEXT_TAG_AMBIGUITY = 'literal text that happens to look like an HTML tag (typically from an unescaped backslash inside a malformed link destination, e.g. "<foo\\>") is indistinguishable, once lowered, from genuine preserved raw HTML -- both are just plain ContentRun text with no field recording which one produced it, so escapeMarkdownText\'s own "leave a real tag unescaped" rule (needed for genuine raw HTML to survive) fires on this literal text too';
+const MATH_DELIMITER_DIVERGENCE = 'a source-level \\( directly followed (eventually) by a literal \\) is now read as inline math (ExaDev/markdown-codec#53), a deliberate divergence from cmark\'s own reading of two independently backslash-escaped parentheses -- src/inline/inline.ts\'s own new \\( recognition in parseBackslash cannot distinguish "the author escaped two literal parens" from "the author wrote inline math", because CommonMark\'s grammar gives \\( no third reading to disambiguate against; real Pandoc/GFM math-extension implementations accept the identical trade-off';
 
 export const COMMONMARK_EXCLUSIONS: ReadonlyMap<number, string> = new Map([
   // Tabs
   [4, MULTI_BLOCK],
   [5, MULTI_BLOCK],
   // Backslash escapes
+  [12, MATH_DELIMITER_DIVERGENCE],
   [14, SOFT_BREAK],
   [22, LINK_TITLE],
   [23, LINK_TITLE],

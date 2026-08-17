@@ -132,6 +132,19 @@ function lowerHtmlBlock(node, context) {
 		styleId: require_shared_style_constants.HTML_PREFORMATTED_STYLE_ID
 	}, context)];
 }
+function lowerMathBlock(node, context) {
+	context.sink({
+		code: require_diagnostics_diagnostics.MarkdownDiagnosticCodes.MATH_BLOCK_PRESERVED_AS_TEXT,
+		severity: "info",
+		message: "block math ($$...$$) was preserved as literal raw LaTeX text (styleId \"MathBlock\"); it is not parsed as LaTeX or converted to MathML by this package"
+	});
+	const literal = node.literal.replace(/\n$/, "");
+	return [decorateParagraph({
+		kind: "paragraph",
+		runs: literal.length === 0 ? [] : [{ text: literal }],
+		styleId: require_shared_style_constants.MATH_BLOCK_STYLE_ID
+	}, context)];
+}
 function lowerBlockquote(node, context, contentWidthPt) {
 	if (context.quoteDepth >= 1) context.sink({
 		code: require_diagnostics_diagnostics.MarkdownDiagnosticCodes.BLOCKQUOTE_NESTED_DEPTH,
@@ -225,6 +238,7 @@ function lowerBlock(node, context, contentWidthPt) {
 		case "codeBlock": return lowerCodeBlock(node, context);
 		case "thematicBreak": return lowerThematicBreak(context);
 		case "htmlBlock": return lowerHtmlBlock(node, context);
+		case "mathBlock": return lowerMathBlock(node, context);
 		case "table":
 			if (context.list !== void 0) context.sink({
 				code: require_diagnostics_diagnostics.MarkdownDiagnosticCodes.LIST_ITEM_BLOCK_UNLISTED,

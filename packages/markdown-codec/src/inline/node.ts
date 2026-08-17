@@ -17,6 +17,7 @@ export type InlineNodeKind =
   | 'softBreak'
   | 'rawHtml'
   | 'entity'
+  | 'mathInline'
   // The synthetic root every inline parse builds into -- never converted to an AST node itself, only its children are.
   | 'container';
 

@@ -1,5 +1,5 @@
 //#region src/inline/node.d.ts
-type InlineNodeKind = 'text' | 'emphasis' | 'strong' | 'strikethrough' | 'codeSpan' | 'link' | 'image' | 'autolink' | 'hardBreak' | 'softBreak' | 'rawHtml' | 'entity' | 'container';
+type InlineNodeKind = 'text' | 'emphasis' | 'strong' | 'strikethrough' | 'codeSpan' | 'link' | 'image' | 'autolink' | 'hardBreak' | 'softBreak' | 'rawHtml' | 'entity' | 'mathInline' | 'container';
 declare class InlineNode {
   readonly kind: InlineNodeKind;
   literal: string;

@@ -121,6 +121,27 @@ describe('every MarkdownDiagnosticCodes entry is reachable from real input', () 
     reached.add(MarkdownDiagnosticCodes.RAW_HTML_DROPPED);
   });
 
+  it('MATH_BLOCK_PRESERVED_AS_TEXT: a $$ display math block', () => {
+    const collector = createDiagnosticCollector();
+    lowerMarkdown('$$\nx^2\n$$', { sink: collector.sink });
+    expect(collector.has(MarkdownDiagnosticCodes.MATH_BLOCK_PRESERVED_AS_TEXT)).toBe(true);
+    reached.add(MarkdownDiagnosticCodes.MATH_BLOCK_PRESERVED_AS_TEXT);
+  });
+
+  it('MATH_INLINE_PRESERVED_AS_TEXT: an inline \\( \\) math span', () => {
+    const collector = createDiagnosticCollector();
+    lowerMarkdown('\\(x^2\\)', { sink: collector.sink });
+    expect(collector.has(MarkdownDiagnosticCodes.MATH_INLINE_PRESERVED_AS_TEXT)).toBe(true);
+    reached.add(MarkdownDiagnosticCodes.MATH_INLINE_PRESERVED_AS_TEXT);
+  });
+
+  it('UNCLOSED_MATH_BLOCK: a $$ math block never closed before end-of-input', () => {
+    const collector = createDiagnosticCollector();
+    parseMarkdown('$$\nx^2', { sink: collector.sink });
+    expect(collector.has(MarkdownDiagnosticCodes.UNCLOSED_MATH_BLOCK)).toBe(true);
+    reached.add(MarkdownDiagnosticCodes.UNCLOSED_MATH_BLOCK);
+  });
+
   it('FRONT_MATTER_KEY_UNMAPPED: an unrecognised front matter key', () => {
     const collector = createDiagnosticCollector();
     lowerMarkdown('---\nunknown: x\n---\n\nbody', { sink: collector.sink, frontMatter: true });

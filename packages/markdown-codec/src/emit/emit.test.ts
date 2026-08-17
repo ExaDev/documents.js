@@ -43,6 +43,16 @@ describe('code blocks, thematic breaks, preformatted HTML', () => {
   });
 });
 
+describe('math (ExaDev/markdown-codec#53)', () => {
+  it('emits a MathBlock paragraph as a $$ display math block', () => {
+    expect(emitMarkdown(doc([{ kind: 'paragraph', runs: [{ text: 'x^2' }], styleId: 'MathBlock' }]))).toBe('$$\nx^2\n$$');
+  });
+
+  it('emits a Cambria-Math-marked run with \\( \\) delimiters, unescaped', () => {
+    expect(emitMarkdown(doc([{ kind: 'paragraph', runs: [{ text: 'f(x) = x^2', fontFamily: 'Cambria Math' }] }]))).toBe('\\(f(x) = x^2\\)');
+  });
+});
+
 describe('blockquotes', () => {
   it('prefixes "> " once per recovered nesting level, on every line of the body', () => {
     const fenced = emitMarkdown(doc([{ kind: 'paragraph', runs: [{ text: 'a\nb' }], styleId: 'CodeBlock', indentLeftPt: 72 }]));
@@ -137,6 +147,33 @@ describe('round trip through src/lower', () => {
     expect(markdown).toBe(source);
     const second = lowerMarkdown(markdown);
     expect(second).toEqual(first);
+  });
+
+  it('preserves inline math (\\( \\)), delimiters included, across a full lower -> emit -> lower round trip (ExaDev/markdown-codec#53)', () => {
+    const source = 'before \\(E = mc^2\\) after';
+    const first = lowerMarkdown(source);
+    const markdown = emitMarkdown(first);
+    expect(markdown).toBe(source);
+    const second = lowerMarkdown(markdown);
+    expect(second).toEqual(first);
+  });
+
+  it('preserves a $$ display math block across a full lower -> emit -> lower round trip', () => {
+    const source = '$$\nx^2\n$$';
+    const first = lowerMarkdown(source);
+    const markdown = emitMarkdown(first);
+    expect(markdown).toBe(source);
+    const second = lowerMarkdown(markdown);
+    expect(second).toEqual(first);
+  });
+
+  it('does not let ordinary parenthetical text collide with preserved math on a write-then-reread round trip', () => {
+    const source = 'a link (not a link) trailing';
+    const first = lowerMarkdown(source);
+    const markdown = emitMarkdown(first);
+    const second = lowerMarkdown(markdown);
+    expect(second).toEqual(first);
+    expect(markdown).not.toContain('\\(');
   });
 });
 

@@ -15,7 +15,8 @@ export type BlockNodeKind =
   | 'codeBlock'
   | 'htmlBlock'
   | 'thematicBreak'
-  | 'table';
+  | 'table'
+  | 'mathBlock';
 
 export type BlockHeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
 
@@ -127,7 +128,7 @@ export function canContain(parent: BlockNodeKind, child: BlockNodeKind): boolean
   }
 }
 
-// Whether a block accepts raw source lines as its own content. A paragraph and a GFM table accept lines AND still let new block starts be tried against each line (a `>` after a table opens a blockquote and breaks the table); a code block and an HTML block accept lines and suppress block starts entirely, which is what makes their content literal.
+// Whether a block accepts raw source lines as its own content. A paragraph and a GFM table accept lines AND still let new block starts be tried against each line (a `>` after a table opens a blockquote and breaks the table); a code block, an HTML block, and a math block accept lines and suppress block starts entirely, which is what makes their content literal.
 export function acceptsLines(kind: BlockNodeKind): boolean {
-  return kind === 'paragraph' || kind === 'codeBlock' || kind === 'htmlBlock' || kind === 'table';
+  return kind === 'paragraph' || kind === 'codeBlock' || kind === 'htmlBlock' || kind === 'table' || kind === 'mathBlock';
 }

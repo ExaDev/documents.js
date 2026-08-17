@@ -59,7 +59,7 @@ function canContain(parent, child) {
 	}
 }
 function acceptsLines(kind) {
-	return kind === "paragraph" || kind === "codeBlock" || kind === "htmlBlock" || kind === "table";
+	return kind === "paragraph" || kind === "codeBlock" || kind === "htmlBlock" || kind === "table" || kind === "mathBlock";
 }
 //#endregion
 export { BlockNode, acceptsLines, canContain };

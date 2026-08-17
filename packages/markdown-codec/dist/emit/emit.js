@@ -1,7 +1,7 @@
 import "../defaults/defaults.js";
 import { MarkdownDiagnosticCodes, MarkdownUnsupportedDocumentKindError, NOOP_MARKDOWN_DIAGNOSTIC_SINK } from "../diagnostics/diagnostics.js";
 import { parseListNumId } from "../shared/list-id.js";
-import { CODE_BLOCK_STYLE_ID, HORIZONTAL_RULE_STYLE_ID, HTML_PREFORMATTED_STYLE_ID, QUOTE_STYLE_ID, parseHeadingStyleId } from "../shared/style-constants.js";
+import { CODE_BLOCK_STYLE_ID, HORIZONTAL_RULE_STYLE_ID, HTML_PREFORMATTED_STYLE_ID, MATH_BLOCK_STYLE_ID, QUOTE_STYLE_ID, parseHeadingStyleId } from "../shared/style-constants.js";
 import { emitFrontMatter } from "./front-matter.js";
 import { emitRuns } from "./inline.js";
 import { emitImage } from "./image.js";
@@ -33,7 +33,8 @@ const QUOTABLE_STYLE_IDS = /* @__PURE__ */ new Set([
 	QUOTE_STYLE_ID,
 	CODE_BLOCK_STYLE_ID,
 	HORIZONTAL_RULE_STYLE_ID,
-	HTML_PREFORMATTED_STYLE_ID
+	HTML_PREFORMATTED_STYLE_ID,
+	MATH_BLOCK_STYLE_ID
 ]);
 function isQuotableStyle(styleId) {
 	if (styleId === void 0) return false;
@@ -51,6 +52,7 @@ function renderParagraphBody(paragraph, context) {
 		return literal.length === 0 ? `${fence}\n${fence}` : `${fence}\n${literal}\n${fence}`;
 	}
 	if (paragraph.styleId === "HTMLPreformatted") return paragraph.runs.map((run) => run.text).join("");
+	if (paragraph.styleId === "MathBlock") return `$$\n${paragraph.runs.map((run) => run.text).join("")}\n$$`;
 	const headingLevel = paragraph.styleId === void 0 ? void 0 : parseHeadingStyleId(paragraph.styleId);
 	if (headingLevel !== void 0) {
 		let level = headingLevel;

@@ -19,6 +19,7 @@ import { matchEntity } from './entity';
 import { applyGfmAutolinks } from './gfm-autolink';
 import type { LinkReferenceMap, ParsedSpan } from './link';
 import { matchLinkLabel, normalizeLinkLabel, parseLinkDestination, parseLinkTitle, skipInlineWhitespace } from './link';
+import { matchMathInlineSpan } from './math';
 import { InlineNode, createTextNode } from './node';
 
 export interface InlineParseOptions {
@@ -176,13 +177,27 @@ class InlineParser {
   }
 
   // spec 0.31.2, "Backslash escapes": a backslash before any ASCII punctuation character escapes it; a backslash before a line ending is a hard break; a backslash before anything else is a literal backslash.
+  //
+  // \( is checked FIRST, ahead of the general escape rule (ExaDev/markdown-codec#53) -- \(...\) inline math (src/inline/math.ts's matchMathInlineSpan) is otherwise indistinguishable from an escaped '(' followed, eventually, by an escaped ')', which is exactly the bug this recognition fixes (the delimiters were being silently eaten as ordinary backslash escapes). An unmatched \( (no closing \) anywhere in the block) falls through unchanged to today's escape behaviour, so a genuinely escaped lone '(' is unaffected.
   private parseBackslash(): void {
+    const backslashIndex = this.pos;
     this.pos += 1;
     const next = this.text.charAt(this.pos);
     if (next === '\n') {
       this.pos += 1;
       this.container.appendChild(new InlineNode('hardBreak'));
       return;
+    }
+    if (next === '(') {
+      const span = matchMathInlineSpan(this.text, backslashIndex);
+      if (span !== undefined) {
+        const node = new InlineNode('mathInline');
+        // Strip the \( / \) delimiters (two characters each) -- literal is the inner LaTeX only, matching MarkdownCodeSpanNode's own convention (see src/ast/ast.ts's own MarkdownMathInlineNode comment for why this node does NOT keep its delimiters the way MarkdownRawHtmlNode does).
+        node.literal = span.slice(2, span.length - 2);
+        this.container.appendChild(node);
+        this.pos = backslashIndex + span.length;
+        return;
+      }
     }
     if (isAsciiPunctuation(next)) {
       this.appendText(next);
@@ -543,6 +558,8 @@ function toAstNode(node: InlineNode): MarkdownInlineNode | undefined {
       return { type: 'rawHtml', literal: node.literal };
     case 'entity':
       return { type: 'entity', raw: node.raw, value: node.literal };
+    case 'mathInline':
+      return { type: 'mathInline', literal: node.literal };
     case 'container':
       return undefined;
   }

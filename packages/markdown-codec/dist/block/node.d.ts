@@ -1,7 +1,7 @@
-import { S as MarkdownOrderedListDelimiter, i as MarkdownBulletMarker, k as MarkdownTableAlignment } from "../ast-BXYwy08e.js";
+import { i as MarkdownBulletMarker, j as MarkdownTableAlignment, w as MarkdownOrderedListDelimiter } from "../ast-DbjiuYr8.js";
 import { t as HtmlBlockType } from "../html-bkz2QTuq.js";
 //#region src/block/node.d.ts
-type BlockNodeKind = 'document' | 'paragraph' | 'heading' | 'blockquote' | 'list' | 'listItem' | 'codeBlock' | 'htmlBlock' | 'thematicBreak' | 'table';
+type BlockNodeKind = 'document' | 'paragraph' | 'heading' | 'blockquote' | 'list' | 'listItem' | 'codeBlock' | 'htmlBlock' | 'thematicBreak' | 'table' | 'mathBlock';
 type BlockHeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
 interface ListMarkerData {
   readonly type: 'bullet' | 'ordered';

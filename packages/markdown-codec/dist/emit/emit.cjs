@@ -34,7 +34,8 @@ const QUOTABLE_STYLE_IDS = /* @__PURE__ */ new Set([
 	require_shared_style_constants.QUOTE_STYLE_ID,
 	require_shared_style_constants.CODE_BLOCK_STYLE_ID,
 	require_shared_style_constants.HORIZONTAL_RULE_STYLE_ID,
-	require_shared_style_constants.HTML_PREFORMATTED_STYLE_ID
+	require_shared_style_constants.HTML_PREFORMATTED_STYLE_ID,
+	require_shared_style_constants.MATH_BLOCK_STYLE_ID
 ]);
 function isQuotableStyle(styleId) {
 	if (styleId === void 0) return false;
@@ -52,6 +53,7 @@ function renderParagraphBody(paragraph, context) {
 		return literal.length === 0 ? `${fence}\n${fence}` : `${fence}\n${literal}\n${fence}`;
 	}
 	if (paragraph.styleId === "HTMLPreformatted") return paragraph.runs.map((run) => run.text).join("");
+	if (paragraph.styleId === "MathBlock") return `$$\n${paragraph.runs.map((run) => run.text).join("")}\n$$`;
 	const headingLevel = paragraph.styleId === void 0 ? void 0 : require_shared_style_constants.parseHeadingStyleId(paragraph.styleId);
 	if (headingLevel !== void 0) {
 		let level = headingLevel;

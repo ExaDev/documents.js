@@ -10,6 +10,7 @@
 //  - GFM tables -> ContentTable, src/lower/table.ts.
 //  - images -> ContentImageBlock via a synchronous MarkdownImageResolver port (src/lower/image.ts) -- MarkdownDiagnosticCodes.IMAGE_UNRESOLVED when the resolver (or native data: URI decoding) cannot produce a real PNG/JPEG; the image degrades to a text run of alt text + hyperlink, NEVER an invalid ContentImageBlock. A top-level image (a direct child of a paragraph) splits that paragraph precisely at the point it occurs; a nested one (inside emphasis/a link) never resolves at all -- see src/lower/inline.ts's own top-of-file note.
 //  - raw HTML -> preserved as literal text by default (styleId 'HTMLPreformatted' for block-level HTML), a rawHtml: 'drop' option available -- MarkdownDiagnosticCodes.RAW_HTML_PRESERVED_AS_TEXT / RAW_HTML_DROPPED.
+//  - $$ display math / \( \) inline math (ExaDev/markdown-codec#53) -> preserved as literal raw LaTeX text (styleId 'MathBlock' for the block form; the inline form keeps its own \( \) delimiters in the run text so src/emit/inline.ts's escapeMarkdownText can recognise and pass it through unescaped -- see src/inline/math.ts) -- MarkdownDiagnosticCodes.MATH_BLOCK_PRESERVED_AS_TEXT / MATH_INLINE_PRESERVED_AS_TEXT. Never parsed as LaTeX or converted to MathML here -- that is a documents.js question (ExaDev/documents.js#563).
 //  - front matter (src/lower/front-matter.ts) -> a flat-scalar-only LayoutMetadata subset -- MarkdownDiagnosticCodes.FRONT_MATTER_KEY_UNMAPPED.
 
 import type { ContentBlock, ContentDocument, ContentParagraph, ContentRun, LayoutMetadata } from 'document-schema.js';
@@ -23,7 +24,7 @@ import { MarkdownDiagnosticCodes, MarkdownInputTooLargeError, NOOP_MARKDOWN_DIAG
 import type { ReadMarkdownOptions } from '../options/options';
 import type { NumIdMintState } from '../shared/list-id';
 import { createNumIdMintState, mintedListType, mintListNumId } from '../shared/list-id';
-import { CODE_BLOCK_STYLE_ID, HORIZONTAL_RULE_STYLE_ID, HTML_PREFORMATTED_STYLE_ID, QUOTE_INDENT_PT, QUOTE_STYLE_ID, TASK_CHECKBOX_CHECKED, TASK_CHECKBOX_UNCHECKED, headingStyleId } from '../shared/style-constants';
+import { CODE_BLOCK_STYLE_ID, HORIZONTAL_RULE_STYLE_ID, HTML_PREFORMATTED_STYLE_ID, MATH_BLOCK_STYLE_ID, QUOTE_INDENT_PT, QUOTE_STYLE_ID, TASK_CHECKBOX_CHECKED, TASK_CHECKBOX_UNCHECKED, headingStyleId } from '../shared/style-constants';
 import { extractFrontMatter } from './front-matter';
 import type { MarkdownImageResolver } from './image';
 import { resolveMarkdownImage } from './image';
@@ -138,6 +139,15 @@ function lowerHtmlBlock(node: Extract<MarkdownBlockNode, { type: 'htmlBlock' }>,
   return [decorateParagraph(paragraph, context)];
 }
 
+// $$...$$ display math (ExaDev/markdown-codec#53) preserved as literal raw LaTeX text, styleId 'MathBlock' -- see src/emit/emit.ts's own inverse. Not parsed as LaTeX or converted to MathML here: that is a documents.js question (ExaDev/documents.js#563), and this package's own scope stops at recognising and round-tripping the syntax.
+function lowerMathBlock(node: Extract<MarkdownBlockNode, { type: 'mathBlock' }>, context: BlockLowerContext): ContentBlock[] {
+  context.sink({ code: MarkdownDiagnosticCodes.MATH_BLOCK_PRESERVED_AS_TEXT, severity: 'info', message: 'block math ($$...$$) was preserved as literal raw LaTeX text (styleId "MathBlock"); it is not parsed as LaTeX or converted to MathML by this package' });
+  const literal = node.literal.replace(/\n$/, '');
+  const runs: ContentRun[] = literal.length === 0 ? [] : [{ text: literal }];
+  const paragraph: ContentParagraph = { kind: 'paragraph', runs, styleId: MATH_BLOCK_STYLE_ID };
+  return [decorateParagraph(paragraph, context)];
+}
+
 function lowerBlockquote(node: Extract<MarkdownBlockNode, { type: 'blockquote' }>, context: BlockLowerContext, contentWidthPt: number): ContentBlock[] {
   if (context.quoteDepth >= 1) {
     context.sink({ code: MarkdownDiagnosticCodes.BLOCKQUOTE_NESTED_DEPTH, severity: 'info', message: `blockquote nesting beyond level 1 is represented only as a larger indentLeftPt (${String((context.quoteDepth + 1) * QUOTE_INDENT_PT)}pt); recovering the exact nesting depth back out is an approximation, not an exact inverse` });
@@ -228,6 +238,8 @@ function lowerBlock(node: MarkdownBlockNode, context: BlockLowerContext, content
       return lowerThematicBreak(context);
     case 'htmlBlock':
       return lowerHtmlBlock(node, context);
+    case 'mathBlock':
+      return lowerMathBlock(node, context);
     case 'table': {
       if (context.list !== undefined) {
         context.sink({ code: MarkdownDiagnosticCodes.LIST_ITEM_BLOCK_UNLISTED, severity: 'info', message: 'a table directly inside a list item has no ContentListMembership field of its own -- only ContentParagraph carries .list -- so its association with the enclosing list item is lost' });

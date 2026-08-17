@@ -41,6 +41,27 @@ describe('code blocks', () => {
   });
 });
 
+describe('math blocks (ExaDev/markdown-codec#53)', () => {
+  it('records the content between two $$ lines, delimiters excluded', () => {
+    expect(parse('$$\nx^2\n$$')).toEqual([{ type: 'mathBlock', literal: 'x^2\n' }]);
+  });
+
+  it('interrupts an open paragraph, like a code fence', () => {
+    expect(parse('foo\n$$\nx^2\n$$')).toEqual([
+      { type: 'paragraph', children: [{ type: 'text', value: 'foo' }] },
+      { type: 'mathBlock', literal: 'x^2\n' },
+    ]);
+  });
+
+  it('records an empty block when the closing $$ follows immediately', () => {
+    expect(parse('$$\n$$')).toEqual([{ type: 'mathBlock', literal: '' }]);
+  });
+
+  it('does not close on a line that is $$ plus other content -- only a bare $$ line closes', () => {
+    expect(parse('$$\nx^2 $$ y\n$$')).toEqual([{ type: 'mathBlock', literal: 'x^2 $$ y\n' }]);
+  });
+});
+
 describe('lists', () => {
   it('records the bullet character a list was written with', () => {
     expect(parse('+ foo')).toEqual([
@@ -213,5 +234,11 @@ describe('recover-tier diagnostics', () => {
     const collector = createDiagnosticCollector();
     parseMarkdown('[foo]: /first\n[foo]: /second', { sink: collector.sink });
     expect(collector.has(MarkdownDiagnosticCodes.DUPLICATE_LINK_REFERENCE)).toBe(true);
+  });
+
+  it('reports a math block never closed by a matching $$ before end-of-input', () => {
+    const collector = createDiagnosticCollector();
+    parseMarkdown('$$\nx^2', { sink: collector.sink });
+    expect(collector.has(MarkdownDiagnosticCodes.UNCLOSED_MATH_BLOCK)).toBe(true);
   });
 });

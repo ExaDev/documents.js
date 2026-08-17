@@ -1,7 +1,7 @@
-import { s as MarkdownDocumentNode } from "../ast-BXYwy08e.cjs";
-import { i as MarkdownDiagnosticSink } from "../diagnostics-DmuWc7d8.cjs";
+import { s as MarkdownDocumentNode } from "../ast-DbjiuYr8.cjs";
+import { i as MarkdownDiagnosticSink } from "../diagnostics-B72W0P_E.cjs";
 import { n as LinkReferenceMap } from "../link-Dv4kxVjk.cjs";
-import { t as InlineParseOptions } from "../inline-C9YEGDV5.cjs";
+import { t as InlineParseOptions } from "../inline-uVHJ5xzT.cjs";
 //#region src/block/block.d.ts
 interface MarkdownParseOptions extends InlineParseOptions {
   readonly gfmTables?: boolean;

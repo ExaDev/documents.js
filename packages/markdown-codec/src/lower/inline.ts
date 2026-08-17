@@ -6,7 +6,7 @@ import type { ContentRun } from 'document-schema.js';
 import type { MarkdownInlineNode } from '../ast/ast';
 import type { MarkdownDiagnosticSink } from '../diagnostics/diagnostics';
 import { MarkdownDiagnosticCodes } from '../diagnostics/diagnostics';
-import { MONOSPACE_FONT_FAMILY } from '../shared/style-constants';
+import { MATH_INLINE_FONT_MARKER, MONOSPACE_FONT_FAMILY } from '../shared/style-constants';
 
 export interface InlineLowerContext {
   readonly sink: MarkdownDiagnosticSink;
@@ -61,6 +61,10 @@ export function lowerInlineNode(node: MarkdownInlineNode, style: RunStyle, conte
       }
       context.sink({ code: MarkdownDiagnosticCodes.RAW_HTML_PRESERVED_AS_TEXT, severity: 'info', message: 'inline raw HTML was preserved as literal text; it will not be rendered as HTML by any consumer of the resulting ContentDocument' });
       return node.literal.length === 0 ? [] : [buildRun(node.literal, style)];
+    case 'mathInline':
+      // Marked with MATH_INLINE_FONT_MARKER, the same opportunistic-reuse trick a code span's own Courier New marker plays -- src/emit/inline.ts's renderLeaf reconstructs the \( \) delimiters around this run's own text (rather than escaping it as ordinary punctuation) specifically because it carries this marker, not because of anything about the text's own shape (see src/ast/ast.ts's own MarkdownMathInlineNode comment for why a text-pattern-based approach was tried and reverted).
+      context.sink({ code: MarkdownDiagnosticCodes.MATH_INLINE_PRESERVED_AS_TEXT, severity: 'info', message: 'inline math (\\( \\)) was preserved as literal raw LaTeX text; it is not parsed as LaTeX or converted to MathML by this package' });
+      return [buildRun(node.literal, style, MATH_INLINE_FONT_MARKER)];
     case 'autolink': {
       const destination = node.email ? `mailto:${node.destination}` : node.destination;
       return [buildRun(node.destination, { ...style, hyperlink: destination })];

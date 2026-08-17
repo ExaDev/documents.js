@@ -1,4 +1,4 @@
-import { i as MarkdownDiagnosticSink } from "../diagnostics-DmuWc7d8.cjs";
+import { i as MarkdownDiagnosticSink } from "../diagnostics-B72W0P_E.cjs";
 import { LayoutMetadata } from "document-schema.js";
 //#region src/lower/front-matter.d.ts
 interface FrontMatterResult {

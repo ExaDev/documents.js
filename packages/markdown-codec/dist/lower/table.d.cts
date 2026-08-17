@@ -1,4 +1,4 @@
-import { j as MarkdownTableNode } from "../ast-BXYwy08e.cjs";
+import { N as MarkdownTableNode } from "../ast-DbjiuYr8.cjs";
 import { InlineLowerContext } from "./inline.cjs";
 import { ContentTable } from "document-schema.js";
 //#region src/lower/table.d.ts

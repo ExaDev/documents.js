@@ -26,6 +26,7 @@ export const NOOP_MARKDOWN_DIAGNOSTIC_SINK: MarkdownDiagnosticSink = () => {
 // Degrade tier: an individual construct src/lower's ContentDocument mapping (or src/emit's inverse) cannot represent faithfully, named per the mapping table in the repository's own task history -- see src/lower/ and src/emit/'s own top-of-file comments for the read/write side each code belongs to. Every one of these is reachable from real markdown/ContentDocument input; src/lower.test.ts and src/emit.test.ts each exercise the codes their own stage produces, and src/diagnostics/diagnostics.test.ts asserts the whole MarkdownDiagnosticCodes table has no dead entry.
 export const MarkdownDiagnosticCodes = {
   UNCLOSED_FENCE: 'md/unclosed-fence',
+  UNCLOSED_MATH_BLOCK: 'md/unclosed-math-block',
   UNTERMINATED_HTML_BLOCK: 'md/unterminated-html-block',
   TABLE_CELL_COUNT_MISMATCH: 'md/table-cell-count-mismatch',
   DUPLICATE_LINK_REFERENCE: 'md/duplicate-link-reference',
@@ -41,6 +42,8 @@ export const MarkdownDiagnosticCodes = {
   IMAGE_UNRESOLVED: 'md/image-unresolved',
   RAW_HTML_PRESERVED_AS_TEXT: 'md/raw-html-preserved-as-text',
   RAW_HTML_DROPPED: 'md/raw-html-dropped',
+  MATH_BLOCK_PRESERVED_AS_TEXT: 'md/math-block-preserved-as-text',
+  MATH_INLINE_PRESERVED_AS_TEXT: 'md/math-inline-preserved-as-text',
   FRONT_MATTER_KEY_UNMAPPED: 'md/front-matter-key-unmapped',
   // src/emit (write side: ContentDocument -> markdown)
   HEADING_LEVEL_CLAMPED: 'md/heading-level-clamped',

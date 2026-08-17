@@ -3,20 +3,22 @@
 // Adjacent runs with DIFFERENT bold/italic/strike combinations are never wrapped independently and concatenated -- **bold** immediately followed by its own ___nested___ wrap would fuse into one ambiguous five-underscore delimiter run once written out, which is a real correctness bug, not a style nit. renderNestedStyles instead groups the run sequence hierarchically by bold, then by italic, then by strike, producing a properly NESTED wrap (`**bold *nested***`-shaped) whose closing delimiter run CommonMark's own algorithm resolves correctly (a closer consumes only as many delimiters as its innermost opener needs, leaving the rest for the next one out) -- exactly the well-known trick real markdown output already relies on for this exact shape.
 //
 // Escaping (escapeMarkdownText) is conservative: every ASCII punctuation character markdown itself gives meaning to is backslash-escaped, UNLESS it is the `<` of a tag src/html/html.ts's own matchHtmlTag would recognise as raw HTML -- exempting exactly that span (not "any `<`") is what lets a paragraph carrying preserved raw HTML (src/lower/inline.ts's own RAW_HTML_PRESERVED_AS_TEXT case) survive a write-then-read round trip AS HTML rather than as escaped literal text.
+//
+// Preserved inline math (src/lower/inline.ts's own MATH_INLINE_PRESERVED_AS_TEXT case) is NOT given the same text-pattern-based exemption, deliberately: escapeMarkdownText already backslash-escapes every literal '(' and ')' it meets in ORDINARY text (both are in ESCAPE_CHARS below), so an ordinary escaped parenthetical remark -- "\(see below\)" -- is indistinguishable from a genuine preserved \( \) span once escaped, and a pattern-based exemption (tried and reverted) misrecognised the former as the latter on reparse. renderLeaf below instead keys off the run's own MATH_INLINE_FONT_MARKER fontFamily, the same non-pattern-based, opportunistic-reuse trick a code span's own Courier New marker already plays two paragraphs down.
 
 import type { ContentRun } from 'document-schema.js';
 import type { MarkdownDiagnosticSink } from '../diagnostics/diagnostics';
 import { MarkdownDiagnosticCodes } from '../diagnostics/diagnostics';
 import { matchHtmlTag } from '../html/html';
-import { MONOSPACE_FONT_FAMILY } from '../shared/style-constants';
+import { MATH_INLINE_FONT_MARKER, MONOSPACE_FONT_FAMILY } from '../shared/style-constants';
 
 export interface InlineEmitContext {
   readonly sink: MarkdownDiagnosticSink;
   readonly emphasisMarker: string;
 }
 
-// Every ASCII punctuation character CommonMark's own backslash-escape grammar recognises (spec 0.31.2, "Backslash escapes") -- escaping any OTHER character is a no-op under that same grammar, so this set is deliberately the full ASCII-punctuation set src/inline/chars.ts already names, not a hand-picked subset of "characters that look dangerous".
-const ESCAPE_CHARS: ReadonlySet<string> = new Set(['!', '"', '#', '$', '%', '&', "'", '(', ')', '*', '+', ',', '-', '.', '/', ':', ';', '<', '=', '>', '?', '@', '[', '\\', ']', '^', '_', '`', '{', '|', '}', '~']);
+// Every ASCII punctuation character CommonMark's own backslash-escape grammar recognises (spec 0.31.2, "Backslash escapes") that genuinely needs escaping to round-trip safely, MINUS '(' and ')' (ExaDev/markdown-codec#53): neither carries any special meaning in ordinary running text under CommonMark's own grammar (a paren only means anything as part of an inline link/image's own "(dest)" syntax, immediately after a `]` this package always escapes anyway -- see the following paragraph), so escaping them was always unnecessary defensive punctuation-escaping, not a correctness requirement. Once \( \) inline math exists, that unnecessary escaping becomes actively harmful: it manufactures the exact \(...\) shape genuine preserved math uses out of ANY ordinary parenthetical remark ("(see below)"), which src/inline/inline.ts's own new \( recognition cannot tell apart from real math on a later reparse (this was tried -- keeping '('/')' escaped and instead pattern-matching a "genuine" math span on the way out -- and reverted; see this module's own top-of-file note and src/ast/ast.ts's own MarkdownMathInlineNode comment for why no text-pattern-based fix exists). A `]` immediately followed by an unescaped `(` could in principle be misread as inline link syntax, but that never happens here: this set still escapes `]` unconditionally, so a literal `]` from ordinary text is never emitted bare, and a REAL link/image's own "](dest)" is produced directly by this module's own emitRuns, never by escaping ordinary text.
+const ESCAPE_CHARS: ReadonlySet<string> = new Set(['!', '"', '#', '$', '%', '&', "'", '*', '+', ',', '-', '.', '/', ':', ';', '<', '=', '>', '?', '@', '[', '\\', ']', '^', '_', '`', '{', '|', '}', '~']);
 
 export function escapeMarkdownText(text: string): string {
   let out = '';
@@ -73,6 +75,10 @@ function renderLeaf(run: ContentRun, context: InlineEmitContext): string {
   if (run.fontFamily === MONOSPACE_FONT_FAMILY) {
     context.sink({ code: MarkdownDiagnosticCodes.CODE_SPAN_AS_MONOSPACE_RUN, severity: 'info', message: 'a run styled with the Courier New font family is rendered as a code span; a genuinely monospace run from another format is indistinguishable from a real markdown code span on the way back out' });
     return renderCodeSpan(run.text);
+  }
+  if (run.fontFamily === MATH_INLINE_FONT_MARKER) {
+    // The \( \) delimiters are regenerated fresh around the run's own (unescaped) text -- this run's text is never passed through escapeMarkdownText at all, since it is not "ordinary punctuation that happens to need escaping" but raw LaTeX carried verbatim (see this module's own top-of-file note on why a text-pattern-based recognition of an already-escaped '(...)' cannot distinguish this from ordinary parenthetical prose).
+    return `\\(${run.text}\\)`;
   }
   return escapeMarkdownText(run.text);
 }
@@ -149,8 +155,8 @@ function renderNestedStyles(runs: readonly ContentRun[], depth: number, context:
 }
 
 function isPlainAutolink(run: ContentRun): boolean {
-  // An autolink's own <...> form can never be empty (CommonMark's own URI/email autolink grammar both require at least one character between the brackets) -- `<>` is not valid autolink syntax at all and would reparse as literal text, so an empty destination (only reachable via a `[](/url)`-shaped empty-text link whose text happens to equal its own empty destination) must fall through to the ordinary `[text](dest)` form instead.
-  if (run.hyperlink === undefined || run.hyperlink.length === 0 || run.bold === true || run.italic === true || run.strike === true || run.fontFamily === MONOSPACE_FONT_FAMILY) {
+  // An autolink's own <...> form can never be empty (CommonMark's own URI/email autolink grammar both require at least one character between the brackets) -- `<>` is not valid autolink syntax at all and would reparse as literal text, so an empty destination (only reachable via a `[](/url)`-shaped empty-text link whose text happens to equal its own empty destination) must fall through to the ordinary `[text](dest)` form instead. A monospace (code-span) or math-marked run is excluded the same way: both need their own dedicated renderLeaf rendering (a code span's backtick fence, math's own \( \) delimiters), never the bare <...> autolink form, however coincidentally their own text might equal the surrounding hyperlink.
+  if (run.hyperlink === undefined || run.hyperlink.length === 0 || run.bold === true || run.italic === true || run.strike === true || run.fontFamily === MONOSPACE_FONT_FAMILY || run.fontFamily === MATH_INLINE_FONT_MARKER) {
     return false;
   }
   return run.text === run.hyperlink || run.hyperlink === `mailto:${run.text}`;

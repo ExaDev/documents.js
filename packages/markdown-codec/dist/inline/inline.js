@@ -5,6 +5,7 @@ import { DelimiterStack, isDelimiterChar, processEmphasis, scanDelimiterRun } fr
 import { InlineNode, createTextNode } from "./node.js";
 import { applyGfmAutolinks } from "./gfm-autolink.js";
 import { matchLinkLabel, normalizeLinkLabel, parseLinkDestination, parseLinkTitle, skipInlineWhitespace } from "./link.js";
+import { matchMathInlineSpan } from "./math.js";
 //#region src/inline/inline.ts
 const PLAIN_TEXT_PATTERN = /[^\n`[\]\\!<&*_~]+/y;
 const URI_AUTOLINK_PATTERN = /<[A-Za-z][A-Za-z0-9.+-]{1,31}:[^<>]*>/y;
@@ -101,12 +102,23 @@ var InlineParser = class {
 		while (this.text.charAt(this.pos) === " ") this.pos += 1;
 	}
 	parseBackslash() {
+		const backslashIndex = this.pos;
 		this.pos += 1;
 		const next = this.text.charAt(this.pos);
 		if (next === "\n") {
 			this.pos += 1;
 			this.container.appendChild(new InlineNode("hardBreak"));
 			return;
+		}
+		if (next === "(") {
+			const span = matchMathInlineSpan(this.text, backslashIndex);
+			if (span !== void 0) {
+				const node = new InlineNode("mathInline");
+				node.literal = span.slice(2, span.length - 2);
+				this.container.appendChild(node);
+				this.pos = backslashIndex + span.length;
+				return;
+			}
 		}
 		if (isAsciiPunctuation(next)) {
 			this.appendText(next);
@@ -440,6 +452,10 @@ function toAstNode(node) {
 			type: "entity",
 			raw: node.raw,
 			value: node.literal
+		};
+		case "mathInline": return {
+			type: "mathInline",
+			literal: node.literal
 		};
 		case "container": return;
 	}

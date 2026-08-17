@@ -89,6 +89,24 @@ describe('code spans and code blocks', () => {
   });
 });
 
+describe('math (ExaDev/markdown-codec#53)', () => {
+  it('maps inline math to a run marked with the Cambria Math font, delimiters excluded from the run text', () => {
+    expect(paragraph(blocks('\\(x^2\\)')[0]).runs).toEqual([{ text: 'x^2', fontFamily: 'Cambria Math' }]);
+  });
+
+  it('maps a $$ display math block to one MathBlock paragraph', () => {
+    const block = paragraph(blocks('$$\nx^2\n$$')[0]);
+    expect(block.styleId).toBe('MathBlock');
+    expect(block.runs).toEqual([{ text: 'x^2' }]);
+  });
+
+  it('produces an empty-runs paragraph for an empty math block', () => {
+    const block = paragraph(blocks('$$\n$$')[0]);
+    expect(block.styleId).toBe('MathBlock');
+    expect(block.runs).toEqual([]);
+  });
+});
+
 describe('blockquotes', () => {
   it('maps a blockquote paragraph to styleId Quote plus indentLeftPt', () => {
     const block = paragraph(blocks('> foo')[0]);
@@ -203,6 +221,18 @@ describe('gaps (MarkdownDiagnosticCodes)', () => {
     const collector = createDiagnosticCollector();
     blocks('```js\ncode\n```', { sink: collector.sink });
     expect(collector.has(MarkdownDiagnosticCodes.CODE_BLOCK_INFO_STRING_DROPPED)).toBe(true);
+  });
+
+  it('MATH_BLOCK_PRESERVED_AS_TEXT fires for a $$ display math block', () => {
+    const collector = createDiagnosticCollector();
+    blocks('$$\nx^2\n$$', { sink: collector.sink });
+    expect(collector.has(MarkdownDiagnosticCodes.MATH_BLOCK_PRESERVED_AS_TEXT)).toBe(true);
+  });
+
+  it('MATH_INLINE_PRESERVED_AS_TEXT fires for an inline \\( \\) math span', () => {
+    const collector = createDiagnosticCollector();
+    blocks('\\(x^2\\)', { sink: collector.sink });
+    expect(collector.has(MarkdownDiagnosticCodes.MATH_INLINE_PRESERVED_AS_TEXT)).toBe(true);
   });
 
   it('BLOCKQUOTE_NESTED_DEPTH fires beyond level 1', () => {
