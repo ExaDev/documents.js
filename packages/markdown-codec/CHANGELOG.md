@@ -1,3 +1,5 @@
+## [1.4.1](https://github.com/ExaDev/markdown-codec/compare/v1.4.0...v1.4.1) (2026-08-17)
+
 # [1.4.0](https://github.com/ExaDev/markdown-codec/compare/v1.3.31...v1.4.0) (2026-08-17)
 
 
