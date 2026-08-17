@@ -85,7 +85,7 @@
   "packageManager": "pnpm@11.6.0",
   "dependencies": {
     "@modelcontextprotocol/server": "^2.0.0",
-    "documents.js": "^1.99.76",
+    "documents.js": "^1.100.0",
     "zod": "^4.2.0"
   },
   "devDependencies": {
