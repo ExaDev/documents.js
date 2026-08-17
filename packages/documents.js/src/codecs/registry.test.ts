@@ -16,7 +16,7 @@ import { DOCUMENT_FORMAT_CODECS } from './registry';
 
 // Proves each DOCUMENT_FORMAT_CODECS entry's own read/write pair is wired correctly on its own terms -- not merely that readDocumentMetadata/setDocumentMetadata/buildDocumentBytes happen to still work after being refactored onto this registry (their own test files cover that). Every format with both a content.read and a content.write is exercised as a genuine read -> write -> read round trip: the content a fresh read produces after writing back out must equal the content that went in.
 
-function requireContentCodec(format: 'docx' | 'pptx' | 'odt' | 'odp' | 'ods' | 'odg' | 'markdown' | 'xlsx') {
+function requireContentCodec(format: 'docx' | 'pptx' | 'odt' | 'odp' | 'ods' | 'odg' | 'markdown' | 'xlsx' | 'csv') {
   const content = DOCUMENT_FORMAT_CODECS[format].content;
   if (!content?.write) {
     throw new Error(`expected DOCUMENT_FORMAT_CODECS.${format}.content.write to be defined`);
@@ -101,6 +101,15 @@ describe('DOCUMENT_FORMAT_CODECS: content read/write round trips', () => {
     expect(codec.read(rebuiltBytes)).toEqual(content);
   });
 
+  // csv's round trip is exact-equality like markdown's, for the same stability reason: write emits each cell's displayText, and read re-types that text heuristically -- but re-typing a cell that already went through inferCellValue once lands on the identical value again (a re-typed number prints back as the same digits, a declined string stays a string), so a second read cannot drift from the first.
+  it('csv: read -> write -> read round-trips the ContentDocument', () => {
+    const codec = requireContentCodec('csv');
+    const csvBytes = new TextEncoder().encode('Name,Amount,Active\nWidget,42.5,TRUE\nGadget,7,\n');
+    const content = codec.read(csvBytes);
+    const rebuiltBytes = codec.write!(content);
+    expect(codec.read(rebuiltBytes)).toEqual(content);
+  });
+
   // xlsx's own column-width unit conversion (ooxml.js's ptToColumnWidthChars/columnWidthCharsToPt, src/typed/xlsx/units.ts) is a best-effort algebraic inverse, not an exact one -- src/convert/bridges.test.ts's own COLUMN_WIDTH_TOLERANCE_PT documents up to ~1pt of drift per pt<->character-width hop. This registry round trip is a second such hop on top of whatever odsToXlsx's own bridge already introduced building the fixture, so widths are checked within tolerance rather than exact equality; every other field (sheet name, cell values/kinds/formula/merges) is checked exactly, since none of those go through a lossy unit conversion.
   it('xlsx: read -> write -> read carries sheet cell values, kinds, formulas, and merges through exactly, and column widths within tolerance', () => {
     const codec = requireContentCodec('xlsx');
@@ -159,5 +168,12 @@ describe('DOCUMENT_FORMAT_CODECS: xlsx has a content codec, no layout codec', ()
   it('xlsx has a content entry and no layout entry', () => {
     expect(DOCUMENT_FORMAT_CODECS.xlsx.content).toBeDefined();
     expect(DOCUMENT_FORMAT_CODECS.xlsx.layout).toBeUndefined();
+  });
+});
+
+describe('DOCUMENT_FORMAT_CODECS: csv has a content codec, no layout codec', () => {
+  it('csv has a content entry and no layout entry', () => {
+    expect(DOCUMENT_FORMAT_CODECS.csv.content).toBeDefined();
+    expect(DOCUMENT_FORMAT_CODECS.csv.layout).toBeUndefined();
   });
 });

@@ -27,7 +27,7 @@ function isOdfPackageFormat(format: DocumentFormat): format is keyof typeof ODF_
   return format in ODF_PACKAGE_FORMATS;
 }
 
-// A recognised DocumentFormat that nonetheless has no raw-package concept at all (markdown is plain text, not a zip container; pdf is its own binary format, not OPC/ODF) -- a named class, matching this package's own convention for every other "recognised but unsupported" input (UnsupportedFontSourceFormatError, OdbUnsupportedFormatError, ...), so a caller can narrow on it with instanceof rather than string-matching a thrown Error's own message.
+// A recognised DocumentFormat that nonetheless has no raw-package concept at all (markdown and csv are plain text, not zip containers; pdf is its own binary format, not OPC/ODF) -- a named class, matching this package's own convention for every other "recognised but unsupported" input (UnsupportedFontSourceFormatError, OdbUnsupportedFormatError, ...), so a caller can narrow on it with instanceof rather than string-matching a thrown Error's own message.
 export class UnsupportedPackageFormatError extends Error {
   readonly format: DocumentFormat;
 
@@ -38,7 +38,7 @@ export class UnsupportedPackageFormatError extends Error {
   }
 }
 
-// Decodes a DocumentFormat's own raw bytes into its underlying Package (parts records -- the ooxml.js/odf.js container both packages independently define, confirmed structurally interchangeable by src/interop.test.ts, so one Package type genuinely covers both branches here). docx/pptx/xlsx decode through ooxml.js's own OPC decoder; odt/odp/ods/odg/odf through odf.js's. markdown and pdf have no raw-package concept at all and throw UnsupportedPackageFormatError.
+// Decodes a DocumentFormat's own raw bytes into its underlying Package (parts records -- the ooxml.js/odf.js container both packages independently define, confirmed structurally interchangeable by src/interop.test.ts, so one Package type genuinely covers both branches here). docx/pptx/xlsx decode through ooxml.js's own OPC decoder; odt/odp/ods/odg/odf through odf.js's. markdown, csv, and pdf have no raw-package concept at all and throw UnsupportedPackageFormatError.
 export function decodeDocumentPackage(format: DocumentFormat, bytes: Uint8Array<ArrayBuffer>): Package {
   if (isOoxmlPackageFormat(format)) {
     return decodeOoxmlPackage(bytes);

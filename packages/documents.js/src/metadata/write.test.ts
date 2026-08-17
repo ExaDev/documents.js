@@ -81,6 +81,10 @@ describe('setDocumentMetadata: rejected formats', () => {
     expect(() => setDocumentMetadata('odf', 'odf', new Uint8Array(), {})).toThrow(/no write path back out/);
   });
 
+  it('rejects csv as a source or target, naming that RFC 4180 text has no metadata container', () => {
+    expect(() => setDocumentMetadata('csv', 'csv', new TextEncoder().encode('A,B\n1,2\n'), {})).toThrow(/no metadata container/);
+  });
+
   it('rejects a source that is neither pdf nor a rebuild format, even when target is a rebuild format', () => {
     expect(() => setDocumentMetadata('pdf', 'docx', new Uint8Array(), {})).toThrow(/must be the same format \(or both 'pdf'\)/);
   });

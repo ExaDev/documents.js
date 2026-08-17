@@ -75,7 +75,7 @@ export function createLocalDocumentConverter(): DocumentConverter {
         return Promise.reject(new UnsupportedConversionError(source.format, targetFormat));
       }
 
-      // convertDocument runs the resolved plan end to end, threading the port's ConversionOptions through to whichever hop consumes each field: fonts/onFontSubstitution/onSubstitution/clock reach any toPdf hop (the only kind that lays text out and resolves a face), sink reaches any fromPdf hop (the only kind that reads a PDF and can report parse diagnostics), and signal/images reach every hop. The onDocument callback captures the DocumentPackage the first content-producing hop builds, mirroring the per-edge onDocument wiring the previous direct-edge path threaded into each edge kind individually.
+      // convertDocument runs the resolved plan end to end, threading the port's ConversionOptions through to whichever hop consumes each field: fonts/onFontSubstitution/onSubstitution/clock reach any toPdf hop (the only kind that lays text out and resolves a face), sink reaches any fromPdf hop (the only kind that reads a PDF and can report parse diagnostics), delimiter/sheet reach any csv hop, and signal/images reach every hop. The onDocument callback captures the DocumentPackage the first content-producing hop builds, mirroring the per-edge onDocument wiring the previous direct-edge path threaded into each edge kind individually.
       const bytes = convertDocument(source.format, targetFormat, source.bytes, {
         signal: options.signal,
         fonts: options.fonts,
@@ -83,6 +83,8 @@ export function createLocalDocumentConverter(): DocumentConverter {
         onSubstitution: (s, c) => diagnostics.push(substitutionDiagnostic(s, c)),
         sink: (d) => diagnostics.push(fromPdfDiagnostic(d)),
         images: options.images,
+        delimiter: options.delimiter,
+        sheet: options.sheet,
         clock: options.clock,
         onDocument,
       });

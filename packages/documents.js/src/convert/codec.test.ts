@@ -1,6 +1,8 @@
 import { decodePackage as decodeOoxmlPackage, readXlsxContent } from 'ooxml.js';
 import { z } from 'zod';
 import { describe, expect, it } from 'vitest';
+import { decodeCsvText, encodeCsvText } from '../csv/text';
+import { parseCsvRecords } from '../csv/records';
 import { createDocx, openDocx } from '../edit/docx/editor';
 import { openOdg } from '../edit/odg/editor';
 import { openOdp } from '../edit/odp/editor';
@@ -14,7 +16,7 @@ import { minimalOdpBytes } from '../test-support/odp';
 import { gridOdsBytes } from '../test-support/ods';
 import { minimalOdtBytes } from '../test-support/odt';
 import { odsToXlsx } from './convert';
-import { docxPdfCodec, markdownDocxCodec, markdownOdtCodec, markdownPdfCodec, odgPdfCodec, odpPdfCodec, odsPdfCodec, odtPdfCodec, pptxPdfCodec, xlsxPdfCodec } from './codec';
+import { csvMarkdownCodec, csvPdfCodec, docxPdfCodec, markdownDocxCodec, markdownOdtCodec, markdownPdfCodec, odgPdfCodec, odpPdfCodec, odsCsvCodec, odsPdfCodec, odtPdfCodec, pptxPdfCodec, xlsxCsvCodec, xlsxPdfCodec } from './codec';
 
 function pdfHeader(bytes: Uint8Array<ArrayBuffer>): string {
   return new TextDecoder('latin1').decode(bytes.subarray(0, 5));
@@ -236,6 +238,99 @@ describe('markdownPdfCodec', () => {
 
   it('rejects encode input with no %PDF- header before ever reaching pdfToMarkdown', () => {
     expect(() => z.encode(markdownPdfCodec, new TextEncoder().encode('not a pdf'))).toThrow(z.core.$ZodError);
+  });
+});
+
+// csvToPdf composes the csv -> ods bridge with ods -> pdf internally (csv has no layout engine of its own, exactly like xlsxPdfCodec above), and pdfToCsv composes pdf -> ods -> csv -- so this pair carries the same stacked-reconstruction caveat as xlsxPdfCodec, with csv read's heuristic re-typing on top.
+describe('csvPdfCodec', () => {
+  it('z.decode produces valid PDF bytes from csv bytes', () => {
+    const pdfBytes = z.decode(csvPdfCodec, encodeCsvText('Name,Amount\nWidget,42.5\n'));
+    expect(pdfHeader(pdfBytes)).toBe('%PDF-');
+  });
+
+  it('z.encode then z.decode round-trips text content, like csvToPdf/pdfToCsv', () => {
+    const pdfBytes = z.decode(csvPdfCodec, encodeCsvText('Name,Amount\nWidget,42.5\n'));
+    const csvBytes = z.encode(csvPdfCodec, pdfBytes);
+    const records = parseCsvRecords(decodeCsvText(csvBytes));
+    expect(records[0]).toEqual(['Name', 'Amount']);
+    expect(records[1]?.[0]).toBe('Widget');
+  });
+
+  it('rejects decode input with malformed UTF-8 before ever reaching csvToPdf', () => {
+    expect(() => z.decode(csvPdfCodec, new Uint8Array([0xff, 0xfe, 0x00]))).toThrow(z.core.$ZodError);
+  });
+
+  it('rejects encode input with no %PDF- header before ever reaching pdfToCsv', () => {
+    expect(() => z.encode(csvPdfCodec, new TextEncoder().encode('not a pdf'))).toThrow(z.core.$ZodError);
+  });
+});
+
+// The same-variant spreadsheet bridges: direct ContentDocument pivot copies with no layout engine and no reconstruction, exactly like odsXlsxCodec. The csv boundary is displayText-only -- a typed ods/xlsx cell re-reads as whatever inferCellValue re-types its printed text as on the way back through the encode side.
+describe('odsCsvCodec', () => {
+  it('z.decode produces csv text carrying every rendered cell of the ods fixture', () => {
+    const csvBytes = z.decode(odsCsvCodec, gridOdsBytes());
+    const records = parseCsvRecords(decodeCsvText(csvBytes));
+    expect(records[0]).toEqual(['Alpha', 'Beta', 'Gamma']);
+    expect(records[1]).toEqual(['One', 'Two', 'Three']);
+  });
+
+  it('z.encode then z.decode round-trips the parsed records, like csvToOds/odsToCsv', () => {
+    const odsBytes = z.encode(odsCsvCodec, encodeCsvText('Name,Amount\nWidget,42.5\n'));
+    const csvBytes = z.decode(odsCsvCodec, odsBytes);
+    expect(parseCsvRecords(decodeCsvText(csvBytes))).toEqual([['Name', 'Amount'], ['Widget', '42.5']]);
+  });
+
+  it('rejects decode input whose first zip entry is not a stored ods mimetype part before ever reaching odsToCsv', () => {
+    expect(() => z.decode(odsCsvCodec, new TextEncoder().encode('not an ods'))).toThrow(z.core.$ZodError);
+  });
+
+  it('rejects encode input with malformed UTF-8 before ever reaching csvToOds', () => {
+    expect(() => z.encode(odsCsvCodec, new Uint8Array([0xff, 0xfe, 0x00]))).toThrow(z.core.$ZodError);
+  });
+});
+
+describe('xlsxCsvCodec', () => {
+  it('z.decode produces csv text carrying every rendered cell of the xlsx fixture', () => {
+    const csvBytes = z.decode(xlsxCsvCodec, odsToXlsx(gridOdsBytes()));
+    const records = parseCsvRecords(decodeCsvText(csvBytes));
+    expect(records[0]).toEqual(['Alpha', 'Beta', 'Gamma']);
+  });
+
+  it('z.encode then z.decode round-trips the parsed records, like csvToXlsx/xlsxToCsv', () => {
+    const xlsxBytes = z.encode(xlsxCsvCodec, encodeCsvText('Name,Amount\nWidget,42.5\n'));
+    const csvBytes = z.decode(xlsxCsvCodec, xlsxBytes);
+    expect(parseCsvRecords(decodeCsvText(csvBytes))).toEqual([['Name', 'Amount'], ['Widget', '42.5']]);
+  });
+
+  it('rejects decode input with no ZIP local-file-header before ever reaching xlsxToCsv', () => {
+    expect(() => z.decode(xlsxCsvCodec, new TextEncoder().encode('not an xlsx'))).toThrow(z.core.$ZodError);
+  });
+
+  it('rejects encode input with malformed UTF-8 before ever reaching csvToXlsx', () => {
+    expect(() => z.encode(xlsxCsvCodec, new Uint8Array([0xff, 0xfe, 0x00]))).toThrow(z.core.$ZodError);
+  });
+});
+
+// The pdf-composed last-resort pair, mirroring xlsxMarkdownCodec's own shape: neither direction is remotely round-trip-lossless (spreadsheet render stacked on markdown reconstruction and back), so the assertions are structural -- valid output of the target schema carrying real text on the decode side.
+describe('csvMarkdownCodec', () => {
+  it('z.decode produces markdown carrying the rendered cell text, like csvToMarkdown', () => {
+    const markdownBytes = z.decode(csvMarkdownCodec, encodeCsvText('Name,Amount\nWidget,42.5\n'));
+    const text = decodeMarkdownText(markdownBytes);
+    expect(text).toContain('Name');
+    expect(text).toContain('Widget');
+  });
+
+  it('z.encode produces csv bytes that parse as well-formed RFC 4180 records, like markdownToCsv', () => {
+    const csvBytes = z.encode(csvMarkdownCodec, encodeMarkdownText('| A | B |\n| --- | --- |\n| one | two |\n'));
+    expect(parseCsvRecords(decodeCsvText(csvBytes)).length).toBeGreaterThan(0);
+  });
+
+  it('rejects decode input with malformed UTF-8 before ever reaching csvToMarkdown', () => {
+    expect(() => z.decode(csvMarkdownCodec, new Uint8Array([0xff, 0xfe, 0x00]))).toThrow(z.core.$ZodError);
+  });
+
+  it('rejects encode input with malformed UTF-8 before ever reaching markdownToCsv', () => {
+    expect(() => z.encode(csvMarkdownCodec, new Uint8Array([0xff, 0xfe, 0x00]))).toThrow(z.core.$ZodError);
   });
 });
 

@@ -30,8 +30,9 @@ import { throwIfAborted } from '../ports/abort';
 import { resolveMetadataTimestamps } from '../model/metadata';
 import type { ClockPort } from '../ports/clock';
 import { convertDocument } from './composition';
+import type { CellTypeInferenceSink } from '../layout/cell-typing';
 
-// Twelve ergonomic conversions (docx/pptx/odt/odp/ods/odg <-> PDF, all now round-trip both ways). Each is now a thin forwarder to convertDocument (src/convert/composition.ts), which resolves the composition plan for the pair and runs the real decode/read/layout/build/encode primitives -- reproducing the exact sequence and option-threading the hand-written body below used to inline. The four special cases further down this file (odfToPdf, odmToPdf, odbToXlsx, odbToCsv) stay as their real hand-written bodies, since none is a composition-graph pair (formula one-way, resolver callback, table extraction).
+// The ergonomic X <-> PDF conversions (docx/pptx/odt/odp/ods/odg/markdown/csv, all round-trip both ways). Each is a thin forwarder to convertDocument (src/convert/composition.ts), which resolves the composition plan for the pair and runs the real decode/read/layout/build/encode primitives -- reproducing the exact sequence and option-threading the hand-written body below used to inline. The four special cases further down this file (odfToPdf, odmToPdf, odbToXlsx, odbToCsv) stay as their real hand-written bodies, since none is a composition-graph pair (formula one-way, resolver callback, table extraction).
 
 // `fonts` and `onFontSubstitution` are inherited from DocumentFontRegistryOptions (src/fonts/registry.ts) rather than redeclared here, so the ergonomic conversions and createDocumentFontRegistry describe the same two options in exactly one place. Every X-to-PDF conversion below builds a real FontRegistry from the SOURCE PACKAGE'S OWN embedded faces first, then those caller-supplied faces, then pdf-codec's vendored Carlito/Caladea substitutes, then the standard 14 -- which is why a document that embeds nothing, and asks for no family a vendored substitute covers, still writes byte-identical output to the standard-font-only pipeline this package had before (see convert-fonts.test.ts's own byte-identity proof).
 export interface DocumentToPdfOptions extends DocumentFontRegistryOptions {
@@ -81,6 +82,26 @@ export function odgToPdf(bytes: Uint8Array<ArrayBuffer>, options?: DocumentToPdf
 // Forwards to convertDocument (src/convert/composition.ts).
 export function markdownToPdf(bytes: Uint8Array<ArrayBuffer>, options?: DocumentToPdfOptions): Uint8Array<ArrayBuffer> {
   return convertDocument('markdown', 'pdf', bytes, options);
+}
+
+// The two csv option groups the named csv conversions below intersect into the shared options type each already uses, rather than a csv-specific options type per function: every csv-SOURCED conversion parses with { delimiter, onCellTypeInference } (readCsvContent's own two options, src/csv/read.ts) and every csv-TARGET one writes with { delimiter, sheet } (buildCsvText's own two, src/csv/write.ts) -- exactly the fields UnifiedConversionOptions (src/convert/composition.ts) threads to the csv node's read/build legs. Declaring the two groups once here keeps each ergonomic signature honest about which csv knobs that particular function consumes without duplicating the field comments eight times over.
+export interface CsvReadOptions {
+  // The field delimiter to parse with -- ',' (RFC 4180's own default, and readCsvContent's own default when omitted) or '\t' for TSV. TSV is deliberately a delimiter choice on the SAME 'csv' format rather than a second DocumentFormat member, since a delimiter is a parse option, not a different document format (see port.ts's own csv comment).
+  readonly delimiter?: string;
+  // Called once per data cell whose text inferCellValue re-typed (or considered and declined) while the csv was being read into spreadsheet cells -- the audit channel for the one lossy step a csv read performs, reported at the read boundary where the re-typing actually happens.
+  readonly onCellTypeInference?: CellTypeInferenceSink;
+}
+
+export interface CsvWriteOptions {
+  // The field delimiter to write with -- ',' by default (RFC 4180), '\t' for TSV output. Feeds quoteCsvField's own quoting decision too, so a field containing the delimiter is quoted and a field containing a comma under a tab delimiter is not.
+  readonly delimiter?: string;
+  // Selects which sheet of a multi-sheet spreadsheet document to write as csv. Required whenever the document has more than one sheet -- omitting it then throws CsvSheetNotSpecifiedError naming every available sheet, rather than guessing (the identical contract odbToCsv's own `table` option follows for a multi-table .odb). May be omitted when the document has exactly one sheet.
+  readonly sheet?: string;
+}
+
+// csv bytes -> PDF bytes: csv has no layout engine of its own (exactly like xlsx), so convertDocument's pathfinder resolves this as [csv -> ods bridge, ods -> pdf toPdf] -- the reader parses RFC 4180 text into a spreadsheet ContentDocument (first record as the header row, data cells re-typed by inferCellValue with onCellTypeInference auditing each decision), then ods's own layout engine renders it. `onDocument` reports the last hop's package under the composition engine's own "fires exactly once, on the last hop" convention: the odsToPdf hop's content+layout.
+export function csvToPdf(bytes: Uint8Array<ArrayBuffer>, options?: DocumentToPdfOptions & CsvReadOptions): Uint8Array<ArrayBuffer> {
+  return convertDocument('csv', 'pdf', bytes, options);
 }
 
 const STANDALONE_FORMULA_SIZE_PT = 18; // larger than a typical embedded formula (see engine.ts's own formulaSizePtForFrame), since a standalone .odf's own formula is usually the whole document's content, not a small inline element.
@@ -159,7 +180,12 @@ export function pdfToMarkdown(bytes: Uint8Array<ArrayBuffer>, options?: PdfToDoc
   return convertDocument('pdf', 'markdown', bytes, options);
 }
 
-// Ten cross-format bridges, five pairs (odt<->docx, odp<->pptx, ods<->xlsx, and -- further down this section -- markdown<->docx, markdown<->odt), each bypassing PDF entirely. Every conversion above this point pivots through a LayoutDocument; these five pairs don't have that problem: both formats in each pair already read into and build from the identical ContentDocument variant, so the bridge is nothing more than reader -> writer, with no layout engine, no font measurement, and no geometry-based reconstruction in between. Each forwarder below hands the pair to convertDocument (src/convert/composition.ts), whose pathfinder resolves it as a single same-variant bridge hop and runs the identical decode/read/build/encode sequence.
+// pdf bytes -> csv bytes: the reverse of csvToPdf above -- convertDocument's pathfinder resolves this as [pdf -> ods fromPdf, ods -> csv bridge], reconstructing the pdf's tabular layout into a spreadsheet ContentDocument and then writing its lone or selected sheet as RFC 4180 text. `onDocument` reports the last hop's package under the composition engine's own "fires exactly once, on the last hop" convention: the odsToCsv bridge hop's content-only package.
+export function pdfToCsv(bytes: Uint8Array<ArrayBuffer>, options?: PdfToDocumentOptions & CsvWriteOptions): Uint8Array<ArrayBuffer> {
+  return convertDocument('pdf', 'csv', bytes, options);
+}
+
+// The same-variant cross-format bridges (odt<->docx, odp<->pptx, ods<->xlsx, csv<->ods, csv<->xlsx, and -- further down this section -- markdown<->docx, markdown<->odt), each bypassing PDF entirely. Every conversion above this point pivots through a LayoutDocument; these pairs don't have that problem: both formats in each pair already read into and build from the identical ContentDocument variant, so the bridge is nothing more than reader -> writer, with no layout engine, no font measurement, and no geometry-based reconstruction in between. Each forwarder below hands the pair to convertDocument (src/convert/composition.ts), whose pathfinder resolves it as a single same-variant bridge hop and runs the identical decode/read/build/encode sequence.
 export interface DocumentBridgeOptions {
   readonly signal?: AbortSignal;
   // Called exactly once, synchronously, with the DocumentPackage this bridge built internally, before the function returns its bytes -- mirroring DocumentToPdfOptions/PdfToDocumentOptions's own onDocument. A bridge never runs a layout engine (see this section's own top-of-block comment), so `layout` is always left undefined here -- DocumentPackageSchema already models layout as optional for exactly this case, and running a layout conversion purely to populate a field no caller asked for would be wasted work.
@@ -170,7 +196,7 @@ export interface DocumentBridgeOptions {
   readonly images?: MarkdownImageResolver;
 }
 
-// Options for a composed edge whose two formats share no ContentDocument variant, so the only route is through PDF (today: xlsx <-> markdown). These are 'bridge' hops from the composition engine's point of view (neither endpoint is pdf), but internally they compose a toPdf leg -- which lays content out, so fonts/onFontSubstitution/onSubstitution/clock reach it -- with a fromPdf leg, which reconstructs, so sink reaches it. That is a wider shape than the PDF-bypassing DocumentBridgeOptions above, and every field is optional deliberately: a DocumentBridgeOptions (what local.ts's port passes to any bridge hop) is assignable to this, which is exactly what lets these run as ordinary bridge hops without a new hop kind -- through the port they run with fonts/sink undefined (the defaults), while a direct ergonomic caller can supply them for finer control over the layout and reconstruction legs.
+// Options for a composed edge whose two formats share no ContentDocument variant, so the only route is through PDF (today: xlsx <-> markdown, csv <-> markdown). These are 'bridge' hops from the composition engine's point of view (neither endpoint is pdf), but internally they compose a toPdf leg -- which lays content out, so fonts/onFontSubstitution/onSubstitution/clock reach it -- with a fromPdf leg, which reconstructs, so sink reaches it. That is a wider shape than the PDF-bypassing DocumentBridgeOptions above, and every field is optional deliberately: a DocumentBridgeOptions (what local.ts's port passes to any bridge hop) is assignable to this, which is exactly what lets these run as ordinary bridge hops without a new hop kind -- through the port they run with fonts/sink undefined (the defaults), while a direct ergonomic caller can supply them for finer control over the layout and reconstruction legs.
 export interface ComposedDocumentOptions extends DocumentFontRegistryOptions {
   readonly signal?: AbortSignal;
   readonly onSubstitution?: (substitution: WinAnsiSubstitution, context: { readonly pageIndex: number }) => void;
@@ -230,6 +256,28 @@ export function odtToMarkdown(bytes: Uint8Array<ArrayBuffer>, options?: Document
   return convertDocument('odt', 'markdown', bytes, options);
 }
 
+// csv <-> xlsx and csv <-> ods: csv is the spreadsheet family's plain-text member -- it reads into and builds from the same spreadsheet ContentDocument variant as xlsx/ods (see capability.ts), so these resolve as single same-variant bridge hops, the csv side decoding/encoding RFC 4180 text with no package in between. The csv-sourced directions intersect CsvReadOptions (delimiter/onCellTypeInference reach readCsvContent's own parse) and the csv-target ones CsvWriteOptions (delimiter/sheet reach buildCsvText's own writer); every non-csv field of DocumentBridgeOptions threads exactly as it does for the bridges above.
+
+// Forwards to convertDocument (src/convert/composition.ts).
+export function csvToXlsx(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBridgeOptions & CsvReadOptions): Uint8Array<ArrayBuffer> {
+  return convertDocument('csv', 'xlsx', bytes, options);
+}
+
+// Forwards to convertDocument (src/convert/composition.ts).
+export function xlsxToCsv(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBridgeOptions & CsvWriteOptions): Uint8Array<ArrayBuffer> {
+  return convertDocument('xlsx', 'csv', bytes, options);
+}
+
+// Forwards to convertDocument (src/convert/composition.ts).
+export function csvToOds(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBridgeOptions & CsvReadOptions): Uint8Array<ArrayBuffer> {
+  return convertDocument('csv', 'ods', bytes, options);
+}
+
+// Forwards to convertDocument (src/convert/composition.ts).
+export function odsToCsv(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBridgeOptions & CsvWriteOptions): Uint8Array<ArrayBuffer> {
+  return convertDocument('ods', 'csv', bytes, options);
+}
+
 // Four cross-variant content bridges (wordprocessing <-> presentation), two pairs: docx <-> pptx and odt <-> odp. These cross a VARIANT BOUNDARY via a real semantic transform (src/convert/variant-bridges.ts), which convertDocument's pathfinder resolves as a single cross-variant bridge hop. Both directions are APPROXIMATIONS -- a flow document has no real slide boundaries, and a deck has no flow -- but the blocks themselves (paragraphs, tables, images, list membership, run styling) survive intact through both transforms.
 
 // Forwards to convertDocument (src/convert/composition.ts).
@@ -276,7 +324,19 @@ export function markdownToXlsx(bytes: Uint8Array<ArrayBuffer>, options?: Compose
   return convertDocument('markdown', 'xlsx', bytes, options);
 }
 
-// odmToPdf -- the fourteenth conversion, and one of the four SPECIAL cases that stays as its real hand-written body rather than forwarding to convertDocument: a .odm master document doesn't carry its chapters' own content at all (readOdm's own module -- see odf.js's implementation report -- confirmed against real LibreOffice output that a text:section-source is always a bare external reference, never an embedded or cached copy), so producing a PDF requires a caller-supplied resolveSubDocument callback to hand back each chapter's own .odt bytes given its href. This is why odmToPdf takes an options object shape the other conversions don't, and why it is not wired into the DocumentConverter port (src/convert/port.ts) -- that port's convert(request, options) contract is fixed single-bytes-in/bytes-out, and widening it with a resolver parameter for this one format would leak an odm-specific concern into every other conversion's own request shape. A caller wanting odmToPdf behind the port can wrap it in their own adapter. convertDocument's own bytes-in/bytes-out contract cannot express the resolver callback either, which is why this stays hand-written.
+// csv <-> markdown: csv and markdown share no ContentDocument variant (spreadsheet vs wordprocessing), so convertDocument's pathfinder resolves these the same three-hop way as xlsx <-> markdown above -- csvToMarkdown as [csv -> ods, ods -> pdf, pdf -> markdown], markdownToCsv as [markdown -> pdf, pdf -> ods, ods -> csv] -- with both legs' lossiness inherited in full. onDocument reports the last hop's package under the composition engine's own "fires exactly once, on the last hop" convention.
+
+// Forwards to convertDocument (src/convert/composition.ts).
+export function csvToMarkdown(bytes: Uint8Array<ArrayBuffer>, options?: ComposedDocumentOptions & CsvReadOptions): Uint8Array<ArrayBuffer> {
+  return convertDocument('csv', 'markdown', bytes, options);
+}
+
+// Forwards to convertDocument (src/convert/composition.ts).
+export function markdownToCsv(bytes: Uint8Array<ArrayBuffer>, options?: ComposedDocumentOptions & CsvWriteOptions): Uint8Array<ArrayBuffer> {
+  return convertDocument('markdown', 'csv', bytes, options);
+}
+
+// odmToPdf -- one of the four SPECIAL cases that stays as its real hand-written body rather than forwarding to convertDocument: a .odm master document doesn't carry its chapters' own content at all (readOdm's own module -- see odf.js's implementation report -- confirmed against real LibreOffice output that a text:section-source is always a bare external reference, never an embedded or cached copy), so producing a PDF requires a caller-supplied resolveSubDocument callback to hand back each chapter's own .odt bytes given its href. This is why odmToPdf takes an options object shape the other conversions don't, and why it is not wired into the DocumentConverter port (src/convert/port.ts) -- that port's convert(request, options) contract is fixed single-bytes-in/bytes-out, and widening it with a resolver parameter for this one format would leak an odm-specific concern into every other conversion's own request shape. A caller wanting odmToPdf behind the port can wrap it in their own adapter. convertDocument's own bytes-in/bytes-out contract cannot express the resolver callback either, which is why this stays hand-written.
 export interface OdmToPdfOptions extends DocumentToPdfOptions {
   // Called once per section whose chapter content could not be read inline from the master document itself, with that section's own href (e.g. "../chapter1.odt"). Returns that chapter's own .odt bytes, or undefined if the caller has no bytes for it -- an undefined result is not itself an error here; odmToPdf collects every section that ends up unresolved (no inline content AND no bytes from this callback, or no callback at all) and throws exactly once, naming all of them, rather than surfacing only the first the loop happens to reach.
   readonly resolveSubDocument?: (href: string) => Uint8Array<ArrayBuffer> | undefined;
