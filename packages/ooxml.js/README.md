@@ -68,6 +68,10 @@ pnpm add ooxml.js
 npm install ooxml.js
 ```
 
+## Compatibility
+
+Worker-isomorphic: runtime `src/` uses no Node-only APIs (no `node:*` imports, no bare Node builtins, no `Buffer` global), so the published package runs in Cloudflare Workers, Deno Deploy, browser bundlers, or any ES2024+ host — not just Node. This is enforced statically by an `eslint` guard (`no-restricted-imports`/`no-restricted-globals` in `eslint.config.ts`) that rejects any Node-only import in `src/`, and dynamically by the `workerd` test suite (`pnpm test:workers`) that exercises the xlsx decode path inside a Cloudflare Workers isolate on every CI run. The `engines.node >= 20` pin is the development and CI floor, not a runtime constraint on consumers.
+
 ## Usage
 
 ```ts
