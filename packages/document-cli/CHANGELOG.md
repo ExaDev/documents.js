@@ -1,3 +1,15 @@
+# [2.0.0](https://github.com/ExaDev/document-cli/compare/v1.14.115...v2.0.0) (2026-08-17)
+
+
+* feat!: migrate --dump-package and from-package to documents.js 2.0.0's fused package shape ([5629bf5](https://github.com/ExaDev/document-cli/commit/5629bf54b8e7ebf09b7a245bc6a297215d72787c))
+
+
+### BREAKING CHANGES
+
+* from-package no longer reads documents.js 1.x
+formatVersion 1 dump files; --dump-package output and the pdf target's
+rebuild follow documents.js 2.0.0.
+
 ## [1.14.115](https://github.com/ExaDev/document-cli/compare/v1.14.114...v1.14.115) (2026-08-17)
 
 ## [1.14.114](https://github.com/ExaDev/document-cli/compare/v1.14.113...v1.14.114) (2026-08-17)
