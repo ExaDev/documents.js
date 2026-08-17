@@ -68,6 +68,36 @@ describe('wordprocessing outlines', () => {
     ]);
   });
 
+  it('pops exactly the deeper group when an H2 follows an H1 and an H3', () => {
+    const h1 = paragraph('Chapter', { headingLevel: 1 });
+    const h3 = paragraph('Aside', { headingLevel: 3 });
+    const h2 = paragraph('Section', { headingLevel: 2 });
+    const body = paragraph('body');
+    const doc = wordprocessingDoc([[h1, h3, h2, body]]);
+    expectSchemaValid(doc);
+    expect(buildOutline(doc)).toEqual([
+      {
+        text: 'Chapter',
+        level: 1,
+        children: [
+          { text: 'Aside', level: 3, children: [] },
+          { text: 'Section', level: 2, children: [body] },
+        ],
+      },
+    ]);
+  });
+
+  it('nests a headingLevel 10 following an H2 as its direct child, level carried verbatim', () => {
+    const h2 = paragraph('Section', { headingLevel: 2 });
+    const h10 = paragraph('Unusually deep', { headingLevel: 10 });
+    const body = paragraph('body');
+    const doc = wordprocessingDoc([[h2, h10, body]]);
+    expectSchemaValid(doc);
+    expect(buildOutline(doc)).toEqual([
+      { text: 'Section', level: 2, children: [{ text: 'Unusually deep', level: 10, children: [body] }] },
+    ]);
+  });
+
   it('pops an H1 after an H3 back to the root', () => {
     const first = paragraph('First', { headingLevel: 1 });
     const firstBody = paragraph('first body');
