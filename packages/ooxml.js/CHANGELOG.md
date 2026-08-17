@@ -1,3 +1,10 @@
+# [2.14.0](https://github.com/ExaDev/ooxml.js/compare/v2.13.1...v2.14.0) (2026-08-17)
+
+
+### Features
+
+* read pptx chart graphic frames' cached series/category model as a table block ([4572909](https://github.com/ExaDev/ooxml.js/commit/4572909263e5bba01e852b2c49326888e56de461))
+
 ## [2.13.1](https://github.com/ExaDev/ooxml.js/compare/v2.13.0...v2.13.1) (2026-08-17)
 
 # [2.13.0](https://github.com/ExaDev/ooxml.js/compare/v2.12.2...v2.13.0) (2026-08-17)
