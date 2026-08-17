@@ -1,3 +1,11 @@
+# [2.1.0](https://github.com/ExaDev/document-cli/compare/v2.0.0...v2.1.0) (2026-08-17)
+
+
+### Features
+
+* add --delimiter, --sheet, and --page for the csv and svg edges ([531893f](https://github.com/ExaDev/document-cli/commit/531893ff52be6731611599e47da3c013e4cf5cd0))
+* support the csv and svg formats documents.js 2.3.0 declares ([4bdee88](https://github.com/ExaDev/document-cli/commit/4bdee88221e1d33cd9534ee2f4a58d30d0eef5ec))
+
 # [2.0.0](https://github.com/ExaDev/document-cli/compare/v1.14.115...v2.0.0) (2026-08-17)
 
 
