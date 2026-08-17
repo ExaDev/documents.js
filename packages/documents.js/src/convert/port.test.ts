@@ -3,7 +3,7 @@ import { DOCUMENT_FORMATS, DocumentFormatSchema } from './port';
 
 describe('DocumentFormatSchema / DOCUMENT_FORMATS', () => {
   it('DOCUMENT_FORMATS lists every DocumentFormat member, matching the schema exactly', () => {
-    expect(DOCUMENT_FORMATS).toEqual(['docx', 'pptx', 'xlsx', 'odt', 'odp', 'ods', 'odg', 'odf', 'csv', 'markdown', 'pdf']);
+    expect(DOCUMENT_FORMATS).toEqual(['docx', 'pptx', 'xlsx', 'odt', 'odp', 'ods', 'odg', 'svg', 'odf', 'csv', 'markdown', 'pdf']);
     expect(DOCUMENT_FORMATS).toEqual(DocumentFormatSchema.options);
   });
 

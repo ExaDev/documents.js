@@ -12,6 +12,8 @@ import { openPptx } from '../edit/pptx/editor';
 import { decodeMarkdownText, encodeMarkdownText } from '../markdown/text';
 import { readOdgContent } from '../odf/odg/read';
 import { readOdsContent } from '../odf/ods/read';
+import { encodeSvgText } from '../svg/text';
+import { SvgMultiPageNotSpecifiedError } from '../svg/write';
 import { FRACTION_FORMULA, odfFormulaBytes } from '../test-support/odf';
 import { minimalOdgBytes } from '../test-support/odg';
 import { richMarkdownText } from '../test-support/markdown';
@@ -462,6 +464,9 @@ function fixtureBytes(format: DocumentFormat): Uint8Array<ArrayBuffer> {
       return minimalOdsBytes();
     case 'odg':
       return minimalOdgBytes();
+    case 'svg':
+      // A viewBox-sized root with a title, one filled rect, and one stroked path -- enough geometry that every svg-sourced sweep pair carries real vector content through the drawing variant, and a metadata title the round trips can genuinely recover.
+      return encodeSvgText('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 60"><title>Sweep fixture</title><rect x="10" y="10" width="80" height="40" fill="#ff0000"/><path d="M 10 10 L 90 50" stroke="#0000ff" fill="none"/></svg>');
     case 'xlsx':
       return odsToXlsx(minimalOdsBytes());
     case 'markdown':
@@ -496,6 +501,8 @@ function isValidOutput(format: DocumentFormat, bytes: Uint8Array<ArrayBuffer>): 
     case 'markdown':
     case 'csv':
       return bytes.length > 0;
+    case 'svg':
+      return new TextDecoder().decode(bytes).includes('<svg');
     default:
       return false;
   }
@@ -503,22 +510,33 @@ function isValidOutput(format: DocumentFormat, bytes: Uint8Array<ArrayBuffer>): 
 
 const ALL_SUPPORTED_PAIRS = createLocalDocumentConverter().conversions;
 
+// svg -> csv and svg -> markdown are the one pair family whose honest output is EMPTY: svg's read scope is vector graphics only (text is out of scope by design, reported as svg/text-unsupported), and neither csv nor markdown has any vector vocabulary, so there is literally nothing these two targets can carry. The conversion still runs and still produces a valid zero-record csv / zero-block markdown -- pinned here as the pair's own expected result, with every text-carrying source keeping the non-empty requirement unchanged.
+const EMPTY_OUTPUT_PAIRS = new Set(['svg->csv', 'svg->markdown']);
+
 describe.each(ALL_SUPPORTED_PAIRS.map((pair) => [`${pair.source}->${pair.target}`, pair] as const))('lightweight sweep: %s', (_label, pair) => {
   it('produces valid output of the target format without throwing', async () => {
     const converter = createLocalDocumentConverter();
     const sourceBytes = fixtureBytes(pair.source);
-    // A csv target whose intermediate content carries more than one sheet (odp -> csv reconstructs one sheet per slide) is a caller decision, not a conversion failure: without a selection the conversion refuses with CsvSheetNotSpecifiedError naming every sheet, and re-running it with { sheet: <one of those names> } produces the csv. Both halves of that contract are asserted here rather than swallowing the refusal. The async wrapper matters: the local converter throws synchronously inside convert() (its body runs the whole pipeline before constructing the return promise), so without it the refusal would bypass .catch entirely.
-    const run = async (options: { sheet?: string } = {}) =>
+    // A csv target whose intermediate content carries more than one sheet (odp -> csv reconstructs one sheet per slide) is a caller decision, not a conversion failure: without a selection the conversion refuses with CsvSheetNotSpecifiedError naming every sheet, and re-running it with { sheet: <one of those names> } produces the csv. An svg target whose intermediate content carries more than one page (a multi-page pdf, one drawing page per slide) holds the identical contract one variant over: the refusal names SvgMultiPageNotSpecifiedError, and re-running it with { page: <index> } produces the svg. Both halves of both contracts are asserted here rather than swallowing the refusal. The async wrapper matters: the local converter throws synchronously inside convert() (its body runs the whole pipeline before constructing the return promise), so without it the refusal would bypass .catch entirely.
+    const run = async (options: { sheet?: string; page?: number } = {}) =>
       converter.convert({ source: { format: pair.source, bytes: sourceBytes }, targetFormat: pair.target }, { signal: new AbortController().signal, ...options });
-    const result = await run().catch((error: unknown) => {
-      if (!(error instanceof CsvSheetNotSpecifiedError)) {
-        throw error;
-      }
-      expect(error.availableSheets.length).toBeGreaterThan(1);
-      return run({ sheet: error.availableSheets[0]! });
-    });
+    const result = await run()
+      .catch((error: unknown) => {
+        if (!(error instanceof CsvSheetNotSpecifiedError)) {
+          throw error;
+        }
+        expect(error.availableSheets.length).toBeGreaterThan(1);
+        return run({ sheet: error.availableSheets[0]! });
+      })
+      .catch((error: unknown) => {
+        if (!(error instanceof SvgMultiPageNotSpecifiedError)) {
+          throw error;
+        }
+        expect(error.pageCount).toBeGreaterThan(1);
+        return run({ page: 0 });
+      });
     expect(result.document.format).toBe(pair.target);
-    expect(isValidOutput(pair.target, result.document.bytes)).toBe(true);
+    expect(isValidOutput(pair.target, result.document.bytes) || (EMPTY_OUTPUT_PAIRS.has(edgeKey(pair)) && result.document.bytes.length === 0)).toBe(true);
   });
 });
 

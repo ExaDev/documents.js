@@ -18,7 +18,7 @@ describe('FORMAT_CAPABILITIES', () => {
     expect(new Set(byVariant.get('wordprocessing'))).toEqual(new Set(['docx', 'odt', 'markdown']));
     expect(new Set(byVariant.get('presentation'))).toEqual(new Set(['pptx', 'odp']));
     expect(new Set(byVariant.get('spreadsheet'))).toEqual(new Set(['xlsx', 'ods', 'csv']));
-    expect(new Set(byVariant.get('drawing'))).toEqual(new Set(['odg']));
+    expect(new Set(byVariant.get('drawing'))).toEqual(new Set(['odg', 'svg']));
   });
 
   it('marks xlsx and csv as the spreadsheet members with no layout path of their own (ods carries the layout edge)', () => {
@@ -28,6 +28,11 @@ describe('FORMAT_CAPABILITIES', () => {
     expect(FORMAT_CAPABILITIES.csv.hasLayoutPath).toBe(false);
     expect(FORMAT_CAPABILITIES.ods.variant).toBe('spreadsheet');
     expect(FORMAT_CAPABILITIES.ods.hasLayoutPath).toBe(true);
+  });
+
+  it('marks svg as the drawing family\'s plain-text member with its own layout path (a sibling of odg, not an ods-style composed member)', () => {
+    expect(FORMAT_CAPABILITIES.svg.variant).toBe('drawing');
+    expect(FORMAT_CAPABILITIES.svg.hasLayoutPath).toBe(true);
   });
 
   it('has no undefined-variant format other than pdf and odf reporting a layout path', () => {
@@ -102,6 +107,33 @@ describe('resolveCompositionPlan', () => {
     const plan = resolveCompositionPlan('pdf', 'csv');
     expect(plan).toBeDefined();
     expect(plan!.hops.map((h) => h.executor)).toEqual(['fromPdf', 'bridge']);
+  });
+
+  it('routes svg -> pdf as a single toPdf hop, since svg rides the drawing layout engine odg feeds', () => {
+    const plan = resolveCompositionPlan('svg', 'pdf');
+    expect(plan).toBeDefined();
+    expect(plan!.hops).toHaveLength(1);
+    expect(plan!.hops[0]!.executor).toBe('toPdf');
+    expect(plan!.hops[0]!.from).toBe('svg');
+    expect(plan!.hops[0]!.to).toBe('pdf');
+  });
+
+  it('routes pdf -> svg as a single fromPdf hop', () => {
+    const plan = resolveCompositionPlan('pdf', 'svg');
+    expect(plan).toBeDefined();
+    expect(plan!.hops).toHaveLength(1);
+    expect(plan!.hops[0]!.executor).toBe('fromPdf');
+    expect(plan!.hops[0]!.from).toBe('pdf');
+    expect(plan!.hops[0]!.to).toBe('svg');
+  });
+
+  it('routes svg -> odg as a single same-variant bridge hop (the drawing family\'s plain-text member)', () => {
+    const plan = resolveCompositionPlan('svg', 'odg');
+    expect(plan).toBeDefined();
+    expect(plan!.hops).toHaveLength(1);
+    expect(plan!.hops[0]!.executor).toBe('bridge');
+    expect(plan!.hops[0]!.from).toBe('svg');
+    expect(plan!.hops[0]!.to).toBe('odg');
   });
 
   it('composes csv -> markdown through ods and pdf (three hops), mirroring the xlsx -> markdown last-resort route', () => {
