@@ -1,3 +1,10 @@
+# [2.12.0](https://github.com/ExaDev/ooxml.js/compare/v2.11.33...v2.12.0) (2026-08-17)
+
+
+### Features
+
+* resolve docx headingLevel from w:outlineLvl through the style cascade ([d46fab7](https://github.com/ExaDev/ooxml.js/commit/d46fab7de87cf000119b9031379a53b3eef791a7))
+
 ## [2.11.33](https://github.com/ExaDev/ooxml.js/compare/v2.11.32...v2.11.33) (2026-08-17)
 
 ## [2.11.32](https://github.com/ExaDev/ooxml.js/compare/v2.11.31...v2.11.32) (2026-08-17)
