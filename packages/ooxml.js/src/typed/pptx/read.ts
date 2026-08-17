@@ -14,6 +14,7 @@ import { attr, childrenWithTag, elementsWithTag, resolveRelationships, rootEleme
 import { base64ToBytes } from '../../util/base64';
 import type { DefaultRunProperties, SlideInheritanceContext } from './inherit';
 import { readPlaceholderKey, readRunPropertiesFromElement, resolveDefaultRunProperties, resolvePlaceholderXfrm, resolveSlideInheritance } from './inherit';
+import { readChartTable } from './chart';
 
 // Package -> PptxDocument. Walks PresentationML directly: document order, placeholder inheritance, and theme resolution all matter for conversion fidelity in a way a flat text/shape-list projection doesn't preserve. Ported from documents.js's src/ooxml/pptx/read.ts.
 
@@ -25,6 +26,7 @@ export type PptxDocument = z.infer<typeof PptxDocumentSchema>;
 
 const PRESENTATION_PATH = 'ppt/presentation.xml';
 const TABLE_GRAPHIC_URI = 'http://schemas.openxmlformats.org/drawingml/2006/table';
+const CHART_GRAPHIC_URI = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
 
 function readSlideSize(presentationRoot: XmlElement | undefined): PageSize {
   const sldSz = presentationRoot === undefined ? undefined : childrenWithTag(presentationRoot, 'p:sldSz')[0];
@@ -310,7 +312,16 @@ function readTable(tbl: XmlElement, context: SlideInheritanceContext, slideRels:
   return { kind: 'table', rows, columnWidthsPt };
 }
 
-function readGraphicFrameShape(gf: XmlElement, context: SlideInheritanceContext, slideRels: ReadonlyMap<string, Relationship>, parentTransform: GroupChildTransform | undefined): ContentShape | undefined {
+// Resolves an r:id found inside a graphic frame's a:graphicData child element (a chart reference's part, an OLE object's fallback image, ...) through the slide's own relationships to the target part's root element -- undefined when the id, relationship, part, or XML root is missing anywhere along the chain, leaving the frame's geometry with empty content.
+function relatedPartRoot(rId: string | undefined, slideRels: ReadonlyMap<string, Relationship>, pkg: Package): XmlElement | undefined {
+  if (rId === undefined) {
+    return undefined;
+  }
+  const rel = slideRels.get(rId);
+  return rel === undefined ? undefined : rootElement(pkg.parts[rel.target]);
+}
+
+function readGraphicFrameShape(gf: XmlElement, context: SlideInheritanceContext, slideRels: ReadonlyMap<string, Relationship>, pkg: Package, parentTransform: GroupChildTransform | undefined): ContentShape | undefined {
   // p:graphicFrame's own transform is a direct p:xfrm child (not nested under p:spPr, unlike p:sp/p:pic) -- verified against ECMA-376's CT_GraphicalObjectFrame element sequence.
   const xfrm = readXfrm(childrenWithTag(gf, 'p:xfrm')[0]);
   if (xfrm === undefined) {
@@ -326,8 +337,18 @@ function readGraphicFrameShape(gf: XmlElement, context: SlideInheritanceContext,
   const graphicData = graphic === undefined ? undefined : childrenWithTag(graphic, 'a:graphicData')[0];
   const uri = graphicData === undefined ? undefined : attr(graphicData, 'uri');
   const tbl = uri === TABLE_GRAPHIC_URI && graphicData !== undefined ? childrenWithTag(graphicData, 'a:tbl')[0] : undefined;
-  // A non-table graphic frame (chart/SmartArt/OLE) keeps its geometry with empty content -- out of scope beyond their raster mc:Fallback, which lives outside a:graphicData entirely and isn't reached from here.
-  const blocks: ContentBlock[] = tbl === undefined ? [] : [readTable(tbl, context, slideRels)];
+  let blocks: ContentBlock[];
+  if (tbl !== undefined) {
+    blocks = [readTable(tbl, context, slideRels)];
+  } else if (uri === CHART_GRAPHIC_URI && graphicData !== undefined) {
+    const chartRef = childrenWithTag(graphicData, 'c:chart')[0];
+    const chartRoot = relatedPartRoot(chartRef === undefined ? undefined : attr(chartRef, 'r:id'), slideRels, pkg);
+    const chartTable = chartRoot === undefined ? undefined : readChartTable(chartRoot, frame);
+    blocks = chartTable === undefined ? [] : [chartTable];
+  } else {
+    // Any other graphic frame (SmartArt, an OLE object) keeps its geometry with empty content.
+    blocks = [];
+  }
   return { name: shapeName(gf), frame, rotationDeg, ...NO_TEXT_BODY_EXTRAS, blocks };
 }
 
@@ -348,7 +369,7 @@ function walkShapeTreeChildren(children: readonly XmlNode[], parentTransform: Gr
         out.push(shape);
       }
     } else if (node.tag === 'p:graphicFrame') {
-      const shape = readGraphicFrameShape(node, context, slideRels, parentTransform);
+      const shape = readGraphicFrameShape(node, context, slideRels, pkg, parentTransform);
       if (shape !== undefined) {
         out.push(shape);
       }

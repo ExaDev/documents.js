@@ -36,6 +36,7 @@ const THEME_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relatio
 const IMAGE_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image';
 const HYPERLINK_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink';
 const NOTES_SLIDE_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide';
+const CHART_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart';
 
 function rels(entries: { id: string; type: string; target: string; external?: boolean }[]): XmlElement {
   return el(
@@ -528,5 +529,108 @@ describe('readPptx: notes', () => {
   it('is an empty string for a slide with no notesSlide relationship', () => {
     const doc = readPptx(buildFixturePackage());
     expect(doc.slides[0]?.notes).toBe('');
+  });
+});
+
+// A chart graphic frame's c:chart child resolves through the slide's own relationships to a chart part, whose cached series/category model reads as the same table block shape an a:tbl frame produces (readChartTable in src/typed/pptx/chart.ts). Series 1 is named through a cached c:strRef and stops at two categories; series 2 is named through an inline c:v literal and carries a third category series 1 never labels -- exercising both name forms and the category union.
+function chartFixturePackage(): Package {
+  const revenue = el('c:ser', {}, [
+    el('c:tx', {}, [el('c:strRef', {}, [el('c:f', {}, [txt('Sheet1!$B$1')]), el('c:strCache', {}, [el('c:ptCount', { val: '1' }), el('c:pt', { idx: '0' }, [el('c:v', {}, [txt('Revenue')])])])])]),
+    el('c:cat', {}, [el('c:strRef', {}, [el('c:strCache', {}, [el('c:ptCount', { val: '2' }), el('c:pt', { idx: '0' }, [el('c:v', {}, [txt('Q1')])]), el('c:pt', { idx: '1' }, [el('c:v', {}, [txt('Q2')])])])])]),
+    el('c:val', {}, [el('c:numRef', {}, [el('c:numCache', {}, [el('c:ptCount', { val: '2' }), el('c:pt', { idx: '0' }, [el('c:v', {}, [txt('8.5')])]), el('c:pt', { idx: '1' }, [el('c:v', {}, [txt('12')])])])])]),
+  ]);
+  const cost = el('c:ser', {}, [
+    el('c:tx', {}, [el('c:v', {}, [txt('Cost')])]),
+    el('c:cat', {}, [el('c:strRef', {}, [el('c:strCache', {}, [el('c:ptCount', { val: '3' }), el('c:pt', { idx: '0' }, [el('c:v', {}, [txt('Q1')])]), el('c:pt', { idx: '1' }, [el('c:v', {}, [txt('Q2')])]), el('c:pt', { idx: '2' }, [el('c:v', {}, [txt('Q3')])])])])]),
+    el('c:val', {}, [el('c:numRef', {}, [el('c:numCache', {}, [el('c:ptCount', { val: '3' }), el('c:pt', { idx: '0' }, [el('c:v', {}, [txt('4')])]), el('c:pt', { idx: '1' }, [el('c:v', {}, [txt('5')])]), el('c:pt', { idx: '2' }, [el('c:v', {}, [txt('6')])])])])]),
+  ]);
+  const chartSpace = el('c:chartSpace', {}, [el('c:chart', {}, [el('c:plotArea', {}, [el('c:barChart', {}, [revenue, cost])])])]);
+
+  const chartFrame = el('p:graphicFrame', {}, [
+    el('p:nvGraphicFramePr', {}, [el('p:cNvPr', { id: '2', name: 'Chart 1' })]),
+    el('p:xfrm', {}, [el('a:off', { x: '914400', y: '1828800' }), el('a:ext', { cx: '4572000', cy: '2743200' })]),
+    el('a:graphic', {}, [el('a:graphicData', { uri: 'http://schemas.openxmlformats.org/drawingml/2006/chart' }, [el('c:chart', { 'r:id': 'rIdChart' })])]),
+  ]);
+  const slide = el('p:sld', {}, [el('p:cSld', {}, [el('p:spTree', {}, [chartFrame])])]);
+  const presentation = el('p:presentation', {}, [el('p:sldIdLst', {}, [el('p:sldId', { id: '256', 'r:id': 'rId1' })])]);
+  const presentationRels = rels([{ id: 'rId1', type: SLIDE_REL, target: 'slides/slide1.xml' }]);
+  const slideRels = rels([{ id: 'rIdChart', type: CHART_REL, target: '../charts/chart1.xml' }]);
+
+  return {
+    parts: {
+      'ppt/presentation.xml': { kind: 'xml', nodes: [presentation] },
+      'ppt/_rels/presentation.xml.rels': { kind: 'xml', nodes: [presentationRels] },
+      'ppt/slides/slide1.xml': { kind: 'xml', nodes: [slide] },
+      'ppt/slides/_rels/slide1.xml.rels': { kind: 'xml', nodes: [slideRels] },
+      'ppt/charts/chart1.xml': { kind: 'xml', nodes: [chartSpace] },
+    },
+  };
+}
+
+function cellText(block: ContentBlock | undefined, row: number, column: number): string | undefined {
+  if (block?.kind !== 'table') {
+    throw new Error('expected a table block');
+  }
+  return asParagraph(block.rows[row]?.cells[column]?.blocks[0]).runs[0]?.text;
+}
+
+describe('readPptx: chart graphic frames', () => {
+  it('reads the chart part\'s cached series/category model as a table block', () => {
+    const doc = readPptx(chartFixturePackage());
+    const chartShape = doc.slides[0]?.shapes.find((s) => s.name === 'Chart 1');
+    const table = asTable(chartShape?.blocks[0]);
+    // Header row: empty corner cell over the category column, then one column per series.
+    expect(table.rows[0]?.cells[0]?.blocks).toEqual([]);
+    expect(cellText(table, 0, 1)).toBe('Revenue');
+    expect(cellText(table, 0, 2)).toBe('Cost');
+  });
+
+  it('reads one row per category index, in index order, with each series\' cached value in its own column', () => {
+    const doc = readPptx(chartFixturePackage());
+    const chartShape = doc.slides[0]?.shapes.find((s) => s.name === 'Chart 1');
+    const table = asTable(chartShape?.blocks[0]);
+    expect(cellText(table, 1, 0)).toBe('Q1');
+    expect(cellText(table, 1, 1)).toBe('8.5');
+    expect(cellText(table, 1, 2)).toBe('4');
+    expect(cellText(table, 3, 0)).toBe('Q3');
+    // A category only series 2 labels still gets its row; series 1 has no cached value there, which reads as an empty cell.
+    expect(table.rows[3]?.cells[1]?.blocks).toEqual([]);
+    expect(cellText(table, 3, 2)).toBe('6');
+  });
+
+  it('splits the frame\'s own width evenly across the category and series columns', () => {
+    const doc = readPptx(chartFixturePackage());
+    const chartShape = doc.slides[0]?.shapes.find((s) => s.name === 'Chart 1');
+    expect(asTable(chartShape?.blocks[0]).columnWidthsPt).toEqual([120, 120, 120]);
+  });
+
+  it('keeps the frame\'s geometry with empty content when the chart reference resolves to no readable chart', () => {
+    // The c:chart r:id points at a relationship the slide does not carry.
+    const brokenFrame = el('p:graphicFrame', {}, [
+      el('p:nvGraphicFramePr', {}, [el('p:cNvPr', { id: '2', name: 'Chart 1' })]),
+      el('p:xfrm', {}, [el('a:off', { x: '914400', y: '1828800' }), el('a:ext', { cx: '4572000', cy: '2743200' })]),
+      el('a:graphic', {}, [el('a:graphicData', { uri: 'http://schemas.openxmlformats.org/drawingml/2006/chart' }, [el('c:chart', { 'r:id': 'rIdMissing' })])]),
+    ]);
+    const slide = el('p:sld', {}, [el('p:cSld', {}, [el('p:spTree', {}, [brokenFrame])])]);
+    const presentation = el('p:presentation', {}, [el('p:sldIdLst', {}, [el('p:sldId', { id: '256', 'r:id': 'rId1' })])]);
+    const pkg: Package = {
+      parts: {
+        'ppt/presentation.xml': { kind: 'xml', nodes: [presentation] },
+        'ppt/_rels/presentation.xml.rels': { kind: 'xml', nodes: [rels([{ id: 'rId1', type: SLIDE_REL, target: 'slides/slide1.xml' }])] },
+        'ppt/slides/slide1.xml': { kind: 'xml', nodes: [slide] },
+      },
+    };
+    const doc = readPptx(pkg);
+    const chartShape = doc.slides[0]?.shapes.find((s) => s.name === 'Chart 1');
+    expect(chartShape?.frame).toEqual({ xPt: 72, yPt: 144, widthPt: 360, heightPt: 216 });
+    expect(chartShape?.blocks).toEqual([]);
+  });
+
+  it('assigns sourcePath into the chart table\'s cells', () => {
+    const doc = readPptx(chartFixturePackage());
+    const chartShape = doc.slides[0]?.shapes.find((s) => s.name === 'Chart 1');
+    const table = asTable(chartShape?.blocks[0]);
+    expect(table.sourcePath).toBe('slides[0].shapes[0].blocks[0]');
+    expect(asParagraph(table.rows[1]?.cells[1]?.blocks[0]).sourcePath).toBe('slides[0].shapes[0].blocks[0].rows[1].cells[1].blocks[0]');
   });
 });
