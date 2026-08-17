@@ -7,6 +7,7 @@ const require_emit_front_matter = require("./front-matter.cjs");
 const require_emit_inline = require("./inline.cjs");
 const require_emit_image = require("./image.cjs");
 const require_emit_table = require("./table.cjs");
+let document_schema_js = require("document-schema.js");
 //#region src/emit/emit.ts
 const MAX_SETEXT_LEVEL = 2;
 const SETEXT_LEVEL_1_CHAR = "=";
@@ -56,15 +57,12 @@ function renderParagraphBody(paragraph, context) {
 	if (paragraph.styleId === "MathBlock") return `$$\n${paragraph.runs.map((run) => run.text).join("")}\n$$`;
 	const headingLevel = paragraph.styleId === void 0 ? void 0 : require_shared_style_constants.parseHeadingStyleId(paragraph.styleId);
 	if (headingLevel !== void 0) {
-		let level = headingLevel;
-		if (level > 6) {
-			context.sink({
-				code: require_diagnostics_diagnostics.MarkdownDiagnosticCodes.HEADING_LEVEL_CLAMPED,
-				severity: "info",
-				message: `heading level ${String(level)} exceeds ATX's own six-"#" ceiling and is clamped to ${String(6)}`
-			});
-			level = 6;
-		}
+		const level = (0, document_schema_js.clampHeadingLevel)(headingLevel);
+		if (level !== headingLevel) context.sink({
+			code: require_diagnostics_diagnostics.MarkdownDiagnosticCodes.HEADING_LEVEL_CLAMPED,
+			severity: "info",
+			message: `heading level ${String(headingLevel)} exceeds ATX's own six-"#" ceiling and is clamped to ${String(level)}`
+		});
 		const text = require_emit_inline.emitRuns(paragraph.runs, context);
 		if (context.headingStyle === "setext" && level <= MAX_SETEXT_LEVEL) return renderSetextHeading(level, text);
 		return `${"#".repeat(level)} ${text}`;

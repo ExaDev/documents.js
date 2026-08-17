@@ -43,12 +43,16 @@ describe('document envelope', () => {
 });
 
 describe('headings', () => {
-  it('maps an ATX heading level to a "Heading{N}" styleId', () => {
-    expect(paragraph(blocks('### foo')[0]).styleId).toBe('Heading3');
+  it('maps an ATX heading level to a "Heading{N}" styleId plus the canonical headingLevel', () => {
+    const heading = paragraph(blocks('### foo')[0]);
+    expect(heading.styleId).toBe('Heading3');
+    expect(heading.headingLevel).toBe(3);
   });
 
   it('maps a setext heading the same way', () => {
-    expect(paragraph(blocks('foo\n===')[0]).styleId).toBe('Heading1');
+    const heading = paragraph(blocks('foo\n===')[0]);
+    expect(heading.styleId).toBe('Heading1');
+    expect(heading.headingLevel).toBe(1);
   });
 });
 
@@ -117,6 +121,7 @@ describe('blockquotes', () => {
   it('keeps a heading inside a quote styled as Heading{N}, not Quote', () => {
     const block = paragraph(blocks('> # foo')[0]);
     expect(block.styleId).toBe('Heading1');
+    expect(block.headingLevel).toBe(1);
     expect(block.indentLeftPt).toBe(36);
   });
 });

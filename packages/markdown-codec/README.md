@@ -168,7 +168,7 @@ Every construct `src/lower`/`src/emit` cannot represent losslessly is a document
 - **`md/image-unresolved`** — no resolver, `undefined` return, or non-PNG/JPEG bytes degrades to alt-text run.
 - **`md/raw-html-preserved-as-text` / `md/raw-html-dropped`** — raw HTML kept as literal text (default) or dropped; never interpreted.
 - **`md/front-matter-key-unmapped`** — no YAML/TOML engine; only five known `LayoutMetadata` keys recognised.
-- **`md/heading-level-clamped`** — styleId beyond `Heading6` (from another format) clamps to level 6.
+- **`md/heading-level-clamped`** — styleId beyond `Heading6` (from another format) clamps to level 6 via document-schema.js's shared `clampHeadingLevel()`.
 - **`md/adjacent-links-merged`** / **`md/code-span-as-monospace-run`** — same-destination adjacent links merge; monospace runs emit as code spans.
 - **`md/paragraph-indent-dropped`** — `indentLeftPt` without a recognised styleId; indent dropped, paragraph renders.
 - **`md/list-numid-fallback`** — a foreign `numId` falls back to a plain bullet list.

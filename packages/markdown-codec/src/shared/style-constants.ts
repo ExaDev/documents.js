@@ -7,7 +7,7 @@ export function headingStyleId(level: number): string {
   return `${HEADING_STYLE_PREFIX}${String(level)}`;
 }
 
-// ATX/setext both cap at six `#`/two underline characters -- the ceiling src/emit/emit.ts clamps a "Heading{N}" styleId back down to (MarkdownDiagnosticCodes.HEADING_LEVEL_CLAMPED) when N exceeds it.
+// ATX/setext both cap at six `#`/two underline characters -- the ceiling of this vocabulary's own "Heading{N}" spelling. Kept exported so a sibling package building or validating heading styleIds against this vocabulary has the same bound; src/emit/emit.ts's own write-side clamping goes through document-schema.js's clampHeadingLevel (the same 1-6 range, defined once at the schema) rather than through this constant.
 export const MAX_HEADING_STYLE_LEVEL = 6;
 
 const HEADING_STYLE_ID_PATTERN = /^Heading([0-9]+)$/;

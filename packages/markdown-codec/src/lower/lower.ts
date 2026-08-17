@@ -1,7 +1,7 @@
 // The AST -> ContentDocument lowering stage: this package's own counterpart to ooxml.js's readDocx/readPptx and odf.js's readOdt/readOdp -- a thin adapter from parseMarkdown's own AST onto document-schema.js's shared ContentDocument pivot, not a second parser. Every mapping below, and the stable diagnostic code its own gap is recorded under (MarkdownDiagnosticCodes, src/diagnostics/diagnostics.ts), mirrors this package's own construct-by-construct design table:
 //
 //  - document envelope -> one ContentSection, A4 + 1in default page geometry, overridable via ReadMarkdownOptions.pageSize/margins -- MarkdownDiagnosticCodes.INVENTED_PAGE_GEOMETRY (markdown has no page concept of its own; this ALWAYS fires, once per lowered document).
-//  - ATX/setext heading -> styleId "Heading1".."Heading6", mirroring odf.js's readOdt convention exactly (src/shared/style-constants.ts's headingStyleId).
+//  - ATX/setext heading -> styleId "Heading1".."Heading6", mirroring odf.js's readOdt convention exactly (src/shared/style-constants.ts's headingStyleId), plus the canonical ContentParagraph.headingLevel document-schema.js defines -- the level number itself (always 1-6 here: ATX/setext cap at six), so a consumer that never learned this package's own styleId spelling still knows the heading's depth.
 //  - emphasis/strong/strikethrough -> italic/bold/strike ContentRun fields; links/autolinks -> ContentRun.hyperlink; code spans -> a Courier New run; hard/soft breaks -> literal '\n'/' ' -- all in src/lower/inline.ts, alongside MarkdownDiagnosticCodes.NESTED_EMPHASIS_FLATTENED and LINK_TITLE_DROPPED.
 //  - fenced/indented code block -> one paragraph, styleId 'CodeBlock', '\n'-joined literal, monospace -- MarkdownDiagnosticCodes.CODE_BLOCK_INFO_STRING_DROPPED when a fence's own info string is non-empty.
 //  - blockquote -> styleId 'Quote' (a real Word built-in style name) plus indentLeftPt per nesting level; a heading inside a quote keeps its own Heading{N} styleId (decorateParagraph below only applies 'Quote' when nothing more specific already set a styleId) -- MarkdownDiagnosticCodes.BLOCKQUOTE_NESTED_DEPTH beyond level 1.
@@ -65,7 +65,7 @@ function decorateParagraph(paragraph: ContentParagraph, context: BlockLowerConte
 }
 
 function lowerHeading(node: MarkdownHeadingNode, context: BlockLowerContext): ContentBlock[] {
-  const paragraph: ContentParagraph = { kind: 'paragraph', runs: lowerInlineNodes(node.children, inlineContext(context)), styleId: headingStyleId(node.level) };
+  const paragraph: ContentParagraph = { kind: 'paragraph', runs: lowerInlineNodes(node.children, inlineContext(context)), styleId: headingStyleId(node.level), headingLevel: node.level };
   return [decorateParagraph(paragraph, context)];
 }
 

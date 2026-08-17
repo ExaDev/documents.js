@@ -36,7 +36,8 @@ function lowerHeading(node, context) {
 	return [decorateParagraph({
 		kind: "paragraph",
 		runs: require_lower_inline.lowerInlineNodes(node.children, inlineContext(context)),
-		styleId: require_shared_style_constants.headingStyleId(node.level)
+		styleId: require_shared_style_constants.headingStyleId(node.level),
+		headingLevel: node.level
 	}, context)];
 }
 function lowerParagraph(node, context) {

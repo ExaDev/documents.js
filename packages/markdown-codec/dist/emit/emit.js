@@ -6,6 +6,7 @@ import { emitFrontMatter } from "./front-matter.js";
 import { emitRuns } from "./inline.js";
 import { emitImage } from "./image.js";
 import { emitTable } from "./table.js";
+import { clampHeadingLevel } from "document-schema.js";
 //#region src/emit/emit.ts
 const MAX_SETEXT_LEVEL = 2;
 const SETEXT_LEVEL_1_CHAR = "=";
@@ -55,15 +56,12 @@ function renderParagraphBody(paragraph, context) {
 	if (paragraph.styleId === "MathBlock") return `$$\n${paragraph.runs.map((run) => run.text).join("")}\n$$`;
 	const headingLevel = paragraph.styleId === void 0 ? void 0 : parseHeadingStyleId(paragraph.styleId);
 	if (headingLevel !== void 0) {
-		let level = headingLevel;
-		if (level > 6) {
-			context.sink({
-				code: MarkdownDiagnosticCodes.HEADING_LEVEL_CLAMPED,
-				severity: "info",
-				message: `heading level ${String(level)} exceeds ATX's own six-"#" ceiling and is clamped to ${String(6)}`
-			});
-			level = 6;
-		}
+		const level = clampHeadingLevel(headingLevel);
+		if (level !== headingLevel) context.sink({
+			code: MarkdownDiagnosticCodes.HEADING_LEVEL_CLAMPED,
+			severity: "info",
+			message: `heading level ${String(headingLevel)} exceeds ATX's own six-"#" ceiling and is clamped to ${String(level)}`
+		});
 		const text = emitRuns(paragraph.runs, context);
 		if (context.headingStyle === "setext" && level <= MAX_SETEXT_LEVEL) return renderSetextHeading(level, text);
 		return `${"#".repeat(level)} ${text}`;

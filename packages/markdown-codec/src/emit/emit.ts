@@ -1,6 +1,6 @@
 // ContentDocument -> markdown text: writeMarkdown's own build-side half, the structural inverse of src/lower/lower.ts. Every mapping mirrors that module's own top-of-file table in reverse:
 //
-//  - "Heading{1..6}" styleId -> ATX heading, "#" repeated to the level -- MarkdownDiagnosticCodes.HEADING_LEVEL_CLAMPED when the level exceeds 6 (a markdown-produced document never carries one, but ContentDocument is a shared cross-format pivot; a paragraph from, say, odt's own unbounded readOutlineLevel can).
+//  - "Heading{1..6}" styleId -> ATX heading, "#" repeated to the level, clamped through document-schema.js's own shared clampHeadingLevel (one heading-range clamp across the ecosystem instead of a private copy here) -- MarkdownDiagnosticCodes.HEADING_LEVEL_CLAMPED when the level exceeds 6 (a markdown-produced document never carries one, but ContentDocument is a shared cross-format pivot; a paragraph from, say, odt's own unbounded readOutlineLevel can).
 //  - 'CodeBlock'/'HorizontalRule'/'HTMLPreformatted' styleId -> a fenced code block / a thematic break / literal, unescaped text.
 //  - 'Quote' styleId, or ANY of the four styleIds above while indentLeftPt is also set (a heading/code-block/rule/preformatted-HTML block that sat inside a blockquote when this package's own src/lower produced it) -> '> ' repeated per recovered nesting level (Math.round(indentLeftPt / QUOTE_INDENT_PT)) prefixed to every line of the block's own rendering. A paragraph with indentLeftPt set but none of these five styleIds is a genuine cross-format ambiguity this package cannot resolve (is it a quote, or just some other format's own paragraph indentation?) -- MarkdownDiagnosticCodes.PARAGRAPH_INDENT_DROPPED; the indent is dropped, the paragraph still renders.
 //  - ContentListMembership -> a bullet/ordered/task-list item, decoded from its own numId string (src/shared/list-id.ts) -- MarkdownDiagnosticCodes.LIST_NUMID_FALLBACK for a numId this package never minted itself (falls back to a plain, tight, non-task bullet, per that module's own documented cross-format contract).
@@ -11,6 +11,7 @@
 // ContentPageBreak and ContentEmbeddedObjectBlock have no markdown representation of any kind (this package's own src/lower never produces either, but ContentDocument is a shared pivot a caller can construct directly) -- both are silently dropped, contributing no output at all; this is not one of this package's own named mapping gaps (there was never a markdown construct to lose fidelity from), so it carries no diagnostic code.
 
 import type { ContentBlock, ContentDocument, ContentParagraph } from 'document-schema.js';
+import { clampHeadingLevel } from 'document-schema.js';
 import { MarkdownUnsupportedDocumentKindError } from '../diagnostics/diagnostics';
 import type { MarkdownDiagnosticSink } from '../diagnostics/diagnostics';
 import { MarkdownDiagnosticCodes, NOOP_MARKDOWN_DIAGNOSTIC_SINK } from '../diagnostics/diagnostics';
@@ -18,7 +19,7 @@ import { DEFAULT_BULLET_LIST_MARKER, DEFAULT_CODE_FENCE_CHAR, DEFAULT_EMPHASIS_M
 import type { MarkdownHeadingStyle, WriteMarkdownOptions } from '../options/options';
 import type { ListNumIdInfo } from '../shared/list-id';
 import { parseListNumId } from '../shared/list-id';
-import { CODE_BLOCK_STYLE_ID, HORIZONTAL_RULE_STYLE_ID, HTML_PREFORMATTED_STYLE_ID, MATH_BLOCK_STYLE_ID, MAX_HEADING_STYLE_LEVEL, QUOTE_INDENT_PT, QUOTE_STYLE_ID, TASK_CHECKBOX_CHECKED, TASK_CHECKBOX_UNCHECKED, parseHeadingStyleId } from '../shared/style-constants';
+import { CODE_BLOCK_STYLE_ID, HORIZONTAL_RULE_STYLE_ID, HTML_PREFORMATTED_STYLE_ID, MATH_BLOCK_STYLE_ID, QUOTE_INDENT_PT, QUOTE_STYLE_ID, TASK_CHECKBOX_CHECKED, TASK_CHECKBOX_UNCHECKED, parseHeadingStyleId } from '../shared/style-constants';
 import { emitFrontMatter } from './front-matter';
 import { emitImage } from './image';
 import type { InlineEmitContext } from './inline';
@@ -109,10 +110,9 @@ function renderParagraphBody(paragraph: ContentParagraph, context: EmitContext):
   }
   const headingLevel = paragraph.styleId === undefined ? undefined : parseHeadingStyleId(paragraph.styleId);
   if (headingLevel !== undefined) {
-    let level = headingLevel;
-    if (level > MAX_HEADING_STYLE_LEVEL) {
-      context.sink({ code: MarkdownDiagnosticCodes.HEADING_LEVEL_CLAMPED, severity: 'info', message: `heading level ${String(level)} exceeds ATX's own six-"#" ceiling and is clamped to ${String(MAX_HEADING_STYLE_LEVEL)}` });
-      level = MAX_HEADING_STYLE_LEVEL;
+    const level = clampHeadingLevel(headingLevel);
+    if (level !== headingLevel) {
+      context.sink({ code: MarkdownDiagnosticCodes.HEADING_LEVEL_CLAMPED, severity: 'info', message: `heading level ${String(headingLevel)} exceeds ATX's own six-"#" ceiling and is clamped to ${String(level)}` });
     }
     const text = emitRuns(paragraph.runs, context);
     if (context.headingStyle === 'setext' && level <= MAX_SETEXT_LEVEL) {

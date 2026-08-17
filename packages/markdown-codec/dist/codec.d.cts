@@ -3,7 +3,7 @@ import { z } from "zod";
 declare const MarkdownBytesSchema: z.ZodCustom<Uint8Array<ArrayBuffer>, Uint8Array<ArrayBuffer>>;
 declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uint8Array<ArrayBuffer>>, z.ZodDiscriminatedUnion<[z.ZodObject<{
   kind: z.ZodLiteral<"wordprocessing">;
-  formatVersion: z.ZodLiteral<2>;
+  formatVersion: z.ZodLiteral<3>;
   metadata: z.ZodObject<{
     title: z.ZodOptional<z.ZodString>;
     author: z.ZodOptional<z.ZodString>;
@@ -29,7 +29,7 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
   }, z.core.$strip>>;
 }, z.core.$strip>, z.ZodObject<{
   kind: z.ZodLiteral<"presentation">;
-  formatVersion: z.ZodLiteral<2>;
+  formatVersion: z.ZodLiteral<3>;
   metadata: z.ZodObject<{
     title: z.ZodOptional<z.ZodString>;
     author: z.ZodOptional<z.ZodString>;
@@ -62,13 +62,20 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
       lineSpacingReduction: z.ZodOptional<z.ZodNumber>;
       paintOrder: z.ZodOptional<z.ZodNumber>;
       sourcePath: z.ZodOptional<z.ZodString>;
+      frames: z.ZodOptional<z.ZodArray<z.ZodObject<{
+        pageIndex: z.ZodNumber;
+        xPt: z.ZodNumber;
+        yPt: z.ZodNumber;
+        widthPt: z.ZodNumber;
+        heightPt: z.ZodNumber;
+      }, z.core.$strip>>>;
       blocks: z.ZodArray<z.ZodCustom<import("document-schema.js").ContentBlock, import("document-schema.js").ContentBlock>>;
     }, z.core.$strip>>;
     notes: z.ZodString;
   }, z.core.$strip>>;
 }, z.core.$strip>, z.ZodObject<{
   kind: z.ZodLiteral<"spreadsheet">;
-  formatVersion: z.ZodLiteral<2>;
+  formatVersion: z.ZodLiteral<3>;
   metadata: z.ZodObject<{
     title: z.ZodOptional<z.ZodString>;
     author: z.ZodOptional<z.ZodString>;
@@ -135,6 +142,13 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
         }, z.core.$strip>>;
         hyperlink: z.ZodOptional<z.ZodString>;
         sourcePath: z.ZodOptional<z.ZodString>;
+        frames: z.ZodOptional<z.ZodArray<z.ZodObject<{
+          pageIndex: z.ZodNumber;
+          xPt: z.ZodNumber;
+          yPt: z.ZodNumber;
+          widthPt: z.ZodNumber;
+          heightPt: z.ZodNumber;
+        }, z.core.$strip>>>;
       }, z.core.$strip>>>;
       colSpan: z.ZodOptional<z.ZodNumber>;
       rowSpan: z.ZodOptional<z.ZodNumber>;
@@ -213,6 +227,13 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
         middle: "middle";
       }>>;
       sourcePath: z.ZodOptional<z.ZodString>;
+      frames: z.ZodOptional<z.ZodArray<z.ZodObject<{
+        pageIndex: z.ZodNumber;
+        xPt: z.ZodNumber;
+        yPt: z.ZodNumber;
+        widthPt: z.ZodNumber;
+        heightPt: z.ZodNumber;
+      }, z.core.$strip>>>;
     }, z.core.$strip>>;
     columns: z.ZodArray<z.ZodObject<{
       index: z.ZodNumber;
@@ -235,6 +256,13 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
       heightPt: z.ZodNumber;
       altText: z.ZodOptional<z.ZodString>;
       sourcePath: z.ZodOptional<z.ZodString>;
+      frames: z.ZodOptional<z.ZodArray<z.ZodObject<{
+        pageIndex: z.ZodNumber;
+        xPt: z.ZodNumber;
+        yPt: z.ZodNumber;
+        widthPt: z.ZodNumber;
+        heightPt: z.ZodNumber;
+      }, z.core.$strip>>>;
       anchorRow: z.ZodNumber;
       anchorColumn: z.ZodNumber;
       offsetXPt: z.ZodNumber;
@@ -285,7 +313,7 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
   }, z.core.$strip>>;
 }, z.core.$strip>, z.ZodObject<{
   kind: z.ZodLiteral<"drawing">;
-  formatVersion: z.ZodLiteral<2>;
+  formatVersion: z.ZodLiteral<3>;
   metadata: z.ZodObject<{
     title: z.ZodOptional<z.ZodString>;
     author: z.ZodOptional<z.ZodString>;
@@ -318,6 +346,13 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
       lineSpacingReduction: z.ZodOptional<z.ZodNumber>;
       paintOrder: z.ZodOptional<z.ZodNumber>;
       sourcePath: z.ZodOptional<z.ZodString>;
+      frames: z.ZodOptional<z.ZodArray<z.ZodObject<{
+        pageIndex: z.ZodNumber;
+        xPt: z.ZodNumber;
+        yPt: z.ZodNumber;
+        widthPt: z.ZodNumber;
+        heightPt: z.ZodNumber;
+      }, z.core.$strip>>>;
       blocks: z.ZodArray<z.ZodCustom<import("document-schema.js").ContentBlock, import("document-schema.js").ContentBlock>>;
     }, z.core.$strip>>;
     vectors: z.ZodArray<z.ZodDiscriminatedUnion<[z.ZodObject<{
@@ -350,6 +385,13 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
       }, z.core.$strip>>;
       paintOrder: z.ZodOptional<z.ZodNumber>;
       sourcePath: z.ZodOptional<z.ZodString>;
+      frames: z.ZodOptional<z.ZodArray<z.ZodObject<{
+        pageIndex: z.ZodNumber;
+        xPt: z.ZodNumber;
+        yPt: z.ZodNumber;
+        widthPt: z.ZodNumber;
+        heightPt: z.ZodNumber;
+      }, z.core.$strip>>>;
     }, z.core.$strip>, z.ZodObject<{
       kind: z.ZodLiteral<"ellipse">;
       frame: z.ZodObject<{
@@ -380,6 +422,13 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
       }, z.core.$strip>>;
       paintOrder: z.ZodOptional<z.ZodNumber>;
       sourcePath: z.ZodOptional<z.ZodString>;
+      frames: z.ZodOptional<z.ZodArray<z.ZodObject<{
+        pageIndex: z.ZodNumber;
+        xPt: z.ZodNumber;
+        yPt: z.ZodNumber;
+        widthPt: z.ZodNumber;
+        heightPt: z.ZodNumber;
+      }, z.core.$strip>>>;
     }, z.core.$strip>, z.ZodObject<{
       kind: z.ZodLiteral<"line">;
       from: z.ZodObject<{
@@ -406,6 +455,13 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
       }, z.core.$strip>;
       paintOrder: z.ZodOptional<z.ZodNumber>;
       sourcePath: z.ZodOptional<z.ZodString>;
+      frames: z.ZodOptional<z.ZodArray<z.ZodObject<{
+        pageIndex: z.ZodNumber;
+        xPt: z.ZodNumber;
+        yPt: z.ZodNumber;
+        widthPt: z.ZodNumber;
+        heightPt: z.ZodNumber;
+      }, z.core.$strip>>>;
     }, z.core.$strip>, z.ZodObject<{
       kind: z.ZodLiteral<"path">;
       frame: z.ZodObject<{
@@ -468,11 +524,18 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
       }, z.core.$strip>>;
       paintOrder: z.ZodOptional<z.ZodNumber>;
       sourcePath: z.ZodOptional<z.ZodString>;
+      frames: z.ZodOptional<z.ZodArray<z.ZodObject<{
+        pageIndex: z.ZodNumber;
+        xPt: z.ZodNumber;
+        yPt: z.ZodNumber;
+        widthPt: z.ZodNumber;
+        heightPt: z.ZodNumber;
+      }, z.core.$strip>>>;
     }, z.core.$strip>], "kind">>;
   }, z.core.$strip>>;
 }, z.core.$strip>, z.ZodObject<{
   kind: z.ZodLiteral<"formula">;
-  formatVersion: z.ZodLiteral<2>;
+  formatVersion: z.ZodLiteral<3>;
   metadata: z.ZodObject<{
     title: z.ZodOptional<z.ZodString>;
     author: z.ZodOptional<z.ZodString>;
