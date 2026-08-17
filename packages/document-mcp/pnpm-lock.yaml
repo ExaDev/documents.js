@@ -67,8 +67,8 @@ importers:
         specifier: ^2.7.10
         version: 2.7.23
       pdf-codec:
-        specifier: ^2.2.34
-        version: 2.2.34
+        specifier: ^2.2.35
+        version: 2.2.35
       publint:
         specifier: ^0.3.22
         version: 0.3.23
@@ -1629,6 +1629,10 @@ packages:
     resolution: {integrity: sha512-Qj+0yx3lkorssXCAOIhLtrPKdJEMaB3E1QyloXWJt2H3NM8+ed7w6TyjWHeiaCnl57eGoAuUDWFGgwYDm/CGqA==}
     engines: {node: '>=20'}
 
+  document-schema.js@3.2.0:
+    resolution: {integrity: sha512-XDu/+fo56WrXrcR3f16xH5lYEQX+3b4W6kJELRNFwrrWxOqhQBQepXMkCi+niSrgCEIcfaC1IeaGPlZ8oj5gSw==}
+    engines: {node: '>=20'}
+
   documents.js@1.102.1:
     resolution: {integrity: sha512-sWQHJreL5i6PftY5qYQn79+TbqPFzr83hVzh4osH0kgY/didT+83Wf6D4i4lIM+eeFWDPLtlvW5+mlMrKgWC8A==}
     engines: {node: '>=20'}
@@ -2564,6 +2568,10 @@ packages:
 
   pdf-codec@2.2.34:
     resolution: {integrity: sha512-OSRUAwlIff0MwZWr2B5vX+mbupTOKtm2qmyNzES3iL8AQjELYWzf04oSzBuTvhGjjxUkzoBdYzmuwaTAIzG5xg==}
+    engines: {node: '>=20'}
+
+  pdf-codec@2.2.35:
+    resolution: {integrity: sha512-kU15MYM2sNAOVPCop+qn2/ITpJ1460g1pj2k8wLKmIfJYp7h94YOPHpPwjVJUyP1tIQeH03wDzp5/uqz2Bwnvw==}
     engines: {node: '>=20'}
 
   picocolors@1.1.1:
@@ -4613,6 +4621,10 @@ snapshots:
     dependencies:
       zod: 4.4.3
 
+  document-schema.js@3.2.0:
+    dependencies:
+      zod: 4.4.3
+
   documents.js@1.102.1:
     dependencies:
       byte-codec: 1.1.9
@@ -5459,6 +5471,13 @@ snapshots:
     dependencies:
       byte-codec: 1.1.9
       document-schema.js: 3.1.0
+      fflate: 0.8.3
+      zod: 4.4.3
+
+  pdf-codec@2.2.35:
+    dependencies:
+      byte-codec: 1.1.9
+      document-schema.js: 3.2.0
       fflate: 0.8.3
       zod: 4.4.3
 
