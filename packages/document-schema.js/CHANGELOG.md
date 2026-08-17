@@ -1,3 +1,10 @@
+# [3.3.0](https://github.com/ExaDev/document-schema.js/compare/v3.2.0...v3.3.0) (2026-08-17)
+
+
+### Features
+
+* make ContentListMembership.numId optional for depth-only list membership ([8c41086](https://github.com/ExaDev/document-schema.js/commit/8c410862ef2b16bde6202eed6e17198c0c7de747))
+
 # [3.2.0](https://github.com/ExaDev/document-schema.js/compare/v3.1.0...v3.2.0) (2026-08-17)
 
 
