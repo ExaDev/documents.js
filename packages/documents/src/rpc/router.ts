@@ -8,6 +8,7 @@ import {
   DOCUMENT_FORMATS,
   extractSourceFontsForFormat,
   LayoutDocumentSchema,
+  readCsvContent,
   readDocxContent,
   readDocxExtras,
   readDocumentMetadata,
@@ -19,6 +20,7 @@ import {
   readMarkdownContent,
   readPptxContent,
   readPdf,
+  readSvgContent,
   readXlsxContent,
   setDocumentMetadata,
 } from 'documents.js';
@@ -184,9 +186,11 @@ const SanitizedLayoutDocumentSchema = LayoutDocumentSchema.extend({
   images: z.record(z.string(), SanitizedLayoutImageAssetSchema),
 });
 
-// Reads a ContentDocument directly from bytes, bypassing the conversion engine entirely -- no target build/encode, no PDF layout pass. Every format's standalone content reader is exported from documents.js (xlsx included since documents.js 2.0 -- before that, xlsx had to detour through the xlsx->ods bridge and read .content off the conversion result).
+// Reads a ContentDocument directly from bytes, bypassing the conversion engine entirely -- no target build/encode, no PDF layout pass. Every format's standalone content reader is exported from documents.js (xlsx included since documents.js 2.0 -- before that, xlsx had to detour through the xlsx->ods bridge and read .content off the conversion result). markdown, csv, and svg are the plain-text formats: their readers take the decoded string, not a package, so each decodes its bytes up front the way markdown always has.
 function readContentForFormat(format: DocumentFormat, bytes: Uint8Array<ArrayBuffer>): ContentDocument {
   if (format === 'markdown') return readMarkdownContent(new TextDecoder().decode(bytes));
+  if (format === 'csv') return readCsvContent(new TextDecoder().decode(bytes));
+  if (format === 'svg') return readSvgContent(new TextDecoder().decode(bytes));
   if (format === 'pdf') throw new Error('PDF has no standalone content reader');
   const pkg = decodeDocumentPackage(format, bytes);
   switch (format) {

@@ -5,7 +5,7 @@ import { getRpcClient } from '../rpc/client';
 import type { Diagnostic } from '../shared/diagnostics';
 import { contentSummary } from '../shared/contentCounts';
 
-// Reads a ContentDocument directly from bytes via the content.read RPC endpoint -- no conversion, no PDF layout pass. Used by every content-backed preview (markdown, docx, odt, xlsx, ods, pptx, odp, odg, odf).
+// Reads a ContentDocument directly from bytes via the content.read RPC endpoint -- no conversion, no PDF layout pass. Used by every content-backed preview (markdown, csv, svg, docx, odt, xlsx, ods, pptx, odp, odg, odf).
 export interface ReadContentInput {
   format: DocumentFormat;
   bytes: Uint8Array<ArrayBuffer>;

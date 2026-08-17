@@ -21,6 +21,8 @@ const EXTENSION_TO_FORMAT: Readonly<Record<string, DocumentFormat>> = {
   otg: 'odg',
   odf: 'odf',
   otf: 'odf',
+  csv: 'csv',
+  svg: 'svg',
   markdown: 'markdown',
   md: 'markdown',
   pdf: 'pdf',

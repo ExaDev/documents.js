@@ -2,7 +2,7 @@
 
 [![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/documents) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/documents/ci.yml?branch=main)](https://github.com/ExaDev/documents/actions)
 
-> A client-only, statically-built web UI for every conversion and editing tool in the [documents.js ecosystem](../README.md) — convert and edit docx, pptx, xlsx, odt, odp, ods, odg, pdf, and markdown documents entirely in the browser, with no server component.
+> A client-only, statically-built web UI for every conversion and editing tool in the [documents.js ecosystem](../README.md) — convert and edit docx, pptx, xlsx, odt, odp, ods, odg, csv, svg, pdf, and markdown documents entirely in the browser, with no server component.
 
 Private (unpublished to npm); deployed as a static site to GitHub Pages.
 

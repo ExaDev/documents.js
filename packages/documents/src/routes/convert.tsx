@@ -28,16 +28,18 @@ export const Route = createFileRoute('/convert')({
   component: ConvertLayout,
 });
 
+// csv reads as a spreadsheet-kind ContentDocument (readCsvContent), so it previews through the same data grid as xlsx/ods.
 function isSheetFormat(format: string | null): boolean {
-  return format === 'xlsx' || format === 'ods';
+  return format === 'xlsx' || format === 'ods' || format === 'csv';
 }
 
 function isWordProcessingFormat(format: string | null): boolean {
   return format === 'docx' || format === 'odt';
 }
 
+// svg reads as a drawing-kind ContentDocument (readSvgContent), so it previews through the same pages/shapes/vectors renderer as odg.
 function isSlidesFormat(format: string | null): boolean {
-  return format === 'pptx' || format === 'odp' || format === 'odg';
+  return format === 'pptx' || format === 'odp' || format === 'odg' || format === 'svg';
 }
 
 // True for every format whose preview renders the ContentDocument natively via content.read rather than a PDF rendition. PDF itself is the only exception -- its "native" representation IS the PDF bytes rendered in an iframe.
