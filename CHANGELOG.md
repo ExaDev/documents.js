@@ -1,3 +1,10 @@
+# [1.100.0](https://github.com/ExaDev/documents.js/compare/v1.99.78...v1.100.0) (2026-08-17)
+
+
+### Features
+
+* write embedded formulas for pptx and odp ([4b24f25](https://github.com/ExaDev/documents.js/commit/4b24f254c474f1b1041953049d254b2ec388e9ba)), closes [ExaDev/documents.js#563](https://github.com/ExaDev/documents.js/issues/563)
+
 ## [1.99.78](https://github.com/ExaDev/documents.js/compare/v1.99.77...v1.99.78) (2026-08-17)
 
 ## [1.99.77](https://github.com/ExaDev/documents.js/compare/v1.99.76...v1.99.77) (2026-08-17)
