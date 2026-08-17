@@ -1,5 +1,5 @@
 import { type Command } from 'commander';
-import { UnrecognizedDocumentSchemaError, buildDocumentBytes, documentFromJson } from 'documents.js';
+import { UnrecognizedDocumentSchemaError, buildDocumentBytes, documentFromJson, documentSchemaKindOf } from 'documents.js';
 import { createRuntimeSignal } from '../runtime/abort';
 import { createDiagnosticReporter } from '../runtime/diagnostics';
 import { EXIT_INPUT_ERROR, EXIT_SUCCESS, EXIT_USAGE_ERROR, mapErrorToExit } from '../runtime/exit-codes';
@@ -9,6 +9,13 @@ import { addJsonOption, addOutOption, addQuietOption, addTimeoutOption, addVerbo
 
 interface FromPackageCliOptions extends ConversionCliFlags {
   readonly to?: string;
+}
+
+// Narrowing guard for the old-dump check below, built on `in` rather than an index-signature cast -- formatVersion 1 is the only package version that ever carried a separate layout half, so it alone identifies a pre-documents.js-2.0 dump regardless of whatever the current version constant is.
+function isFormatVersionOneRecord(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  if (!('formatVersion' in value)) return false;
+  return value.formatVersion === 1;
 }
 
 async function runFromPackage(input: string, output: string | undefined, options: FromPackageCliOptions): Promise<number> {
@@ -37,6 +44,12 @@ async function runFromPackage(input: string, output: string | undefined, options
       parsed = JSON.parse(text);
     } catch (error) {
       process.stderr.write(`[${command}] '${input}' is not valid JSON: ${error instanceof Error ? error.message : String(error)}\n`);
+      return EXIT_INPUT_ERROR;
+    }
+
+    // A dump from formatVersion 1 (documents.js 1.x's package shape: content plus a separate layout half) identifies as a DocumentPackage by its $schema but then fails DocumentPackageSchema.parse with a raw ZodError -- a wall of JSON issues naming neither the version change nor the remedy. Intercepted here for the one wrong-version case a real user hits after upgrading, so the error names the shape change and how to get a current dump; every other structurally invalid tagged package keeps documentFromJson's own ZodError.
+    if (documentSchemaKindOf(parsed) === 'DocumentPackage' && isFormatVersionOneRecord(parsed)) {
+      process.stderr.write(`[${command}] '${input}' is a DocumentPackage dump at formatVersion 1 (the documents.js 1.x shape: content plus a separate layout half) -- documents.js 2.0.0 replaced it with formatVersion 2 (content carrying its own rendered frames, plus page sizes); re-run the source conversion with --dump-package to write a current dump\n`);
       return EXIT_INPUT_ERROR;
     }
 

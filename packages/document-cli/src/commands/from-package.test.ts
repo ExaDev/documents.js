@@ -70,6 +70,11 @@ describe('from-package', () => {
     const dumpedText = await readFile(packagePath, 'utf-8');
     expect(dumpedText).toContain('"$schema"');
     expect(dumpedText).toContain('document-package.schema.json');
+    // The dump carries the formatVersion 2 fused shape -- content nodes with their own rendered frames plus page sizes -- and never the old separate layout half.
+    expect(dumpedText).toContain('"formatVersion": 2');
+    expect(dumpedText).toContain('"pages"');
+    expect(dumpedText).toContain('"frames"');
+    expect(dumpedText).not.toContain('"layout"');
 
     const fromPackageRun = await runCli(['from-package', packagePath, rebuiltPath]);
     expect(fromPackageRun.exitCode).toBe(EXIT_SUCCESS);
@@ -77,6 +82,24 @@ describe('from-package', () => {
     const rebuilt = openDocx(new Uint8Array(await readFile(rebuiltPath)));
     const paragraphs = rebuilt.paragraphs();
     expect(paragraphs.some((paragraph) => paragraph.text === PARAGRAPH_TEXT)).toBe(true);
+  });
+
+  it("rebuilds a pdf from a dumped package's own frames and page sizes", async () => {
+    const packagePath = join(workspace, 'dumped-for-pdf.package.json');
+    const rebuiltPdfPath = join(workspace, 'rebuilt.pdf');
+
+    // docx-to-pdf is the conversion whose dump carries a fully frame-stamped content tree, so its package is the honest input for the pdf target's rebuild-from-frames path (documents.js's layoutDocumentFromPackage -> writePdf, replacing the old stored-layout-half read).
+    const dumpRun = await runCli(['docx-to-pdf', join(workspace, 'source.docx'), join(workspace, 'source-for-pdf.pdf'), '--dump-package', packagePath]);
+    expect(dumpRun.exitCode).toBe(EXIT_SUCCESS);
+
+    const fromPackageRun = await runCli(['from-package', packagePath, rebuiltPdfPath]);
+    expect(fromPackageRun.exitCode).toBe(EXIT_SUCCESS);
+
+    const rebuiltPdfBytes = new Uint8Array(await readFile(rebuiltPdfPath));
+    expect(rebuiltPdfBytes.byteLength).toBeGreaterThan(0);
+    // The minimal honest check on the rebuilt pdf itself: a real PDF file, not an empty or mislabelled write.
+    expect(rebuiltPdfBytes[0]).toBe(0x25); // '%'
+    expect(new TextDecoder().decode(rebuiltPdfBytes.subarray(0, 5))).toBe('%PDF-');
   });
 
   it('infers the target format from the output extension, matching --to explicitly given', async () => {
@@ -147,9 +170,9 @@ describe('from-package', () => {
     expect(stderr).toContain('no recognised $schema');
   });
 
-  it("rejects 'pdf' as the target when the dumped package came from a bridge conversion with no layout half at all", async () => {
+  it("rejects 'pdf' as the target when the dumped package came from a bridge conversion with no page sizes at all", async () => {
     const packagePath = join(workspace, 'dumped-from-bridge.package.json');
-    // A bridge conversion (odt-to-docx) runs no layout engine at all -- its own dumped package always carries a real ContentDocument but layout left undefined (see documents.js's own DocumentBridgeOptions.onDocument comment), unlike every docx-to-pdf/pdf-to-docx dump the other tests in this file use.
+    // A bridge conversion (odt-to-docx) runs no layout engine at all -- its own dumped package always carries a real ContentDocument but pages left undefined (see documents.js's own DocumentBridgeOptions.onDocument comment), unlike every docx-to-pdf/pdf-to-docx dump the other tests in this file use.
     await runCli(['docx-to-odt', join(workspace, 'source.docx'), join(workspace, 'source.odt')]);
     const bridgeRun = await runCli(['odt-to-docx', join(workspace, 'source.odt'), join(workspace, 'unused-bridge.docx'), '--dump-package', packagePath]);
     expect(bridgeRun.exitCode).toBe(EXIT_SUCCESS);
@@ -157,6 +180,30 @@ describe('from-package', () => {
     const { exitCode, stderr } = await runCli(['from-package', packagePath, join(workspace, 'never-written4.pdf')]);
 
     expect(exitCode).not.toBe(EXIT_SUCCESS);
-    expect(stderr).toContain('this DocumentPackage has no layout');
+    expect(stderr).toContain('this DocumentPackage has no pages');
+  });
+
+  it("rejects an old formatVersion 1 dump (a documents.js 1.x --dump-package file) with an error naming the version change", async () => {
+    const oldDumpPath = join(workspace, 'old-shape.package.json');
+    // A user-provided old dump: the exact shape documents.js 1.x wrote via --dump-package -- $schema-tagged, formatVersion 1, content plus a separate layout half. Hand-built here rather than generated, since nothing in this tree can still produce that shape; the $schema URI is version-agnostic by design (documentSchemaKindOf matches the file stem alone), so an old dump still identifies as a DocumentPackage and would otherwise fail DocumentPackageSchema.parse with a raw ZodError wall naming neither the version change nor the remedy.
+    const oldDump = {
+      $schema: 'https://cdn.jsdelivr.net/npm/document-schema.js@1.9.9/schemas/document-package.schema.json',
+      formatVersion: 1,
+      content: {
+        kind: 'wordprocessing',
+        formatVersion: 2,
+        metadata: {},
+        sections: [{ blocks: [{ kind: 'paragraph', styleId: 'Heading1', runs: [{ text: PARAGRAPH_TEXT }] }] }],
+      },
+      layout: { formatVersion: 1, metadata: {}, images: {}, pages: [{ widthPt: 595, heightPt: 842, items: [] }] },
+    };
+    await writeFile(oldDumpPath, JSON.stringify(oldDump, undefined, 2));
+
+    const { exitCode, stderr } = await runCli(['from-package', oldDumpPath, join(workspace, 'never-written5.docx')]);
+
+    expect(exitCode).not.toBe(EXIT_SUCCESS);
+    expect(stderr).toContain('formatVersion 1');
+    expect(stderr).toContain('formatVersion 2');
+    expect(stderr).toContain('--dump-package');
   });
 });
