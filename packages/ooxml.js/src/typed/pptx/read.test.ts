@@ -710,3 +710,90 @@ describe('readPptx: SmartArt graphic frames', () => {
     expect(asParagraph(diagramShape?.blocks[4]).sourcePath).toBe('slides[0].shapes[0].blocks[4]');
   });
 });
+
+// An OLE graphic frame's a:graphicData wraps an mc:AlternateContent: the mc:Choice side's p:oleObj names the embedded payload (never read -- an external application's data with no structured content to recover), while the mc:Fallback side repeats the p:oleObj carrying the raster picture every renderer actually displays. That fallback picture is the only realistic content to recover (readGraphicFrameShape in src/typed/pptx/read.ts).
+function oleFixturePackage(): Package {
+  const choiceOleObj = el('p:oleObj', { spid: '3', 'r:id': 'rIdOle', progId: 'Excel.Sheet.12', showAsIcon: '0' }, [el('p:embed')]);
+  const fallbackOleObj = el('p:oleObj', { spid: '3', 'r:id': 'rIdOle', progId: 'Excel.Sheet.12' }, [
+    el('p:pic', {}, [
+      el('p:nvPicPr', {}, [el('p:cNvPr', { id: '4', name: 'Fallback Picture' }), el('p:cNvPicPr'), el('p:nvPr')]),
+      el('p:blipFill', {}, [el('a:blip', { 'r:embed': 'rIdFallback' })]),
+    ]),
+  ]);
+  const oleFrame = el('p:graphicFrame', {}, [
+    el('p:nvGraphicFramePr', {}, [el('p:cNvPr', { id: '2', name: 'Object 1' })]),
+    el('p:xfrm', {}, [el('a:off', { x: '914400', y: '1828800' }), el('a:ext', { cx: '4572000', cy: '2743200' })]),
+    el('a:graphic', {}, [
+      el('a:graphicData', { uri: 'http://schemas.openxmlformats.org/presentationml/2006/ole' }, [
+        el('mc:AlternateContent', {}, [el('mc:Choice', { Requires: 'v' }, [choiceOleObj]), el('mc:Fallback', {}, [fallbackOleObj])]),
+      ]),
+    ]),
+  ]);
+  const slide = el('p:sld', {}, [el('p:cSld', {}, [el('p:spTree', {}, [oleFrame])])]);
+  const presentation = el('p:presentation', {}, [el('p:sldIdLst', {}, [el('p:sldId', { id: '256', 'r:id': 'rId1' })])]);
+  const presentationRels = rels([{ id: 'rId1', type: SLIDE_REL, target: 'slides/slide1.xml' }]);
+  const slideRels = rels([
+    { id: 'rIdOle', type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject', target: '../embeddings/oleObject1.xlsx' },
+    { id: 'rIdFallback', type: IMAGE_REL, target: '../media/oleFallback.png' },
+  ]);
+
+  return {
+    parts: {
+      'ppt/presentation.xml': { kind: 'xml', nodes: [presentation] },
+      'ppt/_rels/presentation.xml.rels': { kind: 'xml', nodes: [presentationRels] },
+      'ppt/slides/slide1.xml': { kind: 'xml', nodes: [slide] },
+      'ppt/slides/_rels/slide1.xml.rels': { kind: 'xml', nodes: [slideRels] },
+      'ppt/media/oleFallback.png': { kind: 'binary', base64: tinyPngBase64() },
+    },
+  };
+}
+
+describe('readPptx: OLE graphic frames', () => {
+  it('reads the fallback picture as an image block sized to the frame', () => {
+    const doc = readPptx(oleFixturePackage());
+    const oleShape = doc.slides[0]?.shapes.find((s) => s.name === 'Object 1');
+    const image = asImage(oleShape?.blocks[0]);
+    expect(image.format).toBe('png');
+    expect(image.base64).toBe(tinyPngBase64());
+    expect(image.widthPt).toBe(360);
+    expect(image.heightPt).toBe(216);
+  });
+
+  it('records the object\'s progId as a paragraph when no fallback picture resolves', () => {
+    // The fallback relationship points at a part the package does not carry.
+    const pkg = oleFixturePackage();
+    delete pkg.parts['ppt/media/oleFallback.png'];
+    const doc = readPptx(pkg);
+    const oleShape = doc.slides[0]?.shapes.find((s) => s.name === 'Object 1');
+    expect(oleShape?.frame).toEqual({ xPt: 72, yPt: 144, widthPt: 360, heightPt: 216 });
+    expect(asParagraph(oleShape?.blocks[0]).runs[0]?.text).toBe('Excel.Sheet.12');
+  });
+
+  it('keeps the frame\'s geometry with empty content when neither picture nor progId is present', () => {
+    // The p:oleObj carries no progId and the graphicData holds no fallback picture at all.
+    const bareFrame = el('p:graphicFrame', {}, [
+      el('p:nvGraphicFramePr', {}, [el('p:cNvPr', { id: '2', name: 'Object 1' })]),
+      el('p:xfrm', {}, [el('a:off', { x: '914400', y: '1828800' }), el('a:ext', { cx: '4572000', cy: '2743200' })]),
+      el('a:graphic', {}, [el('a:graphicData', { uri: 'http://schemas.openxmlformats.org/presentationml/2006/ole' }, [el('p:oleObj', { spid: '3' })])]),
+    ]);
+    const slide = el('p:sld', {}, [el('p:cSld', {}, [el('p:spTree', {}, [bareFrame])])]);
+    const presentation = el('p:presentation', {}, [el('p:sldIdLst', {}, [el('p:sldId', { id: '256', 'r:id': 'rId1' })])]);
+    const pkg: Package = {
+      parts: {
+        'ppt/presentation.xml': { kind: 'xml', nodes: [presentation] },
+        'ppt/_rels/presentation.xml.rels': { kind: 'xml', nodes: [rels([{ id: 'rId1', type: SLIDE_REL, target: 'slides/slide1.xml' }])] },
+        'ppt/slides/slide1.xml': { kind: 'xml', nodes: [slide] },
+      },
+    };
+    const doc = readPptx(pkg);
+    const oleShape = doc.slides[0]?.shapes.find((s) => s.name === 'Object 1');
+    expect(oleShape?.frame).toEqual({ xPt: 72, yPt: 144, widthPt: 360, heightPt: 216 });
+    expect(oleShape?.blocks).toEqual([]);
+  });
+
+  it('assigns sourcePath to the fallback image block', () => {
+    const doc = readPptx(oleFixturePackage());
+    const oleShape = doc.slides[0]?.shapes.find((s) => s.name === 'Object 1');
+    expect(asImage(oleShape?.blocks[0]).sourcePath).toBe('slides[0].shapes[0].blocks[0]');
+  });
+});

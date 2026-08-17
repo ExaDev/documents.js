@@ -29,6 +29,7 @@ const PRESENTATION_PATH = 'ppt/presentation.xml';
 const TABLE_GRAPHIC_URI = 'http://schemas.openxmlformats.org/drawingml/2006/table';
 const CHART_GRAPHIC_URI = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
 const DIAGRAM_GRAPHIC_URI = 'http://schemas.openxmlformats.org/drawingml/2006/diagram';
+const OLE_GRAPHIC_URI = 'http://schemas.openxmlformats.org/presentationml/2006/ole';
 
 function readSlideSize(presentationRoot: XmlElement | undefined): PageSize {
   const sldSz = presentationRoot === undefined ? undefined : childrenWithTag(presentationRoot, 'p:sldSz')[0];
@@ -260,25 +261,26 @@ function readSpShape(sp: XmlElement, context: SlideInheritanceContext, slideRels
   return { name: shapeName(sp), frame: resolved.frame, rotationDeg: resolved.rotationDeg, ...extras, blocks };
 }
 
+// Resolves the first a:blip/@r:embed anywhere under parent (a p:pic's own p:blipFill, or an OLE object's fallback p:pic nested inside a:graphicData's mc:AlternateContent) through the slide's relationships to a sniffed ContentImageBlock sized to the given frame -- undefined when the id, relationship, part, or magic bytes don't line up, leaving the shape with no image content.
+function readBlipImage(parent: XmlElement, slideRels: ReadonlyMap<string, Relationship>, pkg: Package, frame: Box): ContentImageBlock | undefined {
+  const blip = elementsWithTag([parent], 'a:blip')[0];
+  const rId = blip === undefined ? undefined : attr(blip, 'r:embed');
+  const rel = rId === undefined ? undefined : slideRels.get(rId);
+  const mediaPart = rel === undefined ? undefined : pkg.parts[rel.target];
+  if (mediaPart?.kind !== 'binary') {
+    return undefined;
+  }
+  const format = sniffImageFormat(base64ToBytes(mediaPart.base64));
+  return format === undefined ? undefined : { kind: 'image', format, base64: mediaPart.base64, widthPt: frame.widthPt, heightPt: frame.heightPt };
+}
+
 function readPicShape(pic: XmlElement, context: SlideInheritanceContext, slideRels: ReadonlyMap<string, Relationship>, pkg: Package, parentTransform: GroupChildTransform | undefined): ContentShape | undefined {
   const resolved = resolveShapeFrame(pic, context, parentTransform);
   if (resolved === undefined) {
     return undefined;
   }
-  const blipFill = childrenWithTag(pic, 'p:blipFill')[0];
-  const blip = blipFill === undefined ? undefined : childrenWithTag(blipFill, 'a:blip')[0];
-  const rId = blip === undefined ? undefined : attr(blip, 'r:embed');
-  const rel = rId === undefined ? undefined : slideRels.get(rId);
-  const mediaPart = rel === undefined ? undefined : pkg.parts[rel.target];
-  const blocks: ContentBlock[] = [];
-  if (mediaPart?.kind === 'binary') {
-    const bytes = base64ToBytes(mediaPart.base64);
-    const format = sniffImageFormat(bytes);
-    if (format !== undefined) {
-      const image: ContentImageBlock = { kind: 'image', format, base64: mediaPart.base64, widthPt: resolved.frame.widthPt, heightPt: resolved.frame.heightPt };
-      blocks.push(image);
-    }
-  }
+  const image = readBlipImage(pic, slideRels, pkg, resolved.frame);
+  const blocks: ContentBlock[] = image === undefined ? [] : [image];
   // An unresolvable image (missing relationship/part, or bytes that don't sniff as PNG/JPEG) keeps the shape's geometry with empty content, rather than dropping the shape entirely.
   return { name: shapeName(pic), frame: resolved.frame, rotationDeg: resolved.rotationDeg, ...NO_TEXT_BODY_EXTRAS, blocks };
 }
@@ -314,7 +316,7 @@ function readTable(tbl: XmlElement, context: SlideInheritanceContext, slideRels:
   return { kind: 'table', rows, columnWidthsPt };
 }
 
-// Resolves an r:id found inside a graphic frame's a:graphicData child element (a chart reference's part, an OLE object's fallback image, ...) through the slide's own relationships to the target part's root element -- undefined when the id, relationship, part, or XML root is missing anywhere along the chain, leaving the frame's geometry with empty content.
+// Resolves an r:id found inside a graphic frame's a:graphicData child element (a chart reference's part, a diagram's data model, ...) through the slide's own relationships to the target part's root element -- undefined when the id, relationship, part, or XML root is missing anywhere along the chain, leaving the frame's geometry with empty content.
 function relatedPartRoot(rId: string | undefined, slideRels: ReadonlyMap<string, Relationship>, pkg: Package): XmlElement | undefined {
   if (rId === undefined) {
     return undefined;
@@ -352,8 +354,18 @@ function readGraphicFrameShape(gf: XmlElement, context: SlideInheritanceContext,
     const relIds = childrenWithTag(graphicData, 'dgm:relIds')[0];
     const dataModelRoot = relatedPartRoot(relIds === undefined ? undefined : attr(relIds, 'r:dm'), slideRels, pkg);
     blocks = dataModelRoot === undefined ? [] : readDiagramText(dataModelRoot);
+  } else if (uri === OLE_GRAPHIC_URI && graphicData !== undefined) {
+    // An OLE object's own payload (p:oleObj/@r:id's embedded part) is an arbitrary external application's data with no structured content to recover; what the slide actually displays is the fallback picture (mc:Fallback > p:oleObj > p:pic under the mc:AlternateContent wrapper, or a p:pic directly under p:oleObj where a producer skipped the wrapper), so that picture is read like any other blip image. With no reachable picture, the p:oleObj's progId at least records what kind of object the frame holds.
+    const image = readBlipImage(graphicData, slideRels, pkg, frame);
+    if (image !== undefined) {
+      blocks = [image];
+    } else {
+      const oleObj = elementsWithTag([graphicData], 'p:oleObj')[0];
+      const progId = oleObj === undefined ? undefined : attr(oleObj, 'progId');
+      blocks = progId === undefined ? [] : [{ kind: 'paragraph', runs: [{ text: progId }] }];
+    }
   } else {
-    // Any other graphic frame (an OLE object) keeps its geometry with empty content.
+    // Any other graphic frame kind keeps its geometry with empty content.
     blocks = [];
   }
   return { name: shapeName(gf), frame, rotationDeg, ...NO_TEXT_BODY_EXTRAS, blocks };
