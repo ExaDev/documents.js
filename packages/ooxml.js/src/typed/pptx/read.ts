@@ -154,9 +154,20 @@ function readLineSpacingMultiplier(pPr: XmlElement | undefined): number | undefi
   return val === undefined ? undefined : Number(val) / 100_000;
 }
 
+// a:pPr/@lvl (ST_TextIndentLevelType, 0-8) parsed once for both of its consumers: the a:lvl1pPr..a:lvl9pPr style lookup in resolveDefaultRunProperties, and ContentParagraph.list below. Malformed spellings (non-numeric, fractional, negative) degrade to undefined the way this repo's other numeric attribute readers do (parseChildIndex in xlsx/styles.ts), never to a fabricated or schema-invalid level.
+function readOutlineLevel(pPr: XmlElement | undefined): number | undefined {
+  const raw = pPr === undefined ? undefined : attr(pPr, 'lvl');
+  if (raw === undefined || raw === '') {
+    return undefined;
+  }
+  const level = Number(raw);
+  return Number.isInteger(level) && level >= 0 ? level : undefined;
+}
+
 function readParagraph(pEl: XmlElement, placeholderType: string | undefined, context: SlideInheritanceContext, slideRels: ReadonlyMap<string, Relationship>): ContentParagraph {
   const pPr = childrenWithTag(pEl, 'a:pPr')[0];
-  const level = pPr === undefined ? 0 : Number(attr(pPr, 'lvl') ?? '0');
+  const outlineLevel = readOutlineLevel(pPr);
+  const level = outlineLevel ?? 0;
   const masterDefaults = resolveDefaultRunProperties(placeholderType, level, context);
   const pPrDefRPr = pPr === undefined ? undefined : childrenWithTag(pPr, 'a:defRPr')[0];
   const paragraphDefaults = pPrDefRPr === undefined ? masterDefaults : mergeRunProperties(masterDefaults, readRunPropertiesFromElement(pPrDefRPr, context));
@@ -181,6 +192,8 @@ function readParagraph(pEl: XmlElement, placeholderType: string | undefined, con
     kind: 'paragraph',
     runs,
     alignment: pPr === undefined ? undefined : readAlignment(attr(pPr, 'algn')),
+    // DrawingML paragraphs carry only an outline depth, never a numbering identity (no numPr exists in a:pPr), so list is emitted with level alone -- numId optional since document-schema.js 3.3.0 -- and a fabricated numId would be a lie in the data. An absent (or malformed) @lvl emits no list rather than a redundant { level: 0 }: absent means the body placeholder's default level 0, and outline consumers already treat a missing list as level 0, so the zero would carry no information.
+    list: outlineLevel === undefined ? undefined : { level: outlineLevel },
     spacingBeforePt: readAbsoluteSpacingPt(pPr === undefined ? undefined : childrenWithTag(pPr, 'a:spcBef')[0]),
     spacingAfterPt: readAbsoluteSpacingPt(pPr === undefined ? undefined : childrenWithTag(pPr, 'a:spcAft')[0]),
     lineSpacing: readLineSpacingMultiplier(pPr),

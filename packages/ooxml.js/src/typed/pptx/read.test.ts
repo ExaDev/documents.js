@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { ContentBlock, ContentImageBlock, ContentParagraph, ContentTable } from 'document-schema.js';
 import { el, txt } from '../../xml/fragment';
 import { bytesToBase64 } from '../../util/base64';
-import { readPptx } from './read';
+import { PptxDocumentSchema, readPptx } from './read';
 
 // Ported from documents.js's src/ooxml/pptx/read.test.ts, adapted to readPptx's own PptxDocument shape (no wrapping ContentDocument discriminant) and dropping the dependency on documents.js's own PNG encoder (out of this port's scope): sniffImageFormat only inspects magic bytes, so a bare PNG-signature-prefixed byte array stands in for a real encoded PNG here.
 
@@ -795,5 +795,91 @@ describe('readPptx: OLE graphic frames', () => {
     const doc = readPptx(oleFixturePackage());
     const oleShape = doc.slides[0]?.shapes.find((s) => s.name === 'Object 1');
     expect(asImage(oleShape?.blocks[0]).sourcePath).toBe('slides[0].shapes[0].blocks[0]');
+  });
+});
+
+// One body shape whose paragraphs exercise every a:pPr/@lvl spelling: absent (both as no a:pPr at all and as an a:pPr carrying no lvl), an explicit zero (distinct from absent: present-and-valid, so it emits), a real outline level, and the three malformed spellings that must degrade to no list (readOutlineLevel in src/typed/pptx/read.ts).
+function outlineLevelFixturePackage(): Package {
+  const para = (pPrAttrs: Record<string, string> | undefined, text: string): XmlElement =>
+    el('a:p', {}, [...(pPrAttrs === undefined ? [] : [el('a:pPr', pPrAttrs)]), el('a:r', {}, [el('a:t', {}, [txt(text)])])]);
+
+  const outlineShape = el('p:sp', {}, [
+    el('p:nvSpPr', {}, [el('p:cNvPr', { id: '2', name: 'Outline Body' }), el('p:cNvSpPr'), el('p:nvPr')]),
+    el('p:spPr', {}, [el('a:xfrm', {}, [el('a:off', { x: '914400', y: '914400' }), el('a:ext', { cx: '4572000', cy: '4572000' })])]),
+    el('p:txBody', {}, [
+      para(undefined, 'no pPr'),
+      para({}, 'pPr without lvl'),
+      para({ lvl: '0' }, 'explicit zero'),
+      para({ lvl: '2' }, 'level two'),
+      para({ lvl: 'two' }, 'non-numeric'),
+      para({ lvl: '-1' }, 'negative'),
+      para({ lvl: '1.5' }, 'fractional'),
+    ]),
+  ]);
+
+  const slide = el('p:sld', {}, [el('p:cSld', {}, [el('p:spTree', {}, [outlineShape])])]);
+  const presentation = el('p:presentation', {}, [el('p:sldIdLst', {}, [el('p:sldId', { id: '256', 'r:id': 'rId1' })])]);
+  const presentationRels = rels([{ id: 'rId1', type: SLIDE_REL, target: 'slides/slide1.xml' }]);
+
+  return {
+    parts: {
+      'ppt/presentation.xml': { kind: 'xml', nodes: [presentation] },
+      'ppt/_rels/presentation.xml.rels': { kind: 'xml', nodes: [presentationRels] },
+      'ppt/slides/slide1.xml': { kind: 'xml', nodes: [slide] },
+    },
+  };
+}
+
+function outlineParagraph(text: string): ContentParagraph {
+  const doc = readPptx(outlineLevelFixturePackage());
+  const shape = doc.slides[0]?.shapes.find((s) => s.name === 'Outline Body');
+  return asParagraph(shape?.blocks.find((b) => b.kind === 'paragraph' && asParagraph(b).runs[0]?.text === text));
+}
+
+describe('readPptx: paragraph outline levels', () => {
+  it('reads a:pPr/@lvl into list.level, with no numId -- DrawingML paragraphs carry no numbering identity', () => {
+    const para = outlineParagraph('level two');
+    expect(para.list).toEqual({ level: 2 });
+    expect(para.list?.numId).toBeUndefined();
+  });
+
+  it('emits list membership that validates against ContentListMembershipSchema with numId optional (document-schema.js 3.3.0)', () => {
+    const doc = readPptx(outlineLevelFixturePackage());
+    expect(() => PptxDocumentSchema.parse(doc)).not.toThrow();
+  });
+
+  it('emits no list when @lvl is absent, whether a:pPr exists or not', () => {
+    expect(outlineParagraph('no pPr').list).toBeUndefined();
+    expect(outlineParagraph('pPr without lvl').list).toBeUndefined();
+  });
+
+  it('emits { level: 0 } for an explicit lvl="0" -- present-and-valid, unlike the absent default', () => {
+    expect(outlineParagraph('explicit zero').list).toEqual({ level: 0 });
+  });
+
+  it('degrades malformed @lvl values to no list while keeping the paragraph readable', () => {
+    for (const text of ['non-numeric', 'negative', 'fractional']) {
+      const para = outlineParagraph(text);
+      expect(para.list).toBeUndefined();
+      expect(para.runs[0]?.text).toBe(text);
+    }
+  });
+
+  it('reads a slide of mixed levels back in document order', () => {
+    const doc = readPptx(outlineLevelFixturePackage());
+    const shape = doc.slides[0]?.shapes.find((s) => s.name === 'Outline Body');
+    const read = (shape?.blocks ?? []).map((b) => {
+      const para = asParagraph(b);
+      return { text: para.runs[0]?.text, list: para.list };
+    });
+    expect(read).toEqual([
+      { text: 'no pPr', list: undefined },
+      { text: 'pPr without lvl', list: undefined },
+      { text: 'explicit zero', list: { level: 0 } },
+      { text: 'level two', list: { level: 2 } },
+      { text: 'non-numeric', list: undefined },
+      { text: 'negative', list: undefined },
+      { text: 'fractional', list: undefined },
+    ]);
   });
 });
