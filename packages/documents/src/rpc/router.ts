@@ -19,10 +19,11 @@ import {
   readMarkdownContent,
   readPptxContent,
   readPdf,
+  readXlsxContent,
   setDocumentMetadata,
 } from 'documents.js';
 import type { ContentBlock, ContentDocument, ContentParagraph, DocumentFormat, LayoutImageAsset } from 'documents.js';
-import { CODE_BLOCK_STYLE_ID, HORIZONTAL_RULE_STYLE_ID, parseHeadingStyleId, parseListNumId, QUOTE_STYLE_ID } from 'markdown-codec';
+import { CODE_BLOCK_STYLE_ID, HORIZONTAL_RULE_STYLE_ID, parseListNumId, QUOTE_STYLE_ID } from 'markdown-codec';
 import { z } from 'zod';
 
 // This module runs only inside src/workers/documents.worker.ts. It is the one place in the app allowed to call documents.js's real conversion/metadata functions -- everything on the main thread reaches it only through the oRPC client in src/rpc/client.ts.
@@ -48,13 +49,13 @@ const ConversionResultSchema = z.object({
   content: ContentDocumentSchema.optional(),
 });
 
-// markdown-codec marks a heading paragraph with its own private styleId convention ("Heading1".."Heading6") and a list paragraph's ordered-vs-bullet distinction is encoded inside its own numId string ("md{n}:bullet|ordered@start", via parseListNumId) -- neither is part of document-schema.js's own schema, both are markdown-codec's internal vocabulary. Rewritten here, worker-side (the only place allowed to import markdown-codec), into a small convention this app documents and owns itself, so MarkdownPreview.tsx never needs to depend on markdown-codec's internal string formats -- only on what this router promises to hand it. Only ever applied to a markdown-sourced ContentDocument (see the convert handler's own call site below).
+// markdown-codec 2.0 carries a heading paragraph's level in the schema's own ContentParagraph.headingLevel field, so headings need no vocabulary rewrite -- only the residual private conventions are translated here: quote/code-block/horizontal-rule styleIds and a list paragraph's ordered-vs-bullet distinction encoded inside its numId string ("md{n}:bullet|ordered@start", via parseListNumId). Rewritten worker-side (the only place allowed to import markdown-codec) into a small convention this app documents and owns itself, so MarkdownPreview.tsx never needs to depend on markdown-codec's internal string formats -- only on what this router promises to hand it. Only ever applied to a markdown-sourced ContentDocument (see the convert handler's own call site below).
 function normalizeMarkdownStyling(document: ContentDocument): ContentDocument {
   if (document.kind !== 'wordprocessing') return document;
   return { ...document, sections: document.sections.map((section) => ({ ...section, blocks: section.blocks.map(normalizeMarkdownBlock) })) };
 }
 
-// docx and odt both carry heading paragraphs with styleId "Heading1".."Heading6" (docx: the raw w:pStyle/@w:val; odt: synthesized to the same convention by odf.js/src/typed/odt/read.ts). Rewritten here into the same "heading-{N}" convention normalizeMarkdownStyling produces. Blockquote and code-block styleIds are detected by heuristic name matching (docx: "Quote"/"IntenseQuote"; odt: "Quotations"; both: any styleId containing "Code"/"Source"/"Preformatted"), rewritten into the same "quote"/"code-block" convention markdown-codec uses.
+// docx and odt heading paragraphs are identified primarily by the schema's ContentParagraph.headingLevel (docx: ooxml.js resolves w:outlineLvl through the style chain; odt: odf.js reads text:outline-level), with the "Heading1".."Heading6" styleId pattern as a fallback because the two signals have different coverage: a style NAMED "Heading3" can carry no outline level (caught only by the pattern), and a custom style can inherit an outline level while having a non-Heading name (caught only by the field). Rewritten here into the same "heading-{N}" convention normalizeMarkdownStyling produces. Blockquote and code-block styleIds are detected by heuristic name matching (docx: "Quote"/"IntenseQuote"; odt: "Quotations"; both: any styleId containing "Code"/"Source"/"Preformatted"), rewritten into the same "quote"/"code-block" convention markdown-codec uses.
 const WORDPROCESSING_HEADING_PATTERN = /^Heading([1-6])$/;
 
 function normalizeWordprocessingSemantics(document: ContentDocument): ContentDocument {
@@ -63,12 +64,15 @@ function normalizeWordprocessingSemantics(document: ContentDocument): ContentDoc
 }
 
 function normalizeWordprocessingBlock(block: ContentBlock): ContentBlock {
-  if (block.kind === 'paragraph' && block.styleId !== undefined) {
-    const headingMatch = WORDPROCESSING_HEADING_PATTERN.exec(block.styleId);
-    if (headingMatch !== null) return { ...block, styleId: `heading-${headingMatch[1]}` };
-    if (block.styleId.includes('Quote')) return { ...block, styleId: 'quote' };
-    if (block.styleId.includes('Code') || block.styleId.includes('Source') || block.styleId.includes('Preformatted')) {
-      return { ...block, styleId: 'code-block' };
+  if (block.kind === 'paragraph') {
+    if (block.headingLevel !== undefined) return { ...block, styleId: `heading-${block.headingLevel}` };
+    if (block.styleId !== undefined) {
+      const headingMatch = WORDPROCESSING_HEADING_PATTERN.exec(block.styleId);
+      if (headingMatch !== null) return { ...block, styleId: `heading-${headingMatch[1]}` };
+      if (block.styleId.includes('Quote')) return { ...block, styleId: 'quote' };
+      if (block.styleId.includes('Code') || block.styleId.includes('Source') || block.styleId.includes('Preformatted')) {
+        return { ...block, styleId: 'code-block' };
+      }
     }
     return block;
   }
@@ -130,10 +134,9 @@ function normalizeMarkdownBlock(block: ContentBlock): ContentBlock {
 }
 
 function normalizeMarkdownParagraph(paragraph: ContentParagraph): ContentParagraph {
-  const headingLevel = paragraph.styleId === undefined ? undefined : parseHeadingStyleId(paragraph.styleId);
   const styleId =
-    headingLevel !== undefined
-      ? `heading-${headingLevel}`
+    paragraph.headingLevel !== undefined
+      ? `heading-${paragraph.headingLevel}`
       : paragraph.styleId === QUOTE_STYLE_ID
         ? 'quote'
         : paragraph.styleId === CODE_BLOCK_STYLE_ID
@@ -181,22 +184,15 @@ const SanitizedLayoutDocumentSchema = LayoutDocumentSchema.extend({
   images: z.record(z.string(), SanitizedLayoutImageAssetSchema),
 });
 
-// Reads a ContentDocument directly from bytes, bypassing the conversion engine entirely -- no target build/encode, no PDF layout pass. Every format's standalone content reader is exported from documents.js except xlsx (deliberately not re-exported, see documents.js/src/index.ts:3), so xlsx falls back to the cheapest same-variant bridge (xlsx->ods) and reads .content from the result.
-async function readContentForFormat(format: DocumentFormat, bytes: Uint8Array<ArrayBuffer>, signal?: AbortSignal): Promise<ContentDocument> {
+// Reads a ContentDocument directly from bytes, bypassing the conversion engine entirely -- no target build/encode, no PDF layout pass. Every format's standalone content reader is exported from documents.js (xlsx included since documents.js 2.0 -- before that, xlsx had to detour through the xlsx->ods bridge and read .content off the conversion result).
+function readContentForFormat(format: DocumentFormat, bytes: Uint8Array<ArrayBuffer>): ContentDocument {
   if (format === 'markdown') return readMarkdownContent(new TextDecoder().decode(bytes));
-  if (format === 'xlsx') {
-    const result = await createLocalDocumentConverter().convert(
-      { source: { format: 'xlsx', bytes }, targetFormat: 'ods' },
-      { signal: signal ?? new AbortController().signal },
-    );
-    if (result.package?.content === undefined) throw new Error('xlsx bridge conversion produced no content');
-    return result.package.content;
-  }
   if (format === 'pdf') throw new Error('PDF has no standalone content reader');
   const pkg = decodeDocumentPackage(format, bytes);
   switch (format) {
     case 'docx': return readDocxContent(pkg);
     case 'pptx': return readPptxContent(pkg);
+    case 'xlsx': return readXlsxContent(pkg);
     case 'odt': return readOdtContent(pkg);
     case 'odp': return readOdpContent(pkg);
     case 'ods': return readOdsContent(pkg);
@@ -249,8 +245,8 @@ export const router = {
     read: os
       .input(z.object({ format: DocumentFormatSchema, bytes: BytesSchema }))
       .output(ContentDocumentSchema)
-      .handler(async ({ input, signal }) => {
-        const content = await readContentForFormat(input.format, input.bytes, signal);
+      .handler(({ input }) => {
+        const content = readContentForFormat(input.format, input.bytes);
         return normalizeContentForSource(content, input.format, input.bytes);
       }),
   },
