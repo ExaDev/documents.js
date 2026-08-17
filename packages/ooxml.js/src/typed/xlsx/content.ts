@@ -14,12 +14,14 @@ import { readDate1904, serialToIsoDate, serialToIsoDateTime, serialToIsoTime } f
 import { loadSharedStrings } from './shared-strings';
 import type { CellStyleEntry } from './styles';
 import { readCellStyles } from './styles';
+import type { SheetCellComment } from './comments';
+import { readSheetCellComments } from './comments';
 import { columnWidthCharsToPt, DEFAULT_ROW_HEIGHT_PT } from './units';
 import { readXmlBool } from './util';
 
 // Package -> ContentDocument (kind: 'spreadsheet'): a SpreadsheetML reader built geometry- and print-settings-rich, matching readOds's own established bar in the sibling odf.js package (real column widths, row heights, hidden rows/columns, merged ranges, every cell value kind this format actually distinguishes, and a genuinely populated ContentSheetPrintSettings), rather than the lossy cell-values-only projection typed/xlsx.ts's own readXlsx provides. Unlike readOds, this returns a full ContentDocument envelope directly (kind/formatVersion/metadata/sheets) rather than a bare {metadata, sheets} shape -- readXlsxContent and typed/xlsx/build.ts's buildXlsxPackage are designed as a matched read/write pair around ContentDocument specifically, so a caller can round-trip readXlsxContent(buildXlsxPackage(x)) without an extra wrapping/unwrapping step, and documents.js's own future ods<->xlsx bridge (bypassing PDF, the same way its existing odt<->docx/odp<->pptx bridges do) can treat this reader's own output as an already-correctly-shaped pivot value.
 //
-// SCOPE, stated up front rather than only at each individual site below: (1) xlsx's own cell-type vocabulary (t="n"/absent, "s", "str", "inlineStr", "b", "e") has no percentage/currency/date variant the way ODF's office:value-type does -- those are all just numeric cells with a number-format style applied, so recovering them means resolving the cell's own style index through xl/styles.xml to a numFmt code and classifying that code. This reader does exactly that (typed/xlsx/styles.ts resolves, typed/xlsx/number-format.ts classifies, typed/xlsx/serial.ts converts a date/time serial to ISO), so a numeric cell reads as ContentCellValue's 'percentage'/'currency'/'date'/'time'/'dateTime' kind whenever its format genuinely says so, and 'number' otherwise. What that classifier is NOT is a FORMATTER: nothing here renders a value through a format code, which is why (2) below still holds. Only genuinely numeric cells are ever reclassified -- an s/str/inlineStr/b/e/d cell already carries its own type in the file and is never second-guessed by a style. (2) displayText has no native xlsx equivalent to read verbatim the way ODF's text:p content or a cached string gives readOds for free -- see deriveDisplayText below for exactly how this reader constructs one instead. (3) ContentSheetCellSchema's own `runs` field (genuinely mixed inline formatting within one cell) is never populated -- xlsx rich-text runs (<is>/<si>'s own nested <r><rPr>...) use a distinct font-property vocabulary from docx/pptx's own run styling, and resolving it would duplicate a meaningful slice of that machinery for a rarely-used feature not in this reader's own required field list; only the concatenated plain text (via deriveDisplayText) is read. (4) The cell DECORATION fields (background/borders/alignment/verticalAlignment) ARE read now, resolved from the same cellXfs index the number format comes from: typed/xlsx/styles.ts's readCellStyles resolves each entry's fill bg colour, per-edge borders, and inline <alignment> straight off the <cellXfs><xf> the cell's own s attribute indexes, and readCell below copies whichever of them are present onto the ContentSheetCell -- mirroring how odf.js's readOds populates the same fields from a table:table-cell's style chain. Two genuine scope limits on that resolution live in styles.ts: a fill/border colour carried only as theme/indexed/tint/auto (not rgb) is left unread, and the dash-family border tokens (dashDot/dashDotDot/...) collapse to ContentStrokeStyle 'dashed' since the schema has no dash-dot member.
+// SCOPE, stated up front rather than only at each individual site below: (1) xlsx's own cell-type vocabulary (t="n"/absent, "s", "str", "inlineStr", "b", "e") has no percentage/currency/date variant the way ODF's office:value-type does -- those are all just numeric cells with a number-format style applied, so recovering them means resolving the cell's own style index through xl/styles.xml to a numFmt code and classifying that code. This reader does exactly that (typed/xlsx/styles.ts resolves, typed/xlsx/number-format.ts classifies, typed/xlsx/serial.ts converts a date/time serial to ISO), so a numeric cell reads as ContentCellValue's 'percentage'/'currency'/'date'/'time'/'dateTime' kind whenever its format genuinely says so, and 'number' otherwise. What that classifier is NOT is a FORMATTER: nothing here renders a value through a format code, which is why (2) below still holds. Only genuinely numeric cells are ever reclassified -- an s/str/inlineStr/b/e/d cell already carries its own type in the file and is never second-guessed by a style. (2) displayText has no native xlsx equivalent to read verbatim the way ODF's text:p content or a cached string gives readOds for free -- see deriveDisplayText below for exactly how this reader constructs one instead. (3) ContentSheetCellSchema's own `runs` field (genuinely mixed inline formatting within one cell) is never populated -- xlsx rich-text runs (<is>/<si>'s own nested <r><rPr>...) use a distinct font-property vocabulary from docx/pptx's own run styling, and resolving it would duplicate a meaningful slice of that machinery for a rarely-used feature not in this reader's own required field list; only the concatenated plain text (via deriveDisplayText) is read. (4) The cell DECORATION fields (background/borders/alignment/verticalAlignment) ARE read now, resolved from the same cellXfs index the number format comes from: typed/xlsx/styles.ts's readCellStyles resolves each entry's fill bg colour, per-edge borders, and inline <alignment> straight off the <cellXfs><xf> the cell's own s attribute indexes, and readCell below copies whichever of them are present onto the ContentSheetCell -- mirroring how odf.js's readOds populates the same fields from a table:table-cell's style chain. Two genuine scope limits on that resolution live in styles.ts: a fill/border colour carried only as theme/indexed/tint/auto (not rgb) is left unread, and the dash-family border tokens (dashDot/dashDotDot/...) collapse to ContentStrokeStyle 'dashed' since the schema has no dash-dot member. (5) The cell COMMENT field IS read, from both mechanisms xlsx has ever used for comments -- legacy VML-anchored notes (xl/comments{N}.xml) and the Office-365 threaded-comments extension -- resolved through the worksheet part's own relationships into typed/xlsx/comments.ts, whose own header states the full shape decisions. Comments are read-only: buildXlsxPackage never writes a comment part, so a ContentDocument round-tripped through that pair keeps its cells and drops their annotations.
 
 const WORKBOOK_PATH = 'xl/workbook.xml';
 
@@ -342,6 +344,27 @@ function readCells(worksheet: XmlElement, sharedStrings: readonly string[], cont
   return cells;
 }
 
+// Cell comments live in their own parts, reached through the sheet's own relationships (see comments.ts), so they attach after the cells themselves are read. A comment anchored to a position no <c> ever occupied (a note on a genuinely empty cell is ordinary) still carries real content worth keeping -- the same policy that keeps an <f>-only formula cell, materialised the same way: an empty value with the annotation attached.
+function applyCellComments(comments: ReadonlyMap<string, SheetCellComment>, cells: ContentSheetCell[]): void {
+  if (comments.size === 0) {
+    return;
+  }
+  const byPosition = new Map<string, ContentSheetCell>();
+  for (const cell of cells) {
+    byPosition.set(`${cell.row}:${cell.column}`, cell);
+  }
+  for (const [key, { row, column, comment }] of comments) {
+    const existing = byPosition.get(key);
+    if (existing !== undefined) {
+      existing.comment = comment;
+      continue;
+    }
+    const materialised: ContentSheetCell = { row, column, value: { kind: 'empty' }, displayText: '', comment };
+    cells.push(materialised);
+    byPosition.set(key, materialised);
+  }
+}
+
 function readSheet(
   pkg: Package,
   entry: SheetEntry,
@@ -354,9 +377,11 @@ function readSheet(
   if (worksheet === undefined) {
     return { name: entry.name, cells: [], columns: [], rows: [], images: [], printSettings: readPrintSettings(fallbackEmptyWorksheet(), sheetIndex, definedNamesBySheet) };
   }
+  const cells = readCells(worksheet, sharedStrings, context);
+  applyCellComments(readSheetCellComments(pkg, entry.path), cells);
   return {
     name: entry.name,
-    cells: readCells(worksheet, sharedStrings, context),
+    cells,
     columns: readColumns(worksheet),
     rows: readRows(worksheet),
     images: [],
