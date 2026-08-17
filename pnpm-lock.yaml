@@ -16,8 +16,8 @@ importers:
         specifier: ^1.1.9
         version: 1.1.9
       document-schema.js:
-        specifier: ^2.7.17
-        version: 2.7.17
+        specifier: ^3.0.0
+        version: 3.0.0
       fflate:
         specifier: ^0.8.3
         version: 0.8.3
@@ -1627,6 +1627,10 @@ packages:
 
   document-schema.js@2.7.17:
     resolution: {integrity: sha512-z+1XNFToTrERlxIgoeyFb4Rw5b2nP+EgFOMH/CQfIjo0V9+To0LG6jJe2JUbTUfaggvbBRAEfDAHDMPVcBPROQ==}
+    engines: {node: '>=20'}
+
+  document-schema.js@3.0.0:
+    resolution: {integrity: sha512-19ARydD8C5GjTlEq3UjYgi4imX77Wg56N8cjgEGhRsS1PF1PLqblY9sLjG/b+eQTXzN1SKvDLQSOKvUwWFUa4g==}
     engines: {node: '>=20'}
 
   dot-prop@5.3.0:
@@ -4578,6 +4582,10 @@ snapshots:
       path-type: 4.0.0
 
   document-schema.js@2.7.17:
+    dependencies:
+      zod: 4.4.3
+
+  document-schema.js@3.0.0:
     dependencies:
       zod: 4.4.3
 
