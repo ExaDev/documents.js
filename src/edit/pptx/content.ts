@@ -2,7 +2,9 @@ import type { ContentBlock, ContentDocument, ContentParagraph, ContentShape, Con
 import type { Package } from 'ooxml.js';
 import { base64ToBytes } from 'ooxml.js';
 import { drawingOfBlock, embeddedDrawingVectors } from '../../model/embedded-drawing';
+import { formulaOfBlock, formulaPlaceholderText } from '../../model/formula';
 import { resolveMetadataTimestamps } from '../../model/metadata';
+import type { OmmlDiagnosticSink } from '../../ooxml/pptx/formula';
 import type { ClockPort } from '../../ports/clock';
 import { systemClock } from '../../ports/clock';
 import type { DrawingParagraphInit } from './shape';
@@ -11,9 +13,10 @@ import { createEmptyPptxPackage } from './scaffold';
 import type { PptxSlide } from './slide';
 import type { PptxTable, PptxTableCell } from './table';
 
-// clock resolves content.metadata's own createdIso/modifiedIso the same way createPptx does (src/model/metadata.ts's resolveMetadataTimestamps) -- systemClock by default, never overwriting a createdIso/modifiedIso the source content already carried.
+// clock resolves content.metadata's own createdIso/modifiedIso the same way createPptx does (src/model/metadata.ts's resolveMetadataTimestamps) -- systemClock by default, never overwriting a createdIso/modifiedIso the source content already carried. onMathDiagnostic mirrors BuildDocxPackageOptions's own field exactly (src/edit/docx/content.ts) -- ExaDev/documents.js#563's write side now has the identical MathML -> OMML degrade-diagnostic channel docx already exposes.
 export interface BuildPptxPackageOptions {
   readonly clock?: ClockPort;
+  readonly onMathDiagnostic?: OmmlDiagnosticSink;
 }
 
 // ContentDocument -> a fresh pptx Package, the write-side counterpart to src/ooxml/pptx/read.ts's readPptxContent. Used by the PDF->pptx conversion path. Constructs its own package directly (createEmptyPptxPackage + PptxEditor) rather than calling createPptx(), mirroring buildDocxPackage's own identical reasoning (src/edit/docx/content.ts): createPptx() always starts metadata from {}, but this function needs the SOURCE content's own metadata to reach resolveMetadataTimestamps.
@@ -33,7 +36,7 @@ export function buildPptxPackage(content: ContentDocument, options?: BuildPptxPa
   for (const slide of content.slides) {
     const pptxSlide = editor.addSlide();
     for (const shape of slide.shapes) {
-      appendShape(pptxSlide, shape);
+      appendShape(pptxSlide, shape, options);
     }
     if (slide.notes.length > 0) {
       pptxSlide.notes = slide.notes;
@@ -42,7 +45,7 @@ export function buildPptxPackage(content: ContentDocument, options?: BuildPptxPa
   return editor.toPackage();
 }
 
-function appendShape(slide: PptxSlide, shape: ContentShape): void {
+function appendShape(slide: PptxSlide, shape: ContentShape, options?: BuildPptxPackageOptions): void {
   const [onlyBlock] = shape.blocks;
   // A shape carrying nothing but a recovered DRAWING (src/layout/reconstruct.ts's own vector recovery wraps one in a shape, since a slide has no other container for a block) becomes one real DrawingML autoshape per vector primitive on the slide's own shape tree -- NOT a single containing shape, since PresentationML positions every p:sp against the slide directly and has no "shape holding loose geometry" construct to nest them in. The vectors are translated by the wrapping shape's own frame origin, since that frame is where the embedded drawing sits on the slide.
   if (shape.blocks.length === 1 && onlyBlock?.kind === 'embeddedObject' && drawingOfBlock(onlyBlock) !== undefined) {
@@ -50,6 +53,21 @@ function appendShape(slide: PptxSlide, shape: ContentShape): void {
       slide.addVector(vector);
     }
     return;
+  }
+  // A shape carrying a real embedded formula (ExaDev/documents.js#563) becomes a text box holding one real OOXML equation -- PptxShape.appendOfficeMath, the identical src/omml/write.ts translator buildDocxPackage already uses. A formula whose MathML produces no OMML content at all falls back to its own plain-text stand-in, mirroring buildDocxPackage's own appendEmbeddedObject narrowing exactly (src/edit/docx/content.ts).
+  if (shape.blocks.length === 1 && onlyBlock?.kind === 'embeddedObject') {
+    const formula = formulaOfBlock(onlyBlock);
+    if (formula !== undefined) {
+      const textShape = slide.addTextBox({ frame: shape.frame, text: '' });
+      const { written, diagnostics } = textShape.appendOfficeMath(formula.mathml);
+      for (const diagnostic of diagnostics) {
+        options?.onMathDiagnostic?.(diagnostic, { sourcePath: onlyBlock.sourcePath });
+      }
+      if (!written) {
+        textShape.setParagraphs([{ runs: [{ text: formulaPlaceholderText(formula) }] }]);
+      }
+      return;
+    }
   }
   if (shape.blocks.length === 1 && onlyBlock?.kind === 'image') {
     const imageShape = slide.addImage({ frame: shape.frame, format: onlyBlock.format, bytes: base64ToBytes(onlyBlock.base64), altText: onlyBlock.altText });
