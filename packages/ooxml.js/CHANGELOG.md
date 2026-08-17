@@ -1,3 +1,10 @@
+# [2.17.0](https://github.com/ExaDev/ooxml.js/compare/v2.16.1...v2.17.0) (2026-08-17)
+
+
+### Features
+
+* emit pptx paragraph outline levels from a:pPr/[@lvl](https://github.com/lvl) ([686252c](https://github.com/ExaDev/ooxml.js/commit/686252c3d02335c21393cc900158cd94d2524b1e))
+
 ## [2.16.1](https://github.com/ExaDev/ooxml.js/compare/v2.16.0...v2.16.1) (2026-08-17)
 
 # [2.16.0](https://github.com/ExaDev/ooxml.js/compare/v2.15.0...v2.16.0) (2026-08-17)
