@@ -1,3 +1,10 @@
+## [1.5.101](https://github.com/ExaDev/document-mcp/compare/v1.5.100...v1.5.101) (2026-08-17)
+
+
+### Bug Fixes
+
+* diagnose pre-documents.js-2.0.0 DocumentPackage dumps in from_package ([a8c9e7c](https://github.com/ExaDev/document-mcp/commit/a8c9e7ccc289cff1fb430b3b6657557ed5a02d9d))
+
 ## [1.5.100](https://github.com/ExaDev/document-mcp/compare/v1.5.99...v1.5.100) (2026-08-17)
 
 ## [1.5.99](https://github.com/ExaDev/document-mcp/compare/v1.5.98...v1.5.99) (2026-08-17)
