@@ -1,3 +1,10 @@
+# [2.1.0](https://github.com/ExaDev/documents.js/compare/v2.0.0...v2.1.0) (2026-08-17)
+
+
+### Features
+
+* add csv/tsv as a first-class DocumentFormat mapped to the spreadsheet variant ([75180a1](https://github.com/ExaDev/documents.js/commit/75180a1778f35fd532153dcd75b658f4cbb77268))
+
 # [2.0.0](https://github.com/ExaDev/documents.js/compare/v1.102.2...v2.0.0) (2026-08-17)
 
 
