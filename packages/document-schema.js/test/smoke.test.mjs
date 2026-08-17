@@ -69,13 +69,31 @@ describe('smoke: generated JSON Schema files', () => {
     expect(contentDocument.$defs.ContentBlock.oneOf).toHaveLength(5);
   });
 
-  it("content-document.schema.json's formula variant refs the hand-authored recursive MathMlNode definition", () => {
+  it("content-document.schema.json's formula variant refs the hand-authored ContentFormula and MathMlNode definitions", () => {
     const contentDocument = readSchema('content-document.schema.json');
     const formula = contentDocument.oneOf.find((variant) => variant.properties.kind.const === 'formula');
-    expect(formula.properties.formula.properties.mathml.items.$ref).toBe('#/$defs/MathMlNode');
+    expect(formula.properties.formula.$ref).toBe('#/$defs/ContentFormula');
+    expect(contentDocument.$defs.ContentFormula.properties.mathml.items.$ref).toBe('#/$defs/MathMlNode');
     expect(contentDocument.$defs.MathMlNode.oneOf).toHaveLength(6);
     // The recursion itself: an element's children point back at the shared MathMlNode definition rather than inlining.
     expect(contentDocument.$defs.MathMlElement.properties.children.items.$ref).toBe('#/$defs/MathMlNode');
+  });
+
+  it("content-document.schema.json's formula and symbol-table definitions carry the two-layer math model", () => {
+    const contentDocument = readSchema('content-document.schema.json');
+    // The two layers join in one hand-authored fragment: verbatim LaTeX presentation, semantic MathExpression content, and provenance alongside the MathML tree.
+    expect(contentDocument.$defs.ContentFormula.properties.presentation.$ref).toBe('#/$defs/MathPresentation');
+    expect(contentDocument.$defs.ContentFormula.properties.content.$ref).toBe('#/$defs/MathExpression');
+    expect(contentDocument.$defs.ContentFormula.properties.provenance.$ref).toBe('#/$defs/MathProvenance');
+    expect(contentDocument.$defs.ContentFormula.required).toEqual(['mathml']);
+    // The closed grammar's eight variants, and the unparsed fallback inside them.
+    expect(contentDocument.$defs.MathExpression.oneOf).toHaveLength(8);
+    expect(contentDocument.$defs.MathUnparsed.required).toEqual(['kind', 'latex']);
+    // The document-level symbol table is one named reference from every ContentDocument arm, not five inlined copies.
+    for (const variant of contentDocument.oneOf) {
+      expect(variant.properties.symbolTable.$ref).toBe('#/$defs/SymbolTable');
+    }
+    expect(contentDocument.$defs.SymbolTable.required).toEqual(['symbols', 'units']);
   });
 
   it('layout-document.schema.json has the expected pages/images shape', () => {

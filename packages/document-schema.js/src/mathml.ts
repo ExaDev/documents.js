@@ -65,7 +65,7 @@ function isMathMlAttribute(value: unknown): value is MathMlAttribute {
   return isRecord(value) && typeof value.name === 'string' && typeof value.value === 'string';
 }
 
-// Recursive structural guard. Used via z.custom so element children validate without a recursive Zod schema (which collapses to `unknown` under z.lazy in this Zod version) -- the third such node in this package, alongside ContentBlockSchema and ContentEmbeddedObjectSchema (src/content.ts).
+// Recursive structural guard. Used via z.custom so element children validate without a recursive Zod schema (which collapses to `unknown` under z.lazy in this Zod version) -- one of this package's z.custom() recursion nodes, alongside ContentBlockSchema and ContentEmbeddedObjectSchema (src/content.ts) and MathExpressionSchema (src/math.ts).
 export function isMathMlNode(value: unknown): value is MathMlNode {
   if (!isRecord(value)) {
     return false;

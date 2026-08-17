@@ -5,7 +5,7 @@
 //
 // This script is deliberately outside tsconfig.json's "include" and eslint.config.ts's linted set (see the "scripts" entry in both), matching the existing precedent for test/smoke.test.mjs: a standalone build step, not part of the shipped src/ program.
 //
-// -- The z.custom() opacity problem -- ContentDocumentSchema's tree contains three schemas built from a hand-written type-guard predicate (z.custom()) rather than real Zod primitives -- ContentBlockSchema, ContentEmbeddedObjectSchema, and MathMlNodeSchema -- because the recursive block/table/embedded-object and MathML-element structures they represent can't be expressed via z.lazy() in the pinned Zod version (see src/content.ts's own comments on isContentBlock/isContentEmbeddedObject, and src/mathml.ts's on isMathMlNode). z.toJSONSchema() cannot introspect a z.custom() node at all: with `unrepresentable: 'any'` it silently emits an empty `{}` for that node (confirmed by reading node_modules/zod/v4/core/json-schema-processors.js's customProcessor, which does nothing to its `json` argument once `unrepresentable !== 'throw'`); without that option it throws immediately, before override() ever runs (override only patches at finalize() time, strictly after the pass that would otherwise throw). So these three nodes need hand-authored JSON Schema fragments, spliced in via the override() callback below -- the fragments themselves (CONTENT_DEFS, MAX_SAFE_INTEGER, EMBEDDED_OBJECT_KINDS, CONTENT_DOCUMENT_URI) now live in src/content-json-schema-defs.ts rather than inline here, so this script and that module's own regression test (content-json-schema-defs.test.ts) share exactly one copy -- see that src module's own top comment for why it had to move out of this script.
+// -- The z.custom() opacity problem -- ContentDocumentSchema's tree contains four schemas built from a hand-written type-guard predicate (z.custom()) rather than real Zod primitives -- ContentBlockSchema, ContentEmbeddedObjectSchema, MathMlNodeSchema, and MathExpressionSchema -- because the recursive block/table/embedded-object, MathML-element, and math-expression structures they represent can't be expressed via z.lazy() in the pinned Zod version (see src/content.ts's own comments on isContentBlock/isContentEmbeddedObject, src/mathml.ts's on isMathMlNode, and src/math.ts's on isMathExpression). z.toJSONSchema() cannot introspect a z.custom() node at all: with `unrepresentable: 'any'` it silently emits an empty `{}` for that node (confirmed by reading node_modules/zod/v4/core/json-schema-processors.js's customProcessor, which does nothing to its `json` argument once `unrepresentable !== 'throw'`); without that option it throws immediately, before override() ever runs (override only patches at finalize() time, strictly after the pass that would otherwise throw). So everything downstream of those four nodes needs hand-authored JSON Schema fragments, spliced in via the override() callback below -- the fragments themselves (CONTENT_DEFS, MAX_SAFE_INTEGER, EMBEDDED_OBJECT_KINDS, CONTENT_DOCUMENT_URI) now live in src/content-json-schema-defs.ts rather than inline here, so this script and that module's own regression test (content-json-schema-defs.test.ts) share exactly one copy -- see that src module's own top comment for why it had to move out of this script. Two real z.objects are replaced with a $ref to their hand-authored fragments too: ContentFormulaSchema (a real z.object, but its mathml/content fields drag in the opaque MathMlNodeSchema/MathExpressionSchema, so its auto-generated body would be hollowed out around them -- the ContentTableCellSchema situation) and SymbolTableSchema (fully generatable, but $ref-ing it keeps each ContentDocument arm's symbolTable field one named reference instead of five inlined copies of the whole unit-registry subtree).
 //
 // -- Cross-file references -- Rather than each of the three .schema.json files being a fully independent, self-contained document (duplicating ContentDocument's entire body inside document-package.schema.json), this uses Zod's registry-based multi-schema generation: a dedicated z.registry() (not z.globalRegistry, so a one-shot build step never pollutes shared process-wide state), registry.add(schema, {id}) for all three schemas, then one z.toJSONSchema(registry, {uri, override, unrepresentable: 'any'}) call. Zod automatically produces real $ref-based cross-references between the three output files for any registered schema encountered while generating another (confirmed empirically: see the experiment behind this script's own review) -- DocumentPackageSchema's own `content`/`layout` fields come out as `{ $ref: <external URI> }` rather than inlining ContentDocument/LayoutDocument's entire bodies.
 //
@@ -22,6 +22,7 @@ import {
   ContentBlockSchema,
   ContentDocumentSchema,
   ContentEmbeddedObjectSchema,
+  ContentFormulaSchema,
   CONTENT_DOCUMENT_URI,
   DocumentPackageSchema,
   EMBEDDED_OBJECT_KINDS,
@@ -30,6 +31,7 @@ import {
   MAX_SAFE_INTEGER,
   SCHEMA_FILE_NAMES,
   schemaUriFor,
+  SymbolTableSchema,
 } from '../dist/index.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -44,11 +46,27 @@ registry.add(DocumentPackageSchema, { id: 'DocumentPackage' });
 registry.add(ContentDocumentSchema, { id: 'ContentDocument' });
 registry.add(LayoutDocumentSchema, { id: 'LayoutDocument' });
 
-// Four branches, keyed on reference equality against the exported consts (each z.custom() call has distinct object identity, confirmed empirically). override() fires exactly once per unique Zod schema instance encountered anywhere across the whole registry-processing session, regardless of how many field sites reference it or which of the three output files happens to reach it first -- mutating ctx.jsonSchema in place is what makes one override call apply everywhere that exact schema object is used (e.g. ContentBlockSchema appears in ContentSectionSchema, ContentShapeSchema, and ContentTableCellSchema all at once).
+// Six branches, keyed on reference equality against the exported consts (each z.custom() call has distinct object identity, confirmed empirically). override() fires exactly once per unique Zod schema instance encountered anywhere across the whole registry-processing session, regardless of how many field sites reference it or which of the three output files happens to reach it first -- mutating ctx.jsonSchema in place is what makes one override call apply everywhere that exact schema object is used (e.g. ContentBlockSchema appears in ContentSectionSchema, ContentShapeSchema, and ContentTableCellSchema all at once).
 function override(ctx) {
   if (ctx.zodSchema === ContentDocumentSchema) {
-    // Zod's own discriminated-union conversion already produced a correct `oneOf` of the five kind variants on ctx.jsonSchema (each is a real z.object; the 'formula' variant reaches the custom MathMlNodeSchema through ContentFormulaSchema.mathml, patched by its own branch below) -- this only adds the hand-authored $defs block alongside it.
+    // Zod's own discriminated-union conversion already produced a correct `oneOf` of the five kind variants on ctx.jsonSchema (each is a real z.object; the 'formula' variant reaches the custom nodes through ContentFormulaSchema, replaced wholesale by its own branch below) -- this only adds the hand-authored $defs block alongside it.
     ctx.jsonSchema.$defs = CONTENT_DEFS;
+    return;
+  }
+  if (ctx.zodSchema === ContentFormulaSchema) {
+    // A real z.object, but two of its fields reach opaque custom nodes (mathml -> MathMlNodeSchema, content -> MathExpressionSchema), so the whole thing is transcribed as $defs.ContentFormula and every occurrence replaced -- same treatment as ContentBlockSchema below, except the auto-generated body must be cleared first: unlike a custom node (which starts as `{}`), a real object schema's jsonSchema already carries type/properties/required by the time finalize() runs.
+    for (const key of Object.keys(ctx.jsonSchema)) {
+      delete ctx.jsonSchema[key];
+    }
+    ctx.jsonSchema.$ref = '#/$defs/ContentFormula';
+    return;
+  }
+  if (ctx.zodSchema === SymbolTableSchema) {
+    // Fully generatable, but $ref-ing the hand-authored $defs.SymbolTable keeps each of the five ContentDocument arms' symbolTable field one named reference instead of five inlined copies of the whole symbol/unit subtree. Same clear-then-set as ContentFormulaSchema above.
+    for (const key of Object.keys(ctx.jsonSchema)) {
+      delete ctx.jsonSchema[key];
+    }
+    ctx.jsonSchema.$ref = '#/$defs/SymbolTable';
     return;
   }
   if (ctx.zodSchema === MathMlNodeSchema) {
