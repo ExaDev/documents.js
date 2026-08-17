@@ -1,3 +1,10 @@
+# [1.25.0](https://github.com/ExaDev/documents/compare/v1.24.0...v1.25.0) (2026-08-17)
+
+
+### Features
+
+* support the csv and svg formats ([c38bdfb](https://github.com/ExaDev/documents/commit/c38bdfbba372a3e48d7e787047ea24d96dd3346c))
+
 # [1.24.0](https://github.com/ExaDev/documents/compare/v1.23.55...v1.24.0) (2026-08-17)
 
 
