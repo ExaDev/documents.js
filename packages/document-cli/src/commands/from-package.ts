@@ -1,13 +1,13 @@
 import { type Command } from 'commander';
-import { UnrecognizedDocumentSchemaError, buildDocumentBytes, documentFromJson, documentSchemaKindOf } from 'documents.js';
+import { UnrecognizedDocumentSchemaError, buildCsvText, buildDocumentBytes, buildSvgText, documentFromJson, documentSchemaKindOf, encodeCsvText, encodeSvgText } from 'documents.js';
 import { createRuntimeSignal } from '../runtime/abort';
 import { createDiagnosticReporter } from '../runtime/diagnostics';
 import { EXIT_INPUT_ERROR, EXIT_SUCCESS, EXIT_USAGE_ERROR, mapErrorToExit } from '../runtime/exit-codes';
 import { readInput, resolveDefaultOutputPath, writeOutput } from '../runtime/io';
 import { KNOWN_DOCUMENT_FORMATS, formatError, resolveTargetFormat } from './shared';
-import { addJsonOption, addOutOption, addQuietOption, addTimeoutOption, addVerboseOption, type ConversionCliFlags } from './options';
+import { addDelimiterOption, addJsonOption, addOutOption, addPageOption, addQuietOption, addSheetOption, addTimeoutOption, addVerboseOption, type ConversionCliFlags, type SelectionCliFlags } from './options';
 
-interface FromPackageCliOptions extends ConversionCliFlags {
+interface FromPackageCliOptions extends ConversionCliFlags, SelectionCliFlags {
   readonly to?: string;
 }
 
@@ -59,7 +59,13 @@ async function runFromPackage(input: string, output: string | undefined, options
       return EXIT_USAGE_ERROR;
     }
 
-    const bytes = buildDocumentBytes(result.value, target.format);
+    // csv and svg are the two targets whose codecs take selection options buildDocumentBytes cannot pass (its content.write contract is options-free, so a multi-sheet package would fail CsvSheetNotSpecifiedError with no flag to answer it), so they are built through the identical buildCsvText/buildSvgText functions the codec registry's own write wrappers call, carrying this command's --delimiter/--sheet/--page straight through.
+    const bytes =
+      target.format === 'csv'
+        ? encodeCsvText(buildCsvText(result.value.content, { delimiter: options.delimiter, sheet: options.sheet }))
+        : target.format === 'svg'
+          ? encodeSvgText(buildSvgText(result.value.content, { page: options.page }))
+          : buildDocumentBytes(result.value, target.format);
     await writeOutput(resolvedOutput, bytes);
 
     const reporter = createDiagnosticReporter({ json: options.json, quiet: options.quiet, command });
@@ -85,6 +91,10 @@ export function registerFromPackageCommand(program: Command): void {
   addJsonOption(command);
   addQuietOption(command);
   addVerboseOption(command);
+  // Unconditionally, like the generic `convert` command's own font flags: the target is only known once --to or the output path resolves at run time, and csv/svg are two of the targets it can resolve to.
+  addDelimiterOption(command);
+  addSheetOption(command);
+  addPageOption(command);
   command.option('--to <format>', `target format when it cannot be inferred from the output path (${KNOWN_DOCUMENT_FORMATS})`);
   command.action(async (input: string, output: string | undefined, options: FromPackageCliOptions) => {
     process.exitCode = await runFromPackage(input, output, options);

@@ -66,3 +66,23 @@ export interface FontCliFlags {
   readonly fontFile?: readonly string[];
   readonly reportFontSubstitutions?: boolean;
 }
+
+// The three selection flags documents.js's converter threads to its csv and svg edges: a csv source reads (and a csv target writes) with `delimiter`, a csv target picks `sheet` when the source document carries more than one, and an svg target picks `page` when the source document has more than one (0-based, matching the array index documents.js's own SvgPageNotFoundError reports). Registered only on the commands whose fixed format pair can reach the edge in question, plus unconditionally on `convert` and `from-package` whose target is only known at run time -- the same registration reasoning addFontOptions's own comment documents for the font flags.
+export function addDelimiterOption(command: Command): Command {
+  return command.option('--delimiter <char>', 'field delimiter a csv source reads with, or a csv target writes with (default \',\')');
+}
+
+export function addSheetOption(command: Command): Command {
+  return command.option('--sheet <name>', 'the sheet a csv target writes, when the source document has more than one');
+}
+
+export function addPageOption(command: Command): Command {
+  return command.option('--page <index>', 'the 0-based page an svg target draws, when the source document has more than one', (value: string) => Number.parseInt(value, 10));
+}
+
+// The three attributes the helpers above register, kept out of ConversionCliFlags for the same reason FontCliFlags is: they exist only on the subset of commands the helpers were applied to.
+export interface SelectionCliFlags {
+  readonly delimiter?: string;
+  readonly sheet?: string;
+  readonly page?: number;
+}

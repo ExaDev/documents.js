@@ -1,11 +1,16 @@
 import {
+  CsvSheetNotFoundError,
+  CsvSheetNotSpecifiedError,
   OdbNoEmbeddedDataSourceError,
+  OdbReportNotSpecifiedError,
   OdbTableNotFoundError,
   OdbTableNotSpecifiedError,
   OdbUnsupportedFormatError,
   OdmUnresolvedSectionError,
   PdfEncryptedError,
   PdfParseError,
+  SvgMultiPageNotSpecifiedError,
+  SvgPageNotFoundError,
 } from 'documents.js';
 import { describe, expect, it } from 'vitest';
 import { EXIT_INPUT_ERROR, EXIT_INTERRUPTED, EXIT_NEEDS_INFO, EXIT_TIMEOUT, mapErrorToExit } from './exit-codes';
@@ -41,6 +46,26 @@ describe('mapErrorToExit', () => {
 
   it('maps OdbUnsupportedFormatError to EXIT_NEEDS_INFO', () => {
     expect(mapErrorToExit(new OdbUnsupportedFormatError('unrecognised-engine', 'no known embedded database engine detected'), undefined)).toBe(EXIT_NEEDS_INFO);
+  });
+
+  it('maps OdbReportNotSpecifiedError to EXIT_NEEDS_INFO', () => {
+    expect(mapErrorToExit(new OdbReportNotSpecifiedError(['SalesByRegion', 'StockByWarehouse']), undefined)).toBe(EXIT_NEEDS_INFO);
+  });
+
+  it('maps CsvSheetNotSpecifiedError to EXIT_NEEDS_INFO', () => {
+    expect(mapErrorToExit(new CsvSheetNotSpecifiedError(['Sheet1', 'Sheet2']), undefined)).toBe(EXIT_NEEDS_INFO);
+  });
+
+  it('maps CsvSheetNotFoundError to EXIT_NEEDS_INFO', () => {
+    expect(mapErrorToExit(new CsvSheetNotFoundError('MISSING', ['Sheet1', 'Sheet2']), undefined)).toBe(EXIT_NEEDS_INFO);
+  });
+
+  it('maps SvgMultiPageNotSpecifiedError to EXIT_NEEDS_INFO', () => {
+    expect(mapErrorToExit(new SvgMultiPageNotSpecifiedError(3), undefined)).toBe(EXIT_NEEDS_INFO);
+  });
+
+  it('maps SvgPageNotFoundError to EXIT_NEEDS_INFO', () => {
+    expect(mapErrorToExit(new SvgPageNotFoundError(7, 3), undefined)).toBe(EXIT_NEEDS_INFO);
   });
 
   it('maps PdfEncryptedError to EXIT_INPUT_ERROR', () => {

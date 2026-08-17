@@ -5,9 +5,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { createDocx, createFontRegistry } from 'documents.js';
+import { createDocx, createFontRegistry, createOdg, createOds } from 'documents.js';
 // dist/index.js is this package's own deliberately-importable barrel (see its own top-of-file comment: "so an external consumer -- or a test -- can call this CLI's conversion logic directly"), unlike dist/cli.js -- pulling the exit-code constants from the built artifact avoids hardcoding magic exit-code numbers in this file while still proving the barrel build itself is sound.
-import { EXIT_INPUT_ERROR, EXIT_SUCCESS, EXIT_USAGE_ERROR } from '../dist/index.js';
+import { EXIT_INPUT_ERROR, EXIT_NEEDS_INFO, EXIT_SUCCESS, EXIT_USAGE_ERROR } from '../dist/index.js';
 
 const CLI_PATH = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
 
@@ -272,6 +272,91 @@ describe('dist/cli.js docx-to-pdf --font-file', () => {
       const rejected = await spawnCli(['docx-to-pdf', inputPath, join(tmpDir, 'never-written.pdf'), '--font-file', notAFont]);
       expect(rejected.code).not.toBe(EXIT_SUCCESS);
       expect(rejected.stderr.toString('utf8')).toContain('not-a-font.txt is not a TrueType/OpenType font file');
+    } finally {
+      await rm(tmpDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('dist/cli.js csv and svg conversions', () => {
+  // The same two fixtures the unit suite's src/commands/convert-selection.test.ts builds: a multi-sheet .ods (a csv target has to be told which sheet) and a multi-page .odg whose pages carry one rect each at disjoint coordinates (buildSvgText draws vectors only, so coordinates are how the emitted SVG tells the pages apart).
+  function buildMultiSheetOdsBytes() {
+    const editor = createOds();
+    const first = editor.sheets()[0];
+    first.cell(0, 0).value = { kind: 'string', value: 'AlphaCell' };
+    first.cell(0, 1).value = { kind: 'number', value: 42 };
+    const beta = editor.addSheet('Beta');
+    beta.cell(0, 0).value = { kind: 'string', value: 'BetaCell' };
+    beta.cell(0, 1).value = { kind: 'number', value: 7 };
+    return editor.toBytes();
+  }
+
+  function buildMultiPageOdgBytes() {
+    const editor = createOdg();
+    editor.addPage().addRect({ frame: { xPt: 20, yPt: 20, widthPt: 100, heightPt: 50 } });
+    editor.addPage().addRect({ frame: { xPt: 300, yPt: 400, widthPt: 100, heightPt: 50 } });
+    return editor.toBytes();
+  }
+
+  it('formats --json lists the csv and svg conversion pairs', async () => {
+    const { code, stdout } = await spawnCli(['formats', '--json']);
+    expect(code).toBe(EXIT_SUCCESS);
+    const pairs = JSON.parse(stdout.toString('utf8')).map((entry) => `${entry.source}->${entry.target}`);
+    expect(pairs).toContain('ods->csv');
+    expect(pairs).toContain('csv->pdf');
+    expect(pairs).toContain('odg->svg');
+    expect(pairs).toContain('svg->pdf');
+  });
+
+  it('converts a csv source to a real PDF through the generic convert command', async () => {
+    const tmpDir = await mkdtemp(join(tmpdir(), 'document-cli-smoke-'));
+    try {
+      const inputPath = join(tmpDir, 'table.csv');
+      const outputPath = join(tmpDir, 'table.pdf');
+      await writeFile(inputPath, 'Left,Right\nfirst,second\n');
+
+      const { code } = await spawnCli(['convert', inputPath, outputPath]);
+      expect(code).toBe(EXIT_SUCCESS);
+      expect(isPdfBytes(await readFile(outputPath))).toBe(true);
+    } finally {
+      await rm(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('exits 3 on an ambiguous csv target, then writes the picked sheet with --sheet', async () => {
+    const tmpDir = await mkdtemp(join(tmpdir(), 'document-cli-smoke-'));
+    try {
+      const inputPath = join(tmpDir, 'multi.ods');
+      await writeFile(inputPath, buildMultiSheetOdsBytes());
+
+      const unpicked = await spawnCli(['ods-to-csv', inputPath, join(tmpDir, 'unpicked.csv')]);
+      expect(unpicked.code).toBe(EXIT_NEEDS_INFO);
+      expect(unpicked.stderr.toString('utf8')).toContain('Beta');
+
+      const outputPath = join(tmpDir, 'beta.csv');
+      const picked = await spawnCli(['ods-to-csv', inputPath, outputPath, '--sheet', 'Beta', '--delimiter', ';']);
+      expect(picked.code).toBe(EXIT_SUCCESS);
+      await expect(readFile(outputPath, 'utf8')).resolves.toContain('BetaCell;7');
+    } finally {
+      await rm(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('exits 3 on an ambiguous svg target, then draws the picked page with --page', async () => {
+    const tmpDir = await mkdtemp(join(tmpdir(), 'document-cli-smoke-'));
+    try {
+      const inputPath = join(tmpDir, 'multi.odg');
+      await writeFile(inputPath, buildMultiPageOdgBytes());
+
+      const unpicked = await spawnCli(['odg-to-svg', inputPath, join(tmpDir, 'unpicked.svg')]);
+      expect(unpicked.code).toBe(EXIT_NEEDS_INFO);
+
+      const outputPath = join(tmpDir, 'page1.svg');
+      const picked = await spawnCli(['odg-to-svg', inputPath, outputPath, '--page', '1']);
+      expect(picked.code).toBe(EXIT_SUCCESS);
+      const svg = await readFile(outputPath, 'utf8');
+      expect(svg).toContain('<rect x="300" y="400"');
+      expect(svg).not.toContain('<rect x="20" y="20"');
     } finally {
       await rm(tmpDir, { recursive: true, force: true });
     }

@@ -1,4 +1,6 @@
 import {
+  CsvSheetNotFoundError,
+  CsvSheetNotSpecifiedError,
   HsqldbSqlEvaluationError,
   HsqldbSqlParseError,
   HsqldbSqlUnsupportedError,
@@ -10,6 +12,8 @@ import {
   OdmUnresolvedSectionError,
   PdfEncryptedError,
   PdfParseError,
+  SvgMultiPageNotSpecifiedError,
+  SvgPageNotFoundError,
   UnsupportedFontSourceFormatError,
 } from 'documents.js';
 
@@ -29,14 +33,18 @@ export function mapErrorToExit(error: unknown, abortReason: 'interrupt' | 'timeo
   if (abortReason === 'timeout') {
     return EXIT_TIMEOUT;
   }
-  // These six all mean "documents.js already told the caller exactly what extra input it needs" (which .odm chapter hrefs are unresolved, which .odb table or report to pick, which format isn't embedded) -- distinct from an ordinary unusable-input failure because the fix is supplying more information, not a different file.
+  // These ten all mean "documents.js already told the caller exactly what extra input it needs" (which .odm chapter hrefs are unresolved, which .odb table or report to pick, which format isn't embedded, which sheet a csv target should write or which page an svg target should draw) -- distinct from an ordinary unusable-input failure because the fix is supplying more information, not a different file.
   if (
     error instanceof OdmUnresolvedSectionError ||
     error instanceof OdbTableNotSpecifiedError ||
     error instanceof OdbTableNotFoundError ||
     error instanceof OdbNoEmbeddedDataSourceError ||
     error instanceof OdbUnsupportedFormatError ||
-    error instanceof OdbReportNotSpecifiedError
+    error instanceof OdbReportNotSpecifiedError ||
+    error instanceof CsvSheetNotSpecifiedError ||
+    error instanceof CsvSheetNotFoundError ||
+    error instanceof SvgMultiPageNotSpecifiedError ||
+    error instanceof SvgPageNotFoundError
   ) {
     return EXIT_NEEDS_INFO;
   }

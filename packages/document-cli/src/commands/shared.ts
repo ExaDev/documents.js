@@ -10,7 +10,7 @@ import { createFilesystemMarkdownImageResolver } from '../runtime/markdown-image
 import { readInput, resolveDefaultOutputPath, writeOutput } from '../runtime/io';
 
 // Every DocumentFormat this CLI's commands know how to name in a usage error -- shared between the generic `convert` command (commands/convert.ts) and `from-package` (commands/from-package.ts), the two commands whose target format is not already fixed by their own name.
-export const KNOWN_DOCUMENT_FORMATS = 'docx, pptx, xlsx, odt, odp, ods, odg, odf, markdown, pdf';
+export const KNOWN_DOCUMENT_FORMATS = 'docx, pptx, xlsx, odt, odp, ods, odg, svg, odf, csv, markdown, pdf';
 
 // Resolves a target DocumentFormat the same way for both callers above: an explicit --to always wins (it is the caller stating intent unambiguously), falling back to the output path's own extension, and finally failing with a usage error naming exactly what is missing.
 export function resolveTargetFormat(output: string | undefined, out: string | undefined, to: string | undefined): { readonly format: DocumentFormat } | { readonly errorMessage: string } {
@@ -41,6 +41,10 @@ export interface ConversionCommandOptions {
   // Both absent on a command addFontOptions (commands/options.ts) was never applied to -- a pdf-to-<format> reconstruction or a format-to-format bridge, neither of which resolves a typeface at all.
   readonly fontFiles?: readonly string[];
   readonly reportFontSubstitutions?: boolean;
+  // The csv/svg edge selections from commands/options.ts's own SelectionCliFlags -- threaded straight into the port's own ConversionOptions, which passes them only to the edges that read them (a csv read/write delimiter and sheet pick, an svg write page pick). Undefined on a pair with no csv or svg edge, where the port has nothing to hand them to.
+  readonly delimiter?: string;
+  readonly sheet?: string;
+  readonly page?: number;
 }
 
 // One clean line for a human, with a full stack trace appended only under --verbose -- a bare stack trace on every failure is noise for the common "wrong file" case, but indispensable when actually debugging this CLI itself.
@@ -82,6 +86,9 @@ export function buildConversionAction(
           onFontSubstitution: options.reportFontSubstitutions === true ? createFontSubstitutionReporter({ json: options.json, quiet: options.quiet, command }) : undefined,
           // Resolve a markdown source's own non-data: image destinations against the input file's directory, so `convert notes.md` embeds `![](./image.png)` rather than degrading it to alt text. Ignored by every non-markdown conversion (the port threads it only to the markdown edges), so wiring it unconditionally is a no-op for docx/pptx/odt/... sources. For stdin (`-`) the base directory is the current working directory.
           images: createFilesystemMarkdownImageResolver(input === '-' ? '.' : dirname(resolve(input))),
+          delimiter: options.delimiter,
+          sheet: options.sheet,
+          page: options.page,
         },
       );
 

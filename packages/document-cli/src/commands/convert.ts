@@ -4,9 +4,9 @@ import { createLocalDocumentConverter } from 'documents.js';
 import { inferFormatFromExtension } from '../format';
 import { EXIT_USAGE_ERROR } from '../runtime/exit-codes';
 import { KNOWN_DOCUMENT_FORMATS, type ConversionCommandOptions, buildConversionAction, resolveTargetFormat } from './shared';
-import { addConversionFlags, addDumpPackageOption, addFontOptions, type ConversionCliFlags, type FontCliFlags } from './options';
+import { addConversionFlags, addDelimiterOption, addDumpPackageOption, addFontOptions, addPageOption, addSheetOption, type ConversionCliFlags, type FontCliFlags, type SelectionCliFlags } from './options';
 
-interface ConvertCliOptions extends ConversionCliFlags, FontCliFlags {
+interface ConvertCliOptions extends ConversionCliFlags, FontCliFlags, SelectionCliFlags {
   readonly dumpPackage?: string;
 }
 
@@ -24,6 +24,9 @@ function toConversionCommandOptions(options: ConvertCliOptions): ConversionComma
     dumpPackage: options.dumpPackage,
     fontFiles: options.fontFile,
     reportFontSubstitutions: options.reportFontSubstitutions,
+    delimiter: options.delimiter,
+    sheet: options.sheet,
+    page: options.page,
   };
 }
 
@@ -67,6 +70,16 @@ export function registerConversionCommands(program: Command): void {
     if (target === 'pdf') {
       addFontOptions(command);
     }
+    // The csv/svg edge selections (see commands/options.ts's own SelectionCliFlags comment): --delimiter reaches both a csv source's read edge and a csv target's write edge, --sheet only a csv target's write edge, --page only an svg target's write edge. Everything else has no edge that reads them, so the flags are absent rather than advertised as no-ops.
+    if (source === 'csv' || target === 'csv') {
+      addDelimiterOption(command);
+    }
+    if (target === 'csv') {
+      addSheetOption(command);
+    }
+    if (target === 'svg') {
+      addPageOption(command);
+    }
     command.action(async (input: string, output: string | undefined, options: ConvertCliOptions) => {
       process.exitCode = await buildConversionAction(source, target)(input, output, toConversionCommandOptions(options));
     });
@@ -79,6 +92,10 @@ export function registerConversionCommands(program: Command): void {
   addDumpPackageOption(generic);
   // Unconditionally here, unlike the explicit per-pair commands above: this command's target is only known once --to or the output path has been resolved at run time, and pdf is one of the targets it resolves to. A run that lands on some other target simply passes fonts the port has nothing to resolve them against, which local.ts already documents as a no-op for a non-layout edge.
   addFontOptions(generic);
+  // Same reasoning for the csv/svg edge selections: a run that lands on a target with no csv or svg edge simply passes options the port has nothing to hand them to.
+  addDelimiterOption(generic);
+  addSheetOption(generic);
+  addPageOption(generic);
   generic.option('--to <format>', `target format when it cannot be inferred from the output path (${KNOWN_DOCUMENT_FORMATS})`);
   generic.action(async (input: string, output: string | undefined, options: GenericConvertCliOptions) => {
     process.exitCode = await runGenericConvert(input, output, options);
