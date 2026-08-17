@@ -32,6 +32,7 @@ describe('resolveCompositionPlan route verification', () => {
     const sameVariant: [DocumentFormat, DocumentFormat][] = [
       ['docx', 'odt'], ['odt', 'docx'], ['docx', 'markdown'], ['odt', 'markdown'],
       ['markdown', 'docx'], ['markdown', 'odt'],
+      ['csv', 'ods'], ['ods', 'csv'], ['csv', 'xlsx'], ['xlsx', 'csv'],
     ];
     for (const [s, t] of sameVariant) {
       const plan = resolveCompositionPlan(s, t)!;
@@ -59,6 +60,13 @@ describe('resolveCompositionPlan route verification', () => {
     expect(xlsxToPdf.hops.map((h) => h.executor)).toEqual(['bridge', 'toPdf']);
     const pdfToXlsx = resolveCompositionPlan('pdf', 'xlsx')!;
     expect(pdfToXlsx.hops.map((h) => h.executor)).toEqual(['fromPdf', 'bridge']);
+  });
+
+  it('csv <-> pdf composes through ods (2 hops) exactly like xlsx, since csv has no layout engine of its own either', () => {
+    const csvToPdf = resolveCompositionPlan('csv', 'pdf')!;
+    expect(csvToPdf.hops.map((h) => h.executor)).toEqual(['bridge', 'toPdf']);
+    const pdfToCsv = resolveCompositionPlan('pdf', 'csv')!;
+    expect(pdfToCsv.hops.map((h) => h.executor)).toEqual(['fromPdf', 'bridge']);
   });
 
   it('xlsx -> markdown composes through ods and pdf (3 hops)', () => {

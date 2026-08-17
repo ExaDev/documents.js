@@ -1,6 +1,6 @@
 import { ODF_MEDIA_TYPES, zipPackage } from 'odf.js';
 import { describe, expect, it } from 'vitest';
-import { DocxBytesSchema, MarkdownBytesSchema, OdgBytesSchema, OdpBytesSchema, OdsBytesSchema, OdtBytesSchema, PdfBytesSchema, PptxBytesSchema } from './bytes';
+import { CsvBytesSchema, DocxBytesSchema, MarkdownBytesSchema, OdgBytesSchema, OdpBytesSchema, OdsBytesSchema, OdtBytesSchema, PdfBytesSchema, PptxBytesSchema } from './bytes';
 
 const zipBytes = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0, 0, 0, 0]);
 const pdfBytes = new TextEncoder().encode('%PDF-1.7\n%\xe2\xe3\xcf\xd3\n');
@@ -110,5 +110,17 @@ describe('bytes', () => {
     // Not a claim that docx/pdf/odt bytes ARE markdown -- only that this schema's one check (well-formed UTF-8) cannot distinguish them, unlike every structure-checking schema above. zipBytes/pdfBytes/odtBytes are all valid UTF-8 byte sequences even though they are binary formats.
     expect(MarkdownBytesSchema.safeParse(zipBytes).success).toBe(true);
     expect(MarkdownBytesSchema.safeParse(pdfBytes).success).toBe(true);
+  });
+
+  // CsvBytesSchema shares MarkdownBytesSchema's architecture exactly: RFC 4180 defines no magic bytes either, so the schema checks only well-formed UTF-8 -- the same validation gap, stated here for the same reason.
+  it('CsvBytesSchema accepts well-formed UTF-8 csv text, including bytes that would fail every structure-checking schema above', () => {
+    const csvTextBytes = new TextEncoder().encode('Name,Amount\nWidget,42.5\n');
+    expect(CsvBytesSchema.parse(csvTextBytes)).toBe(csvTextBytes);
+    expect(DocxBytesSchema.safeParse(csvTextBytes).success).toBe(false);
+    expect(PdfBytesSchema.safeParse(csvTextBytes).success).toBe(false);
+  });
+
+  it('CsvBytesSchema rejects malformed UTF-8', () => {
+    expect(CsvBytesSchema.safeParse(new Uint8Array([0xff, 0xfe, 0x00])).success).toBe(false);
   });
 });

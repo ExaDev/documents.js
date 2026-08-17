@@ -35,8 +35,18 @@ describe('createLocalDocumentConverter: shape', () => {
     const converter = createLocalDocumentConverter();
     // 5, not 4: convert()'s own ConversionOptions gained clock (a ClockPort), forwarded to every X-to-PDF conversion's /CreationDate and /ModDate stamping -- see port.ts's own contractVersion comment on what does and does not warrant a bump.
     expect(converter.contractVersion).toBe(5);
-    // SUPPORTED_CONVERSIONS is now derived from the composition pathfinder (resolveCompositionPlan) rather than a hand-maintained DIRECT_EDGES list. The pathfinder routes every pair of non-odf formats (each reaches all 8 others within the 3-hop cap), plus the special-case odf -> pdf pair -- 73 pairs total, sorted by source then target for determinism.
+    // SUPPORTED_CONVERSIONS is now derived from the composition pathfinder (resolveCompositionPlan) rather than a hand-maintained DIRECT_EDGES list. The pathfinder routes every pair of non-odf formats (each reaches all 9 others within the 3-hop cap), plus the special-case odf -> pdf pair -- 91 pairs total, sorted by source then target for determinism. csv joins as a full spreadsheet-variant member: same-variant bridges to ods/xlsx directly, everything else composed through the identical ods pivot xlsx uses.
     expect(converter.conversions).toEqual([
+      { source: 'csv', target: 'docx' },
+      { source: 'csv', target: 'markdown' },
+      { source: 'csv', target: 'odg' },
+      { source: 'csv', target: 'odp' },
+      { source: 'csv', target: 'ods' },
+      { source: 'csv', target: 'odt' },
+      { source: 'csv', target: 'pdf' },
+      { source: 'csv', target: 'pptx' },
+      { source: 'csv', target: 'xlsx' },
+      { source: 'docx', target: 'csv' },
       { source: 'docx', target: 'markdown' },
       { source: 'docx', target: 'odg' },
       { source: 'docx', target: 'odp' },
@@ -45,6 +55,7 @@ describe('createLocalDocumentConverter: shape', () => {
       { source: 'docx', target: 'pdf' },
       { source: 'docx', target: 'pptx' },
       { source: 'docx', target: 'xlsx' },
+      { source: 'markdown', target: 'csv' },
       { source: 'markdown', target: 'docx' },
       { source: 'markdown', target: 'odg' },
       { source: 'markdown', target: 'odp' },
@@ -54,6 +65,7 @@ describe('createLocalDocumentConverter: shape', () => {
       { source: 'markdown', target: 'pptx' },
       { source: 'markdown', target: 'xlsx' },
       { source: 'odf', target: 'pdf' },
+      { source: 'odg', target: 'csv' },
       { source: 'odg', target: 'docx' },
       { source: 'odg', target: 'markdown' },
       { source: 'odg', target: 'odp' },
@@ -62,6 +74,7 @@ describe('createLocalDocumentConverter: shape', () => {
       { source: 'odg', target: 'pdf' },
       { source: 'odg', target: 'pptx' },
       { source: 'odg', target: 'xlsx' },
+      { source: 'odp', target: 'csv' },
       { source: 'odp', target: 'docx' },
       { source: 'odp', target: 'markdown' },
       { source: 'odp', target: 'odg' },
@@ -70,6 +83,7 @@ describe('createLocalDocumentConverter: shape', () => {
       { source: 'odp', target: 'pdf' },
       { source: 'odp', target: 'pptx' },
       { source: 'odp', target: 'xlsx' },
+      { source: 'ods', target: 'csv' },
       { source: 'ods', target: 'docx' },
       { source: 'ods', target: 'markdown' },
       { source: 'ods', target: 'odg' },
@@ -78,6 +92,7 @@ describe('createLocalDocumentConverter: shape', () => {
       { source: 'ods', target: 'pdf' },
       { source: 'ods', target: 'pptx' },
       { source: 'ods', target: 'xlsx' },
+      { source: 'odt', target: 'csv' },
       { source: 'odt', target: 'docx' },
       { source: 'odt', target: 'markdown' },
       { source: 'odt', target: 'odg' },
@@ -86,6 +101,7 @@ describe('createLocalDocumentConverter: shape', () => {
       { source: 'odt', target: 'pdf' },
       { source: 'odt', target: 'pptx' },
       { source: 'odt', target: 'xlsx' },
+      { source: 'pdf', target: 'csv' },
       { source: 'pdf', target: 'docx' },
       { source: 'pdf', target: 'markdown' },
       { source: 'pdf', target: 'odg' },
@@ -94,6 +110,7 @@ describe('createLocalDocumentConverter: shape', () => {
       { source: 'pdf', target: 'odt' },
       { source: 'pdf', target: 'pptx' },
       { source: 'pdf', target: 'xlsx' },
+      { source: 'pptx', target: 'csv' },
       { source: 'pptx', target: 'docx' },
       { source: 'pptx', target: 'markdown' },
       { source: 'pptx', target: 'odg' },
@@ -102,6 +119,7 @@ describe('createLocalDocumentConverter: shape', () => {
       { source: 'pptx', target: 'odt' },
       { source: 'pptx', target: 'pdf' },
       { source: 'pptx', target: 'xlsx' },
+      { source: 'xlsx', target: 'csv' },
       { source: 'xlsx', target: 'docx' },
       { source: 'xlsx', target: 'markdown' },
       { source: 'xlsx', target: 'odg' },
@@ -113,10 +131,12 @@ describe('createLocalDocumentConverter: shape', () => {
     ]);
   });
 
-  // A dedicated, order-independent assertion for the special-case odf -> pdf pair and the composed xlsx <-> pdf pair, on top of the exact-array assertion above -- these keep working even if SUPPORTED_CONVERSIONS' own order ever changes.
-  it('includes the special-case odf->pdf and composed xlsx<->pdf pairs', () => {
+  // A dedicated, order-independent assertion for the special-case odf -> pdf pair and the composed csv/xlsx <-> pdf pairs, on top of the exact-array assertion above -- these keep working even if SUPPORTED_CONVERSIONS' own order ever changes.
+  it('includes the special-case odf->pdf and composed csv/xlsx<->pdf pairs', () => {
     const converter = createLocalDocumentConverter();
     expect(converter.conversions).toContainEqual({ source: 'odf', target: 'pdf' });
+    expect(converter.conversions).toContainEqual({ source: 'csv', target: 'pdf' });
+    expect(converter.conversions).toContainEqual({ source: 'pdf', target: 'csv' });
     expect(converter.conversions).toContainEqual({ source: 'xlsx', target: 'pdf' });
     expect(converter.conversions).toContainEqual({ source: 'pdf', target: 'xlsx' });
   });

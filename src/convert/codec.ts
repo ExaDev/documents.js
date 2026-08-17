@@ -1,20 +1,27 @@
 import { z } from 'zod';
-import { DocxBytesSchema, MarkdownBytesSchema, OdgBytesSchema, OdpBytesSchema, OdsBytesSchema, OdtBytesSchema, PdfBytesSchema, PptxBytesSchema, XlsxBytesSchema } from '../model/bytes';
+import { CsvBytesSchema, DocxBytesSchema, MarkdownBytesSchema, OdgBytesSchema, OdpBytesSchema, OdsBytesSchema, OdtBytesSchema, PdfBytesSchema, PptxBytesSchema, XlsxBytesSchema } from '../model/bytes';
 import {
+  csvToMarkdown,
+  csvToOds,
+  csvToPdf,
+  csvToXlsx,
   docxToMarkdown,
   docxToOdt,
   docxToPdf,
+  markdownToCsv,
   markdownToDocx,
   markdownToOdt,
   markdownToPdf,
   odgToPdf,
   odpToPdf,
   odpToPptx,
+  odsToCsv,
   odsToPdf,
   odsToXlsx,
   odtToDocx,
   odtToMarkdown,
   odtToPdf,
+  pdfToCsv,
   pdfToDocx,
   pdfToMarkdown,
   pdfToOdg,
@@ -25,6 +32,7 @@ import {
   pdfToXlsx,
   pptxToOdp,
   pptxToPdf,
+  xlsxToCsv,
   xlsxToOds,
   xlsxToPdf,
   xlsxToMarkdown,
@@ -104,4 +112,27 @@ export const markdownOdtCodec = z.codec(MarkdownBytesSchema, OdtBytesSchema, {
 export const xlsxMarkdownCodec = z.codec(XlsxBytesSchema, MarkdownBytesSchema, {
   decode: (xlsxBytes) => xlsxToMarkdown(xlsxBytes),
   encode: (markdownBytes) => markdownToXlsx(markdownBytes),
+});
+
+// csv bytes <-> PDF bytes: the no-options form over csvToPdf/pdfToCsv (convert.ts), schema-validated both ways. csvToPdf composes the csv -> ods bridge with ods -> pdf internally (csv has no layout engine of its own, exactly like xlsx), so this pair carries the same "not round-trip-lossless" caveat every PDF-pivot codec above carries, with csv's own additional boundaries on both sides: decode re-types the parsed cells heuristically (inferCellValue), encode reconstructs from geometry.
+export const csvPdfCodec = z.codec(CsvBytesSchema, PdfBytesSchema, {
+  decode: (csvBytes) => csvToPdf(csvBytes),
+  encode: (pdfBytes) => pdfToCsv(pdfBytes),
+});
+
+// ods bytes <-> csv bytes and xlsx bytes <-> csv bytes: schema-validated z.codec() pairs over the same-variant spreadsheet bridges (convert.ts) -- direct ContentDocument pivot copies with no layout engine and no reconstruction, exactly like odsXlsxCodec above. Two honest csv-boundary caveats rather than codec lossiness: the csv side is displayText-only, so a typed ods/xlsx cell (currency, percentage, date) re-reads as whatever inferCellValue re-types its printed text as on the way back; and a multi-sheet ods/xlsx source throws CsvSheetNotSpecifiedError from the no-options build, naming every sheet, rather than silently truncating -- the identical contract the registry codec (src/codecs/registry.ts) documents for its own csv write.
+export const odsCsvCodec = z.codec(OdsBytesSchema, CsvBytesSchema, {
+  decode: (odsBytes) => odsToCsv(odsBytes),
+  encode: (csvBytes) => csvToOds(csvBytes),
+});
+
+export const xlsxCsvCodec = z.codec(XlsxBytesSchema, CsvBytesSchema, {
+  decode: (xlsxBytes) => xlsxToCsv(xlsxBytes),
+  encode: (csvBytes) => csvToXlsx(csvBytes),
+});
+
+// csv bytes <-> markdown bytes: the no-options form over the two pdf-composed bridge functions (convert.ts), routing csv -> ods -> pdf -> markdown and markdown -> pdf -> ods -> csv. Lossy in the same stacked way as xlsxMarkdownCodec above -- the spreadsheet render and the markdown reconstruction each add their own loss -- with csv read's heuristic re-typing on top on the decode side.
+export const csvMarkdownCodec = z.codec(CsvBytesSchema, MarkdownBytesSchema, {
+  decode: (csvBytes) => csvToMarkdown(csvBytes),
+  encode: (markdownBytes) => markdownToCsv(markdownBytes),
 });

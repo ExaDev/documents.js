@@ -23,6 +23,10 @@ import { readOdtContent } from '../odf/odt/read';
 import { buildMarkdownText } from '../markdown/write';
 import { decodeMarkdownText, encodeMarkdownText } from '../markdown/text';
 import { readMarkdownContent } from '../markdown/read';
+import { decodeCsvText, encodeCsvText } from '../csv/text';
+import { readCsvContent } from '../csv/read';
+import { buildCsvText } from '../csv/write';
+import type { CellTypeInferenceSink } from '../layout/cell-typing';
 import { convertDrawingToLayout } from '../layout/drawing';
 import { convertWordprocessingToLayout } from '../layout/engine';
 import { reconstructDrawing, reconstructPresentation, reconstructSpreadsheet, reconstructWordprocessing, type ReconstructOptions } from '../layout/reconstruct';
@@ -53,21 +57,25 @@ export interface UnifiedConversionOptions {
   readonly sink?: PdfDiagnosticSink;
   readonly onMathDiagnostic?: (diagnostic: OmmlDiagnostic, context: { readonly sourcePath?: string }) => void;
   readonly images?: MarkdownImageResolver;
+  // The csv hops' own knobs, on the shared shape for the same reason onMathDiagnostic (docx/pptx only) and images (markdown only) already sit here: the pathfinder picks the hops, so per-format options must ride the one options object every hop receives, and each hop's registry closure reads only the fields it knows -- csv read consumes delimiter/onCellTypeInference, csv build consumes delimiter/sheet, every non-csv hop ignores all three.
+  readonly delimiter?: string;
+  readonly sheet?: string;
+  readonly onCellTypeInference?: CellTypeInferenceSink;
   readonly clock?: ClockPort;
 }
 
 // --- Registry: declarative per-format primitive wiring -----------------------------------------
 
-// The eight content formats this engine routes between (pdf is the layout pivot, reached via toPdf/fromPdf edges; odf is special, excluded entirely -- see the module doc).
-export type ContentFormat = 'docx' | 'pptx' | 'xlsx' | 'odt' | 'odp' | 'ods' | 'odg' | 'markdown';
+// The nine content formats this engine routes between (pdf is the layout pivot, reached via toPdf/fromPdf edges; odf is special, excluded entirely -- see the module doc).
+export type ContentFormat = 'docx' | 'pptx' | 'xlsx' | 'odt' | 'odp' | 'ods' | 'odg' | 'csv' | 'markdown';
 
 // The explicit, typed list of content formats, kept in sync with FORMAT_NODES' own keys. Used for iteration in the graph builder in place of `Object.keys(FORMAT_NODES)` (which returns `string[]` and would need a cast back to ContentFormat), so the registry stays cast-free end to end.
-const CONTENT_FORMATS: readonly ContentFormat[] = ['docx', 'pptx', 'xlsx', 'odt', 'odp', 'ods', 'odg', 'markdown'];
+const CONTENT_FORMATS: readonly ContentFormat[] = ['docx', 'pptx', 'xlsx', 'odt', 'odp', 'ods', 'odg', 'csv', 'markdown'];
 
 // The four ContentDocument variants a layout engine exists for. 'formula' is the fifth ContentVariant member but has no layout engine of its own (odfToPdf renders through writePdf's formula positioning, not a ContentDocument -> LayoutDocument pass), so it is excluded from this engine's layout/reconstruct registries.
 type LayoutVariant = Exclude<ContentVariant, 'formula'>;
 
-// Every content format's node in the composition graph: the decode -> read -> build -> encode primitive chain, plus the ContentDocument variant every format reads into and builds from. A discriminated union on `family` keeps the package (SourcePackage) and markdown (string) halves' decode/read/build/encode signatures concrete and cast-free: the executors narrow on `family === 'markdown'` to select the right shape. hasSourcePackage drives the font-registry choice in executeToPdf (createDocumentFontRegistry for a package, createFontRegistry for markdown text), mirroring markdownToPdf's own documented divergence from docxToPdf.
+// Every content format's node in the composition graph: the decode -> read -> build -> encode primitive chain, plus the ContentDocument variant every format reads into and builds from. A discriminated union keeps the package (SourcePackage) and plain-text (string) halves' decode/read/build/encode signatures concrete and cast-free: the executors narrow through isTextFormatNode (below) to select the right shape. hasSourcePackage is the boolean-literal discriminant that split rests on -- and it also drives the font-registry choice in executeToPdf (createDocumentFontRegistry for a package, createFontRegistry for text), mirroring markdownToPdf's own documented divergence from docxToPdf.
 interface PackageFormatNode {
   readonly variant: LayoutVariant;
   readonly family: 'ooxml' | 'odf';
@@ -78,19 +86,25 @@ interface PackageFormatNode {
   readonly hasSourcePackage: true;
 }
 
-interface MarkdownFormatNode {
+// The plain-text half of the union: markdown and csv both decode straight from bytes to a string and read/build through their own text-level codecs -- no zip package, no font embedding, no source-package concept at all. family names the text dialect so a format can never be a member of both halves. build takes options because csv's build consumes { delimiter, sheet } from UnifiedConversionOptions; markdown's build ignores them.
+interface TextFormatNode {
   readonly variant: LayoutVariant;
-  readonly family: 'markdown';
+  readonly family: 'markdown' | 'csv';
   readonly decode: (bytes: Uint8Array<ArrayBuffer>) => string;
   readonly read: (text: string, options?: UnifiedConversionOptions) => ContentDocument;
-  readonly build: (content: ContentDocument) => string;
+  readonly build: (content: ContentDocument, options?: UnifiedConversionOptions) => string;
   readonly encode: (text: string) => Uint8Array<ArrayBuffer>;
   readonly hasSourcePackage: false;
 }
 
-export type FormatNode = PackageFormatNode | MarkdownFormatNode;
+export type FormatNode = PackageFormatNode | TextFormatNode;
 
-// The single source of truth for "which primitives does each format use". read/build closures thread their own per-format option subset internally: docx and pptx read/build both pull onMathDiagnostic (mirroring readDocxContent's/readPptxContent's own `{ onMathDiagnostic }` and buildDocxPackage's/buildPptxPackage's own option -- ExaDev/documents.js#563 gave pptx the identical OMML degrade-diagnostic channel docx already had), markdown read pulls signal/images (mirroring readMarkdownContent's ReadMarkdownOptions), and every other format's read/build accept and ignore the thread. docxToPdf's openDocx(bytes).toPackage() and decodeOoxmlPackage(bytes) produce the identical Package (openDocx wraps decodeOoxmlPackage and toPackage returns it unmutated), so decode uses the package codec directly for uniformity -- byte-identical to docxToPdf at every downstream call site.
+// Narrowing on the boolean-literal hasSourcePackage discriminant (not on family), so the text half stays open to further plain-text families without touching any executor: TypeScript narrows a discriminated union on literal true/false just as it does on string literals.
+function isTextFormatNode(node: FormatNode): node is TextFormatNode {
+  return !node.hasSourcePackage;
+}
+
+// The single source of truth for "which primitives does each format use". read/build closures thread their own per-format option subset internally: docx and pptx read/build both pull onMathDiagnostic (mirroring readDocxContent's/readPptxContent's own `{ onMathDiagnostic }` and buildDocxPackage's/buildPptxPackage's own option -- ExaDev/documents.js#563 gave pptx the identical OMML degrade-diagnostic channel docx already had), markdown read pulls signal/images (mirroring readMarkdownContent's ReadMarkdownOptions), csv read pulls delimiter/onCellTypeInference and csv build pulls delimiter/sheet (mirroring readCsvContent's ReadCsvContentOptions and buildCsvText's BuildCsvTextOptions), and every other format's read/build accept and ignore the thread. docxToPdf's openDocx(bytes).toPackage() and decodeOoxmlPackage(bytes) produce the identical Package (openDocx wraps decodeOoxmlPackage and toPackage returns it unmutated), so decode uses the package codec directly for uniformity -- byte-identical to docxToPdf at every downstream call site.
 export const FORMAT_NODES: Readonly<Record<ContentFormat, FormatNode>> = {
   docx: {
     variant: 'wordprocessing',
@@ -164,9 +178,18 @@ export const FORMAT_NODES: Readonly<Record<ContentFormat, FormatNode>> = {
     encode: (text) => encodeMarkdownText(text),
     hasSourcePackage: false,
   },
+  csv: {
+    variant: 'spreadsheet',
+    family: 'csv',
+    decode: (bytes) => decodeCsvText(bytes),
+    read: (text, options) => readCsvContent(text, { delimiter: options?.delimiter, onCellTypeInference: options?.onCellTypeInference }),
+    build: (content, options) => buildCsvText(content, { delimiter: options?.delimiter, sheet: options?.sheet }),
+    encode: (text) => encodeCsvText(text),
+    hasSourcePackage: false,
+  },
 };
 
-// The formats that have a direct layout-engine path to/from PDF (convertXToLayout + writePdf). xlsx is deliberately absent: it has no layout engine of its own, so the pathfinder routes xlsx <-> pdf through ods instead (xlsx -> ods bridge, then ods -> pdf toPdf), reproducing the composed route xlsxToPdf/pdfToXlsx already hard-code in convert.ts.
+// The formats that have a direct layout-engine path to/from PDF (convertXToLayout + writePdf). xlsx and csv are deliberately absent: neither has a layout engine of its own, so the pathfinder routes each <-> pdf through ods instead (e.g. csv -> ods bridge, then ods -> pdf toPdf), reproducing the composed route xlsxToPdf/pdfToXlsx already hard-code in convert.ts.
 const LAYOUT_CAPABLE: ReadonlySet<ContentFormat> = new Set<ContentFormat>(['docx', 'pptx', 'odt', 'odp', 'ods', 'odg', 'markdown']);
 
 // Cross-variant transforms keyed by `${fromVariant}->${toVariant}`. Each wrapper narrows its input with a runtime kind guard so the underlying transform receives its exact concrete variant type -- the same "no cast, narrow at the boundary" discipline every read/build closure above follows. Today wordprocessing <-> presentation and drawing <-> presentation transforms exist (src/convert/variant-bridges.ts); the pathfinder derives its cross-variant edges from this object's keys, so adding a transform here is the single change needed to teach both the pathfinder and the bridge executor a new variant crossing.
@@ -220,9 +243,9 @@ function executeBridge(source: ContentFormat, target: ContentFormat, bytes: Uint
   const sourceNode = FORMAT_NODES[source];
   const targetNode = FORMAT_NODES[target];
 
-  // Decode + read the source, branching on family so the package (SourcePackage) and markdown (string) decoded shapes stay concrete.
+  // Decode + read the source, branching on hasSourcePackage so the package (SourcePackage) and text (string) decoded shapes stay concrete.
   let content: ContentDocument;
-  if (sourceNode.family === 'markdown') {
+  if (isTextFormatNode(sourceNode)) {
     const text = sourceNode.decode(bytes);
     content = sourceNode.read(text, options);
   } else {
@@ -248,8 +271,8 @@ function executeBridge(source: ContentFormat, target: ContentFormat, bytes: Uint
   options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content: buildContent });
 
   // Build + encode the target. A bridge never runs a layout engine, so the reported DocumentPackage carries content only, with no pages array and no node frames -- the identical layoutless shape convert.ts's own bridges report.
-  if (targetNode.family === 'markdown') {
-    const text = targetNode.build(buildContent);
+  if (isTextFormatNode(targetNode)) {
+    const text = targetNode.build(buildContent, options);
     return targetNode.encode(text);
   }
   const pkg = targetNode.build(buildContent, options);
@@ -265,7 +288,7 @@ function executeToPdf(format: ContentFormat, bytes: Uint8Array<ArrayBuffer>, opt
 
   let content: ContentDocument;
   let fonts: FontRegistry;
-  if (node.family === 'markdown') {
+  if (isTextFormatNode(node)) {
     throwIfAborted(options?.signal);
     const text = node.decode(bytes);
     const read = node.read(text, options);
@@ -325,17 +348,17 @@ function executeToPdf(format: ContentFormat, bytes: Uint8Array<ArrayBuffer>, opt
   return writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution, formulas, fonts });
 }
 
-// readPdf -> reconstruct(target variant) -> build(target) -> encode(target), reproducing the exact sequence and option-threading of convert.ts's pdfTo* functions (pdfToDocx/pdfToOdt/pdfToOdp/pdfToOds/pdfToOdg/pdfToMarkdown). sink reaches readPdf; signal reaches both readPdf and the reconstructor. The reconstructor's onCellTypeInference (reconstructSpreadsheet's audit channel) is deliberately left unset -- UnifiedConversionOptions does not carry it today, matching every pdfToOds caller in convert.ts. build is called with no options, matching pdfTo*'s own `buildXPackage(content)` calls (no clock, no onMathDiagnostic threaded on this direction).
+// readPdf -> reconstruct(target variant) -> build(target) -> encode(target), reproducing the exact sequence and option-threading of convert.ts's pdfTo* functions (pdfToDocx/pdfToOdt/pdfToOdp/pdfToOds/pdfToOdg/pdfToMarkdown). sink reaches readPdf; signal reaches both readPdf and the reconstructor. onCellTypeInference reaches the reconstructor (reconstructSpreadsheet's audit channel) AND csv's read -- the two places a cell re-typing decision can happen, threaded on the one options object every hop receives; the ergonomic pdfTo* functions do not declare it, so a caller wanting that audit channel on a pdf -> spreadsheet route passes it to convertDocument directly (the first-class entry point every named function forwards to). The package build half is called with no options, matching pdfTo*'s own `buildXPackage(content)` calls (no clock, no onMathDiagnostic threaded on this direction); the text build half receives options because csv's build consumes { delimiter, sheet }.
 function executeFromPdf(target: ContentFormat, bytes: Uint8Array<ArrayBuffer>, options?: UnifiedConversionOptions): Uint8Array<ArrayBuffer> {
   const node = FORMAT_NODES[target];
   const layout = readPdf(bytes, { signal: options?.signal, sink: options?.sink });
-  const content = RECONSTRUCTORS[node.variant](layout, { signal: options?.signal });
+  const content = RECONSTRUCTORS[node.variant](layout, { signal: options?.signal, onCellTypeInference: options?.onCellTypeInference });
   // The pages half derives from the read LayoutDocument's own pages -- every rendered page's size, indexed to match the frames the reconstructor attached to the content it built.
   const pages = layout.pages.map((page) => ({ widthPt: page.widthPt, heightPt: page.heightPt }));
   options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content, pages });
 
-  if (node.family === 'markdown') {
-    const text = node.build(content);
+  if (isTextFormatNode(node)) {
+    const text = node.build(content, options);
     return node.encode(text);
   }
   const pkg = node.build(content);
@@ -361,7 +384,7 @@ interface GraphEdge {
   readonly cost: number;
 }
 
-// Builds the composition graph's adjacency list from the registry, with fidelity-ordered edge costs: a same-variant bridge (cost 1, lossless) always beats a cross-variant transform (cost 2, approximate), which always beats a toPdf/fromPdf edge (cost 3, geometry-based render or reconstruction). Edges are bidirectional with symmetric costs. The toPdf/fromPdf edges cover exactly LAYOUT_CAPABLE (xlsx absent -- it routes through ods), and cross-variant transform edges are derived from TRANSFORMS' own keys so the graph cannot drift from the registered transforms.
+// Builds the composition graph's adjacency list from the registry, with fidelity-ordered edge costs: a same-variant bridge (cost 1, lossless) always beats a cross-variant transform (cost 2, approximate), which always beats a toPdf/fromPdf edge (cost 3, geometry-based render or reconstruction). Edges are bidirectional with symmetric costs. The toPdf/fromPdf edges cover exactly LAYOUT_CAPABLE (xlsx and csv absent -- each routes through ods), and cross-variant transform edges are derived from TRANSFORMS' own keys so the graph cannot drift from the registered transforms.
 function buildCompositionGraph(): ReadonlyMap<DocumentFormat, readonly GraphEdge[]> {
   const adj = new Map<DocumentFormat, GraphEdge[]>();
   const addDirected = (from: DocumentFormat, to: DocumentFormat, cost: number): void => {
@@ -410,7 +433,7 @@ function buildCompositionGraph(): ReadonlyMap<DocumentFormat, readonly GraphEdge
     }
   }
 
-  // toPdf/fromPdf edges (cost 3) for every layout-capable format. xlsx is absent, so it reaches pdf only through its ods bridge.
+  // toPdf/fromPdf edges (cost 3) for every layout-capable format. xlsx and csv are absent, so each reaches pdf only through its ods bridge.
   for (const format of CONTENT_FORMATS) {
     if (LAYOUT_CAPABLE.has(format)) {
       addEdge(format, 'pdf', 3);
@@ -422,7 +445,7 @@ function buildCompositionGraph(): ReadonlyMap<DocumentFormat, readonly GraphEdge
 
 const COMPOSITION_GRAPH: ReadonlyMap<DocumentFormat, readonly GraphEdge[]> = buildCompositionGraph();
 
-// Standard Dijkstra over the small (<= 9-node) composition graph. Returns the ordered node path from source to target, or undefined if source === target or target is unreachable.
+// Standard Dijkstra over the small (<= 10-node) composition graph. Returns the ordered node path from source to target, or undefined if source === target or target is unreachable.
 function shortestPath(source: DocumentFormat, target: DocumentFormat): readonly DocumentFormat[] | undefined {
   if (source === target) {
     return undefined;
@@ -490,7 +513,7 @@ export function resolveCompositionPlan(source: DocumentFormat, target: DocumentF
   return { hops };
 }
 
-// Narrows a DocumentFormat to the ContentFormat union (the eight formats with a FORMAT_NODES entry). pdf and odf are excluded: pdf is the layout pivot reached only via toPdf/fromPdf edges, and odf is the special-case format this engine does not route at all. Used by convertDocument to narrow a hop's DocumentFormat endpoints to the ContentFormat the executors are typed against.
+// Narrows a DocumentFormat to the ContentFormat union (the nine formats with a FORMAT_NODES entry). pdf and odf are excluded: pdf is the layout pivot reached only via toPdf/fromPdf edges, and odf is the special-case format this engine does not route at all. Used by convertDocument to narrow a hop's DocumentFormat endpoints to the ContentFormat the executors are typed against.
 function isContentFormat(format: DocumentFormat): format is ContentFormat {
   return format !== 'pdf' && format !== 'odf';
 }

@@ -130,3 +130,6 @@ function isWellFormedUtf8Text(bytes: Uint8Array): boolean {
 }
 
 export const MarkdownBytesSchema = z.instanceof(Uint8Array).refine(isWellFormedUtf8Text, { message: 'not well-formed UTF-8 text' });
+
+// CsvBytesSchema rests on the identical no-magic-bytes architecture as MarkdownBytesSchema above: csv shares markdown's plain-text nature (no header, no reserved byte sequence -- RFC 4180 text is just fields and delimiters), so well-formed UTF-8 is the one honest bytes-level check, and the same fatal-decode refinement covers both. The parse errors that ARE specific to csv (an unterminated quoted field) surface as CsvParseError from parseCsvRecords, which is where the text is actually understood.
+export const CsvBytesSchema = z.instanceof(Uint8Array).refine(isWellFormedUtf8Text, { message: 'not well-formed UTF-8 text' });
