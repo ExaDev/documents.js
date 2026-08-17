@@ -101,6 +101,9 @@ export { readOdfMetadata, META_PART } from './typed/shared/metadata';
 
 export { readOdfParagraph } from './typed/shared/paragraph';
 
+export { mintOdfListNumId, readOdfListParagraphs, resolveOdfListKind } from './typed/shared/list';
+export type { OdfListIdState, OdfListParagraphReader } from './typed/shared/list';
+
 export { readOdfTable } from './typed/shared/table';
 
 export { parseOdfTransform, applyOdfTransform, netRotationDeg, resolveOdfShapeGeometry, composeOdfGroupTransform } from './typed/shared/transform';
