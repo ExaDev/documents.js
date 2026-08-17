@@ -78,15 +78,17 @@ describe('readOdt: kitchen-sink.odt (real LibreOffice output)', () => {
     expect(section.margins.rightPt).toBeCloseTo(knownLength('1.499cm'), 5);
   });
 
-  it('maps a level-1 heading (text:h, text:outline-level="1") onto styleId "Heading1"', () => {
+  it('maps a level-1 heading (text:h, text:outline-level="1") onto styleId "Heading1" and headingLevel 1', () => {
     const chapterOne = asParagraph(blocks[0]);
     expect(chapterOne.styleId).toBe('Heading1');
+    expect(chapterOne.headingLevel).toBe(1);
     expect(chapterOne.runs.map((r) => r.text).join('')).toBe('Chapter One');
   });
 
-  it('maps a level-2 heading onto styleId "Heading2"', () => {
+  it('maps a level-2 heading onto styleId "Heading2" and headingLevel 2', () => {
     const sectionHeading = blocks.find((b) => b.kind === 'paragraph' && b.runs[0]?.text === 'Section One Point One');
     expect(asParagraph(sectionHeading).styleId).toBe('Heading2');
+    expect(asParagraph(sectionHeading).headingLevel).toBe(2);
   });
 
   it('reads plain multi-paragraph body text in document order', () => {
@@ -163,6 +165,7 @@ describe('readOdt: kitchen-sink.odt (real LibreOffice output)', () => {
     const tableSection = asParagraph(blocks.find((b) => b.kind === 'paragraph' && b.runs[0]?.text === 'Table Section'));
     expect(tableSection.list).toBeUndefined();
     expect(tableSection.styleId).toBe('Heading1');
+    expect(tableSection.headingLevel).toBe(1);
   });
 
   it('reads a table with a genuinely merged cell: colSpan on the anchor cell, an empty placeholder cell for the covered cell (mirroring ooxml.js\'s own vMerge-continuation convention), and the third cell unaffected', () => {
@@ -192,6 +195,7 @@ describe('readOdt: kitchen-sink.odt (real LibreOffice output)', () => {
     expect(chapterTwoIndex).toBeGreaterThan(-1);
     const chapterTwo = asParagraph(blocks[chapterTwoIndex]);
     expect(chapterTwo.styleId).toBe('Heading1');
+    expect(chapterTwo.headingLevel).toBe(1);
     const closing = asParagraph(blocks[chapterTwoIndex + 1]);
     expect(closing.runs.map((r) => r.text).join('')).toContain("second chapter's opening paragraph");
   });
@@ -221,6 +225,7 @@ describe('readOdt: minimal.odt (real LibreOffice output, default/unmodified page
     expect(section.blocks).toHaveLength(2);
     const heading = asParagraph(section.blocks[0]);
     expect(heading.styleId).toBe('Heading1');
+    expect(heading.headingLevel).toBe(1);
     expect(heading.runs.map((r) => r.text).join('')).toBe('Minimal Document');
     const body = asParagraph(section.blocks[1]);
     expect(body.list).toBeUndefined();
