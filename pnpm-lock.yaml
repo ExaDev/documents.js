@@ -25,14 +25,14 @@ importers:
         specifier: ^1.3.29
         version: 1.3.29
       odf.js:
-        specifier: ^2.7.15
-        version: 2.7.15
+        specifier: ^2.7.16
+        version: 2.7.16
       ooxml.js:
-        specifier: ^2.11.30
-        version: 2.11.30
+        specifier: ^2.11.31
+        version: 2.11.31
       pdf-codec:
-        specifier: ^2.2.29
-        version: 2.2.29
+        specifier: ^2.2.31
+        version: 2.2.31
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -2424,16 +2424,16 @@ packages:
     resolution: {integrity: sha512-4a+OsYv9UktOJKE+l1A4OufDgdRF9PifWj+tJnHURo/P+WOxpG4GzUFL9qCalmWauao6ogiG+QvnCovwPoyAWA==}
     engines: {node: '>=12.20.0'}
 
-  odf.js@2.7.15:
-    resolution: {integrity: sha512-JFJkBPo1UwsVq99S4gcBLvB5wC+f8qYpF6W8NIX9i0x8iaDYgzS9GhvGo5Pq4dbovmvmN0MJdkdMW2cvkRUCPA==}
+  odf.js@2.7.16:
+    resolution: {integrity: sha512-7iMSNaDyjdBubX4JCaI2u4goIfrXxXxKWg4ADSnA6MnXQZ/iCeeY4JZ6SVyzKrT8nQtIh6NjSwXcRdbn8aH+Fg==}
     engines: {node: '>=20'}
 
   onetime@6.0.0:
     resolution: {integrity: sha512-1FlR+gjXK7X+AsAHso35MnyN5KqGwJRi/31ft6x0M194ht7S+rWAvd7PHss9xSKMzE0asv1pyIHaJYq+BbacAQ==}
     engines: {node: '>=12'}
 
-  ooxml.js@2.11.30:
-    resolution: {integrity: sha512-Fu8DGkv4N9Xn2OvLrAhpIXxbOLTDuIC8pkgwlF3kXs/bq6KZYvkV8SQm5BDS25I3pyiZaJOhelS4ZS2Fird5bQ==}
+  ooxml.js@2.11.31:
+    resolution: {integrity: sha512-VvUv39woYX4/IqFsCnxUKSHkM5jgaeK49cLRVzndYzZ1PT6anqRVyxOMlK0qjOjxLvnxWMJfeXBmm+NlMzHQOQ==}
     engines: {node: '>=20'}
 
   optionator@0.9.4:
@@ -2546,8 +2546,8 @@ packages:
   pathe@2.0.3:
     resolution: {integrity: sha512-WUjGcAqP1gQacoQe+OBJsFA7Ld4DyXuUIjZ5cc75cLHvJ7dtNsTugphxIADwspS+AraAUePCKrSVtPLFj/F88w==}
 
-  pdf-codec@2.2.29:
-    resolution: {integrity: sha512-ZRUedAis8l9JqxsODmLoovqEmVuOBZedtRyRwnA4b9fA/HLT0j6UMQ7oUFUOpepRGmlTO5SOpiclksNrymjv4A==}
+  pdf-codec@2.2.31:
+    resolution: {integrity: sha512-L8hhc2Wdw/ZYT2b67YNTv/2rtBbbQVZsI2yS6saRMy13/uFaPWQnSk0Ww+GlFD0sPmGSRRY/g1rTlLKxp5QZpg==}
     engines: {node: '>=20'}
 
   picocolors@1.1.1:
@@ -4589,6 +4589,10 @@ snapshots:
     dependencies:
       zod: 4.4.3
 
+  document-schema.js@2.7.17:
+    dependencies:
+      zod: 4.4.3
+
   dot-prop@5.3.0:
     dependencies:
       is-obj: 2.0.0
@@ -5299,9 +5303,9 @@ snapshots:
 
   obug@2.1.4: {}
 
-  odf.js@2.7.15:
+  odf.js@2.7.16:
     dependencies:
-      document-schema.js: 2.7.16
+      document-schema.js: 2.7.17
       fast-xml-parser: 5.10.1
       fflate: 0.8.3
       zod: 4.4.3
@@ -5310,9 +5314,9 @@ snapshots:
     dependencies:
       mimic-fn: 4.0.0
 
-  ooxml.js@2.11.30:
+  ooxml.js@2.11.31:
     dependencies:
-      document-schema.js: 2.7.16
+      document-schema.js: 2.7.17
       fast-xml-parser: 5.10.1
       fflate: 0.8.3
       zod: 4.4.3
@@ -5410,10 +5414,10 @@ snapshots:
 
   pathe@2.0.3: {}
 
-  pdf-codec@2.2.29:
+  pdf-codec@2.2.31:
     dependencies:
       byte-codec: 1.1.9
-      document-schema.js: 2.7.16
+      document-schema.js: 2.7.17
       fflate: 0.8.3
       zod: 4.4.3
 
