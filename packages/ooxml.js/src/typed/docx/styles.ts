@@ -21,6 +21,8 @@ export interface ResolvedParagraphProperties {
   readonly lineSpacing?: number;
   readonly indentLeftPt?: number;
   readonly indentFirstLinePt?: number;
+  // w:pPr/w:outlineLvl verbatim, 0-based (0 is a level-1 heading). This is ECMA-376's own "this paragraph style is a heading at level N" mechanism, inherited through w:basedOn like every other field here -- which is why a custom style based on Heading2 resolves without name-matching the styleId. Kept raw because this interface mirrors the cascade; readParagraph converts it to the schema's 1-based headingLevel.
+  readonly outlineLvl?: number;
 }
 
 export interface ResolvedRunProperties {
@@ -41,6 +43,7 @@ function mergeParagraphLayer(base: ResolvedParagraphProperties, layer: ResolvedP
     lineSpacing: layer.lineSpacing ?? base.lineSpacing,
     indentLeftPt: layer.indentLeftPt ?? base.indentLeftPt,
     indentFirstLinePt: layer.indentFirstLinePt ?? base.indentFirstLinePt,
+    outlineLvl: layer.outlineLvl ?? base.outlineLvl,
   };
 }
 
@@ -178,6 +181,8 @@ function readParagraphPropertiesLayer(pPr: XmlElement | undefined): ResolvedPara
   const left = ind === undefined ? undefined : (attr(ind, 'w:left') ?? attr(ind, 'w:start'));
   const firstLine = ind === undefined ? undefined : attr(ind, 'w:firstLine');
   const hanging = ind === undefined ? undefined : attr(ind, 'w:hanging');
+  const outlineLvl = childrenWithTag(pPr, 'w:outlineLvl')[0];
+  const outlineLvlVal = outlineLvl === undefined ? undefined : attr(outlineLvl, 'w:val');
   return {
     alignment: readAlignment(childrenWithTag(pPr, 'w:jc')[0]),
     spacingBeforePt: before === undefined ? undefined : twipsToPt(Number(before)),
@@ -186,6 +191,7 @@ function readParagraphPropertiesLayer(pPr: XmlElement | undefined): ResolvedPara
     lineSpacing: line === undefined || lineRule === 'exact' || lineRule === 'atLeast' ? undefined : lineUnitsToMultiplier(Number(line)),
     indentLeftPt: left === undefined ? undefined : twipsToPt(Number(left)),
     indentFirstLinePt: firstLine !== undefined ? twipsToPt(Number(firstLine)) : hanging !== undefined ? -twipsToPt(Number(hanging)) : undefined,
+    outlineLvl: outlineLvlVal === undefined ? undefined : Number(outlineLvlVal),
   };
 }
 

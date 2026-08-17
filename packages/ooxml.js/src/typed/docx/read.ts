@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { Package } from '../../model/package';
 import type { XmlElement, XmlNode } from '../../model/node';
 import type { Color, ContentBlock, ContentBorder, ContentCellBorders, ContentImageBlock, ContentListMembership, ContentParagraph, ContentRun, ContentSection, ContentStrokeStyle, ContentTable, ContentTableCell, Margins, PageSize } from 'document-schema.js';
-import { COLOR_BLACK, ContentSectionSchema, PAGE_SIZE_LETTER, rgbHexToColor } from 'document-schema.js';
+import { COLOR_BLACK, ContentSectionSchema, PAGE_SIZE_LETTER, clampHeadingLevel, rgbHexToColor } from 'document-schema.js';
 import { DocumentMetadataSchema, readCoreProperties } from '../shared/metadata';
 import { eighthPointsToPt, emuToPt, twipsToPt } from '../shared/units';
 import type { DrawingTheme } from '../shared/drawingml';
@@ -250,6 +250,8 @@ function readParagraph(paragraph: XmlElement, context: DocxStyleContext, rels: R
     kind: 'paragraph',
     runs: readParagraphRuns(paragraph, context, rels),
     styleId: pStyleEl === undefined ? undefined : attr(pStyleEl, 'w:val'),
+    // w:outlineLvl is 0-based (0 is a level-1 heading). Word's own outline levels run 1-9 while the schema's heading domain is 1-6, so clampHeadingLevel narrows levels 7-9 onto 6 -- the same closest-matching-value convention readAlignment (styles.ts) applies to w:jc's both/distribute.
+    headingLevel: props.outlineLvl === undefined ? undefined : clampHeadingLevel(props.outlineLvl + 1),
     alignment: props.alignment,
     list: readListMembership(pPr),
     spacingBeforePt: props.spacingBeforePt,

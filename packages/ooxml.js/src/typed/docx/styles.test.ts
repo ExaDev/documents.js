@@ -240,4 +240,19 @@ describe('resolveParagraphProperties', () => {
     const paragraph = paragraphEl([el('w:pStyle', { 'w:val': 'Body' }), el('w:jc', { 'w:val': 'right' })]);
     expect(resolveParagraphProperties(paragraph, { stylesRoot: styles, theme: EMPTY_THEME }).alignment).toBe('right');
   });
+
+  it('reads w:outlineLvl through the style cascade, so a custom style based on a heading inherits its level', () => {
+    const heading2 = styleEl('Heading2', 'paragraph', { pPr: el('w:pPr', {}, [el('w:outlineLvl', { 'w:val': '1' })]) });
+    const customSection = styleEl('CustomSection', 'paragraph', { basedOn: 'Heading2' });
+    const styles = stylesRoot([heading2, customSection]);
+    const paragraph = paragraphEl([el('w:pStyle', { 'w:val': 'CustomSection' })]);
+    expect(resolveParagraphProperties(paragraph, { stylesRoot: styles, theme: EMPTY_THEME }).outlineLvl).toBe(1);
+  });
+
+  it('the paragraph\'s own direct w:outlineLvl overrides its style chain', () => {
+    const style = styleEl('Body', 'paragraph', { pPr: el('w:pPr', {}, [el('w:outlineLvl', { 'w:val': '3' })]) });
+    const styles = stylesRoot([style]);
+    const paragraph = paragraphEl([el('w:pStyle', { 'w:val': 'Body' }), el('w:outlineLvl', { 'w:val': '0' })]);
+    expect(resolveParagraphProperties(paragraph, { stylesRoot: styles, theme: EMPTY_THEME }).outlineLvl).toBe(0);
+  });
 });

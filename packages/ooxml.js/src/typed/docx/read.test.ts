@@ -195,6 +195,64 @@ describe('readDocx: style cascade', () => {
   });
 });
 
+// A dedicated minimal fixture for heading-level resolution: a built-in Heading2 carrying its own w:outlineLvl, a custom style based on it (the case name-matching the styleId against /^Heading\d+$/ silently misses), a paragraph with a direct w:pPr/w:outlineLvl, one beyond the schema's six-level heading domain, and one with no outline level anywhere in its cascade.
+function buildHeadingFixturePackage(): Package {
+  const normalStyle = el('w:style', { 'w:type': 'paragraph', 'w:styleId': 'Normal', 'w:default': '1' }, []);
+  const heading2Style = el('w:style', { 'w:type': 'paragraph', 'w:styleId': 'Heading2' }, [
+    el('w:basedOn', { 'w:val': 'Normal' }),
+    el('w:pPr', {}, [el('w:outlineLvl', { 'w:val': '1' })]),
+  ]);
+  const customSectionStyle = el('w:style', { 'w:type': 'paragraph', 'w:styleId': 'CustomSection' }, [
+    el('w:basedOn', { 'w:val': 'Heading2' }),
+  ]);
+  const styles = el('w:styles', {}, [normalStyle, heading2Style, customSectionStyle]);
+
+  const builtInHeadingPara = el('w:p', {}, [el('w:pPr', {}, [el('w:pStyle', { 'w:val': 'Heading2' })]), el('w:r', {}, [el('w:t', {}, [txt('Built-in heading')])])]);
+  const customSectionPara = el('w:p', {}, [el('w:pPr', {}, [el('w:pStyle', { 'w:val': 'CustomSection' })]), el('w:r', {}, [el('w:t', {}, [txt('Custom section heading')])])]);
+  const directOutlinePara = el('w:p', {}, [el('w:pPr', {}, [el('w:outlineLvl', { 'w:val': '0' })]), el('w:r', {}, [el('w:t', {}, [txt('Direct outline level')])])]);
+  const beyondDomainPara = el('w:p', {}, [el('w:pPr', {}, [el('w:outlineLvl', { 'w:val': '8' })]), el('w:r', {}, [el('w:t', {}, [txt('Word level 9')])])]);
+  const bodyPara = el('w:p', {}, [el('w:r', {}, [el('w:t', {}, [txt('Body text')])])]);
+
+  const body = el('w:body', {}, [builtInHeadingPara, customSectionPara, directOutlinePara, beyondDomainPara, bodyPara, el('w:sectPr', {}, [el('w:pgSz', { 'w:w': '12240', 'w:h': '15840' })])]);
+  return {
+    parts: {
+      'word/document.xml': { kind: 'xml', nodes: [el('w:document', {}, [body])] },
+      'word/styles.xml': { kind: 'xml', nodes: [styles] },
+    },
+  };
+}
+
+describe('readDocx: heading levels', () => {
+  it("resolves headingLevel from the style's own w:outlineLvl (0-based, +1), not by name-matching the styleId", () => {
+    const doc = readDocx(buildHeadingFixturePackage());
+    const builtIn = asParagraph(doc.sections[0]?.blocks[0]);
+    expect(builtIn.styleId).toBe('Heading2');
+    expect(builtIn.headingLevel).toBe(2);
+  });
+
+  it('a custom style based on a built-in heading resolves its level through w:basedOn while keeping its own styleId', () => {
+    const doc = readDocx(buildHeadingFixturePackage());
+    const custom = asParagraph(doc.sections[0]?.blocks[1]);
+    expect(custom.styleId).toBe('CustomSection');
+    expect(custom.headingLevel).toBe(2);
+  });
+
+  it('a direct w:pPr/w:outlineLvl populates headingLevel without any named style', () => {
+    const doc = readDocx(buildHeadingFixturePackage());
+    expect(asParagraph(doc.sections[0]?.blocks[2]).headingLevel).toBe(1);
+  });
+
+  it('narrows Word outline levels beyond six onto the schema heading domain\'s top level', () => {
+    const doc = readDocx(buildHeadingFixturePackage());
+    expect(asParagraph(doc.sections[0]?.blocks[3]).headingLevel).toBe(6);
+  });
+
+  it('leaves headingLevel undefined for a paragraph with no outline level anywhere in its cascade', () => {
+    const doc = readDocx(buildHeadingFixturePackage());
+    expect(asParagraph(doc.sections[0]?.blocks[4]).headingLevel).toBeUndefined();
+  });
+});
+
 describe('readDocx: page breaks', () => {
   it('inserts a pageBreak block before a paragraph with w:pageBreakBefore', () => {
     const doc = readDocx(buildFixturePackage());
