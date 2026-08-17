@@ -1,6 +1,6 @@
 {
   "name": "document-mcp",
-  "version": "1.5.95",
+  "version": "1.5.96",
   "description": "MCP (Model Context Protocol) server exposing documents.js's document-conversion, .odb, metadata, and font tooling as MCP tools.",
   "type": "module",
   "repository": {
