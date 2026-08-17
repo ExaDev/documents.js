@@ -1,0 +1,5 @@
+# workerd (the Cloudflare Workers runtime vitest-pool-workers drives the workers tests through) and esbuild (its bundler) both ship native binaries installed via a postinstall script -- pnpm 11 ignores those by default, so allow them explicitly. This file's existence also brings document-outline.js to family parity (every other repo carries a pnpm-workspace.yaml). minimumReleaseAge is set to 0 here, scoped to this repo only: document-schema 3.3.0 -- the exact version this package exists to build on, and every future sibling release the automation bumps it to -- publishes same-day via the family's automated release pipeline, so the machine-global 7-day freshness window would block every fresh install of this repo's own foundation dependency.
+minimumReleaseAge: 0
+allowBuilds:
+  esbuild: true
+  workerd: true
