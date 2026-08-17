@@ -1,3 +1,10 @@
+# [2.13.0](https://github.com/ExaDev/ooxml.js/compare/v2.12.2...v2.13.0) (2026-08-17)
+
+
+### Features
+
+* read xlsx cell comments into ContentSheetCell.comment ([fcea960](https://github.com/ExaDev/ooxml.js/commit/fcea9606e24d0bfc7ff8c498effb5b7821fa7708))
+
 ## [2.12.2](https://github.com/ExaDev/ooxml.js/compare/v2.12.1...v2.12.2) (2026-08-17)
 
 ## [2.12.1](https://github.com/ExaDev/ooxml.js/compare/v2.12.0...v2.12.1) (2026-08-17)
