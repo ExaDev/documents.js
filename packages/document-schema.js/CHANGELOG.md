@@ -1,3 +1,10 @@
+# [3.1.0](https://github.com/ExaDev/document-schema.js/compare/v3.0.0...v3.1.0) (2026-08-17)
+
+
+### Features
+
+* add optional comment field to ContentSheetCell ([b2160f6](https://github.com/ExaDev/document-schema.js/commit/b2160f666369b8b0bfbd38ae5f3b001529ccdf92))
+
 # [3.0.0](https://github.com/ExaDev/document-schema.js/compare/v2.7.17...v3.0.0) (2026-08-17)
 
 
