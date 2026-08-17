@@ -20,6 +20,7 @@ import type {
   ContentTableRow,
   ContentVector,
   LayoutDocument,
+  LayoutFrame,
   LayoutEllipse,
   LayoutImage,
   LayoutImageAsset,
@@ -38,6 +39,7 @@ import type { Box, Margins } from 'document-schema.js';
 import { flipY } from '../model/geometry';
 import type { Alignment } from 'document-schema.js';
 import { throwIfAborted } from '../ports/abort';
+import { stampFrame } from './shared';
 import type { CellTypeInference, CellTypeInferenceSink } from './cell-typing';
 import { inferCellValue } from './cell-typing';
 import type { GridLattice } from './lattice';
@@ -102,8 +104,31 @@ function textItemToContentRun(item: LayoutText): ContentRun {
 // A small absolute floor (not font-size-relative) below which two adjacent items are treated as directly continuing the same word (e.g. a bold/italic sub-run split mid-word) rather than separate words needing a space -- guards against float-rounding noise producing a spurious tiny positive gap.
 const MIN_WORD_GAP_PT = 0.5;
 
+// The PDF-space box one recovered text item occupied -- the exact frame stamped onto the ContentRun node rebuilt from it (and, aggregated over a line's items, onto the paragraph that line became). Uses the same real AFM ascent/descent metrics textItemVerticalExtent derives, so a run's own frame matches the geometry its source glyph run was rendered with.
+function textBoxOfItem(item: LayoutText, pageIndex: number): LayoutFrame {
+  const { ascentPt, descentPt } = textItemVerticalExtent(item);
+  return { pageIndex, xPt: item.xPt, yPt: item.yPt - descentPt, widthPt: item.widthPt ?? 0, heightPt: ascentPt + descentPt };
+}
+
+// The PDF-space bounding box of a whole clustered line -- the frame stamped onto the ContentParagraph a line (or a one-line block) became.
+function lineBox(line: TextLine, pageIndex: number): LayoutFrame {
+  let minX = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (const item of line.items) {
+    const { ascentPt, descentPt } = textItemVerticalExtent(item);
+    minX = Math.min(minX, item.xPt);
+    maxX = Math.max(maxX, item.xPt + (item.widthPt ?? 0));
+    minY = Math.min(minY, item.yPt - descentPt);
+    maxY = Math.max(maxY, item.yPt + ascentPt);
+  }
+  return { pageIndex, xPt: minX, yPt: minY, widthPt: maxX - minX, heightPt: maxY - minY };
+}
+
 // Appends ContentRuns for one line's items, inserting the word-space or tab a caller reading the reconstructed text needs between them: PDF text extraction carries no literal space characters between separately-shown words (interpret.ts's word-wrapping and per-item positioning use xOffsetPt, not embedded spaces), so a positive gap between consecutive items must be turned back into an actual space (or, when it's large enough to read as tabbed/columnar content, a tab) rather than silently concatenating adjacent words together.
-function pushRunsForLine(runs: ContentRun[], line: TextLine): void {
+// pageIndex threads through so every run rebuilt from an item carries that item's own rendered position as its frame -- the PDF->X half of the frames fusion, where each reconstructed node's frames are exactly the items it was clustered from (sourcePath survives on items as traceability only).
+function pushRunsForLine(runs: ContentRun[], line: TextLine, pageIndex: number): void {
   line.items.forEach((item, itemIndex) => {
     if (itemIndex > 0) {
       const prevItem = line.items[itemIndex - 1]!;
@@ -114,7 +139,9 @@ function pushRunsForLine(runs: ContentRun[], line: TextLine): void {
         runs[runs.length - 1]!.text += ' ';
       }
     }
-    runs.push(textItemToContentRun(item));
+    const run = textItemToContentRun(item);
+    stampFrame(run, pageIndex, textBoxOfItem(item, pageIndex));
+    runs.push(run);
   });
 }
 
@@ -188,16 +215,18 @@ export function reconstructWordprocessing(doc: LayoutDocument, options?: Reconst
   const signal = options?.signal;
   const sections: ContentSection[] = [];
   let currentGroup: LayoutPage[] = [];
+  let groupStartPageIndex = 0;
   for (const page of doc.pages) {
     throwIfAborted(signal);
     if (currentGroup.length > 0 && !samePageSize(currentGroup[0]!, page)) {
-      sections.push(buildSection(currentGroup, doc.images));
+      sections.push(buildSection(currentGroup, groupStartPageIndex, doc.images));
+      groupStartPageIndex += currentGroup.length;
       currentGroup = [];
     }
     currentGroup.push(page);
   }
   if (currentGroup.length > 0) {
-    sections.push(buildSection(currentGroup, doc.images));
+    sections.push(buildSection(currentGroup, groupStartPageIndex, doc.images));
   }
   return { kind: 'wordprocessing', formatVersion: CONTENT_FORMAT_VERSION, metadata: doc.metadata, sections };
 }
@@ -207,20 +236,21 @@ function samePageSize(a: LayoutPage, b: LayoutPage): boolean {
 }
 
 // Margins have no PDF equivalent to recover -- there is no principled way to distinguish "intentional margin" from "wherever the content happened to start" from geometry alone, so this deliberately reports zero rather than fabricating a plausible-looking value (ZERO_MARGINS, defined above).
-function buildSection(pages: readonly LayoutPage[], images: Record<string, LayoutImageAsset>): ContentSection {
+// startPageIndex is this section's own first page's absolute index in the whole LayoutDocument -- a frame's pageIndex names a page of the SOURCE document, not a page within one section, so every block this section builds stamps absolute indices derived from it.
+function buildSection(pages: readonly LayoutPage[], startPageIndex: number, images: Record<string, LayoutImageAsset>): ContentSection {
   const blocks: ContentBlock[] = [];
   pages.forEach((page, i) => {
     if (i > 0) {
       blocks.push({ kind: 'pageBreak' });
     }
-    blocks.push(...reconstructPageBlocks(page, images));
+    blocks.push(...reconstructPageBlocks(page, startPageIndex + i, images));
   });
   return { pageSize: { widthPt: pages[0]!.widthPt, heightPt: pages[0]!.heightPt }, margins: ZERO_MARGINS, blocks };
 }
 
 // Table recovery runs FIRST, because it decides what is left for everything after it: text inside a recovered lattice belongs to the table, not to the page's paragraph flow, and the lattice's own strokes belong to the table's structure, not to the recovered vector content. Both recoveries are no-ops on a page without the geometry to support them, so a text-only page produces exactly the blocks it always did. See the shared recovery section below for the full reasoning behind each gate.
-function reconstructPageBlocks(page: LayoutPage, images: Record<string, LayoutImageAsset>): ContentBlock[] {
-  const recoveredTable = recoverTable(page);
+function reconstructPageBlocks(page: LayoutPage, pageIndex: number, images: Record<string, LayoutImageAsset>): ContentBlock[] {
+  const recoveredTable = recoverTable(page, pageIndex);
   const consumedText = recoveredTable?.consumedText;
   const textItems = page.items.filter((i): i is LayoutText => i.kind === 'text' && consumedText?.has(i) !== true);
   const imageItems = page.items.filter((i): i is LayoutImage => i.kind === 'image');
@@ -229,18 +259,20 @@ function reconstructPageBlocks(page: LayoutPage, images: Record<string, LayoutIm
 
   const positioned: { yPt: number; block: ContentBlock }[] = [];
   for (const paragraph of paragraphs) {
-    positioned.push({ yPt: paragraph.lines[0]!.baselineY, block: paragraphToContentParagraph(paragraph) });
+    positioned.push({ yPt: paragraph.lines[0]!.baselineY, block: paragraphToContentParagraph(paragraph, pageIndex) });
   }
   for (const img of imageItems) {
     const asset = images[img.imageId];
     if (asset !== undefined) {
-      positioned.push({ yPt: img.yPt, block: { kind: 'image', format: asset.format, base64: asset.base64, widthPt: img.widthPt, heightPt: img.heightPt } });
+      const block: ContentBlock = { kind: 'image', format: asset.format, base64: asset.base64, widthPt: img.widthPt, heightPt: img.heightPt };
+      stampFrame(block, pageIndex, { xPt: img.xPt, yPt: img.yPt, widthPt: img.widthPt, heightPt: img.heightPt });
+      positioned.push({ yPt: img.yPt, block });
     }
   }
   if (recoveredTable !== undefined) {
     positioned.push({ yPt: recoveredTable.topYPt, block: recoveredTable.table });
   }
-  const recoveredVectors = recoverPageVectors(page, recoveredTable?.latticeItems ?? NO_ITEMS);
+  const recoveredVectors = recoverPageVectors(page, pageIndex, recoveredTable?.latticeItems ?? NO_ITEMS);
   if (recoveredVectors !== undefined) {
     positioned.push({ yPt: recoveredVectors.topYPt, block: recoveredVectors.block });
   }
@@ -288,23 +320,25 @@ function startsNewParagraph(prev: TextLine, next: TextLine, modalSpacing: number
 
 const LEFT_ALIGN_TOLERANCE_PT = 2;
 
-function paragraphToContentParagraph(paragraph: TextParagraph): ContentParagraph {
+function paragraphToContentParagraph(paragraph: TextParagraph, pageIndex: number): ContentParagraph {
   const dominantLeftX = modeOf(paragraph.lines.map((l) => l.items[0]!.xPt), 1);
   const alignment: Alignment | undefined = paragraph.lines.every((l) => Math.abs(l.items[0]!.xPt - dominantLeftX) <= LEFT_ALIGN_TOLERANCE_PT) ? 'left' : undefined;
 
-  const runs: ContentRun[] = [];
+  const result: ContentParagraph = { kind: 'paragraph', runs: [], alignment };
   paragraph.lines.forEach((line, lineIndex) => {
+    // One frame per clustered line, stamped on the paragraph node itself -- the paragraph's own rendered placements, aggregated from exactly the items it was clustered from (the runs inside carry their own finer-grained frames via pushRunsForLine).
+    stampFrame(result, pageIndex, lineBox(line, pageIndex));
     // Lines within a paragraph join with a single space -- deliberately not de-hyphenating a trailing hyphen, since the "looks like a soft hyphen" heuristic corrupts genuine hyphenated compounds about as often as it fixes wrapped words (plan Step 10).
     if (lineIndex > 0) {
-      const lastRun = runs[runs.length - 1];
+      const lastRun = result.runs[result.runs.length - 1];
       if (lastRun !== undefined) {
         lastRun.text += ' ';
       }
     }
-    pushRunsForLine(runs, line);
+    pushRunsForLine(result.runs, line, pageIndex);
   });
 
-  return { kind: 'paragraph', runs, alignment };
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -313,42 +347,44 @@ function paragraphToContentParagraph(paragraph: TextParagraph): ContentParagraph
 
 export function reconstructPresentation(doc: LayoutDocument, options?: ReconstructOptions): ContentDocument {
   const signal = options?.signal;
-  const slides = doc.pages.map((page) => {
+  const slides = doc.pages.map((page, pageIndex) => {
     throwIfAborted(signal);
-    return reconstructSlide(page, doc.images);
+    return reconstructSlide(page, pageIndex, doc.images);
   });
   return { kind: 'presentation', formatVersion: CONTENT_FORMAT_VERSION, metadata: doc.metadata, slides };
 }
 
 // Table and vector recovery run here on exactly the same terms as in reconstructPageBlocks above -- same detector, same gates, same exclusions -- differing only in the container each result has to be wrapped in: a slide holds nothing but ContentShapes, so a recovered table and a recovered drawing each become a shape framed at the geometry they were recovered from, rather than a bare block placed in a flow.
-function reconstructSlide(page: LayoutPage, images: Record<string, LayoutImageAsset>): ContentSlide {
-  const recoveredTable = recoverTable(page);
+function reconstructSlide(page: LayoutPage, pageIndex: number, images: Record<string, LayoutImageAsset>): ContentSlide {
+  const recoveredTable = recoverTable(page, pageIndex);
   const consumedText = recoveredTable?.consumedText;
   const textItems = page.items.filter((i): i is LayoutText => i.kind === 'text' && consumedText?.has(i) !== true);
   const imageItems = page.items.filter((i): i is LayoutImage => i.kind === 'image');
 
   const lines = clusterIntoLines(textItems);
   const blocks = clusterIntoBlocks(lines);
-  const textShapes = blocks.map((block) => blockToShape(block, page.heightPt));
+  const textShapes = blocks.map((block) => blockToShape(block, page.heightPt, pageIndex));
   const imageShapes: ContentShape[] = [];
   for (const img of imageItems) {
-    const shape = imageToShape(img, page.heightPt, images);
+    const shape = imageToShape(img, page.heightPt, pageIndex, images);
     if (shape !== undefined) {
       imageShapes.push(shape);
     }
   }
-  const recoveredVectors = recoverPageVectors(page, recoveredTable?.latticeItems ?? NO_ITEMS);
+  const recoveredVectors = recoverPageVectors(page, pageIndex, recoveredTable?.latticeItems ?? NO_ITEMS);
   // Vectors paint behind everything else, matching src/layout/drawing.ts's own documented vectors-then-shapes fallback for a page whose true interleaving is unknown -- and it is unknown here for the same reason: a slide's shapes array carries no ordering field relating it to content recovered outside it.
-  const vectorShapes: ContentShape[] = recoveredVectors === undefined ? [] : [wrapBlockInShape(recoveredVectors.block, { xPt: 0, yPt: 0, widthPt: page.widthPt, heightPt: page.heightPt })];
-  const tableShapes: ContentShape[] = recoveredTable === undefined ? [] : [wrapBlockInShape(recoveredTable.table, recoveredTable.frame)];
+  const vectorShapes: ContentShape[] = recoveredVectors === undefined ? [] : [wrapBlockInShape(recoveredVectors.block, { xPt: 0, yPt: 0, widthPt: page.widthPt, heightPt: page.heightPt }, page.heightPt, pageIndex)];
+  const tableShapes: ContentShape[] = recoveredTable === undefined ? [] : [wrapBlockInShape(recoveredTable.table, recoveredTable.frame, page.heightPt, pageIndex)];
 
   // Images before text shapes in z-order (plan Step 10). notes recovers LayoutPage's own private page-dictionary entry (see pdf/write.ts/read.ts) when the source PDF was produced by this package's own pptxToPdf -- absent (falls back to '') for a PDF from any other producer, since nothing else would ever write it.
   return { size: { widthPt: page.widthPt, heightPt: page.heightPt }, shapes: [...vectorShapes, ...imageShapes, ...tableShapes, ...textShapes], notes: page.notes ?? '' };
 }
 
-// A single recovered block as its own containing shape, with the zero insets and no rotation every other shape this module produces already uses -- a slide has no container for a bare block, and a table or a drawing recovered from a page is exactly one block.
-function wrapBlockInShape(block: ContentBlock, frame: Box): ContentShape {
-  return { frame, insetLeftPt: 0, insetTopPt: 0, insetRightPt: 0, insetBottomPt: 0, blocks: [block] };
+// A single recovered block as its own containing shape, with the zero insets and no rotation every other shape this module produces already uses -- a slide has no container for a bare block, and a table or a drawing recovered from a page is exactly one block. The wrapper shape's frame records where the wrapped content sat (frame arrives y-down; the stamped frame is its PDF-space flip).
+function wrapBlockInShape(block: ContentBlock, frame: Box, pageHeightPt: number, pageIndex: number): ContentShape {
+  const shape: ContentShape = { frame, insetLeftPt: 0, insetTopPt: 0, insetRightPt: 0, insetBottomPt: 0, blocks: [block] };
+  stampFrame(shape, pageIndex, flipY(frame, pageHeightPt));
+  return shape;
 }
 
 interface TextBlock {
@@ -426,39 +462,47 @@ function computeBlockFrame(block: TextBlock, slideHeightPt: number): Box {
   return flipY({ xPt: minX, yPt: minY, widthPt: maxX - minX, heightPt: maxY - minY }, slideHeightPt);
 }
 
-function lineToParagraph(line: TextLine): ContentParagraph {
-  const runs: ContentRun[] = [];
-  pushRunsForLine(runs, line);
-  return { kind: 'paragraph', runs };
+function lineToParagraph(line: TextLine, pageIndex: number): ContentParagraph {
+  const paragraph: ContentParagraph = { kind: 'paragraph', runs: [] };
+  stampFrame(paragraph, pageIndex, lineBox(line, pageIndex));
+  pushRunsForLine(paragraph.runs, line, pageIndex);
+  return paragraph;
 }
 
-function blockToShape(block: TextBlock, slideHeightPt: number): ContentShape {
-  return {
+// A recovered text block's own shape frame is stamped from the PDF-space bounding box of exactly the items clustered into it -- computeBlockFrame returns that same box flipped into top-left/y-down space for the shape's own frame field, so the stamp records the pre-flip original.
+function blockToShape(block: TextBlock, slideHeightPt: number, pageIndex: number): ContentShape {
+  const shape: ContentShape = {
     frame: computeBlockFrame(block, slideHeightPt),
     insetLeftPt: 0,
     insetTopPt: 0,
     insetRightPt: 0,
     insetBottomPt: 0,
-    blocks: block.lines.map(lineToParagraph),
+    blocks: block.lines.map((line) => lineToParagraph(line, pageIndex)),
   };
+  stampFrame(shape, pageIndex, flipY(shape.frame, slideHeightPt));
+  return shape;
 }
 
 // The inverse of content-write.ts's own placement convention: LayoutImage.rotationDeg is counter-clockwise-positive (matrix.ts's convention, via matrixRotationDegrees), while ContentShape.rotationDeg is clockwise (DrawingML's a:xfrm/@rot convention) -- negated here, the one place PDF-space image rotation crosses into OOXML-space.
-function imageToShape(img: LayoutImage, slideHeightPt: number, images: Record<string, LayoutImageAsset>): ContentShape | undefined {
+function imageToShape(img: LayoutImage, slideHeightPt: number, pageIndex: number, images: Record<string, LayoutImageAsset>): ContentShape | undefined {
   const asset = images[img.imageId];
   if (asset === undefined) {
     return undefined;
   }
   const frame = flipY({ xPt: img.xPt, yPt: img.yPt, widthPt: img.widthPt, heightPt: img.heightPt }, slideHeightPt);
-  return {
+  const block: ContentBlock = { kind: 'image', format: asset.format, base64: asset.base64, widthPt: img.widthPt, heightPt: img.heightPt };
+  stampFrame(block, pageIndex, { xPt: img.xPt, yPt: img.yPt, widthPt: img.widthPt, heightPt: img.heightPt });
+  const shape: ContentShape = {
     frame,
     rotationDeg: img.rotationDeg !== undefined ? -img.rotationDeg : undefined,
     insetLeftPt: 0,
     insetTopPt: 0,
     insetRightPt: 0,
     insetBottomPt: 0,
-    blocks: [{ kind: 'image', format: asset.format, base64: asset.base64, widthPt: img.widthPt, heightPt: img.heightPt }],
+    blocks: [block],
   };
+  stampFrame(shape, pageIndex, { xPt: img.xPt, yPt: img.yPt, widthPt: img.widthPt, heightPt: img.heightPt });
+  return shape;
 }
 
 // ---------------------------------------------------------------------------
@@ -467,34 +511,64 @@ function imageToShape(img: LayoutImage, slideHeightPt: number, images: Record<st
 
 export function reconstructDrawing(doc: LayoutDocument, options?: ReconstructOptions): ContentDocument {
   const signal = options?.signal;
-  const pages: ContentDrawPage[] = doc.pages.map((page) => {
+  const pages: ContentDrawPage[] = doc.pages.map((page, pageIndex) => {
     throwIfAborted(signal);
-    return reconstructDrawPage(page, doc.images);
+    return reconstructDrawPage(page, pageIndex, doc.images);
   });
   return { kind: 'drawing', formatVersion: CONTENT_FORMAT_VERSION, metadata: doc.metadata, pages };
 }
 
 // ContentDrawPageSchema still keeps shapes and vectors as two separate arrays, but both ContentVector and ContentShape carry a shared `paintOrder` recording their true relative position -- the field drawing.ts's own convertDrawingToLayout merges by when going the other direction. reconstructDrawPage produces exactly that field here: it already walked page.items once in real paint order (a LayoutPage's items ARE its paint order, front-to-back by array position) and bucketed each into whichever array its own kind belongs to, so recording the walk position as it goes is all that is needed for the relative order between the two arrays to survive at all. A page that genuinely interleaves the two consequently round-trips its interleaving exactly, rather than collapsing to all-vectors-then-all-shapes the way it had to before the schema carried the field. 'link' items have no drawing-page equivalent and are dropped, matching reconstructPageBlocks/reconstructSlide's own existing precedent above of ignoring link items entirely -- a dropped item consumes no paintOrder slot either, so the stamped values stay a dense 0..n-1 run over what was actually recovered.
-function reconstructDrawPage(page: LayoutPage, images: Record<string, LayoutImageAsset>): ContentDrawPage {
+function reconstructDrawPage(page: LayoutPage, pageIndex: number, images: Record<string, LayoutImageAsset>): ContentDrawPage {
   const vectors: ContentVector[] = [];
   const shapes: ContentShape[] = [];
   let paintOrder = 0;
   for (const item of page.items) {
     const vector = layoutItemToVector(item, page.heightPt);
     if (vector !== undefined) {
+      stampVectorFrame(vector, item, pageIndex);
       vectors.push({ ...vector, paintOrder: paintOrder++ });
       continue;
     }
     if (item.kind === 'text') {
-      shapes.push({ ...layoutTextToShape(item, page.heightPt), paintOrder: paintOrder++ });
+      const shape = layoutTextToShape(item, page.heightPt, pageIndex);
+      stampFrame(shape, pageIndex, flipY(shape.frame, page.heightPt));
+      shapes.push({ ...shape, paintOrder: paintOrder++ });
     } else if (item.kind === 'image') {
-      const shape = imageToShape(item, page.heightPt, images);
+      const shape = imageToShape(item, page.heightPt, pageIndex, images);
       if (shape !== undefined) {
         shapes.push({ ...shape, paintOrder: paintOrder++ });
       }
     }
   }
   return { size: { widthPt: page.widthPt, heightPt: page.heightPt }, shapes, vectors };
+}
+
+// Stamps a recovered vector's frame from the exact item it was recovered from -- the PDF-space box that item painted, so the vector node carries its own rendered position exactly the way an engine-laid-out vector does. Rect/ellipse items carry their own box; a line's is the bounding box of its two endpoints; a path's is the tight hull of every point including cubic controls (collectPathPoints, the same hull rule pathBoundingFrame documents).
+function stampVectorFrame(vector: ContentVector, item: LayoutItem, pageIndex: number): void {
+  if (item.kind === 'rect' || item.kind === 'ellipse') {
+    stampFrame(vector, pageIndex, { xPt: item.xPt, yPt: item.yPt, widthPt: item.widthPt, heightPt: item.heightPt });
+    return;
+  }
+  if (item.kind === 'line') {
+    stampFrame(vector, pageIndex, { xPt: Math.min(item.x1Pt, item.x2Pt), yPt: Math.min(item.y1Pt, item.y2Pt), widthPt: Math.abs(item.x2Pt - item.x1Pt), heightPt: Math.abs(item.y2Pt - item.y1Pt) });
+    return;
+  }
+  if (item.kind !== 'path') {
+    return; // unreachable from both call sites, which invoke this only once layoutItemToVector proved the item is a vector kind -- the guard exists solely to narrow item to LayoutPath for collectPathPoints.
+  }
+  const points = collectPathPoints(item.subpaths);
+  let minX = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (const point of points) {
+    minX = Math.min(minX, point.xPt);
+    maxX = Math.max(maxX, point.xPt);
+    minY = Math.min(minY, point.yPt);
+    maxY = Math.max(maxY, point.yPt);
+  }
+  stampFrame(vector, pageIndex, { xPt: minX, yPt: minY, widthPt: maxX - minX, heightPt: maxY - minY });
 }
 
 // The ONE LayoutItem -> ContentVector classification in this package, shared verbatim by all three reconstruction directions: reconstructDrawing (above), and -- via recoverPageVectors below -- reconstructWordprocessing and reconstructPresentation. Which items reach it at all is a per-direction decision; what a rect/ellipse/line/path becomes once it does is not, and deliberately has no second implementation anywhere. Returns undefined for every non-vector kind (text/image/link), so a caller can use it as the "is this vector geometry?" test and its own converter in one step.
@@ -604,8 +678,12 @@ function layoutPathToVector(item: LayoutPath, pageHeightPt: number): ContentVect
 }
 
 // A single LayoutText item maps to exactly one ContentShape holding one single-run paragraph -- reuses computeBlockFrame/textItemToContentRun verbatim rather than inventing a second frame-estimation approach (the same real AFM ascent/descent math reconstructPresentation's own blockToShape already uses above, degenerating correctly to a one-line, one-item block). Unlike blockToShape (which can merge several LayoutText items into one block and therefore cannot assign a single rotation to the merged result), this mapping is genuinely 1:1, so item.rotationDeg carries straight across, negated -- the same LayoutImage counter-clockwise -> ContentShape clockwise convention imageToShape already applies below.
-function layoutTextToShape(item: LayoutText, pageHeightPt: number): ContentShape {
+function layoutTextToShape(item: LayoutText, pageHeightPt: number, pageIndex: number): ContentShape {
   const frame = computeBlockFrame({ lines: [{ items: [item], baselineY: item.yPt }] }, pageHeightPt);
+  const run = textItemToContentRun(item);
+  stampFrame(run, pageIndex, textBoxOfItem(item, pageIndex));
+  const paragraph: ContentParagraph = { kind: 'paragraph', runs: [run] };
+  stampFrame(paragraph, pageIndex, textBoxOfItem(item, pageIndex));
   return {
     frame,
     rotationDeg: item.rotationDeg !== undefined ? -item.rotationDeg : undefined,
@@ -613,7 +691,7 @@ function layoutTextToShape(item: LayoutText, pageHeightPt: number): ContentShape
     insetTopPt: 0,
     insetRightPt: 0,
     insetBottomPt: 0,
-    blocks: [{ kind: 'paragraph', runs: [textItemToContentRun(item)] }],
+    blocks: [paragraph],
   };
 }
 
@@ -640,7 +718,7 @@ interface RecoveredVectors {
 }
 
 // Every vector primitive on a page, in paint order, as one embedded drawing block -- or undefined when the page has none, so a text-only page's output is byte-identical to what it was before this recovery existed. `excluded` carries the items already claimed as a table's own gridlines.
-function recoverPageVectors(page: LayoutPage, excluded: ReadonlySet<LayoutItem>): RecoveredVectors | undefined {
+function recoverPageVectors(page: LayoutPage, pageIndex: number, excluded: ReadonlySet<LayoutItem>): RecoveredVectors | undefined {
   const vectors: ContentVector[] = [];
   for (const item of page.items) {
     if (excluded.has(item)) {
@@ -648,6 +726,7 @@ function recoverPageVectors(page: LayoutPage, excluded: ReadonlySet<LayoutItem>)
     }
     const vector = layoutItemToVector(item, page.heightPt);
     if (vector !== undefined) {
+      stampVectorFrame(vector, item, pageIndex);
       // paintOrder is the recovery index, exactly as reconstructDrawPage stamps it: a LayoutPage's items ARE its paint order, front-to-back by array position.
       vectors.push({ ...vector, paintOrder: vectors.length });
     }
@@ -656,7 +735,10 @@ function recoverPageVectors(page: LayoutPage, excluded: ReadonlySet<LayoutItem>)
     return undefined;
   }
   const topYDownPt = Math.min(...vectors.map(vectorTopYDownPt));
-  return { block: buildDrawingBlock({ widthPt: page.widthPt, heightPt: page.heightPt }, vectors), topYPt: page.heightPt - topYDownPt };
+  const block = buildDrawingBlock({ widthPt: page.widthPt, heightPt: page.heightPt }, vectors);
+  // The wrapper block sat across the whole page -- the vectors inside it are page-anchored by construction (see buildDrawingBlock's own doc), so its own placement is the page itself.
+  stampFrame(block, pageIndex, { xPt: 0, yPt: 0, widthPt: page.widthPt, heightPt: page.heightPt });
+  return { block, topYPt: page.heightPt - topYDownPt };
 }
 
 // --- Table recovery, gated on an unambiguously detected gridline lattice ---------------------------------
@@ -674,11 +756,11 @@ interface RecoveredTable {
 }
 
 // One cell's own text, as one ContentParagraph per recovered line. A table cell's text genuinely can wrap across lines (unlike a spreadsheet cell's -- see buildGridFromTextClustering's own note), and geometry alone cannot say whether two stacked lines in a cell were one wrapped paragraph or two separate ones, so each line stays its own paragraph rather than being joined on a guess. This is the same choice reconstructPresentation's own blockToShape already makes for a slide text box, for the same reason.
-function cellBlocksFromItems(items: readonly LayoutText[]): ContentBlock[] {
-  return clusterIntoLines(items).map(lineToParagraph);
+function cellBlocksFromItems(items: readonly LayoutText[], pageIndex: number): ContentBlock[] {
+  return clusterIntoLines(items).map((line) => lineToParagraph(line, pageIndex));
 }
 
-function recoverTable(page: LayoutPage): RecoveredTable | undefined {
+function recoverTable(page: LayoutPage, pageIndex: number): RecoveredTable | undefined {
   const lattice = detectGridLattice(page.items);
   if (lattice === undefined) {
     return undefined;
@@ -711,8 +793,14 @@ function recoverTable(page: LayoutPage): RecoveredTable | undefined {
   for (let i = 0; i < rowCount; i++) {
     const cells: ContentTableCell[] = [];
     for (let j = 0; j < columnCount; j++) {
-      // A cell with no text recovered inside it is emitted as a genuinely empty cell rather than skipped: a ContentTableRow's cells are positional, so dropping one would shift every cell after it into the wrong column.
-      cells.push({ blocks: cellBlocksFromItems(groups.get(groupKey(i, j)) ?? []) });
+      // A cell with no text recovered inside it is emitted as a genuinely empty cell rather than skipped: a ContentTableRow's cells are positional, so dropping one would shift every cell after it into the wrong column. Every cell carries its own lattice-measured frame -- the exact box the drawn gridline lattice gave it, in PDF space.
+      const cell: ContentTableCell = { blocks: cellBlocksFromItems(groups.get(groupKey(i, j)) ?? [], pageIndex) };
+      const cellLeftXPt = lattice.columnBoundariesAscPt[j]!;
+      const cellRightXPt = lattice.columnBoundariesAscPt[j + 1]!;
+      const cellTopYPt = lattice.rowBoundariesDescPt[i]!;
+      const cellBottomYPt = lattice.rowBoundariesDescPt[i + 1]!;
+      stampFrame(cell, pageIndex, { xPt: cellLeftXPt, yPt: cellBottomYPt, widthPt: cellRightXPt - cellLeftXPt, heightPt: cellTopYPt - cellBottomYPt });
+      cells.push(cell);
     }
     rows.push({ cells, heightPt: lattice.rowBoundariesDescPt[i]! - lattice.rowBoundariesDescPt[i + 1]! });
   }
@@ -721,8 +809,11 @@ function recoverTable(page: LayoutPage): RecoveredTable | undefined {
   const rightXPt = lattice.columnBoundariesAscPt[columnCount]!;
   const topYPt = lattice.rowBoundariesDescPt[0]!;
   const bottomYPt = lattice.rowBoundariesDescPt[rowCount]!;
-  const frame = flipY({ xPt: leftXPt, yPt: bottomYPt, widthPt: rightXPt - leftXPt, heightPt: topYPt - bottomYPt }, page.heightPt);
-  return { table: { kind: 'table', rows, columnWidthsPt }, frame, topYPt, consumedText, latticeItems: lattice.sourceItems };
+  const pdfBox = { xPt: leftXPt, yPt: bottomYPt, widthPt: rightXPt - leftXPt, heightPt: topYPt - bottomYPt };
+  const frame = flipY(pdfBox, page.heightPt);
+  const table: ContentTable = { kind: 'table', rows, columnWidthsPt };
+  stampFrame(table, pageIndex, pdfBox);
+  return { table, frame, topYPt, consumedText, latticeItems: lattice.sourceItems };
 }
 
 const NO_ITEMS: ReadonlySet<LayoutItem> = new Set();
@@ -767,7 +858,7 @@ function addToGroup(groups: Map<string, LayoutText[]>, row: number, column: numb
 }
 
 // Every recovered cell ALWAYS carries its own rendered text verbatim in displayText, and additionally carries a heuristically re-typed `value` wherever src/layout/cell-typing.ts finds exactly one defensible reading of that text (see its own module doc for the confidence bar, and this section's top-of-block note for why the whole step is probabilistic). A cell whose text is ambiguous, or not number/date/boolean-shaped at all, keeps `value` as the plain string it was recovered as -- so `value.kind !== 'string'` is itself the flag distinguishing an inferred value from an untouched one, with the reporting sink below carrying the reason behind either outcome. A (row, column) position with no text assigned to it at all is simply never emitted, matching the sparse cell model buildOdsPackage's own appendCell already expects.
-function buildCellsFromGroups(groups: ReadonlyMap<string, readonly LayoutText[]>, context: CellTypingContext): ContentSheetCell[] {
+function buildCellsFromGroups(groups: ReadonlyMap<string, readonly LayoutText[]>, pageIndex: number, context: CellTypingContext): ContentSheetCell[] {
   const cells: ContentSheetCell[] = [];
   for (const [key, items] of groups) {
     const displayText = joinCellText(items);
@@ -777,7 +868,21 @@ function buildCellsFromGroups(groups: ReadonlyMap<string, readonly LayoutText[]>
     const [rowPart, columnPart] = key.split(',');
     const row = Number(rowPart);
     const column = Number(columnPart);
-    cells.push({ row, column, value: inferredCellValue(displayText, row, column, context), displayText });
+    const cell: ContentSheetCell = { row, column, value: inferredCellValue(displayText, row, column, context), displayText };
+    // The cell's frame is the PDF-space bounding box of exactly the items clustered into it -- the printed extent of that cell's own content, which is all a rendered PDF carries about where the cell was.
+    let minX = Number.POSITIVE_INFINITY;
+    let maxX = Number.NEGATIVE_INFINITY;
+    let minY = Number.POSITIVE_INFINITY;
+    let maxY = Number.NEGATIVE_INFINITY;
+    for (const item of items) {
+      const { ascentPt, descentPt } = textItemVerticalExtent(item);
+      minX = Math.min(minX, item.xPt);
+      maxX = Math.max(maxX, item.xPt + (item.widthPt ?? 0));
+      minY = Math.min(minY, item.yPt - descentPt);
+      maxY = Math.max(maxY, item.yPt + ascentPt);
+    }
+    stampFrame(cell, pageIndex, { xPt: minX, yPt: minY, widthPt: maxX - minX, heightPt: maxY - minY });
+    cells.push(cell);
   }
   cells.sort((a, b) => a.row - b.row || a.column - b.column);
   return cells;
@@ -807,7 +912,7 @@ interface ReconstructedGrid {
 }
 
 // The gridline positions ARE the cell boundaries -- column/row widths are the exact, genuinely measured gap between consecutive drawn lines, not estimated from text at all.
-function buildGridFromLattice(textItems: readonly LayoutText[], lattice: GridLattice, context: CellTypingContext): ReconstructedGrid {
+function buildGridFromLattice(textItems: readonly LayoutText[], lattice: GridLattice, pageIndex: number, context: CellTypingContext): ReconstructedGrid {
   const groups = new Map<string, LayoutText[]>();
   for (const item of textItems) {
     const row = findRowIndex(lattice.rowBoundariesDescPt, item.yPt);
@@ -825,7 +930,7 @@ function buildGridFromLattice(textItems: readonly LayoutText[], lattice: GridLat
   for (let i = 0; i < lattice.rowBoundariesDescPt.length - 1; i++) {
     rows.push({ index: i, heightPt: lattice.rowBoundariesDescPt[i]! - lattice.rowBoundariesDescPt[i + 1]! });
   }
-  return { cells: buildCellsFromGroups(groups, context), columns, rows, gridlines: true };
+  return { cells: buildCellsFromGroups(groups, pageIndex, context), columns, rows, gridlines: true };
 }
 
 // --- Path 2: text-position clustering, no gridlines present -----------------------------------------------------------
@@ -881,7 +986,7 @@ function lastColumnWidthPt(groups: ReadonlyMap<string, readonly LayoutText[]>, c
 }
 
 // Rows reuse clusterIntoLines directly -- a spreadsheet cell's own text is never wrapped across lines (sheets.ts's own module doc), so a text line already IS a row, with no separate row-clustering pass needed. Each line is then split into segments wherever a large horizontal gap occurs, reusing splitLineByLargeGaps verbatim -- the same >2em-gap signal reconstructPresentation's own block clustering already uses to tell "still one cluster of text" from "a new one" -- since a single cell's own text can arrive as several directly adjacent LayoutText fragments (a run-level style change mid-cell) that must be treated as one cell candidate, not several. Row heights are the genuinely measured baseline-to-baseline gap to the next row; the last row (no following baseline to measure against) falls back to this page's own modal line spacing, the same already-justified estimateModalLineSpacing this module uses for paragraph/block clustering above.
-function buildGridFromTextClustering(textItems: readonly LayoutText[], context: CellTypingContext): ReconstructedGrid {
+function buildGridFromTextClustering(textItems: readonly LayoutText[], pageIndex: number, context: CellTypingContext): ReconstructedGrid {
   const lines = clusterIntoLines(textItems);
   if (lines.length === 0) {
     return { cells: [], columns: [], rows: [], gridlines: false };
@@ -914,7 +1019,7 @@ function buildGridFromTextClustering(textItems: readonly LayoutText[], context: 
     return { index: j, widthPt: nextPosition !== undefined ? nextPosition - position : lastColumnWidthPt(groups, j, position) };
   });
 
-  return { cells: buildCellsFromGroups(groups, context), columns, rows, gridlines: false };
+  return { cells: buildCellsFromGroups(groups, pageIndex, context), columns, rows, gridlines: false };
 }
 
 // --- Orchestration: one ContentSheet per PDF page -----------------------------------------------------------
@@ -924,7 +1029,7 @@ function reconstructSheet(page: LayoutPage, pageIndex: number, sink: CellTypeInf
   const textItems = page.items.filter((i): i is LayoutText => i.kind === 'text');
   const lattice = detectGridLattice(page.items);
   const context: CellTypingContext = { sheetIndex: pageIndex, sink };
-  const grid = lattice !== undefined ? buildGridFromLattice(textItems, lattice, context) : buildGridFromTextClustering(textItems, context);
+  const grid = lattice !== undefined ? buildGridFromLattice(textItems, lattice, pageIndex, context) : buildGridFromTextClustering(textItems, pageIndex, context);
 
   // Margins have no PDF equivalent to recover, mirroring buildSection's own ZERO_MARGINS reasoning above. gridlines reflects whichever detection path actually ran; headers is always false -- a header-gutter row-number/column-letter label has no reliable geometric signal distinguishing it from an ordinary short cell, so this makes no attempt to detect one (any such label sitting outside the detected grid lattice is simply dropped by findRowIndex/findColumnIndex returning undefined for it, rather than being misread as real cell content). No print range/scale/fit-to-page/repeat-rows/repeat-columns/manual-breaks assumption is made at all -- a rendered page carries no trace of print INTENT, only what was visually printed.
   const printSettings: ContentSheetPrintSettings = {
