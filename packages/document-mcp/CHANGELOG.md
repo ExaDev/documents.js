@@ -1,3 +1,5 @@
+## [1.5.98](https://github.com/ExaDev/document-mcp/compare/v1.5.97...v1.5.98) (2026-08-17)
+
 ## [1.5.97](https://github.com/ExaDev/document-mcp/compare/v1.5.96...v1.5.97) (2026-08-17)
 
 ## [1.5.96](https://github.com/ExaDev/document-mcp/compare/v1.5.95...v1.5.96) (2026-08-17)
