@@ -1,3 +1,19 @@
+# [3.0.0](https://github.com/ExaDev/document-schema.js/compare/v2.7.17...v3.0.0) (2026-08-17)
+
+
+* feat!: fuse content and layout into a single DocumentPackage tree, add canonical headingLevel ([74f1f6b](https://github.com/ExaDev/document-schema.js/commit/74f1f6bef3c37cac1eaaa61d1ede7e6a4eaec012))
+
+
+### BREAKING CHANGES
+
+* DocumentPackageSchema no longer has a `layout` field.
+A DocumentPackage produced against DOCUMENT_PACKAGE_FORMAT_VERSION 1
+must be rebuilt: move each rendered position onto its own content
+node's new `frames` field and replace the old `layout` value with a
+`pages` array of page sizes. ContentDocumentSchema's own
+CONTENT_FORMAT_VERSION moves from 2 to 3 for the new `frames` and
+`headingLevel` fields.
+
 ## [2.7.17](https://github.com/ExaDev/document-schema.js/compare/v2.7.16...v2.7.17) (2026-08-17)
 
 ## [2.7.16](https://github.com/ExaDev/document-schema.js/compare/v2.7.15...v2.7.16) (2026-08-17)
