@@ -110,7 +110,7 @@
     "husky": "^9.1.7",
     "ink-testing-library": "^4.0.0",
     "lint-staged": "^17.3.0",
-    "odf.js": "^3.0.2",
+    "odf.js": "^3.1.0",
     "pdf-codec": "^2.2.20",
     "publint": "^0.3.22",
     "semantic-release": "^25.0.8",
