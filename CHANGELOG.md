@@ -1,3 +1,11 @@
+# [2.3.0](https://github.com/ExaDev/documents.js/compare/v2.2.0...v2.3.0) (2026-08-17)
+
+
+### Features
+
+* lower LaTeX presentation into the MathExpression semantic core ([6747e10](https://github.com/ExaDev/documents.js/commit/6747e10d9a28bf1397822e6175c9890efc9ef7f1))
+* lower markdown-carried LaTeX into two-layer formula blocks on the read path ([1b1a7dd](https://github.com/ExaDev/documents.js/commit/1b1a7dd079020831a517f94ed3b6c5d903256473)), closes [#563](https://github.com/ExaDev/documents.js/issues/563)
+
 # [2.2.0](https://github.com/ExaDev/documents.js/compare/v2.1.0...v2.2.0) (2026-08-17)
 
 
