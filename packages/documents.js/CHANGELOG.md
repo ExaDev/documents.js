@@ -1,3 +1,10 @@
+# [2.2.0](https://github.com/ExaDev/documents.js/compare/v2.1.0...v2.2.0) (2026-08-17)
+
+
+### Features
+
+* add svg as a DocumentFormat read into the drawing variant ([09740d8](https://github.com/ExaDev/documents.js/commit/09740d83bfd8132333ceb96f758cc8ea8d756e46))
+
 # [2.1.0](https://github.com/ExaDev/documents.js/compare/v2.0.0...v2.1.0) (2026-08-17)
 
 
