@@ -33,6 +33,9 @@ importers:
       pdf-codec:
         specifier: ^2.2.35
         version: 2.2.35
+      temml:
+        specifier: 0.13.4
+        version: 0.13.4
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -2831,6 +2834,10 @@ packages:
   tagged-tag@1.0.0:
     resolution: {integrity: sha512-yEFYrVhod+hdNyx7g5Bnkkb0G6si8HJurOoOEgC8B/O0uXLHlaey/65KRv6cuWBNhBgHKAROVpc7QyYqE5gFng==}
     engines: {node: '>=20'}
+
+  temml@0.13.4:
+    resolution: {integrity: sha512-k1yolMBswx34Jw9hZn5Xh2/GBlwqlW+wiN7QaUYUMhSa1ypfti6rlCfSmCxWyooxH1G32C/Z+qVvgAsBOELZBQ==}
+    engines: {node: '>=18.13.0'}
 
   temp-dir@3.0.0:
     resolution: {integrity: sha512-nHc6S/bwIilKHNRgK/3jlhDoIHcp45YgyiwcAk46Tr0LfEqGBVpmiAyuiuxeVE44m3mXnEeVhaipLOEWmH+Njw==}
@@ -5760,6 +5767,8 @@ snapshots:
       supports-color: 7.2.0
 
   tagged-tag@1.0.0: {}
+
+  temml@0.13.4: {}
 
   temp-dir@3.0.0: {}
 

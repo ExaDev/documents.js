@@ -90,6 +90,7 @@
     "odf.js": "^3.0.1",
     "ooxml.js": "^2.16.0",
     "pdf-codec": "^2.2.35",
+    "temml": "0.13.4",
     "zod": "^4.4.3"
   },
   "devDependencies": {
