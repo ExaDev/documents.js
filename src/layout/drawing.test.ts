@@ -46,7 +46,7 @@ function drawingDoc(pages: ContentDrawPage[]): Extract<ContentDocument, { kind: 
 }
 
 function convert(pages: ContentDrawPage[]) {
-  return convertDrawingToLayout(drawingDoc(pages), { measurer: fakeMeasurer() });
+  return convertDrawingToLayout(drawingDoc(pages), { measurer: fakeMeasurer() }).document;
 }
 
 describe('convertDrawingToLayout: rect vector', () => {
@@ -324,7 +324,7 @@ describe('convertDrawingToLayout -> reconstructDrawing: paint order survives the
     expect(recoveredPage.shapes.map((s) => s.paintOrder)).toEqual([1]);
 
     // And laying the RECOVERED page out again reproduces the identical interleaving, rather than drifting back to vectors-then-shapes.
-    const relaid = convertDrawingToLayout(recovered, { measurer: fakeMeasurer() });
+    const relaid = convertDrawingToLayout(recovered, { measurer: fakeMeasurer() }).document;
     expect(relaid.pages[0]?.items.map((item) => item.kind)).toEqual(['rect', 'text', 'rect']);
   });
 });

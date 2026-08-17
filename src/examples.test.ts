@@ -20,6 +20,9 @@ import {
   layoutDocumentWithSchema,
 } from 'document-schema.js';
 import { decodePackage as decodeOoxmlPackage } from 'ooxml.js';
+import { createStandardFontMeasurer, loadMathFont } from 'pdf-codec';
+import { convertWordprocessingToLayout } from './layout/engine';
+const mathMetricsAt = (sizePt: number) => loadMathFont().metricsAt(sizePt);
 import { decodePackage as decodeOdfPackage } from 'odf.js';
 import { docxToPdf } from './convert/convert';
 import { readDocxContent } from './ooxml/docx/read';
@@ -76,7 +79,7 @@ function assertPackageExample(name: string, pkg: DocumentPackage): void {
   expect(result.kind, `${name}: schema`).toBe('DocumentPackage');
 }
 
-// The layout and package examples both come from a single docxToPdf run: its onDocument callback hands back the full DocumentPackage (content + layout) the conversion built, which is the README's own recommended way to obtain the intermediate pivot model. Computed once at module load so both examples share it.
+// The package example comes from a real docxToPdf run: its onDocument callback hands back the fused DocumentPackage (content with its own frames stamped, plus the pages array) the conversion built, which is the README's own recommended way to obtain the intermediate pivot model. The LayoutDocument example comes from running the same conversion's own layout engine directly on the same read content -- the internal pdf-codec view a package no longer carries as a second half, still a real pivot model worth an example of its own (writePdf's own contract).
 function buildDocxPackage(): DocumentPackage {
   let captured: DocumentPackage | undefined;
   docxToPdf(minimalDocxBytes(), { onDocument: (pkg) => {
@@ -89,6 +92,17 @@ function buildDocxPackage(): DocumentPackage {
 }
 
 const DOCX_PACKAGE = buildDocxPackage();
+
+function buildDocxLayout(): LayoutDocument {
+  const content = readDocxContent(decodeOoxmlPackage(minimalDocxBytes()));
+  if (content.kind !== 'wordprocessing') {
+    throw new Error('readDocxContent returned a non-wordprocessing ContentDocument');
+  }
+  const { document } = convertWordprocessingToLayout(content, { measurer: createStandardFontMeasurer(), mathMetricsAt });
+  return document;
+}
+
+const DOCX_LAYOUT = buildDocxLayout();
 
 describe('examples', () => {
   // wordprocessing covers docx, odt, and markdown -- they all read into the identical wordprocessing-variant ContentDocument (the README documents this shared pivot). docx is the representative source here.
@@ -112,15 +126,11 @@ describe('examples', () => {
     assertContentExample('formula.content.json', readOdfFormulaContent(decodeOdfPackage(odfFormulaBytes(FRACTION_FORMULA))));
   });
 
-  it('layout-document.json (docxToPdf layout half)', () => {
-    if (DOCX_PACKAGE.layout) {
-      assertLayoutExample('layout-document.json', DOCX_PACKAGE.layout);
-    } else {
-      throw new Error('docxToPdf onDocument package carried no layout');
-    }
+  it('layout-document.json (docxToPdf internal layout)', () => {
+    assertLayoutExample('layout-document.json', DOCX_LAYOUT);
   });
 
-  it('document-package.json (docxToPdf content + layout)', () => {
+  it('document-package.json (docxToPdf fused content + pages)', () => {
     assertPackageExample('document-package.json', DOCX_PACKAGE);
   });
 

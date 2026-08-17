@@ -149,8 +149,8 @@ function paragraphTexts(content: ReturnType<typeof docxContentOf>): string[] {
 }
 
 describe('onDocument (DocumentPackage side channel)', () => {
-  // A bridge never runs a layout engine (see convert.ts's own DocumentBridgeOptions comment), so its DocumentPackage always carries content with layout left undefined -- unlike the PDF-pivot conversions, which populate both (see convert.test.ts's own docxToPdf onDocument test).
-  it('calls onDocument with content populated and layout left undefined', () => {
+  // A bridge never runs a layout engine (see convert.ts's own DocumentBridgeOptions comment), so its DocumentPackage always carries content only, with no pages array and no node frames -- unlike the PDF-pivot conversions, which populate both (see convert.test.ts's own docxToPdf onDocument test).
+  it('calls onDocument with content populated and pages left undefined', () => {
     let captured: DocumentPackage | undefined;
     const docxBytes = odtToDocx(minimalOdtBytes(), { onDocument: (pkg) => { captured = pkg; } });
     expect(docxBytes.length).toBeGreaterThan(0);
@@ -159,7 +159,7 @@ describe('onDocument (DocumentPackage side channel)', () => {
     const pkg = captured!;
     expect(pkg.formatVersion).toBe(DOCUMENT_PACKAGE_FORMAT_VERSION);
     expect(pkg.content.kind).toBe('wordprocessing');
-    expect(pkg.layout).toBeUndefined();
+    expect(pkg.pages).toBeUndefined();
   });
 });
 
@@ -674,13 +674,13 @@ describe('markdownToDocx/docxToMarkdown and markdownToOdt/odtToMarkdown never in
 });
 
 describe('onDocument (DocumentPackage side channel): markdown bridges', () => {
-  it('markdownToDocx calls onDocument with content populated and layout left undefined', () => {
+  it('markdownToDocx calls onDocument with content populated and pages left undefined', () => {
     let captured: DocumentPackage | undefined;
     const docxBytes = markdownToDocx(encodeMarkdownText(richMarkdownText()), { onDocument: (pkg) => { captured = pkg; } });
     expect(docxBytes.length).toBeGreaterThan(0);
     expect(captured).toBeDefined();
     expect(captured!.content.kind).toBe('wordprocessing');
-    expect(captured!.layout).toBeUndefined();
+    expect(captured!.pages).toBeUndefined();
   });
 });
 

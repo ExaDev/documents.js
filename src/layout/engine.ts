@@ -1,12 +1,12 @@
-import type { ContentDocument, ContentEmbeddedObjectBlock, ContentImageBlock, ContentListMembership, ContentParagraph, ContentSection, ContentTable, LayoutDocument, LayoutImage, LayoutImageAsset, LayoutItem, LayoutLink, LayoutPage, LayoutText } from 'document-schema.js';
-import { COLOR_BLACK, LAYOUT_FORMAT_VERSION } from 'document-schema.js';
+import type { ContentDocument, ContentEmbeddedObjectBlock, ContentImageBlock, ContentListMembership, ContentParagraph, ContentSection, ContentTable, LayoutDocument, LayoutImage, LayoutImageAsset, LayoutItem, LayoutLink, LayoutPage, LayoutText, PageSize } from 'document-schema.js';
+import { COLOR_BLACK } from 'document-schema.js';
 import { parseListNumId } from 'markdown-codec';
 import { layoutFormula } from '../mathml/layout';
 import { flipY } from '../model/geometry';
 import { formulaOfBlock, formulaPlaceholderText } from '../model/formula';
 import type { MathFontMetrics, PositionedFormula, TextMeasurer } from 'document-schema.js';
 import { wrapRunsToWidth } from './text-layout';
-import { alignmentOffsetPt, effectiveStyledRuns, estimateRowHeightPt, formulaSizePtForFrame, headingStyleFor, justifyLineGapsPt, lineNaturalHeightPt, pushCellBorderLines, registerImage, sumColumnWidthsPt } from './shared';
+import { alignmentOffsetPt, effectiveStyledRuns, estimateRowHeightPt, formulaSizePtForFrame, headingStyleFor, justifyLineGapsPt, lineNaturalHeightPt, layoutDocumentOf, packagePagesOf, pushCellBorderLines, registerImage, stampFragmentFrame, stampFrame, sumColumnWidthsPt, textBoxForFragment } from './shared';
 
 // ContentDocument (the wordprocessing variant) -> LayoutDocument: docx's hard direction. A docx page isn't a fixed canvas the way a pptx slide is -- content flows and paginates, so this engine tracks a vertical cursor per page and starts a new page whenever the next line (or table row) would overflow the current one, honoring explicit page breaks, w:pageBreakBefore, and a per-section page-size/margin change. Headers/footers and live PAGE/NUMPAGES substitution are not laid out here -- src/ooxml/docx/read.ts doesn't read them either, a deliberate, tracked narrowing from the plan's original scope (see that file's own module doc).
 
@@ -41,6 +41,8 @@ export interface WordprocessingLayoutResult {
   readonly document: LayoutDocument;
   // Every embedded formula actually rendered via src/mathml, already positioned in PDF page space (bottom-left origin, y-up) -- pdf-codec's write.ts's own WritePdfOptions.formulas consumes this directly. See that module's own comment for why a formula's CID-font glyph runs can't travel through LayoutDocument.pages[].items itself.
   readonly formulas: readonly PositionedFormula[];
+  // The DocumentPackage's own pages array (each rendered page's size, indexed to match every content node's own frames[].pageIndex) -- the input `doc` argument itself comes back with frames stamped in place, which together with this array is the fused unified package a conversion reports through onDocument.
+  readonly pages: readonly PageSize[];
 }
 
 type WordprocessingContentDocument = Extract<ContentDocument, { kind: 'wordprocessing' }>;
@@ -95,6 +97,8 @@ function layoutParagraphFlow(
   lines.forEach((line, lineIndex) => {
     const lineHeightPt = lineNaturalHeightPt(line, measurer, fallbackRun) * (paragraph.lineSpacing ?? 1);
     ensureRoom(state, section, pages, lineHeightPt, contentBottomYDown);
+    // Read after ensureRoom, not before: a mid-paragraph page break means different lines of this one paragraph place on different pages, and each line's own stamps must carry the page it actually landed on. pages.length is the index of the page currently being filled (flushPage is what increments it).
+    const pageIndex = pages.length;
 
     const baselineYDown = state.cursorYDown + line.ascentPt;
     // First-line indent shifts only where the first line starts, not its wrap point -- see src/layout/slides.ts's identical note on the same simplification.
@@ -103,18 +107,21 @@ function layoutParagraphFlow(
     // Only a WRAPPED, non-final line of a justified paragraph gets its inter-word gaps stretched -- the paragraph's own final line (or a paragraph that never wraps at all, i.e. lines.length === 1) renders left-aligned instead, the standard justification convention Word/LibreOffice both follow.
     const justifyGapsPt = paragraph.alignment === 'justify' && lineIndex < lines.length - 1 ? justifyLineGapsPt(line, paragraphWidthPt, measurer) : undefined;
 
-    // The marker sits one indent step to the left of the paragraph's own (already-indented) text, on the paragraph's first line only -- the same hanging-indent convention a word processor uses, so wrapped continuation lines line up under the text, not under the marker.
+    // The marker sits one indent step to the left of the paragraph's own (already-indented) text, on the paragraph's first line only -- the same hanging-indent convention a word processor uses, so wrapped continuation lines line up under the text, not under the marker. The marker derives from the paragraph's own list membership rather than from any run, so its frame stamps the PARAGRAPH node itself.
     if (lineIndex === 0 && paragraph.list !== undefined) {
-      state.items.push({
+      const markerText = listMarkerText(paragraph.list, listCounters);
+      const markerItem: LayoutText = {
         kind: 'text',
-        text: listMarkerText(paragraph.list, listCounters),
+        text: markerText,
         xPt: paragraphLeftXDown - LIST_INDENT_STEP_PT,
         yPt: section.pageSize.heightPt - baselineYDown,
         font: fallbackRun.font,
         sizePt: fallbackRun.sizePt,
         color: fallbackRun.color,
         sourcePath: paragraph.sourcePath,
-      });
+      };
+      state.items.push(markerItem);
+      stampFrame(paragraph, pageIndex, textBoxForFragment(markerItem, measurer.widthOfTextAtSize(markerText, fallbackRun.font, fallbackRun.sizePt), line.ascentPt, line.descentPt));
     }
 
     line.fragments.forEach((fragment, fragmentIndex) => {
@@ -132,6 +139,8 @@ function layoutParagraphFlow(
         sourcePath: fragment.sourcePath,
       };
       state.items.push(textItem);
+      // One frame per rendered placement, on the run that placement renders -- a hyperlinked fragment's LayoutLink rides the same placement, so it stamps nothing additional.
+      stampFragmentFrame(paragraph.runs, fragment, pageIndex, textItem, measurer, line);
 
       if (fragment.hyperlink !== undefined) {
         const fragmentWidthPt = measurer.widthOfTextAtSize(fragment.text, fragment.font, fragment.sizePt);
@@ -153,8 +162,8 @@ function layoutParagraphFlow(
   state.cursorYDown += paragraph.spacingAfterPt ?? 0;
 }
 
-// A simpler variant for text inside a table cell: the row's own row-atomic placement (see layoutTableFlow) already guaranteed the whole row fits before any cell content is laid out, so no page-break checking happens per line here -- only wrapping and stacking, returning the new cursor position. Nested tables inside a cell are not laid out (read.ts can represent one recursively, but rendering one is out of v1 scope -- rare in practice, and cheap to add later without touching this function's contract).
-function layoutParagraphInCell(paragraph: ContentParagraph, cellLeftXDown: number, cellWidthPt: number, startYDown: number, pageHeightPt: number, measurer: TextMeasurer, out: LayoutItem[], listCounters: ListCounters): number {
+// A simpler variant for text inside a table cell: the row's own row-atomic placement (see layoutTableFlow) already guaranteed the whole row fits before any cell content is laid out, so no page-break checking happens per line here -- only wrapping and stacking, returning the new cursor position. `pageIndex` is that row's own settled page, threaded in once per row rather than re-derived per line. Nested tables inside a cell are not laid out (read.ts can represent one recursively, but rendering one is out of v1 scope -- rare in practice, and cheap to add later without touching this function's contract).
+function layoutParagraphInCell(paragraph: ContentParagraph, cellLeftXDown: number, cellWidthPt: number, startYDown: number, pageHeightPt: number, pageIndex: number, measurer: TextMeasurer, out: LayoutItem[], listCounters: ListCounters): number {
   let cursorYDown = startYDown + (paragraph.spacingBeforePt ?? 0);
   const effectiveRuns = effectiveStyledRuns(paragraph.runs, 1, headingStyleFor(paragraph.styleId));
   const fallbackRun = effectiveRuns[0]!;
@@ -171,19 +180,22 @@ function layoutParagraphInCell(paragraph: ContentParagraph, cellLeftXDown: numbe
     // See layoutParagraphFlow's identical note: only a wrapped, non-final line of a justified paragraph gets stretched.
     const justifyGapsPt = paragraph.alignment === 'justify' && lineIndex < lines.length - 1 ? justifyLineGapsPt(line, paragraphWidthPt, measurer) : undefined;
     if (lineIndex === 0 && paragraph.list !== undefined) {
-      out.push({
+      const markerText = listMarkerText(paragraph.list, listCounters);
+      const markerItem: LayoutText = {
         kind: 'text',
-        text: listMarkerText(paragraph.list, listCounters),
+        text: markerText,
         xPt: paragraphLeftXDown - LIST_INDENT_STEP_PT,
         yPt: pageHeightPt - baselineYDown,
         font: fallbackRun.font,
         sizePt: fallbackRun.sizePt,
         color: fallbackRun.color,
         sourcePath: paragraph.sourcePath,
-      });
+      };
+      out.push(markerItem);
+      stampFrame(paragraph, pageIndex, textBoxForFragment(markerItem, measurer.widthOfTextAtSize(markerText, fallbackRun.font, fallbackRun.sizePt), line.ascentPt, line.descentPt));
     }
     line.fragments.forEach((fragment, fragmentIndex) => {
-      out.push({
+      const textItem: LayoutText = {
         kind: 'text',
         text: fragment.text,
         xPt: paragraphLeftXDown + firstLineIndentPt + alignOffsetPt + fragment.xOffsetPt + (justifyGapsPt?.[fragmentIndex] ?? 0),
@@ -193,7 +205,9 @@ function layoutParagraphInCell(paragraph: ContentParagraph, cellLeftXDown: numbe
         color: fragment.color,
         underline: fragment.underline,
         sourcePath: fragment.sourcePath,
-      });
+      };
+      out.push(textItem);
+      stampFragmentFrame(paragraph.runs, fragment, pageIndex, textItem, measurer, line);
     });
     cursorYDown += lineHeightPt;
   });
@@ -209,6 +223,8 @@ function layoutTableFlow(table: ContentTable, section: ContentSection, pages: La
   for (const row of table.rows) {
     const rowHeightPt = row.heightPt ?? estimateRowHeightPt(row, measurer, table.columnWidthsPt, scale);
     ensureRoom(state, section, pages, rowHeightPt, contentBottomYDown);
+    // The row's own settled page -- read after ensureRoom, and shared by every cell in it (row-atomic placement means the whole row, decorations and content, is one page's content).
+    const pageIndex = pages.length;
 
     let cellXDown = contentLeftXDown;
     let colIndex = 0;
@@ -216,11 +232,12 @@ function layoutTableFlow(table: ContentTable, section: ContentSection, pages: La
       const span = cell.colSpan ?? 1;
       const cellWidthPt = sumColumnWidthsPt(table.columnWidthsPt, colIndex, span) * scale;
 
-      // A cell's decoration paints under its own content, in the order a real word processor draws it: background fill first, then the border lines sitting on that same frame's edges, then (below) the cell's paragraphs on top of both. ContentTableCell carries a real sourcePath of its own now, so a cell's rect/lines are attributed to the exact cell that declared them, falling back to the containing table only for a cell that has none.
+      // A cell's decoration paints under its own content, in the order a real word processor draws it: background fill first, then the border lines sitting on that same frame's edges, then (below) the cell's paragraphs on top of both. ContentTableCell carries a real sourcePath of its own now, so a cell's rect/lines are attributed to the exact cell that declared them, falling back to the containing table only for a cell that has none. The cell's own frame stamps the CELL node once, PDF-space -- background, borders, and any content runs inside all belong to this one placement of this one cell.
       const cellFrameYDown = { xPt: cellXDown, yPt: state.cursorYDown, widthPt: cellWidthPt, heightPt: rowHeightPt };
       const cellSourcePath = cell.sourcePath ?? table.sourcePath;
+      const cellFrame = flipY(cellFrameYDown, section.pageSize.heightPt);
+      stampFrame(cell, pageIndex, cellFrame);
       if (cell.background !== undefined) {
-        const cellFrame = flipY(cellFrameYDown, section.pageSize.heightPt);
         state.items.push({ kind: 'rect', xPt: cellFrame.xPt, yPt: cellFrame.yPt, widthPt: cellFrame.widthPt, heightPt: cellFrame.heightPt, fill: cell.background, sourcePath: cellSourcePath });
       }
       if (cell.borders !== undefined) {
@@ -230,7 +247,7 @@ function layoutTableFlow(table: ContentTable, section: ContentSection, pages: La
       let cellCursorYDown = state.cursorYDown;
       for (const block of cell.blocks) {
         if (block.kind === 'paragraph') {
-          cellCursorYDown = layoutParagraphInCell(block, cellXDown, cellWidthPt, cellCursorYDown, section.pageSize.heightPt, measurer, state.items, listCounters);
+          cellCursorYDown = layoutParagraphInCell(block, cellXDown, cellWidthPt, cellCursorYDown, section.pageSize.heightPt, pageIndex, measurer, state.items, listCounters);
         }
       }
 
@@ -247,6 +264,7 @@ function layoutImageFlow(block: ContentImageBlock, section: ContentSection, page
   const flippedFrame = flipY({ xPt: contentLeftXDown, yPt: state.cursorYDown, widthPt: block.widthPt, heightPt: block.heightPt }, section.pageSize.heightPt);
   const imageItem: LayoutImage = { kind: 'image', imageId, xPt: flippedFrame.xPt, yPt: flippedFrame.yPt, widthPt: flippedFrame.widthPt, heightPt: flippedFrame.heightPt, sourcePath: block.sourcePath };
   state.items.push(imageItem);
+  stampFrame(block, pages.length, flippedFrame);
   state.cursorYDown += block.heightPt;
 }
 
@@ -275,6 +293,8 @@ function layoutFormulaFlow(block: ContentEmbeddedObjectBlock, section: ContentSe
   ensureRoom(state, section, pages, box.heightPt, contentBottomYDown);
   const flippedFrame = flipY({ xPt: contentLeftXDown, yPt: state.cursorYDown, widthPt: box.widthPt, heightPt: box.heightPt }, section.pageSize.heightPt);
   formulas.push({ pageIndex: pages.length, xPt: flippedFrame.xPt, yPt: flippedFrame.yPt, box });
+  // The block's frame records where the formula was placed even though its glyphs render through the formulas side channel rather than as a LayoutItem -- a consumer rebuilding a layout from frames (src/convert/from-package.ts) still knows where the block sat, and can still not re-render its math (the same honest limit that side channel has always had).
+  stampFrame(block, pages.length, flippedFrame);
   state.cursorYDown += box.heightPt;
 }
 
@@ -314,5 +334,6 @@ export function convertWordprocessingToLayout(doc: WordprocessingContentDocument
   for (const section of doc.sections) {
     paginateSection(section, options.measurer, images, pages, options, formulas, listCounters);
   }
-  return { document: { formatVersion: LAYOUT_FORMAT_VERSION, metadata: doc.metadata, pages, images }, formulas };
+  // `doc` itself now carries every placement this pass computed, stamped in place on its own nodes (frames); the returned pages array plus that mutated content is the fused unified DocumentPackage a conversion reports through onDocument.
+  return { document: layoutDocumentOf(doc.metadata, pages, images), formulas, pages: packagePagesOf(pages) };
 }

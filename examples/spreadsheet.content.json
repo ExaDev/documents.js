@@ -1,7 +1,7 @@
 {
-  "$schema": "https://cdn.jsdelivr.net/npm/document-schema.js@2.7.4/schemas/content-document.schema.json",
+  "$schema": "https://cdn.jsdelivr.net/npm/document-schema.js@3.2.0/schemas/content-document.schema.json",
   "kind": "spreadsheet",
-  "formatVersion": 2,
+  "formatVersion": 3,
   "metadata": {
     "title": "Grid Spreadsheet"
   },

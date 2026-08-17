@@ -1,6 +1,7 @@
 import type { ContentVector, DocumentPackage, LayoutItem, LayoutLine, LayoutPath, LayoutRect, LayoutText } from 'document-schema.js';
 import { DOCUMENT_PACKAGE_FORMAT_VERSION } from 'document-schema.js';
 import { decodePackage, el, txt } from 'odf.js';
+import { decodePackage as decodeOdfPackage } from 'odf.js';
 import { decodePackage as decodeOoxmlPackage, readXlsxContent } from 'ooxml.js';
 import { describe, expect, it } from 'vitest';
 import { createDocx, openDocx } from '../edit/docx/editor';
@@ -10,6 +11,9 @@ import { openOdp } from '../edit/odp/editor';
 import { openOdt } from '../edit/odt/editor';
 import { createPptx, openPptx } from '../edit/pptx/editor';
 import { convertDrawingToLayout } from '../layout/drawing';
+import { convertSpreadsheetToLayout } from '../layout/sheets';
+import { loadMathFont } from 'pdf-codec';
+const mathMetricsAt = (sizePt: number) => loadMathFont().metricsAt(sizePt);
 import { readOdgContent } from '../odf/odg/read';
 import { readDocxContent } from '../ooxml/docx/read';
 import { readOdsContent } from '../odf/ods/read';
@@ -30,7 +34,7 @@ function layoutFromMinimalOdg() {
   if (content.kind !== 'drawing') {
     throw new Error('expected a drawing ContentDocument');
   }
-  return convertDrawingToLayout(content, { measurer: createStandardFontMeasurer() });
+  return convertDrawingToLayout(content, { measurer: createStandardFontMeasurer() }).document;
 }
 
 function pdfHeader(bytes: Uint8Array<ArrayBuffer>): string {
@@ -83,12 +87,9 @@ describe('docxToPdf', () => {
     const contentImage = captured.content.sections.flatMap((s) => s.blocks).find((b) => b.kind === 'image');
     expect(contentImage).toMatchObject({ kind: 'image', format: 'png', widthPt: 96, heightPt: 48 });
 
-    // The LayoutDocument this conversion built internally placed a real, positioned LayoutImage on the page, sized in points, distinct from the two text paragraphs either side of it.
-    const layoutImage = captured.layout?.pages[0]?.items.find((item): item is Extract<LayoutItem, { kind: 'image' }> => item.kind === 'image');
-    expect(layoutImage).toBeDefined();
-    expect(layoutImage?.widthPt).toBe(96);
-    expect(layoutImage?.heightPt).toBe(48);
-    expect(captured.layout?.images[layoutImage!.imageId]).toMatchObject({ format: 'png' });
+    // The layout pass fused a real, positioned placement onto the image block's own nodes: one frame on page 0, sized in points, distinct from the text runs either side of it. The rendered bytes themselves are proven by the readPdf round trip below.
+    expect(contentImage).toMatchObject({ frames: [{ pageIndex: 0, widthPt: 96, heightPt: 48 }] });
+    expect(captured.pages?.[0]).toMatchObject({ widthPt: 612, heightPt: 792 });
 
     // The PRODUCED PDF BYTES THEMSELVES actually embed the image as a real XObject, not just the intermediate LayoutDocument -- readPdf (this repo's own PDF reader) parses the PDF back and recovers the identical positioned image, proving the picture survived the full write path into genuine PDF content, not merely the layout stage.
     const reparsed = readPdf(pdfBytes);
@@ -105,7 +106,7 @@ describe('docxToPdf', () => {
     expect(() => docxToPdf(buildSampleDocx('X'), { signal: controller.signal })).toThrow();
   });
 
-  it('calls onDocument exactly once with a DocumentPackage whose content and layout correlate via sourcePath', () => {
+  it('calls onDocument exactly once with a DocumentPackage whose content carries its own rendered positions as frames', () => {
     let captured: DocumentPackage | undefined;
     const pdfBytes = docxToPdf(buildSampleDocx('Hello from docx'), { onDocument: (pkg) => { captured = pkg; } });
     expect(pdfHeader(pdfBytes)).toBe('%PDF-');
@@ -124,11 +125,15 @@ describe('docxToPdf', () => {
     const run = paragraph.runs[0];
     expect(run?.sourcePath).toBeDefined();
 
-    expect(pkg.layout).toBeDefined();
-    // The layout engine's own word-wrapping splits one run's text into several LayoutText items (one per word) that all share that run's sourcePath -- see src/layout/sourcepath.test.ts's own documented behaviour for this exact split. Every matching item joins back up to the original run text, proving real correlation rather than merely "both fields are present".
-    const layoutTexts = (pkg.layout?.pages[0]?.items ?? []).filter((item): item is LayoutText => item.kind === 'text' && item.sourcePath === run?.sourcePath);
-    expect(layoutTexts.length).toBeGreaterThan(0);
-    expect(layoutTexts.map((item) => item.text).join(' ')).toBe('Hello from docx');
+    // The fused unified package: pages is populated, and the layout pass stamped the run's own rendered placements directly onto the run node -- one frame per wrapped fragment, every one on a real page the pages array describes, in reading order. This is the correlation the old sourcePath-matching against a separate LayoutDocument proved, now proven on the content tree itself rather than across two halves.
+    expect(pkg.pages?.length).toBeGreaterThan(0);
+    expect(run?.frames?.length).toBeGreaterThan(0);
+    for (const frame of run?.frames ?? []) {
+      expect(frame.pageIndex).toBeGreaterThanOrEqual(0);
+      expect(frame.pageIndex).toBeLessThan(pkg.pages?.length ?? 0);
+      expect(frame.widthPt).toBeGreaterThan(0);
+      expect(frame.heightPt).toBeGreaterThan(0);
+    }
   });
 });
 
@@ -231,11 +236,14 @@ describe('odsToPdf', () => {
     expect(text).toContain('1'); // row-number header label
   });
 
-  // End-to-end proof for the per-cell decoration wiring, all the way from real ODF style XML: decoratedOdsBytes declares fo:background-color / fo:border / fo:text-align / style:vertical-align on real table-cell styles, odf.js's readOds resolves all four onto ContentSheetCell, and src/layout/sheets.ts turns them into genuine LayoutRect/LayoutLine items and a genuinely different text position. Asserted against onDocument's own LayoutDocument rather than a readPdf round trip, so the assertions pin what src/layout/sheets.ts itself emitted rather than what survived a second, independently-tested encode/decode hop.
+  // End-to-end proof for the per-cell decoration wiring, all the way from real ODF style XML: decoratedOdsBytes declares fo:background-color / fo:border / fo:text-align / style:vertical-align on real table-cell styles, odf.js's readOds resolves all four onto ContentSheetCell, and src/layout/sheets.ts turns them into genuine LayoutRect/LayoutLine items and a genuinely different text position. Asserted against convertSpreadsheetToLayout's own output (the exact LayoutDocument odsToPdf builds internally) rather than a readPdf round trip, so the assertions pin what src/layout/sheets.ts itself emitted rather than what survived a second, independently-tested encode/decode hop -- a DocumentPackage no longer carries the items themselves, only each node's fused frames.
   it('renders a decorated cell\'s own background, borders, alignment, and vertical alignment into the resulting layout', () => {
-    let pkg: DocumentPackage | undefined;
-    odsToPdf(decoratedOdsBytes(), { onDocument: (p) => { pkg = p; } });
-    const items = pkg?.layout?.pages[0]?.items ?? [];
+    const content = readOdsContent(decodeOdfPackage(decoratedOdsBytes()));
+    if (content.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    const { document: layout } = convertSpreadsheetToLayout(content, { measurer: createStandardFontMeasurer(), mathMetricsAt });
+    const items = layout.pages[0]?.items ?? [];
 
     const rects = items.filter((item): item is LayoutRect => item.kind === 'rect');
     expect(rects).toHaveLength(1); // exactly the one cell that declared a background

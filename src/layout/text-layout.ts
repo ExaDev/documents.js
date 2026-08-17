@@ -2,9 +2,22 @@ import type { StyledRun, StyledFragment, WrappedLine, WrapOptions, TextMeasurer,
 
 // The text-wrapping primitive this package's layout engines (engine.ts/slides.ts/sheets.ts) share, moved out of pdf-codec (which had zero internal callers for it) into the layout engine that owns it. Pure over the injected TextMeasurer port -- no PDF knowledge, no font-parsing -- so a layout engine wraps text against whatever metrics its caller supplied without reaching into a backend. pdf-codec's own copy is dropped in a follow-up breaking step now that nothing imports it.
 
+// Local extensions of the schema's StyledRun/StyledFragment/WrappedLine carrying the index of the originating run (the position it held in the caller's own runs array, set by shared.ts's toStyledRuns and preserved through every split/merge below). Atomisation deliberately merges fragments from DIFFERENT runs into one unbreakable box atom, so run identity is real information the pipeline owns and cannot be re-derived afterwards -- without it, a layout engine could not stamp a rendered position back onto the exact ContentRun node it came from (ExaDev/documents.js#569). runIndex is optional because a synthesised fallback run (an empty paragraph's substitute, shared.ts's effectiveStyledRuns) has no originating node to point at.
+export interface SourcedRun extends StyledRun {
+  readonly runIndex?: number;
+}
+
+export interface SourcedFragment extends StyledFragment {
+  readonly runIndex?: number;
+}
+
+export interface SourcedWrappedLine extends Omit<WrappedLine, 'fragments'> {
+  readonly fragments: readonly (SourcedFragment & { readonly xOffsetPt: number })[];
+}
+
 interface BoxAtom {
   readonly kind: 'box';
-  readonly fragments: readonly StyledFragment[];
+  readonly fragments: readonly SourcedFragment[];
   readonly widthPt: number;
 }
 interface GlueAtom {
@@ -20,9 +33,9 @@ type Atom = BoxAtom | GlueAtom | BreakAtom;
 const WORD_OR_WHITESPACE_PATTERN = /\n|\s+|\S+/g;
 
 // Splits `runs` into word-shaped "box" atoms, "glue" (space) atoms, and explicit line-"break" atoms. Critically, atomisation happens *across run boundaries*: a word split by a formatting change (e.g. "hel" in a plain run immediately followed by "lo" in a bold run) becomes a single box atom carrying both styled fragments, so it can never be broken apart -- only between boxes, and boxes are word-shaped regardless of how the source text was split across runs.
-function atomizeRuns(runs: readonly StyledRun[], measurer: TextMeasurer): Atom[] {
+function atomizeRuns(runs: readonly SourcedRun[], measurer: TextMeasurer): Atom[] {
   const atoms: Atom[] = [];
-  let wordFragments: StyledFragment[] = [];
+  let wordFragments: SourcedFragment[] = [];
   let wordWidth = 0;
 
   function flushWord(): void {
@@ -43,7 +56,7 @@ function atomizeRuns(runs: readonly StyledRun[], measurer: TextMeasurer): Atom[]
         flushWord();
         atoms.push({ kind: 'glue', widthPt: measurer.widthOfTextAtSize(token, run.font, run.sizePt) });
       } else {
-        wordFragments.push({ text: token, font: run.font, sizePt: run.sizePt, color: run.color, underline: run.underline, hyperlink: run.hyperlink, sourcePath: run.sourcePath });
+        wordFragments.push({ text: token, font: run.font, sizePt: run.sizePt, color: run.color, underline: run.underline, hyperlink: run.hyperlink, sourcePath: run.sourcePath, runIndex: run.runIndex });
         wordWidth += measurer.widthOfTextAtSize(token, run.font, run.sizePt);
       }
     }
@@ -52,7 +65,7 @@ function atomizeRuns(runs: readonly StyledRun[], measurer: TextMeasurer): Atom[]
   return atoms;
 }
 
-function fragmentsWidth(fragments: readonly StyledFragment[], measurer: TextMeasurer): number {
+function fragmentsWidth(fragments: readonly SourcedFragment[], measurer: TextMeasurer): number {
   let total = 0;
   for (const f of fragments) {
     total += measurer.widthOfTextAtSize(f.text, f.font, f.sizePt);
@@ -81,7 +94,7 @@ function splitTextToWidth(text: string, font: LayoutFont, sizePt: number, measur
 
 // Splits a box atom that alone exceeds maxWidthPt into a `fit` part (placed on the current line) and an optional `rest` part (requeued for the next line), splitting only within the one fragment where the width budget runs out.
 function splitBoxToWidth(atom: BoxAtom, measurer: TextMeasurer, maxWidthPt: number): { fit: BoxAtom; rest: BoxAtom | undefined } {
-  const fitFragments: StyledFragment[] = [];
+  const fitFragments: SourcedFragment[] = [];
   let fitWidth = 0;
   for (let idx = 0; idx < atom.fragments.length; idx++) {
     const fragment = atom.fragments[idx]!;
@@ -95,7 +108,7 @@ function splitBoxToWidth(atom: BoxAtom, measurer: TextMeasurer, maxWidthPt: numb
     if (fitText.length > 0) {
       fitFragments.push({ ...fragment, text: fitText });
     }
-    const restFragments: StyledFragment[] = [];
+    const restFragments: SourcedFragment[] = [];
     if (restText.length > 0) {
       restFragments.push({ ...fragment, text: restText });
     }
@@ -111,8 +124,8 @@ function splitBoxToWidth(atom: BoxAtom, measurer: TextMeasurer, maxWidthPt: numb
   return { fit: atom, rest: undefined };
 }
 
-function buildLine(atoms: readonly Atom[], measurer: TextMeasurer): WrappedLine {
-  const fragments: (StyledFragment & { xOffsetPt: number })[] = [];
+function buildLine(atoms: readonly Atom[], measurer: TextMeasurer): SourcedWrappedLine {
+  const fragments: (SourcedFragment & { xOffsetPt: number })[] = [];
   let xOffsetPt = 0;
   let maxSizePt = 0;
   let ascentPt = 0;
@@ -134,7 +147,7 @@ function buildLine(atoms: readonly Atom[], measurer: TextMeasurer): WrappedLine 
 }
 
 // Empty-paragraph or forced-break case: the line has no content but still needs a plausible height, derived from whatever run supplied the paragraph's own (possibly empty) run list.
-function buildEmptyLine(runs: readonly StyledRun[], measurer: TextMeasurer): WrappedLine {
+function buildEmptyLine(runs: readonly SourcedRun[], measurer: TextMeasurer): SourcedWrappedLine {
   const first = runs[0];
   if (first === undefined) {
     return { fragments: [], widthPt: 0, maxSizePt: 0, ascentPt: 0, descentPt: 0 };
@@ -149,7 +162,7 @@ function buildEmptyLine(runs: readonly StyledRun[], measurer: TextMeasurer): Wra
 }
 
 // Greedy first-fit line breaking over word-shaped atoms -- the same algorithm Word itself uses (an optimal-fit breaker like Knuth-Plass would produce different, not merely better, line breaks, which is the opposite of matching Word's own output). Never breaks inside a word, regardless of how many runs it spans; an over-long single word is emergency-split at the character level, always making at least one character of progress.
-export function wrapRunsToWidth(runs: readonly StyledRun[], measurer: TextMeasurer, maxWidthPt: number, options: WrapOptions = {}): WrappedLine[] {
+export function wrapRunsToWidth(runs: readonly SourcedRun[], measurer: TextMeasurer, maxWidthPt: number, options: WrapOptions = {}): SourcedWrappedLine[] {
   const breakLongWords = options.breakLongWords ?? true;
 
   if (maxWidthPt <= 0) {
@@ -159,7 +172,7 @@ export function wrapRunsToWidth(runs: readonly StyledRun[], measurer: TextMeasur
   }
 
   const queue = atomizeRuns(runs, measurer);
-  const lines: WrappedLine[] = [];
+  const lines: SourcedWrappedLine[] = [];
   let current: Atom[] = [];
   let currentWidth = 0;
 

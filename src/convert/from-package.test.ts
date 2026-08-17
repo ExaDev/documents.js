@@ -1,4 +1,4 @@
-import type { DocumentPackage } from 'document-schema.js';
+import type { DocumentPackage, LayoutItem } from 'document-schema.js';
 import { DOCUMENT_PACKAGE_FORMAT_VERSION } from 'document-schema.js';
 import { decodePackage as decodeOdfPackage } from 'odf.js';
 import { decodePackage as decodeOoxmlPackage, readXlsxContent } from 'ooxml.js';
@@ -81,7 +81,8 @@ describe('buildDocumentBytes', () => {
     expect(page).toBeDefined();
   });
 
-  it('writes PDF bytes directly from a package that carries a real layout', () => {
+  // The pdf target rebuilds the pdf-codec view from the package's own fused positions (layoutDocumentFromPackage, the frames-to-layout inverse) and writes it -- the package carries no LayoutDocument any more, only each node's own frames plus the pages array.
+  it('writes PDF bytes rebuilt from a frame-stamped package', () => {
     let captured: DocumentPackage | undefined;
     docxToPdf(minimalDocxBytes(), { onDocument: (pkg) => { captured = pkg; } });
     if (captured === undefined) {
@@ -89,17 +90,26 @@ describe('buildDocumentBytes', () => {
     }
     const bytes = buildDocumentBytes(captured, 'pdf');
     const layout = readPdf(bytes);
-    expect(layout.pages.length).toBeGreaterThan(0);
+    expect(layout.pages.length).toBe(captured.pages?.length);
+    // The rebuilt page carries the stamped text back as real positioned text: each run renders once, whole, at its first recorded frame, so every run's own text survives the package -> pdf round trip verbatim.
+    if (captured.content.kind !== 'wordprocessing') {
+      throw new Error('expected a wordprocessing ContentDocument');
+    }
+    const texts = layout.pages.flatMap((page) => page.items.filter((item): item is Extract<LayoutItem, { kind: 'text' }> => item.kind === 'text').map((item) => item.text));
+    const runTexts = captured.content.sections.flatMap((section) => section.blocks).flatMap((block) => (block.kind === 'paragraph' ? block.runs.map((run) => run.text) : [])).filter((text) => text.length > 0);
+    for (const runText of runTexts) {
+      expect(texts).toContain(runText);
+    }
   });
 
-  it('throws when asked for pdf from a package with no layout (a bridge conversion dump)', () => {
+  it('throws when asked for pdf from a package with no pages (a bridge conversion dump)', () => {
     let captured: DocumentPackage | undefined;
     odtToDocx(minimalOdtBytes(), { onDocument: (pkg) => { captured = pkg; } });
     if (captured === undefined) {
       throw new Error('expected odtToDocx to report a package via onDocument');
     }
-    expect(captured.layout).toBeUndefined();
-    expect(() => buildDocumentBytes(captured!, 'pdf')).toThrow(/has no layout/);
+    expect(captured.pages).toBeUndefined();
+    expect(() => buildDocumentBytes(captured!, 'pdf')).toThrow(/has no pages/);
   });
 
   it('builds real xlsx bytes from a spreadsheet package', () => {

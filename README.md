@@ -162,7 +162,7 @@ DocumentFormatSchema.parse(userSuppliedFormat); // throws a ZodError for anythin
 
 ### Intermediate `DocumentPackage`, JSON, and bytes
 
-Every conversion function accepts an `onDocument` callback receiving the intermediate `DocumentPackage` (content + layout). The port surfaces the same value as `package` on `ConversionResult`. For PDF-bypassing bridges, `pkg.layout` is always `undefined`.
+Every conversion function accepts an `onDocument` callback receiving the intermediate `DocumentPackage` — the fused unified tree of document-schema.js 3: `content` (whose own nodes carry `frames`, the rendered page positions the layout pass stamped onto them, in PDF user-space) plus `pages` (each rendered page's size, indexed to match every `frames[].pageIndex`). The port surfaces the same value as `package` on `ConversionResult`. For PDF-bypassing bridges, `pkg.pages` is always `undefined` and no node carries frames — no layout pass ran.
 
 ```ts
 import { docxToPdf } from 'documents.js';
@@ -170,7 +170,9 @@ import { docxToPdf } from 'documents.js';
 const pdfBytes = docxToPdf(docxBytes, {
   onDocument: (pkg) => {
     console.log(pkg.content.kind); // 'wordprocessing'
-    console.log(pkg.layout?.pages.length); // populated for every X-to-PDF/PDF-to-X conversion
+    console.log(pkg.pages?.length); // populated for every X-to-PDF/PDF-to-X conversion
+    const block = pkg.content.kind === 'wordprocessing' ? pkg.content.sections[0]?.blocks[0] : undefined;
+    console.log(block?.kind === 'paragraph' ? block.runs[0]?.frames : 'no paragraph'); // that run's rendered placements
   },
 });
 ```
@@ -187,7 +189,7 @@ const { kind, value } = documentFromJson(JSON.parse(readFileSync('converted.doc.
 // kind: 'DocumentPackage' (here) | 'ContentDocument' | 'LayoutDocument'
 ```
 
-`buildDocumentBytes` rebuilds any `DocumentFormat`'s bytes from a `DocumentPackage` — `'pdf'` writes the `LayoutDocument` half directly (throwing if the package carries none), `'odf'` has no builder and throws, everything else rebuilds from the `ContentDocument` half:
+`buildDocumentBytes` rebuilds any `DocumentFormat`'s bytes from a `DocumentPackage` — `'pdf'` rebuilds the pdf-codec view from the package's own frames+pages (`layoutDocumentFromPackage`, a mechanical inverse walking the content tree and emitting `LayoutItem`s from each node's recorded placements; throwing if the package carries no `pages`), `'odf'` has no builder and throws, everything else rebuilds from the `ContentDocument` half. `layoutDocumentFromPackage` is exported too, for a caller wanting the rebuilt `LayoutDocument` without writing bytes. Two honest limits on the pdf rebuild, both structural properties of what a package records: a run's frames carry positions, not the wrap decisions that distributed its text across them, so a wrapped run re-renders once, whole, at its first recorded placement; and no font registry or positioned formula survives a bare package (a formula block's frame records where it sat while its glyphs render as nothing):
 
 ```ts
 import { buildDocumentBytes, docxToPdf } from 'documents.js';
@@ -543,7 +545,8 @@ To run a single test file: `pnpm vitest run src/path/to/file.test.ts`.
 - **`ooxml.js`'s typed readers are the basis for conversion** — `readDocxContent`/`readPptxContent` are thin wrappers, not independent walks. They are deliberately not re-exported (exposing both would invite using the wrong one). `readDocx`'s `comments`/`footnotes`/`headers`/`footers`/`numbering` are exposed via `readDocxExtras`. `readPptx` has no extras reader yet. xlsx is the one exception: `ooxml.js`'s `readXlsxContent`/`buildXlsxPackage` already read/write a spreadsheet `ContentDocument` directly (unlike `readDocx`/`readPptx`, which `readDocxContent`/`readPptxContent` wrap), so they're re-exported as-is rather than given a documents.js-local wrapper of their own — `readXlsx`, the separate lossy cell-values-only view, stays unexported for the same reason `readDocx`/`readPptx` do.
 - **ODF text content is not a plain string.** ODF represents runs of spaces as `<text:s>`, tabs as `<text:tab/>`, line breaks as `<text:line-break/>` — all elements, not text nodes. Every ODF text getter MUST call `decodeOdfText`, never `textContent()` — which silently drops them (no error, just shorter text).
 - **docx⇄PDF and pptx⇄PDF are explicitly not round-trip-lossless** — see [Fidelity](#fidelity). The cross-format bridge pairs are a genuinely different case.
-- **A `DocumentPackage` from `onDocument`/`ConversionResult.package` is a snapshot, not a live view** — mutating `content` afterwards leaves `layout` stale; nothing detects or rejects that.
+- **A `DocumentPackage` from `onDocument`/`ConversionResult.package` is a snapshot, not a live view** — mutating `content` after the layout pass leaves its nodes' `frames` stale; nothing detects or rejects that, and the schema keeps `content`'s populated `frames` and `pages` in sync with nothing.
+- **`frames` are stamped in place onto the caller's own content tree** — `convertXToLayout` mutates its `ContentDocument` argument (each node's placements are appended to its own `frames` array, one frame per rendered placement: per wrapped fragment on a run, the cell box on a cell, the emitted item's box on an image/vector/shape) and returns `pages` alongside the internal `LayoutDocument`. A run wrapped across three lines carries three frames; a repeat-row spreadsheet cell carries one per page it re-renders on. Reconstructors attach frames from the exact items each reconstructed node was clustered from, so every PDF-to-X conversion's content carries genuine positions too.
 - **ODF text getters must call `decodeOdfText`.** See the dedicated gotcha above.
 - **`readPdf` recovers rect/ellipse/line as their own `LayoutRect`/`LayoutEllipse`/`LayoutLine` kinds** via pdf-codec's shape-pattern detection — an axis-aligned closed four-corner subpath is a rect, four kappa-ratio cubics at cardinal points is an ellipse, an open single straight stroke is a line. A false positive changes kind, never geometry. Off-axis rotations, freeform curves, and multi-subpath figures narrow to `LayoutPath`.
 - **`pdfToOds` re-types cells heuristically — this is probabilistic, not a fidelity guarantee.** A rendered PDF never carries a cell's typed value, only the printed string. Re-typing fires only where the string has exactly one defensible reading: the decimal must be exactly representable as a JS number; separators must be unambiguous (`"1,234"` is declined — competing European reading is 1.234); leading zeros decline (`"007"`); dates must self-state their component roles (ISO or named month accepted; `"01/02/2024"` declined). `TRUE`/`FALSE` re-type as booleans; `Yes`/`No` are declined. `displayText` always carries the rendered string verbatim. `onCellTypeInference` reports every decision. A formula is never claimed.
@@ -604,7 +607,7 @@ To run a single test file: `pnpm vitest run src/path/to/file.test.ts`.
 - **A formula that cannot typeset degrades to its plain-text stand-in, never to nothing.** `buildDocxPackage` writes real OMML; `buildOdtPackage` writes real embedded formula sub-documents. The markdown writer is the only stand-in-only path. `odmToPdf` carries formulas through as ordinary blocks.
 - **OMML read/write are deliberately asymmetric** — the reader covers more (`m:d`, `m:nary`, `m:acc`, `m:bar`, `m:func`, `m:sPre`) because it must read what Word wrote. `docx → odt → docx` round trips keep the mathematics but may change the OMML construct.
 - **The OMML translator covers exactly what `src/mathml/layout.ts` typesets.** A stretchy fence diverges: PDF stretches it, docx writes it at base size. `munderover` becomes nested `m:limUpp`/`m:limLow` (no operand scope in MathML).
-- **`sourcePath` traces a `LayoutItem` to its `ContentDocument` origin, but only within one read+layout pass** — not an edit-tracking mechanism.
+- **`sourcePath` traces a `LayoutItem` to its `ContentDocument` origin, but only within one read+layout pass** — not an edit-tracking mechanism. Since the frames fusion it survives as traceability only: the authoritative node↔position association is each content node's own `frames`, stamped at the moment of layout (or of reconstruction) rather than re-matched by string afterwards.
 - **`readMarkdownContent` passes `readMarkdown`'s result straight through** — `markdown-codec` already produces a full `ContentDocument`.
 - **Every markdown construct-mapping gap is a documented `MarkdownDiagnosticCodes` entry** (`md/invented-page-geometry`, `md/nested-emphasis-flattened`, `md/link-title-dropped`, `md/code-block-info-string-dropped`, `md/blockquote-nested-depth`, `md/list-item-block-unlisted`, `md/list-item-multi-block-flattened`, `md/image-unresolved`, `md/raw-html-preserved-as-text`/`md/raw-html-dropped`, `md/front-matter-key-unmapped`, `md/heading-level-clamped`, `md/adjacent-links-merged`, `md/code-span-as-monospace-run`, `md/paragraph-indent-dropped`, `md/list-numid-fallback`, `md/table-cell-formatting-dropped`, `md/table-cell-multi-paragraph-joined`) — never a silent approximation.
 - **`buildMarkdownText` throws for non-`'wordprocessing'` `ContentDocument`.**
