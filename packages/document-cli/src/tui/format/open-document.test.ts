@@ -53,6 +53,48 @@ describe('openDocumentAtPath for .xlsx', () => {
   });
 });
 
+describe('openDocumentAtPath for .csv and .svg', () => {
+  it('opens a csv read-only as a converted PDF preview, exactly like an xlsx', async () => {
+    const path = join(workspace, 'table.csv');
+    const bytes = new TextEncoder().encode('name,amount\nalice,1\n');
+    await writeFile(path, bytes);
+
+    const doc = await openDocumentAtPath(path);
+    if (doc.format !== 'csv') {
+      throw new Error(`expected an open csv document, got ${doc.format}`);
+    }
+    expect(doc.path).toBe(path);
+    expect(doc.layout.pages.length).toBeGreaterThan(0);
+    expect(doc.bytes).toStrictEqual(bytes);
+  });
+
+  it('opens an svg read-only as a converted PDF preview, exactly like an xlsx', async () => {
+    const path = join(workspace, 'drawing.svg');
+    const bytes = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect x="10" y="10" width="80" height="80" fill="red"/></svg>');
+    await writeFile(path, bytes);
+
+    const doc = await openDocumentAtPath(path);
+    if (doc.format !== 'svg') {
+      throw new Error(`expected an open svg document, got ${doc.format}`);
+    }
+    expect(doc.path).toBe(path);
+    expect(doc.layout.pages.length).toBeGreaterThan(0);
+    expect(doc.bytes).toStrictEqual(bytes);
+  });
+
+  it('cannot write either format back to disk -- both open read-only, the same group as .odb and .xlsx', async () => {
+    const csvPath = join(workspace, 'table.csv');
+    await writeFile(csvPath, new TextEncoder().encode('a,b\n1,2\n'));
+    const csvDoc = await openDocumentAtPath(csvPath);
+    await expect(saveDocumentTo(csvDoc, join(workspace, 'copy.csv'))).rejects.toThrow(/read-only/);
+
+    const svgPath = join(workspace, 'drawing.svg');
+    await writeFile(svgPath, new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="5" height="5"/></svg>'));
+    const svgDoc = await openDocumentAtPath(svgPath);
+    await expect(saveDocumentTo(svgDoc, join(workspace, 'copy.svg'))).rejects.toThrow(/read-only/);
+  });
+});
+
 describe('openDocumentAtPath / saveDocumentTo for .md', () => {
   it('opens a real markdown file into a structured MarkdownEditor, edits it through the shared paragraph-family actions, and saves back out as valid, re-parseable markdown containing the edit', async () => {
     const path = join(workspace, 'notes.md');

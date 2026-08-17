@@ -113,13 +113,29 @@ export interface XlsxOpenDocument {
   readonly path: string;
 }
 
-// The seven formats that have a live-view editor, and therefore support every mutating action, `editor.toBytes()` saving, undo snapshots. `odb`/`xlsx` are read-only sources; `pdf` joined this union once documents.js gained a real live-view `PdfEditor` -- see PdfOpenDocument's own doc comment. `pdf` is deliberately excluded from exportToPdf's own conversion set even though it is editable now: there is no docxToPdf-equivalent "convert a PDF to a PDF" function, and there does not need to be one -- editing and saving a PDF in place needs no conversion step at all.
+// csv is the same read-only-preview story as xlsx one variant over: documents.js has no csv editor (a csv file is one sheet of raw RFC 4180 text, not a package with an XML tree to hold a live view into), but it does have `csvToPdf`, so a .csv opens as that conversion's own `readPdf` result and browses through the identical pdf page-list family. A multi-sheet source never reaches here -- a csv file is exactly one sheet by construction, so no sheet selection is needed at open time the way a spreadsheet-to-csv conversion needs one at write time.
+export interface CsvOpenDocument {
+  readonly format: 'csv';
+  readonly layout: LayoutDocument;
+  readonly bytes: Uint8Array<ArrayBuffer>;
+  readonly path: string;
+}
+
+// svg mirrors csv: no editor (an SVG source is one drawing page of XML text with no live-view object), but a genuine `svgToPdf` conversion, opened read-only as its own `readPdf` result through the shared pdf screen family. An SVG source is likewise exactly one page by construction, so the page selection a multi-page drawing's own svg write edge demands never applies on the read side.
+export interface SvgOpenDocument {
+  readonly format: 'svg';
+  readonly layout: LayoutDocument;
+  readonly bytes: Uint8Array<ArrayBuffer>;
+  readonly path: string;
+}
+
+// The seven formats that have a live-view editor, and therefore support every mutating action, `editor.toBytes()` saving, undo snapshots. `odb`/`xlsx`/`csv`/`svg` are read-only sources; `pdf` joined this union once documents.js gained a real live-view `PdfEditor` -- see PdfOpenDocument's own doc comment. `pdf` is deliberately excluded from exportToPdf's own conversion set even though it is editable now: there is no docxToPdf-equivalent "convert a PDF to a PDF" function, and there does not need to be one -- editing and saving a PDF in place needs no conversion step at all.
 export type EditableOpenDocument = DocxOpenDocument | PptxOpenDocument | OdtOpenDocument | OdpOpenDocument | OdsOpenDocument | OdgOpenDocument | PdfOpenDocument;
 
 // Every format that can be written back to disk at all: the seven live-view-editor formats above, plus markdown through its own live-view MarkdownEditor. This is a strictly broader question than "does this have a `.editor` object" -- markdown genuinely does have one now, but `MarkdownEditor` has no `toBytes()` (it re-serialises the whole document fresh via `toMarkdownText()` instead, see MarkdownOpenDocument's own doc comment), which is exactly why markdown is NOT folded into EditableOpenDocument itself: every EditableOpenDocument call site (`reopenEditable` in reducer.ts, the `.editor.toBytes()` branches in exportToPdf/saveDocumentTo) assumes `.editor.toBytes()` exists verbatim. `mutate`/`mutateGuarded` (reducer.ts) DO take the wider `WritableOpenDocument`, via a small `toUndoSnapshot` helper that branches on the one place the two byte<->text boundaries genuinely differ. Screens that only need "can this be saved, and what extension does it get" (file-picker.tsx, save-as-prompt.tsx) should check WritableOpenDocument/isWritableDocument instead of EditableOpenDocument/isEditableDocument.
 export type WritableOpenDocument = EditableOpenDocument | MarkdownOpenDocument;
 
-export type OpenDocument = WritableOpenDocument | OdbOpenDocument | XlsxOpenDocument;
+export type OpenDocument = WritableOpenDocument | OdbOpenDocument | XlsxOpenDocument | CsvOpenDocument | SvgOpenDocument;
 
 export type EditableFormat = EditableOpenDocument['format'];
 
@@ -279,6 +295,8 @@ export function rootScreenForFormat(format: OpenDocumentFormat): Screen {
       return { kind: 'odbTableList' };
     case 'pdf':
     case 'xlsx':
+    case 'csv':
+    case 'svg':
       return { kind: 'pdfPageList' };
   }
 }

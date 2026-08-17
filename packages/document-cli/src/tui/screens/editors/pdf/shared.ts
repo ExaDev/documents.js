@@ -1,20 +1,20 @@
 import type { LayoutColor, LayoutSubpath } from 'documents.js';
-import type { OpenDocument, PdfOpenDocument, XlsxOpenDocument } from '../../../state/types.js';
+import type { CsvOpenDocument, OpenDocument, PdfOpenDocument, SvgOpenDocument, XlsxOpenDocument } from '../../../state/types.js';
 import { parseColorField, parseStrokeField } from '../../shared/vector-fields.js';
 
 export { parseColorField, parseStrokeField };
 export { parseNumberField } from '../../shared/text.js';
 
-// Every screen in this directory is only ever reached from `pdfPageList`, the root screen `rootScreenForFormat` produces for either an open PDF document or an open xlsx workbook (opened read-only as a converted PDF preview -- see state/types.ts's own XlsxOpenDocument doc comment) -- so `state.openDocument` is always one of these two by the time any screen here renders. Both carry the identical `.layout: LayoutDocument` field this whole screen group reads from, and nothing else, which is exactly what lets one screen family serve both formats with no xlsx-specific branch anywhere in page-list.tsx/page-items.tsx/item-detail.tsx. This throws rather than falling back to an empty view because a mismatch would mean the app router itself is broken, not a recoverable, user-facing condition.
-export function requirePdfDocument(openDocument: OpenDocument | undefined): PdfOpenDocument | XlsxOpenDocument {
-  if (openDocument?.format !== 'pdf' && openDocument?.format !== 'xlsx') {
-    throw new Error('A PDF inspection screen rendered without an open PDF or xlsx document; the app router only reaches this screen group from pdfPageList, which is only ever the root screen of one of those two formats.');
+// Every screen in this directory is only ever reached from `pdfPageList`, the root screen `rootScreenForFormat` produces for an open PDF document or for one of the three formats opened read-only as a converted PDF preview (an xlsx workbook, a csv sheet, an svg drawing -- see state/types.ts's own XlsxOpenDocument/CsvOpenDocument/SvgOpenDocument doc comments) -- so `state.openDocument` is always one of these four by the time any screen here renders. All four carry the identical `.layout: LayoutDocument` field this whole screen group reads from, and nothing else, which is exactly what lets one screen family serve all of them with no per-format branch anywhere in page-list.tsx/page-items.tsx/item-detail.tsx. This throws rather than falling back to an empty view because a mismatch would mean the app router itself is broken, not a recoverable, user-facing condition.
+export function requirePdfDocument(openDocument: OpenDocument | undefined): PdfOpenDocument | XlsxOpenDocument | CsvOpenDocument | SvgOpenDocument {
+  if (openDocument?.format !== 'pdf' && openDocument?.format !== 'xlsx' && openDocument?.format !== 'csv' && openDocument?.format !== 'svg') {
+    throw new Error('A PDF inspection screen rendered without an open PDF, xlsx, csv, or svg document; the app router only reaches this screen group from pdfPageList, which is only ever the root screen of one of those four formats.');
   }
   return openDocument;
 }
 
-// The editing-capable narrowing of the above: an xlsx workbook opens as a fixed, one-shot PDF preview with no live `PdfEditor` behind it at all (see XlsxOpenDocument's own doc comment -- it carries `layout`/`bytes`, never an `editor`), so add/edit/delete only ever make sense for a genuine `'pdf'`-format document. Screens call this only from the code paths that mutate (the add-item flow, item-detail's field editor); the plain read-only list/dump views keep using `requirePdfDocument` above so an opened xlsx preview still browses exactly like a real PDF.
-export function isEditablePdfDocument(doc: PdfOpenDocument | XlsxOpenDocument): doc is PdfOpenDocument {
+// The editing-capable narrowing of the above: an xlsx workbook, csv sheet, or svg drawing opens as a fixed, one-shot PDF preview with no live `PdfEditor` behind it at all (see those formats' own OpenDocument doc comments -- each carries `layout`/`bytes`, never an `editor`), so add/edit/delete only ever make sense for a genuine `'pdf'`-format document. Screens call this only from the code paths that mutate (the add-item flow, item-detail's field editor); the plain read-only list/dump views keep using `requirePdfDocument` above so an opened preview format still browses exactly like a real PDF.
+export function isEditablePdfDocument(doc: PdfOpenDocument | XlsxOpenDocument | CsvOpenDocument | SvgOpenDocument): doc is PdfOpenDocument {
   return doc.format === 'pdf';
 }
 

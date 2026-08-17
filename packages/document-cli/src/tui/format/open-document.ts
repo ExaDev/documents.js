@@ -1,5 +1,5 @@
 import { readFile, writeFile } from 'node:fs/promises';
-import { createDocx, createOdg, createOdp, createOds, createOdt, createPdf, createPptx, decodeMarkdownText, decodeOdbPackage, encodeMarkdownText, openDocx, openMarkdown, openOdg, openOdp, openOds, openOdt, openPdf, openPptx, readOdbForms, readOdbReports, readOdbTables, readPdf, xlsxToPdf } from 'documents.js';
+import { createDocx, createOdg, createOdp, createOds, createOdt, createPdf, createPptx, csvToPdf, decodeMarkdownText, decodeOdbPackage, encodeMarkdownText, openDocx, openMarkdown, openOdg, openOdp, openOds, openOdt, openPdf, openPptx, readOdbForms, readOdbReports, readOdbTables, readPdf, svgToPdf, xlsxToPdf } from 'documents.js';
 import type { Diagnostic, EditableFormat, OpenDocument } from '../state/types.js';
 import { detectFormat } from './detect-format.js';
 
@@ -57,6 +57,11 @@ export async function openDocumentAtPath(path: string, options: OpenDocumentAtPa
     // documents.js has no XlsxEditor and no readXlsxContent re-exported from its own public surface (see the doc comment on XlsxOpenDocument in state/types.ts), so a .xlsx opens read-only as a converted PDF preview: xlsxToPdf once here for the LayoutDocument the pdf page-list/page-items/item-detail screens already know how to browse, plus the original bytes kept alongside for a real export to re-run xlsxToPdf with the caller's own fonts/diagnostics later (see export-pdf.ts).
     case 'xlsx':
       return { format, layout: readPdf(xlsxToPdf(bytes)), bytes, path };
+    // csv and svg are the same read-only-preview shape as xlsx (see their own OpenDocument doc comments in state/types.ts): no editor exists for either text format, so each opens through its own to-Pdf conversion once and browses the result through the shared pdf screen family, with the original bytes kept for a real export to re-convert with the caller's own fonts/diagnostics later.
+    case 'csv':
+      return { format, layout: readPdf(csvToPdf(bytes)), bytes, path };
+    case 'svg':
+      return { format, layout: readPdf(svgToPdf(bytes)), bytes, path };
     case 'odf':
       throw new Error('A standalone .odf formula document has no editor; convert it to PDF (odfToPdf) instead');
   }
@@ -84,7 +89,7 @@ export function createNewDocument(format: EditableFormat): OpenDocument {
 }
 
 export async function saveDocumentTo(openDocument: OpenDocument, path: string): Promise<void> {
-  if (openDocument.format === 'odb' || openDocument.format === 'xlsx') {
+  if (openDocument.format === 'odb' || openDocument.format === 'xlsx' || openDocument.format === 'csv' || openDocument.format === 'svg') {
     throw new Error(`A ${openDocument.format} document is opened read-only and cannot be written back`);
   }
   // MarkdownEditor has no toBytes() (see MarkdownOpenDocument's own doc comment) -- every save re-serialises the whole document fresh through buildMarkdownText (via toMarkdownText()), even one with no edits at all this session. This is a deliberate, permanent consequence of structured editing, not something to work around: a live-view paragraph/run tree has no "untouched bytes" to leave alone the way a docx's XmlElement tree does, so the written text can legitimately differ from whatever was last on disk (heading style, bullet marker, line-ending normalisation -- see README.md's own markdown Gotchas).

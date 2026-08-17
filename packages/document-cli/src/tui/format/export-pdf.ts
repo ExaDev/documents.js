@@ -1,5 +1,5 @@
 import { writeFile } from 'node:fs/promises';
-import { docxToPdf, encodeMarkdownText, markdownToPdf, odgToPdf, odpToPdf, odsToPdf, odtToPdf, pptxToPdf, xlsxToPdf, type DocumentToPdfOptions, type ProvidedFont } from 'documents.js';
+import { csvToPdf, docxToPdf, encodeMarkdownText, markdownToPdf, odgToPdf, odpToPdf, odsToPdf, odtToPdf, pptxToPdf, svgToPdf, xlsxToPdf, type DocumentToPdfOptions, type ProvidedFont } from 'documents.js';
 import { loadProvidedFonts } from '../../runtime/fonts.js';
 import type { Diagnostic, OpenDocument } from '../state/types.js';
 
@@ -40,9 +40,19 @@ export async function exportToPdf(openDocument: OpenDocument, destinationPath: s
     await writeFile(destinationPath, pdfBytes);
     return;
   }
-  // xlsx has no editor to read current bytes from (see state/types.ts's own XlsxOpenDocument doc comment) -- the original bytes captured at open time are re-converted here, with this call's own real fonts/diagnostics options, rather than reusing the fixed preview conversion `openDocumentAtPath` computed to build the read-only viewer.
+  // xlsx has no editor to read current bytes from (see state/types.ts's own XlsxOpenDocument doc comment) -- the original bytes captured at open time are re-converted here, with this call's own real fonts/diagnostics options, rather than reusing the fixed preview conversion `openDocumentAtPath` computed to build the read-only viewer. csv and svg are the identical no-editor story (their own OpenDocument doc comments), each re-converted through its own to-Pdf function the same way.
   if (openDocument.format === 'xlsx') {
     const pdfBytes = xlsxToPdf(openDocument.bytes, pdfOptions);
+    await writeFile(destinationPath, pdfBytes);
+    return;
+  }
+  if (openDocument.format === 'csv') {
+    const pdfBytes = csvToPdf(openDocument.bytes, pdfOptions);
+    await writeFile(destinationPath, pdfBytes);
+    return;
+  }
+  if (openDocument.format === 'svg') {
+    const pdfBytes = svgToPdf(openDocument.bytes, pdfOptions);
     await writeFile(destinationPath, pdfBytes);
     return;
   }

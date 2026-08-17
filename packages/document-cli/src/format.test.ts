@@ -3,7 +3,7 @@ import { formatToExtension, inferFormatFromExtension, isDocumentFormat } from '.
 
 describe('isDocumentFormat', () => {
   it('accepts every recognised format string', () => {
-    for (const format of ['docx', 'pptx', 'xlsx', 'odt', 'odp', 'ods', 'odg', 'odf', 'markdown', 'pdf']) {
+    for (const format of ['docx', 'pptx', 'xlsx', 'odt', 'odp', 'ods', 'odg', 'svg', 'odf', 'csv', 'markdown', 'pdf']) {
       expect(isDocumentFormat(format)).toBe(true);
     }
   });
@@ -70,6 +70,11 @@ describe('inferFormatFromExtension', () => {
     expect(inferFormatFromExtension('macro.xlsm')).toBe('xlsx');
     expect(inferFormatFromExtension('macro.pptm')).toBe('pptx');
   });
+
+  it('infers the csv and svg text formats from their own extensions', () => {
+    expect(inferFormatFromExtension('table.csv')).toBe('csv');
+    expect(inferFormatFromExtension('drawing.svg')).toBe('svg');
+  });
 });
 
 describe('formatToExtension', () => {
@@ -84,6 +89,8 @@ describe('formatToExtension', () => {
       ['ods', 'ods'],
       ['odg', 'odg'],
       ['odf', 'odf'],
+      ['svg', 'svg'],
+      ['csv', 'csv'],
       ['markdown', 'md'],
       ['pdf', 'pdf'],
     ];

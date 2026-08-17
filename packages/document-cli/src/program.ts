@@ -16,7 +16,7 @@ import { version } from '../package.json';
 // Builds the fully assembled commander program, but never parses argv or exits the process itself -- that is src/cli.ts's job, so this stays testable as pure construction and importable from anywhere (including the Ink TUI, which shells out to individual commands rather than re-implementing conversion logic of its own).
 export function createProgram(): Command {
   const program = new Command('document-cli');
-  program.description('every documents.js docx/pptx/odt/odp/ods/odg/odf/pdf/odm/odb/xlsx/markdown conversion, bridge, and inspector as a scriptable command');
+  program.description('every documents.js docx/pptx/odt/odp/ods/odg/odf/pdf/odm/odb/xlsx/csv/svg/markdown conversion, bridge, and inspector as a scriptable command');
   program.version(version);
 
   // Without exitOverride, a commander usage error (or --help/--version) calls process.exit() directly from deep inside .parse()/.parseAsync(), which is exactly the hard, uncontrolled exit this codebase's own convention (set process.exitCode, let Node drain and exit naturally) exists to avoid. Registering a callback here is the only way to prevent that call (see commander's own Command#_exit -- it falls through to a bare process.exit(exitCode) immediately after invoking the callback unless the callback throws), so process.exitCode is set correctly *before* rethrowing; by the time this throws, the exit code is already right regardless of what, if anything, the eventual .parseAsync() caller in src/cli.ts does with the rejection.
