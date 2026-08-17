@@ -1,3 +1,12 @@
+## [1.102.1](https://github.com/ExaDev/documents.js/compare/v1.102.0...v1.102.1) (2026-08-17)
+
+# [1.102.0](https://github.com/ExaDev/documents.js/compare/v1.101.2...v1.102.0) (2026-08-17)
+
+
+### Features
+
+* add ContentDocument to Markdown renderer ([9430ca7](https://github.com/ExaDev/documents.js/commit/9430ca73dec823db6a49612989de72bacc7867c8))
+
 ## [1.101.2](https://github.com/ExaDev/documents.js/compare/v1.101.1...v1.101.2) (2026-08-17)
 
 ## [1.101.1](https://github.com/ExaDev/documents.js/compare/v1.101.0...v1.101.1) (2026-08-17)
