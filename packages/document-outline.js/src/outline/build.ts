@@ -96,7 +96,7 @@ function spreadsheetOutline(doc: SpreadsheetDocument): OutlineNode[] {
     text: sheet.name,
     level: 1,
     // embeddedObjects is optional on the schema (a sheet may legitimately carry none), so absence spreads as nothing -- modelled explicitly rather than defaulted, because "no embedded objects" is a real state, not a missing value.
-    children: [...sheet.images, ...(sheet.embeddedObjects ?? [])] as OutlineChild[],
+    children: [...sheet.images, ...(sheet.embeddedObjects ?? [])],
   }));
 }
 
@@ -105,7 +105,7 @@ function drawingOutline(doc: DrawingDocument): OutlineNode[] {
     text: `Page ${String(index + 1)}`,
     level: 1,
     // Shape blocks first in shape order, then vectors in array order -- the two live in sibling arrays with no cross-array ordering field, and this fixed order is deterministic and matches the schema's own declaration order.
-    children: [...page.shapes.flatMap((shape) => shape.blocks), ...page.vectors] as OutlineChild[],
+    children: [...page.shapes.flatMap((shape) => shape.blocks), ...page.vectors],
   }));
 }
 
@@ -115,7 +115,7 @@ function formulaOutline(doc: FormulaDocument): OutlineNode[] {
       // presentation.latex is the equation's most readable linearisation and therefore the group's label; absence (an allowed state) means the empty string, and the ContentFormula leaf always carries the actual content whatever the label.
       text: doc.formula.presentation?.latex ?? '',
       level: 1,
-      children: [doc.formula] as OutlineChild[],
+      children: [doc.formula],
     },
   ];
 }

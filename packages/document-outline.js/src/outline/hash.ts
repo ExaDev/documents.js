@@ -9,13 +9,17 @@ export function stableContentHash(value: unknown): string {
   return sha256Hex(new TextEncoder().encode(JSON.stringify(canonicalise(value))));
 }
 
+// Same narrow-to-record guard node.ts uses for its OutlineNode check (and document-schema.js's content guards before it): after the typeof/null/array checks this narrows the value to Record<string, unknown> without an `as` assertion.
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 // Step 1 of the documented recipe. `unknown` in, `unknown` out: the output is a fresh structure safe to hand to JSON.stringify, never a mutation of the input. Plain objects (the JSON-mappable class) are rebuilt with sorted keys; arrays and primitives pass through structurally untouched (arrays are copied so the output never aliases the input).
 function canonicalise(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalise);
-  if (typeof value === 'object' && value !== null) {
-    const source = value as Record<string, unknown>;
+  if (isRecord(value)) {
     const sorted: Record<string, unknown> = {};
-    for (const key of Object.keys(source).sort()) sorted[key] = canonicalise(source[key]);
+    for (const key of Object.keys(value).sort()) sorted[key] = canonicalise(value[key]);
     return sorted;
   }
   return value;
