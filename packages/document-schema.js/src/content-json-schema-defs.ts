@@ -105,10 +105,10 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
   ContentListMembership: {
     type: 'object',
     properties: {
-      numId: { type: 'string' },
+      numId: { type: 'string' }, // optional in the Zod source -- depth-only list membership (OOXML drawing paragraphs) carries no numbering identity
       level: { type: 'integer', minimum: 0, maximum: MAX_SAFE_INTEGER },
     },
-    required: ['numId', 'level'],
+    required: ['level'],
     additionalProperties: false,
   },
   ContentRun: {

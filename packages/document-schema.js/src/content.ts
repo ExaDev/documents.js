@@ -31,7 +31,7 @@ export const ContentRunSchema = z.object({
 export type ContentRun = z.infer<typeof ContentRunSchema>;
 
 export const ContentListMembershipSchema = z.object({
-  numId: z.string(), // w:numId
+  numId: z.string().optional(), // identifies a shared numbering definition when the source format has one -- docx's w:numId, ODF's minted structural identity -- and is absent when the format carries only a depth (OOXML drawing paragraphs' a:pPr/@lvl), where fabricating one would invent numbering identity the source never had
   level: z.number().int().nonnegative(), // w:ilvl
 });
 export type ContentListMembership = z.infer<typeof ContentListMembershipSchema>;

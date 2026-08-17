@@ -659,6 +659,33 @@ describe('ContentParagraphSchema headingLevel', () => {
   });
 });
 
+describe('ContentListMembership numId', () => {
+  it('parses a level-only membership, the shape a format with depth but no numbering identity produces (OOXML drawing paragraphs carry only a:pPr/@lvl)', () => {
+    const parsed = ContentParagraphSchema.parse({
+      kind: 'paragraph',
+      runs: [{ text: 'Bullet text' }],
+      list: { level: 1 },
+    });
+    expect(parsed.list).toEqual({ level: 1 });
+  });
+
+  it('still parses a numId+level membership, the shape a format with a shared numbering definition produces (docx w:numId, ODF minted identity)', () => {
+    const parsed = ContentParagraphSchema.parse({
+      kind: 'paragraph',
+      runs: [{ text: 'Item one' }],
+      list: { numId: '1', level: 0 },
+    });
+    expect(parsed.list).toEqual({ numId: '1', level: 0 });
+  });
+
+  it('keeps level required, so a membership without one does not parse', () => {
+    expect(ContentParagraphSchema.safeParse({ kind: 'paragraph', runs: [], list: { numId: '1' } }).success).toBe(
+      false,
+    );
+    expect(ContentParagraphSchema.safeParse({ kind: 'paragraph', runs: [], list: {} }).success).toBe(false);
+  });
+});
+
 describe('clampHeadingLevel', () => {
   it('leaves a level already within 1-6 untouched', () => {
     expect(clampHeadingLevel(1)).toBe(1);
