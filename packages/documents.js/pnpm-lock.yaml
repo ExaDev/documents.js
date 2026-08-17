@@ -16,8 +16,8 @@ importers:
         specifier: ^1.1.9
         version: 1.1.9
       document-schema.js:
-        specifier: ^2.7.16
-        version: 2.7.16
+        specifier: ^2.7.17
+        version: 2.7.17
       fflate:
         specifier: ^0.8.3
         version: 0.8.3
@@ -1624,10 +1624,6 @@ packages:
   dir-glob@3.0.1:
     resolution: {integrity: sha512-WkrWp9GR4KXfKGYzOLmTuGVi1UWFfws377n9cc55/tb6DuqyF6pcQ5AbiHEshaDpY9v6oaSr2XCDidGmMwdzIA==}
     engines: {node: '>=8'}
-
-  document-schema.js@2.7.16:
-    resolution: {integrity: sha512-FhxNB+nXB169iuwkDVzZ/vML578KHYJHy72ZFvYakwaIyT4CiN5NRMENQa1UDrTMpfVQ7s6MnhpcKR3cYXvJ+Q==}
-    engines: {node: '>=20'}
 
   document-schema.js@2.7.17:
     resolution: {integrity: sha512-z+1XNFToTrERlxIgoeyFb4Rw5b2nP+EgFOMH/CQfIjo0V9+To0LG6jJe2JUbTUfaggvbBRAEfDAHDMPVcBPROQ==}
@@ -4580,10 +4576,6 @@ snapshots:
   dir-glob@3.0.1:
     dependencies:
       path-type: 4.0.0
-
-  document-schema.js@2.7.16:
-    dependencies:
-      zod: 4.4.3
 
   document-schema.js@2.7.17:
     dependencies:
