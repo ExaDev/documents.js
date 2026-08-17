@@ -2,6 +2,7 @@ import type { ContentDocument, ContentShape } from 'document-schema.js';
 import type { Package } from 'odf.js';
 import { base64ToBytes } from 'odf.js';
 import { drawingOfBlock, embeddedDrawingVectors } from '../../model/embedded-drawing';
+import { formulaOfBlock, formulaPlaceholderText } from '../../model/formula';
 import { resolveMetadataTimestamps } from '../../model/metadata';
 import type { ClockPort } from '../../ports/clock';
 import { systemClock } from '../../ports/clock';
@@ -49,6 +50,18 @@ function appendShape(slide: OdpSlide, shape: ContentShape): void {
       slide.addVector(vector);
     }
     return;
+  }
+  if (shape.blocks.length === 1 && onlyBlock?.kind === 'embeddedObject') {
+    const formula = formulaOfBlock(onlyBlock);
+    if (formula !== undefined) {
+      // A formula carrying no MathML nodes at all degrades to its own plain-text stand-in, mirroring OdtBody's own appendEmbeddedObject narrowing (src/edit/odt/content.ts) -- writing an empty formula sub-document would render as an empty box, and writing nothing would drop the shape without trace.
+      if (formula.mathml.length === 0) {
+        slide.addTextBox({ frame: shape.frame, text: formulaPlaceholderText(formula) });
+      } else {
+        slide.addFormula(shape.frame, formula);
+      }
+      return;
+    }
   }
   if (shape.blocks.length === 1 && onlyBlock?.kind === 'image') {
     const imageShape = slide.addImage({ frame: shape.frame, format: onlyBlock.format, bytes: base64ToBytes(onlyBlock.base64), altText: onlyBlock.altText });

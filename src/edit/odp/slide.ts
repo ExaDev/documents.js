@@ -1,4 +1,4 @@
-import type { ContentVector } from 'document-schema.js';
+import type { ContentFormula, ContentVector } from 'document-schema.js';
 import type { Package, XmlElement, XmlNode } from 'odf.js';
 import { formatOdfLength } from 'odf.js';
 import { elementsWithTag } from 'ooxml.js';
@@ -11,6 +11,7 @@ import { appendVectorTo } from '../odg/vector';
 import { buildParagraph } from '../odt/paragraph';
 import type { TableInit } from '../odt/table';
 import { buildTable, OdtTable } from '../odt/table';
+import { insertFormulaFrameMedia } from './formula';
 import type { ImageInit, MediaContext } from './image';
 import { insertImageFrameMedia } from './image';
 import { buildTableFrame, buildTextBoxFrame, OdpShape } from './shape';
@@ -113,6 +114,14 @@ export class OdpSlide {
     const node = this.live();
     const media: MediaContext = { pkg: this.context.pkg };
     const frameElement = insertImageFrameMedia(media, init.frame, init);
+    node.children.push(frameElement);
+    return new OdpShape(node.children, frameElement, this.context.pkg);
+  }
+
+  // A real embedded ODF formula sub-document, positioned like any other slide shape (src/edit/odp/formula.ts's own buildFormulaFrame -- svg:x/svg:y, not odt's text-flow "as-char" anchoring). The odp counterpart to OdtBody.appendFormula (src/edit/odt/editor.ts), and what closes the write-side gap src/edit/odp/content.ts's own appendShape previously had: a formula-kind embedded object dropped silently rather than being written.
+  addFormula(frame: Box, formula: ContentFormula): OdpShape {
+    const node = this.live();
+    const frameElement = insertFormulaFrameMedia(this.context.pkg, frame, formula);
     node.children.push(frameElement);
     return new OdpShape(node.children, frameElement, this.context.pkg);
   }

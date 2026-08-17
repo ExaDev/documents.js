@@ -90,7 +90,7 @@ interface MarkdownFormatNode {
 
 export type FormatNode = PackageFormatNode | MarkdownFormatNode;
 
-// The single source of truth for "which primitives does each format use". read/build closures thread their own per-format option subset internally: docx read/build pull onMathDiagnostic (mirroring readDocxContent's `{ onMathDiagnostic }` and buildDocxPackage's own option), markdown read pulls signal/images (mirroring readMarkdownContent's ReadMarkdownOptions), and every other format's read/build accept and ignore the thread. docxToPdf's openDocx(bytes).toPackage() and decodeOoxmlPackage(bytes) produce the identical Package (openDocx wraps decodeOoxmlPackage and toPackage returns it unmutated), so decode uses the package codec directly for uniformity -- byte-identical to docxToPdf at every downstream call site.
+// The single source of truth for "which primitives does each format use". read/build closures thread their own per-format option subset internally: docx and pptx read/build both pull onMathDiagnostic (mirroring readDocxContent's/readPptxContent's own `{ onMathDiagnostic }` and buildDocxPackage's/buildPptxPackage's own option -- ExaDev/documents.js#563 gave pptx the identical OMML degrade-diagnostic channel docx already had), markdown read pulls signal/images (mirroring readMarkdownContent's ReadMarkdownOptions), and every other format's read/build accept and ignore the thread. docxToPdf's openDocx(bytes).toPackage() and decodeOoxmlPackage(bytes) produce the identical Package (openDocx wraps decodeOoxmlPackage and toPackage returns it unmutated), so decode uses the package codec directly for uniformity -- byte-identical to docxToPdf at every downstream call site.
 export const FORMAT_NODES: Readonly<Record<ContentFormat, FormatNode>> = {
   docx: {
     variant: 'wordprocessing',
@@ -105,8 +105,8 @@ export const FORMAT_NODES: Readonly<Record<ContentFormat, FormatNode>> = {
     variant: 'presentation',
     family: 'ooxml',
     decode: (bytes) => decodeOoxmlPackage(bytes),
-    read: (pkg) => readPptxContent(pkg),
-    build: (content) => buildPptxPackage(content),
+    read: (pkg, options) => readPptxContent(pkg, { onMathDiagnostic: options?.onMathDiagnostic }),
+    build: (content, options) => buildPptxPackage(content, { onMathDiagnostic: options?.onMathDiagnostic }),
     encode: (pkg) => encodeOoxmlPackage(pkg),
     hasSourcePackage: true,
   },
