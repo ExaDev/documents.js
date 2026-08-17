@@ -1,3 +1,10 @@
+# [3.1.0](https://github.com/ExaDev/odf.js/compare/v3.0.2...v3.1.0) (2026-08-17)
+
+
+### Features
+
+* read text:list content in odp slide text frames into ContentParagraph.list ([48c3ffa](https://github.com/ExaDev/odf.js/commit/48c3ffacc984db6341660b0027ac29aa12bf2a5b))
+
 ## [3.0.2](https://github.com/ExaDev/odf.js/compare/v3.0.1...v3.0.2) (2026-08-17)
 
 ## [3.0.1](https://github.com/ExaDev/odf.js/compare/v3.0.0...v3.0.1) (2026-08-17)
