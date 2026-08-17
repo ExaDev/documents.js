@@ -73,11 +73,15 @@ describe('readDrawFrame: content dispatch', () => {
     expect(shape?.blocks).toEqual([{ kind: 'paragraph', runs: [{ text: 'Hello', bold: undefined, italic: undefined, underline: undefined, strike: undefined, fontFamily: undefined, sizePt: undefined, color: undefined }], styleId: undefined, alignment: undefined, spacingBeforePt: undefined, spacingAfterPt: undefined, lineSpacing: undefined, indentLeftPt: undefined, indentFirstLinePt: undefined }]);
   });
 
-  it('flattens a text:list\'s own text:list-item > text:p paragraphs (list numbering membership is a documented, separate gap -- text is never dropped)', () => {
-    const list = el('text:list', {}, [el('text:list-item', {}, [el('text:p', {}, [txt('item one')])]), el('text:list-item', {}, [el('text:p', {}, [txt('item two')])])]);
+  it('reads a text:list\'s own text:list-item > text:p paragraphs with list membership attached -- one minted numId across nesting, level read off the XML nesting depth (unstyled, so the numId carries no kind prefix)', () => {
+    const list = el('text:list', {}, [
+      el('text:list-item', {}, [el('text:p', {}, [txt('item one')])]),
+      el('text:list-item', {}, [el('text:p', {}, [txt('item two')]), el('text:list', {}, [el('text:list-item', {}, [el('text:p', {}, [txt('item two.1')])])])]),
+    ]);
     const frame = el('draw:frame', box, [el('draw:text-box', {}, [list])]);
     const shape = readDrawFrame(frame, [], { parts: {} });
-    expect(shape?.blocks.map((b) => (b.kind === 'paragraph' ? b.runs.map((r) => r.text).join('') : undefined))).toEqual(['item one', 'item two']);
+    expect(shape?.blocks.map((b) => (b.kind === 'paragraph' ? b.runs.map((r) => r.text).join('') : undefined))).toEqual(['item one', 'item two', 'item two.1']);
+    expect(shape?.blocks.map((b) => (b.kind === 'paragraph' ? b.list : undefined))).toEqual([{ numId: 'list1', level: 0 }, { numId: 'list1', level: 0 }, { numId: 'list1', level: 1 }]);
   });
 
   it('reads a draw:image\'s referenced media part, sniffed and sized to the frame\'s own resolved box', () => {

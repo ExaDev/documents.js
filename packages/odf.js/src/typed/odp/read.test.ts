@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { ContentListMembership, ContentParagraph, ContentSlide } from 'document-schema.js';
 import type { Package } from '../../model/package';
 import { el, txt } from '../../xml/fragment';
 import { bytesToBase64 } from '../../util/base64';
@@ -66,6 +67,86 @@ function buildFixturePackage(): Package {
     },
   };
 }
+
+// A dedicated fixture for text:list content inside slide text frames (draw:frame > draw:text-box): one slide carrying a "Body" frame whose text box holds a plain paragraph, a styled (bullet) 2-level text:list, and a second unstyled sibling text:list, plus an "Aside" frame with a third text:list of its own -- so nesting depth, per-encounter identity, cross-frame identity, the ordered:/bullet: kind prefix, and the no-membership case are all exercisable against one real-shape package. The text:list-style lives in content.xml's office:automatic-styles, the placement real LibreOffice output uses.
+function buildListFixturePackage(): Package {
+  const styledList = el('text:list', { 'text:style-name': 'L1' }, [
+    el('text:list-item', {}, [el('text:p', {}, [txt('Alpha')])]),
+    el('text:list-item', {}, [
+      el('text:p', {}, [txt('Beta')]),
+      el('text:list', {}, [el('text:list-item', {}, [el('text:p', {}, [txt('Beta.1')])]), el('text:list-item', {}, [el('text:p', {}, [txt('Beta.2')])])]),
+    ]),
+    el('text:list-item', {}, [el('text:p', {}, [txt('Gamma')])]),
+  ]);
+  const siblingList = el('text:list', {}, [el('text:list-item', {}, [el('text:p', {}, [txt('Delta')])])]);
+  const bodyFrame = el('draw:frame', { 'draw:name': 'Body', 'svg:x': '40pt', 'svg:y': '80pt', 'svg:width': '400pt', 'svg:height': '300pt' }, [
+    el('draw:text-box', {}, [el('text:p', {}, [txt('Intro')]), styledList, siblingList]),
+  ]);
+  const asideFrame = el('draw:frame', { 'draw:name': 'Aside', 'svg:x': '40pt', 'svg:y': '400pt', 'svg:width': '400pt', 'svg:height': '80pt' }, [
+    el('draw:text-box', {}, [el('text:list', {}, [el('text:list-item', {}, [el('text:p', {}, [txt('Epsilon')])])])]),
+  ]);
+  const slide = el('draw:page', { 'draw:name': 'ListSlide', 'draw:master-page-name': 'Default' }, [bodyFrame, asideFrame]);
+
+  return {
+    parts: {
+      'content.xml': {
+        kind: 'xml',
+        nodes: [
+          el('office:document-content', {}, [
+            el('office:automatic-styles', {}, [el('text:list-style', { 'style:name': 'L1' }, [el('text:list-level-style-bullet', { 'text:level': '1' })])]),
+            el('office:body', {}, [el('office:presentation', {}, [slide])]),
+          ]),
+        ],
+      },
+      'styles.xml': stylesXml(),
+    },
+  };
+}
+
+function paragraphsWithText(slides: readonly ContentSlide[], shapeName: string, expected: readonly string[]): ContentParagraph[] {
+  const shape = slides[0]?.shapes.find((s) => s.name === shapeName);
+  if (shape === undefined) {
+    throw new Error(`expected a "${shapeName}" shape on slide 1`);
+  }
+  const paragraphs = shape.blocks.filter((block): block is ContentParagraph => block.kind === 'paragraph');
+  const texts = paragraphs.map((paragraph) => paragraph.runs.map((run) => run.text).join(''));
+  expect(texts).toEqual([...expected]);
+  return paragraphs;
+}
+
+describe('readOdp: text:list content inside slide text frames', () => {
+  it('reads a nested text:list as one numId across both depths, with level read off the actual text:list-in-text:list-item nesting and document order preserved across listed and unlisted paragraphs', () => {
+    const paragraphs = paragraphsWithText(readOdp(buildListFixturePackage()).slides, 'Body', ['Intro', 'Alpha', 'Beta', 'Beta.1', 'Beta.2', 'Gamma', 'Delta']);
+    const [, alpha, beta, beta1, beta2, gamma] = paragraphs;
+    expect([alpha?.list?.level, beta?.list?.level, beta1?.list?.level, beta2?.list?.level, gamma?.list?.level]).toEqual([0, 0, 1, 1, 0]);
+    const numId = alpha?.list?.numId;
+    expect(numId).toBeDefined();
+    expect([beta?.list?.numId, beta1?.list?.numId, beta2?.list?.numId, gamma?.list?.numId]).toEqual([numId, numId, numId, numId]);
+  });
+
+  it('mints a distinct numId per top-level text:list encounter -- a sibling list in the same text box and a list in a different frame never share an identity', () => {
+    const { slides } = readOdp(buildListFixturePackage());
+    const body = paragraphsWithText(slides, 'Body', ['Intro', 'Alpha', 'Beta', 'Beta.1', 'Beta.2', 'Gamma', 'Delta']);
+    const aside = paragraphsWithText(slides, 'Aside', ['Epsilon']);
+    const firstListId = body[1]?.list?.numId;
+    const siblingListId = body[6]?.list?.numId;
+    const asideListId = aside[0]?.list?.numId;
+    expect(new Set([firstListId, siblingListId, asideListId]).size).toBe(3);
+  });
+
+  it('leaves list undefined on paragraphs outside any text:list, including one sharing a text box with a list', () => {
+    const { slides } = readOdp(buildListFixturePackage());
+    expect(paragraphsWithText(slides, 'Body', ['Intro', 'Alpha', 'Beta', 'Beta.1', 'Beta.2', 'Gamma', 'Delta'])[0]?.list).toBeUndefined();
+    // The main fixture's title frame proves the same for a text box that never carried a list at all.
+    expect(readOdp(buildFixturePackage()).slides[0]?.shapes.find((s) => s.name === 'Title')?.blocks[0]).not.toHaveProperty('list');
+  });
+
+  it('resolves the ordered-vs-bullet kind prefix from the referenced text:list-style, and leaves an unstyled list unprefixed -- the same shared numId convention the odt reader mints', () => {
+    const paragraphs = paragraphsWithText(readOdp(buildListFixturePackage()).slides, 'Body', ['Intro', 'Alpha', 'Beta', 'Beta.1', 'Beta.2', 'Gamma', 'Delta']);
+    expect(paragraphs[1]?.list).toEqual({ numId: 'bullet:list1', level: 0 } satisfies ContentListMembership);
+    expect(paragraphs[6]?.list).toEqual({ numId: 'list2', level: 0 } satisfies ContentListMembership);
+  });
+});
 
 describe('readOdp', () => {
   it('reads slides in native document order (draw:page order, no p:sldIdLst-style indirection to resolve)', () => {

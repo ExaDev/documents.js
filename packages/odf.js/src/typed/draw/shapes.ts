@@ -8,6 +8,7 @@ import { resolveStyleElementChain } from '../shared/cascade';
 import { parseOdfColor } from '../shared/color';
 import { parseLinePoints } from '../shared/geometry';
 import { decodeOdfText } from '../shared/text';
+import { mintOdfListNumId, readOdfListParagraphs, type OdfListIdState } from '../shared/list';
 import { readOdfParagraph } from '../shared/paragraph';
 import { readOdfTable } from '../shared/table';
 import { parseOdfLength } from '../shared/units';
@@ -85,15 +86,29 @@ export function readDrawImageBlock(image: XmlElement, frame: XmlElement, frameBo
 }
 
 // A draw:frame's content is exactly one of table:table, draw:text-box, or draw:image (verified against real LibreOffice output) -- table:table is checked FIRST because a real saved presentation table frame also carries a sibling draw:image (an .svm fallback preview LibreOffice writes for consumers that can't render a real table), which must not be mistaken for the frame's own image content.
-function readDrawFrameContent(frame: XmlElement, frameBox: Box, pkg: Package): ContentBlock[] {
+//
+// ODP LIST MEMBERSHIP -- minted numId, not the numId-less { level } shape: document-schema.js 3.3.0 made ContentListMembership.numId optional precisely so a reader whose source carries NO list identity could emit the honest minimal { level } (ooxml.js's pptx reader, whose a:pPr/@lvl is a bare depth attribute on the paragraph with no list element behind it -- a fabricated numId there would be a lie in the data). A slide text box is not that case: draw:text-box's own content model is exactly (text:p | text:list)*, and its text:list elements are the IDENTICAL structural containers the odt reader walks in office:text -- a slide can carry two of them (two bullet bodies in one text box, or one list in each of two frames), and a consumer grouping list paragraphs apart (rendering separate <ul>/<ol> elements, nesting an outline per list) must be able to tell them apart. The deciding criterion is exactly that: whether the source carries genuine list identity a consumer needs for grouping separate lists apart. ODP's text:list elements pass it, so this reader mints a per-encounter numId through the SAME shared machinery (typed/shared/list.ts: mintOdfListNumId/readOdfListParagraphs, including the ordered:/bullet: kind prefix) the odt reader uses -- emitting { level } alone would discard a real, source-grounded fact, not avoid a fabrication.
+function readDrawFrameContent(frame: XmlElement, frameBox: Box, pkg: Package, listIdState: OdfListIdState): ContentBlock[] {
   const table = childrenWithTag(frame, 'table:table')[0];
   if (table !== undefined) {
     return [readOdfTable(table, pkg)];
   }
   const textBox = childrenWithTag(frame, 'draw:text-box')[0];
   if (textBox !== undefined) {
-    // elementsWithTag (a DEEP search, not childrenWithTag's direct-children-only) so a text:p nested inside a text:list/text:list-item (a real, valid ODF bulleted/numbered text box) is still read as a paragraph -- its text is preserved, though list numbering membership (ContentParagraph.list) is not populated: that needs ODF list-style resolution (text:list-style -> numId/level), a genuinely separate feature this task does not build, and a documented, narrow gap rather than a silently dropped one.
-    return elementsWithTag(textBox.children, 'text:p').map((p) => readOdfParagraph(p, pkg));
+    // A direct-children walk (not the deep elementsWithTag search this branch used before list membership existed) covers draw:text-box's whole (text:p | text:list)* content model: a text:p reads as a plain paragraph with NO list membership, and a text:list reads through the shared walker, which attaches numId/level membership to every paragraph it finds at its actual text:list-in-text:list-item nesting depth -- document order across both child kinds is preserved, matching the flattened order the old deep search produced.
+    const blocks: ContentBlock[] = [];
+    for (const child of textBox.children) {
+      if (child.type !== 'element') {
+        continue;
+      }
+      if (child.tag === 'text:p') {
+        blocks.push(readOdfParagraph(child, pkg));
+      } else if (child.tag === 'text:list') {
+        const numId = mintOdfListNumId(pkg, child, listIdState);
+        blocks.push(...readOdfListParagraphs(child, { numId, level: 0 }, (element) => readOdfParagraph(element, pkg)));
+      }
+    }
+    return blocks;
   }
   const image = childrenWithTag(frame, 'draw:image')[0];
   if (image !== undefined) {
@@ -103,8 +118,8 @@ function readDrawFrameContent(frame: XmlElement, frameBox: Box, pkg: Package): C
   return [];
 }
 
-// Reads one draw:frame into a ContentShape, in the coordinate space `groupFunctions` maps FROM (its own immediate parent's local space) TO the page: composeOdfGroupTransform is the identity when groupFunctions is empty (the overwhelmingly common case -- a frame with no enclosing draw:g), so this is cheap for the non-grouped case. Returns undefined for a frame with no resolvable geometry of its own -- see transform.ts's resolveOdfShapeGeometry for the documented "inherited positioning" scope boundary this defers to.
-export function readDrawFrame(frame: XmlElement, groupFunctions: readonly OdfTransformFunction[], pkg: Package): ContentShape | undefined {
+// Reads one draw:frame into a ContentShape, in the coordinate space `groupFunctions` maps FROM (its own immediate parent's local space) TO the page: composeOdfGroupTransform is the identity when groupFunctions is empty (the overwhelmingly common case -- a frame with no enclosing draw:g), so this is cheap for the non-grouped case. Returns undefined for a frame with no resolvable geometry of its own -- see transform.ts's resolveOdfShapeGeometry for the documented "inherited positioning" scope boundary this defers to. `listIdState` mints a text-box list's numId identity (see readDrawFrameContent's own ODP LIST MEMBERSHIP note) and defaults to a fresh counter so every pre-existing call site (ods's anchored-drawing reader, this file's own tests) keeps working unchanged -- a caller walking a WHOLE presentation (odp) threads one document-wide state so identities stay unique across every slide.
+export function readDrawFrame(frame: XmlElement, groupFunctions: readonly OdfTransformFunction[], pkg: Package, listIdState: OdfListIdState = { next: 1 }): ContentShape | undefined {
   const ownGeometry = resolveOdfShapeGeometry(frame);
   if (ownGeometry === undefined) {
     return undefined;
@@ -115,7 +130,7 @@ export function readDrawFrame(frame: XmlElement, groupFunctions: readonly OdfTra
     frame: geometry.frame,
     rotationDeg: geometry.rotationDeg,
     ...readFrameInsets(frame, pkg),
-    blocks: readDrawFrameContent(frame, geometry.frame, pkg),
+    blocks: readDrawFrameContent(frame, geometry.frame, pkg, listIdState),
   };
 }
 
@@ -128,21 +143,23 @@ function readOwnTransformFunctions(element: XmlElement): OdfTransformFunction[] 
 // Walks a shape container's direct children (a draw:page, or a draw:g's own children) in document order, flattening any draw:g group into `out`'s own flat ContentShape list: `groupFunctions` accumulates each enclosing group's own draw:transform, INNERMOST first (a nested group's own functions are prepended ahead of whatever its own parent already accumulated), so composeOdfGroupTransform at the leaf applies them in the correct innermost-to-outermost order -- mirroring ooxml.js's own p:grpSp flattening (src/typed/pptx/read.ts's walkShapeTreeChildren/composeGroupTransform), adapted to ODF's own transform-function-list model instead of OOXML's chOff/chExt scaling. See this file's own top-of-file note on why a bare vector-primitive shape (not wrapped in a draw:frame) is silently skipped here.
 //
 // `indexState` reuses the EXACT SAME paintOrderKey/DocumentIndexState machinery walkDrawPageContent (odg, further down this file) uses -- ContentShapeSchema carries the identical optional `paintOrder` field ContentSlideSchema's own shapes already declare, so a presentation shape gets the same real, spec-aware (draw:z-index-honouring, falling back to document-encounter order) paint-order value an odg drawing's shapes get, even though odp's own output array is never reordered by it (matching this walker's own pre-existing document-order-only behaviour -- only the STAMPED VALUE is new, not a new sort). Defaults to a fresh counter so every existing external call site (a single top-level call per slide, with no indexState argument) keeps working unchanged; recursion into a nested draw:g threads the SAME state onward so the counter stays monotonic across the whole slide, matching walkDrawPageContent's own threading discipline exactly.
-export function walkDrawShapes(children: readonly XmlNode[], groupFunctions: readonly OdfTransformFunction[], pkg: Package, out: ContentShape[], indexState: DocumentIndexState = { next: 0 }): void {
+//
+// `listIdState` threads the text-box list numId counter (see readDrawFrameContent's own ODP LIST MEMBERSHIP note) through every frame of the walk, with the same fresh-counter default and the same recursive threading discipline as indexState -- odp passes one document-wide state (see readOdp) so a list's identity is unique across the whole presentation, never reset per slide or per group.
+export function walkDrawShapes(children: readonly XmlNode[], groupFunctions: readonly OdfTransformFunction[], pkg: Package, out: ContentShape[], indexState: DocumentIndexState = { next: 0 }, listIdState: OdfListIdState = { next: 1 }): void {
   for (const node of children) {
     if (node.type !== 'element') {
       continue;
     }
     if (node.tag === 'draw:frame') {
       const zIndex = paintOrderKey(node, indexState);
-      const shape = readDrawFrame(node, groupFunctions, pkg);
+      const shape = readDrawFrame(node, groupFunctions, pkg, listIdState);
       if (shape !== undefined) {
         out.push({ ...shape, paintOrder: zIndex });
       }
     } else if (node.tag === 'draw:g') {
       const ownFunctions = readOwnTransformFunctions(node);
       const nested = ownFunctions.length === 0 ? groupFunctions : [...ownFunctions, ...groupFunctions];
-      walkDrawShapes(node.children, nested, pkg, out, indexState);
+      walkDrawShapes(node.children, nested, pkg, out, indexState, listIdState);
     }
   }
 }
@@ -305,7 +322,7 @@ function readCustomShapeVector(element: XmlElement, groupFunctions: readonly Odf
   return { kind: type === 'ellipse' ? 'ellipse' : 'rect', frame: geometry.frame, rotationDeg: geometry.rotationDeg, fill, stroke };
 }
 
-// The fallback for an UNRECOGNISED draw:custom-shape preset (or one with no draw:enhanced-geometry/draw:type at all): produce text-only content -- a plain ContentShape carrying whatever real text:p runs the shape has, read exactly like readDrawFrameContent's own draw:text-box case above -- rather than a vector primitive this reader cannot correctly derive without evaluating draw:enhanced-path's own formula language (see RECOGNIZED_CUSTOM_SHAPE_PRESETS' own note). A custom-shape's text:p children sit DIRECTLY under draw:custom-shape itself (confirmed against real LibreOffice output -- unlike draw:frame's own draw:text-box wrapper), so elementsWithTag is used the same deep-search way readDrawFrameContent already uses it for a listed text box. An unrecognised preset with NO real text content at all (every run empty, matching this reader's own hand-built fixtures, which never populate a placeholder shape's own text) has nothing worth preserving and is skipped entirely -- this IS the "diagnostic-worthy note" this task's brief asks for: this comment IS that note, since neither this reader nor readOdg below has a diagnostics sink to report it through (matching readOdp/readOdt's own established "no diagnostics channel" posture elsewhere in this package).
+// The fallback for an UNRECOGNISED draw:custom-shape preset (or one with no draw:enhanced-geometry/draw:type at all): produce text-only content -- a plain ContentShape carrying whatever real text:p runs the shape has, read through the same readOdfParagraph call readDrawFrameContent's own draw:text-box case uses (though without its list-membership walk -- an odg path, where a text:list's own text:p children are still FOUND by this deep search and read as plain paragraphs) -- rather than a vector primitive this reader cannot correctly derive without evaluating draw:enhanced-path's own formula language (see RECOGNIZED_CUSTOM_SHAPE_PRESETS' own note). A custom-shape's text:p children sit DIRECTLY under draw:custom-shape itself (confirmed against real LibreOffice output -- unlike draw:frame's own draw:text-box wrapper), so elementsWithTag is used here as a deep search that also finds a text:list's own text:p children should a custom shape carry one, reading them as plain paragraphs. An unrecognised preset with NO real text content at all (every run empty, matching this reader's own hand-built fixtures, which never populate a placeholder shape's own text) has nothing worth preserving and is skipped entirely -- this IS the "diagnostic-worthy note" this task's brief asks for: this comment IS that note, since neither this reader nor readOdg below has a diagnostics sink to report it through (matching readOdp/readOdt's own established "no diagnostics channel" posture elsewhere in this package).
 function readCustomShapeAsTextShape(element: XmlElement, groupFunctions: readonly OdfTransformFunction[], pkg: Package): ContentShape | undefined {
   const paragraphs = elementsWithTag(element.children, 'text:p').map((p) => readOdfParagraph(p, pkg));
   const hasText = paragraphs.some((paragraph) => paragraph.runs.some((run) => run.text.length > 0));

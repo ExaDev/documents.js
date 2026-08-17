@@ -6,6 +6,7 @@ import { childrenWithTag, elementsWithTag, findChildElement, rootElement } from 
 import { decodeOdfText } from '../shared/text';
 import { readOdfMetadata } from '../shared/metadata';
 import { resolveDrawPageSize } from '../shared/masterpage';
+import type { OdfListIdState } from '../shared/list';
 import { walkDrawShapes } from '../draw/shapes';
 
 // Resolves a Package into { metadata, slides }: document order is native here -- a draw:page's own position among its office:presentation siblings IS slide order, with no pptx-style p:sldIdLst indirection to resolve at all (verified against real LibreOffice output: multiple draw:page elements sit directly, in order, under office:body/office:presentation).
@@ -26,9 +27,10 @@ function readSlideNotes(page: XmlElement): string {
   return elementsWithTag(notes.children, 'text:p').map(decodeOdfText).join('\n');
 }
 
-function readSlide(page: XmlElement, pkg: Package): ContentSlide {
+// `listIdState` mints the numId identity for every text:list found inside a slide text frame (draw:frame > draw:text-box), threaded by walkDrawShapes through the whole shape walk and owned by readOdp below at DOCUMENT scope -- one counter across every slide, so two lists on different slides get different identities exactly as two lists in different parts of one odt body do (see typed/shared/list.ts's own top-of-file note for the numId convention and typed/draw/shapes.ts's readDrawFrameContent for why odp mints rather than emitting the numId-less { level } shape).
+function readSlide(page: XmlElement, pkg: Package, listIdState: OdfListIdState): ContentSlide {
   const shapes: ContentShape[] = [];
-  walkDrawShapes(page.children, [], pkg, shapes);
+  walkDrawShapes(page.children, [], pkg, shapes, { next: 0 }, listIdState);
   return { size: readSlideSize(page, pkg), shapes, notes: readSlideNotes(page) };
 }
 
@@ -44,8 +46,9 @@ export function readOdp(pkg: Package): OdpDocument {
   const presentation = body === undefined ? undefined : findChildElement(body.children, 'office:presentation');
   const pages = presentation === undefined ? [] : childrenWithTag(presentation, 'draw:page');
 
+  const listIdState: OdfListIdState = { next: 1 };
   return {
     metadata: readOdfMetadata(pkg),
-    slides: pages.map((page) => readSlide(page, pkg)),
+    slides: pages.map((page) => readSlide(page, pkg, listIdState)),
   };
 }
