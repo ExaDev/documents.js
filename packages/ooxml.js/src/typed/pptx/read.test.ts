@@ -634,3 +634,79 @@ describe('readPptx: chart graphic frames', () => {
     expect(asParagraph(table.rows[1]?.cells[1]?.blocks[0]).sourcePath).toBe('slides[0].shapes[0].blocks[0].rows[1].cells[1].blocks[0]');
   });
 });
+
+// A SmartArt graphic frame's dgm:relIds carries four relationship ids; only r:dm (the data model -- the semantic graph of nodes and text) is read. The tree below: doc -> [Strategy (node 1, srcOrd 0), Cost (node 2, srcOrd 1), textless (node 4, srcOrd 2), Assistant (asst 5, srcOrd 3)], with Strategy -> [Quality/Details (node 3), a parTrans point whose text must not surface]. cxnLst order is deliberately scrambled against srcOrd to prove the sort, and a presOf edge to node 2 must not duplicate its text (readDiagramText in src/typed/pptx/diagram.ts).
+function smartArtFixturePackage(): Package {
+  const para = (...runs: XmlElement[]) => el('a:p', {}, runs);
+  const r = (text: string) => el('a:r', {}, [el('a:t', {}, [txt(text)])]);
+  const textPt = (modelId: string, type: string | undefined, paragraphs: XmlElement[]): XmlElement =>
+    el('dgm:pt', type === undefined ? { modelId } : { modelId, type }, [el('dgm:t', {}, [el('a:bodyPr'), el('a:lstStyle'), ...paragraphs])]);
+  const cxn = (srcId: string, destId: string, srcOrd: string, type?: string) =>
+    el('dgm:cxn', type === undefined ? { modelId: `${srcId}-${destId}`, srcId, destId, srcOrd, destOrd: '0' } : { modelId: `${srcId}-${destId}`, type, srcId, destId, srcOrd, destOrd: '0' });
+
+  const dataModel = el('dgm:dataModel', {}, [
+    el('dgm:ptLst', {}, [
+      textPt('0', 'doc', [para()]),
+      textPt('1', undefined, [para(r('Strategy'))]),
+      textPt('2', undefined, [para(r('Cost'))]),
+      textPt('3', undefined, [para(r('Quality')), para(r('Details'))]),
+      textPt('4', undefined, [para()]),
+      textPt('5', 'asst', [para(r('Assistant'))]),
+      textPt('6', 'parTrans', [para(r('transition text'))]),
+    ]),
+    el('dgm:cxnLst', {}, [
+      cxn('0', '2', '1'),
+      cxn('0', '1', '0'),
+      cxn('0', '4', '2'),
+      cxn('0', '5', '3'),
+      cxn('1', '3', '0'),
+      cxn('1', '6', '1'),
+      cxn('0', '2', '9', 'presOf'),
+    ]),
+  ]);
+
+  const diagramFrame = el('p:graphicFrame', {}, [
+    el('p:nvGraphicFramePr', {}, [el('p:cNvPr', { id: '2', name: 'Diagram 1' })]),
+    el('p:xfrm', {}, [el('a:off', { x: '914400', y: '1828800' }), el('a:ext', { cx: '4572000', cy: '2743200' })]),
+    el('a:graphic', {}, [el('a:graphicData', { uri: 'http://schemas.openxmlformats.org/drawingml/2006/diagram' }, [el('dgm:relIds', { 'r:dm': 'rIdDm', 'r:lo': 'rIdLo', 'r:qs': 'rIdQs', 'r:cs': 'rIdCs' })])]),
+  ]);
+  const slide = el('p:sld', {}, [el('p:cSld', {}, [el('p:spTree', {}, [diagramFrame])])]);
+  const presentation = el('p:presentation', {}, [el('p:sldIdLst', {}, [el('p:sldId', { id: '256', 'r:id': 'rId1' })])]);
+  const presentationRels = rels([{ id: 'rId1', type: SLIDE_REL, target: 'slides/slide1.xml' }]);
+  const slideRels = rels([{ id: 'rIdDm', type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramData', target: '../diagrams/data1.xml' }]);
+
+  return {
+    parts: {
+      'ppt/presentation.xml': { kind: 'xml', nodes: [presentation] },
+      'ppt/_rels/presentation.xml.rels': { kind: 'xml', nodes: [presentationRels] },
+      'ppt/slides/slide1.xml': { kind: 'xml', nodes: [slide] },
+      'ppt/slides/_rels/slide1.xml.rels': { kind: 'xml', nodes: [slideRels] },
+      'ppt/diagrams/data1.xml': { kind: 'xml', nodes: [dataModel] },
+    },
+  };
+}
+
+describe('readPptx: SmartArt graphic frames', () => {
+  it('reads the data model\'s node text as paragraphs in diagram order (depth-first, siblings by srcOrd)', () => {
+    const doc = readPptx(smartArtFixturePackage());
+    const diagramShape = doc.slides[0]?.shapes.find((s) => s.name === 'Diagram 1');
+    const texts = (diagramShape?.blocks ?? []).map((b) => asParagraph(b).runs.map((run) => run.text).join(''));
+    expect(texts).toEqual(['Strategy', 'Quality', 'Details', 'Cost', 'Assistant']);
+  });
+
+  it('keeps the frame\'s geometry with empty content when the data model relationship resolves to no readable part', () => {
+    const pkg = smartArtFixturePackage();
+    delete pkg.parts['ppt/diagrams/data1.xml'];
+    const doc = readPptx(pkg);
+    const diagramShape = doc.slides[0]?.shapes.find((s) => s.name === 'Diagram 1');
+    expect(diagramShape?.frame).toEqual({ xPt: 72, yPt: 144, widthPt: 360, heightPt: 216 });
+    expect(diagramShape?.blocks).toEqual([]);
+  });
+
+  it('assigns sourcePath to each diagram paragraph', () => {
+    const doc = readPptx(smartArtFixturePackage());
+    const diagramShape = doc.slides[0]?.shapes.find((s) => s.name === 'Diagram 1');
+    expect(asParagraph(diagramShape?.blocks[0]).sourcePath).toBe('slides[0].shapes[0].blocks[0]');
+    expect(asParagraph(diagramShape?.blocks[4]).sourcePath).toBe('slides[0].shapes[0].blocks[4]');
+  });
+});

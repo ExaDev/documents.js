@@ -15,6 +15,7 @@ import { base64ToBytes } from '../../util/base64';
 import type { DefaultRunProperties, SlideInheritanceContext } from './inherit';
 import { readPlaceholderKey, readRunPropertiesFromElement, resolveDefaultRunProperties, resolvePlaceholderXfrm, resolveSlideInheritance } from './inherit';
 import { readChartTable } from './chart';
+import { readDiagramText } from './diagram';
 
 // Package -> PptxDocument. Walks PresentationML directly: document order, placeholder inheritance, and theme resolution all matter for conversion fidelity in a way a flat text/shape-list projection doesn't preserve. Ported from documents.js's src/ooxml/pptx/read.ts.
 
@@ -27,6 +28,7 @@ export type PptxDocument = z.infer<typeof PptxDocumentSchema>;
 const PRESENTATION_PATH = 'ppt/presentation.xml';
 const TABLE_GRAPHIC_URI = 'http://schemas.openxmlformats.org/drawingml/2006/table';
 const CHART_GRAPHIC_URI = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
+const DIAGRAM_GRAPHIC_URI = 'http://schemas.openxmlformats.org/drawingml/2006/diagram';
 
 function readSlideSize(presentationRoot: XmlElement | undefined): PageSize {
   const sldSz = presentationRoot === undefined ? undefined : childrenWithTag(presentationRoot, 'p:sldSz')[0];
@@ -345,8 +347,13 @@ function readGraphicFrameShape(gf: XmlElement, context: SlideInheritanceContext,
     const chartRoot = relatedPartRoot(chartRef === undefined ? undefined : attr(chartRef, 'r:id'), slideRels, pkg);
     const chartTable = chartRoot === undefined ? undefined : readChartTable(chartRoot, frame);
     blocks = chartTable === undefined ? [] : [chartTable];
+  } else if (uri === DIAGRAM_GRAPHIC_URI && graphicData !== undefined) {
+    // dgm:relIds' r:dm names the data model part -- the semantic graph of nodes and text (r:lo/r:qs/r:cs only decide how that graph is drawn).
+    const relIds = childrenWithTag(graphicData, 'dgm:relIds')[0];
+    const dataModelRoot = relatedPartRoot(relIds === undefined ? undefined : attr(relIds, 'r:dm'), slideRels, pkg);
+    blocks = dataModelRoot === undefined ? [] : readDiagramText(dataModelRoot);
   } else {
-    // Any other graphic frame (SmartArt, an OLE object) keeps its geometry with empty content.
+    // Any other graphic frame (an OLE object) keeps its geometry with empty content.
     blocks = [];
   }
   return { name: shapeName(gf), frame, rotationDeg, ...NO_TEXT_BODY_EXTRAS, blocks };
