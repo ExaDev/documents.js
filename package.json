@@ -88,7 +88,7 @@
     "fflate": "^0.8.3",
     "markdown-codec": "^1.4.2",
     "odf.js": "^2.7.23",
-    "ooxml.js": "^2.11.31",
+    "ooxml.js": "^2.13.0",
     "pdf-codec": "^2.2.35",
     "zod": "^4.4.3"
   },
