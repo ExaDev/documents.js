@@ -275,21 +275,21 @@ describe('reconstructDrawing: vector mapping', () => {
     const item: LayoutItem = { kind: 'rect', xPt: 20, yPt: 30, widthPt: 100, heightPt: 40, fill: RED };
     const doc = reconstructDrawing(docFrom([page(400, 300, [item])]));
     const [pg] = drawPages(doc);
-    expect(pg!.vectors).toEqual([{ kind: 'rect', frame: { xPt: 20, yPt: 230, widthPt: 100, heightPt: 40 }, fill: RED, stroke: undefined, sourcePath: undefined, paintOrder: 0 }]); // yPt = 300 - 30 - 40
+    expect(pg!.vectors).toEqual([{ kind: 'rect', frame: { xPt: 20, yPt: 230, widthPt: 100, heightPt: 40 }, fill: RED, stroke: undefined, sourcePath: undefined, paintOrder: 0, frames: [{ pageIndex: 0, xPt: 20, yPt: 30, widthPt: 100, heightPt: 40 }] }]); // yPt = 300 - 30 - 40; the vector's own frames carry the exact PDF-space box it was recovered from
   });
 
   it('maps a LayoutEllipse to an ellipse ContentVector via the exact flipY inverse', () => {
     const item: LayoutItem = { kind: 'ellipse', xPt: 50, yPt: 60, widthPt: 80, heightPt: 20, stroke: { color: BLACK, widthPt: 1 } };
     const doc = reconstructDrawing(docFrom([page(400, 300, [item])]));
     const [pg] = drawPages(doc);
-    expect(pg!.vectors).toEqual([{ kind: 'ellipse', frame: { xPt: 50, yPt: 220, widthPt: 80, heightPt: 20 }, fill: undefined, stroke: { color: BLACK, widthPt: 1 }, sourcePath: undefined, paintOrder: 0 }]); // yPt = 300 - 60 - 20
+    expect(pg!.vectors).toEqual([{ kind: 'ellipse', frame: { xPt: 50, yPt: 220, widthPt: 80, heightPt: 20 }, fill: undefined, stroke: { color: BLACK, widthPt: 1 }, sourcePath: undefined, paintOrder: 0, frames: [{ pageIndex: 0, xPt: 50, yPt: 60, widthPt: 80, heightPt: 20 }] }]); // yPt = 300 - 60 - 20
   });
 
   it('maps a LayoutLine to a line ContentVector with a synthesized stroke object', () => {
     const item: LayoutItem = { kind: 'line', x1Pt: 10, y1Pt: 20, x2Pt: 90, y2Pt: 60, color: BLACK, widthPt: 2 };
     const doc = reconstructDrawing(docFrom([page(400, 300, [item])]));
     const [pg] = drawPages(doc);
-    expect(pg!.vectors).toEqual([{ kind: 'line', from: { xPt: 10, yPt: 280 }, to: { xPt: 90, yPt: 240 }, stroke: { color: BLACK, widthPt: 2 }, sourcePath: undefined, paintOrder: 0 }]); // yPt = 300 - y1Pt/y2Pt
+    expect(pg!.vectors).toEqual([{ kind: 'line', from: { xPt: 10, yPt: 280 }, to: { xPt: 90, yPt: 240 }, stroke: { color: BLACK, widthPt: 2 }, sourcePath: undefined, paintOrder: 0, frames: [{ pageIndex: 0, xPt: 10, yPt: 20, widthPt: 80, heightPt: 40 }] }]); // yPt = 300 - y1Pt/y2Pt; the line's own frame is the bounding box of its two endpoints
   });
 
   it('maps a LayoutPath to a path ContentVector with a tight bounding-box frame and localized subpath points', () => {
@@ -310,6 +310,7 @@ describe('reconstructDrawing: vector mapping', () => {
         stroke: undefined,
         sourcePath: undefined,
         paintOrder: 0,
+        frames: [{ pageIndex: 0, xPt: 50, yPt: 250, widthPt: 100, heightPt: 0 }],
       },
     ]);
   });
