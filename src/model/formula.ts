@@ -22,8 +22,8 @@ export function formulaOfBlock(block: ContentEmbeddedObjectBlock): ContentFormul
   return block.document.kind === 'formula' ? block.document.formula : undefined;
 }
 
-// The plain-text stand-in for a formula a consumer cannot typeset: its own StarMath annotation when the source carried one, else a literal marker. Never an empty string -- an empty stand-in is indistinguishable from the formula having been silently dropped.
+// The plain-text stand-in for a formula a consumer cannot typeset: its own StarMath annotation when the source carried one, else the verbatim presentation LaTeX when the formula carries one (a LaTeX-authored formula's own source text is the most faithful thing to show -- and the only thing to show when the pinned parser could not read it, since such a formula's MathML array is empty and its rendering would otherwise collapse to a bare marker), else a literal marker. Never an empty string -- an empty stand-in is indistinguishable from the formula having been silently dropped.
 export function formulaPlaceholderText(formula: ContentFormula): string {
-  return formula.starMath ?? '[formula]';
+  return formula.starMath ?? formula.presentation?.latex ?? '[formula]';
 }
 

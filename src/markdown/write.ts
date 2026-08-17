@@ -6,6 +6,22 @@ import { formulaOfBlock, formulaPlaceholderText } from '../model/formula';
 // markdown-codec's own writeMarkdown parameter type is now the SAME document-schema.js ContentDocument this package imports: markdown-codec bumped its own document-schema.js dependency to ^2.2.4 (matching this package's own ^2.2.4 direct dependency), and pnpm resolves both to the single installed copy (`pnpm why document-schema.js` shows exactly one). The version-skew this file used to reshape around (markdown-codec independently pinned at ^1.5.3, a pre-2.0.0 release with CONTENT_FORMAT_VERSION 1, TypeScript treating the two import("document-schema.js")-sourced types as nominally unrelated all the way down through ContentBlock -> ContentEmbeddedObjectBlock -> document) no longer exists, so there is no LegacyDocument mirror type and no field-by-field document rebuild needed any more -- a real ContentDocument goes straight into writeMarkdown.
 //
 // What remains is a genuine semantic transformation writeMarkdown does not do on its own: markdown-codec's own emit path drops every embeddedObject block uniformly, regardless of what it nests (see that package's own src/write.ts -> emit/emit.ts, renderTopLevelBlock's `case "embeddedObject": return ""`). That is exactly right for a recovered drawing -- a rect/ellipse/line/path carries no text to stand in for, and CommonMark/GFM has no vector construct anyway -- but wrong for an embedded formula, whose own text this package still wants preserved rather than silently discarded. markdownBlock below is that one transformation (flatten a formula block to its own plain-text stand-in) and nothing else; every other block, a recovered drawing included, is passed through unchanged and left to writeMarkdown's own uniform embeddedObject handling to drop.
+// A formula carrying a presentation LaTeX string is reconstructed as markdown MATH rather than flattened to plain text: markdown-codec's own math vocabulary (its issue #53) round-trips a $$ display block as a MathBlock-styled paragraph and an inline \( \) span as a run marked with the Cambria Math fontFamily, and its emit path regenerates both shapes from exactly those markers -- so the formula's verbatim presentation string (rendering-authoritative, never re-derived from the semantic layer) goes back out as the same syntax it arrived in. Which of the two shapes is chosen by the formula's recorded provenance source: a span that arrived inline goes back inline (in a paragraph of its own -- the block model never retained its position inside the source paragraph, the same position loss every inline-equation recovery in this package already has), everything else goes back as a display block. The marker strings are mirrored here as literals for the same reason src/markdown/math.ts mirrors its read-side pair: markdown-codec documents them as stable lower/emit conventions but does not re-export these two among its public style constants.
+const MATH_BLOCK_STYLE_ID = 'MathBlock';
+const MATH_INLINE_FONT_MARKER = 'Cambria Math';
+const MATH_INLINE_SOURCE = 'markdown:math-inline';
+
+function formulaParagraph(formula: NonNullable<ReturnType<typeof formulaOfBlock>>): ContentBlock {
+  const latex = formula.presentation?.latex;
+  if (latex === undefined) {
+    return { kind: 'paragraph', runs: [{ text: formulaPlaceholderText(formula) }] };
+  }
+  if (formula.provenance?.source === MATH_INLINE_SOURCE) {
+    return { kind: 'paragraph', runs: [{ text: latex, fontFamily: MATH_INLINE_FONT_MARKER }] };
+  }
+  return { kind: 'paragraph', runs: [{ text: latex }], styleId: MATH_BLOCK_STYLE_ID };
+}
+
 function markdownBlock(block: ContentBlock): ContentBlock {
   // A table is recursive too -- ContentTableCell.blocks is itself ContentBlock[], so a table cell could carry its own nested embeddedObject (or another nested table) needing the identical treatment as a top-level block.
   if (block.kind === 'table') {
@@ -15,7 +31,7 @@ function markdownBlock(block: ContentBlock): ContentBlock {
     // An embedded formula is FLATTENED to a paragraph carrying its own plain-text stand-in -- its StarMath annotation, or the literal "[formula]" -- rather than left to writeMarkdown's own default embeddedObject handling, which would silently drop it just like a drawing. Flattening is what actually gets the formula's own text into the markdown. CommonMark/GFM has no math construct to do better with, and this package writes no MathML into docx or odt either in the cases where it still falls back to text (buildDocxPackage/buildOdtPackage's own appendEmbeddedObject, which degrade the identical way when a formula carries no MathML nodes at all).
     const formula = formulaOfBlock(block);
     if (formula !== undefined) {
-      return { kind: 'paragraph', runs: [{ text: formulaPlaceholderText(formula) }] };
+      return formulaParagraph(formula);
     }
     // A recovered drawing (or any other embeddedObject kind) is passed through unchanged -- writeMarkdown's own uniform embeddedObject handling drops it regardless of what it nests, so there is nothing further to do here.
     return block;

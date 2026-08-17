@@ -316,6 +316,17 @@ export { buildOfficeMath, buildOfficeMathParagraph } from './omml/write';
 export type { OmmlReadResult } from './omml/read';
 export { collectOfficeMathElements, readOfficeMath } from './omml/read';
 
+// --- LaTeX presentation -> the MathExpression semantic core (src/latex/): the string-to-tree half of document-schema.js's two-layer math model, over a pinned temml parser. lowerLatex is the direct entry point for a caller holding a LaTeX string; latexToFormula wraps it into a whole ContentFormula (verbatim presentation + presentation-MathML + lowered content + provenance) ready to embed the way every other formula in this package travels. The lowering is mechanical where notation is unambiguous (\frac -> math:divide, radicals -> math:sqrt/n-th root, scripted Sigma/Product -> sum/prod binders, numeric literals -> exact rationals, subscripts -> distinct symbol identities) and degrades everything context-starved to visible `unparsed` nodes carrying the verbatim source plus a named diagnostic -- never a parse failure, never a silent guess. The markdown read path runs this lowering automatically over markdown-codec's preserved $$ display blocks and \( \) inline spans (readMarkdownContent's third parameter surfaces the diagnostics). lintMathCoherence is the model's read-only audit: it re-parses and re-lowers every stored presentation string and reports divergence from the stored content layer as a warning carrying provenance -- a deliberate layer edit, never something this package re-derives. ---
+export type { LatexDiagnostic, LatexDiagnosticCode, LatexDiagnosticSink } from './latex/diagnostics';
+export { LATEX_DIAGNOSTIC_CODES, MATH_LINT_CODES } from './latex/diagnostics';
+export type { MathLintDiagnostic, MathLintCode } from './latex/diagnostics';
+export type { LatexFormulaOptions, LatexFormulaResult, LatexLoweringResult, LowerLatexOptions } from './latex/lower';
+export { latexToFormula, lowerLatex } from './latex/lower';
+export { lintMathCoherence } from './latex/lint';
+export type { MarkdownMathLoweringOptions } from './markdown/math';
+export { lowerMarkdownMath } from './markdown/math';
+
+
 // --- Format <-> ContentDocument readers and layout algorithms, each independently usable rather than only reachable through the ergonomic conversions below. ---
 export type { ReadDocxContentOptions } from './ooxml/docx/read';
 export { readDocxContent } from './ooxml/docx/read';
