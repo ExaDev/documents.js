@@ -6,7 +6,7 @@ import type { DocumentCodecOptions } from '../codecs/registry';
 import type { DocumentFormat } from '../convert/port';
 import { throwIfAborted } from '../ports/abort';
 
-// Every format whose own ContentDocument setDocumentMetadata can patch a metadata field on and rebuild from scratch through -- the eight formats sharing the readXContent -> buildXPackage round trip. xlsx joined this set once DOCUMENT_FORMAT_CODECS.xlsx.content gained a real read/write pair (src/codecs/registry.ts): it now fits the identical shape docx/pptx/odt/odp/ods/odg/markdown already share, so there is no reason left to special-case it out. Deliberately does NOT include 'pdf': a PDF's metadata is patched directly on its own LayoutDocument (see setDocumentMetadata below), never through this ContentDocument rebuild path at all.
+// Every format whose own ContentDocument setDocumentMetadata can patch a metadata field on and rebuild from scratch through -- the eight formats sharing the readXContent -> buildXPackage round trip. xlsx joined this set once DOCUMENT_FORMAT_CODECS.xlsx.content gained a real read/write pair (src/codecs/registry.ts): it now fits the identical shape docx/pptx/odt/odp/ods/odg/markdown already share, so there is no reason left to special-case it out. Deliberately does NOT include 'pdf': a PDF's metadata is patched directly on its own LayoutDocument (see setDocumentMetadata below), never through this ContentDocument rebuild path at all. Nor 'csv': a csv round trip technically exists through the registry codec, but RFC 4180 text has no metadata container at all -- a rebuild would "succeed" and silently drop the override -- so classifyWritePath rejects it explicitly below with that reason rather than letting it fall through to the generic format-mismatch message.
 const REBUILD_FORMATS: Readonly<Record<'docx' | 'pptx' | 'odt' | 'odp' | 'ods' | 'odg' | 'markdown' | 'xlsx', true>> = {
   docx: true,
   pptx: true,
@@ -70,6 +70,9 @@ function classifyWritePath(source: DocumentFormat, target: DocumentFormat): Writ
   if (target === 'odf' || source === 'odf') {
     return { errorMessage: "'odf' (a standalone formula document) is not a supported setDocumentMetadata source or target -- it has no write path back out at all" };
   }
+  if (target === 'csv' || source === 'csv') {
+    return { errorMessage: "'csv' is not a supported setDocumentMetadata source or target -- RFC 4180 text has no metadata container, so a rebuild would silently drop the override. Convert to or from csv first, then patch metadata on the package format." };
+  }
   if (!isRebuildFormat(source) || !isRebuildFormat(target)) {
     return { errorMessage: `setDocumentMetadata only patches metadata in place; it does not convert format -- source ('${source}') and target ('${target}') must be the same format (or both 'pdf'). Convert first if you need a different target format.` };
   }
@@ -85,7 +88,7 @@ export interface SetDocumentMetadataOptions {
   readonly images?: MarkdownImageResolver;
 }
 
-// Patches a document's own title/author/subject/keywords, leaving every other field and every other flag as-is. Two write paths: a pdf source/target patches the metadata directly on the parsed PDF (writePdf), with no layout engine involved at all -- genuinely lossless for everything else on the page. Every other supported format (docx, pptx, odt, odp, ods, odg, markdown) rebuilds a fresh package from that format's own ContentDocument -- see classifyWritePath's own comment for exactly what that costs for docx specifically. Overrides are applied via mergeMetadata: a field omitted from `overrides` is left exactly as the source document already had it.
+// Patches a document's own title/author/subject/keywords, leaving every other field and every other flag as-is. Two write paths: a pdf source/target patches the metadata directly on the parsed PDF (writePdf), with no layout engine involved at all -- genuinely lossless for everything else on the page. Every other supported format (docx, pptx, xlsx, odt, odp, ods, odg, markdown) rebuilds a fresh package from that format's own ContentDocument -- see classifyWritePath's own comment for exactly what that costs for docx specifically. Overrides are applied via mergeMetadata: a field omitted from `overrides` is left exactly as the source document already had it.
 export function setDocumentMetadata(sourceFormat: DocumentFormat, targetFormat: DocumentFormat, bytes: Uint8Array<ArrayBuffer>, overrides: MetadataOverrides, options?: SetDocumentMetadataOptions): Uint8Array<ArrayBuffer> {
   const writePath = classifyWritePath(sourceFormat, targetFormat);
   if ('errorMessage' in writePath) {

@@ -1,7 +1,8 @@
 import type { HsqldbTable } from '../hsqldb/script';
 import { displayTextFor } from '../hsqldb/script';
+import { quoteCsvField } from '../csv/records';
 
-// Writes exactly one named HsqldbTable as CSV bytes -- no ContentSheet/xlsx machinery involved at all, since CSV needs nothing beyond the table's own column names and each cell's own display text. RFC 4180-style quoting: a field containing a comma, double quote, or newline is wrapped in double quotes with any embedded double quote doubled; every other field is written bare.
+// Writes exactly one named HsqldbTable as CSV bytes -- no ContentSheet/xlsx machinery involved at all, since CSV needs nothing beyond the table's own column names and each cell's own display text. RFC 4180 quoting is the shared src/csv/records.ts quoteCsvField (the identical function src/csv/write.ts writes ContentSheet cells through), so every csv this package emits speaks one dialect by construction.
 
 export class OdbTableNotSpecifiedError extends Error {
   readonly availableTables: readonly string[];
@@ -23,12 +24,6 @@ export class OdbTableNotFoundError extends Error {
     this.table = table;
     this.availableTables = availableTables;
   }
-}
-
-const CSV_QUOTE_NEEDED_RE = /[",\n\r]/;
-
-function csvField(value: string): string {
-  return CSV_QUOTE_NEEDED_RE.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
 function selectTable(tables: readonly HsqldbTable[], tableName: string | undefined): HsqldbTable {
@@ -55,9 +50,9 @@ function selectTable(tables: readonly HsqldbTable[], tableName: string | undefin
 
 export function buildOdbTableCsv(tables: readonly HsqldbTable[], tableName: string | undefined): Uint8Array<ArrayBuffer> {
   const table = selectTable(tables, tableName);
-  const lines: string[] = [table.columns.map((column) => csvField(column.name)).join(',')];
+  const lines: string[] = [table.columns.map((column) => quoteCsvField(column.name)).join(',')];
   for (const row of table.rows) {
-    lines.push(row.map((cell) => csvField(displayTextFor(cell))).join(','));
+    lines.push(row.map((cell) => quoteCsvField(displayTextFor(cell))).join(','));
   }
   return new TextEncoder().encode(`${lines.join('\r\n')}\r\n`);
 }

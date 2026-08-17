@@ -2,6 +2,9 @@ import { decodePackage as decodeOdfPackage } from 'odf.js';
 import { decodePackage as decodeOoxmlPackage, readXlsxContent } from 'ooxml.js';
 import { readPdf } from 'pdf-codec';
 import { describe, expect, it } from 'vitest';
+import { encodeCsvText } from '../csv/text';
+import { parseCsvRecords } from '../csv/records';
+import { CsvSheetNotSpecifiedError } from '../csv/write';
 import { createDocx, openDocx } from '../edit/docx/editor';
 import { openOdp } from '../edit/odp/editor';
 import { openOdt } from '../edit/odt/editor';
@@ -17,7 +20,7 @@ import { gridOdsBytes, minimalOdsBytes, richOdsBytes } from '../test-support/ods
 import { minimalOdtBytes } from '../test-support/odt';
 import { minimalDocxBytes } from '../test-support/docx';
 import { minimalPptxBytes } from '../test-support/pptx';
-import { docxToMarkdown, docxToOdt, docxToPdf, docxToPptx, markdownToDocx, markdownToOdt, markdownToPdf, odfToPdf, odgToPdf, odpToPdf, odpToPptx, odpToOdt, odsToPdf, odsToXlsx, odtToDocx, odtToMarkdown, odtToOdp, odtToPdf, pdfToDocx, pdfToMarkdown, pdfToOdg, pdfToOdp, pdfToOds, pdfToOdt, pdfToPptx, pdfToXlsx, pptxToDocx, pptxToOdp, pptxToPdf, xlsxToOds, xlsxToPdf, xlsxToMarkdown, markdownToXlsx } from './convert';
+import { csvToOds, docxToMarkdown, docxToOdt, docxToPdf, docxToPptx, markdownToDocx, markdownToOdt, markdownToPdf, odfToPdf, odgToPdf, odpToPdf, odpToPptx, odpToOdt, odsToCsv, odsToPdf, odsToXlsx, odtToDocx, odtToMarkdown, odtToOdp, odtToPdf, pdfToDocx, pdfToMarkdown, pdfToOdg, pdfToOdp, pdfToOds, pdfToOdt, pdfToPptx, pdfToXlsx, pptxToDocx, pptxToOdp, pptxToPdf, xlsxToOds, xlsxToPdf, xlsxToMarkdown, markdownToXlsx } from './convert';
 import { createLocalDocumentConverter } from './local';
 import type { DocumentFormat } from './port';
 
@@ -247,6 +250,20 @@ const MATRIX_ENTRIES: readonly MatrixEntry[] = [
     },
   },
   {
+    name: 'csv <-> ods (bridge)',
+    edges: [
+      { source: 'csv', target: 'ods' },
+      { source: 'ods', target: 'csv' },
+    ],
+    // The csv <-> ods bridge is a direct ContentDocument pivot copy like xlsx <-> ods above -- no layout engine, no reconstruction. The one csv-boundary transformation is read-side re-typing: '42.5' parses into a number cell whose displayText prints back as the identical digits, so a plain-text fixture round-trips field-for-field. The source text is parsed here rather than compared as a raw string, because the writer emits the RFC 4180 CRLF line breaks the fixture's \n spelling is equivalent to.
+    run: () => {
+      const csvText = 'Name,Amount\nWidget,42.5\nGadget,7\n';
+      const odsBytes = csvToOds(encodeCsvText(csvText));
+      const roundTrippedText = new TextDecoder().decode(odsToCsv(odsBytes));
+      expect(parseCsvRecords(roundTrippedText)).toEqual(parseCsvRecords(csvText));
+    },
+  },
+  {
     name: 'ods <-> pdf',
     edges: [
       { source: 'ods', target: 'pdf' },
@@ -449,6 +466,8 @@ function fixtureBytes(format: DocumentFormat): Uint8Array<ArrayBuffer> {
       return odsToXlsx(minimalOdsBytes());
     case 'markdown':
       return encodeMarkdownText('# Heading\n\nA paragraph of text.');
+    case 'csv':
+      return encodeCsvText('Name,Amount\nWidget,42.5\nGadget,7\n');
     case 'odf':
       return odfFormulaBytes(FRACTION_FORMULA);
     case 'pdf':
@@ -475,6 +494,7 @@ function isValidOutput(format: DocumentFormat, bytes: Uint8Array<ArrayBuffer>): 
       return bytes[0] === 0x50 && bytes[1] === 0x4b;
     }
     case 'markdown':
+    case 'csv':
       return bytes.length > 0;
     default:
       return false;
@@ -487,10 +507,16 @@ describe.each(ALL_SUPPORTED_PAIRS.map((pair) => [`${pair.source}->${pair.target}
   it('produces valid output of the target format without throwing', async () => {
     const converter = createLocalDocumentConverter();
     const sourceBytes = fixtureBytes(pair.source);
-    const result = await converter.convert(
-      { source: { format: pair.source, bytes: sourceBytes }, targetFormat: pair.target },
-      { signal: new AbortController().signal },
-    );
+    // A csv target whose intermediate content carries more than one sheet (odp -> csv reconstructs one sheet per slide) is a caller decision, not a conversion failure: without a selection the conversion refuses with CsvSheetNotSpecifiedError naming every sheet, and re-running it with { sheet: <one of those names> } produces the csv. Both halves of that contract are asserted here rather than swallowing the refusal. The async wrapper matters: the local converter throws synchronously inside convert() (its body runs the whole pipeline before constructing the return promise), so without it the refusal would bypass .catch entirely.
+    const run = async (options: { sheet?: string } = {}) =>
+      converter.convert({ source: { format: pair.source, bytes: sourceBytes }, targetFormat: pair.target }, { signal: new AbortController().signal, ...options });
+    const result = await run().catch((error: unknown) => {
+      if (!(error instanceof CsvSheetNotSpecifiedError)) {
+        throw error;
+      }
+      expect(error.availableSheets.length).toBeGreaterThan(1);
+      return run({ sheet: error.availableSheets[0]! });
+    });
     expect(result.document.format).toBe(pair.target);
     expect(isValidOutput(pair.target, result.document.bytes)).toBe(true);
   });

@@ -12,6 +12,9 @@ import { decodeMarkdownText, encodeMarkdownText } from '../markdown/text';
 import type { MarkdownImageResolver } from 'markdown-codec';
 import { readMarkdownContent } from '../markdown/read';
 import { buildMarkdownText } from '../markdown/write';
+import { decodeCsvText, encodeCsvText } from '../csv/text';
+import { readCsvContent } from '../csv/read';
+import { buildCsvText } from '../csv/write';
 import { readOdfFormulaContent } from '../odf/formula/read';
 import { readOdgContent } from '../odf/odg/read';
 import { readOdpContent } from '../odf/odp/read';
@@ -114,6 +117,13 @@ export const DOCUMENT_FORMAT_CODECS: Readonly<Record<DocumentFormat, DocumentFor
     content: {
       read: (bytes, options) => readMarkdownContent(decodeMarkdownText(bytes), { signal: options?.signal, images: options?.images }),
       write: (content) => encodeMarkdownText(buildMarkdownText(content)),
+    },
+  },
+  // The csv entry is the markdown entry's structural twin: decode straight from bytes to text (no package), read into a ContentDocument, write the reverse. DocumentCodecOptions carries no delimiter/sheet, so this codec reads and writes the default comma dialect over a lone sheet -- a caller wanting TSV output or a named sheet of a multi-sheet document uses the named conversions (convert.ts's xlsxToCsv/odsToCsv/pdfToCsv), which thread { delimiter, sheet } through UnifiedConversionOptions; a multi-sheet write through THIS codec throws buildCsvText's own CsvSheetNotSpecifiedError rather than silently truncating. decodeCsvText is a fatal decoder with no loop of its own, so no separate signal check is needed -- the same reasoning as the markdown entry beside it.
+  csv: {
+    content: {
+      read: (bytes) => readCsvContent(decodeCsvText(bytes)),
+      write: (content) => encodeCsvText(buildCsvText(content)),
     },
   },
   pdf: {

@@ -17,13 +17,15 @@ describe('FORMAT_CAPABILITIES', () => {
 
     expect(new Set(byVariant.get('wordprocessing'))).toEqual(new Set(['docx', 'odt', 'markdown']));
     expect(new Set(byVariant.get('presentation'))).toEqual(new Set(['pptx', 'odp']));
-    expect(new Set(byVariant.get('spreadsheet'))).toEqual(new Set(['xlsx', 'ods']));
+    expect(new Set(byVariant.get('spreadsheet'))).toEqual(new Set(['xlsx', 'ods', 'csv']));
     expect(new Set(byVariant.get('drawing'))).toEqual(new Set(['odg']));
   });
 
-  it('is the one node sharing a variant with a layout-path sibling but having no layout path of its own', () => {
+  it('marks xlsx and csv as the spreadsheet members with no layout path of their own (ods carries the layout edge)', () => {
     expect(FORMAT_CAPABILITIES.xlsx.variant).toBe('spreadsheet');
     expect(FORMAT_CAPABILITIES.xlsx.hasLayoutPath).toBe(false);
+    expect(FORMAT_CAPABILITIES.csv.variant).toBe('spreadsheet');
+    expect(FORMAT_CAPABILITIES.csv.hasLayoutPath).toBe(false);
     expect(FORMAT_CAPABILITIES.ods.variant).toBe('spreadsheet');
     expect(FORMAT_CAPABILITIES.ods.hasLayoutPath).toBe(true);
   });
@@ -84,6 +86,28 @@ describe('resolveCompositionPlan', () => {
     const plan = resolveCompositionPlan('pdf', 'xlsx');
     expect(plan).toBeDefined();
     expect(plan!.hops.map((h) => h.executor)).toEqual(['fromPdf', 'bridge']);
+  });
+
+  it('composes csv -> pdf through ods (bridge then toPdf), since csv has no layout engine of its own', () => {
+    const plan = resolveCompositionPlan('csv', 'pdf');
+    expect(plan).toBeDefined();
+    expect(plan!.hops.map((h) => h.executor)).toEqual(['bridge', 'toPdf']);
+    expect(plan!.hops[0]!.from).toBe('csv');
+    expect(plan!.hops[0]!.to).toBe('ods');
+    expect(plan!.hops[1]!.from).toBe('ods');
+    expect(plan!.hops[1]!.to).toBe('pdf');
+  });
+
+  it('composes pdf -> csv through ods (fromPdf then bridge)', () => {
+    const plan = resolveCompositionPlan('pdf', 'csv');
+    expect(plan).toBeDefined();
+    expect(plan!.hops.map((h) => h.executor)).toEqual(['fromPdf', 'bridge']);
+  });
+
+  it('composes csv -> markdown through ods and pdf (three hops), mirroring the xlsx -> markdown last-resort route', () => {
+    const plan = resolveCompositionPlan('csv', 'markdown');
+    expect(plan).toBeDefined();
+    expect(plan!.hops).toHaveLength(3);
   });
 
   it('composes xlsx -> markdown through ods and pdf (three hops), the lossiest route in the package', () => {

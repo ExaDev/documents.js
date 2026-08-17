@@ -7,7 +7,7 @@ import type { DocumentFormat } from './port';
 
 // Lives beside convert.ts's own DocumentFormat-dispatching functions (buildDocumentBytes, odbReportToPdf, ...) rather than in src/fonts/registry.ts alongside extractSourceFonts/FontSourcePackage: this package's own dependency-direction convention (see the README's Architecture section) states that `fonts` imports no local module at all, so it can sit beside `layout` rather than under it -- importing DocumentFormat from src/convert/port.ts here would break that invariant for no real gain, since `convert` already legitimately depends on `fonts` in the other direction.
 
-// The subset of DocumentFormat that can declare a source-embedded font face at all: docx/pptx via OOXML's own fontTable.xml/embeddedFontLst, odt/odp/ods/odg via ODF's own office:font-face-decls. xlsx has no OOXML font-embedding vocabulary of its own; pdf/markdown carry no source-package concept to embed a font declaration in; a standalone .odf formula document embeds only the STIX Two Math font pdf-codec itself carries, never a caller-resolvable face; .odb has no font concept at all (and is not a DocumentFormat member regardless).
+// The subset of DocumentFormat that can declare a source-embedded font face at all: docx/pptx via OOXML's own fontTable.xml/embeddedFontLst, odt/odp/ods/odg via ODF's own office:font-face-decls. xlsx has no OOXML font-embedding vocabulary of its own; pdf/markdown/csv carry no source-package concept to embed a font declaration in; a standalone .odf formula document embeds only the STIX Two Math font pdf-codec itself carries, never a caller-resolvable face; .odb has no font concept at all (and is not a DocumentFormat member regardless).
 const FONT_SOURCE_FORMATS: Readonly<Record<'docx' | 'pptx' | 'odt' | 'odp' | 'ods' | 'odg', true>> = {
   docx: true,
   pptx: true,
@@ -21,7 +21,7 @@ function isFontSourceFormat(format: DocumentFormat): format is keyof typeof FONT
   return format in FONT_SOURCE_FORMATS;
 }
 
-// A recognised DocumentFormat that nonetheless has no source-embedded-font concept at all (xlsx, pdf, markdown, odf) -- a named class, matching this package's own convention for every other "recognised but unsupported" input across the .odb/odm surface (OdbTableNotSpecifiedError, OdbUnsupportedFormatError, ...), so a caller can narrow on it with instanceof rather than string-matching a thrown Error's own message.
+// A recognised DocumentFormat that nonetheless has no source-embedded-font concept at all (xlsx, pdf, markdown, csv, odf) -- a named class, matching this package's own convention for every other "recognised but unsupported" input across the .odb/odm surface (OdbTableNotSpecifiedError, OdbUnsupportedFormatError, ...), so a caller can narrow on it with instanceof rather than string-matching a thrown Error's own message.
 export class UnsupportedFontSourceFormatError extends Error {
   readonly format: DocumentFormat;
 
