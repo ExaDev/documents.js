@@ -1,3 +1,5 @@
+## [2.2.31](https://github.com/ExaDev/pdf-codec/compare/v2.2.30...v2.2.31) (2026-08-17)
+
 ## [2.2.30](https://github.com/ExaDev/pdf-codec/compare/v2.2.29...v2.2.30) (2026-08-17)
 
 ## [2.2.29](https://github.com/ExaDev/pdf-codec/compare/v2.2.28...v2.2.29) (2026-08-17)
