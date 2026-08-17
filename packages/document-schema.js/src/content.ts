@@ -3,6 +3,7 @@ import { ColorSchema } from './color';
 import type { Color } from './color';
 import { BoxSchema, LayoutFrameSchema, MarginsSchema, PageSizeSchema } from './geometry';
 import type { Box, LayoutFrame } from './geometry';
+import { MathExpressionSchema, MathPresentationSchema, MathProvenanceSchema, SymbolTableSchema } from './math';
 import { MathMlNodeSchema } from './mathml';
 import { LayoutMetadataSchema } from './metadata';
 import { AlignmentSchema } from './style';
@@ -501,47 +502,65 @@ export const ContentDrawPageSchema = z.object({
 });
 export type ContentDrawPage = z.infer<typeof ContentDrawPageSchema>;
 
-// Formula content model: a standalone equation document (an ODF .odf formula document, or the equation an embedded 'formula' object carries). Unlike the other four kinds this has no page/slide/sheet structure at all -- a formula is one expression, positioned by whatever embeds it, so there is nothing here to paginate or place.
+// Formula content model: a standalone equation document (an ODF .odf formula document, or the equation an embedded 'formula' object carries). Unlike the other four kinds this has no page/slide/sheet structure at all -- a formula is one expression, positioned by whatever embeds it, so there is nothing here to paginate or place. Whatever embeds it supplies position through its own frames field (a ContentEmbeddedObjectBlock's frames describe the rendered box the equation occupies); the semantic payload here is position-independent by nature, and the fusion invariant deliberately reaches no further into a formula than that box.
+//
+// A formula's meaning is carried as two co-equal authoritative layers, joined in this one shape: `presentation` (rendering-authoritative) and `content` (computation-authoritative), alongside the source formats' own trees and strings. Neither layer is stored derived from the other -- string-to-tree lowering is total (worst case an `unparsed` node), tree-to-string rendering is partial, and storage takes the recoverable side by carrying both verbatim. The atomic pair-edit rule: editing one layer must never silently mutate the other -- an editor changing `content` leaves `presentation` byte-identical unless it explicitly rewrites both -- and any canonical form used to match or diff the two layers is a derived view computed at comparison time, never written back in place. That rule is documentation-stated rather than Zod-enforced on purpose: the schema's job is to carry both layers losslessly, and a producer that mutates one layer in place is misbehaving in a way no input shape can prevent -- consumers comparing layers recompute their own canonical views rather than trusting either layer to be normalised.
 export const ContentFormulaSchema = z.object({
-  // The formula's own MathML presentation-layer tree, carried as raw XML nodes (see src/mathml.ts for why that, rather than a MathML-specific element vocabulary). An array rather than a single root because a real formula part's content is a node list -- an XML declaration and/or whitespace text nodes commonly precede the <math> element itself, and dropping them on the way in would make this model lossy for no gain.
+  // The formula's own MathML presentation-layer tree, carried as raw XML nodes (see src/mathml.ts for why that, rather than a MathML-specific element vocabulary). An array rather than a single root because a real formula part's content is a node list -- an XML declaration and/or whitespace text nodes commonly precede the <math> element itself, and dropping them on the way in would make this model lossy for no gain. Required even when the source carried no MathML of its own (a LaTeX-authored equation lowered on the way in): such a formula carries an empty array, which keeps every existing constructor of this shape valid.
   mathml: z.array(MathMlNodeSchema),
   // The equivalent StarMath source, when the producing format carried one alongside the MathML (ODF stores it as the formula's own annotation). Purely informational: MathML is the authoritative content, and a consumer that renders from starMath instead is rendering a secondary encoding of the same expression.
   starMath: z.string().optional(),
+  // The rendering-authoritative layer: the formula's LaTeX, stored verbatim (src/math.ts's MathPresentationSchema). A renderer serialises this string exactly as it stands and never re-emits it from the semantic layer below. Absent on a formula whose source offered nothing LaTeX-shaped, in which case rendering falls back to the MathML tree above.
+  presentation: MathPresentationSchema.optional(),
+  // The computation-authoritative layer: a MathExpression tree (src/math.ts). Absent means nobody has lowered this formula to semantics yet; an `unparsed` node inside it means somebody tried and hit a construct the grammar does not cover -- coverage gaps stay visible data, never parse failures. The symbol and unit references inside resolve against the embedding document's own symbolTable field (below).
+  content: MathExpressionSchema.optional(),
+  // Where this formula came from and what has touched it since (src/math.ts's MathProvenanceSchema).
+  provenance: MathProvenanceSchema.optional(),
 });
 export type ContentFormula = z.infer<typeof ContentFormulaSchema>;
 
 // Bumped whenever ContentDocumentSchema's shape changes incompatibly. 2 added the 'formula' variant below, renamed ContentSheetPrintSettings.scale to scalePercent, made ContentSheetColumn.widthPt/ContentSheetRow.heightPt optional-positive rather than required-nonnegative, and added the 'dateTime' ContentCellValue kind. 3 added the canonical, format-agnostic `headingLevel` field to ContentParagraphSchema (alongside the existing round-trip-only `styleId`), and fused DocumentPackage's own layout half directly onto the content tree: every content-kind leaf that previously carried only a `sourcePath` correlation string (ContentRun, ContentParagraph, ContentImageBlock, ContentPageBreak, ContentTable, ContentTableCell, ContentEmbeddedObjectBlock, ContentShape, every ContentVector variant, ContentSheetCell) now additionally carries an optional `frames: LayoutFrame[]` field of its own rendered page position(s) -- see FusedNode above and DOCUMENT_PACKAGE_FORMAT_VERSION in package.ts, bumped in step.
 export const CONTENT_FORMAT_VERSION = 3;
 
+// Fields every one of the five ContentDocument arms below carries in addition to its own kind, formatVersion, and metadata -- currently the document-level math symbol table (SymbolTableSchema, src/math.ts): the curation layer mapping each written symbol glyph to its quantity kind, preferred unit, and definition, alongside the unit registry a formula's expressions resolve their symbol and unit references against. Spliced into each arm via spread rather than factored through a base schema the arms extend, because z.discriminatedUnion() needs each member as a plain z.object carrying its own literal `kind` field in place. Optional on every arm: a document with no lowered math content (most of them) simply omits it, and the table is presentation-inert by construction -- it curates what symbols mean, never how any formula renders -- so its presence or absence changes no rendering. It lives on the envelope, not inside LayoutMetadataSchema, because that schema is shared with LayoutDocument (src/metadata.ts) and a math curation layer there would leak onto every layout document, which carries no formulas of its own.
+const contentDocumentSharedFields = {
+  symbolTable: SymbolTableSchema.optional(),
+};
+
 export const ContentDocumentSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('wordprocessing'),
     formatVersion: z.literal(CONTENT_FORMAT_VERSION),
     metadata: LayoutMetadataSchema,
+    ...contentDocumentSharedFields,
     sections: z.array(ContentSectionSchema),
   }),
   z.object({
     kind: z.literal('presentation'),
     formatVersion: z.literal(CONTENT_FORMAT_VERSION),
     metadata: LayoutMetadataSchema,
+    ...contentDocumentSharedFields,
     slides: z.array(ContentSlideSchema),
   }),
   z.object({
     kind: z.literal('spreadsheet'),
     formatVersion: z.literal(CONTENT_FORMAT_VERSION),
     metadata: LayoutMetadataSchema,
+    ...contentDocumentSharedFields,
     sheets: z.array(ContentSheetSchema),
   }),
   z.object({
     kind: z.literal('drawing'),
     formatVersion: z.literal(CONTENT_FORMAT_VERSION),
     metadata: LayoutMetadataSchema,
+    ...contentDocumentSharedFields,
     pages: z.array(ContentDrawPageSchema),
   }),
   z.object({
     kind: z.literal('formula'),
     formatVersion: z.literal(CONTENT_FORMAT_VERSION),
     metadata: LayoutMetadataSchema,
+    ...contentDocumentSharedFields,
     formula: ContentFormulaSchema,
   }),
 ]);

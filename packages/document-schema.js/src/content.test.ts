@@ -417,6 +417,111 @@ describe('ContentDocument formula variant', () => {
   });
 });
 
+// The two-layer design (src/math.ts's own top comment): the same Pythagoras formula as above, carrying its verbatim LaTeX alongside an equivalent semantic tree, neither derived from the other at rest. An empty mathml array is the LaTeX-authored case -- a formula whose source offered no MathML tree keeps the required field while all its meaning lives in the two layers.
+function layeredFormulaDocument(): ContentDocument {
+  return {
+    kind: 'formula',
+    formatVersion: CONTENT_FORMAT_VERSION,
+    metadata: { title: 'Pythagoras, both layers' },
+    formula: {
+      mathml: [],
+      presentation: { latex: 'c = \\sqrt{a^2 + b^2}' },
+      content: {
+        kind: 'app',
+        operator: 'math:equals',
+        args: [
+          { kind: 'sym', id: 'c' },
+          {
+            kind: 'app',
+            operator: 'math:sqrt',
+            args: [
+              {
+                kind: 'app',
+                operator: 'math:add',
+                args: [
+                  { kind: 'app', operator: 'math:pow', args: [{ kind: 'sym', id: 'a' }, { kind: 'num', numerator: '2', denominator: '1' }] },
+                  { kind: 'app', operator: 'math:pow', args: [{ kind: 'sym', id: 'b' }, { kind: 'num', numerator: '2', denominator: '1' }] },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      provenance: { source: 'lowered:latex', editTrail: ['lowered from presentation on ingest'] },
+    },
+  };
+}
+
+describe('ContentFormula two-layer model', () => {
+  it('carries presentation, content, and provenance alongside the MathML tree', () => {
+    const parsed = ContentDocumentSchema.parse(layeredFormulaDocument());
+    if (parsed.kind !== 'formula') {
+      throw new Error('expected a formula document');
+    }
+    expect(parsed.formula.presentation?.latex).toBe('c = \\sqrt{a^2 + b^2}');
+    expect(parsed.formula.content?.kind).toBe('app');
+    expect(parsed.formula.provenance?.source).toBe('lowered:latex');
+  });
+
+  it('still validates the pre-existing shape with every new layer absent', () => {
+    expect(ContentDocumentSchema.safeParse(formulaDocument()).success).toBe(true);
+  });
+
+  it('rejects a malformed semantic tree rather than degrading it, keeping coverage gaps the job of explicit unparsed nodes', () => {
+    const malformed: unknown = {
+      ...layeredFormulaDocument(),
+      formula: {
+        mathml: [],
+        presentation: { latex: 'x' },
+        content: { kind: 'app', operator: 'math:divide', args: [{ kind: 'num', numerator: '1', denominator: '0' }] },
+      },
+    };
+    expect(ContentDocumentSchema.safeParse(malformed).success).toBe(false);
+  });
+});
+
+describe('the document-level symbol table', () => {
+  const symbolTable = {
+    symbols: [
+      { glyph: 'a', scope: 'document', id: 'leg-a', preferredUnit: 'si:metre' },
+      { glyph: 'b', scope: 'document', id: 'leg-b', preferredUnit: 'si:metre' },
+    ],
+    units: [
+      { id: 'si:metre', symbol: 'm', dimension: { length: 1 }, factorToSi: { numerator: '1', denominator: '1' } },
+    ],
+  };
+
+  it('is accepted on every one of the five ContentDocument arms', () => {
+    for (const document of [
+      wordprocessingDocument(),
+      presentationDocument(),
+      spreadsheetDocument(),
+      drawingDocument(),
+      formulaDocument(),
+    ]) {
+      const withTable = { ...document, symbolTable };
+      expect(ContentDocumentSchema.safeParse(withTable).success).toBe(true);
+    }
+  });
+
+  it('parses back off the envelope with its entries intact', () => {
+    const parsed = ContentDocumentSchema.parse({ ...formulaDocument(), symbolTable });
+    if (parsed.kind !== 'formula') {
+      throw new Error('expected a formula document');
+    }
+    expect(parsed.symbolTable?.symbols).toHaveLength(2);
+    expect(parsed.symbolTable?.units[0]?.id).toBe('si:metre');
+  });
+
+  it('stays absent and optional on documents that carry no math curation', () => {
+    const parsed = ContentDocumentSchema.parse(wordprocessingDocument());
+    if (parsed.kind !== 'wordprocessing') {
+      throw new Error('expected a wordprocessing document');
+    }
+    expect(parsed.symbolTable).toBeUndefined();
+  });
+});
+
 // The formula ContentDocument kind slots straight into the pre-existing ContentEmbeddedObjectKind 'formula' mechanism -- an embedded equation now carries genuine MathML instead of a wordprocessing document standing in for one.
 describe('an embedded formula object carrying a real formula document', () => {
   it('validates as a ContentBlock and inside a whole document', () => {
