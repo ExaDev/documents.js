@@ -105,7 +105,7 @@
     "husky": "^9.1.7",
     "lint-staged": "^17.3.0",
     "odf.js": "^2.7.10",
-    "pdf-codec": "^2.2.33",
+    "pdf-codec": "^2.2.34",
     "publint": "^0.3.22",
     "semantic-release": "^25.0.8",
     "tsdown": "^0.22.14",
