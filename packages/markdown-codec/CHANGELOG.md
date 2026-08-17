@@ -1,3 +1,10 @@
+# [1.4.0](https://github.com/ExaDev/markdown-codec/compare/v1.3.31...v1.4.0) (2026-08-17)
+
+
+### Features
+
+* recognise $$ display math and \( \) inline math ([f21ee9b](https://github.com/ExaDev/markdown-codec/commit/f21ee9b8f774cd092b70bf26ce6f7ca17c1693d4)), closes [ExaDev/documents.js#563](https://github.com/ExaDev/documents.js/issues/563)
+
 ## [1.3.31](https://github.com/ExaDev/markdown-codec/compare/v1.3.30...v1.3.31) (2026-08-17)
 
 ## [1.3.30](https://github.com/ExaDev/markdown-codec/compare/v1.3.29...v1.3.30) (2026-08-17)
