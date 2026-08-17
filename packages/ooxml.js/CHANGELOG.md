@@ -1,3 +1,10 @@
+# [2.16.0](https://github.com/ExaDev/ooxml.js/compare/v2.15.0...v2.16.0) (2026-08-17)
+
+
+### Features
+
+* read pptx OLE graphic frames' fallback picture as an image block ([d5f5a30](https://github.com/ExaDev/ooxml.js/commit/d5f5a3013b052c08ecdde1a8771a3690dd5b1ef1))
+
 # [2.15.0](https://github.com/ExaDev/ooxml.js/compare/v2.14.0...v2.15.0) (2026-08-17)
 
 
