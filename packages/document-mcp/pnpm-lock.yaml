@@ -68,7 +68,7 @@ importers:
         version: 2.7.14
       pdf-codec:
         specifier: ^2.2.30
-        version: 2.2.30
+        version: 2.2.32
       publint:
         specifier: ^0.3.22
         version: 0.3.23
@@ -2572,10 +2572,6 @@ packages:
 
   pathe@2.0.3:
     resolution: {integrity: sha512-WUjGcAqP1gQacoQe+OBJsFA7Ld4DyXuUIjZ5cc75cLHvJ7dtNsTugphxIADwspS+AraAUePCKrSVtPLFj/F88w==}
-
-  pdf-codec@2.2.30:
-    resolution: {integrity: sha512-s4CTavpLhtxdaXo7dF1yXOOEumgH3BBYUBS87ykcQSN5DfxPgJlk2EVhwV2pu0y22T+F79gJ0pmSuPf9Fw8sTA==}
-    engines: {node: '>=20'}
 
   pdf-codec@2.2.32:
     resolution: {integrity: sha512-SAHlT9sfK4225BmkOAj2RO5U7l64Uf4/ks7PQ+ILMNcIf/nMWlf7Y+Kf9cyONUG6C1IvO1OlSq2FZYJw4SmFjA==}
@@ -5493,13 +5489,6 @@ snapshots:
   path-type@4.0.0: {}
 
   pathe@2.0.3: {}
-
-  pdf-codec@2.2.30:
-    dependencies:
-      byte-codec: 1.1.9
-      document-schema.js: 2.7.17
-      fflate: 0.8.3
-      zod: 4.4.3
 
   pdf-codec@2.2.32:
     dependencies:
