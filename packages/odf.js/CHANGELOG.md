@@ -1,3 +1,21 @@
+# [3.0.0](https://github.com/ExaDev/odf.js/compare/v2.7.23...v3.0.0) (2026-08-17)
+
+
+* build!: bump document-schema.js to ^3.0.0 ([afe2894](https://github.com/ExaDev/odf.js/commit/afe2894f32c7b84e5d57b50de080d9ebdf901d37))
+
+
+### Features
+
+* read odt heading outline levels as headingLevel alongside styleId ([cf21f55](https://github.com/ExaDev/odf.js/commit/cf21f55d82a1a9ac6e967d54bddccec2533b4ff2))
+
+
+### BREAKING CHANGES
+
+* odf.js's emitted ContentDocuments now carry
+formatVersion 3, from document-schema.js 3.0.0's CONTENT_FORMAT_VERSION;
+consumers still validating odf.js output against document-schema.js 2
+will reject the new documents.
+
 ## [2.7.23](https://github.com/ExaDev/odf.js/compare/v2.7.22...v2.7.23) (2026-08-17)
 
 ## [2.7.22](https://github.com/ExaDev/odf.js/compare/v2.7.21...v2.7.22) (2026-08-17)
