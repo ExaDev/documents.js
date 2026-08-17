@@ -3,6 +3,7 @@ export * from './geometry';
 export * from './style';
 export * from './metadata';
 export * from './mathml';
+export * from './math';
 export * from './content';
 export * from './layout';
 export * from './package';
