@@ -1,3 +1,11 @@
+# [3.2.0](https://github.com/ExaDev/document-schema.js/compare/v3.1.0...v3.2.0) (2026-08-17)
+
+
+### Features
+
+* add the semantic math value schemas (rationals, units, symbol table, expression grammar) ([4455daa](https://github.com/ExaDev/document-schema.js/commit/4455daace215555c764fdda96142e26025ba993f))
+* carry the two-layer math model on ContentFormula and a symbol table on every document arm ([3c7feae](https://github.com/ExaDev/document-schema.js/commit/3c7feae0a918c3b8efa696dc24493a08e78bc24f))
+
 # [3.1.0](https://github.com/ExaDev/document-schema.js/compare/v3.0.0...v3.1.0) (2026-08-17)
 
 
