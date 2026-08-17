@@ -16,8 +16,8 @@ importers:
         specifier: ^1.1.9
         version: 1.1.9
       document-schema.js:
-        specifier: ^2.7.15
-        version: 2.7.15
+        specifier: ^2.7.14
+        version: 2.7.14
       fflate:
         specifier: ^0.8.3
         version: 0.8.3
@@ -31,8 +31,8 @@ importers:
         specifier: ^2.11.29
         version: 2.11.29
       pdf-codec:
-        specifier: ^2.2.24
-        version: 2.2.26
+        specifier: ^2.2.27
+        version: 2.2.27
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -1625,8 +1625,8 @@ packages:
     resolution: {integrity: sha512-WkrWp9GR4KXfKGYzOLmTuGVi1UWFfws377n9cc55/tb6DuqyF6pcQ5AbiHEshaDpY9v6oaSr2XCDidGmMwdzIA==}
     engines: {node: '>=8'}
 
-  document-schema.js@2.7.13:
-    resolution: {integrity: sha512-EtgZlCftQRCRowPG7tmw95XZihy3SAFN4cy4hBVY9h+QJCJXq7mx/7ic0eUutouElrmDN9VKH2qdmz/XZIfeLw==}
+  document-schema.js@2.7.14:
+    resolution: {integrity: sha512-4gFhWZAd2o4NjdFZUvZO0QryBvZ595jey1wAy4M0QeT9W7+YmIb2H4sYGdFB17snTaGoEhDuILpV5yYUXU3Q0w==}
     engines: {node: '>=20'}
 
   document-schema.js@2.7.15:
@@ -2546,8 +2546,8 @@ packages:
   pathe@2.0.3:
     resolution: {integrity: sha512-WUjGcAqP1gQacoQe+OBJsFA7Ld4DyXuUIjZ5cc75cLHvJ7dtNsTugphxIADwspS+AraAUePCKrSVtPLFj/F88w==}
 
-  pdf-codec@2.2.26:
-    resolution: {integrity: sha512-VzGOFMjAq0MUM7RLU8YcWq+FKZZfJBHWZ4i0NNlHHpcLGdrxuDG30+MBZYgYo7673TfT/bFpstUdHMXVJ1CyRQ==}
+  pdf-codec@2.2.27:
+    resolution: {integrity: sha512-Gq0sYMlM3U+42N3biDtrXFyHvGuE81bnnfhUKAAis33ow3OXUeJKZuXbB0xDqMzqhP872kYsoZeON0pFfbUiew==}
     engines: {node: '>=20'}
 
   picocolors@1.1.1:
@@ -4581,7 +4581,7 @@ snapshots:
     dependencies:
       path-type: 4.0.0
 
-  document-schema.js@2.7.13:
+  document-schema.js@2.7.14:
     dependencies:
       zod: 4.4.3
 
@@ -5185,7 +5185,7 @@ snapshots:
 
   markdown-codec@1.3.29:
     dependencies:
-      document-schema.js: 2.7.13
+      document-schema.js: 2.7.15
       zod: 4.4.3
 
   marked-terminal@7.3.0(marked@15.0.12):
@@ -5410,10 +5410,10 @@ snapshots:
 
   pathe@2.0.3: {}
 
-  pdf-codec@2.2.26:
+  pdf-codec@2.2.27:
     dependencies:
       byte-codec: 1.1.9
-      document-schema.js: 2.7.13
+      document-schema.js: 2.7.15
       fflate: 0.8.3
       zod: 4.4.3
 
