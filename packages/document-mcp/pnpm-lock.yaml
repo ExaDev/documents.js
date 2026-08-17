@@ -67,8 +67,8 @@ importers:
         specifier: ^2.7.10
         version: 2.7.14
       pdf-codec:
-        specifier: ^2.2.27
-        version: 2.2.27
+        specifier: ^2.2.29
+        version: 2.2.29
       publint:
         specifier: ^0.3.22
         version: 0.3.23
@@ -2562,12 +2562,12 @@ packages:
   pathe@2.0.3:
     resolution: {integrity: sha512-WUjGcAqP1gQacoQe+OBJsFA7Ld4DyXuUIjZ5cc75cLHvJ7dtNsTugphxIADwspS+AraAUePCKrSVtPLFj/F88w==}
 
-  pdf-codec@2.2.26:
-    resolution: {integrity: sha512-VzGOFMjAq0MUM7RLU8YcWq+FKZZfJBHWZ4i0NNlHHpcLGdrxuDG30+MBZYgYo7673TfT/bFpstUdHMXVJ1CyRQ==}
-    engines: {node: '>=20'}
-
   pdf-codec@2.2.27:
     resolution: {integrity: sha512-Gq0sYMlM3U+42N3biDtrXFyHvGuE81bnnfhUKAAis33ow3OXUeJKZuXbB0xDqMzqhP872kYsoZeON0pFfbUiew==}
+    engines: {node: '>=20'}
+
+  pdf-codec@2.2.29:
+    resolution: {integrity: sha512-ZRUedAis8l9JqxsODmLoovqEmVuOBZedtRyRwnA4b9fA/HLT0j6UMQ7oUFUOpepRGmlTO5SOpiclksNrymjv4A==}
     engines: {node: '>=20'}
 
   picocolors@1.1.1:
@@ -4625,7 +4625,7 @@ snapshots:
       markdown-codec: 1.3.28
       odf.js: 2.7.14
       ooxml.js: 2.11.28
-      pdf-codec: 2.2.26
+      pdf-codec: 2.2.27
       zod: 4.4.3
 
   dot-prop@5.3.0:
@@ -5234,7 +5234,7 @@ snapshots:
 
   markdown-codec@1.3.28:
     dependencies:
-      document-schema.js: 2.7.13
+      document-schema.js: 2.7.15
       zod: 4.4.3
 
   marked-terminal@7.3.0(marked@15.0.12):
@@ -5361,7 +5361,7 @@ snapshots:
 
   ooxml.js@2.11.28:
     dependencies:
-      document-schema.js: 2.7.13
+      document-schema.js: 2.7.15
       fast-xml-parser: 5.10.1
       fflate: 0.8.3
       zod: 4.4.3
@@ -5459,14 +5459,14 @@ snapshots:
 
   pathe@2.0.3: {}
 
-  pdf-codec@2.2.26:
+  pdf-codec@2.2.27:
     dependencies:
       byte-codec: 1.1.9
-      document-schema.js: 2.7.13
+      document-schema.js: 2.7.15
       fflate: 0.8.3
       zod: 4.4.3
 
-  pdf-codec@2.2.27:
+  pdf-codec@2.2.29:
     dependencies:
       byte-codec: 1.1.9
       document-schema.js: 2.7.15
