@@ -87,7 +87,7 @@
     "document-schema.js": "^2.7.15",
     "fflate": "^0.8.3",
     "markdown-codec": "^1.3.29",
-    "odf.js": "^2.7.13",
+    "odf.js": "^2.7.15",
     "ooxml.js": "^2.11.29",
     "pdf-codec": "^2.2.24",
     "zod": "^4.4.3"
