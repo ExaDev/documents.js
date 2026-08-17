@@ -22,7 +22,7 @@ export const CONTENT_DOCUMENT_URI = schemaUriFor('ContentDocument');
 
 // -- Hand-authored $defs, spliced into content-document.schema.json only (via scripts/generate-json-schemas.mjs's own ContentDocumentSchema override branch) --
 //
-// The fragments below are transcribed by hand, field-for-field, from src/content.ts's real Zod object definitions (ContentParagraphSchema, ContentTableSchema/ContentTableRowSchema/ContentTableCellSchema, ContentImageBlockSchema, ContentPageBreakSchema, ContentRunSchema, ContentListMembershipSchema, ColorSchema, BoxSchema, AlignmentSchema, ContentStrokeStyleSchema, ContentBorderSchema, ContentCellBordersSchema -- each cross-checked directly against a real z.toJSONSchema() call over that exact exported schema, and the ones with a real, non-recursive, non-custom counterpart are held to that comparison as a running test by content-json-schema-defs.test.ts) plus the ContentEmbeddedObject/ContentEmbeddedObjectBlock TS interfaces, which have no exported z.object() counterpart at all (both are validated only via the isContentEmbeddedObject*() z.custom() guards). Re-verify this block against src/content.ts whenever that file's field shapes change -- nothing here is generated or checked against the real schemas at build time, other than the eleven leaf/near-leaf fragments the regression test below does cover.
+// The fragments below are transcribed by hand, field-for-field, from src/content.ts's real Zod object definitions (ContentParagraphSchema, ContentTableSchema/ContentTableRowSchema/ContentTableCellSchema, ContentImageBlockSchema, ContentPageBreakSchema, ContentRunSchema, ContentListMembershipSchema, ColorSchema, BoxSchema, LayoutFrameSchema, AlignmentSchema, ContentStrokeStyleSchema, ContentBorderSchema, ContentCellBordersSchema -- each cross-checked directly against a real z.toJSONSchema() call over that exact exported schema, and the ones with a real, non-recursive, non-custom counterpart are held to that comparison as a running test by content-json-schema-defs.test.ts) plus the ContentEmbeddedObject/ContentEmbeddedObjectBlock TS interfaces, which have no exported z.object() counterpart at all (both are validated only via the isContentEmbeddedObject*() z.custom() guards). Re-verify this block against src/content.ts whenever that file's field shapes change -- nothing here is generated or checked against the real schemas at build time, other than the twelve leaf/near-leaf fragments the regression test below does cover.
 export const CONTENT_DEFS: Record<string, JsonSchema> = {
   Color: {
     type: 'object',
@@ -43,6 +43,18 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       heightPt: { type: 'number', minimum: 0 },
     },
     required: ['xPt', 'yPt', 'widthPt', 'heightPt'],
+    additionalProperties: false,
+  },
+  LayoutFrame: {
+    type: 'object',
+    properties: {
+      pageIndex: { type: 'integer', minimum: 0, maximum: MAX_SAFE_INTEGER },
+      xPt: { type: 'number' },
+      yPt: { type: 'number' },
+      widthPt: { type: 'number', minimum: 0 },
+      heightPt: { type: 'number', minimum: 0 },
+    },
+    required: ['pageIndex', 'xPt', 'yPt', 'widthPt', 'heightPt'],
     additionalProperties: false,
   },
   Alignment: {
@@ -95,6 +107,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       color: { $ref: '#/$defs/Color' },
       hyperlink: { type: 'string' }, // resolved external URI
       sourcePath: { type: 'string' },
+      frames: { type: 'array', items: { $ref: '#/$defs/LayoutFrame' } },
     },
     required: ['text'],
     additionalProperties: false,
@@ -105,6 +118,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       kind: { type: 'string', const: 'paragraph' },
       runs: { type: 'array', items: { $ref: '#/$defs/ContentRun' } },
       styleId: { type: 'string' }, // w:pStyle/@w:val, e.g. 'Heading1'
+      headingLevel: { type: 'integer', exclusiveMinimum: 0, maximum: MAX_SAFE_INTEGER }, // canonical, format-agnostic heading depth -- see src/content.ts's own field comment
       alignment: { $ref: '#/$defs/Alignment' },
       list: { $ref: '#/$defs/ContentListMembership' },
       spacingBeforePt: { type: 'number' },
@@ -113,6 +127,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       indentLeftPt: { type: 'number' },
       indentFirstLinePt: { type: 'number' },
       sourcePath: { type: 'string' },
+      frames: { type: 'array', items: { $ref: '#/$defs/LayoutFrame' } },
     },
     required: ['kind', 'runs'],
     additionalProperties: false,
@@ -127,6 +142,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       heightPt: { type: 'number', exclusiveMinimum: 0 },
       altText: { type: 'string' },
       sourcePath: { type: 'string' },
+      frames: { type: 'array', items: { $ref: '#/$defs/LayoutFrame' } },
     },
     required: ['kind', 'format', 'base64', 'widthPt', 'heightPt'],
     additionalProperties: false,
@@ -136,6 +152,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     properties: {
       kind: { type: 'string', const: 'pageBreak' },
       sourcePath: { type: 'string' },
+      frames: { type: 'array', items: { $ref: '#/$defs/LayoutFrame' } },
     },
     required: ['kind'],
     additionalProperties: false,
@@ -150,6 +167,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       background: { $ref: '#/$defs/Color' },
       borders: { $ref: '#/$defs/ContentCellBorders' },
       sourcePath: { type: 'string' },
+      frames: { type: 'array', items: { $ref: '#/$defs/LayoutFrame' } },
     },
     required: ['blocks'],
     additionalProperties: false,
@@ -172,6 +190,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       // Pre-existing discrepancy, not fixed here: ContentTableSchema.columnWidthsPt is z.array(z.number().positive()), stricter than isContentBlock's own runtime guard (src/content.ts), which only checks `typeof w === 'number'` for each width in its 'table' branch. This fragment matches the stricter declared Zod schema, not the looser guard -- flagged, not silently normalized away.
       columnWidthsPt: { type: 'array', items: { type: 'number', exclusiveMinimum: 0 } },
       sourcePath: { type: 'string' },
+      frames: { type: 'array', items: { $ref: '#/$defs/LayoutFrame' } },
     },
     required: ['kind', 'rows', 'columnWidthsPt'],
     additionalProperties: false,
@@ -185,6 +204,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       document: { $ref: CONTENT_DOCUMENT_URI },
       frame: { $ref: '#/$defs/Box' },
       sourcePath: { type: 'string' },
+      frames: { type: 'array', items: { $ref: '#/$defs/LayoutFrame' } },
       // Cell-anchor position, all four optional -- only set on an embedded object held in a ContentSheetSchema.embeddedObjects array; mirrors ContentSheetImageSchema's own anchorRow/anchorColumn/offsetXPt/offsetYPt representation exactly (see schemas/content-document.schema.json's own ContentSheetImage fragment, generated -- not hand-transcribed -- since that schema is a real z.object()).
       anchorRow: { type: 'integer', minimum: 0, maximum: MAX_SAFE_INTEGER },
       anchorColumn: { type: 'integer', minimum: 0, maximum: MAX_SAFE_INTEGER },

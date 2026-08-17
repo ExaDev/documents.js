@@ -30,6 +30,16 @@ export const MarginsSchema = z.object({
 });
 export type Margins = z.infer<typeof MarginsSchema>;
 
+// A single positioned placement of a content node on one rendered page -- PDF user-space points (origin bottom-left, y increasing upward), matching LayoutItem's own xPt/yPt/widthPt/heightPt convention exactly (src/layout.ts), plus the page it belongs to. pageIndex is 0-based, matching DocumentPackageSchema's own `pages` array index (src/package.ts): `pages[frame.pageIndex]` names the page a given frame renders onto and that page's own dimensions. A content node carries an ARRAY of these (see FusedNode in src/content.ts), not a single optional one, because pagination or line-wrapping can render one semantic node -- a paragraph whose runs wrap across a page boundary is the common case -- into more than one place without splitting or duplicating the node itself. This is the fusion primitive that replaces DocumentPackage's old approach of correlating a wholly separate LayoutDocument's own positioned items back to their originating ContentDocument node purely by matching sourcePath strings.
+export const LayoutFrameSchema = z.object({
+  pageIndex: z.number().int().nonnegative(),
+  xPt: z.number(),
+  yPt: z.number(),
+  widthPt: z.number().nonnegative(),
+  heightPt: z.number().nonnegative(),
+});
+export type LayoutFrame = z.infer<typeof LayoutFrameSchema>;
+
 // US Letter: 612 x 792 pt (8.5 x 11 in). The default page size when a docx section has no explicit w:sectPr/w:pgSz.
 export const PAGE_SIZE_LETTER: PageSize = { widthPt: 612, heightPt: 792 };
 

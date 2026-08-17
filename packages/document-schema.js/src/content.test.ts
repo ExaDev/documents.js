@@ -8,13 +8,17 @@ import {
   ContentDocumentSchema,
   type ContentEmbeddedObject,
   ContentEmbeddedObjectSchema,
+  ContentParagraphSchema,
   ContentRunSchema,
   ContentShapeSchema,
+  ContentSheetCellSchema,
   ContentSheetColumnSchema,
   ContentSheetRowSchema,
   type ContentTable,
+  clampHeadingLevel,
   isContentBlock,
 } from './content';
+import { LayoutFrameSchema } from './geometry';
 
 const paragraph: ContentBlock = {
   kind: 'paragraph',
@@ -503,6 +507,126 @@ describe('sourcePath', () => {
       blocks: [],
     });
     expect(shapeWithoutSourcePath.sourcePath).toBeUndefined();
+  });
+});
+
+describe('ContentParagraphSchema headingLevel', () => {
+  it('accepts an explicit heading level, independent of styleId', () => {
+    const parsed = ContentParagraphSchema.parse({
+      kind: 'paragraph',
+      runs: [{ text: 'A heading' }],
+      styleId: 'Heading2',
+      headingLevel: 2,
+    });
+    expect(parsed.headingLevel).toBe(2);
+    expect(parsed.styleId).toBe('Heading2');
+  });
+
+  it('accepts a heading level beyond 6, since the canonical field is not itself clamped (ODF permits ten levels)', () => {
+    expect(ContentParagraphSchema.parse({ kind: 'paragraph', runs: [], headingLevel: 9 }).headingLevel).toBe(9);
+  });
+
+  it('parses with headingLevel omitted, matching every other optional field', () => {
+    const parsed = ContentParagraphSchema.parse({ kind: 'paragraph', runs: [{ text: 'Body text' }] });
+    expect(parsed.headingLevel).toBeUndefined();
+  });
+
+  it('rejects a zero, negative, or non-integer headingLevel', () => {
+    expect(ContentParagraphSchema.safeParse({ kind: 'paragraph', runs: [], headingLevel: 0 }).success).toBe(false);
+    expect(ContentParagraphSchema.safeParse({ kind: 'paragraph', runs: [], headingLevel: -1 }).success).toBe(false);
+    expect(ContentParagraphSchema.safeParse({ kind: 'paragraph', runs: [], headingLevel: 1.5 }).success).toBe(false);
+  });
+
+  it('survives a JSON round trip', () => {
+    const original = ContentParagraphSchema.parse({
+      kind: 'paragraph',
+      runs: [{ text: 'Heading' }],
+      headingLevel: 3,
+    });
+    const roundTripped: unknown = JSON.parse(JSON.stringify(original));
+    expect(ContentParagraphSchema.parse(roundTripped)).toEqual(original);
+  });
+});
+
+describe('clampHeadingLevel', () => {
+  it('leaves a level already within 1-6 untouched', () => {
+    expect(clampHeadingLevel(1)).toBe(1);
+    expect(clampHeadingLevel(3)).toBe(3);
+    expect(clampHeadingLevel(6)).toBe(6);
+  });
+
+  it('clamps a level above 6 down to 6', () => {
+    expect(clampHeadingLevel(7)).toBe(6);
+    expect(clampHeadingLevel(10)).toBe(6);
+    expect(clampHeadingLevel(999)).toBe(6);
+  });
+
+  it('clamps a level below 1 up to 1', () => {
+    expect(clampHeadingLevel(0)).toBe(1);
+    expect(clampHeadingLevel(-5)).toBe(1);
+  });
+
+  it('rounds a fractional level to the nearest integer before clamping', () => {
+    expect(clampHeadingLevel(2.4)).toBe(2);
+    expect(clampHeadingLevel(2.6)).toBe(3);
+  });
+});
+
+describe('frames (the FusedNode pattern)', () => {
+  it('accepts a LayoutFrame array on every content-kind leaf that carries one', () => {
+    const frame = { pageIndex: 0, xPt: 10, yPt: 700, widthPt: 100, heightPt: 12 };
+
+    expect(ContentRunSchema.parse({ text: 'Fused', frames: [frame] }).frames).toEqual([frame]);
+    expect(ContentParagraphSchema.parse({ kind: 'paragraph', runs: [], frames: [frame] }).frames).toEqual([frame]);
+    expect(
+      ContentBlockSchema.parse({ kind: 'image', format: 'png', base64: 'AA==', widthPt: 1, heightPt: 1, frames: [frame] }),
+    ).toMatchObject({ frames: [frame] });
+    expect(ContentBlockSchema.parse({ kind: 'pageBreak', frames: [frame] })).toMatchObject({ frames: [frame] });
+
+    const shape = ContentShapeSchema.parse({
+      frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 100 },
+      insetLeftPt: 0,
+      insetTopPt: 0,
+      insetRightPt: 0,
+      insetBottomPt: 0,
+      blocks: [],
+      frames: [frame],
+    });
+    expect(shape.frames).toEqual([frame]);
+
+    const cell = ContentSheetCellSchema.parse({
+      row: 0,
+      column: 0,
+      value: { kind: 'string', value: 'x' },
+      displayText: 'x',
+      frames: [frame],
+    });
+    expect(cell.frames).toEqual([frame]);
+  });
+
+  it('accepts a node with multiple frames -- one node appearing at more than one rendered position', () => {
+    const frames = [
+      { pageIndex: 0, xPt: 72, yPt: 60, widthPt: 468, heightPt: 24 },
+      { pageIndex: 1, xPt: 72, yPt: 720, widthPt: 200, heightPt: 12 },
+    ];
+    const parsed = ContentParagraphSchema.parse({ kind: 'paragraph', runs: [], frames });
+    expect(parsed.frames).toHaveLength(2);
+    expect(parsed.frames?.map((f) => f.pageIndex)).toEqual([0, 1]);
+  });
+
+  it('parses correctly when frames is omitted, matching every other optional field', () => {
+    expect(ContentRunSchema.parse({ text: 'No frames' }).frames).toBeUndefined();
+  });
+
+  it('rejects a malformed frame (negative pageIndex, missing fields)', () => {
+    expect(LayoutFrameSchema.safeParse({ pageIndex: -1, xPt: 0, yPt: 0, widthPt: 1, heightPt: 1 }).success).toBe(
+      false,
+    );
+    expect(LayoutFrameSchema.safeParse({ pageIndex: 0, xPt: 0, yPt: 0 }).success).toBe(false);
+    expect(
+      ContentRunSchema.safeParse({ text: 'Bad', frames: [{ pageIndex: -1, xPt: 0, yPt: 0, widthPt: 1, heightPt: 1 }] })
+        .success,
+    ).toBe(false);
   });
 });
 

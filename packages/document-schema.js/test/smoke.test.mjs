@@ -35,7 +35,7 @@ describe('smoke: generated JSON Schema files', () => {
     }
   });
 
-  it("document-package.schema.json's $id is a jsdelivr URL pinned to the package's own published version, and its content/layout refs share that same version", () => {
+  it("document-package.schema.json's $id is a jsdelivr URL pinned to the package's own published version, and its content ref shares that same version", () => {
     const documentPackage = readSchema('document-package.schema.json');
     expect(documentPackage.$id).toBe(
       `https://cdn.jsdelivr.net/npm/document-schema.js@${packageVersion}/schemas/document-package.schema.json`,
@@ -43,10 +43,23 @@ describe('smoke: generated JSON Schema files', () => {
     expect(documentPackage.properties.content.$ref).toBe(
       `https://cdn.jsdelivr.net/npm/document-schema.js@${packageVersion}/schemas/content-document.schema.json`,
     );
-    expect(documentPackage.properties.layout.$ref).toBe(
-      `https://cdn.jsdelivr.net/npm/document-schema.js@${packageVersion}/schemas/layout-document.schema.json`,
+    // The fused-tree design (see src/package.ts): no more standalone `layout` field pairing a whole separate LayoutDocument -- position now lives on content nodes themselves via their own `frames`, and all that remains at the package level is each rendered page's own size.
+    expect(documentPackage.properties).not.toHaveProperty('layout');
+    expect(documentPackage.properties.pages.type).toBe('array');
+    expect(documentPackage.properties.pages.items.required).toEqual(
+      expect.arrayContaining(['widthPt', 'heightPt']),
     );
     expect(documentPackage.required).toEqual(expect.arrayContaining(['formatVersion', 'content']));
+    expect(documentPackage.required).not.toEqual(expect.arrayContaining(['pages']));
+  });
+
+  it("content-document.schema.json's $defs.LayoutFrame and ContentParagraph's headingLevel/frames fields are present, matching the fused-tree design", () => {
+    const contentDocument = readSchema('content-document.schema.json');
+    expect(contentDocument.$defs.LayoutFrame.required).toEqual(
+      expect.arrayContaining(['pageIndex', 'xPt', 'yPt', 'widthPt', 'heightPt']),
+    );
+    expect(contentDocument.$defs.ContentParagraph.properties.headingLevel.type).toBe('integer');
+    expect(contentDocument.$defs.ContentParagraph.properties.frames.items.$ref).toBe('#/$defs/LayoutFrame');
   });
 
   it("content-document.schema.json's root is a bare oneOf of the 5 ContentDocument variants, and $defs.ContentBlock has 5 members", () => {

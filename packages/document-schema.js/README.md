@@ -48,7 +48,7 @@ graph TD
     style schema fill:#f9a825,stroke:#333,stroke-width:3px
 ```
 
-`ContentDocument` (the semantic pivot) is a discriminated union of five kinds: `wordprocessing` (docx/odt sections of paragraphs/runs/tables/images), `presentation` (pptx/odp slides of shapes), `spreadsheet` (xlsx/ods sheets of cells, columns, rows, print settings), `drawing` (odg pages of shapes plus vector primitives — rect/ellipse/line/path), and `formula` (an equation carrying its own MathML node tree plus StarMath source when the producing format had one). `ContentEmbeddedObjectSchema` lets any of the five embed another whole `ContentDocument`. `LayoutDocument` (the PDF-rendering pivot) is pages of positioned `LayoutItem`s (`text`/`image`/`rect`/`line`/`ellipse`/`path`/`link`) in PDF user-space coordinates. `DocumentPackageSchema` pairs the two: `content` required, `layout` optional (derived, absent until something lays content out); the schema does not keep them in sync or detect staleness.
+`ContentDocument` (the semantic pivot) is a discriminated union of five kinds: `wordprocessing` (docx/odt sections of paragraphs/runs/tables/images), `presentation` (pptx/odp slides of shapes), `spreadsheet` (xlsx/ods sheets of cells, columns, rows, print settings), `drawing` (odg pages of shapes plus vector primitives — rect/ellipse/line/path), and `formula` (an equation carrying its own MathML node tree plus StarMath source when the producing format had one). `ContentEmbeddedObjectSchema` lets any of the five embed another whole `ContentDocument`. Every paragraph/run/image/table/shape/vector/spreadsheet-cell leaf also carries its own canonical `headingLevel`-or-position fields directly: a `ContentParagraph`'s optional `headingLevel` (1 = the outermost heading, independent of the round-trip-only `styleId`), and every such leaf's optional `frames: LayoutFrame[]` — that node's own rendered page position(s) (`pageIndex` plus PDF user-space `xPt`/`yPt`/`widthPt`/`heightPt`), fused directly onto the content tree once a layout pass has run. `LayoutDocument` (the PDF-rendering pivot pdf-codec's `readPdf`/`writePdf` operate on directly, independent of any `ContentDocument`) is pages of positioned `LayoutItem`s (`text`/`image`/`rect`/`line`/`ellipse`/`path`/`link`) in PDF user-space coordinates. `DocumentPackageSchema` wraps `content` (required) with `pages` (optional, derived: each rendered page's own size, indexed to match every node's own `frames[].pageIndex`) — a single fused tree rather than a second, independent `LayoutDocument` correlated back to `content` only by matching `sourcePath` strings; the schema does not keep `content`'s populated `frames` fields and `pages` in sync or detect staleness.
 
 The package contains only [Zod](https://zod.dev) schemas, their inferred types, trivial schema-attached helpers (hex-colour conversion, recursive structural type guards), and two small structural interfaces (`ContentCodec`/`LayoutCodec`, see [Codecs](#codecs)). No XML, ZIP, PDF, or binary handling; the sole dependency is `zod`.
 
@@ -60,8 +60,16 @@ Two format-agnostic helpers live here because they operate on the content model 
 import { ContentDocumentSchema, DocumentPackageSchema, LayoutDocumentSchema } from 'document-schema.js';
 
 const content = ContentDocumentSchema.parse(someWordprocessingOrPresentationValue);
-const layout = LayoutDocumentSchema.parse(somePageLayoutValue);
-const pkg = DocumentPackageSchema.parse({ formatVersion: 1, content, layout });
+// A content-only package -- no layout pass has run yet, so no node carries `frames` and `pages` stays absent.
+const pkg = DocumentPackageSchema.parse({ formatVersion: 2, content });
+
+// Once a layout pass has fused rendered positions onto content's own nodes (each via its own `frames` array)
+// and reported each page's own size, `pages` is populated to match:
+const laidOut = DocumentPackageSchema.parse({ formatVersion: 2, content: someAlreadyPositionedContent, pages: [{ widthPt: 612, heightPt: 792 }] });
+
+// LayoutDocumentSchema is unrelated to DocumentPackageSchema -- it is the standalone PDF-rendering pivot
+// pdf-codec's own readPdf/writePdf read and write directly, with no ContentDocument in the loop at all.
+const layout = LayoutDocumentSchema.parse(somePdfPageLayoutValue);
 ```
 
 Every module is also importable directly — `tsdown` builds one file per source module, and `package.json`'s `"./*"` export makes each individually resolvable:
@@ -138,7 +146,7 @@ export const MathMlNodeSchema: z.ZodType<MathMlNode> = z.discriminatedUnion('typ
 import { documentPackageWithSchema } from 'document-schema.js';
 
 const tagged = documentPackageWithSchema(pkg);
-// { $schema: 'https://cdn.jsdelivr.net/npm/document-schema.js@1.6.1/schemas/document-package.schema.json', formatVersion: 1, content: {...}, layout: {...} }
+// { $schema: 'https://cdn.jsdelivr.net/npm/document-schema.js@2.0.0/schemas/document-package.schema.json', formatVersion: 2, content: {...}, pages: [...] }
 writeFileSync('package.json.doc', JSON.stringify(tagged, null, 2));
 ```
 

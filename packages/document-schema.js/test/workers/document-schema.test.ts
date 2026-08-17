@@ -56,6 +56,6 @@ describe('document-schema.js under the Cloudflare Workers runtime', () => {
       content: document,
     });
     expect(parsed.content.kind).toBe('wordprocessing');
-    expect(parsed.layout).toBeUndefined();
+    expect(parsed.pages).toBeUndefined();
   });
 });

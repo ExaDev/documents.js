@@ -1,15 +1,18 @@
 import { z } from 'zod';
 import { ColorSchema } from './color';
 import type { Color } from './color';
-import { BoxSchema, MarginsSchema, PageSizeSchema } from './geometry';
-import type { Box } from './geometry';
+import { BoxSchema, LayoutFrameSchema, MarginsSchema, PageSizeSchema } from './geometry';
+import type { Box, LayoutFrame } from './geometry';
 import { MathMlNodeSchema } from './mathml';
 import { LayoutMetadataSchema } from './metadata';
 import { AlignmentSchema } from './style';
 
 // The shared block model underlying a wordprocessing document's sections and a presentation document's slides. Ported from ooxml.js's src/typed/shared/content.ts (itself ported from documents.js's src/model/content.ts) -- the canonical home now; ooxml.js and documents.js both import this instead of maintaining their own copy. The ContentDocument envelope below (formatVersion + kind + wordprocessing/presentation/spreadsheet/drawing/formula variants) is this package's own addition on top of that shared vocabulary, matching documents.js's existing model/content.ts shape, since a caller needs a single top-level value to carry through a conversion pipeline.
 
-// sourcePath is assigned by each format's reader at read time and copied onto emitted LayoutItems by the layout engine; this package only defines the field, it doesn't generate values. Known limitation: sourcePath values are stable within one read+layout pass over a single document, not across edits -- inserting content earlier in a document shifts every later path. This is not a stable identity scheme for incremental re-layout; it exists for tagged/accessible-PDF-style traceability and debugging, not edit-tracking.
+// sourcePath is assigned by each format's reader at read time; this package only defines the field, it doesn't generate values. Known limitation: sourcePath values are stable within one read+layout pass over a single document, not across edits -- inserting content earlier in a document shifts every later path. It exists for tagged/accessible-PDF-style traceability and debugging, not edit-tracking, and not (any more, see `frames` immediately below) as the mechanism a node's own rendered position is found through.
+
+// The fusion primitive every content-kind leaf below adds via its own literal `frames?: LayoutFrame[]` field (Zod's discriminated-union/object model needs the field spliced in field-by-field per variant, not layered on generically through this generic type) -- FusedNode<T> names that exact pattern once, for a consumer describing "a content node carrying its own rendered position(s)" in the general case rather than repeating the union of leaf types by hand. A node's own `frames` entries record wherever -- and on however many pages -- its rendered content actually landed, replacing DocumentPackage's old two-tree design of correlating a wholly separate LayoutDocument's own positioned items back to their originating ContentDocument node purely by matching sourcePath strings (see src/package.ts). A node with more than one frame appeared in more than one rendered position -- a paragraph's runs wrapping across a page boundary is the common case -- without the content itself needing to be split or duplicated. `frames` is absent on a content-only value that has never been through a layout pass, exactly mirroring how DocumentPackage.layout used to be absent for the same reason.
+export type FusedNode<T> = T & { frames?: LayoutFrame[] };
 
 export const ContentRunSchema = z.object({
   text: z.string(),
@@ -22,6 +25,7 @@ export const ContentRunSchema = z.object({
   color: ColorSchema.optional(),
   hyperlink: z.string().optional(), // resolved external URI
   sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
+  frames: z.array(LayoutFrameSchema).optional(), // this run's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
 });
 export type ContentRun = z.infer<typeof ContentRunSchema>;
 
@@ -34,7 +38,8 @@ export type ContentListMembership = z.infer<typeof ContentListMembershipSchema>;
 export const ContentParagraphSchema = z.object({
   kind: z.literal('paragraph'),
   runs: z.array(ContentRunSchema),
-  styleId: z.string().optional(), // w:pStyle/@w:val, e.g. 'Heading1'
+  styleId: z.string().optional(), // w:pStyle/@w:val, e.g. 'Heading1' -- round-trip-only: a producer's own style name, meaningful only to a consumer that already knows that producer's naming convention
+  headingLevel: z.number().int().positive().optional(), // canonical, format-agnostic heading depth (1 = the outermost heading), independent of styleId's own producer-specific spelling -- e.g. docx's w:outlineLvl (0-based, so read as level + 1), odf's text:outline-level (already 1-based), markdown's '#' count. Deliberately unbounded here (ODF alone permits ten levels): a format whose own vocabulary tops out lower than what's present (six for HTML/Markdown) clamps on its own way out, via clampHeadingLevel below, rather than this canonical field silently losing information a richer source format actually carried.
   alignment: AlignmentSchema.optional(),
   list: ContentListMembershipSchema.optional(),
   spacingBeforePt: z.number().optional(),
@@ -43,8 +48,14 @@ export const ContentParagraphSchema = z.object({
   indentLeftPt: z.number().optional(),
   indentFirstLinePt: z.number().optional(),
   sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
+  frames: z.array(LayoutFrameSchema).optional(), // this paragraph's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
 });
 export type ContentParagraph = z.infer<typeof ContentParagraphSchema>;
+
+// Clamps an arbitrary heading level to the 1-6 range every consumer whose own heading vocabulary tops out at six shares -- HTML/Markdown's h1-h6, docx's built-in Heading1-Heading6 style set. Exported so a writer targeting one of those (markdown-codec's own private clamp-to-6 logic on write is the motivating case) can share this exact clamp instead of reimplementing it. Deliberately simple: rounds a fractional level to the nearest integer first (a level is conceptually a whole step of depth; a producer should never genuinely hand this a fraction, but rounding rather than truncating avoids silently favouring shallower headings if one ever does), then clamps into [1, 6].
+export function clampHeadingLevel(level: number): number {
+  return Math.min(6, Math.max(1, Math.round(level)));
+}
 
 export const ContentImageBlockSchema = z.object({
   kind: z.literal('image'),
@@ -54,12 +65,14 @@ export const ContentImageBlockSchema = z.object({
   heightPt: z.number().positive(),
   altText: z.string().optional(),
   sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
+  frames: z.array(LayoutFrameSchema).optional(), // this image's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
 });
 export type ContentImageBlock = z.infer<typeof ContentImageBlockSchema>;
 
 export const ContentPageBreakSchema = z.object({
   kind: z.literal('pageBreak'),
   sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
+  frames: z.array(LayoutFrameSchema).optional(), // where this page break actually landed, once a layout pass has fused one in -- see FusedNode above
 });
 export type ContentPageBreak = z.infer<typeof ContentPageBreakSchema>;
 
@@ -71,6 +84,7 @@ export interface ContentTableCell {
   background?: Color;
   borders?: ContentCellBorders;
   sourcePath?: string;
+  frames?: LayoutFrame[]; // this cell's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
 }
 
 export interface ContentTableRow {
@@ -84,6 +98,7 @@ export interface ContentTable {
   rows: ContentTableRow[];
   columnWidthsPt: number[];
   sourcePath?: string; // deterministic, document-order-derived path assigned by the format reader
+  frames?: LayoutFrame[]; // this table's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
 }
 
 // ContentEmbeddedObject is mutually recursive with ContentDocument (an embedded object carries a whole ContentDocument, which can itself contain another embedded object -- e.g. a formula embedded inside a drawing embedded inside a spreadsheet) -- hand-written, mirroring ContentTable/ContentBlock's own recursive-guard-plus-z.custom pattern immediately below, since z.lazy() collapses to `unknown` for recursive children in this pinned Zod version. Every objectKind names an embedded whole sub-document of the identically-named ContentDocument kind, 'formula' included now that ContentDocument has a real 'formula' variant of its own (below) -- so an embedded equation carries genuine MathML rather than, as before, a wordprocessing document standing in for one. That pairing is a producer convention, not a constraint this schema enforces: objectKind and document.kind are independently typed, and nothing here rejects a mismatched pair. A 'formula' object is expected to be short enough that a layout engine can reasonably lay it out and render it; the other four are expected to round-trip through this model losslessly without ever being laid out or rendered. This package holds schemas only, so no rendering/layout logic lives here regardless of objectKind.
@@ -104,6 +119,7 @@ export interface ContentEmbeddedObject {
 export interface ContentEmbeddedObjectBlock extends ContentEmbeddedObject {
   kind: 'embeddedObject';
   sourcePath?: string; // deterministic, document-order-derived path assigned by the format reader
+  frames?: LayoutFrame[]; // this embedded object's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
 }
 
 export type ContentBlock = ContentParagraph | ContentTable | ContentImageBlock | ContentPageBreak | ContentEmbeddedObjectBlock;
@@ -229,6 +245,7 @@ export const ContentTableCellSchema = z.object({
   background: ColorSchema.optional(),
   borders: ContentCellBordersSchema.optional(),
   sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
+  frames: z.array(LayoutFrameSchema).optional(), // this cell's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
 });
 
 export const ContentTableRowSchema = z.object({
@@ -241,6 +258,7 @@ export const ContentTableSchema = z.object({
   rows: z.array(ContentTableRowSchema),
   columnWidthsPt: z.array(z.number().positive()),
   sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
+  frames: z.array(LayoutFrameSchema).optional(), // this table's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
 });
 
 // A docx section: a run of pages sharing one page size/margins (a w:sectPr boundary starts a new one).
@@ -264,6 +282,7 @@ export const ContentShapeSchema = z.object({
   lineSpacingReduction: z.number().nonnegative().optional(),
   paintOrder: z.number().optional(),
   sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
+  frames: z.array(LayoutFrameSchema).optional(), // this shape's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
   blocks: z.array(ContentBlockSchema),
 });
 export type ContentShape = z.infer<typeof ContentShapeSchema>;
@@ -313,6 +332,7 @@ export const ContentSheetCellSchema = z.object({
   alignment: AlignmentSchema.optional(), // override; absent means the existing value-kind default
   verticalAlignment: z.enum(['top', 'middle', 'bottom']).optional(), // absent means 'bottom'
   sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
+  frames: z.array(LayoutFrameSchema).optional(), // this cell's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
 });
 export type ContentSheetCell = z.infer<typeof ContentSheetCellSchema>;
 
@@ -427,6 +447,7 @@ export const ContentVectorSchema = z.discriminatedUnion('kind', [
     stroke: ContentStrokeSchema.optional(),
     paintOrder: z.number().optional(),
     sourcePath: z.string().optional(),
+    frames: z.array(LayoutFrameSchema).optional(), // this vector's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
   }),
   z.object({
     kind: z.literal('ellipse'),
@@ -436,6 +457,7 @@ export const ContentVectorSchema = z.discriminatedUnion('kind', [
     stroke: ContentStrokeSchema.optional(),
     paintOrder: z.number().optional(),
     sourcePath: z.string().optional(),
+    frames: z.array(LayoutFrameSchema).optional(),
   }),
   z.object({
     kind: z.literal('line'),
@@ -444,6 +466,7 @@ export const ContentVectorSchema = z.discriminatedUnion('kind', [
     stroke: ContentStrokeSchema,
     paintOrder: z.number().optional(),
     sourcePath: z.string().optional(),
+    frames: z.array(LayoutFrameSchema).optional(),
   }),
   z.object({
     kind: z.literal('path'),
@@ -455,6 +478,7 @@ export const ContentVectorSchema = z.discriminatedUnion('kind', [
     stroke: ContentStrokeSchema.optional(),
     paintOrder: z.number().optional(),
     sourcePath: z.string().optional(),
+    frames: z.array(LayoutFrameSchema).optional(),
   }),
 ]);
 export type ContentVector = z.infer<typeof ContentVectorSchema>;
@@ -476,8 +500,8 @@ export const ContentFormulaSchema = z.object({
 });
 export type ContentFormula = z.infer<typeof ContentFormulaSchema>;
 
-// Bumped whenever ContentDocumentSchema's shape changes incompatibly. 2 added the 'formula' variant below, renamed ContentSheetPrintSettings.scale to scalePercent, made ContentSheetColumn.widthPt/ContentSheetRow.heightPt optional-positive rather than required-nonnegative, and added the 'dateTime' ContentCellValue kind.
-export const CONTENT_FORMAT_VERSION = 2;
+// Bumped whenever ContentDocumentSchema's shape changes incompatibly. 2 added the 'formula' variant below, renamed ContentSheetPrintSettings.scale to scalePercent, made ContentSheetColumn.widthPt/ContentSheetRow.heightPt optional-positive rather than required-nonnegative, and added the 'dateTime' ContentCellValue kind. 3 added the canonical, format-agnostic `headingLevel` field to ContentParagraphSchema (alongside the existing round-trip-only `styleId`), and fused DocumentPackage's own layout half directly onto the content tree: every content-kind leaf that previously carried only a `sourcePath` correlation string (ContentRun, ContentParagraph, ContentImageBlock, ContentPageBreak, ContentTable, ContentTableCell, ContentEmbeddedObjectBlock, ContentShape, every ContentVector variant, ContentSheetCell) now additionally carries an optional `frames: LayoutFrame[]` field of its own rendered page position(s) -- see FusedNode above and DOCUMENT_PACKAGE_FORMAT_VERSION in package.ts, bumped in step.
+export const CONTENT_FORMAT_VERSION = 3;
 
 export const ContentDocumentSchema = z.discriminatedUnion('kind', [
   z.object({

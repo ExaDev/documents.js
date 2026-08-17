@@ -71,7 +71,7 @@ function documentPackage(): DocumentPackage {
   return {
     formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION,
     content: wordprocessingDocument(),
-    layout: layoutDocument(),
+    pages: [{ widthPt: 612, heightPt: 792 }],
   };
 }
 
