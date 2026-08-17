@@ -52,7 +52,7 @@ describe('from_package', () => {
     const editor = createDocx();
     editor.body.appendParagraph().appendRun({ text: PARAGRAPH_TEXT });
 
-    // docxToPdf's own onDocument hands back the exact DocumentPackage (content + layout) a real docx-to-pdf conversion built internally -- the same value document-cli's --dump-package writes to disk, reused here rather than hand-built, since a hand-built DocumentPackage would need to fabricate a plausible LayoutDocument from scratch.
+    // docxToPdf's own onDocument hands back the exact DocumentPackage (content + pages, with per-node frames) a real docx-to-pdf conversion built internally -- the same value document-cli's --dump-package writes to disk, reused here rather than hand-built, since a hand-built DocumentPackage would need to fabricate a plausible frame set from scratch.
     let capturedPackage: DocumentPackage | undefined;
     docxToPdf(editor.toBytes(), {
       onDocument: (pkg) => {
@@ -165,6 +165,46 @@ describe('from_package', () => {
     expect(result.isError).toBe(true);
     const [block] = result.content;
     expect(block?.type === 'text' ? block.text : undefined).toContain('no recognised $schema');
+  });
+
+  it('rejects a pre-documents.js-2.0.0 package dump with an error naming the shape change', async () => {
+    // Hand-built rather than captured: documents.js 2.0.0's own conversions can no longer produce this shape (formatVersion 1, a 'layout' half beside 'content'), and rejection keys on the $schema + formatVersion/layout signals alone, before any content is validated. The $schema URI is the 2.7.17-era one a real old dump carries -- documentFromJson recognises document-package URIs from any document-schema.js release, so this dump reaches DocumentPackageSchema.parse and dies there on formatVersion.
+    const legacyPath = join(workspace, 'legacy.package.json');
+    await writeFile(
+      legacyPath,
+      JSON.stringify({
+        $schema: 'https://cdn.jsdelivr.net/npm/document-schema.js@2.7.17/schemas/document-package.schema.json',
+        formatVersion: 1,
+        content: { kind: 'wordprocessing', formatVersion: 2, metadata: {}, sections: [] },
+        layout: { formatVersion: 1, pages: [] },
+      }),
+    );
+
+    const result = await pair.client.callTool({ name: 'from_package', arguments: { source: { path: legacyPath }, targetFormat: 'docx' } });
+
+    expect(result.isError).toBe(true);
+    const [block] = result.content;
+    const text = block?.type === 'text' ? block.text : undefined;
+    expect(text).toContain('old formatVersion 1');
+    expect(text).toContain('regenerate the dump');
+  });
+
+  it('also rejects a legacy dump whose formatVersion is missing but which still carries the layout half', async () => {
+    const legacyPath = join(workspace, 'legacy-no-version.package.json');
+    await writeFile(
+      legacyPath,
+      JSON.stringify({
+        $schema: 'https://cdn.jsdelivr.net/npm/document-schema.js@2.7.17/schemas/document-package.schema.json',
+        content: { kind: 'wordprocessing', formatVersion: 2, metadata: {}, sections: [] },
+        layout: { formatVersion: 1, pages: [] },
+      }),
+    );
+
+    const result = await pair.client.callTool({ name: 'from_package', arguments: { source: { path: legacyPath }, targetFormat: 'docx' } });
+
+    expect(result.isError).toBe(true);
+    const [block] = result.content;
+    expect(block?.type === 'text' ? block.text : undefined).toContain('old formatVersion 1');
   });
 
   it('rejects source text that is not valid JSON', async () => {
