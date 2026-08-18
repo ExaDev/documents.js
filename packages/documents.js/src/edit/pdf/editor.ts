@@ -1,7 +1,6 @@
-import type { LayoutDocument, LayoutMetadata } from 'document-schema.js';
-import { LAYOUT_FORMAT_VERSION } from 'document-schema.js';
-import type { ReadPdfOptions, WritePdfOptions } from 'pdf-codec';
-import { readPdf, writePdf } from 'pdf-codec';
+import type { LayoutMetadata } from 'document-schema.js';
+import type { LayoutDocument, ReadPdfOptions, WritePdfOptions } from 'pdf-codec';
+import { LAYOUT_FORMAT_VERSION, readPdf, writePdf } from 'pdf-codec';
 import { resolveMetadataTimestamps } from '../../model/metadata';
 import type { ClockPort } from '../../ports/clock';
 import { systemClock } from '../../ports/clock';

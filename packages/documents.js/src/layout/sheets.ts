@@ -9,13 +9,6 @@ import type {
   ContentSheetImage,
   ContentSheetPrintRange,
   ContentSheetPrintSettings,
-  LayoutDocument,
-  LayoutImage,
-  LayoutImageAsset,
-  LayoutItem,
-  LayoutLine,
-  LayoutPage,
-  LayoutText,
   PageSize,
 } from 'document-schema.js';
 import { columnIndexToLetters } from 'document-schema.js';
@@ -29,6 +22,7 @@ import { throwIfAborted } from '../ports/abort';
 import type { MathFontMetrics, PositionedFormula, StyledFragment, StyledRun, TextMeasurer } from 'document-schema.js';
 import { wrapRunsToWidth } from './text-layout';
 import { alignmentOffsetPt, formulaSizePtForFrame, justifyLineGapsPt, lineNaturalHeightPt, layoutDocumentOf, packagePagesOf, pushCellBorderLines, registerImage, stampFragmentFrame, stampFrame, sumColumnWidthsPt, toStyledRuns } from './shared';
+import type { LayoutDocument, LayoutImage, LayoutImageAsset, LayoutItem, LayoutLine, LayoutPage, LayoutText } from 'pdf-codec';
 
 // ContentDocument (the spreadsheet variant) -> LayoutDocument: ods/xlsx's own layout direction, genuinely distinct from both docx's flow/pagination (engine.ts) and pptx's direct placement (slides.ts). A sheet paginates over TWO axes at once (column bands x row bands, not just rows), print settings (range/scale/fit-to-page/repeat rows-columns/gridlines/headers/page order/manual breaks) drive the page grid directly rather than being ignored the way a docx section's margins alone would be, and cell overflow is bounded per cell (###, spill, truncate) rather than wrapped the way paragraph text is. This is also the first layout algorithm in the package genuinely long-running enough (a real sheet can carry tens of thousands of populated cells) to need cooperative cancellation wired into its own per-cell emission loop, not just checked once at the top of the function the way reconstruct.ts's own page/slide loops do.
 //

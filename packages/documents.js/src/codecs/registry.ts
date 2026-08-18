@@ -1,6 +1,7 @@
-import type { ContentCodec, LayoutCodec } from 'document-schema.js';
+import type { ContentCodec } from 'document-schema.js';
 import { buildXlsxPackage, readXlsxContent } from 'ooxml.js';
 import { readPdf, writePdf } from 'pdf-codec';
+import type { LayoutDocument } from 'pdf-codec';
 import type { DocumentFormat } from '../convert/port';
 import { buildDocxPackage } from '../edit/docx/content';
 import { buildOdgPackage } from '../edit/odg/content';
@@ -40,16 +41,22 @@ export function requireArrayBufferBytes(bytes: Uint8Array): Uint8Array<ArrayBuff
   return bytes;
 }
 
-// The one option every registry entry's read/write genuinely needs to know about -- an AbortSignal -- plus an optional MarkdownImageResolver consulted only by the markdown content codec's read (every other codec ignores it). Matches the shape every one of this registry's own callers (readDocumentMetadata, setDocumentMetadata) already threads through this exact call path, so parameterizing ContentCodec/LayoutCodec with this concrete type (rather than the default `unknown`) lets a caller forward its own signal straight through without a cast at either end.
+// The one option every registry entry's read/write genuinely needs to know about -- an AbortSignal -- plus an optional MarkdownImageResolver consulted only by the markdown content codec's read (every other codec ignores it). Matches the shape every one of this registry's own callers (readDocumentMetadata, setDocumentMetadata) already threads through this exact call path, so parameterizing ContentCodec (and the local LayoutEntryCodec) with this concrete type (rather than the default `unknown`) lets a caller forward its own signal straight through without a cast at either end.
 export interface DocumentCodecOptions {
   readonly signal?: AbortSignal;
   readonly images?: MarkdownImageResolver;
 }
 
+// The layout half of a registry entry, stated here as a plain structural type: document-schema.js's LayoutCodec port retired with the LayoutDocument demotion (the item family moved to pdf-codec at schema 4.0.0, and the schema no longer knows the type a layout codec would carry), so the registry names the two-function shape itself over pdf-codec's own LayoutDocument -- the same shape the retired port gave it, one owner over.
+export interface LayoutEntryCodec {
+  read(bytes: Uint8Array, options?: DocumentCodecOptions): LayoutDocument;
+  write(layout: LayoutDocument, options?: DocumentCodecOptions): Uint8Array;
+}
+
 // Every DocumentFormat's own capability, expressed as data rather than as three independent switch statements re-deriving the same "given a format, which read/build function do I call" dispatch. A format's `content` entry wraps the identical readXContent/buildXPackage pair every ergonomic conversion in this package already uses for it (via decodeDocumentPackage/encodeDocumentPackage for the raw-package half); a format's `layout` entry wraps a LayoutDocument codec (pdf only, so far). Cancellation policy is preserved per format exactly as it was before this registry existed: docx/pptx/odt/odp/ods/odg/odf have no loop of their own to hook a signal into, so their own `read` checks it once via throwIfAborted before decoding; markdown/pdf do have one, so their own `read`/`write` forward the signal straight into the underlying reader/writer instead of checking it separately.
 export interface DocumentFormatCodecs {
   readonly content?: ContentCodec<DocumentCodecOptions>;
-  readonly layout?: LayoutCodec<DocumentCodecOptions>;
+  readonly layout?: LayoutEntryCodec;
 }
 
 // xlsx now has a real content codec too, wrapping ooxml.js's own readXlsxContent/buildXlsxPackage exactly the way every other OPC/ODF format's entry wraps its own readXContent/buildXPackage pair. This does not contradict the README's Architecture-section statement that documents.js does not re-export readXlsxContent/buildXlsxPackage as public API: that statement is about src/index.ts's own export surface (still true -- neither name is exported from there), not about whether this internal registry may call them. Wrapping them here, behind the same DocumentFormatCodecs shape every other format already uses, is what lets readDocumentMetadata/setDocumentMetadata/buildDocumentBytes treat xlsx uniformly with the rest of DocumentFormat rather than special-casing it -- see each of those modules' own comments for exactly which xlsx special-cases this closed. odf (a standalone formula document) has a content.read but no content.write: odf.js has no write path for a formula document at all, so `write` is left unset rather than stubbed.
