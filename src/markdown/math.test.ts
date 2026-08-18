@@ -4,6 +4,7 @@ import { lintMathCoherence } from '../latex/lint';
 import { buildMarkdownText } from './write';
 import { lowerMarkdownMath } from './math';
 import { readMarkdownContent } from './read';
+import { assemblePackage } from '../convert/factor-styles';
 
 // The markdown math-lowering pass end to end: markdown-codec's preserved raw LaTeX ($$ display blocks, \( \) inline spans) becomes the two-layer ContentFormula every format in this family shares, the document's own prose seeds the symbol table, and the write side reconstructs the same markdown math syntax from the presentation layer. These tests pin the whole pipeline the issue describes -- "parse at the format edge, lower at the model level, so every input format that can carry LaTeX benefits from one lowering implementation".
 
@@ -152,7 +153,7 @@ describe('buildMarkdownText math reconstruction', () => {
     expect(text).toContain('$$\n2x\n$$');
     // The re-read document lowers the identical presentation strings again -- the two-layer model round-trips through markdown without touching the semantic layer.
     const reread = readMarkdownContent(text);
-    expect(lintMathCoherence({ formatVersion: 2, content: reread })).toEqual([]);
+    expect(lintMathCoherence(assemblePackage(reread))).toEqual([]);
   });
 
   it('a formula with no presentation layer still flattens to its plain-text stand-in', () => {

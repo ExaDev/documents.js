@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
+
 import type { ContentDocument } from 'document-schema.js';
 import type { XmlElement } from 'ooxml.js';
 import { attr } from 'ooxml.js';
@@ -8,7 +8,6 @@ import { buildDocxPackage } from './content';
 function wordprocessingDocWithList(): ContentDocument {
   return {
     kind: 'wordprocessing',
-    formatVersion: CONTENT_FORMAT_VERSION,
     metadata: {},
     sections: [{
       pageSize: { widthPt: 612, heightPt: 792 },
@@ -100,7 +99,6 @@ describe('buildDocxPackage list numbering synthesis', () => {
   it('does NOT create a numbering part when the content has no list paragraphs (byte-identical to today)', () => {
     const doc: ContentDocument = {
       kind: 'wordprocessing',
-      formatVersion: CONTENT_FORMAT_VERSION,
       metadata: {},
       sections: [{
         pageSize: { widthPt: 612, heightPt: 792 },

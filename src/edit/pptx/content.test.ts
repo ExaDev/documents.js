@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
+
 import type { ContentDocument } from 'document-schema.js';
 import type { Package, XmlElement } from 'ooxml.js';
 import { attr, bytesToBase64, decodePackage, encodePackage, rootElement } from 'ooxml.js';
@@ -11,7 +11,7 @@ import { buildPptxPackage } from './content';
 import { PptxEditor } from './editor';
 
 function presentationDoc(slides: Extract<ContentDocument, { kind: 'presentation' }>['slides']): ContentDocument {
-  return { kind: 'presentation', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, slides };
+  return { kind: 'presentation', metadata: {}, slides };
 }
 
 function firstSlideRoot(pkg: Package): XmlElement {
@@ -27,7 +27,7 @@ const SLIDE_SIZE = { widthPt: 960, heightPt: 540 };
 
 describe('buildPptxPackage', () => {
   it('throws for a wordprocessing ContentDocument', () => {
-    expect(() => buildPptxPackage({ kind: 'wordprocessing', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, sections: [] })).toThrow(/presentation/);
+    expect(() => buildPptxPackage({ kind: 'wordprocessing', metadata: {}, sections: [] })).toThrow(/presentation/);
   });
 
   it('sets the deck-wide slide size from the first slide', () => {

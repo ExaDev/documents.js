@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ContentDocument } from 'document-schema.js';
-import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
+
 import { CsvInvalidUtf8Error, decodeCsvText, encodeCsvText } from './text';
 import { TSV_DELIMITER, parseCsvRecords } from './records';
 import { readCsvContent } from './read';
@@ -16,7 +16,6 @@ interface SheetFixture {
 function spreadsheetDocument(sheets: readonly SheetFixture[]): ContentDocument {
   return {
     kind: 'spreadsheet',
-    formatVersion: CONTENT_FORMAT_VERSION,
     metadata: {},
     sheets: sheets.map(({ name, rows }) => ({
       name,
@@ -144,7 +143,7 @@ describe('buildCsvText', () => {
   });
 
   it('throws CsvUnsupportedDocumentKindError for a non-spreadsheet ContentDocument', () => {
-    const wordprocessing: ContentDocument = { kind: 'wordprocessing', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, sections: [] };
+    const wordprocessing: ContentDocument = { kind: 'wordprocessing', metadata: {}, sections: [] };
     expect(() => buildCsvText(wordprocessing)).toThrow(CsvUnsupportedDocumentKindError);
   });
 
@@ -158,7 +157,6 @@ describe('buildCsvText', () => {
     // Row 1 populates only column 1; the dense grid writes column 0 as an empty field rather than collapsing the row.
     const document: ContentDocument = {
       kind: 'spreadsheet',
-      formatVersion: CONTENT_FORMAT_VERSION,
       metadata: {},
       sheets: [{
         name: 'Sparse',

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
+
 import type { ContentDocument } from 'document-schema.js';
 import type { XmlElement } from 'ooxml.js';
 import { attr, bytesToBase64, childrenWithTag, decodePackage, encodePackage, rootElement, textContent } from 'ooxml.js';
@@ -11,7 +11,7 @@ import { buildDocxPackage } from './content';
 import { DocxEditor } from './editor';
 
 function wordDoc(sections: Extract<ContentDocument, { kind: 'wordprocessing' }>['sections']): ContentDocument {
-  return { kind: 'wordprocessing', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, sections };
+  return { kind: 'wordprocessing', metadata: {}, sections };
 }
 
 function descendants(root: XmlElement, tag: string): XmlElement[] {
@@ -20,7 +20,7 @@ function descendants(root: XmlElement, tag: string): XmlElement[] {
 
 describe('buildDocxPackage', () => {
   it('throws for a presentation ContentDocument', () => {
-    expect(() => buildDocxPackage({ kind: 'presentation', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, slides: [] })).toThrow(/wordprocessing/);
+    expect(() => buildDocxPackage({ kind: 'presentation', metadata: {}, slides: [] })).toThrow(/wordprocessing/);
   });
 
   it('builds a paragraph with styled runs', () => {
@@ -81,7 +81,6 @@ describe('buildDocxPackage', () => {
   it('inserts a page break between sections', () => {
     const content: ContentDocument = {
       kind: 'wordprocessing',
-      formatVersion: CONTENT_FORMAT_VERSION,
       metadata: {},
       sections: [
         { pageSize: { widthPt: 612, heightPt: 792 }, margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 }, blocks: [{ kind: 'paragraph', runs: [{ text: 'Section one' }] }] },

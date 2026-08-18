@@ -1,4 +1,4 @@
-import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
+
 import { describe, expect, it } from 'vitest';
 import { minimalPptxPackage } from '../../test-support/pptx';
 import { readPptxContent } from './read';
@@ -9,7 +9,6 @@ describe('readPptxContent', () => {
   it('wraps readPptx into a presentation ContentDocument', () => {
     const doc = readPptxContent(minimalPptxPackage());
     expect(doc.kind).toBe('presentation');
-    expect(doc.formatVersion).toBe(CONTENT_FORMAT_VERSION);
   });
 
   it('passes slides through from readPptx unchanged, including slide size and shape text', () => {

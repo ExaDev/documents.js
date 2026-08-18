@@ -1,5 +1,5 @@
 import type { ContentDocument, ContentVector } from 'document-schema.js';
-import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
+
 import type { Package, XmlElement, XmlNode } from 'odf.js';
 import { findChildElement, readOdt, rootElement } from 'odf.js';
 import type { BlockPlacement } from '../../model/block-splice';
@@ -55,7 +55,7 @@ export function readOdtContent(pkg: Package): ContentDocument {
     }
   }
 
-  return { kind: 'wordprocessing', formatVersion: CONTENT_FORMAT_VERSION, metadata: { ...odtDoc.metadata }, sections: odtDoc.sections };
+  return { kind: 'wordprocessing', metadata: { ...odtDoc.metadata }, sections: odtDoc.sections };
 }
 
 // ---------------------------------------------------------------------------

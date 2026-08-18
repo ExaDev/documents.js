@@ -1,5 +1,5 @@
 import type { ContentBlock, ContentCellValue, ContentDocument, ContentParagraph, ContentSection, ContentTable } from 'document-schema.js';
-import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
+
 import type { OdbReport, OdbReportBand, OdbReportElement, OdbReportGroup } from 'odf.js';
 import { displayTextFor } from '../../hsqldb/script';
 import { PAGE_SIZE_A4 } from 'document-schema.js';
@@ -147,7 +147,6 @@ export function renderOdbReportContent(report: OdbReport, resultSet: SqlResultSe
 
   return {
     kind: 'wordprocessing',
-    formatVersion: CONTENT_FORMAT_VERSION,
     // office:caption is the report's own user-visible title; its db:component name is the identifier the .odb files it under, and stands in when the report carries no caption.
     metadata: { title: report.caption ?? report.name },
     sections: [section],

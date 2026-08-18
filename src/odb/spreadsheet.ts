@@ -1,5 +1,5 @@
 import type { ContentDocument, ContentSheet, ContentSheetCell, ContentSheetColumn, ContentSheetPrintSettings, ContentSheetRow } from 'document-schema.js';
-import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
+
 import type { HsqldbTable } from '../hsqldb/script';
 import { displayTextFor } from '../hsqldb/script';
 import { PAGE_SIZE_A4 } from 'document-schema.js';
@@ -41,5 +41,5 @@ function tableToSheet(table: HsqldbTable): ContentSheet {
 }
 
 export function odbTablesToSpreadsheetDocument(tables: readonly HsqldbTable[]): ContentDocument {
-  return { kind: 'spreadsheet', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, sheets: tables.map(tableToSheet) };
+  return { kind: 'spreadsheet', metadata: {}, sheets: tables.map(tableToSheet) };
 }

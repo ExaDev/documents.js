@@ -1,5 +1,5 @@
 import type { Box, ContentDocument, ContentEmbeddedObjectBlock, ContentFormula, LayoutMetadata } from 'document-schema.js';
-import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
+
 
 // A formula's real content lives INSIDE the ContentDocument, not alongside it. document-schema.js 2.0.0 models a genuine fifth 'formula' ContentDocument variant (`formula: ContentFormulaSchema`, carrying `{ mathml: MathMlNode[]; starMath?: string }`) and a fully-specified MathMlNode union of its own -- so a formula embedded in an odt paragraph or an odp slide is an ordinary ContentEmbeddedObjectBlock whose `document` genuinely holds the MathML, and a standalone .odf formula document is a top-level ContentDocument of that same kind.
 //
@@ -9,7 +9,7 @@ import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
 
 // The 'formula' ContentDocument envelope around one ContentFormula. `metadata` is meaningful only for a standalone .odf document (its own title/author belongs on the PDF that document produces); an embedded sub-object's own metadata is not meaningful at the embedding document's level and is left empty.
 export function formulaDocument(formula: ContentFormula, metadata: LayoutMetadata = {}): ContentDocument {
-  return { kind: 'formula', formatVersion: CONTENT_FORMAT_VERSION, metadata, formula };
+  return { kind: 'formula', metadata, formula };
 }
 
 // A formula embedded in a wordprocessing/presentation document, as the ordinary ContentEmbeddedObjectBlock it is. `frame` is the source draw:frame's own geometry (the layout engines pick a rendered size from its height); `sourcePath` traces the block back to its origin exactly as every other block's does.
