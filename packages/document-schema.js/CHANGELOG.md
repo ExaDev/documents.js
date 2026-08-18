@@ -1,3 +1,15 @@
+# [4.0.0](https://github.com/ExaDev/document-schema.js/compare/v3.3.0...v4.0.0) (2026-08-18)
+
+
+### Bug Fixes
+
+* reject wrapper keys outside node/style/children and style refs on bare package-tree leaves ([dc77740](https://github.com/ExaDev/document-schema.js/commit/dc77740d91e38699e02d6dfeadd70e2c1be3f4d3))
+
+
+### Features
+
+* pin the formula package arm to exactly one ContentFormula child ([4748c19](https://github.com/ExaDev/document-schema.js/commit/4748c195b16a2b2d2ef722bb9c2232e51e386d74))
+
 # [3.3.0](https://github.com/ExaDev/document-schema.js/compare/v3.2.0...v3.3.0) (2026-08-17)
 
 
