@@ -1,3 +1,16 @@
+# [3.0.0](https://github.com/ExaDev/ooxml.js/compare/v2.17.0...v3.0.0) (2026-08-18)
+
+
+* feat!: drop ContentDocument formatVersion for document-schema.js 4.0.0 ([ae81880](https://github.com/ExaDev/ooxml.js/commit/ae8188057ea6d9066c3ca53c3cd405698acaf164)), closes [ExaDev/document-schema.js#20](https://github.com/ExaDev/document-schema.js/issues/20)
+
+
+### BREAKING CHANGES
+
+* readXlsxContent's emitted ContentDocument no longer
+carries formatVersion and the CONTENT_FORMAT_VERSION barrel export is
+removed; dependents must move to document-schema.js ^4.0.0 in
+lockstep.
+
 # [2.17.0](https://github.com/ExaDev/ooxml.js/compare/v2.16.1...v2.17.0) (2026-08-17)
 
 
