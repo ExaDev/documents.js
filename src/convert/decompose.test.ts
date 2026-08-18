@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ContentBlock, ContentDocument, ContentEmbeddedObject, ContentFormula, ContentSection, ContentShape, ContentSheetCell, ContentSheetImage, ContentSheetPrintSettings, ContentVector, DocumentPackage, SheetGroupNode } from 'document-schema.js';
+import { isHeadingGroupNode, isListGroupNode, type ContentBlock, type ContentDocument, type ContentEmbeddedObject, type ContentFormula, type ContentSection, type ContentShape, type ContentSheetCell, type ContentSheetImage, type ContentSheetPrintSettings, type ContentVector, type DocumentPackage, type SectionConstructGroupNode, type SectionGroupNode, type ShapeConstructGroupNode, type ShapeGroupNode, type SheetGroupNode, type SlideGroupNode } from 'document-schema.js';
 import { decompose, decomposeSection, decomposeSheet, isHeadingParagraph } from './decompose';
 import { flattenPackage } from './flatten';
 
@@ -159,6 +159,22 @@ describe('spreadsheet decomposition', () => {
   });
 });
 
+// document-schema.js 4.1.0 added SectionConstructGroupNode/ShapeConstructGroupNode (docx SDTs, ODF fields, tracked changes, and the rest of document-schema.js#22's fidelity-construct vocabulary) to the tree. decompose.ts never manufactures one (grepping this package's src/ for ConstructDescriptor/SectionConstructGroupNode/ShapeConstructGroupNode returns nothing outside document-schema.js's own types), but a hand-built or third-party tree can carry one, and ContentBlock has no construct carrier to flatten it into (document-schema.js#22 tracks that separately) -- so flatten refuses loudly rather than silently dropping the construct's own semantic wrapper and keeping only its flattened children, the same "fail loudly, never silently skip" rule the sheet-group guard above follows.
+describe('construct group refusal', () => {
+  it('refuses a section construct group loudly -- ContentBlock has no construct carrier yet', () => {
+    const constructGroup: SectionConstructGroupNode = { node: { kind: 'field', instruction: 'PAGE' }, children: [paragraph('inside a field')] };
+    const sectionGroup: SectionGroupNode = { node: { kind: 'section', pageSize: SECTION_GEOMETRY.pageSize, margins: SECTION_GEOMETRY.margins }, children: [constructGroup] };
+    expect(() => flattenPackage({ kind: 'wordprocessing', metadata: {}, children: [sectionGroup] })).toThrow(/construct group/);
+  });
+
+  it('refuses a shape construct group loudly -- the identical gap, on the shape/list flow', () => {
+    const constructGroup: ShapeConstructGroupNode = { node: { kind: 'anchor', anchorType: 'bookmark', name: 'b1' }, children: [paragraph('inside a bookmark')] };
+    const shapeGroup: ShapeGroupNode = { node: { frame: { xPt: 0, yPt: 0, widthPt: 400, heightPt: 300 }, insetLeftPt: 0, insetTopPt: 0, insetRightPt: 0, insetBottomPt: 0 }, children: [constructGroup] };
+    const slideGroup: SlideGroupNode = { node: { kind: 'slide', size: { widthPt: 960, heightPt: 540 }, notes: '' }, children: [shapeGroup] };
+    expect(() => flattenPackage({ kind: 'presentation', metadata: {}, children: [slideGroup] })).toThrow(/construct group/);
+  });
+});
+
 describe('drawing and formula decomposition', () => {
   it('orders a draw page\'s children shapes-then-vectors and nests each shape\'s flow inside it', () => {
     const vector: ContentVector = { kind: 'rect', frame: { xPt: 1, yPt: 2, widthPt: 3, heightPt: 4 } };
@@ -190,7 +206,8 @@ describe('ownership', () => {
     const source: ContentSection = { ...SECTION_GEOMETRY, blocks: [heading, body] };
     const sectionGroup = decomposeSection(source);
     const [headingGroup] = sectionGroup.children;
-    if (headingGroup === undefined || !('node' in headingGroup) || !('children' in headingGroup)) {
+    // A plain 'node'/'children' presence check no longer narrows out every non-anchor shape: since document-schema.js 4.1.0, a SectionConstructGroupNode carries both too. isHeadingGroupNode/isListGroupNode are the real schema guards, so reaching for them here (rather than reinventing the anchor-vs-construct narrow this test doesn't need to know about) both fixes the narrowing and states the assertion's actual intent.
+    if (headingGroup === undefined || !(isHeadingGroupNode(headingGroup) || isListGroupNode(headingGroup))) {
       throw new Error('expected the heading paragraph to open the section flow');
     }
     expect(headingGroup.node).toBe(heading);
