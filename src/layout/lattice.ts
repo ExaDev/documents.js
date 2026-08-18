@@ -1,4 +1,5 @@
-import type { LayoutItem } from 'document-schema.js';
+import type { LayoutItem } from 'pdf-codec';
+
 
 // Gridline-lattice detection over a page's recovered geometry: the one place this package decides that a set of drawn strokes genuinely IS a printed grid rather than a scatter of unrelated rules. Lives in its own module because THREE reconstruction directions now share it -- reconstructSpreadsheet (where the lattice's own line positions become cell boundaries directly), and reconstructWordprocessing/reconstructPresentation (where an unambiguously detected lattice is the ONLY signal permitted to synthesize a ContentTable; see reconstruct.ts's own table-recovery note for why text alignment alone deliberately is not).
 //

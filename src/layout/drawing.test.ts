@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { ContentDocument, ContentDrawPage, ContentRun, ContentShape, ContentVector, LayoutItem, LayoutPath } from 'document-schema.js';
-import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
-import type { TextMeasurer } from 'pdf-codec';
+import type { ContentDocument, ContentDrawPage, ContentRun, ContentShape, ContentVector } from 'document-schema.js';
+
+import type { LayoutItem, LayoutPath, TextMeasurer } from 'pdf-codec';
 import { convertDrawingToLayout } from './drawing';
 import { reconstructDrawing } from './reconstruct';
 
@@ -42,7 +42,7 @@ function page(overrides: Partial<ContentDrawPage> = {}): ContentDrawPage {
 }
 
 function drawingDoc(pages: ContentDrawPage[]): Extract<ContentDocument, { kind: 'drawing' }> {
-  return { kind: 'drawing', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, pages };
+  return { kind: 'drawing', metadata: {}, pages };
 }
 
 function convert(pages: ContentDrawPage[]) {

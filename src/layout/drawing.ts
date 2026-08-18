@@ -1,10 +1,11 @@
-import type { Box, ContentDocument, ContentDrawPage, ContentPathPoint, ContentVector, LayoutDocument, LayoutImageAsset, LayoutItem, LayoutPage, LayoutPathSegment, LayoutSubpath, PageSize } from 'document-schema.js';
+import type { Box, ContentDocument, ContentDrawPage, ContentPathPoint, ContentVector, PageSize } from 'document-schema.js';
 import { flipY } from '../model/geometry';
 import { mergeByPaintOrder } from '../model/paint-order';
 import type { Point, TextMeasurer } from 'document-schema.js';
 import { rotatePointAboutCenter } from '../model/geometry';
 import { convertShape } from './slides';
 import { layoutDocumentOf, packagePagesOf, stampFrame } from './shared';
+import type { LayoutDocument, LayoutImageAsset, LayoutItem, LayoutPage, LayoutPathSegment, LayoutSubpath } from 'pdf-codec';
 
 export interface DrawingLayoutResult {
   readonly document: LayoutDocument;

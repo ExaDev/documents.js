@@ -1,8 +1,8 @@
 import { bytesToBase64 } from 'ooxml.js';
 import { describe, expect, it } from 'vitest';
-import type { ContentDocument, ContentImageBlock, ContentParagraph, ContentRun, ContentShape, ContentSlide, ContentTable, LayoutImage, LayoutItem, LayoutLink, LayoutRect, LayoutText } from 'document-schema.js';
-import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
-import type { TextMeasurer } from 'pdf-codec';
+import type { ContentDocument, ContentImageBlock, ContentParagraph, ContentRun, ContentShape, ContentSlide, ContentTable } from 'document-schema.js';
+
+import type { LayoutImage, LayoutItem, LayoutLink, LayoutRect, LayoutText, TextMeasurer } from 'pdf-codec';
 import { encodePng } from 'byte-codec';
 import { loadMathFont } from 'pdf-codec';
 const mathMetricsAt = (sizePt: number) => loadMathFont().metricsAt(sizePt);
@@ -48,7 +48,7 @@ function slide(shapes: ContentShape[], size = { widthPt: 960, heightPt: 540 }): 
 }
 
 function presentationDoc(slides: ContentSlide[]): Extract<ContentDocument, { kind: 'presentation' }> {
-  return { kind: 'presentation', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, slides };
+  return { kind: 'presentation', metadata: {}, slides };
 }
 
 function convert(slides: ContentSlide[]) {
