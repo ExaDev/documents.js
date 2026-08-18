@@ -94,9 +94,11 @@ export function assemblePackage(content: ContentDocument, pages?: readonly PageS
   }
 }
 
-// Re-factors an already-assembled package. The input is flattened first (materialising its refs), so this both re-mints a minted package to the identical table (law iii) and factors any hand-built or round-tripped tree a caller hands in. `pages` rides the input through untouched.
+// Re-factors an already-assembled package. The input is flattened first (materialising its refs), so this both re-mints a minted package to the identical table (law iii) and factors any hand-built or round-tripped tree a caller hands in. `pages` and `definitions` ride the input through: neither has a spelling on the flat ContentDocument, so the flatten step cannot carry them and the reassembled tree would otherwise drop them silently. Minting never reads `definitions` -- the table is per-document caller data, not style content the pass has any business rewriting.
 export function factorStyles(pkg: DocumentPackage): DocumentPackage {
-  return assemblePackage(flattenPackage(pkg), pkg.pages);
+  const reassembled = assemblePackage(flattenPackage(pkg), pkg.pages);
+  if (pkg.definitions === undefined) return reassembled;
+  return { ...reassembled, definitions: pkg.definitions };
 }
 
 // --- The plan: extents, candidates, selection -----------------------------------------------------------
