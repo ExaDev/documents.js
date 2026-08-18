@@ -107,7 +107,6 @@ export type {
   ContentVector,
 } from 'document-schema.js';
 export {
-  CONTENT_FORMAT_VERSION,
   ContentBlockSchema,
   ContentCellValueSchema,
   ContentDocumentSchema,
@@ -137,18 +136,18 @@ export {
   isContentBlock,
 } from 'document-schema.js';
 
-// --- The PDF-side pivot model, also sourced from document-schema.js. ---
-export type { LayoutDocument, LayoutEllipse, LayoutImage, LayoutImageAsset, LayoutItem, LayoutLine, LayoutLink, LayoutMetadata, LayoutPage, LayoutPath, LayoutPathSegment, LayoutRect, LayoutSubpath, LayoutText } from 'document-schema.js';
-export { LAYOUT_FORMAT_VERSION } from 'document-schema.js';
+// --- The PDF-side pivot model. The Layout* item family moved to pdf-codec at document-schema.js 4.0.0 (the demotion: a LayoutDocument is the pdf codec's own read/write artefact, not a shared pivot), so the item types and LAYOUT_FORMAT_VERSION re-export from pdf-codec here, while LayoutMetadata/LayoutFont/LayoutFrame -- the members the content model itself references -- stay re-exported from the schema with the shared primitives below. ---
+export type { LayoutDocument, LayoutEllipse, LayoutImage, LayoutImageAsset, LayoutItem, LayoutLine, LayoutLink, LayoutPage, LayoutPath, LayoutPathSegment, LayoutRect, LayoutSubpath, LayoutText } from 'pdf-codec';
+export { LAYOUT_FORMAT_VERSION, LayoutDocumentSchema } from 'pdf-codec';
+export type { LayoutMetadata } from 'document-schema.js';
 
-// --- document-schema.js's own DocumentPackage type/schema (the envelope pairing a ContentDocument with a LayoutDocument) and its self-describing-JSON helpers. contentDocumentWithSchema / documentSchemaKindOf / documentFromJson's ContentDocument branch / ContentDocumentJson all operate on the identical ContentDocument type exported above. ---
+// --- document-schema.js's own tree-form DocumentPackage (structure, layout, and content fused in one tree since 4.0.0) and its self-describing-JSON helpers. contentDocumentWithSchema / documentSchemaKindOf / documentFromJson's ContentDocument branch / ContentDocumentJson all operate on the identical ContentDocument type exported above. The package's own layoutDocumentWithSchema/LayoutDocumentJson exports retired with the demotion: a LayoutDocument has no schema-stamped JSON envelope any more, it is a pdf-codec value. ---
 export type {
   ContentDocumentJson,
   DocumentJsonResult,
   DocumentPackage,
   DocumentPackageJson,
   DocumentSchemaKind,
-  LayoutDocumentJson,
 } from 'document-schema.js';
 export {
   contentDocumentWithSchema,
@@ -156,8 +155,6 @@ export {
   documentPackageWithSchema,
   DocumentPackageSchema,
   documentSchemaKindOf,
-  layoutDocumentWithSchema,
-  LayoutDocumentSchema,
   schemaUriFor,
   UnrecognizedDocumentSchemaError,
 } from 'document-schema.js';
@@ -482,6 +479,11 @@ export type { UnifiedConversionOptions, ConversionPlan, CompositionHop } from '.
 
 // --- A DocumentPackage (content + its fused positions) -> any DocumentFormat's own bytes -- the reverse of what every ergonomic X-to-PDF/PDF-to-X conversion's own onDocument callback hands back -- plus the frames-to-layout inverse the pdf target rebuilds through (exported for a caller wanting the pdf-codec view of a package's positions without writing bytes). ---
 export { buildDocumentBytes, layoutDocumentFromPackage } from './convert/from-package';
+// The package boundary itself (the tree <-> flat pair and the styles minting pass that runs at every DocumentPackage construction site): assemblePackage is the one helper behind every conversion's onDocument payload -- decompose then factorStyles -- while decompose/flattenPackage are the two directions exposed for a caller composing its own boundary, and factorStyles re-mints an already-assembled tree to the identical styles table (minting is idempotent). Together they satisfy the three laws stated on ExaDev/document-schema.js#20: strict structural round-trip both directions for a styles-free package, effective-property equality universally (flattenPackage materialises refs away), and minting idempotence.
+export { assemblePackage, factorStyles } from './convert/factor-styles';
+export { decompose } from './convert/decompose';
+export type { PackageChildren } from './convert/decompose';
+export { flattenPackage } from './convert/flatten';
 
 // --- Raw package decode/encode, dispatched by DocumentFormat -- the format-aware counterpart to ooxml.js's/odf.js's own decodePackage/encodePackage, for a caller holding a format + bytes rather than already knowing which of the two underlying codecs applies. Covers docx/pptx/xlsx (ooxml.js's OPC container) and odt/odp/ods/odg/odf (odf.js's ODF container); markdown, csv, svg, and pdf have no raw-package concept at all and throw UnsupportedPackageFormatError. decodeOdbPackage is the .odb-specific sibling: 'odb' is deliberately not a DocumentFormat member (see src/odb/'s own Architecture/Gotchas entries), but its bytes are an ordinary ODF package decoded by the identical odf.js decodePackage every readOdb*/odbTo* function in this package already starts from -- there is no encodeOdbPackage, since nothing here ever writes a new .odb file. ---
 export { decodeDocumentPackage, decodeOdbPackage, encodeDocumentPackage, UnsupportedPackageFormatError } from './package-codec';

@@ -2,11 +2,12 @@
 //
 // odf (a standalone formula document) and odm (an ODF master document) are deliberately NOT part of this engine: odfToPdf renders through src/mathml's own formula-positioning path rather than a ContentDocument -> LayoutDocument layout engine, and odmToPdf needs a caller-supplied resolveSubDocument callback that a fixed bytes-in/bytes-out contract cannot express. Both stay as the dedicated functions in convert.ts.
 
-import { DOCUMENT_PACKAGE_FORMAT_VERSION, type ContentDocument, type DocumentPackage, type FontSubstitution, type LayoutDocument, type MathFontMetrics, type PageSize, type PositionedFormula, type ProvidedFont } from 'document-schema.js';
+import { type ContentDocument, type DocumentPackage, type FontSubstitution, type MathFontMetrics, type PageSize, type PositionedFormula, type ProvidedFont } from 'document-schema.js';
 import { buildXlsxPackage, decodePackage as decodeOoxmlPackage, encodePackage as encodeOoxmlPackage, readXlsxContent, type Package as OoxmlPackage } from 'ooxml.js';
 import { decodePackage as decodeOdfPackage, encodePackage as encodeOdfPackage } from 'odf.js';
 import { createFontMeasurer, createFontRegistry, loadMathFont, readPdf, writePdf, type FontRegistry, type PdfDiagnosticSink, type WinAnsiSubstitution } from 'pdf-codec';
 import { type MarkdownImageResolver } from 'markdown-codec';
+import { assemblePackage } from './factor-styles';
 
 import { buildDocxPackage } from '../edit/docx/content';
 import { buildOdgPackage } from '../edit/odg/content';
@@ -44,6 +45,7 @@ import { createDocumentFontRegistry, type FontSourcePackage } from '../fonts/reg
 import { drawingToPresentation, presentationToDrawing, presentationToWordprocessing, wordprocessingToPresentation } from './variant-bridges';
 import { type ContentVariant, UnsupportedConversionError } from './capability';
 import { type DocumentFormat } from './port';
+import type { LayoutDocument } from 'pdf-codec';
 
 // ooxml.js's and odf.js's Package types are structurally identical (src/interop.test.ts is the standing type-level proof, mutually assignable in both directions), so a single canonical alias covers both: every package-format read/build/encode/decode closure below flows an ooxml.js Package through odf.js primitives (and vice versa) without a cast at the boundary. This is the identical structural-typing bet createDocumentFontRegistry's own FontSourcePackage union already rests on.
 type SourcePackage = OoxmlPackage;
@@ -284,15 +286,18 @@ function executeBridge(source: ContentFormat, target: ContentFormat, bytes: Uint
   }
 
   throwIfAborted(options?.signal);
-  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content: buildContent });
 
-  // Build + encode the target. A bridge never runs a layout engine, so the reported DocumentPackage carries content only, with no pages array and no node frames -- the identical layoutless shape convert.ts's own bridges report.
+  // Build + encode the target first, then report the package: onDocument fires after the output bytes exist (the ownership rule every construction site follows -- a callback that inspects the tree cannot observe a half-built conversion; this executor historically fired before the build and was reordered with the tree promotion). A bridge never runs a layout engine, so the reported DocumentPackage is content-only -- assemblePackage decomposes it into its tree with no pages array and no node frames, the identical layoutless shape convert.ts's own bridges report.
+  let out: Uint8Array<ArrayBuffer>;
   if (isTextFormatNode(targetNode)) {
     const text = targetNode.build(buildContent, options);
-    return targetNode.encode(text);
+    out = targetNode.encode(text);
+  } else {
+    const pkg = targetNode.build(buildContent, options);
+    out = targetNode.encode(pkg);
   }
-  const pkg = targetNode.build(buildContent, options);
-  return targetNode.encode(pkg);
+  options?.onDocument?.(assemblePackage(buildContent));
+  return out;
 }
 
 // decode(source) -> [extract source fonts] -> build font registry -> read(source) -> resolve metadata -> layout engine by variant -> writePdf, reproducing the exact sequence and option-threading of convert.ts's *ToPdf functions (docxToPdf/odtToPdf/odpToPdf/odsToPdf/odgToPdf/markdownToPdf). The font registry is built from the source package's own embedded faces for package formats (createDocumentFontRegistry) and from caller-supplied faces alone for markdown (createFontRegistry), matching markdownToPdf's own documented divergence. The drawing engine takes no mathMetricsAt and produces no positioned formulas, so writePdf is called without `formulas` for that variant -- byte-identical to odgToPdf. markdownToPdf's leading throwIfAborted (decodeMarkdownText has no abort hook of its own) is reproduced; the package paths match docxToPdf/odtToPdf by not checking abort until writePdf's own loops do.
@@ -356,12 +361,15 @@ function executeToPdf(format: ContentFormat, bytes: Uint8Array<ArrayBuffer>, opt
     }
   }
 
-  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content, pages: [...pages] });
-
+  // The output bytes are built first and the package reported after them (the ownership rule every construction site follows), with assemblePackage decomposing the framed content + rendered page sizes into the tree-form DocumentPackage onDocument's contract now states.
   if (formulas === undefined) {
-    return writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution, fonts });
+    const out = writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution, fonts });
+    options?.onDocument?.(assemblePackage(content, pages));
+    return out;
   }
-  return writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution, formulas, fonts });
+  const out = writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution, formulas, fonts });
+  options?.onDocument?.(assemblePackage(content, pages));
+  return out;
 }
 
 // readPdf -> reconstruct(target variant) -> build(target) -> encode(target), reproducing the exact sequence and option-threading of convert.ts's pdfTo* functions (pdfToDocx/pdfToOdt/pdfToOdp/pdfToOds/pdfToOdg/pdfToMarkdown). sink reaches readPdf; signal reaches both readPdf and the reconstructor. onCellTypeInference reaches the reconstructor (reconstructSpreadsheet's audit channel) AND csv's read -- the two places a cell re-typing decision can happen, threaded on the one options object every hop receives; the ergonomic pdfTo* functions do not declare it, so a caller wanting that audit channel on a pdf -> spreadsheet route passes it to convertDocument directly (the first-class entry point every named function forwards to). The package build half is called with no options, matching pdfTo*'s own `buildXPackage(content)` calls (no clock, no onMathDiagnostic threaded on this direction); the text build half receives options because csv's build consumes { delimiter, sheet }.
@@ -371,14 +379,18 @@ function executeFromPdf(target: ContentFormat, bytes: Uint8Array<ArrayBuffer>, o
   const content = RECONSTRUCTORS[node.variant](layout, { signal: options?.signal, onCellTypeInference: options?.onCellTypeInference });
   // The pages half derives from the read LayoutDocument's own pages -- every rendered page's size, indexed to match the frames the reconstructor attached to the content it built.
   const pages = layout.pages.map((page) => ({ widthPt: page.widthPt, heightPt: page.heightPt }));
-  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content, pages });
 
+  // Build + encode the target first, then report the package (the ownership rule every construction site follows), with assemblePackage decomposing the reconstructed content + page sizes into the tree-form DocumentPackage.
+  let out: Uint8Array<ArrayBuffer>;
   if (isTextFormatNode(node)) {
     const text = node.build(content, options);
-    return node.encode(text);
+    out = node.encode(text);
+  } else {
+    const pkg = node.build(content);
+    out = node.encode(pkg);
   }
-  const pkg = node.build(content);
-  return node.encode(pkg);
+  options?.onDocument?.(assemblePackage(content, pages));
+  return out;
 }
 
 // --- Pathfinder: minimum-cost route over the composition graph ---------------------------------

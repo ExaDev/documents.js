@@ -1,5 +1,5 @@
 import type { ContentDocument, ContentDrawPage, ContentParagraph, ContentShape, ContentSlide, ContentVector } from 'document-schema.js';
-import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
+
 import { decodePackage as decodeOdfPackage } from 'odf.js';
 import { describe, expect, it } from 'vitest';
 import { readOdgContent } from '../odf/odg/read';
@@ -35,19 +35,18 @@ function rectVector(): ContentVector {
 
 function minimalDrawingDoc(): Extract<ContentDocument, { kind: 'drawing' }> {
   const page: ContentDrawPage = { size: PAGE_SIZE, shapes: [textShape('Label')], vectors: [rectVector()] };
-  return { kind: 'drawing', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, pages: [page] };
+  return { kind: 'drawing', metadata: {}, pages: [page] };
 }
 
 function minimalPresentationDoc(): Extract<ContentDocument, { kind: 'presentation' }> {
   const slide: ContentSlide = { size: PAGE_SIZE, shapes: [textShape('Slide text')], notes: 'Speaker notes' };
-  return { kind: 'presentation', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, slides: [slide] };
+  return { kind: 'presentation', metadata: {}, slides: [slide] };
 }
 
 describe('drawingToPresentation', () => {
   it('produces a presentation document with one slide per draw page', () => {
     const doc = drawingToPresentation(minimalDrawingDoc());
     expect(doc.kind).toBe('presentation');
-    expect(doc.formatVersion).toBe(CONTENT_FORMAT_VERSION);
     expect(doc.slides).toHaveLength(1);
   });
 
@@ -78,7 +77,6 @@ describe('presentationToDrawing', () => {
   it('produces a drawing document with one page per slide', () => {
     const doc = presentationToDrawing(minimalPresentationDoc());
     expect(doc.kind).toBe('drawing');
-    expect(doc.formatVersion).toBe(CONTENT_FORMAT_VERSION);
     expect(doc.pages).toHaveLength(1);
   });
 
