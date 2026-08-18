@@ -1,3 +1,34 @@
+# [3.0.0](https://github.com/ExaDev/documents.js/compare/v2.3.3...v3.0.0) (2026-08-18)
+
+
+* feat!: consume tree packages by flattening at the boundary ([f84251a](https://github.com/ExaDev/documents.js/commit/f84251a3e2f922d1b7a0fc8be84f5f6c52db7f26))
+* feat!: report tree-form packages at every construction site ([ed6a51b](https://github.com/ExaDev/documents.js/commit/ed6a51bb032f0a9eed8c57d42f8be6136caaa067))
+* refactor!: drop the retired ContentDocument formatVersion literals ([1287b03](https://github.com/ExaDev/documents.js/commit/1287b03ad99ebf9464b2d5faf6d8bea6964e1f14))
+* refactor!: import the Layout item family from pdf-codec ([e6732ec](https://github.com/ExaDev/documents.js/commit/e6732ec346d51e8db463d0260237f60b158638dd))
+
+
+### Bug Fixes
+
+* handle schema 4's optional list numId across markers and docx numbering ([398384f](https://github.com/ExaDev/documents.js/commit/398384f85d2aab9569118e9717c8c10904cc087f))
+
+
+### Features
+
+* mint styles at package assembly ([762544d](https://github.com/ExaDev/documents.js/commit/762544dbb492f63b31fba7d9644318f315fa9791))
+* port decompose/flatten into the package boundary ([c8009c7](https://github.com/ExaDev/documents.js/commit/c8009c7bb7ce046951d4ece601fe5736de5021a1))
+
+
+### BREAKING CHANGES
+
+* a tree-form package is the only accepted input shape.
+* onDocument and ConversionResult.package carry the tree-form
+DocumentPackage of schema 4.0.0 -- children hold the decomposed groups and the
+minted styles table instead of the flat content envelope.
+* LAYOUT_FORMAT_VERSION and the Layout* item types re-export
+from pdf-codec; layoutDocumentWithSchema and LayoutDocumentJson no longer exist.
+* CONTENT_FORMAT_VERSION no longer exists and ContentDocument
+arms carry no formatVersion field.
+
 ## [2.3.3](https://github.com/ExaDev/documents.js/compare/v2.3.2...v2.3.3) (2026-08-18)
 
 ## [2.3.2](https://github.com/ExaDev/documents.js/compare/v2.3.1...v2.3.2) (2026-08-18)
