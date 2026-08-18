@@ -60,8 +60,8 @@ importers:
         specifier: ^4.4.0
         version: 4.4.0(dexie@4.4.4)(react@19.2.8)
       documents.js:
-        specifier: ^3.0.6
-        version: 3.0.6
+        specifier: ^3.0.7
+        version: 3.0.7
       markdown-codec:
         specifier: ^3.0.1
         version: 3.0.1
@@ -2438,8 +2438,8 @@ packages:
     resolution: {integrity: sha512-ckdp0yIItnQKPK23ciINygPbKPQanvodeLT9uJIj1EtQpjIlaMqHT/8iKdoql2zrgOol0rUguJAsEWCHEr44Gw==}
     engines: {node: '>=20'}
 
-  documents.js@3.0.6:
-    resolution: {integrity: sha512-Ez+ScmG7DHkG7v4sRdR8+HLn9a92qFRvR6HSvYB0HQmMz5E55gxAHSNuqi/sezJAfm27U38J5AA8N3scgtyUMg==}
+  documents.js@3.0.7:
+    resolution: {integrity: sha512-EXw9W58s2O7lEzn41b+6OJ7ZslSwyW15FNDJS6TR7syaQtpAyf0bMgMLrUO2ecbpZGtxAfl5HYv7Fsj5jh06YA==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -3652,10 +3652,6 @@ packages:
     resolution: {integrity: sha512-4a+OsYv9UktOJKE+l1A4OufDgdRF9PifWj+tJnHURo/P+WOxpG4GzUFL9qCalmWauao6ogiG+QvnCovwPoyAWA==}
     engines: {node: '>=12.20.0'}
 
-  odf.js@4.0.1:
-    resolution: {integrity: sha512-S7hZ6+TcqQH0muuEb7PmivMQs1KaohKCqN8PBdJJNtggEW2UxAC7XPm52KGpWVlBNHS/rPTqt7+xveK4hO7aOw==}
-    engines: {node: '>=20'}
-
   odf.js@4.0.2:
     resolution: {integrity: sha512-4nAnVDc34eDEj6FOKwH2hxqZroiqHVu+YYn+roNQFxjHDm/o0vRVzh3EM7h+ayEQK78r0fpGQxa3Pp8gt4QxGQ==}
     engines: {node: '>=20'}
@@ -3792,8 +3788,8 @@ packages:
   pathe@2.0.3:
     resolution: {integrity: sha512-WUjGcAqP1gQacoQe+OBJsFA7Ld4DyXuUIjZ5cc75cLHvJ7dtNsTugphxIADwspS+AraAUePCKrSVtPLFj/F88w==}
 
-  pdf-codec@3.0.1:
-    resolution: {integrity: sha512-MO7kLNFci/ypHcpvUVO5C1rD0y470dR43fj5PiIjd/19/6XISigLJl7ieRvS/8Gkg5/mt4lgLp2ftZvuR4Rkuw==}
+  pdf-codec@3.0.2:
+    resolution: {integrity: sha512-TZFjoKxFke2zA4HNHllyy+n04nAgizN29HIi06WSN/kF0iMfI2msT8GGsgbWCC0ju5yAE/RiqPKprWXCUGxxPQ==}
     engines: {node: '>=20'}
 
   picocolors@1.1.1:
@@ -7345,15 +7341,15 @@ snapshots:
     dependencies:
       zod: 4.4.3
 
-  documents.js@3.0.6:
+  documents.js@3.0.7:
     dependencies:
       byte-codec: 1.1.9
-      document-schema.js: 4.1.0
+      document-schema.js: 4.2.0
       fflate: 0.8.3
       markdown-codec: 3.0.1
-      odf.js: 4.0.1
+      odf.js: 4.0.2
       ooxml.js: 3.0.1
-      pdf-codec: 3.0.1
+      pdf-codec: 3.0.2
       temml: 0.13.4
       zod: 4.4.3
 
@@ -8616,13 +8612,6 @@ snapshots:
 
   obug@2.1.4: {}
 
-  odf.js@4.0.1:
-    dependencies:
-      document-schema.js: 4.1.0
-      fast-xml-parser: 5.10.1
-      fflate: 0.8.3
-      zod: 4.4.3
-
   odf.js@4.0.2:
     dependencies:
       document-schema.js: 4.2.0
@@ -8636,7 +8625,7 @@ snapshots:
 
   ooxml.js@3.0.1:
     dependencies:
-      document-schema.js: 4.1.0
+      document-schema.js: 4.2.0
       fast-xml-parser: 5.10.1
       fflate: 0.8.3
       zod: 4.4.3
@@ -8752,10 +8741,10 @@ snapshots:
 
   pathe@2.0.3: {}
 
-  pdf-codec@3.0.1:
+  pdf-codec@3.0.2:
     dependencies:
       byte-codec: 1.1.9
-      document-schema.js: 4.1.0
+      document-schema.js: 4.2.0
       fflate: 0.8.3
       zod: 4.4.3
 
