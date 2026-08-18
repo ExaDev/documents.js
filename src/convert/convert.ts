@@ -1,5 +1,5 @@
-import type { ContentBlock, ContentDocument, ContentSection, DocumentPackage, LayoutDocument } from 'document-schema.js';
-import { COLOR_BLACK, CONTENT_FORMAT_VERSION, DOCUMENT_PACKAGE_FORMAT_VERSION, LAYOUT_FORMAT_VERSION } from 'document-schema.js';
+import type { ContentBlock, ContentDocument, ContentSection, DocumentPackage } from 'document-schema.js';
+import { COLOR_BLACK } from 'document-schema.js';
 import type { OdmSection, Package } from 'odf.js';
 import { decodePackage, encodePackage as encodeOdfPackage, readOdfMetadata, readOdfParagraph, readOdfTable, readOdm } from 'odf.js';
 import { buildXlsxPackage, encodePackage } from 'ooxml.js';
@@ -18,9 +18,9 @@ import { readOdbTables } from '../odb/read';
 import { odbTablesToSpreadsheetDocument } from '../odb/spreadsheet';
 import type { OmmlDiagnostic } from '../omml/shared';
 import type { MarkdownImageResolver } from 'markdown-codec';
-import type { PdfDiagnosticSink, WinAnsiSubstitution } from 'pdf-codec';
+import type { LayoutDocument, PdfDiagnosticSink, WinAnsiSubstitution } from 'pdf-codec';
 import type { ProvidedFont } from 'document-schema.js';
-import { createFontMeasurer, createFontRegistry, loadMathFont, writePdf } from 'pdf-codec';
+import { createFontMeasurer, createFontRegistry, loadMathFont, writePdf, LAYOUT_FORMAT_VERSION } from 'pdf-codec';
 
 // A thin factory over pdf-codec's cached loadMathFont singleton, injected into each layout engine's options as `mathMetricsAt` so the layout engine never imports loadMathFont itself (the last direct pdf-codec runtime call the formula-placing engines had). The layout engine receives `(sizePt) => MathFontMetrics` and calls it at whatever size it needs, with no knowledge of where the metrics came from.
 const mathMetricsAt = (sizePt: number) => loadMathFont().metricsAt(sizePt);
@@ -30,6 +30,7 @@ import { throwIfAborted } from '../ports/abort';
 import { resolveMetadataTimestamps } from '../model/metadata';
 import type { ClockPort } from '../ports/clock';
 import { convertDocument } from './composition';
+import { assemblePackage } from './factor-styles';
 import type { CellTypeInferenceSink } from '../layout/cell-typing';
 import type { SvgDiagnosticSink } from '../svg/diagnostics';
 
@@ -151,10 +152,11 @@ export function odfToPdf(bytes: Uint8Array<ArrayBuffer>, options?: DocumentToPdf
     pages: [{ widthPt: PAGE_SIZE_A4.widthPt, heightPt: PAGE_SIZE_A4.heightPt, items: [] }],
     images: {},
   };
-  // The reported package carries the one real A4 page it renders (pages) and no node frames -- a formula document's content has no renderable-item placements at all, since the formula's glyphs travel through writePdf's own formulas side channel rather than as page content.
-  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content, pages: [{ widthPt: PAGE_SIZE_A4.widthPt, heightPt: PAGE_SIZE_A4.heightPt }] });
   throwIfAborted(options?.signal);
-  return writePdf(layout, { signal: options?.signal, formulas: [{ pageIndex: 0, xPt: flipped.xPt, yPt: flipped.yPt, box }] });
+  const out = writePdf(layout, { signal: options?.signal, formulas: [{ pageIndex: 0, xPt: flipped.xPt, yPt: flipped.yPt, box }] });
+  // The reported tree-form package carries the one real A4 page it renders (pages) and no node frames -- a formula document's content has no renderable-item placements at all, since the formula's glyphs travel through writePdf's own formulas side channel rather than as page content -- and is assembled only after the output bytes exist, like every construction site.
+  options?.onDocument?.(assemblePackage(content, [{ widthPt: PAGE_SIZE_A4.widthPt, heightPt: PAGE_SIZE_A4.heightPt }]));
+  return out;
 }
 
 export interface PdfToDocumentOptions {
@@ -467,7 +469,6 @@ export function odmToPdf(bytes: Uint8Array<ArrayBuffer>, options?: OdmToPdfOptio
   // Typed via Extract rather than the full ContentDocument union -- unlike every X-to-PDF sibling above, which reads a full-union-typed ContentDocument from another function and narrows it with a runtime `if (content.kind !== '...')` guard, this object is a literal this function writes itself two lines below: its 'wordprocessing' discriminant is already statically known, so a runtime guard here would only ever check something already proven at compile time.
   const content: Extract<ContentDocument, { kind: 'wordprocessing' }> = {
     kind: 'wordprocessing',
-    formatVersion: CONTENT_FORMAT_VERSION,
     metadata: resolveMetadataTimestamps(readOdfMetadata(pkg), options?.clock),
     sections: combinedSections,
   };
@@ -486,8 +487,8 @@ export function odbToXlsx(bytes: Uint8Array<ArrayBuffer>, options?: OdbConversio
   throwIfAborted(options?.signal);
   const content = odbTablesToSpreadsheetDocument(tables);
   const out = encodePackage(buildXlsxPackage(content)); // ooxml.js's own encodePackage -- buildXlsxPackage produces an OOXML package.
-  // Fires the content-only package OdbConversionOptions has always accepted via DocumentBridgeOptions but these two odb functions never delivered -- no layout pass runs here, so there are no pages and no node frames, exactly like every other bridge's package. Fired after the output bytes exist so a callback that inspects content cannot observe a half-built conversion.
-  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content });
+  // Fires the content-only tree package OdbConversionOptions has always accepted via DocumentBridgeOptions but these two odb functions never delivered -- no layout pass runs here, so there are no pages and no node frames, exactly like every other bridge's package. Fired after the output bytes exist so a callback that inspects the tree cannot observe a half-built conversion.
+  options?.onDocument?.(assemblePackage(content));
   return out;
 }
 
@@ -504,7 +505,7 @@ export function odbToCsv(bytes: Uint8Array<ArrayBuffer>, options?: OdbToCsvOptio
   const csv = buildOdbTableCsv(tables, options?.table);
   // The CSV writer pivots through HsqldbTable rows rather than a ContentDocument, so the reported package is built only when a callback asks for it -- the .odb's whole spreadsheet content (every table), since that is the document this conversion read, with the selected table carried by the CSV itself.
   if (options?.onDocument !== undefined) {
-    options.onDocument({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content: odbTablesToSpreadsheetDocument(tables) });
+    options.onDocument(assemblePackage(odbTablesToSpreadsheetDocument(tables)));
   }
   return csv;
 }
@@ -540,6 +541,8 @@ export function odbReportToPdf(content: ContentDocument, options?: DocumentToPdf
   }
   const fonts = createFontRegistry({ fonts: options?.fonts, onSubstitution: options?.onFontSubstitution });
   const { document: layout, formulas, pages } = convertWordprocessingToLayout(content, { measurer: createFontMeasurer(fonts), mathMetricsAt });
-  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content, pages: [...pages] });
-  return writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution, formulas, fonts });
+  const out = writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution, formulas, fonts });
+  // Assembled and reported after the output bytes exist, matching every other construction site's ownership rule.
+  options?.onDocument?.(assemblePackage(content, pages));
+  return out;
 }

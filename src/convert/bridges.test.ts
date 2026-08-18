@@ -1,5 +1,5 @@
 import type { ContentDocument, DocumentPackage } from 'document-schema.js';
-import { CONTENT_FORMAT_VERSION, DOCUMENT_PACKAGE_FORMAT_VERSION } from 'document-schema.js';
+
 import { decodePackage as decodeOdfPackage } from 'odf.js';
 import { buildXlsxPackage, decodePackage as decodeOoxmlPackage, encodePackage as encodeOoxmlPackage, readXlsxContent } from 'ooxml.js';
 import { describe, expect, it, vi } from 'vitest';
@@ -20,6 +20,7 @@ import { minimalOdtBytes } from '../test-support/odt';
 import { decodeMarkdownText, encodeMarkdownText } from '../markdown/text';
 import { richMarkdownText } from '../test-support/markdown';
 import { docxToMarkdown, docxToOdt, docxToPptx, markdownToDocx, markdownToOdt, odpToPptx, odsToXlsx, odtToDocx, odtToMarkdown, pptxToDocx, pptxToOdp, xlsxToOds } from './convert';
+import { flattenPackage } from './flatten';
 
 // The dedicated round-trip suite for the six PDF-bypassing cross-format bridges (convert.ts's own "Six cross-format bridges" section) -- exercised via both directions and both starting points for each of the three pairs (odt<->docx, odp<->pptx, ods<->xlsx), per the project's own explicit "we should also have .odt <-> .docx roundtrip tests and similar for the other types" requirement. Real-file, real-LibreOffice verification (independently-produced odt/odp/ods opened through the bridge and back into LibreOffice) is a separate, manual, non-CI-gated step -- see this repo's own README Fidelity section and test:corpus precedent for why that class of check deliberately never runs inside `pnpm test`.
 
@@ -157,8 +158,8 @@ describe('onDocument (DocumentPackage side channel)', () => {
 
     expect(captured).toBeDefined();
     const pkg = captured!;
-    expect(pkg.formatVersion).toBe(DOCUMENT_PACKAGE_FORMAT_VERSION);
-    expect(pkg.content.kind).toBe('wordprocessing');
+    expect(pkg.kind).toBe('wordprocessing');
+    expect(flattenPackage(pkg).kind).toBe('wordprocessing');
     expect(pkg.pages).toBeUndefined();
   });
 });
@@ -597,7 +598,6 @@ describe('ods <-> xlsx: ods -> xlsx -> ods (double hop, starting from ods)', () 
 function buildXlsxNativeContentDocument(): ContentDocument {
   return {
     kind: 'spreadsheet',
-    formatVersion: CONTENT_FORMAT_VERSION,
     metadata: {},
     sheets: [
       {
@@ -679,7 +679,7 @@ describe('onDocument (DocumentPackage side channel): markdown bridges', () => {
     const docxBytes = markdownToDocx(encodeMarkdownText(richMarkdownText()), { onDocument: (pkg) => { captured = pkg; } });
     expect(docxBytes.length).toBeGreaterThan(0);
     expect(captured).toBeDefined();
-    expect(captured!.content.kind).toBe('wordprocessing');
+    expect(flattenPackage(captured!).kind).toBe('wordprocessing');
     expect(captured!.pages).toBeUndefined();
   });
 });

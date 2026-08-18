@@ -26,6 +26,7 @@ import { readOdsContent } from '../odf/ods/read';
 import { odmBytes } from '../test-support/odm';
 import { sheetFormulaOdsBytes } from '../test-support/ods-formula';
 import { docxToOdt, odfToPdf, odmToPdf, odpToPdf, odsToPdf, odtToDocx, odtToMarkdown, odtToPdf } from './convert';
+import { flattenPackage } from './flatten';
 
 // End-to-end coverage for the MathML/formula pipeline: odfToPdf (a standalone .odf formula document) for each of the task's own named curated formulas (a simple fraction, a square root, a superscript/subscript combination, a small matrix via mtable), plus the embedded-formula-inside-odt/odp path. Checks the output PDF is well-formed (readable back through this package's own readPdf; also cross-checked with qpdf --check when that binary is available locally -- see qpdfCheck below) and that real layout invariants hold, not just "it doesn't crash".
 
@@ -321,24 +322,26 @@ describe('a formula as a real ContentDocument, not a side-channel map', () => {
     expect(new TextDecoder().decode(bytes.subarray(0, 5))).toBe('%PDF-');
 
     expect(captured).toBeDefined();
-    expect(captured?.content.kind).toBe('formula');
-    if (captured?.content.kind !== 'formula') {
+    const capturedContent = captured === undefined ? undefined : flattenPackage(captured);
+    expect(capturedContent?.kind).toBe('formula');
+    if (capturedContent?.kind !== 'formula') {
       throw new Error('expected a formula ContentDocument');
     }
-    expect(captured.content.formula.starMath).toBe('{a} over {b}');
-    expect(captured.content.formula.mathml.length).toBeGreaterThan(0);
+    expect(capturedContent.formula.starMath).toBe('{a} over {b}');
+    expect(capturedContent.formula.mathml.length).toBeGreaterThan(0);
     // The pages half is a genuine single A4 page and no node carries any frame, by construction: the formula renders through writePdf's own separate formula positioning, never as page content, so there are no item placements to fuse onto content.
-    expect(captured.pages).toHaveLength(1);
-    expect(captured.pages?.[0]).toEqual(PAGE_SIZE_A4);
+    expect(captured?.pages).toHaveLength(1);
+    expect(captured?.pages?.[0]).toEqual(PAGE_SIZE_A4);
   });
 
   it('carries an odt formula through onDocument as part of the ContentDocument the conversion built', () => {
     let captured: DocumentPackage | undefined;
     odtToPdf(odtWithEmbeddedFormulaBytes(), { onDocument: (pkg) => { captured = pkg; } });
-    if (captured?.content.kind !== 'wordprocessing') {
+    const capturedContent = captured === undefined ? undefined : flattenPackage(captured);
+    if (capturedContent?.kind !== 'wordprocessing') {
       throw new Error('expected a wordprocessing ContentDocument');
     }
-    const block = captured.content.sections[0]!.blocks.find((b) => b.kind === 'embeddedObject');
+    const block = capturedContent.sections[0]!.blocks.find((b) => b.kind === 'embeddedObject');
     expect(block?.kind === 'embeddedObject' && block.document.kind === 'formula').toBe(true);
   });
 });

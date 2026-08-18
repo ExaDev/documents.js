@@ -1,5 +1,5 @@
-import type { ContentVector, DocumentPackage, LayoutItem, LayoutLine, LayoutPath, LayoutRect, LayoutText } from 'document-schema.js';
-import { DOCUMENT_PACKAGE_FORMAT_VERSION } from 'document-schema.js';
+import type { ContentVector, DocumentPackage } from 'document-schema.js';
+
 import { decodePackage, el, txt } from 'odf.js';
 import { decodePackage as decodeOdfPackage } from 'odf.js';
 import { decodePackage as decodeOoxmlPackage, readXlsxContent } from 'ooxml.js';
@@ -27,6 +27,8 @@ import { minimalOdpBytes } from '../test-support/odp';
 import { decoratedOdsBytes, gridOdsBytes, minimalOdsBytes } from '../test-support/ods';
 import { minimalOdtBytes } from '../test-support/odt';
 import { docxToPdf, inlineOdmSectionToContentSection, markdownToPdf, odgToPdf, odmToPdf, OdmUnresolvedSectionError, odpToPdf, odsToPdf, odsToXlsx, odtToPdf, pdfToDocx, pdfToMarkdown, pdfToOdg, pdfToOdp, pdfToOds, pdfToOdt, pdfToPptx, pdfToXlsx, pptxToPdf, xlsxToPdf } from './convert';
+import { flattenPackage } from './flatten';
+import type { LayoutItem, LayoutLine, LayoutPath, LayoutRect, LayoutText } from 'pdf-codec';
 
 // Builds the same intermediate LayoutDocument odgToPdf itself builds internally (readOdgContent -> convertDrawingToLayout), so a test can assert on 'path'/'rect' LayoutItem kinds directly -- readPdf's own content-stream interpreter does not reconstruct 'path'/'line'/'ellipse' items at all (pdf-codec's interpret.ts), so round-tripping the fixture's curve/z-order back through readPdf is not possible; this is the direct way to prove them.
 function layoutFromMinimalOdg() {
@@ -80,16 +82,17 @@ describe('docxToPdf', () => {
     expect(pdfHeader(pdfBytes)).toBe('%PDF-');
 
     // The ContentDocument this conversion built internally really did read the image as a ContentImageBlock, not drop it.
-    expect(captured?.content.kind).toBe('wordprocessing');
-    if (captured?.content.kind !== 'wordprocessing') {
+    const capturedContent = captured === undefined ? undefined : flattenPackage(captured);
+    expect(capturedContent?.kind).toBe('wordprocessing');
+    if (capturedContent?.kind !== 'wordprocessing') {
       throw new Error('expected a wordprocessing ContentDocument');
     }
-    const contentImage = captured.content.sections.flatMap((s) => s.blocks).find((b) => b.kind === 'image');
+    const contentImage = capturedContent.sections.flatMap((s) => s.blocks).find((b) => b.kind === 'image');
     expect(contentImage).toMatchObject({ kind: 'image', format: 'png', widthPt: 96, heightPt: 48 });
 
     // The layout pass fused a real, positioned placement onto the image block's own nodes: one frame on page 0, sized in points, distinct from the text runs either side of it. The rendered bytes themselves are proven by the readPdf round trip below.
     expect(contentImage).toMatchObject({ frames: [{ pageIndex: 0, widthPt: 96, heightPt: 48 }] });
-    expect(captured.pages?.[0]).toMatchObject({ widthPt: 612, heightPt: 792 });
+    expect(captured?.pages?.[0]).toMatchObject({ widthPt: 612, heightPt: 792 });
 
     // The PRODUCED PDF BYTES THEMSELVES actually embed the image as a real XObject, not just the intermediate LayoutDocument -- readPdf (this repo's own PDF reader) parses the PDF back and recovers the identical positioned image, proving the picture survived the full write path into genuine PDF content, not merely the layout stage.
     const reparsed = readPdf(pdfBytes);
@@ -113,12 +116,14 @@ describe('docxToPdf', () => {
 
     expect(captured).toBeDefined();
     const pkg = captured!;
-    expect(pkg.formatVersion).toBe(DOCUMENT_PACKAGE_FORMAT_VERSION);
-    expect(pkg.content.kind).toBe('wordprocessing');
-    if (pkg.content.kind !== 'wordprocessing') {
+    // The tree-form package states its document kind at the root and carries the content as section-group children; flattening once recovers the flat ContentDocument whose nodes carry their own rendered positions as frames.
+    expect(pkg.kind).toBe('wordprocessing');
+    const content = flattenPackage(pkg);
+    expect(content.kind).toBe('wordprocessing');
+    if (content.kind !== 'wordprocessing') {
       throw new Error('expected a wordprocessing ContentDocument');
     }
-    const paragraph = pkg.content.sections[0]?.blocks[0];
+    const paragraph = content.sections[0]?.blocks[0];
     if (paragraph?.kind !== 'paragraph') {
       throw new Error('expected a paragraph block');
     }
