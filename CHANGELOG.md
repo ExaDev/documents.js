@@ -1,3 +1,12 @@
+## [2.3.3](https://github.com/ExaDev/documents.js/compare/v2.3.2...v2.3.3) (2026-08-18)
+
+## [2.3.2](https://github.com/ExaDev/documents.js/compare/v2.3.1...v2.3.2) (2026-08-18)
+
+
+### Bug Fixes
+
+* fire the inherited onDocument callback in odbToXlsx and odbToCsv ([73aae3b](https://github.com/ExaDev/documents.js/commit/73aae3bd1b23fd8fb0b43f3c37e250fe4bd735a7))
+
 ## [2.3.1](https://github.com/ExaDev/documents.js/compare/v2.3.0...v2.3.1) (2026-08-17)
 
 # [2.3.0](https://github.com/ExaDev/documents.js/compare/v2.2.0...v2.3.0) (2026-08-17)
