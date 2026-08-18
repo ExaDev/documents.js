@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ContentBlock, ContentSection } from 'document-schema.js';
+import type { ConstructDescriptor, ContentBlock, ContentSection } from 'document-schema.js';
 import { findConstructMarkerImbalance } from 'document-schema.js';
 import type { Package } from '../../model/package';
 import type { XmlNode } from '../../model/node';
@@ -261,6 +261,21 @@ describe('buildDocxPackage: construct round trip', () => {
     const sections = expectStableRoundTrip(docxPackage([el('w:p', {}, [el('w:fldSimple', { 'w:instr': ' PAGE ' }, [el('w:r', {}, [el('w:t', {}, [txt('4')])])])])]));
     const start = sections[0]?.blocks[0];
     expect(start?.kind === 'constructStart' ? start.descriptor : undefined).toEqual({ kind: 'field', instruction: ' PAGE ' });
+  });
+
+  // The kinds readDocx never produces, which a ContentDocument from another codec still can. Each writes its content and drops only the descriptor, since WordprocessingML has no block-level element for any of them -- what must never happen is an element written where it does not parse.
+  it.each([
+    ['a block-scoped link', { kind: 'link', target: { kind: 'external', uri: 'https://example.com' } }],
+    ['a named division', { kind: 'division', name: 'part-one' }],
+    ['a format-change provenance', { kind: 'provenance', change: 'formatChange', author: 'Ada' }],
+    ['a footnote anchor', { kind: 'anchor', anchorType: 'footnote', name: '1' }],
+  ] satisfies [string, ConstructDescriptor][])('writes %s as its own content, with no wrapper element and no lost paragraph', (_label, descriptor) => {
+    const blocks: ContentBlock[] = [{ kind: 'constructStart', descriptor }, { kind: 'paragraph', runs: [{ text: 'inside' }] }, { kind: 'constructEnd' }];
+    const written = buildDocxPackage({ sections: [{ pageSize: { widthPt: 612, heightPt: 792 }, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 }, blocks }] });
+    const roundTripped = readDocx(written).sections[0]?.blocks ?? [];
+    expect(roundTripped.map((block) => block.kind)).toEqual(['paragraph']);
+    const paragraph = roundTripped[0];
+    expect(paragraph?.kind === 'paragraph' ? paragraph.runs[0]?.text : undefined).toBe('inside');
   });
 
   it('round-trips constructs nested inside each other, and inside a table cell', () => {

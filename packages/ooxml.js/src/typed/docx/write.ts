@@ -6,14 +6,14 @@ import { el, txt } from '../../xml/fragment';
 import { encodeXmlText } from '../../xml/entities';
 import type { DocumentMetadata } from '../shared/metadata';
 import { ptToEighthPoints, ptToEmu, ptToHalfPoints, ptToTwips } from '../shared/units';
-import { TABLE_OF_CONTENTS_GALLERY } from './constructs';
+import { TABLE_OF_CONTENTS_GALLERY, isDeletedChange } from './constructs';
 
 // ContentSection[] -> Package: the write side of readDocx, and this package's second writer of genuinely new content after typed/xlsx/build.ts's buildXlsxPackage (whose part-scaffolding conventions this follows). It builds a complete, fresh docx package -- content types, package and document relationships, media parts, core/extended properties, and word/document.xml -- rather than editing a decoded one, so a ContentDocument that never came from a docx writes out just as well as one that did.
 //
 // It is readDocx's honest inverse over ContentSection: page geometry, paragraphs with their fully-resolved direct formatting, runs (including external hyperlinks), lists, headings, tables (grids, spans, shading, borders, row heights), page breaks, images, and the block-scoped construct markers all survive a round trip through the pair. What does NOT survive, stated rather than implied:
 // - No styles.xml, numbering.xml, comments, footnotes, headers, or footers are written. readDocx reads all of those into DocxDocument fields outside `sections`, and each needs machinery of its own; a paragraph's styleId is still written as a w:pStyle reference, resolving to nothing without the style part, since every property that style would have contributed is already spelled as direct formatting by then.
 // - A run whose boolean properties are absent but which carries some other property (a colour, a size) reads back with those booleans false rather than absent, because the w:rPr the other property forces is itself what the read-side cascade turns an absent w:b into. A run with no properties at all writes no w:rPr and round-trips exactly.
-// - `link` and `division` construct descriptors are written as their content with no wrapper: WordprocessingML's own hyperlink is run-level (a block-scoped link has no element to be), and it has no block container answering to a division. readDocx never produces either kind, so this only bounds what a foreign ContentDocument can carry through here.
+// - Four construct shapes are written as their content with no wrapper, because WordprocessingML has no block-level element for them: a `link` (its own hyperlink is run-level, so a block-scoped link has no element to be), a `division` (no block container answers to one), a `provenance` whose change is `formatChange` (w:pPrChange is a child of w:pPr describing one paragraph's old properties, not a wrapper over a block flow), and an `anchor` whose type is a footnote, endnote, or comment reference (each of those is a run-level reference into a part this writer does not emit). readDocx produces none of them, so this only bounds what a foreign ContentDocument can carry through here.
 // - A field construct whose extent contains no paragraph at all, and a section whose last block is not a paragraph, each gain one empty paragraph on the way out (the field characters and the section break both need a paragraph to live in). Everything readDocx itself produces already has one.
 
 const WML_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
@@ -233,9 +233,10 @@ const LINE_UNITS_PER_LINE = 240;
 // A tracked change carrying whole paragraphs still has to mark each paragraph's own mark as changed (w:pPr/w:rPr/w:ins and kin), or Word shows the change as covering the text but not the paragraph break that ends it. CT_PPr puts that w:rPr after every property element and before w:sectPr, which is exactly where appending it lands.
 function buildParagraph(paragraph: ContentParagraph, state: WriteState, pageBreakBefore: boolean, deleted: boolean, change: ProvenanceChange | undefined): XmlElement {
   const properties = buildParagraphProperties(paragraph, pageBreakBefore);
-  const pPr = properties === undefined && change !== undefined ? el('w:pPr', {}, []) : properties;
-  if (pPr !== undefined && change !== undefined) {
-    pPr.children.push(el('w:rPr', {}, [el(TRACKED_CHANGE_TAG_BY_CHANGE[change], { 'w:id': String(state.nextMarkerId++) })]));
+  const changeTag = change === undefined ? undefined : TRACKED_CHANGE_TAG_BY_CHANGE[change];
+  const pPr = properties === undefined && changeTag !== undefined ? el('w:pPr', {}, []) : properties;
+  if (pPr !== undefined && changeTag !== undefined) {
+    pPr.children.push(el('w:rPr', {}, [el(changeTag, { 'w:id': String(state.nextMarkerId++) })]));
   }
   const runs = paragraph.runs.map((run) => buildRun(run, state, deleted));
   return el('w:p', {}, [...(pPr === undefined ? [] : [pPr]), ...runs]);
@@ -370,12 +371,13 @@ function buildDrawing(image: ContentImageBlock, state: WriteState): XmlElement {
 
 // --- construct markers ------------------------------------------------------------------------------------------------
 
-const TRACKED_CHANGE_TAG_BY_CHANGE: Readonly<Record<ProvenanceChange, string>> = {
+// The four tracked-change elements that wrap a block flow. formatChange has no entry: w:pPrChange is a child of w:pPr recording one paragraph's superseded properties, not a wrapper over blocks, so a formatChange construct writes its content unwrapped rather than as an element that would not parse where it sits.
+const TRACKED_CHANGE_TAG_BY_CHANGE: Readonly<Record<ProvenanceChange, string | undefined>> = {
   insertion: 'w:ins',
   deletion: 'w:del',
   moveFrom: 'w:moveFrom',
   moveTo: 'w:moveTo',
-  formatChange: 'w:pPrChange',
+  formatChange: undefined,
 };
 
 const SDT_TYPE_ELEMENT: Readonly<Record<ContentControlDescriptor['controlType'], string | undefined>> = {
@@ -507,17 +509,19 @@ function buildConstructNodes(descriptor: ConstructDescriptor, children: FlowItem
     return [el('w:sdt', {}, [buildSdtProperties(descriptor), el('w:sdtContent', {}, buildFlowItems(children, state, deleted, undefined))])];
   }
   if (descriptor.kind === 'provenance') {
-    const attrs: Record<string, string> = { 'w:id': String(state.nextMarkerId++) };
-    if (descriptor.author !== undefined) {
-      attrs['w:author'] = encodeXmlText(descriptor.author);
+    const tag = TRACKED_CHANGE_TAG_BY_CHANGE[descriptor.change];
+    if (tag !== undefined) {
+      const attrs: Record<string, string> = { 'w:id': String(state.nextMarkerId++) };
+      if (descriptor.author !== undefined) {
+        attrs['w:author'] = encodeXmlText(descriptor.author);
+      }
+      if (descriptor.dateIso !== undefined) {
+        attrs['w:date'] = encodeXmlText(descriptor.dateIso);
+      }
+      return [el(tag, attrs, buildFlowItems(children, state, deleted || isDeletedChange(descriptor.change), descriptor.change))];
     }
-    if (descriptor.dateIso !== undefined) {
-      attrs['w:date'] = encodeXmlText(descriptor.dateIso);
-    }
-    const nested = descriptor.change === 'deletion' || descriptor.change === 'moveFrom';
-    return [el(TRACKED_CHANGE_TAG_BY_CHANGE[descriptor.change], attrs, buildFlowItems(children, state, deleted || nested, descriptor.change))];
   }
-  if (descriptor.kind === 'anchor') {
+  if (descriptor.kind === 'anchor' && descriptor.anchorType === 'bookmark') {
     const id = String(state.nextMarkerId++);
     return [
       el('w:bookmarkStart', { 'w:id': id, 'w:name': encodeXmlText(descriptor.name) }),
