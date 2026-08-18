@@ -157,6 +157,7 @@ describe('docx constructs: tracked changes', () => {
     expect(outline(blocksOf([paragraph]))).toEqual(['kept added ']);
   });
 
+  // This block-level w:del (a tracked-change element wrapping whole w:p elements directly) is not a shape Word itself ever emits -- CT_RunTrackChange has no w:p in its content model, so this is reader tolerance of malformed input, not a spelling buildDocxPackage produces. Word's own multi-paragraph deletion repeats the in-paragraph shape (a w:del wrapping each paragraph's own runs, with that paragraph's own mark also marked deleted) once per paragraph; see write.test.ts's own round-trip coverage for the writer's actual output shape.
   it('reads a block-level w:del wrapping whole paragraphs as one deletion construct over both', () => {
     const del = el('w:del', { 'w:id': '1', 'w:author': 'Grace', 'w:date': '2026-08-18T10:00:00Z' }, [
       el('w:p', {}, [el('w:r', {}, [el('w:delText', {}, [txt('first')])])]),

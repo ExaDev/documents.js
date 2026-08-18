@@ -1,4 +1,4 @@
-import type { Alignment, ConstructDescriptor, ContentBlock, ContentCellBorders, ContentControlDescriptor, ContentImageBlock, ContentParagraph, ContentRun, ContentSection, ContentTable, ContentTableCell, ProvenanceChange } from 'document-schema.js';
+import type { Alignment, ConstructDescriptor, ContentBlock, ContentCellBorders, ContentControlDescriptor, ContentImageBlock, ContentParagraph, ContentRun, ContentSection, ContentTable, ContentTableCell, ProvenanceChange, ProvenanceDescriptor } from 'document-schema.js';
 import { colorToRgbHex, findConstructMarkerImbalance } from 'document-schema.js';
 import type { Package, XmlPart } from '../../model/package';
 import type { XmlElement, XmlNode } from '../../model/node';
@@ -231,16 +231,17 @@ function buildParagraphProperties(paragraph: ContentParagraph, pageBreakBefore: 
 // w:spacing/@w:line's own 240ths-of-a-line unit, the write-side counterpart of shared/units.ts's lineUnitsToMultiplier -- kept local rather than exported from there because nothing else writes it.
 const LINE_UNITS_PER_LINE = 240;
 
-// A tracked change carrying whole paragraphs still has to mark each paragraph's own mark as changed (w:pPr/w:rPr/w:ins and kin), or Word shows the change as covering the text but not the paragraph break that ends it. CT_PPr puts that w:rPr after every property element and before w:sectPr, which is exactly where appending it lands.
-function buildParagraph(paragraph: ContentParagraph, state: WriteState, pageBreakBefore: boolean, deleted: boolean, change: ProvenanceChange | undefined): XmlElement {
+// A tracked change carrying a whole paragraph still has to mark the paragraph's own mark as changed (w:pPr/w:rPr/w:ins and kin), or Word shows the change as covering the text but not the paragraph break that ends it -- CT_PPr puts that w:rPr after every property element and before w:sectPr, which is exactly where appending it lands. The change element itself wraps the paragraph's RUNS, never the w:p: CT_RunTrackChange (reached through EG_RunLevelElts) has no w:p in its content model, so a change wrapping whole paragraphs is not valid WordprocessingML even though the reader tolerates it as input. A paragraph carrying no runs at all still gets an empty change element (rather than none), since that empty element is exactly what marks the paragraph as wholly changed to a reader walking its content-bearing children.
+function buildParagraph(paragraph: ContentParagraph, state: WriteState, pageBreakBefore: boolean, deleted: boolean, provenance: ProvenanceDescriptor | undefined): XmlElement {
   const properties = buildParagraphProperties(paragraph, pageBreakBefore);
-  const changeTag = change === undefined ? undefined : TRACKED_CHANGE_TAG_BY_CHANGE[change];
+  const changeTag = provenance === undefined ? undefined : TRACKED_CHANGE_TAG_BY_CHANGE[provenance.change];
   const pPr = properties === undefined && changeTag !== undefined ? el('w:pPr', {}, []) : properties;
-  if (pPr !== undefined && changeTag !== undefined) {
-    pPr.children.push(el('w:rPr', {}, [el(changeTag, { 'w:id': String(state.nextMarkerId++) })]));
+  if (pPr !== undefined && changeTag !== undefined && provenance !== undefined) {
+    pPr.children.push(el('w:rPr', {}, [el(changeTag, trackChangeAttrs(state, provenance))]));
   }
   const runs = paragraph.runs.map((run) => buildRun(run, state, deleted));
-  return el('w:p', {}, [...(pPr === undefined ? [] : [pPr]), ...runs]);
+  const content = changeTag === undefined || provenance === undefined ? runs : [el(changeTag, trackChangeAttrs(state, provenance), runs)];
+  return el('w:p', {}, [...(pPr === undefined ? [] : [pPr]), ...content]);
 }
 
 // readDocx lifts a paragraph's own images out into sibling blocks after it, so the inverse puts each one back into the run it came out of: the paragraph's trailing empty-text runs, in order, are exactly the runs a drawing-only run reads back as. An image with no such run left takes a fresh one.
@@ -381,6 +382,17 @@ const TRACKED_CHANGE_TAG_BY_CHANGE: Readonly<Record<ProvenanceChange, string | u
   formatChange: undefined,
 };
 
+// CT_TrackChange's own w:id and w:author are both required attributes (ECMA-376's schema, not merely convention); w:date is optional. ProvenanceDescriptor.author is optional -- not every ContentDocument source records one -- so an absent author falls back to this rather than the writer omitting a required attribute. Each call mints its own w:id, since every tracked-change element (a paragraph mark's rPr/w:ins and the run wrapper around its content alike) needs a unique one, not one id shared across a whole multi-paragraph extent.
+const UNKNOWN_PROVENANCE_AUTHOR = 'Unknown';
+
+function trackChangeAttrs(state: WriteState, descriptor: ProvenanceDescriptor): Record<string, string> {
+  const attrs: Record<string, string> = { 'w:id': String(state.nextMarkerId++), 'w:author': encodeXmlText(descriptor.author ?? UNKNOWN_PROVENANCE_AUTHOR) };
+  if (descriptor.dateIso !== undefined) {
+    attrs['w:date'] = encodeXmlText(descriptor.dateIso);
+  }
+  return attrs;
+}
+
 const SDT_TYPE_ELEMENT: Readonly<Record<ContentControlDescriptor['controlType'], string | undefined>> = {
   richText: 'w:richText',
   plainText: 'w:text',
@@ -505,41 +517,36 @@ function buildFieldNodes(instruction: string, content: XmlNode[]): XmlNode[] {
   return content;
 }
 
-function buildConstructNodes(descriptor: ConstructDescriptor, children: FlowItem[], state: WriteState, deleted: boolean): XmlNode[] {
+// `provenance` is the ambient tracked change, if any, this construct sits inside -- a bookmark, content control, or field nested inside a tracked-change range does not interrupt that change, since it wraps at a different level (block-sibling markers, or an element around the extent) that coexists with the change wrapping the paragraphs' own marks and runs underneath. Every branch but the provenance one itself threads the ambient value straight through to whatever paragraphs its own content eventually reaches; the provenance branch replaces it with its own descriptor for its own extent, the ordinary nesting rule for two constructs of the same kind.
+function buildConstructNodes(descriptor: ConstructDescriptor, children: FlowItem[], state: WriteState, deleted: boolean, provenance: ProvenanceDescriptor | undefined): XmlNode[] {
   if (descriptor.kind === 'contentControl') {
-    return [el('w:sdt', {}, [buildSdtProperties(descriptor), el('w:sdtContent', {}, buildFlowItems(children, state, deleted, undefined))])];
+    return [el('w:sdt', {}, [buildSdtProperties(descriptor), el('w:sdtContent', {}, buildFlowItems(children, state, deleted, provenance))])];
   }
   if (descriptor.kind === 'provenance') {
     const tag = TRACKED_CHANGE_TAG_BY_CHANGE[descriptor.change];
     if (tag !== undefined) {
-      const attrs: Record<string, string> = { 'w:id': String(state.nextMarkerId++) };
-      if (descriptor.author !== undefined) {
-        attrs['w:author'] = encodeXmlText(descriptor.author);
-      }
-      if (descriptor.dateIso !== undefined) {
-        attrs['w:date'] = encodeXmlText(descriptor.dateIso);
-      }
-      return [el(tag, attrs, buildFlowItems(children, state, deleted || isDeletedChange(descriptor.change), descriptor.change))];
+      // No block-level element here: buildParagraph wraps each paragraph's own runs in `tag` instead, threading this descriptor through so every paragraph in the extent -- one or many -- carries the same change on both its runs and its own paragraph mark.
+      return buildFlowItems(children, state, deleted || isDeletedChange(descriptor.change), descriptor);
     }
   }
   if (descriptor.kind === 'anchor' && descriptor.anchorType === 'bookmark') {
     const id = String(state.nextMarkerId++);
     return [
       el('w:bookmarkStart', { 'w:id': id, 'w:name': encodeXmlText(descriptor.name) }),
-      ...buildFlowItems(children, state, deleted, undefined),
+      ...buildFlowItems(children, state, deleted, provenance),
       el('w:bookmarkEnd', { 'w:id': id }),
     ];
   }
   if (descriptor.kind === 'field') {
-    return buildFieldNodes(descriptor.instruction, buildFlowItems(children, state, deleted, undefined));
+    return buildFieldNodes(descriptor.instruction, buildFlowItems(children, state, deleted, provenance));
   }
-  return buildFlowItems(children, state, deleted, undefined);
+  return buildFlowItems(children, state, deleted, provenance);
 }
 
-// `change` propagates a tracked change down to the paragraphs it wraps so each paragraph's own mark carries the same change; it stops at the first nested construct, since a construct inside a tracked change carries its own paragraphs' marks through its own wrapper.
+// `provenance` propagates a tracked change down to the paragraphs it wraps so each paragraph's own mark -- and its own runs -- carry the same change; it flows straight through a nested non-provenance construct (buildConstructNodes threads it on), since a bookmark or content control nested inside a tracked-change range does not interrupt the change, and only stops where a nested provenance construct replaces it with its own descriptor for its own extent.
 //
 // `pendingPageBreak` carries a still-unattached w:pageBreakBefore forward across sibling items in `items`, since the paragraph that break belongs to may not be the very next item: it can be inside a nested construct (a page-break-before paragraph that also opens a bookmark or tracked change), or there may be no paragraph at all before the next table or image. The construct branch below re-delegates a pending break into that construct's own children (as a synthetic leading pageBreak block) so the same paragraph-attachment logic finds it however deep it is nested; the table and image branches, which cannot carry w:pageBreakBefore themselves, materialise it as their own leading empty paragraph instead.
-function buildFlowItems(items: readonly FlowItem[], state: WriteState, deleted: boolean, change: ProvenanceChange | undefined): XmlNode[] {
+function buildFlowItems(items: readonly FlowItem[], state: WriteState, deleted: boolean, provenance: ProvenanceDescriptor | undefined): XmlNode[] {
   const nodes: XmlNode[] = [];
   let pendingPageBreak = false;
   let lastParagraph: XmlElement | undefined;
@@ -548,7 +555,7 @@ function buildFlowItems(items: readonly FlowItem[], state: WriteState, deleted: 
     if (item.kind === 'construct') {
       const pageBreakItem: FlowItem = { kind: 'block', block: { kind: 'pageBreak' } };
       const constructChildren = pendingPageBreak ? [pageBreakItem, ...item.children] : item.children;
-      nodes.push(...buildConstructNodes(item.descriptor, constructChildren, state, deleted));
+      nodes.push(...buildConstructNodes(item.descriptor, constructChildren, state, deleted, provenance));
       pendingPageBreak = false;
       lastParagraph = undefined;
       availableImageRuns = [];
@@ -560,7 +567,7 @@ function buildFlowItems(items: readonly FlowItem[], state: WriteState, deleted: 
       continue;
     }
     if (block.kind === 'paragraph') {
-      const paragraph = buildParagraph(block, state, pendingPageBreak, deleted, change);
+      const paragraph = buildParagraph(block, state, pendingPageBreak, deleted, provenance);
       pendingPageBreak = false;
       lastParagraph = paragraph;
       availableImageRuns = trailingEmptyRunElements(block, paragraph);

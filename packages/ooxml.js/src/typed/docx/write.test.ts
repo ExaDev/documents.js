@@ -238,13 +238,52 @@ describe('buildDocxPackage: construct round trip', () => {
     ]);
   });
 
-  it('round-trips a tracked insertion and a tracked deletion, keeping the deleted text as deleted text', () => {
+  it('round-trips a tracked insertion and a tracked deletion, keeping the deleted text as deleted text, and wraps each paragraph\'s own runs rather than the paragraph itself', () => {
     const ins = el('w:ins', { 'w:id': '1', 'w:author': 'Ada', 'w:date': '2026-08-18T09:00:00Z' }, [para('added')]);
     const del = el('w:del', { 'w:id': '2', 'w:author': 'Grace' }, [el('w:p', {}, [el('w:r', {}, [el('w:delText', {}, [txt('removed')])])])]);
     const { before, after, written } = roundTrip(docxPackage([ins, del]));
     expect(after).toEqual(before);
     const document = rootElement(written.parts['word/document.xml']);
-    expect(elementsWithTag(document === undefined ? [] : [document], 'w:delText')).toHaveLength(1);
+    const root = document === undefined ? [] : [document];
+    expect(elementsWithTag(root, 'w:delText')).toHaveLength(1);
+    // CT_RunTrackChange (reached through EG_RunLevelElts) has no w:p in its content model: w:ins/w:del must wrap the paragraph's own runs, never the w:p element itself, and CT_TrackChange's own w:author is required on every one of them.
+    for (const element of [...elementsWithTag(root, 'w:ins'), ...elementsWithTag(root, 'w:del')]) {
+      expect(element.children.some((child) => child.type === 'element' && child.tag === 'w:p')).toBe(false);
+      expect(element.attributes.some((a) => a.name === 'w:author')).toBe(true);
+    }
+  });
+
+  it('mints its own author for a tracked change whose descriptor carries none, rather than omitting the required attribute', () => {
+    const blocks: ContentBlock[] = [
+      { kind: 'constructStart', descriptor: { kind: 'provenance', change: 'insertion' } },
+      { kind: 'paragraph', runs: [{ text: 'anonymous' }] },
+      { kind: 'constructEnd' },
+    ];
+    const written = buildDocxPackage({ sections: [{ pageSize: { widthPt: 612, heightPt: 792 }, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 }, blocks }] });
+    const document = rootElement(written.parts['word/document.xml']);
+    const insEls = elementsWithTag(document === undefined ? [] : [document], 'w:ins');
+    expect(insEls.length).toBeGreaterThan(0);
+    for (const element of insEls) {
+      const author = element.attributes.find((a) => a.name === 'w:author')?.value;
+      expect(author).toBeTruthy();
+    }
+  });
+
+  it('threads a tracked change through a nested bookmark down to the paragraph it wraps, rather than dropping it', () => {
+    const blocks: ContentBlock[] = [
+      { kind: 'constructStart', descriptor: { kind: 'provenance', change: 'insertion', author: 'Ada' } },
+      { kind: 'constructStart', descriptor: { kind: 'anchor', anchorType: 'bookmark', name: 'intro' } },
+      { kind: 'paragraph', runs: [{ text: 'nested' }] },
+      { kind: 'constructEnd' },
+      { kind: 'constructEnd' },
+    ];
+    const written = buildDocxPackage({ sections: [{ pageSize: { widthPt: 612, heightPt: 792 }, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 }, blocks }] });
+    const document = rootElement(written.parts['word/document.xml']);
+    const body = document === undefined ? undefined : document.children[0];
+    expect(body?.type === 'element' ? body.children.map((child) => (child.type === 'element' ? child.tag : child.type)) : undefined).toEqual(['w:bookmarkStart', 'w:p', 'w:bookmarkEnd', 'w:sectPr']);
+    const descriptors = readDocx(written).sections[0]?.blocks.flatMap((block) => (block.kind === 'constructStart' ? [block.descriptor] : [])) ?? [];
+    expect(descriptors).toContainEqual({ kind: 'anchor', anchorType: 'bookmark', name: 'intro' });
+    expect(descriptors).toContainEqual({ kind: 'provenance', change: 'insertion', author: 'Ada' });
   });
 
   it('round-trips a move pair as its own two provenance changes', () => {
@@ -316,8 +355,12 @@ describe('buildDocxPackage: construct round trip', () => {
   });
 
   it('round-trips constructs nested inside each other, and inside a table cell', () => {
-    const inner = el('w:sdt', {}, [el('w:sdtPr', {}, [el('w:richText')]), el('w:sdtContent', {}, [para('controlled')])]);
-    const outer = el('w:ins', { 'w:id': '1', 'w:author': 'Ada' }, [inner]);
+    // A content control wrapping a wholly tracked-inserted paragraph -- Word's own nesting order, since CT_RunTrackChange has no w:p in its content model and so can never be the structural outer element around a block-level w:sdt.
+    const trackedParagraph = el('w:p', {}, [
+      el('w:pPr', {}, [el('w:rPr', {}, [el('w:ins', { 'w:id': '1', 'w:author': 'Ada' })])]),
+      el('w:ins', { 'w:id': '2', 'w:author': 'Ada' }, [el('w:r', {}, [el('w:t', {}, [txt('controlled')])])]),
+    ]);
+    const outer = el('w:sdt', {}, [el('w:sdtPr', {}, [el('w:richText')]), el('w:sdtContent', {}, [trackedParagraph])]);
     const cellControl = el('w:sdt', {}, [el('w:sdtPr', {}, [el('w:text')]), el('w:sdtContent', {}, [para('in a cell')])]);
     const table = el('w:tbl', {}, [el('w:tblGrid', {}, [el('w:gridCol', { 'w:w': '2880' })]), el('w:tr', {}, [el('w:tc', {}, [cellControl])])]);
     const sections = expectStableRoundTrip(docxPackage([outer, table]));
