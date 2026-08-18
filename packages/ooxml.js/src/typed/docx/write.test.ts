@@ -209,6 +209,19 @@ describe('buildDocxPackage: content round trip', () => {
     expect(sections).toHaveLength(2);
     expect(sections[0]?.pageSize.widthPt).toBeCloseTo(595.3, 1);
   });
+
+  // A bookmark closing exactly where a section ends: the section's own flow ends in a childless w:bookmarkEnd marker, not a w:p, so attachSectionBreak has to descend into the construct to find the paragraph the break actually belongs to, the same way buildFieldNodes' own findParagraph already does for a field.
+  it('attaches a mid-document section break to the true last paragraph even when a construct closes at the end of the section', () => {
+    const closingParagraph = el('w:p', {}, [
+      el('w:pPr', {}, [el('w:sectPr', {}, [el('w:pgSz', { 'w:w': '11906', 'w:h': '16838' }), el('w:pgMar', { 'w:top': '720', 'w:right': '720', 'w:bottom': '720', 'w:left': '720' })])]),
+      el('w:r', {}, [el('w:t', {}, [txt('end of section one')])]),
+    ]);
+    const source = docxPackage([el('w:bookmarkStart', { 'w:id': '1', 'w:name': 'closing' }), closingParagraph, el('w:bookmarkEnd', { 'w:id': '1' }), para('second')]);
+    const sections = expectStableRoundTrip(source);
+    expect(sections).toHaveLength(2);
+    // No spurious empty paragraph gained on the way out to carry the break.
+    expect(sections[0]?.blocks.map((block) => block.kind)).toEqual(['constructStart', 'paragraph', 'constructEnd']);
+  });
 });
 
 describe('buildDocxPackage: construct round trip', () => {

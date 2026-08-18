@@ -633,10 +633,9 @@ function buildSectionProperties(section: ContentSection): XmlElement {
   ]);
 }
 
-// A mid-document section break rides on the last paragraph of the section it closes -- the shape readSections reads it back from, which keeps that paragraph as content rather than adding one. Only the final section's w:sectPr is a direct child of w:body; a section whose last node is not a paragraph gets an empty one to carry the break.
+// A mid-document section break rides on the last paragraph of the section it closes -- the shape readSections reads it back from, which keeps that paragraph as content rather than adding one. That paragraph is not necessarily nodes' own last element: a bookmark closing the section trails a childless w:bookmarkEnd marker, and a content control closing it wraps its content in w:sdt, so findParagraph (searching from the end, the same way buildFieldNodes locates a field's own paragraphs) descends through whatever construct wrapper sits last to find the real one. Only the final section's w:sectPr is a direct child of w:body; a section with no paragraph anywhere in its flow gets an empty one to carry the break.
 function attachSectionBreak(nodes: XmlNode[], section: ContentSection): void {
-  const last = nodes[nodes.length - 1];
-  const target = last?.type === 'element' && last.tag === 'w:p' ? last : undefined;
+  const target = findParagraph(nodes, true);
   if (target === undefined) {
     nodes.push(el('w:p', {}, [el('w:pPr', {}, [buildSectionProperties(section)])]));
     return;
