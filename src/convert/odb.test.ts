@@ -1,8 +1,10 @@
+import { DocumentPackageSchema } from 'document-schema.js';
 import { decodePackage as decodeOoxmlPackage, readXlsxContent } from 'ooxml.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { embeddedHsqldbCachedOdbBytes, embeddedHsqldbOdbBytes } from '../test-support/odb';
 import { odbToCsv, odbToXlsx } from './convert';
 import { OdbTableNotSpecifiedError } from '../odb/csv';
+import { flattenPackage } from './flatten';
 
 // The genuine byte-level round trip for odbToXlsx/odbToCsv: embeddedHsqldbOdbBytes() (src/test-support/odb.ts) is a real, zipped .odb package -- mimetype/manifest/content.xml/database/script all present -- decoded exactly the way a caller's own bytes would be, through decodePackage -> readOdbTables -> odbTablesToSpreadsheetDocument/buildOdbTableCsv. See this repo's own real-LibreOffice verification notes (README Fidelity, this task's own final report) for confirmation the generated xlsx opens correctly in genuine LibreOffice.
 
@@ -72,21 +74,20 @@ describe('odbToCsv', () => {
   });
 });
 
-// OdbConversionOptions inherits onDocument from DocumentBridgeOptions, but odbToXlsx/odbToCsv historically never fired it -- an accepted-but-ignored callback. Both now deliver the same content-only package every other bridge reports: the .odb's whole spreadsheet content (every table, since that is the document the conversion read), no pages and no node frames, because no layout pass runs on this path.
+// OdbConversionOptions inherits onDocument from DocumentBridgeOptions, but odbToXlsx/odbToCsv historically never fired it -- an accepted-but-ignored callback. Both now deliver the same content-only tree package every other bridge reports: the .odb's whole spreadsheet content decomposed into sheet-group children (every table, since that is the document the conversion read), no pages and no node frames, because no layout pass runs on this path.
 describe('odbToXlsx / odbToCsv onDocument', () => {
   it('odbToXlsx fires onDocument exactly once with a content-only spreadsheet package', () => {
     const packages: unknown[] = [];
     const out = odbToXlsx(embeddedHsqldbOdbBytes(), { onDocument: (pkg) => packages.push(pkg) });
     expect(out.byteLength).toBeGreaterThan(0);
     expect(packages).toHaveLength(1);
-    const pkg = packages[0];
-    if (typeof pkg !== 'object' || pkg === null || !('content' in pkg)) {
-      throw new Error('expected a DocumentPackage');
+    const pkg = DocumentPackageSchema.parse(packages[0]);
+    const content = flattenPackage(pkg);
+    if (content.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
     }
-    const { content } = pkg as { content: { kind: string; sheets: { name: string }[] } };
-    expect(content.kind).toBe('spreadsheet');
     expect(content.sheets.map((sheet) => sheet.name)).toEqual(['CUSTOMERS', 'ORDERS']);
-    expect('pages' in pkg && pkg.pages !== undefined).toBe(false);
+    expect(pkg.pages).toBeUndefined();
   });
 
   it('odbToCsv fires onDocument once with the whole-document content, lazily -- no callback, no document built', () => {
@@ -94,13 +95,13 @@ describe('odbToXlsx / odbToCsv onDocument', () => {
     const out = odbToCsv(embeddedHsqldbOdbBytes(), { table: 'ORDERS', onDocument: (pkg) => packages.push(pkg) });
     expect(new TextDecoder().decode(out)).toContain('first order');
     expect(packages).toHaveLength(1);
-    const pkg = packages[0];
-    if (typeof pkg !== 'object' || pkg === null || !('content' in pkg)) {
-      throw new Error('expected a DocumentPackage');
-    }
+    // The captured unknown narrows through the schema's own parse -- the repo's untrusted-value boundary pattern -- before the tree is flattened.
+    const pkg = DocumentPackageSchema.parse(packages[0]);
     // The selected ORDERS table is what the CSV carries; the reported package is the whole .odb -- CUSTOMERS and ORDERS both.
-    const { content } = pkg as { content: { kind: string; sheets: { name: string }[] } };
-    expect(content.kind).toBe('spreadsheet');
+    const content = flattenPackage(pkg);
+    if (content.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
     expect(content.sheets.map((sheet) => sheet.name)).toEqual(['CUSTOMERS', 'ORDERS']);
   });
 
