@@ -4,7 +4,7 @@ import { richMarkdownText, richMarkdownTextWithFrontMatter } from '../test-suppo
 import { readMarkdownContent } from './read';
 
 describe('readMarkdownContent', () => {
-  it('produces a wordprocessing ContentDocument at the current CONTENT_FORMAT_VERSION', () => {
+  it('produces a wordprocessing ContentDocument', () => {
     const content = readMarkdownContent(richMarkdownText());
     expect(content.kind).toBe('wordprocessing');
   });
