@@ -1,3 +1,12 @@
+## [3.0.1](https://github.com/ExaDev/documents.js/compare/v3.0.0...v3.0.1) (2026-08-18)
+
+
+### Bug Fixes
+
+* carry a package's definitions table through factorStyles ([02508aa](https://github.com/ExaDev/documents.js/commit/02508aa59fcb43f60e23e90a9821717dbf49900a))
+* refuse a style ref on a sheet group in flattenPackage ([b0c675f](https://github.com/ExaDev/documents.js/commit/b0c675ff30b3d9cc8f246006c62a8da016b3dbca))
+* scope minting strips and factored bookkeeping per wrapper chain ([882d934](https://github.com/ExaDev/documents.js/commit/882d93436b71defc794a483c0017970483f00dee))
+
 # [3.0.0](https://github.com/ExaDev/documents.js/compare/v2.3.3...v3.0.0) (2026-08-18)
 
 
