@@ -204,6 +204,38 @@ describe('every MarkdownDiagnosticCodes entry is reachable from real input', () 
     reached.add(MarkdownDiagnosticCodes.TABLE_CELL_MULTI_PARAGRAPH_JOINED);
   });
 
+  it('DUPLICATE_FOOTNOTE_DEFINITION: two definitions sharing one label', () => {
+    const collector = createDiagnosticCollector();
+    parseMarkdown('[^1]: first\n\n[^1]: second', { sink: collector.sink });
+    expect(collector.has(MarkdownDiagnosticCodes.DUPLICATE_FOOTNOTE_DEFINITION)).toBe(true);
+    reached.add(MarkdownDiagnosticCodes.DUPLICATE_FOOTNOTE_DEFINITION);
+  });
+
+  it('FOOTNOTE_REFERENCE_PRESERVED_AS_TEXT: a reference resolving against a definition', () => {
+    const collector = createDiagnosticCollector();
+    lowerMarkdown('see[^1]\n\n[^1]: note', { sink: collector.sink });
+    expect(collector.has(MarkdownDiagnosticCodes.FOOTNOTE_REFERENCE_PRESERVED_AS_TEXT)).toBe(true);
+    reached.add(MarkdownDiagnosticCodes.FOOTNOTE_REFERENCE_PRESERVED_AS_TEXT);
+  });
+
+  it('FOOTNOTE_BODY_HEADING_FLATTENED: a heading inside a definition body', () => {
+    const collector = createDiagnosticCollector();
+    lowerMarkdown('[^1]: intro\n\n    # inner', { sink: collector.sink });
+    expect(collector.has(MarkdownDiagnosticCodes.FOOTNOTE_BODY_HEADING_FLATTENED)).toBe(true);
+    reached.add(MarkdownDiagnosticCodes.FOOTNOTE_BODY_HEADING_FLATTENED);
+  });
+
+  it('CONSTRUCT_UNREPRESENTED: a construct kind markdown has no syntax for', () => {
+    const collector = createDiagnosticCollector();
+    emitMarkdown(minimalDocument([
+      { kind: 'constructStart', descriptor: { kind: 'division', name: 'chapter' } },
+      { kind: 'paragraph', runs: [{ text: 'inside' }] },
+      { kind: 'constructEnd' },
+    ]), { sink: collector.sink });
+    expect(collector.has(MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED)).toBe(true);
+    reached.add(MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+  });
+
   it('has no dead code: every value in MarkdownDiagnosticCodes was proven reachable above', () => {
     expect(reached).toEqual(new Set(Object.values(MarkdownDiagnosticCodes)));
   });

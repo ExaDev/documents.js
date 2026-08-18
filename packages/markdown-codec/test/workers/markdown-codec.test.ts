@@ -15,4 +15,9 @@ describe('markdown-codec under the Cloudflare Workers runtime', () => {
     const roundTripped = writeMarkdown(document);
     expect(roundTripped).toContain('Heading text');
   });
+
+  it('round-trips a footnote, whose definition rides a construct boundary-marker pair', () => {
+    const { document } = readMarkdown('Body[^1].\n\n[^1]: The note.');
+    expect(writeMarkdown(document)).toContain('[^1]: The note');
+  });
 });
