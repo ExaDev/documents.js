@@ -167,8 +167,8 @@ describe('from_package', () => {
     expect(block?.type === 'text' ? block.text : undefined).toContain('no recognised $schema');
   });
 
-  it('rejects a pre-documents.js-2.0.0 package dump with an error naming the shape change', async () => {
-    // Hand-built rather than captured: documents.js 2.0.0's own conversions can no longer produce this shape (formatVersion 1, a 'layout' half beside 'content'), and rejection keys on the $schema + formatVersion/layout signals alone, before any content is validated. The $schema URI is the 2.7.17-era one a real old dump carries -- documentFromJson recognises document-package URIs from any document-schema.js release, so this dump reaches DocumentPackageSchema.parse and dies there on formatVersion.
+  it('rejects a pre-schema-4 package dump (formatVersion 1, layout half) with the named version-gate error', async () => {
+    // Hand-built rather than captured: no current documents.js conversion can produce this shape any more (documents.js 1.x's formatVersion 1, a 'layout' half beside 'content'), and rejection keys on the $schema URI's major alone, before any content is validated. documentFromJson recognises document-package URIs from any document-schema.js release but only parses under the major that wrote the dump, so this dies in the version gate -- throwing the named error whose message names the tree change and the remedy, which the tool surfaces verbatim.
     const legacyPath = join(workspace, 'legacy.package.json');
     await writeFile(
       legacyPath,
@@ -185,18 +185,21 @@ describe('from_package', () => {
     expect(result.isError).toBe(true);
     const [block] = result.content;
     const text = block?.type === 'text' ? block.text : undefined;
-    expect(text).toContain('old formatVersion 1');
-    expect(text).toContain('regenerate the dump');
+    expect(text).toContain('document-schema.js@2.7.17');
+    expect(text).toContain('tree-form DocumentPackage');
+    expect(text).toContain('Re-dump the value with a 4.x release');
   });
 
-  it('also rejects a legacy dump whose formatVersion is missing but which still carries the layout half', async () => {
-    const legacyPath = join(workspace, 'legacy-no-version.package.json');
+  it('also rejects the fused formatVersion 2 shape (schema 3.x flat content+pages) with the same named error', async () => {
+    // The other pre-tree shape: documents.js 2.x (on document-schema.js 3.x, here pinned @3.0.0) dumped formatVersion 2 with flat content+pages -- the shape that was current until the tree, equally refused by the version gate, since it is the $schema major, not the body's fields, that decides.
+    const legacyPath = join(workspace, 'legacy-fused.package.json');
     await writeFile(
       legacyPath,
       JSON.stringify({
-        $schema: 'https://cdn.jsdelivr.net/npm/document-schema.js@2.7.17/schemas/document-package.schema.json',
+        $schema: 'https://cdn.jsdelivr.net/npm/document-schema.js@3.0.0/schemas/document-package.schema.json',
+        formatVersion: 2,
         content: { kind: 'wordprocessing', formatVersion: 2, metadata: {}, sections: [] },
-        layout: { formatVersion: 1, pages: [] },
+        pages: [],
       }),
     );
 
@@ -204,7 +207,30 @@ describe('from_package', () => {
 
     expect(result.isError).toBe(true);
     const [block] = result.content;
-    expect(block?.type === 'text' ? block.text : undefined).toContain('old formatVersion 1');
+    const text = block?.type === 'text' ? block.text : undefined;
+    expect(text).toContain('tree-form DocumentPackage');
+    expect(text).toContain('Re-dump the value with a 4.x release');
+  });
+
+  it('rejects a layout-document dump with the demotion error naming where the schema moved', async () => {
+    // A layout-document dump was never a DocumentPackage, but its $schema URI is still recognised -- answered by the demotion tombstone rather than the no-recognised-$schema branch, so a caller holding one learns the schema moved to pdf-codec instead of hearing the value is unrecognised.
+    const layoutPath = join(workspace, 'legacy-layout.package.json');
+    await writeFile(
+      layoutPath,
+      JSON.stringify({
+        $schema: 'https://cdn.jsdelivr.net/npm/document-schema.js@3.0.0/schemas/layout-document.schema.json',
+        formatVersion: 1,
+        pages: [],
+      }),
+    );
+
+    const result = await pair.client.callTool({ name: 'from_package', arguments: { source: { path: layoutPath }, targetFormat: 'docx' } });
+
+    expect(result.isError).toBe(true);
+    const [block] = result.content;
+    const text = block?.type === 'text' ? block.text : undefined;
+    expect(text).toContain('layout-document dump');
+    expect(text).toContain('moved to pdf-codec');
   });
 
   it('rejects source text that is not valid JSON', async () => {

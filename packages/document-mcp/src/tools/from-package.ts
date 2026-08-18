@@ -20,14 +20,9 @@ function errorResult(message: string): CallToolResult {
   return { content: [{ type: 'text', text: message }], isError: true };
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-// documentFromJson recognises a DocumentPackage $schema URI from any document-schema.js release (the URI pattern matches the version segment), so a pre-documents.js-2.0.0 dump is routed into DocumentPackageSchema.parse and dies there on formatVersion -- without this check the tool would surface the raw Zod issue list, which names neither the shape change nor the remedy. Either signal marks the old shape: package formatVersion 1, or a 'layout' half on a dump that is not formatVersion 2 (the fused shape has no such field, so anything still carrying one alongside a missing or older formatVersion was dumped before the fusion).
-function isLegacyPackageDump(value: unknown): boolean {
-  if (!isRecord(value) || documentSchemaKindOf(value) !== 'DocumentPackage') return false;
-  return value.formatVersion === 1 || ('layout' in value && value.formatVersion !== 2);
+// Narrowed by name, not instanceof: document-schema.js 4's documentFromJson throws SchemaVersionMismatchError and LayoutSchemaDemotedError, but documents.js re-exports only UnrecognizedDocumentSchemaError of the three -- and a name check is robust even against the class anyway (a duplicate documents.js/document-schema.js install would break instanceof while both sides still set error.name). Each class pins its own name literal at construction, so the name is the contract.
+function isNamedError(error: unknown, name: 'SchemaVersionMismatchError' | 'LayoutSchemaDemotedError'): error is Error {
+  return error instanceof Error && error.name === name;
 }
 
 export function registerFromPackageTools(server: McpServer): void {
@@ -46,7 +41,7 @@ export function registerFromPackageTools(server: McpServer): void {
       }),
     },
     async ({ source, targetFormat, output }) => {
-      // Declared outside the try so the catch can inspect what was read -- the legacy-dump and schema-validation diagnoses below key off the parsed value's own fields, not off the thrown error alone.
+      // Declared outside the try so the catch can name the schema kind in the validation diagnosis below, keyed off the parsed value's own $schema rather than the thrown error alone.
       let parsed: unknown;
       try {
         const bytes = await readSourceBytes(source);
@@ -74,10 +69,13 @@ export function registerFromPackageTools(server: McpServer): void {
             "'source' has no recognised $schema -- only a file carrying a real DocumentPackage (e.g. written by a caller's own --dump-package-equivalent step) can be read back by this tool",
           );
         }
-        if (error instanceof z.ZodError && isLegacyPackageDump(parsed)) {
-          return errorResult(
-            "'source' is a DocumentPackage dump in the old formatVersion 1 shape: a 'layout' half beside 'content'. documents.js 2.0.0 fused the two into formatVersion 2 ('content' + 'pages', with per-node 'frames' carrying the layout positions) and no longer parses the old shape -- regenerate the dump with a current documents.js (e.g. re-run the conversion whose package dump produced it) and read that back instead",
-          );
+        // The pre-tree shapes (document-schema.js 3.x and earlier: package formatVersion 1 with a separate layout half, or formatVersion 2's flat content+pages) never reach schema validation any more -- documentFromJson's version gate refuses a dump whose $schema pins another major, throwing the named error whose message says exactly what changed (the tree-form DocumentPackage of 4.0.0) and the remedy (re-dump with a 4.x release), so it is surfaced verbatim rather than paraphrased.
+        if (isNamedError(error, 'SchemaVersionMismatchError')) {
+          return errorResult(error.message);
+        }
+        // A layout-document dump is likewise named by its own error -- LayoutDocument moved to pdf-codec in the schema-4 major, and the message points there instead of implying the value is unreadable garbage.
+        if (isNamedError(error, 'LayoutSchemaDemotedError')) {
+          return errorResult(error.message);
         }
         if (error instanceof z.ZodError) {
           return errorResult(`'source' failed ${documentSchemaKindOf(parsed) ?? 'document schema'} validation: ${error.message}`);

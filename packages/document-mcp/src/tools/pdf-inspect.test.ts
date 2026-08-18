@@ -7,7 +7,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { createServer } from '../server';
 import { buildMultiPagePdf } from '../test-support/pdf-fixture';
 
-// Drives the real, fully-assembled MCP server (createServer(), the same entry point src/bin.ts uses) through a genuine in-memory client/server JSON-RPC round trip -- not the tool callback in isolation -- so this proves the wiring: that `pdf_inspect` is registered under that name on the server createServer() returns, that it reads a real PDF through documents.js's own readPdf, and that both the summary and the full ($schema-tagged) LayoutDocument reach the caller as structuredContent.
+// Drives the real, fully-assembled MCP server (createServer(), the same entry point src/bin.ts uses) through a genuine in-memory client/server JSON-RPC round trip -- not the tool callback in isolation -- so this proves the wiring: that `pdf_inspect` is registered under that name on the server createServer() returns, that it reads a real PDF through documents.js's own readPdf, and that both the summary and the full parsed LayoutDocument reach the caller as structuredContent.
 
 interface ConnectedPair {
   readonly client: Client;
@@ -110,7 +110,7 @@ describe('pdf_inspect', () => {
     expect(block?.type === 'text' ? JSON.parse(block.text) : undefined).toEqual(result.structuredContent);
   });
 
-  it('returns the full, $schema-tagged LayoutDocument via inline base64 bytes when full: true', async () => {
+  it('returns the full parsed LayoutDocument via inline base64 bytes when full: true', async () => {
     const pdfBytes = buildMultiPagePdf();
     const result = await pair.client.callTool({
       name: 'pdf_inspect',
@@ -118,16 +118,17 @@ describe('pdf_inspect', () => {
     });
 
     expect(result.isError).toBeFalsy();
-    const tagged = result.structuredContent;
-    if (!isRecord(tagged)) {
+    const layout = result.structuredContent;
+    if (!isRecord(layout)) {
       throw new Error('expected pdf_inspect --full to return a structured LayoutDocument object');
     }
-    expect(typeof tagged.$schema).toBe('string');
-    expect(tagged.formatVersion).toBe(1);
+    // No $schema any more: the layout-document schema family moved to pdf-codec in the schema-4 major and pdf-codec publishes no .schema.json URI to stamp -- the value's own formatVersion literal (still 1) is its version marker.
+    expect(layout.$schema).toBeUndefined();
+    expect(layout.formatVersion).toBe(1);
 
-    const pages = tagged.pages;
+    const pages = layout.pages;
     if (!isUnknownArray(pages)) {
-      throw new Error('expected the tagged LayoutDocument to carry a pages array');
+      throw new Error('expected the LayoutDocument to carry a pages array');
     }
     expect(pages).toHaveLength(2);
   });

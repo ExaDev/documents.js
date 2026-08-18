@@ -1,5 +1,5 @@
 import type { McpServer } from '@modelcontextprotocol/server';
-import { layoutDocumentWithSchema, readPdf, type LayoutImageAsset, type LayoutItem } from 'documents.js';
+import { readPdf, type LayoutImageAsset, type LayoutItem } from 'documents.js';
 import { z } from 'zod';
 import { DocumentInputSchema, resolveDocumentInput } from '../io/document-input';
 
@@ -27,7 +27,7 @@ export function registerPdfInspectTools(server: McpServer): void {
     {
       title: 'Inspect PDF',
       description:
-        "Parses a PDF (documents.js's readPdf) and reports a summary: page count, each page's own size and item-kind histogram, document metadata, and embedded image formats. Pass full: true to return the entire parsed LayoutDocument (tagged with its own $schema) instead of a summary.",
+        "Parses a PDF (documents.js's readPdf) and reports a summary: page count, each page's own size and item-kind histogram, document metadata, and embedded image formats. Pass full: true to return the entire parsed LayoutDocument instead of a summary.",
       inputSchema: z.object({
         source: DocumentInputSchema.describe('The PDF document to inspect.'),
         full: z.boolean().optional().describe('When true, return the entire parsed LayoutDocument instead of a summary. Defaults to false.'),
@@ -42,8 +42,8 @@ export function registerPdfInspectTools(server: McpServer): void {
       const layout = readPdf(bytes, { signal });
 
       if (full === true) {
-        const tagged = layoutDocumentWithSchema(layout);
-        return { content: [{ type: 'text', text: JSON.stringify(tagged) }], structuredContent: tagged };
+        // Returned as-is, no $schema tagging: the layout-document schema family moved from document-schema.js to pdf-codec in the schema-4 major (ExaDev/pdf-codec#65), and pdf-codec publishes no .schema.json URI to stamp -- the value's own formatVersion literal (still 1) is its version marker.
+        return { content: [{ type: 'text', text: JSON.stringify(layout) }], structuredContent: layout };
       }
 
       const summary = {
