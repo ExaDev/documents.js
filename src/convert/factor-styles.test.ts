@@ -93,16 +93,21 @@ describe('factorStyles minting', () => {
   });
 
   it('never factors the ban list: frames, sourcePath, and styleId stay per-node', () => {
+    const frames = [{ pageIndex: 0, xPt: 10, yPt: 20, widthPt: 30, heightPt: 5 }];
     const doc = wordprocessingDoc([
-      paragraph([run('one', { bold: true })], { styleId: 'Heading1' }),
-      paragraph([run('two', { bold: true })], { styleId: 'Heading1' }),
+      paragraph([run('one', { bold: true })], { styleId: 'Heading1', sourcePath: 'word/document.xml#one', frames }),
+      paragraph([run('two', { bold: true })], { styleId: 'Heading1', sourcePath: 'word/document.xml#one', frames }),
     ]);
     const minted = assemblePackage(doc);
     expect(refsOf(minted)).toEqual([{ ref: 's1', nodeKind: 'section' }]);
-    // styleId is identical on both paragraphs and occurs twice, but it is a per-node fact: no entry carries it and no paragraph loses it. bold occurs twice AND is carried by both extent runs, so the run half legitimately mints.
+    // All three ban-list keys are identical on both paragraphs and so occur twice, but each is a per-node fact: no entry carries any of them and no paragraph loses any of them. bold occurs twice AND is carried by both extent runs, so the run half legitimately mints.
     expect(minted.styles?.s1).toEqual({ run: { bold: true } });
     expect(containsKeyAnywhere(minted.children, 'styleId')).toBe(true);
     expect(containsKeyAnywhere(minted.styles, 'styleId')).toBe(false);
+    expect(containsKeyAnywhere(minted.children, 'sourcePath')).toBe(true);
+    expect(containsKeyAnywhere(minted.styles, 'sourcePath')).toBe(false);
+    expect(containsKeyAnywhere(minted.children, 'frames')).toBe(true);
+    expect(containsKeyAnywhere(minted.styles, 'frames')).toBe(false);
   });
 
   it('mints run tuples on the wrapper whose extent covers the runs, stripping them from the runs', () => {
