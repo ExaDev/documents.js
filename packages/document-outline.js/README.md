@@ -2,9 +2,9 @@
 
 [![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/document-outline.js) [![npm](https://img.shields.io/badge/npm-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/document-outline.js) [![Release](https://img.shields.io/github/v/release/ExaDev/document-outline.js)](https://github.com/ExaDev/document-outline.js/releases/latest) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/document-outline.js/ci.yml?branch=main)](https://github.com/ExaDev/document-outline.js/actions)
 
-> Heading- and level-driven hierarchical outlines over any `ContentDocument` — all five document kinds — plus the tree-walking helpers every consumer of a grouped tree ends up needing. The outline package for the [documents.js family](https://github.com/ExaDev). Worker-isomorphic: the same code runs under Node and inside a Cloudflare Workers isolate.
+> Heading- and level-driven hierarchical outlines over any `ContentDocument` — all five document kinds — plus `decompose`/`flatten`: the lossless tree-form view of a `DocumentPackage` and back, with bijection property tests as the gate. The outline package for the [documents.js family](https://github.com/ExaDev). Worker-isomorphic: the same code runs under Node and inside a Cloudflare Workers isolate.
 
-Created for [document-schema.js#14](https://github.com/ExaDev/document-schema.js/issues/14): none of `ContentDocument`'s shapes groups content by heading or list level — a heading paragraph sits in a flat `blocks` array like any other — so every consumer needing a nested tree (chunking a document for retrieval, generating a table of contents, structural diffing) had to rebuild the same nesting transform for itself. This package is that transform, once. It depends only on `document-schema.js` (plus `zod`): it never touches a codec, because it only ever operates on an already-produced `ContentDocument`, regardless of which codec made it.
+Created for [document-schema.js#14](https://github.com/ExaDev/document-schema.js/issues/14): none of `ContentDocument`'s shapes groups content by heading or list level — a heading paragraph sits in a flat `blocks` array like any other — so every consumer needing a nested tree (chunking a document for retrieval, generating a table of contents, structural diffing) had to rebuild the same nesting transform for itself. This package is that transform, once. It depends only on `document-schema.js` (plus `zod`): it never touches a codec, because it only ever operates on an already-produced `ContentDocument`, regardless of which codec made it. [document-outline.js#2](https://github.com/ExaDev/document-outline.js/issues/2) then re-chartered it as the phase-1 vehicle for [document-schema.js#20](https://github.com/ExaDev/document-schema.js/issues/20)'s `DocumentPackage` promotion: the `decompose`/`flatten` pair below is the grouping semantics and the property-tested bijection that promotion depends on.
 
 ## Getting started
 
@@ -27,8 +27,13 @@ To run a single test file, pass its path to vitest directly, e.g. `pnpm exec vit
 | Module | Exports |
 |---|---|
 | `outline/build` | `buildOutline` (per-kind outline construction) |
+| `outline/decompose` | `decompose` (DocumentPackage → package tree) |
+| `outline/flatten` | `flatten`, `DocumentEnvelope`, `documentEnvelope` (package tree → ContentDocument) |
+| `outline/effective` | `effective`, `effectiveTree` (effective-property resolution) |
+| `outline/package-node` | the `PackageNode` types, `PackageNodeSchema`/`PackageGroupSchema`/`PackageLeafSchema`, `isPackageNode`/`isPackageGroup`/`isPackageLeaf`, per-root-kind narrowers |
 | `outline/node` | `OutlineNode`, `OutlineChild`, `OutlineLeaf`, `OutlineNodeSchema`, `isOutlineNode`, `isOutlineChild`, `isOutlineLeaf` |
 | `outline/helpers` | `flattenOutline`, `outlineLeafText`, `leafContentHash` |
+| `outline/hash` | `stableContentHash`, `canonicalise`, `sha256` |
 
 `buildOutline(doc)` dispatches on `doc.kind` and returns the root scope's children — `OutlineChild[]`, an ordered mix of group nodes and leaf payloads. The root is deliberately not itself a node (no synthetic "document" group), so a wordprocessing document's pre-heading content — or a document with no grouping signal at all — appears as leaves directly in the returned array.
 
@@ -73,6 +78,47 @@ Heading and list paragraphs are represented by their group nodes and are not dup
 5. Hex-encode the digest, lowercase.
 
 The result is deterministic across processes and platforms, equal exactly when the leaf's content is equal, and different for different content up to SHA-256 collision resistance.
+
+## Decompose and flatten: the package tree
+
+`decompose` and `flatten` ([document-schema.js#20](https://github.com/ExaDev/document-schema.js/issues/20)'s promoted `DocumentPackage`, phase 1) are the lossless structural view of a document and its exact inverse:
+
+```ts
+import { decompose, flatten, documentEnvelope } from 'document-outline.js';
+
+const tree = decompose(pkg);                                  // PackageRoot[] — one group per top-level container
+const content = flatten(tree, documentEnvelope(pkg.content)); // ContentDocument — structurally identical to pkg.content
+```
+
+`decompose(pkg)` reads `pkg.content` (the flat codec-exchange form) and wraps it into a tree of `{ node, children }` groups and bare leaves. It never copies content: the tree's leaves are the document's own node objects, embedded — so a consumer holding both views sees an edit through either. It ignores `pkg.pages` (rendered page geometry is already fused onto the content nodes' own `frames` fields).
+
+Groups are `{ node, children }` where `node` embeds either an **anchor paragraph** — heading and list groups carry the full `ContentParagraph`, runs and formatting and frames included, never a projected text label; that projection is `buildOutline`'s job — or a **container descriptor**: `{ kind: 'section', pageSize, margins }`, `{ kind: 'slide', size, notes }`, `{ kind: 'sheet', name, cells, columns, rows, printSettings }`, `{ kind: 'drawPage', size }`. A shape is its own group `{ node: <ContentShape minus blocks>, children }`. Bare leaves carry their own `kind` and never `children`; discrimination is structural on `node` + `children`.
+
+### The container-boundary rule
+
+Grouping happens **within one container's block flow, never across containers**:
+
+- **wordprocessing** — one section group per `ContentSection` (mandatory: a section's pre-layout geometry cannot ride a rendered-pages array, and without section groups the bijection is unsatisfiable for multi-section documents). Inside a section, the same stack semantics as `buildOutline` — headings nest by `headingLevel`, lists nest inside them by `list.level`, plain paragraphs sit flat and close the list nesting — but the stacks reset at each section boundary rather than flowing sections into one tree.
+- **presentation** — one slide group per slide, then **one shape group per shape**: a slide's paragraphs are never regrouped across its shapes (that is the outline's lossy TOC projection, not a decomposition). Inside each shape, list nesting only.
+- **spreadsheet** — one sheet group per sheet; the grid (`cells`, `columns`, `rows`) and `printSettings` ride **on the sheet node**; children are the sheet's images then its embedded objects.
+- **drawing** — one page group per page; children are the page's shape groups then its vector leaves.
+- **formula** — the single `ContentFormula` node, with no container group around it.
+
+An embedded document (`ContentEmbeddedObject`, the recursive arm) always stays intact as one leaf, whichever container holds it.
+
+### The envelope
+
+`flatten` takes the document-level fields the tree cannot carry, as a `DocumentEnvelope` (`{ kind, metadata, symbolTable? }`) beside the tree. `kind` lives in the envelope rather than being inferred from the top-level nodes because empty documents are legal — a presentation with no slides decomposes to an empty root array, and inferring the kind from nothing would break the bijection for exactly those. `documentEnvelope(pkg.content)` extracts it in one call.
+
+### The three laws
+
+The pair is gated by property tests over an outline-local corpus covering all five kinds (including the recursive embedded-formula arm, multi-section geometry, a multi-frame wrapped run, and the empty-document edges) — `src/outline/bijection.test.ts`:
+
+1. **Strict structural equality, both directions** — `flatten(decompose(pkg))` reproduces `pkg.content` exactly (same document order; comparison via `canonicalise` + a JSON cycle, never identity — decompose shares node references, so identity would pass even for a mutating implementation).
+2. **Effective-property equality, universally** — resolve-then-compare: both encodings pass through `effective`/`effectiveTree` before comparison. Today resolution is the identity (no style layer exists yet, so every corpus document is trivially styles-table-free and this law reduces to structural equality); when the styles major lands, the same assertions compare overlay-resolved properties. `effective` is exported now precisely so these tests and `leafContentHash` already route through the one seam where style resolution will land.
+3. **Minting idempotence** — `decompose(flatten(decompose(pkg)))` equals `decompose(pkg)`: re-decomposing a flattened tree mints the identical tree.
+
+These laws are the gate for the whole `DocumentPackage` promotion. **Phase 2 ports this pair into documents.js's package boundary** (one implementation, one authority — no second copy of the grouping semantics; `buildOutline` deprecates in favour of the boundary's `decompose`), and documents.js re-runs the same assertions over its real corpus as the promotion's merge gate. The tests travel unchanged.
 
 ## Conventions
 
