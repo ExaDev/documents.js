@@ -1,3 +1,10 @@
+# [1.26.0](https://github.com/ExaDev/documents/compare/v1.25.1...v1.26.0) (2026-08-18)
+
+
+### Features
+
+* migrate to the documents.js 3.0.0 tree-form DocumentPackage ([400e2d8](https://github.com/ExaDev/documents/commit/400e2d86e8b2bf398f73e8db12cfbacbaf3c6f92))
+
 ## [1.25.1](https://github.com/ExaDev/documents/compare/v1.25.0...v1.25.1) (2026-08-17)
 
 # [1.25.0](https://github.com/ExaDev/documents/compare/v1.24.0...v1.25.0) (2026-08-17)
