@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ContentBlock, ContentDocument, ContentEmbeddedObject, ContentFormula, ContentSection, ContentShape, ContentSheetCell, ContentSheetImage, ContentSheetPrintSettings, ContentVector, DocumentPackage } from 'document-schema.js';
+import type { ContentBlock, ContentDocument, ContentEmbeddedObject, ContentFormula, ContentSection, ContentShape, ContentSheetCell, ContentSheetImage, ContentSheetPrintSettings, ContentVector, DocumentPackage, SheetGroupNode } from 'document-schema.js';
 import { decompose, decomposeSection, decomposeSheet, isHeadingParagraph } from './decompose';
 import { flattenPackage } from './flatten';
 
@@ -150,6 +150,12 @@ describe('spreadsheet decomposition', () => {
     expect(flat.sheets[2]).not.toHaveProperty('embeddedObjects');
     expect(flat.sheets[1]).toHaveProperty('embeddedObjects');
     expect(flat.sheets[2]).toHaveProperty('images');
+  });
+
+  it('refuses a style ref on a sheet group loudly -- a sheet holds no block flow to resolve it onto', () => {
+    // The schema permits style on every group node, but the spreadsheet arm builds no resolution chain (a sheet's children are images and embedded objects, not paragraphs), so a ref there could only be passed by silently -- losing the styled content with no signal. The refusal mirrors entryOf's missing-table rule: resolution runs completely or not at all. Minting never stamps such a ref (a sheet group's extent is always empty); this guard is for hand-built trees.
+    const sheet: SheetGroupNode = { node: { kind: 'sheet', name: 'Data', cells: [], columns: [], rows: [], printSettings: { pageSize: { widthPt: 595, heightPt: 842 }, margins: { topPt: 20, rightPt: 20, bottomPt: 20, leftPt: 20 }, gridlines: true, headers: true, pageOrder: 'downThenOver' } }, children: [], style: 's1' };
+    expect(() => flattenPackage({ kind: 'spreadsheet', metadata: {}, children: [sheet] })).toThrow(/no block flow/);
   });
 });
 
