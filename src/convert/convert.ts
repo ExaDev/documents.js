@@ -212,7 +212,7 @@ export function pdfToSvg(bytes: Uint8Array<ArrayBuffer>, options?: PdfToDocument
 // The same-variant cross-format bridges (odt<->docx, odp<->pptx, ods<->xlsx, csv<->ods, csv<->xlsx, svg<->odg, and -- further down this section -- markdown<->docx, markdown<->odt), each bypassing PDF entirely. Every conversion above this point pivots through a LayoutDocument; these pairs don't have that problem: both formats in each pair already read into and build from the identical ContentDocument variant, so the bridge is nothing more than reader -> writer, with no layout engine, no font measurement, and no geometry-based reconstruction in between. Each forwarder below hands the pair to convertDocument (src/convert/composition.ts), whose pathfinder resolves it as a single same-variant bridge hop and runs the identical decode/read/build/encode sequence.
 export interface DocumentBridgeOptions {
   readonly signal?: AbortSignal;
-  // Called exactly once, synchronously, with the DocumentPackage this bridge built internally, before the function returns its bytes -- mirroring DocumentToPdfOptions/PdfToDocumentOptions's own onDocument. A bridge never runs a layout engine (see this section's own top-of-block comment), so `layout` is always left undefined here -- DocumentPackageSchema already models layout as optional for exactly this case, and running a layout conversion purely to populate a field no caller asked for would be wasted work.
+  // Called exactly once, synchronously, with the DocumentPackage this bridge built internally, before the function returns its bytes -- mirroring DocumentToPdfOptions/PdfToDocumentOptions's own onDocument. A bridge never runs a layout engine (see this section's own top-of-block comment), so the reported package carries content only, with no pages array and no node frames -- running a layout conversion purely to populate positions no caller asked for would be wasted work.
   readonly onDocument?: (pkg: DocumentPackage) => void;
   // Called once per formula construct that degraded or was approximated while an embedded formula crossed this bridge, in whichever direction the bridge translates: a MathML construct with no OMML counterpart when BUILDING a docx (src/omml/write.ts -- odtToDocx genuinely produces these; markdownToDocx threads the option for consistency but has no formula construct in its own source format to produce one from), and an OMML construct with no MathML counterpart when READING one (src/omml/read.ts -- docxToOdt and docxToMarkdown). pdfToDocx deliberately has no equivalent option -- reconstructWordprocessing recovers positioned glyphs, never a formula block, so there is nothing there to report.
   readonly onMathDiagnostic?: (diagnostic: OmmlDiagnostic, context: { readonly sourcePath?: string }) => void;
@@ -485,7 +485,10 @@ export function odbToXlsx(bytes: Uint8Array<ArrayBuffer>, options?: OdbConversio
   const tables = readOdbTables(pkg, { timeZone: options?.timeZone });
   throwIfAborted(options?.signal);
   const content = odbTablesToSpreadsheetDocument(tables);
-  return encodePackage(buildXlsxPackage(content)); // ooxml.js's own encodePackage -- buildXlsxPackage produces an OOXML package.
+  const out = encodePackage(buildXlsxPackage(content)); // ooxml.js's own encodePackage -- buildXlsxPackage produces an OOXML package.
+  // Fires the content-only package OdbConversionOptions has always accepted via DocumentBridgeOptions but these two odb functions never delivered -- no layout pass runs here, so there are no pages and no node frames, exactly like every other bridge's package. Fired after the output bytes exist so a callback that inspects content cannot observe a half-built conversion.
+  options?.onDocument?.({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content });
+  return out;
 }
 
 export interface OdbToCsvOptions extends OdbConversionOptions {
@@ -498,7 +501,12 @@ export function odbToCsv(bytes: Uint8Array<ArrayBuffer>, options?: OdbToCsvOptio
   const pkg = decodePackage(bytes); // odf.js's own decodePackage -- odb is an ODF package.
   const tables = readOdbTables(pkg, { timeZone: options?.timeZone });
   throwIfAborted(options?.signal);
-  return buildOdbTableCsv(tables, options?.table);
+  const csv = buildOdbTableCsv(tables, options?.table);
+  // The CSV writer pivots through HsqldbTable rows rather than a ContentDocument, so the reported package is built only when a callback asks for it -- the .odb's whole spreadsheet content (every table), since that is the document this conversion read, with the selected table carried by the CSV itself.
+  if (options?.onDocument !== undefined) {
+    options.onDocument({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content: odbTablesToSpreadsheetDocument(tables) });
+  }
+  return csv;
 }
 
 // readOdbReportContent (src/odb/report/content.ts) already turns a report into a real wordprocessing ContentDocument -- the three functions below are the last step, dispatching that ContentDocument to real docx/odt/pdf bytes, the same "read/render -> encode" shape every other ergonomic conversion in this file has. They take a ContentDocument rather than a Package: a rendered report has no source package of its own to round-trip through (readOdbReportContent already consumed the .odb), so there is nothing left to decode here, unlike odbToXlsx/odbToCsv above. They stay hand-written rather than forwarding to convertDocument: convertDocument's contract is bytes-in/bytes-out, and these take a ContentDocument directly.
