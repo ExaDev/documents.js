@@ -13,6 +13,7 @@ import { minimalOdtBytes } from '../test-support/odt';
 import { odsToXlsx } from './convert';
 import { createLocalDocumentConverter } from './local';
 import { UnsupportedConversionError } from './capability';
+import { flattenPackage } from './flatten';
 
 function pdfHeader(bytes: Uint8Array<ArrayBuffer>): string {
   return new TextDecoder('latin1').decode(bytes.subarray(0, 5));
@@ -33,8 +34,8 @@ function buildSamplePptx(text: string): Uint8Array<ArrayBuffer> {
 describe('createLocalDocumentConverter: shape', () => {
   it('reports contractVersion and the supported conversion pairs', () => {
     const converter = createLocalDocumentConverter();
-    // 6, not 5: convert()'s own ConversionOptions gained page, forwarded to any svg-target hop (drawing pages are anonymous, so an index selects the page the way sheet names a sheet) -- see port.ts's own contractVersion comment on what does and does not warrant a bump.
-    expect(converter.contractVersion).toBe(6);
+    // 7, not 6: ConversionResult.package changed TYPE to the tree-form DocumentPackage of document-schema.js 4.0.0 (children carry the decomposed group tree plus the minted styles table, where it previously carried the flat { content, pages } envelope) -- see port.ts's own contractVersion comment on what does and does not warrant a bump.
+    expect(converter.contractVersion).toBe(7);
     // SUPPORTED_CONVERSIONS is now derived from the composition pathfinder (resolveCompositionPlan) rather than a hand-maintained DIRECT_EDGES list. The pathfinder routes every pair of non-odf formats (each reaches all 10 others within the 3-hop cap), plus the special-case odf -> pdf pair -- 111 pairs total, sorted by source then target for determinism. csv joins as a full spreadsheet-variant member: same-variant bridges to ods/xlsx directly, everything else composed through the identical ods pivot xlsx uses. svg joins as the drawing family's plain-text member the same way: a same-variant bridge to odg directly plus its own pdf layout pair, everything else composed through those two edges.
     expect(converter.conversions).toEqual([
       { source: 'csv', target: 'docx' },
@@ -355,12 +356,13 @@ describe('createLocalDocumentConverter: convert', () => {
 
     expect(result.package).toBeDefined();
     const pkg = result.package!;
-    expect(pkg.content.kind).toBe('wordprocessing');
+    expect(pkg.kind).toBe('wordprocessing');
     expect(pkg.pages).toBeDefined();
-    if (pkg.content.kind !== 'wordprocessing') {
+    const content = flattenPackage(pkg);
+    if (content.kind !== 'wordprocessing') {
       throw new Error('expected a wordprocessing ContentDocument');
     }
-    const paragraph = pkg.content.sections[0]?.blocks[0];
+    const paragraph = content.sections[0]?.blocks[0];
     if (paragraph?.kind !== 'paragraph') {
       throw new Error('expected a paragraph block');
     }
@@ -377,7 +379,7 @@ describe('createLocalDocumentConverter: convert', () => {
 
     expect(result.package).toBeDefined();
     const pkg = result.package!;
-    expect(pkg.content.kind).toBe('wordprocessing');
+    expect(pkg.kind).toBe('wordprocessing');
     expect(pkg.pages).toBeUndefined();
   });
 });
@@ -429,9 +431,10 @@ describe('createLocalDocumentConverter: markdown image resolution', () => {
       { source: { format: 'markdown', bytes: new TextEncoder().encode('![a local image](./local.png)') }, targetFormat: 'pdf' },
       { signal: new AbortController().signal, images: (destination) => (destination === './local.png' ? { bytes: onePixelPng } : undefined) },
     );
-    expect(result.package?.content.kind).toBe('wordprocessing');
-    if (result.package?.content.kind === 'wordprocessing') {
-      const hasImage = result.package.content.sections.some((section) => section.blocks.some((block) => block.kind === 'image'));
+    const content = result.package === undefined ? undefined : flattenPackage(result.package);
+    expect(content?.kind).toBe('wordprocessing');
+    if (content?.kind === 'wordprocessing') {
+      const hasImage = content.sections.some((section) => section.blocks.some((block) => block.kind === 'image'));
       expect(hasImage).toBe(true);
     }
   });
