@@ -1,6 +1,6 @@
 {
   "name": "odf.js",
-  "version": "4.0.0",
+  "version": "4.0.1",
   "description": "Type-safe, lossless round-trip conversion between OpenDocument Format packages (odt, ods, odp) and JSON, hand-written and dependency-minimal, built on Zod 4 codecs.",
   "type": "module",
   "repository": {
