@@ -21,13 +21,21 @@ function asParagraph(block: ContentBlock | undefined): ContentParagraph {
   return block;
 }
 
+// The two construct-boundary markers have no sourcePath field at all (a boundary is not content), so reading one off an unnarrowed ContentBlock no longer type-checks -- this narrows past them for the assertions below, which only ever look at real content blocks.
+function sourcePathOf(block: ContentBlock | undefined): string | undefined {
+  if (block === undefined || block.kind === 'constructStart' || block.kind === 'constructEnd') {
+    return undefined;
+  }
+  return block.sourcePath;
+}
+
 describe('assignSourcePaths', () => {
   it('assigns each top-level block a path from the given prefix', () => {
     const blocks: ContentBlock[] = [paragraph('a'), pageBreak(), image()];
     assignSourcePaths(blocks, 'sections[0]');
-    expect(blocks[0]?.sourcePath).toBe('sections[0].blocks[0]');
-    expect(blocks[1]?.sourcePath).toBe('sections[0].blocks[1]');
-    expect(blocks[2]?.sourcePath).toBe('sections[0].blocks[2]');
+    expect(sourcePathOf(blocks[0])).toBe('sections[0].blocks[0]');
+    expect(sourcePathOf(blocks[1])).toBe('sections[0].blocks[1]');
+    expect(sourcePathOf(blocks[2])).toBe('sections[0].blocks[2]');
   });
 
   it('assigns each run within a paragraph a path nested under its own block path', () => {
@@ -65,7 +73,7 @@ describe('assignSourcePaths', () => {
   it('works with a slides[N].shapes[N] prefix, matching the pptx grammar', () => {
     const blocks: ContentBlock[] = [paragraph('hello')];
     assignSourcePaths(blocks, 'slides[2].shapes[1]');
-    expect(blocks[0]?.sourcePath).toBe('slides[2].shapes[1].blocks[0]');
+    expect(sourcePathOf(blocks[0])).toBe('slides[2].shapes[1].blocks[0]');
     expect(asParagraph(blocks[0]).runs[0]?.sourcePath).toBe('slides[2].shapes[1].blocks[0].runs[0]');
   });
 });

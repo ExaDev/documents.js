@@ -43,6 +43,14 @@ function asParagraph(block: ContentBlock | undefined): ContentParagraph {
   return block;
 }
 
+// The two construct-boundary markers have no sourcePath field at all (a boundary is not content), so reading one off an unnarrowed ContentBlock no longer type-checks -- this narrows past them for the assertions below, which only ever look at real content blocks.
+function sourcePathOf(block: ContentBlock | undefined): string | undefined {
+  if (block === undefined || block.kind === 'constructStart' || block.kind === 'constructEnd') {
+    return undefined;
+  }
+  return block.sourcePath;
+}
+
 function asTable(block: ContentBlock | undefined): ContentTable {
   if (block?.kind !== 'table') {
     throw new Error('expected a table block');
@@ -379,7 +387,7 @@ describe('readDocx: sourcePath', () => {
     const title = asParagraph(doc.sections[0]?.blocks[0]);
     expect(title.sourcePath).toBe('sections[0].blocks[0]');
     expect(title.runs[0]?.sourcePath).toBe('sections[0].blocks[0].runs[0]');
-    expect(doc.sections[0]?.blocks[1]?.sourcePath).toBe('sections[0].blocks[1]'); // the pageBreak block
+    expect(sourcePathOf(doc.sections[0]?.blocks[1])).toBe('sections[0].blocks[1]'); // the pageBreak block
     const secondSection = asParagraph(doc.sections[1]?.blocks[0]);
     expect(secondSection.sourcePath).toBe('sections[1].blocks[0]');
     expect(secondSection.runs[0]?.sourcePath).toBe('sections[1].blocks[0].runs[0]');
@@ -448,7 +456,7 @@ describe('readDocx: images', () => {
 
   it('assigns the image its own sourcePath alongside its containing paragraph', () => {
     const doc = readDocx(buildFixturePackage());
-    expect(doc.sections[1]?.blocks[2]?.sourcePath).toBe('sections[1].blocks[2]');
+    expect(sourcePathOf(doc.sections[1]?.blocks[2])).toBe('sections[1].blocks[2]');
   });
 });
 
