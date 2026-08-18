@@ -14,7 +14,7 @@ import type {
   LayoutMetadata,
   Margins,
 } from 'document-schema.js';
-import { CONTENT_FORMAT_VERSION, PAGE_SIZE_A4 } from 'document-schema.js';
+import { PAGE_SIZE_A4 } from 'document-schema.js';
 import type { XmlElement, XmlNode } from '../../model/node';
 import type { Package } from '../../model/package';
 import { attrValue, childrenWithTag, findChildElement, rootElement } from '../../xml/query';
@@ -225,19 +225,19 @@ function readEmbeddedObjectDocument(reference: EmbeddedDrawObject): ContentDocum
   switch (reference.objectKind) {
     case 'wordprocessing': {
       const { metadata, sections } = readOdt(reference.package);
-      return { kind: 'wordprocessing', formatVersion: CONTENT_FORMAT_VERSION, metadata, sections };
+      return { kind: 'wordprocessing', metadata, sections };
     }
     case 'presentation': {
       const { metadata, slides } = readOdp(reference.package);
-      return { kind: 'presentation', formatVersion: CONTENT_FORMAT_VERSION, metadata, slides };
+      return { kind: 'presentation', metadata, slides };
     }
     case 'drawing': {
       const { metadata, pages } = readOdg(reference.package);
-      return { kind: 'drawing', formatVersion: CONTENT_FORMAT_VERSION, metadata, pages };
+      return { kind: 'drawing', metadata, pages };
     }
     case 'spreadsheet': {
       const { metadata, sheets } = readOds(reference.package);
-      return { kind: 'spreadsheet', formatVersion: CONTENT_FORMAT_VERSION, metadata, sheets };
+      return { kind: 'spreadsheet', metadata, sheets };
     }
     case 'formula':
       // The one embedded kind whose own reader already returns a finished ContentDocument (readOdfFormulaDocument), because a formula document has no per-format {metadata, sections/slides/pages/sheets} shape to re-wrap -- its whole content IS the MathML.

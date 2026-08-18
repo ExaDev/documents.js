@@ -1,5 +1,4 @@
 import type { ContentDocument, LayoutMetadata } from 'document-schema.js';
-import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
 import type { XmlElement, XmlNode } from '../../model/node';
 import type { Package } from '../../model/package';
 import { attrValue, elementsWithTag, rootElement } from '../../xml/query';
@@ -100,7 +99,6 @@ export function readOdfFormulaDocument(pkg: Package): ContentDocument {
 
   return {
     kind: 'formula',
-    formatVersion: CONTENT_FORMAT_VERSION,
     metadata,
     formula: starMath === undefined ? { mathml } : { mathml, starMath },
   };
