@@ -2,6 +2,7 @@ import type { ContentBlock, ContentRun } from 'document-schema.js';
 import { isOutlineNode } from './node';
 import type { OutlineChild, OutlineLeaf } from './node';
 import { stableContentHash } from './hash';
+import { effective } from './effective';
 
 // Flattens an outline to its leaves in document order: a left-to-right depth-first walk that skips group nodes (their text already lives in the node, not in a leaf) and emits every leaf payload in the position it occupies. This is the chunking-for-retrieval view -- the ordered list of retrievable content units. Accepts exactly what buildOutline returns (the root scope's children, groups and pre-grouping leaves alike).
 export function flattenOutline(children: readonly OutlineChild[]): OutlineLeaf[] {
@@ -35,7 +36,7 @@ function blockTexts(blocks: readonly ContentBlock[]): string[] {
   return parts;
 }
 
-// A stable content hash for one leaf, identical across processes and platforms and equal exactly when the leaf's content is equal: independently constructed leaves that differ only in field-construction order hash the same, and any content difference hashes differently (up to SHA-256 collision resistance). The exact recipe -- key-order canonicalisation, JSON serialisation, UTF-8, hand-rolled SHA-256, lowercase hex -- is documented step by step in hash.ts and is part of this package's published contract.
+// A stable content hash for one leaf, identical across processes and platforms and equal exactly when the leaf's content is equal: independently constructed leaves that differ only in field-construction order hash the same, and any content difference hashes differently (up to SHA-256 collision resistance). The exact recipe -- key-order canonicalisation, JSON serialisation, UTF-8, hand-rolled SHA-256, lowercase hex -- is documented step by step in hash.ts and is part of this package's published contract. The leaf passes through effective() before hashing so the hash is over EFFECTIVE properties: today resolution is the identity (no style layer exists), and when the styles major lands the hash recipe stays pinned while its input becomes the resolved form -- hashes issued before and after that change stay comparable for style-free content.
 export function leafContentHash(leaf: OutlineLeaf): string {
-  return stableContentHash(leaf);
+  return stableContentHash(effective(leaf));
 }
