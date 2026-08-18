@@ -1,3 +1,15 @@
+# [3.0.0](https://github.com/ExaDev/markdown-codec/compare/v2.0.0...v3.0.0) (2026-08-18)
+
+
+* feat!: migrate to document-schema.js 4.0.0 (formatVersion retired, depth-only list memberships) ([226463a](https://github.com/ExaDev/markdown-codec/commit/226463a7b43ba788369b50c9b0004437d623c04b))
+
+
+### BREAKING CHANGES
+
+* readMarkdown's emitted ContentDocuments no longer
+carry formatVersion and validate against document-schema.js 4;
+consumers still validating against schema 3 must move to 4.
+
 # [2.0.0](https://github.com/ExaDev/markdown-codec/compare/v1.4.2...v2.0.0) (2026-08-17)
 
 
