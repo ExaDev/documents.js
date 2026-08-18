@@ -203,7 +203,7 @@ export function convertShape(shape: ContentShape, slideHeightPt: number, pageInd
     } else if (block.kind === 'embeddedObject' && block.objectKind === 'formula' && formulaContext !== undefined) {
       layoutShapeFormula(block, flippedFrame, formulaContext);
     }
-    // 'pageBreak' blocks never occur in a pptx-sourced ContentDocument (only docx's reader emits them). Every other 'embeddedObject' objectKind (wordprocessing/presentation/spreadsheet/drawing), and a 'formula' block reached with no formulaContext, fall through unhandled -- present only for ContentBlock's type exhaustiveness.
+    // 'pageBreak' blocks never occur in a pptx-sourced ContentDocument (only docx's reader emits them). Every other 'embeddedObject' objectKind (wordprocessing/presentation/spreadsheet/drawing), and a 'formula' block reached with no formulaContext, fall through unhandled -- present only for ContentBlock's type exhaustiveness. 'constructStart'/'constructEnd' fall through the same way, deliberately: a construct marker is a zero-width boundary sentinel with no content of its own to render, so skipping it here loses nothing -- the paragraphs it wraps are separate blocks in this same flow and lay out exactly as if the marker were not there.
   }
 }
 
