@@ -72,6 +72,44 @@ describe('odbToCsv', () => {
   });
 });
 
+// OdbConversionOptions inherits onDocument from DocumentBridgeOptions, but odbToXlsx/odbToCsv historically never fired it -- an accepted-but-ignored callback. Both now deliver the same content-only package every other bridge reports: the .odb's whole spreadsheet content (every table, since that is the document the conversion read), no pages and no node frames, because no layout pass runs on this path.
+describe('odbToXlsx / odbToCsv onDocument', () => {
+  it('odbToXlsx fires onDocument exactly once with a content-only spreadsheet package', () => {
+    const packages: unknown[] = [];
+    const out = odbToXlsx(embeddedHsqldbOdbBytes(), { onDocument: (pkg) => packages.push(pkg) });
+    expect(out.byteLength).toBeGreaterThan(0);
+    expect(packages).toHaveLength(1);
+    const pkg = packages[0];
+    if (typeof pkg !== 'object' || pkg === null || !('content' in pkg)) {
+      throw new Error('expected a DocumentPackage');
+    }
+    const { content } = pkg as { content: { kind: string; sheets: { name: string }[] } };
+    expect(content.kind).toBe('spreadsheet');
+    expect(content.sheets.map((sheet) => sheet.name)).toEqual(['CUSTOMERS', 'ORDERS']);
+    expect('pages' in pkg && pkg.pages !== undefined).toBe(false);
+  });
+
+  it('odbToCsv fires onDocument once with the whole-document content, lazily -- no callback, no document built', () => {
+    const packages: unknown[] = [];
+    const out = odbToCsv(embeddedHsqldbOdbBytes(), { table: 'ORDERS', onDocument: (pkg) => packages.push(pkg) });
+    expect(new TextDecoder().decode(out)).toContain('first order');
+    expect(packages).toHaveLength(1);
+    const pkg = packages[0];
+    if (typeof pkg !== 'object' || pkg === null || !('content' in pkg)) {
+      throw new Error('expected a DocumentPackage');
+    }
+    // The selected ORDERS table is what the CSV carries; the reported package is the whole .odb -- CUSTOMERS and ORDERS both.
+    const { content } = pkg as { content: { kind: string; sheets: { name: string }[] } };
+    expect(content.kind).toBe('spreadsheet');
+    expect(content.sheets.map((sheet) => sheet.name)).toEqual(['CUSTOMERS', 'ORDERS']);
+  });
+
+  it('neither fires anything when no onDocument is supplied', () => {
+    expect(() => odbToXlsx(embeddedHsqldbOdbBytes())).not.toThrow();
+    expect(() => odbToCsv(embeddedHsqldbOdbBytes(), { table: 'ORDERS' })).not.toThrow();
+  });
+});
+
 // The Tier 2 byte-level round trip: embeddedHsqldbCachedOdbBytes() (src/test-support/odb.ts) is a real, zipped .odb package wrapping a genuine HSQLDB 1.8.0.10 CACHED-table database's own database/script + database/data + database/properties + database/backup -- decoded exactly the way a caller's own bytes would be, through decodePackage -> readOdbTables (src/odb/read.ts's withCachedTableRows, src/hsqldb/cache.ts) -> odbTablesToSpreadsheetDocument/buildOdbTableCsv. DATE columns are involved, so this suite pins TZ the same way src/hsqldb/cache.test.ts does -- see that file's own comment on why.
 describe('odbToXlsx / odbToCsv: a real HSQLDB 1.8.0.10 CACHED-table database', () => {
   let previousTz: string | undefined;
