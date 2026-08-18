@@ -110,6 +110,43 @@ describe('buildDocxPackage: content round trip', () => {
     expect(sections[0]?.blocks.map((block) => block.kind)).toEqual(['paragraph', 'pageBreak', 'paragraph']);
   });
 
+  // A heading with a page break before it and Word's own _Toc bookmark around it -- one of the commonest shapes in a real document with a table of contents. collectParagraph pushes the pageBreak block before the paragraph it belongs to, so a construct whose extent starts at that same paragraph opens one block later: the page break and the construct are siblings in the flat list, not nested. The page break must still land immediately before the paragraph that carries it, not at the end of the section with a spurious empty paragraph appended.
+  it('keeps a page break immediately before the paragraph that opens a construct there, instead of moving it to the end of the flow', () => {
+    const source = docxPackage([
+      para('before'),
+      el('w:p', {}, [
+        el('w:pPr', {}, [el('w:pageBreakBefore')]),
+        el('w:bookmarkStart', { 'w:id': '3', 'w:name': '_Toc9' }),
+        el('w:r', {}, [el('w:t', {}, [txt('Chapter 1')])]),
+        el('w:bookmarkEnd', { 'w:id': '3' }),
+      ]),
+    ]);
+    const before = readDocx(source);
+    expect(before.sections[0]?.blocks.map((block) => block.kind)).toEqual(['paragraph', 'pageBreak', 'constructStart', 'paragraph', 'constructEnd']);
+    const after = readDocx(buildDocxPackage(before)).sections[0]?.blocks ?? [];
+    expect(findConstructMarkerImbalance(after)).toBeUndefined();
+    const paragraphs = after.flatMap((block) => (block.kind === 'paragraph' ? [block] : []));
+    // No spurious paragraph gained on the way out, and "Chapter 1" is not displaced to the end of the flow.
+    expect(paragraphs.map((paragraph) => paragraph.runs.map((run) => run.text).join(''))).toEqual(['before', 'Chapter 1']);
+    const kinds = after.map((block) => block.kind);
+    expect(kinds.filter((kind) => kind === 'pageBreak')).toHaveLength(1);
+    expect(kinds.indexOf('pageBreak')).toBeLessThan(kinds.lastIndexOf('paragraph'));
+  });
+
+  // A ContentDocument from another codec (markdown-codec, odf.js, pdf-codec) can hand this writer a page break directly followed by a table, a shape readDocx itself never produces but buildDocxPackage still has to honour: WordprocessingML has no page-break element for a table to carry, so the break becomes its own empty paragraph immediately before the table, not displaced after it.
+  it('keeps a page break immediately before a table rather than displacing it after the table', () => {
+    const blocks: ContentBlock[] = [
+      { kind: 'paragraph', runs: [{ text: 'before' }] },
+      { kind: 'pageBreak' },
+      { kind: 'table', columnWidthsPt: [72], rows: [{ cells: [{ blocks: [{ kind: 'paragraph', runs: [{ text: 'cell' }] }] }] }] },
+    ];
+    const written = buildDocxPackage({ sections: [{ pageSize: { widthPt: 612, heightPt: 792 }, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 }, blocks }] });
+    const after = readDocx(written).sections[0]?.blocks ?? [];
+    const kinds = after.map((block) => block.kind);
+    expect(kinds.indexOf('pageBreak')).toBeGreaterThan(-1);
+    expect(kinds.indexOf('pageBreak')).toBeLessThan(kinds.indexOf('table'));
+  });
+
   // The source relationship spells its query separator as the XML entity '&amp;'; the projection decodes it, and the writer re-encodes it once -- the whole point of the pair being that a target survives the trip spelled the same way, not doubly encoded.
   it('round-trips an external hyperlink through a freshly minted relationship, sharing one relationship per target', () => {
     const link = (text: string): XmlNode => el('w:p', {}, [el('w:hyperlink', { 'r:id': 'rIdHlink' }, [el('w:r', {}, [el('w:t', {}, [txt(text)])])])]);

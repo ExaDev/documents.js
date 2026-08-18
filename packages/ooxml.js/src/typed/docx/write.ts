@@ -15,6 +15,7 @@ import { TABLE_OF_CONTENTS_GALLERY, isDeletedChange } from './constructs';
 // - A run whose boolean properties are absent but which carries some other property (a colour, a size) reads back with those booleans false rather than absent, because the w:rPr the other property forces is itself what the read-side cascade turns an absent w:b into. A run with no properties at all writes no w:rPr and round-trips exactly.
 // - Four construct shapes are written as their content with no wrapper, because WordprocessingML has no block-level element for them: a `link` (its own hyperlink is run-level, so a block-scoped link has no element to be), a `division` (no block container answers to one), a `provenance` whose change is `formatChange` (w:pPrChange is a child of w:pPr describing one paragraph's old properties, not a wrapper over a block flow), and an `anchor` whose type is a footnote, endnote, or comment reference (each of those is a run-level reference into a part this writer does not emit). readDocx produces none of them, so this only bounds what a foreign ContentDocument can carry through here.
 // - A field construct whose extent contains no paragraph at all, and a section whose last block is not a paragraph, each gain one empty paragraph on the way out (the field characters and the section break both need a paragraph to live in). Everything readDocx itself produces already has one.
+// - A page break immediately before a table or an image -- w:pageBreakBefore is a paragraph property, so neither can carry it directly -- becomes its own empty paragraph carrying the break, immediately before that content rather than displaced to the end of the flow.
 
 const WML_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 const REL_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
@@ -536,6 +537,8 @@ function buildConstructNodes(descriptor: ConstructDescriptor, children: FlowItem
 }
 
 // `change` propagates a tracked change down to the paragraphs it wraps so each paragraph's own mark carries the same change; it stops at the first nested construct, since a construct inside a tracked change carries its own paragraphs' marks through its own wrapper.
+//
+// `pendingPageBreak` carries a still-unattached w:pageBreakBefore forward across sibling items in `items`, since the paragraph that break belongs to may not be the very next item: it can be inside a nested construct (a page-break-before paragraph that also opens a bookmark or tracked change), or there may be no paragraph at all before the next table or image. The construct branch below re-delegates a pending break into that construct's own children (as a synthetic leading pageBreak block) so the same paragraph-attachment logic finds it however deep it is nested; the table and image branches, which cannot carry w:pageBreakBefore themselves, materialise it as their own leading empty paragraph instead.
 function buildFlowItems(items: readonly FlowItem[], state: WriteState, deleted: boolean, change: ProvenanceChange | undefined): XmlNode[] {
   const nodes: XmlNode[] = [];
   let pendingPageBreak = false;
@@ -543,7 +546,10 @@ function buildFlowItems(items: readonly FlowItem[], state: WriteState, deleted: 
   let availableImageRuns: XmlElement[] = [];
   for (const item of items) {
     if (item.kind === 'construct') {
-      nodes.push(...buildConstructNodes(item.descriptor, item.children, state, deleted));
+      const pageBreakItem: FlowItem = { kind: 'block', block: { kind: 'pageBreak' } };
+      const constructChildren = pendingPageBreak ? [pageBreakItem, ...item.children] : item.children;
+      nodes.push(...buildConstructNodes(item.descriptor, constructChildren, state, deleted));
+      pendingPageBreak = false;
       lastParagraph = undefined;
       availableImageRuns = [];
       continue;
@@ -562,6 +568,13 @@ function buildFlowItems(items: readonly FlowItem[], state: WriteState, deleted: 
       continue;
     }
     if (block.kind === 'image') {
+      if (pendingPageBreak) {
+        const breakParagraph = el('w:p', {}, [el('w:pPr', {}, [el('w:pageBreakBefore')])]);
+        nodes.push(breakParagraph);
+        lastParagraph = breakParagraph;
+        availableImageRuns = [];
+        pendingPageBreak = false;
+      }
       const drawing = buildDrawing(block, state);
       const reusable = availableImageRuns.shift();
       if (reusable !== undefined) {
@@ -576,12 +589,16 @@ function buildFlowItems(items: readonly FlowItem[], state: WriteState, deleted: 
       continue;
     }
     if (block.kind === 'table') {
+      if (pendingPageBreak) {
+        nodes.push(el('w:p', {}, [el('w:pPr', {}, [el('w:pageBreakBefore')])]));
+        pendingPageBreak = false;
+      }
       nodes.push(buildTable(block, state, deleted));
       lastParagraph = undefined;
       availableImageRuns = [];
       continue;
     }
-    // An embedded object has no WordprocessingML block element this writer can produce (readDocx never reads one either), so it contributes nothing rather than a placeholder that would read back as content it is not.
+    // An embedded object has no WordprocessingML block element this writer can produce (readDocx never reads one either), so it contributes nothing rather than a placeholder that would read back as content it is not. A pending page break is left untouched here rather than consumed: since this block contributes no output of its own, the break still belongs to whatever comes next.
     lastParagraph = undefined;
     availableImageRuns = [];
   }
