@@ -1,3 +1,16 @@
+# [2.0.0](https://github.com/ExaDev/document-mcp/compare/v1.5.109...v2.0.0) (2026-08-18)
+
+
+* feat!: migrate to documents.js 3 and schema 4 tree-form packages ([151af47](https://github.com/ExaDev/document-mcp/commit/151af473591d8d2c7d40152990bed9ac5ead41ae))
+
+
+### BREAKING CHANGES
+
+* from_package rejects every pre-schema-4 DocumentPackage
+dump (the documents.js 2.x fused-flat shape included) with the
+version-gate error, and pdf_inspect full mode no longer stamps a
+$schema property onto the returned LayoutDocument.
+
 ## [1.5.109](https://github.com/ExaDev/document-mcp/compare/v1.5.108...v1.5.109) (2026-08-18)
 
 ## [1.5.108](https://github.com/ExaDev/document-mcp/compare/v1.5.107...v1.5.108) (2026-08-18)
