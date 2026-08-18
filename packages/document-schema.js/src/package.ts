@@ -1,20 +1,50 @@
 import { z } from 'zod';
-import { ContentDocumentSchema } from './content';
+import { contentDocumentSharedFields, ContentFormulaSchema } from './content';
+import { DefinitionsTableSchema, StylesTableSchema } from './definitions';
 import { PageSizeSchema } from './geometry';
+import { LayoutMetadataSchema } from './metadata';
+import { DrawPageGroupSchema, SectionGroupSchema, SheetGroupSchema, SlideGroupSchema } from './package-node';
 
-// DocumentPackage is a fused, single-tree envelope around ContentDocument: content is required, and once something has laid the document out, that same layout is not carried as a second, independent tree -- it is fused directly onto the content tree, node by node, via each node's own optional `frames` field (src/content.ts's FusedNode pattern; see LayoutFrameSchema in src/geometry.ts). A paragraph, run, image, table, shape, vector, or spreadsheet cell that has been through a layout pass carries its own rendered page position(s) right there on the node -- no correlation step, no separate array of positioned items to walk back to their origin by matching a sourcePath string.
-//
-// What is left at the package level, once position moves onto the nodes themselves, is `pages`: the geometry of each rendered page a `frames` entry's own `pageIndex` refers into. `pages` is optional for the same reason DocumentPackage's old `layout` field was optional -- layout (now: page geometry plus populated `frames` fields throughout content) is a *derived* artifact, the output of running a layout algorithm against content, so a content-only package (an edit-only workflow that never touches rendering) must be constructible without eagerly running layout. A DocumentPackage whose `pages` is present but whose content nodes carry no `frames` at all (or vice versa) is not detected or rejected by this schema; keeping the two in step is entirely the producer's responsibility, exactly as keeping content and layout in step was under the old two-tree design.
-//
-// This is a genuinely breaking shape change from the previous `{ content, layout: LayoutDocument }` envelope (LayoutDocument -- pages of positioned, sourcePath-correlated LayoutItems -- no longer appears here at all), which is why DOCUMENT_PACKAGE_FORMAT_VERSION is bumped below. LayoutDocumentSchema itself is untouched and still exported from this package: it remains the right shape for a format with no content tree of its own to fuse onto, most notably pdf-codec's own readPdf/writePdf, which read and write a PDF's pages of positioned items directly with no ContentDocument in the loop at all.
+// DocumentPackage is the single hierarchical artefact: structure, layout, and content fused in one tree (ExaDev/document-schema.js#20). The root carries what no tree node can -- the document kind (moved up from the retired flat `content` field; the empty documents are legal, so the kind cannot be inferred from the children and the envelope keeps it explicit), the required metadata, the optional document-level symbolTable (the same shared fields every ContentDocument arm spreads -- one declaration, spliced in from src/content.ts), and the envelope's three optional tables and arrays: `pages` (each rendered page's own size, indexed to match every content node's own `frames[].pageIndex` -- present once a layout pass has run, absent for a content-only package), `styles` and `definitions` (the package-level definitions-table facility, src/definitions.ts). Everything structural hangs off `children`: one group per top-level container (a section, slide, sheet, or draw page), each holding its own content tree -- see src/package-node.ts for the node vocabulary and its structural discrimination rule.
 
-// Bumped whenever DocumentPackageSchema's own shape changes incompatibly -- independent of CONTENT_FORMAT_VERSION and LAYOUT_FORMAT_VERSION, since the envelope can change shape without either pivot changing, and vice versa. 2 replaced the separate optional `layout: LayoutDocument` field with the fused-tree design above: `pages` (page geometry only) plus each content node's own optional `frames` field (src/content.ts, CONTENT_FORMAT_VERSION bumped in step).
-export const DOCUMENT_PACKAGE_FORMAT_VERSION = 2;
+// The package tree and the flat ContentDocument are one format in two encodings, related by three laws (stated on the issues and proven property-wise by document-outline.js's decompose/flatten over real corpus documents, with documents.js re-running the same assertions over its own corpus at the package boundary): (i) strict structural equality holds both directions for a table-free package -- decompose(flatten(pkg)) and flatten(decompose(pkg)) reproduce it exactly; (ii) effective-property equality holds universally -- once styles are resolved (resolve-then-compare, src/definitions.ts), a factored and an unfactored serialisation of one document compare equal; (iii) minting is idempotent -- factoring a second time mints the identical table. The codecs keep producing flat ContentDocuments (their natural reading shape); decomposition runs once at the package boundary in documents.js and flatten runs once where a builder consumes a package.
 
-export const DocumentPackageSchema = z.object({
-  formatVersion: z.literal(DOCUMENT_PACKAGE_FORMAT_VERSION),
-  content: ContentDocumentSchema,
-  // Each rendered page's own size, indexed to match every content node's own `frames[].pageIndex` (src/content.ts, src/geometry.ts's LayoutFrameSchema). Absent until something has laid `content` out, mirroring the old `layout` field's own absence for a content-only package.
+// This is a genuinely breaking shape change from the previous `{ formatVersion, content, pages }` envelope, which is why it rides a major (4.0.0). The old envelope's `formatVersion` field is gone with no replacement field: a serialised package states its version through the release-pinned $schema URI its dumper stamped (documentPackageWithSchema, src/schema-io.ts), and an ingesting documentFromJson dispatches on that URI -- the URI is the version, not a hand-kept integer. ContentDocument (the flat codec-exchange form) survives unchanged in role minus its own retired formatVersion literal, and nothing about the content model itself changed: every block, run, cell, and frame field a 3.x package carried still validates in its old flat shape -- only the envelope around it moved.
+
+// The five arms duplicate their kind literals rather than factoring through a base schema, because z.discriminatedUnion() needs each member as a plain z.object carrying its own literal `kind` field in place (the same reason ContentDocumentSchema's own arms spread contentDocumentSharedFields); the children type is the one thing that differs per arm, and the union says exactly which root group each kind takes -- a wordprocessing package of section groups, a presentation of slide groups, a spreadsheet of sheet groups, a drawing of drawPage groups, and a formula package whose single child is the ContentFormula leaf itself (a formula has no container structure to group).
+const packageEnvelopeFields = {
+  metadata: LayoutMetadataSchema,
+  ...contentDocumentSharedFields,
   pages: z.array(PageSizeSchema).optional(),
-});
+  styles: StylesTableSchema.optional(),
+  definitions: DefinitionsTableSchema.optional(),
+};
+
+export const DocumentPackageSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('wordprocessing'),
+    ...packageEnvelopeFields,
+    children: z.array(SectionGroupSchema),
+  }),
+  z.object({
+    kind: z.literal('presentation'),
+    ...packageEnvelopeFields,
+    children: z.array(SlideGroupSchema),
+  }),
+  z.object({
+    kind: z.literal('spreadsheet'),
+    ...packageEnvelopeFields,
+    children: z.array(SheetGroupSchema),
+  }),
+  z.object({
+    kind: z.literal('drawing'),
+    ...packageEnvelopeFields,
+    children: z.array(DrawPageGroupSchema),
+  }),
+  z.object({
+    kind: z.literal('formula'),
+    ...packageEnvelopeFields,
+    children: z.array(ContentFormulaSchema),
+  }),
+]);
 export type DocumentPackage = z.infer<typeof DocumentPackageSchema>;

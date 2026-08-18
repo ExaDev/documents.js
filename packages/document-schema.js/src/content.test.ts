@@ -3,7 +3,6 @@ import { COLOR_BLACK } from './color';
 import {
   type ContentBlock,
   ContentBlockSchema,
-  CONTENT_FORMAT_VERSION,
   type ContentDocument,
   ContentDocumentSchema,
   type ContentEmbeddedObject,
@@ -136,7 +135,6 @@ describe('isContentBlock', () => {
 function wordprocessingDocument(): ContentDocument {
   return {
     kind: 'wordprocessing',
-    formatVersion: CONTENT_FORMAT_VERSION,
     metadata: {
       title: 'Deep nesting test',
       author: 'documents.js',
@@ -156,7 +154,6 @@ function wordprocessingDocument(): ContentDocument {
 function presentationDocument(): ContentDocument {
   return {
     kind: 'presentation',
-    formatVersion: CONTENT_FORMAT_VERSION,
     metadata: { title: 'Deck' },
     slides: [
       {
@@ -192,7 +189,6 @@ function presentationDocument(): ContentDocument {
 function spreadsheetDocument(): ContentDocument {
   return {
     kind: 'spreadsheet',
-    formatVersion: CONTENT_FORMAT_VERSION,
     metadata: { title: 'Quarterly figures' },
     sheets: [
       {
@@ -276,7 +272,6 @@ function spreadsheetDocument(): ContentDocument {
 function drawingDocument(): ContentDocument {
   return {
     kind: 'drawing',
-    formatVersion: CONTENT_FORMAT_VERSION,
     metadata: { title: 'Org chart' },
     pages: [
       {
@@ -341,7 +336,6 @@ function drawingDocument(): ContentDocument {
 function formulaDocument(): ContentDocument {
   return {
     kind: 'formula',
-    formatVersion: CONTENT_FORMAT_VERSION,
     metadata: { title: 'Pythagoras' },
     formula: {
       mathml: [
@@ -386,7 +380,6 @@ describe('ContentDocument formula variant', () => {
   it('rejects a malformed MathML node buried inside the tree, not just at the outermost element', () => {
     const malformed: unknown = {
       kind: 'formula',
-      formatVersion: CONTENT_FORMAT_VERSION,
       metadata: {},
       formula: {
         mathml: [
@@ -406,7 +399,6 @@ describe('ContentDocument formula variant', () => {
   it('parses with starMath omitted, since MathML alone is the authoritative content', () => {
     const parsed = ContentDocumentSchema.parse({
       kind: 'formula',
-      formatVersion: CONTENT_FORMAT_VERSION,
       metadata: {},
       formula: { mathml: [{ type: 'element', tag: 'math', attributes: [], children: [] }] },
     });
@@ -421,7 +413,6 @@ describe('ContentDocument formula variant', () => {
 function layeredFormulaDocument(): ContentDocument {
   return {
     kind: 'formula',
-    formatVersion: CONTENT_FORMAT_VERSION,
     metadata: { title: 'Pythagoras, both layers' },
     formula: {
       mathml: [],
@@ -535,7 +526,6 @@ describe('an embedded formula object carrying a real formula document', () => {
     expect(
       ContentDocumentSchema.safeParse({
         kind: 'wordprocessing',
-        formatVersion: CONTENT_FORMAT_VERSION,
         metadata: {},
         sections: [
           {
@@ -870,17 +860,6 @@ describe('ContentDocumentSchema round trips', () => {
   it('rejects an unknown discriminant', () => {
     expect(ContentDocumentSchema.safeParse({ kind: 'bogus' }).success).toBe(false);
   });
-
-  it('rejects a mismatched formatVersion', () => {
-    expect(
-      ContentDocumentSchema.safeParse({
-        kind: 'wordprocessing',
-        formatVersion: 999,
-        metadata: {},
-        sections: [],
-      }).success,
-    ).toBe(false);
-  });
 });
 
 // Deliberately deep nesting for ContentEmbeddedObjectSchema's own recursive guard, mirroring the discipline already applied to ContentTable's three-level recursion test above: a formula embedded inside a drawing embedded inside a spreadsheet, three levels deep, exercising both anchoring mechanisms (ContentSheetSchema.embeddedObjects at level 1->2, and the ContentBlock 'embeddedObject' variant at level 2->3) in the same structure. The innermost document is a genuine 'formula'-kind ContentDocument (reusing the fixture above), so this also drives the recursion down through the custom MathMlNode guard, not only through the block model.
@@ -893,7 +872,6 @@ const formulaEmbeddedBlock: ContentBlock = {
 
 const drawingWithFormula: ContentDocument = {
   kind: 'drawing',
-  formatVersion: CONTENT_FORMAT_VERSION,
   metadata: {},
   pages: [
     {
@@ -921,7 +899,6 @@ const drawingEmbeddedObject: ContentEmbeddedObject = {
 
 const spreadsheetWithDrawing: ContentDocument = {
   kind: 'spreadsheet',
-  formatVersion: CONTENT_FORMAT_VERSION,
   metadata: {},
   sheets: [
     {
@@ -1032,7 +1009,6 @@ describe('ContentEmbeddedObjectSchema deep recursion', () => {
   it('rejects a malformed embedded object buried three levels deep, not just at the outermost shell', () => {
     const deeplyMalformed: unknown = {
       kind: 'spreadsheet',
-      formatVersion: CONTENT_FORMAT_VERSION,
       metadata: {},
       sheets: [
         {
@@ -1054,8 +1030,7 @@ describe('ContentEmbeddedObjectSchema deep recursion', () => {
               frame: { xPt: 100, yPt: 100, widthPt: 200, heightPt: 150 },
               document: {
                 kind: 'drawing',
-                formatVersion: CONTENT_FORMAT_VERSION,
-                metadata: {},
+                        metadata: {},
                 pages: [
                   {
                     size: { widthPt: 400, heightPt: 300 },
@@ -1074,8 +1049,7 @@ describe('ContentEmbeddedObjectSchema deep recursion', () => {
                             frame: { xPt: 10, yPt: 10, widthPt: 80, heightPt: 20 },
                             document: {
                               kind: 'formula',
-                              formatVersion: CONTENT_FORMAT_VERSION,
-                              metadata: {},
+                                                    metadata: {},
                               formula: {
                                 mathml: [
                                   {

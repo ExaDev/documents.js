@@ -1,19 +1,21 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { COLOR_BLACK } from './color';
-import { CONTENT_FORMAT_VERSION, type ContentDocument } from './content';
-import { LAYOUT_FORMAT_VERSION, type LayoutDocument } from './layout';
-import { DOCUMENT_PACKAGE_FORMAT_VERSION, type DocumentPackage } from './package';
+import type { ContentDocument } from './content';
+import {
+  type DocumentPackage,
+  DocumentPackageSchema,
+} from './package';
+import type { SectionGroupNode } from './package-node';
 import {
   contentDocumentWithSchema,
   documentFromJson,
   documentPackageWithSchema,
   documentSchemaKindOf,
-  layoutDocumentWithSchema,
+  LayoutSchemaDemotedError,
+  SchemaVersionMismatchError,
   schemaUriFor,
   UnrecognizedDocumentSchemaError,
 } from './schema-io';
-import { DEFAULT_LAYOUT_FONT } from './style';
 
 function isPackageJsonWithVersion(value: unknown): value is { version: string } {
   if (typeof value !== 'object' || value === null) return false;
@@ -26,11 +28,19 @@ if (!isPackageJsonWithVersion(parsedPackageJson)) {
   throw new Error('package.json is missing a string "version" field');
 }
 const packageVersion: string = parsedPackageJson.version;
+// The installed release's major, read the same way src/schema-io.ts's dispatch reads it -- every URI this test builds keys on this, so the suite stays correct whatever the dev package.json happens to say.
+const installedMajor = Number(/^(\d+)/.exec(packageVersion)?.[1]);
+const installedMajorMinusOne = installedMajor - 1;
+const installedMajorPlusOne = installedMajor + 1;
+
+function uriForVersion(majorOrVersion: number | string, stem: 'document-package' | 'content-document' | 'layout-document'): string {
+  const version = typeof majorOrVersion === 'number' ? `${majorOrVersion}.0.0` : majorOrVersion;
+  return `https://cdn.jsdelivr.net/npm/document-schema.js@${version}/schemas/${stem}.schema.json`;
+}
 
 function wordprocessingDocument(): ContentDocument {
   return {
     kind: 'wordprocessing',
-    formatVersion: CONTENT_FORMAT_VERSION,
     metadata: { title: 'schema-io fixture', author: 'document-schema.js' },
     sections: [
       {
@@ -42,50 +52,18 @@ function wordprocessingDocument(): ContentDocument {
   };
 }
 
-function layoutDocument(): LayoutDocument {
-  return {
-    formatVersion: LAYOUT_FORMAT_VERSION,
-    metadata: { title: 'schema-io fixture', author: 'document-schema.js' },
-    pages: [
-      {
-        widthPt: 612,
-        heightPt: 792,
-        items: [
-          {
-            kind: 'text',
-            text: 'Hello, schema-io.',
-            xPt: 72,
-            yPt: 720,
-            font: DEFAULT_LAYOUT_FONT,
-            sizePt: 12,
-            color: COLOR_BLACK,
-          },
-        ],
-      },
-    ],
-    images: {},
-  };
-}
-
 function documentPackage(): DocumentPackage {
-  return {
-    formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION,
-    content: wordprocessingDocument(),
-    pages: [{ widthPt: 612, heightPt: 792 }],
+  const section: SectionGroupNode = {
+    node: { kind: 'section', pageSize: { widthPt: 612, heightPt: 792 }, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 } },
+    children: [{ kind: 'paragraph', runs: [{ text: 'Hello, schema-io.' }] }],
   };
+  return { kind: 'wordprocessing', metadata: { title: 'schema-io fixture' }, children: [section] };
 }
 
 describe('schemaUriFor', () => {
-  it('builds a jsdelivr URL pinned to the current published version, one per kind', () => {
-    expect(schemaUriFor('DocumentPackage')).toBe(
-      `https://cdn.jsdelivr.net/npm/document-schema.js@${packageVersion}/schemas/document-package.schema.json`,
-    );
-    expect(schemaUriFor('ContentDocument')).toBe(
-      `https://cdn.jsdelivr.net/npm/document-schema.js@${packageVersion}/schemas/content-document.schema.json`,
-    );
-    expect(schemaUriFor('LayoutDocument')).toBe(
-      `https://cdn.jsdelivr.net/npm/document-schema.js@${packageVersion}/schemas/layout-document.schema.json`,
-    );
+  it('builds a release-pinned jsdelivr URL, one per kind', () => {
+    expect(schemaUriFor('DocumentPackage')).toBe(uriForVersion(packageVersion, 'document-package'));
+    expect(schemaUriFor('ContentDocument')).toBe(uriForVersion(packageVersion, 'content-document'));
   });
 });
 
@@ -105,29 +83,20 @@ describe('*WithSchema', () => {
     expect(tagged.$schema).toBe(schemaUriFor('ContentDocument'));
     expect(tagged).toEqual({ $schema: schemaUriFor('ContentDocument'), ...doc });
   });
-
-  it('layoutDocumentWithSchema stamps $schema as the first key and preserves every field', () => {
-    const layout = layoutDocument();
-    const tagged = layoutDocumentWithSchema(layout);
-    expect(Object.keys(tagged)[0]).toBe('$schema');
-    expect(tagged.$schema).toBe(schemaUriFor('LayoutDocument'));
-    expect(tagged).toEqual({ $schema: schemaUriFor('LayoutDocument'), ...layout });
-  });
 });
 
 describe('documentSchemaKindOf', () => {
-  it('recognizes all three kinds', () => {
+  it('recognizes both live kinds', () => {
     expect(documentSchemaKindOf(documentPackageWithSchema(documentPackage()))).toBe('DocumentPackage');
     expect(documentSchemaKindOf(contentDocumentWithSchema(wordprocessingDocument()))).toBe('ContentDocument');
-    expect(documentSchemaKindOf(layoutDocumentWithSchema(layoutDocument()))).toBe('LayoutDocument');
   });
 
-  it('is version-agnostic: a $schema from a different installed version still resolves', () => {
-    expect(
-      documentSchemaKindOf({
-        $schema: 'https://cdn.jsdelivr.net/npm/document-schema.js@0.0.1/schemas/document-package.schema.json',
-      }),
-    ).toBe('DocumentPackage');
+  it('is version-agnostic: a $schema from a different release still names its kind', () => {
+    expect(documentSchemaKindOf({ $schema: uriForVersion(installedMajorPlusOne, 'document-package') })).toBe('DocumentPackage');
+  });
+
+  it('returns undefined for a layout-document URI -- that kind moved to pdf-codec', () => {
+    expect(documentSchemaKindOf({ $schema: schemaUriFor('DocumentPackage').replace('document-package', 'layout-document') })).toBeUndefined();
   });
 
   it('returns undefined for a missing, non-string, or unrelated $schema', () => {
@@ -144,16 +113,67 @@ describe('documentSchemaKindOf', () => {
   });
 });
 
-describe('documentFromJson', () => {
-  it('round-trips each kind end-to-end', () => {
+describe('documentFromJson dispatches on the $schema URI', () => {
+  it('round-trips each live kind stamped with the installed release URI', () => {
     const pkg = documentPackage();
     expect(documentFromJson(documentPackageWithSchema(pkg))).toEqual({ kind: 'DocumentPackage', value: pkg });
 
     const content = wordprocessingDocument();
     expect(documentFromJson(contentDocumentWithSchema(content))).toEqual({ kind: 'ContentDocument', value: content });
+  });
 
-    const layout = layoutDocument();
-    expect(documentFromJson(layoutDocumentWithSchema(layout))).toEqual({ kind: 'LayoutDocument', value: layout });
+  it('accepts a URI from another release of the SAME major -- patch and minor releases validate a major\'s dumps', () => {
+    const pkg = documentPackage();
+    const tagged = { ...documentPackageWithSchema(pkg), $schema: uriForVersion(`${installedMajor}.9.9`, 'document-package') };
+    expect(documentFromJson(tagged)).toEqual({ kind: 'DocumentPackage', value: pkg });
+  });
+
+  it('refuses an older major\'s URI and names the change -- the formatVersion era and the flat package shape', () => {
+    const oldDump = {
+      $schema: uriForVersion(installedMajorMinusOne, 'document-package'),
+      formatVersion: 2,
+      content: { kind: 'wordprocessing', metadata: {}, sections: [] },
+    };
+    try {
+      documentFromJson(oldDump);
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toBeInstanceOf(SchemaVersionMismatchError);
+      if (!(error instanceof SchemaVersionMismatchError)) throw error;
+      expect(error.dumpVersion).toBe(`${installedMajorMinusOne}.0.0`);
+      expect(error.installedVersion).toBe(packageVersion);
+      expect(error.message).toContain('formatVersion');
+      expect(error.message).toContain('tree-form DocumentPackage');
+      expect(error.message).toContain('ExaDev/document-schema.js#20');
+    }
+  });
+
+  it('refuses a newer major\'s URI with the upgrade pointer', () => {
+    const futureDump = { $schema: uriForVersion(installedMajorPlusOne, 'document-package') };
+    try {
+      documentFromJson(futureDump);
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toBeInstanceOf(SchemaVersionMismatchError);
+      if (!(error instanceof SchemaVersionMismatchError)) throw error;
+      expect(error.message).toContain('Upgrade document-schema.js');
+    }
+  });
+
+  it('tombstones a layout-document URI from any release with the pointer to pdf-codec', () => {
+    for (const version of [1, 2, 3, installedMajor, installedMajorPlusOne]) {
+      const layoutDump = { $schema: uriForVersion(version, 'layout-document'), pages: [] };
+      try {
+        documentFromJson(layoutDump);
+        expect.unreachable();
+      } catch (error) {
+        expect(error).toBeInstanceOf(LayoutSchemaDemotedError);
+        if (!(error instanceof LayoutSchemaDemotedError)) throw error;
+        expect(error.schema).toBe(uriForVersion(version, 'layout-document'));
+        expect(error.message).toContain('pdf-codec');
+        expect(error.message).toContain('ExaDev/pdf-codec#65');
+      }
+    }
   });
 
   it('throws UnrecognizedDocumentSchemaError, carrying the offending value, for unrecognized input', () => {
@@ -178,5 +198,14 @@ describe('documentFromJson', () => {
     expect(() => documentFromJson({ $schema: schemaUriFor('DocumentPackage') })).not.toThrow(
       UnrecognizedDocumentSchemaError,
     );
+  });
+
+  it('a bare DocumentPackageSchema.parse does not version-discriminate: it structurally validates whatever it is handed', () => {
+    // The documented contract (src/schema-io.ts): a direct parse validates structure only. This value carries a foreign version's $schema, which documentFromJson would refuse -- the direct parse accepts, because the installed schema's shape tolerates and strips the unknown $schema key and the tree underneath is valid.
+    const foreignTagged = {
+      ...documentPackage(),
+      $schema: uriForVersion(installedMajorPlusOne, 'document-package'),
+    } as unknown;
+    expect(DocumentPackageSchema.safeParse(foreignTagged).success).toBe(true);
   });
 });

@@ -5,11 +5,11 @@ import { schemaUriFor } from './schema-io';
 // The hand-authored JSON Schema $defs fragments spliced into content-document.schema.json's `override()` callback (scripts/generate-json-schemas.mjs), lifted out into their own src module rather than staying inline in that script. The reason is single-sourcing, not tidiness: this exact object needs to be reachable from two places that cannot share an import graph --
 //
 //   1. scripts/generate-json-schemas.mjs itself, which only ever runs against the freshly-built ../dist/ (it imports every other schema it needs the same way), so it imports CONTENT_DEFS from '../dist/content-json-schema-defs.js', the file tsdown emits for this module (entry: 'src/**/*.ts', one dist file per src file -- see tsdown.config.ts).
-//   2. content-json-schema-defs.test.ts (src/, run directly by vitest's "unit" project against source, never against dist), which imports this exact same CONTENT_DEFS value straight from here and asserts it stays byte-for-byte in step with a live z.toJSONSchema() call over each fragment's real exported Zod schema counterpart (ContentParagraphSchema, ContentRunSchema, ContentListMembershipSchema, ContentImageBlockSchema, ContentPageBreakSchema, ColorSchema, BoxSchema, AlignmentSchema, ContentStrokeStyleSchema, ContentBorderSchema, ContentCellBordersSchema, plus the non-recursive math leaves from src/math.ts: ExactRationalSchema, DimensionVectorSchema, MathPresentationSchema, MathProvenanceSchema, MathUncertaintySchema, MathNumSchema, MathQtySchema, MathSymSchema, MathUnparsedSchema, MathSymbolEntrySchema, MathUnitSchema, MathNormalisationContextSchema, SymbolTableSchema) -- see that test file's own top comment for why this is the only structural defence this generator has against silently drifting away from the schemas it's meant to describe.
+//   2. content-json-schema-defs.test.ts (src/, run directly by vitest's "unit" project against source, never against dist), which imports this exact same CONTENT_DEFS value straight from here and asserts it stays byte-for-byte in step with a live z.toJSONSchema() call over each fragment's real exported Zod schema counterpart (ContentParagraphSchema, ContentRunSchema, ContentListMembershipSchema, ContentImageBlockSchema, ContentPageBreakSchema, ColorSchema, BoxSchema, LayoutFrameSchema, PageSizeSchema, MarginsSchema, AlignmentSchema, ContentStrokeStyleSchema, ContentBorderSchema, ContentCellBordersSchema, the package tree's non-recursive descriptors and anchors from src/package-node.ts: SectionDescriptorSchema, SlideDescriptorSchema, SheetDescriptorSchema, DrawPageDescriptorSchema, ShapeDescriptorSchema, HeadingParagraphSchema, ListParagraphSchema, the sheet grid and vector leaves from src/content.ts: ContentSheetCellSchema, ContentCellValueSchema, ContentSheetCellCommentSchema, ContentSheetColumnSchema, ContentSheetRowSchema, ContentSheetPrintSettingsSchema, ContentSheetPrintRangeSchema, ContentSheetRepeatRangeSchema, ContentSheetImageSchema, ContentStrokeSchema, ContentPathPointSchema, ContentPathSegmentSchema, ContentSubpathSchema, ContentVectorSchema, and the definitions facility from src/definitions.ts: StyleParagraphPropertiesSchema, StyleRunPropertiesSchema, StyleEntrySchema, DefinitionEntrySchema, plus the non-recursive math leaves from src/math.ts: ExactRationalSchema, DimensionVectorSchema, MathPresentationSchema, MathProvenanceSchema, MathUncertaintySchema, MathNumSchema, MathQtySchema, MathSymSchema, MathUnparsedSchema, MathSymbolEntrySchema, MathUnitSchema, MathNormalisationContextSchema, SymbolTableSchema) -- see that test file's own top comment for why this is the only structural defence this generator has against silently drifting away from the schemas it's meant to describe.
 //
 // If CONTENT_DEFS stayed inline in the .mjs script, only path 1 above would work: the script imports Zod schemas exclusively from '../dist/index.js' (a build artefact that may not exist, and per eslint.config.ts/tsconfig.json is deliberately excluded from both linting and typechecking, matching test/smoke.test.mjs's own precedent) -- a test that has to import through that path would only ever run after a build, which `pnpm test` (the "unit" vitest project, run standalone in CI's own "test" job, with no build step beforehand) never guarantees. Living here instead, this is an ordinary, fully typechecked and linted src module like any other -- CONTENT_DEFS just happens to be consumed by a script as well as by the package's own test suite.
 //
-// The fragments below still cover exactly what scripts/generate-json-schemas.mjs's own top-of-file comment already explains: ContentBlockSchema, ContentEmbeddedObjectSchema, MathMlNodeSchema, and MathExpressionSchema are z.custom() predicates z.toJSONSchema() cannot introspect at all (recursion the pinned Zod version's z.lazy() can't express -- see src/content.ts's isContentBlock/isContentEmbeddedObject, src/mathml.ts's isMathMlNode, and src/math.ts's isMathExpression), so every schema reachable only through one of those four is transcribed by hand here, field-for-field, from the real Zod object definitions. Two further schemas are transcribed despite being real z.objects themselves: ContentFormulaSchema (its mathml/content fields reach the opaque MathMlNodeSchema/MathExpressionSchema nodes, exactly like ContentTableCellSchema's blocks) and SymbolTableSchema (transcribed so each ContentDocument arm's symbolTable field is one named $ref rather than five inlined copies of the whole unit-registry subtree) -- the generator's override() replaces both with a $ref to their fragments here. Anything transcribed here that DOES have a real, non-custom, exported Zod schema counterpart is exactly what content-json-schema-defs.test.ts holds to a live z.toJSONSchema() comparison; re-verify the rest (ContentTableCell/ContentTableRow/ContentTable, ContentEmbeddedObjectBlock, MathMlElement/MathMlNode, MathApp/MathSum/MathProd/MathMatrix/MathExpression, ContentFormula) against src/content.ts/src/mathml.ts/src/math.ts by hand whenever those files' field shapes change, exactly as before.
+// The fragments below still cover exactly what scripts/generate-json-schemas.mjs's own top-of-file comment already explains: ContentBlockSchema, ContentEmbeddedObjectSchema, MathMlNodeSchema, and MathExpressionSchema are z.custom() predicates z.toJSONSchema() cannot introspect at all (recursion the pinned Zod version's z.lazy() can't express -- see src/content.ts's isContentBlock/isContentEmbeddedObject, src/mathml.ts's isMathMlNode, and src/math.ts's isMathExpression), so every schema reachable only through one of those four is transcribed by hand here, field-for-field, from the real Zod object definitions. The package tree added its own opaque set in the 4.0.0 major: DocumentPackageSchema's children reach the tree's per-kind group schemas (src/package-node.ts, all z.custom over recursive guards), so the whole PackageNode vocabulary -- container descriptors, anchor paragraphs, the seven group wrappers, and the sheet-image/vector leaves -- is transcribed here too, and the generator splices CONTENT_DEFS into document-package.schema.json as well as content-document.schema.json so both files resolve their local #/$defs pointers without depending on each other's file layout (the one deliberate cross-file ref stays $defs.ContentEmbeddedObject(Block)'s document pointer, CONTENT_DOCUMENT_URI). Three further schemas are transcribed despite being real z.objects themselves: ContentFormulaSchema (its mathml/content fields reach the opaque MathMlNodeSchema/MathExpressionSchema nodes, exactly like ContentTableCellSchema's blocks), SymbolTableSchema (transcribed so each ContentDocument arm's symbolTable field is one named $ref rather than five inlined copies of the whole unit-registry subtree), and now StyleEntrySchema/DefinitionEntrySchema (same five-copies reason for the package arms' styles/definitions fields) -- the generator's override() replaces each with a $ref to its fragment here. Anything transcribed here that DOES have a real, non-custom, exported Zod schema counterpart is exactly what content-json-schema-defs.test.ts holds to a live z.toJSONSchema() comparison; re-verify the rest (ContentTableCell/ContentTableRow/ContentTable, ContentEmbeddedObject(Block), the seven group wrappers, MathMlElement/MathMlNode, MathApp/MathSum/MathProd/MathMatrix/MathExpression, ContentFormula) against src/content.ts/src/package-node.ts/src/mathml.ts/src/math.ts by hand whenever those files' field shapes change, exactly as before.
 
 type JsonSchema = z.core.JSONSchema.JSONSchema;
 
@@ -240,6 +240,613 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       { $ref: '#/$defs/ContentPageBreak' },
       { $ref: '#/$defs/ContentEmbeddedObjectBlock' },
     ],
+  },
+  // -- The package tree (src/package-node.ts), reached through DocumentPackageSchema's children --
+  //
+  // Everything in this block is here because the tree's group schemas are z.custom() guards z.toJSONSchema() cannot walk, so the descriptors, anchors, leaves, and wrappers underneath them exist only as these fragments. The descriptors, anchors, and leaves have real exported Zod counterparts built from the content schemas by omit+extend, and content-json-schema-defs.test.ts holds each to a live comparison; only the seven group wrappers (recursive through their children arrays) and ContentEmbeddedObject (the z.custom-backed interface with no z.object at all) are hand-verified alone.
+  PageSize: {
+    type: 'object',
+    properties: {
+      widthPt: { type: 'number', exclusiveMinimum: 0 },
+      heightPt: { type: 'number', exclusiveMinimum: 0 },
+    },
+    required: ['widthPt', 'heightPt'],
+    additionalProperties: false,
+  },
+  Margins: {
+    type: 'object',
+    properties: {
+      topPt: { type: 'number', minimum: 0 },
+      rightPt: { type: 'number', minimum: 0 },
+      bottomPt: { type: 'number', minimum: 0 },
+      leftPt: { type: 'number', minimum: 0 },
+    },
+    required: ['topPt', 'rightPt', 'bottomPt', 'leftPt'],
+    additionalProperties: false,
+  },
+  SectionDescriptor: {
+    type: 'object',
+    properties: {
+      pageSize: { $ref: '#/$defs/PageSize' },
+      margins: { $ref: '#/$defs/Margins' },
+      kind: { type: 'string', const: 'section' },
+    },
+    required: ['pageSize', 'margins', 'kind'],
+    additionalProperties: false,
+  },
+  SlideDescriptor: {
+    type: 'object',
+    properties: {
+      size: { $ref: '#/$defs/PageSize' },
+      notes: { type: 'string' },
+      kind: { type: 'string', const: 'slide' },
+    },
+    required: ['size', 'notes', 'kind'],
+    additionalProperties: false,
+  },
+  SheetDescriptor: {
+    type: 'object',
+    properties: {
+      name: { type: 'string' },
+      cells: { type: 'array', items: { $ref: '#/$defs/ContentSheetCell' } },
+      columns: { type: 'array', items: { $ref: '#/$defs/ContentSheetColumn' } },
+      rows: { type: 'array', items: { $ref: '#/$defs/ContentSheetRow' } },
+      printSettings: { $ref: '#/$defs/ContentSheetPrintSettings' },
+      kind: { type: 'string', const: 'sheet' },
+    },
+    required: ['name', 'cells', 'columns', 'rows', 'printSettings', 'kind'],
+    additionalProperties: false,
+  },
+  DrawPageDescriptor: {
+    type: 'object',
+    properties: {
+      size: { $ref: '#/$defs/PageSize' },
+      kind: { type: 'string', const: 'drawPage' },
+    },
+    required: ['size', 'kind'],
+    additionalProperties: false,
+  },
+  // A shape group's node payload -- the one descriptor with no kind tag, since ContentShape carries none; identified structurally by its frame and insets. strictObject in the source (src/package-node.ts) is what rejects a raw flat ContentShape's blocks key here, matching additionalProperties: false plus blocks' absence.
+  ShapeDescriptor: {
+    type: 'object',
+    properties: {
+      name: { type: 'string' },
+      frame: { $ref: '#/$defs/Box' },
+      rotationDeg: { type: 'number' },
+      insetLeftPt: { type: 'number', minimum: 0 },
+      insetTopPt: { type: 'number', minimum: 0 },
+      insetRightPt: { type: 'number', minimum: 0 },
+      insetBottomPt: { type: 'number', minimum: 0 },
+      fontScale: { type: 'number', exclusiveMinimum: 0 },
+      lineSpacingReduction: { type: 'number', minimum: 0 },
+      paintOrder: { type: 'number' },
+      sourcePath: { type: 'string' },
+      frames: { type: 'array', items: { $ref: '#/$defs/LayoutFrame' } },
+    },
+    required: ['frame', 'insetLeftPt', 'insetTopPt', 'insetRightPt', 'insetBottomPt'],
+    additionalProperties: false,
+  },
+  // The heading-group anchor: ContentParagraphSchema's every field with headingLevel required (ContentParagraphSchema.extend in src/package-node.ts).
+  HeadingParagraph: {
+    type: 'object',
+    properties: {
+      kind: { type: 'string', const: 'paragraph' },
+      runs: { type: 'array', items: { $ref: '#/$defs/ContentRun' } },
+      styleId: { type: 'string' },
+      headingLevel: { type: 'integer', exclusiveMinimum: 0, maximum: MAX_SAFE_INTEGER },
+      alignment: { $ref: '#/$defs/Alignment' },
+      list: { $ref: '#/$defs/ContentListMembership' },
+      spacingBeforePt: { type: 'number' },
+      spacingAfterPt: { type: 'number' },
+      lineSpacing: { type: 'number', exclusiveMinimum: 0 },
+      indentLeftPt: { type: 'number' },
+      indentFirstLinePt: { type: 'number' },
+      sourcePath: { type: 'string' },
+      frames: { type: 'array', items: { $ref: '#/$defs/LayoutFrame' } },
+    },
+    required: ['kind', 'runs', 'headingLevel'],
+    additionalProperties: false,
+  },
+  // The list-group anchor: ContentParagraphSchema's every field with list required.
+  ListParagraph: {
+    type: 'object',
+    properties: {
+      kind: { type: 'string', const: 'paragraph' },
+      runs: { type: 'array', items: { $ref: '#/$defs/ContentRun' } },
+      styleId: { type: 'string' },
+      headingLevel: { type: 'integer', exclusiveMinimum: 0, maximum: MAX_SAFE_INTEGER },
+      alignment: { $ref: '#/$defs/Alignment' },
+      list: { $ref: '#/$defs/ContentListMembership' },
+      spacingBeforePt: { type: 'number' },
+      spacingAfterPt: { type: 'number' },
+      lineSpacing: { type: 'number', exclusiveMinimum: 0 },
+      indentLeftPt: { type: 'number' },
+      indentFirstLinePt: { type: 'number' },
+      sourcePath: { type: 'string' },
+      frames: { type: 'array', items: { $ref: '#/$defs/LayoutFrame' } },
+    },
+    required: ['kind', 'runs', 'list'],
+    additionalProperties: false,
+  },
+  ContentSheetCell: {
+    type: 'object',
+    properties: {
+      row: { type: 'integer', minimum: 0, maximum: MAX_SAFE_INTEGER },
+      column: { type: 'integer', minimum: 0, maximum: MAX_SAFE_INTEGER },
+      value: { $ref: '#/$defs/ContentCellValue' },
+      formula: { type: 'string' },
+      displayText: { type: 'string' },
+      runs: { type: 'array', items: { $ref: '#/$defs/ContentRun' } },
+      colSpan: { type: 'integer', exclusiveMinimum: 0, maximum: MAX_SAFE_INTEGER },
+      rowSpan: { type: 'integer', exclusiveMinimum: 0, maximum: MAX_SAFE_INTEGER },
+      background: { $ref: '#/$defs/Color' },
+      borders: { $ref: '#/$defs/ContentCellBorders' },
+      alignment: { $ref: '#/$defs/Alignment' },
+      verticalAlignment: { type: 'string', enum: ['top', 'middle', 'bottom'] },
+      comment: { $ref: '#/$defs/ContentSheetCellComment' },
+      sourcePath: { type: 'string' },
+      frames: { type: 'array', items: { $ref: '#/$defs/LayoutFrame' } },
+    },
+    required: ['row', 'column', 'value', 'displayText'],
+    additionalProperties: false,
+  },
+  // A cell's own computed/typed value, one variant per ODF office:value-type plus dateTime -- the ten-member discriminated union in declared order (src/content.ts's ContentCellValueSchema).
+  ContentCellValue: {
+    oneOf: [
+      {
+        type: 'object',
+        properties: {
+          kind: { type: 'string', const: 'number' },
+          value: { type: 'number' },
+          exactValue: { type: 'string', pattern: '^-?(0|[1-9]\\d*)(\\.\\d+)?$' },
+        },
+        required: ['kind', 'value'],
+        additionalProperties: false,
+      },
+      {
+        type: 'object',
+        properties: {
+          kind: { type: 'string', const: 'percentage' },
+          value: { type: 'number' },
+          exactValue: { type: 'string', pattern: '^-?(0|[1-9]\\d*)(\\.\\d+)?$' },
+        },
+        required: ['kind', 'value'],
+        additionalProperties: false,
+      },
+      {
+        type: 'object',
+        properties: {
+          kind: { type: 'string', const: 'currency' },
+          value: { type: 'number' },
+          currency: { type: 'string' },
+          exactValue: { type: 'string', pattern: '^-?(0|[1-9]\\d*)(\\.\\d+)?$' },
+        },
+        required: ['kind', 'value'],
+        additionalProperties: false,
+      },
+      {
+        type: 'object',
+        properties: { kind: { type: 'string', const: 'boolean' }, value: { type: 'boolean' } },
+        required: ['kind', 'value'],
+        additionalProperties: false,
+      },
+      {
+        type: 'object',
+        properties: { kind: { type: 'string', const: 'date' }, value: { type: 'string' } },
+        required: ['kind', 'value'],
+        additionalProperties: false,
+      },
+      {
+        type: 'object',
+        properties: { kind: { type: 'string', const: 'time' }, value: { type: 'string' } },
+        required: ['kind', 'value'],
+        additionalProperties: false,
+      },
+      {
+        type: 'object',
+        properties: { kind: { type: 'string', const: 'dateTime' }, value: { type: 'string' } },
+        required: ['kind', 'value'],
+        additionalProperties: false,
+      },
+      {
+        type: 'object',
+        properties: { kind: { type: 'string', const: 'string' }, value: { type: 'string' } },
+        required: ['kind', 'value'],
+        additionalProperties: false,
+      },
+      {
+        type: 'object',
+        properties: { kind: { type: 'string', const: 'error' }, value: { type: 'string' } },
+        required: ['kind', 'value'],
+        additionalProperties: false,
+      },
+      {
+        type: 'object',
+        properties: { kind: { type: 'string', const: 'empty' } },
+        required: ['kind'],
+        additionalProperties: false,
+      },
+    ],
+  },
+  ContentSheetCellComment: {
+    type: 'object',
+    properties: {
+      text: { type: 'string' },
+      author: { type: 'string' },
+      createdAt: { type: 'string' },
+      replies: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: { text: { type: 'string' }, author: { type: 'string' } },
+          required: ['text'],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ['text'],
+    additionalProperties: false,
+  },
+  ContentSheetColumn: {
+    type: 'object',
+    properties: {
+      index: { type: 'integer', minimum: 0, maximum: MAX_SAFE_INTEGER },
+      widthPt: { type: 'number', exclusiveMinimum: 0 },
+      hidden: { type: 'boolean' },
+    },
+    required: ['index'],
+    additionalProperties: false,
+  },
+  ContentSheetRow: {
+    type: 'object',
+    properties: {
+      index: { type: 'integer', minimum: 0, maximum: MAX_SAFE_INTEGER },
+      heightPt: { type: 'number', exclusiveMinimum: 0 },
+      hidden: { type: 'boolean' },
+    },
+    required: ['index'],
+    additionalProperties: false,
+  },
+  ContentSheetPrintSettings: {
+    type: 'object',
+    properties: {
+      pageSize: { $ref: '#/$defs/PageSize' },
+      margins: { $ref: '#/$defs/Margins' },
+      printRange: { $ref: '#/$defs/ContentSheetPrintRange' },
+      scalePercent: { type: 'number', exclusiveMinimum: 0 },
+      fitToPages: {
+        type: 'object',
+        properties: {
+          width: { type: 'integer', exclusiveMinimum: 0, maximum: MAX_SAFE_INTEGER },
+          height: { type: 'integer', exclusiveMinimum: 0, maximum: MAX_SAFE_INTEGER },
+        },
+        required: ['width', 'height'],
+        additionalProperties: false,
+      },
+      repeatRows: { $ref: '#/$defs/ContentSheetRepeatRange' },
+      repeatColumns: { $ref: '#/$defs/ContentSheetRepeatRange' },
+      gridlines: { type: 'boolean' },
+      headers: { type: 'boolean' },
+      pageOrder: { type: 'string', enum: ['downThenOver', 'overThenDown'] },
+      manualBreaks: {
+        type: 'object',
+        properties: {
+          rows: { type: 'array', items: { type: 'integer', minimum: 0, maximum: MAX_SAFE_INTEGER } },
+          columns: { type: 'array', items: { type: 'integer', minimum: 0, maximum: MAX_SAFE_INTEGER } },
+        },
+        required: ['rows', 'columns'],
+        additionalProperties: false,
+      },
+    },
+    required: ['pageSize', 'margins', 'gridlines', 'headers', 'pageOrder'],
+    additionalProperties: false,
+  },
+  ContentSheetPrintRange: {
+    type: 'object',
+    properties: {
+      startRow: { type: 'integer', minimum: 0, maximum: MAX_SAFE_INTEGER },
+      startColumn: { type: 'integer', minimum: 0, maximum: MAX_SAFE_INTEGER },
+      endRow: { type: 'integer', minimum: 0, maximum: MAX_SAFE_INTEGER },
+      endColumn: { type: 'integer', minimum: 0, maximum: MAX_SAFE_INTEGER },
+    },
+    required: ['startRow', 'startColumn', 'endRow', 'endColumn'],
+    additionalProperties: false,
+  },
+  ContentSheetRepeatRange: {
+    type: 'object',
+    properties: {
+      start: { type: 'integer', minimum: 0, maximum: MAX_SAFE_INTEGER },
+      end: { type: 'integer', minimum: 0, maximum: MAX_SAFE_INTEGER },
+    },
+    required: ['start', 'end'],
+    additionalProperties: false,
+  },
+  // A sheet-anchored image leaf: ContentImageBlockSchema's own fields plus the four required cell-anchor placement fields (ContentImageBlockSchema.extend, src/content.ts).
+  ContentSheetImage: {
+    type: 'object',
+    properties: {
+      kind: { type: 'string', const: 'image' },
+      format: { type: 'string', enum: ['png', 'jpeg'] },
+      base64: { type: 'string' },
+      widthPt: { type: 'number', exclusiveMinimum: 0 },
+      heightPt: { type: 'number', exclusiveMinimum: 0 },
+      altText: { type: 'string' },
+      sourcePath: { type: 'string' },
+      frames: { type: 'array', items: { $ref: '#/$defs/LayoutFrame' } },
+      anchorRow: { type: 'integer', minimum: 0, maximum: MAX_SAFE_INTEGER },
+      anchorColumn: { type: 'integer', minimum: 0, maximum: MAX_SAFE_INTEGER },
+      offsetXPt: { type: 'number' },
+      offsetYPt: { type: 'number' },
+    },
+    required: ['kind', 'format', 'base64', 'widthPt', 'heightPt', 'anchorRow', 'anchorColumn', 'offsetXPt', 'offsetYPt'],
+    additionalProperties: false,
+  },
+  ContentStroke: {
+    type: 'object',
+    properties: {
+      color: { $ref: '#/$defs/Color' },
+      widthPt: { type: 'number', exclusiveMinimum: 0 },
+      style: { $ref: '#/$defs/ContentStrokeStyle' },
+    },
+    required: ['color', 'widthPt'],
+    additionalProperties: false,
+  },
+  ContentPathPoint: {
+    type: 'object',
+    properties: {
+      xPt: { type: 'number' },
+      yPt: { type: 'number' },
+    },
+    required: ['xPt', 'yPt'],
+    additionalProperties: false,
+  },
+  ContentPathSegment: {
+    oneOf: [
+      {
+        type: 'object',
+        properties: { kind: { type: 'string', const: 'line' }, to: { $ref: '#/$defs/ContentPathPoint' } },
+        required: ['kind', 'to'],
+        additionalProperties: false,
+      },
+      {
+        type: 'object',
+        properties: {
+          kind: { type: 'string', const: 'cubic' },
+          control1: { $ref: '#/$defs/ContentPathPoint' },
+          control2: { $ref: '#/$defs/ContentPathPoint' },
+          to: { $ref: '#/$defs/ContentPathPoint' },
+        },
+        required: ['kind', 'control1', 'control2', 'to'],
+        additionalProperties: false,
+      },
+    ],
+  },
+  ContentSubpath: {
+    type: 'object',
+    properties: {
+      start: { $ref: '#/$defs/ContentPathPoint' },
+      segments: { type: 'array', items: { $ref: '#/$defs/ContentPathSegment' } },
+      closed: { type: 'boolean' },
+    },
+    required: ['start', 'segments', 'closed'],
+    additionalProperties: false,
+  },
+  // The textless vector primitives, in their declared variant order (rect / ellipse / line / path, src/content.ts's ContentVectorSchema).
+  ContentVector: {
+    oneOf: [
+      {
+        type: 'object',
+        properties: {
+          kind: { type: 'string', const: 'rect' },
+          frame: { $ref: '#/$defs/Box' },
+          rotationDeg: { type: 'number' },
+          fill: { $ref: '#/$defs/Color' },
+          stroke: { $ref: '#/$defs/ContentStroke' },
+          paintOrder: { type: 'number' },
+          sourcePath: { type: 'string' },
+          frames: { type: 'array', items: { $ref: '#/$defs/LayoutFrame' } },
+        },
+        required: ['kind', 'frame'],
+        additionalProperties: false,
+      },
+      {
+        type: 'object',
+        properties: {
+          kind: { type: 'string', const: 'ellipse' },
+          frame: { $ref: '#/$defs/Box' },
+          rotationDeg: { type: 'number' },
+          fill: { $ref: '#/$defs/Color' },
+          stroke: { $ref: '#/$defs/ContentStroke' },
+          paintOrder: { type: 'number' },
+          sourcePath: { type: 'string' },
+          frames: { type: 'array', items: { $ref: '#/$defs/LayoutFrame' } },
+        },
+        required: ['kind', 'frame'],
+        additionalProperties: false,
+      },
+      {
+        type: 'object',
+        properties: {
+          kind: { type: 'string', const: 'line' },
+          from: { $ref: '#/$defs/ContentPathPoint' },
+          to: { $ref: '#/$defs/ContentPathPoint' },
+          stroke: { $ref: '#/$defs/ContentStroke' },
+          paintOrder: { type: 'number' },
+          sourcePath: { type: 'string' },
+          frames: { type: 'array', items: { $ref: '#/$defs/LayoutFrame' } },
+        },
+        required: ['kind', 'from', 'to', 'stroke'],
+        additionalProperties: false,
+      },
+      {
+        type: 'object',
+        properties: {
+          kind: { type: 'string', const: 'path' },
+          frame: { $ref: '#/$defs/Box' },
+          rotationDeg: { type: 'number' },
+          subpaths: { type: 'array', items: { $ref: '#/$defs/ContentSubpath' } },
+          fill: { $ref: '#/$defs/Color' },
+          fillRule: { type: 'string', enum: ['nonzero', 'evenodd'] },
+          stroke: { $ref: '#/$defs/ContentStroke' },
+          paintOrder: { type: 'number' },
+          sourcePath: { type: 'string' },
+          frames: { type: 'array', items: { $ref: '#/$defs/LayoutFrame' } },
+        },
+        required: ['kind', 'frame', 'subpaths'],
+        additionalProperties: false,
+      },
+    ],
+  },
+  // An embedded object on its own (the sheet-children leaf position) -- the same member fields as ContentEmbeddedObjectBlock above minus the block-level kind discriminant, transcribed from the ContentEmbeddedObject interface (src/content.ts), which has no z.object() counterpart at all.
+  ContentEmbeddedObject: {
+    type: 'object',
+    properties: {
+      objectKind: { type: 'string', enum: EMBEDDED_OBJECT_KINDS },
+      document: { $ref: CONTENT_DOCUMENT_URI },
+      frame: { $ref: '#/$defs/Box' },
+      anchorRow: { type: 'integer', minimum: 0, maximum: MAX_SAFE_INTEGER },
+      anchorColumn: { type: 'integer', minimum: 0, maximum: MAX_SAFE_INTEGER },
+      offsetXPt: { type: 'number' },
+      offsetYPt: { type: 'number' },
+    },
+    required: ['objectKind', 'document', 'frame'],
+    additionalProperties: false,
+  },
+  // The seven group wrappers, hand-verified alone (recursive through their children arrays): `{ node, style?, children }` where children's permitted members are exactly that group kind's own child types (src/package-node.ts's per-kind guards). A wordprocessing section's flow.
+  SectionGroup: {
+    type: 'object',
+    properties: {
+      node: { $ref: '#/$defs/SectionDescriptor' },
+      style: { type: 'string' },
+      children: {
+        type: 'array',
+        items: { oneOf: [{ $ref: '#/$defs/HeadingGroup' }, { $ref: '#/$defs/ListGroup' }, { $ref: '#/$defs/ContentBlock' }] },
+      },
+    },
+    required: ['node', 'children'],
+    additionalProperties: false,
+  },
+  HeadingGroup: {
+    type: 'object',
+    properties: {
+      node: { $ref: '#/$defs/HeadingParagraph' },
+      style: { type: 'string' },
+      children: {
+        type: 'array',
+        items: { oneOf: [{ $ref: '#/$defs/HeadingGroup' }, { $ref: '#/$defs/ListGroup' }, { $ref: '#/$defs/ContentBlock' }] },
+      },
+    },
+    required: ['node', 'children'],
+    additionalProperties: false,
+  },
+  ListGroup: {
+    type: 'object',
+    properties: {
+      node: { $ref: '#/$defs/ListParagraph' },
+      style: { type: 'string' },
+      children: {
+        type: 'array',
+        items: { oneOf: [{ $ref: '#/$defs/ListGroup' }, { $ref: '#/$defs/ContentBlock' }] },
+      },
+    },
+    required: ['node', 'children'],
+    additionalProperties: false,
+  },
+  // A slide holds shape groups only, in shape order -- grouping never crosses a shape boundary (a slide's paragraphs across its shapes is the outline's lossy TOC projection, not a decomposition).
+  SlideGroup: {
+    type: 'object',
+    properties: {
+      node: { $ref: '#/$defs/SlideDescriptor' },
+      style: { type: 'string' },
+      children: { type: 'array', items: { $ref: '#/$defs/ShapeGroup' } },
+    },
+    required: ['node', 'children'],
+    additionalProperties: false,
+  },
+  ShapeGroup: {
+    type: 'object',
+    properties: {
+      node: { $ref: '#/$defs/ShapeDescriptor' },
+      style: { type: 'string' },
+      children: {
+        type: 'array',
+        items: { oneOf: [{ $ref: '#/$defs/ListGroup' }, { $ref: '#/$defs/ContentBlock' }] },
+      },
+    },
+    required: ['node', 'children'],
+    additionalProperties: false,
+  },
+  // A sheet's children: its anchored images then its whole embedded documents, in that fixed order; the grid rides the sheet descriptor.
+  SheetGroup: {
+    type: 'object',
+    properties: {
+      node: { $ref: '#/$defs/SheetDescriptor' },
+      style: { type: 'string' },
+      children: {
+        type: 'array',
+        items: { oneOf: [{ $ref: '#/$defs/ContentSheetImage' }, { $ref: '#/$defs/ContentEmbeddedObject' }] },
+      },
+    },
+    required: ['node', 'children'],
+    additionalProperties: false,
+  },
+  // A drawing page's children: shape groups then vector leaves, in that fixed order.
+  DrawPageGroup: {
+    type: 'object',
+    properties: {
+      node: { $ref: '#/$defs/DrawPageDescriptor' },
+      style: { type: 'string' },
+      children: {
+        type: 'array',
+        items: { oneOf: [{ $ref: '#/$defs/ShapeGroup' }, { $ref: '#/$defs/ContentVector' }] },
+      },
+    },
+    required: ['node', 'children'],
+    additionalProperties: false,
+  },
+  // -- The definitions facility (src/definitions.ts), reached through DocumentPackageSchema's styles/definitions fields --
+  StyleParagraphProperties: {
+    type: 'object',
+    properties: {
+      alignment: { $ref: '#/$defs/Alignment' },
+      list: { $ref: '#/$defs/ContentListMembership' },
+      spacingBeforePt: { type: 'number' },
+      spacingAfterPt: { type: 'number' },
+      lineSpacing: { type: 'number', exclusiveMinimum: 0 },
+      indentLeftPt: { type: 'number' },
+      indentFirstLinePt: { type: 'number' },
+    },
+    additionalProperties: false,
+  },
+  StyleRunProperties: {
+    type: 'object',
+    properties: {
+      bold: { type: 'boolean' },
+      italic: { type: 'boolean' },
+      underline: { type: 'boolean' },
+      strike: { type: 'boolean' },
+      fontFamily: { type: 'string' },
+      sizePt: { type: 'number', exclusiveMinimum: 0 },
+      color: { $ref: '#/$defs/Color' },
+    },
+    additionalProperties: false,
+  },
+  StyleEntry: {
+    type: 'object',
+    properties: {
+      paragraph: { $ref: '#/$defs/StyleParagraphProperties' },
+      run: { $ref: '#/$defs/StyleRunProperties' },
+    },
+    additionalProperties: false,
+  },
+  // A tenant-generic definitions-table entry: a required `kind` discriminator plus an open body whose keys belong to the tenant's vocabulary, never this package's -- the empty additionalProperties schema is JSON Schema's "anything", the emitted form of z.looseObject (src/definitions.ts).
+  DefinitionEntry: {
+    type: 'object',
+    properties: {
+      kind: { type: 'string' },
+    },
+    required: ['kind'],
+    additionalProperties: {},
   },
   // The MathML node tree carried by the ContentDocument 'formula' variant's own ContentFormulaSchema.mathml (src/content.ts), reached through MathMlNodeSchema -- the third z.custom() node, transcribed field-for-field from src/mathml.ts's own real Zod definitions (MathMlAttributeSchema/MathMlTextSchema/MathMlCdataSchema/MathMlCommentSchema/MathMlDeclarationSchema/MathMlPiSchema) plus the MathMlElement interface, which has no z.object() counterpart usable here for the same reason ContentTableCell doesn't: MathMlElementSchema.children is z.array(MathMlNodeSchema), so converting it drags in the opaque custom node again.
   MathMlAttribute: {

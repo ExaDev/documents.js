@@ -1,14 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { COLOR_BLACK } from './color';
-import type { ContentCodec, LayoutCodec } from './codec';
-import { CONTENT_FORMAT_VERSION, type ContentDocument } from './content';
-import { LAYOUT_FORMAT_VERSION, type LayoutDocument } from './layout';
-import { DEFAULT_LAYOUT_FONT } from './style';
+import type { ContentCodec } from './codec';
+import type { ContentDocument } from './content';
 
 function wordprocessingDocument(): ContentDocument {
   return {
     kind: 'wordprocessing',
-    formatVersion: CONTENT_FORMAT_VERSION,
     metadata: { title: 'Codec round trip', author: 'document-schema.js' },
     sections: [
       {
@@ -23,32 +19,6 @@ function wordprocessingDocument(): ContentDocument {
         ],
       },
     ],
-  };
-}
-
-function layoutDocument(): LayoutDocument {
-  return {
-    formatVersion: LAYOUT_FORMAT_VERSION,
-    metadata: { title: 'Codec round trip', author: 'document-schema.js' },
-    pages: [
-      {
-        widthPt: 612,
-        heightPt: 792,
-        items: [
-          {
-            kind: 'text',
-            text: 'Hello, codec.',
-            xPt: 72,
-            yPt: 720,
-            font: DEFAULT_LAYOUT_FONT,
-            sizePt: 12,
-            color: COLOR_BLACK,
-            sourcePath: 'sections[0].blocks[0].runs[0]',
-          },
-        ],
-      },
-    ],
-    images: {},
   };
 }
 
@@ -92,42 +62,5 @@ describe('ContentCodec', () => {
     };
 
     expect(codec.read(new Uint8Array([0]), {})).toEqual(wordprocessingDocument());
-  });
-});
-
-describe('LayoutCodec', () => {
-  it('accepts a real implementation carrying both read and write, since write is not optional', () => {
-    const codec: LayoutCodec = {
-      read: (bytes) => {
-        expect(bytes).toBeInstanceOf(Uint8Array);
-        return layoutDocument();
-      },
-      write: (layout) => {
-        expect(layout.pages).toHaveLength(1);
-        return new Uint8Array([4, 5, 6]);
-      },
-    };
-
-    const layout = codec.read(new Uint8Array([0]));
-    expect(layout).toEqual(layoutDocument());
-    expect(codec.write(layout)).toEqual(new Uint8Array([4, 5, 6]));
-  });
-
-  it('threads a format-specific TOptions type through both read and write', () => {
-    interface PdfWriteOptions {
-      onFontSubstitution?: (family: string) => void;
-    }
-
-    const codec: LayoutCodec<PdfWriteOptions> = {
-      read: () => layoutDocument(),
-      write: (_layout, options) => {
-        options?.onFontSubstitution?.('Carlito');
-        return new Uint8Array([7]);
-      },
-    };
-
-    let substituted: string | undefined;
-    codec.write(layoutDocument(), { onFontSubstitution: (family) => (substituted = family) });
-    expect(substituted).toBe('Carlito');
   });
 });

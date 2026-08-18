@@ -8,7 +8,7 @@ import { MathMlNodeSchema } from './mathml';
 import { LayoutMetadataSchema } from './metadata';
 import { AlignmentSchema } from './style';
 
-// The shared block model underlying a wordprocessing document's sections and a presentation document's slides. Ported from ooxml.js's src/typed/shared/content.ts (itself ported from documents.js's src/model/content.ts) -- the canonical home now; ooxml.js and documents.js both import this instead of maintaining their own copy. The ContentDocument envelope below (formatVersion + kind + wordprocessing/presentation/spreadsheet/drawing/formula variants) is this package's own addition on top of that shared vocabulary, matching documents.js's existing model/content.ts shape, since a caller needs a single top-level value to carry through a conversion pipeline.
+// The shared block model underlying a wordprocessing document's sections and a presentation document's slides. Ported from ooxml.js's src/typed/shared/content.ts (itself ported from documents.js's src/model/content.ts) -- the canonical home now; ooxml.js and documents.js both import this instead of maintaining their own copy. The ContentDocument envelope below (kind + wordprocessing/presentation/spreadsheet/drawing/formula variants) is this package's own addition on top of that shared vocabulary, matching documents.js's existing model/content.ts shape, since a caller needs a single top-level value to carry through a conversion pipeline.
 
 // sourcePath is assigned by each format's reader at read time; this package only defines the field, it doesn't generate values. Known limitation: sourcePath values are stable within one read+layout pass over a single document, not across edits -- inserting content earlier in a document shifts every later path. It exists for tagged/accessible-PDF-style traceability and debugging, not edit-tracking, and not (any more, see `frames` immediately below) as the mechanism a node's own rendered position is found through.
 
@@ -519,46 +519,44 @@ export const ContentFormulaSchema = z.object({
 });
 export type ContentFormula = z.infer<typeof ContentFormulaSchema>;
 
-// Bumped whenever ContentDocumentSchema's shape changes incompatibly. 2 added the 'formula' variant below, renamed ContentSheetPrintSettings.scale to scalePercent, made ContentSheetColumn.widthPt/ContentSheetRow.heightPt optional-positive rather than required-nonnegative, and added the 'dateTime' ContentCellValue kind. 3 added the canonical, format-agnostic `headingLevel` field to ContentParagraphSchema (alongside the existing round-trip-only `styleId`), and fused DocumentPackage's own layout half directly onto the content tree: every content-kind leaf that previously carried only a `sourcePath` correlation string (ContentRun, ContentParagraph, ContentImageBlock, ContentPageBreak, ContentTable, ContentTableCell, ContentEmbeddedObjectBlock, ContentShape, every ContentVector variant, ContentSheetCell) now additionally carries an optional `frames: LayoutFrame[]` field of its own rendered page position(s) -- see FusedNode above and DOCUMENT_PACKAGE_FORMAT_VERSION in package.ts, bumped in step.
-export const CONTENT_FORMAT_VERSION = 3;
+// The five ContentDocument kinds, one shared declaration for every consumer that needs the union as a value or a type -- the package tree's root carries the same five (src/package.ts), and two hand copies of the list would drift the first time a kind was added.
+export const CONTENT_DOCUMENT_KINDS = ['wordprocessing', 'presentation', 'spreadsheet', 'drawing', 'formula'] as const;
+export type ContentDocumentKind = (typeof CONTENT_DOCUMENT_KINDS)[number];
 
-// Fields every one of the five ContentDocument arms below carries in addition to its own kind, formatVersion, and metadata -- currently the document-level math symbol table (SymbolTableSchema, src/math.ts): the curation layer mapping each written symbol glyph to its quantity kind, preferred unit, and definition, alongside the unit registry a formula's expressions resolve their symbol and unit references against. Spliced into each arm via spread rather than factored through a base schema the arms extend, because z.discriminatedUnion() needs each member as a plain z.object carrying its own literal `kind` field in place. Optional on every arm: a document with no lowered math content (most of them) simply omits it, and the table is presentation-inert by construction -- it curates what symbols mean, never how any formula renders -- so its presence or absence changes no rendering. It lives on the envelope, not inside LayoutMetadataSchema, because that schema is shared with LayoutDocument (src/metadata.ts) and a math curation layer there would leak onto every layout document, which carries no formulas of its own.
-const contentDocumentSharedFields = {
+// ContentDocument carries no formatVersion of its own: it is the in-process codec-exchange type the codecs hand each other and never a serialised artefact in its own right, so it has no version to declare. Versioning lives entirely at the serialised-artefact boundary -- a dumped document or package states its version through the release-pinned $schema URI its dumper stamped (src/schema-io.ts), which is also what an ingesting documentFromJson dispatches on. Releases 1.x-3.x carried a per-arm formatVersion literal here; 4.0.0 retired it (ExaDev/document-schema.js#20's errata).
+
+// Fields every one of the five ContentDocument arms below carries in addition to its own kind and metadata -- currently the document-level math symbol table (SymbolTableSchema, src/math.ts): the curation layer mapping each written symbol glyph to its quantity kind, preferred unit, and definition, alongside the unit registry a formula's expressions resolve their symbol and unit references against. Spliced into each arm via spread rather than factored through a base schema the arms extend, because z.discriminatedUnion() needs each member as a plain z.object carrying its own literal `kind` field in place. Optional on every arm: a document with no lowered math content (most of them) simply omits it, and the table is presentation-inert by construction -- it curates what symbols mean, never how any formula renders -- so its presence or absence changes no rendering. Exported because DocumentPackageSchema's own arms (src/package.ts) spread the identical field set -- one declaration, so a shared field added here reaches the package root without a second edit.
+export const contentDocumentSharedFields = {
   symbolTable: SymbolTableSchema.optional(),
 };
 
 export const ContentDocumentSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('wordprocessing'),
-    formatVersion: z.literal(CONTENT_FORMAT_VERSION),
     metadata: LayoutMetadataSchema,
     ...contentDocumentSharedFields,
     sections: z.array(ContentSectionSchema),
   }),
   z.object({
     kind: z.literal('presentation'),
-    formatVersion: z.literal(CONTENT_FORMAT_VERSION),
     metadata: LayoutMetadataSchema,
     ...contentDocumentSharedFields,
     slides: z.array(ContentSlideSchema),
   }),
   z.object({
     kind: z.literal('spreadsheet'),
-    formatVersion: z.literal(CONTENT_FORMAT_VERSION),
     metadata: LayoutMetadataSchema,
     ...contentDocumentSharedFields,
     sheets: z.array(ContentSheetSchema),
   }),
   z.object({
     kind: z.literal('drawing'),
-    formatVersion: z.literal(CONTENT_FORMAT_VERSION),
     metadata: LayoutMetadataSchema,
     ...contentDocumentSharedFields,
     pages: z.array(ContentDrawPageSchema),
   }),
   z.object({
     kind: z.literal('formula'),
-    formatVersion: z.literal(CONTENT_FORMAT_VERSION),
     metadata: LayoutMetadataSchema,
     ...contentDocumentSharedFields,
     formula: ContentFormulaSchema,
