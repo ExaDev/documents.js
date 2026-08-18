@@ -1,6 +1,6 @@
 {
   "name": "document-schema.js",
-  "version": "4.1.0",
+  "version": "4.2.0",
   "description": "The canonical, format-agnostic content and document-package schemas shared by ooxml.js, odf.js, documents.js, pdf-codec, and markdown-codec -- pure Zod schemas, no behaviour.",
   "type": "module",
   "repository": {

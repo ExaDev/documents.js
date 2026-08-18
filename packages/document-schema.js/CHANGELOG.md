@@ -1,3 +1,12 @@
+# [4.2.0](https://github.com/ExaDev/document-schema.js/compare/v4.1.0...v4.2.0) (2026-08-18)
+
+
+### Features
+
+* carry constructs in the flat form as matched boundary markers ([a61880d](https://github.com/ExaDev/document-schema.js/commit/a61880d5440c28e5daed3812d83118d8205b0fad))
+* publish the boundary markers and the marker-free tree leaf as JSON Schema fragments ([447e7c2](https://github.com/ExaDev/document-schema.js/commit/447e7c271dcc27688931e6e461719899fce9a9a1))
+* refuse construct boundary markers at package-tree leaf positions ([ea524dd](https://github.com/ExaDev/document-schema.js/commit/ea524dd5555390fafcc9823567f93bc6097ada28))
+
 # [4.1.0](https://github.com/ExaDev/document-schema.js/compare/v4.0.0...v4.1.0) (2026-08-18)
 
 
