@@ -1,5 +1,5 @@
 import type { ContentDocument, ContentShape } from 'document-schema.js';
-import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
+
 import type { Package } from 'odf.js';
 import { childrenWithTag, findChildElement, readOdp, rootElement } from 'odf.js';
 import { buildDrawingBlock } from '../../model/embedded-drawing';
@@ -70,5 +70,5 @@ export function readOdpContent(pkg: Package): ContentDocument {
     });
   }
 
-  return { kind: 'presentation', formatVersion: CONTENT_FORMAT_VERSION, metadata: { ...odpDoc.metadata }, slides: odpDoc.slides };
+  return { kind: 'presentation', metadata: { ...odpDoc.metadata }, slides: odpDoc.slides };
 }

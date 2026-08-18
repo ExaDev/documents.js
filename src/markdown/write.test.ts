@@ -1,5 +1,5 @@
 import type { ContentDocument } from 'document-schema.js';
-import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
+
 import { MarkdownUnsupportedDocumentKindError } from 'markdown-codec';
 import { describe, expect, it } from 'vitest';
 import { richMarkdownText } from '../test-support/markdown';
@@ -16,7 +16,7 @@ describe('buildMarkdownText', () => {
   });
 
   it('throws MarkdownUnsupportedDocumentKindError for a non-wordprocessing ContentDocument', () => {
-    const presentation: ContentDocument = { kind: 'presentation', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, slides: [] };
+    const presentation: ContentDocument = { kind: 'presentation', metadata: {}, slides: [] };
     expect(() => buildMarkdownText(presentation)).toThrow(MarkdownUnsupportedDocumentKindError);
   });
 

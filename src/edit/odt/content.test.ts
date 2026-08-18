@@ -1,4 +1,4 @@
-import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
+
 import type { ContentDocument, ContentVector } from 'document-schema.js';
 import type { Package, XmlElement } from 'odf.js';
 import { bytesToBase64, childrenWithTag, decodePackage, encodePackage, findChildElement, readDrawPageContent, rootElement } from 'odf.js';
@@ -16,7 +16,7 @@ function tinyPngBase64(): string {
 }
 
 function wordDoc(sections: Extract<ContentDocument, { kind: 'wordprocessing' }>['sections']): ContentDocument {
-  return { kind: 'wordprocessing', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, sections };
+  return { kind: 'wordprocessing', metadata: {}, sections };
 }
 
 function contentRoot(pkg: Package): XmlElement {
@@ -45,7 +45,7 @@ function readFlowVectors(pkg: Package): ContentVector[] {
 
 describe('buildOdtPackage', () => {
   it('throws for a presentation ContentDocument', () => {
-    expect(() => buildOdtPackage({ kind: 'presentation', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, slides: [] })).toThrow(/wordprocessing/);
+    expect(() => buildOdtPackage({ kind: 'presentation', metadata: {}, slides: [] })).toThrow(/wordprocessing/);
   });
 
   it('builds a paragraph with styled runs', () => {
@@ -92,7 +92,6 @@ describe('buildOdtPackage', () => {
   it('inserts a page break between sections', () => {
     const content: ContentDocument = {
       kind: 'wordprocessing',
-      formatVersion: CONTENT_FORMAT_VERSION,
       metadata: {},
       sections: [
         { pageSize: { widthPt: 612, heightPt: 792 }, margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 }, blocks: [{ kind: 'paragraph', runs: [{ text: 'Section one' }] }] },

@@ -1,5 +1,5 @@
 import type { ContentDocument } from 'document-schema.js';
-import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
+
 import { rootElement, type XmlElement } from 'ooxml.js';
 import { describe, expect, it } from 'vitest';
 import { buildPptxPackage } from '../edit/pptx/content';
@@ -260,7 +260,6 @@ describe('buildPptxPackage threading', () => {
   it('threads shape name through to p:cNvPr@name', () => {
     const content: ContentDocument = {
       kind: 'presentation',
-      formatVersion: CONTENT_FORMAT_VERSION,
       metadata: {},
       slides: [
         {
@@ -291,7 +290,6 @@ describe('buildPptxPackage threading', () => {
   it('threads shape insets through to a:bodyPr in EMU', () => {
     const content: ContentDocument = {
       kind: 'presentation',
-      formatVersion: CONTENT_FORMAT_VERSION,
       metadata: {},
       slides: [
         {
@@ -324,7 +322,6 @@ describe('buildPptxPackage threading', () => {
   it('threads paragraph spacing/indent through to a:pPr', () => {
     const content: ContentDocument = {
       kind: 'presentation',
-      formatVersion: CONTENT_FORMAT_VERSION,
       metadata: {},
       slides: [
         {
@@ -372,7 +369,6 @@ describe('buildPptxPackage threading', () => {
   it('threads cell background and borders through to a:tcPr', () => {
     const content: ContentDocument = {
       kind: 'presentation',
-      formatVersion: CONTENT_FORMAT_VERSION,
       metadata: {},
       slides: [
         {

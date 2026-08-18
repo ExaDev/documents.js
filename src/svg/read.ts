@@ -1,5 +1,5 @@
 import type { Box, Color, ContentDocument, ContentDrawPage, ContentStroke, ContentSubpath, ContentVector } from 'document-schema.js';
-import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
+
 import type { SvgDiagnosticCode, SvgDiagnosticSink } from './diagnostics';
 import { parseSvgDashStyle, parseSvgPaint } from './paint';
 import { parseSvgPathData } from './path';
@@ -544,5 +544,5 @@ export function readSvgContent(text: string, options?: ReadSvgContentOptions): C
   walkChildren(state, root, rootGeometry.map, childPaintState(root, {}));
 
   const page: ContentDrawPage = { size: { widthPt: rootGeometry.widthPt, heightPt: rootGeometry.heightPt }, shapes: [], vectors: state.vectors };
-  return { kind: 'drawing', formatVersion: CONTENT_FORMAT_VERSION, metadata, pages: [page] };
+  return { kind: 'drawing', metadata, pages: [page] };
 }

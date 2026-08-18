@@ -1,5 +1,5 @@
 import type { ContentDocument } from 'document-schema.js';
-import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
+
 import type { Package, XmlElement } from 'ooxml.js';
 import { childrenWithTag, readDocx, rootElement } from 'ooxml.js';
 import type { OmmlDiagnosticSink } from './formula';
@@ -25,5 +25,5 @@ export function readDocxContent(pkg: Package, options?: ReadDocxContentOptions):
   const body = documentBody(pkg);
   // readDocx already threw if word/document.xml has no w:body, so this only guards the type -- there is no reachable "readDocx succeeded but the body is gone" state.
   const sections = body === undefined ? docxDoc.sections : spliceDocxEmbeddedObjects(docxDoc.sections, body.children, options?.onMathDiagnostic);
-  return { kind: 'wordprocessing', formatVersion: CONTENT_FORMAT_VERSION, metadata: { ...docxDoc.metadata }, sections };
+  return { kind: 'wordprocessing', metadata: { ...docxDoc.metadata }, sections };
 }

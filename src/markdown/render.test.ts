@@ -13,7 +13,7 @@ import type {
   LayoutMetadata,
   MathMlNode,
 } from 'document-schema.js';
-import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
+
 import { describe, expect, it } from 'vitest';
 import { richMarkdownText } from '../test-support/markdown';
 import type { MarkdownRenderDiagnostic } from './render';
@@ -44,7 +44,7 @@ function slide(blocks: readonly ContentBlock[], notes = ''): ContentSlide {
 }
 
 function presentationDoc(slides: readonly ContentSlide[], metadata: LayoutMetadata = {}): Extract<ContentDocument, { kind: 'presentation' }> {
-  return { kind: 'presentation', formatVersion: CONTENT_FORMAT_VERSION, metadata, slides: [...slides] };
+  return { kind: 'presentation', metadata, slides: [...slides] };
 }
 
 function drawPage(shapes: readonly ContentShape[], vectors: readonly ContentVector[] = []): ContentDrawPage {
@@ -52,7 +52,7 @@ function drawPage(shapes: readonly ContentShape[], vectors: readonly ContentVect
 }
 
 function drawingDoc(pages: readonly ContentDrawPage[]): Extract<ContentDocument, { kind: 'drawing' }> {
-  return { kind: 'drawing', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, pages: [...pages] };
+  return { kind: 'drawing', metadata: {}, pages: [...pages] };
 }
 
 const PRINT_SETTINGS: ContentSheetPrintSettings = {
@@ -72,13 +72,13 @@ function sheet(cells: readonly ContentSheetCell[], overrides: Partial<ContentShe
 }
 
 function spreadsheetDoc(sheets: readonly ContentSheet[]): Extract<ContentDocument, { kind: 'spreadsheet' }> {
-  return { kind: 'spreadsheet', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, sheets: [...sheets] };
+  return { kind: 'spreadsheet', metadata: {}, sheets: [...sheets] };
 }
 
 const MI_X: MathMlNode[] = [{ type: 'element', tag: 'mi', attributes: [], children: [{ type: 'text', value: 'x' }] }];
 
 function formulaDocument(): Extract<ContentDocument, { kind: 'formula' }> {
-  return { kind: 'formula', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, formula: { mathml: MI_X } };
+  return { kind: 'formula', metadata: {}, formula: { mathml: MI_X } };
 }
 
 function anchoredFormulaObject(): ContentEmbeddedObject {
@@ -214,7 +214,7 @@ describe('renderContentDocumentToMarkdown', () => {
   });
 
   it('renders a standalone formula document as its own StarMath stand-in text when the source carried one', () => {
-    const document: ContentDocument = { kind: 'formula', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, formula: { mathml: MI_X, starMath: 'left ( a over b right )' } };
+    const document: ContentDocument = { kind: 'formula', metadata: {}, formula: { mathml: MI_X, starMath: 'left ( a over b right )' } };
     const { diagnostics, onDiagnostic } = collect();
     const text = renderContentDocumentToMarkdown(document, { onDiagnostic });
     expect(text).toBe('left ( a over b right )');

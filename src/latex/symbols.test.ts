@@ -1,5 +1,5 @@
 import type { ContentDocument } from 'document-schema.js';
-import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
+
 import { describe, expect, it } from 'vitest';
 import type { LatexDiagnostic } from './diagnostics';
 import { extractSymbolDefinitionsFromProse } from './symbols';
@@ -9,7 +9,6 @@ import { extractSymbolDefinitionsFromProse } from './symbols';
 function wordprocessing(paragraphs: readonly string[]): ContentDocument {
   return {
     kind: 'wordprocessing',
-    formatVersion: CONTENT_FORMAT_VERSION,
     metadata: {},
     sections: [{ pageSize: { widthPt: 595, heightPt: 842 }, margins: { topPt: 20, rightPt: 20, bottomPt: 20, leftPt: 20 }, blocks: paragraphs.map((text) => ({ kind: 'paragraph' as const, runs: [{ text }] })) }],
   };
@@ -65,7 +64,6 @@ describe('extractSymbolDefinitionsFromProse', () => {
   it('scans every section\'s paragraphs and ignores non-wordprocessing arms entirely', () => {
     const multiSection: ContentDocument = {
       kind: 'wordprocessing',
-      formatVersion: CONTENT_FORMAT_VERSION,
       metadata: {},
       sections: [
         { pageSize: { widthPt: 595, heightPt: 842 }, margins: { topPt: 20, rightPt: 20, bottomPt: 20, leftPt: 20 }, blocks: [{ kind: 'paragraph', runs: [{ text: 'where a is one thing' }] }] },
@@ -73,7 +71,7 @@ describe('extractSymbolDefinitionsFromProse', () => {
       ],
     };
     expect(extractSymbolDefinitionsFromProse(multiSection).map((entry) => entry.glyph)).toEqual(['a']);
-    const formula: ContentDocument = { kind: 'formula', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, formula: { mathml: [] } };
+    const formula: ContentDocument = { kind: 'formula', metadata: {}, formula: { mathml: [] } };
     expect(extractSymbolDefinitionsFromProse(formula)).toEqual([]);
   });
 });

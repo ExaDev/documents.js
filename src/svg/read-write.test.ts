@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ContentDocument, ContentVector } from 'document-schema.js';
-import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
+
 import type { SvgDiagnostic } from './diagnostics';
 import { readSvgContent } from './read';
 import { SvgMissingRootElementError } from './read';
@@ -23,7 +23,6 @@ function readVectors(text: string, diagnostics?: SvgDiagnostic[]): ContentVector
 function drawingDocument(pages: readonly { readonly vectors: readonly ContentVector[] }[], title?: string): ContentDocument {
   return {
     kind: 'drawing',
-    formatVersion: CONTENT_FORMAT_VERSION,
     metadata: title === undefined ? {} : { title },
     pages: pages.map((page) => ({ size: { widthPt: 100, heightPt: 60 }, shapes: [], vectors: [...page.vectors] })),
   };
@@ -269,7 +268,7 @@ describe('buildSvgText', () => {
   });
 
   it('throws SvgUnsupportedDocumentKindError for a non-drawing ContentDocument', () => {
-    const wordprocessing: ContentDocument = { kind: 'wordprocessing', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, sections: [] };
+    const wordprocessing: ContentDocument = { kind: 'wordprocessing', metadata: {}, sections: [] };
     expect(() => buildSvgText(wordprocessing)).toThrow(SvgUnsupportedDocumentKindError);
   });
 
@@ -292,7 +291,7 @@ describe('buildSvgText', () => {
   it('throws SvgPageNotFoundError for an out-of-range index and for a document with no pages', () => {
     const document = drawingDocument([{ vectors: [] }]);
     expect(() => buildSvgText(document, { page: 5 })).toThrow(SvgPageNotFoundError);
-    const empty: ContentDocument = { kind: 'drawing', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, pages: [] };
+    const empty: ContentDocument = { kind: 'drawing', metadata: {}, pages: [] };
     expect(() => buildSvgText(empty)).toThrow(SvgPageNotFoundError);
   });
 
@@ -300,7 +299,6 @@ describe('buildSvgText', () => {
     const diagnostics: SvgDiagnostic[] = [];
     const document: ContentDocument = {
       kind: 'drawing',
-      formatVersion: CONTENT_FORMAT_VERSION,
       metadata: {},
       pages: [{
         size: { widthPt: 100, heightPt: 60 },

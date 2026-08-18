@@ -1,5 +1,5 @@
 import type { ContentDocument } from 'document-schema.js';
-import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
+
 import { describe, expect, it } from 'vitest';
 import { decodePackage as decodeOdfPackage } from 'odf.js';
 import { decodePackage as decodeOoxmlPackage } from 'ooxml.js';
@@ -11,7 +11,6 @@ import { markdownToDocx, markdownToOdt } from './convert';
 function docWithHyperlink(): ContentDocument {
   return {
     kind: 'wordprocessing',
-    formatVersion: CONTENT_FORMAT_VERSION,
     metadata: {},
     sections: [{
       pageSize: { widthPt: 612, heightPt: 792 },
@@ -55,7 +54,6 @@ describe('hyperlink write: pptx a:hlinkClick', () => {
   it('buildPptxPackage wraps a hyperlinked run in a:hlinkClick with an external slide relationship', () => {
     const content: ContentDocument = {
       kind: 'presentation',
-      formatVersion: CONTENT_FORMAT_VERSION,
       metadata: {},
       slides: [{
         size: { widthPt: 720, heightPt: 540 },
