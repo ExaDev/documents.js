@@ -1,0 +1,355 @@
+{
+  "$schema": "https://cdn.jsdelivr.net/npm/document-schema.js@4.0.0/schemas/document-package.schema.json",
+  "kind": "spreadsheet",
+  "metadata": {
+    "title": "Grid Spreadsheet"
+  },
+  "pages": [
+    {
+      "widthPt": 400,
+      "heightPt": 300
+    }
+  ],
+  "children": [
+    {
+      "node": {
+        "kind": "sheet",
+        "name": "Grid",
+        "cells": [
+          {
+            "row": 0,
+            "column": 0,
+            "value": {
+              "kind": "string",
+              "value": "Alpha"
+            },
+            "displayText": "Alpha",
+            "runs": [
+              {
+                "text": "Alpha",
+                "frames": [
+                  {
+                    "pageIndex": 0,
+                    "xPt": 67.14091338582676,
+                    "yPt": 221.3492125984252,
+                    "widthPt": 25.57,
+                    "heightPt": 9.25
+                  }
+                ]
+              }
+            ],
+            "frames": [
+              {
+                "pageIndex": 0,
+                "xPt": 65.14091338582676,
+                "yPt": 217.0992125984252,
+                "widthPt": 56.69291338582677,
+                "heightPt": 17.00787401574803
+              }
+            ]
+          },
+          {
+            "row": 0,
+            "column": 1,
+            "value": {
+              "kind": "string",
+              "value": "Beta"
+            },
+            "displayText": "Beta",
+            "runs": [
+              {
+                "text": "Beta",
+                "frames": [
+                  {
+                    "pageIndex": 0,
+                    "xPt": 123.83382677165353,
+                    "yPt": 221.3492125984252,
+                    "widthPt": 20.57,
+                    "heightPt": 9.25
+                  }
+                ]
+              }
+            ],
+            "frames": [
+              {
+                "pageIndex": 0,
+                "xPt": 121.83382677165353,
+                "yPt": 217.0992125984252,
+                "widthPt": 56.69291338582677,
+                "heightPt": 17.00787401574803
+              }
+            ]
+          },
+          {
+            "row": 0,
+            "column": 2,
+            "value": {
+              "kind": "string",
+              "value": "Gamma"
+            },
+            "displayText": "Gamma",
+            "runs": [
+              {
+                "text": "Gamma",
+                "frames": [
+                  {
+                    "pageIndex": 0,
+                    "xPt": 180.5267401574803,
+                    "yPt": 221.3492125984252,
+                    "widthPt": 35.56,
+                    "heightPt": 9.25
+                  }
+                ]
+              }
+            ],
+            "frames": [
+              {
+                "pageIndex": 0,
+                "xPt": 178.5267401574803,
+                "yPt": 217.0992125984252,
+                "widthPt": 56.69291338582677,
+                "heightPt": 17.00787401574803
+              }
+            ]
+          },
+          {
+            "row": 1,
+            "column": 0,
+            "value": {
+              "kind": "string",
+              "value": "One"
+            },
+            "displayText": "One",
+            "runs": [
+              {
+                "text": "One",
+                "frames": [
+                  {
+                    "pageIndex": 0,
+                    "xPt": 67.14091338582676,
+                    "yPt": 204.34133858267717,
+                    "widthPt": 18.9,
+                    "heightPt": 9.25
+                  }
+                ]
+              }
+            ],
+            "frames": [
+              {
+                "pageIndex": 0,
+                "xPt": 65.14091338582676,
+                "yPt": 200.09133858267717,
+                "widthPt": 56.69291338582677,
+                "heightPt": 17.00787401574803
+              }
+            ]
+          },
+          {
+            "row": 1,
+            "column": 1,
+            "value": {
+              "kind": "string",
+              "value": "Two"
+            },
+            "displayText": "Two",
+            "runs": [
+              {
+                "text": "Two",
+                "frames": [
+                  {
+                    "pageIndex": 0,
+                    "xPt": 123.83382677165353,
+                    "yPt": 204.34133858267717,
+                    "widthPt": 18.89,
+                    "heightPt": 9.25
+                  }
+                ]
+              }
+            ],
+            "frames": [
+              {
+                "pageIndex": 0,
+                "xPt": 121.83382677165353,
+                "yPt": 200.09133858267717,
+                "widthPt": 56.69291338582677,
+                "heightPt": 17.00787401574803
+              }
+            ]
+          },
+          {
+            "row": 1,
+            "column": 2,
+            "value": {
+              "kind": "string",
+              "value": "Three"
+            },
+            "displayText": "Three",
+            "runs": [
+              {
+                "text": "Three",
+                "frames": [
+                  {
+                    "pageIndex": 0,
+                    "xPt": 180.5267401574803,
+                    "yPt": 204.34133858267717,
+                    "widthPt": 26.12,
+                    "heightPt": 9.25
+                  }
+                ]
+              }
+            ],
+            "frames": [
+              {
+                "pageIndex": 0,
+                "xPt": 178.5267401574803,
+                "yPt": 200.09133858267717,
+                "widthPt": 56.69291338582677,
+                "heightPt": 17.00787401574803
+              }
+            ]
+          },
+          {
+            "row": 2,
+            "column": 0,
+            "value": {
+              "kind": "string",
+              "value": "Four"
+            },
+            "displayText": "Four",
+            "runs": [
+              {
+                "text": "Four",
+                "frames": [
+                  {
+                    "pageIndex": 0,
+                    "xPt": 67.14091338582676,
+                    "yPt": 187.33346456692914,
+                    "widthPt": 20.560000000000002,
+                    "heightPt": 9.25
+                  }
+                ]
+              }
+            ],
+            "frames": [
+              {
+                "pageIndex": 0,
+                "xPt": 65.14091338582676,
+                "yPt": 183.08346456692914,
+                "widthPt": 56.69291338582677,
+                "heightPt": 17.00787401574803
+              }
+            ]
+          },
+          {
+            "row": 2,
+            "column": 1,
+            "value": {
+              "kind": "string",
+              "value": "Five"
+            },
+            "displayText": "Five",
+            "runs": [
+              {
+                "text": "Five",
+                "frames": [
+                  {
+                    "pageIndex": 0,
+                    "xPt": 123.83382677165353,
+                    "yPt": 187.33346456692914,
+                    "widthPt": 18.89,
+                    "heightPt": 9.25
+                  }
+                ]
+              }
+            ],
+            "frames": [
+              {
+                "pageIndex": 0,
+                "xPt": 121.83382677165353,
+                "yPt": 183.08346456692914,
+                "widthPt": 56.69291338582677,
+                "heightPt": 17.00787401574803
+              }
+            ]
+          },
+          {
+            "row": 2,
+            "column": 2,
+            "value": {
+              "kind": "string",
+              "value": "Six"
+            },
+            "displayText": "Six",
+            "runs": [
+              {
+                "text": "Six",
+                "frames": [
+                  {
+                    "pageIndex": 0,
+                    "xPt": 180.5267401574803,
+                    "yPt": 187.33346456692914,
+                    "widthPt": 13.89,
+                    "heightPt": 9.25
+                  }
+                ]
+              }
+            ],
+            "frames": [
+              {
+                "pageIndex": 0,
+                "xPt": 178.5267401574803,
+                "yPt": 183.08346456692914,
+                "widthPt": 56.69291338582677,
+                "heightPt": 17.00787401574803
+              }
+            ]
+          }
+        ],
+        "columns": [
+          {
+            "index": 0,
+            "widthPt": 56.69291338582677
+          },
+          {
+            "index": 1,
+            "widthPt": 56.69291338582677
+          },
+          {
+            "index": 2,
+            "widthPt": 56.69291338582677
+          }
+        ],
+        "rows": [
+          {
+            "index": 0,
+            "heightPt": 17.00787401574803
+          },
+          {
+            "index": 1,
+            "heightPt": 17.00787401574803
+          },
+          {
+            "index": 2,
+            "heightPt": 17.00787401574803
+          }
+        ],
+        "printSettings": {
+          "pageSize": {
+            "widthPt": 400,
+            "heightPt": 300
+          },
+          "margins": {
+            "topPt": 56.69291338582677,
+            "rightPt": 56.69291338582677,
+            "bottomPt": 56.69291338582677,
+            "leftPt": 56.69291338582677
+          },
+          "gridlines": true,
+          "headers": true,
+          "pageOrder": "downThenOver"
+        }
+      },
+      "children": []
+    }
+  ]
+}

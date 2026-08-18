@@ -10,21 +10,11 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import {
-  type ContentDocument,
-  type DocumentPackage,
-  type LayoutDocument,
-  contentDocumentWithSchema,
-  documentFromJson,
-  documentPackageWithSchema,
-  layoutDocumentWithSchema,
-} from 'document-schema.js';
+import type { ContentDocument, DocumentPackage } from 'document-schema.js';
+import { contentDocumentWithSchema, documentFromJson, documentPackageWithSchema } from 'document-schema.js';
 import { decodePackage as decodeOoxmlPackage } from 'ooxml.js';
-import { createStandardFontMeasurer, loadMathFont } from 'pdf-codec';
-import { convertWordprocessingToLayout } from './layout/engine';
-const mathMetricsAt = (sizePt: number) => loadMathFont().metricsAt(sizePt);
 import { decodePackage as decodeOdfPackage } from 'odf.js';
-import { docxToPdf } from './convert/convert';
+import { docxToPdf, odgToPdf, odfToPdf, odsToPdf, pptxToPdf } from './convert/convert';
 import { readDocxContent } from './ooxml/docx/read';
 import { readPptxContent } from './ooxml/pptx/read';
 import { readOdpContent } from './odf/odp/read';
@@ -63,14 +53,6 @@ function assertContentExample(name: string, document: ContentDocument): void {
   expect(result.value.kind, `${name}: variant`).toBe(document.kind);
 }
 
-function assertLayoutExample(name: string, layout: LayoutDocument): void {
-  if (REGEN) {
-    writeJson(name, layoutDocumentWithSchema(layout));
-  }
-  const result = documentFromJson(readJson(name));
-  expect(result.kind, `${name}: schema`).toBe('LayoutDocument');
-}
-
 function assertPackageExample(name: string, pkg: DocumentPackage): void {
   if (REGEN) {
     writeJson(name, documentPackageWithSchema(pkg));
@@ -79,30 +61,19 @@ function assertPackageExample(name: string, pkg: DocumentPackage): void {
   expect(result.kind, `${name}: schema`).toBe('DocumentPackage');
 }
 
-// The package example comes from a real docxToPdf run: its onDocument callback hands back the fused DocumentPackage (content with its own frames stamped, plus the pages array) the conversion built, which is the README's own recommended way to obtain the intermediate pivot model. The LayoutDocument example comes from running the same conversion's own layout engine directly on the same read content -- the internal pdf-codec view a package no longer carries as a second half, still a real pivot model worth an example of its own (writePdf's own contract).
-function buildDocxPackage(): DocumentPackage {
+// The package examples come from real conversion runs: each variant's onDocument callback hands back the tree-form DocumentPackage (decomposed content with the layout pass's frames stamped onto its own nodes, plus the pages array and the minted styles table) the conversion built, which is the README's own recommended way to obtain the intermediate pivot model. The pdf-codec LayoutDocument no longer has a committed example: it stopped being a schema-serialised pivot when the item family demoted to pdf-codec (a LayoutDocument is that codec's own read/write artefact now, with no $schema-stamped JSON envelope to validate a golden against).
+function capturePackage(convert: (onDocument: (pkg: DocumentPackage) => void) => Uint8Array<ArrayBuffer>): DocumentPackage {
   let captured: DocumentPackage | undefined;
-  docxToPdf(minimalDocxBytes(), { onDocument: (pkg) => {
+  convert((pkg) => {
     captured = pkg;
-  } });
+  });
   if (!captured) {
-    throw new Error('docxToPdf did not invoke onDocument');
+    throw new Error('conversion did not invoke onDocument');
   }
   return captured;
 }
 
-const DOCX_PACKAGE = buildDocxPackage();
-
-function buildDocxLayout(): LayoutDocument {
-  const content = readDocxContent(decodeOoxmlPackage(minimalDocxBytes()));
-  if (content.kind !== 'wordprocessing') {
-    throw new Error('readDocxContent returned a non-wordprocessing ContentDocument');
-  }
-  const { document } = convertWordprocessingToLayout(content, { measurer: createStandardFontMeasurer(), mathMetricsAt });
-  return document;
-}
-
-const DOCX_LAYOUT = buildDocxLayout();
+const DOCX_PACKAGE = capturePackage((onDocument) => docxToPdf(minimalDocxBytes(), { onDocument }));
 
 describe('examples', () => {
   // wordprocessing covers docx, odt, and markdown -- they all read into the identical wordprocessing-variant ContentDocument (the README documents this shared pivot). docx is the representative source here.
@@ -126,12 +97,25 @@ describe('examples', () => {
     assertContentExample('formula.content.json', readOdfFormulaContent(decodeOdfPackage(odfFormulaBytes(FRACTION_FORMULA))));
   });
 
-  it('layout-document.json (docxToPdf internal layout)', () => {
-    assertLayoutExample('layout-document.json', DOCX_LAYOUT);
+  // One tree-form package golden per variant, each captured from the variant's own to-pdf conversion so the committed tree carries real frames, real pages, and (where the fixture's formatting repeats) a real minted styles table. wordprocessing covers docx, odt, and markdown (the shared variant); the formula entry comes from the special-case odfToPdf, whose single ContentFormula child and one A4 page is the one tree shape with no container grouping.
+  it('wordprocessing.package.json (docxToPdf tree + pages)', () => {
+    assertPackageExample('wordprocessing.package.json', DOCX_PACKAGE);
   });
 
-  it('document-package.json (docxToPdf fused content + pages)', () => {
-    assertPackageExample('document-package.json', DOCX_PACKAGE);
+  it('presentation.package.json (pptxToPdf tree + pages)', () => {
+    assertPackageExample('presentation.package.json', capturePackage((onDocument) => pptxToPdf(minimalPptxBytes(), { onDocument })));
+  });
+
+  it('spreadsheet.package.json (odsToPdf tree + pages)', () => {
+    assertPackageExample('spreadsheet.package.json', capturePackage((onDocument) => odsToPdf(gridOdsBytes(), { onDocument })));
+  });
+
+  it('drawing.package.json (odgToPdf tree + pages)', () => {
+    assertPackageExample('drawing.package.json', capturePackage((onDocument) => odgToPdf(minimalOdgBytes(), { onDocument })));
+  });
+
+  it('formula.package.json (odfToPdf tree + page)', () => {
+    assertPackageExample('formula.package.json', capturePackage((onDocument) => odfToPdf(odfFormulaBytes(FRACTION_FORMULA), { onDocument })));
   });
 
   // odp reads into the same presentation variant as pptx and is not one of the five committed examples, but exercising it here confirms the second source format still resolves -- guarding against an odp reader regression that the pptx-sourced example alone would not surface.

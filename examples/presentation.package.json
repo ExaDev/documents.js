@@ -1,0 +1,77 @@
+{
+  "$schema": "https://cdn.jsdelivr.net/npm/document-schema.js@4.0.0/schemas/document-package.schema.json",
+  "kind": "presentation",
+  "metadata": {},
+  "pages": [
+    {
+      "widthPt": 960,
+      "heightPt": 540
+    }
+  ],
+  "children": [
+    {
+      "node": {
+        "kind": "slide",
+        "size": {
+          "widthPt": 960,
+          "heightPt": 540
+        },
+        "notes": ""
+      },
+      "children": [
+        {
+          "node": {
+            "frame": {
+              "xPt": 72,
+              "yPt": 72,
+              "widthPt": 288,
+              "heightPt": 72
+            },
+            "insetLeftPt": 7.2,
+            "insetTopPt": 3.6,
+            "insetRightPt": 7.2,
+            "insetBottomPt": 3.6,
+            "sourcePath": "slides[0].shapes[0]",
+            "frames": [
+              {
+                "pageIndex": 0,
+                "xPt": 72,
+                "yPt": 396,
+                "widthPt": 288,
+                "heightPt": 72
+              }
+            ]
+          },
+          "children": [
+            {
+              "kind": "paragraph",
+              "runs": [
+                {
+                  "text": "Slide text",
+                  "sourcePath": "slides[0].shapes[0].blocks[0].runs[0]",
+                  "frames": [
+                    {
+                      "pageIndex": 0,
+                      "xPt": 79.2,
+                      "yPt": 447.75,
+                      "widthPt": 40.013999999999996,
+                      "heightPt": 16.65
+                    },
+                    {
+                      "pageIndex": 0,
+                      "xPt": 124.21799999999999,
+                      "yPt": 447.75,
+                      "widthPt": 29.016000000000002,
+                      "heightPt": 16.65
+                    }
+                  ]
+                }
+              ],
+              "sourcePath": "slides[0].shapes[0].blocks[0]"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

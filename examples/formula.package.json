@@ -1,0 +1,53 @@
+{
+  "$schema": "https://cdn.jsdelivr.net/npm/document-schema.js@4.0.0/schemas/document-package.schema.json",
+  "kind": "formula",
+  "metadata": {},
+  "pages": [
+    {
+      "widthPt": 595.28,
+      "heightPt": 841.89
+    }
+  ],
+  "children": [
+    {
+      "mathml": [
+        {
+          "type": "element",
+          "tag": "math:semantics",
+          "attributes": [],
+          "children": [
+            {
+              "type": "element",
+              "tag": "math:mfrac",
+              "attributes": [],
+              "children": [
+                {
+                  "type": "element",
+                  "tag": "math:mi",
+                  "attributes": [],
+                  "children": [
+                    {
+                      "type": "text",
+                      "value": "a"
+                    }
+                  ]
+                },
+                {
+                  "type": "element",
+                  "tag": "math:mi",
+                  "attributes": [],
+                  "children": [
+                    {
+                      "type": "text",
+                      "value": "b"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

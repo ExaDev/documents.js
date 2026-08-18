@@ -1,42 +1,69 @@
 {
-  "$schema": "https://cdn.jsdelivr.net/npm/document-schema.js@4.0.0/schemas/content-document.schema.json",
+  "$schema": "https://cdn.jsdelivr.net/npm/document-schema.js@4.0.0/schemas/document-package.schema.json",
   "kind": "drawing",
   "metadata": {
     "title": "My Drawing"
   },
   "pages": [
     {
-      "size": {
-        "widthPt": 400,
-        "heightPt": 300
+      "widthPt": 400,
+      "heightPt": 300
+    }
+  ],
+  "children": [
+    {
+      "node": {
+        "kind": "drawPage",
+        "size": {
+          "widthPt": 400,
+          "heightPt": 300
+        }
       },
-      "shapes": [
+      "children": [
         {
-          "name": "TextFrame",
-          "frame": {
-            "xPt": 305,
-            "yPt": 160,
-            "widthPt": 80,
-            "heightPt": 30
+          "node": {
+            "name": "TextFrame",
+            "frame": {
+              "xPt": 305,
+              "yPt": 160,
+              "widthPt": 80,
+              "heightPt": 30
+            },
+            "insetLeftPt": 0,
+            "insetTopPt": 0,
+            "insetRightPt": 0,
+            "insetBottomPt": 0,
+            "paintOrder": 6,
+            "frames": [
+              {
+                "pageIndex": 0,
+                "xPt": 305,
+                "yPt": 110,
+                "widthPt": 80,
+                "heightPt": 30
+              }
+            ]
           },
-          "insetLeftPt": 0,
-          "insetTopPt": 0,
-          "insetRightPt": 0,
-          "insetBottomPt": 0,
-          "blocks": [
+          "children": [
             {
               "kind": "paragraph",
               "runs": [
                 {
-                  "text": "Label"
+                  "text": "Label",
+                  "frames": [
+                    {
+                      "pageIndex": 0,
+                      "xPt": 305,
+                      "yPt": 123.35,
+                      "widthPt": 44.028000000000006,
+                      "heightPt": 16.65
+                    }
+                  ]
                 }
               ]
             }
-          ],
-          "paintOrder": 6
-        }
-      ],
-      "vectors": [
+          ]
+        },
         {
           "kind": "rect",
           "frame": {
@@ -50,7 +77,16 @@
             "g": 0.5019607843137255,
             "b": 0
           },
-          "paintOrder": 0
+          "paintOrder": 0,
+          "frames": [
+            {
+              "pageIndex": 0,
+              "xPt": 20,
+              "yPt": 100,
+              "widthPt": 120,
+              "heightPt": 80
+            }
+          ]
         },
         {
           "kind": "rect",
@@ -65,7 +101,16 @@
             "g": 0,
             "b": 1
           },
-          "paintOrder": 1
+          "paintOrder": 1,
+          "frames": [
+            {
+              "pageIndex": 0,
+              "xPt": 60,
+              "yPt": 80,
+              "widthPt": 120,
+              "heightPt": 80
+            }
+          ]
         },
         {
           "kind": "rect",
@@ -88,7 +133,16 @@
             },
             "widthPt": 1.4173228346456694
           },
-          "paintOrder": 2
+          "paintOrder": 2,
+          "frames": [
+            {
+              "pageIndex": 0,
+              "xPt": 20,
+              "yPt": 210,
+              "widthPt": 100,
+              "heightPt": 70
+            }
+          ]
         },
         {
           "kind": "ellipse",
@@ -111,7 +165,16 @@
             },
             "widthPt": 0.8503937007874015
           },
-          "paintOrder": 3
+          "paintOrder": 3,
+          "frames": [
+            {
+              "pageIndex": 0,
+              "xPt": 160,
+              "yPt": 210,
+              "widthPt": 100,
+              "heightPt": 70
+            }
+          ]
         },
         {
           "kind": "line",
@@ -131,7 +194,16 @@
             },
             "widthPt": 1.700787401574803
           },
-          "paintOrder": 4
+          "paintOrder": 4,
+          "frames": [
+            {
+              "pageIndex": 0,
+              "xPt": 300,
+              "yPt": 210,
+              "widthPt": 80,
+              "heightPt": 70
+            }
+          ]
         },
         {
           "kind": "path",
@@ -187,7 +259,16 @@
             },
             "widthPt": 1.4173228346456694
           },
-          "paintOrder": 5
+          "paintOrder": 5,
+          "frames": [
+            {
+              "pageIndex": 0,
+              "xPt": 300,
+              "yPt": 46.642519685039375,
+              "widthPt": 113.35482162350706,
+              "heightPt": 113.35748031496063
+            }
+          ]
         }
       ]
     }
