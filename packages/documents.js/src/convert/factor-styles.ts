@@ -179,7 +179,7 @@ interface RunCandidate {
   readonly positions: ContentRun[];
 }
 
-// Groups the not-yet-factored positions by their restricted tuple and returns the best candidate -- the one occurring on two or more positions, most frequent first, then earliest first position, then the canonical-serialised tuple -- or undefined when no tuple reaches the threshold. The frequency threshold is the plan's own economy rule: a singleton ref plus its table entry is larger than the inline tuple it would replace.
+// Groups the not-yet-factored positions by their restricted tuple and returns the best candidate -- the one occurring on two or more positions, most frequent first, then earliest first position -- or undefined when no tuple reaches the threshold. The frequency threshold is the plan's own economy rule: a singleton ref plus its table entry is larger than the inline tuple it would replace.
 function bestParagraphCandidate(extent: readonly ContentParagraph[], keys: readonly ParagraphKey[], factored: ReadonlySet<ContentParagraph>): ParagraphCandidate | undefined {
   const groups = new Map<string, ParagraphCandidate>();
   for (const paragraph of extent) {
@@ -210,7 +210,7 @@ function bestRunCandidate(extent: readonly ContentParagraph[], keys: readonly Ru
   return bestGroup(groups);
 }
 
-// The shared (most frequent, earliest) choice over a tuple -> positions grouping. Map iteration order is first-occurrence insertion order, so iterating in insertion order and taking the first strictly-more-frequent group resolves frequency first and falls back to document order for ties. The rule's third arm (canonical-serialised tuple) cannot bind here -- two distinct tuples cannot share both a frequency and a first occurrence -- so it lives in the table-entry sort below, where it genuinely binds (two entries minted at the same wrapper share a first visit).
+// The shared (most frequent, earliest) choice over a tuple -> positions grouping. Map iteration order is first-occurrence insertion order, so iterating in insertion order and taking the first strictly-more-frequent group resolves frequency first and falls back to document order for ties. The rule is total at two arms: a position joins exactly one tuple group, so two distinct tuples can never share a first occurrence.
 function bestGroup<T extends { readonly tuple: unknown; readonly positions: unknown[] }>(groups: Map<string, T>): T | undefined {
   let best: T | undefined;
   for (const group of groups.values()) {
@@ -355,8 +355,8 @@ function mint(pkg: DocumentPackage): DocumentPackage {
   if (entries.size === 0) {
     return pkg;
   }
-  // Entry ids in (descending total frequency, first visit, canonical content) order -- the deterministic table order the plan locks. Array.prototype.sort is stable, so equal-rank entries keep their first-visit encounter order.
-  const ordered = [...entries.values()].sort((a, b) => b.frequency - a.frequency || a.firstVisit - b.firstVisit || canonicalKey(a.content).localeCompare(canonicalKey(b.content)));
+  // Entry ids in (descending total frequency, first wrapper visit) order -- the deterministic table order the plan locks. The comparator is total at two arms: one wrapper mints at most one entry, so distinct entries always have distinct first visits and a further tie-break arm could never bind.
+  const ordered = [...entries.values()].sort((a, b) => b.frequency - a.frequency || a.firstVisit - b.firstVisit);
   const styles: StylesTable = {};
   ordered.forEach((entry, index) => {
     const id = `s${index + 1}`;
