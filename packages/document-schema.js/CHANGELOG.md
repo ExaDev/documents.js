@@ -1,3 +1,12 @@
+# [4.1.0](https://github.com/ExaDev/document-schema.js/compare/v4.0.0...v4.1.0) (2026-08-18)
+
+
+### Features
+
+* add the fidelity construct descriptor kinds ([3669943](https://github.com/ExaDev/document-schema.js/commit/366994331fcfd63744ae6f7ab90d9a10d7331aae)), closes [ExaDev/document-schema.js#22](https://github.com/ExaDev/document-schema.js/issues/22) [ExaDev/document-schema.js#24](https://github.com/ExaDev/document-schema.js/issues/24)
+* admit construct groups at every block-flow position of the package tree ([15ca95b](https://github.com/ExaDev/document-schema.js/commit/15ca95b7c5d6942a021b50a3b114f34ae037ce70)), closes [ExaDev/document-schema.js#24](https://github.com/ExaDev/document-schema.js/issues/24)
+* carry layers, attachments, and destinations tables at the package root ([15f9f72](https://github.com/ExaDev/document-schema.js/commit/15f9f72b2a7fc9766bc506b38ec3503d38729748)), closes [ExaDev/document-schema.js#24](https://github.com/ExaDev/document-schema.js/issues/24) [ExaDev/pdf-codec#66](https://github.com/ExaDev/pdf-codec/issues/66)
+
 # [4.0.0](https://github.com/ExaDev/document-schema.js/compare/v3.3.0...v4.0.0) (2026-08-18)
 
 
