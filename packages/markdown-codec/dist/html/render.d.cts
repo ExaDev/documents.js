@@ -1,4 +1,4 @@
-import { g as MarkdownInlineNode, s as MarkdownDocumentNode } from "../ast-DbjiuYr8.cjs";
+import { s as MarkdownDocumentNode, v as MarkdownInlineNode } from "../ast-8XCbjRQT.cjs";
 //#region src/html/render.d.ts
 declare function escapeHtml(text: string): string;
 declare function escapeHref(href: string): string;

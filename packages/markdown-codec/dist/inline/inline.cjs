@@ -1,4 +1,5 @@
 Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
+const require_inline_footnote = require("./footnote.cjs");
 const require_html_html = require("../html/html.cjs");
 const require_inline_chars = require("./chars.cjs");
 const require_inline_entity = require("./entity.cjs");
@@ -25,14 +26,16 @@ function createWrapper(kind, marker) {
 var InlineParser = class {
 	text;
 	references;
+	footnotes;
 	gfmStrikethrough;
 	container = new require_inline_node.InlineNode("container");
 	delimiters = new require_inline_delimiter.DelimiterStack();
 	brackets;
 	pos = 0;
-	constructor(text, references, options) {
+	constructor(text, references, footnotes, options) {
 		this.text = text;
 		this.references = references;
+		this.footnotes = footnotes;
 		this.gfmStrikethrough = options.gfmStrikethrough ?? true;
 	}
 	parse() {
@@ -238,13 +241,30 @@ var InlineParser = class {
 	}
 	parseOpenBracket() {
 		const start = this.pos;
+		const footnote = this.matchFootnoteReference();
+		if (footnote !== void 0) {
+			const node = new require_inline_node.InlineNode("footnoteReference");
+			node.label = footnote.label;
+			this.container.appendChild(node);
+			this.pos = footnote.end;
+			return;
+		}
 		this.pos += 1;
 		this.pushBracket(this.appendText("["), start, false);
+	}
+	matchFootnoteReference() {
+		const match = require_inline_footnote.matchFootnoteLabel(this.text, this.pos);
+		if (match === void 0 || !this.footnotes.has(match.label)) return;
+		return match;
 	}
 	parseBang() {
 		const start = this.pos;
 		this.pos += 1;
 		if (this.text.charAt(this.pos) !== "[") {
+			this.appendText("!");
+			return;
+		}
+		if (this.matchFootnoteReference() !== void 0) {
 			this.appendText("!");
 			return;
 		}
@@ -363,6 +383,7 @@ function flattenToPlainText(node) {
 		case "autolink": return node.destination;
 		case "softBreak":
 		case "hardBreak": return " ";
+		case "footnoteReference": return `[^${node.label}]`;
 		default: {
 			let result = "";
 			let child = node.firstChild;
@@ -458,11 +479,15 @@ function toAstNode(node) {
 			type: "mathInline",
 			literal: node.literal
 		};
+		case "footnoteReference": return {
+			type: "footnoteReference",
+			label: node.label
+		};
 		case "container": return;
 	}
 }
-function parseInlines(content, references, options = {}) {
-	const root = new InlineParser(content, references, options).parse();
+function parseInlines(content, references, footnotes, options = {}) {
+	const root = new InlineParser(content, references, footnotes, options).parse();
 	if (options.gfmAutolinks ?? true) {
 		require_inline_gfm_autolink.applyGfmAutolinks(root);
 		mergeAdjacentText(root);

@@ -14,6 +14,7 @@ declare const MarkdownDiagnosticCodes: {
   readonly UNTERMINATED_HTML_BLOCK: "md/unterminated-html-block";
   readonly TABLE_CELL_COUNT_MISMATCH: "md/table-cell-count-mismatch";
   readonly DUPLICATE_LINK_REFERENCE: "md/duplicate-link-reference";
+  readonly DUPLICATE_FOOTNOTE_DEFINITION: "md/duplicate-footnote-definition";
   readonly LIST_MARKER_TYPE_CONFLICT: "md/list-marker-type-conflict";
   readonly INVENTED_PAGE_GEOMETRY: "md/invented-page-geometry";
   readonly NESTED_EMPHASIS_FLATTENED: "md/nested-emphasis-flattened";
@@ -28,6 +29,9 @@ declare const MarkdownDiagnosticCodes: {
   readonly MATH_BLOCK_PRESERVED_AS_TEXT: "md/math-block-preserved-as-text";
   readonly MATH_INLINE_PRESERVED_AS_TEXT: "md/math-inline-preserved-as-text";
   readonly FRONT_MATTER_KEY_UNMAPPED: "md/front-matter-key-unmapped";
+  readonly FOOTNOTE_REFERENCE_PRESERVED_AS_TEXT: "md/footnote-reference-preserved-as-text";
+  readonly FOOTNOTE_BODY_HEADING_FLATTENED: "md/footnote-body-heading-flattened";
+  readonly CONSTRUCT_UNREPRESENTED: "md/construct-unrepresented";
   readonly HEADING_LEVEL_CLAMPED: "md/heading-level-clamped";
   readonly ADJACENT_LINKS_MERGED: "md/adjacent-links-merged";
   readonly CODE_SPAN_AS_MONOSPACE_RUN: "md/code-span-as-monospace-run";
@@ -56,9 +60,14 @@ declare class MarkdownWriteError extends Error {
   readonly code: string;
   constructor(code: string, message: string);
 }
+declare class MarkdownUnbalancedConstructMarkersError extends MarkdownWriteError {
+  readonly imbalanceKind: 'unmatchedEnd' | 'unclosedStart';
+  readonly blockIndex: number;
+  constructor(imbalanceKind: 'unmatchedEnd' | 'unclosedStart', blockIndex: number);
+}
 declare class MarkdownUnsupportedDocumentKindError extends MarkdownWriteError {
   readonly kind: string;
   constructor(kind: string);
 }
 //#endregion
-export { MarkdownInputTooLargeError as a, MarkdownParseError as c, NOOP_MARKDOWN_DIAGNOSTIC_SINK as d, MarkdownDiagnosticSink as i, MarkdownUnsupportedDocumentKindError as l, MarkdownDiagnosticCodes as n, MarkdownInvalidUtf8Error as o, MarkdownDiagnosticSeverity as r, MarkdownNestingLimitExceededError as s, MarkdownDiagnostic as t, MarkdownWriteError as u };
+export { MarkdownInputTooLargeError as a, MarkdownParseError as c, MarkdownWriteError as d, NOOP_MARKDOWN_DIAGNOSTIC_SINK as f, MarkdownDiagnosticSink as i, MarkdownUnbalancedConstructMarkersError as l, MarkdownDiagnosticCodes as n, MarkdownInvalidUtf8Error as o, MarkdownDiagnosticSeverity as r, MarkdownNestingLimitExceededError as s, MarkdownDiagnostic as t, MarkdownUnsupportedDocumentKindError as u };

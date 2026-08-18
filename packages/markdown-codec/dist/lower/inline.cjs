@@ -53,6 +53,13 @@ function lowerInlineNode(node, style, context) {
 				message: "inline math (\\( \\)) was preserved as literal raw LaTeX text; it is not parsed as LaTeX or converted to MathML by this package"
 			});
 			return [buildRun(node.literal, style, require_shared_style_constants.MATH_INLINE_FONT_MARKER)];
+		case "footnoteReference":
+			context.sink({
+				code: require_diagnostics_diagnostics.MarkdownDiagnosticCodes.FOOTNOTE_REFERENCE_PRESERVED_AS_TEXT,
+				severity: "info",
+				message: `footnote reference "[^${node.label}]" is preserved as a marked text run rather than an anchor construct: a construct's extent is block-scoped, and a reference site sits between two runs inside a paragraph, which no block-level boundary marker can bracket`
+			});
+			return [buildRun(`[^${node.label}]`, style, require_shared_style_constants.FOOTNOTE_REFERENCE_FONT_MARKER)];
 		case "autolink": {
 			const destination = node.email ? `mailto:${node.destination}` : node.destination;
 			return [buildRun(node.destination, {

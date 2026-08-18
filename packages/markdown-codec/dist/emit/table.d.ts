@@ -1,4 +1,4 @@
-import { i as MarkdownDiagnosticSink } from "../diagnostics-B72W0P_E.js";
+import { i as MarkdownDiagnosticSink } from "../diagnostics-BuO5-SW1.js";
 import { InlineEmitContext } from "./inline.js";
 import { ContentTable } from "document-schema.js";
 //#region src/emit/table.d.ts

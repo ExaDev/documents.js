@@ -229,6 +229,55 @@ function lowerList(node, ancestorNumId, level, context, contentWidthPt) {
 	}
 	return node.children.flatMap((item) => lowerListItem(item, numId, level, context, contentWidthPt));
 }
+function flattenFootnoteBodyHeadings(node, context) {
+	switch (node.type) {
+		case "heading":
+			context.sink({
+				code: MarkdownDiagnosticCodes.FOOTNOTE_BODY_HEADING_FLATTENED,
+				severity: "info",
+				message: `a level-${String(node.level)} heading inside a footnote definition's body is carried as literal ATX text: a construct boundary marker's extent may not contain a block that opens or closes a heading scope, so the heading cannot stay a heading inside the anchor construct the definition lowers to`
+			});
+			return {
+				type: "paragraph",
+				children: [{
+					type: "text",
+					value: `${"#".repeat(node.level)} `
+				}, ...node.children]
+			};
+		case "blockquote": return {
+			type: "blockquote",
+			children: node.children.map((child) => flattenFootnoteBodyHeadings(child, context))
+		};
+		case "list": return {
+			...node,
+			children: node.children.map((item) => flattenFootnoteBodyHeadingsInItem(item, context))
+		};
+		case "listItem": return flattenFootnoteBodyHeadingsInItem(node, context);
+		default: return node;
+	}
+}
+function flattenFootnoteBodyHeadingsInItem(item, context) {
+	return {
+		...item,
+		children: item.children.map((child) => flattenFootnoteBodyHeadings(child, context))
+	};
+}
+function lowerFootnoteDefinition(node, context, contentWidthPt) {
+	const descriptor = {
+		kind: "anchor",
+		anchorType: "footnote",
+		name: node.label
+	};
+	const body = node.children.flatMap((child) => lowerBlock(flattenFootnoteBodyHeadings(child, context), context, contentWidthPt));
+	return [
+		{
+			kind: "constructStart",
+			descriptor
+		},
+		...body,
+		{ kind: "constructEnd" }
+	];
+}
 function lowerBlock(node, context, contentWidthPt) {
 	switch (node.type) {
 		case "paragraph": return lowerParagraph(node, context);
@@ -239,6 +288,7 @@ function lowerBlock(node, context, contentWidthPt) {
 		case "thematicBreak": return lowerThematicBreak(context);
 		case "htmlBlock": return lowerHtmlBlock(node, context);
 		case "mathBlock": return lowerMathBlock(node, context);
+		case "footnoteDefinition": return lowerFootnoteDefinition(node, context, contentWidthPt);
 		case "table":
 			if (context.list !== void 0) context.sink({
 				code: MarkdownDiagnosticCodes.LIST_ITEM_BLOCK_UNLISTED,
@@ -295,6 +345,7 @@ function lowerMarkdown(source, options = {}) {
 		gfmAutolinks: options.gfmAutolinks,
 		gfmStrikethrough: options.gfmStrikethrough,
 		gfmTaskLists: options.gfmTaskLists,
+		footnotes: options.footnotes,
 		maxNesting: options.maxBlockNesting,
 		sink
 	};

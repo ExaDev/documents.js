@@ -1,4 +1,5 @@
 Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
+const require_inline_footnote = require("../inline/footnote.cjs");
 require("../defaults/defaults.cjs");
 const require_diagnostics_diagnostics = require("../diagnostics/diagnostics.cjs");
 const require_html_html = require("../html/html.cjs");
@@ -14,7 +15,7 @@ const TASK_LIST_MARKER_PATTERN = /^\[([ xX])\][ \t]/;
 const NUL_REPLACEMENT = "�";
 const NUL_PATTERN = /\0/g;
 const LINE_ENDING_PATTERN = /\r\n|\n|\r/;
-const MAYBE_SPECIAL_PATTERN = /^[#$`~*+_=<>0-9|:-]/;
+const MAYBE_SPECIAL_PATTERN = /^[#$`~*+_=<>[0-9|:-]/;
 const ATX_MARKER_PATTERN = /^#{1,6}(?:[ \t]+|$)/;
 const ATX_ONLY_CLOSING_SEQUENCE_PATTERN = /^[ \t]*#+[ \t]*$/;
 const ATX_TRAILING_CLOSING_SEQUENCE_PATTERN = /[ \t]+#+[ \t]*$/;
@@ -46,8 +47,10 @@ function headingLevelOf(hashes) {
 }
 var BlockParser = class {
 	references = /* @__PURE__ */ new Map();
+	footnotes = /* @__PURE__ */ new Set();
 	document = new require_block_node.BlockNode("document", 1);
 	tables;
+	footnotesEnabled;
 	sink;
 	maxNesting;
 	tip = this.document;
@@ -59,6 +62,7 @@ var BlockParser = class {
 	nestingDepth = 0;
 	constructor(options) {
 		this.tables = options.gfmTables ?? true;
+		this.footnotesEnabled = options.footnotes ?? true;
 		this.sink = options.sink ?? require_diagnostics_diagnostics.NOOP_MARKDOWN_DIAGNOSTIC_SINK;
 		this.maxNesting = options.maxNesting ?? 250;
 	}
@@ -129,6 +133,7 @@ var BlockParser = class {
 			case "list": return "matched";
 			case "blockquote": return this.continueBlockquote();
 			case "listItem": return this.continueListItem(node);
+			case "footnoteDefinition": return this.continueFootnoteDefinition(node);
 			case "codeBlock": return this.continueCodeBlock(node);
 			case "mathBlock": return this.continueMathBlock(node);
 			case "htmlBlock": return this.line.blank && HTML_BLOCK_BLANK_LINE_END_TYPES.includes(node.htmlBlockType) ? "not-matched" : "matched";
@@ -159,6 +164,18 @@ var BlockParser = class {
 		}
 		if (this.line.indent >= listData.markerOffset + listData.padding) {
 			this.line.advance(listData.markerOffset + listData.padding);
+			return "matched";
+		}
+		return "not-matched";
+	}
+	continueFootnoteDefinition(node) {
+		if (this.line.blank) {
+			if (node.children.length === 0) return "not-matched";
+			this.line.advanceToNextNonspace();
+			return "matched";
+		}
+		if (this.line.indent >= 4) {
+			this.line.advance(4);
 			return "matched";
 		}
 		return "not-matched";
@@ -216,6 +233,7 @@ var BlockParser = class {
 			() => this.tryAtxHeadingStart(),
 			() => this.tryCodeFenceStart(),
 			() => this.tryMathBlockStart(),
+			() => this.tryFootnoteDefinitionStart(container),
 			() => this.tryHtmlBlockStart(container),
 			() => this.tryPromoteParagraph(container),
 			() => this.tryThematicBreakStart(),
@@ -272,6 +290,24 @@ var BlockParser = class {
 		this.line.advanceToNextNonspace();
 		this.line.advance(MATH_BLOCK_MARKER_LENGTH);
 		return "leaf";
+	}
+	tryFootnoteDefinitionStart(container) {
+		if (!this.footnotesEnabled || this.line.indented || container.kind !== "document") return "none";
+		const marker = require_inline_footnote.matchFootnoteDefinitionMarker(this.line.restFromNextNonspace());
+		if (marker === void 0) return "none";
+		if (this.footnotes.has(marker.label)) this.sink({
+			code: require_diagnostics_diagnostics.MarkdownDiagnosticCodes.DUPLICATE_FOOTNOTE_DEFINITION,
+			severity: "warning",
+			message: `footnote "${marker.label}" was already defined earlier in the document; every reference resolves to the first definition, and both definitions are kept as written`,
+			line: this.lineNumber
+		});
+		this.footnotes.add(marker.label);
+		this.line.advanceToNextNonspace();
+		this.closeUnmatchedBlocks();
+		const node = this.addChild("footnoteDefinition");
+		node.footnoteLabel = marker.label;
+		this.line.advance(marker.markerLength);
+		return "container";
 	}
 	tryHtmlBlockStart(container) {
 		if (this.line.indented || this.line.peekNextNonspace() !== "<") return "none";
@@ -429,15 +465,15 @@ var BlockParser = class {
 		node.literal = breakIndex === -1 ? "" : node.content.slice(breakIndex + 1);
 	}
 };
-function toInlineChildren(content, references, options) {
-	return require_inline_inline.parseInlines(content.trim(), references, options);
+function toInlineChildren(content, context) {
+	return require_inline_inline.parseInlines(content.trim(), context.references, context.footnotes, context.options);
 }
-function toHeadingNode(node, references, options) {
+function toHeadingNode(node, context) {
 	return {
 		type: "heading",
 		level: node.level,
 		style: node.setext ? "setext" : "atx",
-		children: toInlineChildren(node.content, references, options)
+		children: toInlineChildren(node.content, context)
 	};
 }
 function extractTaskListMarker(itemChildren) {
@@ -448,19 +484,19 @@ function extractTaskListMarker(itemChildren) {
 	first.content = first.content.slice(match[0].length);
 	return match[1] !== " ";
 }
-function toListItemNode(item, references, options) {
-	const checked = options.gfmTaskLists ?? true ? extractTaskListMarker(item.children) : void 0;
+function toListItemNode(item, context) {
+	const checked = context.options.gfmTaskLists ?? true ? extractTaskListMarker(item.children) : void 0;
 	return checked === void 0 ? {
 		type: "listItem",
-		children: toAstBlocks(item.children, references, options)
+		children: toAstBlocks(item.children, context)
 	} : {
 		type: "listItem",
 		checked,
-		children: toAstBlocks(item.children, references, options)
+		children: toAstBlocks(item.children, context)
 	};
 }
-function toListNode(node, references, options) {
-	const children = node.children.map((item) => toListItemNode(item, references, options));
+function toListNode(node, context) {
+	const children = node.children.map((item) => toListItemNode(item, context));
 	const data = node.listData;
 	if (data?.type === "ordered") return {
 		type: "list",
@@ -478,20 +514,20 @@ function toListNode(node, references, options) {
 		children
 	};
 }
-function toTableRow(cells, header, references, options) {
+function toTableRow(cells, header, context) {
 	return {
 		type: "tableRow",
 		header,
 		children: cells.map((cell) => ({
 			type: "tableCell",
-			children: toInlineChildren(cell, references, options)
+			children: toInlineChildren(cell, context)
 		}))
 	};
 }
-function toTableNode(node, references, options) {
-	const sink = options.sink ?? require_diagnostics_diagnostics.NOOP_MARKDOWN_DIAGNOSTIC_SINK;
+function toTableNode(node, context) {
+	const sink = context.options.sink ?? require_diagnostics_diagnostics.NOOP_MARKDOWN_DIAGNOSTIC_SINK;
 	const columnCount = node.alignments.length;
-	const rows = [toTableRow(require_block_table.fitRowToColumns(require_block_table.splitTableRow(node.headerLine), columnCount), true, references, options)];
+	const rows = [toTableRow(require_block_table.fitRowToColumns(require_block_table.splitTableRow(node.headerLine), columnCount), true, context)];
 	for (const rowLine of node.content.split("\n")) {
 		if (rowLine.trim().length === 0) continue;
 		const cells = require_block_table.splitTableRow(rowLine);
@@ -501,7 +537,7 @@ function toTableNode(node, references, options) {
 			message: `table row has ${String(cells.length)} cell(s), but the header row declares ${String(columnCount)}; the row is padded with empty cells or truncated to fit`,
 			line: node.startLine
 		});
-		rows.push(toTableRow(require_block_table.fitRowToColumns(cells, columnCount), false, references, options));
+		rows.push(toTableRow(require_block_table.fitRowToColumns(cells, columnCount), false, context));
 	}
 	return {
 		type: "table",
@@ -509,18 +545,23 @@ function toTableNode(node, references, options) {
 		children: rows
 	};
 }
-function toAstBlock(node, references, options) {
+function toAstBlock(node, context) {
 	switch (node.kind) {
 		case "paragraph": return {
 			type: "paragraph",
-			children: toInlineChildren(node.content, references, options)
+			children: toInlineChildren(node.content, context)
 		};
-		case "heading": return toHeadingNode(node, references, options);
+		case "heading": return toHeadingNode(node, context);
 		case "blockquote": return {
 			type: "blockquote",
-			children: toAstBlocks(node.children, references, options)
+			children: toAstBlocks(node.children, context)
 		};
-		case "list": return toListNode(node, references, options);
+		case "list": return toListNode(node, context);
+		case "footnoteDefinition": return {
+			type: "footnoteDefinition",
+			label: node.footnoteLabel,
+			children: toAstBlocks(node.children, context)
+		};
 		case "codeBlock": return node.fenced ? {
 			type: "codeBlock",
 			fenced: true,
@@ -541,15 +582,15 @@ function toAstBlock(node, references, options) {
 			type: "mathBlock",
 			literal: node.literal
 		};
-		case "table": return toTableNode(node, references, options);
+		case "table": return toTableNode(node, context);
 		case "document":
 		case "listItem": return;
 	}
 }
-function toAstBlocks(nodes, references, options) {
+function toAstBlocks(nodes, context) {
 	const blocks = [];
 	for (const node of nodes) {
-		const converted = toAstBlock(node, references, options);
+		const converted = toAstBlock(node, context);
 		if (converted !== void 0) blocks.push(converted);
 	}
 	return blocks;
@@ -557,13 +598,18 @@ function toAstBlocks(nodes, references, options) {
 function parseMarkdown(source, options = {}) {
 	const parser = new BlockParser(options);
 	const root = parser.parse(source);
-	const references = parser.references;
+	const context = {
+		references: parser.references,
+		footnotes: parser.footnotes,
+		options
+	};
 	return {
 		document: {
 			type: "document",
-			children: toAstBlocks(root.children, references, options)
+			children: toAstBlocks(root.children, context)
 		},
-		references
+		references: context.references,
+		footnotes: context.footnotes
 	};
 }
 //#endregion

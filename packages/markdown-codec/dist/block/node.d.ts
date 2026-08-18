@@ -1,7 +1,7 @@
-import { i as MarkdownBulletMarker, j as MarkdownTableAlignment, w as MarkdownOrderedListDelimiter } from "../ast-DbjiuYr8.js";
+import { E as MarkdownOrderedListDelimiter, N as MarkdownTableAlignment, i as MarkdownBulletMarker } from "../ast-8XCbjRQT.js";
 import { t as HtmlBlockType } from "../html-bkz2QTuq.js";
 //#region src/block/node.d.ts
-type BlockNodeKind = 'document' | 'paragraph' | 'heading' | 'blockquote' | 'list' | 'listItem' | 'codeBlock' | 'htmlBlock' | 'thematicBreak' | 'table' | 'mathBlock';
+type BlockNodeKind = 'document' | 'paragraph' | 'heading' | 'blockquote' | 'list' | 'listItem' | 'codeBlock' | 'htmlBlock' | 'thematicBreak' | 'table' | 'mathBlock' | 'footnoteDefinition';
 type BlockHeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
 interface ListMarkerData {
   readonly type: 'bullet' | 'ordered';
@@ -33,6 +33,7 @@ declare class BlockNode {
   tight: boolean;
   alignments: MarkdownTableAlignment[];
   headerLine: string;
+  footnoteLabel: string;
   constructor(kind: BlockNodeKind, startLine: number);
   get lastChild(): BlockNode | undefined;
   appendChild(child: BlockNode): void;

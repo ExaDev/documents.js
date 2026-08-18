@@ -6,7 +6,7 @@ interface MarkdownPosition {
   readonly endColumn: number;
 }
 type MarkdownNode = MarkdownBlockNode | MarkdownInlineNode;
-type MarkdownBlockNode = MarkdownDocumentNode | MarkdownParagraphNode | MarkdownHeadingNode | MarkdownBlockquoteNode | MarkdownListNode | MarkdownListItemNode | MarkdownCodeBlockNode | MarkdownThematicBreakNode | MarkdownHtmlBlockNode | MarkdownTableNode | MarkdownTableRowNode | MarkdownTableCellNode | MarkdownMathBlockNode;
+type MarkdownBlockNode = MarkdownDocumentNode | MarkdownParagraphNode | MarkdownHeadingNode | MarkdownBlockquoteNode | MarkdownListNode | MarkdownListItemNode | MarkdownCodeBlockNode | MarkdownThematicBreakNode | MarkdownHtmlBlockNode | MarkdownTableNode | MarkdownTableRowNode | MarkdownTableCellNode | MarkdownMathBlockNode | MarkdownFootnoteDefinitionNode;
 interface MarkdownDocumentNode {
   readonly type: 'document';
   readonly children: MarkdownBlockNode[];
@@ -89,7 +89,13 @@ interface MarkdownMathBlockNode {
   readonly literal: string;
   readonly position?: MarkdownPosition;
 }
-type MarkdownInlineNode = MarkdownTextNode | MarkdownEmphasisNode | MarkdownStrongNode | MarkdownStrikethroughNode | MarkdownCodeSpanNode | MarkdownLinkNode | MarkdownImageNode | MarkdownAutolinkNode | MarkdownHardBreakNode | MarkdownSoftBreakNode | MarkdownRawHtmlNode | MarkdownEntityNode | MarkdownMathInlineNode;
+interface MarkdownFootnoteDefinitionNode {
+  readonly type: 'footnoteDefinition';
+  readonly label: string;
+  readonly children: MarkdownBlockNode[];
+  readonly position?: MarkdownPosition;
+}
+type MarkdownInlineNode = MarkdownTextNode | MarkdownEmphasisNode | MarkdownStrongNode | MarkdownStrikethroughNode | MarkdownCodeSpanNode | MarkdownLinkNode | MarkdownImageNode | MarkdownAutolinkNode | MarkdownHardBreakNode | MarkdownSoftBreakNode | MarkdownRawHtmlNode | MarkdownEntityNode | MarkdownMathInlineNode | MarkdownFootnoteReferenceNode;
 type MarkdownEmphasisMarker = '_' | '*';
 interface MarkdownTextNode {
   readonly type: 'text';
@@ -164,7 +170,12 @@ interface MarkdownMathInlineNode {
   readonly literal: string;
   readonly position?: MarkdownPosition;
 }
+interface MarkdownFootnoteReferenceNode {
+  readonly type: 'footnoteReference';
+  readonly label: string;
+  readonly position?: MarkdownPosition;
+}
 declare function isMarkdownBlockNode(node: MarkdownNode): node is MarkdownBlockNode;
 declare function isMarkdownInlineNode(node: MarkdownNode): node is MarkdownInlineNode;
 //#endregion
-export { MarkdownStrongNode as A, MarkdownNode as C, MarkdownRawHtmlNode as D, MarkdownPosition as E, MarkdownTextNode as F, MarkdownThematicBreakNode as I, isMarkdownBlockNode as L, MarkdownTableCellNode as M, MarkdownTableNode as N, MarkdownSoftBreakNode as O, MarkdownTableRowNode as P, isMarkdownInlineNode as R, MarkdownMathInlineNode as S, MarkdownParagraphNode as T, MarkdownLinkNode as _, MarkdownCodeBlockNode as a, MarkdownListNode as b, MarkdownEmphasisMarker as c, MarkdownHardBreakNode as d, MarkdownHeadingNode as f, MarkdownInlineNode as g, MarkdownImageNode as h, MarkdownBulletMarker as i, MarkdownTableAlignment as j, MarkdownStrikethroughNode as k, MarkdownEmphasisNode as l, MarkdownHtmlBlockNode as m, MarkdownBlockNode as n, MarkdownCodeSpanNode as o, MarkdownHeadingStyle as p, MarkdownBlockquoteNode as r, MarkdownDocumentNode as s, MarkdownAutolinkNode as t, MarkdownEntityNode as u, MarkdownListItemNode as v, MarkdownOrderedListDelimiter as w, MarkdownMathBlockNode as x, MarkdownListMarkerType as y };
+export { MarkdownSoftBreakNode as A, isMarkdownInlineNode as B, MarkdownMathBlockNode as C, MarkdownParagraphNode as D, MarkdownOrderedListDelimiter as E, MarkdownTableNode as F, MarkdownTableRowNode as I, MarkdownTextNode as L, MarkdownStrongNode as M, MarkdownTableAlignment as N, MarkdownPosition as O, MarkdownTableCellNode as P, MarkdownThematicBreakNode as R, MarkdownListNode as S, MarkdownNode as T, MarkdownImageNode as _, MarkdownCodeBlockNode as a, MarkdownListItemNode as b, MarkdownEmphasisMarker as c, MarkdownFootnoteDefinitionNode as d, MarkdownFootnoteReferenceNode as f, MarkdownHtmlBlockNode as g, MarkdownHeadingStyle as h, MarkdownBulletMarker as i, MarkdownStrikethroughNode as j, MarkdownRawHtmlNode as k, MarkdownEmphasisNode as l, MarkdownHeadingNode as m, MarkdownBlockNode as n, MarkdownCodeSpanNode as o, MarkdownHardBreakNode as p, MarkdownBlockquoteNode as r, MarkdownDocumentNode as s, MarkdownAutolinkNode as t, MarkdownEntityNode as u, MarkdownInlineNode as v, MarkdownMathInlineNode as w, MarkdownListMarkerType as x, MarkdownLinkNode as y, isMarkdownBlockNode as z };

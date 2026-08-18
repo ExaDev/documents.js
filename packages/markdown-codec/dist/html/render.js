@@ -78,6 +78,7 @@ function renderInline(node) {
 		case "rawHtml": return node.literal;
 		case "hardBreak": return "<br />\n";
 		case "softBreak": return "\n";
+		case "footnoteReference": return escapeHtml(`[^${node.label}]`);
 		case "mathInline": return `\\(${escapeHtml(node.literal)}\\)`;
 	}
 }
@@ -137,6 +138,12 @@ var HtmlRenderer = class {
 			case "mathBlock":
 				this.cr();
 				this.out += `$$\n${escapeHtml(node.literal)}\n$$\n`;
+				this.cr();
+				return;
+			case "footnoteDefinition":
+				this.cr();
+				this.out += `${escapeHtml(`[^${node.label}]:`)}\n`;
+				this.render(node.children, false);
 				this.cr();
 				return;
 			case "document":

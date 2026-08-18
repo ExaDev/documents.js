@@ -7,6 +7,7 @@ const MarkdownDiagnosticCodes = {
 	UNTERMINATED_HTML_BLOCK: "md/unterminated-html-block",
 	TABLE_CELL_COUNT_MISMATCH: "md/table-cell-count-mismatch",
 	DUPLICATE_LINK_REFERENCE: "md/duplicate-link-reference",
+	DUPLICATE_FOOTNOTE_DEFINITION: "md/duplicate-footnote-definition",
 	LIST_MARKER_TYPE_CONFLICT: "md/list-marker-type-conflict",
 	INVENTED_PAGE_GEOMETRY: "md/invented-page-geometry",
 	NESTED_EMPHASIS_FLATTENED: "md/nested-emphasis-flattened",
@@ -21,6 +22,9 @@ const MarkdownDiagnosticCodes = {
 	MATH_BLOCK_PRESERVED_AS_TEXT: "md/math-block-preserved-as-text",
 	MATH_INLINE_PRESERVED_AS_TEXT: "md/math-inline-preserved-as-text",
 	FRONT_MATTER_KEY_UNMAPPED: "md/front-matter-key-unmapped",
+	FOOTNOTE_REFERENCE_PRESERVED_AS_TEXT: "md/footnote-reference-preserved-as-text",
+	FOOTNOTE_BODY_HEADING_FLATTENED: "md/footnote-body-heading-flattened",
+	CONSTRUCT_UNREPRESENTED: "md/construct-unrepresented",
 	HEADING_LEVEL_CLAMPED: "md/heading-level-clamped",
 	ADJACENT_LINKS_MERGED: "md/adjacent-links-merged",
 	CODE_SPAN_AS_MONOSPACE_RUN: "md/code-span-as-monospace-run",
@@ -69,6 +73,16 @@ var MarkdownWriteError = class extends Error {
 		this.code = code;
 	}
 };
+var MarkdownUnbalancedConstructMarkersError = class extends MarkdownWriteError {
+	imbalanceKind;
+	blockIndex;
+	constructor(imbalanceKind, blockIndex) {
+		super("md/unbalanced-construct-markers", `${imbalanceKind === "unmatchedEnd" ? "a constructEnd marker closes no open construct" : "a constructStart marker is never closed"} at block index ${String(blockIndex)}; a block list's construct boundary markers must pair as balanced brackets`);
+		this.name = "MarkdownUnbalancedConstructMarkersError";
+		this.imbalanceKind = imbalanceKind;
+		this.blockIndex = blockIndex;
+	}
+};
 var MarkdownUnsupportedDocumentKindError = class extends MarkdownWriteError {
 	kind;
 	constructor(kind) {
@@ -83,6 +97,7 @@ exports.MarkdownInputTooLargeError = MarkdownInputTooLargeError;
 exports.MarkdownInvalidUtf8Error = MarkdownInvalidUtf8Error;
 exports.MarkdownNestingLimitExceededError = MarkdownNestingLimitExceededError;
 exports.MarkdownParseError = MarkdownParseError;
+exports.MarkdownUnbalancedConstructMarkersError = MarkdownUnbalancedConstructMarkersError;
 exports.MarkdownUnsupportedDocumentKindError = MarkdownUnsupportedDocumentKindError;
 exports.MarkdownWriteError = MarkdownWriteError;
 exports.NOOP_MARKDOWN_DIAGNOSTIC_SINK = NOOP_MARKDOWN_DIAGNOSTIC_SINK;

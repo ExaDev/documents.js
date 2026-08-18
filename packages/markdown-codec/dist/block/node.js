@@ -21,6 +21,7 @@ var BlockNode = class {
 	tight = true;
 	alignments = [];
 	headerLine = "";
+	footnoteLabel = "";
 	constructor(kind, startLine) {
 		this.kind = kind;
 		this.startLine = startLine;
@@ -51,6 +52,7 @@ var BlockNode = class {
 };
 function canContain(parent, child) {
 	switch (parent) {
+		case "footnoteDefinition": return child !== "listItem" && child !== "footnoteDefinition";
 		case "document":
 		case "blockquote":
 		case "listItem": return child !== "listItem";

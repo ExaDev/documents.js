@@ -7,6 +7,7 @@ var InlineNode = class {
 	email = false;
 	marker = "*";
 	raw = "";
+	label = "";
 	parent;
 	firstChild;
 	lastChild;

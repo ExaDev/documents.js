@@ -12,7 +12,8 @@ const BLOCK_NODE_TYPES = /* @__PURE__ */ new Set([
 	"table",
 	"tableRow",
 	"tableCell",
-	"mathBlock"
+	"mathBlock",
+	"footnoteDefinition"
 ]);
 function isMarkdownBlockNode(node) {
 	return BLOCK_NODE_TYPES.has(node.type);

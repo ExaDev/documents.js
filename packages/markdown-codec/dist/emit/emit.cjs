@@ -193,28 +193,89 @@ function renderListRegion(items, context) {
 	}
 	return out;
 }
-function emitBlocks(blocks, context) {
-	const parts = [];
-	let index = 0;
+function isConstructItem(item) {
+	return "descriptor" in item;
+}
+function groupConstructItems(blocks, start) {
+	const items = [];
+	let index = start;
 	while (index < blocks.length) {
 		const block = blocks[index];
 		if (block === void 0) break;
-		if (block.kind === "paragraph" && block.list !== void 0) {
+		index += 1;
+		if (block.kind === "constructEnd") return {
+			items,
+			next: index
+		};
+		if (block.kind === "constructStart") {
+			const nested = groupConstructItems(blocks, index);
+			items.push({
+				descriptor: block.descriptor,
+				children: nested.items
+			});
+			index = nested.next;
+			continue;
+		}
+		items.push({ block });
+	}
+	return {
+		items,
+		next: index
+	};
+}
+const FOOTNOTE_CONTINUATION_INDENT = 4;
+function renderFootnoteDefinition(name, body) {
+	const marker = `[^${name}]:`;
+	if (body.length === 0) return marker;
+	const indent = " ".repeat(FOOTNOTE_CONTINUATION_INDENT);
+	const [firstLine = "", ...restLines] = body.split("\n");
+	return [`${marker} ${firstLine}`, ...restLines.map((line) => line.length === 0 ? line : `${indent}${line}`)].join("\n");
+}
+function renderConstruct(item, context) {
+	const body = renderItems(item.children, context);
+	const { descriptor } = item;
+	if (descriptor.kind === "anchor" && descriptor.anchorType === "footnote") return renderFootnoteDefinition(descriptor.name, body);
+	const detail = descriptor.kind === "anchor" ? `${descriptor.kind} (${descriptor.anchorType})` : descriptor.kind;
+	context.sink({
+		code: require_diagnostics_diagnostics.MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+		severity: "info",
+		message: `a "${detail}" construct has no markdown syntax; its own extent still renders in place, but the construct itself is not represented`
+	});
+	return body;
+}
+function renderItems(items, context) {
+	const parts = [];
+	let index = 0;
+	while (index < items.length) {
+		const item = items[index];
+		if (item === void 0) break;
+		if (isConstructItem(item)) {
+			const rendered = renderConstruct(item, context);
+			if (rendered.length > 0) parts.push(rendered);
+			index += 1;
+			continue;
+		}
+		if (item.block.kind === "paragraph" && item.block.list !== void 0) {
 			const region = [];
 			let end = index;
-			for (let candidate = blocks[end]; candidate?.kind === "paragraph" && candidate.list !== void 0; candidate = blocks[end]) {
-				region.push(candidate);
+			for (let candidate = items[end]; candidate !== void 0 && !isConstructItem(candidate) && candidate.block.kind === "paragraph" && candidate.block.list !== void 0; candidate = items[end]) {
+				region.push(candidate.block);
 				end += 1;
 			}
 			parts.push(renderListRegion(region, context));
 			index = end;
 			continue;
 		}
-		const rendered = renderTopLevelBlock(block, context);
+		const rendered = renderTopLevelBlock(item.block, context);
 		if (rendered.length > 0) parts.push(rendered);
 		index += 1;
 	}
 	return parts.join("\n\n");
+}
+function emitBlocks(blocks, context) {
+	const imbalance = (0, document_schema_js.findConstructMarkerImbalance)(blocks);
+	if (imbalance !== void 0) throw new require_diagnostics_diagnostics.MarkdownUnbalancedConstructMarkersError(imbalance.kind, imbalance.index);
+	return renderItems(groupConstructItems(blocks, 0).items, context);
 }
 function emitMarkdown(document, options = {}) {
 	if (document.kind !== "wordprocessing") throw new require_diagnostics_diagnostics.MarkdownUnsupportedDocumentKindError(document.kind);

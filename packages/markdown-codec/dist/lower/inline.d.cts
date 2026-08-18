@@ -1,5 +1,5 @@
-import { g as MarkdownInlineNode } from "../ast-DbjiuYr8.cjs";
-import { i as MarkdownDiagnosticSink } from "../diagnostics-B72W0P_E.cjs";
+import { v as MarkdownInlineNode } from "../ast-8XCbjRQT.cjs";
+import { i as MarkdownDiagnosticSink } from "../diagnostics-BuO5-SW1.cjs";
 import { ContentRun } from "document-schema.js";
 //#region src/lower/inline.d.ts
 interface InlineLowerContext {

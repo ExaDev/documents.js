@@ -84,6 +84,7 @@ function renderLeaf(run, context) {
 		});
 		return renderCodeSpan(run.text);
 	}
+	if (run.fontFamily === "Footnote Reference") return run.text;
 	if (run.fontFamily === "Cambria Math") return `\\(${run.text}\\)`;
 	return escapeMarkdownText(run.text);
 }
@@ -134,7 +135,7 @@ function renderNestedStyles(runs, depth, context) {
 	return out;
 }
 function isPlainAutolink(run) {
-	if (run.hyperlink === void 0 || run.hyperlink.length === 0 || run.bold === true || run.italic === true || run.strike === true || run.fontFamily === "Courier New" || run.fontFamily === "Cambria Math") return false;
+	if (run.hyperlink === void 0 || run.hyperlink.length === 0 || run.bold === true || run.italic === true || run.strike === true || run.fontFamily === "Courier New" || run.fontFamily === "Cambria Math" || run.fontFamily === "Footnote Reference") return false;
 	return run.text === run.hyperlink || run.hyperlink === `mailto:${run.text}`;
 }
 function escapeLinkDestination(destination) {
