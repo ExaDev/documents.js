@@ -97,6 +97,37 @@ describe('reading footnote definitions', () => {
     ]);
   });
 
+  it('recognises a definition that follows a list, closing the still-open list rather than folding the definition into a paragraph', () => {
+    // continueBlock (src/block/block.ts) reports a `list` node as continued unconditionally, so the container the block-start dispatch sees here is the list itself, not the document -- tryFootnoteDefinitionStart has to walk past that before its own document-only restriction applies. Without that walk this whole shape collapses: `[^1]: note` reads as an ordinary paragraph, extractDefinitions swallows it as a LINK reference definition instead, and the note body is gone.
+    expect(parseMarkdown('Body[^1].\n\n- a\n- b\n\n[^1]: note').document.children).toEqual([
+      { type: 'paragraph', children: [{ type: 'text', value: 'Body' }, { type: 'footnoteReference', label: '1' }, { type: 'text', value: '.' }] },
+      {
+        type: 'list',
+        markerType: 'bullet',
+        bulletMarker: '-',
+        tight: true,
+        children: [
+          { type: 'listItem', children: [{ type: 'paragraph', children: [{ type: 'text', value: 'a' }] }] },
+          { type: 'listItem', children: [{ type: 'paragraph', children: [{ type: 'text', value: 'b' }] }] },
+        ],
+      },
+      { type: 'footnoteDefinition', label: '1', children: [{ type: 'paragraph', children: [{ type: 'text', value: 'note' }] }] },
+    ]);
+  });
+
+  it('still refuses a definition indented into a list item\'s own content, even though a bare definition after the same list is recognised', () => {
+    // "[^1]: note" here is indented enough to be the item's own second paragraph, so tryFootnoteDefinitionStart's guard correctly rejects it (matchedContainer is the listItem itself, not something that walks up to the document). What is left is an ordinary paragraph holding nothing but what extractDefinitions reads as a link reference definition, which leaves no block behind at all -- the item ends up with only its first paragraph.
+    expect(parseMarkdown('- a\n\n  [^1]: note').document.children).toEqual([
+      {
+        type: 'list',
+        markerType: 'bullet',
+        bulletMarker: '-',
+        tight: true,
+        children: [{ type: 'listItem', children: [{ type: 'paragraph', children: [{ type: 'text', value: 'a' }] }] }],
+      },
+    ]);
+  });
+
   it('reports a duplicate label and keeps both definitions as written', () => {
     const collector = createDiagnosticCollector();
     const parsed = parseMarkdown('[^1]: first\n\n[^1]: second', { sink: collector.sink });
@@ -250,6 +281,28 @@ describe('writing footnotes back out', () => {
     expect(collector.has(MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED)).toBe(true);
   });
 
+  it('degrades a footnote anchor whose own name cannot be spelled as a "[^label]:" marker, rather than emitting markdown its own reader cannot parse back', () => {
+    // AnchorDescriptorSchema.name is a bare z.string() -- document-schema.js places no grammar constraint of its own on it, so a name from another codec sharing the same ContentDocument pivot may carry whitespace or a "]" this package's own [^label] grammar (src/inline/footnote.ts) cannot represent. Spelling either straight into a marker would emit text this package's own reader reparses as something else entirely (a link reference definition, or a plain paragraph), losing the construct with no diagnostic -- so both fall back to the same transparent degrade an unrepresentable construct kind already gets.
+    const whitespaceCollector = createDiagnosticCollector();
+    const whitespaceWritten = emitMarkdown(minimalDocument([
+      { kind: 'constructStart', descriptor: { kind: 'anchor', anchorType: 'footnote', name: 'My Note' } },
+      { kind: 'paragraph', runs: [{ text: 'body' }] },
+      { kind: 'constructEnd' },
+    ]), { sink: whitespaceCollector.sink });
+    expect(whitespaceWritten).toBe('body');
+    expect(whitespaceCollector.has(MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED)).toBe(true);
+    expect(parseMarkdown(whitespaceWritten).document.children).toEqual([{ type: 'paragraph', children: [{ type: 'text', value: 'body' }] }]);
+
+    const bracketCollector = createDiagnosticCollector();
+    const bracketWritten = emitMarkdown(minimalDocument([
+      { kind: 'constructStart', descriptor: { kind: 'anchor', anchorType: 'footnote', name: 'a]b' } },
+      { kind: 'paragraph', runs: [{ text: 'body' }] },
+      { kind: 'constructEnd' },
+    ]), { sink: bracketCollector.sink });
+    expect(bracketWritten).toBe('body');
+    expect(bracketCollector.has(MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED)).toBe(true);
+  });
+
   it('renders a nested construct inside a footnote body', () => {
     expect(emitMarkdown(minimalDocument([
       { kind: 'constructStart', descriptor: { kind: 'anchor', anchorType: 'footnote', name: '1' } },
@@ -276,6 +329,7 @@ describe('round trip', () => {
     '[^1]: body\n\n    - a\n    - b',
     'Escaped \\[^1\\] stays literal.\n\n[^1]: while this one is real.',
     'Unmatched [^nope] stays literal text.',
+    'Body[^1].\n\n- a\n- b\n\n[^1]: note',
   ];
 
   it.each(sources)('reaches a fixed point for %j', (source) => {
