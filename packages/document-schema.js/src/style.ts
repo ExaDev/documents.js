@@ -4,7 +4,7 @@ import { z } from 'zod';
 export const AlignmentSchema = z.enum(['left', 'center', 'right', 'justify']);
 export type Alignment = z.infer<typeof AlignmentSchema>;
 
-// A requested font, independent of any concrete rendering backend -- part of LayoutDocument's own shape (every LayoutText needs one), not OOXML/ODF-specific. documents.js's src/pdf/fonts.ts resolves this to one of the 14 standard PDF faces at write time; src/pdf/font-read.ts produces one from a PDF's own /BaseFont + /FontDescriptor at read time -- that resolution behaviour stays in documents.js, only the shape lives here.
+// A requested font, independent of any concrete rendering backend -- a rendering concern, not OOXML/ODF-specific (it originated as part of the layout model this package once carried; it stays because the text-layout port contracts below it and pdf-codec's own layout model both speak it). documents.js's src/pdf/fonts.ts resolves this to one of the 14 standard PDF faces at write time; src/pdf/font-read.ts produces one from a PDF's own /BaseFont + /FontDescriptor at read time -- that resolution behaviour stays in documents.js, only the shape lives here.
 export const LayoutFontSchema = z.object({
   family: z.string(),
   weight: z.enum(['normal', 'bold']),
