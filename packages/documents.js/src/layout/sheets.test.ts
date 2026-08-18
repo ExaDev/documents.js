@@ -1,8 +1,8 @@
 import { bytesToBase64 } from 'ooxml.js';
 import { describe, expect, it } from 'vitest';
-import type { ContentDocument, ContentEmbeddedObject, ContentImageBlock, ContentSheet, ContentSheetCell, ContentSheetImage, ContentSheetPrintSettings, LayoutImage, LayoutItem, LayoutLine, LayoutRect, LayoutText, MathMlNode } from 'document-schema.js';
-import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
-import type { TextMeasurer } from 'pdf-codec';
+import type { ContentDocument, ContentEmbeddedObject, ContentImageBlock, ContentSheet, ContentSheetCell, ContentSheetImage, ContentSheetPrintSettings, MathMlNode } from 'document-schema.js';
+
+import type { LayoutImage, LayoutItem, LayoutLine, LayoutRect, LayoutText, TextMeasurer } from 'pdf-codec';
 import { encodePng } from 'byte-codec';
 import { loadMathFont } from 'pdf-codec';
 const mathMetricsAt = (sizePt: number) => loadMathFont().metricsAt(sizePt);
@@ -44,7 +44,7 @@ function sheet(cells: ContentSheetCell[], overrides: Partial<ContentSheet> = {})
 }
 
 function doc(sheets: ContentSheet[]): Extract<ContentDocument, { kind: 'spreadsheet' }> {
-  return { kind: 'spreadsheet', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, sheets };
+  return { kind: 'spreadsheet', metadata: {}, sheets };
 }
 
 function convertResult(sheets: ContentSheet[], measurer: TextMeasurer = fakeMeasurer(), signal?: AbortSignal) {
@@ -642,7 +642,7 @@ const SQRT_FRAC: MathMlNode[] = [
 function formulaObject(anchorRow: number, anchorColumn: number, offsetXPt: number, offsetYPt: number, overrides: Partial<ContentEmbeddedObject> = {}): ContentEmbeddedObject {
   return {
     objectKind: 'formula',
-    document: { kind: 'formula', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, formula: { mathml: MI_X } },
+    document: { kind: 'formula', metadata: {}, formula: { mathml: MI_X } },
     frame: { xPt: offsetXPt, yPt: offsetYPt, widthPt: 40, heightPt: 24 },
     anchorRow,
     anchorColumn,
@@ -675,7 +675,7 @@ describe('convertSpreadsheetToLayout: cell-anchored embedded formulas', () => {
   it('sizes a stacked formula to fit its declared frame in both dimensions, rather than overflowing it', () => {
     // A fraction-inside-a-square-root has a total height well over twice its base font size, so the old height/2 heuristic over-estimates and the laid-out box overflows the frame. The frame carries a real width+height (the ODF draw:frame geometry readOds provides); a docx OMML equation has widthPt 0 and falls back to the height-only path, which this test does not exercise.
     const stacked = formulaObject(0, 0, 0, 0, {
-      document: { kind: 'formula', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, formula: { mathml: SQRT_FRAC } },
+      document: { kind: 'formula', metadata: {}, formula: { mathml: SQRT_FRAC } },
       frame: { xPt: 0, yPt: 0, widthPt: 60, heightPt: 30 },
     });
     const s = sheet([stringCell(0, 0, 'A')], { columns: COLUMNS_20, rows: ROWS_10, embeddedObjects: [stacked] });
@@ -743,11 +743,11 @@ describe('convertSpreadsheetToLayout: cell-anchored embedded formulas', () => {
     const notFormula: ContentEmbeddedObject = { ...formulaObject(0, 0, 0, 0), objectKind: 'drawing' };
     const emptyMathml: ContentEmbeddedObject = {
       ...formulaObject(0, 0, 0, 0),
-      document: { kind: 'formula', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, formula: { mathml: [], starMath: 'x' } },
+      document: { kind: 'formula', metadata: {}, formula: { mathml: [], starMath: 'x' } },
     };
     const anchorless: ContentEmbeddedObject = {
       objectKind: 'formula',
-      document: { kind: 'formula', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, formula: { mathml: MI_X } },
+      document: { kind: 'formula', metadata: {}, formula: { mathml: MI_X } },
       frame: { xPt: 0, yPt: 0, widthPt: 40, heightPt: 24 },
     };
     const s = sheet([stringCell(0, 0, 'A')], { columns: COLUMNS_20, rows: ROWS_10, embeddedObjects: [notFormula, emptyMathml, anchorless] });
