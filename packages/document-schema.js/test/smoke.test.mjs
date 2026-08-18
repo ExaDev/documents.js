@@ -78,12 +78,19 @@ describe('smoke: generated JSON Schema files', () => {
     // The tree fragments resolve file-locally: both published files carry the same $defs block (the same object emitted twice in one generator run).
     expect(Object.keys(documentPackage.$defs)).toContain('SectionGroup');
     expect(Object.keys(documentPackage.$defs)).toContain('StyleEntry');
-    // The recursion itself: a section group's children point back at the shared HeadingGroup/ListGroup/SectionConstructGroup definitions, and those at ContentBlock.
+    // The recursion itself: a section group's children point back at the shared HeadingGroup/ListGroup/SectionConstructGroup definitions, and those at PackageBlockLeaf -- the block union minus the two construct boundary markers, since a construct is a group at this position and never the flat form's marker pair.
     expect(documentPackage.$defs.SectionGroup.properties.children.items.oneOf).toEqual([
       { $ref: '#/$defs/HeadingGroup' },
       { $ref: '#/$defs/ListGroup' },
       { $ref: '#/$defs/SectionConstructGroup' },
-      { $ref: '#/$defs/ContentBlock' },
+      { $ref: '#/$defs/PackageBlockLeaf' },
+    ]);
+    expect(documentPackage.$defs.PackageBlockLeaf.oneOf).toEqual([
+      { $ref: '#/$defs/ContentParagraph' },
+      { $ref: '#/$defs/ContentTable' },
+      { $ref: '#/$defs/ContentImageBlock' },
+      { $ref: '#/$defs/ContentPageBreak' },
+      { $ref: '#/$defs/ContentEmbeddedObjectBlock' },
     ]);
     // Style entries enforce the ban list by shape: additionalProperties false on entry and both halves, with no frames/sourcePath/styleId field anywhere.
     expect(documentPackage.$defs.StyleEntry.additionalProperties).toBe(false);
@@ -144,7 +151,20 @@ describe('smoke: generated JSON Schema files', () => {
     );
     expect(contentDocument.$defs.ContentParagraph.properties.headingLevel.type).toBe('integer');
     expect(contentDocument.$defs.ContentParagraph.properties.frames.items.$ref).toBe('#/$defs/LayoutFrame');
-    expect(contentDocument.$defs.ContentBlock.oneOf).toHaveLength(5);
+    // The flat block union, listed rather than counted: the five content kinds plus the two construct boundary markers that let a codec emit a construct into the only shape it produces.
+    expect(contentDocument.$defs.ContentBlock.oneOf).toEqual([
+      { $ref: '#/$defs/ContentParagraph' },
+      { $ref: '#/$defs/ContentTable' },
+      { $ref: '#/$defs/ContentImageBlock' },
+      { $ref: '#/$defs/ContentPageBreak' },
+      { $ref: '#/$defs/ContentEmbeddedObjectBlock' },
+      { $ref: '#/$defs/ContentConstructStart' },
+      { $ref: '#/$defs/ContentConstructEnd' },
+    ]);
+    expect(contentDocument.$defs.ContentConstructStart.properties.descriptor.$ref).toBe('#/$defs/ConstructDescriptor');
+    expect(contentDocument.$defs.ContentConstructStart.required).toEqual(['kind', 'descriptor']);
+    // The close marker's kind is its whole payload -- no id, no frames, no style ref.
+    expect(Object.keys(contentDocument.$defs.ContentConstructEnd.properties)).toEqual(['kind']);
     // The embedded-object cycle is the one deliberate cross-file pointer.
     expect(contentDocument.$defs.ContentEmbeddedObjectBlock.properties.document.$ref).toBe(
       `https://cdn.jsdelivr.net/npm/document-schema.js@${packageVersion}/schemas/content-document.schema.json`,
