@@ -31,9 +31,9 @@ import { flattenPackage } from './flatten';
 // 1. A minted tuple's keys must be carried by EVERY paragraph (for the paragraph half) and EVERY run of every extent paragraph (for the run half) of the wrapper's whole subtree extent -- the block-flow paragraphs resolution overlays the ref onto (group anchors and bare paragraph leaves; a table leaf's cell paragraphs and an embedded document's own content are outside the walk, exactly as they are outside resolution). A key a node already carries wins over the entry whatever its value, so unstripped extent nodes are untouched; a key a node lacks would be FILLED, so the every-node-carries-it condition is what makes the fill a no-op for everyone except the stripped positions it restores.
 // 2. A key already minted by an ancestor wrapper's entry is frozen for every wrapper below it: resolution overlays the chain outermost-first with the nearest entry winning, so a nested entry re-minting an ancestor's key with a different value would silently rewrite the value the ancestor's ref restores for its own stripped positions. Freezing keeps already-factored keys out of every deeper candidate.
 //
-// Minting order and identity per the plan's locked rules: wrappers are visited outermost-first (pre-order, document order); a wrapper mints at most one entry (optionally carrying both halves) when some paragraph tuple and/or run tuple occurs on two or more not-yet-factored positions in its extent; the best tuple at a wrapper is the most frequent, tie-broken by first occurrence in document order then by the canonical-serialised tuple (canonicalise-then-stringify, canonicalise.ts -- stableContentHash's own recipe, no second one). Identical entries minted at several wrappers share one table entry; ids are s1, s2, ... in (descending total frequency, first occurrence, canonical tuple) order, so the pass is deterministic.
+// Minting order and identity per the plan's locked rules: wrappers are visited outermost-first (pre-order, document order); a wrapper mints at most one entry (optionally carrying both halves) when some paragraph tuple and/or run tuple occurs on two or more positions in its extent that no wrapper on its root-to-leaf chain has already factored (the factored bookkeeping is branch-scoped, never global -- see Branch); the best tuple at a wrapper is the most frequent, tie-broken by first occurrence in document order -- a total rule, since a position joins exactly one tuple group, so two distinct tuples can never share a first occurrence. Identical entries minted at several wrappers share one table entry; ids are s1, s2, ... in (descending total frequency, first wrapper visit) order -- itself total, because one wrapper mints at most one entry, so distinct entries always have distinct first visits -- and the pass is deterministic.
 //
-// The whole pass is a pure function of the MATERIALISED content: factorStyles flattens its input first (resolving any refs it already carries), so factoring a second time computes the identical plan over the identical values and mints the identical table -- law (iii), minting idempotence, holds by construction. Stripping copies only the paragraphs and runs whose keys moved to a table entry (never the caller's nodes in place -- decompose embedded those, and the layout pass's frames ride on them); every other node in the minted tree is the same object the flat content owns.
+// The whole pass is a pure function of the MATERIALISED content: factorStyles flattens its input first (resolving any refs it already carries), so factoring a second time computes the identical plan over the identical values and mints the identical table -- law (iii), minting idempotence, holds by construction. Stripping copies only the paragraphs and runs whose keys moved to a table entry (never the caller's nodes in place -- decompose embedded those, and the layout pass's frames ride on them); every other node in the minted tree is the same object the flat content owns. Strips apply per chain, not per node object: the same paragraph or run object may legally sit at positions under two sibling wrappers (a caller-built document that pushes one node into two sections is a two-position tree once serialised), and each position is stripped only by a wrapper whose ref that position's own chain resolves -- flatten resolves per position, so minting strips per position too (see WrapperStrips).
 
 // The paragraph half's mintable keys, in the schema's own declaration order (StyleParagraphProperties minus `list`; see the module doc for why list never factors).
 const PARAGRAPH_STYLE_KEYS = ['alignment', 'spacingBeforePt', 'spacingAfterPt', 'lineSpacing', 'indentLeftPt', 'indentFirstLinePt'] as const;
@@ -220,15 +220,26 @@ function bestGroup<T extends { readonly tuple: unknown; readonly positions: unkn
 
 // --- The plan walk and the apply phase -------------------------------------------------------------------
 
-// The mutable working state of one minting run, threaded through the wrapper walk.
+// The strips one minting wrapper's selection recorded: the keys its entry takes off each paragraph and each run it factored. Held per wrapper and consulted per chain during the rebuild, so the same node object aliased at positions under two sibling wrappers is stripped by each branch's own minter (or by neither) -- flatten resolves refs per position, so minting must strip per position too. A single node-keyed strip map cannot express that: it would apply one branch's strip at every position, and a position whose own chain minted nothing (or minted a different key set) would lose the stripped properties with no ref to restore them.
+interface WrapperStrips {
+  readonly paragraphs: Map<ContentParagraph, readonly ParagraphKey[]>;
+  readonly runs: Map<ContentRun, readonly RunKey[]>;
+}
+
+// The mutable working state of one minting run: the refs the rebuild stamps and the per-wrapper strips it applies. The plan's chain-scoped inputs (frozen keys, factored positions) live in Branch instead, threaded through plan() copy-on-descend so they never survive into the rebuild.
 interface MintState {
-  readonly factoredParagraphs: Set<ContentParagraph>;
-  readonly factoredRuns: Set<ContentRun>;
   // wrapper object identity -> the entry id its ref names (consumed by the rebuild walk).
   readonly wrapperRefs: Map<MintWrapper, string>;
-  // paragraph/run object identity -> the keys the entry stripped from it (the rebuild walk copies exactly these).
-  readonly paragraphStrips: Map<ContentParagraph, readonly ParagraphKey[]>;
-  readonly runStrips: Map<ContentRun, readonly RunKey[]>;
+  // minted wrapper object identity -> the strips its own entry recorded (the rebuild walk threads the records of its chain, innermost first).
+  readonly wrapperStrips: Map<MintWrapper, WrapperStrips>;
+}
+
+// The chain-scoped planning context one plan() call sees: the keys an ancestor's entry froze for everything below it, and the positions an ancestor's entry already factored (restoring those is that ancestor ref's job). Copy-on-descend, so a factored position is invisible to every SIBLING branch: the same paragraph or run object may legally sit at positions under two sibling wrappers (a caller-built document that pushes one node into two sections is a two-position tree once serialised), and chain-global bookkeeping would let the first wrapper's mint suppress the second branch's own mint -- leaving the second position's chain ref-less while a strip still took its properties, silently breaking law (i). Branch-scoped, the sibling mints the identical entry content, shares the table entry through the canonical key, and carries its own ref, so both positions resolve back.
+interface Branch {
+  readonly frozenParagraphs: ReadonlySet<ParagraphKey>;
+  readonly frozenRuns: ReadonlySet<RunKey>;
+  readonly factoredParagraphs: ReadonlySet<ContentParagraph>;
+  readonly factoredRuns: ReadonlySet<ContentRun>;
 }
 
 // One accumulated table entry: its resolved content, the wrappers referencing it, and the ordering inputs (total stripped positions and the first wrapper's pre-order visit index).
@@ -239,14 +250,16 @@ interface MintedEntry {
   firstVisit: number;
 }
 
-// Visits one wrapper outermost-first: selects at most one entry here, freezes its keys for everything below, then recurses into the child wrappers. `visit.index` numbers wrappers in pre-order -- the "first occurrence" arm of the entry ordering rule.
-function plan(wrapper: MintWrapper, visit: { index: number }, frozenParagraphs: ReadonlySet<ParagraphKey>, frozenRuns: ReadonlySet<RunKey>, state: MintState, entries: Map<string, MintedEntry>): void {
+// Visits one wrapper outermost-first: selects at most one entry here, records its strips against this wrapper, freezes its keys for everything below, then recurses into the child wrappers with the branch bookkeeping extended (copy-on-descend, so sibling branches stay independent). `visit.index` numbers wrappers in pre-order -- the "first occurrence" arm of the entry ordering rule.
+function plan(wrapper: MintWrapper, visit: { index: number }, branch: Branch, state: MintState, entries: Map<string, MintedEntry>): void {
   const extent = extentOf(wrapper);
-  const paragraphCandidate = extent.length > 0 ? bestParagraphCandidate(extent, commonParagraphKeys(extent, frozenParagraphs), state.factoredParagraphs) : undefined;
-  const runCandidate = extent.length > 0 ? bestRunCandidate(extent, commonRunKeys(extent, frozenRuns), state.factoredRuns) : undefined;
+  const paragraphCandidate = extent.length > 0 ? bestParagraphCandidate(extent, commonParagraphKeys(extent, branch.frozenParagraphs), branch.factoredParagraphs) : undefined;
+  const runCandidate = extent.length > 0 ? bestRunCandidate(extent, commonRunKeys(extent, branch.frozenRuns), branch.factoredRuns) : undefined;
 
-  const nextFrozenParagraphs = new Set(frozenParagraphs);
-  const nextFrozenRuns = new Set(frozenRuns);
+  const nextFrozenParagraphs = new Set(branch.frozenParagraphs);
+  const nextFrozenRuns = new Set(branch.frozenRuns);
+  const nextFactoredParagraphs = new Set(branch.factoredParagraphs);
+  const nextFactoredRuns = new Set(branch.factoredRuns);
   if (paragraphCandidate !== undefined || runCandidate !== undefined) {
     const content: StyleEntry = {
       ...(paragraphCandidate !== undefined ? { paragraph: paragraphCandidate.tuple } : {}),
@@ -260,25 +273,28 @@ function plan(wrapper: MintWrapper, visit: { index: number }, frozenParagraphs: 
       existing.wrappers.push(wrapper);
       existing.frequency += (paragraphCandidate?.positions.length ?? 0) + (runCandidate?.positions.length ?? 0);
     }
+    const strips: WrapperStrips = { paragraphs: new Map(), runs: new Map() };
     if (paragraphCandidate !== undefined) {
       for (const paragraph of paragraphCandidate.positions) {
-        state.factoredParagraphs.add(paragraph);
-        state.paragraphStrips.set(paragraph, paragraphCandidate.keys);
+        nextFactoredParagraphs.add(paragraph);
+        strips.paragraphs.set(paragraph, paragraphCandidate.keys);
       }
       for (const key of paragraphCandidate.keys) nextFrozenParagraphs.add(key);
     }
     if (runCandidate !== undefined) {
       for (const run of runCandidate.positions) {
-        state.factoredRuns.add(run);
-        state.runStrips.set(run, runCandidate.keys);
+        nextFactoredRuns.add(run);
+        strips.runs.set(run, runCandidate.keys);
       }
       for (const key of runCandidate.keys) nextFrozenRuns.add(key);
     }
+    state.wrapperStrips.set(wrapper, strips);
   }
 
   visit.index += 1;
+  const next: Branch = { frozenParagraphs: nextFrozenParagraphs, frozenRuns: nextFrozenRuns, factoredParagraphs: nextFactoredParagraphs, factoredRuns: nextFactoredRuns };
   for (const child of childWrappers(wrapper)) {
-    plan(child, visit, nextFrozenParagraphs, nextFrozenRuns, state, entries);
+    plan(child, visit, next, state, entries);
   }
 }
 
@@ -310,28 +326,24 @@ function childWrappers(wrapper: MintWrapper): MintWrapper[] {
   return wrappers;
 }
 
-// The entry point over a whole tree: plan (outermost-first, freezing keys down each chain), order the entries, then rebuild the tree stamping refs and stripping keys.
+// The entry point over a whole tree: plan (outermost-first, freezing keys and factoring positions down each chain), order the entries, then rebuild the tree stamping refs and stripping keys per chain.
 function mint(pkg: DocumentPackage): DocumentPackage {
   const state: MintState = {
-    factoredParagraphs: new Set(),
-    factoredRuns: new Set(),
     wrapperRefs: new Map(),
-    paragraphStrips: new Map(),
-    runStrips: new Map(),
+    wrapperStrips: new Map(),
   };
   const entries = new Map<string, MintedEntry>();
   const visit = { index: 0 };
-  const emptyParagraphs: ReadonlySet<ParagraphKey> = new Set();
-  const emptyRuns: ReadonlySet<RunKey> = new Set();
+  const rootBranch: Branch = { frozenParagraphs: new Set(), frozenRuns: new Set(), factoredParagraphs: new Set(), factoredRuns: new Set() };
   switch (pkg.kind) {
     case 'wordprocessing':
-      for (const root of pkg.children) plan(root, visit, emptyParagraphs, emptyRuns, state, entries);
+      for (const root of pkg.children) plan(root, visit, rootBranch, state, entries);
       break;
     case 'presentation':
-      for (const root of pkg.children) plan(root, visit, emptyParagraphs, emptyRuns, state, entries);
+      for (const root of pkg.children) plan(root, visit, rootBranch, state, entries);
       break;
     case 'drawing':
-      for (const root of pkg.children) plan(root, visit, emptyParagraphs, emptyRuns, state, entries);
+      for (const root of pkg.children) plan(root, visit, rootBranch, state, entries);
       break;
     // A spreadsheet's roots are sheet groups (no block flow, never minted) and a formula package's single child is a leaf: neither holds a wrapper to visit.
     case 'spreadsheet':
@@ -352,11 +364,11 @@ function mint(pkg: DocumentPackage): DocumentPackage {
   // Per-arm spreads rather than one spread of the union: a literal containing a union spread widens its discriminant-narrowed properties and stops assigning to DocumentPackageSchema's inferred type, so each arm rebuilds itself with its own children type.
   switch (pkg.kind) {
     case 'wordprocessing':
-      return { ...pkg, styles, children: pkg.children.map((group) => rebuildSectionGroup(group, state)) };
+      return { ...pkg, styles, children: pkg.children.map((group) => rebuildSectionGroup(group, [], state)) };
     case 'presentation':
-      return { ...pkg, styles, children: pkg.children.map((group) => rebuildSlideGroup(group, state)) };
+      return { ...pkg, styles, children: pkg.children.map((group) => rebuildSlideGroup(group, [], state)) };
     case 'drawing':
-      return { ...pkg, styles, children: pkg.children.map((group) => rebuildDrawPageGroup(group, state)) };
+      return { ...pkg, styles, children: pkg.children.map((group) => rebuildDrawPageGroup(group, [], state)) };
     // No wrapper was visited for these arms (sheets hold no block flow; a formula package holds one leaf), so entries is empty and the early return above has already fired -- the arms exist for switch totality only.
     case 'spreadsheet':
     case 'formula':
@@ -364,73 +376,107 @@ function mint(pkg: DocumentPackage): DocumentPackage {
   }
 }
 
+// The strip records of every minted wrapper on the current rebuild chain, outermost first (each rebuild level appends its own record before walking its children). A node's strip is the LAST record naming it -- the chain is outermost-first, so the last is the innermost, and branch-scoped factoring gives each chain at most one minter per node anyway, which is what makes the per-position rule exact: an aliased node is stripped by its own branch's record and never by a sibling's.
+type ChainStrips = readonly WrapperStrips[];
+
+// The chain one level deeper than `group`: unchanged when this wrapper minted nothing, extended by its own strips when it did.
+function innerChain(group: MintWrapper, chain: ChainStrips, state: MintState): ChainStrips {
+  const own = state.wrapperStrips.get(group);
+  return own === undefined ? chain : [...chain, own];
+}
+
+// The strip a wrapper on `chain` recorded against `paragraph`, or undefined when no wrapper on the chain factored it (the paragraph rides through as the same object).
+function paragraphStripsOf(chain: ChainStrips, paragraph: ContentParagraph): readonly ParagraphKey[] | undefined {
+  let result: readonly ParagraphKey[] | undefined;
+  for (const strips of chain) {
+    const found = strips.paragraphs.get(paragraph);
+    if (found !== undefined) result = found;
+  }
+  return result;
+}
+
+function runStripsOf(chain: ChainStrips, run: ContentRun): readonly RunKey[] | undefined {
+  let result: readonly RunKey[] | undefined;
+  for (const strips of chain) {
+    const found = strips.runs.get(run);
+    if (found !== undefined) result = found;
+  }
+  return result;
+}
+
 // One slide group: stamp its ref when minted, rebuild its shapes below it, and return the same object when neither changed.
-function rebuildSlideGroup(group: SlideGroupNode, state: MintState): SlideGroupNode {
-  const children = group.children.map((shape) => rebuildShapeGroup(shape, state));
+function rebuildSlideGroup(group: SlideGroupNode, chain: ChainStrips, state: MintState): SlideGroupNode {
+  const inner = innerChain(group, chain, state);
+  const children = group.children.map((shape) => rebuildShapeGroup(shape, inner, state));
   const ref = state.wrapperRefs.get(group);
   const unchanged = ref === undefined && children.every((child, index) => child === group.children[index]);
   return unchanged ? group : { node: group.node, ...(ref !== undefined ? { style: ref } : {}), children };
 }
 
 // One draw-page group: its shape children rebuild, its vector leaves pass through unchanged (no paragraphs to strip, no ref to carry -- a vector is a leaf).
-function rebuildDrawPageGroup(group: DrawPageGroupNode, state: MintState): DrawPageGroupNode {
-  const children = group.children.map((child) => ('node' in child ? rebuildShapeGroup(child, state) : child));
+function rebuildDrawPageGroup(group: DrawPageGroupNode, chain: ChainStrips, state: MintState): DrawPageGroupNode {
+  const inner = innerChain(group, chain, state);
+  const children = group.children.map((child) => ('node' in child ? rebuildShapeGroup(child, inner, state) : child));
   const ref = state.wrapperRefs.get(group);
   const unchanged = ref === undefined && children.every((child, index) => child === group.children[index]);
   return unchanged ? group : { node: group.node, ...(ref !== undefined ? { style: ref } : {}), children };
 }
 
 // One section group: stamp its ref when minted, rebuild its flow below it, and return the same object when neither changed.
-function rebuildSectionGroup(group: SectionGroupNode, state: MintState): SectionGroupNode {
-  const children = group.children.map((child) => rebuildSectionChild(child, state));
+function rebuildSectionGroup(group: SectionGroupNode, chain: ChainStrips, state: MintState): SectionGroupNode {
+  const inner = innerChain(group, chain, state);
+  const children = group.children.map((child) => rebuildSectionChild(child, inner, state));
   const ref = state.wrapperRefs.get(group);
   const unchanged = ref === undefined && children.every((child, index) => child === group.children[index]);
   return unchanged ? group : { node: group.node, ...(ref !== undefined ? { style: ref } : {}), children };
 }
 
 // One section-flow child position: a heading group recurses through the section-flow vocabulary, a list group through the list-flow vocabulary (its own children are ListChild, the shared list/shape vocabulary), a bare paragraph leaf is copied only when stripped, every other leaf passes through as the same object.
-function rebuildSectionChild(child: SectionChild, state: MintState): SectionChild {
+function rebuildSectionChild(child: SectionChild, chain: ChainStrips, state: MintState): SectionChild {
   if ('node' in child && 'children' in child) {
-    return isHeadingGroup(child) ? rebuildHeadingGroup(child, state, rebuildSectionChild) : rebuildListGroup(child, state, rebuildListChild);
+    return isHeadingGroup(child) ? rebuildHeadingGroup(child, chain, state, rebuildSectionChild) : rebuildListGroup(child, chain, state, rebuildListChild);
   }
   if (child.kind === 'paragraph') {
-    return rebuildParagraph(child, state);
+    return rebuildParagraph(child, chain);
   }
   return child;
 }
 
 // One list-flow child position -- the shared vocabulary of list-group children and shape flows.
-function rebuildListChild(child: ListGroupNode | ContentBlock, state: MintState): ListGroupNode | ContentBlock {
+function rebuildListChild(child: ListGroupNode | ContentBlock, chain: ChainStrips, state: MintState): ListGroupNode | ContentBlock {
   if ('node' in child && 'children' in child) {
-    return rebuildListGroup(child, state, rebuildListChild);
+    return rebuildListGroup(child, chain, state, rebuildListChild);
   }
   if (child.kind === 'paragraph') {
-    return rebuildParagraph(child, state);
+    return rebuildParagraph(child, chain);
   }
   return child;
 }
 
 // A shape group: no anchor of its own, its list-flow children rebuilt through the shared walk.
-function rebuildShapeGroup(group: ShapeGroupNode, state: MintState): ShapeGroupNode {
-  const children = group.children.map((child) => rebuildListChild(child, state));
+function rebuildShapeGroup(group: ShapeGroupNode, chain: ChainStrips, state: MintState): ShapeGroupNode {
+  const inner = innerChain(group, chain, state);
+  const children = group.children.map((child) => rebuildListChild(child, inner, state));
   const ref = state.wrapperRefs.get(group);
   const unchanged = ref === undefined && children.every((child, index) => child === group.children[index]);
   return unchanged ? group : { node: group.node, ...(ref !== undefined ? { style: ref } : {}), children };
 }
 
-function rebuildHeadingGroup(group: HeadingGroupNode, state: MintState, rebuildChild: (child: SectionChild, state: MintState) => SectionChild): HeadingGroupNode {
-  const anchor = rebuildParagraph(group.node, state);
+function rebuildHeadingGroup(group: HeadingGroupNode, chain: ChainStrips, state: MintState, rebuildChild: (child: SectionChild, chain: ChainStrips, state: MintState) => SectionChild): HeadingGroupNode {
+  const inner = innerChain(group, chain, state);
+  const anchor = rebuildParagraph(group.node, inner);
   assertHeadingAnchor(anchor);
-  const children = group.children.map((child) => rebuildChild(child, state));
+  const children = group.children.map((child) => rebuildChild(child, inner, state));
   const ref = state.wrapperRefs.get(group);
   const unchanged = ref === undefined && anchor === group.node && children.every((child, index) => child === group.children[index]);
   return unchanged ? group : { node: anchor, ...(ref !== undefined ? { style: ref } : {}), children };
 }
 
-function rebuildListGroup(group: ListGroupNode, state: MintState, rebuildChild: (child: ListGroupNode | ContentBlock, state: MintState) => ListGroupNode | ContentBlock): ListGroupNode {
-  const anchor = rebuildParagraph(group.node, state);
+function rebuildListGroup(group: ListGroupNode, chain: ChainStrips, state: MintState, rebuildChild: (child: ListGroupNode | ContentBlock, chain: ChainStrips, state: MintState) => ListGroupNode | ContentBlock): ListGroupNode {
+  const inner = innerChain(group, chain, state);
+  const anchor = rebuildParagraph(group.node, inner);
   assertListAnchor(anchor);
-  const children = group.children.map((child) => rebuildChild(child, state));
+  const children = group.children.map((child) => rebuildChild(child, inner, state));
   const ref = state.wrapperRefs.get(group);
   const unchanged = ref === undefined && anchor === group.node && children.every((child, index) => child === group.children[index]);
   return unchanged ? group : { node: anchor, ...(ref !== undefined ? { style: ref } : {}), children };
@@ -445,14 +491,14 @@ function assertListAnchor(paragraph: ContentParagraph): asserts paragraph is Lis
   if (paragraph.list === undefined) throw new Error("factorStyles: stripping dropped a list anchor's list membership");
 }
 
-// One paragraph (leaf or anchor): stripped -- copied sans its minted keys -- when the plan factored it, with its runs rebuilt through the same copy-or-share rule. Returns the same object when nothing under it changed.
-function rebuildParagraph(paragraph: ContentParagraph, state: MintState): ContentParagraph {
-  const strips = state.paragraphStrips.get(paragraph);
+// One paragraph (leaf or anchor): stripped -- copied sans its minted keys -- when a wrapper on its chain factored it (chain-scoped, so an aliased position is stripped by its own branch's minter, never another branch's), with its runs rebuilt through the same copy-or-share rule. Returns the same object when nothing under it changed.
+function rebuildParagraph(paragraph: ContentParagraph, chain: ChainStrips): ContentParagraph {
+  const strips = paragraphStripsOf(chain, paragraph);
   const base = strips === undefined ? paragraph : stripParagraphKeys(paragraph, strips);
   let changed = base !== paragraph;
   const runs: ContentRun[] = [];
   for (const run of base.runs) {
-    const runStrips = state.runStrips.get(run);
+    const runStrips = runStripsOf(chain, run);
     const rebuilt = runStrips === undefined ? run : stripRunKeys(run, runStrips);
     changed ||= rebuilt !== run;
     runs.push(rebuilt);

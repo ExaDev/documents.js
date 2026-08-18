@@ -5,7 +5,7 @@ import { assemblePackage, factorStyles } from './factor-styles';
 import { flattenPackage } from './flatten';
 import { canonicalise } from './canonicalise';
 
-// The minting rules as focused fixtures: the >=2 frequency threshold, the paragraph/run namespaces, the ban list (frames/sourcePath/styleId never enter a tuple), refs on wrappers only, the frozen-key rule for nested wrappers, entry ordering and determinism, and idempotence. The bijection corpus (bijection.test.ts) re-runs the effective-equality and idempotence laws over real reader/conversion output; these tests pin the mechanism itself on minimal hand-built documents.
+// The minting rules as focused fixtures: the >=2 frequency threshold, the paragraph/run namespaces, the ban list (frames/sourcePath/styleId never enter a tuple), refs on wrappers only, the frozen-key rule for nested wrappers, chain-scoped stripping for nodes aliased under sibling wrappers, entry ordering and determinism, and idempotence. The bijection corpus (bijection.test.ts) re-runs the effective-equality and idempotence laws over real reader/conversion output; these tests pin the mechanism itself on minimal hand-built documents.
 
 const SECTION = { pageSize: { widthPt: 595, heightPt: 842 }, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 } };
 
@@ -195,6 +195,69 @@ describe('factorStyles minting', () => {
     expect(doc).toEqual(snapshot);
     expect(p1.indentLeftPt).toBe(20);
     expect(p2.indentLeftPt).toBe(20);
+  });
+
+  it('strips an aliased node at every position whose own chain minted -- identical tuple, both sibling wrappers mint', () => {
+    const shared = paragraph([run('a')], { alignment: 'center', indentLeftPt: 20 });
+    const doc: ContentDocument = {
+      kind: 'wordprocessing',
+      metadata: {},
+      sections: [
+        { ...SECTION, blocks: [shared, paragraph([run('b')], { alignment: 'center', indentLeftPt: 20 })] },
+        { ...SECTION, blocks: [shared, paragraph([run('c')], { alignment: 'center', indentLeftPt: 20 })] },
+      ],
+    };
+    const minted = assemblePackage(doc);
+    // Both sections' extents hold two matching positions (the shared node plus a sibling leaf), so each mints the identical entry content and shares ONE table entry through the canonical key -- two refs, one row. Global factored bookkeeping would mark the shared node done at the first section, leaving the second position's chain ref-less while a node-keyed strip still took its properties; branch-scoped, both positions resolve their own ref back.
+    expect(refsOf(minted)).toEqual([
+      { ref: 's1', nodeKind: 'section' },
+      { ref: 's1', nodeKind: 'section' },
+    ]);
+    expect(minted.styles?.s1).toEqual({ paragraph: { alignment: 'center', indentLeftPt: 20 } });
+    const flat = flattenPackage(minted);
+    expect(canon(flat)).toEqual(canon(doc));
+  });
+
+  it('strips an aliased node by its own branch\'s key set when sibling wrappers mint divergent entries', () => {
+    const shared = paragraph([run('a')], { alignment: 'center', indentLeftPt: 20 });
+    const doc: ContentDocument = {
+      kind: 'wordprocessing',
+      metadata: {},
+      sections: [
+        { ...SECTION, blocks: [shared, paragraph([run('b')], { alignment: 'center' })] },
+        { ...SECTION, blocks: [shared, paragraph([run('c')], { alignment: 'center', indentLeftPt: 20 })] },
+      ],
+    };
+    const minted = assemblePackage(doc);
+    // Section one's extent shares only alignment (its second paragraph carries no indent), so it mints the alignment-only entry and strips just that key off the shared node's first position; section two's extent shares both keys and mints the wider entry. Whichever section plans second would overwrite a node-keyed global strip's key set, leaving the first position stripped of indentLeftPt with a ref that restores only alignment; per-wrapper strips keep each position's strip the set its own ref restores.
+    expect(minted.styles?.s1).toEqual({ paragraph: { alignment: 'center' } });
+    expect(minted.styles?.s2).toEqual({ paragraph: { alignment: 'center', indentLeftPt: 20 } });
+    if (minted.kind !== 'wordprocessing') throw new Error('expected wordprocessing');
+    const flat = flattenPackage(minted);
+    if (flat.kind !== 'wordprocessing') throw new Error('expected wordprocessing');
+    expect(flat.sections[0]!.blocks[0]).toMatchObject({ alignment: 'center', indentLeftPt: 20 });
+    expect(flat.sections[1]!.blocks[0]).toMatchObject({ alignment: 'center', indentLeftPt: 20 });
+    expect(canon(flat)).toEqual(canon(doc));
+  });
+
+  it('leaves an aliased node fully inline at a position whose own chain minted nothing', () => {
+    const shared = paragraph([run('a')], { indentLeftPt: 20 });
+    const doc: ContentDocument = {
+      kind: 'wordprocessing',
+      metadata: {},
+      sections: [
+        { ...SECTION, blocks: [shared, paragraph([run('b')], { indentLeftPt: 20 })] },
+        { ...SECTION, blocks: [shared] },
+      ],
+    };
+    const minted = assemblePackage(doc);
+    // Section one mints (two matching positions); section two's extent is the aliased node alone -- a singleton, below the threshold -- so its chain carries no ref and the node must keep every property inline there: a node-keyed global strip would strip it at BOTH positions with no ref to restore the second.
+    expect(refsOf(minted)).toEqual([{ ref: 's1', nodeKind: 'section' }]);
+    expect(minted.styles?.s1).toEqual({ paragraph: { indentLeftPt: 20 } });
+    if (minted.kind !== 'wordprocessing') throw new Error('expected wordprocessing');
+    expect(minted.children[1]?.children[0]).toMatchObject({ kind: 'paragraph', indentLeftPt: 20 });
+    const flat = flattenPackage(minted);
+    expect(canon(flat)).toEqual(canon(doc));
   });
 
   it('mints nothing for a formula package (one leaf, no wrappers)', () => {
