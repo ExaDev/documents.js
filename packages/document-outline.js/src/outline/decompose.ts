@@ -88,7 +88,7 @@ function decomposeSlide(slide: ContentSlide): SlideGroupNode {
   return { node: { kind: 'slide', ...rest }, children: shapes.map(decomposeShape) };
 }
 
-// A sheet's children are its images then its embedded objects (sibling arrays with no cross-array ordering field; this fixed order is what flatten's partition reverses). The grid and print settings ride ON the sheet descriptor -- they are addressable data, not block flow. embeddedObjects is optional on ContentSheet (a sheet may legitimately carry none), so absence spreads as nothing: children then hold images alone, and flatten reconstructs the field's absence from exactly that.
+// A sheet's children are its images then its embedded objects (sibling arrays with no cross-array ordering field; this fixed order is what flatten's partition reverses). The grid and print settings ride ON the sheet descriptor -- they are addressable data, not block flow. embeddedObjects is optional on ContentSheet (a sheet may legitimately carry none), so absence spreads as nothing: children then hold images alone, and flatten reconstructs the field's absence from exactly that. A present-but-empty array also contributes no children -- the one spelling the concatenated children cannot distinguish from absence -- so it round-trips to the field absent: the bijection's one declared normalisation, stated in bijection.test.ts rather than left to be discovered as a law failure.
 function decomposeSheet(sheet: ContentSheet): SheetGroupNode {
   const { images, embeddedObjects, ...rest } = sheet;
   const children: SheetChild[] = [...images, ...(embeddedObjects ?? [])];

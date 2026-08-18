@@ -191,4 +191,14 @@ describe('flatten envelope matching', () => {
     if (bare === undefined) throw new Error('expected one sheet back');
     expect('embeddedObjects' in bare).toBe(false);
   });
+
+  it('normalises a present-but-empty embeddedObjects field to absent, per the declared normalisation', () => {
+    const doc = spreadsheetDoc([sheet({ name: 'Declared empty', embeddedObjects: [] })]);
+    const flat = flatten(decompose(wrap(doc)), { kind: 'spreadsheet', metadata: {} });
+    if (flat.kind !== 'spreadsheet') throw new Error('expected a spreadsheet back');
+    const [declaredEmpty] = flat.sheets;
+    if (declaredEmpty === undefined) throw new Error('expected one sheet back');
+    // A present-but-empty array is schema-legal, but the tree's children concatenate images and embedded objects into one array, so declared-empty cannot be distinguished from absent there. The bijection is therefore declared exact up to this normalisation (bijection.test.ts applies it to both sides) rather than failing silently on the spelling -- and this test pins the direction itself, which the symmetric comparator cannot.
+    expect('embeddedObjects' in declaredEmpty).toBe(false);
+  });
 });

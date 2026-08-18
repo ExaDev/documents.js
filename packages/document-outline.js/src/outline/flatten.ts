@@ -73,7 +73,7 @@ export function flatten(nodes: readonly PackageRoot[], envelope: DocumentEnvelop
             if ('kind' in child) images.push(child);
             else embedded.push(child);
           }
-          // embeddedObjects is rebuilt only when the sheet actually carried embedded objects, so a sheet whose field was absent round-trips with it absent again -- absent-versus-present is content here, not a default to fill in.
+          // embeddedObjects is rebuilt only when the sheet actually carried embedded objects, so a sheet whose field was absent round-trips with it absent again -- absent-versus-present is content here, not a default to fill in. The one declared exception: a present-but-empty array (schema-legal, emitted by no codec) is indistinguishable from an absent field once decompose has concatenated images and embedded objects into one children array, so it normalises to absent. The bijection laws state this normalisation explicitly (bijection.test.ts applies it to both sides; decompose.test.ts pins the direction) instead of leaving it to be discovered as an undeclared law failure.
           return { ...untag(group.node), images, ...(embedded.length > 0 ? { embeddedObjects: embedded } : {}) };
         }),
       };

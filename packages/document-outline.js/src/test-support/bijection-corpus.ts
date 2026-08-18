@@ -1,4 +1,4 @@
-// The outline-local bijection corpus (document-outline.js cannot import documents.js, so the laws run over fixtures built directly against document-schema.js's own types; documents.js later re-runs the same assertions over its real corpus at the phase-3 promotion gate). Every entry's content is asserted valid against ContentDocumentSchema before its laws run, so a schema change breaks the corpus loudly. Built to cover, at minimum: the recursive embedded-formula arm, multi-section wordprocessing with per-section geometry, a run carrying multiple frames, a slide whose two shapes each carry list-nested paragraphs, a drawing page mixing shapes and vectors, and the empty-document edge where the envelope's kind is the only kind carrier left.
+// The outline-local bijection corpus (document-outline.js cannot import documents.js, so the laws run over fixtures built directly against document-schema.js's own types; documents.js later re-runs the same assertions over its real corpus at the phase-3 promotion gate). Every entry's content is asserted valid against ContentDocumentSchema before its laws run, so a schema change breaks the corpus loudly. Built to cover, at minimum: the recursive embedded-formula arm, multi-section wordprocessing with per-section geometry, a run carrying multiple frames, a slide whose two shapes each carry list-nested paragraphs, a drawing page mixing shapes and vectors, a present-but-empty embeddedObjects sheet (the spelling behind the bijection's one declared normalisation), and the empty-document edge where the envelope's kind is the only kind carrier left.
 import { DOCUMENT_PACKAGE_FORMAT_VERSION, type ContentDocument, type DocumentPackage, type PageSize } from 'document-schema.js';
 import {
   drawPage,
@@ -103,7 +103,7 @@ export const corpus: readonly CorpusEntry[] = [
     ),
   },
   {
-    name: 'spreadsheet: cells and image on one sheet, embedded formula and wordprocessing objects on another, a bare third',
+    name: 'spreadsheet: cells and image on one sheet, an embedded formula object on another, a declared-empty embeddedObjects field on a third, a bare fourth',
     pkg: packageOf(
       spreadsheetDoc([
         sheet({
@@ -116,6 +116,8 @@ export const corpus: readonly CorpusEntry[] = [
           images: [sheetImage('revenue chart')],
         }),
         sheet({ name: 'Model', embeddedObjects: [embeddedFormulaObject()] }),
+        // A present-but-empty embeddedObjects array: schema-legal (the field is z.array().optional()), emitted by no codec, and the one spelling the tree encoding cannot carry undamaged -- decompose concatenates images and embedded objects into one children array, so a declared-empty field is indistinguishable from an absent one and the round trip normalises it to absent. The corpus carries it so the laws run over the normalisation and the comparator has to state it, rather than the spelling staying unpinned until some future corpus document trips an undeclared failure.
+        sheet({ name: 'Declared empty', embeddedObjects: [] }),
         sheet({ name: 'Bare' }),
       ]),
     ),

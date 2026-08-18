@@ -13,11 +13,23 @@ import { canonicalise } from './hash';
 import { paragraph, wordprocessingDoc } from '../test-support/fixtures';
 import { corpus } from '../test-support/bijection-corpus';
 
-// The three bijection laws that gate the whole DocumentPackage promotion (ExaDev/document-schema.js#20's amended statement, ExaDev/document-outline.js#2's phase 1): (i) strict structural equality in both directions; (ii) effective-property equality universally, resolve-then-compare; (iii) minting idempotence, decompose(flatten(decompose(x))) === decompose(x). Today every corpus document is styles-table-free by construction (factorStyles does not exist yet), so law (i) holds unconditionally and law (ii) reduces to structural equality -- the assertions are shaped so the styles round-trip checks slot into the marked places without rewriting: law (ii) already compares through effective/effectiveTree, and the flat encoding's zero-style-refs invariant is already asserted.
+// The three bijection laws that gate the whole DocumentPackage promotion (ExaDev/document-schema.js#20's amended statement, ExaDev/document-outline.js#2's phase 1): (i) strict structural equality in both directions, up to one declared normalisation (a present-but-empty embeddedObjects array normalises to the field absent -- see normaliseEmbeddedObjects below); (ii) effective-property equality universally, resolve-then-compare; (iii) minting idempotence, decompose(flatten(decompose(x))) === decompose(x). Today every corpus document is styles-table-free by construction (factorStyles does not exist yet), so law (i) holds unconditionally up to that normalisation and law (ii) reduces to structural equality -- the assertions are shaped so the styles round-trip checks slot into the marked places without rewriting: law (ii) already compares through effective/effectiveTree, and the flat encoding's zero-style-refs invariant is already asserted.
 
 // The comparator, per the promotion plan's rules: canonicalise rebuilds every object with sorted keys (hash.ts's own recipe step 1, so the comparator and the hash can never drift apart), and one JSON-parse cycle collapses absent-versus-explicitly-undefined before comparison. Never an identity assertion: decompose embeds the source's own node objects, so toBe would pass even for an implementation that mutated its input -- structural comparison over a pre-roundtrip structuredClone snapshot is what actually pins the values.
 function canon(value: unknown): unknown {
-  return JSON.parse(JSON.stringify(canonicalise(value)));
+  return JSON.parse(JSON.stringify(normaliseEmbeddedObjects(canonicalise(value))));
+}
+
+// The bijection's one declared normalisation: decompose concatenates a sheet's images and embedded objects into a single children array and flatten rebuilds embeddedObjects only when an embedded object exists, so a present-but-empty array -- schema-legal (the field is z.array().optional()), emitted by no codec today -- cannot survive the round trip and normalises to the field absent. Applied to BOTH sides of every comparison so law (i) stays an equivalence over canonical forms rather than a one-way coercion; the direction (present-empty round-trips to absent) is pinned outright in decompose.test.ts, and the law statements name the normalisation so the phase-3 documents.js gate inherits it as a declared rule instead of discovering it as an undeclared failure. Recursive because a sheet can sit inside an embedded document, whose own sheets can carry the same field.
+function normaliseEmbeddedObjects(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(normaliseEmbeddedObjects);
+  if (typeof value !== 'object' || value === null) return value;
+  const normalised: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value)) {
+    if (key === 'embeddedObjects' && Array.isArray(child) && child.length === 0) continue;
+    normalised[key] = normaliseEmbeddedObjects(child);
+  }
+  return normalised;
 }
 
 function expectStructurallyEqual(actual: unknown, expected: unknown): void {

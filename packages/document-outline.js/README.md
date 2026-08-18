@@ -100,7 +100,7 @@ Grouping happens **within one container's block flow, never across containers**:
 
 - **wordprocessing** — one section group per `ContentSection` (mandatory: a section's pre-layout geometry cannot ride a rendered-pages array, and without section groups the bijection is unsatisfiable for multi-section documents). Inside a section, the same stack semantics as `buildOutline` — headings nest by `headingLevel`, lists nest inside them by `list.level`, plain paragraphs sit flat and close the list nesting — but the stacks reset at each section boundary rather than flowing sections into one tree.
 - **presentation** — one slide group per slide, then **one shape group per shape**: a slide's paragraphs are never regrouped across its shapes (that is the outline's lossy TOC projection, not a decomposition). Inside each shape, list nesting only.
-- **spreadsheet** — one sheet group per sheet; the grid (`cells`, `columns`, `rows`) and `printSettings` ride **on the sheet node**; children are the sheet's images then its embedded objects.
+- **spreadsheet** — one sheet group per sheet; the grid (`cells`, `columns`, `rows`) and `printSettings` ride **on the sheet node**; children are the sheet's images then its embedded objects. A present-but-empty `embeddedObjects` array normalises to the field absent — the bijection's one declared normalisation (see the laws).
 - **drawing** — one page group per page; children are the page's shape groups then its vector leaves.
 - **formula** — the single `ContentFormula` node, with no container group around it.
 
@@ -112,9 +112,9 @@ An embedded document (`ContentEmbeddedObject`, the recursive arm) always stays i
 
 ### The three laws
 
-The pair is gated by property tests over an outline-local corpus covering all five kinds (including the recursive embedded-formula arm, multi-section geometry, a multi-frame wrapped run, and the empty-document edges) — `src/outline/bijection.test.ts`:
+The pair is gated by property tests over an outline-local corpus covering all five kinds (including the recursive embedded-formula arm, multi-section geometry, a multi-frame wrapped run, a present-but-empty `embeddedObjects` sheet, and the empty-document edges) — `src/outline/bijection.test.ts`:
 
-1. **Strict structural equality, both directions** — `flatten(decompose(pkg))` reproduces `pkg.content` exactly (same document order; comparison via `canonicalise` + a JSON cycle, never identity — decompose shares node references, so identity would pass even for a mutating implementation).
+1. **Strict structural equality, both directions** — `flatten(decompose(pkg))` reproduces `pkg.content` exactly (same document order; comparison via `canonicalise` + a JSON cycle, never identity — decompose shares node references, so identity would pass even for a mutating implementation), up to one declared normalisation: a present-but-empty `embeddedObjects` array on a sheet, which the tree's concatenated children cannot distinguish from an absent field, round-trips to the field absent. The schema allows the spelling and no codec emits it; the comparator applies the normalisation to both sides (an equivalence over canonical forms, not a one-way coercion) and a dedicated test pins the direction, so the documents.js gate inherits a declared rule rather than an undeclared failure.
 2. **Effective-property equality, universally** — resolve-then-compare: both encodings pass through `effective`/`effectiveTree` before comparison. Today resolution is the identity (no style layer exists yet, so every corpus document is trivially styles-table-free and this law reduces to structural equality); when the styles major lands, the same assertions compare overlay-resolved properties. `effective` is exported now precisely so these tests and `leafContentHash` already route through the one seam where style resolution will land.
 3. **Minting idempotence** — `decompose(flatten(decompose(pkg)))` equals `decompose(pkg)`: re-decomposing a flattened tree mints the identical tree.
 
