@@ -282,6 +282,16 @@ describe('readDocx: hyperlinks', () => {
     const hyperlinkPara = asParagraph(doc.sections[0]?.blocks[3]);
     expect(hyperlinkPara.runs[0]?.hyperlink).toBe('https://example.com');
   });
+
+  it('decodes a relationship target\'s XML entities, so the hyperlink is the URI rather than its encoding', () => {
+    const pkg = buildFixturePackage();
+    pkg.parts['word/_rels/document.xml.rels'] = {
+      kind: 'xml',
+      nodes: [el('Relationships', {}, [el('Relationship', { Id: 'rIdHlink', Type: HYPERLINK_REL, Target: 'https://example.com/search?a=1&amp;b=2', TargetMode: 'External' })])],
+    };
+    const doc = readDocx(pkg);
+    expect(asParagraph(doc.sections[0]?.blocks[3]).runs[0]?.hyperlink).toBe('https://example.com/search?a=1&b=2');
+  });
 });
 
 describe('readDocx: fields', () => {

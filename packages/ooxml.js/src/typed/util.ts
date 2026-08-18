@@ -121,7 +121,9 @@ function resolveRelTarget(partPath: string, target: string): string {
   return resolved.join('/');
 }
 
-// Resolve a part's relationships to a Map of r:id -> { type, target, targetMode? }. Internal targets become package-relative part paths; external targets (TargetMode="External", e.g. hyperlink URLs) are kept verbatim.
+// Resolve a part's relationships to a Map of r:id -> { type, target, targetMode? }. Internal targets become package-relative part paths; an external target (TargetMode="External", e.g. a hyperlink URL) keeps whatever the producer wrote, minus its XML encoding.
+//
+// The Target attribute is entity-decoded before anything else happens to it, since this is the typed (lossy) projection and the lossless layer stores every attribute value exactly as it appeared in the source (parseXml runs with processEntities:false). Without that, an internal target containing '&' never matches its own part key -- package keys are the ZIP entry names, which carry no XML encoding -- and an external one hands a caller a URL still spelled '&amp;', which then re-encodes to '&amp;amp;' the moment anything writes it back out.
 export function resolveRelationships(pkg: Package, partPath: string): Map<string, Relationship> {
   const map = new Map<string, Relationship>();
   const rels = rootElement(pkg.parts[relsPathFor(partPath)]);
@@ -131,13 +133,14 @@ export function resolveRelationships(pkg: Package, partPath: string): Map<string
   for (const rel of childrenWithTag(rels, 'Relationship')) {
     const id = attr(rel, 'Id');
     const type = attr(rel, 'Type');
-    const target = attr(rel, 'Target');
-    if (id === undefined || type === undefined || target === undefined) {
+    const rawTarget = attr(rel, 'Target');
+    if (id === undefined || type === undefined || rawTarget === undefined) {
       continue;
     }
+    const target = decodeEntities(rawTarget);
     const targetMode = attr(rel, 'TargetMode');
     map.set(id, {
-      type,
+      type: decodeEntities(type),
       target: targetMode === 'External' ? target : resolveRelTarget(partPath, target),
       targetMode,
     });
