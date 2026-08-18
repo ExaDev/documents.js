@@ -89,7 +89,6 @@ export {
   ContentTableRowSchema,
   ContentTableSchema,
   isContentBlock,
-  CONTENT_FORMAT_VERSION,
   ContentDocumentSchema,
   ContentCellValueSchema,
   ContentSheetSchema,

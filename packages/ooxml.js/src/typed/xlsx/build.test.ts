@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ContentDocument, ContentSheet } from 'document-schema.js';
-import { CONTENT_FORMAT_VERSION, PAGE_SIZE_A4, PAGE_SIZE_LETTER } from 'document-schema.js';
+import { PAGE_SIZE_A4, PAGE_SIZE_LETTER } from 'document-schema.js';
 import type { XmlElement } from '../../model/node';
 import type { Package } from '../../model/package';
 import { encodePackage } from '../../codec';
@@ -70,14 +70,13 @@ const SUMMARY_SHEET: ContentSheet = {
 
 const DOCUMENT: ContentDocument = {
   kind: 'spreadsheet',
-  formatVersion: CONTENT_FORMAT_VERSION,
   metadata: { title: 'Kitchen Sink', author: 'Test Suite', keywords: ['a', 'b'], createdIso: '2026-07-31T00:00:00Z' },
   sheets: [KITCHEN_SINK_SHEET, SUMMARY_SHEET],
 };
 
 describe('buildXlsxPackage: rejects a non-spreadsheet ContentDocument', () => {
   it('throws for a wordprocessing document', () => {
-    const wrongKind: ContentDocument = { kind: 'wordprocessing', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, sections: [] };
+    const wrongKind: ContentDocument = { kind: 'wordprocessing', metadata: {}, sections: [] };
     expect(() => buildXlsxPackage(wrongKind)).toThrow(/spreadsheet/);
   });
 });
@@ -208,7 +207,6 @@ describe('readXlsxContent(buildXlsxPackage(x)) round-trips real content', () => 
 describe('buildXlsxPackage: an empty sheet with no cells/columns/rows still produces a structurally valid worksheet', () => {
   const emptyDocument: ContentDocument = {
     kind: 'spreadsheet',
-    formatVersion: CONTENT_FORMAT_VERSION,
     metadata: {},
     sheets: [
       {
@@ -252,7 +250,6 @@ const DEFAULT_PRINT_SETTINGS: ContentSheet['printSettings'] = {
 function singleSheetDocument(cells: ContentSheet['cells']): ContentDocument {
   return {
     kind: 'spreadsheet',
-    formatVersion: CONTENT_FORMAT_VERSION,
     metadata: {},
     sheets: [{ name: 'Sheet1', cells, columns: [], rows: [], images: [], printSettings: DEFAULT_PRINT_SETTINGS }],
   };
@@ -477,7 +474,6 @@ describe('buildXlsxPackage: a workbook needing no number formats writes the same
 describe('buildXlsxPackage: a formula cell with a cached STRING result writes t="str" literally, never shared-string-indexed', () => {
   const document: ContentDocument = {
     kind: 'spreadsheet',
-    formatVersion: CONTENT_FORMAT_VERSION,
     metadata: {},
     sheets: [
       {
@@ -553,7 +549,7 @@ const DECORATED_SHEET: ContentSheet = {
 };
 
 describe('buildXlsxPackage: writes cell decoration (fills/borders/alignment) into xl/styles.xml', () => {
-  const pkg = buildXlsxPackage({ kind: 'spreadsheet', formatVersion: CONTENT_FORMAT_VERSION, metadata: { title: undefined, author: undefined, subject: undefined, keywords: undefined, creator: undefined, producer: undefined, createdIso: undefined, modifiedIso: undefined }, sheets: [DECORATED_SHEET] });
+  const pkg = buildXlsxPackage({ kind: 'spreadsheet', metadata: { title: undefined, author: undefined, subject: undefined, keywords: undefined, creator: undefined, producer: undefined, createdIso: undefined, modifiedIso: undefined }, sheets: [DECORATED_SHEET] });
   const styles = rootElement(pkg.parts['xl/styles.xml']);
   if (styles === undefined) {
     throw new Error('expected xl/styles.xml to have a root element');
@@ -611,7 +607,7 @@ describe('buildXlsxPackage: writes cell decoration (fills/borders/alignment) int
 });
 
 describe('readXlsxContent(buildXlsxPackage(x)) round-trips cell decoration', () => {
-  const pkg = buildXlsxPackage({ kind: 'spreadsheet', formatVersion: CONTENT_FORMAT_VERSION, metadata: { title: undefined, author: undefined, subject: undefined, keywords: undefined, creator: undefined, producer: undefined, createdIso: undefined, modifiedIso: undefined }, sheets: [DECORATED_SHEET] });
+  const pkg = buildXlsxPackage({ kind: 'spreadsheet', metadata: { title: undefined, author: undefined, subject: undefined, keywords: undefined, creator: undefined, producer: undefined, createdIso: undefined, modifiedIso: undefined }, sheets: [DECORATED_SHEET] });
   const result = readXlsxContent(pkg);
   if (result.kind !== 'spreadsheet') {
     throw new Error('expected a spreadsheet ContentDocument');

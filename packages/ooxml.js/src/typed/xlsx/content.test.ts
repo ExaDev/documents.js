@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { CONTENT_FORMAT_VERSION, PAGE_SIZE_A4 } from 'document-schema.js';
+import { ContentDocumentSchema, PAGE_SIZE_A4 } from 'document-schema.js';
 import type { Package } from '../../model/package';
 import { el, txt } from '../../xml/fragment';
 import { parsePackage } from '../../package-io/read';
@@ -34,9 +34,10 @@ describe('readXlsxContent: kitchen-sink.xlsx (real LibreOffice output)', () => {
     expect(sheets.map((sheet) => sheet.name)).toEqual(['Data', 'Summary']);
   });
 
-  it('produces a ContentDocument envelope directly (kind, formatVersion, metadata, sheets)', () => {
+  it('produces a ContentDocument envelope directly (kind, metadata, sheets) matching the live ContentDocumentSchema', () => {
     expect(document.kind).toBe('spreadsheet');
-    expect(document.formatVersion).toBe(CONTENT_FORMAT_VERSION);
+    expect(ContentDocumentSchema.safeParse(document).success).toBe(true);
+    expect('formatVersion' in document).toBe(false); // retired in document-schema.js 4.0.0 -- versioning now lives only at the serialised-artefact boundary ($schema URI), never on the in-process codec-exchange envelope
   });
 
   it('reads document metadata via docProps/core.xml -- this fixture never had a title set', () => {
