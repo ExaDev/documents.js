@@ -63,8 +63,8 @@ importers:
         specifier: ^3.0.1
         version: 3.0.1
       markdown-codec:
-        specifier: ^3.0.0
-        version: 3.0.0
+        specifier: ^3.0.1
+        version: 3.0.1
       odf.js:
         specifier: ^4.0.0
         version: 4.0.0
@@ -2434,6 +2434,10 @@ packages:
     resolution: {integrity: sha512-aCBeWHDubmchJBXPx7ZesLmGgOCAPOEI3n/PzunPLBEUq/w+hGpl/XLczGyyPkURu7nKR+dP6M1p7u6k4YxDsw==}
     engines: {node: '>=20'}
 
+  document-schema.js@4.1.0:
+    resolution: {integrity: sha512-sRnhIHGb7UvmtDX9DeJY6/uEULoQ3JZn4whH+gyyLAcP26zzr/u8EXEIZYDRIfabHEZHksBZOUQgCD1cacH3cA==}
+    engines: {node: '>=20'}
+
   documents.js@3.0.1:
     resolution: {integrity: sha512-m8QPMu2LPYNzBaSWe2sfioixOY4uHpNgArx5MclrG61UszmPl2+E8dSfSwBSy8oqIIo/6j/o/fckJUyG4DEagQ==}
     engines: {node: '>=20'}
@@ -3434,6 +3438,10 @@ packages:
 
   markdown-codec@3.0.0:
     resolution: {integrity: sha512-FhtWGLNw7/johsgZP+W9tj3Bc8u4b8HKX+R//CO+HCtq9EGhEnrG0MSWHOYi1Hqkm52isfu/DL1ZDJtYybWhxw==}
+    engines: {node: '>=20'}
+
+  markdown-codec@3.0.1:
+    resolution: {integrity: sha512-vM3mIC1E3qdkm2r0bWlrH6R/GvHx6iBiiI11LgybtZXlwiLBOidu3YmUZswOTRXlcR2saVhSslk08G2Qq4HiIA==}
     engines: {node: '>=20'}
 
   marked-terminal@7.3.0:
@@ -7333,6 +7341,10 @@ snapshots:
     dependencies:
       zod: 4.4.3
 
+  document-schema.js@4.1.0:
+    dependencies:
+      zod: 4.4.3
+
   documents.js@3.0.1:
     dependencies:
       byte-codec: 1.1.9
@@ -8462,6 +8474,11 @@ snapshots:
   markdown-codec@3.0.0:
     dependencies:
       document-schema.js: 4.0.0
+      zod: 4.4.3
+
+  markdown-codec@3.0.1:
+    dependencies:
+      document-schema.js: 4.1.0
       zod: 4.4.3
 
   marked-terminal@7.3.0(marked@15.0.12):
