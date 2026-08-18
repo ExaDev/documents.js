@@ -2,18 +2,6 @@ import { z } from "zod";
 //#region src/codec.d.ts
 declare const MarkdownBytesSchema: z.ZodCustom<Uint8Array<ArrayBuffer>, Uint8Array<ArrayBuffer>>;
 declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uint8Array<ArrayBuffer>>, z.ZodDiscriminatedUnion<[z.ZodObject<{
-  kind: z.ZodLiteral<"wordprocessing">;
-  formatVersion: z.ZodLiteral<3>;
-  metadata: z.ZodObject<{
-    title: z.ZodOptional<z.ZodString>;
-    author: z.ZodOptional<z.ZodString>;
-    subject: z.ZodOptional<z.ZodString>;
-    keywords: z.ZodOptional<z.ZodArray<z.ZodString>>;
-    creator: z.ZodOptional<z.ZodString>;
-    producer: z.ZodOptional<z.ZodString>;
-    createdIso: z.ZodOptional<z.ZodString>;
-    modifiedIso: z.ZodOptional<z.ZodString>;
-  }, z.core.$strip>;
   sections: z.ZodArray<z.ZodObject<{
     pageSize: z.ZodObject<{
       widthPt: z.ZodNumber;
@@ -27,9 +15,50 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
     }, z.core.$strip>;
     blocks: z.ZodArray<z.ZodCustom<import("document-schema.js").ContentBlock, import("document-schema.js").ContentBlock>>;
   }, z.core.$strip>>;
-}, z.core.$strip>, z.ZodObject<{
-  kind: z.ZodLiteral<"presentation">;
-  formatVersion: z.ZodLiteral<3>;
+  symbolTable: z.ZodOptional<z.ZodObject<{
+    symbols: z.ZodArray<z.ZodObject<{
+      glyph: z.ZodString;
+      scope: z.ZodString;
+      id: z.ZodString;
+      quantityKind: z.ZodOptional<z.ZodString>;
+      preferredUnit: z.ZodOptional<z.ZodString>;
+      definitionSource: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
+    units: z.ZodArray<z.ZodObject<{
+      id: z.ZodString;
+      symbol: z.ZodString;
+      name: z.ZodOptional<z.ZodString>;
+      dimension: z.ZodRecord<z.ZodEnum<{
+        time: "time";
+        length: "length";
+        mass: "mass";
+        electricCurrent: "electricCurrent";
+        thermodynamicTemperature: "thermodynamicTemperature";
+        amountOfSubstance: "amountOfSubstance";
+        luminousIntensity: "luminousIntensity";
+      }> & z.core.$partial, z.ZodNumber>;
+      factorToSi: z.ZodObject<{
+        numerator: z.ZodString;
+        denominator: z.ZodString;
+      }, z.core.$strip>;
+      offsetToSi: z.ZodOptional<z.ZodObject<{
+        numerator: z.ZodString;
+        denominator: z.ZodString;
+      }, z.core.$strip>>;
+      context: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
+    contexts: z.ZodOptional<z.ZodArray<z.ZodObject<{
+      id: z.ZodString;
+      bases: z.ZodArray<z.ZodObject<{
+        unit: z.ZodString;
+        value: z.ZodObject<{
+          numerator: z.ZodString;
+          denominator: z.ZodString;
+        }, z.core.$strip>;
+      }, z.core.$strip>>;
+    }, z.core.$strip>>>;
+  }, z.core.$strip>>;
+  kind: z.ZodLiteral<"wordprocessing">;
   metadata: z.ZodObject<{
     title: z.ZodOptional<z.ZodString>;
     author: z.ZodOptional<z.ZodString>;
@@ -40,6 +69,7 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
     createdIso: z.ZodOptional<z.ZodString>;
     modifiedIso: z.ZodOptional<z.ZodString>;
   }, z.core.$strip>;
+}, z.core.$strip>, z.ZodObject<{
   slides: z.ZodArray<z.ZodObject<{
     size: z.ZodObject<{
       widthPt: z.ZodNumber;
@@ -73,9 +103,50 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
     }, z.core.$strip>>;
     notes: z.ZodString;
   }, z.core.$strip>>;
-}, z.core.$strip>, z.ZodObject<{
-  kind: z.ZodLiteral<"spreadsheet">;
-  formatVersion: z.ZodLiteral<3>;
+  symbolTable: z.ZodOptional<z.ZodObject<{
+    symbols: z.ZodArray<z.ZodObject<{
+      glyph: z.ZodString;
+      scope: z.ZodString;
+      id: z.ZodString;
+      quantityKind: z.ZodOptional<z.ZodString>;
+      preferredUnit: z.ZodOptional<z.ZodString>;
+      definitionSource: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
+    units: z.ZodArray<z.ZodObject<{
+      id: z.ZodString;
+      symbol: z.ZodString;
+      name: z.ZodOptional<z.ZodString>;
+      dimension: z.ZodRecord<z.ZodEnum<{
+        time: "time";
+        length: "length";
+        mass: "mass";
+        electricCurrent: "electricCurrent";
+        thermodynamicTemperature: "thermodynamicTemperature";
+        amountOfSubstance: "amountOfSubstance";
+        luminousIntensity: "luminousIntensity";
+      }> & z.core.$partial, z.ZodNumber>;
+      factorToSi: z.ZodObject<{
+        numerator: z.ZodString;
+        denominator: z.ZodString;
+      }, z.core.$strip>;
+      offsetToSi: z.ZodOptional<z.ZodObject<{
+        numerator: z.ZodString;
+        denominator: z.ZodString;
+      }, z.core.$strip>>;
+      context: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
+    contexts: z.ZodOptional<z.ZodArray<z.ZodObject<{
+      id: z.ZodString;
+      bases: z.ZodArray<z.ZodObject<{
+        unit: z.ZodString;
+        value: z.ZodObject<{
+          numerator: z.ZodString;
+          denominator: z.ZodString;
+        }, z.core.$strip>;
+      }, z.core.$strip>>;
+    }, z.core.$strip>>>;
+  }, z.core.$strip>>;
+  kind: z.ZodLiteral<"presentation">;
   metadata: z.ZodObject<{
     title: z.ZodOptional<z.ZodString>;
     author: z.ZodOptional<z.ZodString>;
@@ -86,6 +157,7 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
     createdIso: z.ZodOptional<z.ZodString>;
     modifiedIso: z.ZodOptional<z.ZodString>;
   }, z.core.$strip>;
+}, z.core.$strip>, z.ZodObject<{
   sheets: z.ZodArray<z.ZodObject<{
     name: z.ZodString;
     cells: z.ZodArray<z.ZodObject<{
@@ -226,6 +298,15 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
         bottom: "bottom";
         middle: "middle";
       }>>;
+      comment: z.ZodOptional<z.ZodObject<{
+        text: z.ZodString;
+        author: z.ZodOptional<z.ZodString>;
+        createdAt: z.ZodOptional<z.ZodString>;
+        replies: z.ZodOptional<z.ZodArray<z.ZodObject<{
+          text: z.ZodString;
+          author: z.ZodOptional<z.ZodString>;
+        }, z.core.$strip>>>;
+      }, z.core.$strip>>;
       sourcePath: z.ZodOptional<z.ZodString>;
       frames: z.ZodOptional<z.ZodArray<z.ZodObject<{
         pageIndex: z.ZodNumber;
@@ -311,9 +392,50 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
     }, z.core.$strip>;
     embeddedObjects: z.ZodOptional<z.ZodArray<z.ZodCustom<import("document-schema.js").ContentEmbeddedObject, import("document-schema.js").ContentEmbeddedObject>>>;
   }, z.core.$strip>>;
-}, z.core.$strip>, z.ZodObject<{
-  kind: z.ZodLiteral<"drawing">;
-  formatVersion: z.ZodLiteral<3>;
+  symbolTable: z.ZodOptional<z.ZodObject<{
+    symbols: z.ZodArray<z.ZodObject<{
+      glyph: z.ZodString;
+      scope: z.ZodString;
+      id: z.ZodString;
+      quantityKind: z.ZodOptional<z.ZodString>;
+      preferredUnit: z.ZodOptional<z.ZodString>;
+      definitionSource: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
+    units: z.ZodArray<z.ZodObject<{
+      id: z.ZodString;
+      symbol: z.ZodString;
+      name: z.ZodOptional<z.ZodString>;
+      dimension: z.ZodRecord<z.ZodEnum<{
+        time: "time";
+        length: "length";
+        mass: "mass";
+        electricCurrent: "electricCurrent";
+        thermodynamicTemperature: "thermodynamicTemperature";
+        amountOfSubstance: "amountOfSubstance";
+        luminousIntensity: "luminousIntensity";
+      }> & z.core.$partial, z.ZodNumber>;
+      factorToSi: z.ZodObject<{
+        numerator: z.ZodString;
+        denominator: z.ZodString;
+      }, z.core.$strip>;
+      offsetToSi: z.ZodOptional<z.ZodObject<{
+        numerator: z.ZodString;
+        denominator: z.ZodString;
+      }, z.core.$strip>>;
+      context: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
+    contexts: z.ZodOptional<z.ZodArray<z.ZodObject<{
+      id: z.ZodString;
+      bases: z.ZodArray<z.ZodObject<{
+        unit: z.ZodString;
+        value: z.ZodObject<{
+          numerator: z.ZodString;
+          denominator: z.ZodString;
+        }, z.core.$strip>;
+      }, z.core.$strip>>;
+    }, z.core.$strip>>>;
+  }, z.core.$strip>>;
+  kind: z.ZodLiteral<"spreadsheet">;
   metadata: z.ZodObject<{
     title: z.ZodOptional<z.ZodString>;
     author: z.ZodOptional<z.ZodString>;
@@ -324,6 +446,7 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
     createdIso: z.ZodOptional<z.ZodString>;
     modifiedIso: z.ZodOptional<z.ZodString>;
   }, z.core.$strip>;
+}, z.core.$strip>, z.ZodObject<{
   pages: z.ZodArray<z.ZodObject<{
     size: z.ZodObject<{
       widthPt: z.ZodNumber;
@@ -533,9 +656,50 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
       }, z.core.$strip>>>;
     }, z.core.$strip>], "kind">>;
   }, z.core.$strip>>;
-}, z.core.$strip>, z.ZodObject<{
-  kind: z.ZodLiteral<"formula">;
-  formatVersion: z.ZodLiteral<3>;
+  symbolTable: z.ZodOptional<z.ZodObject<{
+    symbols: z.ZodArray<z.ZodObject<{
+      glyph: z.ZodString;
+      scope: z.ZodString;
+      id: z.ZodString;
+      quantityKind: z.ZodOptional<z.ZodString>;
+      preferredUnit: z.ZodOptional<z.ZodString>;
+      definitionSource: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
+    units: z.ZodArray<z.ZodObject<{
+      id: z.ZodString;
+      symbol: z.ZodString;
+      name: z.ZodOptional<z.ZodString>;
+      dimension: z.ZodRecord<z.ZodEnum<{
+        time: "time";
+        length: "length";
+        mass: "mass";
+        electricCurrent: "electricCurrent";
+        thermodynamicTemperature: "thermodynamicTemperature";
+        amountOfSubstance: "amountOfSubstance";
+        luminousIntensity: "luminousIntensity";
+      }> & z.core.$partial, z.ZodNumber>;
+      factorToSi: z.ZodObject<{
+        numerator: z.ZodString;
+        denominator: z.ZodString;
+      }, z.core.$strip>;
+      offsetToSi: z.ZodOptional<z.ZodObject<{
+        numerator: z.ZodString;
+        denominator: z.ZodString;
+      }, z.core.$strip>>;
+      context: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
+    contexts: z.ZodOptional<z.ZodArray<z.ZodObject<{
+      id: z.ZodString;
+      bases: z.ZodArray<z.ZodObject<{
+        unit: z.ZodString;
+        value: z.ZodObject<{
+          numerator: z.ZodString;
+          denominator: z.ZodString;
+        }, z.core.$strip>;
+      }, z.core.$strip>>;
+    }, z.core.$strip>>>;
+  }, z.core.$strip>>;
+  kind: z.ZodLiteral<"drawing">;
   metadata: z.ZodObject<{
     title: z.ZodOptional<z.ZodString>;
     author: z.ZodOptional<z.ZodString>;
@@ -546,9 +710,73 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
     createdIso: z.ZodOptional<z.ZodString>;
     modifiedIso: z.ZodOptional<z.ZodString>;
   }, z.core.$strip>;
+}, z.core.$strip>, z.ZodObject<{
   formula: z.ZodObject<{
     mathml: z.ZodArray<z.ZodCustom<import("document-schema.js").MathMlNode, import("document-schema.js").MathMlNode>>;
     starMath: z.ZodOptional<z.ZodString>;
+    presentation: z.ZodOptional<z.ZodObject<{
+      latex: z.ZodString;
+    }, z.core.$strip>>;
+    content: z.ZodOptional<z.ZodCustom<import("document-schema.js").MathExpression, import("document-schema.js").MathExpression>>;
+    provenance: z.ZodOptional<z.ZodObject<{
+      source: z.ZodString;
+      pageRef: z.ZodOptional<z.ZodString>;
+      editTrail: z.ZodArray<z.ZodString>;
+    }, z.core.$strip>>;
+  }, z.core.$strip>;
+  symbolTable: z.ZodOptional<z.ZodObject<{
+    symbols: z.ZodArray<z.ZodObject<{
+      glyph: z.ZodString;
+      scope: z.ZodString;
+      id: z.ZodString;
+      quantityKind: z.ZodOptional<z.ZodString>;
+      preferredUnit: z.ZodOptional<z.ZodString>;
+      definitionSource: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
+    units: z.ZodArray<z.ZodObject<{
+      id: z.ZodString;
+      symbol: z.ZodString;
+      name: z.ZodOptional<z.ZodString>;
+      dimension: z.ZodRecord<z.ZodEnum<{
+        time: "time";
+        length: "length";
+        mass: "mass";
+        electricCurrent: "electricCurrent";
+        thermodynamicTemperature: "thermodynamicTemperature";
+        amountOfSubstance: "amountOfSubstance";
+        luminousIntensity: "luminousIntensity";
+      }> & z.core.$partial, z.ZodNumber>;
+      factorToSi: z.ZodObject<{
+        numerator: z.ZodString;
+        denominator: z.ZodString;
+      }, z.core.$strip>;
+      offsetToSi: z.ZodOptional<z.ZodObject<{
+        numerator: z.ZodString;
+        denominator: z.ZodString;
+      }, z.core.$strip>>;
+      context: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
+    contexts: z.ZodOptional<z.ZodArray<z.ZodObject<{
+      id: z.ZodString;
+      bases: z.ZodArray<z.ZodObject<{
+        unit: z.ZodString;
+        value: z.ZodObject<{
+          numerator: z.ZodString;
+          denominator: z.ZodString;
+        }, z.core.$strip>;
+      }, z.core.$strip>>;
+    }, z.core.$strip>>>;
+  }, z.core.$strip>>;
+  kind: z.ZodLiteral<"formula">;
+  metadata: z.ZodObject<{
+    title: z.ZodOptional<z.ZodString>;
+    author: z.ZodOptional<z.ZodString>;
+    subject: z.ZodOptional<z.ZodString>;
+    keywords: z.ZodOptional<z.ZodArray<z.ZodString>>;
+    creator: z.ZodOptional<z.ZodString>;
+    producer: z.ZodOptional<z.ZodString>;
+    createdIso: z.ZodOptional<z.ZodString>;
+    modifiedIso: z.ZodOptional<z.ZodString>;
   }, z.core.$strip>;
 }, z.core.$strip>], "kind">>;
 //#endregion

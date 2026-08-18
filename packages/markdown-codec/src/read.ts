@@ -1,6 +1,6 @@
 // readMarkdown: markdown source text -> ContentDocument.
 //
-// RECONCILIATION DECISION (recorded here per the scaffolding task that created this file): readMarkdown/writeMarkdown operate on document-schema.js's full ContentDocument directly (kind/formatVersion/metadata/sections), not a bare {metadata, sections} shape wrapped by a documents.js-side adapter.
+// RECONCILIATION DECISION (recorded here per the scaffolding task that created this file): readMarkdown/writeMarkdown operate on document-schema.js's full ContentDocument directly (kind/metadata/sections), not a bare {metadata, sections} shape wrapped by a documents.js-side adapter. The envelope this decision was recorded against carried a formatVersion field per arm; document-schema.js 4.0.0 retired it, and the full-envelope-vs-bare-shape fork the decision documents is unchanged by that.
 //
 // Reasoning, from the two precedents this family's own sibling packages already established for exactly this fork:
 //

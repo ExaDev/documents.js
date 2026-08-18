@@ -14,7 +14,7 @@
 //  - front matter (src/lower/front-matter.ts) -> a flat-scalar-only LayoutMetadata subset -- MarkdownDiagnosticCodes.FRONT_MATTER_KEY_UNMAPPED.
 
 import type { ContentBlock, ContentDocument, ContentParagraph, ContentRun, LayoutMetadata } from 'document-schema.js';
-import { CONTENT_FORMAT_VERSION, PAGE_SIZE_A4 } from 'document-schema.js';
+import { PAGE_SIZE_A4 } from 'document-schema.js';
 import type { MarkdownBlockNode, MarkdownHeadingNode, MarkdownListItemNode, MarkdownListNode, MarkdownParagraphNode } from '../ast/ast';
 import type { MarkdownParseOptions, ParsedMarkdown } from '../block/block';
 import { parseMarkdown } from '../block/block';
@@ -276,7 +276,6 @@ export function lowerParsedMarkdown(parsed: ParsedMarkdown, options: ReadMarkdow
 
   return {
     kind: 'wordprocessing',
-    formatVersion: CONTENT_FORMAT_VERSION,
     metadata,
     sections: [{ pageSize, margins, blocks }],
   };

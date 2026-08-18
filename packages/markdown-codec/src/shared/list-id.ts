@@ -2,7 +2,7 @@
 //
 // Nesting mints NO new numId at all -- a nested list reuses its ENCLOSING list's own numId, incrementing only `level`, exactly mirroring odf.js's own nesting rule (a nested text:list keeps its enclosing list's numId, level+1). This is a deliberate, accepted limitation, not an oversight: if a nested list's own real marker type disagrees with the type baked into the numId at mint time, the numId's own type tag wins (first-wins) and the loser is reported via MarkdownDiagnosticCodes.LIST_MARKER_TYPE_CONFLICT (src/lower/lower.ts).
 //
-// A numId that does not match this grammar at all (e.g. "list1", "3" -- odf.js's own convention, or any other format's own numId scheme entirely) is a cross-format value this package never minted itself: src/emit falls back to rendering it as an ordinary bullet list -- tight, start 1, never a task list -- per MarkdownDiagnosticCodes.LIST_NUMID_FALLBACK, the documented cross-format contract.
+// A numId that does not match this grammar at all (e.g. "list1", "3" -- odf.js's own convention, or any other format's own numId scheme entirely) is a cross-format value this package never minted itself: src/emit falls back to rendering it as an ordinary bullet list -- tight, start 1, never a task list -- per MarkdownDiagnosticCodes.LIST_NUMID_FALLBACK, the documented cross-format contract. A ContentListMembership with no numId at all (optional since document-schema.js 3.3.0, for a source that carries only a depth) gets the same src/emit fallback under the same code.
 
 const NUMID_PATTERN = /^md(\d+):(bullet|ordered)(?:@(\d+))?(\+task)?(\+loose)?$/;
 const DEFAULT_ORDERED_START = 1;

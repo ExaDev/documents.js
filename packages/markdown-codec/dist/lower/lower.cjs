@@ -271,15 +271,13 @@ function lowerParsedMarkdown(parsed, options = {}, metadata = {}) {
 		quoteDepth: 0,
 		list: void 0
 	};
-	const blocks = parsed.document.children.flatMap((child) => lowerBlock(child, context, contentWidthPt));
 	return {
 		kind: "wordprocessing",
-		formatVersion: document_schema_js.CONTENT_FORMAT_VERSION,
 		metadata,
 		sections: [{
 			pageSize,
 			margins,
-			blocks
+			blocks: parsed.document.children.flatMap((child) => lowerBlock(child, context, contentWidthPt))
 		}]
 	};
 }

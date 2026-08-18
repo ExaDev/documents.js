@@ -1,7 +1,7 @@
 // Coverage sweep: every entry in MarkdownDiagnosticCodes must be reachable from some real input to this package's own read/write surface (parseMarkdown, lowerMarkdown, emitMarkdown) -- a code that exists in the table but that nothing ever fires is dead documentation, worse than no documentation at all. Each case below is deliberately minimal and independent of src/block/block.test.ts, src/lower/lower.test.ts, and src/emit/emit.test.ts's own (more thoroughly asserted) per-gap tests -- this file only cares whether the code fires at all, not what else the surrounding output looks like. The final test asserts the codes proven reachable here cover the whole MarkdownDiagnosticCodes table, so the list can never grow a new, silently-unreachable entry.
 
 import type { ContentBlock, ContentDocument, ContentTable } from 'document-schema.js';
-import { CONTENT_FORMAT_VERSION, PAGE_SIZE_A4 } from 'document-schema.js';
+import { PAGE_SIZE_A4 } from 'document-schema.js';
 import { describe, expect, it } from 'vitest';
 import { parseMarkdown } from '../block/block';
 import { emitMarkdown } from '../emit/emit';
@@ -10,7 +10,7 @@ import { createDiagnosticCollector } from '../test-support/diagnostics';
 import { MarkdownDiagnosticCodes } from './diagnostics';
 
 function minimalDocument(blocks: readonly ContentBlock[]): ContentDocument {
-  return { kind: 'wordprocessing', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, sections: [{ pageSize: PAGE_SIZE_A4, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 }, blocks: [...blocks] }] };
+  return { kind: 'wordprocessing', metadata: {}, sections: [{ pageSize: PAGE_SIZE_A4, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 }, blocks: [...blocks] }] };
 }
 
 const reached = new Set<string>();

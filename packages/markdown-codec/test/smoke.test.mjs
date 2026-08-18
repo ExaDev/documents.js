@@ -52,7 +52,7 @@ describe.each([
     });
 
     it('throws MarkdownUnsupportedDocumentKindError for a non-wordprocessing ContentDocument', () => {
-      const spreadsheet = { kind: 'spreadsheet', formatVersion: 1, metadata: {}, sheets: [] };
+      const spreadsheet = { kind: 'spreadsheet', metadata: {}, sheets: [] };
       expect(() => api.writeMarkdown(spreadsheet)).toThrow(api.MarkdownUnsupportedDocumentKindError);
     });
   });

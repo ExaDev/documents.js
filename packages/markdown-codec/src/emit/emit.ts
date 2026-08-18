@@ -3,7 +3,7 @@
 //  - "Heading{1..6}" styleId -> ATX heading, "#" repeated to the level, clamped through document-schema.js's own shared clampHeadingLevel (one heading-range clamp across the ecosystem instead of a private copy here) -- MarkdownDiagnosticCodes.HEADING_LEVEL_CLAMPED when the level exceeds 6 (a markdown-produced document never carries one, but ContentDocument is a shared cross-format pivot; a paragraph from, say, odt's own unbounded readOutlineLevel can).
 //  - 'CodeBlock'/'HorizontalRule'/'HTMLPreformatted' styleId -> a fenced code block / a thematic break / literal, unescaped text.
 //  - 'Quote' styleId, or ANY of the four styleIds above while indentLeftPt is also set (a heading/code-block/rule/preformatted-HTML block that sat inside a blockquote when this package's own src/lower produced it) -> '> ' repeated per recovered nesting level (Math.round(indentLeftPt / QUOTE_INDENT_PT)) prefixed to every line of the block's own rendering. A paragraph with indentLeftPt set but none of these five styleIds is a genuine cross-format ambiguity this package cannot resolve (is it a quote, or just some other format's own paragraph indentation?) -- MarkdownDiagnosticCodes.PARAGRAPH_INDENT_DROPPED; the indent is dropped, the paragraph still renders.
-//  - ContentListMembership -> a bullet/ordered/task-list item, decoded from its own numId string (src/shared/list-id.ts) -- MarkdownDiagnosticCodes.LIST_NUMID_FALLBACK for a numId this package never minted itself (falls back to a plain, tight, non-task bullet, per that module's own documented cross-format contract).
+//  - ContentListMembership -> a bullet/ordered/task-list item, decoded from its own numId string (src/shared/list-id.ts) -- MarkdownDiagnosticCodes.LIST_NUMID_FALLBACK for a numId this package never minted itself, or a depth-only membership carrying no numId at all (both fall back to a plain, tight, non-task bullet, per that module's own documented cross-format contract).
 //  - ContentTable -> a GFM table, src/emit/table.ts.
 //  - ContentImageBlock -> a markdown image, src/emit/image.ts.
 //  - ContentRun[] -> inline text, src/emit/inline.ts.
@@ -36,6 +36,8 @@ interface EmitContext extends TableEmitContext {
   readonly embedImages: boolean;
   readonly orderedCounters: Map<string, number>;
   readonly reportedFallbackNumIds: Set<string>;
+  // One-shot latch for the no-numId-at-all fallback diagnostic -- reportedFallbackNumIds cannot key an absent numId without inventing a sentinel string, so this is a mutable flag where its sibling is a mutable-by-reference collection.
+  reportedAbsentNumIdFallback: boolean;
 }
 
 // setext's own grammar (spec 0.31.2, "Setext headings") only distinguishes two levels (a run of '=' for level 1, of '-' for level 2) -- there is no setext spelling for level 3 and deeper, so headingStyle: 'setext' still falls back to ATX there.
@@ -157,7 +159,15 @@ function renderTopLevelBlock(block: ContentBlock, context: EmitContext): string 
 
 // --- List rendering: every ContentParagraph carrying .list is its own list item (see src/lower/lower.ts's own top-of-file note on why ContentListMembership cannot distinguish a continuation paragraph from a fresh sibling item -- this package resolves that ambiguity the same way on both sides, consistently). ---
 
-function listInfoFor(numId: string, context: EmitContext): ListNumIdInfo | undefined {
+// numId undefined is a depth-only ContentListMembership -- document-schema.js 3.3.0+ makes numId optional for sources that carry a level but no numbering identity of their own (OOXML drawing paragraphs' a:pPr/@lvl being the motivating case) -- and it lands in the same documented cross-format fallback as a foreign numId string: with no marker type, task-ness, or loose-ness to recover, the item renders as an ordinary, tight, non-task bullet at its own level.
+function listInfoFor(numId: string | undefined, context: EmitContext): ListNumIdInfo | undefined {
+  if (numId === undefined) {
+    if (!context.reportedAbsentNumIdFallback) {
+      context.reportedAbsentNumIdFallback = true;
+      context.sink({ code: MarkdownDiagnosticCodes.LIST_NUMID_FALLBACK, severity: 'info', message: 'a list membership with no numId of its own (a depth-only ContentListMembership) has no marker type, task-ness, or loose-ness to recover and falls back to an ordinary, tight, non-task bullet list' });
+    }
+    return undefined;
+  }
   const info = parseListNumId(numId);
   if (info === undefined && !context.reportedFallbackNumIds.has(numId)) {
     context.reportedFallbackNumIds.add(numId);
@@ -202,10 +212,11 @@ interface RenderedListMarker {
   readonly bareLength: number;
 }
 
-function renderListItemMarker(numId: string, info: ListNumIdInfo | undefined, item: ContentParagraph, context: EmitContext): RenderedListMarker {
+function renderListItemMarker(numId: string | undefined, info: ListNumIdInfo | undefined, item: ContentParagraph, context: EmitContext): RenderedListMarker {
   const checkboxPrefix = info?.task === true ? checkboxPrefixFor(item) : undefined;
   const checkboxText = checkboxPrefix ?? '';
-  if (info?.type === 'ordered') {
+  // Only a parsed numId string can carry type 'ordered', so the ordered-counter key is present exactly when this branch is live.
+  if (info?.type === 'ordered' && numId !== undefined) {
     const next = context.orderedCounters.get(numId) ?? (info.start ?? 1);
     context.orderedCounters.set(numId, next + 1);
     const bare = `${String(next)}${context.orderedDelimiter} `;
@@ -216,7 +227,8 @@ function renderListItemMarker(numId: string, info: ListNumIdInfo | undefined, it
 }
 
 interface ListItemPart {
-  readonly numId: string;
+  // undefined = a depth-only membership with no numId of its own; consecutive such parts share that absence as their list identity, rendering as one tight bullet list.
+  readonly numId: string | undefined;
   readonly text: string;
 }
 
@@ -261,7 +273,7 @@ function renderListRegion(items: readonly ContentParagraph[], context: EmitConte
     if (partIndex > 0) {
       const previous = parts[partIndex - 1]!;
       const sameList = previous.numId === part.numId;
-      const loose = sameList && (parseListNumId(previous.numId)?.loose ?? false);
+      const loose = sameList && previous.numId !== undefined && (parseListNumId(previous.numId)?.loose ?? false);
       out += sameList && !loose ? '\n' : '\n\n';
     }
     out += part.text;
@@ -315,6 +327,7 @@ export function emitMarkdown(document: ContentDocument, options: WriteMarkdownOp
     embedImages: options.images ?? true,
     orderedCounters: new Map(),
     reportedFallbackNumIds: new Set(),
+    reportedAbsentNumIdFallback: false,
   };
 
   const sections = document.sections.map((section) => emitBlocks(section.blocks, context));

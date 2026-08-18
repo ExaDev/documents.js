@@ -94,6 +94,17 @@ function renderTopLevelBlock(block, context) {
 	}
 }
 function listInfoFor(numId, context) {
+	if (numId === void 0) {
+		if (!context.reportedAbsentNumIdFallback) {
+			context.reportedAbsentNumIdFallback = true;
+			context.sink({
+				code: require_diagnostics_diagnostics.MarkdownDiagnosticCodes.LIST_NUMID_FALLBACK,
+				severity: "info",
+				message: "a list membership with no numId of its own (a depth-only ContentListMembership) has no marker type, task-ness, or loose-ness to recover and falls back to an ordinary, tight, non-task bullet list"
+			});
+		}
+		return;
+	}
 	const info = require_shared_list_id.parseListNumId(numId);
 	if (info === void 0 && !context.reportedFallbackNumIds.has(numId)) {
 		context.reportedFallbackNumIds.add(numId);
@@ -128,7 +139,7 @@ function stripCheckboxRun(item, checkboxPrefix) {
 }
 function renderListItemMarker(numId, info, item, context) {
 	const checkboxText = (info?.task === true ? checkboxPrefixFor(item) : void 0) ?? "";
-	if (info?.type === "ordered") {
+	if (info?.type === "ordered" && numId !== void 0) {
 		const next = context.orderedCounters.get(numId) ?? info.start ?? 1;
 		context.orderedCounters.set(numId, next + 1);
 		const bare = `${String(next)}${context.orderedDelimiter} `;
@@ -175,7 +186,7 @@ function renderListRegion(items, context) {
 		if (partIndex > 0) {
 			const previous = parts[partIndex - 1];
 			const sameList = previous.numId === part.numId;
-			const loose = sameList && (require_shared_list_id.parseListNumId(previous.numId)?.loose ?? false);
+			const loose = sameList && previous.numId !== void 0 && (require_shared_list_id.parseListNumId(previous.numId)?.loose ?? false);
 			out += sameList && !loose ? "\n" : "\n\n";
 		}
 		out += part.text;
@@ -217,7 +228,8 @@ function emitMarkdown(document, options = {}) {
 		headingStyle: options.headingStyle ?? "atx",
 		embedImages: options.images ?? true,
 		orderedCounters: /* @__PURE__ */ new Map(),
-		reportedFallbackNumIds: /* @__PURE__ */ new Set()
+		reportedFallbackNumIds: /* @__PURE__ */ new Set(),
+		reportedAbsentNumIdFallback: false
 	};
 	const body = document.sections.map((section) => emitBlocks(section.blocks, context)).join("\n\n");
 	const frontMatter = options.frontMatter === true ? require_emit_front_matter.emitFrontMatter(document.metadata) : void 0;

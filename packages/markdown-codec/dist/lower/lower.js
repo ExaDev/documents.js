@@ -7,7 +7,7 @@ import { extractFrontMatter } from "./front-matter.js";
 import { resolveMarkdownImage } from "./image.js";
 import { lowerCodeBlockRun, lowerInlineNodes } from "./inline.js";
 import { lowerTable } from "./table.js";
-import { CONTENT_FORMAT_VERSION, PAGE_SIZE_A4 } from "document-schema.js";
+import { PAGE_SIZE_A4 } from "document-schema.js";
 //#region src/lower/lower.ts
 function inlineContext(context) {
 	return {
@@ -270,15 +270,13 @@ function lowerParsedMarkdown(parsed, options = {}, metadata = {}) {
 		quoteDepth: 0,
 		list: void 0
 	};
-	const blocks = parsed.document.children.flatMap((child) => lowerBlock(child, context, contentWidthPt));
 	return {
 		kind: "wordprocessing",
-		formatVersion: CONTENT_FORMAT_VERSION,
 		metadata,
 		sections: [{
 			pageSize,
 			margins,
-			blocks
+			blocks: parsed.document.children.flatMap((child) => lowerBlock(child, context, contentWidthPt))
 		}]
 	};
 }

@@ -1,7 +1,7 @@
 // Construct-by-construct tests for the ContentDocument -> markdown emission stage (src/emit/emit.ts), the structural inverse of src/lower/lower.test.ts. Most tests here build a ContentDocument directly (bypassing src/lower entirely) so each construct -- including a cross-format shape src/lower itself never produces, like a paragraph with indentLeftPt but no quotable styleId -- can be exercised in isolation; a handful round-trip through src/lower/lower.ts first where that is the more natural way to obtain a real value (a code span run, a task-list item).
 
 import type { ContentDocument, ContentImageBlock, ContentParagraph, ContentTable } from 'document-schema.js';
-import { CONTENT_FORMAT_VERSION, PAGE_SIZE_A4 } from 'document-schema.js';
+import { PAGE_SIZE_A4 } from 'document-schema.js';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_MARGINS } from '../defaults/defaults';
 import { MarkdownDiagnosticCodes } from '../diagnostics/diagnostics';
@@ -12,7 +12,6 @@ import { emitMarkdown } from './emit';
 function doc(blocks: readonly (ContentParagraph | ContentTable | ContentImageBlock)[]): ContentDocument {
   return {
     kind: 'wordprocessing',
-    formatVersion: CONTENT_FORMAT_VERSION,
     metadata: {},
     sections: [{ pageSize: PAGE_SIZE_A4, margins: DEFAULT_MARGINS, blocks: [...blocks] }],
   };
@@ -214,6 +213,16 @@ describe('gaps (MarkdownDiagnosticCodes)', () => {
     const markdown = emitMarkdown(doc([{ kind: 'paragraph', runs: [{ text: 'x' }], list: { numId: 'list1', level: 0 } }]), { sink: collector.sink });
     expect(markdown).toBe('- x');
     expect(collector.has(MarkdownDiagnosticCodes.LIST_NUMID_FALLBACK)).toBe(true);
+  });
+
+  it('LIST_NUMID_FALLBACK fires once for depth-only memberships with no numId, falling back to one tight plain-bullet list', () => {
+    const collector = createDiagnosticCollector();
+    const markdown = emitMarkdown(doc([
+      { kind: 'paragraph', runs: [{ text: 'x' }], list: { level: 0 } },
+      { kind: 'paragraph', runs: [{ text: 'y' }], list: { level: 1 } },
+    ]), { sink: collector.sink });
+    expect(markdown).toBe('- x\n  - y');
+    expect(collector.diagnostics.filter((diagnostic) => diagnostic.code === MarkdownDiagnosticCodes.LIST_NUMID_FALLBACK)).toHaveLength(1);
   });
 
   it('TABLE_CELL_FORMATTING_DROPPED fires for colSpan/rowSpan/background and for a non-paragraph cell block', () => {
