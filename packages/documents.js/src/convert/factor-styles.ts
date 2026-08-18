@@ -1,12 +1,14 @@
 import type {
-  ContentBlock,
   ContentDocument,
   ContentParagraph,
   ContentRun,
   DocumentPackage,
+  ListChild,
   PageSize,
   SectionChild,
+  SectionConstructGroupNode,
   SectionGroupNode,
+  ShapeConstructGroupNode,
   ShapeGroupNode,
   SlideGroupNode,
   StyleEntry,
@@ -44,13 +46,13 @@ const RUN_STYLE_KEYS = ['bold', 'italic', 'underline', 'strike', 'fontFamily', '
 type ParagraphKey = (typeof PARAGRAPH_STYLE_KEYS)[number];
 type RunKey = (typeof RUN_STYLE_KEYS)[number];
 
-// The wrapper kinds that can carry a ref and hold block-flow paragraphs. SheetGroupNode fits the wrapper shape but its children are images and embedded objects -- no paragraphs, an always-empty extent -- so it never mints and is excluded from the walk's type.
-type MintWrapper = SectionGroupNode | SlideGroupNode | DrawPageGroupNode | ShapeGroupNode | HeadingGroupNode | ListGroupNode;
+// The wrapper kinds that can carry a ref and hold block-flow paragraphs. SheetGroupNode fits the wrapper shape but its children are images and embedded objects -- no paragraphs, an always-empty extent -- so it never mints and is excluded from the walk's type. SectionConstructGroupNode/ShapeConstructGroupNode (document-schema.js 4.1.0) join the set on equal footing: each carries the same `{ node, style?, children }` shape as every other wrapper here, and neither needs a dedicated dispatch arm below -- their node is never the 'paragraph'/'slide'/'drawPage' discriminant any other wrapper matches on, so both fall straight through to extentOf/childWrappers' shared "no anchor of its own" default, the same default a plain SectionGroupNode already relies on.
+type MintWrapper = SectionGroupNode | SlideGroupNode | DrawPageGroupNode | ShapeGroupNode | HeadingGroupNode | ListGroupNode | SectionConstructGroupNode | ShapeConstructGroupNode;
 
-// One child position of any block flow: the union of the section, list, and shape flows' child vocabularies (ListChild and ShapeChild are both ListGroupNode | ContentBlock, sub-ranges of SectionChild), so the extent walk serves all three with one function.
-type FlowChild = SectionChild;
+// One child position of any block flow: the union of the section, list, and shape flows' child vocabularies. ListChild and ShapeChild are the identical type (ListGroupNode | ShapeConstructGroupNode | ContentBlock) since 4.1.0, no longer a sub-range of SectionChild (which carries SectionConstructGroupNode instead) -- so the extent walk needs both halves explicitly to serve all three flows with one function.
+type FlowChild = SectionChild | ListChild;
 
-// Per-kind narrowers over MintWrapper. These exist because TypeScript does not narrow a union from a comparison against a NESTED discriminant (`wrapper.node.kind === 'section'` narrows wrapper.node at best, never `wrapper`) -- the identical reason document-schema.js's own package-node.ts writes per-kind predicates, and an explicit guard is what narrows the wrapper itself. A shape group is the no-kind arm (ContentShape carries no kind field); heading and list groups share the 'paragraph' node discriminant and stay one arm because the minting walk treats every anchor alike.
+// Per-kind narrowers over MintWrapper. These exist because TypeScript does not narrow a union from a comparison against a NESTED discriminant (`wrapper.node.kind === 'section'` narrows wrapper.node at best, never `wrapper`) -- the identical reason document-schema.js's own package-node.ts writes per-kind predicates, and an explicit guard is what narrows the wrapper itself. A shape group is the no-kind arm (ContentShape carries no kind field); heading and list groups share the 'paragraph' node discriminant and stay one arm because the minting walk treats every anchor alike. SectionGroupNode, SectionConstructGroupNode, and ShapeConstructGroupNode get no guard of their own: none of their node kinds ('section', or one of the six construct kinds) matches any check below, so all three fall through to the shared "no anchor" default at the foot of extentOf/childWrappers.
 function isShapeGroupWrapper(wrapper: MintWrapper): wrapper is ShapeGroupNode {
   return !('kind' in wrapper.node);
 }
@@ -70,6 +72,11 @@ function isDrawPageGroupWrapper(wrapper: MintWrapper): wrapper is DrawPageGroupN
 // Heading vs list within the anchor arm, discriminated the way decompose constructs them (a paragraph carrying both signals becomes a heading anchor -- headings win).
 function isHeadingGroup(group: HeadingGroupNode | ListGroupNode): group is HeadingGroupNode {
   return group.node.headingLevel !== undefined;
+}
+
+// A section- or shape-flow child position whose own node is a construct descriptor rather than a paragraph -- the same structural narrow flatten.ts uses (node.kind is never 'paragraph' for a ConstructDescriptor), needed here in the rebuild walk below to dispatch a construct-group position to its own rebuilder rather than treating it as a heading/list anchor.
+function isConstructGroup(child: SectionChild | ListChild): child is SectionConstructGroupNode | ShapeConstructGroupNode {
+  return 'node' in child && 'children' in child && child.node.kind !== 'paragraph';
 }
 
 // Assembles the tree-form DocumentPackage every construction site reports: decompose the flat content into its children, splice the envelope fields (kind, metadata, symbolTable) out of the content onto the root, carry `pages` when a layout pass produced rendered page sizes, then mint the styles table over the result. `pages` is spread-copied because the schema's array field is mutable while callers hand us readonly views of the layout engine's own array.
@@ -122,11 +129,11 @@ function extentOf(wrapper: MintWrapper): ContentParagraph[] {
     }
     return paragraphs;
   }
-  // A section group: no anchor, its whole flow is the extent.
+  // A section group or a construct group (section or shape variant): no anchor of its own, its whole flow is the extent -- a construct descriptor is never a paragraph, so it never contributes a paragraph itself, exactly like a plain section group's descriptor.
   return flowExtent(wrapper.children);
 }
 
-// The block-flow extent of one section/heading/list/shape child list: nested heading and list groups contribute their anchors and recurse, bare paragraph leaves contribute themselves, every other leaf (tables, images, page breaks, embedded objects) contributes nothing.
+// The block-flow extent of one section/heading/list/shape/construct child list: nested heading, list, and construct groups contribute their anchors (construct groups contribute none of their own) and recurse, bare paragraph leaves contribute themselves, every other leaf (tables, images, page breaks, embedded objects) contributes nothing.
 function flowExtent(children: readonly FlowChild[]): ContentParagraph[] {
   const paragraphs: ContentParagraph[] = [];
   for (const child of children) {
@@ -328,8 +335,8 @@ function childWrappers(wrapper: MintWrapper): MintWrapper[] {
   return wrappers;
 }
 
-// The entry point over a whole tree: plan (outermost-first, freezing keys and factoring positions down each chain), order the entries, then rebuild the tree stamping refs and stripping keys per chain.
-function mint(pkg: DocumentPackage): DocumentPackage {
+// The entry point over a whole tree: plan (outermost-first, freezing keys and factoring positions down each chain), order the entries, then rebuild the tree stamping refs and stripping keys per chain. Exported (beyond assemblePackage's own internal use, which only ever calls it on a tree decompose.ts just produced) because it is otherwise unreachable on a hand-built tree carrying a construct group: assemblePackage only ever takes flat content (decompose never manufactures a construct group), and factorStyles flattens its input first, which now refuses one (see flatten.ts) -- mint's own construct-group handling is real, load-bearing code with no other route a test (or a caller with an already-tree-form package) can reach it through.
+export function mint(pkg: DocumentPackage): DocumentPackage {
   const state: MintState = {
     wrapperRefs: new Map(),
     wrapperStrips: new Map(),
@@ -433,8 +440,11 @@ function rebuildSectionGroup(group: SectionGroupNode, chain: ChainStrips, state:
   return unchanged ? group : { node: group.node, ...(ref !== undefined ? { style: ref } : {}), children };
 }
 
-// One section-flow child position: a heading group recurses through the section-flow vocabulary, a list group through the list-flow vocabulary (its own children are ListChild, the shared list/shape vocabulary), a bare paragraph leaf is copied only when stripped, every other leaf passes through as the same object.
+// One section-flow child position: a construct group recurses through its own rebuilder (no anchor to narrow), a heading group recurses through the section-flow vocabulary, a list group through the list-flow vocabulary (its own children are ListChild, the shared list/shape vocabulary), a bare paragraph leaf is copied only when stripped, every other leaf passes through as the same object.
 function rebuildSectionChild(child: SectionChild, chain: ChainStrips, state: MintState): SectionChild {
+  if (isConstructGroup(child)) {
+    return rebuildSectionConstructGroup(child, chain, state);
+  }
   if ('node' in child && 'children' in child) {
     return isHeadingGroup(child) ? rebuildHeadingGroup(child, chain, state, rebuildSectionChild) : rebuildListGroup(child, chain, state, rebuildListChild);
   }
@@ -445,7 +455,10 @@ function rebuildSectionChild(child: SectionChild, chain: ChainStrips, state: Min
 }
 
 // One list-flow child position -- the shared vocabulary of list-group children and shape flows.
-function rebuildListChild(child: ListGroupNode | ContentBlock, chain: ChainStrips, state: MintState): ListGroupNode | ContentBlock {
+function rebuildListChild(child: ListChild, chain: ChainStrips, state: MintState): ListChild {
+  if (isConstructGroup(child)) {
+    return rebuildShapeConstructGroup(child, chain, state);
+  }
   if ('node' in child && 'children' in child) {
     return rebuildListGroup(child, chain, state, rebuildListChild);
   }
@@ -464,6 +477,24 @@ function rebuildShapeGroup(group: ShapeGroupNode, chain: ChainStrips, state: Min
   return unchanged ? group : { node: group.node, ...(ref !== undefined ? { style: ref } : {}), children };
 }
 
+// A construct group sat in a section flow: no anchor of its own (its node is a ConstructDescriptor, never a paragraph), so it rebuilds exactly like rebuildSectionGroup -- stamp its own ref when minted, rebuild its section-flow children below it.
+function rebuildSectionConstructGroup(group: SectionConstructGroupNode, chain: ChainStrips, state: MintState): SectionConstructGroupNode {
+  const inner = innerChain(group, chain, state);
+  const children = group.children.map((child) => rebuildSectionChild(child, inner, state));
+  const ref = state.wrapperRefs.get(group);
+  const unchanged = ref === undefined && children.every((child, index) => child === group.children[index]);
+  return unchanged ? group : { node: group.node, ...(ref !== undefined ? { style: ref } : {}), children };
+}
+
+// A construct group sat in a shape or list-item flow: the same shape as rebuildSectionConstructGroup, over the list-flow vocabulary instead.
+function rebuildShapeConstructGroup(group: ShapeConstructGroupNode, chain: ChainStrips, state: MintState): ShapeConstructGroupNode {
+  const inner = innerChain(group, chain, state);
+  const children = group.children.map((child) => rebuildListChild(child, inner, state));
+  const ref = state.wrapperRefs.get(group);
+  const unchanged = ref === undefined && children.every((child, index) => child === group.children[index]);
+  return unchanged ? group : { node: group.node, ...(ref !== undefined ? { style: ref } : {}), children };
+}
+
 function rebuildHeadingGroup(group: HeadingGroupNode, chain: ChainStrips, state: MintState, rebuildChild: (child: SectionChild, chain: ChainStrips, state: MintState) => SectionChild): HeadingGroupNode {
   const inner = innerChain(group, chain, state);
   const anchor = rebuildParagraph(group.node, inner);
@@ -474,7 +505,7 @@ function rebuildHeadingGroup(group: HeadingGroupNode, chain: ChainStrips, state:
   return unchanged ? group : { node: anchor, ...(ref !== undefined ? { style: ref } : {}), children };
 }
 
-function rebuildListGroup(group: ListGroupNode, chain: ChainStrips, state: MintState, rebuildChild: (child: ListGroupNode | ContentBlock, chain: ChainStrips, state: MintState) => ListGroupNode | ContentBlock): ListGroupNode {
+function rebuildListGroup(group: ListGroupNode, chain: ChainStrips, state: MintState, rebuildChild: (child: ListChild, chain: ChainStrips, state: MintState) => ListChild): ListGroupNode {
   const inner = innerChain(group, chain, state);
   const anchor = rebuildParagraph(group.node, inner);
   assertListAnchor(anchor);
