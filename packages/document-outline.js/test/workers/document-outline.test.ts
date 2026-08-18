@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { buildOutline, flattenOutline, isOutlineChild, leafContentHash, outlineLeafText } from '../../src';
+import { ContentDocumentSchema } from 'document-schema.js';
+import { buildOutline, decompose, documentEnvelope, effectiveTree, flatten, flattenOutline, isOutlineChild, isPackageNode, leafContentHash, outlineLeafText } from '../../src';
+import { corpus } from '../../src/test-support/bijection-corpus';
 import {
   drawPage,
   drawingDoc,
@@ -47,5 +49,16 @@ describe('document-outline.js under the Cloudflare Workers runtime', () => {
     expect(flattenOutline(outline)).toEqual([paragraph('before')]);
     expect(leafContentHash(paragraph('before'))).toBe(leafContentHash({ kind: 'paragraph', runs: [{ text: 'before' }] }));
     expect(outlineLeafText(paragraph('before'))).toBe('before');
+  });
+
+  it('decomposes, flattens, and resolves the whole bijection corpus inside the isolate', () => {
+    // The full round trip plus the effective walk over every corpus kind -- if any path in decompose/flatten/effectiveTree (or their document-schema.js schema-parse dependencies) reached for a Node-only API, the isolate would throw rather than these passing.
+    for (const { pkg } of corpus) {
+      const tree = decompose(pkg);
+      for (const root of tree) expect(isPackageNode(root)).toBe(true);
+      const flat = flatten(tree, documentEnvelope(pkg.content));
+      expect(ContentDocumentSchema.safeParse(flat).success).toBe(true);
+      expect(effectiveTree(tree).length).toBe(tree.length);
+    }
   });
 });
