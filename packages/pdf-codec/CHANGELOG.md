@@ -1,3 +1,18 @@
+# [3.0.0](https://github.com/ExaDev/pdf-codec/compare/v2.2.36...v3.0.0) (2026-08-18)
+
+
+* feat!: own the Layout item family in src/layout.ts ([2193d71](https://github.com/ExaDev/pdf-codec/commit/2193d71dd3bdeb31e7471d53465feaa9e80693e9))
+
+
+### BREAKING CHANGES
+
+* the Layout item family (LayoutDocument, LayoutItem,
+every item/page/image-asset schema and type, LAYOUT_FORMAT_VERSION)
+is no longer exported by document-schema.js and now lives in
+pdf-codec; import the same names from pdf-codec. This requires
+document-schema.js ^4.0.0, whose own major also reshaped
+ContentDocument and DocumentPackage.
+
 ## [2.2.36](https://github.com/ExaDev/pdf-codec/compare/v2.2.35...v2.2.36) (2026-08-17)
 
 ## [2.2.35](https://github.com/ExaDev/pdf-codec/compare/v2.2.34...v2.2.35) (2026-08-17)
