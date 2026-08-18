@@ -104,7 +104,7 @@
     "globals": "^17.8.0",
     "husky": "^9.1.7",
     "lint-staged": "^17.3.0",
-    "odf.js": "^2.7.10",
+    "odf.js": "^3.1.0",
     "pdf-codec": "^2.2.36",
     "publint": "^0.3.22",
     "semantic-release": "^25.0.8",
