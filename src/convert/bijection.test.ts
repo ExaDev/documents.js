@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ContentDocument, DocumentPackage, PageSize } from 'document-schema.js';
+import type { ConstructDescriptor, ContentBlock, ContentDocument, ContentShape, DocumentPackage, PageSize } from 'document-schema.js';
 import { ContentDocumentSchema, DocumentPackageSchema } from 'document-schema.js';
 import { decodePackage as decodeOdfPackage } from 'odf.js';
 import { buildXlsxPackage, decodePackage as decodeOoxmlPackage, readXlsxContent } from 'ooxml.js';
@@ -142,7 +142,101 @@ function corpus(): readonly CorpusEntry[] {
   entries.push({ name: 'pdfToDocx reconstruction capture', ...captured((onDocument) => pdfToDocx(pdfBytes, { onDocument })) });
   entries.push({ name: 'pdfToOds reconstruction capture', ...captured((onDocument) => pdfToOds(pdfBytes, { onDocument })) });
   entries.push({ name: 'pdfToOdg reconstruction capture', ...captured((onDocument) => pdfToOdg(docxToPdf(minimalDocxBytes()), { onDocument })) });
+  entries.push(...constructCorpus());
   return entries;
+}
+
+// --- The construct-boundary corpus ------------------------------------------------------------------------
+
+// document-schema.js 4.2.0 gave ContentBlock the constructStart/constructEnd marker pair, so a construct boundary is now a flat-form signal decompose promotes to a construct group and flatten reproduces, exactly like a heading level or a list level. No reader in this package emits a marker yet (the format codecs' own construct extraction is document-schema.js#22's separate track), so the vocabulary reaches this gate only through hand-built content -- but the gate itself is unchanged: these entries run the identical three laws every reader entry does, which is what makes them the proof the promotion is correct rather than merely typed. One entry per placement, so a failure names the case.
+
+const CONSTRUCT_SECTION = { pageSize: { widthPt: 595, heightPt: 842 }, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 } };
+const CONSTRUCT_SHAPE_FRAME = { xPt: 0, yPt: 0, widthPt: 400, heightPt: 300 };
+const CONSTRUCT_END: ContentBlock = { kind: 'constructEnd' };
+
+function constructStart(descriptor: ConstructDescriptor): ContentBlock {
+  return { kind: 'constructStart', descriptor };
+}
+
+function constructParagraph(text: string, options: { headingLevel?: number; listLevel?: number; indentLeftPt?: number } = {}): ContentBlock {
+  return {
+    kind: 'paragraph',
+    runs: [{ text }],
+    ...(options.headingLevel !== undefined ? { headingLevel: options.headingLevel } : {}),
+    ...(options.listLevel !== undefined ? { list: { level: options.listLevel } } : {}),
+    ...(options.indentLeftPt !== undefined ? { indentLeftPt: options.indentLeftPt } : {}),
+  };
+}
+
+function constructSectionEntry(name: string, blocks: readonly ContentBlock[]): CorpusEntry {
+  return { name, content: { kind: 'wordprocessing', metadata: {}, sections: [{ ...CONSTRUCT_SECTION, blocks: [...blocks] }] } };
+}
+
+function constructShape(blocks: readonly ContentBlock[]): ContentShape {
+  return { frame: CONSTRUCT_SHAPE_FRAME, insetLeftPt: 0, insetTopPt: 0, insetRightPt: 0, insetBottomPt: 0, blocks: [...blocks] };
+}
+
+function constructCorpus(): readonly CorpusEntry[] {
+  // Repeated indentLeftPt inside each construct region so the entries mint for real rather than round-tripping a styles-free tree: the ref lands on the construct group itself (the enclosing section's extent also holds the unindented paragraphs, so no ancestor can factor the key), which is what makes laws (ii) and (iii) bite on a construct wrapper and not just on the leaves under it.
+  const shapeWithConstruct = constructShape([
+    constructParagraph('before the construct'),
+    constructStart({ kind: 'field', instruction: 'PAGE' }),
+    constructParagraph('in a shape construct', { indentLeftPt: 18 }),
+    constructParagraph('also in it', { indentLeftPt: 18 }),
+    CONSTRUCT_END,
+  ]);
+  return [
+    constructSectionEntry('construct at a section root', [
+      constructParagraph('before'),
+      constructStart({ kind: 'field', instruction: 'PAGE', cachedResult: '1' }),
+      constructParagraph('in a field', { indentLeftPt: 24 }),
+      constructParagraph('still in the field', { indentLeftPt: 24 }),
+      CONSTRUCT_END,
+      constructParagraph('after'),
+    ]),
+    constructSectionEntry('construct nested inside a heading group', [
+      constructParagraph('Chapter', { headingLevel: 1 }),
+      constructParagraph('under the heading'),
+      constructStart({ kind: 'contentControl', controlType: 'richText', tag: 'body', alias: 'Body' }),
+      constructParagraph('in a content control', { indentLeftPt: 24 }),
+      constructParagraph('still in it', { indentLeftPt: 24 }),
+      CONSTRUCT_END,
+      constructParagraph('after the control, still under the heading'),
+    ]),
+    constructSectionEntry('construct nested inside a list group', [
+      constructParagraph('item one', { listLevel: 0 }),
+      constructStart({ kind: 'anchor', anchorType: 'bookmark', name: 'b1' }),
+      constructParagraph('in a bookmark', { indentLeftPt: 24 }),
+      constructParagraph('still in it', { indentLeftPt: 24 }),
+      CONSTRUCT_END,
+      // A deeper item after the region: the round trip only reproduces it in place if stepping through the construct left the list stack alone.
+      constructParagraph('item two, nested', { listLevel: 1 }),
+    ]),
+    constructSectionEntry('two constructs of different kinds nested inside each other', [
+      constructStart({ kind: 'provenance', change: 'insertion', author: 'A', dateIso: '2024-01-15T00:00:00Z' }),
+      constructParagraph('inserted'),
+      constructStart({ kind: 'link', target: { kind: 'external', uri: 'https://example.invalid/' }, title: 'Example' }),
+      constructParagraph('linked and inserted', { indentLeftPt: 24 }),
+      constructParagraph('also linked', { indentLeftPt: 24 }),
+      CONSTRUCT_END,
+      constructParagraph('inserted again'),
+      CONSTRUCT_END,
+    ]),
+    constructSectionEntry('construct with no children (an open marker immediately closed)', [
+      constructParagraph('before'),
+      constructStart({ kind: 'division', name: 'empty', columnCount: 2 }),
+      CONSTRUCT_END,
+      constructParagraph('after'),
+    ]),
+    {
+      name: 'construct inside a presentation shape flow',
+      content: { kind: 'presentation', metadata: {}, slides: [{ size: { widthPt: 960, heightPt: 540 }, shapes: [shapeWithConstruct], notes: '' }] },
+    },
+    {
+      name: 'construct inside a drawing page shape flow',
+      content: { kind: 'drawing', metadata: {}, pages: [{ size: { widthPt: 300, heightPt: 300 }, shapes: [shapeWithConstruct], vectors: [] }] },
+    },
+  ];
 }
 
 // A live-view docx build carrying repeated direct formatting (two identically-styled runs), encoded through the editor's own bytes and read back -- the editor surface's contribution to the corpus.
@@ -213,4 +307,31 @@ describe('decompose/flatten bijection laws over the real corpus', () => {
     const minting = corpus().filter((entry) => Object.keys(assemblePackage(entry.content, entry.pages).styles ?? {}).length > 0);
     expect(minting.length).toBeGreaterThan(0);
   });
+
+  // The same anti-vacuity guard, narrowed to the construct entries: laws (ii) and (iii) say nothing about construct groups unless a construct group actually carries a ref, and a construct entry that minted nothing would pass all three laws while proving only that its leaves round-trip. Every construct entry except the deliberately empty one is built to mint on its own construct wrapper, so this pins that the promotion and minting really do compose over the corpus rather than only in factor-styles.test.ts's single fixture.
+  it('the construct corpus mints refs onto the construct groups themselves', () => {
+    const withConstructRefs = constructCorpus().filter((entry) => constructGroupRefsOf(assemblePackage(entry.content, entry.pages)).length > 0);
+    expect(withConstructRefs.map((entry) => entry.name)).toEqual(constructCorpus().filter((entry) => entry.name !== 'construct with no children (an open marker immediately closed)').map((entry) => entry.name));
+  });
 });
+
+// Every style ref sitting on a construct-descriptor wrapper anywhere in a minted tree: a group node carrying a `kind` that is neither 'paragraph' nor a container discriminant is a ConstructDescriptor, which is exactly what construct groups (and nothing else) hold.
+function constructGroupRefsOf(pkg: DocumentPackage): string[] {
+  const refs: string[] = [];
+  function walk(value: unknown): void {
+    if (Array.isArray(value)) {
+      for (const child of value) walk(child);
+      return;
+    }
+    if (typeof value !== 'object' || value === null) return;
+    if ('node' in value && 'children' in value && 'style' in value && typeof value.style === 'string') {
+      const node: unknown = value.node;
+      if (typeof node === 'object' && node !== null && 'kind' in node && typeof node.kind === 'string' && !['paragraph', 'section', 'slide', 'sheet', 'drawPage'].includes(node.kind)) {
+        refs.push(value.style);
+      }
+    }
+    for (const child of Object.values(value)) walk(child);
+  }
+  walk(pkg.children);
+  return refs;
+}
