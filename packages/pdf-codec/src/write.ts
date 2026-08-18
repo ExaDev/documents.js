@@ -3,7 +3,8 @@ import { deflate } from './bytes/flate';
 import { ByteWriter, concatBytes } from './bytes/writer';
 import { readJpegInfo } from './image/jpeg-info';
 import { decodePng } from './image/png-decode';
-import type { LayoutDocument, LayoutFont, LayoutImageAsset, LayoutLink, PositionedFormula } from 'document-schema.js';
+import type { LayoutFont, PositionedFormula } from 'document-schema.js';
+import type { LayoutDocument, LayoutImageAsset, LayoutLink } from './layout';
 import type { FontMetrics, StandardFontName } from './afm-widths';
 import { STANDARD_METRICS, widthOfCode } from './afm-widths';
 import type { ContentWriteContext } from './content-write';
@@ -25,7 +26,7 @@ import { throwIfAborted } from './util/abort';
 import { writeObject } from './serialize';
 import type { WinAnsiSubstitution } from './winansi';
 
-// A formula's own glyph runs are shown through an embedded CID composite font via Identity-H 2-byte CIDs (see math-content-write.ts's own module comment) -- a fundamentally different content-stream shape from an ordinary LayoutText item's single-byte WinAnsi string, and one document-schema.js's own LayoutItem union has no member for (LayoutFont only ever names one of the 14 standard PDF faces -- see src/model/style.ts's own comment -- with no room for "this run uses an embedded, non-standard font resource" at all). A formula therefore cannot travel through LayoutDocument.pages[].items the way every other kind of content this writer draws does; WritePdfOptions.formulas is this module's own, local side channel for it instead, positioned entirely outside document-schema.js's own schema.
+// A formula's own glyph runs are shown through an embedded CID composite font via Identity-H 2-byte CIDs (see math-content-write.ts's own module comment) -- a fundamentally different content-stream shape from an ordinary LayoutText item's single-byte WinAnsi string, and one this package's own LayoutItem union (src/layout.ts) has no member for (LayoutFont only ever names one of the 14 standard PDF faces -- see document-schema.js's style.ts comment -- with no room for "this run uses an embedded, non-standard font resource" at all). A formula therefore cannot travel through LayoutDocument.pages[].items the way every other kind of content this writer draws does; WritePdfOptions.formulas is this module's own, local side channel for it instead, positioned entirely outside the LayoutDocument schema itself.
 const MATH_FONT_RESOURCE_NAME = 'MF';
 
 // The /Resources/Font key prefix for an embedded text face, deliberately distinct from both the standard-14 faces' own 'F' prefix and the math font's 'MF': all three share one /Font dict, so a collision would silently make one font's resource name resolve to another's object.

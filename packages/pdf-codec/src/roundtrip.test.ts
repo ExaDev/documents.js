@@ -1,7 +1,7 @@
 import { bytesToBase64 } from './util/base64';
 import { describe, expect, it } from 'vitest';
-import type { LayoutDocument, LayoutEllipse, LayoutImageAsset, LayoutItem, LayoutLine, LayoutPage, LayoutPath, LayoutRect } from 'document-schema.js';
-import { LAYOUT_FORMAT_VERSION, LayoutDocumentSchema } from 'document-schema.js';
+import type { LayoutDocument, LayoutEllipse, LayoutImageAsset, LayoutItem, LayoutLine, LayoutPage, LayoutPath, LayoutRect } from './layout';
+import { LAYOUT_FORMAT_VERSION, LayoutDocumentSchema } from './layout';
 import { encodePng } from './image/png-encode';
 import { readPdf } from './read';
 import { writePdf } from './write';

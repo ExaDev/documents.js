@@ -1,6 +1,5 @@
-import type { LayoutEllipse, LayoutImage, LayoutItem, LayoutLine, LayoutPath, LayoutRect, LayoutSubpath, LayoutText } from 'document-schema.js';
-import type { Color as LayoutColor } from 'document-schema.js';
-import type { LayoutFont, TextMeasurer, UnderlineMetrics } from 'document-schema.js';
+import type { Color as LayoutColor, LayoutFont, TextMeasurer, UnderlineMetrics } from 'document-schema.js';
+import type { LayoutEllipse, LayoutImage, LayoutItem, LayoutLine, LayoutPath, LayoutRect, LayoutSubpath, LayoutText } from './layout';
 import type { StandardFontName } from './afm-widths';
 import { ByteWriter } from './bytes/writer';
 import type { EmbeddedFace, EmbeddedFaceSubstitution, EmbeddedShow } from './embedded-font';
@@ -172,7 +171,7 @@ function formatPoint(x: number, y: number): string {
   return `${formatNumber(x)} ${formatNumber(y)}`;
 }
 
-// A LayoutLine's/LayoutPath's own stroke style (document-schema.js 2.1's `style` field). 'solid' and an absent field are the same thing: the PDF graphics state's own defaults, with nothing emitted for either.
+// A LayoutLine's/LayoutPath's own stroke style (the `style` field on the item schemas in src/layout.ts). 'solid' and an absent field are the same thing: the PDF graphics state's own defaults, with nothing emitted for either.
 type StrokeStyle = NonNullable<LayoutLine['style']>;
 
 // Dash-pattern lengths (ISO 32000-1 8.4.3.6, the 'd' operator) are expressed as multiples of the stroke's OWN width rather than as fixed point lengths, so a hairline rule and a thick one both read as recognisably dashed: a fixed [3 3] pattern under a 6pt stroke paints overlapping blocks that read as solid, and under a 0.25pt one paints dashes twelve times longer than they are thick.
@@ -385,7 +384,7 @@ function writeEllipse(writer: ByteWriter, item: LayoutEllipse): void {
   writer.writeAscii(`${paint}\n`);
 }
 
-// One subpath: m (moveto the subpath's own starting point), then l/c per segment, then h if the subpath is closed. No quadratic-to-cubic elevation and no SVG elliptical-arc endpoint-to-center parameterization exist anywhere in this module, deliberately: LayoutPathSegment's own discriminated union (document-schema.js's layout.ts) only ever has 'line'/'cubic' variants, because the sole real-world producer of a LayoutPath -- odf.js's own svg:d/draw:points parser (typed/shared/path.ts), verified against genuine LibreOffice output -- never emits a quadratic or an arc segment in the first place: ODF's own svg:d grammar recognises S/s, Q/q, T/t, A/a as command letters (so the token stream stays in sync) but that parser explicitly produces no segment for any of them, real LibreOffice output for rectangles/ellipses/freeform curves/basic custom-shape presets never exercises them, and ContentPathSegmentSchema itself only models 'line'/'cubic' regardless. There is nothing here to elevate or parameterize, and building that conversion code with no caller would be unused code kept "just in case".
+// One subpath: m (moveto the subpath's own starting point), then l/c per segment, then h if the subpath is closed. No quadratic-to-cubic elevation and no SVG elliptical-arc endpoint-to-center parameterization exist anywhere in this module, deliberately: LayoutPathSegment's own discriminated union (src/layout.ts) only ever has 'line'/'cubic' variants, because the sole real-world producer of a LayoutPath -- odf.js's own svg:d/draw:points parser (typed/shared/path.ts), verified against genuine LibreOffice output -- never emits a quadratic or an arc segment in the first place: ODF's own svg:d grammar recognises S/s, Q/q, T/t, A/a as command letters (so the token stream stays in sync) but that parser explicitly produces no segment for any of them, real LibreOffice output for rectangles/ellipses/freeform curves/basic custom-shape presets never exercises them, and ContentPathSegmentSchema itself only models 'line'/'cubic' regardless. There is nothing here to elevate or parameterize, and building that conversion code with no caller would be unused code kept "just in case".
 function writeSubpath(writer: ByteWriter, subpath: LayoutSubpath): void {
   writer.writeAscii(`${formatPoint(subpath.startXPt, subpath.startYPt)} m\n`);
   for (const segment of subpath.segments) {

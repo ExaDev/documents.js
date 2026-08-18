@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import { LayoutDocumentSchema } from 'document-schema.js';
 import { readPdf } from './read';
 import { writePdf } from './write';
+import { LayoutDocumentSchema } from './layout';
 
 // '%PDF-' -- the PDF header (ISO 32000-1 section 7.5.2). Per the spec it may be preceded by arbitrary bytes (some producers prepend a comment or BOM), so this checks for the signature within the first kilobyte rather than requiring it at offset 0. A standalone, independently-duplicated copy of documents.js's own src/model/bytes.ts PdfBytesSchema logic -- that file is co-located there alongside unrelated docx/pptx/odt schemas which must stay in documents.js, so this package owns its own narrow ~20-line copy of just the PDF-specific check rather than importing the whole thing.
 const PDF_HEADER = [0x25, 0x50, 0x44, 0x46, 0x2d];

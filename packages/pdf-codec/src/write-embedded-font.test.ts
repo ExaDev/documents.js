@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import type { LayoutDocument, LayoutFont, LayoutImageAsset } from 'document-schema.js';
-import { LAYOUT_FORMAT_VERSION } from 'document-schema.js';
+import type { LayoutFont } from 'document-schema.js';
+import type { LayoutDocument, LayoutImageAsset } from './layout';
+import { LAYOUT_FORMAT_VERSION } from './layout';
 import type { EmbeddedFace, EmbeddedFaceSubstitution } from './embedded-font';
 import { encodeForShowEmbedded, loadEmbeddedFace } from './embedded-font';
 import { createFontRegistry } from './font-registry';

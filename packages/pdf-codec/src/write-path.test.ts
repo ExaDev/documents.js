@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { LayoutPath, TextMeasurer } from 'document-schema.js';
+import type { TextMeasurer } from 'document-schema.js';
+import type { LayoutPath } from './layout';
 import type { ContentWriteContext } from './content-write';
 import { writeContentStream } from './content-write';
 

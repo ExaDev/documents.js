@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { LayoutEllipse, LayoutImage, LayoutLine, LayoutLink, LayoutRect, LayoutText, TextMeasurer } from 'document-schema.js';
+import type { TextMeasurer } from 'document-schema.js';
+import type { LayoutEllipse, LayoutImage, LayoutLine, LayoutLink, LayoutRect, LayoutText } from './layout';
 import type { ContentWriteContext } from './content-write';
 import { writeContentStream } from './content-write';
 import type { EmbeddedFace } from './embedded-font';

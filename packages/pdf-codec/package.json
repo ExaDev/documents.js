@@ -1,7 +1,7 @@
 {
   "name": "pdf-codec",
   "version": "2.2.36",
-  "description": "Hand-written, dependency-minimal PDF codec: parses arbitrary real-world PDFs and generates new ones, built on document-schema.js's LayoutDocument pivot and Zod 4 codecs.",
+  "description": "Hand-written, dependency-minimal PDF codec: parses arbitrary real-world PDFs and generates new ones, built on its own codec-owned LayoutDocument item model and Zod 4 codecs.",
   "type": "module",
   "repository": {
     "type": "git",
@@ -81,7 +81,7 @@
   "packageManager": "pnpm@11.6.0",
   "dependencies": {
     "byte-codec": "^1.1.8",
-    "document-schema.js": "^3.3.0",
+    "document-schema.js": "^4.0.0",
     "fflate": "^0.8.3",
     "zod": "^4.4.3"
   },
