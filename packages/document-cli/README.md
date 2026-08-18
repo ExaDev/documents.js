@@ -132,7 +132,7 @@ document-cli odb-query sales.odb --query HighValueSales --json
 document-cli odb-render-report sales.odb SalesByRegion.pdf --report SalesByRegion
 ```
 
-**`pdf-inspect <input>`** — reports a PDF's page count, per-page size and item-kind histogram, document metadata, and embedded image formats, without converting it to anything. `--full` dumps the entire parsed `LayoutDocument` as JSON instead of the summary:
+**`pdf-inspect <input>`** — reports a PDF's page count, per-page size and item-kind histogram, document metadata, and embedded image formats, without converting it to anything. `--full` dumps the entire parsed `LayoutDocument` as plain JSON (no `$schema` stamp — that family moved to pdf-codec at document-schema.js 4.0.0 and lost its schema-stamped envelope) instead of the summary:
 
 ```sh
 document-cli pdf-inspect report.pdf
