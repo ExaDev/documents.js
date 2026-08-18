@@ -88,7 +88,8 @@
   "packageManager": "pnpm@11.6.0",
   "dependencies": {
     "commander": "^15.0.0",
-    "documents.js": "^2.3.3",
+    "document-outline.js": "file:/Users/joe/Developer/ExaDev/Internal/documents.js/.worktrees/outline-pinned",
+    "documents.js": "^3.0.1",
     "ink": "^7.1.1",
     "ink-text-input": "^6.0.0",
     "react": "^19.2.8"
@@ -111,7 +112,7 @@
     "ink-testing-library": "^4.0.0",
     "lint-staged": "^17.3.0",
     "odf.js": "^4.0.0",
-    "pdf-codec": "^2.2.20",
+    "pdf-codec": "^3.0.0",
     "publint": "^0.3.22",
     "semantic-release": "^25.0.8",
     "tsdown": "^0.22.14",

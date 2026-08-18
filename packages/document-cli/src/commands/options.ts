@@ -22,7 +22,7 @@ export function addVerboseOption(command: Command): Command {
 }
 
 export function addDumpPackageOption(command: Command): Command {
-  return command.option('--dump-package <file>', 'write the intermediate DocumentPackage (content with its per-node layout frames + page sizes) this conversion built to a JSON file');
+  return command.option('--dump-package <file>', 'write the intermediate DocumentPackage (the tree form: container-grouped content carrying per-node rendered frames, plus page sizes) this conversion built to a JSON file');
 }
 
 // Accumulates repeated --font-file <path> flags into a list, in the order given -- which is also the order documents.js's own FontRegistry resolves them in, so an earlier --font-file wins a family+weight+slope tie against a later one.
@@ -42,7 +42,7 @@ export function addFontOptions(command: Command): Command {
   return command;
 }
 
-// The shared flag set for a command that reads one file, converts or extracts from it, and writes one file: output destination, a run timeout, and the three output-shaping flags every such command supports. --dump-package is deliberately not included here -- only the PDF-pivot conversions ever populate ConversionResult.package, so it is added separately by callers that actually go through buildConversionAction.
+// The shared flag set for a command that reads one file, converts or extracts from it, and writes one file: output destination, a run timeout, and the three output-shaping flags every such command supports. --dump-package is deliberately not included here -- it exists only where a DocumentConverter port conversion runs and populates ConversionResult.package, so it is added separately by the conversion commands themselves (commands/convert.ts), not the direct-call commands (odm/odb/metadata/...) that bypass the port entirely.
 export function addConversionFlags(command: Command): Command {
   addOutOption(command);
   addTimeoutOption(command);

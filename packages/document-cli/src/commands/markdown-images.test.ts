@@ -10,16 +10,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-// Walks the dumped DocumentPackage JSON for any image block -- a narrowing guard rather than a typed parse, so this test never needs a type assertion over the raw JSON shape.
-function dumpHasImageBlock(pkg: unknown): boolean {
-  if (!isRecord(pkg) || !isRecord(pkg.content)) {
+// Walks the dumped DocumentPackage's tree for any image block -- a narrowing guard rather than a typed parse, so this test never needs a type assertion over the raw JSON shape. The tree's own rule does the work: every node is either a group ({ node, children }) or a bare leaf carrying kind, so recursing over children from the package root reaches every block wherever the grouping nested it.
+function dumpHasImageBlock(node: unknown): boolean {
+  if (!isRecord(node)) {
     return false;
   }
-  const sections = pkg.content.sections;
-  if (!Array.isArray(sections)) {
+  if (node.kind === 'image') {
+    return true;
+  }
+  const children = node.children;
+  if (!Array.isArray(children)) {
     return false;
   }
-  return sections.some((section) => isRecord(section) && Array.isArray(section.blocks) && section.blocks.some((block) => isRecord(block) && block.kind === 'image'));
+  return children.some(dumpHasImageBlock);
 }
 
 // A CLI `convert notes.md` resolves a relative-path image against notes.md's own directory and embeds it, rather than degrading it to alt text -- the end-to-end proof that the filesystem MarkdownImageResolver wired into buildConversionAction (commands/shared.ts) reaches documents.js's port and through it markdown-codec's resolver.

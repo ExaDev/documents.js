@@ -70,10 +70,11 @@ describe('from-package', () => {
     const dumpedText = await readFile(packagePath, 'utf-8');
     expect(dumpedText).toContain('"$schema"');
     expect(dumpedText).toContain('document-package.schema.json');
-    // The dump carries the formatVersion 2 fused shape -- content nodes with their own rendered frames plus page sizes -- and never the old separate layout half.
-    expect(dumpedText).toContain('"formatVersion": 2');
+    // The dump carries the tree form -- container groups under children, content nodes with their own rendered frames, page sizes at the root -- and neither the retired formatVersion integer nor the old separate layout half.
+    expect(dumpedText).toContain('"children"');
     expect(dumpedText).toContain('"pages"');
     expect(dumpedText).toContain('"frames"');
+    expect(dumpedText).not.toContain('"formatVersion"');
     expect(dumpedText).not.toContain('"layout"');
 
     const fromPackageRun = await runCli(['from-package', packagePath, rebuiltPath]);
@@ -183,27 +184,65 @@ describe('from-package', () => {
     expect(stderr).toContain('this DocumentPackage has no pages');
   });
 
-  it("rejects an old formatVersion 1 dump (a documents.js 1.x --dump-package file) with an error naming the version change", async () => {
-    const oldDumpPath = join(workspace, 'old-shape.package.json');
-    // A user-provided old dump: the exact shape documents.js 1.x wrote via --dump-package -- $schema-tagged, formatVersion 1, content plus a separate layout half. Hand-built here rather than generated, since nothing in this tree can still produce that shape; the $schema URI is version-agnostic by design (documentSchemaKindOf matches the file stem alone), so an old dump still identifies as a DocumentPackage and would otherwise fail DocumentPackageSchema.parse with a raw ZodError wall naming neither the version change nor the remedy.
+  it('rejects a pre-4.0.0 flat-shape dump (a documents.js 2.x --dump-package file) with an error naming the tree change and the remedy', async () => {
+    const oldDumpPath = join(workspace, 'old-flat.package.json');
+    // A user-provided old dump: the exact shape documents.js 2.x wrote via --dump-package -- $schema-tagged by a document-schema.js 3.x release, the flat { formatVersion, content, pages } envelope. Hand-built here rather than generated, since nothing in this tree can still produce that shape; documentFromJson's version gate refuses it on the URI's major alone (a dump only parses under the major that wrote it), so the body's own fields never even reach schema validation.
     const oldDump = {
-      $schema: 'https://cdn.jsdelivr.net/npm/document-schema.js@1.9.9/schemas/document-package.schema.json',
-      formatVersion: 1,
+      $schema: 'https://cdn.jsdelivr.net/npm/document-schema.js@3.9.9/schemas/document-package.schema.json',
+      formatVersion: 2,
       content: {
         kind: 'wordprocessing',
         formatVersion: 2,
         metadata: {},
         sections: [{ blocks: [{ kind: 'paragraph', styleId: 'Heading1', runs: [{ text: PARAGRAPH_TEXT }] }] }],
       },
-      layout: { formatVersion: 1, metadata: {}, images: {}, pages: [{ widthPt: 595, heightPt: 842, items: [] }] },
+      pages: [{ widthPt: 595, heightPt: 842 }],
     };
     await writeFile(oldDumpPath, JSON.stringify(oldDump, undefined, 2));
 
     const { exitCode, stderr } = await runCli(['from-package', oldDumpPath, join(workspace, 'never-written5.docx')]);
 
     expect(exitCode).not.toBe(EXIT_SUCCESS);
-    expect(stderr).toContain('formatVersion 1');
-    expect(stderr).toContain('formatVersion 2');
+    // The readable surfacing of SchemaVersionMismatchError: the pinned release, the installed major, the flat-to-tree change, and the CLI's own remedy.
+    expect(stderr).toContain('document-schema.js@3.9.9');
+    expect(stderr).toContain('tree-form DocumentPackage');
     expect(stderr).toContain('--dump-package');
+  });
+
+  it('rejects a formatVersion 1 dump (a documents.js 1.x --dump-package file) through the same version gate, naming the pinned release', async () => {
+    const v1DumpPath = join(workspace, 'old-v1.package.json');
+    // The one wrong-version case a real user hits after upgrading, kept as its own test because its dump is the oldest shape out there: formatVersion 1, content plus a separate layout half, tagged by a document-schema.js 1.x release. The same version gate refuses it -- the CLI-level intercept this command used to carry existed only because the old dispatch had no gate at all.
+    const v1Dump = {
+      $schema: 'https://cdn.jsdelivr.net/npm/document-schema.js@1.9.9/schemas/document-package.schema.json',
+      formatVersion: 1,
+      content: { kind: 'wordprocessing', formatVersion: 2, metadata: {}, sections: [{ blocks: [{ kind: 'paragraph', runs: [{ text: PARAGRAPH_TEXT }] }] }] },
+      layout: { formatVersion: 1, metadata: {}, images: {}, pages: [{ widthPt: 595, heightPt: 842, items: [] }] },
+    };
+    await writeFile(v1DumpPath, JSON.stringify(v1Dump, undefined, 2));
+
+    const { exitCode, stderr } = await runCli(['from-package', v1DumpPath, join(workspace, 'never-written6.docx')]);
+
+    expect(exitCode).not.toBe(EXIT_SUCCESS);
+    expect(stderr).toContain('document-schema.js@1.9.9');
+    expect(stderr).toContain('--dump-package');
+  });
+
+  it('rejects a layout-document dump (an old pdf-inspect --full output) with the demotion pointer', async () => {
+    const layoutDumpPath = join(workspace, 'old-layout.dump.json');
+    // A document-schema.js 3.x layoutDocumentWithSchema artefact: documentFromJson answers its URI with the LayoutSchemaDemotedError tombstone (the kind moved to pdf-codec), which this command surfaces as its own readable line rather than an unrecognised-schema wall.
+    const layoutDump = {
+      $schema: 'https://cdn.jsdelivr.net/npm/document-schema.js@3.9.9/schemas/layout-document.schema.json',
+      formatVersion: 1,
+      metadata: {},
+      images: {},
+      pages: [],
+    };
+    await writeFile(layoutDumpPath, JSON.stringify(layoutDump, undefined, 2));
+
+    const { exitCode, stderr } = await runCli(['from-package', layoutDumpPath, join(workspace, 'never-written7.docx')]);
+
+    expect(exitCode).not.toBe(EXIT_SUCCESS);
+    expect(stderr).toContain('LayoutDocument dump');
+    expect(stderr).toContain('pdf-codec');
   });
 });

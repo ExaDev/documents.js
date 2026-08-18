@@ -1,5 +1,5 @@
 import { type Command } from 'commander';
-import { type LayoutImageAsset, type LayoutItem, layoutDocumentWithSchema, readPdf } from 'documents.js';
+import { type LayoutImageAsset, type LayoutItem, readPdf } from 'documents.js';
 import { createRuntimeSignal } from '../runtime/abort';
 import { createDiagnosticReporter, pdfDiagnosticToDiagnostic } from '../runtime/diagnostics';
 import { mapErrorToExit, EXIT_SUCCESS } from '../runtime/exit-codes';
@@ -43,8 +43,8 @@ async function runPdfInspect(input: string, options: PdfInspectCliOptions): Prom
     });
 
     if (options.full) {
-      // Tagged with its own $schema before serialising, not written raw -- documentFromJson (the read side a caller reading this dump back in would use) identifies a value's kind purely from that field, so an untagged dump could not be told apart from a bare, unrelated JSON object, let alone round-tripped back into a LayoutDocument. Matches buildConversionAction's own --dump-package convention (commands/shared.ts).
-      process.stdout.write(`${JSON.stringify(layoutDocumentWithSchema(layout), undefined, 2)}\n`);
+      // Serialised as the plain pdf-codec value, with no $schema stamp -- LayoutDocument lost its schema-stamped JSON envelope when the family moved to pdf-codec at document-schema.js 4.0.0 (the demotion), so there is no documentFromJson kind for it any more and nothing to tag it with. A reader that wants the value back parses this JSON as a LayoutDocument directly (it is plain data).
+      process.stdout.write(`${JSON.stringify(layout, undefined, 2)}\n`);
       return EXIT_SUCCESS;
     }
 

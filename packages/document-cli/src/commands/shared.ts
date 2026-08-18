@@ -100,11 +100,11 @@ export function buildConversionAction(
       }
 
       if (options.dumpPackage !== undefined) {
-        // Checked generically by presence, never by which (source, target) pair this action was built for -- the six PDF-bypassing bridges and odm/odb never populate `package` at all, and that is exactly the condition this branch already detects.
+        // Checked generically by presence, never by which (source, target) pair this action was built for -- the port declares `package` optional, so this branch guards the declared contract rather than any particular pair (in practice the local converter reports one for every conversion, bridges included, content-only with no pages where no layout engine ran).
         if (result.package === undefined) {
           process.stderr.write(`[${command}] this conversion does not produce an intermediate DocumentPackage\n`);
         } else {
-          // Tagged with its own $schema before serialising, not written raw -- documentFromJson (the read side `from-package` uses to read this file back in) identifies a value's kind purely from that field, so an untagged dump would be unreadable by its own round trip.
+          // Tagged with its own $schema before serialising, not written raw -- documentFromJson (the read side `from-package` uses to read this file back in) identifies a value's kind and version purely from that URI, so an untagged dump would be unreadable by its own round trip.
           await writeFile(options.dumpPackage, JSON.stringify(documentPackageWithSchema(result.package), undefined, 2));
         }
       }
