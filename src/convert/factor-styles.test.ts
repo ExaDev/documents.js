@@ -170,6 +170,20 @@ describe('factorStyles minting', () => {
     expect(twice.styles).toEqual(once.styles);
   });
 
+  it('carries a package\'s definitions table through re-factoring untouched', () => {
+    const doc = wordprocessingDoc([
+      paragraph([run('one')], { indentLeftPt: 20 }),
+      paragraph([run('two')], { indentLeftPt: 20 }),
+    ]);
+    const minted = assemblePackage(doc);
+    // definitions is package-root caller data the flat ContentDocument cannot spell, so re-factoring must hand it back verbatim -- dropping it would silently lose the table on every factorStyles round trip. Minting still runs: the indent tuple mints s1 alongside the carried definitions.
+    const withDefinitions: DocumentPackage = { ...minted, definitions: { tenantNote: { kind: 'tenant-note' } } };
+    const refactored = factorStyles(withDefinitions);
+    expect(refactored.definitions).toEqual({ tenantNote: { kind: 'tenant-note' } });
+    expect(refactored.styles?.s1).toEqual({ paragraph: { indentLeftPt: 20 } });
+    expect(DocumentPackageSchema.safeParse(refactored).success).toBe(true);
+  });
+
   it('keeps flat output free of refs and effective-equal to the unfactored form, combining halves on one wrapper', () => {
     const doc = wordprocessingDoc([
       paragraph([run('one', { bold: true, sizePt: 14 })], { indentLeftPt: 20, alignment: 'left' }),
