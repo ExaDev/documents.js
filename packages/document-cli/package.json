@@ -88,7 +88,6 @@
   "packageManager": "pnpm@11.6.0",
   "dependencies": {
     "commander": "^15.0.0",
-    "document-outline.js": "file:/Users/joe/Developer/ExaDev/Internal/documents.js/.worktrees/outline-pinned",
     "documents.js": "^3.0.1",
     "ink": "^7.1.1",
     "ink-text-input": "^6.0.0",
