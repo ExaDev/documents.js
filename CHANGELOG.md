@@ -1,3 +1,11 @@
+## [3.0.4](https://github.com/ExaDev/documents.js/compare/v3.0.3...v3.0.4) (2026-08-18)
+
+
+### Bug Fixes
+
+* factor styles through nested construct-group extents ([2faff12](https://github.com/ExaDev/documents.js/commit/2faff122ecfe367c7f8470992d935874c136de47))
+* throw loudly when flatten meets a construct group with no flat carrier ([72bd4ec](https://github.com/ExaDev/documents.js/commit/72bd4ec506ccf662ce05e5f1560e90cd4a08fe9a)), closes [#22](https://github.com/ExaDev/documents.js/issues/22)
+
 ## [3.0.3](https://github.com/ExaDev/documents.js/compare/v3.0.2...v3.0.3) (2026-08-18)
 
 ## [3.0.2](https://github.com/ExaDev/documents.js/compare/v3.0.1...v3.0.2) (2026-08-18)
