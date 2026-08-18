@@ -182,6 +182,13 @@ describe('DocumentPackageSchema round trips (tree form)', () => {
     expect(DocumentPackageSchema.safeParse(withLeafStyleRef).success).toBe(false);
   });
 
+  it('pins the formula package to exactly one child -- decompose emits one ContentFormula and flatten requires one', () => {
+    const empty = { kind: 'formula', metadata: {}, children: [] };
+    expect(DocumentPackageSchema.safeParse(empty).success).toBe(false);
+    const two = { kind: 'formula', metadata: {}, children: [{ mathml: [] }, { mathml: [] }] };
+    expect(DocumentPackageSchema.safeParse(two).success).toBe(false);
+  });
+
   it('keeps the document-level symbolTable on the package root, spliced from the same declaration the content arms use', () => {
     const original = wordprocessingPackage();
     const withSymbols = { ...original, symbolTable: { symbols: [], units: [] } };

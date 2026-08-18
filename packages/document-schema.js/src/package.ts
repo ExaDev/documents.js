@@ -44,7 +44,8 @@ export const DocumentPackageSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('formula'),
     ...packageEnvelopeFields,
-    children: z.array(ContentFormulaSchema),
+    // Exactly one: decompose emits a single ContentFormula and flatten requires exactly one (document-outline.js's phase-1 reference throws on any other count), so the schema states the cardinality the bijection needs rather than admitting trees that cannot round-trip.
+    children: z.array(ContentFormulaSchema).length(1),
   }),
 ]);
 export type DocumentPackage = z.infer<typeof DocumentPackageSchema>;
