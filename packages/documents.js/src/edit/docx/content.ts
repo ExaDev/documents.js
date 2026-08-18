@@ -32,11 +32,11 @@ export function buildDocxPackage(content: ContentDocument, options?: BuildDocxPa
   const metadata = resolveMetadataTimestamps(content.metadata, clock);
   const pkg = createEmptyDocxPackage({ metadata });
   // Pre-pass: collect every distinct list numId + its levels across all blocks (recursing into table cells), then synthesise a word/numbering.xml so the w:numPr/w:numId references DocxParagraph.list writes actually resolve in Word. Without this, numIds dangle and Word renders no bullets.
-  const numIdLevels = new Map<string, Set<number>>();
+  const numIdLevels = new Map<string | undefined, Set<number>>();
   for (const section of content.sections) {
     collectListNumIds(section.blocks, numIdLevels);
   }
-  const remap = new Map<string, string>();
+  const remap = new Map<string | undefined, string>();
   if (numIdLevels.size > 0) {
     const entries: NumberingEntry[] = [];
     let abstractNumId = 0;
@@ -73,7 +73,8 @@ function isMergeableImageParagraph(block: ContentBlock): block is ContentParagra
 }
 
 // Walks blocks recursively (paragraphs at any level, including inside table cells), collecting every distinct list numId and the set of levels each uses -- the input to the numbering.xml synthesis pre-pass above.
-function collectListNumIds(blocks: readonly ContentBlock[], out: Map<string, Set<number>>): void {
+// The pre-pass map is keyed by a membership's numId OR its absence (undefined): numId is optional since schema 4.0.0 -- an OOXML drawing paragraph or a de-numIded bridge product carries only a level -- and every distinct key, present or absent, needs its own numbering definition for the numIds DocxParagraph.list writes to resolve. All memberships sharing the absent key land on one shared w:num, which is exactly right for a bullet-template table: the only thing a numbering definition distinguishes is the marker template, and every level of every entry this synthesiser emits is the same bullet anyway.
+function collectListNumIds(blocks: readonly ContentBlock[], out: Map<string | undefined, Set<number>>): void {
   for (const block of blocks) {
     if (block.kind === 'paragraph' && block.list !== undefined) {
       let levels = out.get(block.list.numId);
@@ -93,7 +94,7 @@ function collectListNumIds(blocks: readonly ContentBlock[], out: Map<string, Set
 }
 
 // Remaps source ContentListMembership numIds through the numbering pre-pass's source-to-docx integer map, producing a new block list where every list paragraph's numId is the one the synthesised numbering.xml actually defines. Returns the input unchanged when the map is empty (the no-list case), avoiding a needless shallow clone.
-function remapListNumIds(blocks: readonly ContentBlock[], numIdMap: ReadonlyMap<string, string>): ContentBlock[] {
+function remapListNumIds(blocks: readonly ContentBlock[], numIdMap: ReadonlyMap<string | undefined, string>): ContentBlock[] {
   if (numIdMap.size === 0) {
     return [...blocks];
   }
