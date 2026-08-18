@@ -35,7 +35,7 @@ export interface ConversionResult {
   readonly document: DocumentPayload;
   // Diagnostics are for expected, scoped-out-of-v1 degradations (a font substitution, an unsupported PDF filter) -- anything that would actually corrupt output throws instead of becoming a silently-swallowed diagnostic.
   readonly diagnostics: readonly Diagnostic[];
-  // The intermediate content+layout pivot the underlying conversion function built while producing `document`, when that function supports building one (see convert.ts's own onDocument option) and the DocumentConverter implementation chooses to wire it through. Not every implementation is obligated to populate this -- a hypothetical remote adapter might not want to serialize a full DocumentPackage over the wire by default.
+  // The intermediate tree-form DocumentPackage (structure, layout, and content fused in one tree, document-schema.js 4.0.0) the underlying conversion function built while producing `document`, when that function supports building one (see convert.ts's own onDocument option) and the DocumentConverter implementation chooses to wire it through. Not every implementation is obligated to populate this -- a hypothetical remote adapter might not want to serialize a full DocumentPackage over the wire by default.
   readonly package?: DocumentPackage;
 }
 
