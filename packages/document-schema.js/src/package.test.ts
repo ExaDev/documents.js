@@ -161,6 +161,27 @@ describe('DocumentPackageSchema round trips (tree form)', () => {
     expect(DocumentPackageSchema.safeParse(slideWithStrayParagraph).success).toBe(false);
   });
 
+  it('rejects an unknown key on a group wrapper and a style ref on a bare leaf -- the runtime guard matches the published JSON Schema fragments key for key', () => {
+    const withJunkWrapperKey = {
+      kind: 'wordprocessing',
+      metadata: {},
+      children: [{ node: { kind: 'section', pageSize: PAGE, margins: MARGINS }, junkKey: 'x', children: [] }],
+    };
+    expect(DocumentPackageSchema.safeParse(withJunkWrapperKey).success).toBe(false);
+
+    const withLeafStyleRef = {
+      kind: 'wordprocessing',
+      metadata: {},
+      children: [
+        {
+          node: { kind: 'section', pageSize: PAGE, margins: MARGINS },
+          children: [{ kind: 'paragraph', runs: [{ text: 'Body.' }], style: 's1' }],
+        },
+      ],
+    };
+    expect(DocumentPackageSchema.safeParse(withLeafStyleRef).success).toBe(false);
+  });
+
   it('keeps the document-level symbolTable on the package root, spliced from the same declaration the content arms use', () => {
     const original = wordprocessingPackage();
     const withSymbols = { ...original, symbolTable: { symbols: [], units: [] } };

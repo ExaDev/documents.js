@@ -283,6 +283,42 @@ describe('the package tree rejects near-misses', () => {
     expect(SectionGroupSchema.safeParse(broken).success).toBe(false);
   });
 
+  it("rejects a group wrapper carrying a key outside { node, style, children }, exactly as the published fragments' additionalProperties: false does", () => {
+    const broken = {
+      node: { kind: 'section', pageSize: PAGE, margins: MARGINS },
+      junkKey: 'x',
+      children: [],
+    };
+    expect(SectionGroupSchema.safeParse(broken).success).toBe(false);
+  });
+
+  it('rejects a style ref on a bare leaf at a child position, in every leaf family -- refs sit on group wrappers only, so a leaf-position ref fails loudly instead of parsing inert', () => {
+    const section = sectionGroup();
+    const withLeafRef = {
+      ...section,
+      children: [...section.children, { kind: 'paragraph', runs: [run('leaf')], style: 's1' }],
+    };
+    expect(SectionGroupSchema.safeParse(withLeafRef).success).toBe(false);
+
+    const sheet = sheetGroup();
+    const sheetImage = sheet.children[0];
+    if (sheetImage === undefined || !('format' in sheetImage)) throw new Error('fixture shape');
+    const sheetWithLeafRef = { ...sheet, children: [{ ...sheetImage, style: 's1' }] };
+    expect(SheetGroupSchema.safeParse(sheetWithLeafRef).success).toBe(false);
+
+    const drawPage = drawPageGroup();
+    const vectorWithRef = {
+      kind: 'line',
+      from: { xPt: 0, yPt: 0 },
+      to: { xPt: 10, yPt: 10 },
+      stroke: { color: { r: 0, g: 0, b: 0 }, widthPt: 1 },
+      style: 's1',
+    };
+    expect(DrawPageGroupSchema.safeParse({ ...drawPage, children: [...drawPage.children, vectorWithRef] }).success).toBe(
+      false,
+    );
+  });
+
   it('rejects a malformed leaf payload at a child position (an image whose width is not a number)', () => {
     const broken = {
       node: { kind: 'section', pageSize: PAGE, margins: MARGINS },

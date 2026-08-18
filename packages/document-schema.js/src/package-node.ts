@@ -133,31 +133,38 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-// The shared wrapper shape every group guard checks: a record whose `node` is itself a record, whose `children` is an array of values each satisfying that group kind's own child predicate, and whose optional `style` ref is a string when present. Per-kind child predicates (not one generic isPackageNode) are what make these guards the untrusted-input boundary: a tree that hangs a paragraph leaf directly off a slide group, or a section group off a sheet, is structurally illegal and rejects here, where the reference implementation's own guard checks children generically (it walks trees it constructed itself; this schema's job is to validate trees it did not).
+// The shared wrapper shape every group guard checks: a record whose `node` is itself a record, whose `children` is an array of values each satisfying that group kind's own child predicate, whose optional `style` ref is a string when present, and which carries no other keys -- every group fragment in content-json-schema-defs.ts declares additionalProperties: false over exactly { node, style, children }, so a wrapper with any fourth key must fail here too, or documentFromJson would accept a value the published .schema.json rejects. Per-kind child predicates (not one generic isPackageNode) are what make these guards the untrusted-input boundary: a tree that hangs a paragraph leaf directly off a slide group, or a section group off a sheet, is structurally illegal and rejects here, where the reference implementation's own guard checks children generically (it walks trees it constructed itself; this schema's job is to validate trees it did not).
 function isGroupWrapper(value: Record<string, unknown>, isChild: (child: unknown) => boolean): boolean {
   if (!isRecord(value.node)) return false;
   if (value.style !== undefined && typeof value.style !== 'string') return false;
+  if (!Object.keys(value).every((key) => key === 'node' || key === 'style' || key === 'children')) return false;
   return Array.isArray(value.children) && value.children.every(isChild);
 }
 
+// The leaf arm of every child predicate: a value carrying a top-level `style` key is rejected before the content schema ever sees it. A style ref is legal only on a group wrapper (the resolution chain, src/definitions.ts, walks group ancestors and never leaf payloads), and the content schemas deliberately accept-and-ignore unknown keys -- they are the shared flat-model schemas, and tightening them to strict would change flat ContentDocument parsing far beyond the package tree -- so without this check a leaf-position ref would parse, sit inert through resolution, and still be rejected by the published JSON Schema leaf fragments (additionalProperties: false over exactly the payload's own fields): a tree documentFromJson accepts that the CDN-published .schema.json forbids. Rejecting the key here keeps the runtime guard and the published face aligned at the one boundary this module owns.
+function isLeafChild(schema: z.ZodType, value: unknown): boolean {
+  if (isRecord(value) && 'style' in value) return false;
+  return schema.safeParse(value).success;
+}
+
 function isSectionChild(value: unknown): value is SectionChild {
-  return isHeadingGroupNode(value) || isListGroupNode(value) || ContentBlockSchema.safeParse(value).success;
+  return isHeadingGroupNode(value) || isListGroupNode(value) || isLeafChild(ContentBlockSchema, value);
 }
 
 function isShapeChild(value: unknown): value is ShapeChild {
-  return isListGroupNode(value) || ContentBlockSchema.safeParse(value).success;
+  return isListGroupNode(value) || isLeafChild(ContentBlockSchema, value);
 }
 
 function isListChild(value: unknown): value is ListChild {
-  return isListGroupNode(value) || ContentBlockSchema.safeParse(value).success;
+  return isListGroupNode(value) || isLeafChild(ContentBlockSchema, value);
 }
 
 function isSheetChild(value: unknown): value is SheetChild {
-  return ContentSheetImageSchema.safeParse(value).success || ContentEmbeddedObjectSchema.safeParse(value).success;
+  return isLeafChild(ContentSheetImageSchema, value) || isLeafChild(ContentEmbeddedObjectSchema, value);
 }
 
 function isDrawPageChild(value: unknown): value is DrawPageChild {
-  return isShapeGroupNode(value) || ContentVectorSchema.safeParse(value).success;
+  return isShapeGroupNode(value) || isLeafChild(ContentVectorSchema, value);
 }
 
 export function isSectionGroupNode(value: unknown): value is SectionGroupNode {
