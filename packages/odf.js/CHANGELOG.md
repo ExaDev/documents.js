@@ -1,3 +1,14 @@
+# [4.0.0](https://github.com/ExaDev/odf.js/compare/v3.1.0...v4.0.0) (2026-08-18)
+
+
+* feat!: stop stamping formatVersion on ContentDocument for schema 4.0.0 ([282e275](https://github.com/ExaDev/odf.js/commit/282e27541c035998f655d2de98e741f0979d0a78))
+
+
+### BREAKING CHANGES
+
+* every ContentDocument odf.js produces now omits
+formatVersion, and the package requires document-schema.js ^4.0.0.
+
 # [3.1.0](https://github.com/ExaDev/odf.js/compare/v3.0.2...v3.1.0) (2026-08-17)
 
 
