@@ -51,7 +51,7 @@ graph TD
 
 ## Status
 
-The scanner, block parser, and inline parser are complete hand-written implementations of CommonMark 0.31.2's two-phase algorithm plus GFM's table/strikethrough/autolink/task-list-item extensions. `readMarkdown`/`writeMarkdown`/`markdownCodec` are wired and real. Conformance suites measure the full public surface (`readMarkdown` → `writeMarkdown` → reparse → render to HTML) against the vendored CommonMark/GFM corpora — see [Fidelity](#fidelity) for why the rate is below 100% (dominated by what `ContentDocument` can represent, not parsing gaps).
+The scanner, block parser, and inline parser are complete hand-written implementations of CommonMark 0.31.2's two-phase algorithm plus GFM's table/strikethrough/autolink/task-list-item extensions and GitHub's footnotes (see [Footnotes](#footnotes)). `readMarkdown`/`writeMarkdown`/`markdownCodec` are wired and real. Conformance suites measure the full public surface (`readMarkdown` → `writeMarkdown` → reparse → render to HTML) against the vendored CommonMark/GFM corpora — see [Fidelity](#fidelity) for why the rate is below 100% (dominated by what `ContentDocument` can represent, not parsing gaps).
 
 ## Getting started
 
@@ -80,6 +80,7 @@ import { readMarkdown, writeMarkdown } from 'markdown-codec';
 
 const { document, diagnostics } = readMarkdown('# Title\n\nSome **bold** text with a [link](https://example.com).', {
   frontMatter: true, // parse a leading YAML front matter block into ContentDocument.metadata
+  footnotes: true, // recognise [^label] markers and [^label]: definitions (default; see Footnotes)
   images: (destination) => undefined, // a synchronous MarkdownImageResolver port for non-data: URI images
 });
 
@@ -112,8 +113,8 @@ Modelled on `pdf-codec`'s own layering, aimed at CommonMark+GFM instead of PDF:
 - **`src/ast/`** — markdown AST node types (document/block/inline union), Zod-first.
 - **`src/options/`** / **`src/defaults/`** — read/write options (GFM toggles, sink, `AbortSignal`, write-side style) and defaults.
 - **`src/scan/`** — CommonMark line/character scanner, plus `entity-table.ts` (generated from `assets/html-entities/entities.json`).
-- **`src/block/`** — CommonMark block-structure algorithm (open-block stack, continuation matching): paragraphs, headings, code blocks, block quotes, lists (incl. GFM task-list-item), thematic breaks, link references, GFM tables.
-- **`src/inline/`** — emphasis, code spans, links, autolinks, raw HTML, GFM strikethrough, line breaks.
+- **`src/block/`** — CommonMark block-structure algorithm (open-block stack, continuation matching): paragraphs, headings, code blocks, block quotes, lists (incl. GFM task-list-item), thematic breaks, link references, footnote definitions, GFM tables.
+- **`src/inline/`** — emphasis, code spans, links, autolinks, raw HTML, GFM strikethrough, footnote references, line breaks. `link.ts` and `footnote.ts` hold the label grammars the block phase shares.
 - **`src/html/`** — raw HTML recognition (bounded rules, not a general parser) plus `render.ts` (conformance oracle; internal only).
 - **`src/image/`** — PNG/JPEG dimension reader and base64 codec, shared by `src/lower/` and `src/emit/`.
 - **`src/shared/`** — string-shape conventions `src/lower`/`src/emit` agree on (`style-constants.ts`, `list-id.ts`'s opaque `numId`). Re-exported so `documents.js`'s `MarkdownEditor` reuses the identical grammar.
@@ -173,6 +174,23 @@ Every construct `src/lower`/`src/emit` cannot represent losslessly is a document
 - **`md/paragraph-indent-dropped`** — `indentLeftPt` without a recognised styleId; indent dropped, paragraph renders.
 - **`md/list-numid-fallback`** — a foreign or absent `numId` (depth-only `ContentListMembership`) falls back to a plain bullet list.
 - **`md/table-cell-formatting-dropped`** / **`md/table-cell-multi-paragraph-joined`** — GFM cells have no rich-formatting or multi-paragraph representation.
+- **`md/duplicate-footnote-definition`** — two definitions share a label; every reference resolves to the first, both are kept as written.
+- **`md/footnote-reference-preserved-as-text`** — a reference site is a marked run, not an `anchor` construct; see [Footnotes](#footnotes).
+- **`md/footnote-body-heading-flattened`** — a heading inside a definition body is carried as literal ATX text, since a construct extent may not open or close a heading scope.
+- **`md/construct-unrepresented`** — a construct kind markdown has no syntax for renders transparently: its extent still appears, the construct itself does not.
+
+## Footnotes
+
+GitHub's footnote extension (`[^label]` markers, `[^label]: body` definitions) is on by default, alongside the four GFM toggles — switch it off with `footnotes: false`. Neither CommonMark nor the GFM spec document defines footnotes, so both spellings are ordinary text with it off.
+
+The two halves of a footnote map onto **two different mechanisms**, and that split is structural rather than a choice:
+
+- **A definition becomes an `anchor` construct.** `readMarkdown` emits document-schema.js 4.2.0's construct boundary markers — a `constructStart` carrying `{ kind: 'anchor', anchorType: 'footnote', name }`, the definition's own lowered body blocks, and a `constructEnd`. The body rides the construct's extent rather than `AnchorDescriptor.definition`, which names a key in a package-level definitions table a flat `ContentDocument` has no root to carry; a body is genuinely block content (several paragraphs, a code block, a list) that a string field could not have held either way. A bodyless `[^1]:` lowers to the point anchor the same descriptor describes: a pair with nothing between it.
+- **A reference site stays a marked run.** A construct's extent is block-scoped by document-schema.js's own definition, and a reference sits between two runs inside a paragraph, so no block-level boundary marker can bracket it without splitting the paragraph in two. The schema names this gap itself and parks the inline-anchor case on a run-level extent mechanism it has not shipped. Until it does, the reference is a `ContentRun` keeping its own `[^label]` spelling and carrying `FOOTNOTE_REFERENCE_FONT_MARKER`, reported through `md/footnote-reference-preserved-as-text`.
+
+Definitions are recognised only at the document's own top level. Inside a block quote or a list item, the pair's extent would sit inside a scope the enclosing container had already opened, which the marker contract forbids a producer from emitting — so the text stays an ordinary paragraph there. A heading inside a definition body is flattened to literal ATX text for the same reason.
+
+`writeMarkdown` is the inverse and validates first: a section's markers must pair as balanced brackets (checked through document-schema.js's own `findConstructMarkerImbalance`, the shared definition every codec and `decompose` agree on) or it throws `MarkdownUnbalancedConstructMarkersError`. A construct kind with no markdown syntax — a bookmark, a division, a tracked change — renders transparently: its extent still appears in place, only the construct's own identity is lost.
 
 ## Fidelity
 
