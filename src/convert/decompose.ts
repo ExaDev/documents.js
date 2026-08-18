@@ -1,4 +1,6 @@
 import type {
+  ConstructDescriptor,
+  ConstructMarkerImbalance,
   ContentBlock,
   ContentDocument,
   ContentDrawPage,
@@ -20,10 +22,13 @@ import type {
   SlideGroupNode,
   DrawPageGroupNode,
 } from 'document-schema.js';
+import { findConstructMarkerImbalance } from 'document-schema.js';
 
 // The flat-to-tree half of the package boundary, ported from document-outline.js's phase-1 reference implementation (that repo's pre-re-charter git history) onto document-schema.js 4.0.0's own tree vocabulary -- the schema's src/package-node.ts is the same shape's schema-home port, so this module imports the group types instead of redeclaring them. The one forced adaptation beyond types: the reference decomposed a 3.x DocumentPackage's `content` field and rebuilt envelopes through a separate documentEnvelope helper, while schema 4's DocumentPackage IS the tree (the envelope -- kind, metadata, symbolTable -- rides the root), so decompose takes the flat ContentDocument directly and assemblePackage splices the envelope fields out of it. Everything else -- the stack semantics, the container rule, the ownership discipline -- is the reviewed reference verbatim.
 //
-// Decomposition follows the container rule: sections, slides, sheets, and draw pages each become one top-level group per container, a shape is its own group with its inner blocks grouped inside it (never a slide's paragraphs flattened across its shapes -- that is a table-of-contents projection, not a decomposition), a sheet's grid rides ON the sheet node while children carry its images and embedded objects, and an embedded document (the recursive ContentEmbeddedObject arm) stays intact as one leaf. The input's node objects are embedded, not copied -- decompose owns no content, it only wraps -- so the frames a layout pass stamped onto content survive into the tree as the same objects.
+// Decomposition follows the container rule: sections, slides, sheets, and draw pages each become one top-level group per container, a shape is its own group with its inner blocks grouped inside it (never a slide's paragraphs flattened across its shapes -- that is a table-of-contents projection, not a decomposition), a sheet's grid rides ON the sheet node while children carry its images and embedded objects, and an embedded document (the recursive ContentEmbeddedObject arm) stays intact as one leaf. The input's node objects are embedded, not copied -- decompose owns no content, it only wraps -- so the frames a layout pass stamped onto content survive into the tree as the same objects. The one node the tree cannot embed is a construct-boundary marker: PackageBlockLeaf excludes both marker kinds by construction, so a constructStart's own ConstructDescriptor becomes the group's `node` (that descriptor object IS embedded, uncopied) while the marker wrapper around it has no tree spelling and is rebuilt by flatten from the descriptor plus the group's extent.
+//
+// Construct boundaries (document-schema.js 4.2.0's constructStart/constructEnd blocks -- docx SDTs, ODF fields, tracked changes, and the rest of document-schema.js#22's fidelity-construct vocabulary) are promoted here, not passed through: a marker pair delimits a region of the block stream that becomes one construct group whose children are that region decomposed on its own. The region's extent is stated by the markers themselves rather than by any level comparison, which is why the block walks below run off a shared forward cursor rather than a plain for-of loop -- a nested walk consumes from exactly where its parent stopped and hands the position back by returning once it meets its own close marker. Promotion reaches exactly as far as grouping does, which is one container's own block flow: a marker inside a table cell's blocks or inside an embedded document rides through untouched on its leaf, unpromoted and unchecked, the same boundary a heading level inside a table cell already sits outside of.
 
 // Property-presence predicates over ContentParagraph, so decompose's branches narrow the paragraph itself (not just a property access) to the anchor types -- a plain property `!== undefined` check narrows the access, never the object, and `{ node: paragraph }` needs the narrowed object. The schema exports the anchor types but not these predicates; they are three lines of structural fact, not a second copy of a schema shape.
 export function isHeadingParagraph(paragraph: ContentParagraph): paragraph is HeadingParagraph {
@@ -34,10 +39,25 @@ export function isListParagraph(paragraph: ContentParagraph): paragraph is ListP
   return paragraph.list !== undefined;
 }
 
+// A container's block stream whose construct markers do not pair up: a constructEnd closing nothing, or a constructStart never closed. Promotion is defined only over balanced markers -- an unbalanced stream has no region for the group to span -- so decompose refuses it loudly rather than inventing a boundary (silently closing an unclosed construct at the container's end, or dropping a stray close) and losing the producer's real error in a plausible-looking tree. Balance is a per-container property, checked over one section's, shape's, or sheet's own block flow: a pair cannot span two containers, because each container decomposes independently. The payload is the schema's own ConstructMarkerImbalance so the failure vocabulary stays document-schema.js's rather than a second one restated here, and `imbalance.index` indexes that container's own blocks.
+export class ConstructMarkerImbalanceError extends Error {
+  readonly imbalance: ConstructMarkerImbalance;
+
+  constructor(imbalance: ConstructMarkerImbalance) {
+    super(
+      imbalance.kind === 'unmatchedEnd'
+        ? `decompose: the constructEnd marker at index ${imbalance.index} of this container's block flow closes no open construct`
+        : `decompose: the constructStart marker at index ${imbalance.index} of this container's block flow is never closed`,
+    );
+    this.name = 'ConstructMarkerImbalanceError';
+    this.imbalance = imbalance;
+  }
+}
+
 // What decompose returns and every package arm's children hold: the per-kind roots the schema's DocumentPackage union states (section groups for wordprocessing, slide groups for presentation, sheet groups for spreadsheet, draw-page groups for drawing, the single ContentFormula leaf for formula). Spelled as the explicit union rather than the indexed access DocumentPackage['children'] so tooling that resolves types one hop at a time (this repo's ESLint typed rules) sees named imports instead of an index into the zod-inferred union.
 export type PackageChildren = SectionGroupNode[] | SlideGroupNode[] | SheetGroupNode[] | DrawPageGroupNode[] | ContentFormula[];
 
-// Decomposes a flat ContentDocument into the tree a DocumentPackage's children carry. The same node objects are embedded, never cloned.
+// Decomposes a flat ContentDocument into the tree a DocumentPackage's children carry. The same node objects are embedded, never cloned -- the one exception being a construct-boundary marker pair, which has no tree spelling of its own and contributes its ConstructDescriptor (that object, uncopied) to the group it promotes to. Throws ConstructMarkerImbalanceError when a container's markers do not pair up.
 export function decompose(content: ContentDocument): PackageChildren {
   switch (content.kind) {
     case 'wordprocessing':
@@ -59,8 +79,25 @@ export function decomposeSection(section: ContentSection): SectionGroupNode {
   return { node: { kind: 'section', ...rest }, children: decomposeSectionBlocks(blocks) };
 }
 
+// One forward cursor over a container's flat block stream, shared by every walk below it. A construct region's extent is delimited by markers inside the stream, so a nested walk must start exactly where its parent stopped and leave the parent resuming exactly past the close marker it consumed -- which is precisely what one shared iterator is: the parent keeps pulling after the nested call returns, with no index to thread back or get wrong. An iterator rather than an index into `blocks` also keeps end-of-stream a real answer (the iterator protocol's own done flag) instead of an indexed read that noUncheckedIndexedAccess types as possibly-undefined and that would need a branch nothing can ever take.
+type BlockCursor = Iterator<ContentBlock>;
+
+// Refuses a block stream whose construct markers do not pair up, before any grouping runs. The check is the schema's own findConstructMarkerImbalance rather than a second implementation folded into the walks, which is also what lets each walk return plainly at end-of-stream: over a balanced stream a nested walk always terminates on its own close marker, so no walk needs an unreachable "ran out mid-construct" arm of its own.
+function assertBalancedConstructMarkers(blocks: readonly ContentBlock[]): void {
+  const imbalance = findConstructMarkerImbalance(blocks);
+  if (imbalance !== undefined) {
+    throw new ConstructMarkerImbalanceError(imbalance);
+  }
+}
+
 // The wordprocessing stack semantics: a heading paragraph opens a group nested under the deepest open heading group with a strictly shallower level, popping equal-or-deeper groups closed (an H4 after an H2 becomes its direct child with no synthetic intermediates; an H1 after an H3 pops to the root); list paragraphs nest by list.level on the same stack semantics inside the innermost heading scope; non-paragraph blocks attach as leaves at the current depth without changing it; a plain paragraph -- no heading level, no list membership -- sits flat at its scope and closes the list nesting. headingLevel is the only heading signal read; a Heading styleId without headingLevel does not group.
 function decomposeSectionBlocks(blocks: readonly ContentBlock[]): SectionChild[] {
+  assertBalancedConstructMarkers(blocks);
+  return walkSectionBlocks(blocks.values());
+}
+
+// Consumes a section flow off the cursor, returning at the constructEnd marker that closes the region it was called for (or at end of stream, for the container's own outermost call).
+function walkSectionBlocks(cursor: BlockCursor): SectionChild[] {
   const root: SectionChild[] = [];
   // Heading groups currently open, deepest last. Each entry is the group itself -- a group carries both its anchor paragraph (and thereby its level) and its children, so it is the scope. An empty stack means the section root: content before any heading, and sections with no headings at all, attach directly to the section group's children.
   const headingStack: HeadingGroupNode[] = [];
@@ -68,7 +105,15 @@ function decomposeSectionBlocks(blocks: readonly ContentBlock[]): SectionChild[]
   const listStack: ListGroupNode[] = [];
   // The scope every non-heading attachment targets: the innermost open heading group's children, or the section root when no heading is open.
   const headingScope = (): SectionChild[] => headingStack.at(-1)?.children ?? root;
-  for (const block of blocks) {
+  for (let step = cursor.next(); step.done !== true; step = cursor.next()) {
+    const block = step.value;
+    if (block.kind === 'constructEnd') {
+      return root;
+    }
+    if (block.kind === 'constructStart') {
+      openConstructGroup(block.descriptor, cursor, listStack, headingScope());
+      continue;
+    }
     if (block.kind !== 'paragraph') {
       const parent = listStack.at(-1);
       (parent !== undefined ? parent.children : headingScope()).push(block);
@@ -121,9 +166,24 @@ export function decomposeShape(shape: ContentShape): ShapeGroupNode {
 }
 
 function decomposeShapeBlocks(blocks: readonly ContentBlock[]): ShapeChild[] {
+  assertBalancedConstructMarkers(blocks);
+  return walkShapeBlocks(blocks.values());
+}
+
+// Consumes a shape (or list-item) flow off the cursor, on the same return-at-my-close-marker contract walkSectionBlocks holds.
+function walkShapeBlocks(cursor: BlockCursor): ShapeChild[] {
   const root: ShapeChild[] = [];
   const listStack: ListGroupNode[] = [];
-  for (const block of blocks) {
+  for (let step = cursor.next(); step.done !== true; step = cursor.next()) {
+    const block = step.value;
+    if (block.kind === 'constructEnd') {
+      return root;
+    }
+    if (block.kind === 'constructStart') {
+      const parent = listStack.at(-1);
+      (parent !== undefined ? parent.children : root).push({ node: block.descriptor, children: walkShapeBlocks(cursor) });
+      continue;
+    }
     if (block.kind !== 'paragraph') {
       const parent = listStack.at(-1);
       (parent !== undefined ? parent.children : root).push(block);
@@ -138,6 +198,16 @@ function decomposeShapeBlocks(blocks: readonly ContentBlock[]): ShapeChild[] {
     root.push(block);
   }
   return root;
+}
+
+// Attaches the construct region a section-flow constructStart opened, recursing over the cursor to build its children and resuming the caller past the close marker that recursion consumed. Two things follow from a construct being a semantic wrapper rather than a container: it attaches at the CURRENT scope exactly as any other non-paragraph block does (the innermost open list group, else the innermost open heading scope), and it disturbs neither stack -- content after the close marker resumes at the same heading depth and the same list depth as content before the open marker. Its own children walk with FRESH stacks, the same reset a section boundary already performs, because the region is its own flow. Which stack it lands in also decides which group type it is, and the schema states both halves of that: the section flow's SectionChild admits a SectionConstructGroupNode (whose children are a full section flow, headings included), while a list group's ListChild admits only a ShapeConstructGroupNode (whose children are a list/shape flow, where a heading paragraph is ordinary content) -- a construct inside a list therefore groups its interior by list level alone, which is exactly the vocabulary a list group's subtree already has.
+function openConstructGroup(descriptor: ConstructDescriptor, cursor: BlockCursor, listStack: readonly ListGroupNode[], headingScope: SectionChild[]): void {
+  const parent = listStack.at(-1);
+  if (parent === undefined) {
+    headingScope.push({ node: descriptor, children: walkSectionBlocks(cursor) });
+    return;
+  }
+  parent.children.push({ node: descriptor, children: walkShapeBlocks(cursor) });
 }
 
 // Opens a list-item group anchored on `paragraph` at its list.level under the deepest open list group with a strictly shallower level (or directly under `scopeChildren` when none is open), popping equal-or-deeper groups closed -- the same stack semantics heading groups follow, on list.level's 0-based scale, so a level jump nests directly under the nearest shallower item with no synthetic intermediates.

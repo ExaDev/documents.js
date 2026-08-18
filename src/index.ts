@@ -481,7 +481,8 @@ export type { UnifiedConversionOptions, ConversionPlan, CompositionHop } from '.
 export { buildDocumentBytes, layoutDocumentFromPackage } from './convert/from-package';
 // The package boundary itself (the tree <-> flat pair and the styles minting pass that runs at every DocumentPackage construction site): assemblePackage is the one helper behind every conversion's onDocument payload -- decompose then factorStyles -- while decompose/flattenPackage are the two directions exposed for a caller composing its own boundary, and factorStyles re-mints an already-assembled tree to the identical styles table (minting is idempotent). Together they satisfy the three laws stated on ExaDev/document-schema.js#20: strict structural round-trip both directions for a styles-free package, effective-property equality universally (flattenPackage materialises refs away), and minting idempotence.
 export { assemblePackage, factorStyles } from './convert/factor-styles';
-export { decompose } from './convert/decompose';
+// ConstructMarkerImbalanceError is decompose's one refusal: the constructStart/constructEnd pairs delimiting fidelity constructs must balance within a container's block flow, and an unmatched marker throws rather than being repaired into a plausible tree. A named class, so a caller can narrow with instanceof and read the offending block index off the schema's own ConstructMarkerImbalance payload instead of parsing a message.
+export { ConstructMarkerImbalanceError, decompose } from './convert/decompose';
 export type { PackageChildren } from './convert/decompose';
 export { flattenPackage } from './convert/flatten';
 
