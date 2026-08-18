@@ -33,7 +33,8 @@ To run a single test file, pass its path to vitest directly, e.g. `pnpm exec vit
 | `outline/package-node` | the `PackageNode` types, `PackageNodeSchema`/`PackageGroupSchema`/`PackageLeafSchema`, `isPackageNode`/`isPackageGroup`/`isPackageLeaf`, per-root-kind narrowers |
 | `outline/node` | `OutlineNode`, `OutlineChild`, `OutlineLeaf`, `OutlineNodeSchema`, `isOutlineNode`, `isOutlineChild`, `isOutlineLeaf` |
 | `outline/helpers` | `flattenOutline`, `outlineLeafText`, `leafContentHash` |
-| `outline/hash` | `stableContentHash`, `canonicalise`, `sha256` |
+
+Every module in the table is re-exported from the package root, so its exports import from `'document-outline.js'` directly. `outline/hash` (the `stableContentHash`/`canonicalise`/`sha256` primitives behind `leafContentHash`'s published recipe) is deliberately not on the root entry — it stays reachable via the `document-outline.js/outline/hash` subpath, keeping the root surface at the phase's mandated size.
 
 `buildOutline(doc)` dispatches on `doc.kind` and returns the root scope's children — `OutlineChild[]`, an ordered mix of group nodes and leaf payloads. The root is deliberately not itself a node (no synthetic "document" group), so a wordprocessing document's pre-heading content — or a document with no grouping signal at all — appears as leaves directly in the returned array.
 
