@@ -62,13 +62,13 @@ export interface ListItemNode {
   readonly children: ListItemNode[];
 }
 
-// Reconstructs a nested list tree from a flat run of list-membership paragraphs via a level stack. For markdown, the ordered-vs-bullet distinction is read per item from its numId's "ordered:"/"bullet:" prefix (router.ts's normalizeMarkdownStyling convention); for docx/odt, numId is opaque (no ordered/bullet info available in ContentDocument today), so `ordered` is always false and the caller renders with a neutral marker rather than trusting it.
+// Reconstructs a nested list tree from a flat run of list-membership paragraphs via a level stack. For markdown, the ordered-vs-bullet distinction is read per item from its numId's "ordered:"/"bullet:" prefix (router.ts's normalizeMarkdownStyling convention); for docx/odt, numId is opaque (no ordered/bullet info available in ContentDocument today), so `ordered` is always false and the caller renders with a neutral marker rather than trusting it. A membership with no numId carries only a depth (no numbering identity the source ever had) and takes the same neutral-marker path.
 export function buildListForest(items: readonly ContentParagraph[]): ListItemNode[] {
   const root: ListItemNode[] = [];
   const stack: { level: number; children: ListItemNode[] }[] = [{ level: -1, children: root }];
   for (const item of items) {
     const level = item.list?.level ?? 0;
-    const ordered = item.list?.numId.startsWith('ordered:') ?? false;
+    const ordered = item.list?.numId?.startsWith('ordered:') ?? false;
     const node: ListItemNode = { runs: item.runs, ordered, children: [] };
     while (stack.length > 1 && stack[stack.length - 1]!.level >= level) {
       stack.pop();

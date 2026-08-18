@@ -1,14 +1,20 @@
 import { useMutation } from '@tanstack/react-query';
-import type { ContentDocument, DocumentFormat, LayoutDocument } from 'documents.js';
+import type { ContentDocument, DocumentFormat, DocumentPackageJson, LayoutDocument } from 'documents.js';
 
 import { getRpcClient } from '../rpc/client';
 import type { Diagnostic } from '../shared/diagnostics';
 import { contentSummary } from '../shared/contentCounts';
 
-// Reads a ContentDocument directly from bytes via the content.read RPC endpoint -- no conversion, no PDF layout pass. Used by every content-backed preview (markdown, csv, svg, docx, odt, xlsx, ods, pptx, odp, odg, odf).
+// Reads a document's content directly from bytes via the content.read RPC endpoint -- no conversion, no PDF layout pass. Used by every content-backed preview (markdown, csv, svg, docx, odt, xlsx, ods, pptx, odp, odg, odf).
 export interface ReadContentInput {
   format: DocumentFormat;
   bytes: Uint8Array<ArrayBuffer>;
+}
+
+// What content.read returns across the worker boundary: the flat ContentDocument the preview components render, plus the same document in its artefact form -- the tree-form DocumentPackage stamped with its release-pinned $schema URI (the artefact's version since document-schema.js 4), which the structure tree shows.
+export interface ContentReadResult {
+  content: ContentDocument;
+  package: DocumentPackageJson;
 }
 
 export function useReadContent() {
@@ -49,18 +55,18 @@ export interface PdfInspectResult extends InspectDiagnostics {
   layout: SanitizedLayoutDocument;
 }
 
-// Structure derived directly from a ContentDocument (variant-aware summary + the content tree itself), produced client-side from content already on hand -- no PDF layout pass, no second RPC. Used by formats that preview their native representation rather than a PDF rendition.
+// Structure derived directly from a read document (variant-aware summary + the $schema-stamped tree-form DocumentPackage), produced client-side from content already on hand -- no PDF layout pass, no second RPC. Used by formats that preview their native representation rather than a PDF rendition.
 export interface ContentInspectResult extends InspectDiagnostics {
   backing: 'content';
   summary: readonly string[];
-  content: ContentDocument;
+  package: DocumentPackageJson;
 }
 
 export type InspectResult = PdfInspectResult | ContentInspectResult;
 
-// Constructs a content-backed InspectResult from a ContentDocument already on the client (the preview conversion's own .content side effect) -- pure, synchronous, no RPC. The summary is variant-aware (sections+blocks vs sheets+cells vs ...), and the tree shows the content itself.
-export function contentInspectResult(content: ContentDocument): ContentInspectResult {
-  return { backing: 'content', diagnostics: [], summary: contentSummary(content), content };
+// Constructs a content-backed InspectResult from a content.read result already on the client -- pure, synchronous, no RPC. The summary is variant-aware (sections+blocks vs sheets+cells vs ...) and counted over the flat form; the tree shows the stamped package, the document's artefact form.
+export function contentInspectResult(read: ContentReadResult): ContentInspectResult {
+  return { backing: 'content', diagnostics: [], summary: contentSummary(read.content), package: read.package };
 }
 
 async function inspectPdfBytes(bytes: Uint8Array<ArrayBuffer>, diagnostics: readonly Diagnostic[] = []): Promise<PdfInspectResult> {

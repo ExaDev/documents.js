@@ -1,12 +1,16 @@
 import { os } from '@orpc/server';
 import {
+  assemblePackage,
   ContentDocumentSchema,
   createLocalDocumentConverter,
   decodeDocumentPackage,
   describeFontFace,
   DocumentFormatSchema,
+  DocumentPackageSchema,
+  documentPackageWithSchema,
   DOCUMENT_FORMATS,
   extractSourceFontsForFormat,
+  flattenPackage,
   LayoutDocumentSchema,
   readCsvContent,
   readDocxContent,
@@ -44,14 +48,17 @@ const DiagnosticSchema = z.object({
   pageIndex: z.number().int().nonnegative().optional(),
 });
 
-// `content` carries ConversionResult's own DocumentPackage.content -- createLocalDocumentConverter().convert() already computes this on every call via its internal onDocument callback, so surfacing it here costs nothing extra. Used by the Convert tool's markdown/spreadsheet previews (src/ui/MarkdownPreview.tsx, src/ui/SheetPreview.tsx) to render natively rather than round-tripping every format through PDF -- LayoutDocument is deliberately still omitted, since no tool needs it across the RPC boundary yet.
+// `content` carries the conversion's own intermediate document, flattened from the tree at this boundary: documents.js 3 surfaces ConversionResult.package as the tree-form DocumentPackage (structure, layout, and content fused, document-schema.js 4), and flattenPackage materialises the flat codec-exchange ContentDocument the preview components consume -- one walk, refs resolved, user-visible behaviour identical to the old pkg.content read. createLocalDocumentConverter().convert() already computes the package on every call via its internal onDocument callback, so surfacing it here costs nothing extra.
 const ConversionResultSchema = z.object({
   document: DocumentPayloadSchema,
   diagnostics: z.array(DiagnosticSchema),
   content: ContentDocumentSchema.optional(),
 });
 
-// markdown-codec 2.0 carries a heading paragraph's level in the schema's own ContentParagraph.headingLevel field, so headings need no vocabulary rewrite -- only the residual private conventions are translated here: quote/code-block/horizontal-rule styleIds and a list paragraph's ordered-vs-bullet distinction encoded inside its numId string ("md{n}:bullet|ordered@start", via parseListNumId). Rewritten worker-side (the only place allowed to import markdown-codec) into a small convention this app documents and owns itself, so MarkdownPreview.tsx never needs to depend on markdown-codec's internal string formats -- only on what this router promises to hand it. Only ever applied to a markdown-sourced ContentDocument (see the convert handler's own call site below).
+// The tree-form DocumentPackage in the shape a dump carries it: stamped with its release-pinned $schema URI, which since document-schema.js 4 IS the artefact's version (the hand-kept formatVersion integer is gone). DocumentPackageSchema is a discriminated union and has no .extend, so the stamp rides in as an intersection -- the union validates the tree, the object validates the envelope's one extra key.
+const DocumentPackageJsonSchema = DocumentPackageSchema.and(z.object({ $schema: z.string() }));
+
+// markdown-codec carries a heading paragraph's level in the schema's own ContentParagraph.headingLevel field, so headings need no vocabulary rewrite -- only the residual private conventions are translated here: quote/code-block/horizontal-rule styleIds and a list paragraph's ordered-vs-bullet distinction encoded inside its numId string ("md{n}:bullet|ordered@start", via parseListNumId). Rewritten worker-side (the only place allowed to import markdown-codec) into a small convention this app documents and owns itself, so MarkdownPreview.tsx never needs to depend on markdown-codec's internal string formats -- only on what this router promises to hand it. Only ever applied to a markdown-sourced ContentDocument (see the convert handler's own call site below).
 function normalizeMarkdownStyling(document: ContentDocument): ContentDocument {
   if (document.kind !== 'wordprocessing') return document;
   return { ...document, sections: document.sections.map((section) => ({ ...section, blocks: section.blocks.map(normalizeMarkdownBlock) })) };
@@ -100,6 +107,8 @@ function normalizeDocxListKinds(document: ContentDocument, bytes: Uint8Array<Arr
   };
   const walkBlock = (block: ContentBlock): ContentBlock => {
     if (block.kind === 'paragraph' && block.list !== undefined) {
+      // An absent numId means the source carried only a depth (ContentListMembership's own field comment -- no numbering definition exists to look up), so the membership passes through untouched rather than resolving against a fabricated identity.
+      if (block.list.numId === undefined) return block;
       return { ...block, list: { ...block.list, numId: resolve(block.list.numId, block.list.level) } };
     }
     if (block.kind === 'table') {
@@ -146,10 +155,10 @@ function normalizeMarkdownParagraph(paragraph: ContentParagraph): ContentParagra
           : paragraph.styleId === HORIZONTAL_RULE_STYLE_ID
             ? 'horizontal-rule'
             : paragraph.styleId;
-  // Preserves the original numId as a suffix (not just the ordered/bullet type alone) so MarkdownPreview can still tell where one list ends and the next begins -- markdown-codec mints a fresh numId per list instance, so two adjacent same-type lists must not collapse into one <ul>/<ol>.
+  // Preserves the original numId as a suffix (not just the ordered/bullet type alone) so MarkdownPreview can still tell where one list ends and the next begins -- markdown-codec mints a fresh numId per list instance, so two adjacent same-type lists must not collapse into one <ul>/<ol>. A membership with no numId at all carries only a depth (no list instance to identify), so it passes through unrewritten and buildListForest renders it with the neutral marker.
   const list =
-    paragraph.list === undefined
-      ? undefined
+    paragraph.list?.numId === undefined
+      ? paragraph.list
       : { ...paragraph.list, numId: `${parseListNumId(paragraph.list.numId)?.type ?? 'bullet'}:${paragraph.list.numId}` };
   return { ...paragraph, styleId, list };
 }
@@ -237,7 +246,8 @@ export const router = {
         { source: { format: input.source, bytes: input.bytes }, targetFormat: input.targetFormat },
         { signal: signal ?? new AbortController().signal },
       );
-      const content = result.package?.content;
+      const pkg = result.package;
+      const content = pkg !== undefined ? flattenPackage(pkg) : undefined;
       return {
         document: result.document,
         diagnostics: result.diagnostics.map((diagnostic) => ({ ...diagnostic })),
@@ -246,12 +256,21 @@ export const router = {
     }),
 
   content: {
+    // Both encodings of the one document cross together: `content` is the flat codec-exchange ContentDocument the preview components render (readContentForFormat's own output, still the form every reader produces), `package` the same document in its artefact form -- assemblePackage decomposes it into the tree and documentPackageWithSchema stamps the $schema URI that names its version. The tree is built from the raw read, not the normalised content below: normalizeContentForSource rewrites styleIds into this app's own preview-rendering conventions, and a dumped artefact must show the document as the reader actually produced it.
     read: os
       .input(z.object({ format: DocumentFormatSchema, bytes: BytesSchema }))
-      .output(ContentDocumentSchema)
+      .output(
+        z.object({
+          content: ContentDocumentSchema,
+          package: DocumentPackageJsonSchema,
+        }),
+      )
       .handler(({ input }) => {
         const content = readContentForFormat(input.format, input.bytes);
-        return normalizeContentForSource(content, input.format, input.bytes);
+        return {
+          content: normalizeContentForSource(content, input.format, input.bytes),
+          package: documentPackageWithSchema(assemblePackage(content)),
+        };
       }),
   },
 

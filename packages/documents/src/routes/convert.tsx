@@ -217,7 +217,7 @@ function ConvertLayout() {
                     <MarkdownPreview
                       label="Original"
                       format={source}
-                      content={originalContent.data}
+                      content={originalContent.data?.content}
                       loading={originalContent.isPending}
                       // React Query represents "no error" as null, not undefined -- normalised here since MarkdownPreview/SheetPreview/PdfPreview's own contract only knows "no error" as undefined.
                       error={originalContent.error ?? undefined}
@@ -226,7 +226,7 @@ function ConvertLayout() {
                     <SheetPreview
                       label="Original"
                       format={source ?? ''}
-                      content={originalContent.data}
+                      content={originalContent.data?.content}
                       loading={originalContent.isPending}
                       error={originalContent.error ?? undefined}
                     />
@@ -234,7 +234,7 @@ function ConvertLayout() {
                     <WordProcessingPreview
                       label="Original"
                       format={source ?? ''}
-                      content={originalContent.data}
+                      content={originalContent.data?.content}
                       loading={originalContent.isPending}
                       error={originalContent.error ?? undefined}
                     />
@@ -242,7 +242,7 @@ function ConvertLayout() {
                     <SlidesPreview
                       label="Original"
                       format={source ?? ''}
-                      content={originalContent.data}
+                      content={originalContent.data?.content}
                       loading={originalContent.isPending}
                       error={originalContent.error ?? undefined}
                     />
@@ -250,7 +250,7 @@ function ConvertLayout() {
                     <FormulaPreview
                       label="Original"
                       format={source ?? ''}
-                      content={originalContent.data}
+                      content={originalContent.data?.content}
                       loading={originalContent.isPending}
                       error={originalContent.error ?? undefined}
                     />
@@ -274,7 +274,7 @@ function ConvertLayout() {
                     <MarkdownPreview
                       label="Converted"
                       format={target}
-                      content={resultContent.data}
+                      content={resultContent.data?.content}
                       loading={resultContent.isPending}
                       error={resultContent.error ?? undefined}
                     />
@@ -282,7 +282,7 @@ function ConvertLayout() {
                     <SheetPreview
                       label="Converted"
                       format={target ?? ''}
-                      content={resultContent.data}
+                      content={resultContent.data?.content}
                       loading={resultContent.isPending}
                       error={resultContent.error ?? undefined}
                     />
@@ -290,7 +290,7 @@ function ConvertLayout() {
                     <WordProcessingPreview
                       label="Converted"
                       format={target ?? ''}
-                      content={resultContent.data}
+                      content={resultContent.data?.content}
                       loading={resultContent.isPending}
                       error={resultContent.error ?? undefined}
                     />
@@ -298,7 +298,7 @@ function ConvertLayout() {
                     <SlidesPreview
                       label="Converted"
                       format={target ?? ''}
-                      content={resultContent.data}
+                      content={resultContent.data?.content}
                       loading={resultContent.isPending}
                       error={resultContent.error ?? undefined}
                     />
@@ -306,7 +306,7 @@ function ConvertLayout() {
                     <FormulaPreview
                       label="Converted"
                       format={target ?? ''}
-                      content={resultContent.data}
+                      content={resultContent.data?.content}
                       loading={resultContent.isPending}
                       error={resultContent.error ?? undefined}
                     />

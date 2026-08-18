@@ -9,7 +9,7 @@ export interface InspectPanelProps {
   error?: unknown;
 }
 
-// Renders an InspectResult -- shared by the Inspect page's own result panel and the Convert page's per-side "Show structure" disclosure, so the two never drift into rendering the same data two different ways. Branches on `backing`: a PDF-backed result shows page count, per-item-kind breakdown, metadata, and the LayoutDocument tree; a content-backed result shows a variant-aware summary and the ContentDocument tree directly.
+// Renders an InspectResult -- shared by the Inspect page's own result panel and the Convert page's per-side "Show structure" disclosure, so the two never drift into rendering the same data two different ways. Branches on `backing`: a PDF-backed result shows page count, per-item-kind breakdown, metadata, and the LayoutDocument tree; a content-backed result shows a variant-aware summary and the $schema-stamped tree-form DocumentPackage (the artefact form since document-schema.js 4 -- the $schema URI it opens with is the document's version).
 export function InspectPanel({ data, loading, error }: InspectPanelProps) {
   if (loading === true) return <Skeleton height={120} />;
   if (error !== undefined) return <Alert color="red">Could not inspect this document.</Alert>;
@@ -24,7 +24,7 @@ export function InspectPanel({ data, loading, error }: InspectPanelProps) {
           </Text>
         ))}
         <Title order={6}>Document structure</Title>
-        <StructureTree data={data.content} />
+        <StructureTree data={data.package} />
       </Stack>
     );
   }
