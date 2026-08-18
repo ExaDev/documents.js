@@ -1,3 +1,4 @@
+import { isValidFootnoteLabel } from "../inline/footnote.js";
 import "../defaults/defaults.js";
 import { MarkdownDiagnosticCodes, MarkdownUnbalancedConstructMarkersError, MarkdownUnsupportedDocumentKindError, NOOP_MARKDOWN_DIAGNOSTIC_SINK } from "../diagnostics/diagnostics.js";
 import { parseListNumId } from "../shared/list-id.js";
@@ -233,7 +234,15 @@ function renderFootnoteDefinition(name, body) {
 function renderConstruct(item, context) {
 	const body = renderItems(item.children, context);
 	const { descriptor } = item;
-	if (descriptor.kind === "anchor" && descriptor.anchorType === "footnote") return renderFootnoteDefinition(descriptor.name, body);
+	if (descriptor.kind === "anchor" && descriptor.anchorType === "footnote") {
+		if (isValidFootnoteLabel(descriptor.name)) return renderFootnoteDefinition(descriptor.name, body);
+		context.sink({
+			code: MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
+			severity: "info",
+			message: `a footnote anchor's own name "${descriptor.name}" cannot be spelled as a "[^label]:" marker (whitespace or "]" would reparse as something else); its own extent still renders in place, but the construct itself is not represented`
+		});
+		return body;
+	}
 	const detail = descriptor.kind === "anchor" ? `${descriptor.kind} (${descriptor.anchorType})` : descriptor.kind;
 	context.sink({
 		code: MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED,

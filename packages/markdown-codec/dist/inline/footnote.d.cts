@@ -1,2 +1,2 @@
-import { a as matchFootnoteLabel, i as matchFootnoteDefinitionMarker, n as FootnoteLabelMatch, r as FootnoteLabelSet, t as FootnoteDefinitionMatch } from "../footnote-BrIWhACz.cjs";
-export { FootnoteDefinitionMatch, FootnoteLabelMatch, FootnoteLabelSet, matchFootnoteDefinitionMarker, matchFootnoteLabel };
+import { a as matchFootnoteDefinitionMarker, i as isValidFootnoteLabel, n as FootnoteLabelMatch, o as matchFootnoteLabel, r as FootnoteLabelSet, t as FootnoteDefinitionMatch } from "../footnote-CKk4JbLk.cjs";
+export { FootnoteDefinitionMatch, FootnoteLabelMatch, FootnoteLabelSet, isValidFootnoteLabel, matchFootnoteDefinitionMarker, matchFootnoteLabel };

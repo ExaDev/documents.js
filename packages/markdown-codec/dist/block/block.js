@@ -291,7 +291,7 @@ var BlockParser = class {
 		return "leaf";
 	}
 	tryFootnoteDefinitionStart(container) {
-		if (!this.footnotesEnabled || this.line.indented || container.kind !== "document") return "none";
+		if (!this.footnotesEnabled || this.line.indented || !this.footnoteDefinitionMayOpenIn(container)) return "none";
 		const marker = matchFootnoteDefinitionMarker(this.line.restFromNextNonspace());
 		if (marker === void 0) return "none";
 		if (this.footnotes.has(marker.label)) this.sink({
@@ -307,6 +307,11 @@ var BlockParser = class {
 		node.footnoteLabel = marker.label;
 		this.line.advance(marker.markerLength);
 		return "container";
+	}
+	footnoteDefinitionMayOpenIn(container) {
+		let node = container;
+		while (node?.kind === "list") node = node.parent;
+		return node?.kind === "document";
 	}
 	tryHtmlBlockStart(container) {
 		if (this.line.indented || this.line.peekNextNonspace() !== "<") return "none";

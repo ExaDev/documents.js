@@ -10,5 +10,6 @@ interface FootnoteDefinitionMatch {
 }
 declare function matchFootnoteDefinitionMarker(lineText: string): FootnoteDefinitionMatch | undefined;
 type FootnoteLabelSet = ReadonlySet<string>;
+declare function isValidFootnoteLabel(label: string): boolean;
 //#endregion
-export { matchFootnoteLabel as a, matchFootnoteDefinitionMarker as i, FootnoteLabelMatch as n, FootnoteLabelSet as r, FootnoteDefinitionMatch as t };
+export { matchFootnoteDefinitionMarker as a, isValidFootnoteLabel as i, FootnoteLabelMatch as n, matchFootnoteLabel as o, FootnoteLabelSet as r, FootnoteDefinitionMatch as t };

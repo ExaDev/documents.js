@@ -1,6 +1,7 @@
 Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
 //#region src/inline/footnote.ts
 const FOOTNOTE_LABEL_PATTERN = /\[\^([^\s[\]]+)\]/y;
+const FOOTNOTE_LABEL_ONLY_PATTERN = /^[^\s[\]]+$/;
 function matchFootnoteLabel(text, start) {
 	FOOTNOTE_LABEL_PATTERN.lastIndex = start;
 	const match = FOOTNOTE_LABEL_PATTERN.exec(text);
@@ -20,6 +21,10 @@ function matchFootnoteDefinitionMarker(lineText) {
 		markerLength: match.end + 1
 	};
 }
+function isValidFootnoteLabel(label) {
+	return FOOTNOTE_LABEL_ONLY_PATTERN.test(label);
+}
 //#endregion
+exports.isValidFootnoteLabel = isValidFootnoteLabel;
 exports.matchFootnoteDefinitionMarker = matchFootnoteDefinitionMarker;
 exports.matchFootnoteLabel = matchFootnoteLabel;

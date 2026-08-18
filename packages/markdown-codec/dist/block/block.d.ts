@@ -1,8 +1,8 @@
 import { s as MarkdownDocumentNode } from "../ast-8XCbjRQT.js";
-import { r as FootnoteLabelSet } from "../footnote-BrIWhACz.js";
+import { r as FootnoteLabelSet } from "../footnote-CKk4JbLk.js";
 import { i as MarkdownDiagnosticSink } from "../diagnostics-BuO5-SW1.js";
 import { n as LinkReferenceMap } from "../link-Dv4kxVjk.js";
-import { t as InlineParseOptions } from "../inline-BzFbXWuR.js";
+import { t as InlineParseOptions } from "../inline-B_V7bs5j.js";
 //#region src/block/block.d.ts
 interface MarkdownParseOptions extends InlineParseOptions {
   readonly gfmTables?: boolean;
