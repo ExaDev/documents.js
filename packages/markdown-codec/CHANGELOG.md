@@ -1,3 +1,18 @@
+# [3.1.0](https://github.com/ExaDev/markdown-codec/compare/v3.0.1...v3.1.0) (2026-08-18)
+
+
+### Bug Fixes
+
+* **block:** recognise a footnote definition following a still-open top-level list ([3309f63](https://github.com/ExaDev/markdown-codec/commit/3309f630de448a8b5bc8ce7c16a20cd4cc3de0a8))
+* **emit:** decline to spell a footnote anchor name that would reparse as something else ([04b2e9e](https://github.com/ExaDev/markdown-codec/commit/04b2e9ec0fd433a43746ad6c4794e9898d55c7c0))
+
+
+### Features
+
+* lower a footnote definition to an anchor construct and its reference to a marked run ([afc72fe](https://github.com/ExaDev/markdown-codec/commit/afc72febdf440a8384b919d01155db4572b6d34f))
+* parse GitHub footnote definitions and references ([0167c1c](https://github.com/ExaDev/markdown-codec/commit/0167c1c2a513c5217943f1638cf02ffa2143c0bb))
+* render construct boundary markers back to markdown ([aa5d3b1](https://github.com/ExaDev/markdown-codec/commit/aa5d3b14d14ec728c6ec1ba2feea68be811df83c))
+
 ## [3.0.1](https://github.com/ExaDev/markdown-codec/compare/v3.0.0...v3.0.1) (2026-08-18)
 
 # [3.0.0](https://github.com/ExaDev/markdown-codec/compare/v2.0.0...v3.0.0) (2026-08-18)
