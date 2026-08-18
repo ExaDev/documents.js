@@ -80,6 +80,10 @@ export function flattenPackage(pkg: DocumentPackage): ContentDocument {
         kind: 'spreadsheet',
         ...envelope,
         sheets: pkg.children.map((group): ContentSheet => {
+          // The schema allows a style ref on every group node, but a sheet group holds no block flow, so a chain built here has nothing to resolve onto -- refuse rather than pass the ref by silently, the same all-or-nothing rule as entryOf's missing-table refusal below. Minting never stamps a ref on a sheet (its extent is always empty); the guard is for hand-built trees.
+          if (group.style !== undefined) {
+            throw new Error('flattenPackage: a sheet group carries a style ref but a sheet holds no block flow to resolve it onto');
+          }
           const images: ContentSheetImage[] = [];
           const embedded: ContentEmbeddedObject[] = [];
           for (const child of group.children) {
