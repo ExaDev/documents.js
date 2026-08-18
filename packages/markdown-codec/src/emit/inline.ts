@@ -10,7 +10,7 @@ import type { ContentRun } from 'document-schema.js';
 import type { MarkdownDiagnosticSink } from '../diagnostics/diagnostics';
 import { MarkdownDiagnosticCodes } from '../diagnostics/diagnostics';
 import { matchHtmlTag } from '../html/html';
-import { MATH_INLINE_FONT_MARKER, MONOSPACE_FONT_FAMILY } from '../shared/style-constants';
+import { FOOTNOTE_REFERENCE_FONT_MARKER, MATH_INLINE_FONT_MARKER, MONOSPACE_FONT_FAMILY } from '../shared/style-constants';
 
 export interface InlineEmitContext {
   readonly sink: MarkdownDiagnosticSink;
@@ -75,6 +75,10 @@ function renderLeaf(run: ContentRun, context: InlineEmitContext): string {
   if (run.fontFamily === MONOSPACE_FONT_FAMILY) {
     context.sink({ code: MarkdownDiagnosticCodes.CODE_SPAN_AS_MONOSPACE_RUN, severity: 'info', message: 'a run styled with the Courier New font family is rendered as a code span; a genuinely monospace run from another format is indistinguishable from a real markdown code span on the way back out' });
     return renderCodeSpan(run.text);
+  }
+  if (run.fontFamily === FOOTNOTE_REFERENCE_FONT_MARKER) {
+    // The run's text already IS the reference's own `[^label]` spelling (src/lower/inline.ts), written out verbatim rather than escaped -- exactly the same reason the math case below skips escaping, and the reason the marker has to exist at all: escapeMarkdownText escapes `[`, `^`, and `]`, so a deliberately-escaped literal `\[^1\]` and a genuine reference are the same run text by the time they reach here, and only the marker separates them.
+    return run.text;
   }
   if (run.fontFamily === MATH_INLINE_FONT_MARKER) {
     // The \( \) delimiters are regenerated fresh around the run's own (unescaped) text -- this run's text is never passed through escapeMarkdownText at all, since it is not "ordinary punctuation that happens to need escaping" but raw LaTeX carried verbatim (see this module's own top-of-file note on why a text-pattern-based recognition of an already-escaped '(...)' cannot distinguish this from ordinary parenthetical prose).
@@ -155,8 +159,8 @@ function renderNestedStyles(runs: readonly ContentRun[], depth: number, context:
 }
 
 function isPlainAutolink(run: ContentRun): boolean {
-  // An autolink's own <...> form can never be empty (CommonMark's own URI/email autolink grammar both require at least one character between the brackets) -- `<>` is not valid autolink syntax at all and would reparse as literal text, so an empty destination (only reachable via a `[](/url)`-shaped empty-text link whose text happens to equal its own empty destination) must fall through to the ordinary `[text](dest)` form instead. A monospace (code-span) or math-marked run is excluded the same way: both need their own dedicated renderLeaf rendering (a code span's backtick fence, math's own \( \) delimiters), never the bare <...> autolink form, however coincidentally their own text might equal the surrounding hyperlink.
-  if (run.hyperlink === undefined || run.hyperlink.length === 0 || run.bold === true || run.italic === true || run.strike === true || run.fontFamily === MONOSPACE_FONT_FAMILY || run.fontFamily === MATH_INLINE_FONT_MARKER) {
+  // An autolink's own <...> form can never be empty (CommonMark's own URI/email autolink grammar both require at least one character between the brackets) -- `<>` is not valid autolink syntax at all and would reparse as literal text, so an empty destination (only reachable via a `[](/url)`-shaped empty-text link whose text happens to equal its own empty destination) must fall through to the ordinary `[text](dest)` form instead. A monospace (code-span), math-marked, or footnote-reference-marked run is excluded the same way: each needs its own dedicated renderLeaf rendering (a code span's backtick fence, math's own \( \) delimiters, a reference's own unescaped `[^label]`), never the bare <...> autolink form, however coincidentally their own text might equal the surrounding hyperlink.
+  if (run.hyperlink === undefined || run.hyperlink.length === 0 || run.bold === true || run.italic === true || run.strike === true || run.fontFamily === MONOSPACE_FONT_FAMILY || run.fontFamily === MATH_INLINE_FONT_MARKER || run.fontFamily === FOOTNOTE_REFERENCE_FONT_MARKER) {
     return false;
   }
   return run.text === run.hyperlink || run.hyperlink === `mailto:${run.text}`;

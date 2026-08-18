@@ -10,9 +10,9 @@
 //
 // ContentPageBreak and ContentEmbeddedObjectBlock have no markdown representation of any kind (this package's own src/lower never produces either, but ContentDocument is a shared pivot a caller can construct directly) -- both are silently dropped, contributing no output at all; this is not one of this package's own named mapping gaps (there was never a markdown construct to lose fidelity from), so it carries no diagnostic code.
 
-import type { ContentBlock, ContentDocument, ContentParagraph } from 'document-schema.js';
-import { clampHeadingLevel } from 'document-schema.js';
-import { MarkdownUnsupportedDocumentKindError } from '../diagnostics/diagnostics';
+import type { ConstructDescriptor, ContentBlock, ContentConstructEnd, ContentConstructStart, ContentDocument, ContentParagraph } from 'document-schema.js';
+import { clampHeadingLevel, findConstructMarkerImbalance } from 'document-schema.js';
+import { MarkdownUnbalancedConstructMarkersError, MarkdownUnsupportedDocumentKindError } from '../diagnostics/diagnostics';
 import type { MarkdownDiagnosticSink } from '../diagnostics/diagnostics';
 import { MarkdownDiagnosticCodes, NOOP_MARKDOWN_DIAGNOSTIC_SINK } from '../diagnostics/diagnostics';
 import { DEFAULT_BULLET_LIST_MARKER, DEFAULT_CODE_FENCE_CHAR, DEFAULT_EMPHASIS_MARKER, DEFAULT_HEADING_STYLE, DEFAULT_LINE_ENDING, DEFAULT_ORDERED_LIST_DELIMITER, DEFAULT_THEMATIC_BREAK_CHAR } from '../defaults/defaults';
@@ -143,7 +143,10 @@ function renderParagraph(paragraph: ContentParagraph, context: EmitContext): str
     .join('\n');
 }
 
-function renderTopLevelBlock(block: ContentBlock, context: EmitContext): string {
+// Every ContentBlock kind that renders as content in its own right -- the whole union MINUS the two construct boundary markers, which are structure rather than content and are consumed by groupConstructItems below before any block reaches here. Spelled as a type rather than as two unreachable switch arms so the compiler, not a comment, is what guarantees a marker never arrives.
+type RenderableBlock = Exclude<ContentBlock, ContentConstructStart | ContentConstructEnd>;
+
+function renderTopLevelBlock(block: RenderableBlock, context: EmitContext): string {
   switch (block.kind) {
     case 'paragraph':
       return renderParagraph(block, context);
@@ -281,33 +284,115 @@ function renderListRegion(items: readonly ContentParagraph[], context: EmitConte
   return out;
 }
 
-// A consecutive run of quoted top-level blocks at the SAME depth is genuinely ambiguous once lowered -- ContentParagraph.indentLeftPt has no field distinguishing "one blockquote containing several blocks" from "several independent blockquotes back to back at the same depth" (document-schema.js carries no ContentBlockquote container of its own; src/lower/lower.ts flattens both shapes identically). Joining every top-level block with a bare blank line, as below, resolves that ambiguity by always choosing the "independent blockquotes" reading -- the correctness-preserving default, since re-joining two ADJACENT SAME-depth quoted blocks into one blockquote (tried and reverted here) fixed no example this package's own soft-line-break handling (src/lower/inline.ts's own softBreak -> ' ' mapping, see src/test-support/conformance-exclusions.ts) did not already fail on for an unrelated reason, while genuinely breaking two real cases (two independent same-depth blockquotes with nothing between them) that this simpler join gets right.
-function emitBlocks(blocks: readonly ContentBlock[], context: EmitContext): string {
-  const parts: string[] = [];
-  let index = 0;
+// --- Construct boundary markers (document-schema.js 4.2.0): the flat form encodes a construct as a MATCHED PAIR of markers bracketing the blocks it spans, so the writer's first job over any block list is to recover that bracketing as a tree before rendering anything. ---
+
+// One item of a block list once the markers have been resolved: either an ordinary content block, or a construct with its own extent recovered as children (which may themselves contain further constructs, at any nesting depth).
+type EmitItem = { readonly block: RenderableBlock } | ConstructItem;
+
+interface ConstructItem {
+  readonly descriptor: ConstructDescriptor;
+  readonly children: readonly EmitItem[];
+}
+
+function isConstructItem(item: EmitItem): item is ConstructItem {
+  return 'descriptor' in item;
+}
+
+// Bracket matching, per document-schema.js's own contract: a constructEnd closes the nearest preceding still-open constructStart in the SAME block list, and the blocks between them are that construct's extent. emitMarkdown validates the whole list's balance up front (findConstructMarkerImbalance -- the one shared definition of that check, which this writer, every sibling codec, and documents.js's decompose all have to agree on exactly), so by the time this runs a closing marker for every open one is known to exist.
+function groupConstructItems(blocks: readonly ContentBlock[], start: number): { readonly items: EmitItem[]; readonly next: number } {
+  const items: EmitItem[] = [];
+  let index = start;
   while (index < blocks.length) {
     const block = blocks[index];
     if (block === undefined) {
       break;
     }
-    if (block.kind === 'paragraph' && block.list !== undefined) {
+    index += 1;
+    if (block.kind === 'constructEnd') {
+      return { items, next: index };
+    }
+    if (block.kind === 'constructStart') {
+      const nested = groupConstructItems(blocks, index);
+      items.push({ descriptor: block.descriptor, children: nested.items });
+      index = nested.next;
+      continue;
+    }
+    items.push({ block });
+  }
+  return { items, next: index };
+}
+
+// Columns of indentation a footnote definition's own continuation lines carry -- the same four src/block/block.ts's continueFootnoteDefinition strips back off, and the same four Pandoc and GitHub both write. Deliberately NOT the rendered `[^label]: ` marker's own width (which varies with the label): a reader measures the continuation indent against a fixed column, not against whatever the marker happened to occupy.
+const FOOTNOTE_CONTINUATION_INDENT = 4;
+
+// The write-side inverse of src/lower/lower.ts's lowerFootnoteDefinition: the anchor's own name becomes the `[^label]:` marker, and its extent becomes the definition's body, every line after the first indented to the continuation column. An empty extent (the point anchor a bodyless `[^1]:` lowers to) emits the bare marker rather than a marker followed by a trailing space.
+function renderFootnoteDefinition(name: string, body: string): string {
+  const marker = `[^${name}]:`;
+  if (body.length === 0) {
+    return marker;
+  }
+  const indent = ' '.repeat(FOOTNOTE_CONTINUATION_INDENT);
+  const [firstLine = '', ...restLines] = body.split('\n');
+  return [`${marker} ${firstLine}`, ...restLines.map((line) => (line.length === 0 ? line : `${indent}${line}`))].join('\n');
+}
+
+// A construct markdown has a syntax for renders as that syntax; one it does not is TRANSPARENT -- its extent still renders in place, and only the construct's own identity is lost. That is the correct degrade rather than dropping the extent: a ContentDocument reaching this writer from another codec (an odt division, a docx content control, a tracked-change wrapper) carries real content inside markers markdown cannot spell, and dropping the wrapper's content along with the wrapper would lose the document, not just the construct.
+//
+// `anchor` is the only descriptor kind with a markdown spelling at all, and only for its footnote arm: a bookmark, an endnote, and a comment have no CommonMark or GFM syntax, and neither does any of the other five descriptor kinds.
+function renderConstruct(item: ConstructItem, context: EmitContext): string {
+  const body = renderItems(item.children, context);
+  const { descriptor } = item;
+  if (descriptor.kind === 'anchor' && descriptor.anchorType === 'footnote') {
+    return renderFootnoteDefinition(descriptor.name, body);
+  }
+  const detail = descriptor.kind === 'anchor' ? `${descriptor.kind} (${descriptor.anchorType})` : descriptor.kind;
+  context.sink({ code: MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED, severity: 'info', message: `a "${detail}" construct has no markdown syntax; its own extent still renders in place, but the construct itself is not represented` });
+  return body;
+}
+
+// A consecutive run of quoted top-level blocks at the SAME depth is genuinely ambiguous once lowered -- ContentParagraph.indentLeftPt has no field distinguishing "one blockquote containing several blocks" from "several independent blockquotes back to back at the same depth" (document-schema.js carries no ContentBlockquote container of its own; src/lower/lower.ts flattens both shapes identically). Joining every top-level block with a bare blank line, as below, resolves that ambiguity by always choosing the "independent blockquotes" reading -- the correctness-preserving default, since re-joining two ADJACENT SAME-depth quoted blocks into one blockquote (tried and reverted here) fixed no example this package's own soft-line-break handling (src/lower/inline.ts's own softBreak -> ' ' mapping, see src/test-support/conformance-exclusions.ts) did not already fail on for an unrelated reason, while genuinely breaking two real cases (two independent same-depth blockquotes with nothing between them) that this simpler join gets right.
+function renderItems(items: readonly EmitItem[], context: EmitContext): string {
+  const parts: string[] = [];
+  let index = 0;
+  while (index < items.length) {
+    const item = items[index];
+    if (item === undefined) {
+      break;
+    }
+    if (isConstructItem(item)) {
+      const rendered = renderConstruct(item, context);
+      if (rendered.length > 0) {
+        parts.push(rendered);
+      }
+      index += 1;
+      continue;
+    }
+    if (item.block.kind === 'paragraph' && item.block.list !== undefined) {
       const region: ContentParagraph[] = [];
       let end = index;
-      for (let candidate = blocks[end]; candidate?.kind === 'paragraph' && candidate.list !== undefined; candidate = blocks[end]) {
-        region.push(candidate);
+      for (let candidate = items[end]; candidate !== undefined && !isConstructItem(candidate) && candidate.block.kind === 'paragraph' && candidate.block.list !== undefined; candidate = items[end]) {
+        region.push(candidate.block);
         end += 1;
       }
       parts.push(renderListRegion(region, context));
       index = end;
       continue;
     }
-    const rendered = renderTopLevelBlock(block, context);
+    const rendered = renderTopLevelBlock(item.block, context);
     if (rendered.length > 0) {
       parts.push(rendered);
     }
     index += 1;
   }
   return parts.join('\n\n');
+}
+
+function emitBlocks(blocks: readonly ContentBlock[], context: EmitContext): string {
+  const imbalance = findConstructMarkerImbalance(blocks);
+  if (imbalance !== undefined) {
+    throw new MarkdownUnbalancedConstructMarkersError(imbalance.kind, imbalance.index);
+  }
+  return renderItems(groupConstructItems(blocks, 0).items, context);
 }
 
 export function emitMarkdown(document: ContentDocument, options: WriteMarkdownOptions = {}): string {
