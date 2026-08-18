@@ -1,22 +1,19 @@
 import type { ContentBlock, DocumentPackage } from 'document-schema.js';
-import { CONTENT_FORMAT_VERSION, DOCUMENT_PACKAGE_FORMAT_VERSION } from 'document-schema.js';
+
 import { describe, expect, it } from 'vitest';
 import { latexToFormula } from './lower';
 import { lintMathCoherence } from './lint';
 import { buildFormulaBlock } from '../model/formula';
+import { assemblePackage } from '../convert/factor-styles';
 
 // The coherence lint's contract: re-parse, re-lower, compare -- and report divergence as a warning carrying the stored provenance, never as an automatic re-derivation (the schema's atomic pair-edit rule: the layers stay exactly as stored). These tests also pin that the lint WRITES nothing: every assertion re-reads the same package object after linting.
 
 function packageOf(blocks: readonly ContentBlock[]): DocumentPackage {
-  return {
-    formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION,
-    content: {
-      kind: 'wordprocessing',
-      formatVersion: CONTENT_FORMAT_VERSION,
-      metadata: {},
-      sections: [{ pageSize: { widthPt: 595, heightPt: 842 }, margins: { topPt: 20, rightPt: 20, bottomPt: 20, leftPt: 20 }, blocks: [...blocks] }],
-    },
-  };
+  return assemblePackage({
+    kind: 'wordprocessing',
+    metadata: {},
+    sections: [{ pageSize: { widthPt: 595, heightPt: 842 }, margins: { topPt: 20, rightPt: 20, bottomPt: 20, leftPt: 20 }, blocks: [...blocks] }],
+  });
 }
 
 function mathBlockOf(latex: string): ContentBlock {

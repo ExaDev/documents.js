@@ -1,7 +1,7 @@
 import { bytesToBase64 } from 'ooxml.js';
 import { describe, expect, it } from 'vitest';
-import type { ContentDocument, ContentDrawPage, ContentImageBlock, ContentParagraph, ContentRun, ContentSection, ContentSheet, ContentSheetCell, ContentSheetPrintSettings, ContentShape, ContentSlide, ContentTable, ContentVector, LayoutItem } from 'document-schema.js';
-import { CONTENT_FORMAT_VERSION, DOCUMENT_PACKAGE_FORMAT_VERSION, type DocumentPackage } from 'document-schema.js';
+import type { ContentDocument, ContentDrawPage, ContentImageBlock, ContentParagraph, ContentRun, ContentSection, ContentSheet, ContentSheetCell, ContentSheetPrintSettings, ContentShape, ContentSlide, ContentTable, ContentVector } from 'document-schema.js';
+import { type DocumentPackage } from 'document-schema.js';
 import { encodePng } from 'byte-codec';
 import { createStandardFontMeasurer, loadMathFont } from 'pdf-codec';
 import { convertWordprocessingToLayout } from './engine';
@@ -10,6 +10,8 @@ import { reconstructWordprocessing } from './reconstruct';
 import { convertSpreadsheetToLayout } from './sheets';
 import { convertPresentationToLayout } from './slides';
 import { layoutDocumentFromPackage } from '../convert/from-package';
+import { assemblePackage } from '../convert/factor-styles';
+import type { LayoutItem } from 'pdf-codec';
 const mathMetricsAt = (sizePt: number) => loadMathFont().metricsAt(sizePt);
 
 // The frames half of the unified DocumentPackage (ExaDev/documents.js#569): every layout engine stamps each placement it computes onto the corresponding content node's own frames array (PDF user-space, pageIndex into the package's own pages), every reconstructor attaches frames from the exact items each reconstructed node was clustered from, and from-package's inverse rebuilds a LayoutDocument from those frames alone. These tests pin that stamping at each layer; sourcepath.test.ts pins the older sourcePath traceability that survives alongside it.
@@ -27,7 +29,7 @@ function section(blocks: ContentSection['blocks'], overrides: Partial<ContentSec
 }
 
 function wordprocessingDoc(sections: ContentSection[]): Extract<ContentDocument, { kind: 'wordprocessing' }> {
-  return { kind: 'wordprocessing', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, sections };
+  return { kind: 'wordprocessing', metadata: {}, sections };
 }
 
 function shape(overrides: Partial<ContentShape> = {}): ContentShape {
@@ -39,7 +41,7 @@ function slide(shapes: ContentShape[], size = { widthPt: 960, heightPt: 540 }): 
 }
 
 function presentationDoc(slides: ContentSlide[]): Extract<ContentDocument, { kind: 'presentation' }> {
-  return { kind: 'presentation', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, slides };
+  return { kind: 'presentation', metadata: {}, slides };
 }
 
 function drawPage(overrides: Partial<ContentDrawPage> = {}): ContentDrawPage {
@@ -47,7 +49,7 @@ function drawPage(overrides: Partial<ContentDrawPage> = {}): ContentDrawPage {
 }
 
 function drawingDoc(pages: ContentDrawPage[]): Extract<ContentDocument, { kind: 'drawing' }> {
-  return { kind: 'drawing', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, pages };
+  return { kind: 'drawing', metadata: {}, pages };
 }
 
 function tinyPngBlock(overrides: Partial<ContentImageBlock> = {}): ContentImageBlock {
@@ -146,7 +148,7 @@ describe('engine frames: presentation (slides.ts)', () => {
 
 describe('engine frames: spreadsheet (sheets.ts)', () => {
   it('stamps each populated cell\'s frame at its grid position', () => {
-    const doc: Extract<ContentDocument, { kind: 'spreadsheet' }> = { kind: 'spreadsheet', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, sheets: [sheet([{ row: 0, column: 0, value: { kind: 'string', value: 'A' }, displayText: 'A' }])] };
+    const doc: Extract<ContentDocument, { kind: 'spreadsheet' }> = { kind: 'spreadsheet', metadata: {}, sheets: [sheet([{ row: 0, column: 0, value: { kind: 'string', value: 'A' }, displayText: 'A' }])] };
     convertSpreadsheetToLayout(doc, { measurer: createStandardFontMeasurer(), mathMetricsAt });
     const cell = doc.sheets[0]!.cells[0]!;
     expect(cell.frames).toEqual([{ pageIndex: 0, xPt: 10, yPt: 300 - 10 - 20, widthPt: 60, heightPt: 20 }]);
@@ -189,7 +191,7 @@ describe('from-package inverse (from-package.ts)', () => {
   it('rebuilds a LayoutDocument whose pages match the package\'s own and whose text comes from the runs\' frames', () => {
     const doc = wordprocessingDoc([section([paragraph([run('Hi', { sizePt: 10 })])])]);
     const { pages } = convertWordprocessingToLayout(doc, { measurer: createStandardFontMeasurer(), mathMetricsAt });
-    const pkg: DocumentPackage = { formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content: doc, pages: [...pages] };
+    const pkg: DocumentPackage = assemblePackage(doc, pages);
     const layout = layoutDocumentFromPackage(pkg);
     expect(layout.pages.map(({ widthPt, heightPt }) => ({ widthPt, heightPt }))).toEqual(pages);
     const texts = layout.pages.flatMap((page) => page.items.filter((item): item is Extract<LayoutItem, { kind: 'text' }> => item.kind === 'text'));
@@ -207,7 +209,7 @@ describe('from-package inverse (from-package.ts)', () => {
     const image = tinyPngBlock();
     const doc = drawingDoc([drawPage({ vectors: [vector], shapes: [shape({ blocks: [image], frame: { xPt: 100, yPt: 100, widthPt: 20, heightPt: 20 } })] })]);
     const { pages } = convertDrawingToLayout(doc, { measurer: createStandardFontMeasurer() });
-    const layout = layoutDocumentFromPackage({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content: doc, pages: [...pages] });
+    const layout = layoutDocumentFromPackage(assemblePackage(doc, pages));
     const rebuiltItems = layout.pages[0]!.items;
     expect(rebuiltItems.map((item) => item.kind)).toEqual(['rect', 'image']);
     const rebuiltRect = rebuiltItems.find((item): item is Extract<LayoutItem, { kind: 'rect' }> => item.kind === 'rect');
@@ -217,9 +219,9 @@ describe('from-package inverse (from-package.ts)', () => {
   });
 
   it('renders a spreadsheet cell\'s displayText at its own frame (single-line by construction)', () => {
-    const doc: Extract<ContentDocument, { kind: 'spreadsheet' }> = { kind: 'spreadsheet', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, sheets: [sheet([{ row: 0, column: 0, value: { kind: 'string', value: 'A' }, displayText: 'A' }])] };
+    const doc: Extract<ContentDocument, { kind: 'spreadsheet' }> = { kind: 'spreadsheet', metadata: {}, sheets: [sheet([{ row: 0, column: 0, value: { kind: 'string', value: 'A' }, displayText: 'A' }])] };
     const { pages } = convertSpreadsheetToLayout(doc, { measurer: createStandardFontMeasurer(), mathMetricsAt });
-    const layout = layoutDocumentFromPackage({ formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content: doc, pages: [...pages] });
+    const layout = layoutDocumentFromPackage(assemblePackage(doc, pages));
     const texts = layout.pages[0]!.items.filter((item): item is Extract<LayoutItem, { kind: 'text' }> => item.kind === 'text');
     expect(texts.map((item) => item.text)).toEqual(['A']);
   });

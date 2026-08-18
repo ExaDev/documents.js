@@ -1,5 +1,5 @@
-import type { DocumentPackage, LayoutItem } from 'document-schema.js';
-import { DOCUMENT_PACKAGE_FORMAT_VERSION } from 'document-schema.js';
+import type { DocumentPackage } from 'document-schema.js';
+
 import { decodePackage as decodeOdfPackage } from 'odf.js';
 import { decodePackage as decodeOoxmlPackage, readXlsxContent } from 'ooxml.js';
 import { readPdf } from 'pdf-codec';
@@ -22,21 +22,24 @@ import { minimalOdsBytes } from '../test-support/ods';
 import { minimalOdtBytes } from '../test-support/odt';
 import { docxToPdf, odtToDocx } from './convert';
 import { buildDocumentBytes } from './from-package';
+import { assemblePackage } from './factor-styles';
+import { flattenPackage } from './flatten';
+import type { LayoutItem } from 'pdf-codec';
 
 function wordprocessingPackage(): DocumentPackage {
-  return { formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content: readOdtContent(decodeOdfPackage(minimalOdtBytes())) };
+  return assemblePackage(readOdtContent(decodeOdfPackage(minimalOdtBytes())));
 }
 
 function presentationPackage(): DocumentPackage {
-  return { formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content: readOdpContent(decodeOdfPackage(minimalOdpBytes())) };
+  return assemblePackage(readOdpContent(decodeOdfPackage(minimalOdpBytes())));
 }
 
 function spreadsheetPackage(): DocumentPackage {
-  return { formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content: readOdsContent(decodeOdfPackage(minimalOdsBytes())) };
+  return assemblePackage(readOdsContent(decodeOdfPackage(minimalOdsBytes())));
 }
 
 function drawingPackage(): DocumentPackage {
-  return { formatVersion: DOCUMENT_PACKAGE_FORMAT_VERSION, content: readOdgContent(decodeOdfPackage(minimalOdgBytes())) };
+  return assemblePackage(readOdgContent(decodeOdfPackage(minimalOdgBytes())));
 }
 
 describe('buildDocumentBytes', () => {
@@ -92,11 +95,12 @@ describe('buildDocumentBytes', () => {
     const layout = readPdf(bytes);
     expect(layout.pages.length).toBe(captured.pages?.length);
     // The rebuilt page carries the stamped text back as real positioned text: each run renders once, whole, at its first recorded frame, so every run's own text survives the package -> pdf round trip verbatim.
-    if (captured.content.kind !== 'wordprocessing') {
+    const capturedContent = flattenPackage(captured);
+    if (capturedContent.kind !== 'wordprocessing') {
       throw new Error('expected a wordprocessing ContentDocument');
     }
     const texts = layout.pages.flatMap((page) => page.items.filter((item): item is Extract<LayoutItem, { kind: 'text' }> => item.kind === 'text').map((item) => item.text));
-    const runTexts = captured.content.sections.flatMap((section) => section.blocks).flatMap((block) => (block.kind === 'paragraph' ? block.runs.map((run) => run.text) : [])).filter((text) => text.length > 0);
+    const runTexts = capturedContent.sections.flatMap((section) => section.blocks).flatMap((block) => (block.kind === 'paragraph' ? block.runs.map((run) => run.text) : [])).filter((text) => text.length > 0);
     for (const runText of runTexts) {
       expect(texts).toContain(runText);
     }
