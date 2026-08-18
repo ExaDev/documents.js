@@ -1,43 +1,57 @@
-// Fixture builders for every ContentDocument kind, shaped against the real document-schema.js 3.3.0 field requirements -- every builder's output is asserted to pass ContentDocumentSchema.parse in the tests that use it, so a schema change in document-schema.js breaks these fixtures loudly instead of silently testing against a shape that no longer exists. Never imported by src/index.ts and never reaching dist/ -- test-only, mirroring the family's test-support convention.
+// Fixture builders for every tree-form DocumentPackage kind, shaped against the real document-schema.js 4.0.0 field requirements -- every builder's output is asserted to pass DocumentPackageSchema.parse in the tests that use it, so a schema change in document-schema.js breaks these fixtures loudly instead of silently testing against a shape that no longer exists. Two layers: the leaf builders (paragraphs, tables, images, vectors, ...) and the group/package builders (headingGroup/sectionGroup/wordprocessingPackage/...), mirroring the tree's own two vocabularies. Never imported by src/index.ts and never reaching dist/ -- test-only, mirroring the family's test-support convention.
 import type {
   ContentBlock,
   ContentCellValue,
-  ContentDocument,
-  ContentDrawPage,
   ContentEmbeddedObject,
+  ContentParagraph,
   ContentRun,
-  ContentSection,
-  ContentShape,
-  ContentSheet,
   ContentSheetCell,
   ContentSheetImage,
-  ContentSlide,
   ContentVector,
+  DocumentPackage,
+  DrawPageChild,
+  DrawPageGroupNode,
+  HeadingGroupNode,
   LayoutFrame,
   LayoutMetadata,
+  ListChild,
+  ListGroupNode,
   Margins,
   PageSize,
+  SectionChild,
+  SectionGroupNode,
+  ShapeChild,
+  ShapeGroupNode,
+  SheetChild,
+  SheetGroupNode,
+  SlideGroupNode,
+  StylesTable,
   SymbolTable,
 } from 'document-schema.js';
 
-export function textRun(text: string): ContentRun {
-  return { text };
+export function textRun(text: string, options: { bold?: boolean } = {}): ContentRun {
+  return { text, ...(options.bold !== undefined ? { bold: options.bold } : {}) };
 }
 
-interface ParagraphOptions {
+export interface ParagraphOptions {
   headingLevel?: number;
   listLevel?: number;
   styleId?: string;
+  indentLeftPt?: number;
+  bold?: boolean;
 }
 
-export function paragraph(text: string, options: ParagraphOptions = {}): ContentBlock {
+// A bare paragraph LEAF (ContentParagraph): no headingLevel, no list membership -- exactly the payload that sits at a leaf position in a tree. The heading/list anchors are separate builders below, because in the tree vocabulary an anchored paragraph lives on its group's node, never as a leaf.
+export function paragraph(text: string, options: ParagraphOptions = {}): ContentParagraph {
   return {
     kind: 'paragraph',
-    runs: [textRun(text)],
+    runs: [textRun(text, { bold: options.bold })],
+    // headingLevel/listLevel here are for paragraphs that must carry the signal while sitting OUTSIDE a matching group (the heading-styled presentation leaf, the effective-resolution anchor variants), not for leaf-position grouping -- buildOutline reads signals only from group anchors.
     ...(options.headingLevel !== undefined ? { headingLevel: options.headingLevel } : {}),
     // numId omitted deliberately on list paragraphs: since schema 3.3.0 it is optional, and OOXML drawing paragraphs carry only a level -- exactly the slide-body shape the presentation outline nests by.
     ...(options.listLevel !== undefined ? { list: { level: options.listLevel } } : {}),
     ...(options.styleId !== undefined ? { styleId: options.styleId } : {}),
+    ...(options.indentLeftPt !== undefined ? { indentLeftPt: options.indentLeftPt } : {}),
   };
 }
 
@@ -72,69 +86,8 @@ export function layoutFrame(pageIndex: number, xPt: number, yPt: number, widthPt
 }
 
 // A paragraph whose single run carries more than one frame -- the wrapped-run case: the run's content renders in two places without the node being split or duplicated.
-export function wrappedRunParagraph(text: string, frames: LayoutFrame[]): ContentBlock {
+export function wrappedRunParagraph(text: string, frames: LayoutFrame[]): ContentParagraph {
   return { kind: 'paragraph', runs: [{ text, frames }] };
-}
-
-const PAGE_SIZE_A4_SECTION = { widthPt: 595, heightPt: 842 };
-const MARGINS_A4_SECTION = { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 };
-
-// Geometry defaults for the section builder: fixtures may override either half per section (the multi-section corpus entry uses two distinct geometries, because per-section geometry is exactly what section groups must carry for the flatten bijection to hold).
-export interface SectionOptions {
-  pageSize?: PageSize;
-  margins?: Margins;
-}
-
-export function section(blocks: ContentBlock[], options: SectionOptions = {}): ContentSection {
-  return {
-    pageSize: options.pageSize ?? PAGE_SIZE_A4_SECTION,
-    margins: options.margins ?? MARGINS_A4_SECTION,
-    blocks,
-  };
-}
-
-// Document-level options the envelope round-trip has to prove: non-empty metadata (title/author reach flatten only through DocumentEnvelope) and the document-level symbolTable (the optional third envelope field).
-export interface DocumentOptions {
-  metadata?: LayoutMetadata;
-  symbolTable?: SymbolTable;
-}
-
-export function wordprocessingDoc(blocksPerSection: ContentBlock[][], options: DocumentOptions = {}): ContentDocument {
-  return {
-    kind: 'wordprocessing',
-    formatVersion: 3,
-    metadata: options.metadata ?? {},
-    ...(options.symbolTable !== undefined ? { symbolTable: options.symbolTable } : {}),
-    sections: blocksPerSection.map((blocks) => section(blocks)),
-  };
-}
-
-export function shape(blocks: ContentBlock[]): ContentShape {
-  return {
-    frame: { xPt: 0, yPt: 0, widthPt: 600, heightPt: 400 },
-    insetLeftPt: 0,
-    insetTopPt: 0,
-    insetRightPt: 0,
-    insetBottomPt: 0,
-    blocks,
-  };
-}
-
-export function slide(blocksPerShape: ContentBlock[][], options: { notes?: string } = {}): ContentSlide {
-  return {
-    size: { widthPt: 960, heightPt: 540 },
-    shapes: blocksPerShape.map(shape),
-    notes: options.notes ?? '',
-  };
-}
-
-export function presentationDoc(slides: ContentSlide[]): ContentDocument {
-  return {
-    kind: 'presentation',
-    formatVersion: 3,
-    metadata: {},
-    slides,
-  };
 }
 
 export function sheetImage(altText?: string): ContentSheetImage {
@@ -152,20 +105,34 @@ export function sheetImage(altText?: string): ContentSheetImage {
   };
 }
 
+// An embedded whole wordprocessing document, block-flow-shaped via embeddedObjectBlock below or sheet-anchored as-is -- the recursive arm stays one intact leaf whichever container holds it. The payload is a flat ContentDocument, not a DocumentPackage: schema 4 promotes the TOP-LEVEL package to tree form, but an embedded document stays the flat codec-exchange shape it always was.
 export function embeddedObject(): ContentEmbeddedObject {
   return {
     objectKind: 'wordprocessing',
     frame: { xPt: 10, yPt: 10, widthPt: 300, heightPt: 200 },
-    document: wordprocessingDoc([[paragraph('embedded document body')]]),
+    document: {
+      kind: 'wordprocessing',
+      metadata: {},
+      sections: [
+        { pageSize: { widthPt: 595, heightPt: 842 }, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 }, blocks: [paragraph('embedded document body')] },
+      ],
+    },
   };
 }
 
-// The recursive formula arm: an embedded whole formula document, anchored to a spreadsheet cell exactly as a sheet-held embedded object is (the four anchor fields are sheet-anchored-only, which is why they are set here and absent on embeddedObject above).
+// The recursive formula arm: an embedded whole formula document, anchored to a spreadsheet cell exactly as a sheet-held embedded object is (the four anchor fields are sheet-anchored-only, which is why they are set here and absent on embeddedObject above). Same flat-shape rule as embeddedObject; mathml carries a real MathMlNode tree (an element with a text child), because the schema's guard rejects bare strings.
 export function embeddedFormulaObject(): ContentEmbeddedObject {
   return {
     objectKind: 'formula',
     frame: { xPt: 2, yPt: 2, widthPt: 120, heightPt: 40 },
-    document: formulaDoc('P = VI'),
+    document: {
+      kind: 'formula',
+      metadata: {},
+      formula: {
+        mathml: [{ type: 'element', tag: 'mi', attributes: [], children: [{ type: 'text', value: 'P' }] }],
+        presentation: { latex: 'P = VI' },
+      },
+    },
     anchorRow: 0,
     anchorColumn: 2,
     offsetXPt: 2,
@@ -178,43 +145,9 @@ export function embeddedObjectBlock(): ContentBlock {
   return { ...embeddedObject(), kind: 'embeddedObject' };
 }
 
-// A populated sheet cell, for the corpus's grid-carrying sheet: cells ride ON the sheet descriptor in the tree, so a round-tripped cell proves the grid travelled with the container and not through the children.
+// A populated sheet cell, for grid-carrying sheets: cells ride ON the sheet descriptor, so a sheet group carries the grid and its children carry only the floating payload.
 export function sheetCell(row: number, column: number, value: ContentCellValue, displayText: string): ContentSheetCell {
   return { row, column, value, displayText };
-}
-
-export interface SheetOptions {
-  name: string;
-  cells?: ContentSheetCell[];
-  images?: ContentSheetImage[];
-  embeddedObjects?: ContentEmbeddedObject[];
-}
-
-export function sheet(options: SheetOptions): ContentSheet {
-  return {
-    name: options.name,
-    cells: options.cells ?? [],
-    columns: [{ index: 0, widthPt: 80 }],
-    rows: [{ index: 0, heightPt: 20 }],
-    images: options.images ?? [],
-    printSettings: {
-      pageSize: { widthPt: 842, heightPt: 595 },
-      margins: { topPt: 40, rightPt: 40, bottomPt: 40, leftPt: 40 },
-      gridlines: false,
-      headers: false,
-      pageOrder: 'downThenOver',
-    },
-    ...(options.embeddedObjects !== undefined ? { embeddedObjects: options.embeddedObjects } : {}),
-  };
-}
-
-export function spreadsheetDoc(sheets: ContentSheet[]): ContentDocument {
-  return {
-    kind: 'spreadsheet',
-    formatVersion: 3,
-    metadata: {},
-    sheets,
-  };
 }
 
 export function vectorLine(): ContentVector {
@@ -234,35 +167,177 @@ export function vectorRect(): ContentVector {
   };
 }
 
-export function drawPage(blocksPerShape: ContentBlock[][], vectors: ContentVector[]): ContentDrawPage {
+// A group's optional style ref into the package's styles table -- the field effectivePackage exists to consume. Plain {} at every call site keeps the anchor fixtures readable while the effective tests spell the ref out.
+interface GroupOptions {
+  style?: string;
+}
+
+// The anchor paragraphs are built literally rather than through paragraph(), whose return type is the loose ContentParagraph with the grouping signal optional -- a group anchor's signal is structurally required, and the literal spread keeps it required without a cast.
+export function headingGroup(text: string, headingLevel: number, children: SectionChild[] = [], options: GroupOptions = {}): HeadingGroupNode {
   return {
-    size: { widthPt: 960, heightPt: 540 },
-    shapes: blocksPerShape.map(shape),
-    vectors,
+    node: { ...paragraph(text), headingLevel },
+    ...(options.style !== undefined ? { style: options.style } : {}),
+    children,
   };
 }
 
-export function drawingDoc(pages: ContentDrawPage[]): ContentDocument {
+export function listGroup(text: string, level: number, children: ListChild[] = [], options: GroupOptions = {}): ListGroupNode {
+  return {
+    node: { ...paragraph(text), list: { level } },
+    ...(options.style !== undefined ? { style: options.style } : {}),
+    children,
+  };
+}
+
+const PAGE_SIZE_A4_SECTION = { widthPt: 595, heightPt: 842 };
+const MARGINS_A4_SECTION = { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 };
+
+export interface SectionGroupOptions extends GroupOptions {
+  pageSize?: PageSize;
+  margins?: Margins;
+}
+
+export function sectionGroup(children: SectionChild[], options: SectionGroupOptions = {}): SectionGroupNode {
+  return {
+    node: {
+      pageSize: options.pageSize ?? PAGE_SIZE_A4_SECTION,
+      margins: options.margins ?? MARGINS_A4_SECTION,
+      kind: 'section',
+    },
+    ...(options.style !== undefined ? { style: options.style } : {}),
+    children,
+  };
+}
+
+export function shapeGroup(children: ShapeChild[], options: GroupOptions = {}): ShapeGroupNode {
+  return {
+    node: {
+      frame: { xPt: 0, yPt: 0, widthPt: 600, heightPt: 400 },
+      insetLeftPt: 0,
+      insetTopPt: 0,
+      insetRightPt: 0,
+      insetBottomPt: 0,
+    },
+    ...(options.style !== undefined ? { style: options.style } : {}),
+    children,
+  };
+}
+
+export interface SlideGroupOptions extends GroupOptions {
+  notes?: string;
+}
+
+export function slideGroup(shapes: ShapeGroupNode[], options: SlideGroupOptions = {}): SlideGroupNode {
+  return {
+    node: {
+      size: { widthPt: 960, heightPt: 540 },
+      notes: options.notes ?? '',
+      kind: 'slide',
+    },
+    ...(options.style !== undefined ? { style: options.style } : {}),
+    children: shapes,
+  };
+}
+
+export interface SheetGroupOptions extends GroupOptions {
+  name: string;
+  cells?: ContentSheetCell[];
+  images?: ContentSheetImage[];
+  embeddedObjects?: ContentEmbeddedObject[];
+}
+
+export function sheetGroup(options: SheetGroupOptions): SheetGroupNode {
+  const children: SheetChild[] = [...(options.images ?? []), ...(options.embeddedObjects ?? [])];
+  return {
+    node: {
+      cells: options.cells ?? [],
+      rows: [{ index: 0, heightPt: 20 }],
+      name: options.name,
+      columns: [{ index: 0, widthPt: 80 }],
+      printSettings: {
+        pageSize: { widthPt: 842, heightPt: 595 },
+        margins: { topPt: 40, rightPt: 40, bottomPt: 40, leftPt: 40 },
+        gridlines: false,
+        headers: false,
+        pageOrder: 'downThenOver',
+      },
+      kind: 'sheet',
+    },
+    ...(options.style !== undefined ? { style: options.style } : {}),
+    children,
+  };
+}
+
+export function drawPageGroup(children: DrawPageChild[], options: GroupOptions = {}): DrawPageGroupNode {
+  return {
+    node: { size: { widthPt: 960, heightPt: 540 }, kind: 'drawPage' },
+    ...(options.style !== undefined ? { style: options.style } : {}),
+    children,
+  };
+}
+
+// The envelope options every package builder shares -- exactly the DocumentPackage fields outside `kind` and `children`, so a fixture can prove any envelope field survives alongside the tree without a second bespoke builder per kind.
+export interface PackageOptions {
+  metadata?: LayoutMetadata;
+  symbolTable?: SymbolTable;
+  pages?: NonNullable<DocumentPackage['pages']>;
+  styles?: StylesTable;
+}
+
+export function wordprocessingPackage(children: SectionGroupNode[], options: PackageOptions = {}): DocumentPackage {
+  return {
+    kind: 'wordprocessing',
+    metadata: options.metadata ?? {},
+    ...(options.symbolTable !== undefined ? { symbolTable: options.symbolTable } : {}),
+    ...(options.pages !== undefined ? { pages: options.pages } : {}),
+    ...(options.styles !== undefined ? { styles: options.styles } : {}),
+    children,
+  };
+}
+
+export function presentationPackage(children: SlideGroupNode[], options: PackageOptions = {}): DocumentPackage {
+  return {
+    kind: 'presentation',
+    metadata: options.metadata ?? {},
+    ...(options.symbolTable !== undefined ? { symbolTable: options.symbolTable } : {}),
+    ...(options.pages !== undefined ? { pages: options.pages } : {}),
+    ...(options.styles !== undefined ? { styles: options.styles } : {}),
+    children,
+  };
+}
+
+export function spreadsheetPackage(children: SheetGroupNode[], options: PackageOptions = {}): DocumentPackage {
+  return {
+    kind: 'spreadsheet',
+    metadata: options.metadata ?? {},
+    ...(options.symbolTable !== undefined ? { symbolTable: options.symbolTable } : {}),
+    ...(options.pages !== undefined ? { pages: options.pages } : {}),
+    ...(options.styles !== undefined ? { styles: options.styles } : {}),
+    children,
+  };
+}
+
+export function drawingPackage(children: DrawPageGroupNode[], options: PackageOptions = {}): DocumentPackage {
   return {
     kind: 'drawing',
-    formatVersion: 3,
-    metadata: {},
-    pages,
+    metadata: options.metadata ?? {},
+    ...(options.symbolTable !== undefined ? { symbolTable: options.symbolTable } : {}),
+    ...(options.pages !== undefined ? { pages: options.pages } : {}),
+    ...(options.styles !== undefined ? { styles: options.styles } : {}),
+    children,
   };
 }
 
-type FormulaDocument = Extract<ContentDocument, { kind: 'formula' }>;
-
-// Narrowed to the formula variant so tests can reach doc.formula without re-narrowing by hand.
-export function formulaDoc(latex?: string): FormulaDocument {
+export function formulaPackage(latex?: string): DocumentPackage {
   return {
     kind: 'formula',
-    formatVersion: 3,
     metadata: {},
-    formula: {
-      mathml: [{ type: 'element', tag: 'mi', attributes: [], children: [{ type: 'text', value: 'x' }] }],
-      ...(latex !== undefined ? { presentation: { latex } } : {}),
-    },
+    children: [
+      {
+        mathml: [{ type: 'element', tag: 'mi', attributes: [], children: [{ type: 'text', value: 'x' }] }],
+        ...(latex !== undefined ? { presentation: { latex } } : {}),
+      },
+    ],
   };
 }
 

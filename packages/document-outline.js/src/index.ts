@@ -1,8 +1,5 @@
-// The outline package for the documents.js family: heading- and list-level-driven hierarchical outlines over any ContentDocument (all five document kinds), the kind-agnostic tree-walking helpers every consumer of a grouped tree ends up needing -- flatten-to-leaves, a leaf's own text, and a stable per-leaf content hash -- and, since the re-charter in document-outline.js#2, the decompose/flatten pair over DocumentPackage with its bijection property tests: the lossless package-tree view and its exact inverse, the phase-1 gate for document-schema.js#20's DocumentPackage promotion (phase 2 ports the pair into documents.js's package boundary).
+// Artefact utilities for the documents.js family, since document-outline.js#2 phase 2 re-chartered the package around document-schema.js 4.0.0's tree-form DocumentPackage (ExaDev/document-schema.js#20): the tree types and the lossless decompose/flatten grouping semantics are the schema's and documents.js's to own, and this package's own copies are gone (one implementation, one authority). What remains, for a consumer already holding a tree-form package JSON without importing the producer that built it: the TOC outline projection over the package tree (buildOutline), effective-property resolution of style refs (effectivePackage), and the kind-agnostic walking helpers every consumer of grouped content ends up needing -- flatten-to-leaves, a leaf's own text, and a stable per-leaf content hash.
 export * from './outline/build';
-export * from './outline/decompose';
 export * from './outline/effective';
-export * from './outline/flatten';
 export * from './outline/helpers';
 export * from './outline/node';
-export * from './outline/package-node';

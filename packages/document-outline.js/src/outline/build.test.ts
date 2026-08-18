@@ -1,43 +1,52 @@
 import { describe, expect, it } from 'vitest';
-import { ContentDocumentSchema, type ContentDocument } from 'document-schema.js';
+import { DocumentPackageSchema, type DocumentPackage } from 'document-schema.js';
 import { buildOutline } from './build';
 import {
-  drawPage,
-  drawingDoc,
+  drawPageGroup,
+  drawingPackage,
   embeddedObject,
-  formulaDoc,
+  formulaPackage,
+  headingGroup,
   imageBlock,
+  listGroup,
   pageBreak,
   paragraph,
-  presentationDoc,
-  sheet,
+  presentationPackage,
+  sectionGroup,
+  shapeGroup,
+  sheetGroup,
   sheetImage,
-  slide,
-  spreadsheetDoc,
+  slideGroup,
+  spreadsheetPackage,
   table,
   vectorLine,
   vectorRect,
-  wordprocessingDoc,
+  wordprocessingPackage,
 } from '../test-support/fixtures';
 
-// Every per-kind fixture is asserted valid against the canonical schema before its outline is checked, so these tests exercise the builder against real ContentDocument shapes -- the actual field requirements of document-schema.js 3.3.0 -- not approximations that merely happen to type-check.
-function expectSchemaValid(doc: ContentDocument): void {
-  const result = ContentDocumentSchema.safeParse(doc);
+// Every per-kind fixture is asserted valid against the canonical schema before its outline is checked, so these tests exercise the builder against real DocumentPackage shapes -- the actual field requirements of document-schema.js 4.0.0 -- not approximations that merely happen to type-check.
+function expectSchemaValid(pkg: DocumentPackage): void {
+  const result = DocumentPackageSchema.safeParse(pkg);
   expect(result.success ? 'valid' : `invalid: ${JSON.stringify(result.error.issues[0])}`).toBe('valid');
 }
 
 describe('wordprocessing outlines', () => {
   it('nests headings deeply with content at each level', () => {
     const lead = paragraph('lead');
-    const h1 = paragraph('Chapter', { headingLevel: 1 });
     const chapterIntro = paragraph('chapter intro');
-    const h2 = paragraph('Section', { headingLevel: 2 });
     const sectionBody = paragraph('section body');
-    const h3 = paragraph('Subsection', { headingLevel: 3 });
     const subBody = paragraph('sub body');
-    const doc = wordprocessingDoc([[lead, h1, chapterIntro, h2, sectionBody, h3, subBody]]);
-    expectSchemaValid(doc);
-    expect(buildOutline(doc)).toEqual([
+    const pkg = wordprocessingPackage([
+      sectionGroup([
+        lead,
+        headingGroup('Chapter', 1, [
+          chapterIntro,
+          headingGroup('Section', 2, [sectionBody, headingGroup('Subsection', 3, [subBody])]),
+        ]),
+      ]),
+    ]);
+    expectSchemaValid(pkg);
+    expect(buildOutline(pkg)).toEqual([
       lead,
       {
         text: 'Chapter',
@@ -57,25 +66,26 @@ describe('wordprocessing outlines', () => {
     ]);
   });
 
-  it('makes an H4 following an H2 its direct child with no synthetic intermediates', () => {
-    const h2 = paragraph('Section', { headingLevel: 2 });
-    const h4 = paragraph('Deep', { headingLevel: 4 });
+  it('keeps the tree shape when an H4 sits under an H2 with no synthetic intermediates', () => {
     const body = paragraph('body');
-    const doc = wordprocessingDoc([[h2, h4, body]]);
-    expectSchemaValid(doc);
-    expect(buildOutline(doc)).toEqual([
+    const pkg = wordprocessingPackage([
+      sectionGroup([headingGroup('Section', 2, [headingGroup('Deep', 4, [body])])]),
+    ]);
+    expectSchemaValid(pkg);
+    expect(buildOutline(pkg)).toEqual([
       { text: 'Section', level: 2, children: [{ text: 'Deep', level: 4, children: [body] }] },
     ]);
   });
 
   it('pops exactly the deeper group when an H2 follows an H1 and an H3', () => {
-    const h1 = paragraph('Chapter', { headingLevel: 1 });
-    const h3 = paragraph('Aside', { headingLevel: 3 });
-    const h2 = paragraph('Section', { headingLevel: 2 });
     const body = paragraph('body');
-    const doc = wordprocessingDoc([[h1, h3, h2, body]]);
-    expectSchemaValid(doc);
-    expect(buildOutline(doc)).toEqual([
+    const pkg = wordprocessingPackage([
+      sectionGroup([
+        headingGroup('Chapter', 1, [headingGroup('Aside', 3, []), headingGroup('Section', 2, [body])]),
+      ]),
+    ]);
+    expectSchemaValid(pkg);
+    expect(buildOutline(pkg)).toEqual([
       {
         text: 'Chapter',
         level: 1,
@@ -88,26 +98,28 @@ describe('wordprocessing outlines', () => {
   });
 
   it('nests a headingLevel 10 following an H2 as its direct child, level carried verbatim', () => {
-    const h2 = paragraph('Section', { headingLevel: 2 });
-    const h10 = paragraph('Unusually deep', { headingLevel: 10 });
     const body = paragraph('body');
-    const doc = wordprocessingDoc([[h2, h10, body]]);
-    expectSchemaValid(doc);
-    expect(buildOutline(doc)).toEqual([
+    const pkg = wordprocessingPackage([
+      sectionGroup([headingGroup('Section', 2, [headingGroup('Unusually deep', 10, [body])])]),
+    ]);
+    expectSchemaValid(pkg);
+    expect(buildOutline(pkg)).toEqual([
       { text: 'Section', level: 2, children: [{ text: 'Unusually deep', level: 10, children: [body] }] },
     ]);
   });
 
-  it('pops an H1 after an H3 back to the root', () => {
-    const first = paragraph('First', { headingLevel: 1 });
+  it('pops an H1 after an H3 back to the root across sibling groups', () => {
     const firstBody = paragraph('first body');
-    const h3 = paragraph('Nested', { headingLevel: 3 });
     const nestedBody = paragraph('nested body');
-    const second = paragraph('Second', { headingLevel: 1 });
     const secondBody = paragraph('second body');
-    const doc = wordprocessingDoc([[first, firstBody, h3, nestedBody, second, secondBody]]);
-    expectSchemaValid(doc);
-    expect(buildOutline(doc)).toEqual([
+    const pkg = wordprocessingPackage([
+      sectionGroup([
+        headingGroup('First', 1, [firstBody, headingGroup('Nested', 3, [nestedBody])]),
+        headingGroup('Second', 1, [secondBody]),
+      ]),
+    ]);
+    expectSchemaValid(pkg);
+    expect(buildOutline(pkg)).toEqual([
       {
         text: 'First',
         level: 1,
@@ -122,33 +134,34 @@ describe('wordprocessing outlines', () => {
 
   it('attaches content before any heading at the root', () => {
     const intro = paragraph('intro');
-    const h1 = paragraph('Chapter', { headingLevel: 1 });
     const body = paragraph('body');
-    const doc = wordprocessingDoc([[intro, h1, body]]);
-    expectSchemaValid(doc);
-    expect(buildOutline(doc)).toEqual([intro, { text: 'Chapter', level: 1, children: [body] }]);
+    const pkg = wordprocessingPackage([sectionGroup([intro, headingGroup('Chapter', 1, [body])])]);
+    expectSchemaValid(pkg);
+    expect(buildOutline(pkg)).toEqual([intro, { text: 'Chapter', level: 1, children: [body] }]);
   });
 
-  it('leaves a document with no headings flat at the root', () => {
+  it('leaves a package with no headings flat at the root', () => {
     const body = paragraph('body');
     const cells = table([['a', 'b']]);
     const img = imageBlock('a picture');
     const breakBlock = pageBreak();
-    const doc = wordprocessingDoc([[body, cells, img, breakBlock]]);
-    expectSchemaValid(doc);
-    expect(buildOutline(doc)).toEqual([body, cells, img, breakBlock]);
+    const pkg = wordprocessingPackage([sectionGroup([body, cells, img, breakBlock])]);
+    expectSchemaValid(pkg);
+    expect(buildOutline(pkg)).toEqual([body, cells, img, breakBlock]);
   });
 
   it('nests list levels inside a heading group, including stepping back to a shallower level', () => {
-    const h1 = paragraph('Chapter', { headingLevel: 1 });
-    const a = paragraph('A', { listLevel: 0 });
-    const b = paragraph('B', { listLevel: 1 });
-    const c = paragraph('C', { listLevel: 2 });
-    const d = paragraph('D', { listLevel: 1 });
     const tail = paragraph('tail');
-    const doc = wordprocessingDoc([[h1, a, b, c, d, tail]]);
-    expectSchemaValid(doc);
-    expect(buildOutline(doc)).toEqual([
+    const pkg = wordprocessingPackage([
+      sectionGroup([
+        headingGroup('Chapter', 1, [
+          listGroup('A', 0, [listGroup('B', 1, [listGroup('C', 2, [])]), listGroup('D', 1, [])]),
+          tail,
+        ]),
+      ]),
+    ]);
+    expectSchemaValid(pkg);
+    expect(buildOutline(pkg)).toEqual([
       {
         text: 'Chapter',
         level: 1,
@@ -168,11 +181,9 @@ describe('wordprocessing outlines', () => {
   });
 
   it('nests a level jump directly under the nearest shallower item with no synthetic intermediates', () => {
-    const a = paragraph('A', { listLevel: 0 });
-    const c = paragraph('C', { listLevel: 2 });
-    const doc = wordprocessingDoc([[a, c]]);
-    expectSchemaValid(doc);
-    expect(buildOutline(doc)).toEqual([
+    const pkg = wordprocessingPackage([sectionGroup([listGroup('A', 0, [listGroup('C', 2, [])])])]);
+    expectSchemaValid(pkg);
+    expect(buildOutline(pkg)).toEqual([
       { text: 'A', level: 0, children: [{ text: 'C', level: 2, children: [] }] },
     ]);
   });
@@ -180,18 +191,21 @@ describe('wordprocessing outlines', () => {
   it('does not group a Heading-styled paragraph that carries no headingLevel', () => {
     const styled = paragraph('styled as a heading', { styleId: 'Heading3' });
     const body = paragraph('body');
-    const doc = wordprocessingDoc([[styled, body]]);
-    expectSchemaValid(doc);
-    expect(buildOutline(doc)).toEqual([styled, body]);
+    const pkg = wordprocessingPackage([sectionGroup([styled, body])]);
+    expectSchemaValid(pkg);
+    expect(buildOutline(pkg)).toEqual([styled, body]);
   });
 
   it('flows blocks from every section into one tree', () => {
-    const h1 = paragraph('Chapter', { headingLevel: 1 });
     const firstSectionBody = paragraph('first section body');
     const secondSectionBody = paragraph('second section body');
-    const doc = wordprocessingDoc([[h1, firstSectionBody], [secondSectionBody]]);
-    expectSchemaValid(doc);
-    expect(buildOutline(doc)).toEqual([
+    const pkg = wordprocessingPackage([
+      sectionGroup([headingGroup('Chapter', 1, [firstSectionBody])]),
+      sectionGroup([secondSectionBody]),
+    ]);
+    expectSchemaValid(pkg);
+    // The heading stack persists across the section boundary -- the TOC projection's deliberate cross-container lossiness (and exactly why the lossless grouping lives in documents.js, not here).
+    expect(buildOutline(pkg)).toEqual([
       {
         text: 'Chapter',
         level: 1,
@@ -199,18 +213,38 @@ describe('wordprocessing outlines', () => {
       },
     ]);
   });
+
+  it('continues heading nesting opened in one section inside the next', () => {
+    const pkg = wordprocessingPackage([
+      sectionGroup([headingGroup('Chapter', 1, [headingGroup('Section', 2, [])])]),
+      sectionGroup([headingGroup('Subsection', 3, [])]),
+    ]);
+    expectSchemaValid(pkg);
+    // The deepest open group at the end of section one is the scope the next section's headings nest into -- stack semantics applied to anchors in pre-order, exactly as they were on flat content before the tree form existed.
+    expect(buildOutline(pkg)).toEqual([
+      {
+        text: 'Chapter',
+        level: 1,
+        children: [{ text: 'Section', level: 2, children: [{ text: 'Subsection', level: 3, children: [] }] }],
+      },
+    ]);
+  });
 });
 
 describe('presentation outlines', () => {
   it('nests mixed list levels under the slide group with non-paragraph blocks attached at the current depth', () => {
-    const a = paragraph('A', { listLevel: 0 });
     const cells = table([['cell']]);
-    const b = paragraph('B', { listLevel: 1 });
     const img = imageBlock('a picture');
-    const c = paragraph('C', { listLevel: 0 });
-    const doc = presentationDoc([slide([[a, cells, b, img, c]])]);
-    expectSchemaValid(doc);
-    expect(buildOutline(doc)).toEqual([
+    const pkg = presentationPackage([
+      slideGroup([
+        shapeGroup([
+          listGroup('A', 0, [cells, listGroup('B', 1, [img])]),
+          listGroup('C', 0, []),
+        ]),
+      ]),
+    ]);
+    expectSchemaValid(pkg);
+    expect(buildOutline(pkg)).toEqual([
       {
         text: 'Slide 1',
         level: 1,
@@ -229,12 +263,22 @@ describe('presentation outlines', () => {
   it('keeps a slide with no list levels flat under its group and numbers slides across the document', () => {
     const first = paragraph('first');
     const second = paragraph('second');
-    const doc = presentationDoc([slide([[first], [second]]), slide([[]])]);
-    expectSchemaValid(doc);
-    expect(buildOutline(doc)).toEqual([
+    const pkg = presentationPackage([
+      slideGroup([shapeGroup([first]), shapeGroup([second])]),
+      slideGroup([]),
+    ]);
+    expectSchemaValid(pkg);
+    expect(buildOutline(pkg)).toEqual([
       { text: 'Slide 1', level: 1, children: [first, second] },
       { text: 'Slide 2', level: 1, children: [] },
     ]);
+  });
+
+  it('projects a heading-styled paragraph leaf flat: headingLevel is not a depth signal in a shape', () => {
+    const titleStyled = paragraph('Title', { headingLevel: 1 });
+    const pkg = presentationPackage([slideGroup([shapeGroup([titleStyled])])]);
+    expectSchemaValid(pkg);
+    expect(buildOutline(pkg)).toEqual([{ text: 'Slide 1', level: 1, children: [titleStyled] }]);
   });
 });
 
@@ -242,12 +286,12 @@ describe('spreadsheet outlines', () => {
   it('groups per sheet, with images then embedded objects as leaves and cells absent', () => {
     const chart = sheetImage('a chart');
     const embedded = embeddedObject();
-    const doc = spreadsheetDoc([
-      sheet({ name: 'Revenue', images: [chart], embeddedObjects: [embedded] }),
-      sheet({ name: 'Notes' }),
+    const pkg = spreadsheetPackage([
+      sheetGroup({ name: 'Revenue', images: [chart], embeddedObjects: [embedded] }),
+      sheetGroup({ name: 'Notes' }),
     ]);
-    expectSchemaValid(doc);
-    expect(buildOutline(doc)).toEqual([
+    expectSchemaValid(pkg);
+    expect(buildOutline(pkg)).toEqual([
       { text: 'Revenue', level: 1, children: [chart, embedded] },
       { text: 'Notes', level: 1, children: [] },
     ]);
@@ -255,29 +299,53 @@ describe('spreadsheet outlines', () => {
 });
 
 describe('drawing outlines', () => {
-  it('groups per page with shape blocks then vectors as leaves', () => {
+  it('groups per page with shape contents then vectors as flat leaves', () => {
     const body = paragraph('text box');
     const line = vectorLine();
     const rect = vectorRect();
-    const doc = drawingDoc([drawPage([[body]], [line, rect]), drawPage([], [])]);
-    expectSchemaValid(doc);
-    expect(buildOutline(doc)).toEqual([
+    const pkg = drawingPackage([
+      drawPageGroup([shapeGroup([body]), line, rect]),
+      drawPageGroup([]),
+    ]);
+    expectSchemaValid(pkg);
+    expect(buildOutline(pkg)).toEqual([
       { text: 'Page 1', level: 1, children: [body, line, rect] },
       { text: 'Page 2', level: 1, children: [] },
+    ]);
+  });
+
+  it('flattens list-group anchors inside a shape back to paragraph leaves, pre-order', () => {
+    // A drawing outline is flat under its page: list structure inside a text box is not TOC hierarchy, so the anchor paragraphs re-emerge as plain leaves in document order.
+    const pkg = drawingPackage([
+      drawPageGroup([shapeGroup([listGroup('A', 0, [listGroup('B', 1, [])]), paragraph('tail')])]),
+    ]);
+    expectSchemaValid(pkg);
+    const outline = buildOutline(pkg);
+    expect(outline).toHaveLength(1);
+    const page = outline[0];
+    if (page === undefined || !('children' in page)) throw new Error('expected a group node');
+    expect(page.text).toBe('Page 1');
+    expect(page.level).toBe(1);
+    expect(page.children).toEqual([
+      expect.objectContaining({ kind: 'paragraph' }),
+      expect.objectContaining({ kind: 'paragraph' }),
+      expect.objectContaining({ kind: 'paragraph' }),
     ]);
   });
 });
 
 describe('formula outlines', () => {
   it('yields a single node whose leaf is the ContentFormula, labelled by its LaTeX', () => {
-    const doc = formulaDoc('x^2');
-    expectSchemaValid(doc);
-    expect(buildOutline(doc)).toEqual([{ text: 'x^2', level: 1, children: [doc.formula] }]);
+    const pkg = formulaPackage('x^2');
+    expectSchemaValid(pkg);
+    if (pkg.kind !== 'formula') throw new Error('unreachable');
+    expect(buildOutline(pkg)).toEqual([{ text: 'x^2', level: 1, children: [pkg.children[0]] }]);
   });
 
   it('labels the single node with the empty string when no LaTeX is present', () => {
-    const doc = formulaDoc();
-    expectSchemaValid(doc);
-    expect(buildOutline(doc)).toEqual([{ text: '', level: 1, children: [doc.formula] }]);
+    const pkg = formulaPackage();
+    expectSchemaValid(pkg);
+    if (pkg.kind !== 'formula') throw new Error('unreachable');
+    expect(buildOutline(pkg)).toEqual([{ text: '', level: 1, children: [pkg.children[0]] }]);
   });
 });

@@ -2,44 +2,45 @@ import { describe, expect, it } from 'vitest';
 import { buildOutline } from './build';
 import { isOutlineChild, isOutlineLeaf, isOutlineNode, OutlineNodeSchema } from './node';
 import {
-  drawPage,
-  drawingDoc,
+  drawPageGroup,
+  drawingPackage,
   embeddedObject,
-  formulaDoc,
+  formulaPackage,
+  headingGroup,
   imageBlock,
+  listGroup,
   pageBreak,
   paragraph,
-  presentationDoc,
-  sheet,
+  presentationPackage,
+  sectionGroup,
+  shapeGroup,
+  sheetGroup,
   sheetImage,
-  slide,
-  spreadsheetDoc,
+  slideGroup,
+  spreadsheetPackage,
   table,
   vectorLine,
-  wordprocessingDoc,
+  wordprocessingPackage,
 } from '../test-support/fixtures';
 
 describe('isOutlineNode guard', () => {
-  it('accepts builder output for every document kind', () => {
-    const documents = [
-      wordprocessingDoc([
-        [
+  it('accepts builder output for every package kind', () => {
+    const packages = [
+      wordprocessingPackage([
+        sectionGroup([
           paragraph('before'),
-          paragraph('Chapter', { headingLevel: 1 }),
-          paragraph('A', { listLevel: 0 }),
-          paragraph('B', { listLevel: 1 }),
-          table([['cell']]),
-          paragraph('Deep', { headingLevel: 4 }),
-        ],
+          headingGroup('Chapter', 1, [listGroup('A', 0, [listGroup('B', 1, [table([['cell']])])])]),
+          headingGroup('Deep', 4, []),
+        ]),
       ]),
-      presentationDoc([slide([[paragraph('A', { listLevel: 0 }), imageBlock('a picture'), paragraph('B', { listLevel: 1 })]])]),
-      spreadsheetDoc([sheet({ name: 'Revenue', images: [sheetImage('a chart')], embeddedObjects: [embeddedObject()] })]),
-      drawingDoc([drawPage([[paragraph('text box')]], [vectorLine()])]),
-      formulaDoc('x^2'),
+      presentationPackage([slideGroup([shapeGroup([listGroup('A', 0, [imageBlock('a picture')]), listGroup('B', 1, [])])])]),
+      spreadsheetPackage([sheetGroup({ name: 'Revenue', images: [sheetImage('a chart')], embeddedObjects: [embeddedObject()] })]),
+      drawingPackage([drawPageGroup([shapeGroup([paragraph('text box')]), vectorLine()])]),
+      formulaPackage('x^2'),
     ];
-    for (const doc of documents) {
+    for (const pkg of packages) {
       // The wordprocessing root mixes a pre-heading leaf with groups; every other kind's root is pure groups. isOutlineChild covers both classes.
-      const outline = buildOutline(doc);
+      const outline = buildOutline(pkg);
       expect(outline.every(isOutlineChild)).toBe(true);
       for (const node of outline.filter(isOutlineNode)) {
         expect(isOutlineNode(node)).toBe(true);
@@ -66,6 +67,8 @@ describe('isOutlineNode guard', () => {
 
   it('recognises every leaf class via isOutlineLeaf', () => {
     const blockEmbedded = { ...embeddedObject(), kind: 'embeddedObject' };
+    const withLatex = formulaPackage('x^2');
+    if (withLatex.kind !== 'formula') throw new Error('unreachable');
     const leaves = [
       paragraph('text'),
       table([['cell']]),
@@ -75,7 +78,7 @@ describe('isOutlineNode guard', () => {
       sheetImage('a chart'),
       embeddedObject(),
       vectorLine(),
-      formulaDoc('x^2').formula,
+      withLatex.children[0]!,
     ];
     for (const leaf of leaves) {
       expect(isOutlineLeaf(leaf)).toBe(true);
@@ -86,16 +89,10 @@ describe('isOutlineNode guard', () => {
 
 describe('OutlineNodeSchema', () => {
   it('round-trips builder output through parse unchanged', () => {
-    const doc = wordprocessingDoc([
-      [
-        paragraph('before'),
-        paragraph('Chapter', { headingLevel: 1 }),
-        paragraph('A', { listLevel: 0 }),
-        paragraph('B', { listLevel: 1 }),
-        table([['cell']]),
-      ],
+    const pkg = wordprocessingPackage([
+      sectionGroup([paragraph('before'), headingGroup('Chapter', 1, [listGroup('A', 0, [listGroup('B', 1, [table([['cell']])])])])]),
     ]);
-    const outline = buildOutline(doc);
+    const outline = buildOutline(pkg);
     expect(outline.every(isOutlineChild)).toBe(true);
     // The pre-heading paragraph is a leaf at the root; the group nodes round-trip through the schema unchanged.
     const groups = outline.filter(isOutlineNode);

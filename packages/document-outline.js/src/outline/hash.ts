@@ -1,17 +1,32 @@
 // The exact stable-hash recipe (every step is part of the published contract; changing any step changes every hash ever issued):
-// 1. Canonicalise the value: rebuild every plain object with its own keys sorted ascending by UTF-16 code unit (Array.prototype.sort's default comparison -- a total, implementation-specified-stable order), preserving arrays in order and primitives as-is. This removes construction-order differences between independently built but structurally identical content, which is the whole point: two readers producing the same logical leaf must hash equal regardless of the order they happened to assign fields.
-// 2. JSON.stringify the canonicalised value with no spacing. Objects whose optional fields were left absent versus explicitly assigned undefined collapse to the same string, because JSON.stringify drops undefined-valued properties -- intended: both spellings mean "field absent" in the content schemas. Numbers use ECMAScript's own number-to-string, which is specified exactly, so the same numeric value always yields the same digits.
-// 3. UTF-8 encode the JSON text with TextEncoder (available in Node, browsers, and workerd alike -- no node:buffer, no node:util TextDecoder polyfill).
-// 4. SHA-256 over those bytes, implemented below by hand for the same Worker-isomorphism reason: node:crypto's createHash is banned in runtime src by this package's ESLint guard, and every Web Crypto subtle.digest is async (and unavailable synchronously inside a synchronous helper), so a pure-integer SHA-256 keeps leafContentHash a plain function call.
-// 5. Hex-encode the 32 digest bytes, lowercase.
+// 1. Strip every `$schema` key from the value, at any depth: a serialised tree-form package carries a release-pinned `$schema` URI that labels the content rather than being content (document-schema.js's own schema-io strips it the same way before ITS canonicalisation, so both canonicalisers exclude exactly the one key). Without this step, reserialising the same package against a different schema release would change every hash, which would make a hash name the release it was minted under rather than the document -- the opposite of stable. No content schema field is named `$schema`, so no hash ever issued changes.
+// 2. Canonicalise the value: rebuild every plain object with its own keys sorted ascending by UTF-16 code unit (Array.prototype.sort's default comparison -- a total, implementation-specified-stable order), preserving arrays in order and primitives as-is. This removes construction-order differences between independently built but structurally identical content, which is the whole point: two readers producing the same logical leaf must hash equal regardless of the order they happened to assign fields.
+// 3. JSON.stringify the canonicalised value with no spacing. Objects whose optional fields were left absent versus explicitly assigned undefined collapse to the same string, because JSON.stringify drops undefined-valued properties -- intended: both spellings mean "field absent" in the content schemas. Numbers use ECMAScript's own number-to-string, which is specified exactly, so the same numeric value always yields the same digits.
+// 4. UTF-8 encode the JSON text with TextEncoder (available in Node, browsers, and workerd alike -- no node:buffer, no node:util TextDecoder polyfill).
+// 5. SHA-256 over those bytes, implemented below by hand for the same Worker-isomorphism reason: node:crypto's createHash is banned in runtime src by this package's ESLint guard, and every Web Crypto subtle.digest is async (and unavailable synchronously inside a synchronous helper), so a pure-integer SHA-256 keeps leafContentHash a plain function call.
+// 6. Hex-encode the 32 digest bytes, lowercase.
 // The result is deterministic across processes and platforms (every step is either an ECMAScript-specified operation or a fixed byte-level algorithm), equal for independently constructed identical content, and different for different content up to SHA-256's collision resistance.
 export function stableContentHash(value: unknown): string {
-  return sha256Hex(new TextEncoder().encode(JSON.stringify(canonicalise(value))));
+  return sha256Hex(new TextEncoder().encode(JSON.stringify(canonicalise(stripSchemaKeys(value)))));
 }
 
 // Same narrow-to-record guard node.ts uses for its OutlineNode check (and document-schema.js's content guards before it): after the typeof/null/array checks this narrows the value to Record<string, unknown> without an `as` assertion.
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+// Recipe step 1: remove every `$schema` key at any depth, rebuilding rather than mutating so the input is never touched. Runs BEFORE canonicalisation (the strip and the sort are independent orderings of the same walk, but this order keeps canonicalise's own contract -- the documented recipe for anyone who imports it -- free of the label-key concern, which belongs to hashing alone).
+function stripSchemaKeys(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stripSchemaKeys);
+  if (isRecord(value)) {
+    const stripped: Record<string, unknown> = {};
+    for (const [key, entry] of Object.entries(value)) {
+      if (key === '$schema') continue;
+      stripped[key] = stripSchemaKeys(entry);
+    }
+    return stripped;
+  }
+  return value;
 }
 
 // Step 1 of the documented recipe, exported because the decompose/flatten bijection tests canonicalise with the exact same function (src/outline/bijection.test.ts) -- one canonical key order across the package, not a second recipe that could drift from the hash's. `unknown` in, `unknown` out: the output is a fresh structure safe to hand to JSON.stringify, never a mutation of the input. Plain objects (the JSON-mappable class) are rebuilt with sorted keys; arrays and primitives pass through structurally untouched (arrays are copied so the output never aliases the input).

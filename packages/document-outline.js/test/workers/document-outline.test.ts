@@ -1,64 +1,63 @@
 import { describe, expect, it } from 'vitest';
-import { ContentDocumentSchema } from 'document-schema.js';
-import { buildOutline, decompose, documentEnvelope, effectiveTree, flatten, flattenOutline, isOutlineChild, isPackageNode, leafContentHash, outlineLeafText } from '../../src';
-import { corpus } from '../../src/test-support/bijection-corpus';
+import { documentPackageWithSchema, type StylesTable } from 'document-schema.js';
+import { effectivePackage, buildOutline, flattenOutline, isOutlineChild, leafContentHash, outlineLeafText } from '../../src';
+import { stableContentHash } from '../../src/outline/hash';
 import {
-  drawPage,
-  drawingDoc,
-  formulaDoc,
+  drawPageGroup,
+  drawingPackage,
+  formulaPackage,
+  headingGroup,
+  listGroup,
   paragraph,
-  presentationDoc,
-  sheet,
+  presentationPackage,
+  sectionGroup,
+  shapeGroup,
+  sheetGroup,
   sheetImage,
-  slide,
-  spreadsheetDoc,
+  slideGroup,
+  spreadsheetPackage,
   vectorLine,
-  wordprocessingDoc,
+  wordprocessingPackage,
 } from '../../src/test-support/fixtures';
 
-// Proves document-outline.js's surface executes inside a Cloudflare Workers isolate (workerd, via @cloudflare/vitest-pool-workers) with no Node-only APIs. Every path here -- per-kind outline building, flatten, leaf text, content hashing -- is deliberately Node-free (the SHA-256 is hand-rolled over Uint8Array precisely so no node:crypto is needed); if any touched code path in this module graph or its zod / document-schema.js dependencies reached for node:fs/Buffer/process, the workerd isolate would throw rather than these passing. This is the runtime complement to the static ESLint Worker-isomorphism guard.
+// Proves document-outline.js's surface executes inside a Cloudflare Workers isolate (workerd, via @cloudflare/vitest-pool-workers) with no Node-only APIs. Every path here -- per-kind outline building, effective-property resolution, flatten, leaf text, content hashing -- is deliberately Node-free (the SHA-256 is hand-rolled over Uint8Array precisely so no node:crypto is needed); if any touched code path in this module graph or its zod / document-schema.js dependencies reached for node:fs/Buffer/process, the workerd isolate would throw rather than these passing. This is the runtime complement to the static ESLint Worker-isomorphism guard.
 describe('document-outline.js under the Cloudflare Workers runtime', () => {
-  it('builds and validates outlines for all five document kinds inside the isolate', () => {
-    const wordDoc = wordprocessingDoc([[paragraph('Chapter', { headingLevel: 1 }), paragraph('body')]]);
-    const documents = [
-      wordDoc,
-      presentationDoc([slide([[paragraph('A', { listLevel: 0 }), paragraph('B', { listLevel: 1 })]])]),
-      spreadsheetDoc([sheet({ name: 'Revenue', images: [sheetImage('a chart')] })]),
-      drawingDoc([drawPage([[paragraph('text box')]], [vectorLine()])]),
-      formulaDoc('x^2'),
+  it('builds and validates outlines for all five package kinds inside the isolate', () => {
+    const wordPkg = wordprocessingPackage([sectionGroup([headingGroup('Chapter', 1, [paragraph('body')])])]);
+    const packages = [
+      wordPkg,
+      presentationPackage([slideGroup([shapeGroup([listGroup('A', 0, [listGroup('B', 1, [])])])])]),
+      spreadsheetPackage([sheetGroup({ name: 'Revenue', images: [sheetImage('a chart')] })]),
+      drawingPackage([drawPageGroup([shapeGroup([paragraph('text box')]), vectorLine()])]),
+      formulaPackage('x^2'),
     ];
-    for (const doc of documents) {
-      expect(buildOutline(doc).every(isOutlineChild)).toBe(true);
+    for (const pkg of packages) {
+      expect(buildOutline(pkg).every(isOutlineChild)).toBe(true);
     }
-    expect(buildOutline(wordDoc)).toEqual([
+    expect(buildOutline(wordPkg)).toEqual([
       { text: 'Chapter', level: 1, children: [paragraph('body')] },
     ]);
   });
 
-  it('walks and hashes leaves inside the isolate', () => {
-    const doc = wordprocessingDoc([
-      [
-        paragraph('before'),
-        paragraph('Chapter', { headingLevel: 1 }),
-        paragraph('A', { listLevel: 0 }),
-        paragraph('B', { listLevel: 1 }),
-      ],
-    ]);
-    const outline = buildOutline(doc);
+  it('resolves effective properties, walks, and hashes leaves inside the isolate', () => {
+    const styles: StylesTable = { 'body-text': { paragraph: { indentLeftPt: 24 } } };
+    const factored = wordprocessingPackage(
+      [sectionGroup([headingGroup('Chapter', 1, [paragraph('body')], { style: 'body-text' })])],
+      { styles },
+    );
+    const outline = buildOutline(effectivePackage(factored));
     expect(outline.every(isOutlineChild)).toBe(true);
-    expect(flattenOutline(outline)).toEqual([paragraph('before')]);
-    expect(leafContentHash(paragraph('before'))).toBe(leafContentHash({ kind: 'paragraph', runs: [{ text: 'before' }] }));
-    expect(outlineLeafText(paragraph('before'))).toBe('before');
+    const leaves = flattenOutline(outline);
+    expect(leaves).toEqual([{ kind: 'paragraph', runs: [{ text: 'body' }], indentLeftPt: 24 }]);
+    expect(leafContentHash(leaves[0]!)).toBe(leafContentHash({ kind: 'paragraph', runs: [{ text: 'body' }], indentLeftPt: 24 }));
+    expect(outlineLeafText(leaves[0]!)).toBe('body');
   });
 
-  it('decomposes, flattens, and resolves the whole bijection corpus inside the isolate', () => {
-    // The full round trip plus the effective walk over every corpus kind -- if any path in decompose/flatten/effectiveTree (or their document-schema.js schema-parse dependencies) reached for a Node-only API, the isolate would throw rather than these passing.
-    for (const { pkg } of corpus) {
-      const tree = decompose(pkg);
-      for (const root of tree) expect(isPackageNode(root)).toBe(true);
-      const flat = flatten(tree, documentEnvelope(pkg.content));
-      expect(ContentDocumentSchema.safeParse(flat).success).toBe(true);
-      expect(effectiveTree(tree).length).toBe(tree.length);
-    }
+  it('hashes a serialised package identically with and without its $schema label inside the isolate', () => {
+    const pkg = wordprocessingPackage([sectionGroup([paragraph('before')])]);
+    expect(leafContentHash(flattenOutline(buildOutline(pkg))[0]!)).toBe(
+      leafContentHash({ kind: 'paragraph', runs: [{ text: 'before' }] }),
+    );
+    expect(stableContentHash(documentPackageWithSchema(pkg))).toBe(stableContentHash(pkg));
   });
 });

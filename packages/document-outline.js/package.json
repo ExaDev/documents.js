@@ -1,7 +1,7 @@
 {
   "name": "document-outline.js",
   "version": "0.0.0-development",
-  "description": "Heading- and level-driven hierarchical outlines over any ContentDocument - all five document kinds, plus flatten/leaf-text/stable-hash helpers, the outline package for the documents.js family.",
+  "description": "Utilities for consumers holding a tree-form DocumentPackage - the TOC outline projection, effective-property resolution, and flatten/leaf-text/stable-hash helpers, the outline package for the documents.js family.",
   "type": "module",
   "repository": {
     "type": "git",
@@ -63,7 +63,7 @@
   },
   "packageManager": "pnpm@11.6.0",
   "dependencies": {
-    "document-schema.js": "^3.3.0",
+    "document-schema.js": "^4.0.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
