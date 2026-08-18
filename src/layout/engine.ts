@@ -1,4 +1,4 @@
-import type { ContentDocument, ContentEmbeddedObjectBlock, ContentImageBlock, ContentListMembership, ContentParagraph, ContentSection, ContentTable, LayoutDocument, LayoutImage, LayoutImageAsset, LayoutItem, LayoutLink, LayoutPage, LayoutText, PageSize } from 'document-schema.js';
+import type { ContentDocument, ContentEmbeddedObjectBlock, ContentImageBlock, ContentListMembership, ContentParagraph, ContentSection, ContentTable, PageSize } from 'document-schema.js';
 import { COLOR_BLACK } from 'document-schema.js';
 import { parseListNumId } from 'markdown-codec';
 import { layoutFormula } from '../mathml/layout';
@@ -7,6 +7,7 @@ import { formulaOfBlock, formulaPlaceholderText } from '../model/formula';
 import type { MathFontMetrics, PositionedFormula, TextMeasurer } from 'document-schema.js';
 import { wrapRunsToWidth } from './text-layout';
 import { alignmentOffsetPt, effectiveStyledRuns, estimateRowHeightPt, formulaSizePtForFrame, headingStyleFor, justifyLineGapsPt, lineNaturalHeightPt, layoutDocumentOf, packagePagesOf, pushCellBorderLines, registerImage, stampFragmentFrame, stampFrame, sumColumnWidthsPt, textBoxForFragment } from './shared';
+import type { LayoutDocument, LayoutImage, LayoutImageAsset, LayoutItem, LayoutLink, LayoutPage, LayoutText } from 'pdf-codec';
 
 // ContentDocument (the wordprocessing variant) -> LayoutDocument: docx's hard direction. A docx page isn't a fixed canvas the way a pptx slide is -- content flows and paginates, so this engine tracks a vertical cursor per page and starts a new page whenever the next line (or table row) would overflow the current one, honoring explicit page breaks, w:pageBreakBefore, and a per-section page-size/margin change. Headers/footers and live PAGE/NUMPAGES substitution are not laid out here -- src/ooxml/docx/read.ts doesn't read them either, a deliberate, tracked narrowing from the plan's original scope (see that file's own module doc).
 
@@ -23,11 +24,15 @@ type ListCounters = Map<string, number>;
 
 // markdown-codec mints its own numId as "md{n}:bullet|ordered@start" (see that package's list-id.ts) -- parseListNumId is already public from there specifically so a consumer can recover this. docx numIds are plain "1", "2", ...; odt's are "list1", "list2", ... -- neither follows markdown-codec's convention, so a docx/odt-sourced ordered list still degrades to a bullet here, same as the write-side limitation noted above. Only markdown gets real sequential numbering, which is still a strict improvement over no marker at all.
 function listMarkerText(list: ContentListMembership, counters: ListCounters): string {
-  const info = parseListNumId(list.numId);
-  if (info?.type === 'ordered') {
-    const next = counters.get(list.numId) ?? info.start ?? 1;
-    counters.set(list.numId, next + 1);
-    return `${next}.`;
+  // numId is optional since schema 4.0.0 (an OOXML drawing paragraph carries only a level; markdown-codec mints its own md{n}: ids), and only a minted markdown id can name an ORDERED list -- no numId means no ordering information at all, so the glyph cycle below is the only honest marker.
+  const { numId } = list;
+  if (numId !== undefined) {
+    const info = parseListNumId(numId);
+    if (info?.type === 'ordered') {
+      const next = counters.get(numId) ?? info.start ?? 1;
+      counters.set(numId, next + 1);
+      return `${next}.`;
+    }
   }
   return BULLET_GLYPHS[list.level % BULLET_GLYPHS.length]!;
 }
