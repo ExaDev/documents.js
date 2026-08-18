@@ -16,6 +16,8 @@ import { containsAsciiControlOrSpace, isAsciiPunctuation } from './chars';
 import type { Delimiter, DelimiterChar } from './delimiter';
 import { DelimiterStack, isDelimiterChar, processEmphasis, scanDelimiterRun } from './delimiter';
 import { matchEntity } from './entity';
+import type { FootnoteLabelSet } from './footnote';
+import { matchFootnoteLabel } from './footnote';
 import { applyGfmAutolinks } from './gfm-autolink';
 import type { LinkReferenceMap, ParsedSpan } from './link';
 import { matchLinkLabel, normalizeLinkLabel, parseLinkDestination, parseLinkTitle, skipInlineWhitespace } from './link';
@@ -83,15 +85,17 @@ function createWrapper(kind: 'emphasis' | 'strong' | 'strikethrough', marker: De
 class InlineParser {
   private readonly text: string;
   private readonly references: LinkReferenceMap;
+  private readonly footnotes: FootnoteLabelSet;
   private readonly gfmStrikethrough: boolean;
   private readonly container = new InlineNode('container');
   private readonly delimiters = new DelimiterStack();
   private brackets: Bracket | undefined;
   private pos = 0;
 
-  constructor(text: string, references: LinkReferenceMap, options: InlineParseOptions) {
+  constructor(text: string, references: LinkReferenceMap, footnotes: FootnoteLabelSet, options: InlineParseOptions) {
     this.text = text;
     this.references = references;
+    this.footnotes = footnotes;
     this.gfmStrikethrough = options.gfmStrikethrough ?? true;
   }
 
@@ -336,16 +340,40 @@ class InlineParser {
     this.brackets = { node, previous: this.brackets, previousDelimiter: this.delimiters.top, index, image, active: true, bracketAfter: false };
   }
 
+  // A `[` opens a link/image bracket -- unless it opens a footnote reference instead. That check runs FIRST and consumes the whole `[^label]` outright rather than pushing a bracket, for the same reason a code span binds tighter than everything after it: a reference is a single indivisible token, and letting the `[` reach the bracket stack would leave the label's own `^` and text as ordinary inline content that emphasis resolution could reach into.
+  //
+  // A label with no matching DEFINITION in this document is deliberately not a reference at all -- GitHub's own reading, and the one that keeps ordinary bracketed prose ("[^2 is the exponent]" -- well, that one has whitespace, but "[^see]" in a document with no `[^see]:` line does not) from silently becoming a note pointing at nothing. This is exactly how a shortcut link reference already behaves one function down: no definition, no link.
   private parseOpenBracket(): void {
     const start = this.pos;
+    const footnote = this.matchFootnoteReference();
+    if (footnote !== undefined) {
+      const node = new InlineNode('footnoteReference');
+      node.label = footnote.label;
+      this.container.appendChild(node);
+      this.pos = footnote.end;
+      return;
+    }
     this.pos += 1;
     this.pushBracket(this.appendText('['), start, false);
+  }
+
+  private matchFootnoteReference(): { readonly label: string; readonly end: number } | undefined {
+    const match = matchFootnoteLabel(this.text, this.pos);
+    if (match === undefined || !this.footnotes.has(match.label)) {
+      return undefined;
+    }
+    return match;
   }
 
   private parseBang(): void {
     const start = this.pos;
     this.pos += 1;
     if (this.text.charAt(this.pos) !== '[') {
+      this.appendText('!');
+      return;
+    }
+    // `![^label]` is an exclamation mark followed by a footnote reference, never an image whose description happens to start with a caret: the reference token is already complete before the image's own `](dest)` grammar could begin, so pushing an image bracket here would open one that can never close. Leaving the cursor on the `[` hands it straight to parseOpenBracket on the next step.
+    if (this.matchFootnoteReference() !== undefined) {
       this.appendText('!');
       return;
     }
@@ -490,6 +518,9 @@ function flattenToPlainText(node: InlineNode): string {
     case 'softBreak':
     case 'hardBreak':
       return ' ';
+    case 'footnoteReference':
+      // An alt attribute is plain text, so a reference inside an image description contributes its own source spelling -- the same thing every consumer that does not resolve footnotes shows for it.
+      return `[^${node.label}]`;
     default: {
       let result = '';
       let child = node.firstChild;
@@ -560,14 +591,16 @@ function toAstNode(node: InlineNode): MarkdownInlineNode | undefined {
       return { type: 'entity', raw: node.raw, value: node.literal };
     case 'mathInline':
       return { type: 'mathInline', literal: node.literal };
+    case 'footnoteReference':
+      return { type: 'footnoteReference', label: node.label };
     case 'container':
       return undefined;
   }
 }
 
-// Parses one block's raw inline content. `references` is the document-global link-reference-definition table the block phase built -- see this module's own top-of-file note on why it cannot be discovered here.
-export function parseInlines(content: string, references: LinkReferenceMap, options: InlineParseOptions = {}): MarkdownInlineNode[] {
-  const root = new InlineParser(content, references, options).parse();
+// Parses one block's raw inline content. `references` is the document-global link-reference-definition table the block phase built, and `footnotes` the document-global set of footnote labels it collected alongside -- see this module's own top-of-file note on why neither can be discovered here. Both are forward-visible for the identical reason: a `[^1]` in the first paragraph resolves against a `[^1]:` definition on the last line.
+export function parseInlines(content: string, references: LinkReferenceMap, footnotes: FootnoteLabelSet, options: InlineParseOptions = {}): MarkdownInlineNode[] {
+  const root = new InlineParser(content, references, footnotes, options).parse();
   if (options.gfmAutolinks ?? true) {
     applyGfmAutolinks(root);
     mergeAdjacentText(root);

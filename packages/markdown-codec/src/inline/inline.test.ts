@@ -2,14 +2,16 @@
 
 import { describe, expect, it } from 'vitest';
 import type { MarkdownInlineNode } from '../ast/ast';
+import type { FootnoteLabelSet } from './footnote';
 import { parseInlines } from './inline';
 import type { LinkReferenceDefinition, LinkReferenceMap } from './link';
 
 const NO_REFERENCES: LinkReferenceMap = new Map<string, LinkReferenceDefinition>();
+const NO_FOOTNOTES: FootnoteLabelSet = new Set<string>();
 const COMMONMARK_ONLY = { gfmAutolinks: false, gfmStrikethrough: false };
 
 function parse(source: string, references: LinkReferenceMap = NO_REFERENCES): MarkdownInlineNode[] {
-  return parseInlines(source, references, COMMONMARK_ONLY);
+  return parseInlines(source, references, NO_FOOTNOTES, COMMONMARK_ONLY);
 }
 
 describe('text, escapes, and character references', () => {
@@ -187,16 +189,16 @@ describe('line breaks', () => {
 
 describe('GFM strikethrough', () => {
   it('matches one or two tildes through the shared delimiter stack', () => {
-    expect(parseInlines('~~a~~', NO_REFERENCES)).toEqual([{ type: 'strikethrough', children: [{ type: 'text', value: 'a' }] }]);
-    expect(parseInlines('~a~', NO_REFERENCES)).toEqual([{ type: 'strikethrough', children: [{ type: 'text', value: 'a' }] }]);
+    expect(parseInlines('~~a~~', NO_REFERENCES, NO_FOOTNOTES)).toEqual([{ type: 'strikethrough', children: [{ type: 'text', value: 'a' }] }]);
+    expect(parseInlines('~a~', NO_REFERENCES, NO_FOOTNOTES)).toEqual([{ type: 'strikethrough', children: [{ type: 'text', value: 'a' }] }]);
   });
 
   it('requires the opening and closing runs to be the same length', () => {
-    expect(parseInlines('~~a~', NO_REFERENCES)).toEqual([{ type: 'text', value: '~~a~' }]);
+    expect(parseInlines('~~a~', NO_REFERENCES, NO_FOOTNOTES)).toEqual([{ type: 'text', value: '~~a~' }]);
   });
 
   it('treats a run of three or more tildes as literal text', () => {
-    expect(parseInlines('~~~a~~~', NO_REFERENCES)).toEqual([{ type: 'text', value: '~~~a~~~' }]);
+    expect(parseInlines('~~~a~~~', NO_REFERENCES, NO_FOOTNOTES)).toEqual([{ type: 'text', value: '~~~a~~~' }]);
   });
 
   it('leaves every tilde literal when the extension is disabled', () => {
@@ -204,7 +206,7 @@ describe('GFM strikethrough', () => {
   });
 
   it('resolves emphasis nested inside strikethrough', () => {
-    expect(parseInlines('~~*a*~~', NO_REFERENCES)).toEqual([
+    expect(parseInlines('~~*a*~~', NO_REFERENCES, NO_FOOTNOTES)).toEqual([
       { type: 'strikethrough', children: [{ type: 'emphasis', marker: '*', children: [{ type: 'text', value: 'a' }] }] },
     ]);
   });
@@ -212,7 +214,7 @@ describe('GFM strikethrough', () => {
 
 describe('GFM extended autolinks', () => {
   it('links a www-prefixed run, prepending the scheme to the destination only', () => {
-    expect(parseInlines('see www.example.com now', NO_REFERENCES)).toEqual([
+    expect(parseInlines('see www.example.com now', NO_REFERENCES, NO_FOOTNOTES)).toEqual([
       { type: 'text', value: 'see ' },
       { type: 'link', destination: 'http://www.example.com', children: [{ type: 'text', value: 'www.example.com' }] },
       { type: 'text', value: ' now' },
@@ -220,13 +222,13 @@ describe('GFM extended autolinks', () => {
   });
 
   it('links a bare http(s) run', () => {
-    expect(parseInlines('https://example.com/a', NO_REFERENCES)).toEqual([
+    expect(parseInlines('https://example.com/a', NO_REFERENCES, NO_FOOTNOTES)).toEqual([
       { type: 'link', destination: 'https://example.com/a', children: [{ type: 'text', value: 'https://example.com/a' }] },
     ]);
   });
 
   it('trims trailing punctuation and an unbalanced closing parenthesis', () => {
-    expect(parseInlines('(https://example.com/a).', NO_REFERENCES)).toEqual([
+    expect(parseInlines('(https://example.com/a).', NO_REFERENCES, NO_FOOTNOTES)).toEqual([
       { type: 'text', value: '(' },
       { type: 'link', destination: 'https://example.com/a', children: [{ type: 'text', value: 'https://example.com/a' }] },
       { type: 'text', value: ').' },
@@ -234,36 +236,36 @@ describe('GFM extended autolinks', () => {
   });
 
   it('links a bare email address through a mailto: destination', () => {
-    expect(parseInlines('mail me@example.com', NO_REFERENCES)).toEqual([
+    expect(parseInlines('mail me@example.com', NO_REFERENCES, NO_FOOTNOTES)).toEqual([
       { type: 'text', value: 'mail ' },
       { type: 'link', destination: 'mailto:me@example.com', children: [{ type: 'text', value: 'me@example.com' }] },
     ]);
   });
 
   it('rejects a domain with no dot', () => {
-    expect(parseInlines('www.example', NO_REFERENCES)).toEqual([{ type: 'text', value: 'www.example' }]);
+    expect(parseInlines('www.example', NO_REFERENCES, NO_FOOTNOTES)).toEqual([{ type: 'text', value: 'www.example' }]);
   });
 
   it('links a bare ftp run, the third scheme GFM recognises alongside http and https', () => {
-    expect(parseInlines('ftp://foo.bar.baz', NO_REFERENCES)).toEqual([
+    expect(parseInlines('ftp://foo.bar.baz', NO_REFERENCES, NO_FOOTNOTES)).toEqual([
       { type: 'link', destination: 'ftp://foo.bar.baz', children: [{ type: 'text', value: 'ftp://foo.bar.baz' }] },
     ]);
   });
 
   it('drops a trailing dot from an email address but rejects one ending in a hyphen or underscore outright', () => {
-    expect(parseInlines('a.b-c_d@a.b.', NO_REFERENCES)).toEqual([
+    expect(parseInlines('a.b-c_d@a.b.', NO_REFERENCES, NO_FOOTNOTES)).toEqual([
       { type: 'link', destination: 'mailto:a.b-c_d@a.b', children: [{ type: 'text', value: 'a.b-c_d@a.b' }] },
       { type: 'text', value: '.' },
     ]);
-    expect(parseInlines('a.b-c_d@a.b-', NO_REFERENCES)).toEqual([{ type: 'text', value: 'a.b-c_d@a.b-' }]);
-    expect(parseInlines('a.b-c_d@a.b_', NO_REFERENCES)).toEqual([{ type: 'text', value: 'a.b-c_d@a.b_' }]);
+    expect(parseInlines('a.b-c_d@a.b-', NO_REFERENCES, NO_FOOTNOTES)).toEqual([{ type: 'text', value: 'a.b-c_d@a.b-' }]);
+    expect(parseInlines('a.b-c_d@a.b_', NO_REFERENCES, NO_FOOTNOTES)).toEqual([{ type: 'text', value: 'a.b-c_d@a.b_' }]);
   });
 
   it('never creates an autolink inside an existing link or code span', () => {
-    expect(parseInlines('[www.example.com](/u)', NO_REFERENCES)).toEqual([
+    expect(parseInlines('[www.example.com](/u)', NO_REFERENCES, NO_FOOTNOTES)).toEqual([
       { type: 'link', destination: '/u', children: [{ type: 'text', value: 'www.example.com' }] },
     ]);
-    expect(parseInlines('`www.example.com`', NO_REFERENCES)).toEqual([{ type: 'codeSpan', literal: 'www.example.com' }]);
+    expect(parseInlines('`www.example.com`', NO_REFERENCES, NO_FOOTNOTES)).toEqual([{ type: 'codeSpan', literal: 'www.example.com' }]);
   });
 
   it('leaves a bare URL as plain text when the extension is disabled', () => {

@@ -18,6 +18,7 @@ export type InlineNodeKind =
   | 'rawHtml'
   | 'entity'
   | 'mathInline'
+  | 'footnoteReference'
   // The synthetic root every inline parse builds into -- never converted to an AST node itself, only its children are.
   | 'container';
 
@@ -33,6 +34,8 @@ export class InlineNode {
   marker: '_' | '*' = '*';
   // An entity node's own literal source text (e.g. '&amp;'), kept alongside `literal`'s decoded value.
   raw = '';
+  // A footnote reference's own label -- kept in its own field rather than reusing `literal`, since a reference has no literal text of its own: `[^1]` is the label's SPELLING, reconstructed on the way out, not content the parser read.
+  label = '';
 
   parent: InlineNode | undefined;
   firstChild: InlineNode | undefined;

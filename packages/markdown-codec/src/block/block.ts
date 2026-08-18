@@ -28,6 +28,8 @@ import type {
   MarkdownTableNode,
   MarkdownTableRowNode,
 } from '../ast/ast';
+import type { FootnoteLabelSet } from '../inline/footnote';
+import { matchFootnoteDefinitionMarker } from '../inline/footnote';
 import type { MarkdownDiagnosticSink } from '../diagnostics/diagnostics';
 import { DEFAULT_MAX_BLOCK_NESTING } from '../defaults/defaults';
 import { MarkdownDiagnosticCodes, MarkdownNestingLimitExceededError, NOOP_MARKDOWN_DIAGNOSTIC_SINK } from '../diagnostics/diagnostics';
@@ -52,8 +54,8 @@ const NUL_PATTERN = /\0/g;
 
 const LINE_ENDING_PATTERN = /\r\n|\n|\r/;
 
-// A cheap first filter before the block-start list is tried at all: no block start, and no paragraph promotion, can begin with any other character. `|` and `:` are here for the GFM table delimiter row (`| --- |`, `:-: | ---:`), the only construct in this package that can start with either. `$` is here for a $$ math block's own opening line (ExaDev/markdown-codec#53).
-const MAYBE_SPECIAL_PATTERN = /^[#$`~*+_=<>0-9|:-]/;
+// A cheap first filter before the block-start list is tried at all: no block start, and no paragraph promotion, can begin with any other character. `|` and `:` are here for the GFM table delimiter row (`| --- |`, `:-: | ---:`), the only construct in this package that can start with either. `$` is here for a $$ math block's own opening line (ExaDev/markdown-codec#53), and `[` for a footnote definition's own `[^label]:` marker (ExaDev/markdown-codec#66).
+const MAYBE_SPECIAL_PATTERN = /^[#$`~*+_=<>[0-9|:-]/;
 
 // spec 0.31.2, "ATX headings": one to six `#` characters, followed by spaces/tabs or the end of the line.
 const ATX_MARKER_PATTERN = /^#{1,6}(?:[ \t]+|$)/;
@@ -96,6 +98,8 @@ export interface MarkdownParseOptions extends InlineParseOptions {
   readonly gfmTables?: boolean;
   // GFM's task-list-item extension (`- [ ] foo` / `- [x] bar`). Enabled by default for the same reason; with it off, a leading `[ ]`/`[x]` is ordinary paragraph text, matching CommonMark's own reading (task lists are not part of CommonMark proper).
   readonly gfmTaskLists?: boolean;
+  // GitHub's footnote extension (`[^label]` markers with `[^label]: body` definitions, ExaDev/markdown-codec#66). Enabled by default like the four above; with it off, both spellings are ordinary text, which is what CommonMark and the GFM spec document itself both say (neither defines footnotes at all -- see src/inline/footnote.ts).
+  readonly footnotes?: boolean;
   // Throws MarkdownNestingLimitExceededError (src/diagnostics) rather than opening a block past this many levels deep in the open-block stack -- defaults to DEFAULT_MAX_BLOCK_NESTING (src/defaults), matching cmark's own reference-implementation guard against pathological/adversarial nesting.
   readonly maxNesting?: number;
   readonly sink?: MarkdownDiagnosticSink;
@@ -105,6 +109,8 @@ export interface ParsedMarkdown {
   readonly document: MarkdownDocumentNode;
   // The document-global link-reference-definition table, complete before any inline was parsed against it.
   readonly references: LinkReferenceMap;
+  // The document-global set of footnote labels a definition was found for, complete before any inline was parsed against it -- the same forward-visibility guarantee `references` carries, for the same structural reason.
+  readonly footnotes: FootnoteLabelSet;
 }
 
 function isBlankContent(content: string): boolean {
@@ -130,8 +136,10 @@ function headingLevelOf(hashes: number): BlockHeadingLevel {
 
 class BlockParser {
   readonly references = new Map<string, LinkReferenceDefinition>();
+  readonly footnotes = new Set<string>();
   private readonly document = new BlockNode('document', 1);
   private readonly tables: boolean;
+  private readonly footnotesEnabled: boolean;
   private readonly sink: MarkdownDiagnosticSink;
   private readonly maxNesting: number;
   private tip: BlockNode = this.document;
@@ -146,6 +154,7 @@ class BlockParser {
 
   constructor(options: MarkdownParseOptions) {
     this.tables = options.gfmTables ?? true;
+    this.footnotesEnabled = options.footnotes ?? true;
     this.sink = options.sink ?? NOOP_MARKDOWN_DIAGNOSTIC_SINK;
     this.maxNesting = options.maxNesting ?? DEFAULT_MAX_BLOCK_NESTING;
   }
@@ -227,6 +236,8 @@ class BlockParser {
         return this.continueBlockquote();
       case 'listItem':
         return this.continueListItem(node);
+      case 'footnoteDefinition':
+        return this.continueFootnoteDefinition(node);
       case 'codeBlock':
         return this.continueCodeBlock(node);
       case 'mathBlock':
@@ -280,6 +291,22 @@ class BlockParser {
     }
     if (this.line.indent >= listData.markerOffset + listData.padding) {
       this.line.advance(listData.markerOffset + listData.padding);
+      return 'matched';
+    }
+    return 'not-matched';
+  }
+
+  // A definition's body continues on any line indented at least four columns -- the same continuation indent Pandoc and GitHub both use for a multi-block footnote, and the same one src/emit/emit.ts writes back out. A blank line continues it too (a definition may hold several paragraphs), except when the definition still has no content at all, mirroring the "a list item can begin with at most one blank line" rule one function up: `[^1]:` on a line of its own followed by a blank line is an empty definition, not the opening of one that swallows the rest of the document.
+  private continueFootnoteDefinition(node: BlockNode): ContinueResult {
+    if (this.line.blank) {
+      if (node.children.length === 0) {
+        return 'not-matched';
+      }
+      this.line.advanceToNextNonspace();
+      return 'matched';
+    }
+    if (this.line.indent >= CODE_INDENT_COLUMNS) {
+      this.line.advance(CODE_INDENT_COLUMNS);
       return 'matched';
     }
     return 'not-matched';
@@ -349,6 +376,7 @@ class BlockParser {
       () => this.tryAtxHeadingStart(),
       () => this.tryCodeFenceStart(),
       () => this.tryMathBlockStart(),
+      () => this.tryFootnoteDefinitionStart(container),
       () => this.tryHtmlBlockStart(container),
       () => this.tryPromoteParagraph(container),
       () => this.tryThematicBreakStart(),
@@ -429,6 +457,32 @@ class BlockParser {
     this.line.advanceToNextNonspace();
     this.line.advance(MATH_BLOCK_MARKER_LENGTH);
     return 'leaf';
+  }
+
+  // A footnote definition (ExaDev/markdown-codec#66) opens a CONTAINER, exactly as a list item does: the rest of the marker's own line, and every following line indented four columns, is its body.
+  //
+  // Two restrictions, both deliberate and both about what the ContentDocument mapping downstream can actually represent rather than about markdown's own grammar:
+  //
+  //  - It may not interrupt a paragraph, matching a link reference definition (which is only ever recognised at the FRONT of a paragraph's accumulated content, src/block/definitions.ts) and matching Pandoc. A `[^1]: note` line directly under a line of prose is lazy paragraph continuation text.
+  //  - It is recognised ONLY as a direct child of the document -- never inside a block quote or a list item. src/lower/lower.ts lowers a definition to a construct boundary-marker pair (document-schema.js 4.2.0) bracketing its own body, and that pair's extent may not cross a scope its enclosing container had already opened: a definition inside a list item would have to carry the item's own ContentListMembership on every body block, which a body table or image cannot carry at all, closing the item's list scope from INSIDE the pair -- precisely what the flat form's bracket-matching contract forbids a producer from emitting. A block quote is the same shape one level along: its own `> ` prefix is recovered on the way out from each paragraph's indentLeftPt, and a definition's label line has no paragraph of its own to carry it. Inside either container the `[^1]: ...` text stays an ordinary paragraph, exactly as it did before footnotes existed here.
+  private tryFootnoteDefinitionStart(container: BlockNode): BlockStartResult {
+    if (!this.footnotesEnabled || this.line.indented || container.kind !== 'document') {
+      return 'none';
+    }
+    const marker = matchFootnoteDefinitionMarker(this.line.restFromNextNonspace());
+    if (marker === undefined) {
+      return 'none';
+    }
+    if (this.footnotes.has(marker.label)) {
+      this.sink({ code: MarkdownDiagnosticCodes.DUPLICATE_FOOTNOTE_DEFINITION, severity: 'warning', message: `footnote "${marker.label}" was already defined earlier in the document; every reference resolves to the first definition, and both definitions are kept as written`, line: this.lineNumber });
+    }
+    this.footnotes.add(marker.label);
+    this.line.advanceToNextNonspace();
+    this.closeUnmatchedBlocks();
+    const node = this.addChild('footnoteDefinition');
+    node.footnoteLabel = marker.label;
+    this.line.advance(marker.markerLength);
+    return 'container';
   }
 
   private tryHtmlBlockStart(container: BlockNode): BlockStartResult {
@@ -672,13 +726,20 @@ class BlockParser {
   }
 }
 
-function toInlineChildren(content: string, references: LinkReferenceMap, options: MarkdownParseOptions): MarkdownInlineNode[] {
-  // A leaf block's accumulated content keeps the line endings that separated its source lines but not the whitespace around the block itself: leading indentation was stripped as each line was added, and trailing whitespace at the very end of the block is not a hard line break.
-  return parseInlines(content.trim(), references, options);
+// The two document-global tables the inline phase resolves against, plus the parse options, threaded through the AST conversion as one value rather than as three parallel parameters on every function below.
+interface AstConversionContext {
+  readonly references: LinkReferenceMap;
+  readonly footnotes: FootnoteLabelSet;
+  readonly options: MarkdownParseOptions;
 }
 
-function toHeadingNode(node: BlockNode, references: LinkReferenceMap, options: MarkdownParseOptions): MarkdownHeadingNode {
-  return { type: 'heading', level: node.level, style: node.setext ? 'setext' : 'atx', children: toInlineChildren(node.content, references, options) };
+function toInlineChildren(content: string, context: AstConversionContext): MarkdownInlineNode[] {
+  // A leaf block's accumulated content keeps the line endings that separated its source lines but not the whitespace around the block itself: leading indentation was stripped as each line was added, and trailing whitespace at the very end of the block is not a hard line break.
+  return parseInlines(content.trim(), context.references, context.footnotes, context.options);
+}
+
+function toHeadingNode(node: BlockNode, context: AstConversionContext): MarkdownHeadingNode {
+  return { type: 'heading', level: node.level, style: node.setext ? 'setext' : 'atx', children: toInlineChildren(node.content, context) };
 }
 
 // Extracts a task-list-item marker from the FIRST child of a list item, mutating that child's own raw content in place to strip the marker (so the paragraph's own inline content, parsed afterwards, never sees it). Returns undefined -- never a false/absent sentinel -- when the item is not a task item at all, matching MarkdownListItemNode.checked's own "absent, not false" convention.
@@ -695,16 +756,16 @@ function extractTaskListMarker(itemChildren: readonly BlockNode[]): boolean | un
   return match[1] !== ' ';
 }
 
-function toListItemNode(item: BlockNode, references: LinkReferenceMap, options: MarkdownParseOptions): MarkdownListItemNode {
-  const taskLists = options.gfmTaskLists ?? true;
+function toListItemNode(item: BlockNode, context: AstConversionContext): MarkdownListItemNode {
+  const taskLists = context.options.gfmTaskLists ?? true;
   const checked = taskLists ? extractTaskListMarker(item.children) : undefined;
   return checked === undefined
-    ? { type: 'listItem', children: toAstBlocks(item.children, references, options) }
-    : { type: 'listItem', checked, children: toAstBlocks(item.children, references, options) };
+    ? { type: 'listItem', children: toAstBlocks(item.children, context) }
+    : { type: 'listItem', checked, children: toAstBlocks(item.children, context) };
 }
 
-function toListNode(node: BlockNode, references: LinkReferenceMap, options: MarkdownParseOptions): MarkdownListNode {
-  const children: MarkdownListItemNode[] = node.children.map((item) => toListItemNode(item, references, options));
+function toListNode(node: BlockNode, context: AstConversionContext): MarkdownListNode {
+  const children: MarkdownListItemNode[] = node.children.map((item) => toListItemNode(item, context));
   const data = node.listData;
   if (data?.type === 'ordered') {
     return { type: 'list', markerType: 'ordered', orderedDelimiter: data.delimiter, start: data.start, tight: node.tight, children };
@@ -712,15 +773,15 @@ function toListNode(node: BlockNode, references: LinkReferenceMap, options: Mark
   return { type: 'list', markerType: 'bullet', bulletMarker: data?.bulletChar, tight: node.tight, children };
 }
 
-function toTableRow(cells: readonly string[], header: boolean, references: LinkReferenceMap, options: MarkdownParseOptions): MarkdownTableRowNode {
-  const children: MarkdownTableCellNode[] = cells.map((cell) => ({ type: 'tableCell', children: toInlineChildren(cell, references, options) }));
+function toTableRow(cells: readonly string[], header: boolean, context: AstConversionContext): MarkdownTableRowNode {
+  const children: MarkdownTableCellNode[] = cells.map((cell) => ({ type: 'tableCell', children: toInlineChildren(cell, context) }));
   return { type: 'tableRow', header, children };
 }
 
-function toTableNode(node: BlockNode, references: LinkReferenceMap, options: MarkdownParseOptions): MarkdownTableNode {
-  const sink = options.sink ?? NOOP_MARKDOWN_DIAGNOSTIC_SINK;
+function toTableNode(node: BlockNode, context: AstConversionContext): MarkdownTableNode {
+  const sink = context.options.sink ?? NOOP_MARKDOWN_DIAGNOSTIC_SINK;
   const columnCount = node.alignments.length;
-  const rows: MarkdownTableRowNode[] = [toTableRow(fitRowToColumns(splitTableRow(node.headerLine), columnCount), true, references, options)];
+  const rows: MarkdownTableRowNode[] = [toTableRow(fitRowToColumns(splitTableRow(node.headerLine), columnCount), true, context)];
   for (const rowLine of node.content.split('\n')) {
     if (rowLine.trim().length === 0) {
       continue;
@@ -729,21 +790,23 @@ function toTableNode(node: BlockNode, references: LinkReferenceMap, options: Mar
     if (cells.length !== columnCount) {
       sink({ code: MarkdownDiagnosticCodes.TABLE_CELL_COUNT_MISMATCH, severity: 'warning', message: `table row has ${String(cells.length)} cell(s), but the header row declares ${String(columnCount)}; the row is padded with empty cells or truncated to fit`, line: node.startLine });
     }
-    rows.push(toTableRow(fitRowToColumns(cells, columnCount), false, references, options));
+    rows.push(toTableRow(fitRowToColumns(cells, columnCount), false, context));
   }
   return { type: 'table', alignments: node.alignments, children: rows };
 }
 
-function toAstBlock(node: BlockNode, references: LinkReferenceMap, options: MarkdownParseOptions): MarkdownBlockNode | undefined {
+function toAstBlock(node: BlockNode, context: AstConversionContext): MarkdownBlockNode | undefined {
   switch (node.kind) {
     case 'paragraph':
-      return { type: 'paragraph', children: toInlineChildren(node.content, references, options) };
+      return { type: 'paragraph', children: toInlineChildren(node.content, context) };
     case 'heading':
-      return toHeadingNode(node, references, options);
+      return toHeadingNode(node, context);
     case 'blockquote':
-      return { type: 'blockquote', children: toAstBlocks(node.children, references, options) };
+      return { type: 'blockquote', children: toAstBlocks(node.children, context) };
     case 'list':
-      return toListNode(node, references, options);
+      return toListNode(node, context);
+    case 'footnoteDefinition':
+      return { type: 'footnoteDefinition', label: node.footnoteLabel, children: toAstBlocks(node.children, context) };
     case 'codeBlock':
       return node.fenced
         ? { type: 'codeBlock', fenced: true, fenceChar: node.fenceChar, infoString: node.infoString, literal: node.literal }
@@ -755,7 +818,7 @@ function toAstBlock(node: BlockNode, references: LinkReferenceMap, options: Mark
     case 'mathBlock':
       return { type: 'mathBlock', literal: node.literal };
     case 'table':
-      return toTableNode(node, references, options);
+      return toTableNode(node, context);
     case 'document':
     case 'listItem':
       // Neither can appear as a child of anything toAstBlocks walks: a document is the root, and a list item is only ever reached through its own list.
@@ -763,10 +826,10 @@ function toAstBlock(node: BlockNode, references: LinkReferenceMap, options: Mark
   }
 }
 
-function toAstBlocks(nodes: readonly BlockNode[], references: LinkReferenceMap, options: MarkdownParseOptions): MarkdownBlockNode[] {
+function toAstBlocks(nodes: readonly BlockNode[], context: AstConversionContext): MarkdownBlockNode[] {
   const blocks: MarkdownBlockNode[] = [];
   for (const node of nodes) {
-    const converted = toAstBlock(node, references, options);
+    const converted = toAstBlock(node, context);
     if (converted !== undefined) {
       blocks.push(converted);
     }
@@ -774,10 +837,10 @@ function toAstBlocks(nodes: readonly BlockNode[], references: LinkReferenceMap, 
   return blocks;
 }
 
-// Parses a whole markdown document: block structure first, to completion, then every leaf block's own inline content against the finished link-reference-definition table. See this module's own top-of-file note on why that ordering is structural rather than a matter of convenience.
+// Parses a whole markdown document: block structure first, to completion, then every leaf block's own inline content against the finished link-reference-definition table and footnote-label set. See this module's own top-of-file note on why that ordering is structural rather than a matter of convenience.
 export function parseMarkdown(source: string, options: MarkdownParseOptions = {}): ParsedMarkdown {
   const parser = new BlockParser(options);
   const root = parser.parse(source);
-  const references: LinkReferenceMap = parser.references;
-  return { document: { type: 'document', children: toAstBlocks(root.children, references, options) }, references };
+  const context: AstConversionContext = { references: parser.references, footnotes: parser.footnotes, options };
+  return { document: { type: 'document', children: toAstBlocks(root.children, context) }, references: context.references, footnotes: context.footnotes };
 }

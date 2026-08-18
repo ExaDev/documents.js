@@ -23,6 +23,8 @@ export interface ReadMarkdownOptions {
   readonly gfmAutolinks?: boolean;
   readonly gfmStrikethrough?: boolean;
   readonly gfmTaskLists?: boolean;
+  // GitHub's footnote extension (`[^label]` markers with `[^label]: body` definitions). Defaults to true alongside the four toggles above; src/conformance.test.ts switches it off with them, since neither CommonMark nor the GFM spec document itself defines footnotes at all.
+  readonly footnotes?: boolean;
   // Throws MarkdownInputTooLargeError (src/diagnostics) rather than scanning input beyond this many bytes.
   readonly maxInputBytes?: number;
   // Throws MarkdownNestingLimitExceededError (src/diagnostics) rather than recursing past this many levels of block nesting (blockquote-in-list-in-blockquote, etc.).

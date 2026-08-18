@@ -27,7 +27,8 @@ export type MarkdownBlockNode =
   | MarkdownTableNode
   | MarkdownTableRowNode
   | MarkdownTableCellNode
-  | MarkdownMathBlockNode;
+  | MarkdownMathBlockNode
+  | MarkdownFootnoteDefinitionNode;
 
 export interface MarkdownDocumentNode {
   readonly type: 'document';
@@ -138,6 +139,15 @@ export interface MarkdownMathBlockNode {
   readonly position?: MarkdownPosition;
 }
 
+// A footnote definition's own tail-of-document block (`[^label]: body`, ExaDev/markdown-codec#66) -- a CONTAINER, not a leaf: its body is ordinary block content (further paragraphs, code blocks, tables, quotes, nested lists), continued by four columns of indentation exactly as a list item's own body is. That containment is what the definition's ContentDocument mapping needs: src/lower/lower.ts lowers this node to an `anchor` construct's boundary-marker pair (document-schema.js 4.2.0) bracketing the lowered body blocks, and AnchorDescriptor's own `definition` field names a package-level definitions-table key that a flat ContentDocument has no root to carry -- so the body rides the construct's own extent rather than a table entry.
+export interface MarkdownFootnoteDefinitionNode {
+  readonly type: 'footnoteDefinition';
+  // The identifier between `[^` and `]`, verbatim -- matched against a reference's own label exactly, with no case folding (see src/inline/footnote.ts).
+  readonly label: string;
+  readonly children: MarkdownBlockNode[];
+  readonly position?: MarkdownPosition;
+}
+
 // --- Inline nodes ---
 
 export type MarkdownInlineNode =
@@ -153,7 +163,8 @@ export type MarkdownInlineNode =
   | MarkdownSoftBreakNode
   | MarkdownRawHtmlNode
   | MarkdownEntityNode
-  | MarkdownMathInlineNode;
+  | MarkdownMathInlineNode
+  | MarkdownFootnoteReferenceNode;
 
 export type MarkdownEmphasisMarker = '_' | '*';
 
@@ -249,6 +260,15 @@ export interface MarkdownMathInlineNode {
   readonly position?: MarkdownPosition;
 }
 
+// A footnote REFERENCE site (`[^label]` in running text, ExaDev/markdown-codec#66). Produced only when the document also carries a definition under that exact label -- an unmatched `[^label]` is ordinary text, which is GitHub's own reading and the only one that keeps a bracketed aside from silently becoming a dangling note.
+//
+// Deliberately a leaf carrying its label and nothing else: unlike the definition above, a reference has no extent. That is also why it is the one half of the footnote pair src/lower/lower.ts CANNOT map onto an `anchor` construct: a construct's extent is block-scoped by document-schema.js's own definition, and a reference sits between two runs INSIDE a paragraph, which no block-level boundary marker can bracket without splitting the paragraph in two. See src/lower/inline.ts's own footnoteReference case for the degrade that carries it instead, and MarkdownDiagnosticCodes.FOOTNOTE_REFERENCE_PRESERVED_AS_TEXT for the gap it reports.
+export interface MarkdownFootnoteReferenceNode {
+  readonly type: 'footnoteReference';
+  readonly label: string;
+  readonly position?: MarkdownPosition;
+}
+
 const BLOCK_NODE_TYPES: ReadonlySet<string> = new Set<MarkdownBlockNode['type']>([
   'document',
   'paragraph',
@@ -263,6 +283,7 @@ const BLOCK_NODE_TYPES: ReadonlySet<string> = new Set<MarkdownBlockNode['type']>
   'tableRow',
   'tableCell',
   'mathBlock',
+  'footnoteDefinition',
 ]);
 
 export function isMarkdownBlockNode(node: MarkdownNode): node is MarkdownBlockNode {

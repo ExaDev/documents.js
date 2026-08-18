@@ -16,7 +16,8 @@ export type BlockNodeKind =
   | 'htmlBlock'
   | 'thematicBreak'
   | 'table'
-  | 'mathBlock';
+  | 'mathBlock'
+  | 'footnoteDefinition';
 
 export type BlockHeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
 
@@ -71,6 +72,9 @@ export class BlockNode {
   // The table's header row, as raw source text; the body rows arrive through `content` like any other line-accepting leaf block.
   headerLine = '';
 
+  // A footnote definition's own label, from its `[^label]:` opening marker.
+  footnoteLabel = '';
+
   constructor(kind: BlockNodeKind, startLine: number) {
     this.kind = kind;
     this.startLine = startLine;
@@ -115,8 +119,12 @@ export class BlockNode {
 }
 
 // Which block kinds may hold which children, per CommonMark's own container/leaf split. A list holds only items; an item (like a blockquote or the document) holds anything except a bare item; every leaf block holds no blocks at all.
+//
+// A footnote definition is a container of the same shape as a list item -- its body is ordinary block content, continued by indentation -- with one further restriction: it may not hold another footnote definition. Nesting one inside another has no meaning (a definition is addressed by a document-global label, not by its position), and src/block/block.ts's own start rule already refuses to open one anywhere but at the document's own top level, so this is the type-level statement of a rule the parser never reaches the other way round.
 export function canContain(parent: BlockNodeKind, child: BlockNodeKind): boolean {
   switch (parent) {
+    case 'footnoteDefinition':
+      return child !== 'listItem' && child !== 'footnoteDefinition';
     case 'document':
     case 'blockquote':
     case 'listItem':

@@ -99,6 +99,9 @@ function renderInline(node: MarkdownInlineNode): string {
       return '<br />\n';
     case 'softBreak':
       return '\n';
+    case 'footnoteReference':
+      // Footnotes (ExaDev/markdown-codec#66) are a GitHub extension outside both CommonMark and the GFM spec document itself, so -- exactly as for the math case below -- neither vendored corpus this renderer exists to check against carries a footnote example, and there is no cmark-produced expected HTML to match. GitHub's own rendering (a superscripted `<a href="#user-content-fn-1">` plus a generated back-reference in a trailing notes section) is deliberately NOT reproduced: it is a whole-document transformation with its own id-minting rules, none of which any fixture here pins down. The reference's own source spelling is emitted instead, matching what the real write path (src/emit/inline.ts's renderLeaf) actually produces for the same node.
+      return escapeHtml(`[^${node.label}]`);
     case 'mathInline':
       // Math (ExaDev/markdown-codec#53) is a Pandoc/GFM extension outside CommonMark/GFM proper -- neither vendored corpus this renderer exists to check against (src/conformance.test.ts, src/gfm-conformance.test.ts) carries a math example, so there is no cmark-produced expected HTML to match here. The \( \) delimiters are reconstructed around the escaped literal -- matching what the real write path (src/emit/inline.ts's renderLeaf) actually produces -- so an EMPTY math span (a genuine, if unlikely, corpus edge case: two backslash escapes sitting directly adjacent, e.g. "\(\)") renders as "\(\)" here too rather than as nothing, keeping this internal oracle consistent with the real writer it exists to cross-check other constructs against.
       return `\\(${escapeHtml(node.literal)}\\)`;
@@ -172,6 +175,13 @@ class HtmlRenderer {
         // See renderInline's own mathInline case: the $$ delimiters are reconstructed around the escaped literal, matching src/emit/emit.ts's own real MATH_BLOCK_STYLE_ID branch.
         this.cr();
         this.out += `$$\n${escapeHtml(node.literal)}\n$$\n`;
+        this.cr();
+        return;
+      case 'footnoteDefinition':
+        // See renderInline's own footnoteReference case: no fixture pins GitHub's own notes-section markup down, so the definition's source spelling is reconstructed around its rendered body, matching src/emit/emit.ts's own renderFootnoteDefinition. The body renders as ordinary blocks -- a definition holding several paragraphs shows all of them.
+        this.cr();
+        this.out += `${escapeHtml(`[^${node.label}]:`)}\n`;
+        this.render(node.children, false);
         this.cr();
         return;
       case 'document':
