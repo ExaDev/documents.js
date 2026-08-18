@@ -466,7 +466,7 @@ class BlockParser {
   //  - It may not interrupt a paragraph, matching a link reference definition (which is only ever recognised at the FRONT of a paragraph's accumulated content, src/block/definitions.ts) and matching Pandoc. A `[^1]: note` line directly under a line of prose is lazy paragraph continuation text.
   //  - It is recognised ONLY as a direct child of the document -- never inside a block quote or a list item. src/lower/lower.ts lowers a definition to a construct boundary-marker pair (document-schema.js 4.2.0) bracketing its own body, and that pair's extent may not cross a scope its enclosing container had already opened: a definition inside a list item would have to carry the item's own ContentListMembership on every body block, which a body table or image cannot carry at all, closing the item's list scope from INSIDE the pair -- precisely what the flat form's bracket-matching contract forbids a producer from emitting. A block quote is the same shape one level along: its own `> ` prefix is recovered on the way out from each paragraph's indentLeftPt, and a definition's label line has no paragraph of its own to carry it. Inside either container the `[^1]: ...` text stays an ordinary paragraph, exactly as it did before footnotes existed here.
   private tryFootnoteDefinitionStart(container: BlockNode): BlockStartResult {
-    if (!this.footnotesEnabled || this.line.indented || container.kind !== 'document') {
+    if (!this.footnotesEnabled || this.line.indented || !this.footnoteDefinitionMayOpenIn(container)) {
       return 'none';
     }
     const marker = matchFootnoteDefinitionMarker(this.line.restFromNextNonspace());
@@ -483,6 +483,15 @@ class BlockParser {
     node.footnoteLabel = marker.label;
     this.line.advance(marker.markerLength);
     return 'container';
+  }
+
+  // Whether `container` -- the deepest block the current line matched in step 1 -- sits at the document's own top level, walking up through any still-open `list` ancestors first. `continueBlock` treats a `list` node as unconditionally continued no matter what the line is (a list only actually closes when something tries to become its child and can't), so a line right after a top-level list's last item reports its matched container as that LIST, not the document, even though the list itself is about to close. Skipping over `list` ancestors here mirrors what `addChild` does a few lines below once a definition is actually opened: it walks up finalising whatever the tip can't contain, which closes a bare top-level list the same way any other block start does. A list nested inside a block quote or a list item still walks up to THAT container rather than the document, so the existing restriction on those two holds.
+  private footnoteDefinitionMayOpenIn(container: BlockNode): boolean {
+    let node: BlockNode | undefined = container;
+    while (node?.kind === 'list') {
+      node = node.parent;
+    }
+    return node?.kind === 'document';
   }
 
   private tryHtmlBlockStart(container: BlockNode): BlockStartResult {
