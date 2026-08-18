@@ -12,8 +12,8 @@ importers:
         specifier: ^2.0.0
         version: 2.0.0
       documents.js:
-        specifier: ^3.0.2
-        version: 3.0.2
+        specifier: ^3.0.4
+        version: 3.0.4
       zod:
         specifier: ^4.2.0
         version: 4.4.3
@@ -1633,8 +1633,8 @@ packages:
     resolution: {integrity: sha512-sRnhIHGb7UvmtDX9DeJY6/uEULoQ3JZn4whH+gyyLAcP26zzr/u8EXEIZYDRIfabHEZHksBZOUQgCD1cacH3cA==}
     engines: {node: '>=20'}
 
-  documents.js@3.0.2:
-    resolution: {integrity: sha512-Fd37XaE9ic+te2xUXUTvvF9mYUZ/tqatIgHTGy9xvk1XtmqLLxu4ODPyn5j+kZcrPg7KcD9N1GY0BDm2eEwPTg==}
+  documents.js@3.0.4:
+    resolution: {integrity: sha512-sbSuB/pDUUpZDbmUCVpHCAfiXwgQPuoaiS1+qFGCRqGiaa6YhBPjKN0FZn/ERrqvbXKxSZBf1wHSLg6A570Uwg==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -2448,8 +2448,8 @@ packages:
     resolution: {integrity: sha512-P2fSMZr3wTsJR5dMJno2lNNJQEGBfLJaJ/GNpOzTxCY/81jA7d0DsYoHKZuzqIhVGmsOTMh4+6w0DKMxlLLl0g==}
     engines: {node: '>=20'}
 
-  odf.js@4.0.0:
-    resolution: {integrity: sha512-O/eg94uDgXlSoSAC4Wbk3C0CXri2mSagu9RlSs9gaEQL84kqqp8IRySQwvQO1ytpCn6pnS8Wtl9A5RwiVvowSw==}
+  odf.js@4.0.1:
+    resolution: {integrity: sha512-S7hZ6+TcqQH0muuEb7PmivMQs1KaohKCqN8PBdJJNtggEW2UxAC7XPm52KGpWVlBNHS/rPTqt7+xveK4hO7aOw==}
     engines: {node: '>=20'}
 
   onetime@6.0.0:
@@ -4629,13 +4629,13 @@ snapshots:
     dependencies:
       zod: 4.4.3
 
-  documents.js@3.0.2:
+  documents.js@3.0.4:
     dependencies:
       byte-codec: 1.1.9
-      document-schema.js: 4.0.0
+      document-schema.js: 4.1.0
       fflate: 0.8.3
       markdown-codec: 3.0.1
-      odf.js: 4.0.0
+      odf.js: 4.0.1
       ooxml.js: 3.0.0
       pdf-codec: 3.0.0
       temml: 0.13.4
@@ -5368,9 +5368,9 @@ snapshots:
       fflate: 0.8.3
       zod: 4.4.3
 
-  odf.js@4.0.0:
+  odf.js@4.0.1:
     dependencies:
-      document-schema.js: 4.0.0
+      document-schema.js: 4.1.0
       fast-xml-parser: 5.11.0
       fflate: 0.8.3
       zod: 4.4.3
@@ -5381,7 +5381,7 @@ snapshots:
 
   ooxml.js@3.0.0:
     dependencies:
-      document-schema.js: 4.0.0
+      document-schema.js: 4.1.0
       fast-xml-parser: 5.11.0
       fflate: 0.8.3
       zod: 4.4.3
