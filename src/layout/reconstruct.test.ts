@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import type { ContentBlock, ContentDrawPage, ContentParagraph, ContentShape, ContentSheet, ContentSheetCell, ContentSlide, ContentVector, LayoutDocument, LayoutImage, LayoutImageAsset, LayoutItem, LayoutPage, LayoutText } from 'document-schema.js';
+import type { ContentBlock, ContentDrawPage, ContentParagraph, ContentShape, ContentSheet, ContentSheetCell, ContentSlide, ContentVector } from 'document-schema.js';
 import { STANDARD_METRICS } from 'pdf-codec';
 import { drawingOfBlock } from '../model/embedded-drawing';
 import type { CellTypeInference } from './cell-typing';
 import { reconstructDrawing, reconstructPresentation, reconstructSpreadsheet, reconstructWordprocessing } from './reconstruct';
+import type { LayoutDocument, LayoutImage, LayoutImageAsset, LayoutItem, LayoutPage, LayoutText } from 'pdf-codec';
 
 const RED = { r: 1, g: 0, b: 0 };
 const BLACK = { r: 0, g: 0, b: 0 };

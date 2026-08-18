@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { LayoutDocument } from 'document-schema.js';
-import { LAYOUT_FORMAT_VERSION } from 'document-schema.js';
-import type { EmbeddedFaceSubstitution, FontSubstitution, ProvidedFont } from 'pdf-codec';
-import { writePdf } from 'pdf-codec';
+import type { EmbeddedFaceSubstitution, FontSubstitution, LayoutDocument, ProvidedFont } from 'pdf-codec';
+import { LAYOUT_FORMAT_VERSION, writePdf } from 'pdf-codec';
 import { minimalDocxPackage } from '../test-support/docx';
 import { caladeaItalicBytes, embeddedFontDocxPackage, embeddedFontOdtPackage, embeddedFontPptxPackage } from '../test-support/fonts';
 import { createDocumentFontRegistry, extractSourceFonts } from './registry';

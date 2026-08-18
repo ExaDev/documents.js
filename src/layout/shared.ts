@@ -1,12 +1,13 @@
 import { base64ToBytes } from 'ooxml.js';
-import type { Box, ContentBorder, ContentCellBorders, ContentImageBlock, ContentRun, ContentTableRow, LayoutDocument, LayoutFrame, LayoutImageAsset, LayoutItem, LayoutPage, LayoutText, MathFontMetrics, MathMlNode, PageSize, TextMeasurer, WrappedLine } from 'document-schema.js';
-import { LAYOUT_FORMAT_VERSION } from 'document-schema.js';
+import type { Box, ContentBorder, ContentCellBorders, ContentImageBlock, ContentRun, ContentTableRow, LayoutFrame, MathFontMetrics, MathMlNode, PageSize, TextMeasurer, WrappedLine } from 'document-schema.js';
 import { layoutFormula } from '../mathml/layout';
 import type { Alignment, LayoutFont, LayoutMetadata, StyledRun } from 'document-schema.js';
 import { COLOR_BLACK, DEFAULT_LAYOUT_FONT } from 'document-schema.js';
 import { crc32, decodePng, readJpegInfo } from 'byte-codec';
 import { wrapRunsToWidth } from './text-layout';
 import type { SourcedFragment, SourcedRun } from './text-layout';
+import type { LayoutDocument, LayoutImageAsset, LayoutItem, LayoutPage, LayoutText } from 'pdf-codec';
+import { LAYOUT_FORMAT_VERSION } from 'pdf-codec';
 
 // Layout logic genuinely shared between src/layout/slides.ts (pptx, direct placement) and src/layout/engine.ts (docx, flow/pagination): run styling, line-height measurement, alignment, and image-asset registration have no format-specific knowledge of their own -- duplicating them between the two engines would just be two copies to keep in sync.
 

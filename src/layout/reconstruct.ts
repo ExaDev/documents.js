@@ -19,21 +19,11 @@ import type {
   ContentTableCell,
   ContentTableRow,
   ContentVector,
-  LayoutDocument,
   LayoutFrame,
-  LayoutEllipse,
-  LayoutImage,
-  LayoutImageAsset,
-  LayoutItem,
-  LayoutLine,
-  LayoutPage,
-  LayoutPath,
-  LayoutRect,
-  LayoutSubpath,
-  LayoutText,
 } from 'document-schema.js';
-import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
+
 import { resolveStandardFont, STANDARD_METRICS } from 'pdf-codec';
+import type { LayoutDocument, LayoutEllipse, LayoutImage, LayoutImageAsset, LayoutItem, LayoutLine, LayoutPage, LayoutPath, LayoutRect, LayoutSubpath, LayoutText } from 'pdf-codec';
 import { buildDrawingBlock } from '../model/embedded-drawing';
 import type { Box, Margins } from 'document-schema.js';
 import { flipY } from '../model/geometry';
@@ -228,7 +218,7 @@ export function reconstructWordprocessing(doc: LayoutDocument, options?: Reconst
   if (currentGroup.length > 0) {
     sections.push(buildSection(currentGroup, groupStartPageIndex, doc.images));
   }
-  return { kind: 'wordprocessing', formatVersion: CONTENT_FORMAT_VERSION, metadata: doc.metadata, sections };
+  return { kind: 'wordprocessing', metadata: doc.metadata, sections };
 }
 
 function samePageSize(a: LayoutPage, b: LayoutPage): boolean {
@@ -351,7 +341,7 @@ export function reconstructPresentation(doc: LayoutDocument, options?: Reconstru
     throwIfAborted(signal);
     return reconstructSlide(page, pageIndex, doc.images);
   });
-  return { kind: 'presentation', formatVersion: CONTENT_FORMAT_VERSION, metadata: doc.metadata, slides };
+  return { kind: 'presentation', metadata: doc.metadata, slides };
 }
 
 // Table and vector recovery run here on exactly the same terms as in reconstructPageBlocks above -- same detector, same gates, same exclusions -- differing only in the container each result has to be wrapped in: a slide holds nothing but ContentShapes, so a recovered table and a recovered drawing each become a shape framed at the geometry they were recovered from, rather than a bare block placed in a flow.
@@ -515,7 +505,7 @@ export function reconstructDrawing(doc: LayoutDocument, options?: ReconstructOpt
     throwIfAborted(signal);
     return reconstructDrawPage(page, pageIndex, doc.images);
   });
-  return { kind: 'drawing', formatVersion: CONTENT_FORMAT_VERSION, metadata: doc.metadata, pages };
+  return { kind: 'drawing', metadata: doc.metadata, pages };
 }
 
 // ContentDrawPageSchema still keeps shapes and vectors as two separate arrays, but both ContentVector and ContentShape carry a shared `paintOrder` recording their true relative position -- the field drawing.ts's own convertDrawingToLayout merges by when going the other direction. reconstructDrawPage produces exactly that field here: it already walked page.items once in real paint order (a LayoutPage's items ARE its paint order, front-to-back by array position) and bucketed each into whichever array its own kind belongs to, so recording the walk position as it goes is all that is needed for the relative order between the two arrays to survive at all. A page that genuinely interleaves the two consequently round-trips its interleaving exactly, rather than collapsing to all-vectors-then-all-shapes the way it had to before the schema carried the field. 'link' items have no drawing-page equivalent and are dropped, matching reconstructPageBlocks/reconstructSlide's own existing precedent above of ignoring link items entirely -- a dropped item consumes no paintOrder slot either, so the stamped values stay a dense 0..n-1 run over what was actually recovered.
@@ -1049,5 +1039,5 @@ export function reconstructSpreadsheet(doc: LayoutDocument, options?: Reconstruc
     throwIfAborted(signal);
     return reconstructSheet(page, index, options?.onCellTypeInference);
   });
-  return { kind: 'spreadsheet', formatVersion: CONTENT_FORMAT_VERSION, metadata: doc.metadata, sheets };
+  return { kind: 'spreadsheet', metadata: doc.metadata, sheets };
 }

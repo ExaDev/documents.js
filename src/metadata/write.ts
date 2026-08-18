@@ -1,10 +1,11 @@
-import type { ContentDocument, LayoutDocument, LayoutMetadata } from 'document-schema.js';
+import type { ContentDocument, LayoutMetadata } from 'document-schema.js';
 import type { MarkdownImageResolver } from 'markdown-codec';
 import { readPdf, writePdf } from 'pdf-codec';
 import { DOCUMENT_FORMAT_CODECS, requireArrayBufferBytes } from '../codecs/registry';
 import type { DocumentCodecOptions } from '../codecs/registry';
 import type { DocumentFormat } from '../convert/port';
 import { throwIfAborted } from '../ports/abort';
+import type { LayoutDocument } from 'pdf-codec';
 
 // Every format whose own ContentDocument setDocumentMetadata can patch a metadata field on and rebuild from scratch through -- the eight formats sharing the readXContent -> buildXPackage round trip. xlsx joined this set once DOCUMENT_FORMAT_CODECS.xlsx.content gained a real read/write pair (src/codecs/registry.ts): it now fits the identical shape docx/pptx/odt/odp/ods/odg/markdown already share, so there is no reason left to special-case it out. Deliberately does NOT include 'pdf': a PDF's metadata is patched directly on its own LayoutDocument (see setDocumentMetadata below), never through this ContentDocument rebuild path at all. Nor 'csv': a csv round trip technically exists through the registry codec, but RFC 4180 text has no metadata container at all -- a rebuild would "succeed" and silently drop the override -- so classifyWritePath rejects it explicitly below with that reason rather than letting it fall through to the generic format-mismatch message. Nor 'svg': its round trip technically exists too, but this package's SVG metadata surface is the root <title> element alone (mapped to/from metadata.title), so every other override would be silently dropped by the rebuild -- rejected below for the identical reason.
 const REBUILD_FORMATS: Readonly<Record<'docx' | 'pptx' | 'odt' | 'odp' | 'ods' | 'odg' | 'markdown' | 'xlsx', true>> = {

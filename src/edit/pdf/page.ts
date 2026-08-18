@@ -1,4 +1,4 @@
-import type { LayoutImageAsset, LayoutPage } from 'document-schema.js';
+import type { LayoutImageAsset, LayoutPage } from 'pdf-codec';
 import type {
   PdfEllipseInit,
   PdfImageInit,

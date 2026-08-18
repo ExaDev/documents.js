@@ -1,12 +1,12 @@
 import { bytesToBase64 } from 'ooxml.js';
 import { describe, expect, it } from 'vitest';
-import type { ContentDocument, ContentImageBlock, ContentParagraph, ContentRun, ContentSection, ContentShape, ContentSlide, ContentTable, LayoutImage, LayoutItem, LayoutLink, LayoutRect, LayoutText } from 'document-schema.js';
-import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
+import type { ContentDocument, ContentImageBlock, ContentParagraph, ContentRun, ContentSection, ContentShape, ContentSlide, ContentTable } from 'document-schema.js';
+
 import { createDocx } from '../edit/docx/editor';
 import { createPptx } from '../edit/pptx/editor';
 import { readDocxContent } from '../ooxml/docx/read';
 import { readPptxContent } from '../ooxml/pptx/read';
-import type { TextMeasurer } from 'pdf-codec';
+import type { LayoutImage, LayoutItem, LayoutLink, LayoutRect, LayoutText, TextMeasurer } from 'pdf-codec';
 import { encodePng } from 'byte-codec';
 import { createStandardFontMeasurer, loadMathFont } from 'pdf-codec';
 const mathMetricsAt = (sizePt: number) => loadMathFont().metricsAt(sizePt);
@@ -39,7 +39,7 @@ function section(blocks: ContentSection['blocks'], overrides: Partial<ContentSec
 }
 
 function wordprocessingDoc(sections: ContentSection[]): Extract<ContentDocument, { kind: 'wordprocessing' }> {
-  return { kind: 'wordprocessing', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, sections };
+  return { kind: 'wordprocessing', metadata: {}, sections };
 }
 
 function shape(overrides: Partial<ContentShape> = {}): ContentShape {
@@ -51,7 +51,7 @@ function slide(shapes: ContentShape[], size = { widthPt: 960, heightPt: 540 }): 
 }
 
 function presentationDoc(slides: ContentSlide[]): Extract<ContentDocument, { kind: 'presentation' }> {
-  return { kind: 'presentation', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, slides };
+  return { kind: 'presentation', metadata: {}, slides };
 }
 
 function textItems(items: readonly LayoutItem[]): LayoutText[] {
