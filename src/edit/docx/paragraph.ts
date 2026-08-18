@@ -299,6 +299,10 @@ export class DocxParagraph {
       }
       return;
     }
+    // A docx list membership is meaningless without a numId naming the numbering definition that carries its marker -- CT_NumPr's own shape requires w:numId, and schema 4.0.0's optional numId describes memberships from sources that have none (OOXML drawing paragraphs, level-only). Those memberships get a numId minted by buildDocxPackage's numbering pre-pass before they ever reach a DocxParagraph; a live-view caller writing { level } directly gets this loud refusal naming the fix rather than a silently unnumbered bullet.
+    if (value.numId === undefined) {
+      throw new Error('DocxParagraph.list requires a numId -- buildDocxPackage mints one for memberships that lack it; set numId explicitly (see src/edit/docx/numbering.ts)');
+    }
     const numPr = getOrCreateChildElement(pPr, 'w:numPr', PPR_ORDER, () => el('w:numPr'));
     // CT_NumPr's sequence is ilvl before numId.
     numPr.children = [el('w:ilvl', { 'w:val': String(value.level) }), el('w:numId', { 'w:val': value.numId })];
