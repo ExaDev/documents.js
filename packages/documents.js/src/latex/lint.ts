@@ -2,6 +2,7 @@ import type { ContentBlock, ContentFormula, DocumentPackage, MathExpression, Mat
 import type { MathLintDiagnostic } from './diagnostics';
 import { lowerLatex } from './lower';
 import { reduceRational } from './rational';
+import { flattenPackage } from '../convert/flatten';
 
 // The coherence lint: the two-layer model's read-only audit. For every formula carrying BOTH a presentation string and a content tree, re-parse the stored presentation with the same pinned parser, re-run the same lowering against the document's own symbol table, and compare the result with the stored content. Divergence means somebody edited one layer deliberately since the content was last derived -- the schema's atomic pair-edit rule guarantees the layers never drift by accident -- so the finding is a WARNING carrying the stored provenance (where the formula came from and what has touched it, per the edit trail), never an automatic re-derivation: this function computes a derived comparison view at comparison time and writes nothing back, exactly the discipline the schema's own comment prescribes.
 //
@@ -73,12 +74,12 @@ function collectBlockFormulas(blocks: readonly ContentBlock[], locate: string, f
   }
 }
 
-// Lint every formula carrying both layers in a package. The walk covers every arm formulas actually travel through: the wordprocessing sections' block flow, presentation slides and drawing pages (both via their shapes' own block flows), the spreadsheet arm's own embeddedObjects array, and the formula arm itself (a standalone formula document).
+// Lint every formula carrying both layers in a package. The tree-form package is flattened once at entry (the same single tree-to-flat authority every package consumer uses); the walk below covers every arm formulas actually travel through in the flat form: the wordprocessing sections' block flow, presentation slides and drawing pages (both via their shapes' own block flows), the spreadsheet arm's own embeddedObjects array, and the formula arm itself (a standalone formula document). The exported signature keeps DocumentPackage -- callers hand back exactly what onDocument gave them.
 export function lintMathCoherence(pkg: DocumentPackage): readonly MathLintDiagnostic[] {
   const warnings: MathLintDiagnostic[] = [];
-  const symbolEntries = pkg.content.symbolTable?.symbols;
+  const content = flattenPackage(pkg);
+  const symbolEntries = content.symbolTable?.symbols;
   const found: { formula: ContentFormula; locate: string }[] = [];
-  const content = pkg.content;
   if (content.kind === 'formula') {
     found.push({ formula: content.formula, locate: 'formula' });
   } else if (content.kind === 'wordprocessing') {
