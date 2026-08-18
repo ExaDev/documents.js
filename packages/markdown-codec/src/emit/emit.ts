@@ -16,6 +16,7 @@ import { MarkdownUnbalancedConstructMarkersError, MarkdownUnsupportedDocumentKin
 import type { MarkdownDiagnosticSink } from '../diagnostics/diagnostics';
 import { MarkdownDiagnosticCodes, NOOP_MARKDOWN_DIAGNOSTIC_SINK } from '../diagnostics/diagnostics';
 import { DEFAULT_BULLET_LIST_MARKER, DEFAULT_CODE_FENCE_CHAR, DEFAULT_EMPHASIS_MARKER, DEFAULT_HEADING_STYLE, DEFAULT_LINE_ENDING, DEFAULT_ORDERED_LIST_DELIMITER, DEFAULT_THEMATIC_BREAK_CHAR } from '../defaults/defaults';
+import { isValidFootnoteLabel } from '../inline/footnote';
 import type { MarkdownHeadingStyle, WriteMarkdownOptions } from '../options/options';
 import type { ListNumIdInfo } from '../shared/list-id';
 import { parseListNumId } from '../shared/list-id';
@@ -343,7 +344,11 @@ function renderConstruct(item: ConstructItem, context: EmitContext): string {
   const body = renderItems(item.children, context);
   const { descriptor } = item;
   if (descriptor.kind === 'anchor' && descriptor.anchorType === 'footnote') {
-    return renderFootnoteDefinition(descriptor.name, body);
+    if (isValidFootnoteLabel(descriptor.name)) {
+      return renderFootnoteDefinition(descriptor.name, body);
+    }
+    context.sink({ code: MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED, severity: 'info', message: `a footnote anchor's own name "${descriptor.name}" cannot be spelled as a "[^label]:" marker (whitespace or "]" would reparse as something else); its own extent still renders in place, but the construct itself is not represented` });
+    return body;
   }
   const detail = descriptor.kind === 'anchor' ? `${descriptor.kind} (${descriptor.anchorType})` : descriptor.kind;
   context.sink({ code: MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED, severity: 'info', message: `a "${detail}" construct has no markdown syntax; its own extent still renders in place, but the construct itself is not represented` });

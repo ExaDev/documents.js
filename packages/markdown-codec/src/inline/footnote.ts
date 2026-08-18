@@ -7,6 +7,9 @@
 // The identifier between `[^` and `]`: at least one character, none of them whitespace and none of them a further square bracket. Both restrictions are load-bearing rather than tidiness -- a label containing whitespace is ambiguous with ordinary bracketed prose ("[^ see above]"), and one containing a bracket cannot be scanned without a nesting rule neither GitHub nor Pandoc defines.
 const FOOTNOTE_LABEL_PATTERN = /\[\^([^\s[\]]+)\]/y;
 
+// The same identifier grammar as FOOTNOTE_LABEL_PATTERN's own capture group, anchored to the whole string rather than embedded in a `[^label]` match -- isValidFootnoteLabel below tests a candidate label in isolation, not a marker it was scanned out of.
+const FOOTNOTE_LABEL_ONLY_PATTERN = /^[^\s[\]]+$/;
+
 export interface FootnoteLabelMatch {
   readonly label: string;
   // Source index one past the closing `]`.
@@ -44,3 +47,8 @@ export function matchFootnoteDefinitionMarker(lineText: string): FootnoteDefinit
 
 // Labels are matched EXACTLY, with no case folding and no whitespace collapsing -- unlike a link label (src/inline/link.ts's normalizeLinkLabel, which implements CommonMark's own normalisation rules verbatim). There is no spec text to transcribe here: footnotes are outside both CommonMark and GFM proper, so a normalisation rule would be this package's own invention, and an exact match is the one choice that cannot silently merge two labels an author meant to keep apart. `[^Note]` and `[^note]` are therefore two distinct footnotes, and each round-trips under its own spelling.
 export type FootnoteLabelSet = ReadonlySet<string>;
+
+// Whether `label` could itself appear, unchanged, between `[^` and `]` and be read back as the same footnote. src/emit/emit.ts calls this before spelling a footnote anchor's own name into a `[^label]:` marker: the name comes from document-schema.js's AnchorDescriptorSchema, a bare `z.string()` with no grammar constraint of its own, so it may arrive from a producer other than this package's own reader (ooxml.js, odf.js, or any other codec sharing the same ContentDocument pivot) carrying whitespace or a `]` this grammar cannot represent. Spelling such a name into a marker anyway would emit text this package's own reader -- and GitHub's -- cannot parse back as a footnote at all: whitespace reopens the "[^ see above]" ambiguity FOOTNOTE_LABEL_PATTERN's own comment describes, and a `]` ends the marker early, degrading the rest of the line into ordinary paragraph text or a link reference definition. The write side is expected to fall back to its transparent unrepresented-construct degrade when this returns false, rather than emit unparseable syntax.
+export function isValidFootnoteLabel(label: string): boolean {
+  return FOOTNOTE_LABEL_ONLY_PATTERN.test(label);
+}
