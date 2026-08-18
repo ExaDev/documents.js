@@ -39,7 +39,7 @@
     "@vanilla-extract/recipes": "^0.5.7",
     "dexie": "^4.4.4",
     "dexie-react-hooks": "^4.4.0",
-    "documents.js": "^3.0.1",
+    "documents.js": "^3.0.2",
     "markdown-codec": "^3.0.1",
     "odf.js": "^4.0.1",
     "react": "^19.2.8",
