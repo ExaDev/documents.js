@@ -12,7 +12,7 @@ import type {
   ContentTableRow,
   LayoutMetadata,
 } from 'document-schema.js';
-import { CONTENT_FORMAT_VERSION, PAGE_SIZE_A4 } from 'document-schema.js';
+import{ PAGE_SIZE_A4 } from 'document-schema.js';
 import type { WriteMarkdownOptions } from 'markdown-codec';
 import { headingStyleId } from 'markdown-codec';
 import { formulaPlaceholderText } from '../model/formula';
@@ -72,7 +72,6 @@ function textParagraph(text: string): ContentParagraph {
 function wrapAsWordprocessing(metadata: LayoutMetadata, blocks: readonly ContentBlock[]): ContentDocument {
   return {
     kind: 'wordprocessing',
-    formatVersion: CONTENT_FORMAT_VERSION,
     metadata,
     sections: [{ pageSize: PAGE_SIZE_A4, margins: SYNTHETIC_MARGINS, blocks: [...blocks] }],
   };

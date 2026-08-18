@@ -1,4 +1,4 @@
-import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
+
 import { describe, expect, it } from 'vitest';
 import { docxWithTableCellEquationPackage, minimalDocxPackage } from '../../test-support/docx';
 import { readDocxContent } from './read';
@@ -9,7 +9,6 @@ describe('readDocxContent', () => {
   it('wraps readDocx into a wordprocessing ContentDocument', () => {
     const doc = readDocxContent(minimalDocxPackage());
     expect(doc.kind).toBe('wordprocessing');
-    expect(doc.formatVersion).toBe(CONTENT_FORMAT_VERSION);
   });
 
   it('passes sections through from readDocx unchanged, including a paragraph and a table', () => {

@@ -1,5 +1,5 @@
 import type { ContentDocument, ContentFormula, MathMlElement, MathMlNode } from 'document-schema.js';
-import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
+
 import { attrValue, childrenWithTag, decodePackage, elementsWithTag, encodePackage, findChildElement, readManifest, readOdfFormula, rootElement, validateManifest } from 'odf.js';
 import type { Package, XmlElement } from 'odf.js';
 import { describe, expect, it } from 'vitest';
@@ -52,7 +52,7 @@ function firstDrawPage(pkg: Package): XmlElement {
 }
 
 function presentationDoc(shapes: Extract<ContentDocument, { kind: 'presentation' }>['slides'][number]['shapes']): ContentDocument {
-  return { kind: 'presentation', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, slides: [{ size: { widthPt: 960, heightPt: 540 }, notes: '', shapes }] };
+  return { kind: 'presentation', metadata: {}, slides: [{ size: { widthPt: 960, heightPt: 540 }, notes: '', shapes }] };
 }
 
 const ZERO_INSETS = { insetLeftPt: 0, insetTopPt: 0, insetRightPt: 0, insetBottomPt: 0 };

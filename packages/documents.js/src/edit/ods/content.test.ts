@@ -1,5 +1,5 @@
 import type { ContentDocument } from 'document-schema.js';
-import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
+
 import { attrValue, bytesToBase64, elementsWithTag, readOds, rootElement } from 'odf.js';
 import { describe, expect, it } from 'vitest';
 import { formulaDocument } from '../../model/formula';
@@ -10,7 +10,6 @@ type SpreadsheetDocument = Extract<ContentDocument, { kind: 'spreadsheet' }>;
 function spreadsheetDocument(): SpreadsheetDocument {
   return {
     kind: 'spreadsheet',
-    formatVersion: CONTENT_FORMAT_VERSION,
     metadata: {},
     sheets: [
       {
@@ -41,7 +40,7 @@ function spreadsheetDocument(): SpreadsheetDocument {
 
 describe('buildOdsPackage', () => {
   it('throws for a non-spreadsheet ContentDocument', () => {
-    expect(() => buildOdsPackage({ kind: 'wordprocessing', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, sections: [] })).toThrow(/requires a spreadsheet/);
+    expect(() => buildOdsPackage({ kind: 'wordprocessing', metadata: {}, sections: [] })).toThrow(/requires a spreadsheet/);
   });
 
   it('builds a package that reads back through odf.js\'s own readOds with every sheet, cell value, and formula intact', () => {
@@ -64,7 +63,7 @@ describe('buildOdsPackage', () => {
   });
 
   it('an empty content.sheets array keeps the scaffold\'s own single default sheet', () => {
-    const pkg = buildOdsPackage({ kind: 'spreadsheet', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, sheets: [] });
+    const pkg = buildOdsPackage({ kind: 'spreadsheet', metadata: {}, sheets: [] });
     const document = readOds(pkg);
     expect(document.sheets).toHaveLength(1);
     expect(document.sheets[0]?.name).toBe('Sheet1');

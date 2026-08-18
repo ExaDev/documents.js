@@ -1,5 +1,5 @@
 import type { ContentDocument } from 'document-schema.js';
-import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
+
 import type { Package } from 'ooxml.js';
 import { attr, childrenWithTag, readPptx, resolveRelationships, rootElement } from 'ooxml.js';
 import type { OmmlDiagnosticSink } from './formula';
@@ -51,5 +51,5 @@ export function readPptxContent(pkg: Package, options?: ReadPptxContentOptions):
     const withFormulas = spliceSlideFormulas(slide, slideIndex, spTree.children, options?.onMathDiagnostic);
     return collapseVectorShapeRuns(withFormulas, slideIndex, spTree.children);
   });
-  return { kind: 'presentation', formatVersion: CONTENT_FORMAT_VERSION, metadata: { ...pptxDoc.metadata }, slides };
+  return { kind: 'presentation', metadata: { ...pptxDoc.metadata }, slides };
 }

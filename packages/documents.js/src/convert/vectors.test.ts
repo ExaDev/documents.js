@@ -1,5 +1,5 @@
 import type { ContentDocument, ContentVector } from 'document-schema.js';
-import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
+
 import type { Package as OdfPackage, XmlElement as OdfXmlElement } from 'odf.js';
 import { childrenWithTag, decodePackage as decodeOdfPackage, encodePackage as encodeOdfPackage, findChildElement, readDrawPageContent, rootElement as odfRootElement, zipPackage as zipOdfPackage } from 'odf.js';
 import type { XmlElement } from 'ooxml.js';
@@ -335,7 +335,6 @@ describe('odt <-> docx: a recovered drawing survives repeated cycles without acc
     const size = { widthPt: 612, heightPt: 792 };
     const source: ContentDocument = {
       kind: 'wordprocessing',
-      formatVersion: CONTENT_FORMAT_VERSION,
       metadata: {},
       sections: [
         {
@@ -369,7 +368,6 @@ describe('odp <-> pptx: a recovered drawing survives repeated cycles without acc
     const zeroInsets = { insetLeftPt: 0, insetTopPt: 0, insetRightPt: 0, insetBottomPt: 0 };
     const source: ContentDocument = {
       kind: 'presentation',
-      formatVersion: CONTENT_FORMAT_VERSION,
       metadata: {},
       slides: [
         {

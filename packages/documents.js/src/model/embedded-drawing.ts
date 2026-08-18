@@ -1,5 +1,5 @@
 import type { Box, ContentDocument, ContentDrawPage, ContentEmbeddedObjectBlock, ContentPathPoint, ContentVector, PageSize } from 'document-schema.js';
-import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
+
 
 // Vector primitives (rect/ellipse/line/path) recovered from a page, packaged as the ContentEmbeddedObjectBlock the shared schema already models for exactly this -- the counterpart to src/model/formula.ts's buildFormulaBlock/formulaOfBlock, for the drawing objectKind rather than the formula one.
 //
@@ -8,7 +8,7 @@ import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
 // The nested page is sized to the SOURCE page and the block's own frame is that same full-page box, so every recovered vector's own frame stays in the coordinates it was recovered in (page-relative, top-left origin, y down) with no re-origining arithmetic anywhere -- an offset step that could only introduce error, since the recovered geometry is already page-relative by construction.
 export function buildDrawingBlock(size: PageSize, vectors: readonly ContentVector[]): ContentEmbeddedObjectBlock {
   const page: ContentDrawPage = { size, shapes: [], vectors: [...vectors] };
-  const document: ContentDocument = { kind: 'drawing', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, pages: [page] };
+  const document: ContentDocument = { kind: 'drawing', metadata: {}, pages: [page] };
   return { kind: 'embeddedObject', objectKind: 'drawing', document, frame: { xPt: 0, yPt: 0, widthPt: size.widthPt, heightPt: size.heightPt } };
 }
 

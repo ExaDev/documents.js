@@ -1,5 +1,5 @@
 import type { ContentDocument, ContentFormula, MathMlElement, MathMlNode } from 'document-schema.js';
-import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
+
 import { attrValue, buildXml, childrenWithTag, decodePackage, elementsWithTag, encodePackage, readManifest, readOdfFormula, rootElement, validateManifest } from 'odf.js';
 import type { Package, XmlElement } from 'odf.js';
 import { describe, expect, it } from 'vitest';
@@ -53,7 +53,6 @@ type WordprocessingBlocks = Extract<ContentDocument, { kind: 'wordprocessing' }>
 function wordDoc(blocks: WordprocessingBlocks): ContentDocument {
   return {
     kind: 'wordprocessing',
-    formatVersion: CONTENT_FORMAT_VERSION,
     metadata: {},
     sections: [{ pageSize: { widthPt: 612, heightPt: 792 }, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 }, blocks }],
   };

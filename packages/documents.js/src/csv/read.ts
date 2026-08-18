@@ -1,5 +1,5 @@
 import type { ContentDocument, ContentSheet, ContentSheetCell, ContentSheetColumn, ContentSheetPrintSettings, ContentSheetRow } from 'document-schema.js';
-import { CONTENT_FORMAT_VERSION, PAGE_SIZE_A4 } from 'document-schema.js';
+import{ PAGE_SIZE_A4 } from 'document-schema.js';
 import type { CellTypeInferenceSink } from '../layout/cell-typing';
 import { inferCellValue } from '../layout/cell-typing';
 import { DEFAULT_CSV_DELIMITER, parseCsvRecords } from './records';
@@ -63,5 +63,5 @@ export function readCsvContent(text: string, options?: ReadCsvContentOptions): C
   const rows: ContentSheetRow[] = Array.from({ length: records.length }, (_unused, index) => ({ index, heightPt: ROW_HEIGHT_PT }));
   const sheet: ContentSheet = { name: SHEET_NAME, cells, columns, rows, images: [], printSettings: DEFAULT_PRINT_SETTINGS };
 
-  return { kind: 'spreadsheet', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, sheets: [sheet] };
+  return { kind: 'spreadsheet', metadata: {}, sheets: [sheet] };
 }

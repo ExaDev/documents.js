@@ -170,7 +170,7 @@ describe('OdsSheet.addEmbeddedObject', () => {
     const editor = createOds();
     const sheet = editor.sheets()[0]!;
     const partCountBefore = Object.keys(editor.toPackage().parts).length;
-    sheet.addEmbeddedObject({ objectKind: 'drawing', document: { kind: 'drawing', formatVersion: FRACTION.formatVersion, metadata: {}, pages: [] }, frame: { xPt: 0, yPt: 0, widthPt: 1, heightPt: 1 } });
+    sheet.addEmbeddedObject({ objectKind: 'drawing', document: { kind: 'drawing', metadata: {}, pages: [] }, frame: { xPt: 0, yPt: 0, widthPt: 1, heightPt: 1 } });
     expect(findTableShapes(editor.toPackage())).toBeUndefined();
     expect(Object.keys(editor.toPackage().parts)).toHaveLength(partCountBefore);
   });

@@ -1,5 +1,5 @@
 import type { ContentDocument, ContentFormula, MathMlElement, MathMlNode } from 'document-schema.js';
-import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
+
 import type { Package, XmlElement } from 'ooxml.js';
 import { childrenWithTag, rootElement } from 'ooxml.js';
 import { describe, expect, it } from 'vitest';
@@ -49,7 +49,7 @@ function firstSlideRoot(pkg: Package): XmlElement {
 }
 
 function presentationDoc(shapes: Extract<ContentDocument, { kind: 'presentation' }>['slides'][number]['shapes']): ContentDocument {
-  return { kind: 'presentation', formatVersion: CONTENT_FORMAT_VERSION, metadata: {}, slides: [{ size: { widthPt: 960, heightPt: 540 }, notes: '', shapes }] };
+  return { kind: 'presentation', metadata: {}, slides: [{ size: { widthPt: 960, heightPt: 540 }, notes: '', shapes }] };
 }
 
 const FORMULA_SHAPES = [{ frame: FRAME, ...ZERO_INSETS, blocks: [{ kind: 'embeddedObject' as const, objectKind: 'formula' as const, document: formulaDocument(FRACTION), frame: FRAME }] }];

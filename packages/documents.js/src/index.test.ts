@@ -1,5 +1,5 @@
 import type { ContentDocument } from 'document-schema.js';
-import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
+
 import { describe, expect, it } from 'vitest';
 import { buildXlsxPackage, decodeDocumentPackage, decodePackage, encodeDocumentPackage, encodePackage, odsToXlsx, readXlsxContent } from './index';
 import { richOdsBytes } from './test-support/ods';
@@ -33,7 +33,6 @@ describe('readXlsxContent / buildXlsxPackage re-export', () => {
   it('builds real xlsx bytes from a spreadsheet ContentDocument and reads its own content back through the same re-export', () => {
     const document: ContentDocument = {
       kind: 'spreadsheet',
-      formatVersion: CONTENT_FORMAT_VERSION,
       metadata: {},
       sheets: [
         {

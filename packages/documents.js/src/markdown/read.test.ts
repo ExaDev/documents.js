@@ -1,4 +1,4 @@
-import { CONTENT_FORMAT_VERSION } from 'document-schema.js';
+
 import { describe, expect, it } from 'vitest';
 import { richMarkdownText, richMarkdownTextWithFrontMatter } from '../test-support/markdown';
 import { readMarkdownContent } from './read';
@@ -7,7 +7,6 @@ describe('readMarkdownContent', () => {
   it('produces a wordprocessing ContentDocument at the current CONTENT_FORMAT_VERSION', () => {
     const content = readMarkdownContent(richMarkdownText());
     expect(content.kind).toBe('wordprocessing');
-    expect(content.formatVersion).toBe(CONTENT_FORMAT_VERSION);
   });
 
   it('lowers a heading to a Heading1-styled paragraph, matching odf.js/ooxml.js\'s own convention', () => {
