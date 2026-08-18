@@ -1,0 +1,140 @@
+{
+  "$schema": "https://cdn.jsdelivr.net/npm/document-schema.js@4.0.0/schemas/document-package.schema.json",
+  "kind": "wordprocessing",
+  "metadata": {},
+  "pages": [
+    {
+      "widthPt": 612,
+      "heightPt": 792
+    }
+  ],
+  "children": [
+    {
+      "node": {
+        "kind": "section",
+        "pageSize": {
+          "widthPt": 612,
+          "heightPt": 792
+        },
+        "margins": {
+          "topPt": 72,
+          "rightPt": 72,
+          "bottomPt": 72,
+          "leftPt": 72
+        }
+      },
+      "children": [
+        {
+          "kind": "paragraph",
+          "runs": [
+            {
+              "text": "Hello, world!",
+              "fontFamily": "Calibri",
+              "sizePt": 11,
+              "sourcePath": "sections[0].blocks[0].runs[0]",
+              "frames": [
+                {
+                  "pageIndex": 0,
+                  "xPt": 72,
+                  "yPt": 706.572265625,
+                  "widthPt": 25.72216796875,
+                  "heightPt": 13.427734375
+                },
+                {
+                  "pageIndex": 0,
+                  "xPt": 100.208984375,
+                  "yPt": 706.572265625,
+                  "widthPt": 29.283203125,
+                  "heightPt": 13.427734375
+                }
+              ]
+            }
+          ],
+          "sourcePath": "sections[0].blocks[0]"
+        },
+        {
+          "kind": "table",
+          "columnWidthsPt": [
+            225,
+            225
+          ],
+          "rows": [
+            {
+              "cells": [
+                {
+                  "blocks": [
+                    {
+                      "kind": "paragraph",
+                      "runs": [
+                        {
+                          "text": "A1",
+                          "fontFamily": "Calibri",
+                          "sizePt": 11,
+                          "sourcePath": "sections[0].blocks[1].rows[0].cells[0].blocks[0].runs[0]",
+                          "frames": [
+                            {
+                              "pageIndex": 0,
+                              "xPt": 72,
+                              "yPt": 693.14453125,
+                              "widthPt": 11.93994140625,
+                              "heightPt": 13.427734375
+                            }
+                          ]
+                        }
+                      ],
+                      "sourcePath": "sections[0].blocks[1].rows[0].cells[0].blocks[0]"
+                    }
+                  ],
+                  "frames": [
+                    {
+                      "pageIndex": 0,
+                      "xPt": 72,
+                      "yPt": 686.572265625,
+                      "widthPt": 234,
+                      "heightPt": 20
+                    }
+                  ]
+                },
+                {
+                  "blocks": [
+                    {
+                      "kind": "paragraph",
+                      "runs": [
+                        {
+                          "text": "B1",
+                          "fontFamily": "Calibri",
+                          "sizePt": 11,
+                          "sourcePath": "sections[0].blocks[1].rows[0].cells[1].blocks[0].runs[0]",
+                          "frames": [
+                            {
+                              "pageIndex": 0,
+                              "xPt": 306,
+                              "yPt": 693.14453125,
+                              "widthPt": 11.55859375,
+                              "heightPt": 13.427734375
+                            }
+                          ]
+                        }
+                      ],
+                      "sourcePath": "sections[0].blocks[1].rows[0].cells[1].blocks[0]"
+                    }
+                  ],
+                  "frames": [
+                    {
+                      "pageIndex": 0,
+                      "xPt": 306,
+                      "yPt": 686.572265625,
+                      "widthPt": 234,
+                      "heightPt": 20
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "sourcePath": "sections[0].blocks[1]"
+        }
+      ]
+    }
+  ]
+}

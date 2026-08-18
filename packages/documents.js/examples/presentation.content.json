@@ -1,7 +1,6 @@
 {
-  "$schema": "https://cdn.jsdelivr.net/npm/document-schema.js@3.2.0/schemas/content-document.schema.json",
+  "$schema": "https://cdn.jsdelivr.net/npm/document-schema.js@4.0.0/schemas/content-document.schema.json",
   "kind": "presentation",
-  "formatVersion": 3,
   "metadata": {},
   "slides": [
     {
