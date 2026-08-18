@@ -287,7 +287,7 @@ describe('factorStyles minting', () => {
   });
 
   it('factors a paragraph tuple nested inside a construct group\'s children onto the construct group\'s own ref (document-schema.js 4.1.0)', () => {
-    // decompose.ts never manufactures a construct group, and flattenPackage now refuses one outright (see flatten.ts), so the only way to exercise extentOf/flowExtent's construct-group recognition is a hand-built tree run straight through mint() -- assemblePackage/factorStyles can never hand one to it.
+    // mint() run directly on a hand-built tree, rather than through assemblePackage, so extentOf/flowExtent's construct-group recognition is asserted on exactly the tree shape stated here -- independent of which flat marker placement decompose would have promoted to it.
     const outside = paragraph([run('outside')], { alignment: 'right' });
     const insideA = paragraph([run('a')], { indentLeftPt: 20 });
     const insideB = paragraph([run('b')], { indentLeftPt: 20 });
@@ -311,7 +311,7 @@ describe('factorStyles minting', () => {
   });
 
   it('factors a paragraph tuple nested inside a shape-flow construct group onto the construct group\'s own ref (document-schema.js 4.1.0)', () => {
-    // The section-flow test above exercises rebuildSectionConstructGroup and the isConstructGroup arm in rebuildSectionChild; this mirrors it through the shape/list-flow vocabulary instead -- a ShapeConstructGroupNode sat inside a ShapeGroupNode's own children, nested under a SlideGroupNode -- so rebuildShapeConstructGroup and the isConstructGroup dispatch arm in rebuildListChild get their own coverage rather than riding untested on the section-flow rebuilder's coattails. decompose.ts never manufactures a construct group and flattenPackage now refuses one outright (see flatten.ts), so mint() run directly on a hand-built tree is again the only route that reaches either.
+    // The section-flow test above exercises rebuildSectionConstructGroup and the isConstructGroup arm in rebuildSectionChild; this mirrors it through the shape/list-flow vocabulary instead -- a ShapeConstructGroupNode sat inside a ShapeGroupNode's own children, nested under a SlideGroupNode -- so rebuildShapeConstructGroup and the isConstructGroup dispatch arm in rebuildListChild get their own coverage rather than riding untested on the section-flow rebuilder's coattails.
     const outside = paragraph([run('outside')], { alignment: 'right' });
     const insideA = paragraph([run('a')], { indentLeftPt: 20 });
     const insideB = paragraph([run('b')], { indentLeftPt: 20 });
@@ -335,6 +335,44 @@ describe('factorStyles minting', () => {
     expect(mintedConstruct.style).toBe('s1');
     expect(mintedConstruct.children[0]).not.toHaveProperty('indentLeftPt');
     expect(mintedConstruct.children[1]).not.toHaveProperty('indentLeftPt');
+  });
+
+  it('mints through a construct promoted from flat marker blocks, and the tree it produces flattens back', () => {
+    // The two tests above hand mint() a tree directly; this one comes the whole way round -- flat content carrying a constructStart/constructEnd pair, through assemblePackage (decompose then mint), and back through flattenPackage. It is the end-to-end proof that minting and the promotion compose: a construct group manufactured by decompose is an ordinary mint wrapper, and a minted tree containing one is still flattenable.
+    const doc = wordprocessingDoc([
+      paragraph([run('outside')], { alignment: 'right' }),
+      { kind: 'constructStart', descriptor: { kind: 'contentControl', controlType: 'richText' } },
+      paragraph([run('a')], { indentLeftPt: 20 }),
+      paragraph([run('b')], { indentLeftPt: 20 }),
+      { kind: 'constructEnd' },
+    ]);
+    const minted = assemblePackage(doc);
+    expect(DocumentPackageSchema.safeParse(minted).success).toBe(true);
+    expect(refsOf(minted)).toEqual([{ ref: 's1', nodeKind: 'contentControl' }]);
+    expect(minted.styles?.s1).toEqual({ paragraph: { indentLeftPt: 20 } });
+    expect(canon(flattenPackage(minted))).toEqual(canon(doc));
+  });
+
+  it('resolves an ancestor heading\'s ref onto a paragraph nested inside a construct -- a construct extends the style chain, never resets it', () => {
+    // The chain axis, stated on its own because it is the one place a construct differs from the section/slide/sheet/draw-page roots: those start a brand new empty chain, a construct extends the incoming one. A construct is a semantic wrapper sitting inside ambient content, so `inside` must come back carrying the heading group's factored alignment exactly as `a` (its sibling outside the construct) does -- if flatten reset the chain at the construct boundary, `inside` would flatten back stripped and law (i) would fail on it.
+    const doc = wordprocessingDoc([
+      // `intro` carries no alignment, so the SECTION wrapper's own four-paragraph extent shares no mintable key and mints nothing -- which is what puts the ref on the heading group specifically rather than on an ancestor that happens to cover everything.
+      paragraph([run('intro')]),
+      paragraph([run('Chapter')], { headingLevel: 1, alignment: 'center' }),
+      paragraph([run('a')], { alignment: 'center' }),
+      { kind: 'constructStart', descriptor: { kind: 'field', instruction: 'PAGE' } },
+      paragraph([run('inside')], { alignment: 'center' }),
+      { kind: 'constructEnd' },
+    ]);
+    const minted = assemblePackage(doc);
+    expect(refsOf(minted)).toEqual([{ ref: 's1', nodeKind: 'paragraph' }]);
+    expect(minted.styles?.s1).toEqual({ paragraph: { alignment: 'center' } });
+    const heading = findGroupByText(minted, 'Chapter');
+    if (heading === undefined) throw new Error('expected the heading group');
+    expect(heading.style).toBe('s1');
+    // The nested paragraph was stripped by the heading's entry (no ref of its own on the construct group), and flatten restores it from that ancestor entry.
+    expect(containsKeyAnywhere(minted.children, 'alignment')).toBe(false);
+    expect(canon(flattenPackage(minted))).toEqual(canon(doc));
   });
 });
 

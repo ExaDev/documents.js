@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { isHeadingGroupNode, isListGroupNode, type ContentBlock, type ContentDocument, type ContentEmbeddedObject, type ContentFormula, type ContentSection, type ContentShape, type ContentSheetCell, type ContentSheetImage, type ContentSheetPrintSettings, type ContentVector, type DocumentPackage, type SectionConstructGroupNode, type SectionGroupNode, type ShapeConstructGroupNode, type ShapeGroupNode, type SheetGroupNode, type SlideGroupNode } from 'document-schema.js';
-import { decompose, decomposeSection, decomposeSheet, isHeadingParagraph } from './decompose';
+import { isHeadingGroupNode, isListGroupNode, isSectionConstructGroupNode, type ConstructDescriptor, type ContentBlock, type ContentDocument, type ContentEmbeddedObject, type ContentFormula, type ContentSection, type ContentShape, type ContentSheetCell, type ContentSheetImage, type ContentSheetPrintSettings, type ContentVector, type DocumentPackage, type SheetGroupNode } from 'document-schema.js';
+import { ConstructMarkerImbalanceError, decompose, decomposeSection, decomposeSheet, isHeadingParagraph } from './decompose';
 import { flattenPackage } from './flatten';
 
 // The bijection laws (bijection.test.ts) pin round-trip fidelity, not grouping semantics -- a degenerate decompose whose section groups carried flat, ungrouped children would satisfy every law just as well. These tests pin the TREE SHAPE itself: mandatory section groups, per-container stacks, the never-cross-a-shape-boundary rule, and the ownership discipline. Ported from document-outline.js's phase-1 decompose tests, adapted to schema 4 (decompose takes the flat ContentDocument; the envelope rides the package root).
@@ -24,6 +24,12 @@ function paragraph(text: string, options: { headingLevel?: number; listLevel?: n
 function table(text: string): ContentBlock {
   return { kind: 'table', rows: [{ cells: [{ blocks: [paragraph(text)] }] }], columnWidthsPt: [80] };
 }
+
+function constructStart(descriptor: ConstructDescriptor): ContentBlock {
+  return { kind: 'constructStart', descriptor };
+}
+
+const CONSTRUCT_END: ContentBlock = { kind: 'constructEnd' };
 
 function wordprocessingDoc(blocksPerSection: ContentBlock[][]): ContentDocument {
   return { kind: 'wordprocessing', metadata: {}, sections: blocksPerSection.map((blocks) => ({ ...SECTION_GEOMETRY, blocks })) };
@@ -159,19 +165,155 @@ describe('spreadsheet decomposition', () => {
   });
 });
 
-// document-schema.js 4.1.0 added SectionConstructGroupNode/ShapeConstructGroupNode (docx SDTs, ODF fields, tracked changes, and the rest of document-schema.js#22's fidelity-construct vocabulary) to the tree. decompose.ts never manufactures one (grepping this package's src/ for ConstructDescriptor/SectionConstructGroupNode/ShapeConstructGroupNode returns nothing outside document-schema.js's own types), but a hand-built or third-party tree can carry one, and ContentBlock has no construct carrier to flatten it into (document-schema.js#22 tracks that separately) -- so flatten refuses loudly rather than silently dropping the construct's own semantic wrapper and keeping only its flattened children, the same "fail loudly, never silently skip" rule the sheet-group guard above follows.
-describe('construct group refusal', () => {
-  it('refuses a section construct group loudly -- ContentBlock has no construct carrier yet', () => {
-    const constructGroup: SectionConstructGroupNode = { node: { kind: 'field', instruction: 'PAGE' }, children: [paragraph('inside a field')] };
-    const sectionGroup: SectionGroupNode = { node: { kind: 'section', pageSize: SECTION_GEOMETRY.pageSize, margins: SECTION_GEOMETRY.margins }, children: [constructGroup] };
-    expect(() => flattenPackage({ kind: 'wordprocessing', metadata: {}, children: [sectionGroup] })).toThrow(/construct group/);
+// document-schema.js 4.1.0 added SectionConstructGroupNode/ShapeConstructGroupNode (docx SDTs, ODF fields, tracked changes, and the rest of document-schema.js#22's fidelity-construct vocabulary) to the tree; 4.2.0 gave ContentBlock the matching flat carrier, the constructStart/constructEnd marker pair, so the boundary is now a promotion like every other grouping signal rather than a shape only a hand-built tree could hold. These tests pin the promotion's SHAPE -- which scope a construct attaches at, what its interior groups by, and what the outer stacks do while it is open. Round-trip fidelity itself is the bijection suite's job (bijection.test.ts carries the construct corpus entries).
+describe('construct-boundary promotion', () => {
+  it('promotes a marker pair into one group whose children are the delimited region decomposed on its own', () => {
+    const insideHeading = paragraph('inside', { headingLevel: 1 });
+    const doc = wordprocessingDoc([[paragraph('before'), constructStart({ kind: 'field', instruction: 'PAGE' }), insideHeading, paragraph('inside body'), CONSTRUCT_END, paragraph('after')]]);
+    expect(decompose(doc)).toEqual([
+      {
+        node: { kind: 'section', pageSize: SECTION_GEOMETRY.pageSize, margins: SECTION_GEOMETRY.margins },
+        children: [
+          paragraph('before'),
+          // The construct's interior walks with FRESH heading/list stacks, so its own H1 groups inside it...
+          { node: { kind: 'field', instruction: 'PAGE' }, children: [{ node: insideHeading, children: [paragraph('inside body')] }] },
+          // ...and closes with the region: `after` lands back at the section root rather than under the H1 the construct opened, which is what "the outer stacks are undisturbed" means in the one direction a leak would be invisible in the flat form.
+          paragraph('after'),
+        ],
+      },
+    ]);
   });
 
-  it('refuses a shape construct group loudly -- the identical gap, on the shape/list flow', () => {
-    const constructGroup: ShapeConstructGroupNode = { node: { kind: 'anchor', anchorType: 'bookmark', name: 'b1' }, children: [paragraph('inside a bookmark')] };
-    const shapeGroup: ShapeGroupNode = { node: { frame: { xPt: 0, yPt: 0, widthPt: 400, heightPt: 300 }, insetLeftPt: 0, insetTopPt: 0, insetRightPt: 0, insetBottomPt: 0 }, children: [constructGroup] };
-    const slideGroup: SlideGroupNode = { node: { kind: 'slide', size: { widthPt: 960, heightPt: 540 }, notes: '' }, children: [shapeGroup] };
-    expect(() => flattenPackage({ kind: 'presentation', metadata: {}, children: [slideGroup] })).toThrow(/construct group/);
+  it('leaves the enclosing heading and list stacks exactly where they were', () => {
+    const h1 = paragraph('Chapter', { headingLevel: 1 });
+    const first = paragraph('A', { listLevel: 0 });
+    const second = paragraph('B', { listLevel: 1 });
+    const doc = wordprocessingDoc([[h1, first, constructStart({ kind: 'anchor', anchorType: 'bookmark', name: 'b1' }), paragraph('inside'), CONSTRUCT_END, second]]);
+    expect(decompose(doc)).toEqual([
+      {
+        node: { kind: 'section', pageSize: SECTION_GEOMETRY.pageSize, margins: SECTION_GEOMETRY.margins },
+        children: [
+          {
+            node: h1,
+            children: [
+              {
+                node: first,
+                // B still nests under A across the intervening construct: stepping through a region neither pops the list stack (as a plain paragraph would) nor the heading stack.
+                children: [{ node: { kind: 'anchor', anchorType: 'bookmark', name: 'b1' }, children: [paragraph('inside')] }, { node: second, children: [] }],
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('groups a construct inside a list item by list level alone -- the list-flow vocabulary its position admits', () => {
+    // A list group's children are ListChild, which admits a ShapeConstructGroupNode and no heading group at all, so a heading paragraph inside a construct inside a list is ordinary content -- exactly what it already is anywhere else in a list group's subtree. The section-root case above shows the other half: there the position is SectionChild, so the same marker pair promotes to a SectionConstructGroupNode whose interior does group headings.
+    const item = paragraph('A', { listLevel: 0 });
+    const headingInside = paragraph('a heading-styled paragraph is an ordinary leaf here', { headingLevel: 2 });
+    const doc = wordprocessingDoc([[item, constructStart({ kind: 'contentControl', controlType: 'richText' }), headingInside, CONSTRUCT_END]]);
+    expect(decompose(doc)).toEqual([
+      {
+        node: { kind: 'section', pageSize: SECTION_GEOMETRY.pageSize, margins: SECTION_GEOMETRY.margins },
+        children: [{ node: item, children: [{ node: { kind: 'contentControl', controlType: 'richText' }, children: [headingInside] }] }],
+      },
+    ]);
+  });
+
+  it('nests constructs of different kinds to arbitrary depth, and admits an empty region', () => {
+    const doc = wordprocessingDoc([[
+      constructStart({ kind: 'provenance', change: 'insertion', author: 'A' }),
+      constructStart({ kind: 'link', target: { kind: 'external', uri: 'https://example.invalid/' } }),
+      paragraph('deep'),
+      CONSTRUCT_END,
+      constructStart({ kind: 'division', name: 'empty' }),
+      CONSTRUCT_END,
+      CONSTRUCT_END,
+    ]]);
+    expect(decompose(doc)).toEqual([
+      {
+        node: { kind: 'section', pageSize: SECTION_GEOMETRY.pageSize, margins: SECTION_GEOMETRY.margins },
+        children: [
+          {
+            node: { kind: 'provenance', change: 'insertion', author: 'A' },
+            children: [
+              { node: { kind: 'link', target: { kind: 'external', uri: 'https://example.invalid/' } }, children: [paragraph('deep')] },
+              // An open marker immediately followed by its close is a real, schema-legal region with no content: it promotes to a group with no children rather than collapsing to nothing, so flatten reproduces the pair.
+              { node: { kind: 'division', name: 'empty' }, children: [] },
+            ],
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('promotes a construct in a shape flow the same way, on the shape vocabulary', () => {
+    const inner = shape([constructStart({ kind: 'field', instruction: 'PAGE' }), paragraph('in a shape'), CONSTRUCT_END]);
+    const doc: ContentDocument = { kind: 'presentation', metadata: {}, slides: [{ size: { widthPt: 960, heightPt: 540 }, shapes: [inner], notes: '' }] };
+    expect(decompose(doc)).toEqual([
+      {
+        node: { kind: 'slide', size: { widthPt: 960, heightPt: 540 }, notes: '' },
+        children: [
+          {
+            node: { frame: inner.frame, insetLeftPt: 0, insetTopPt: 0, insetRightPt: 0, insetBottomPt: 0 },
+            children: [{ node: { kind: 'field', instruction: 'PAGE' }, children: [paragraph('in a shape')] }],
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('embeds the source descriptor object itself, and rebuilds the marker pair around it on the way back', () => {
+    // The ownership discipline, at the one node it cannot hold verbatim: PackageBlockLeaf excludes both marker kinds, so the tree keeps the descriptor (the same object, by identity) while the marker wrapper is reconstructed by flatten. A consumer holding both views still sees one descriptor.
+    const descriptor: ConstructDescriptor = { kind: 'field', instruction: 'PAGE' };
+    const start: ContentBlock = { kind: 'constructStart', descriptor };
+    const source: ContentSection = { ...SECTION_GEOMETRY, blocks: [start, paragraph('inside'), CONSTRUCT_END] };
+    const group = decomposeSection(source);
+    const [constructGroup] = group.children;
+    if (constructGroup === undefined || !isSectionConstructGroupNode(constructGroup)) {
+      throw new Error('expected the marker pair to promote to a construct group');
+    }
+    expect(constructGroup.node).toBe(descriptor);
+    const flat = flattenPackage({ kind: 'wordprocessing', metadata: {}, children: [group] });
+    if (flat.kind !== 'wordprocessing') throw new Error('expected a wordprocessing document back');
+    const section = flat.sections[0];
+    if (section === undefined) throw new Error('expected one section back');
+    expect(section.blocks).toEqual([start, paragraph('inside'), CONSTRUCT_END]);
+    const [rebuiltStart] = section.blocks;
+    if (rebuiltStart?.kind !== 'constructStart') throw new Error('expected the open marker back first');
+    expect(rebuiltStart.descriptor).toBe(descriptor);
+    expect(rebuiltStart).not.toBe(start);
+  });
+});
+
+// Promotion is defined only over a balanced marker stream, so an unbalanced one is refused outright rather than repaired into a plausible tree -- the same "fail loudly, never silently skip" rule the sheet-group style-ref guard above follows. The thrown error carries document-schema.js's own ConstructMarkerImbalance payload, so a caller gets the offending block index without parsing a message.
+describe('construct marker imbalance', () => {
+  it('refuses a close marker that closes no open construct', () => {
+    const doc = wordprocessingDoc([[paragraph('before'), CONSTRUCT_END]]);
+    expect(() => decompose(doc)).toThrow(ConstructMarkerImbalanceError);
+    try {
+      decompose(doc);
+    } catch (error) {
+      if (!(error instanceof ConstructMarkerImbalanceError)) throw error;
+      expect(error.imbalance).toEqual({ kind: 'unmatchedEnd', index: 1 });
+    }
+  });
+
+  it('refuses a block stream that ends with a construct still open', () => {
+    const doc = wordprocessingDoc([[constructStart({ kind: 'field', instruction: 'PAGE' }), paragraph('inside')]]);
+    expect(() => decompose(doc)).toThrow(ConstructMarkerImbalanceError);
+    try {
+      decompose(doc);
+    } catch (error) {
+      if (!(error instanceof ConstructMarkerImbalanceError)) throw error;
+      expect(error.imbalance).toEqual({ kind: 'unclosedStart', index: 0 });
+    }
+  });
+
+  it('refuses an unbalanced shape flow too -- the check runs per container block stream, not per document', () => {
+    const doc: ContentDocument = { kind: 'presentation', metadata: {}, slides: [{ size: { widthPt: 960, heightPt: 540 }, shapes: [shape([CONSTRUCT_END])], notes: '' }] };
+    expect(() => decompose(doc)).toThrow(ConstructMarkerImbalanceError);
   });
 });
 
