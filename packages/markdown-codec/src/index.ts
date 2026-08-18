@@ -14,6 +14,7 @@ export {
   MarkdownInvalidUtf8Error,
   MarkdownNestingLimitExceededError,
   MarkdownParseError,
+  MarkdownUnbalancedConstructMarkersError,
   MarkdownUnsupportedDocumentKindError,
   MarkdownWriteError,
   NOOP_MARKDOWN_DIAGNOSTIC_SINK,
@@ -39,6 +40,7 @@ export type { ListNumIdInfo, ListNumIdMintOptions, NumIdMintState } from './shar
 export { createNumIdMintState, mintedListType, mintListNumId, parseListNumId } from './shared/list-id';
 export {
   CODE_BLOCK_STYLE_ID,
+  FOOTNOTE_REFERENCE_FONT_MARKER,
   headingStyleId,
   HORIZONTAL_RULE_STYLE_ID,
   HTML_PREFORMATTED_STYLE_ID,

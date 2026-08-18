@@ -30,6 +30,7 @@ export const MarkdownDiagnosticCodes = {
   UNTERMINATED_HTML_BLOCK: 'md/unterminated-html-block',
   TABLE_CELL_COUNT_MISMATCH: 'md/table-cell-count-mismatch',
   DUPLICATE_LINK_REFERENCE: 'md/duplicate-link-reference',
+  DUPLICATE_FOOTNOTE_DEFINITION: 'md/duplicate-footnote-definition',
   LIST_MARKER_TYPE_CONFLICT: 'md/list-marker-type-conflict',
   // src/lower (read side: markdown -> ContentDocument)
   INVENTED_PAGE_GEOMETRY: 'md/invented-page-geometry',
@@ -45,7 +46,10 @@ export const MarkdownDiagnosticCodes = {
   MATH_BLOCK_PRESERVED_AS_TEXT: 'md/math-block-preserved-as-text',
   MATH_INLINE_PRESERVED_AS_TEXT: 'md/math-inline-preserved-as-text',
   FRONT_MATTER_KEY_UNMAPPED: 'md/front-matter-key-unmapped',
+  FOOTNOTE_REFERENCE_PRESERVED_AS_TEXT: 'md/footnote-reference-preserved-as-text',
+  FOOTNOTE_BODY_HEADING_FLATTENED: 'md/footnote-body-heading-flattened',
   // src/emit (write side: ContentDocument -> markdown)
+  CONSTRUCT_UNREPRESENTED: 'md/construct-unrepresented',
   HEADING_LEVEL_CLAMPED: 'md/heading-level-clamped',
   ADJACENT_LINKS_MERGED: 'md/adjacent-links-merged',
   CODE_SPAN_AS_MONOSPACE_RUN: 'md/code-span-as-monospace-run',
@@ -106,6 +110,21 @@ export class MarkdownWriteError extends Error {
     super(message);
     this.name = 'MarkdownWriteError';
     this.code = code;
+  }
+}
+
+// Thrown by writeMarkdown when handed a ContentDocument whose block list's construct boundary markers (document-schema.js 4.2.0's ContentConstructStart/ContentConstructEnd) do not pair up as balanced brackets -- an end with no construct open at that point, or a start still open when the list ended. This is the throw tier rather than a degrade because an unbalanced list is malformed input rather than a shape to repair: the schema's own bracket-matching contract states outright that the blocks between a matched pair ARE the construct's extent, so with the pairing broken there is no extent to render and no correct guess about which blocks the producer meant to include. Detected via document-schema.js's own findConstructMarkerImbalance -- the one shared definition of the check, which every codec that emits a pair and documents.js's own decompose all have to agree on exactly.
+export class MarkdownUnbalancedConstructMarkersError extends MarkdownWriteError {
+  // Which end of the pairing failed, and the offending block's own index in its section's block list -- carried verbatim from findConstructMarkerImbalance so a caller can locate it without re-running the walk.
+  readonly imbalanceKind: 'unmatchedEnd' | 'unclosedStart';
+  readonly blockIndex: number;
+
+  constructor(imbalanceKind: 'unmatchedEnd' | 'unclosedStart', blockIndex: number) {
+    const description = imbalanceKind === 'unmatchedEnd' ? 'a constructEnd marker closes no open construct' : 'a constructStart marker is never closed';
+    super('md/unbalanced-construct-markers', `${description} at block index ${String(blockIndex)}; a block list's construct boundary markers must pair as balanced brackets`);
+    this.name = 'MarkdownUnbalancedConstructMarkersError';
+    this.imbalanceKind = imbalanceKind;
+    this.blockIndex = blockIndex;
   }
 }
 

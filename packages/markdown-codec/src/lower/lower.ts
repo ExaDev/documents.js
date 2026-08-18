@@ -12,10 +12,11 @@
 //  - raw HTML -> preserved as literal text by default (styleId 'HTMLPreformatted' for block-level HTML), a rawHtml: 'drop' option available -- MarkdownDiagnosticCodes.RAW_HTML_PRESERVED_AS_TEXT / RAW_HTML_DROPPED.
 //  - $$ display math / \( \) inline math (ExaDev/markdown-codec#53) -> preserved as literal raw LaTeX text (styleId 'MathBlock' for the block form; the inline form keeps its own \( \) delimiters in the run text so src/emit/inline.ts's escapeMarkdownText can recognise and pass it through unescaped -- see src/inline/math.ts) -- MarkdownDiagnosticCodes.MATH_BLOCK_PRESERVED_AS_TEXT / MATH_INLINE_PRESERVED_AS_TEXT. Never parsed as LaTeX or converted to MathML here -- that is a documents.js question (ExaDev/documents.js#563).
 //  - front matter (src/lower/front-matter.ts) -> a flat-scalar-only LayoutMetadata subset -- MarkdownDiagnosticCodes.FRONT_MATTER_KEY_UNMAPPED.
+//  - footnote definition (ExaDev/markdown-codec#66) -> an `anchor` construct's boundary-marker pair (document-schema.js 4.2.0) bracketing its own lowered body blocks; the reference site is a marked run instead (src/lower/inline.ts) -- MarkdownDiagnosticCodes.FOOTNOTE_REFERENCE_PRESERVED_AS_TEXT, FOOTNOTE_BODY_HEADING_FLATTENED. See lowerFootnoteDefinition below for why the body rides the construct's extent rather than AnchorDescriptor's own `definition` field.
 
-import type { ContentBlock, ContentDocument, ContentParagraph, ContentRun, LayoutMetadata } from 'document-schema.js';
+import type { AnchorDescriptor, ContentBlock, ContentDocument, ContentParagraph, ContentRun, LayoutMetadata } from 'document-schema.js';
 import { PAGE_SIZE_A4 } from 'document-schema.js';
-import type { MarkdownBlockNode, MarkdownHeadingNode, MarkdownListItemNode, MarkdownListNode, MarkdownParagraphNode } from '../ast/ast';
+import type { MarkdownBlockNode, MarkdownFootnoteDefinitionNode, MarkdownHeadingNode, MarkdownListItemNode, MarkdownListNode, MarkdownParagraphNode } from '../ast/ast';
 import type { MarkdownParseOptions, ParsedMarkdown } from '../block/block';
 import { parseMarkdown } from '../block/block';
 import { DEFAULT_FRONT_MATTER, DEFAULT_MARGINS, DEFAULT_RAW_HTML_MODE } from '../defaults/defaults';
@@ -222,6 +223,42 @@ function lowerList(node: MarkdownListNode, ancestorNumId: string | undefined, le
   return node.children.flatMap((item) => lowerListItem(item, numId, level, context, contentWidthPt));
 }
 
+// Rewrites every heading inside a footnote definition's own body into an ordinary paragraph carrying the heading's ATX spelling as leading literal text, recursively through the containers a body may hold.
+//
+// This is the one thing a footnote body cannot carry, and the reason is the construct boundary markers' own binding contract rather than anything about markdown: a marker pair's extent may not cross a heading-group scope boundary, and a heading INSIDE the extent both closes whatever heading scope was open outside it when the pair started (a `# H` in a footnote written under a `## Section`) and opens one that would still be standing at the closing marker. document-schema.js states that a producer must never emit such a pair, and that decompose rejects rather than repairs one -- so the choice here is between emitting a pair no consumer may accept and carrying the heading as text. The text form round-trips: `#` is escaped on the way out and unescaped identically on the way back in, so a second pass through this pipeline reproduces the same document.
+//
+// Deliberately unconditional rather than "only when a shallower heading is actually open outside": the level comparison would make one footnote's fidelity depend on which heading happens to precede it, so the same body would lower two different ways in two documents. A heading inside a footnote is a degenerate shape in the first place; a single, position-independent rule is the one a consumer can reason about.
+function flattenFootnoteBodyHeadings(node: MarkdownBlockNode, context: BlockLowerContext): MarkdownBlockNode {
+  switch (node.type) {
+    case 'heading':
+      context.sink({ code: MarkdownDiagnosticCodes.FOOTNOTE_BODY_HEADING_FLATTENED, severity: 'info', message: `a level-${String(node.level)} heading inside a footnote definition's body is carried as literal ATX text: a construct boundary marker's extent may not contain a block that opens or closes a heading scope, so the heading cannot stay a heading inside the anchor construct the definition lowers to` });
+      return { type: 'paragraph', children: [{ type: 'text', value: `${'#'.repeat(node.level)} ` }, ...node.children] };
+    case 'blockquote':
+      return { type: 'blockquote', children: node.children.map((child) => flattenFootnoteBodyHeadings(child, context)) };
+    case 'list':
+      return { ...node, children: node.children.map((item) => flattenFootnoteBodyHeadingsInItem(item, context)) };
+    case 'listItem':
+      return flattenFootnoteBodyHeadingsInItem(node, context);
+    default:
+      return node;
+  }
+}
+
+function flattenFootnoteBodyHeadingsInItem(item: MarkdownListItemNode, context: BlockLowerContext): MarkdownListItemNode {
+  return { ...item, children: item.children.map((child) => flattenFootnoteBodyHeadings(child, context)) };
+}
+
+// A footnote definition becomes an `anchor` construct: a constructStart carrying the descriptor, the definition's own lowered body blocks, and a constructEnd -- document-schema.js 4.2.0's flat-form encoding of the construct group its package tree already had.
+//
+// Why the body rides the construct's EXTENT rather than AnchorDescriptor's own `definition` field: that field is documented as "the definitions-table key holding this marker's body", and a definitions table is a DocumentPackage root field. A flat ContentDocument -- the only shape any codec in this family produces -- has no root to carry one, so there is no key to name and the field stays absent. The extent is not a workaround for that: a footnote body is genuinely block content (several paragraphs, a code block, a table), which a string field could not have held either way, and AnchorDescriptor's own note says outright that a ranged anchor "wraps the blocks it spans". A consumer that later factors these documents into a package is free to move the body into a definitions entry and populate `definition` then; nothing here has to be undone for it to.
+//
+// A definition with an empty body (`[^1]:` and nothing else) lowers to a pair with no blocks between the markers -- the point anchor the same descriptor note describes, not a special case.
+function lowerFootnoteDefinition(node: MarkdownFootnoteDefinitionNode, context: BlockLowerContext, contentWidthPt: number): ContentBlock[] {
+  const descriptor: AnchorDescriptor = { kind: 'anchor', anchorType: 'footnote', name: node.label };
+  const body = node.children.flatMap((child) => lowerBlock(flattenFootnoteBodyHeadings(child, context), context, contentWidthPt));
+  return [{ kind: 'constructStart', descriptor }, ...body, { kind: 'constructEnd' }];
+}
+
 function lowerBlock(node: MarkdownBlockNode, context: BlockLowerContext, contentWidthPt: number): ContentBlock[] {
   switch (node.type) {
     case 'paragraph':
@@ -240,6 +277,8 @@ function lowerBlock(node: MarkdownBlockNode, context: BlockLowerContext, content
       return lowerHtmlBlock(node, context);
     case 'mathBlock':
       return lowerMathBlock(node, context);
+    case 'footnoteDefinition':
+      return lowerFootnoteDefinition(node, context, contentWidthPt);
     case 'table': {
       if (context.list !== undefined) {
         context.sink({ code: MarkdownDiagnosticCodes.LIST_ITEM_BLOCK_UNLISTED, severity: 'info', message: 'a table directly inside a list item has no ContentListMembership field of its own -- only ContentParagraph carries .list -- so its association with the enclosing list item is lost' });
@@ -297,6 +336,7 @@ export function lowerMarkdown(source: string, options: ReadMarkdownOptions = {})
     gfmAutolinks: options.gfmAutolinks,
     gfmStrikethrough: options.gfmStrikethrough,
     gfmTaskLists: options.gfmTaskLists,
+    footnotes: options.footnotes,
     maxNesting: options.maxBlockNesting,
     sink,
   };
