@@ -1,3 +1,15 @@
+# [3.0.0](https://github.com/ExaDev/document-cli/compare/v2.1.6...v3.0.0) (2026-08-18)
+
+
+* feat!: migrate --dump-package and from-package to documents.js 3.0.0's tree-form package ([c2bdad4](https://github.com/ExaDev/document-cli/commit/c2bdad4d2869fa4044cd557c382847c81cc497c2))
+
+
+### BREAKING CHANGES
+
+* from-package no longer reads documents.js 1.x/2.x dump
+files; --dump-package output follows documents.js 3.0.0 and pdf-inspect
+--full output no longer carries a $schema key.
+
 ## [2.1.6](https://github.com/ExaDev/document-cli/compare/v2.1.5...v2.1.6) (2026-08-18)
 
 ## [2.1.5](https://github.com/ExaDev/document-cli/compare/v2.1.4...v2.1.5) (2026-08-18)
