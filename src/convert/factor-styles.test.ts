@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ContentBlock, ContentDocument, ContentParagraph, ContentRun, DocumentPackage, SectionConstructGroupNode, SectionGroupNode } from 'document-schema.js';
+import type { ContentBlock, ContentDocument, ContentParagraph, ContentRun, DocumentPackage, SectionConstructGroupNode, SectionGroupNode, ShapeConstructGroupNode, ShapeGroupNode, SlideGroupNode } from 'document-schema.js';
 import { DocumentPackageSchema } from 'document-schema.js';
 import { assemblePackage, factorStyles, mint } from './factor-styles';
 import { flattenPackage } from './flatten';
@@ -302,6 +302,33 @@ describe('factorStyles minting', () => {
     const mintedSection = minted.children[0];
     if (mintedSection === undefined) throw new Error('expected the section group');
     const mintedConstruct = mintedSection.children[1];
+    if (mintedConstruct === undefined || !('node' in mintedConstruct) || !('children' in mintedConstruct)) {
+      throw new Error('expected the construct group to survive minting');
+    }
+    expect(mintedConstruct.style).toBe('s1');
+    expect(mintedConstruct.children[0]).not.toHaveProperty('indentLeftPt');
+    expect(mintedConstruct.children[1]).not.toHaveProperty('indentLeftPt');
+  });
+
+  it('factors a paragraph tuple nested inside a shape-flow construct group onto the construct group\'s own ref (document-schema.js 4.1.0)', () => {
+    // The section-flow test above exercises rebuildSectionConstructGroup and the isConstructGroup arm in rebuildSectionChild; this mirrors it through the shape/list-flow vocabulary instead -- a ShapeConstructGroupNode sat inside a ShapeGroupNode's own children, nested under a SlideGroupNode -- so rebuildShapeConstructGroup and the isConstructGroup dispatch arm in rebuildListChild get their own coverage rather than riding untested on the section-flow rebuilder's coattails. decompose.ts never manufactures a construct group and flattenPackage now refuses one outright (see flatten.ts), so mint() run directly on a hand-built tree is again the only route that reaches either.
+    const outside = paragraph([run('outside')], { alignment: 'right' });
+    const insideA = paragraph([run('a')], { indentLeftPt: 20 });
+    const insideB = paragraph([run('b')], { indentLeftPt: 20 });
+    const constructGroup: ShapeConstructGroupNode = { node: { kind: 'contentControl', controlType: 'richText' }, children: [insideA, insideB] };
+    const shapeGroup: ShapeGroupNode = { node: { frame: { xPt: 0, yPt: 0, widthPt: 400, heightPt: 300 }, insetLeftPt: 0, insetTopPt: 0, insetRightPt: 0, insetBottomPt: 0 }, children: [outside, constructGroup] };
+    const slideGroup: SlideGroupNode = { node: { kind: 'slide', size: { widthPt: 960, heightPt: 540 }, notes: '' }, children: [shapeGroup] };
+    const pkg: DocumentPackage = { kind: 'presentation', metadata: {}, children: [slideGroup] };
+    const minted = mint(pkg);
+    // Neither the slide's nor the shape's own extent shares a key across all three paragraphs (outside lacks indentLeftPt, insideA/insideB lack alignment), so both mint nothing; only descending into the construct group's own two-paragraph extent makes indentLeftPt common there and mints.
+    expect(refsOf(minted)).toEqual([{ ref: 's1', nodeKind: 'contentControl' }]);
+    expect(minted.styles?.s1).toEqual({ paragraph: { indentLeftPt: 20 } });
+    if (minted.kind !== 'presentation') throw new Error('expected presentation');
+    const mintedSlide = minted.children[0];
+    if (mintedSlide === undefined) throw new Error('expected the slide group');
+    const mintedShape = mintedSlide.children[0];
+    if (mintedShape === undefined) throw new Error('expected the shape group');
+    const mintedConstruct = mintedShape.children[1];
     if (mintedConstruct === undefined || !('node' in mintedConstruct) || !('children' in mintedConstruct)) {
       throw new Error('expected the construct group to survive minting');
     }
