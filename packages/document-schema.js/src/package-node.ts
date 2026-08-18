@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import {
-  ContentBlockSchema,
   ContentDrawPageSchema,
   ContentEmbeddedObjectSchema,
   ContentFormulaSchema,
@@ -12,7 +11,12 @@ import {
   ContentSheetSchema,
   ContentSlideSchema,
   ContentVectorSchema,
+  isContentBlock,
+  isContentConstructEnd,
+  isContentConstructStart,
   type ContentBlock,
+  type ContentConstructEnd,
+  type ContentConstructStart,
   type ContentEmbeddedObject,
   type ContentFormula,
   type ContentSheetImage,
@@ -20,7 +24,7 @@ import {
 } from './content';
 import { ConstructDescriptorSchema, type ConstructDescriptor } from './construct';
 
-// The package tree's node vocabulary (ExaDev/document-schema.js#20's promoted DocumentPackage, as proven by document-outline.js's phase-1 reference implementation -- this module is that shape's schema-home port). Groups are `{ node, children }` where node embeds either an anchor paragraph (heading and list groups carry the full ContentParagraph, runs and formatting and frames included, never a projected text label) or a container descriptor (section / slide / sheet / drawPage, each tagged with a `kind` the flat container type does not carry). Bare leaves carry their own `kind` and never `children` -- discrimination is structural on node+children, because the earlier "anything with kind is a leaf" rule collided with `{ kind: 'slide' }` groups. Grouping never crosses container boundaries: a shape is its own group with its inner blocks grouped inside it, a sheet's grid rides on the sheet node, and an embedded document (the recursive ContentEmbeddedObject arm) stays intact as one leaf. A group may additionally carry `style` -- a string ref into the package's styles table (ExaDev/document-schema.js#21); refs exist only here, never on ContentDocument nodes, so the flat codec-exchange form is always fully materialised. Since 4.1.0 a group's node may also be a construct descriptor (src/construct.ts, ExaDev/document-schema.js#24) -- a contentControl, field, anchor, link, provenance, or division wrapping the block extent it spans -- which is what the tree's construct-capable-from-day-one design was for: the kinds landed additively, so a 4.0.0 tree carrying none of them parses identically under this release.
+// The package tree's node vocabulary (ExaDev/document-schema.js#20's promoted DocumentPackage, as proven by document-outline.js's phase-1 reference implementation -- this module is that shape's schema-home port). Groups are `{ node, children }` where node embeds either an anchor paragraph (heading and list groups carry the full ContentParagraph, runs and formatting and frames included, never a projected text label) or a container descriptor (section / slide / sheet / drawPage, each tagged with a `kind` the flat container type does not carry). Bare leaves carry their own `kind` and never `children` -- discrimination is structural on node+children, because the earlier "anything with kind is a leaf" rule collided with `{ kind: 'slide' }` groups. Grouping never crosses container boundaries: a shape is its own group with its inner blocks grouped inside it, a sheet's grid rides on the sheet node, and an embedded document (the recursive ContentEmbeddedObject arm) stays intact as one leaf. A group may additionally carry `style` -- a string ref into the package's styles table (ExaDev/document-schema.js#21); refs exist only here, never on ContentDocument nodes, so the flat codec-exchange form is always fully materialised. Since 4.1.0 a group's node may also be a construct descriptor (src/construct.ts, ExaDev/document-schema.js#24) -- a contentControl, field, anchor, link, provenance, or division wrapping the block extent it spans -- which is what the tree's construct-capable-from-day-one design was for: the kinds landed additively, so a 4.0.0 tree carrying none of them parses identically under this release. A construct is a group HERE and a matched marker pair in the flat form (src/content.ts's constructStart/constructEnd), never both in one tree: the two marker kinds are the one part of the ContentBlock union this vocabulary refuses at a leaf position, see PackageBlockLeaf below.
 
 // The descriptors are built from the content schemas themselves by omit+extend rather than re-declared field by field, so a field added to a container schema in a future release rides its descriptor automatically -- the zod-first spelling of the reference implementation's `Omit<ContentSection, 'blocks'> & { kind: 'section' }` types. Each is strict: the omitted array (the one whose members became the group's children) is rejected, not merely absent, so a raw flat container smuggled in as a descriptor fails validation instead of parsing to a descriptor that silently dropped its content.
 export const SectionDescriptorSchema = ContentSectionSchema.omit({ blocks: true })
@@ -59,17 +63,22 @@ export const ListParagraphSchema = ContentParagraphSchema.extend({
 });
 export type ListParagraph = z.infer<typeof ListParagraphSchema>;
 
-// The leaf payloads of a package tree, across all five document kinds: wordprocessing/presentation/drawing block flow yields ContentBlock leaves, spreadsheets additionally yield sheet-anchored images (ContentSheetImage) and whole embedded documents (ContentEmbeddedObject, which is not itself a ContentBlock -- it has no `kind` discriminator), drawings yield textless vector primitives (ContentVector), and a formula document yields its single ContentFormula. One union, so one guard set serves every kind.
-export type PackageLeaf = ContentBlock | ContentSheetImage | ContentEmbeddedObject | ContentVector | ContentFormula;
+// The ContentBlock members legal at a tree leaf position: every kind except the two construct boundary markers (src/content.ts). A construct is a GROUP in this encoding and a marker pair in the flat one -- two encodings of one fact -- so admitting a marker here would put both inside one tree and break the encoding pair's own first law outright: decompose promotes a matched pair into a construct group, so flatten(decompose(x)) could never reproduce a tree that already carried a marker leaf. Spelled as an exclusion rather than a hand-listed union so that a ContentBlock member added later is leaf-legal by default, which is right for everything that is not a boundary marker.
+//
+// Table cells are the deliberate exception, and they are not one: a table is one leaf, decomposition never descends into it, and a cell's blocks stay flat in both encodings -- so a construct inside a cell is a marker pair there in a tree exactly as it is in a flat document, and nothing about that crosses this boundary.
+export type PackageBlockLeaf = Exclude<ContentBlock, ContentConstructStart | ContentConstructEnd>;
+
+// The leaf payloads of a package tree, across all five document kinds: wordprocessing/presentation/drawing block flow yields block leaves, spreadsheets additionally yield sheet-anchored images (ContentSheetImage) and whole embedded documents (ContentEmbeddedObject, which is not itself a ContentBlock -- it has no `kind` discriminator), drawings yield textless vector primitives (ContentVector), and a formula document yields its single ContentFormula. One union, so one guard set serves every kind.
+export type PackageLeaf = PackageBlockLeaf | ContentSheetImage | ContentEmbeddedObject | ContentVector | ContentFormula;
 
 // What a section's (or a heading group's) block flow holds: heading groups, list groups, construct groups, and bare block leaves. Headings nest under headings and lists nest inside the open heading scope or under deeper list items; a plain paragraph is a leaf.
-export type SectionChild = HeadingGroupNode | ListGroupNode | SectionConstructGroupNode | ContentBlock;
+export type SectionChild = HeadingGroupNode | ListGroupNode | SectionConstructGroupNode | PackageBlockLeaf;
 
 // What a shape's block flow holds: list groups, construct groups, and bare leaves only. Shapes carry no heading hierarchy of their own -- list.level is the only depth signal a slide or drawing shape's paragraphs actually carry -- so a paragraph with headingLevel but no list membership sits flat as a leaf here.
-export type ShapeChild = ListGroupNode | ShapeConstructGroupNode | ContentBlock;
+export type ShapeChild = ListGroupNode | ShapeConstructGroupNode | PackageBlockLeaf;
 
 // A list group's children: deeper list groups, construct groups, and block leaves. A heading never appears below a list group, because opening a heading resets the list nesting before it opens its own group. The construct group here is the shape-scoped one for exactly that reason: a list item's flow and a shape's flow admit the same children, as ListChild and ShapeChild have always spelled identically.
-export type ListChild = ListGroupNode | ShapeConstructGroupNode | ContentBlock;
+export type ListChild = ListGroupNode | ShapeConstructGroupNode | PackageBlockLeaf;
 
 // What a sheet's children are: its anchored images and its whole embedded documents, in that order (the two live in sibling arrays with no cross-array ordering field, and flatten's type partition reverses this fixed order). Cells are addressable data, never children -- they ride the sheet descriptor.
 export type SheetChild = ContentSheetImage | ContentEmbeddedObject;
@@ -163,21 +172,29 @@ function isLeafChild(schema: z.ZodType, value: unknown): boolean {
   return schema.safeParse(value).success;
 }
 
+// The block-leaf guard behind PackageBlockLeaf above, and the reason that exclusion is enforced at runtime rather than left to the types: these predicates are the untrusted-input boundary, so a marker smuggled into a tree by a producer that flattened one encoding into the other has to fail here, where documentFromJson can report it, rather than parse and quietly leave a package no round trip can reproduce.
+export function isPackageBlockLeaf(value: unknown): value is PackageBlockLeaf {
+  if (isContentConstructStart(value) || isContentConstructEnd(value)) return false;
+  return isContentBlock(value);
+}
+
+export const PackageBlockLeafSchema = z.custom<PackageBlockLeaf>(isPackageBlockLeaf);
+
 function isSectionChild(value: unknown): value is SectionChild {
   return (
     isHeadingGroupNode(value) ||
     isListGroupNode(value) ||
     isSectionConstructGroupNode(value) ||
-    isLeafChild(ContentBlockSchema, value)
+    isLeafChild(PackageBlockLeafSchema, value)
   );
 }
 
 function isShapeChild(value: unknown): value is ShapeChild {
-  return isListGroupNode(value) || isShapeConstructGroupNode(value) || isLeafChild(ContentBlockSchema, value);
+  return isListGroupNode(value) || isShapeConstructGroupNode(value) || isLeafChild(PackageBlockLeafSchema, value);
 }
 
 function isListChild(value: unknown): value is ListChild {
-  return isListGroupNode(value) || isShapeConstructGroupNode(value) || isLeafChild(ContentBlockSchema, value);
+  return isListGroupNode(value) || isShapeConstructGroupNode(value) || isLeafChild(PackageBlockLeafSchema, value);
 }
 
 function isSheetChild(value: unknown): value is SheetChild {
@@ -234,7 +251,7 @@ export function isShapeConstructGroupNode(value: unknown): value is ShapeConstru
 
 // Leaf validation delegates to the content model's own exported schemas rather than hand-rolling a second, parallel structural guard per payload -- the shapes are src/content.ts's to own, and a hand copy here would drift the first time a schema field changes. The union's first-match-wins order is safe because no leaf type is a structural subset of a later member that would change the verdict.
 const packageLeafUnion = z.union([
-  ContentBlockSchema,
+  PackageBlockLeafSchema,
   ContentSheetImageSchema,
   ContentEmbeddedObjectSchema,
   ContentVectorSchema,
@@ -263,7 +280,7 @@ export function isPackageNode(value: unknown): value is PackageNode {
   return isPackageGroup(value) || isPackageLeaf(value);
 }
 
-// The zod faces of the guards above -- usable wherever a schema value is needed (array element, object property, safeParse of external input). Deliberately z.custom, not z.lazy: z.lazy() collapses the static type of a recursive schema to `unknown` under the pinned zod 4, so the recursion lives in the plain function guards instead (ContentBlockSchema in src/content.ts is the family precedent, OutlineNodeSchema in document-outline.js the direct one).
+// The zod faces of the guards above -- usable wherever a schema value is needed (array element, object property, safeParse of external input). Deliberately z.custom, not z.lazy: z.lazy() collapses the static type of a recursive schema to `unknown` under the pinned zod 4, so the recursion lives in the plain function guards instead (ContentBlockSchema in src/content.ts is the family precedent, OutlineNodeSchema in document-outline.js the direct one). PackageBlockLeafSchema is the one face declared further up instead of here, beside its own guard, because the child predicates above consume it.
 export const SectionGroupSchema = z.custom<SectionGroupNode>(isSectionGroupNode);
 export const SlideGroupSchema = z.custom<SlideGroupNode>(isSlideGroupNode);
 export const SheetGroupSchema = z.custom<SheetGroupNode>(isSheetGroupNode);

@@ -3,10 +3,12 @@ import type { ContentDocument, ContentEmbeddedObject, ContentFormula, ContentRun
 import {
   DrawPageGroupSchema,
   HeadingGroupSchema,
+  isPackageBlockLeaf,
   isPackageGroup,
   isPackageLeaf,
   isPackageNode,
   ListGroupSchema,
+  PackageBlockLeafSchema,
   PackageGroupSchema,
   PackageLeafSchema,
   PackageNodeSchema,
@@ -426,6 +428,92 @@ describe('construct groups reject the positions and shapes they are not legal in
       children: [{ kind: 'image', format: 'png', base64: 'aGk=', widthPt: 'wide', heightPt: 50 }],
     };
     expect(SectionConstructGroupSchema.safeParse(broken).success).toBe(false);
+  });
+});
+
+// The flat form's construct boundary markers (src/content.ts) are legal ContentBlocks and illegal tree leaves: a construct is a group in this encoding, and one fact carried in both encodings inside one tree is what breaks decompose(flatten(x)) === x. These are the tests of that exclusion.
+describe('construct boundary markers are not tree leaves', () => {
+  const openMarker = { kind: 'constructStart', descriptor: { kind: 'anchor', anchorType: 'bookmark', name: 'b1' } };
+  const closeMarker = { kind: 'constructEnd' };
+
+  it('rejects either marker at a block-leaf position, whichever flow it sits in', () => {
+    for (const marker of [openMarker, closeMarker]) {
+      expect(isPackageBlockLeaf(marker)).toBe(false);
+      expect(PackageBlockLeafSchema.safeParse(marker).success).toBe(false);
+      expect(isPackageLeaf(marker)).toBe(false);
+      expect(isPackageNode(marker)).toBe(false);
+      expect(
+        SectionGroupSchema.safeParse({ node: { kind: 'section', pageSize: PAGE, margins: MARGINS }, children: [marker] })
+          .success,
+      ).toBe(false);
+      expect(
+        HeadingGroupSchema.safeParse({
+          node: { kind: 'paragraph', headingLevel: 1, runs: [run('H')] },
+          children: [marker],
+        }).success,
+      ).toBe(false);
+      expect(
+        ListGroupSchema.safeParse({
+          node: { kind: 'paragraph', list: { level: 0 }, runs: [run('Item')] },
+          children: [marker],
+        }).success,
+      ).toBe(false);
+      expect(
+        ShapeGroupSchema.safeParse({
+          node: {
+            frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 50 },
+            insetLeftPt: 0,
+            insetTopPt: 0,
+            insetRightPt: 0,
+            insetBottomPt: 0,
+          },
+          children: [marker],
+        }).success,
+      ).toBe(false);
+    }
+  });
+
+  it('rejects a marker inside a construct extent too -- a construct group is where the pair would have been promoted to', () => {
+    expect(
+      SectionConstructGroupSchema.safeParse({
+        node: { kind: 'division', name: 'Chapter1' },
+        children: [openMarker, { kind: 'paragraph', runs: [run('Body')] }, closeMarker],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('still accepts every other block kind as a leaf, so the exclusion is the two markers and nothing else', () => {
+    for (const leaf of [
+      { kind: 'paragraph', runs: [run('Body')] },
+      { kind: 'pageBreak' },
+      { kind: 'image', format: 'png', base64: 'aGk=', widthPt: 50, heightPt: 50 },
+    ]) {
+      expect(isPackageBlockLeaf(leaf)).toBe(true);
+      expect(isPackageLeaf(leaf)).toBe(true);
+    }
+  });
+
+  it('accepts a marker pair inside a table cell, the one place the flat encoding survives inside a tree', () => {
+    const tableLeaf = {
+      kind: 'table',
+      rows: [
+        {
+          cells: [
+            {
+              blocks: [openMarker, { kind: 'paragraph', runs: [run('Bookmarked cell')] }, closeMarker],
+            },
+          ],
+        },
+      ],
+      columnWidthsPt: [200],
+    };
+    expect(isPackageBlockLeaf(tableLeaf)).toBe(true);
+    expect(
+      SectionGroupSchema.safeParse({
+        node: { kind: 'section', pageSize: PAGE, margins: MARGINS },
+        children: [tableLeaf],
+      }).success,
+    ).toBe(true);
   });
 });
 
