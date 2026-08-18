@@ -15,9 +15,12 @@ graph TD
     mdcodec("markdown-codec")
     bytecodec("byte-codec")
     documents("documents.js")
+    outline("document-outline.js")
     mcp("document-mcp")
     cli("document-cli")
 
+    schema --> outline
+    outline --> mcp
     schema --> ooxml
     schema --> odf
     schema --> pdfcodec
@@ -42,6 +45,7 @@ graph TD
     click mdcodec "https://github.com/ExaDev/markdown-codec" "markdown-codec"
     click bytecodec "https://github.com/ExaDev/byte-codec" "byte-codec"
     click documents "https://github.com/ExaDev/documents.js" "documents.js"
+    click outline "https://github.com/ExaDev/document-outline.js" "document-outline.js"
     click mcp "https://github.com/ExaDev/document-mcp" "document-mcp"
     click cli "https://github.com/ExaDev/document-cli" "document-cli"
 
@@ -210,6 +214,7 @@ Every tool that takes or produces document bytes goes through the same two hybri
 | `pdf_inspect` | Parses a PDF and reports a summary (page count, per-page size and item-kind histogram, metadata, embedded image formats), or the entire parsed `LayoutDocument` with `full: true`. |
 | `odm_to_pdf` | Converts a `.odm` (ODF master document) to PDF. A `.odm` never carries its chapters' content inline, so each chapter resolves via a caller-supplied `chapters` href-to-document map and/or a `chaptersDir` searched by basename. |
 | `from_package` | Rebuilds real document bytes in a target format from a `DocumentPackage` previously serialised to JSON (e.g. by a conversion tool's own `onDocument`/package-dump step). |
+| `outline_document` | Projects a document's own table of contents as structured JSON: groups (`{ text, level, children }`) for headings, list items, slides, sheets, and draw pages, leaves (`{ kind, text }`) for the content between them. The outline is over the source's own content — read through `documents.js`'s `DocumentConverter` port and built by `document-outline.js`'s `buildOutline`. |
 | `odb_tables` | Lists every table an embedded `.odb` database declares — column names, types, and row data — across every storage tier `documents.js` supports (HSQLDB TEXT/CACHED/BINARY, Firebird gbak backups). |
 | `odb_forms` | Lists every form an `.odb` database declares, with each form's own data source and field-bound controls. |
 | `odb_reports` | Lists every report an `.odb` database declares, with each report's own data-source command, band/group structure, and `rpt:` formula expressions. |
@@ -221,12 +226,13 @@ Every tool that takes or produces document bytes goes through the same two hybri
 ## References
 
 - [documents.js](https://github.com/ExaDev/documents.js) — the library this server exposes.
+- [document-outline.js](https://github.com/ExaDev/document-outline.js) — the artefact-utilities package over document-schema.js's tree-form `DocumentPackage` whose `buildOutline` powers `outline_document`.
 - [document-cli](https://github.com/ExaDev/document-cli) — the sibling CLI/TUI over the same library, whose toolchain this repository's scaffold mirrors.
 - [Model Context Protocol](https://modelcontextprotocol.io) — the protocol this server implements, via [`@modelcontextprotocol/server`](https://www.npmjs.com/package/@modelcontextprotocol/server).
 
 ## Gotchas
 
-- **Runtime dependencies are `documents.js` + `@modelcontextprotocol/server` + `zod` only; `pdf-codec` and `odf.js` are devDependencies (test-support only).** Every runtime reach into either — `ProvidedFont`/`FontSubstitution`/`describeFontFace`/the `WinAnsi` substitution shape — goes through `documents.js`'s own re-exports, so a published install pulls in no direct `pdf-codec`/`odf.js` dependency. `odf.js` survives in `devDependencies` solely because `src/test-support/odm-fixture.ts` and `src/test-support/embedded-font-fixture.ts` build real ODF package fixtures from its low-level XML primitives (`zipPackage`/`el`/`rootElement`), and `src/test-support/` is excluded from the `tsdown` build — only `src/index.ts` and `src/bin.ts` are entry points — so neither fixture module ever ships in `dist/`.
+- **Runtime dependencies are `documents.js` + `document-outline.js` + `@modelcontextprotocol/server` + `zod` only; `pdf-codec` and `odf.js` are devDependencies (test-support only).** `document-outline.js` is the one dependency beyond the server stack itself: `outline_document` imports `buildOutline`/`outlineLeafText` from it, and documents.js deliberately does not re-export them (the outline projection lives in the family's artefact-utilities package, which depends only on `document-schema.js` — already a transitive dependency via documents.js — so it adds no second copy of anything). Every runtime reach into `pdf-codec`/`odf.js` — `ProvidedFont`/`FontSubstitution`/`describeFontFace`/the `WinAnsi` substitution shape — goes through `documents.js`'s own re-exports, so a published install pulls in no direct `pdf-codec`/`odf.js` dependency. `odf.js` survives in `devDependencies` solely because `src/test-support/odm-fixture.ts` and `src/test-support/embedded-font-fixture.ts` build real ODF package fixtures from its low-level XML primitives (`zipPackage`/`el`/`rootElement`), and `src/test-support/` is excluded from the `tsdown` build — only `src/index.ts` and `src/bin.ts` are entry points — so neither fixture module ever ships in `dist/`.
 
 ## License
 
