@@ -324,7 +324,7 @@ function paginateSection(section: ContentSection, measurer: TextMeasurer, images
     } else if (block.kind === 'embeddedObject' && block.objectKind === 'formula') {
       layoutFormulaFlow(block, section, pages, state, contentLeftXDown, contentWidthPt, contentBottomYDown, measurer, options.mathMetricsAt, formulas, listCounters);
     }
-    // Every other 'embeddedObject' objectKind (wordprocessing/presentation/spreadsheet/drawing) is not produced by any reader this package depends on yet (document-schema.js's forward-looking schema addition -- see edit/docx/content.ts's own note on the same gap), so there is nothing to lay out for those here today.
+    // Every other 'embeddedObject' objectKind (wordprocessing/presentation/spreadsheet/drawing) is not produced by any reader this package depends on yet (document-schema.js's forward-looking schema addition -- see edit/docx/content.ts's own note on the same gap), so there is nothing to lay out for those here today. 'constructStart'/'constructEnd' fall through the same way, but deliberately rather than by omission: a construct marker is a zero-width boundary sentinel with no content of its own to render, so skipping it here loses nothing -- the paragraphs/tables it wraps are separate blocks in this same flow and lay out exactly as if the marker were not there.
   }
 
   flushPage(state, section, pages);
