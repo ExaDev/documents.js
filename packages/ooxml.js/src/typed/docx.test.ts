@@ -213,7 +213,7 @@ describe('readDocx expanded constructs', () => {
     expect(cellBlock?.kind === 'paragraph' ? cellBlock.runs[0]?.text : undefined).toBe('Cell paragraph');
   });
 
-  // Regression guard: a paragraph wrapped in a w:sdt content control (not inside a table) is genuine body-level reading-order content and must still appear among the section's own blocks.
+  // Regression guard: a paragraph wrapped in a w:sdt content control (not inside a table) is genuine body-level reading-order content and must still appear among the section's own blocks -- now bracketed by the contentControl construct's own marker pair rather than unwrapped anonymously.
   it('still includes a paragraph nested inside a w:sdt content control', () => {
     const documentXml = enc(
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:sdt><w:sdtContent><w:p><w:r><w:t>SDT paragraph</w:t></w:r></w:p></w:sdtContent></w:sdt></w:body></w:document>',
@@ -229,7 +229,9 @@ describe('readDocx expanded constructs', () => {
     );
 
     const blocks = result.sections[0]?.blocks ?? [];
-    expect(blocks).toHaveLength(1);
-    expect(blocks[0]?.kind === 'paragraph' ? blocks[0].runs[0]?.text : undefined).toBe('SDT paragraph');
+    expect(blocks).toHaveLength(3);
+    expect(blocks[0]?.kind === 'constructStart' ? blocks[0].descriptor : undefined).toEqual({ kind: 'contentControl', controlType: 'richText' });
+    expect(blocks[1]?.kind === 'paragraph' ? blocks[1].runs[0]?.text : undefined).toBe('SDT paragraph');
+    expect(blocks[2]?.kind).toBe('constructEnd');
   });
 });

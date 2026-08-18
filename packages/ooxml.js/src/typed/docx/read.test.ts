@@ -1,7 +1,7 @@
 import type { Package } from '../../model/package';
 import type { XmlElement } from '../../model/node';
 import { describe, expect, it } from 'vitest';
-import type { ContentBlock, ContentImageBlock, ContentParagraph, ContentTable } from 'document-schema.js';
+import type { ContentBlock, ContentConstructStart, ContentImageBlock, ContentParagraph, ContentTable } from 'document-schema.js';
 import { el, txt } from '../../xml/fragment';
 import { readDocx } from './read';
 
@@ -49,6 +49,13 @@ function sourcePathOf(block: ContentBlock | undefined): string | undefined {
     return undefined;
   }
   return block.sourcePath;
+}
+
+function asConstructStart(block: ContentBlock | undefined): ContentConstructStart {
+  if (block?.kind !== 'constructStart') {
+    throw new Error('expected a constructStart marker');
+  }
+  return block;
 }
 
 function asTable(block: ContentBlock | undefined): ContentTable {
@@ -197,8 +204,8 @@ describe('readDocx: style cascade', () => {
 
   it('resolves a theme font reference from the default style', () => {
     const doc = readDocx(buildFixturePackage());
-    // blocks: [0]=title [1]=pageBreak [2]=pageBreakPara [3]=hyperlinkPara [4]=fieldPara -- the field paragraph's run inherits Normal's asciiTheme reference (no style of its own).
-    const fieldPara = asParagraph(doc.sections[0]?.blocks[4]);
+    // blocks: [0]=title [1]=pageBreak [2]=pageBreakPara [3]=hyperlinkPara [4]=the field's own constructStart [5]=fieldPara -- the field paragraph's run inherits Normal's asciiTheme reference (no style of its own).
+    const fieldPara = asParagraph(doc.sections[0]?.blocks[5]);
     expect(fieldPara.runs[0]?.fontFamily).toBe('Minor Font');
   });
 });
@@ -280,36 +287,48 @@ describe('readDocx: hyperlinks', () => {
 describe('readDocx: fields', () => {
   it('keeps only the cached result text between fldChar separate and end, dropping the field code', () => {
     const doc = readDocx(buildFixturePackage());
-    const fieldPara = asParagraph(doc.sections[0]?.blocks[4]);
+    const fieldPara = asParagraph(doc.sections[0]?.blocks[5]);
     expect(fieldPara.runs).toHaveLength(1);
     expect(fieldPara.runs[0]?.text).toBe('1');
+  });
+
+  it('brackets a whole-paragraph complex field in a field construct carrying its instruction verbatim', () => {
+    const doc = readDocx(buildFixturePackage());
+    expect(asConstructStart(doc.sections[0]?.blocks[4]).descriptor).toEqual({ kind: 'field', instruction: ' PAGE ' });
+    expect(doc.sections[0]?.blocks[6]?.kind).toBe('constructEnd');
   });
 });
 
 describe('readDocx: tracked changes', () => {
-  it('includes content wrapped in w:ins', () => {
+  it('includes content wrapped in w:ins, bracketed by an insertion provenance construct', () => {
     const doc = readDocx(buildFixturePackage());
-    const inserted = asParagraph(doc.sections[0]?.blocks[5]);
+    expect(asConstructStart(doc.sections[0]?.blocks[7]).descriptor).toEqual({ kind: 'provenance', change: 'insertion' });
+    const inserted = asParagraph(doc.sections[0]?.blocks[8]);
     expect(inserted.runs[0]?.text).toBe('Inserted');
+    expect(doc.sections[0]?.blocks[9]?.kind).toBe('constructEnd');
   });
 
-  it('excludes content wrapped in w:del entirely', () => {
+  it('carries content wrapped in w:del as w:delText runs inside a deletion provenance construct', () => {
     const doc = readDocx(buildFixturePackage());
-    const blockTexts = doc.sections[0]?.blocks.map((b) => (b.kind === 'paragraph' ? b.runs.map((r) => r.text).join('') : b.kind));
-    expect(blockTexts).not.toContain('Deleted');
+    expect(asConstructStart(doc.sections[0]?.blocks[10]).descriptor).toEqual({ kind: 'provenance', change: 'deletion' });
+    const deleted = asParagraph(doc.sections[0]?.blocks[11]);
+    expect(deleted.runs[0]?.text).toBe('Deleted');
+    expect(doc.sections[0]?.blocks[12]?.kind).toBe('constructEnd');
   });
 });
 
 describe('readDocx: content controls and alternate content', () => {
-  it('recurses into w:sdt/w:sdtContent', () => {
+  it('recurses into w:sdt/w:sdtContent, bracketing the content in a contentControl construct', () => {
     const doc = readDocx(buildFixturePackage());
-    const sdtBlock = asParagraph(doc.sections[0]?.blocks[6]);
+    expect(asConstructStart(doc.sections[0]?.blocks[13]).descriptor).toEqual({ kind: 'contentControl', controlType: 'richText' });
+    const sdtBlock = asParagraph(doc.sections[0]?.blocks[14]);
     expect(sdtBlock.runs[0]?.text).toBe('Content control');
+    expect(doc.sections[0]?.blocks[15]?.kind).toBe('constructEnd');
   });
 
-  it('prefers mc:Fallback over mc:Choice', () => {
+  it('prefers mc:Fallback over mc:Choice, without bracketing it as a construct', () => {
     const doc = readDocx(buildFixturePackage());
-    const altBlock = asParagraph(doc.sections[0]?.blocks[7]);
+    const altBlock = asParagraph(doc.sections[0]?.blocks[16]);
     expect(altBlock.runs[0]?.text).toBe('Fallback');
   });
 });
@@ -317,7 +336,7 @@ describe('readDocx: content controls and alternate content', () => {
 describe('readDocx: lists', () => {
   it('reads numId/level from w:numPr', () => {
     const doc = readDocx(buildFixturePackage());
-    const listBlock = asParagraph(doc.sections[0]?.blocks[8]);
+    const listBlock = asParagraph(doc.sections[0]?.blocks[17]);
     expect(listBlock.list).toEqual({ numId: '5', level: 1 });
   });
 
@@ -331,7 +350,7 @@ describe('readDocx: lists', () => {
 describe('readDocx: run text with tab/break', () => {
   it('embeds w:tab as a literal tab and w:br as a literal newline within one run\'s text', () => {
     const doc = readDocx(buildFixturePackage());
-    const tabBreakBlock = asParagraph(doc.sections[0]?.blocks[9]);
+    const tabBreakBlock = asParagraph(doc.sections[0]?.blocks[18]);
     expect(tabBreakBlock.runs[0]?.text).toBe('a\tb\nc');
   });
 });
@@ -339,7 +358,7 @@ describe('readDocx: run text with tab/break', () => {
 describe('readDocx: tables', () => {
   it('reads column widths and a horizontally-merged cell\'s colSpan and background', () => {
     const doc = readDocx(buildFixturePackage());
-    const table = asTable(doc.sections[0]?.blocks[10]);
+    const table = asTable(doc.sections[0]?.blocks[19]);
     expect(table.columnWidthsPt).toEqual([144, 144]);
     expect(table.rows[0]?.cells[0]?.colSpan).toBe(2);
     expect(table.rows[0]?.cells[0]?.background).toEqual({ r: 1, g: 0, b: 0 });
@@ -347,7 +366,7 @@ describe('readDocx: tables', () => {
 
   it('reads w:tcBorders into the cell\'s own borders, mapping style keywords and eighth-point widths, skipping a nil edge and resolving an auto colour to black', () => {
     const doc = readDocx(buildFixturePackage());
-    const table = asTable(doc.sections[0]?.blocks[10]);
+    const table = asTable(doc.sections[0]?.blocks[19]);
     const borders = table.rows[0]?.cells[0]?.borders;
     expect(borders?.top).toEqual({ color: { r: 0, g: 1, b: 0 }, widthPt: 1, style: 'solid' });
     expect(borders?.left).toBeUndefined();
@@ -357,7 +376,7 @@ describe('readDocx: tables', () => {
 
   it('computes a vMerge anchor\'s rowSpan by scanning subsequent continuation rows, leaving them empty', () => {
     const doc = readDocx(buildFixturePackage());
-    const table = asTable(doc.sections[0]?.blocks[10]);
+    const table = asTable(doc.sections[0]?.blocks[19]);
     expect(table.rows[1]?.cells[0]?.rowSpan).toBe(3);
     expect(table.rows[2]?.cells[0]?.blocks).toEqual([]);
     expect(table.rows[3]?.cells[0]?.blocks).toEqual([]);
@@ -395,20 +414,20 @@ describe('readDocx: sourcePath', () => {
 
   it('assigns a multi-run paragraph\'s runs their own zero-based index', () => {
     const doc = readDocx(buildFixturePackage());
-    const tabBreakBlock = asParagraph(doc.sections[0]?.blocks[9]);
-    expect(tabBreakBlock.sourcePath).toBe('sections[0].blocks[9]');
-    expect(tabBreakBlock.runs[0]?.sourcePath).toBe('sections[0].blocks[9].runs[0]');
+    const tabBreakBlock = asParagraph(doc.sections[0]?.blocks[18]);
+    expect(tabBreakBlock.sourcePath).toBe('sections[0].blocks[18]');
+    expect(tabBreakBlock.runs[0]?.sourcePath).toBe('sections[0].blocks[18].runs[0]');
   });
 
   it('nests a table cell\'s own blocks under sections[N].blocks[N].rows[N].cells[N].blocks[N]', () => {
     const doc = readDocx(buildFixturePackage());
-    const table = asTable(doc.sections[0]?.blocks[10]);
-    expect(table.sourcePath).toBe('sections[0].blocks[10]');
+    const table = asTable(doc.sections[0]?.blocks[19]);
+    expect(table.sourcePath).toBe('sections[0].blocks[19]');
     const mergedCell = asParagraph(table.rows[0]?.cells[0]?.blocks[0]);
-    expect(mergedCell.sourcePath).toBe('sections[0].blocks[10].rows[0].cells[0].blocks[0]');
-    expect(mergedCell.runs[0]?.sourcePath).toBe('sections[0].blocks[10].rows[0].cells[0].blocks[0].runs[0]');
+    expect(mergedCell.sourcePath).toBe('sections[0].blocks[19].rows[0].cells[0].blocks[0]');
+    expect(mergedCell.runs[0]?.sourcePath).toBe('sections[0].blocks[19].rows[0].cells[0].blocks[0].runs[0]');
     const right1Cell = asParagraph(table.rows[1]?.cells[1]?.blocks[0]);
-    expect(right1Cell.sourcePath).toBe('sections[0].blocks[10].rows[1].cells[1].blocks[0]');
+    expect(right1Cell.sourcePath).toBe('sections[0].blocks[19].rows[1].cells[1].blocks[0]');
   });
 });
 

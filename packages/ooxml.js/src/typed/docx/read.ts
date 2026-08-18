@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { Package } from '../../model/package';
 import type { XmlElement, XmlNode } from '../../model/node';
-import type { Color, ContentBlock, ContentBorder, ContentCellBorders, ContentImageBlock, ContentListMembership, ContentParagraph, ContentRun, ContentSection, ContentStrokeStyle, ContentTable, ContentTableCell, Margins, PageSize } from 'document-schema.js';
+import type { Color, ContentBlock, ContentBorder, ContentCellBorders, ContentImageBlock, ContentListMembership, ContentParagraph, ContentRun, ContentSection, ContentStrokeStyle, ContentTable, ContentTableCell, Margins, PageSize, ProvenanceChange } from 'document-schema.js';
 import { COLOR_BLACK, ContentSectionSchema, PAGE_SIZE_LETTER, clampHeadingLevel, rgbHexToColor } from 'document-schema.js';
 import { DocumentMetadataSchema, readCoreProperties } from '../shared/metadata';
 import { eighthPointsToPt, emuToPt, twipsToPt } from '../shared/units';
@@ -11,12 +11,27 @@ import { assignSourcePaths } from '../shared/source-path';
 import { sniffImageFormat } from '../../image/sniff';
 import { base64ToBytes } from '../../util/base64';
 import type { Relationship } from '../util';
-import { attr, childrenWithTag, elementsWithTag, resolveRelationships, rootElement, textContent } from '../util';
+import { attr, childrenWithTag, decodeEntities, elementsWithTag, resolveRelationships, rootElement, textContent } from '../util';
 import type { DocxStyleContext } from './styles';
 import { resolveParagraphProperties, resolveRunProperties } from './styles';
 import { NumberingDefinitionSchema, readNumberingDefinitions } from './numbering';
+import type { ConstructExtent, ParagraphContentIndex } from './constructs';
+import {
+  PROVENANCE_CHANGE_BY_TAG,
+  bookmarkAnchorDescriptor,
+  contentBearingChildren,
+  fieldCharType,
+  indexParagraphContent,
+  insertConstructMarkers,
+  isDeletedChange,
+  readContentControlDescriptor,
+  readProvenanceDescriptor,
+  runInstructionText,
+} from './constructs';
 
 // Package -> DocxDocument. Walks word/document.xml directly, resolving the full style cascade (docDefaults -> named-style basedOn chains -> paragraph-mark run properties -> character styles -> direct formatting) and DrawingML theme references for each run, so document order, styling, and geometry are all preserved -- unlike a naive reader that flattens paragraphs/tables into separate arrays with no shared ordering. Headers/footers keep their prior flat-text projection; live PAGE/NUMPAGES field substitution is not implemented -- fields resolve to their cached result text (Word already computed it), which is correct for every field except one whose value would change under a different pagination this reader doesn't perform. Ported from documents.js's src/ooxml/docx/read.ts (the section/style-cascade walk) merged with this package's own prior comment/footnote/header/footer reading.
+//
+// Block-scoped fidelity constructs (structured document tags, complex and simple fields, bookmarks, tracked insertions/deletions/moves) are read into document-schema.js's constructStart/constructEnd marker pairs bracketing the blocks they span -- see typed/docx/constructs.ts for the descriptor shapes and the block-scope rule that decides which real-world occurrences are representable and which are not.
 
 export const CommentSchema = z.object({
   author: z.string().optional(),
@@ -45,6 +60,13 @@ export type DocxDocument = z.infer<typeof DocxDocumentSchema>;
 const DOCUMENT_PART_PATH = 'word/document.xml';
 const STYLES_PART_PATH = 'word/styles.xml';
 const THEME_REL_SUFFIX = '/theme';
+
+// Everything the block walk needs that does not change as it descends: the style/theme cascade context, the containing part's own relationships, and the package the media parts live in.
+interface DocxReadContext {
+  readonly styles: DocxStyleContext;
+  readonly rels: ReadonlyMap<string, Relationship>;
+  readonly pkg: Package;
+}
 
 // Word's own default page margins (1 inch each side) and page size (US Letter), used whenever a section's w:sectPr omits w:pgMar/w:pgSz.
 const DEFAULT_MARGIN_PT = 72;
@@ -102,14 +124,14 @@ function hasPageBreakBefore(paragraph: XmlElement): boolean {
   return readToggle(pPr === undefined ? undefined : childrenWithTag(pPr, 'w:pageBreakBefore')[0]);
 }
 
-// A run's own w:t/w:tab/w:br children are ordered and interleaved (e.g. "text" w:tab "more text" within one w:r) -- concatenating only w:t would silently drop the tab. w:tab becomes a literal '\t', w:br/w:cr a literal '\n' (every w:br type, including an explicit page break, is treated as a plain line break here -- splitting one paragraph into two at a mid-run page break is a real but rare-enough case to defer).
+// A run's own w:t/w:delText/w:tab/w:br children are ordered and interleaved (e.g. "text" w:tab "more text" within one w:r) -- concatenating only w:t would silently drop the tab. w:delText is the spelling a run takes inside a tracked deletion or move-from, and is read identically: a deletion's text is the whole point of carrying the deletion at all. w:tab becomes a literal '\t', w:br/w:cr a literal '\n' (every w:br type, including an explicit page break, is treated as a plain line break here -- splitting one paragraph into two at a mid-run page break is a real but rare-enough case to defer).
 function readRunText(run: XmlElement): string {
   let text = '';
   for (const child of run.children) {
     if (child.type !== 'element') {
       continue;
     }
-    if (child.tag === 'w:t') {
+    if (child.tag === 'w:t' || child.tag === 'w:delText') {
       text += textContent(child);
     } else if (child.tag === 'w:tab') {
       text += '\t';
@@ -121,7 +143,7 @@ function readRunText(run: XmlElement): string {
 }
 
 // A w:drawing wraps exactly one wp:inline (in-flow) or wp:anchor (floating/wrapped) container, both of which share the same wp:extent (EMU size) and wp:docPr (name/alt-text) children, and both of which reach the actual picture through an identical a:graphic/a:graphicData/pic:pic/pic:blipFill/a:blip chain -- so both placements resolve through one function. wp:anchor's own wp:positionH/wp:positionV (page/margin/paragraph-relative offset) is read by nothing here: ContentImageBlock has no absolute x/y positioning field at all (unlike ContentShape's frame), so a floating image has nowhere to record its real anchored position -- it is deliberately placed in the block flow at the point its own w:drawing was encountered, i.e. exactly where an inline image would land. This is a real, honest scope narrowing (a floating image's on-page position is lost, not silently wrong), not an attempt at true anchored placement.
-function readDrawingImage(drawing: XmlElement, rels: ReadonlyMap<string, Relationship>, pkg: Package): ContentImageBlock | undefined {
+function readDrawingImage(drawing: XmlElement, ctx: DocxReadContext): ContentImageBlock | undefined {
   const container = childrenWithTag(drawing, 'wp:inline')[0] ?? childrenWithTag(drawing, 'wp:anchor')[0];
   if (container === undefined) {
     return undefined;
@@ -136,8 +158,8 @@ function readDrawingImage(drawing: XmlElement, rels: ReadonlyMap<string, Relatio
   const altText = docPr === undefined ? undefined : (attr(docPr, 'descr') ?? attr(docPr, 'title'));
   const blip = elementsWithTag(container.children, 'a:blip')[0];
   const rId = blip === undefined ? undefined : attr(blip, 'r:embed');
-  const rel = rId === undefined ? undefined : rels.get(rId);
-  const mediaPart = rel === undefined ? undefined : pkg.parts[rel.target];
+  const rel = rId === undefined ? undefined : ctx.rels.get(rId);
+  const mediaPart = rel === undefined ? undefined : ctx.pkg.parts[rel.target];
   if (mediaPart?.kind !== 'binary') {
     return undefined;
   }
@@ -148,35 +170,35 @@ function readDrawingImage(drawing: XmlElement, rels: ReadonlyMap<string, Relatio
   }
   const image: ContentImageBlock = { kind: 'image', format, base64: mediaPart.base64, widthPt: emuToPt(Number(cx)), heightPt: emuToPt(Number(cy)) };
   if (altText !== undefined) {
-    image.altText = altText;
+    image.altText = decodeEntities(altText);
   }
   return image;
 }
 
-// Collects every w:drawing found anywhere inside a paragraph's own content (nested inside w:r, w:hyperlink, w:ins, w:fldSimple), in document order, while excluding w:del subtrees entirely -- mirroring readParagraphRuns' own tracked-changes handling, since a deleted drawing's own w:r sits inside w:del alongside w:delText runs.
-function collectDrawings(nodes: readonly XmlNode[], out: XmlElement[]): void {
+// Collects every w:drawing found anywhere inside a paragraph's own content (nested inside w:r, w:hyperlink, w:ins, w:fldSimple), in document order. Deleted subtrees (w:del, w:moveFrom) are excluded unless the caller is carrying deletions -- mirroring readParagraphRuns' own tracked-changes handling, since a deleted drawing's own w:r sits inside w:del alongside w:delText runs, and a drawing lifted out of a deletion the reader is not carrying would appear as live content.
+function collectDrawings(nodes: readonly XmlNode[], carryDeletions: boolean, out: XmlElement[]): void {
   for (const node of nodes) {
     if (node.type !== 'element') {
       continue;
     }
-    if (node.tag === 'w:del') {
+    if (!carryDeletions && (node.tag === 'w:del' || node.tag === 'w:moveFrom')) {
       continue;
     }
     if (node.tag === 'w:drawing') {
       out.push(node);
       continue;
     }
-    collectDrawings(node.children, out);
+    collectDrawings(node.children, carryDeletions, out);
   }
 }
 
 // ContentRun has no field to carry an inline image (unlike ContentShape's blocks list in pptx) -- an image found inside a paragraph's own runs is therefore surfaced as its own sibling ContentImageBlock, appended immediately after that paragraph's block, rather than nested inside it. This preserves block-level document order (the image still appears right after the paragraph that contained it) at the cost of losing the image's exact character-level position within that paragraph's text -- a real, bounded scope narrowing forced by ContentParagraph's own shape, not a silent drop.
-function readParagraphImages(paragraph: XmlElement, rels: ReadonlyMap<string, Relationship>, pkg: Package): ContentImageBlock[] {
+function readParagraphImages(paragraph: XmlElement, ctx: DocxReadContext, carryDeletions: boolean): ContentImageBlock[] {
   const drawings: XmlElement[] = [];
-  collectDrawings(paragraph.children, drawings);
+  collectDrawings(paragraph.children, carryDeletions, drawings);
   const images: ContentImageBlock[] = [];
   for (const drawing of drawings) {
-    const image = readDrawingImage(drawing, rels, pkg);
+    const image = readDrawingImage(drawing, ctx);
     if (image !== undefined) {
       images.push(image);
     }
@@ -198,8 +220,8 @@ function readRun(run: XmlElement, paragraph: XmlElement, context: DocxStyleConte
   };
 }
 
-// Walks a paragraph's own children producing its runs, tracking two things across siblings: complex-field state (w:fldChar begin/separate/end -- only the cached result between separate and end is visible content) and the enclosing hyperlink target (w:hyperlink, resolved via the document's relationships), threaded through w:ins/w:fldSimple recursion. w:del is not recursed into: its own runs use w:delText rather than w:t, so even if visited they would contribute no text -- skipping the element entirely is simpler.
-function readParagraphRuns(paragraph: XmlElement, context: DocxStyleContext, rels: ReadonlyMap<string, Relationship>): ContentRun[] {
+// Walks a paragraph's own children producing its runs, tracking two things across siblings: complex-field state (w:fldChar begin/separate/end -- only the cached result between separate and end is visible content) and the enclosing hyperlink target (w:hyperlink, resolved via the document's relationships), threaded through w:ins/w:moveTo/w:sdt/w:fldSimple recursion. w:del and w:moveFrom are recursed into only when the caller is carrying deletions -- i.e. when the whole paragraph is itself a tracked deletion or move-from, so that every run it yields is labelled as deleted by the enclosing provenance construct. A mid-paragraph deletion stays excluded, because lifting those runs into the paragraph's own text would render deleted words as live text, which is strictly worse than the existing omission.
+function readParagraphRuns(paragraph: XmlElement, ctx: DocxReadContext, carryDeletions: boolean): ContentRun[] {
   const runs: ContentRun[] = [];
   let fieldState: 'none' | 'code' | 'result' = 'none';
 
@@ -209,9 +231,8 @@ function readParagraphRuns(paragraph: XmlElement, context: DocxStyleContext, rel
         continue;
       }
       if (node.tag === 'w:r') {
-        const fldChar = childrenWithTag(node, 'w:fldChar')[0];
-        if (fldChar !== undefined) {
-          const type = attr(fldChar, 'w:fldCharType');
+        const type = fieldCharType(node);
+        if (type !== undefined) {
           if (type === 'begin') {
             fieldState = 'code';
           } else if (type === 'separate') {
@@ -224,16 +245,26 @@ function readParagraphRuns(paragraph: XmlElement, context: DocxStyleContext, rel
         if (fieldState === 'code') {
           continue;
         }
-        const run = readRun(node, paragraph, context);
+        const run = readRun(node, paragraph, ctx.styles);
         runs.push(hyperlinkTarget === undefined ? run : { ...run, hyperlink: hyperlinkTarget });
       } else if (node.tag === 'w:fldSimple') {
         walk(node.children, hyperlinkTarget);
       } else if (node.tag === 'w:hyperlink') {
         const rId = attr(node, 'r:id');
-        const target = rId === undefined ? undefined : rels.get(rId)?.target;
+        const target = rId === undefined ? undefined : ctx.rels.get(rId)?.target;
         walk(node.children, target ?? hyperlinkTarget);
-      } else if (node.tag === 'w:ins') {
+      } else if (node.tag === 'w:ins' || node.tag === 'w:moveTo') {
         walk(node.children, hyperlinkTarget);
+      } else if (node.tag === 'w:del' || node.tag === 'w:moveFrom') {
+        if (carryDeletions) {
+          walk(node.children, hyperlinkTarget);
+        }
+      } else if (node.tag === 'w:sdt') {
+        // An inline (run-level) structured document tag: its own descriptor has no encoding here, since a construct marker brackets whole blocks and this one wraps a sub-sequence of runs -- but its content is ordinary text, so it is read as runs rather than dropped along with the descriptor.
+        const sdtContent = childrenWithTag(node, 'w:sdtContent')[0];
+        if (sdtContent !== undefined) {
+          walk(sdtContent.children, hyperlinkTarget);
+        }
       }
     }
   }
@@ -242,13 +273,13 @@ function readParagraphRuns(paragraph: XmlElement, context: DocxStyleContext, rel
   return runs;
 }
 
-function readParagraph(paragraph: XmlElement, context: DocxStyleContext, rels: ReadonlyMap<string, Relationship>): ContentParagraph {
+function readParagraph(paragraph: XmlElement, ctx: DocxReadContext, carryDeletions: boolean): ContentParagraph {
   const pPr = childrenWithTag(paragraph, 'w:pPr')[0];
   const pStyleEl = pPr === undefined ? undefined : childrenWithTag(pPr, 'w:pStyle')[0];
-  const props = resolveParagraphProperties(paragraph, context);
+  const props = resolveParagraphProperties(paragraph, ctx.styles);
   return {
     kind: 'paragraph',
-    runs: readParagraphRuns(paragraph, context, rels),
+    runs: readParagraphRuns(paragraph, ctx, carryDeletions),
     styleId: pStyleEl === undefined ? undefined : attr(pStyleEl, 'w:val'),
     // w:outlineLvl is 0-based (0 is a level-1 heading). Word's own outline levels run 1-9 while the schema's heading domain is 1-6, so clampHeadingLevel narrows levels 7-9 onto 6 -- the same closest-matching-value convention readAlignment (styles.ts) applies to w:jc's both/distribute.
     headingLevel: props.outlineLvl === undefined ? undefined : clampHeadingLevel(props.outlineLvl + 1),
@@ -343,7 +374,7 @@ interface RawCell {
 }
 
 // w:vMerge's own presence-without-@w:val means "continue" (per ECMA-376, "restart" must be explicit) -- distinct from no w:vMerge element at all, which means this cell isn't part of any vertical merge.
-function readRawCell(tc: XmlElement, context: DocxStyleContext, rels: ReadonlyMap<string, Relationship>, pkg: Package): RawCell {
+function readRawCell(tc: XmlElement, ctx: DocxReadContext, carryDeletions: boolean): RawCell {
   const tcPr = childrenWithTag(tc, 'w:tcPr')[0];
   const gridSpanEl = tcPr === undefined ? undefined : childrenWithTag(tcPr, 'w:gridSpan')[0];
   const gridSpanVal = gridSpanEl === undefined ? undefined : attr(gridSpanEl, 'w:val');
@@ -354,8 +385,8 @@ function readRawCell(tc: XmlElement, context: DocxStyleContext, rels: ReadonlyMa
     isVMergeContinuation: vMergeVal === 'continue',
     background: readCellShading(tcPr),
     borders: readCellBorders(tcPr),
-    // readRawCell/readTable and readBodyBlocks are mutually recursive (a cell can contain a nested table) -- both are function declarations, so hoisting makes this forward reference safe.
-    blocks: readBodyBlocks(tc.children, context, rels, pkg),
+    // A cell's own block list is its own construct-marker bracket scope, exactly as document-schema.js's bracket-matching contract requires: a pair opened inside a cell closes inside that cell, and never straddles the list containing the table.
+    blocks: readBlockScope(tc.children, ctx, carryDeletions),
   };
 }
 
@@ -371,12 +402,12 @@ function readRowHeightPt(tr: XmlElement): number | undefined {
 }
 
 // Column indices account for preceding cells' own gridSpan (a spanned cell occupies multiple grid columns); a vMerge-restart anchor's rowSpan is computed by scanning subsequent rows for a "continue" cell at the same column index, matching the anchor's own gridSpan -- ECMA-376 doesn't store the span count directly the way pptx's a:tc/@rowSpan does, so it must be derived.
-function readTable(tbl: XmlElement, context: DocxStyleContext, rels: ReadonlyMap<string, Relationship>, pkg: Package): ContentTable {
+function readTable(tbl: XmlElement, ctx: DocxReadContext, carryDeletions: boolean): ContentTable {
   const tblGrid = childrenWithTag(tbl, 'w:tblGrid')[0];
   const columnWidthsPt = tblGrid === undefined ? [] : childrenWithTag(tblGrid, 'w:gridCol').map((col) => twipsToPt(Number(attr(col, 'w:w') ?? '0')));
 
   const trs = childrenWithTag(tbl, 'w:tr');
-  const rawRows: RawCell[][] = trs.map((tr) => childrenWithTag(tr, 'w:tc').map((tc) => readRawCell(tc, context, rels, pkg)));
+  const rawRows: RawCell[][] = trs.map((tr) => childrenWithTag(tr, 'w:tc').map((tc) => readRawCell(tc, ctx, carryDeletions)));
   const rowColumnIndices: number[][] = rawRows.map((row) => {
     const indices: number[] = [];
     let col = 0;
@@ -416,71 +447,273 @@ function readTable(tbl: XmlElement, context: DocxStyleContext, rels: ReadonlyMap
   return { kind: 'table', columnWidthsPt, rows };
 }
 
-// Walks block-level content (w:p, w:tbl), recursing into w:sdt (content controls), w:ins (inserted content), and mc:AlternateContent (Fallback preferred, else the first Choice). w:del is skipped at the block level too (a whole deleted paragraph/table). Any w:drawing found inside a paragraph is surfaced as a sibling ContentImageBlock immediately following that paragraph's own block -- see readParagraphImages.
-function readBodyBlocks(nodes: readonly XmlNode[], context: DocxStyleContext, rels: ReadonlyMap<string, Relationship>, pkg: Package): ContentBlock[] {
-  const blocks: ContentBlock[] = [];
+// --- the block flow walk, and the construct extents it discovers along the way ---------------------------------------
+
+interface SectionBreak {
+  readonly index: number;
+  readonly sectPr: XmlElement;
+}
+
+// A bookmark's two halves are id-paired rather than nested, so neither half can be turned into a marker until both have been seen and both have been shown to sit at a block boundary: `index` is the block position the half sits at, and `qualified` records whether it sat outside every content-bearing child of its paragraph (or at block level, where it always does). See resolveBookmarkExtents for the pairing itself.
+interface BookmarkEvent {
+  readonly id: string;
+  readonly name: string | undefined;
+  readonly kind: 'start' | 'end';
+  readonly index: number;
+  readonly qualified: boolean;
+  readonly order: number;
+}
+
+// A complex field opened by a w:fldChar begin and still waiting for its matching end, which may be several paragraphs away (a TOC field's begin sits in its first entry's paragraph and its end in a paragraph of its own after the last).
+interface OpenField {
+  instruction: string;
+  inCode: boolean;
+  readonly startIndex: number;
+  readonly qualifiedStart: boolean;
+  readonly order: number;
+}
+
+interface FlowState {
+  readonly blocks: ContentBlock[];
+  readonly extents: ConstructExtent[];
+  readonly sectionBreaks: SectionBreak[];
+  readonly bookmarkEvents: BookmarkEvent[];
+  readonly openFields: OpenField[];
+  order: number;
+}
+
+function newFlowState(): FlowState {
+  return { blocks: [], extents: [], sectionBreaks: [], bookmarkEvents: [], openFields: [], order: 0 };
+}
+
+// Pairs the flow's bookmark halves by w:id into extents. A bookmark survives only when it has exactly one start and one end in this block list, both carry a name and sit at a block boundary, and the end does not precede the start. Everything else -- a half whose partner lies in a different block list (inside a table cell, or on the far side of a structured document tag), a duplicate id, a bookmark whose extent is a sub-sequence of one paragraph's runs -- has no block-scoped encoding and is not emitted.
+function resolveBookmarkExtents(events: readonly BookmarkEvent[]): ConstructExtent[] {
+  const byId = new Map<string, BookmarkEvent[]>();
+  for (const event of events) {
+    const existing = byId.get(event.id);
+    if (existing === undefined) {
+      byId.set(event.id, [event]);
+    } else {
+      existing.push(event);
+    }
+  }
+  const extents: ConstructExtent[] = [];
+  for (const halves of byId.values()) {
+    const start = halves.filter((half) => half.kind === 'start');
+    const end = halves.filter((half) => half.kind === 'end');
+    const open = start[0];
+    const close = end[0];
+    if (start.length !== 1 || end.length !== 1 || open === undefined || close === undefined) {
+      continue;
+    }
+    if (open.name === undefined || !open.qualified || !close.qualified || close.index < open.index) {
+      continue;
+    }
+    extents.push({ startIndex: open.index, endIndex: close.index, order: open.order, descriptor: bookmarkAnchorDescriptor(open.name) });
+  }
+  return extents;
+}
+
+// A paragraph whose every content-bearing child is the same tracked-change element -- Word's own spelling of a wholly inserted, deleted, or moved paragraph, which puts the change inside the paragraph rather than wrapping it. The extent is the whole paragraph, so this is block-scoped; a paragraph mixing tracked and untracked children is a run-level change with no encoding here. Author and date come from the first such element: a paragraph split across several same-tag elements by different authors carries only the first, since the descriptor names one author.
+function wholeParagraphTrackedChange(index: ParagraphContentIndex): { element: XmlElement; change: ProvenanceChange } | undefined {
+  const content = contentBearingChildren(index);
+  const first = content[0];
+  if (first === undefined) {
+    return undefined;
+  }
+  const change = PROVENANCE_CHANGE_BY_TAG.get(first.tag);
+  if (change === undefined || !content.every((child) => child.tag === first.tag)) {
+    return undefined;
+  }
+  return { element: first, change };
+}
+
+// A bookmark half inside a paragraph brackets whole blocks only when it sits outside every content-bearing child: a leading half opens (or closes) at the paragraph itself, a trailing one at the position after the paragraph's last block. A half between content children marks a sub-sequence of runs and is recorded as unqualified so resolveBookmarkExtents drops the whole pair rather than emitting a marker at the wrong place.
+function recordParagraphBookmarks(index: ParagraphContentIndex, paragraphIndex: number, endIndex: number, state: FlowState): void {
+  index.elements.forEach((element, position) => {
+    if (element.tag !== 'w:bookmarkStart' && element.tag !== 'w:bookmarkEnd') {
+      return;
+    }
+    const id = attr(element, 'w:id');
+    if (id === undefined) {
+      return;
+    }
+    const leading = index.firstContentIndex === -1 || position < index.firstContentIndex;
+    const trailing = index.lastContentIndex === -1 || position > index.lastContentIndex;
+    if (element.tag === 'w:bookmarkStart') {
+      const name = attr(element, 'w:name');
+      state.bookmarkEvents.push({
+        id,
+        name: name === undefined ? undefined : decodeEntities(name),
+        kind: 'start',
+        index: leading ? paragraphIndex : endIndex,
+        qualified: leading || trailing,
+        order: state.order++,
+      });
+      return;
+    }
+    state.bookmarkEvents.push({ id, name: undefined, kind: 'end', index: trailing ? endIndex : paragraphIndex, qualified: leading || trailing, order: state.order++ });
+  });
+}
+
+// A field is block-scoped when its opening w:fldChar begin is the paragraph's first content-bearing child and its closing w:fldChar end is the last content-bearing child of whichever paragraph closes it -- the multi-paragraph TOC shape, and the single-paragraph case where the field is the paragraph's entire content. A w:fldSimple is block-scoped on the same test: it must be its paragraph's only content-bearing child. A field beginning or ending mid-paragraph ("Page 3 of 10", a cross-reference inside a sentence) covers a sub-sequence of runs and has no encoding here; its cached result text still reaches the output as ordinary run text, exactly as before, so only the field-ness and the instruction are lost.
+//
+// The field's cached result is deliberately never spelled on the descriptor: FieldDescriptor.cachedResult is for a field whose result is a scalar, and a block-scoped field's result is the block content its extent already wraps -- document-schema.js states the two are the block and the scalar case of one fact, never two encodings of the same one.
+function scanParagraphFields(index: ParagraphContentIndex, paragraphIndex: number, endIndex: number, state: FlowState): void {
+  const content = contentBearingChildren(index);
+  content.forEach((child, position) => {
+    if (child.tag === 'w:fldSimple') {
+      if (content.length === 1) {
+        state.extents.push({ startIndex: paragraphIndex, endIndex, order: state.order++, descriptor: { kind: 'field', instruction: decodeEntities(attr(child, 'w:instr') ?? '') } });
+      }
+      return;
+    }
+    if (child.tag !== 'w:r') {
+      return;
+    }
+    const type = fieldCharType(child);
+    if (type === 'begin') {
+      state.openFields.push({ instruction: '', inCode: true, startIndex: paragraphIndex, qualifiedStart: position === 0, order: state.order++ });
+      return;
+    }
+    if (type === 'separate') {
+      const open = state.openFields[state.openFields.length - 1];
+      if (open !== undefined) {
+        open.inCode = false;
+      }
+      return;
+    }
+    if (type === 'end') {
+      const open = state.openFields.pop();
+      if (open !== undefined && open.qualifiedStart && position === content.length - 1) {
+        state.extents.push({ startIndex: open.startIndex, endIndex, order: open.order, descriptor: { kind: 'field', instruction: open.instruction } });
+      }
+      return;
+    }
+    const open = state.openFields[state.openFields.length - 1];
+    if (open?.inCode === true) {
+      open.instruction += runInstructionText(child);
+    }
+  });
+}
+
+function collectParagraph(paragraph: XmlElement, ctx: DocxReadContext, state: FlowState, carryDeletions: boolean): void {
+  const index = indexParagraphContent(paragraph);
+  const tracked = wholeParagraphTrackedChange(index);
+  const paragraphDeleted = carryDeletions || (tracked !== undefined && isDeletedChange(tracked.change));
+
+  if (hasPageBreakBefore(paragraph)) {
+    state.blocks.push({ kind: 'pageBreak' });
+  }
+  // The pageBreak block above sits outside every extent recorded here: it is the paragraph's own w:pageBreakBefore rendered as a preceding block, not part of any construct that brackets the paragraph.
+  const paragraphIndex = state.blocks.length;
+  state.blocks.push(readParagraph(paragraph, ctx, paragraphDeleted));
+  state.blocks.push(...readParagraphImages(paragraph, ctx, paragraphDeleted));
+  const endIndex = state.blocks.length;
+
+  if (tracked !== undefined) {
+    state.extents.push({ startIndex: paragraphIndex, endIndex, order: state.order++, descriptor: readProvenanceDescriptor(tracked.element, tracked.change) });
+  }
+  recordParagraphBookmarks(index, paragraphIndex, endIndex, state);
+  scanParagraphFields(index, paragraphIndex, endIndex, state);
+
+  const pPr = childrenWithTag(paragraph, 'w:pPr')[0];
+  const sectPr = pPr === undefined ? undefined : childrenWithTag(pPr, 'w:sectPr')[0];
+  if (sectPr !== undefined) {
+    state.sectionBreaks.push({ index: state.blocks.length, sectPr });
+  }
+}
+
+// Walks block-level content (w:p, w:tbl) into one flat block list plus the construct extents bracketing it. A structured document tag (w:sdt), a tracked change (w:ins/w:del/w:moveFrom/w:moveTo), and mc:AlternateContent (Fallback preferred, else the first Choice) all recurse into the SAME list rather than starting a nested one: the first two become construct extents over the blocks they contributed, and alternate content is unwrapped as before, since a taken branch is content rather than a construct. Any w:drawing found inside a paragraph is surfaced as a sibling ContentImageBlock immediately following that paragraph's own block -- see readParagraphImages.
+function collectFlowNodes(nodes: readonly XmlNode[], ctx: DocxReadContext, state: FlowState, carryDeletions: boolean): void {
   for (const node of nodes) {
     if (node.type !== 'element') {
       continue;
     }
     if (node.tag === 'w:p') {
-      if (hasPageBreakBefore(node)) {
-        blocks.push({ kind: 'pageBreak' });
-      }
-      blocks.push(readParagraph(node, context, rels));
-      blocks.push(...readParagraphImages(node, rels, pkg));
-    } else if (node.tag === 'w:tbl') {
-      blocks.push(readTable(node, context, rels, pkg));
-    } else if (node.tag === 'w:sdt') {
+      collectParagraph(node, ctx, state, carryDeletions);
+      continue;
+    }
+    if (node.tag === 'w:tbl') {
+      state.blocks.push(readTable(node, ctx, carryDeletions));
+      continue;
+    }
+    if (node.tag === 'w:sdt') {
+      const order = state.order++;
+      const startIndex = state.blocks.length;
       const sdtContent = childrenWithTag(node, 'w:sdtContent')[0];
       if (sdtContent !== undefined) {
-        blocks.push(...readBodyBlocks(sdtContent.children, context, rels, pkg));
+        collectFlowNodes(sdtContent.children, ctx, state, carryDeletions);
       }
-    } else if (node.tag === 'w:ins') {
-      blocks.push(...readBodyBlocks(node.children, context, rels, pkg));
-    } else if (node.tag === 'mc:AlternateContent') {
+      state.extents.push({ startIndex, endIndex: state.blocks.length, order, descriptor: readContentControlDescriptor(node) });
+      continue;
+    }
+    const change = PROVENANCE_CHANGE_BY_TAG.get(node.tag);
+    if (change !== undefined) {
+      const order = state.order++;
+      const startIndex = state.blocks.length;
+      collectFlowNodes(node.children, ctx, state, carryDeletions || isDeletedChange(change));
+      state.extents.push({ startIndex, endIndex: state.blocks.length, order, descriptor: readProvenanceDescriptor(node, change) });
+      continue;
+    }
+    if (node.tag === 'mc:AlternateContent') {
       const target = childrenWithTag(node, 'mc:Fallback')[0] ?? childrenWithTag(node, 'mc:Choice')[0];
       if (target !== undefined) {
-        blocks.push(...readBodyBlocks(target.children, context, rels, pkg));
+        collectFlowNodes(target.children, ctx, state, carryDeletions);
       }
+      continue;
     }
-  }
-  return blocks;
-}
-
-// A mid-document section break is an otherwise-ordinary w:p whose w:pPr carries its own w:sectPr, describing the section that paragraph (and everything since the previous break) belongs to; the body's own trailing w:sectPr (a direct child, not nested in any paragraph) closes the final section. Multi-section support falls out of this directly: each section break just starts a fresh blocks accumulator.
-function readSections(body: XmlElement, context: DocxStyleContext, rels: ReadonlyMap<string, Relationship>, pkg: Package): ContentSection[] {
-  const sections: ContentSection[] = [];
-  let currentBlocks: ContentBlock[] = [];
-
-  for (const node of body.children) {
-    if (node.type !== 'element') {
+    if (node.tag === 'w:bookmarkStart') {
+      const id = attr(node, 'w:id');
+      const name = attr(node, 'w:name');
+      if (id !== undefined) {
+        state.bookmarkEvents.push({ id, name: name === undefined ? undefined : decodeEntities(name), kind: 'start', index: state.blocks.length, qualified: true, order: state.order++ });
+      }
+      continue;
+    }
+    if (node.tag === 'w:bookmarkEnd') {
+      const id = attr(node, 'w:id');
+      if (id !== undefined) {
+        state.bookmarkEvents.push({ id, name: undefined, kind: 'end', index: state.blocks.length, qualified: true, order: state.order++ });
+      }
       continue;
     }
     if (node.tag === 'w:sectPr') {
-      sections.push({ pageSize: readPageSize(node), margins: readMargins(node), blocks: currentBlocks });
-      currentBlocks = [];
-      continue;
+      state.sectionBreaks.push({ index: state.blocks.length, sectPr: node });
     }
-    if (node.tag === 'w:p') {
-      const pPr = childrenWithTag(node, 'w:pPr')[0];
-      const sectPr = pPr === undefined ? undefined : childrenWithTag(pPr, 'w:sectPr')[0];
-      if (hasPageBreakBefore(node)) {
-        currentBlocks.push({ kind: 'pageBreak' });
-      }
-      currentBlocks.push(readParagraph(node, context, rels));
-      currentBlocks.push(...readParagraphImages(node, rels, pkg));
-      if (sectPr !== undefined) {
-        sections.push({ pageSize: readPageSize(sectPr), margins: readMargins(sectPr), blocks: currentBlocks });
-        currentBlocks = [];
-      }
-      continue;
-    }
-    currentBlocks.push(...readBodyBlocks([node], context, rels, pkg));
+  }
+}
+
+// One self-contained bracket scope: a table cell's own content, or a header/footer's, walked and closed with its markers spliced in. The document body is not read through this -- see readSections, which splits one walk across several sections.
+function readBlockScope(nodes: readonly XmlNode[], ctx: DocxReadContext, carryDeletions: boolean): ContentBlock[] {
+  const state = newFlowState();
+  collectFlowNodes(nodes, ctx, state, carryDeletions);
+  return insertConstructMarkers(state.blocks, [...state.extents, ...resolveBookmarkExtents(state.bookmarkEvents)]);
+}
+
+// A mid-document section break is an otherwise-ordinary w:p whose w:pPr carries its own w:sectPr, describing the section that paragraph (and everything since the previous break) belongs to; the body's own trailing w:sectPr (a direct child, not nested in any paragraph) closes the final section. Multi-section support falls out of this directly: the body is walked once, and each break just cuts the resulting block list.
+//
+// Every section's blocks are their own bracket scope, so an extent straddling a section break is dropped rather than being split into two half-constructs -- the same not-representable case as a run-level extent, and the reason the split happens after the walk rather than during it (a construct's own two ends are only known once both have been seen).
+function readSections(body: XmlElement, ctx: DocxReadContext): ContentSection[] {
+  const state = newFlowState();
+  collectFlowNodes(body.children, ctx, state, false);
+  const extents = [...state.extents, ...resolveBookmarkExtents(state.bookmarkEvents)];
+
+  function sliceSection(pageSize: PageSize, margins: Margins, from: number, to: number): ContentSection {
+    const contained = extents
+      .filter((extent) => extent.startIndex >= from && extent.endIndex <= to)
+      .map((extent) => ({ ...extent, startIndex: extent.startIndex - from, endIndex: extent.endIndex - from }));
+    return { pageSize, margins, blocks: insertConstructMarkers(state.blocks.slice(from, to), contained) };
   }
 
-  if (currentBlocks.length > 0 || sections.length === 0) {
-    sections.push({ pageSize: PAGE_SIZE_LETTER, margins: DEFAULT_MARGINS, blocks: currentBlocks });
+  const sections: ContentSection[] = [];
+  let from = 0;
+  for (const sectionBreak of state.sectionBreaks) {
+    sections.push(sliceSection(readPageSize(sectionBreak.sectPr), readMargins(sectionBreak.sectPr), from, sectionBreak.index));
+    from = sectionBreak.index;
+  }
+  if (from < state.blocks.length || sections.length === 0) {
+    sections.push(sliceSection(PAGE_SIZE_LETTER, DEFAULT_MARGINS, from, state.blocks.length));
   }
   sections.forEach((section, sectionIndex) => assignSourcePaths(section.blocks, `sections[${sectionIndex}]`));
   return sections;
@@ -558,7 +791,9 @@ function readHeaderFooterText(pkg: Package, prefix: string): string[] {
   return out;
 }
 
-// Resolves a generic OOXML Package into DocxDocument: the WordprocessingML style cascade, DrawingML theme resolution (including w:themeColor run-colour references, resolved against the theme's own colour scheme), ordered sections of paragraphs/tables/page-breaks/images (document order preserved, including inside tables, with cell background AND border styling read from w:tcBorders), plus comments, footnotes, header/footer text, and word/numbering.xml's own abstractNum/num level definitions (numbering.ts's readNumberingDefinitions). An inline (wp:inline) or floating/anchored (wp:anchor) w:drawing is resolved to a real ContentImageBlock via the containing part's own relationships, sniffed from its actual media-part bytes rather than trusted from any extension/content-type -- but a floating image's own wp:anchor position (page/margin/paragraph-relative offset) is never read, since ContentImageBlock has no absolute positioning field to record it in; it lands in the block flow at the point its w:drawing was encountered, same as an inline image. It is a one-way read, not a round-trip path: information not modelled here is dropped (section break types other than plain w:sectPr -- ContentSection itself has no field to record w:type's nextPage/continuous/evenPage/oddPage distinction, a document-schema.js addition out of this package's own scope; live PAGE/NUMPAGES field re-evaluation; w:themeShade/w:themeTint refinement of a resolved theme colour; a floating image's own anchored position; and any image whose bytes don't sniff as PNG/JPEG), and a DocxDocument cannot be written back to a package.
+// Resolves a generic OOXML Package into DocxDocument: the WordprocessingML style cascade, DrawingML theme resolution (including w:themeColor run-colour references, resolved against the theme's own colour scheme), ordered sections of paragraphs/tables/page-breaks/images (document order preserved, including inside tables, with cell background AND border styling read from w:tcBorders), the block-scoped fidelity constructs (structured document tags, fields, bookmarks, tracked changes) as constructStart/constructEnd marker pairs, plus comments, footnotes, header/footer text, and word/numbering.xml's own abstractNum/num level definitions (numbering.ts's readNumberingDefinitions). An inline (wp:inline) or floating/anchored (wp:anchor) w:drawing is resolved to a real ContentImageBlock via the containing part's own relationships, sniffed from its actual media-part bytes rather than trusted from any extension/content-type -- but a floating image's own wp:anchor position (page/margin/paragraph-relative offset) is never read, since ContentImageBlock has no absolute positioning field to record it in; it lands in the block flow at the point its w:drawing was encountered, same as an inline image.
+//
+// Information not modelled here is still dropped: section break types other than plain w:sectPr (ContentSection itself has no field to record w:type's nextPage/continuous/evenPage/oddPage distinction); live PAGE/NUMPAGES field re-evaluation; w:themeShade/w:themeTint refinement of a resolved theme colour; a floating image's own anchored position; any image whose bytes don't sniff as PNG/JPEG; and every run-level construct occurrence -- a field, bookmark, content control, or tracked change covering a sub-sequence of one paragraph's runs rather than whole blocks (see typed/docx/constructs.ts for why, and typed/docx/write.ts for the write side of what does survive).
 export function readDocx(pkg: Package): DocxDocument {
   const documentRoot = rootElement(pkg.parts[DOCUMENT_PART_PATH]);
   if (documentRoot === undefined) {
@@ -570,11 +805,15 @@ export function readDocx(pkg: Package): DocxDocument {
   }
 
   const docRels = resolveRelationships(pkg, DOCUMENT_PART_PATH);
-  const context: DocxStyleContext = { stylesRoot: rootElement(pkg.parts[STYLES_PART_PATH]), theme: readDocumentTheme(pkg, docRels) };
+  const ctx: DocxReadContext = {
+    styles: { stylesRoot: rootElement(pkg.parts[STYLES_PART_PATH]), theme: readDocumentTheme(pkg, docRels) },
+    rels: docRels,
+    pkg,
+  };
 
   return {
     metadata: readCoreProperties(pkg),
-    sections: readSections(body, context, docRels, pkg),
+    sections: readSections(body, ctx),
     comments: readComments(pkg),
     footnotes: readFootnotes(pkg),
     headers: readHeaderFooterText(pkg, 'word/header'),

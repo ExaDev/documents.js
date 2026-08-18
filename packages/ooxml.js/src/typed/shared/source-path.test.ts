@@ -70,6 +70,15 @@ describe('assignSourcePaths', () => {
     expect(r0c0.runs[0]?.sourcePath).toBe('sections[0].blocks[1].rows[0].cells[0].blocks[0].runs[0]');
   });
 
+  it('skips both construct-boundary markers while still counting their positions in the paths around them', () => {
+    const blocks: ContentBlock[] = [{ kind: 'constructStart', descriptor: { kind: 'anchor', anchorType: 'bookmark', name: 'intro' } }, paragraph('a'), { kind: 'constructEnd' }, paragraph('b')];
+    assignSourcePaths(blocks, 'sections[0]');
+    expect(blocks[0]).toEqual({ kind: 'constructStart', descriptor: { kind: 'anchor', anchorType: 'bookmark', name: 'intro' } });
+    expect(blocks[2]).toEqual({ kind: 'constructEnd' });
+    expect(sourcePathOf(blocks[1])).toBe('sections[0].blocks[1]');
+    expect(sourcePathOf(blocks[3])).toBe('sections[0].blocks[3]');
+  });
+
   it('works with a slides[N].shapes[N] prefix, matching the pptx grammar', () => {
     const blocks: ContentBlock[] = [paragraph('hello')];
     assignSourcePaths(blocks, 'slides[2].shapes[1]');
