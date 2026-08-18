@@ -60,8 +60,8 @@ importers:
         specifier: ^4.4.0
         version: 4.4.0(dexie@4.4.4)(react@19.2.8)
       documents.js:
-        specifier: ^3.0.5
-        version: 3.0.5
+        specifier: ^3.0.6
+        version: 3.0.6
       markdown-codec:
         specifier: ^3.0.1
         version: 3.0.1
@@ -2434,8 +2434,8 @@ packages:
     resolution: {integrity: sha512-sRnhIHGb7UvmtDX9DeJY6/uEULoQ3JZn4whH+gyyLAcP26zzr/u8EXEIZYDRIfabHEZHksBZOUQgCD1cacH3cA==}
     engines: {node: '>=20'}
 
-  documents.js@3.0.5:
-    resolution: {integrity: sha512-sFbzcO8ypW62g4fIwQR96Rxyn4+v3zrSgDE8Ffs08k1PQo0r2TWzvdH4JAo8Dt0kmzRLud2gf5VeviGPUWTLSw==}
+  documents.js@3.0.6:
+    resolution: {integrity: sha512-Ez+ScmG7DHkG7v4sRdR8+HLn9a92qFRvR6HSvYB0HQmMz5E55gxAHSNuqi/sezJAfm27U38J5AA8N3scgtyUMg==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -3656,8 +3656,8 @@ packages:
     resolution: {integrity: sha512-1FlR+gjXK7X+AsAHso35MnyN5KqGwJRi/31ft6x0M194ht7S+rWAvd7PHss9xSKMzE0asv1pyIHaJYq+BbacAQ==}
     engines: {node: '>=12'}
 
-  ooxml.js@3.0.0:
-    resolution: {integrity: sha512-QyddERXgvUNhtOtqs1S87DjwgUfCenHNeI8rKPHXXyqOd4r54nmGV0SjQRqih/vXSsYHLjn9DBWaPi33vCwEJg==}
+  ooxml.js@3.0.1:
+    resolution: {integrity: sha512-wvUdOpXBzI1RKPuBjv6aJLaNwYbyc3R8UK0V3uCLdjOl7vZqP5jElsUcv6YTsRP3wB5r+MTyHmQ1YpT6mD1C9g==}
     engines: {node: '>=20'}
 
   openapi-types@12.1.3:
@@ -7333,14 +7333,14 @@ snapshots:
     dependencies:
       zod: 4.4.3
 
-  documents.js@3.0.5:
+  documents.js@3.0.6:
     dependencies:
       byte-codec: 1.1.9
       document-schema.js: 4.1.0
       fflate: 0.8.3
       markdown-codec: 3.0.1
       odf.js: 4.0.1
-      ooxml.js: 3.0.0
+      ooxml.js: 3.0.1
       pdf-codec: 3.0.1
       temml: 0.13.4
       zod: 4.4.3
@@ -8615,7 +8615,7 @@ snapshots:
     dependencies:
       mimic-fn: 4.0.0
 
-  ooxml.js@3.0.0:
+  ooxml.js@3.0.1:
     dependencies:
       document-schema.js: 4.1.0
       fast-xml-parser: 5.10.1
