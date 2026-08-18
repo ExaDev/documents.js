@@ -1,3 +1,20 @@
+# [3.1.0](https://github.com/ExaDev/ooxml.js/compare/v3.0.1...v3.1.0) (2026-08-18)
+
+
+### Bug Fixes
+
+* **docx:** descend into a trailing construct wrapper to find a section break's paragraph ([9b9c01b](https://github.com/ExaDev/ooxml.js/commit/9b9c01becbb388497e6e27a4608b41d08389aaf5))
+* **docx:** keep a pending page break attached to its paragraph through a construct, table, or image ([29780a3](https://github.com/ExaDev/ooxml.js/commit/29780a3c24567d27f25786152814d85f9d7578fd))
+* **docx:** wrap a tracked change around a paragraph's own runs, never the paragraph ([2a230a6](https://github.com/ExaDev/ooxml.js/commit/2a230a6c45c098fd01c48659382c942f18b84ba5))
+* **docx:** write a construct with no block-level docx element as plain content ([a7e6b02](https://github.com/ExaDev/ooxml.js/commit/a7e6b0233474ce7b0bc847cec0916debd2af5f01))
+* **typed:** decode a relationship target's XML entities when resolving it ([6b04db9](https://github.com/ExaDev/ooxml.js/commit/6b04db9c70f9ef90d891e96c65afea15aa1ff149))
+
+
+### Features
+
+* **docx:** add buildDocxPackage, the write side of readDocx's sections ([b161ad9](https://github.com/ExaDev/ooxml.js/commit/b161ad90c963f21837da99e920f0e372e49a2629))
+* **docx:** read block-scoped fields, bookmarks, SDTs, and tracked changes as construct markers ([48f3ef7](https://github.com/ExaDev/ooxml.js/commit/48f3ef74750a1a710b5d9dfb9af441064c7a4f48))
+
 ## [3.0.1](https://github.com/ExaDev/ooxml.js/compare/v3.0.0...v3.0.1) (2026-08-18)
 
 # [3.0.0](https://github.com/ExaDev/ooxml.js/compare/v2.17.0...v3.0.0) (2026-08-18)
