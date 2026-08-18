@@ -100,6 +100,44 @@ export {
   ContentSheetRepeatRangeSchema,
   ContentSheetPrintSettingsSchema,
 } from 'document-schema.js';
+
+// --- The fidelity construct vocabulary: the descriptor kinds a construct carries, and the flat form's constructStart/constructEnd marker pair that brackets the blocks one spans. readDocx produces these markers for every block-scoped docx construct (see typed/docx/constructs.ts) and buildDocxPackage writes them back, so they belong on this package's own surface alongside the block model they sit in. findConstructMarkerImbalance is document-schema.js's single shared definition of the bracket-matching contract, re-exported so a consumer validates a block list against the same check both halves of this package do. ---
+export {
+  ConstructDescriptorSchema,
+  ContentControlDescriptorSchema,
+  ContentControlTypeSchema,
+  ContentControlLockSchema,
+  FieldDescriptorSchema,
+  AnchorDescriptorSchema,
+  AnchorTypeSchema,
+  LinkDescriptorSchema,
+  LinkTargetSchema,
+  ProvenanceDescriptorSchema,
+  ProvenanceChangeSchema,
+  DivisionDescriptorSchema,
+  ContentConstructStartSchema,
+  ContentConstructEndSchema,
+  isContentConstructStart,
+  isContentConstructEnd,
+  findConstructMarkerImbalance,
+} from 'document-schema.js';
+export type {
+  ConstructDescriptor,
+  ContentControlDescriptor,
+  ContentControlType,
+  ContentControlLock,
+  FieldDescriptor,
+  AnchorDescriptor,
+  AnchorType,
+  LinkDescriptor,
+  LinkTarget,
+  ProvenanceDescriptor,
+  ProvenanceChange,
+  DivisionDescriptor,
+  ContentConstructStart,
+  ContentConstructEnd,
+  ConstructMarkerImbalance,
+} from 'document-schema.js';
 export type {
   Box,
   Margins,
@@ -142,9 +180,11 @@ export type { DocumentMetadata } from './typed/shared/metadata';
 export { sniffImageFormat } from './image/sniff';
 export type { ImageFormat } from './image/sniff';
 
-// --- docx: a WordprocessingML reader resolving the full style cascade (docDefaults -> named-style basedOn chains -> paragraph-mark run properties -> character styles -> direct formatting) and DrawingML theme references (including w:themeColor run colours) into ordered sections of paragraphs/tables/page-breaks. ---
+// --- docx: a WordprocessingML reader resolving the full style cascade (docDefaults -> named-style basedOn chains -> paragraph-mark run properties -> character styles -> direct formatting) and DrawingML theme references (including w:themeColor run colours) into ordered sections of paragraphs/tables/page-breaks, with every block-scoped fidelity construct (structured document tags, fields, bookmarks, tracked changes) bracketed by construct-boundary markers -- paired with buildDocxPackage, its write-side inverse over those same sections. ---
 export { readDocx, CommentSchema, DocxDocumentSchema, FootnoteSchema } from './typed/docx/read';
 export type { Comment, DocxDocument, Footnote } from './typed/docx/read';
+export { buildDocxPackage } from './typed/docx/write';
+export type { DocxContent } from './typed/docx/write';
 
 // word/numbering.xml's own abstractNum/num level definitions (glyph format, start-at value, restart rule) -- a companion to, not a replacement for, ContentListMembership's existing per-paragraph numId/level tracking. See numbering.ts's own doc comment for why this is a separate keyed structure rather than a ContentListMembership field.
 export { NumberingDefinitionSchema, NumberingLevelSchema, readNumberingDefinitions } from './typed/docx/numbering';
