@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { ContentBlock, ContentDocument, ContentParagraph, ContentRun, DocumentPackage } from 'document-schema.js';
+import type { ContentBlock, ContentDocument, ContentParagraph, ContentRun, DocumentPackage, SectionConstructGroupNode, SectionGroupNode } from 'document-schema.js';
 import { DocumentPackageSchema } from 'document-schema.js';
-import { assemblePackage, factorStyles } from './factor-styles';
+import { assemblePackage, factorStyles, mint } from './factor-styles';
 import { flattenPackage } from './flatten';
 import { canonicalise } from './canonicalise';
 
@@ -284,6 +284,30 @@ describe('factorStyles minting', () => {
     const minted = assemblePackage(doc);
     expect(minted.styles).toBeUndefined();
     expect(DocumentPackageSchema.safeParse(minted).success).toBe(true);
+  });
+
+  it('factors a paragraph tuple nested inside a construct group\'s children onto the construct group\'s own ref (document-schema.js 4.1.0)', () => {
+    // decompose.ts never manufactures a construct group, and flattenPackage now refuses one outright (see flatten.ts), so the only way to exercise extentOf/flowExtent's construct-group recognition is a hand-built tree run straight through mint() -- assemblePackage/factorStyles can never hand one to it.
+    const outside = paragraph([run('outside')], { alignment: 'right' });
+    const insideA = paragraph([run('a')], { indentLeftPt: 20 });
+    const insideB = paragraph([run('b')], { indentLeftPt: 20 });
+    const constructGroup: SectionConstructGroupNode = { node: { kind: 'contentControl', controlType: 'richText' }, children: [insideA, insideB] };
+    const sectionGroup: SectionGroupNode = { node: { kind: 'section', ...SECTION }, children: [outside, constructGroup] };
+    const pkg: DocumentPackage = { kind: 'wordprocessing', metadata: {}, children: [sectionGroup] };
+    const minted = mint(pkg);
+    // Rule 1 (every extent paragraph must carry a minted key) means the section's own three-paragraph extent shares no key across all three -- outside lacks indentLeftPt, insideA/insideB lack alignment -- so the section wrapper itself mints nothing. Only once the walk descends INTO the construct group's own two-paragraph extent (proof extentOf/flowExtent recurse into a construct group's children rather than stopping at or skipping it) does indentLeftPt become common there and mint.
+    expect(refsOf(minted)).toEqual([{ ref: 's1', nodeKind: 'contentControl' }]);
+    expect(minted.styles?.s1).toEqual({ paragraph: { indentLeftPt: 20 } });
+    if (minted.kind !== 'wordprocessing') throw new Error('expected wordprocessing');
+    const mintedSection = minted.children[0];
+    if (mintedSection === undefined) throw new Error('expected the section group');
+    const mintedConstruct = mintedSection.children[1];
+    if (mintedConstruct === undefined || !('node' in mintedConstruct) || !('children' in mintedConstruct)) {
+      throw new Error('expected the construct group to survive minting');
+    }
+    expect(mintedConstruct.style).toBe('s1');
+    expect(mintedConstruct.children[0]).not.toHaveProperty('indentLeftPt');
+    expect(mintedConstruct.children[1]).not.toHaveProperty('indentLeftPt');
   });
 });
 
