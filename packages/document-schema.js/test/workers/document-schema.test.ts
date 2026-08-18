@@ -57,4 +57,36 @@ describe('document-schema.js under the Cloudflare Workers runtime', () => {
     const resolved = resolveStyleChain(parsed.styles ?? {}, ['s1']);
     expect(resolved.paragraph).toEqual({ alignment: 'justify' });
   });
+
+  it('DocumentPackageSchema parses a construct-bearing tree and the construct tables at the root', () => {
+    const parsed = DocumentPackageSchema.parse({
+      kind: 'wordprocessing',
+      metadata: {},
+      definitions: { n1: { kind: 'footnote', blocks: [] } },
+      destinations: { ch1: { kind: 'destination', pageIndex: 0 } },
+      children: [
+        {
+          node: {
+            kind: 'section',
+            pageSize: { widthPt: 612, heightPt: 792 },
+            margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+          },
+          children: [
+            {
+              node: { kind: 'division', name: 'Chapter1' },
+              children: [
+                { node: { kind: 'anchor', anchorType: 'footnote', name: '1', definition: 'n1' }, children: [] },
+                {
+                  node: { kind: 'link', target: { kind: 'internal', anchor: 'ch1' } },
+                  children: [{ kind: 'paragraph', runs: [{ text: 'Jump to chapter 1.' }] }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    expect(parsed.destinations?.ch1).toEqual({ kind: 'destination', pageIndex: 0 });
+    expect(parsed.children[0]?.children).toHaveLength(1);
+  });
 });

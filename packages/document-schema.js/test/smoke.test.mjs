@@ -10,6 +10,8 @@ describe('smoke: ESM/CJS parity', () => {
     const esm = await import('../dist/index.js');
     expect(typeof esm.DocumentPackageSchema.parse).toBe('function');
     expect(typeof esm.PackageNodeSchema.safeParse).toBe('function');
+    expect(typeof esm.ConstructDescriptorSchema.safeParse).toBe('function');
+    expect(typeof esm.SectionConstructGroupSchema.safeParse).toBe('function');
     expect(typeof esm.resolveStyleChain).toBe('function');
     expect(esm.LayoutDocumentSchema).toBeUndefined();
   });
@@ -19,6 +21,8 @@ describe('smoke: ESM/CJS parity', () => {
     const cjs = require('../dist/index.cjs');
     expect(typeof cjs.DocumentPackageSchema.parse).toBe('function');
     expect(typeof cjs.PackageNodeSchema.safeParse).toBe('function');
+    expect(typeof cjs.ConstructDescriptorSchema.safeParse).toBe('function');
+    expect(typeof cjs.SectionConstructGroupSchema.safeParse).toBe('function');
     expect(typeof cjs.resolveStyleChain).toBe('function');
     expect(cjs.LayoutDocumentSchema).toBeUndefined();
   });
@@ -59,6 +63,10 @@ describe('smoke: generated JSON Schema files', () => {
       expect(variant.properties.pages.type).toBe('array');
       expect(variant.properties.styles.additionalProperties.$ref).toBe('#/$defs/StyleEntry');
       expect(variant.properties.definitions.additionalProperties.$ref).toBe('#/$defs/DefinitionEntry');
+      // The three construct tables reuse the generic definitions entry rather than minting parallel entry shapes.
+      for (const table of ['layers', 'attachments', 'destinations']) {
+        expect(variant.properties[table].additionalProperties.$ref).toBe('#/$defs/DefinitionEntry');
+      }
     }
     // The per-kind root children: sections, slides, sheets, draw pages, and the formula leaf.
     const byKind = Object.fromEntries(documentPackage.oneOf.map((variant) => [variant.properties.kind.const, variant]));
@@ -70,10 +78,11 @@ describe('smoke: generated JSON Schema files', () => {
     // The tree fragments resolve file-locally: both published files carry the same $defs block (the same object emitted twice in one generator run).
     expect(Object.keys(documentPackage.$defs)).toContain('SectionGroup');
     expect(Object.keys(documentPackage.$defs)).toContain('StyleEntry');
-    // The recursion itself: a section group's children point back at the shared HeadingGroup/ListGroup definitions, and those at ContentBlock.
+    // The recursion itself: a section group's children point back at the shared HeadingGroup/ListGroup/SectionConstructGroup definitions, and those at ContentBlock.
     expect(documentPackage.$defs.SectionGroup.properties.children.items.oneOf).toEqual([
       { $ref: '#/$defs/HeadingGroup' },
       { $ref: '#/$defs/ListGroup' },
+      { $ref: '#/$defs/SectionConstructGroup' },
       { $ref: '#/$defs/ContentBlock' },
     ]);
     // Style entries enforce the ban list by shape: additionalProperties false on entry and both halves, with no frames/sourcePath/styleId field anywhere.
@@ -81,6 +90,46 @@ describe('smoke: generated JSON Schema files', () => {
     expect(documentPackage.$defs.StyleParagraphProperties.additionalProperties).toBe(false);
     expect(documentPackage.$defs.StyleParagraphProperties.properties.frames).toBeUndefined();
     expect(documentPackage.$defs.StyleRunProperties.properties.sourcePath).toBeUndefined();
+  });
+
+  it('document-package.schema.json publishes the construct vocabulary: six descriptor kinds and the two group wrappers that carry them', () => {
+    const documentPackage = readSchema('document-package.schema.json');
+    expect(documentPackage.$defs.ConstructDescriptor.oneOf).toEqual([
+      { $ref: '#/$defs/ContentControlDescriptor' },
+      { $ref: '#/$defs/FieldDescriptor' },
+      { $ref: '#/$defs/AnchorDescriptor' },
+      { $ref: '#/$defs/LinkDescriptor' },
+      { $ref: '#/$defs/ProvenanceDescriptor' },
+      { $ref: '#/$defs/DivisionDescriptor' },
+    ]);
+    // Both group wrappers take a construct descriptor as their node, and each recurses into its own flow's child union -- the section-scoped one admitting heading groups, the shape-scoped one not.
+    for (const wrapper of ['SectionConstructGroup', 'ShapeConstructGroup']) {
+      expect(documentPackage.$defs[wrapper].properties.node.$ref).toBe('#/$defs/ConstructDescriptor');
+      expect(documentPackage.$defs[wrapper].required).toEqual(['node', 'children']);
+      expect(documentPackage.$defs[wrapper].additionalProperties).toBe(false);
+    }
+    expect(documentPackage.$defs.SectionConstructGroup.properties.children.items.oneOf).toContainEqual({
+      $ref: '#/$defs/HeadingGroup',
+    });
+    expect(documentPackage.$defs.ShapeConstructGroup.properties.children.items.oneOf).not.toContainEqual({
+      $ref: '#/$defs/HeadingGroup',
+    });
+    // Every descriptor is a closed object, so a producer cannot smuggle format-specific residue onto one -- channel 2 is its own facility, not a descriptor escape hatch.
+    for (const descriptor of [
+      'ContentControlDescriptor',
+      'FieldDescriptor',
+      'AnchorDescriptor',
+      'LinkDescriptor',
+      'ProvenanceDescriptor',
+      'DivisionDescriptor',
+      'DivisionSource',
+    ]) {
+      expect(documentPackage.$defs[descriptor].additionalProperties).toBe(false);
+    }
+    expect(documentPackage.$defs.FieldDescriptor.required).toEqual(['kind', 'instruction']);
+    expect(documentPackage.$defs.AnchorDescriptor.required).toEqual(['kind', 'anchorType', 'name']);
+    expect(documentPackage.$defs.LinkDescriptor.properties.target.$ref).toBe('#/$defs/LinkTarget');
+    expect(documentPackage.$defs.LinkTarget.oneOf).toHaveLength(2);
   });
 
   it("content-document.schema.json's flat arms keep their symbol-table $ref and drop the retired formatVersion field", () => {

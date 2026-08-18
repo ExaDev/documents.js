@@ -5,11 +5,11 @@ import { schemaUriFor } from './schema-io';
 // The hand-authored JSON Schema $defs fragments spliced into content-document.schema.json's `override()` callback (scripts/generate-json-schemas.mjs), lifted out into their own src module rather than staying inline in that script. The reason is single-sourcing, not tidiness: this exact object needs to be reachable from two places that cannot share an import graph --
 //
 //   1. scripts/generate-json-schemas.mjs itself, which only ever runs against the freshly-built ../dist/ (it imports every other schema it needs the same way), so it imports CONTENT_DEFS from '../dist/content-json-schema-defs.js', the file tsdown emits for this module (entry: 'src/**/*.ts', one dist file per src file -- see tsdown.config.ts).
-//   2. content-json-schema-defs.test.ts (src/, run directly by vitest's "unit" project against source, never against dist), which imports this exact same CONTENT_DEFS value straight from here and asserts it stays byte-for-byte in step with a live z.toJSONSchema() call over each fragment's real exported Zod schema counterpart (ContentParagraphSchema, ContentRunSchema, ContentListMembershipSchema, ContentImageBlockSchema, ContentPageBreakSchema, ColorSchema, BoxSchema, LayoutFrameSchema, PageSizeSchema, MarginsSchema, AlignmentSchema, ContentStrokeStyleSchema, ContentBorderSchema, ContentCellBordersSchema, the package tree's non-recursive descriptors and anchors from src/package-node.ts: SectionDescriptorSchema, SlideDescriptorSchema, SheetDescriptorSchema, DrawPageDescriptorSchema, ShapeDescriptorSchema, HeadingParagraphSchema, ListParagraphSchema, the sheet grid and vector leaves from src/content.ts: ContentSheetCellSchema, ContentCellValueSchema, ContentSheetCellCommentSchema, ContentSheetColumnSchema, ContentSheetRowSchema, ContentSheetPrintSettingsSchema, ContentSheetPrintRangeSchema, ContentSheetRepeatRangeSchema, ContentSheetImageSchema, ContentStrokeSchema, ContentPathPointSchema, ContentPathSegmentSchema, ContentSubpathSchema, ContentVectorSchema, and the definitions facility from src/definitions.ts: StyleParagraphPropertiesSchema, StyleRunPropertiesSchema, StyleEntrySchema, DefinitionEntrySchema, plus the non-recursive math leaves from src/math.ts: ExactRationalSchema, DimensionVectorSchema, MathPresentationSchema, MathProvenanceSchema, MathUncertaintySchema, MathNumSchema, MathQtySchema, MathSymSchema, MathUnparsedSchema, MathSymbolEntrySchema, MathUnitSchema, MathNormalisationContextSchema, SymbolTableSchema) -- see that test file's own top comment for why this is the only structural defence this generator has against silently drifting away from the schemas it's meant to describe.
+//   2. content-json-schema-defs.test.ts (src/, run directly by vitest's "unit" project against source, never against dist), which imports this exact same CONTENT_DEFS value straight from here and asserts it stays byte-for-byte in step with a live z.toJSONSchema() call over each fragment's real exported Zod schema counterpart (ContentParagraphSchema, ContentRunSchema, ContentListMembershipSchema, ContentImageBlockSchema, ContentPageBreakSchema, ColorSchema, BoxSchema, LayoutFrameSchema, PageSizeSchema, MarginsSchema, AlignmentSchema, ContentStrokeStyleSchema, ContentBorderSchema, ContentCellBordersSchema, the package tree's non-recursive descriptors and anchors from src/package-node.ts: SectionDescriptorSchema, SlideDescriptorSchema, SheetDescriptorSchema, DrawPageDescriptorSchema, ShapeDescriptorSchema, HeadingParagraphSchema, ListParagraphSchema, the sheet grid and vector leaves from src/content.ts: ContentSheetCellSchema, ContentCellValueSchema, ContentSheetCellCommentSchema, ContentSheetColumnSchema, ContentSheetRowSchema, ContentSheetPrintSettingsSchema, ContentSheetPrintRangeSchema, ContentSheetRepeatRangeSchema, ContentSheetImageSchema, ContentStrokeSchema, ContentPathPointSchema, ContentPathSegmentSchema, ContentSubpathSchema, ContentVectorSchema, and the definitions facility from src/definitions.ts: StyleParagraphPropertiesSchema, StyleRunPropertiesSchema, StyleEntrySchema, DefinitionEntrySchema, the whole construct descriptor vocabulary from src/construct.ts: ContentControlDescriptorSchema, FieldDescriptorSchema, AnchorDescriptorSchema, LinkTargetSchema, LinkDescriptorSchema, ProvenanceDescriptorSchema, DivisionSourceSchema, DivisionDescriptorSchema, ConstructDescriptorSchema, plus the non-recursive math leaves from src/math.ts: ExactRationalSchema, DimensionVectorSchema, MathPresentationSchema, MathProvenanceSchema, MathUncertaintySchema, MathNumSchema, MathQtySchema, MathSymSchema, MathUnparsedSchema, MathSymbolEntrySchema, MathUnitSchema, MathNormalisationContextSchema, SymbolTableSchema) -- see that test file's own top comment for why this is the only structural defence this generator has against silently drifting away from the schemas it's meant to describe.
 //
 // If CONTENT_DEFS stayed inline in the .mjs script, only path 1 above would work: the script imports Zod schemas exclusively from '../dist/index.js' (a build artefact that may not exist, and per eslint.config.ts/tsconfig.json is deliberately excluded from both linting and typechecking, matching test/smoke.test.mjs's own precedent) -- a test that has to import through that path would only ever run after a build, which `pnpm test` (the "unit" vitest project, run standalone in CI's own "test" job, with no build step beforehand) never guarantees. Living here instead, this is an ordinary, fully typechecked and linted src module like any other -- CONTENT_DEFS just happens to be consumed by a script as well as by the package's own test suite.
 //
-// The fragments below still cover exactly what scripts/generate-json-schemas.mjs's own top-of-file comment already explains: ContentBlockSchema, ContentEmbeddedObjectSchema, MathMlNodeSchema, and MathExpressionSchema are z.custom() predicates z.toJSONSchema() cannot introspect at all (recursion the pinned Zod version's z.lazy() can't express -- see src/content.ts's isContentBlock/isContentEmbeddedObject, src/mathml.ts's isMathMlNode, and src/math.ts's isMathExpression), so every schema reachable only through one of those four is transcribed by hand here, field-for-field, from the real Zod object definitions. The package tree added its own opaque set in the 4.0.0 major: DocumentPackageSchema's children reach the tree's per-kind group schemas (src/package-node.ts, all z.custom over recursive guards), so the whole PackageNode vocabulary -- container descriptors, anchor paragraphs, the seven group wrappers, and the sheet-image/vector leaves -- is transcribed here too, and the generator splices CONTENT_DEFS into document-package.schema.json as well as content-document.schema.json so both files resolve their local #/$defs pointers without depending on each other's file layout (the one deliberate cross-file ref stays $defs.ContentEmbeddedObject(Block)'s document pointer, CONTENT_DOCUMENT_URI). Three further schemas are transcribed despite being real z.objects themselves: ContentFormulaSchema (its mathml/content fields reach the opaque MathMlNodeSchema/MathExpressionSchema nodes, exactly like ContentTableCellSchema's blocks), SymbolTableSchema (transcribed so each ContentDocument arm's symbolTable field is one named $ref rather than five inlined copies of the whole unit-registry subtree), and now StyleEntrySchema/DefinitionEntrySchema (same five-copies reason for the package arms' styles/definitions fields) -- the generator's override() replaces each with a $ref to its fragment here. Anything transcribed here that DOES have a real, non-custom, exported Zod schema counterpart is exactly what content-json-schema-defs.test.ts holds to a live z.toJSONSchema() comparison; re-verify the rest (ContentTableCell/ContentTableRow/ContentTable, ContentEmbeddedObject(Block), the seven group wrappers, MathMlElement/MathMlNode, MathApp/MathSum/MathProd/MathMatrix/MathExpression, ContentFormula) against src/content.ts/src/package-node.ts/src/mathml.ts/src/math.ts by hand whenever those files' field shapes change, exactly as before.
+// The fragments below still cover exactly what scripts/generate-json-schemas.mjs's own top-of-file comment already explains: ContentBlockSchema, ContentEmbeddedObjectSchema, MathMlNodeSchema, and MathExpressionSchema are z.custom() predicates z.toJSONSchema() cannot introspect at all (recursion the pinned Zod version's z.lazy() can't express -- see src/content.ts's isContentBlock/isContentEmbeddedObject, src/mathml.ts's isMathMlNode, and src/math.ts's isMathExpression), so every schema reachable only through one of those four is transcribed by hand here, field-for-field, from the real Zod object definitions. The package tree added its own opaque set in the 4.0.0 major: DocumentPackageSchema's children reach the tree's per-kind group schemas (src/package-node.ts, all z.custom over recursive guards), so the whole PackageNode vocabulary -- container descriptors, anchor paragraphs, the nine group wrappers (the seven of 4.0.0 plus 4.1.0's two construct groups), and the sheet-image/vector leaves -- is transcribed here too, and the generator splices CONTENT_DEFS into document-package.schema.json as well as content-document.schema.json so both files resolve their local #/$defs pointers without depending on each other's file layout (the one deliberate cross-file ref stays $defs.ContentEmbeddedObject(Block)'s document pointer, CONTENT_DOCUMENT_URI). Three further schemas are transcribed despite being real z.objects themselves: ContentFormulaSchema (its mathml/content fields reach the opaque MathMlNodeSchema/MathExpressionSchema nodes, exactly like ContentTableCellSchema's blocks), SymbolTableSchema (transcribed so each ContentDocument arm's symbolTable field is one named $ref rather than five inlined copies of the whole unit-registry subtree), and now StyleEntrySchema/DefinitionEntrySchema (same five-copies reason for the package arms' styles/definitions fields) -- the generator's override() replaces each with a $ref to its fragment here. Anything transcribed here that DOES have a real, non-custom, exported Zod schema counterpart is exactly what content-json-schema-defs.test.ts holds to a live z.toJSONSchema() comparison -- which is every construct descriptor fragment, since a descriptor is a plain z.strictObject reaching no opaque node; re-verify the rest (ContentTableCell/ContentTableRow/ContentTable, ContentEmbeddedObject(Block), the nine group wrappers, MathMlElement/MathMlNode, MathApp/MathSum/MathProd/MathMatrix/MathExpression, ContentFormula) against src/content.ts/src/package-node.ts/src/mathml.ts/src/math.ts by hand whenever those files' field shapes change, exactly as before.
 
 type JsonSchema = z.core.JSONSchema.JSONSchema;
 
@@ -712,7 +712,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     required: ['objectKind', 'document', 'frame'],
     additionalProperties: false,
   },
-  // The seven group wrappers, hand-verified alone (recursive through their children arrays): `{ node, style?, children }` where children's permitted members are exactly that group kind's own child types (src/package-node.ts's per-kind guards). A wordprocessing section's flow.
+  // The nine group wrappers, hand-verified alone (recursive through their children arrays): `{ node, style?, children }` where children's permitted members are exactly that group kind's own child types (src/package-node.ts's per-kind guards). A wordprocessing section's flow.
   SectionGroup: {
     type: 'object',
     properties: {
@@ -720,7 +720,14 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       style: { type: 'string' },
       children: {
         type: 'array',
-        items: { oneOf: [{ $ref: '#/$defs/HeadingGroup' }, { $ref: '#/$defs/ListGroup' }, { $ref: '#/$defs/ContentBlock' }] },
+        items: {
+          oneOf: [
+            { $ref: '#/$defs/HeadingGroup' },
+            { $ref: '#/$defs/ListGroup' },
+            { $ref: '#/$defs/SectionConstructGroup' },
+            { $ref: '#/$defs/ContentBlock' },
+          ],
+        },
       },
     },
     required: ['node', 'children'],
@@ -733,7 +740,14 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       style: { type: 'string' },
       children: {
         type: 'array',
-        items: { oneOf: [{ $ref: '#/$defs/HeadingGroup' }, { $ref: '#/$defs/ListGroup' }, { $ref: '#/$defs/ContentBlock' }] },
+        items: {
+          oneOf: [
+            { $ref: '#/$defs/HeadingGroup' },
+            { $ref: '#/$defs/ListGroup' },
+            { $ref: '#/$defs/SectionConstructGroup' },
+            { $ref: '#/$defs/ContentBlock' },
+          ],
+        },
       },
     },
     required: ['node', 'children'],
@@ -746,7 +760,13 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       style: { type: 'string' },
       children: {
         type: 'array',
-        items: { oneOf: [{ $ref: '#/$defs/ListGroup' }, { $ref: '#/$defs/ContentBlock' }] },
+        items: {
+          oneOf: [
+            { $ref: '#/$defs/ListGroup' },
+            { $ref: '#/$defs/ShapeConstructGroup' },
+            { $ref: '#/$defs/ContentBlock' },
+          ],
+        },
       },
     },
     required: ['node', 'children'],
@@ -770,7 +790,13 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       style: { type: 'string' },
       children: {
         type: 'array',
-        items: { oneOf: [{ $ref: '#/$defs/ListGroup' }, { $ref: '#/$defs/ContentBlock' }] },
+        items: {
+          oneOf: [
+            { $ref: '#/$defs/ListGroup' },
+            { $ref: '#/$defs/ShapeConstructGroup' },
+            { $ref: '#/$defs/ContentBlock' },
+          ],
+        },
       },
     },
     required: ['node', 'children'],
@@ -804,7 +830,164 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     required: ['node', 'children'],
     additionalProperties: false,
   },
-  // -- The definitions facility (src/definitions.ts), reached through DocumentPackageSchema's styles/definitions fields --
+  // The two construct group wrappers (src/package-node.ts), hand-verified alone for the same reason as the seven above -- their children arrays recurse back through the same per-flow child unions. One per block flow: the section-scoped variant admits heading groups, the shape-scoped one does not, exactly as SectionChild and ShapeChild differ. A list item's flow takes the shape-scoped variant, since ListChild and ShapeChild admit the same members.
+  SectionConstructGroup: {
+    type: 'object',
+    properties: {
+      node: { $ref: '#/$defs/ConstructDescriptor' },
+      style: { type: 'string' },
+      children: {
+        type: 'array',
+        items: {
+          oneOf: [
+            { $ref: '#/$defs/HeadingGroup' },
+            { $ref: '#/$defs/ListGroup' },
+            { $ref: '#/$defs/SectionConstructGroup' },
+            { $ref: '#/$defs/ContentBlock' },
+          ],
+        },
+      },
+    },
+    required: ['node', 'children'],
+    additionalProperties: false,
+  },
+  ShapeConstructGroup: {
+    type: 'object',
+    properties: {
+      node: { $ref: '#/$defs/ConstructDescriptor' },
+      style: { type: 'string' },
+      children: {
+        type: 'array',
+        items: {
+          oneOf: [
+            { $ref: '#/$defs/ListGroup' },
+            { $ref: '#/$defs/ShapeConstructGroup' },
+            { $ref: '#/$defs/ContentBlock' },
+          ],
+        },
+      },
+    },
+    required: ['node', 'children'],
+    additionalProperties: false,
+  },
+  // -- The construct descriptor vocabulary (src/construct.ts), the node payload of the two group wrappers above. Every fragment from here to ConstructDescriptor has a real, non-recursive, non-custom Zod counterpart, so all of them are held to the live z.toJSONSchema() comparison by content-json-schema-defs.test.ts rather than needing hand re-verification. --
+  ContentControlDescriptor: {
+    type: 'object',
+    properties: {
+      kind: { type: 'string', const: 'contentControl' },
+      controlType: {
+        type: 'string',
+        enum: [
+          'richText',
+          'plainText',
+          'checkbox',
+          'dropDown',
+          'comboBox',
+          'date',
+          'picture',
+          'repeatingSection',
+          'button',
+          'index',
+          'group',
+        ],
+      },
+      tag: { type: 'string' },
+      alias: { type: 'string' },
+      lock: { type: 'string', enum: ['content', 'container', 'both'] },
+      value: { type: 'string' },
+      checked: { type: 'boolean' },
+      options: { type: 'array', items: { type: 'string' } },
+    },
+    required: ['kind', 'controlType'],
+    additionalProperties: false,
+  },
+  FieldDescriptor: {
+    type: 'object',
+    properties: {
+      kind: { type: 'string', const: 'field' },
+      instruction: { type: 'string' },
+      cachedResult: { type: 'string' },
+    },
+    required: ['kind', 'instruction'],
+    additionalProperties: false,
+  },
+  AnchorDescriptor: {
+    type: 'object',
+    properties: {
+      kind: { type: 'string', const: 'anchor' },
+      anchorType: { type: 'string', enum: ['bookmark', 'footnote', 'endnote', 'comment'] },
+      name: { type: 'string' },
+      definition: { type: 'string' },
+    },
+    required: ['kind', 'anchorType', 'name'],
+    additionalProperties: false,
+  },
+  LinkTarget: {
+    oneOf: [
+      {
+        type: 'object',
+        properties: { kind: { type: 'string', const: 'external' }, uri: { type: 'string' } },
+        required: ['kind', 'uri'],
+        additionalProperties: false,
+      },
+      {
+        type: 'object',
+        properties: { kind: { type: 'string', const: 'internal' }, anchor: { type: 'string' } },
+        required: ['kind', 'anchor'],
+        additionalProperties: false,
+      },
+    ],
+  },
+  LinkDescriptor: {
+    type: 'object',
+    properties: {
+      kind: { type: 'string', const: 'link' },
+      target: { $ref: '#/$defs/LinkTarget' },
+      title: { type: 'string' },
+    },
+    required: ['kind', 'target'],
+    additionalProperties: false,
+  },
+  ProvenanceDescriptor: {
+    type: 'object',
+    properties: {
+      kind: { type: 'string', const: 'provenance' },
+      change: { type: 'string', enum: ['insertion', 'deletion', 'moveFrom', 'moveTo', 'formatChange'] },
+      author: { type: 'string' },
+      dateIso: { type: 'string' },
+    },
+    required: ['kind', 'change'],
+    additionalProperties: false,
+  },
+  DivisionSource: {
+    type: 'object',
+    properties: { href: { type: 'string' }, sectionName: { type: 'string' } },
+    required: ['href'],
+    additionalProperties: false,
+  },
+  DivisionDescriptor: {
+    type: 'object',
+    properties: {
+      kind: { type: 'string', const: 'division' },
+      name: { type: 'string' },
+      columnCount: { type: 'integer', exclusiveMinimum: 0, maximum: MAX_SAFE_INTEGER },
+      protected: { type: 'boolean' },
+      source: { $ref: '#/$defs/DivisionSource' },
+    },
+    required: ['kind'],
+    additionalProperties: false,
+  },
+  ConstructDescriptor: {
+    oneOf: [
+      { $ref: '#/$defs/ContentControlDescriptor' },
+      { $ref: '#/$defs/FieldDescriptor' },
+      { $ref: '#/$defs/AnchorDescriptor' },
+      { $ref: '#/$defs/LinkDescriptor' },
+      { $ref: '#/$defs/ProvenanceDescriptor' },
+      { $ref: '#/$defs/DivisionDescriptor' },
+    ],
+  },
+  // -- The definitions facility (src/definitions.ts), reached through DocumentPackageSchema's styles/definitions fields and, since 4.1.0, its layers/attachments/destinations tables --
   StyleParagraphProperties: {
     type: 'object',
     properties: {

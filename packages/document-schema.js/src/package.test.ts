@@ -196,3 +196,100 @@ describe('DocumentPackageSchema round trips (tree form)', () => {
     expect(parsed.symbolTable).toEqual({ symbols: [], units: [] });
   });
 });
+
+// The 4.1.0 additions at the root (ExaDev/document-schema.js#24): three more tables of the same generic type `definitions` already uses, and the additivity guarantee that made them a minor.
+describe('the construct tables at the package root', () => {
+  it('accepts layers, attachments, and destinations, each its own key namespace over kind-tagged entries', () => {
+    const withTables = {
+      ...wordprocessingPackage(),
+      layers: {
+        ocg1: { kind: 'layer', name: 'Watermark', defaultVisible: false },
+        d: { kind: 'layerConfig', baseState: 'ON', order: ['ocg1'] },
+      },
+      attachments: { a1: { kind: 'attachment', fileName: 'source.csv', description: 'The source data' } },
+      destinations: {
+        ch1: { kind: 'destination', pageIndex: 0 },
+        o1: { kind: 'outline', title: 'Chapter 1', destination: 'ch1' },
+      },
+    };
+    const parsed = DocumentPackageSchema.parse(withTables);
+    expect(parsed.layers?.ocg1).toEqual({ kind: 'layer', name: 'Watermark', defaultVisible: false });
+    expect(parsed.attachments?.a1).toEqual({ kind: 'attachment', fileName: 'source.csv', description: 'The source data' });
+    expect(parsed.destinations?.o1).toEqual({ kind: 'outline', title: 'Chapter 1', destination: 'ch1' });
+  });
+
+  it('lets one name appear in more than one table without collision -- separate root fields are separate namespaces', () => {
+    const withTables = {
+      ...wordprocessingPackage(),
+      layers: { x: { kind: 'layer', name: 'Layer x' } },
+      destinations: { x: { kind: 'destination', pageIndex: 3 } },
+    };
+    const parsed = DocumentPackageSchema.parse(withTables);
+    expect(parsed.layers?.x).toEqual({ kind: 'layer', name: 'Layer x' });
+    expect(parsed.destinations?.x).toEqual({ kind: 'destination', pageIndex: 3 });
+  });
+
+  it('requires the kind discriminator on every entry, exactly as the definitions table does', () => {
+    for (const field of ['layers', 'attachments', 'destinations']) {
+      const broken = { ...wordprocessingPackage(), [field]: { e1: { name: 'no kind here' } } };
+      expect(DocumentPackageSchema.safeParse(broken).success).toBe(false);
+    }
+  });
+
+  it('preserves each tenant body through a JSON round trip, since the entry body is the tenant vocabulary and not this package to strip', () => {
+    const original = {
+      ...wordprocessingPackage(),
+      attachments: { a1: { kind: 'attachment', fileName: 'source.csv', bytesBase64: 'aGk=' } },
+    };
+    const roundTripped: unknown = JSON.parse(JSON.stringify(DocumentPackageSchema.parse(original)));
+    expect(DocumentPackageSchema.parse(roundTripped)).toEqual(original);
+  });
+});
+
+describe('the construct kinds are additive over 4.0.0', () => {
+  it('parses a 4.0.0 tree carrying none of the new kinds or tables, unchanged and field for field', () => {
+    for (const original of [wordprocessingPackage(), spreadsheetPackage(), formulaPackage()]) {
+      const parsed = DocumentPackageSchema.parse(original);
+      expect(parsed).toEqual(original);
+      expect(parsed).not.toHaveProperty('layers');
+      expect(parsed).not.toHaveProperty('attachments');
+      expect(parsed).not.toHaveProperty('destinations');
+    }
+  });
+
+  it('parses a package whose tree carries construct groups, at the root children position it belongs under', () => {
+    const withConstructs: DocumentPackage = {
+      kind: 'wordprocessing',
+      metadata: {},
+      definitions: { n1: { kind: 'footnote', blocks: [] } },
+      children: [
+        {
+          node: { kind: 'section', pageSize: PAGE, margins: MARGINS },
+          children: [
+            {
+              node: { kind: 'division', name: 'Chapter1' },
+              children: [
+                { node: { kind: 'anchor', anchorType: 'footnote', name: '1', definition: 'n1' }, children: [] },
+                {
+                  node: { kind: 'provenance', change: 'insertion', author: 'A. Reviewer' },
+                  children: [{ kind: 'paragraph', runs: [{ text: 'Inserted sentence.' }] }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const roundTripped: unknown = JSON.parse(JSON.stringify(DocumentPackageSchema.parse(withConstructs)));
+    expect(DocumentPackageSchema.parse(roundTripped)).toEqual(withConstructs);
+  });
+
+  it('still rejects a construct group at the root children position -- a package holds containers, not extents', () => {
+    const broken = {
+      kind: 'wordprocessing',
+      metadata: {},
+      children: [{ node: { kind: 'division', name: 'Chapter1' }, children: [] }],
+    };
+    expect(DocumentPackageSchema.safeParse(broken).success).toBe(false);
+  });
+});
