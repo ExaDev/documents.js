@@ -1,3 +1,15 @@
+# [3.1.0](https://github.com/ExaDev/documents.js/compare/v3.0.7...v3.1.0) (2026-08-18)
+
+
+### Bug Fixes
+
+* **markdown:** refuse a construct marker in buildMarkdownText instead of crashing ([aaee71a](https://github.com/ExaDev/documents.js/commit/aaee71a9788d8059d21a3a188ec34c88d9d921a5))
+
+
+### Features
+
+* promote construct-boundary markers across the package boundary ([62fb4e1](https://github.com/ExaDev/documents.js/commit/62fb4e12ecb2727d684289ea74dbd8343139e30d))
+
 ## [3.0.7](https://github.com/ExaDev/documents.js/compare/v3.0.6...v3.0.7) (2026-08-18)
 
 ## [3.0.6](https://github.com/ExaDev/documents.js/compare/v3.0.5...v3.0.6) (2026-08-18)
