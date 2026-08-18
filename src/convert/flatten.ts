@@ -16,8 +16,11 @@ import {
   type ContentVector,
   type DocumentPackage,
   type HeadingGroupNode,
+  type ListChild,
   type ListGroupNode,
   type SectionChild,
+  type SectionConstructGroupNode,
+  type ShapeConstructGroupNode,
   type ShapeGroupNode,
   type StyleEntry,
   type StylesTable,
@@ -134,7 +137,10 @@ function flattenShape(styles: StylesTable | undefined, chain: readonly string[],
   return { ...group.node, blocks: flattenListChildren(styles, chainWithRef(chain, group), group.children) };
 }
 
-// One section-flow child walk: nested heading/list groups recurse with their extended chain, a bare paragraph leaf resolves against the incoming chain (it carries no ref of its own -- refs are legal only on group wrappers), and every other leaf is its own payload, untouched.
+// The message a construct group throws with, wherever flatten meets one -- both flow walks below name the identical gap, so the wording is not tied to which flow found it.
+const CONSTRUCT_GROUP_UNFLATTENABLE = 'flattenPackage: cannot flatten a construct group -- ContentBlock has no construct carrier yet (see document-schema.js#22)';
+
+// One section-flow child walk: nested heading/list groups recurse with their extended chain, a bare paragraph leaf resolves against the incoming chain (it carries no ref of its own -- refs are legal only on group wrappers), a construct group refuses loudly (see isConstructGroup below), and every other leaf is its own payload, untouched.
 function flattenSectionChildren(styles: StylesTable | undefined, chain: readonly string[], children: readonly SectionChild[]): ContentBlock[] {
   const blocks: ContentBlock[] = [];
   for (const child of children) {
@@ -144,6 +150,8 @@ function flattenSectionChildren(styles: StylesTable | undefined, chain: readonly
     } else if (isListGroup(child)) {
       const own = chainWithRef(chain, child);
       blocks.push(resolveAnchor(styles, own, child.node), ...flattenListChildren(styles, own, child.children));
+    } else if (isConstructGroup(child)) {
+      throw new Error(CONSTRUCT_GROUP_UNFLATTENABLE);
     } else if (child.kind === 'paragraph') {
       const entry = entryOf(styles, chain);
       blocks.push(entry === undefined ? child : applyEntry(entry, child));
@@ -154,13 +162,15 @@ function flattenSectionChildren(styles: StylesTable | undefined, chain: readonly
   return blocks;
 }
 
-// The shared vocabulary of shape flows and list-group children (ListGroupNode | ContentBlock), so one walk serves both.
-function flattenListChildren(styles: StylesTable | undefined, chain: readonly string[], children: readonly (ListGroupNode | ContentBlock)[]): ContentBlock[] {
+// The shared vocabulary of shape flows and list-group children (ListChild: ListGroupNode | ShapeConstructGroupNode | ContentBlock), so one walk serves both.
+function flattenListChildren(styles: StylesTable | undefined, chain: readonly string[], children: readonly ListChild[]): ContentBlock[] {
   const blocks: ContentBlock[] = [];
   for (const child of children) {
     if (isListGroup(child)) {
       const own = chainWithRef(chain, child);
       blocks.push(resolveAnchor(styles, own, child.node), ...flattenListChildren(styles, own, child.children));
+    } else if (isConstructGroup(child)) {
+      throw new Error(CONSTRUCT_GROUP_UNFLATTENABLE);
     } else if (child.kind === 'paragraph') {
       const entry = entryOf(styles, chain);
       blocks.push(entry === undefined ? child : applyEntry(entry, child));
@@ -171,13 +181,18 @@ function flattenListChildren(styles: StylesTable | undefined, chain: readonly st
   return blocks;
 }
 
-// Structural narrows over the already-typed child unions, avoiding a widening round-trip through the schema's unknown-taking guards inside this module's own walks: both group kinds carry `node`+`children`, no block leaf does.
+// Structural narrows over the already-typed child unions, avoiding a widening round-trip through the schema's unknown-taking guards inside this module's own walks: every group kind carries `node`+`children`, no block leaf does.
 function isHeadingGroup(child: SectionChild): child is HeadingGroupNode {
   return 'node' in child && 'children' in child && child.node.kind === 'paragraph' && child.node.headingLevel !== undefined;
 }
 
-function isListGroup(child: SectionChild | ListGroupNode | ContentBlock): child is ListGroupNode {
+function isListGroup(child: SectionChild | ListChild): child is ListGroupNode {
   return 'node' in child && 'children' in child && child.node.kind === 'paragraph' && child.node.list !== undefined;
+}
+
+// A construct group's own node is a ConstructDescriptor (contentControl/field/anchor/link/provenance/division), never a paragraph -- discriminated off the same node.kind property the heading/list narrows above read, since a ConstructDescriptor's `kind` is always disjoint from `'paragraph'`. Section and shape construct groups share this one narrow: flatten treats both identically (refuse), so there is no need to tell them apart.
+function isConstructGroup(child: SectionChild | ListChild): child is SectionConstructGroupNode | ShapeConstructGroupNode {
+  return 'node' in child && 'children' in child && child.node.kind !== 'paragraph';
 }
 
 // One group anchor under its own chain: an empty chain leaves the anchor object as-is (the ownership discipline -- no copies when nothing resolves), anything else resolves the entry and applies it; the anchor's required grouping signal survives gap-fill by construction, and a resolved heading/list anchor keeps its narrowed type through the shared ContentParagraph return.
