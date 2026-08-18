@@ -1,3 +1,5 @@
+## [3.0.1](https://github.com/ExaDev/ooxml.js/compare/v3.0.0...v3.0.1) (2026-08-18)
+
 # [3.0.0](https://github.com/ExaDev/ooxml.js/compare/v2.17.0...v3.0.0) (2026-08-18)
 
 
