@@ -1,6 +1,7 @@
 // Fixture builders for every ContentDocument kind, shaped against the real document-schema.js 3.3.0 field requirements -- every builder's output is asserted to pass ContentDocumentSchema.parse in the tests that use it, so a schema change in document-schema.js breaks these fixtures loudly instead of silently testing against a shape that no longer exists. Never imported by src/index.ts and never reaching dist/ -- test-only, mirroring the family's test-support convention.
 import type {
   ContentBlock,
+  ContentCellValue,
   ContentDocument,
   ContentDrawPage,
   ContentEmbeddedObject,
@@ -8,9 +9,15 @@ import type {
   ContentSection,
   ContentShape,
   ContentSheet,
+  ContentSheetCell,
   ContentSheetImage,
   ContentSlide,
   ContentVector,
+  LayoutFrame,
+  LayoutMetadata,
+  Margins,
+  PageSize,
+  SymbolTable,
 } from 'document-schema.js';
 
 export function textRun(text: string): ContentRun {
@@ -59,23 +66,46 @@ export function pageBreak(): ContentBlock {
   return { kind: 'pageBreak' };
 }
 
+// A rendered position for the fused-frames fixtures: a run or paragraph that has been through a layout pass carries wherever it landed, and the wrapped-run case (one node, more than one frame) is what the array-of-frames shape exists for.
+export function layoutFrame(pageIndex: number, xPt: number, yPt: number, widthPt: number, heightPt: number): LayoutFrame {
+  return { pageIndex, xPt, yPt, widthPt, heightPt };
+}
+
+// A paragraph whose single run carries more than one frame -- the wrapped-run case: the run's content renders in two places without the node being split or duplicated.
+export function wrappedRunParagraph(text: string, frames: LayoutFrame[]): ContentBlock {
+  return { kind: 'paragraph', runs: [{ text, frames }] };
+}
+
 const PAGE_SIZE_A4_SECTION = { widthPt: 595, heightPt: 842 };
 const MARGINS_A4_SECTION = { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 };
 
-export function section(blocks: ContentBlock[]): ContentSection {
+// Geometry defaults for the section builder: fixtures may override either half per section (the multi-section corpus entry uses two distinct geometries, because per-section geometry is exactly what section groups must carry for the flatten bijection to hold).
+export interface SectionOptions {
+  pageSize?: PageSize;
+  margins?: Margins;
+}
+
+export function section(blocks: ContentBlock[], options: SectionOptions = {}): ContentSection {
   return {
-    pageSize: PAGE_SIZE_A4_SECTION,
-    margins: MARGINS_A4_SECTION,
+    pageSize: options.pageSize ?? PAGE_SIZE_A4_SECTION,
+    margins: options.margins ?? MARGINS_A4_SECTION,
     blocks,
   };
 }
 
-export function wordprocessingDoc(blocksPerSection: ContentBlock[][]): ContentDocument {
+// Document-level options the envelope round-trip has to prove: non-empty metadata (title/author reach flatten only through DocumentEnvelope) and the document-level symbolTable (the optional third envelope field).
+export interface DocumentOptions {
+  metadata?: LayoutMetadata;
+  symbolTable?: SymbolTable;
+}
+
+export function wordprocessingDoc(blocksPerSection: ContentBlock[][], options: DocumentOptions = {}): ContentDocument {
   return {
     kind: 'wordprocessing',
     formatVersion: 3,
-    metadata: {},
-    sections: blocksPerSection.map(section),
+    metadata: options.metadata ?? {},
+    ...(options.symbolTable !== undefined ? { symbolTable: options.symbolTable } : {}),
+    sections: blocksPerSection.map((blocks) => section(blocks)),
   };
 }
 
@@ -90,11 +120,11 @@ export function shape(blocks: ContentBlock[]): ContentShape {
   };
 }
 
-export function slide(blocksPerShape: ContentBlock[][]): ContentSlide {
+export function slide(blocksPerShape: ContentBlock[][], options: { notes?: string } = {}): ContentSlide {
   return {
     size: { widthPt: 960, heightPt: 540 },
     shapes: blocksPerShape.map(shape),
-    notes: '',
+    notes: options.notes ?? '',
   };
 }
 
@@ -130,8 +160,32 @@ export function embeddedObject(): ContentEmbeddedObject {
   };
 }
 
+// The recursive formula arm: an embedded whole formula document, anchored to a spreadsheet cell exactly as a sheet-held embedded object is (the four anchor fields are sheet-anchored-only, which is why they are set here and absent on embeddedObject above).
+export function embeddedFormulaObject(): ContentEmbeddedObject {
+  return {
+    objectKind: 'formula',
+    frame: { xPt: 2, yPt: 2, widthPt: 120, heightPt: 40 },
+    document: formulaDoc('P = VI'),
+    anchorRow: 0,
+    anchorColumn: 2,
+    offsetXPt: 2,
+    offsetYPt: 2,
+  };
+}
+
+// The block-level spelling of an embedded object inside a section's or shape's block flow (ContentEmbeddedObjectBlock adds the kind discriminator to ContentEmbeddedObject's own fields).
+export function embeddedObjectBlock(): ContentBlock {
+  return { ...embeddedObject(), kind: 'embeddedObject' };
+}
+
+// A populated sheet cell, for the corpus's grid-carrying sheet: cells ride ON the sheet descriptor in the tree, so a round-tripped cell proves the grid travelled with the container and not through the children.
+export function sheetCell(row: number, column: number, value: ContentCellValue, displayText: string): ContentSheetCell {
+  return { row, column, value, displayText };
+}
+
 export interface SheetOptions {
   name: string;
+  cells?: ContentSheetCell[];
   images?: ContentSheetImage[];
   embeddedObjects?: ContentEmbeddedObject[];
 }
@@ -139,7 +193,7 @@ export interface SheetOptions {
 export function sheet(options: SheetOptions): ContentSheet {
   return {
     name: options.name,
-    cells: [],
+    cells: options.cells ?? [],
     columns: [{ index: 0, widthPt: 80 }],
     rows: [{ index: 0, heightPt: 20 }],
     images: options.images ?? [],
@@ -209,5 +263,23 @@ export function formulaDoc(latex?: string): FormulaDocument {
       mathml: [{ type: 'element', tag: 'mi', attributes: [], children: [{ type: 'text', value: 'x' }] }],
       ...(latex !== undefined ? { presentation: { latex } } : {}),
     },
+  };
+}
+
+// A minimal, dimensionally correct symbol table (one curated symbol, the SI unit it prefers): enough to exercise the envelope's optional symbolTable field end to end without dragging in the wider math curation surface. Voltage is mass.length^2.time^-3.current^-1, and the coherent SI unit's factor to itself is 1/1.
+export function minimalSymbolTable(): SymbolTable {
+  return {
+    symbols: [
+      { glyph: 'U', scope: 'document', id: 'symbols:voltage', quantityKind: 'si:voltage', preferredUnit: 'si:volt' },
+    ],
+    units: [
+      {
+        id: 'si:volt',
+        symbol: 'V',
+        name: 'volt',
+        dimension: { mass: 1, length: 2, time: -3, electricCurrent: -1 },
+        factorToSi: { numerator: '1', denominator: '1' },
+      },
+    ],
   };
 }

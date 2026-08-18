@@ -14,8 +14,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-// Step 1 of the documented recipe. `unknown` in, `unknown` out: the output is a fresh structure safe to hand to JSON.stringify, never a mutation of the input. Plain objects (the JSON-mappable class) are rebuilt with sorted keys; arrays and primitives pass through structurally untouched (arrays are copied so the output never aliases the input).
-function canonicalise(value: unknown): unknown {
+// Step 1 of the documented recipe, exported because the decompose/flatten bijection tests canonicalise with the exact same function (src/outline/bijection.test.ts) -- one canonical key order across the package, not a second recipe that could drift from the hash's. `unknown` in, `unknown` out: the output is a fresh structure safe to hand to JSON.stringify, never a mutation of the input. Plain objects (the JSON-mappable class) are rebuilt with sorted keys; arrays and primitives pass through structurally untouched (arrays are copied so the output never aliases the input).
+export function canonicalise(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalise);
   if (isRecord(value)) {
     const sorted: Record<string, unknown> = {};
