@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ContentDocumentSchema, DocumentPackageSchema, resolveStyleChain } from '../../src';
+import { ContentDocumentSchema, DocumentPackageSchema, findConstructMarkerImbalance, resolveStyleChain } from '../../src';
 
 // Proves document-schema.js's Zod schemas and helpers parse inside a Cloudflare Workers isolate (workerd, via @cloudflare/vitest-pool-workers) with no Node-only APIs. The package is pure Zod by design -- no node:fs, no Buffer, no process -- and zod is isomorphic, so if any schema (or its zod dependency) touched a Node-only API the workerd isolate would throw rather than these passing. This is the runtime complement to the static node test suite.
 describe('document-schema.js under the Cloudflare Workers runtime', () => {
@@ -88,5 +88,28 @@ describe('document-schema.js under the Cloudflare Workers runtime', () => {
     });
     expect(parsed.destinations?.ch1).toEqual({ kind: 'destination', pageIndex: 0 });
     expect(parsed.children[0]?.children).toHaveLength(1);
+  });
+
+  it('ContentDocumentSchema parses the flat form of the same construct, and findConstructMarkerImbalance runs inside the isolate', () => {
+    const blocks = [
+      { kind: 'constructStart', descriptor: { kind: 'division', name: 'Chapter1' } },
+      { kind: 'paragraph', runs: [{ text: 'Chapter body.' }] },
+      { kind: 'constructEnd' },
+    ];
+    const parsed = ContentDocumentSchema.parse({
+      kind: 'wordprocessing',
+      metadata: {},
+      sections: [
+        {
+          pageSize: { widthPt: 612, heightPt: 792 },
+          margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+          blocks,
+        },
+      ],
+    });
+    const parsedBlocks = parsed.kind === 'wordprocessing' ? (parsed.sections[0]?.blocks ?? []) : [];
+    expect(parsedBlocks).toHaveLength(3);
+    expect(findConstructMarkerImbalance(parsedBlocks)).toBeUndefined();
+    expect(findConstructMarkerImbalance(parsedBlocks.slice(1))).toStrictEqual({ kind: 'unmatchedEnd', index: 1 });
   });
 });

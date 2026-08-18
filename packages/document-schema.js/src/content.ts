@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { ColorSchema } from './color';
 import type { Color } from './color';
+import { ConstructDescriptorSchema } from './construct';
 import { BoxSchema, LayoutFrameSchema, MarginsSchema, PageSizeSchema } from './geometry';
 import type { Box, LayoutFrame } from './geometry';
 import { MathExpressionSchema, MathPresentationSchema, MathProvenanceSchema, SymbolTableSchema } from './math';
@@ -77,6 +78,27 @@ export const ContentPageBreakSchema = z.object({
 });
 export type ContentPageBreak = z.infer<typeof ContentPageBreakSchema>;
 
+// -- Construct boundary markers: the flat form's encoding of a fidelity construct (src/construct.ts) --
+//
+// The package tree carries a construct as a group -- `{ node: <descriptor>, children: <the extent it spans> }` (src/package-node.ts) -- but the flat form has no wrapper to hang an extent off: a section's, shape's, or table cell's content is one block list and nothing else. So the flat encoding of a construct is a matched pair of markers bracketing the blocks it spans, and decompose promotes each pair into the group the tree already has. The pair is what makes the 4.1.0 descriptor vocabulary reachable at all from the only shape a codec ever produces: every codec (ooxml.js, odf.js, markdown-codec, pdf-codec) reads and writes ContentDocument, so a construct facility wired only onto the tree is a facility no codec can emit into.
+//
+// THE BRACKET-MATCHING CONTRACT, stated once and binding on every producer and consumer: markers pair exactly as balanced parentheses do -- a `constructEnd` closes the nearest preceding still-open `constructStart` in the SAME block list, and the blocks between them are that construct's extent. That is the entire pairing mechanism; there is deliberately no id, name, or other pairing key on either marker. Matching never straddles a block list: a pair opened in a section's blocks closes in that same array, and a pair opened inside a table cell closes inside that cell -- which is also the only way a construct inside a table is expressible in EITHER encoding, since decomposition treats a table as one leaf and never descends into its cells. A block list whose markers do not balance (an end with no open start, or a start still open when the list ends) is malformed input rather than a shape to repair: see findConstructMarkerImbalance below, the one shared definition of that check.
+//
+// WHY NO ID ON EITHER MARKER: an id would have to be minted by whichever producer emitted the pair and then reproduced byte-for-byte by flatten to satisfy the encoding pair's own first law, flatten(decompose(x)) === x (src/package.ts). A construct group carries a descriptor and its children and nothing else, so a marker id would be a value with no home on the tree side and no deterministic way back -- whereas a bare bracket has nothing to reproduce and nothing to get wrong. Bracket matching also already generalises to arbitrary nesting depth and to different construct kinds nested inside each other, which is the whole of what a pairing key would have bought.
+//
+// WHY NO style, sourcePath, OR frames: a marker is a boundary, not content -- it renders nothing, occupies no space, and has no position -- so `frames` and `sourcePath`, which every real block leaf carries, would name facts a boundary does not have. A `style` ref would be worse: refs are a tree-only, table-compression concept (the flat form is always fully materialised, ExaDev/document-schema.js#21), and a construct group's own style ref never resolves onto the construct itself -- a construct group is a wrapper with no anchor of its own, so its ref only extends the chain passed to its children, which are ordinary blocks and paragraphs already carrying their own fully-resolved direct properties by the time they reach a marker. Nothing on either marker beyond the descriptor the open marker names.
+export const ContentConstructStartSchema = z.object({
+  kind: z.literal('constructStart'),
+  descriptor: ConstructDescriptorSchema, // the construct this marker opens -- the identical payload a construct group carries as its `node`, so promoting a pair into a group moves this value across untouched
+});
+export type ContentConstructStart = z.infer<typeof ContentConstructStartSchema>;
+
+// The close half of the pair: its kind is its entire payload, for the reasons stated above. Which construct it closes is a fact about the sequence it sits in, never a fact stored on the marker.
+export const ContentConstructEndSchema = z.object({
+  kind: z.literal('constructEnd'),
+});
+export type ContentConstructEnd = z.infer<typeof ContentConstructEndSchema>;
+
 // ContentTable is mutually recursive with ContentBlock (a cell contains blocks, which may themselves be tables) -- hand-written, mirroring ooxml.js's own XmlElement/isXmlNode pattern, since z.lazy() collapses to `unknown` for recursive children in the pinned Zod version.
 export interface ContentTableCell {
   blocks: ContentBlock[];
@@ -123,7 +145,15 @@ export interface ContentEmbeddedObjectBlock extends ContentEmbeddedObject {
   frames?: LayoutFrame[]; // this embedded object's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
 }
 
-export type ContentBlock = ContentParagraph | ContentTable | ContentImageBlock | ContentPageBreak | ContentEmbeddedObjectBlock;
+// The two boundary markers join the union at the end, so a 4.1.0 block list parses identically here and a consumer switching exhaustively over the union is the only thing this addition breaks -- the same additive-plus-exhaustive-switch trade the construct descriptor kinds themselves made. The package tree admits every member of this union at a leaf position EXCEPT the two markers (src/package-node.ts's PackageBlockLeaf): a construct is a group there, and one fact carried in two encodings inside one tree would break the encoding pair's laws.
+export type ContentBlock =
+  | ContentParagraph
+  | ContentTable
+  | ContentImageBlock
+  | ContentPageBreak
+  | ContentEmbeddedObjectBlock
+  | ContentConstructStart
+  | ContentConstructEnd;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -176,6 +206,17 @@ function isContentEmbeddedObjectBlock(value: unknown): value is ContentEmbeddedO
   return isRecord(value) && value.kind === 'embeddedObject' && isContentEmbeddedObject(value);
 }
 
+// The two marker guards, exported for the consumers that have to recognise a boundary without parsing the whole block: the package tree's leaf predicates, which reject them (src/package-node.ts), and findConstructMarkerImbalance below, which walks a block list looking for exactly these two kinds.
+export function isContentConstructStart(value: unknown): value is ContentConstructStart {
+  return (
+    isRecord(value) && value.kind === 'constructStart' && ConstructDescriptorSchema.safeParse(value.descriptor).success
+  );
+}
+
+export function isContentConstructEnd(value: unknown): value is ContentConstructEnd {
+  return isRecord(value) && value.kind === 'constructEnd';
+}
+
 // Recursive structural guard. Used via z.custom so table cells (and now embedded-object documents) validate without a recursive Zod schema (which collapses to `unknown` under z.lazy in this Zod version).
 export function isContentBlock(value: unknown): value is ContentBlock {
   if (!isRecord(value)) {
@@ -207,6 +248,12 @@ export function isContentBlock(value: unknown): value is ContentBlock {
   if (kind === 'embeddedObject') {
     return isContentEmbeddedObject(value);
   }
+  if (kind === 'constructStart') {
+    return isContentConstructStart(value);
+  }
+  if (kind === 'constructEnd') {
+    return true;
+  }
   return false;
 }
 
@@ -217,6 +264,30 @@ export const ContentEmbeddedObjectSchema = z.custom<ContentEmbeddedObject>(isCon
 
 // Standalone schema for the ContentBlock 'embeddedObject' variant, matching the sibling per-kind block schemas above (ContentParagraphSchema, ContentImageBlockSchema, ContentPageBreakSchema) even though ContentBlockSchema itself validates every kind, embeddedObject included, through the single custom guard above.
 export const ContentEmbeddedObjectBlockSchema = z.custom<ContentEmbeddedObjectBlock>(isContentEmbeddedObjectBlock);
+
+// Where a block list's construct markers stop balancing: an `unmatchedEnd` is a close with no construct open at that point, an `unclosedStart` is an open still standing when the list ended. `index` is the offending block's own position in the list -- the close itself for the first, and for the second the OUTERMOST still-open start, since that is where the unbalanced region begins rather than where the walk happened to notice it.
+export type ConstructMarkerImbalance =
+  | { kind: 'unmatchedEnd'; index: number }
+  | { kind: 'unclosedStart'; index: number };
+
+// The one shared definition of the bracket-matching contract's balance check (see the marker schemas above for the contract itself): returns the first place a block list's markers fail to match, or undefined when they balance. It lives here rather than in each consumer because at least three of them must agree exactly -- every codec that emits a pair, and documents.js's decompose, which promotes each matched pair into a construct group and so must reject a list it cannot promote instead of silently repairing one -- and because no schema can express it: balance is a property of a block list's sequence, not of any block in it, so ContentBlockSchema validating every member says nothing about whether the members pair up.
+//
+// Deliberately non-recursive. Each block list is its own bracket scope (a table cell's list matches independently of the list containing the table), so a caller walking nested lists calls this once per list -- which is exactly the walk decompose already performs -- rather than this helper duplicating that walk with its own idea of where the nested lists are.
+export function findConstructMarkerImbalance(blocks: readonly ContentBlock[]): ConstructMarkerImbalance | undefined {
+  const openStartIndices: number[] = [];
+  for (const [index, block] of blocks.entries()) {
+    if (isContentConstructStart(block)) {
+      openStartIndices.push(index);
+    } else if (isContentConstructEnd(block) && openStartIndices.pop() === undefined) {
+      return { kind: 'unmatchedEnd', index };
+    }
+  }
+  const outermostUnclosed = openStartIndices[0];
+  if (outermostUnclosed !== undefined) {
+    return { kind: 'unclosedStart', index: outermostUnclosed };
+  }
+  return undefined;
+}
 
 // Shared stroke/border style vocabulary -- reused by ContentStrokeSchema (drawing vector primitives, defined further down alongside them) and by ContentTableCellSchema/ContentSheetCellSchema's own per-side border fields immediately below, so a border always carries the same solid/dashed/dotted/double vocabulary regardless of which content leaf it decorates. Absent means 'solid' wherever this is optional.
 export const ContentStrokeStyleSchema = z.enum(['solid', 'dashed', 'dotted', 'double']);
