@@ -12,8 +12,8 @@ importers:
         specifier: ^15.0.0
         version: 15.0.0
       documents.js:
-        specifier: ^3.0.3
-        version: 3.0.3
+        specifier: ^3.0.5
+        version: 3.0.5
       ink:
         specifier: ^7.1.1
         version: 7.1.1(@types/react@19.2.18)(react@19.2.8)
@@ -1728,8 +1728,8 @@ packages:
     resolution: {integrity: sha512-sRnhIHGb7UvmtDX9DeJY6/uEULoQ3JZn4whH+gyyLAcP26zzr/u8EXEIZYDRIfabHEZHksBZOUQgCD1cacH3cA==}
     engines: {node: '>=20'}
 
-  documents.js@3.0.3:
-    resolution: {integrity: sha512-AEzVWHd4sddRBDszwIHJ4yYk+rZQ6WcsxnlMFUXK5Ta83U/WZwvNLnZplMWwObNHfymRi2P9fHfEyfoFfAkxeQ==}
+  documents.js@3.0.5:
+    resolution: {integrity: sha512-sFbzcO8ypW62g4fIwQR96Rxyn4+v3zrSgDE8Ffs08k1PQo0r2TWzvdH4JAo8Dt0kmzRLud2gf5VeviGPUWTLSw==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -2738,6 +2738,10 @@ packages:
 
   pdf-codec@3.0.0:
     resolution: {integrity: sha512-oc2h039edaWyP/96WF0Jf29EhX7wQmjurEtNpEGliNwAPZ9eO6A0RWAAOl3B1Vnm7RJv06sxUxp2ZvcJJehyQw==}
+    engines: {node: '>=20'}
+
+  pdf-codec@3.0.1:
+    resolution: {integrity: sha512-MO7kLNFci/ypHcpvUVO5C1rD0y470dR43fj5PiIjd/19/6XISigLJl7ieRvS/8Gkg5/mt4lgLp2ftZvuR4Rkuw==}
     engines: {node: '>=20'}
 
   picocolors@1.1.1:
@@ -4983,7 +4987,7 @@ snapshots:
     dependencies:
       zod: 4.4.3
 
-  documents.js@3.0.3:
+  documents.js@3.0.5:
     dependencies:
       byte-codec: 1.1.9
       document-schema.js: 4.1.0
@@ -4991,7 +4995,7 @@ snapshots:
       markdown-codec: 3.0.1
       odf.js: 4.0.1
       ooxml.js: 3.0.0
-      pdf-codec: 3.0.0
+      pdf-codec: 3.0.1
       temml: 0.13.4
       zod: 4.4.3
 
@@ -5912,6 +5916,13 @@ snapshots:
     dependencies:
       byte-codec: 1.1.9
       document-schema.js: 4.0.0
+      fflate: 0.8.3
+      zod: 4.4.3
+
+  pdf-codec@3.0.1:
+    dependencies:
+      byte-codec: 1.1.9
+      document-schema.js: 4.1.0
       fflate: 0.8.3
       zod: 4.4.3
 
