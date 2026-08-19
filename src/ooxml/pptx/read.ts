@@ -1,7 +1,7 @@
 import type { ContentDocument } from 'document-schema.js';
 
 import type { Package } from 'ooxml.js';
-import { attr, childrenWithTag, readPptx, resolveRelationships, rootElement } from 'ooxml.js';
+import { attr, childrenWithTag, readPptxContent as readPptxFlat, resolveRelationships, rootElement } from 'ooxml.js';
 import type { OmmlDiagnosticSink } from './formula';
 import { spliceSlideFormulas } from './formula';
 import { collapseVectorShapeRuns } from './vector';
@@ -12,7 +12,7 @@ export interface ReadPptxContentOptions {
 
 const PRESENTATION_PART = 'ppt/presentation.xml';
 
-// Every slide's own part path, in p:sldIdLst document order -- the same order readPptx itself resolves slides in (see ooxml.js's own readSlidePathsInOrder), needed here only to locate each slide's raw p:sld root for the second, vector-detecting pass below.
+// Every slide's own part path, in p:sldIdLst document order -- the same order the upstream reader itself resolves slides in (see ooxml.js's own readSlidePathsInOrder), needed here only to locate each slide's raw p:sld root for the second, vector-detecting pass below.
 function slidePathsInOrder(pkg: Package): readonly string[] {
   const presentationRoot = rootElement(pkg.parts[PRESENTATION_PART]);
   if (presentationRoot === undefined) {
@@ -34,11 +34,11 @@ function slidePathsInOrder(pkg: Package): readonly string[] {
   return paths;
 }
 
-// Package -> ContentDocument (the presentation variant). A thin adapter over ooxml.js's own readPptx: placeholder -> layout -> master -> theme inheritance, the run-property cascade, group-transform flattening, and slide ordering via p:sldIdLst all now live upstream in ooxml.js (readPptx used to be a lossy, geometry-free projection unusable as a layout basis; it no longer is).
+// Package -> ContentDocument (the presentation variant). A thin adapter over ooxml.js's own readPptxContent (imported here as readPptxFlat because this module's own export already holds that name; ooxml.js 4.0.0 renamed this flat reader to readPptxContent and gave the bare readPptx name to its tree-form DocumentPackage counterpart): placeholder -> layout -> master -> theme inheritance, the run-property cascade, group-transform flattening, and slide ordering via p:sldIdLst all live upstream in ooxml.js (the upstream reader used to be a lossy, geometry-free projection unusable as a layout basis; it no longer is).
 //
-// An embedded OOXML equation (ExaDev/documents.js#563) and a vector-only p:sp -- one readPptx itself always reads as an ordinary, empty ContentShape regardless of content -- are each carried through too, as second, independent passes over each slide's own raw p:sld: ./formula.ts's own spliceSlideFormulas (a real 'formula'-kind embedded object) runs FIRST, then ./vector.ts's own collapseVectorShapeRuns (a real 'drawing'-kind embedded object collapsing the run of shape slots it occupied) -- that ordering is load-bearing, not incidental, since the vector pass can shrink the shapes array and would invalidate the formula pass's own shape-index correspondence if it ran first (see spliceSlideFormulas's own comment). readPptx has no vector-geometry or embedded-equation handling at all, mirroring how src/ooxml/docx/vector.ts and src/odf/vector/detect.ts recover the same geometry ooxml.js's/odf.js's own readers do not.
+// An embedded OOXML equation (ExaDev/documents.js#563) and a vector-only p:sp -- one the upstream reader itself always reads as an ordinary, empty ContentShape regardless of content -- are each carried through too, as second, independent passes over each slide's own raw p:sld: ./formula.ts's own spliceSlideFormulas (a real 'formula'-kind embedded object) runs FIRST, then ./vector.ts's own collapseVectorShapeRuns (a real 'drawing'-kind embedded object collapsing the run of shape slots it occupied) -- that ordering is load-bearing, not incidental, since the vector pass can shrink the shapes array and would invalidate the formula pass's own shape-index correspondence if it ran first (see spliceSlideFormulas's own comment). The upstream reader has no vector-geometry or embedded-equation handling at all, mirroring how src/ooxml/docx/vector.ts and src/odf/vector/detect.ts recover the same geometry ooxml.js's/odf.js's own readers do not.
 export function readPptxContent(pkg: Package, options?: ReadPptxContentOptions): ContentDocument {
-  const pptxDoc = readPptx(pkg);
+  const pptxDoc = readPptxFlat(pkg);
   const slidePaths = slidePathsInOrder(pkg);
   const slides = pptxDoc.slides.map((slide, slideIndex) => {
     const slidePath = slidePaths[slideIndex];

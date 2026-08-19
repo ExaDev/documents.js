@@ -17,7 +17,7 @@ const MATHML_NS = 'http://www.w3.org/1998/Math/MathML';
 const OFFICE_NS = 'urn:oasis:names:tc:opendocument:xmlns:office:1.0';
 const ODF_VERSION = '1.3';
 
-// odf.js's readOdfFormula recognises a StarMath annotation by an encoding attribute STARTING with "StarMath" (see its own findStarMathAnnotation); "StarMath 5.0" is the exact value LibreOffice itself writes.
+// odf.js's readOdfFormulaMathMl recognises a StarMath annotation by an encoding attribute STARTING with "StarMath" (see its own findStarMathAnnotation); "StarMath 5.0" is the exact value LibreOffice itself writes.
 const STARMATH_ENCODING = 'StarMath 5.0';
 
 export interface AddedOdfFormula {

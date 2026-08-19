@@ -3,7 +3,7 @@
 // odf (a standalone formula document) and odm (an ODF master document) are deliberately NOT part of this engine: odfToPdf renders through src/mathml's own formula-positioning path rather than a ContentDocument -> LayoutDocument layout engine, and odmToPdf needs a caller-supplied resolveSubDocument callback that a fixed bytes-in/bytes-out contract cannot express. Both stay as the dedicated functions in convert.ts.
 
 import { assemblePackage, type ContentDocument, type DocumentPackage, type FontSubstitution, type MathFontMetrics, type PageSize, type PositionedFormula, type ProvidedFont } from 'document-schema.js';
-import { buildXlsxPackage, decodePackage as decodeOoxmlPackage, encodePackage as encodeOoxmlPackage, readXlsxContent, type Package as OoxmlPackage } from 'ooxml.js';
+import { buildXlsxPackageFromContent, decodePackage as decodeOoxmlPackage, encodePackage as encodeOoxmlPackage, readXlsxContent, type Package as OoxmlPackage } from 'ooxml.js';
 import { decodePackage as decodeOdfPackage, encodePackage as encodeOdfPackage } from 'odf.js';
 import { createFontMeasurer, createFontRegistry, loadMathFont, readPdf, writePdf, type FontRegistry, type PdfDiagnosticSink, type WinAnsiSubstitution } from 'pdf-codec';
 import { type MarkdownImageResolver } from 'markdown-codec';
@@ -136,7 +136,7 @@ export const FORMAT_NODES: Readonly<Record<ContentFormat, FormatNode>> = {
     family: 'ooxml',
     decode: (bytes) => decodeOoxmlPackage(bytes),
     read: (pkg) => readXlsxContent(pkg),
-    build: (content) => buildXlsxPackage(content),
+    build: (content) => buildXlsxPackageFromContent(content),
     encode: (pkg) => encodeOoxmlPackage(pkg),
     hasSourcePackage: true,
   },

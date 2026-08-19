@@ -77,7 +77,7 @@ function appendCell(odsSheet: OdsSheet, cell: ContentSheetCell): void {
   } else {
     odsCell.displayText = cell.displayText;
   }
-  // Merged ranges: readOds never emits a ContentSheetCell for a position covered by another cell's own merge (see its own read.ts comment -- "nothing to emit" for a covered cell), so every entry in sheet.cells is, by construction, a genuine anchor or an unmerged cell; mergeCells only needs to run for the ones that actually carry a span.
+  // Merged ranges: readOdsContent never emits a ContentSheetCell for a position covered by another cell's own merge (see its own read.ts comment -- "nothing to emit" for a covered cell), so every entry in sheet.cells is, by construction, a genuine anchor or an unmerged cell; mergeCells only needs to run for the ones that actually carry a span.
   const rowSpan = cell.rowSpan ?? 1;
   const colSpan = cell.colSpan ?? 1;
   if (rowSpan > 1 || colSpan > 1) {

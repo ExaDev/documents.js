@@ -1,6 +1,6 @@
 import type { ContentDocument, ContentFormula, MathMlElement, MathMlNode } from 'document-schema.js';
 
-import { attrValue, buildXml, childrenWithTag, decodePackage, elementsWithTag, encodePackage, readManifest, readOdfFormula, rootElement, validateManifest } from 'odf.js';
+import { attrValue, buildXml, childrenWithTag, decodePackage, elementsWithTag, encodePackage, readManifest, readOdfFormulaMathMl, rootElement, validateManifest } from 'odf.js';
 import type { Package, XmlElement } from 'odf.js';
 import { describe, expect, it } from 'vitest';
 import { readOdtContent } from '../../odf/odt/read';
@@ -9,7 +9,7 @@ import { formulaDocument } from '../../model/formula';
 import { buildOdtPackage } from './content';
 import { createOdt } from './editor';
 
-// The ODF embedded-formula WRITE path: a real formula sub-document ("Object N/content.xml") inside the odt package, referenced from a draw:frame/draw:object and listed in the manifest -- the structural inverse of odf.js's own readOdfFormula, and the ODF-side symmetry of buildDocxPackage's OMML writing. Every assertion below is about the real package that came out, read back through odf.js's own reader rather than through a hand-written expectation of the XML.
+// The ODF embedded-formula WRITE path: a real formula sub-document ("Object N/content.xml") inside the odt package, referenced from a draw:frame/draw:object and listed in the manifest -- the structural inverse of odf.js's own readOdfFormulaMathMl, and the ODF-side symmetry of buildDocxPackage's OMML writing. Every assertion below is about the real package that came out, read back through odf.js's own reader rather than through a hand-written expectation of the XML.
 
 function mel(tag: string, children: MathMlNode[] = []): MathMlElement {
   return { type: 'element', tag, attributes: [], children };
@@ -59,7 +59,7 @@ function wordDoc(blocks: WordprocessingBlocks): ContentDocument {
 }
 
 describe('OdtBody.appendFormula', () => {
-  it('writes a real formula sub-document odf.js\'s own readOdfFormula reads straight back', () => {
+  it('writes a real formula sub-document odf.js\'s own readOdfFormulaMathMl reads straight back', () => {
     const editor = createOdt();
     editor.body.appendFormula(FRACTION, FRAME);
     const pkg = editor.toPackage();
@@ -67,7 +67,7 @@ describe('OdtBody.appendFormula', () => {
     const subPart = pkg.parts['Object 1/content.xml'];
     expect(subPart?.kind).toBe('xml');
     // Read through odf.js's own formula reader over a synthetic sub-package, exactly as readOdfEmbeddedFormula does for a real one.
-    const recovered = readOdfFormula({ parts: { 'content.xml': subPart! } });
+    const recovered = readOdfFormulaMathMl({ parts: { 'content.xml': subPart! } });
     expect(signature(recovered.mathml)).toBe('mfrac(mi(a),mi(b))');
   });
 

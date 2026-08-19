@@ -1,6 +1,6 @@
 import type { ContentDocument } from 'document-schema.js';
 
-import { attrValue, bytesToBase64, elementsWithTag, readOds, rootElement } from 'odf.js';
+import { attrValue, bytesToBase64, elementsWithTag, readOdsContent, rootElement } from 'odf.js';
 import { describe, expect, it } from 'vitest';
 import { formulaDocument } from '../../model/formula';
 import { buildOdsPackage } from './content';
@@ -43,9 +43,9 @@ describe('buildOdsPackage', () => {
     expect(() => buildOdsPackage({ kind: 'wordprocessing', metadata: {}, sections: [] })).toThrow(/requires a spreadsheet/);
   });
 
-  it('builds a package that reads back through odf.js\'s own readOds with every sheet, cell value, and formula intact', () => {
+  it('builds a package that reads back through odf.js\'s own readOdsContent with every sheet, cell value, and formula intact', () => {
     const pkg = buildOdsPackage(spreadsheetDocument());
-    const document = readOds(pkg);
+    const document = readOdsContent(pkg);
     expect(document.sheets.map((s) => s.name)).toEqual(['Data', 'Second']);
 
     const dataSheet = document.sheets[0]!;
@@ -55,7 +55,7 @@ describe('buildOdsPackage', () => {
     expect(byPosition.get('1,0')?.value).toEqual({ kind: 'currency', value: 9.99, currency: 'USD' });
     expect(byPosition.get('1,1')?.formula).toBe('of:=1+1');
     expect(byPosition.get('2,0')?.colSpan).toBe(2);
-    // The merge's covered position never appears in cells[] at all -- matching readOds's own "nothing to emit for a covered cell" convention.
+    // The merge's covered position never appears in cells[] at all -- matching readOdsContent's own "nothing to emit for a covered cell" convention.
     expect(byPosition.has('2,1')).toBe(false);
 
     const secondSheet = document.sheets[1]!;
@@ -64,18 +64,18 @@ describe('buildOdsPackage', () => {
 
   it('an empty content.sheets array keeps the scaffold\'s own single default sheet', () => {
     const pkg = buildOdsPackage({ kind: 'spreadsheet', metadata: {}, sheets: [] });
-    const document = readOds(pkg);
+    const document = readOdsContent(pkg);
     expect(document.sheets).toHaveLength(1);
     expect(document.sheets[0]?.name).toBe('Sheet1');
     expect(document.sheets[0]?.cells).toEqual([]);
   });
 
-  it('writes column/row hidden state, reading back through odf.js\'s own readOds', () => {
+  it('writes column/row hidden state, reading back through odf.js\'s own readOdsContent', () => {
     const content = spreadsheetDocument();
     content.sheets[0]!.columns.push({ index: 0, widthPt: 50, hidden: true });
     content.sheets[0]!.rows.push({ index: 3, heightPt: 12, hidden: true });
 
-    const document = readOds(buildOdsPackage(content));
+    const document = readOdsContent(buildOdsPackage(content));
     const dataSheet = document.sheets[0]!;
     expect(dataSheet.columns.find((c) => c.index === 0)?.hidden).toBe(true);
     expect(dataSheet.rows.find((r) => r.index === 3)?.hidden).toBe(true);
@@ -110,8 +110,8 @@ describe('buildOdsPackage', () => {
     expect(attrValue(frame!, 'svg:width')).toBe('40pt');
     expect(pkg.parts['Pictures/image1.png']?.kind).toBe('binary');
 
-    // odf.js 2.2.0's readOds genuinely reads a floating shape back (it previously hardcoded images: []), so this is now a real write-then-reread round trip rather than a structural check alone: the recovered image carries its own bytes, its declared size, and the anchor quartet buildOdsPackage wrote it at.
-    const recovered = readOds(pkg).sheets[0]!.images;
+    // odf.js 2.2.0's readOds (now readOdsContent) genuinely reads a floating shape back (it previously hardcoded images: []), so this is now a real write-then-reread round trip rather than a structural check alone: the recovered image carries its own bytes, its declared size, and the anchor quartet buildOdsPackage wrote it at.
+    const recovered = readOdsContent(pkg).sheets[0]!.images;
     expect(recovered).toHaveLength(1);
     expect(recovered[0]!.format).toBe('png');
     expect(recovered[0]!.base64).toBe(bytesToBase64(pngBytes));

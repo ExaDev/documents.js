@@ -2,7 +2,7 @@ import type { ContentBlock, ContentDocument, ContentSection, DocumentPackage } f
 import { assemblePackage, COLOR_BLACK } from 'document-schema.js';
 import type { OdmSection, Package } from 'odf.js';
 import { decodePackage, encodePackage as encodeOdfPackage, readOdfMetadata, readOdfParagraph, readOdfTable, readOdm } from 'odf.js';
-import { buildXlsxPackage, encodePackage } from 'ooxml.js';
+import { buildXlsxPackageFromContent, encodePackage } from 'ooxml.js';
 import { buildDocxPackage } from '../edit/docx/content';
 import { buildOdtPackage } from '../edit/odt/content';
 import { layoutFormula } from '../mathml/layout';
@@ -390,7 +390,7 @@ export class OdmUnresolvedSectionError extends Error {
   }
 }
 
-// 2cm margins on an A4 page -- the exact fallback odf.js's own readOdt falls back to (readFirstMasterPageGeometry) when a document has no page-layout of its own, confirmed directly against the installed odf.js 1.9.0 build. inlineOdmSectionToContentSection reaches this same fallback for the identical reason: inline chapter content was never its own document with its own master-page/page-layout chain to resolve a real page size from.
+// 2cm margins on an A4 page -- the exact fallback odf.js's own readOdtContent falls back to (readFirstMasterPageGeometry) when a document has no page-layout of its own, confirmed directly against the installed odf.js 1.9.0 build. inlineOdmSectionToContentSection reaches this same fallback for the identical reason: inline chapter content was never its own document with its own master-page/page-layout chain to resolve a real page size from.
 const INLINE_SECTION_MARGIN_PT = 56.69291338582677;
 const INLINE_SECTION_MARGINS: Margins = { topPt: INLINE_SECTION_MARGIN_PT, rightPt: INLINE_SECTION_MARGIN_PT, bottomPt: INLINE_SECTION_MARGIN_PT, leftPt: INLINE_SECTION_MARGIN_PT };
 
@@ -410,7 +410,7 @@ export function inlineOdmSectionToContentSection(section: OdmSection, pkg: Packa
   return { pageSize: PAGE_SIZE_A4, margins: INLINE_SECTION_MARGINS, blocks };
 }
 
-// Prepends an explicit page-break block to a chapter's own first section, the same {kind:'pageBreak'} block ooxml.js's own readDocx already derives from w:pageBreakBefore (see paginateSection's own handling of it, src/layout/engine.ts) -- signalling "a new chapter starts here" as an explicit content-level marker rather than leaning on the incidental fact that a fresh ContentSection already starts its own fresh page in the engine today. Applied to every chapter after the first when combining chapters below.
+// Prepends an explicit page-break block to a chapter's own first section, the same {kind:'pageBreak'} block ooxml.js's own readDocxContent already derives from w:pageBreakBefore (see paginateSection's own handling of it, src/layout/engine.ts) -- signalling "a new chapter starts here" as an explicit content-level marker rather than leaning on the incidental fact that a fresh ContentSection already starts its own fresh page in the engine today. Applied to every chapter after the first when combining chapters below.
 function withLeadingChapterBreak(section: ContentSection): ContentSection {
   const pageBreak: ContentBlock = { kind: 'pageBreak' };
   return { ...section, blocks: [pageBreak, ...section.blocks] };
@@ -485,7 +485,7 @@ export function odbToXlsx(bytes: Uint8Array<ArrayBuffer>, options?: OdbConversio
   const tables = readOdbTables(pkg, { timeZone: options?.timeZone });
   throwIfAborted(options?.signal);
   const content = odbTablesToSpreadsheetDocument(tables);
-  const out = encodePackage(buildXlsxPackage(content)); // ooxml.js's own encodePackage -- buildXlsxPackage produces an OOXML package.
+  const out = encodePackage(buildXlsxPackageFromContent(content)); // ooxml.js's own encodePackage -- buildXlsxPackageFromContent (the flat ContentDocument builder; ooxml.js 4.0.0 gives the bare buildXlsxPackage name to the tree-form DocumentPackage counterpart) produces an OOXML package.
   // Fires the content-only tree package OdbConversionOptions has always accepted via DocumentBridgeOptions but these two odb functions never delivered -- no layout pass runs here, so there are no pages and no node frames, exactly like every other bridge's package. Fired after the output bytes exist so a callback that inspects the tree cannot observe a half-built conversion.
   options?.onDocument?.(assemblePackage(content));
   return out;

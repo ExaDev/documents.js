@@ -21,7 +21,7 @@ export const MASTER_PAGE_NAME = 'Standard';
 export const SHEET_TABLE_STYLE_NAME = 'OdsTable';
 export const DEFAULT_SHEET_NAME = 'Sheet1';
 
-// 2cm -- LibreOffice Calc's own real out-of-the-box default page margin (confirmed directly via the UNO API by odf.js's own readOds, see its DEFAULT_MARGIN_PT/DEFAULT_MARGINS comment), reused verbatim here rather than re-deriving it, so a document this scaffold produces round-trips through readOds to the exact same default print-settings a freshly-opened, untouched real Calc document would report.
+// 2cm -- LibreOffice Calc's own real out-of-the-box default page margin (confirmed directly via the UNO API by odf.js's own readOdsContent, see its DEFAULT_MARGIN_PT/DEFAULT_MARGINS comment), reused verbatim here rather than re-deriving it, so a document this scaffold produces round-trips through readOds to the exact same default print-settings a freshly-opened, untouched real Calc document would report.
 const DEFAULT_MARGIN = '2cm';
 
 function declaration(): XmlNode {
@@ -35,7 +35,7 @@ function declaration(): XmlNode {
   };
 }
 
-// style:page-layout-properties carries the actual page geometry; style:master-page merely names it; table:table's own table:style-name -> style:style[family="table"] -> style:master-page-name is the chain odf.js's own readOds resolves it through (readPrintSettings, typed/ods/read.ts -- confirmed there against real LibreOffice output that the master-page-name lives on the TABLE'S OWN style, not as a direct table:table attribute the way draw:master-page-name sits directly on draw:page). Defaults to PAGE_SIZE_A4 + 2cm margins -- readOds's own confirmed real Calc default -- so a sheet built by this scaffold, if never given its own explicit print settings via a future feature, still resolves to the exact same values a real untouched Calc document would.
+// style:page-layout-properties carries the actual page geometry; style:master-page merely names it; table:table's own table:style-name -> style:style[family="table"] -> style:master-page-name is the chain odf.js's own readOdsContent resolves it through (readPrintSettings, typed/ods/read.ts -- confirmed there against real LibreOffice output that the master-page-name lives on the TABLE'S OWN style, not as a direct table:table attribute the way draw:master-page-name sits directly on draw:page). Defaults to PAGE_SIZE_A4 + 2cm margins -- readOds's own confirmed real Calc default -- so a sheet built by this scaffold, if never given its own explicit print settings via a future feature, still resolves to the exact same values a real untouched Calc document would.
 function buildPageLayout(): XmlElement {
   return el('style:page-layout', { 'style:name': PAGE_LAYOUT_NAME }, [
     el('style:page-layout-properties', {

@@ -1,6 +1,6 @@
 import type { ContentDocument, ContentFormula, MathMlElement, MathMlNode } from 'document-schema.js';
 
-import { attrValue, childrenWithTag, decodePackage, elementsWithTag, encodePackage, findChildElement, readManifest, readOdfFormula, rootElement, validateManifest } from 'odf.js';
+import { attrValue, childrenWithTag, decodePackage, elementsWithTag, encodePackage, findChildElement, readManifest, readOdfFormulaMathMl, rootElement, validateManifest } from 'odf.js';
 import type { Package, XmlElement } from 'odf.js';
 import { describe, expect, it } from 'vitest';
 import { readOdfEmbeddedFormula } from '../../odf/formula/read';
@@ -60,7 +60,7 @@ const ZERO_INSETS = { insetLeftPt: 0, insetTopPt: 0, insetRightPt: 0, insetBotto
 const FORMULA_SHAPES = [{ frame: FRAME, ...ZERO_INSETS, blocks: [{ kind: 'embeddedObject' as const, objectKind: 'formula' as const, document: formulaDocument(FRACTION), frame: FRAME }] }];
 
 describe('OdpSlide.addFormula', () => {
-  it('writes a real formula sub-document odf.js\'s own readOdfFormula reads straight back', () => {
+  it('writes a real formula sub-document odf.js\'s own readOdfFormulaMathMl reads straight back', () => {
     const editor = new OdpEditor(buildOdpPackage(presentationDoc([])));
     const slide = editor.slides()[0]!;
     slide.addFormula(FRAME, FRACTION);
@@ -68,7 +68,7 @@ describe('OdpSlide.addFormula', () => {
 
     const subPart = pkg.parts['Object 1/content.xml'];
     expect(subPart?.kind).toBe('xml');
-    const recovered = readOdfFormula({ parts: { 'content.xml': subPart! } });
+    const recovered = readOdfFormulaMathMl({ parts: { 'content.xml': subPart! } });
     expect(signature(recovered.mathml)).toBe('mfrac(mi(a),mi(b))');
   });
 

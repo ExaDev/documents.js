@@ -169,7 +169,7 @@ describe('OdsSheet.printSettings', () => {
   });
 
   // Re-reads the ACTUAL SERIALIZED BYTES via odf.js's own real readOds parser (readOdsContent is a thin wrapper over it), not this package's own writer echoing its input back -- proves the page-layout/master-page/table-style chain writeSheetPrintSettings mints is genuinely valid, spec-shaped ODF, not merely an in-memory object this editor's own getter happens to read back correctly.
-  it('a set printSettings survives a real write -> reread round trip via odf.js\'s own readOds parser', () => {
+  it('a set printSettings survives a real write -> reread round trip via odf.js\'s own readOdsContent parser', () => {
     const editor = createOds();
     editor.sheets()[0]!.printSettings = CUSTOM_PRINT_SETTINGS;
     const bytes = editor.toBytes();
@@ -186,7 +186,7 @@ describe('OdsSheet.printSettings', () => {
 });
 
 describe('OdsSheet.printSettings: printRange, scale/fitToPages, repeatRows/repeatColumns, manualBreaks', () => {
-  it('printRange round-trips through a real write -> reread cycle via odf.js\'s own readOds parser', () => {
+  it('printRange round-trips through a real write -> reread cycle via odf.js\'s own readOdsContent parser', () => {
     const editor = createOds();
     const sheet = editor.sheets()[0]!;
     sheet.cell(0, 0).value = { kind: 'string', value: 'x' };
@@ -216,7 +216,7 @@ describe('OdsSheet.printSettings: printRange, scale/fitToPages, repeatRows/repea
     expect(content.sheets[1]!.printSettings.scalePercent).toBeUndefined();
   });
 
-  it('repeatRows/repeatColumns wrap the real rows/columns into table:table-header-rows/table:table-header-columns, and round-trip through odf.js\'s own readOds', () => {
+  it('repeatRows/repeatColumns wrap the real rows/columns into table:table-header-rows/table:table-header-columns, and round-trip through odf.js\'s own readOdsContent', () => {
     const editor = createOds();
     const sheet = editor.sheets()[0]!;
     sheet.cell(0, 0).value = { kind: 'string', value: 'Header' };
@@ -362,7 +362,7 @@ describe('OdsSheet.setColumnWidth / setRowHeight', () => {
     expect(content.sheets[0]!.rows[0]?.heightPt).toBeCloseTo(15, 5);
   });
 
-  it('set then get (via a real write -> reread round trip through odf.js\'s own readOds parser) round-trips the width/height', () => {
+  it('set then get (via a real write -> reread round trip through odf.js\'s own readOdsContent parser) round-trips the width/height', () => {
     const editor = createOds();
     const sheet = editor.sheets()[0]!;
     sheet.cell(0, 0).value = { kind: 'string', value: 'x' };
@@ -455,7 +455,7 @@ describe('OdsSheet.setColumnHidden / setRowHidden', () => {
     expect(content.sheets[0]!.rows[0]?.hidden).toBeUndefined();
   });
 
-  it('set then get (via a real write -> reread round trip through odf.js\'s own readOds parser) round-trips hidden state', () => {
+  it('set then get (via a real write -> reread round trip through odf.js\'s own readOdsContent parser) round-trips hidden state', () => {
     const editor = createOds();
     const sheet = editor.sheets()[0]!;
     sheet.cell(0, 0).value = { kind: 'string', value: 'x' };

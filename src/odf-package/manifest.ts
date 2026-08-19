@@ -8,7 +8,7 @@ import { findChildElement, ODF_MEDIA_TYPES, rootElement, syncManifest as syncOdf
 const CONTENT_PART_SUFFIX = '/content.xml';
 const ROOT_CONTENT_PART = 'content.xml';
 
-// An ODF document's own kind is stated by the single element inside office:body -- the same discriminant odf.js's own readOdt/readOds/readOdp/readOdg/readOdfFormula each look for, and the only thing distinguishing one sub-document from another once the mimetype part (which a sub-document does not have -- only the outer package does) is out of the picture.
+// An ODF document's own kind is stated by the single element inside office:body -- the same discriminant odf.js's own readOdtContent/readOdsContent/readOdpContent/readOdgContent/readOdfFormulaContent each look for, and the only thing distinguishing one sub-document from another once the mimetype part (which a sub-document does not have -- only the outer package does) is out of the picture.
 const MEDIA_TYPE_BY_BODY_ELEMENT: ReadonlyMap<string, string> = new Map([
   ['office:text', ODF_MEDIA_TYPES.odt],
   ['office:spreadsheet', ODF_MEDIA_TYPES.ods],

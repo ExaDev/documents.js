@@ -24,7 +24,7 @@ function firstDrawPage(pkg: Package): XmlElement {
   return page;
 }
 
-// A slide's vectors read back through odf.js's OWN readDrawPageContent -- the same reader readOdg uses for a real drawing page, and a genuinely independent oracle rather than an inverse written alongside this package's writer. readOdp itself cannot serve here: ContentSlide has a shapes array and no vectors array at all, which is exactly why buildOdpPackage writes vector primitives as page-level geometry rather than as shapes.
+// A slide's vectors read back through odf.js's OWN readDrawPageContent -- the same reader readOdgContent uses for a real drawing page, and a genuinely independent oracle rather than an inverse written alongside this package's writer. readOdp itself cannot serve here: ContentSlide has a shapes array and no vectors array at all, which is exactly why buildOdpPackage writes vector primitives as page-level geometry rather than as shapes.
 function readSlideVectors(pkg: Package): ContentVector[] {
   return readDrawPageContent(firstDrawPage(pkg).children, pkg).vectors;
 }

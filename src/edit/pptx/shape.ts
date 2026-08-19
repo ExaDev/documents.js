@@ -111,7 +111,7 @@ export class PptxShape {
     return created;
   }
 
-  // p:cNvPr@name (ECMA-376 19.2.1.3) -- the shape's own non-visual name, read back by ooxml.js's own readPptx (typed/pptx/read.ts's shapeName) straight off this attribute.
+  // p:cNvPr@name (ECMA-376 19.2.1.3) -- the shape's own non-visual name, read back by ooxml.js's own readPptxContent (typed/pptx/read.ts's shapeName) straight off this attribute.
   get name(): string | undefined {
     const cNvPr = this.cNvPrElement(false);
     return cNvPr === undefined ? undefined : attr(cNvPr, 'name');
@@ -301,7 +301,7 @@ export interface DrawingParagraphInit {
   readonly alignment?: Alignment;
   readonly spacingBeforePt?: number;
   readonly spacingAfterPt?: number;
-  // A line-spacing MULTIPLIER (1.0 = single, 1.5 = one-and-a-half, 2.0 = double) -- the same shape ContentParagraph.lineSpacing carries and ooxml.js's own readPptx produces from a:lnSpc/a:spcPct@val / 100000.
+  // A line-spacing MULTIPLIER (1.0 = single, 1.5 = one-and-a-half, 2.0 = double) -- the same shape ContentParagraph.lineSpacing carries and ooxml.js's own readPptxContent produces from a:lnSpc/a:spcPct@val / 100000.
   readonly lineSpacing?: number;
   readonly indentLeftPt?: number;
   readonly indentFirstLinePt?: number;
@@ -319,7 +319,7 @@ const SPACING_POINTS_PER_POINT = 100;
 // a:spcPct/@val is in thousandths of a percent (ECMA-376 20.1.10.68) -- 100000 = 100% = single spacing. ooxml.js's own readLineSpacingMultiplier divides @val by 100000 to recover the multiplier, so the inverse is multiplier * 100000.
 const LINE_SPACING_PERCENT_PER_MULTIPLIER = 100000;
 
-// DrawingML run properties are attribute-based toggles (b="1", i="1" on a:rPr itself), not the element-presence toggles WordprocessingML uses (w:b/w:i as child elements) -- the same distinction ooxml.js's readPptx documents for the read side, mirrored here on write.
+// DrawingML run properties are attribute-based toggles (b="1", i="1" on a:rPr itself), not the element-presence toggles WordprocessingML uses (w:b/w:i as child elements) -- the same distinction ooxml.js's readPptxContent documents for the read side, mirrored here on write.
 function buildDrawingRun(init: DrawingRunInit): XmlElement {
   const rPrAttrs: Record<string, string> = {};
   if (init.bold === true) {
@@ -328,7 +328,7 @@ function buildDrawingRun(init: DrawingRunInit): XmlElement {
   if (init.italic === true) {
     rPrAttrs.i = '1';
   }
-  // a:rPr/@u and a:rPr/@strike are attribute toggles on the same element as b/i (ECMA-376 21.1.2.3.2/21.1.2.3.15), so they mirror bold/italic exactly. ooxml.js's readPptx reads any @u != "none" as underlined and any @strike != "noStrike" as struck, so the single-underline ("sng") and single-strike ("sngStrike") values round-trip back as underline/strike === true.
+  // a:rPr/@u and a:rPr/@strike are attribute toggles on the same element as b/i (ECMA-376 21.1.2.3.2/21.1.2.3.15), so they mirror bold/italic exactly. ooxml.js's readPptxContent reads any @u != "none" as underlined and any @strike != "noStrike" as struck, so the single-underline ("sng") and single-strike ("sngStrike") values round-trip back as underline/strike === true.
   if (init.underline === true) {
     rPrAttrs.u = 'sng';
   }

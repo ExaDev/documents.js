@@ -7,7 +7,7 @@ import { readOdpContent } from '../odf/odp/read';
 import { readPptxContent } from '../ooxml/pptx/read';
 import { odpToPptx, pptxToOdp } from './convert';
 
-// Round-trip proofs for run-level decoration (underline, strike) across the odp <-> pptx bridge. ooxml.js's readPptx already reads a:u/a:strike into ContentRun.underline/strike, and odf.js's readOdp already reads them via the shared paragraph reader. OdtRun already has underline/strike setters and buildOdpPackage's populateParagraph already threads them, so the odp WRITE side was never the gap. The gap this suite guards against is the pptx WRITE side: buildPptxPackage's appendShape/populateCellParagraphs run mappings dropped underline/strike, and DrawingRunInit/ buildDrawingRun (shape.ts) had no fields/attributes for them. These tests prove both directions now carry them.
+// Round-trip proofs for run-level decoration (underline, strike) across the odp <-> pptx bridge. ooxml.js's readPptxContent already reads a:u/a:strike into ContentRun.underline/strike, and odf.js's readOdpContent already reads them via the shared paragraph reader. OdtRun already has underline/strike setters and buildOdpPackage's populateParagraph already threads them, so the odp WRITE side was never the gap. The gap this suite guards against is the pptx WRITE side: buildPptxPackage's appendShape/populateCellParagraphs run mappings dropped underline/strike, and DrawingRunInit/ buildDrawingRun (shape.ts) had no fields/attributes for them. These tests prove both directions now carry them.
 
 function pptxContentOf(bytes: Uint8Array<ArrayBuffer>) {
   const content = readPptxContent(decodeOoxmlPackage(bytes));

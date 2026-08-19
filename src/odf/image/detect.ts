@@ -3,7 +3,7 @@ import { attrValue, childrenWithTag, parseOdfTransform, readDrawFrame, readDrawI
 import type { ContentImageBlock } from 'document-schema.js';
 import { flowAnchoredFrameBox } from '../shared/flow-anchor';
 
-// Image detection for odt -- the ODF-side counterpart to ooxml.js's own readDocx image support (see the README's own docx-image-round-trip gotcha), needed because odf.js's own readOdt explicitly does not read draw:frame/draw:image back into a ContentParagraph or any ContentBlock at all (that reader's own scope note treats an inline frame as odp/odg's job, not odt's). Structurally this mirrors src/odf/formula/detect.ts's own deep walk almost exactly -- a draw:frame can sit anywhere at all (nested in a group, anchored inline in a run), so this runs its own bespoke deep walk rather than delegating to odf.js's own readDrawPageContent the way src/odf/vector/detect.ts does.
+// Image detection for odt -- the ODF-side counterpart to ooxml.js's own readDocxContent image support (see the README's own docx-image-round-trip gotcha), needed because odf.js's own readOdtContent explicitly does not read draw:frame/draw:image back into a ContentParagraph or any ContentBlock at all (that reader's own scope note treats an inline frame as odp/odg's job, not odt's). Structurally this mirrors src/odf/formula/detect.ts's own deep walk almost exactly -- a draw:frame can sit anywhere at all (nested in a group, anchored inline in a run), so this runs its own bespoke deep walk rather than delegating to odf.js's own readDrawPageContent the way src/odf/vector/detect.ts does.
 
 export interface DetectedImageFrame {
   readonly frameElement: XmlElement;

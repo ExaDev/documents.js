@@ -246,7 +246,7 @@ function odpWithEmbeddedFormulaBytes(): Uint8Array<ArrayBuffer> {
   return odpZip(FORMULA_FRAME, [['Object 1', '<math:msqrt><math:mi>x</math:mi></math:msqrt>']]);
 }
 
-// A slide carrying BOTH a draw:g group and a formula frame -- the exact shape that previously disabled formula detection for the whole slide, because a group's own frames are spliced into readOdp's flat shapes array at the group's own position, breaking any "Nth top-level frame = shapes[N]" correspondence.
+// A slide carrying BOTH a draw:g group and a formula frame -- the exact shape that previously disabled formula detection for the whole slide, because a group's own frames are spliced into readOdpContent's flat shapes array at the group's own position, breaking any "Nth top-level frame = shapes[N]" correspondence.
 function odpWithGroupAndFormulaBytes(): Uint8Array<ArrayBuffer> {
   return odpZip(`<draw:g>${TEXT_BOX_FRAME}</draw:g>${FORMULA_FRAME}`, [['Object 1', '<math:msqrt><math:mi>x</math:mi></math:msqrt>']]);
 }
@@ -413,7 +413,7 @@ describe('embedded-formula detection: a formula inside a list item', () => {
 });
 
 describe('embedded-formula detection: an odp slide that also contains a group', () => {
-  it('detects the formula on a slide carrying a draw:g, attaching it to the shape readOdp actually produced for that frame', () => {
+  it('detects the formula on a slide carrying a draw:g, attaching it to the shape readOdpContent actually produced for that frame', () => {
     const content = readOdpContent(decodePackage(odpWithGroupAndFormulaBytes()));
     if (content.kind !== 'presentation') {
       throw new Error('expected a presentation ContentDocument');

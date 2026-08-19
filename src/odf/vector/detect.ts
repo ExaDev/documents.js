@@ -17,7 +17,7 @@ export function collectContainerVectors(children: readonly XmlNode[], pkg: Packa
 }
 
 export interface DetectedSlideVectorGroup {
-  // The 0-based position, among the ContentShapes odf.js's own readOdp already produced for this slide, immediately before which this group's synthetic drawing shape is inserted.
+  // The 0-based position, among the ContentShapes odf.js's own readOdpContent already produced for this slide, immediately before which this group's synthetic drawing shape is inserted.
   readonly insertBeforeShapeIndex: number;
   readonly vectors: readonly ContentVector[];
 }
@@ -30,7 +30,7 @@ function paintOrderOf(item: { readonly paintOrder?: number }): number {
   return item.paintOrder;
 }
 
-// Every vector primitive on one draw:page, grouped by which of odf.js's own readOdp-produced ContentShapes each sits immediately before -- so a caller inserting synthetic shapes for them lands each group at its true position among the slide's real shapes, in ONE forward pass, rather than always at the end.
+// Every vector primitive on one draw:page, grouped by which of odf.js's own readOdpContent-produced ContentShapes each sits immediately before -- so a caller inserting synthetic shapes for them lands each group at its true position among the slide's real shapes, in ONE forward pass, rather than always at the end.
 export function collectSlideVectorGroups(pageChildren: readonly XmlNode[], pkg: Package): readonly DetectedSlideVectorGroup[] {
   const { shapes, vectors } = readDrawPageContent(pageChildren, pkg);
   const shapePaintOrders = shapes.map(paintOrderOf);
