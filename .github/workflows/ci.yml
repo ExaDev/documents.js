@@ -1,0 +1,207 @@
+name: CI
+
+# One workflow for the whole workspace. Each package carried a near-identical ci.yml (Commitlint, Lint, Typecheck, Test, Smoke test, Release, and for the web UI a Pages deploy); those are consolidated here into one job per task, each running the task across the workspace through turbo rather than once per package. Release is a job in this workflow rather than a separate release.yml so it can keep the `needs: [...]` gate the per-package workflows had: the orchestrator publishes to npm and pushes tags, and gating that on the same run's checks is a direct dependency, not something to re-derive from a workflow_run event (which would also lose the elevated-token checkout the push to a protected main needs).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # On a pull request, restrict every turbo task to the packages the branch actually changed (and their dependents); on main, run the whole workspace so the caches the next run restores from are complete and the release gate covers everything. --affected compares against the base branch, so the checkouts below use fetch-depth: 0.
+  TURBO_FLAGS: ${{ github.event_name == 'pull_request' && '--affected' || '' }}
+  TURBO_SCM_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+
+jobs:
+  commitlint:
+    name: Commitlint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Validate the last commit with commitlint
+        if: github.event_name == 'push'
+        run: pnpm exec commitlint --last --verbose
+      - name: Validate every PR commit with commitlint
+        if: github.event_name == 'pull_request'
+        run: pnpm exec commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-workspace
+        with:
+          task: lint
+          command: pnpm lint $TURBO_FLAGS
+
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-workspace
+        with:
+          task: typecheck
+          # attw --pack per published package, as each package's own typecheck job did: it checks the package's declared types resolve under every module resolution mode, which needs dist/ to exist, hence the build first. The web UI is filtered out -- it publishes nothing and exposes no types.
+          command: |
+            pnpm typecheck $TURBO_FLAGS
+            pnpm build $TURBO_FLAGS
+            pnpm --recursive --filter='!documents' exec attw --pack
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-workspace
+        with:
+          task: test
+          command: pnpm test:coverage $TURBO_FLAGS
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: coverage-report
+          path: packages/*/coverage/
+          if-no-files-found: ignore
+
+  test-workers:
+    name: Test (workerd)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      # The install above already built the workerd binary (allowBuilds in pnpm-workspace.yaml). This suite runs the Worker-isomorphic packages' code inside the real Cloudflare Workers runtime, enforcing zero Node-only API usage on the tested paths at runtime rather than only at lint time.
+      - uses: ./.github/actions/setup-workspace
+        with:
+          task: test-workers
+          command: pnpm test:workers $TURBO_FLAGS
+
+  test-smoke:
+    name: Smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-workspace
+        with:
+          task: test-smoke
+          command: pnpm test:smoke $TURBO_FLAGS
+
+  release:
+    name: Release
+    needs: [commitlint, lint, typecheck, test, test-workers, test-smoke]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write # to push release and dependency-bump commits and tags, and create GitHub Releases
+      issues: write # to comment on released issues
+      pull-requests: write # to comment on released pull requests
+      id-token: write # OIDC identity for npm trusted publishing (no NPM_TOKEN)
+    steps:
+      # main requires status checks to merge, and the default GITHUB_TOKEN has no bypass for that -- the orchestrator's release commits, dependency-bump commits, and tags are direct pushes to main, so they need a token from an actor the branch ruleset explicitly allows to bypass (see ExaDev/.github and this repo's own ruleset). Everything else in this job (release notes, GitHub Release creation, issue/PR comments, OIDC npm publish) keeps using secrets.GITHUB_TOKEN below, unaffected -- only checkout's own git credentials need the elevated token, since that's what the later pushes inherit.
+      - name: Generate a token for the release pushes
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: "4473709"
+          private-key: ${{ secrets.AUTOMERGE_APP_PRIVATE_KEY }}
+      - uses: actions/checkout@v7
+        with:
+          # ref: main, not the bare event SHA. The orchestrator pushes each dependency-bump commit to the current branch by name as it goes, so a detached HEAD stops the run with a WorkspaceStateError rather than pushing HEAD:HEAD; naming the branch is what makes checkout attach HEAD to it. fetch-depth: 0 because each package's release range is analysed from its own last matching tag.
+          ref: main
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Upgrade npm for OIDC trusted publishing (needs npm CLI >=11.5.1)
+        run: npm install -g npm@latest
+      - name: Release every package that changed, in dependency order
+        # One orchestrator run replaces the per-package release jobs: it discovers the workspace from pnpm-workspace.yaml, orders packages topologically, and runs semantic-release per package with commits path-filtered to that package's own directory and tags in `name@version` form. A package whose only change is a sibling's release still gets a patch release, because its published dependency range changed. HUSKY=0 so local git hooks never fire against the automated commits.
+        run: HUSKY=0 pnpm release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # npm publish provenance for every package the run publishes, matching each package.json's own publishConfig.provenance.
+          NPM_CONFIG_PROVENANCE: "true"
+          # Blanked, not omitted -- an inherited NPM_TOKEN/NODE_AUTH_TOKEN from a workflow-level env block, reusable workflow, or composite action would otherwise be used in preference to the OIDC exchange.
+          NPM_TOKEN: ""
+          NODE_AUTH_TOKEN: ""
+
+  deploy-site:
+    name: Build and deploy the web UI to Pages
+    # After release, so the deploy is built from the release commit the orchestrator just pushed (it bumps packages/documents/package.json and tags it). For a commit that releases nothing, no new tag is created and this builds the current tip of main.
+    needs: [commitlint, lint, typecheck, test, test-workers, test-smoke, release]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: deploy-pages
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+      actions: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-workspace
+        with:
+          task: build-site
+          # No $TURBO_FLAGS: this job only ever runs on main, where the flag is empty anyway, and the deploy must be built from the whole workspace rather than from an affected subset.
+          command: pnpm build
+      - uses: actions/configure-pages@v6
+        with:
+          enablement: true
+      # A failed deploy-pages step leaves this run's uploaded github-pages artifact behind; re-running would then try to upload a second one and fail ("Multiple artifacts named github-pages"). Clean up first.
+      - name: Remove prior github-pages artifacts from this run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts" \
+            --jq '.artifacts[] | select(.name=="github-pages") | .id' |
+          while read -r id; do
+            [ -z "$id" ] && continue
+            gh api -X DELETE "repos/${{ github.repository }}/actions/artifacts/$id"
+          done
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: packages/documents/dist
+      - id: deployment
+        uses: actions/deploy-pages@v5

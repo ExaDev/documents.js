@@ -1,0 +1,35 @@
+name: Dependabot auto-merge
+
+# A minor or patch bump merges itself once CI is green; a major bump still opens a pull request but is left for manual review. The per-package workflows this replaces also carried an unconditional-merge path for sibling ExaDev packages -- obsolete here, since those packages are workspace members and Dependabot no longer proposes updates for them. Auto-merge is enforced by CI actually passing on the pull request's head commit: this workflow only requests the merge, GitHub itself withholds it until checks conclude. The merge authenticates via a GitHub App installation token rather than GITHUB_TOKEN, so the resulting push to main cascades into ci.yml instead of being silently skipped by GitHub's anti-recursion protection.
+
+on:
+  # pull_request_target, not pull_request -- a workflow run triggered by dependabot[bot]'s own pull_request event gets NO secret access at all (a hard GitHub Actions security restriction against a compromised dependency update exfiltrating secrets), so secrets.AUTOMERGE_APP_PRIVATE_KEY would resolve empty regardless of how correctly the secret itself is configured. pull_request_target runs using the base branch's own workflow file and normal secret access instead. Safe here specifically because this job never checks out or executes the pull request's own code -- it only calls the GitHub API (fetch-metadata, gh pr merge), which is exactly the case pull_request_target's own security guidance calls out as safe.
+  pull_request_target:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Fetch Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+      - name: Generate a token for the merge
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: "4473709"
+          private-key: ${{ secrets.AUTOMERGE_APP_PRIVATE_KEY }}
+      - name: Enable auto-merge for minor and patch updates
+        if: steps.metadata.outputs.update-type == 'version-update:semver-minor' || steps.metadata.outputs.update-type == 'version-update:semver-patch'
+        run: gh pr merge --auto --rebase "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
