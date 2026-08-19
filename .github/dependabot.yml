@@ -1,0 +1,21 @@
+version: 2
+
+# GitHub reads only the repository root's dependabot.yml, so the per-package copies this replaces could never have run here. `directories` (plural, glob-capable) covers the workspace root's own manifest plus every package's, in one entry rather than one per manifest.
+updates:
+  - package-ecosystem: "npm"
+    directories:
+      - "/"
+      - "/packages/*"
+    schedule:
+      interval: "daily"
+    cooldown:
+      # Seven days of public availability before Dependabot proposes a third-party update at all, matching the per-package configs. The sibling-package exclusions those configs carried are gone: the packages that needed exempting are workspace members now, resolved from the workspace rather than the registry, so Dependabot has nothing to propose for them.
+      default-days: 7
+    commit-message:
+      prefix: "build"
+      include: "scope"
+    groups:
+      # Every package manifest plus the root on one daily schedule would open a flood of individual pull requests, where separate repositories previously spread the same updates out. Minor and patch updates batch into one pull request; a major update still gets its own, since it is the one that needs reading.
+      minor-and-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
