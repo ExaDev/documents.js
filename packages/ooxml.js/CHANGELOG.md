@@ -1,3 +1,23 @@
+# [4.0.0](https://github.com/ExaDev/ooxml.js/compare/v3.1.1...v4.0.0) (2026-08-19)
+
+
+* feat!: give each format a DocumentPackage-native reader and writer ([b092969](https://github.com/ExaDev/ooxml.js/commit/b0929697de91316971deaacbd6671c6743927ca7))
+
+
+### Features
+
+* re-export document-schema.js's style-resolution helpers from the barrel ([2f47b40](https://github.com/ExaDev/ooxml.js/commit/2f47b409b89c1683a5f85e91aee4f3a5a30251c8))
+
+
+### BREAKING CHANGES
+
+* readDocx, readPptx, and readXlsx keep their signatures but
+return a DocumentPackage instead of DocxDocument, PptxDocument, and
+XlsxWorkbook; buildDocxPackage and buildXlsxPackage take a DocumentPackage
+instead of DocxContent and ContentDocument. Callers wanting the previous
+behaviour move to readDocxContent, readPptxContent, readXlsxWorkbook,
+buildDocxPackageFromContent, and buildXlsxPackageFromContent respectively.
+
 ## [3.1.1](https://github.com/ExaDev/ooxml.js/compare/v3.1.0...v3.1.1) (2026-08-19)
 
 # [3.1.0](https://github.com/ExaDev/ooxml.js/compare/v3.0.1...v3.1.0) (2026-08-18)
