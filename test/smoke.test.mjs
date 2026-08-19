@@ -59,11 +59,6 @@ const FUNCTIONS = [
   'documentSchemaKindOf',
   'documentFromJson',
   'schemaUriFor',
-  // The package boundary itself: the tree <-> flat pair and the minting pass behind every onDocument payload (layoutDocumentWithSchema retired with the pdf-codec demotion -- a LayoutDocument has no schema-stamped JSON envelope any more).
-  'assemblePackage',
-  'decompose',
-  'flattenPackage',
-  'factorStyles',
 ];
 
 // These minimal odt bytes are hand-built directly against odf.js (documents.js's own real, already-installed dependency), mirroring src/test-support/odt.ts's fixture exactly, rather than built through this package's own createOdt(). This is deliberate duplication, not an oversight: it is the only way to prove odtToPdf's ENTIRE pipeline (odf.js's decodePackage, dist's own readOdtContent/convertWordprocessingToLayout/writePdf) actually works from the built dist/ artifact independent of documents.js's own odt live-view editor, the same reasoning the odp/odg blocks further down apply when they build their own fixture bytes via cjs.createOdp()/cjs.createOdg() instead.

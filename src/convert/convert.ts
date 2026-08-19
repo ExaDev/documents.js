@@ -1,5 +1,5 @@
 import type { ContentBlock, ContentDocument, ContentSection, DocumentPackage } from 'document-schema.js';
-import { COLOR_BLACK } from 'document-schema.js';
+import { assemblePackage, COLOR_BLACK } from 'document-schema.js';
 import type { OdmSection, Package } from 'odf.js';
 import { decodePackage, encodePackage as encodeOdfPackage, readOdfMetadata, readOdfParagraph, readOdfTable, readOdm } from 'odf.js';
 import { buildXlsxPackage, encodePackage } from 'ooxml.js';
@@ -30,7 +30,6 @@ import { throwIfAborted } from '../ports/abort';
 import { resolveMetadataTimestamps } from '../model/metadata';
 import type { ClockPort } from '../ports/clock';
 import { convertDocument } from './composition';
-import { assemblePackage } from './factor-styles';
 import type { CellTypeInferenceSink } from '../layout/cell-typing';
 import type { SvgDiagnosticSink } from '../svg/diagnostics';
 
