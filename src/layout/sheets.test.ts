@@ -673,7 +673,7 @@ describe('convertSpreadsheetToLayout: cell-anchored embedded formulas', () => {
   });
 
   it('sizes a stacked formula to fit its declared frame in both dimensions, rather than overflowing it', () => {
-    // A fraction-inside-a-square-root has a total height well over twice its base font size, so the old height/2 heuristic over-estimates and the laid-out box overflows the frame. The frame carries a real width+height (the ODF draw:frame geometry readOds provides); a docx OMML equation has widthPt 0 and falls back to the height-only path, which this test does not exercise.
+    // A fraction-inside-a-square-root has a total height well over twice its base font size, so the old height/2 heuristic over-estimates and the laid-out box overflows the frame. The frame carries a real width+height (the ODF draw:frame geometry readOdsContent provides); a docx OMML equation has widthPt 0 and falls back to the height-only path, which this test does not exercise.
     const stacked = formulaObject(0, 0, 0, 0, {
       document: { kind: 'formula', metadata: {}, formula: { mathml: SQRT_FRAC } },
       frame: { xPt: 0, yPt: 0, widthPt: 60, heightPt: 30 },

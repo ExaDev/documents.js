@@ -137,7 +137,7 @@ export function gridOdsPackage(): Package {
   return decodePackage(gridOdsBytes());
 }
 
-// A third fixture, purpose-built for the ods<->xlsx cross-format bridge's own round-trip tests (src/convert/bridges.test.ts): three explicitly-widthed columns (3cm/4cm/2cm) and every office:value-type ODS distinguishes on one row each -- string, float, boolean, percentage, currency, date, time -- plus a formula cell (table:formula carried verbatim, never evaluated by either side of the bridge) and a genuine 2-column merge. This is deliberately the richest of the three ods.ts fixtures: xlsx write support (ooxml.js's buildXlsxPackage) is new to the ecosystem, so the bridge's own tests need real, independently-authored ground truth to check against, not a fixture built through the very editor (createOds) the bridge composes with on its own write-back hop.
+// A third fixture, purpose-built for the ods<->xlsx cross-format bridge's own round-trip tests (src/convert/bridges.test.ts): three explicitly-widthed columns (3cm/4cm/2cm) and every office:value-type ODS distinguishes on one row each -- string, float, boolean, percentage, currency, date, time -- plus a formula cell (table:formula carried verbatim, never evaluated by either side of the bridge) and a genuine 2-column merge. This is deliberately the richest of the three ods.ts fixtures: xlsx write support (ooxml.js's buildXlsxPackageFromContent) is new to the ecosystem, so the bridge's own tests need real, independently-authored ground truth to check against, not a fixture built through the very editor (createOds) the bridge composes with on its own write-back hop.
 function buildRichFixturePackage(): Package {
   const columns = [
     el('table:table-column', { 'table:style-name': 'RichColA' }),

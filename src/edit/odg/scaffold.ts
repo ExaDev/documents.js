@@ -27,7 +27,7 @@ function declaration(): XmlNode {
   };
 }
 
-// style:page-layout-properties carries the actual page geometry; style:master-page merely names it -- the exact chain odf.js's own resolveDrawPageSize (src/typed/shared/masterpage.ts) reads back via draw:page/@draw:master-page-name -> style:master-page -> style:page-layout-name -> style:page-layout -> style:page-layout-properties, shared verbatim with odp (see that reader's own top-of-file note). Defaults to A4 -- LibreOffice Draw's own real out-of-the-box default page size (confirmed against a real, unmodified Draw document; see readOdg's own DEFAULT_PAGE_SIZE comment), not Impress's widescreen default odp/scaffold.ts uses, since a drawing and a presentation have genuinely different real-world defaults.
+// style:page-layout-properties carries the actual page geometry; style:master-page merely names it -- the exact chain odf.js's own resolveDrawPageSize (src/typed/shared/masterpage.ts) reads back via draw:page/@draw:master-page-name -> style:master-page -> style:page-layout-name -> style:page-layout -> style:page-layout-properties, shared verbatim with odp (see that reader's own top-of-file note). Defaults to A4 -- LibreOffice Draw's own real out-of-the-box default page size (confirmed against a real, unmodified Draw document; see readOdgContent's own DEFAULT_PAGE_SIZE comment), not Impress's widescreen default odp/scaffold.ts uses, since a drawing and a presentation have genuinely different real-world defaults.
 function buildPageLayout(): XmlElement {
   return el('style:page-layout', { 'style:name': PAGE_LAYOUT_NAME }, [
     el('style:page-layout-properties', { 'fo:page-width': `${PAGE_SIZE_A4.widthPt}pt`, 'fo:page-height': `${PAGE_SIZE_A4.heightPt}pt` }),

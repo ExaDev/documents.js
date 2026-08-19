@@ -225,7 +225,7 @@ function layoutRowChildren(children: readonly MathMlElement[], ctx: LayoutContex
   return concatBoxesHorizontally(boxes, gapsPt);
 }
 
-// semantics wraps its actual content plus one or more parallel-markup annotations (annotation / annotation-xml) -- real MathML producers (confirmed against LibreOffice's own content.xml) always wrap a formula this way, pairing the presentation-MathML tree this module renders with a StarMath (or similar) annotation odf.js's own readOdfFormula already extracts separately (OdfFormulaDocument.starMath). Only the first non-annotation child is rendered; every annotation/annotation-xml child is skipped.
+// semantics wraps its actual content plus one or more parallel-markup annotations (annotation / annotation-xml) -- real MathML producers (confirmed against LibreOffice's own content.xml) always wrap a formula this way, pairing the presentation-MathML tree this module renders with a StarMath (or similar) annotation odf.js's own readOdfFormulaMathMl already extracts separately (OdfFormulaDocument.starMath). Only the first non-annotation child is rendered; every annotation/annotation-xml child is skipped.
 function layoutSemantics(element: MathMlElement, ctx: LayoutContext): MathBox {
   const content = elementChildren(element).find((child) => {
     const name = elementLocalName(child);
