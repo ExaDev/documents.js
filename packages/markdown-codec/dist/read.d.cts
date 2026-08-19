@@ -1,11 +1,16 @@
 import { t as MarkdownDiagnostic } from "./diagnostics-BuO5-SW1.cjs";
 import { ReadMarkdownOptions } from "./options/options.cjs";
-import { ContentDocument } from "document-schema.js";
+import { ContentDocument, DocumentPackage } from "document-schema.js";
 //#region src/read.d.ts
 interface ReadMarkdownResult {
+  readonly documentPackage: DocumentPackage;
+  readonly diagnostics: readonly MarkdownDiagnostic[];
+}
+interface ReadMarkdownContentResult {
   readonly document: ContentDocument;
   readonly diagnostics: readonly MarkdownDiagnostic[];
 }
 declare function readMarkdown(text: string, options?: ReadMarkdownOptions): ReadMarkdownResult;
+declare function readMarkdownContent(text: string, options?: ReadMarkdownOptions): ReadMarkdownContentResult;
 //#endregion
-export { ReadMarkdownResult, readMarkdown };
+export { ReadMarkdownContentResult, ReadMarkdownResult, readMarkdown, readMarkdownContent };

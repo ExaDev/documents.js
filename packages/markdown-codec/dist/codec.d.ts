@@ -2,6 +2,539 @@ import { z } from "zod";
 //#region src/codec.d.ts
 declare const MarkdownBytesSchema: z.ZodCustom<Uint8Array<ArrayBuffer>, Uint8Array<ArrayBuffer>>;
 declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uint8Array<ArrayBuffer>>, z.ZodDiscriminatedUnion<[z.ZodObject<{
+  children: z.ZodArray<z.ZodCustom<import("document-schema.js").SectionGroupNode, import("document-schema.js").SectionGroupNode>>;
+  pages: z.ZodOptional<z.ZodArray<z.ZodObject<{
+    widthPt: z.ZodNumber;
+    heightPt: z.ZodNumber;
+  }, z.core.$strip>>>;
+  styles: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodObject<{
+    paragraph: z.ZodOptional<z.ZodObject<{
+      alignment: z.ZodOptional<z.ZodEnum<{
+        left: "left";
+        center: "center";
+        right: "right";
+        justify: "justify";
+      }>>;
+      list: z.ZodOptional<z.ZodObject<{
+        numId: z.ZodOptional<z.ZodString>;
+        level: z.ZodNumber;
+      }, z.core.$strip>>;
+      spacingBeforePt: z.ZodOptional<z.ZodNumber>;
+      spacingAfterPt: z.ZodOptional<z.ZodNumber>;
+      lineSpacing: z.ZodOptional<z.ZodNumber>;
+      indentLeftPt: z.ZodOptional<z.ZodNumber>;
+      indentFirstLinePt: z.ZodOptional<z.ZodNumber>;
+    }, z.core.$strict>>;
+    run: z.ZodOptional<z.ZodObject<{
+      bold: z.ZodOptional<z.ZodBoolean>;
+      italic: z.ZodOptional<z.ZodBoolean>;
+      underline: z.ZodOptional<z.ZodBoolean>;
+      strike: z.ZodOptional<z.ZodBoolean>;
+      fontFamily: z.ZodOptional<z.ZodString>;
+      sizePt: z.ZodOptional<z.ZodNumber>;
+      color: z.ZodOptional<z.ZodObject<{
+        r: z.ZodNumber;
+        g: z.ZodNumber;
+        b: z.ZodNumber;
+      }, z.core.$strip>>;
+    }, z.core.$strict>>;
+  }, z.core.$strict>>>;
+  definitions: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodObject<{
+    kind: z.ZodString;
+  }, z.core.$loose>>>;
+  layers: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodObject<{
+    kind: z.ZodString;
+  }, z.core.$loose>>>;
+  attachments: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodObject<{
+    kind: z.ZodString;
+  }, z.core.$loose>>>;
+  destinations: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodObject<{
+    kind: z.ZodString;
+  }, z.core.$loose>>>;
+  symbolTable: z.ZodOptional<z.ZodObject<{
+    symbols: z.ZodArray<z.ZodObject<{
+      glyph: z.ZodString;
+      scope: z.ZodString;
+      id: z.ZodString;
+      quantityKind: z.ZodOptional<z.ZodString>;
+      preferredUnit: z.ZodOptional<z.ZodString>;
+      definitionSource: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
+    units: z.ZodArray<z.ZodObject<{
+      id: z.ZodString;
+      symbol: z.ZodString;
+      name: z.ZodOptional<z.ZodString>;
+      dimension: z.ZodRecord<z.ZodEnum<{
+        time: "time";
+        length: "length";
+        mass: "mass";
+        electricCurrent: "electricCurrent";
+        thermodynamicTemperature: "thermodynamicTemperature";
+        amountOfSubstance: "amountOfSubstance";
+        luminousIntensity: "luminousIntensity";
+      }> & z.core.$partial, z.ZodNumber>;
+      factorToSi: z.ZodObject<{
+        numerator: z.ZodString;
+        denominator: z.ZodString;
+      }, z.core.$strip>;
+      offsetToSi: z.ZodOptional<z.ZodObject<{
+        numerator: z.ZodString;
+        denominator: z.ZodString;
+      }, z.core.$strip>>;
+      context: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
+    contexts: z.ZodOptional<z.ZodArray<z.ZodObject<{
+      id: z.ZodString;
+      bases: z.ZodArray<z.ZodObject<{
+        unit: z.ZodString;
+        value: z.ZodObject<{
+          numerator: z.ZodString;
+          denominator: z.ZodString;
+        }, z.core.$strip>;
+      }, z.core.$strip>>;
+    }, z.core.$strip>>>;
+  }, z.core.$strip>>;
+  metadata: z.ZodObject<{
+    title: z.ZodOptional<z.ZodString>;
+    author: z.ZodOptional<z.ZodString>;
+    subject: z.ZodOptional<z.ZodString>;
+    keywords: z.ZodOptional<z.ZodArray<z.ZodString>>;
+    creator: z.ZodOptional<z.ZodString>;
+    producer: z.ZodOptional<z.ZodString>;
+    createdIso: z.ZodOptional<z.ZodString>;
+    modifiedIso: z.ZodOptional<z.ZodString>;
+  }, z.core.$strip>;
+  kind: z.ZodLiteral<"wordprocessing">;
+}, z.core.$strip>, z.ZodObject<{
+  children: z.ZodArray<z.ZodCustom<import("document-schema.js").SlideGroupNode, import("document-schema.js").SlideGroupNode>>;
+  pages: z.ZodOptional<z.ZodArray<z.ZodObject<{
+    widthPt: z.ZodNumber;
+    heightPt: z.ZodNumber;
+  }, z.core.$strip>>>;
+  styles: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodObject<{
+    paragraph: z.ZodOptional<z.ZodObject<{
+      alignment: z.ZodOptional<z.ZodEnum<{
+        left: "left";
+        center: "center";
+        right: "right";
+        justify: "justify";
+      }>>;
+      list: z.ZodOptional<z.ZodObject<{
+        numId: z.ZodOptional<z.ZodString>;
+        level: z.ZodNumber;
+      }, z.core.$strip>>;
+      spacingBeforePt: z.ZodOptional<z.ZodNumber>;
+      spacingAfterPt: z.ZodOptional<z.ZodNumber>;
+      lineSpacing: z.ZodOptional<z.ZodNumber>;
+      indentLeftPt: z.ZodOptional<z.ZodNumber>;
+      indentFirstLinePt: z.ZodOptional<z.ZodNumber>;
+    }, z.core.$strict>>;
+    run: z.ZodOptional<z.ZodObject<{
+      bold: z.ZodOptional<z.ZodBoolean>;
+      italic: z.ZodOptional<z.ZodBoolean>;
+      underline: z.ZodOptional<z.ZodBoolean>;
+      strike: z.ZodOptional<z.ZodBoolean>;
+      fontFamily: z.ZodOptional<z.ZodString>;
+      sizePt: z.ZodOptional<z.ZodNumber>;
+      color: z.ZodOptional<z.ZodObject<{
+        r: z.ZodNumber;
+        g: z.ZodNumber;
+        b: z.ZodNumber;
+      }, z.core.$strip>>;
+    }, z.core.$strict>>;
+  }, z.core.$strict>>>;
+  definitions: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodObject<{
+    kind: z.ZodString;
+  }, z.core.$loose>>>;
+  layers: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodObject<{
+    kind: z.ZodString;
+  }, z.core.$loose>>>;
+  attachments: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodObject<{
+    kind: z.ZodString;
+  }, z.core.$loose>>>;
+  destinations: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodObject<{
+    kind: z.ZodString;
+  }, z.core.$loose>>>;
+  symbolTable: z.ZodOptional<z.ZodObject<{
+    symbols: z.ZodArray<z.ZodObject<{
+      glyph: z.ZodString;
+      scope: z.ZodString;
+      id: z.ZodString;
+      quantityKind: z.ZodOptional<z.ZodString>;
+      preferredUnit: z.ZodOptional<z.ZodString>;
+      definitionSource: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
+    units: z.ZodArray<z.ZodObject<{
+      id: z.ZodString;
+      symbol: z.ZodString;
+      name: z.ZodOptional<z.ZodString>;
+      dimension: z.ZodRecord<z.ZodEnum<{
+        time: "time";
+        length: "length";
+        mass: "mass";
+        electricCurrent: "electricCurrent";
+        thermodynamicTemperature: "thermodynamicTemperature";
+        amountOfSubstance: "amountOfSubstance";
+        luminousIntensity: "luminousIntensity";
+      }> & z.core.$partial, z.ZodNumber>;
+      factorToSi: z.ZodObject<{
+        numerator: z.ZodString;
+        denominator: z.ZodString;
+      }, z.core.$strip>;
+      offsetToSi: z.ZodOptional<z.ZodObject<{
+        numerator: z.ZodString;
+        denominator: z.ZodString;
+      }, z.core.$strip>>;
+      context: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
+    contexts: z.ZodOptional<z.ZodArray<z.ZodObject<{
+      id: z.ZodString;
+      bases: z.ZodArray<z.ZodObject<{
+        unit: z.ZodString;
+        value: z.ZodObject<{
+          numerator: z.ZodString;
+          denominator: z.ZodString;
+        }, z.core.$strip>;
+      }, z.core.$strip>>;
+    }, z.core.$strip>>>;
+  }, z.core.$strip>>;
+  metadata: z.ZodObject<{
+    title: z.ZodOptional<z.ZodString>;
+    author: z.ZodOptional<z.ZodString>;
+    subject: z.ZodOptional<z.ZodString>;
+    keywords: z.ZodOptional<z.ZodArray<z.ZodString>>;
+    creator: z.ZodOptional<z.ZodString>;
+    producer: z.ZodOptional<z.ZodString>;
+    createdIso: z.ZodOptional<z.ZodString>;
+    modifiedIso: z.ZodOptional<z.ZodString>;
+  }, z.core.$strip>;
+  kind: z.ZodLiteral<"presentation">;
+}, z.core.$strip>, z.ZodObject<{
+  children: z.ZodArray<z.ZodCustom<import("document-schema.js").SheetGroupNode, import("document-schema.js").SheetGroupNode>>;
+  pages: z.ZodOptional<z.ZodArray<z.ZodObject<{
+    widthPt: z.ZodNumber;
+    heightPt: z.ZodNumber;
+  }, z.core.$strip>>>;
+  styles: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodObject<{
+    paragraph: z.ZodOptional<z.ZodObject<{
+      alignment: z.ZodOptional<z.ZodEnum<{
+        left: "left";
+        center: "center";
+        right: "right";
+        justify: "justify";
+      }>>;
+      list: z.ZodOptional<z.ZodObject<{
+        numId: z.ZodOptional<z.ZodString>;
+        level: z.ZodNumber;
+      }, z.core.$strip>>;
+      spacingBeforePt: z.ZodOptional<z.ZodNumber>;
+      spacingAfterPt: z.ZodOptional<z.ZodNumber>;
+      lineSpacing: z.ZodOptional<z.ZodNumber>;
+      indentLeftPt: z.ZodOptional<z.ZodNumber>;
+      indentFirstLinePt: z.ZodOptional<z.ZodNumber>;
+    }, z.core.$strict>>;
+    run: z.ZodOptional<z.ZodObject<{
+      bold: z.ZodOptional<z.ZodBoolean>;
+      italic: z.ZodOptional<z.ZodBoolean>;
+      underline: z.ZodOptional<z.ZodBoolean>;
+      strike: z.ZodOptional<z.ZodBoolean>;
+      fontFamily: z.ZodOptional<z.ZodString>;
+      sizePt: z.ZodOptional<z.ZodNumber>;
+      color: z.ZodOptional<z.ZodObject<{
+        r: z.ZodNumber;
+        g: z.ZodNumber;
+        b: z.ZodNumber;
+      }, z.core.$strip>>;
+    }, z.core.$strict>>;
+  }, z.core.$strict>>>;
+  definitions: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodObject<{
+    kind: z.ZodString;
+  }, z.core.$loose>>>;
+  layers: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodObject<{
+    kind: z.ZodString;
+  }, z.core.$loose>>>;
+  attachments: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodObject<{
+    kind: z.ZodString;
+  }, z.core.$loose>>>;
+  destinations: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodObject<{
+    kind: z.ZodString;
+  }, z.core.$loose>>>;
+  symbolTable: z.ZodOptional<z.ZodObject<{
+    symbols: z.ZodArray<z.ZodObject<{
+      glyph: z.ZodString;
+      scope: z.ZodString;
+      id: z.ZodString;
+      quantityKind: z.ZodOptional<z.ZodString>;
+      preferredUnit: z.ZodOptional<z.ZodString>;
+      definitionSource: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
+    units: z.ZodArray<z.ZodObject<{
+      id: z.ZodString;
+      symbol: z.ZodString;
+      name: z.ZodOptional<z.ZodString>;
+      dimension: z.ZodRecord<z.ZodEnum<{
+        time: "time";
+        length: "length";
+        mass: "mass";
+        electricCurrent: "electricCurrent";
+        thermodynamicTemperature: "thermodynamicTemperature";
+        amountOfSubstance: "amountOfSubstance";
+        luminousIntensity: "luminousIntensity";
+      }> & z.core.$partial, z.ZodNumber>;
+      factorToSi: z.ZodObject<{
+        numerator: z.ZodString;
+        denominator: z.ZodString;
+      }, z.core.$strip>;
+      offsetToSi: z.ZodOptional<z.ZodObject<{
+        numerator: z.ZodString;
+        denominator: z.ZodString;
+      }, z.core.$strip>>;
+      context: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
+    contexts: z.ZodOptional<z.ZodArray<z.ZodObject<{
+      id: z.ZodString;
+      bases: z.ZodArray<z.ZodObject<{
+        unit: z.ZodString;
+        value: z.ZodObject<{
+          numerator: z.ZodString;
+          denominator: z.ZodString;
+        }, z.core.$strip>;
+      }, z.core.$strip>>;
+    }, z.core.$strip>>>;
+  }, z.core.$strip>>;
+  metadata: z.ZodObject<{
+    title: z.ZodOptional<z.ZodString>;
+    author: z.ZodOptional<z.ZodString>;
+    subject: z.ZodOptional<z.ZodString>;
+    keywords: z.ZodOptional<z.ZodArray<z.ZodString>>;
+    creator: z.ZodOptional<z.ZodString>;
+    producer: z.ZodOptional<z.ZodString>;
+    createdIso: z.ZodOptional<z.ZodString>;
+    modifiedIso: z.ZodOptional<z.ZodString>;
+  }, z.core.$strip>;
+  kind: z.ZodLiteral<"spreadsheet">;
+}, z.core.$strip>, z.ZodObject<{
+  children: z.ZodArray<z.ZodCustom<import("document-schema.js").DrawPageGroupNode, import("document-schema.js").DrawPageGroupNode>>;
+  pages: z.ZodOptional<z.ZodArray<z.ZodObject<{
+    widthPt: z.ZodNumber;
+    heightPt: z.ZodNumber;
+  }, z.core.$strip>>>;
+  styles: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodObject<{
+    paragraph: z.ZodOptional<z.ZodObject<{
+      alignment: z.ZodOptional<z.ZodEnum<{
+        left: "left";
+        center: "center";
+        right: "right";
+        justify: "justify";
+      }>>;
+      list: z.ZodOptional<z.ZodObject<{
+        numId: z.ZodOptional<z.ZodString>;
+        level: z.ZodNumber;
+      }, z.core.$strip>>;
+      spacingBeforePt: z.ZodOptional<z.ZodNumber>;
+      spacingAfterPt: z.ZodOptional<z.ZodNumber>;
+      lineSpacing: z.ZodOptional<z.ZodNumber>;
+      indentLeftPt: z.ZodOptional<z.ZodNumber>;
+      indentFirstLinePt: z.ZodOptional<z.ZodNumber>;
+    }, z.core.$strict>>;
+    run: z.ZodOptional<z.ZodObject<{
+      bold: z.ZodOptional<z.ZodBoolean>;
+      italic: z.ZodOptional<z.ZodBoolean>;
+      underline: z.ZodOptional<z.ZodBoolean>;
+      strike: z.ZodOptional<z.ZodBoolean>;
+      fontFamily: z.ZodOptional<z.ZodString>;
+      sizePt: z.ZodOptional<z.ZodNumber>;
+      color: z.ZodOptional<z.ZodObject<{
+        r: z.ZodNumber;
+        g: z.ZodNumber;
+        b: z.ZodNumber;
+      }, z.core.$strip>>;
+    }, z.core.$strict>>;
+  }, z.core.$strict>>>;
+  definitions: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodObject<{
+    kind: z.ZodString;
+  }, z.core.$loose>>>;
+  layers: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodObject<{
+    kind: z.ZodString;
+  }, z.core.$loose>>>;
+  attachments: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodObject<{
+    kind: z.ZodString;
+  }, z.core.$loose>>>;
+  destinations: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodObject<{
+    kind: z.ZodString;
+  }, z.core.$loose>>>;
+  symbolTable: z.ZodOptional<z.ZodObject<{
+    symbols: z.ZodArray<z.ZodObject<{
+      glyph: z.ZodString;
+      scope: z.ZodString;
+      id: z.ZodString;
+      quantityKind: z.ZodOptional<z.ZodString>;
+      preferredUnit: z.ZodOptional<z.ZodString>;
+      definitionSource: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
+    units: z.ZodArray<z.ZodObject<{
+      id: z.ZodString;
+      symbol: z.ZodString;
+      name: z.ZodOptional<z.ZodString>;
+      dimension: z.ZodRecord<z.ZodEnum<{
+        time: "time";
+        length: "length";
+        mass: "mass";
+        electricCurrent: "electricCurrent";
+        thermodynamicTemperature: "thermodynamicTemperature";
+        amountOfSubstance: "amountOfSubstance";
+        luminousIntensity: "luminousIntensity";
+      }> & z.core.$partial, z.ZodNumber>;
+      factorToSi: z.ZodObject<{
+        numerator: z.ZodString;
+        denominator: z.ZodString;
+      }, z.core.$strip>;
+      offsetToSi: z.ZodOptional<z.ZodObject<{
+        numerator: z.ZodString;
+        denominator: z.ZodString;
+      }, z.core.$strip>>;
+      context: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
+    contexts: z.ZodOptional<z.ZodArray<z.ZodObject<{
+      id: z.ZodString;
+      bases: z.ZodArray<z.ZodObject<{
+        unit: z.ZodString;
+        value: z.ZodObject<{
+          numerator: z.ZodString;
+          denominator: z.ZodString;
+        }, z.core.$strip>;
+      }, z.core.$strip>>;
+    }, z.core.$strip>>>;
+  }, z.core.$strip>>;
+  metadata: z.ZodObject<{
+    title: z.ZodOptional<z.ZodString>;
+    author: z.ZodOptional<z.ZodString>;
+    subject: z.ZodOptional<z.ZodString>;
+    keywords: z.ZodOptional<z.ZodArray<z.ZodString>>;
+    creator: z.ZodOptional<z.ZodString>;
+    producer: z.ZodOptional<z.ZodString>;
+    createdIso: z.ZodOptional<z.ZodString>;
+    modifiedIso: z.ZodOptional<z.ZodString>;
+  }, z.core.$strip>;
+  kind: z.ZodLiteral<"drawing">;
+}, z.core.$strip>, z.ZodObject<{
+  children: z.ZodArray<z.ZodObject<{
+    mathml: z.ZodArray<z.ZodCustom<import("document-schema.js").MathMlNode, import("document-schema.js").MathMlNode>>;
+    starMath: z.ZodOptional<z.ZodString>;
+    presentation: z.ZodOptional<z.ZodObject<{
+      latex: z.ZodString;
+    }, z.core.$strip>>;
+    content: z.ZodOptional<z.ZodCustom<import("document-schema.js").MathExpression, import("document-schema.js").MathExpression>>;
+    provenance: z.ZodOptional<z.ZodObject<{
+      source: z.ZodString;
+      pageRef: z.ZodOptional<z.ZodString>;
+      editTrail: z.ZodArray<z.ZodString>;
+    }, z.core.$strip>>;
+  }, z.core.$strip>>;
+  pages: z.ZodOptional<z.ZodArray<z.ZodObject<{
+    widthPt: z.ZodNumber;
+    heightPt: z.ZodNumber;
+  }, z.core.$strip>>>;
+  styles: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodObject<{
+    paragraph: z.ZodOptional<z.ZodObject<{
+      alignment: z.ZodOptional<z.ZodEnum<{
+        left: "left";
+        center: "center";
+        right: "right";
+        justify: "justify";
+      }>>;
+      list: z.ZodOptional<z.ZodObject<{
+        numId: z.ZodOptional<z.ZodString>;
+        level: z.ZodNumber;
+      }, z.core.$strip>>;
+      spacingBeforePt: z.ZodOptional<z.ZodNumber>;
+      spacingAfterPt: z.ZodOptional<z.ZodNumber>;
+      lineSpacing: z.ZodOptional<z.ZodNumber>;
+      indentLeftPt: z.ZodOptional<z.ZodNumber>;
+      indentFirstLinePt: z.ZodOptional<z.ZodNumber>;
+    }, z.core.$strict>>;
+    run: z.ZodOptional<z.ZodObject<{
+      bold: z.ZodOptional<z.ZodBoolean>;
+      italic: z.ZodOptional<z.ZodBoolean>;
+      underline: z.ZodOptional<z.ZodBoolean>;
+      strike: z.ZodOptional<z.ZodBoolean>;
+      fontFamily: z.ZodOptional<z.ZodString>;
+      sizePt: z.ZodOptional<z.ZodNumber>;
+      color: z.ZodOptional<z.ZodObject<{
+        r: z.ZodNumber;
+        g: z.ZodNumber;
+        b: z.ZodNumber;
+      }, z.core.$strip>>;
+    }, z.core.$strict>>;
+  }, z.core.$strict>>>;
+  definitions: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodObject<{
+    kind: z.ZodString;
+  }, z.core.$loose>>>;
+  layers: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodObject<{
+    kind: z.ZodString;
+  }, z.core.$loose>>>;
+  attachments: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodObject<{
+    kind: z.ZodString;
+  }, z.core.$loose>>>;
+  destinations: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodObject<{
+    kind: z.ZodString;
+  }, z.core.$loose>>>;
+  symbolTable: z.ZodOptional<z.ZodObject<{
+    symbols: z.ZodArray<z.ZodObject<{
+      glyph: z.ZodString;
+      scope: z.ZodString;
+      id: z.ZodString;
+      quantityKind: z.ZodOptional<z.ZodString>;
+      preferredUnit: z.ZodOptional<z.ZodString>;
+      definitionSource: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
+    units: z.ZodArray<z.ZodObject<{
+      id: z.ZodString;
+      symbol: z.ZodString;
+      name: z.ZodOptional<z.ZodString>;
+      dimension: z.ZodRecord<z.ZodEnum<{
+        time: "time";
+        length: "length";
+        mass: "mass";
+        electricCurrent: "electricCurrent";
+        thermodynamicTemperature: "thermodynamicTemperature";
+        amountOfSubstance: "amountOfSubstance";
+        luminousIntensity: "luminousIntensity";
+      }> & z.core.$partial, z.ZodNumber>;
+      factorToSi: z.ZodObject<{
+        numerator: z.ZodString;
+        denominator: z.ZodString;
+      }, z.core.$strip>;
+      offsetToSi: z.ZodOptional<z.ZodObject<{
+        numerator: z.ZodString;
+        denominator: z.ZodString;
+      }, z.core.$strip>>;
+      context: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
+    contexts: z.ZodOptional<z.ZodArray<z.ZodObject<{
+      id: z.ZodString;
+      bases: z.ZodArray<z.ZodObject<{
+        unit: z.ZodString;
+        value: z.ZodObject<{
+          numerator: z.ZodString;
+          denominator: z.ZodString;
+        }, z.core.$strip>;
+      }, z.core.$strip>>;
+    }, z.core.$strip>>>;
+  }, z.core.$strip>>;
+  metadata: z.ZodObject<{
+    title: z.ZodOptional<z.ZodString>;
+    author: z.ZodOptional<z.ZodString>;
+    subject: z.ZodOptional<z.ZodString>;
+    keywords: z.ZodOptional<z.ZodArray<z.ZodString>>;
+    creator: z.ZodOptional<z.ZodString>;
+    producer: z.ZodOptional<z.ZodString>;
+    createdIso: z.ZodOptional<z.ZodString>;
+    modifiedIso: z.ZodOptional<z.ZodString>;
+  }, z.core.$strip>;
+  kind: z.ZodLiteral<"formula">;
+}, z.core.$strip>], "kind">>;
+declare const markdownContentCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uint8Array<ArrayBuffer>>, z.ZodDiscriminatedUnion<[z.ZodObject<{
   sections: z.ZodArray<z.ZodObject<{
     pageSize: z.ZodObject<{
       widthPt: z.ZodNumber;
@@ -780,4 +1313,4 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
   }, z.core.$strip>;
 }, z.core.$strip>], "kind">>;
 //#endregion
-export { MarkdownBytesSchema, markdownCodec };
+export { MarkdownBytesSchema, markdownCodec, markdownContentCodec };

@@ -1,6 +1,7 @@
 import { WriteMarkdownOptions } from "./options/options.js";
-import { ContentDocument } from "document-schema.js";
+import { ContentDocument, DocumentPackage } from "document-schema.js";
 //#region src/write.d.ts
-declare function writeMarkdown(document: ContentDocument, options?: WriteMarkdownOptions): string;
+declare function writeMarkdown(documentPackage: DocumentPackage, options?: WriteMarkdownOptions): string;
+declare function writeMarkdownContent(document: ContentDocument, options?: WriteMarkdownOptions): string;
 //#endregion
-export { writeMarkdown };
+export { writeMarkdown, writeMarkdownContent };
