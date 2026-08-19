@@ -67,8 +67,8 @@ importers:
         specifier: ^17.3.0
         version: 17.3.0
       odf.js:
-        specifier: ^3.1.0
-        version: 3.1.0
+        specifier: ^5.0.0
+        version: 5.0.0
       pdf-codec:
         specifier: ^3.0.4
         version: 3.0.4
@@ -1628,10 +1628,6 @@ packages:
     resolution: {integrity: sha512-x55gJFT4eyPieUkHRDbpV5ty3qeNRnPx96/h2T+PwHGINX1HCqMLrtkpqciSYUzrcKFG/s2hrQa1+Vk0Tz5Gow==}
     engines: {node: '>=20'}
 
-  document-schema.js@3.3.0:
-    resolution: {integrity: sha512-Jcg+sLEKF6T2w6WdCD1S0DcKFt1Kpk/rO1AZlE7fi0pqN4Ys8tN3qeY97DPc78QRy+EkbCW5hKLwM0EyV+Ojqw==}
-    engines: {node: '>=20'}
-
   document-schema.js@4.2.0:
     resolution: {integrity: sha512-ckdp0yIItnQKPK23ciINygPbKPQanvodeLT9uJIj1EtQpjIlaMqHT/8iKdoql2zrgOol0rUguJAsEWCHEr44Gw==}
     engines: {node: '>=20'}
@@ -2451,12 +2447,12 @@ packages:
     resolution: {integrity: sha512-4a+OsYv9UktOJKE+l1A4OufDgdRF9PifWj+tJnHURo/P+WOxpG4GzUFL9qCalmWauao6ogiG+QvnCovwPoyAWA==}
     engines: {node: '>=12.20.0'}
 
-  odf.js@3.1.0:
-    resolution: {integrity: sha512-P2fSMZr3wTsJR5dMJno2lNNJQEGBfLJaJ/GNpOzTxCY/81jA7d0DsYoHKZuzqIhVGmsOTMh4+6w0DKMxlLLl0g==}
-    engines: {node: '>=20'}
-
   odf.js@4.0.3:
     resolution: {integrity: sha512-XmC2ULP8DjUpkdqQ9FPfG7IBDQ44yH5kGuOLSja0/mqDdlB7zAaALMVA+unQB+eKnHNF5deuRSROYJMxyJ39Ag==}
+    engines: {node: '>=20'}
+
+  odf.js@5.0.0:
+    resolution: {integrity: sha512-IoPvCJ+pOF94R8B18Hgpf7cwzAOPo59b/oNZYHhh8+3gVTYOluuKgdPu0TTvTfd0BLLewquOzQD1mK+SFl1GaA==}
     engines: {node: '>=20'}
 
   onetime@6.0.0:
@@ -4629,10 +4625,6 @@ snapshots:
       document-schema.js: 4.2.0
       zod: 4.4.3
 
-  document-schema.js@3.3.0:
-    dependencies:
-      zod: 4.4.3
-
   document-schema.js@4.2.0:
     dependencies:
       zod: 4.4.3
@@ -5373,14 +5365,14 @@ snapshots:
 
   obug@2.1.4: {}
 
-  odf.js@3.1.0:
+  odf.js@4.0.3:
     dependencies:
-      document-schema.js: 3.3.0
+      document-schema.js: 4.3.0
       fast-xml-parser: 5.11.0
       fflate: 0.8.3
       zod: 4.4.3
 
-  odf.js@4.0.3:
+  odf.js@5.0.0:
     dependencies:
       document-schema.js: 4.3.0
       fast-xml-parser: 5.11.0
