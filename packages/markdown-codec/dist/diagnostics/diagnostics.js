@@ -24,6 +24,7 @@ const MarkdownDiagnosticCodes = {
 	FOOTNOTE_REFERENCE_PRESERVED_AS_TEXT: "md/footnote-reference-preserved-as-text",
 	FOOTNOTE_BODY_HEADING_FLATTENED: "md/footnote-body-heading-flattened",
 	CONSTRUCT_UNREPRESENTED: "md/construct-unrepresented",
+	PACKAGE_TABLE_DROPPED: "md/package-table-dropped",
 	HEADING_LEVEL_CLAMPED: "md/heading-level-clamped",
 	ADJACENT_LINKS_MERGED: "md/adjacent-links-merged",
 	CODE_SPAN_AS_MONOSPACE_RUN: "md/code-span-as-monospace-run",
@@ -90,5 +91,12 @@ var MarkdownUnsupportedDocumentKindError = class extends MarkdownWriteError {
 		this.kind = kind;
 	}
 };
+var MarkdownPackageFlattenError = class extends MarkdownWriteError {
+	constructor(cause) {
+		const detail = cause instanceof Error ? cause.message : String(cause);
+		super("md/package-flatten-failed", `flattening the package for write failed: ${detail}`);
+		this.name = "MarkdownPackageFlattenError";
+	}
+};
 //#endregion
-export { MarkdownDiagnosticCodes, MarkdownInputTooLargeError, MarkdownInvalidUtf8Error, MarkdownNestingLimitExceededError, MarkdownParseError, MarkdownUnbalancedConstructMarkersError, MarkdownUnsupportedDocumentKindError, MarkdownWriteError, NOOP_MARKDOWN_DIAGNOSTIC_SINK };
+export { MarkdownDiagnosticCodes, MarkdownInputTooLargeError, MarkdownInvalidUtf8Error, MarkdownNestingLimitExceededError, MarkdownPackageFlattenError, MarkdownParseError, MarkdownUnbalancedConstructMarkersError, MarkdownUnsupportedDocumentKindError, MarkdownWriteError, NOOP_MARKDOWN_DIAGNOSTIC_SINK };

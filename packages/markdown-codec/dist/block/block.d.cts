@@ -1,6 +1,6 @@
 import { s as MarkdownDocumentNode } from "../ast-8XCbjRQT.cjs";
 import { r as FootnoteLabelSet } from "../footnote-CKk4JbLk.cjs";
-import { i as MarkdownDiagnosticSink } from "../diagnostics-BuO5-SW1.cjs";
+import { i as MarkdownDiagnosticSink } from "../diagnostics-BWK1iGy7.cjs";
 import { n as LinkReferenceMap } from "../link-Dv4kxVjk.cjs";
 import { t as InlineParseOptions } from "../inline-CXVQWQnW.cjs";
 //#region src/block/block.d.ts

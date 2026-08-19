@@ -32,6 +32,7 @@ declare const MarkdownDiagnosticCodes: {
   readonly FOOTNOTE_REFERENCE_PRESERVED_AS_TEXT: "md/footnote-reference-preserved-as-text";
   readonly FOOTNOTE_BODY_HEADING_FLATTENED: "md/footnote-body-heading-flattened";
   readonly CONSTRUCT_UNREPRESENTED: "md/construct-unrepresented";
+  readonly PACKAGE_TABLE_DROPPED: "md/package-table-dropped";
   readonly HEADING_LEVEL_CLAMPED: "md/heading-level-clamped";
   readonly ADJACENT_LINKS_MERGED: "md/adjacent-links-merged";
   readonly CODE_SPAN_AS_MONOSPACE_RUN: "md/code-span-as-monospace-run";
@@ -69,5 +70,8 @@ declare class MarkdownUnsupportedDocumentKindError extends MarkdownWriteError {
   readonly kind: string;
   constructor(kind: string);
 }
+declare class MarkdownPackageFlattenError extends MarkdownWriteError {
+  constructor(cause: unknown);
+}
 //#endregion
-export { MarkdownInputTooLargeError as a, MarkdownParseError as c, MarkdownWriteError as d, NOOP_MARKDOWN_DIAGNOSTIC_SINK as f, MarkdownDiagnosticSink as i, MarkdownUnbalancedConstructMarkersError as l, MarkdownDiagnosticCodes as n, MarkdownInvalidUtf8Error as o, MarkdownDiagnosticSeverity as r, MarkdownNestingLimitExceededError as s, MarkdownDiagnostic as t, MarkdownUnsupportedDocumentKindError as u };
+export { MarkdownInputTooLargeError as a, MarkdownPackageFlattenError as c, MarkdownUnsupportedDocumentKindError as d, MarkdownWriteError as f, MarkdownDiagnosticSink as i, MarkdownParseError as l, MarkdownDiagnosticCodes as n, MarkdownInvalidUtf8Error as o, NOOP_MARKDOWN_DIAGNOSTIC_SINK as p, MarkdownDiagnosticSeverity as r, MarkdownNestingLimitExceededError as s, MarkdownDiagnostic as t, MarkdownUnbalancedConstructMarkersError as u };
