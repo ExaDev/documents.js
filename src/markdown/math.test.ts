@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { assemblePackage } from 'document-schema.js';
 import type { LatexDiagnostic } from '../latex/diagnostics';
 import { lintMathCoherence } from '../latex/lint';
 import { buildMarkdownText } from './write';
 import { lowerMarkdownMath } from './math';
 import { readMarkdownContent } from './read';
-import { assemblePackage } from '../convert/factor-styles';
 
 // The markdown math-lowering pass end to end: markdown-codec's preserved raw LaTeX ($$ display blocks, \( \) inline spans) becomes the two-layer ContentFormula every format in this family shares, the document's own prose seeds the symbol table, and the write side reconstructs the same markdown math syntax from the presentation layer. These tests pin the whole pipeline the issue describes -- "parse at the format edge, lower at the model level, so every input format that can carry LaTeX benefits from one lowering implementation".
 

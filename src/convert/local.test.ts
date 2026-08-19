@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { flattenPackage } from 'document-schema.js';
 import type { FontSubstitution } from 'pdf-codec';
 import { createDocx } from '../edit/docx/editor';
 import { createPptx } from '../edit/pptx/editor';
@@ -13,7 +14,6 @@ import { minimalOdtBytes } from '../test-support/odt';
 import { odsToXlsx } from './convert';
 import { createLocalDocumentConverter } from './local';
 import { UnsupportedConversionError } from './capability';
-import { flattenPackage } from './flatten';
 
 function pdfHeader(bytes: Uint8Array<ArrayBuffer>): string {
   return new TextDecoder('latin1').decode(bytes.subarray(0, 5));
