@@ -70,8 +70,8 @@ importers:
         specifier: ^3.1.0
         version: 3.1.0
       pdf-codec:
-        specifier: ^3.0.3
-        version: 3.0.3
+        specifier: ^3.0.4
+        version: 3.0.4
       publint:
         specifier: ^0.3.22
         version: 0.3.23
@@ -2579,6 +2579,10 @@ packages:
 
   pdf-codec@3.0.3:
     resolution: {integrity: sha512-MH6nh50HYh0hhxAuF7OTGQO3gfCBhLECl/uaxZ6REJ4+oTsAlnXtO5jJkd4v6t/paElFiKeZ83kDCUPHJNEOdA==}
+    engines: {node: '>=20'}
+
+  pdf-codec@3.0.4:
+    resolution: {integrity: sha512-EwGetkta3q/LBIu94883mES1uKmlIls8f8Mi0L/03xaV8uR1YftSwxnO00Vg+rWxPeE8TaCdZQVIExAhJtKvPQ==}
     engines: {node: '>=20'}
 
   picocolors@1.1.1:
@@ -5492,6 +5496,13 @@ snapshots:
   pathe@2.0.3: {}
 
   pdf-codec@3.0.3:
+    dependencies:
+      byte-codec: 1.1.9
+      document-schema.js: 4.3.0
+      fflate: 0.8.3
+      zod: 4.4.3
+
+  pdf-codec@3.0.4:
     dependencies:
       byte-codec: 1.1.9
       document-schema.js: 4.3.0
