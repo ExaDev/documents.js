@@ -1,0 +1,6 @@
+{
+  // A no-op Worker whose only purpose is to host pdf-codec's source as the module graph the workers test suite (test/workers/**) imports against under the real workerd runtime -- there is no fetch handler to exercise, only the codec's own read path running inside a Cloudflare Workers isolate to prove the production source carries zero Node-only API usage.
+  "name": "pdf-codec-workers-test",
+  "main": "src/index.ts",
+  "compatibility_date": "2024-09-23"
+}
