@@ -1,3 +1,15 @@
+# [2.1.0](https://github.com/ExaDev/document-mcp/compare/v2.0.10...v2.1.0) (2026-08-19)
+
+
+### Bug Fixes
+
+* route odg outlining through pdf, not svg ([b03ed73](https://github.com/ExaDev/document-mcp/commit/b03ed73db14dd055edee36e1853574791c448ef3))
+
+
+### Features
+
+* add outline_document tool projecting a document's table of contents ([af75e22](https://github.com/ExaDev/document-mcp/commit/af75e22b19d63121ebfa380fdca1abf892d5fcf2))
+
 ## [2.0.10](https://github.com/ExaDev/document-mcp/compare/v2.0.9...v2.0.10) (2026-08-18)
 
 ## [2.0.9](https://github.com/ExaDev/document-mcp/compare/v2.0.8...v2.0.9) (2026-08-18)
