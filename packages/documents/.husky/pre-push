@@ -1,0 +1,4 @@
+# Run typecheck, unit tests, and a full build before push to catch breakage early.
+pnpm typecheck
+pnpm test
+pnpm build
