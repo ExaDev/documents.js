@@ -44,7 +44,7 @@ describe('dist/cli.js --help', () => {
     expect(code).toBe(EXIT_SUCCESS);
     const text = stdout.toString('utf8');
     // markdown-to-pdf is not registered by any code in this package -- it exists only because documents.js's own createLocalDocumentConverter().conversions now includes a markdown edge, and registerConversionCommands (src/commands/convert.ts) loops over that array unmodified. Its presence here is the end-to-end proof that registering a new format entirely inside documents.js is enough.
-    for (const name of ['docx-to-pdf', 'markdown-to-pdf', 'convert', 'formats', 'odm-to-pdf', 'odb-tables', 'odb-forms', 'odb-reports', 'pdf-inspect', 'tui']) {
+    for (const name of ['docx-to-pdf', 'markdown-to-pdf', 'convert', 'formats', 'odm-to-pdf', 'odb-tables', 'odb-forms', 'odb-reports', 'pdf-inspect', 'outline', 'tui']) {
       expect(text).toContain(name);
     }
   });
@@ -357,6 +357,23 @@ describe('dist/cli.js csv and svg conversions', () => {
       const svg = await readFile(outputPath, 'utf8');
       expect(svg).toContain('<rect x="300" y="400"');
       expect(svg).not.toContain('<rect x="20" y="20"');
+    } finally {
+      await rm(tmpDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('dist/cli.js outline: real file round trip', () => {
+  it('prints an indented outline for a genuine docx fixture through the actual built binary', async () => {
+    const tmpDir = await mkdtemp(join(tmpdir(), 'document-cli-smoke-'));
+    try {
+      const inputPath = join(tmpDir, 'fixture.docx');
+      await writeFile(inputPath, buildFixtureDocxBytes());
+
+      const { code, stdout, stderr } = await spawnCli(['outline', inputPath]);
+      expect(code).toBe(EXIT_SUCCESS);
+      expect(stderr.length).toBe(0);
+      expect(stdout.toString('utf8')).toBe('Hello from the document-cli smoke test\n');
     } finally {
       await rm(tmpDir, { recursive: true, force: true });
     }
