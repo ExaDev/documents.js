@@ -1,3 +1,18 @@
+# [3.1.0](https://github.com/ExaDev/document-cli/compare/v3.0.11...v3.1.0) (2026-08-19)
+
+
+### Bug Fixes
+
+* **outline:** bridge odg to odp so a multi-page drawing can be outlined ([9b8cad4](https://github.com/ExaDev/document-cli/commit/9b8cad43330abae4cd86ac89800f92be137024c2))
+* **outline:** drop --delimiter, which never reached a csv source's outline ([ee2daf4](https://github.com/ExaDev/document-cli/commit/ee2daf4ba9cddf7c3bfce95635bcc42710314016))
+* **outline:** suppress the trailing newline for a document with no outline content ([0b37487](https://github.com/ExaDev/document-cli/commit/0b37487a13273b5dc51284746940986ddf738a4f))
+
+
+### Features
+
+* add an outline command printing a document's table-of-contents projection ([f49bdce](https://github.com/ExaDev/document-cli/commit/f49bdce13129db86f4c8f1282f5433dec1febcf6))
+* **outline:** add --from to name a source format extension inference can't resolve ([6bb5b09](https://github.com/ExaDev/document-cli/commit/6bb5b09b1ac95f3dc3cb724129a863cb04c88440))
+
 ## [3.0.11](https://github.com/ExaDev/document-cli/compare/v3.0.10...v3.0.11) (2026-08-18)
 
 ## [3.0.10](https://github.com/ExaDev/document-cli/compare/v3.0.9...v3.0.10) (2026-08-18)
