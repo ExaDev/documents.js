@@ -942,7 +942,7 @@ describe('odmToPdf', () => {
 });
 
 describe('inlineOdmSectionToContentSection', () => {
-  // readOdm's own inlineContent field is declared for schema-completeness but never actually populated by the installed odf.js 1.9.0 (a real .odm's text:section-source is always a bare external reference -- see odmToPdf's own module comment), so there is no byte-level .odm fixture that can drive this branch through odmToPdf's own public entry point; this exercises the conversion function directly with a hand-built OdmSection instead, the only way to prove it works at all.
+  // readOdm's own inlineContent field is declared for schema-completeness but never actually populated by the installed odf.js build (a real .odm's text:section-source is always a bare external reference -- see odmToPdf's own module comment), so there is no byte-level .odm fixture that can drive this branch through odmToPdf's own public entry point; this exercises the conversion function directly with a hand-built OdmSection instead, the only way to prove it works at all.
   it('builds a ContentSection directly from inlineContent, without needing a resolver', () => {
     const pkg = odmPackage([]);
     const contentSection = inlineOdmSectionToContentSection(

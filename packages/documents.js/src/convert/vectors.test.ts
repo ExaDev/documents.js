@@ -180,7 +180,7 @@ describe('readPptxContent: a hand-authored slide mixing a vector shape, a connec
   const PRESENTATION_RELS_XML = enc(
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/></Relationships>',
   );
-  // A real slide's own shape tree: an ordinary text shape (shapes[0]), a connector (p:cxnSp -- occupies no shape slot at all, so it must not shift shapes[1]'s own index), a bare vector p:sp (shapes[1]), a SECOND ordinary text shape (shapes[2] -- deliberately separating the two vectors, so they do NOT collapse into one maximal run), and a p:grpSp wrapping a third vector p:sp (shapes[3], flattened out of the group exactly as readPptx itself flattens it).
+  // A real slide's own shape tree: an ordinary text shape (shapes[0]), a connector (p:cxnSp -- occupies no shape slot at all, so it must not shift shapes[1]'s own index), a bare vector p:sp (shapes[1]), a SECOND ordinary text shape (shapes[2] -- deliberately separating the two vectors, so they do NOT collapse into one maximal run), and a p:grpSp wrapping a third vector p:sp (shapes[3], flattened out of the group exactly as readPptxContent itself flattens it).
   const SLIDE1_XML = enc(
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">' +
       '<p:cSld><p:spTree>' +
@@ -272,7 +272,7 @@ describe('readOdpContent: a hand-authored slide interleaving a real shape and a 
   const SVG_NS = 'xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0"';
   const STYLE_NS = 'xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"';
 
-  // A slide carrying a real draw:frame text box (occupying slide.shapes[0]) followed by a bare draw:rect (a genuine vector primitive, occupying no shape slot at all) -- proving the vector inserts AFTER the real shape rather than always at the end, and confirming (per this module's own dedicated correspondence test below) that odf.js's own readOdp and readDrawPageContent agree on where shapes[0] sits.
+  // A slide carrying a real draw:frame text box (occupying slide.shapes[0]) followed by a bare draw:rect (a genuine vector primitive, occupying no shape slot at all) -- proving the vector inserts AFTER the real shape rather than always at the end, and confirming (per this module's own dedicated correspondence test below) that odf.js's own readOdpContent and readDrawPageContent agree on where shapes[0] sits.
   function odpBytes(): Uint8Array<ArrayBuffer> {
     const contentXml = enc(
       `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<office:document-content ${OFFICE_NS} ${TEXT_NS} ${DRAW_NS} ${SVG_NS} ${STYLE_NS}>` +

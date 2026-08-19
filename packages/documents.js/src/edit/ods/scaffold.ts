@@ -57,7 +57,7 @@ function buildStylesXml(): XmlElement {
   ]);
 }
 
-// The one automatic style every sheet this editor creates shares, via table:table/@table:style-name -- a bare table-family style whose only property is style:master-page-name, exactly mirroring test-support/ods.ts's own hand-built fixture (which was itself built to match real readOds() expectations) and editor.ts's own ensureSheetTableStyleName, which mints this identical entry for any LATER sheet addSheet creates once this initial one is already present.
+// The one automatic style every sheet this editor creates shares, via table:table/@table:style-name -- a bare table-family style whose only property is style:master-page-name, exactly mirroring test-support/ods.ts's own hand-built fixture (which was itself built to match real readOdsContent() expectations) and editor.ts's own ensureSheetTableStyleName, which mints this identical entry for any LATER sheet addSheet creates once this initial one is already present.
 function buildSheetTableStyle(): XmlElement {
   return el('style:style', { 'style:name': SHEET_TABLE_STYLE_NAME, 'style:family': 'table', 'style:master-page-name': MASTER_PAGE_NAME });
 }

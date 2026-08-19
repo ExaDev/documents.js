@@ -452,7 +452,7 @@ describe('odp <-> pptx: shape rotation', () => {
   });
 });
 
-// minimalOdpBytes() (test-support/odp.ts) carries a rotated frame, a grouped pair of shapes, an image, and a TABLE SHAPE (a draw:frame whose content is a table:table directly, not inside a text box) -- the same real-shape variety odf.js's own readOdp fixture verified against genuine LibreOffice 26.2 output. buildOdpPackage/buildPptxPackage's own appendShape (src/edit/odp/content.ts, src/edit/pptx/content.ts) now writes a table block into a real table:table/a:tbl shape via OdpSlide.addTable/PptxSlide.addTable, so the table shape's own content survives this bridge exactly like every other shape kind on this fixture.
+// minimalOdpBytes() (test-support/odp.ts) carries a rotated frame, a grouped pair of shapes, an image, and a TABLE SHAPE (a draw:frame whose content is a table:table directly, not inside a text box) -- the same real-shape variety odf.js's own readOdpContent fixture verified against genuine LibreOffice 26.2 output. buildOdpPackage/buildPptxPackage's own appendShape (src/edit/odp/content.ts, src/edit/pptx/content.ts) now writes a table block into a real table:table/a:tbl shape via OdpSlide.addTable/PptxSlide.addTable, so the table shape's own content survives this bridge exactly like every other shape kind on this fixture.
 describe('odp <-> pptx: a table shape survives odpToPptx', () => {
   it('carries the rotated title, the grouped shapes, the image, the notes, and the table shape\'s own cell content through odpToPptx', () => {
     const pptxBytes = odpToPptx(minimalOdpBytes());
