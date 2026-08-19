@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import type { DocumentPackage, SectionGroupNode, SlideGroupNode } from 'document-schema.js';
-import { flattenPackage, isHeadingGroupNode, isListGroupNode, isShapeGroupNode } from 'document-schema.js';
+import { flattenPackage, isHeadingGroupNode, isListGroupNode, isSectionConstructGroupNode, isShapeGroupNode } from 'document-schema.js';
 import { decodePackage, encodePackage } from '../codec';
 import type { XmlElement, XmlNode } from '../model/node';
 import { el, txt } from '../xml/fragment';
@@ -67,6 +67,50 @@ function docxBytes(): Uint8Array<ArrayBuffer> {
   });
 }
 
+// A section carrying one content control (structured document tag) wrapping two paragraphs -- the one thing docxBody() above never exercises: decompose must promote the sdt's matched constructStart/constructEnd pair into a SectionConstructGroupNode spanning both paragraphs, and buildDocxPackageFromContent's construct-writing side must write that same w:sdt back out.
+function docxBodyWithConstruct(): XmlNode {
+  const sdt = el('w:sdt', {}, [
+    el('w:sdtPr', {}, [el('w:alias', { 'w:val': 'Approval block' }), el('w:tag', { 'w:val': 'approval' }), el('w:text')]),
+    el('w:sdtContent', {}, [
+      el('w:p', {}, [el('w:r', {}, [el('w:t', {}, [txt('Controlled paragraph one')])])]),
+      el('w:p', {}, [el('w:r', {}, [el('w:t', {}, [txt('Controlled paragraph two')])])]),
+    ]),
+  ]);
+  const sectPr = el('w:sectPr', {}, [el('w:pgSz', { 'w:w': '11906', 'w:h': '16838' }), el('w:pgMar', { 'w:top': '1440', 'w:right': '1440', 'w:bottom': '1440', 'w:left': '1440' })]);
+  return el('w:body', {}, [sdt, sectPr]);
+}
+
+function docxBytesWithConstruct(): Uint8Array<ArrayBuffer> {
+  return encodePackage({
+    parts: {
+      '[Content_Types].xml': { kind: 'xml', nodes: [contentTypes([{ part: '/word/document.xml', type: CT_DOCX }])] },
+      '_rels/.rels': { kind: 'xml', nodes: [relationships([{ id: 'rId1', type: REL_OFFICE_DOCUMENT, target: 'word/document.xml' }])] },
+      'word/document.xml': { kind: 'xml', nodes: [el('w:document', { 'xmlns:w': WML_NS }, [docxBodyWithConstruct()])] },
+    },
+  });
+}
+
+// A section carrying three paragraphs whose one run each shares identical bold+red formatting -- the other thing docxBody() above never exercises: factorStyles must mint a shared styles-table entry over the three runs (bestGroup's own >= 2 positions threshold) and strip the matching run properties off all three, and buildDocxPackageFromContent must re-materialise them identically via flattenPackage before writing.
+function boldRedRun(text: string): XmlNode {
+  return el('w:r', {}, [el('w:rPr', {}, [el('w:b'), el('w:color', { 'w:val': 'FF0000' })]), el('w:t', {}, [txt(text)])]);
+}
+
+function docxBodyWithRepeatedFormatting(): XmlNode {
+  const paragraphs = ['one', 'two', 'three'].map((text) => el('w:p', {}, [boldRedRun(text)]));
+  const sectPr = el('w:sectPr', {}, [el('w:pgSz', { 'w:w': '11906', 'w:h': '16838' }), el('w:pgMar', { 'w:top': '1440', 'w:right': '1440', 'w:bottom': '1440', 'w:left': '1440' })]);
+  return el('w:body', {}, [...paragraphs, sectPr]);
+}
+
+function docxBytesWithRepeatedFormatting(): Uint8Array<ArrayBuffer> {
+  return encodePackage({
+    parts: {
+      '[Content_Types].xml': { kind: 'xml', nodes: [contentTypes([{ part: '/word/document.xml', type: CT_DOCX }])] },
+      '_rels/.rels': { kind: 'xml', nodes: [relationships([{ id: 'rId1', type: REL_OFFICE_DOCUMENT, target: 'word/document.xml' }])] },
+      'word/document.xml': { kind: 'xml', nodes: [el('w:document', { 'xmlns:w': WML_NS }, [docxBodyWithRepeatedFormatting()])] },
+    },
+  });
+}
+
 function sectionGroups(document: DocumentPackage): SectionGroupNode[] {
   if (document.kind !== 'wordprocessing') {
     throw new Error(`expected a wordprocessing package, got "${document.kind}"`);
@@ -111,6 +155,35 @@ describe('readDocx: docx bytes -> DocumentPackage', () => {
     expect(flattened.metadata).toEqual(content.metadata);
     expect(flattened.kind === 'wordprocessing' ? flattened.sections : undefined).toEqual(content.sections);
   });
+
+  it('promotes a content control into its own construct group, and flattens back to exactly what readDocxContent reads', () => {
+    const pkg = decodePackage(docxBytesWithConstruct());
+    const document = readDocx(pkg);
+
+    const construct = sectionGroups(document)[0]?.children.find(isSectionConstructGroupNode);
+    expect(construct?.node).toMatchObject({ kind: 'contentControl', tag: 'approval', alias: 'Approval block' });
+    expect(construct?.children.map((child) => ('kind' in child && child.kind === 'paragraph' ? child.runs[0]?.text : undefined))).toEqual(['Controlled paragraph one', 'Controlled paragraph two']);
+
+    const flattened = flattenPackage(document);
+    const content = readDocxContent(pkg);
+    expect(flattened.kind === 'wordprocessing' ? flattened.sections : undefined).toEqual(content.sections);
+  });
+
+  it('mints a shared styles-table entry over repeated run formatting, and flattens back to exactly what readDocxContent reads', () => {
+    const pkg = decodePackage(docxBytesWithRepeatedFormatting());
+    const document = readDocx(pkg);
+
+    // The three paragraphs' identical bold+red run tuple crosses bestGroup's >= 2 positions threshold, so it mints one entry -- and every run loses its own direct bold/color in favour of the group-level ref that restores them.
+    expect(document.styles).toEqual({ s1: { run: { bold: true, color: { r: 1, g: 0, b: 0 } } } });
+    const paragraphs = sectionGroups(document)[0];
+    expect(paragraphs?.style).toBe('s1');
+    const runs = document.kind === 'wordprocessing' ? paragraphs?.children.flatMap((child) => ('kind' in child && child.kind === 'paragraph' ? child.runs : [])) : [];
+    expect(runs?.every((run) => run.bold === undefined && run.color === undefined)).toBe(true);
+
+    const flattened = flattenPackage(document);
+    const content = readDocxContent(pkg);
+    expect(flattened.kind === 'wordprocessing' ? flattened.sections : undefined).toEqual(content.sections);
+  });
 });
 
 describe('buildDocxPackage: DocumentPackage -> docx bytes', () => {
@@ -144,6 +217,18 @@ describe('buildDocxPackage: DocumentPackage -> docx bytes', () => {
 
   it('builds the same package the flat pair builds, so routing through the tree costs no fidelity of its own', () => {
     const pkg = decodePackage(docxBytes());
+
+    expect(buildDocxPackage(readDocx(pkg))).toEqual(buildDocxPackageFromContent(readDocxContent(pkg)));
+  });
+
+  it('builds the same package the flat pair builds when the section carries a promoted construct group', () => {
+    const pkg = decodePackage(docxBytesWithConstruct());
+
+    expect(buildDocxPackage(readDocx(pkg))).toEqual(buildDocxPackageFromContent(readDocxContent(pkg)));
+  });
+
+  it('builds the same package the flat pair builds when the section carries a minted styles table', () => {
+    const pkg = decodePackage(docxBytesWithRepeatedFormatting());
 
     expect(buildDocxPackage(readDocx(pkg))).toEqual(buildDocxPackageFromContent(readDocxContent(pkg)));
   });
