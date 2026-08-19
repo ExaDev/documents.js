@@ -167,4 +167,26 @@ describe('outline', () => {
     expect(exitCode).toBe(EXIT_USAGE_ERROR);
     expect(stderr).toContain('cannot infer a source format');
   });
+
+  it('prints nothing at all for a document with no outline content, rather than one stray blank line', async () => {
+    const emptyPath = join(workspace, 'empty.md');
+    await writeFile(emptyPath, '');
+
+    const { exitCode, stdout, stderr } = await runCli(['outline', emptyPath]);
+
+    expect(stderr).toBe('');
+    expect(exitCode).toBe(EXIT_SUCCESS);
+    // Not '\n' -- joining zero lines and then appending a trailing newline unconditionally would still write one blank line for a document with nothing to outline at all.
+    expect(stdout).toBe('');
+  });
+
+  it('--json still emits an empty array for the same empty document', async () => {
+    const emptyPath = join(workspace, 'empty-json.md');
+    await writeFile(emptyPath, '');
+
+    const { exitCode, stdout } = await runCli(['outline', emptyPath, '--json']);
+
+    expect(exitCode).toBe(EXIT_SUCCESS);
+    expect(stdout).toBe('[]\n');
+  });
 });

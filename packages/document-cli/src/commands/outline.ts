@@ -125,7 +125,10 @@ async function runOutline(input: string, options: OutlineCliOptions): Promise<nu
 
     const lines: string[] = [];
     appendOutlineLines(outline, 0, lines);
-    process.stdout.write(`${lines.join('\n')}\n`);
+    // An empty document (no groups, no leaves) has nothing to print -- joining an empty array still needs the trailing newline suppressed, or stdout would carry one blank line for a document with no outline at all.
+    if (lines.length > 0) {
+      process.stdout.write(`${lines.join('\n')}\n`);
+    }
     return EXIT_SUCCESS;
   } catch (error) {
     process.stderr.write(`[${command}] ${formatError(error, options.verbose)}\n`);
