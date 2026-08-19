@@ -29,6 +29,18 @@ const FUNCTIONS = [
   'syncManifest',
   'validateManifest',
   'setDocumentMediaType',
+  // Both levels of every typed reader: the package-native primary and the flat *Content function beneath it. Listed here so a rename or a missing barrel export fails against the BUILT artifact, not only against src.
+  'readOdt',
+  'readOdtContent',
+  'readOdp',
+  'readOdpContent',
+  'readOdg',
+  'readOdgContent',
+  'readOds',
+  'readOdsContent',
+  'readOdfFormula',
+  'readOdfFormulaContent',
+  'readOdfFormulaMathMl',
 ];
 const OBJECTS = ['packageCodec', 'xmlCodec', 'ODF_NAMESPACES', 'ODF_MEDIA_TYPES'];
 

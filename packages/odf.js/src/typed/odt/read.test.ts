@@ -8,7 +8,8 @@ import { PAGE_SIZE_A4 } from 'document-schema.js';
 import { el, txt } from '../../xml/fragment';
 import { parsePackage } from '../../package-io/read';
 import { parseOdfLength } from '../shared/units';
-import { readOdt } from './read';
+import { assertPackageRoundTrip, wordprocessingPackage } from '../../test-support/document-package';
+import { readOdt, readOdtContent } from './read';
 
 // This suite reads real, unmodified LibreOffice 26.2-generated .odt fixtures (src/typed/odt/fixtures/*.odt, built via a headless UNO Basic macro -- see this repository's own commit history for the exact macro -- never hand-edited afterwards) rather than programmatically reconstructing the expected XML shapes: the task this reader was built against is explicit that whitespace preservation, list nesting, and merged-cell handling must each be proven against genuine producer output, not just this package's own idea of what that output looks like. A handful of narrow error/fallback-path tests at the end use small, synthetic, hand-built packages instead (via el/txt, matching this package's other typed-reader tests), since those specific paths -- a missing content.xml, a missing office:text -- are not something any real LibreOffice document can ever actually produce.
 
@@ -49,9 +50,9 @@ function asTable(block: ContentBlock | undefined): ContentTable {
   return block;
 }
 
-describe('readOdt: kitchen-sink.odt (real LibreOffice output)', () => {
+describe('readOdtContent: kitchen-sink.odt (real LibreOffice output)', () => {
   const kitchenSink = loadFixture('kitchen-sink.odt');
-  const { metadata, sections } = readOdt(kitchenSink);
+  const { metadata, sections } = readOdtContent(kitchenSink);
   const section = sections[0];
   if (section === undefined) {
     throw new Error('expected at least one section');
@@ -201,9 +202,9 @@ describe('readOdt: kitchen-sink.odt (real LibreOffice output)', () => {
   });
 });
 
-describe('readOdt: minimal.odt (real LibreOffice output, default/unmodified page style)', () => {
+describe('readOdtContent: minimal.odt (real LibreOffice output, default/unmodified page style)', () => {
   const minimal = loadFixture('minimal.odt');
-  const { metadata, sections } = readOdt(minimal);
+  const { metadata, sections } = readOdtContent(minimal);
   const section = sections[0];
   if (section === undefined) {
     throw new Error('expected at least one section');
@@ -232,14 +233,14 @@ describe('readOdt: minimal.odt (real LibreOffice output, default/unmodified page
   });
 });
 
-describe('readOdt: error and fallback paths (synthetic packages -- not something real LibreOffice output can exercise)', () => {
+describe('readOdtContent: error and fallback paths (synthetic packages -- not something real LibreOffice output can exercise)', () => {
   it('throws when the package has no content.xml part at all', () => {
-    expect(() => readOdt({ parts: {} })).toThrow(/content\.xml/);
+    expect(() => readOdtContent({ parts: {} })).toThrow(/content\.xml/);
   });
 
   it('throws when content.xml has no office:body/office:text element', () => {
     const pkg: Package = { parts: { 'content.xml': { kind: 'xml', nodes: [el('office:document-content', {}, [el('office:body')])] } } };
-    expect(() => readOdt(pkg)).toThrow(/office:text/);
+    expect(() => readOdtContent(pkg)).toThrow(/office:text/);
   });
 
   it('falls back to document-schema.js\'s own PAGE_SIZE_A4/2cm-margin defaults when styles.xml is missing entirely', () => {
@@ -248,7 +249,7 @@ describe('readOdt: error and fallback paths (synthetic packages -- not something
         'content.xml': { kind: 'xml', nodes: [el('office:document-content', {}, [el('office:body', {}, [el('office:text', {}, [el('text:p', {}, [txt('hello')])])])])] },
       },
     };
-    const { sections } = readOdt(pkg);
+    const { sections } = readOdtContent(pkg);
     expect(sections[0]?.pageSize).toEqual(PAGE_SIZE_A4);
     expect(sections[0]?.margins.topPt).toBeCloseTo(knownLength('2cm'), 5);
   });
@@ -257,7 +258,64 @@ describe('readOdt: error and fallback paths (synthetic packages -- not something
     const pkg: Package = {
       parts: { 'content.xml': { kind: 'xml', nodes: [el('office:document-content', {}, [el('office:body', {}, [el('office:text')])])] } },
     };
-    const { sections } = readOdt(pkg);
+    const { sections } = readOdtContent(pkg);
     expect(sections[0]?.blocks).toEqual([]);
+  });
+});
+
+describe('readOdt: the package-native reader over the same real fixtures', () => {
+  it('assembles kitchen-sink.odt into a wordprocessing package whose tree flattens back to readOdtContent output exactly', () => {
+    const pkg = loadFixture('kitchen-sink.odt');
+    const content = readOdtContent(pkg);
+    const documentPackage = readOdt(pkg);
+
+    expect(documentPackage.kind).toBe('wordprocessing');
+    expect(documentPackage.metadata).toEqual(content.metadata);
+    // One section group per ContentSection -- the tree's mandatory top-level grouping, not a flattening of the section's own blocks.
+    expect(documentPackage.children).toHaveLength(content.sections.length);
+    assertPackageRoundTrip(documentPackage, { kind: 'wordprocessing', ...content });
+  });
+
+  it('groups this fixture\'s headings into real heading groups carrying their following blocks, rather than a flat block list', () => {
+    const documentPackage = wordprocessingPackage(readOdt(loadFixture('kitchen-sink.odt')));
+    const section = documentPackage.children[0];
+    if (section === undefined) {
+      throw new Error('expected one section group');
+    }
+    // Every top-level child of this fixture's section is a heading group (its body paragraphs and its table sit INSIDE the heading they follow), which is precisely the structure the flat ContentSection.blocks list cannot express.
+    for (const child of section.children) {
+      if (!('node' in child) || !('kind' in child.node) || child.node.kind !== 'paragraph') {
+        throw new Error('expected every top-level section child to be a heading group');
+      }
+      expect(child.node.headingLevel).toBeGreaterThanOrEqual(1);
+      expect(child.children.length).toBeGreaterThan(0);
+    }
+    expect(section.children.length).toBeGreaterThan(1);
+  });
+
+  it('mints a real styles table over the repeated run properties this fixture actually carries', () => {
+    const documentPackage = wordprocessingPackage(readOdt(loadFixture('kitchen-sink.odt')));
+    // Not an assertion that some fixed entry exists: the fixture's own repeated property tuples are what mint, so the check is that minting HAPPENED and that every ref in the tree names an entry the table defines.
+    const styles = documentPackage.styles;
+    expect(styles).toBeDefined();
+    expect(Object.keys(styles ?? {}).length).toBeGreaterThan(0);
+    for (const section of documentPackage.children) {
+      for (const child of section.children) {
+        if ('node' in child && child.style !== undefined) {
+          expect(styles?.[child.style]).toBeDefined();
+        }
+      }
+    }
+  });
+
+  it('assembles minimal.odt into a package that round-trips identically', () => {
+    const pkg = loadFixture('minimal.odt');
+    const content = readOdtContent(pkg);
+    assertPackageRoundTrip(readOdt(pkg), { kind: 'wordprocessing', ...content });
+  });
+
+  it('throws from the package-native reader exactly as the content reader does, on a package with no content.xml', () => {
+    const pkg: Package = { parts: {} };
+    expect(() => readOdt(pkg)).toThrow('readOdtContent: package has no content.xml part');
   });
 });

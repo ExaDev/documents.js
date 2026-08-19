@@ -1,4 +1,5 @@
-import type { ContentDocument, LayoutMetadata } from 'document-schema.js';
+import type { ContentDocument, DocumentPackage, LayoutMetadata } from 'document-schema.js';
+import { assemblePackage } from 'document-schema.js';
 import type { XmlElement, XmlNode } from '../../model/node';
 import type { Package } from '../../model/package';
 import { attrValue, elementsWithTag, rootElement } from '../../xml/query';
@@ -74,15 +75,15 @@ function findStarMathAnnotation(mathRoot: XmlElement): string | undefined {
   return undefined;
 }
 
-// Package -> OdfFormulaDocument. Throws only when content.xml itself, or a MathML root within it (see findMathRoot), is missing -- a genuinely unusable package, mirroring every other odf.js typed reader's own "missing required structural element" throw convention. `mathml` is the MathML root's own children (its real content -- typically a single <semantics> element wrapping the presentation MathML plus any <annotation>s, per real LibreOffice output; occasionally, for hand-authored presentation-only MathML with no <semantics> wrapper, the presentation elements directly), returned as the raw, lossless XmlNode[] this reader read them as -- see readOdfFormulaDocument below for the document-schema.js-pivot-shaped alternative built on top of this same result.
-export function readOdfFormula(pkg: Package): OdfFormulaDocument {
+// Package -> OdfFormulaDocument. Throws only when content.xml itself, or a MathML root within it (see findMathRoot), is missing -- a genuinely unusable package, mirroring every other odf.js typed reader's own "missing required structural element" throw convention. `mathml` is the MathML root's own children (its real content -- typically a single <semantics> element wrapping the presentation MathML plus any <annotation>s, per real LibreOffice output; occasionally, for hand-authored presentation-only MathML with no <semantics> wrapper, the presentation elements directly), returned as the raw, lossless XmlNode[] this reader read them as -- see readOdfFormulaContent below for the document-schema.js-pivot-shaped alternative built on top of this same result.
+export function readOdfFormulaMathMl(pkg: Package): OdfFormulaDocument {
   const contentPart = pkg.parts[CONTENT_PART];
   if (contentPart?.kind !== 'xml') {
-    throw new Error(`readOdfFormula: package has no ${CONTENT_PART} part`);
+    throw new Error(`readOdfFormulaMathMl: package has no ${CONTENT_PART} part`);
   }
   const mathRoot = findMathRoot(contentPart.nodes);
   if (mathRoot === undefined) {
-    throw new Error(`readOdfFormula: ${CONTENT_PART} has no MathML root element`);
+    throw new Error(`readOdfFormulaMathMl: ${CONTENT_PART} has no MathML root element`);
   }
 
   const metadata = readOdfMetadata(pkg);
@@ -91,15 +92,22 @@ export function readOdfFormula(pkg: Package): OdfFormulaDocument {
   return starMath === undefined ? { mathml: mathRoot.children, metadata } : { starMath, mathml: mathRoot.children, metadata };
 }
 
-// Package -> a real document-schema.js ContentDocument of kind 'formula'. Built directly on readOdfFormula's own result -- same throw behaviour, same metadata, same raw mathml/starMath -- just reshaped into the ContentDocumentSchema 'formula' variant document-schema.js 2.0.0 now defines, for a caller that wants the shared pivot type rather than this reader's own bespoke OdfFormulaDocument shape. readOdfFormula itself is unchanged and remains the right call for a caller that wants the raw, lossless data with no pivot-schema shaping at all.
+// Package -> a real document-schema.js ContentDocument of kind 'formula'. Built directly on readOdfFormulaMathMl's own result -- same throw behaviour, same metadata, same raw mathml/starMath -- just reshaped into the ContentDocumentSchema 'formula' variant document-schema.js 2.0.0 now defines, for a caller that wants the shared pivot type rather than this reader's own bespoke OdfFormulaDocument shape. readOdfFormulaMathMl itself is unchanged and remains the right call for a caller that wants the raw, lossless data with no pivot-schema shaping at all.
 //
 // `mathml` here is odf.js's own XmlNode[] (this package's local, hand-written recursive element type); the object literal below assigns it straight into ContentFormula's own `mathml: MathMlNode[]` field, checked structurally against this function's own `ContentDocument` return type, with NO cast anywhere. XmlNode and MathMlNode are independently-defined structural mirrors of each other (see this module's own top-of-file note and src/interop.test.ts-style guards elsewhere in this family), not a shared class or branded type, so this return statement compiling unmodified is itself the live proof that document-schema.js's MathMlNode transcription is a genuine structural supertype of XmlNode.
-export function readOdfFormulaDocument(pkg: Package): ContentDocument {
-  const { mathml, starMath, metadata } = readOdfFormula(pkg);
+export function readOdfFormulaContent(pkg: Package): ContentDocument {
+  const { mathml, starMath, metadata } = readOdfFormulaMathMl(pkg);
 
   return {
     kind: 'formula',
     metadata,
     formula: starMath === undefined ? { mathml } : { mathml, starMath },
   };
+}
+
+// Package -> DocumentPackage: this module's PRIMARY entry point, the formula mirror of readOdtContent/readOdt (see src/typed/odt/read.ts's own note on why assemblePackage rather than bare decompose, and why no `pages` argument). A formula package's single child is the ContentFormula leaf itself -- there is no container structure to group and therefore nothing for the minting pass to factor, so assemblePackage's styles table is necessarily absent here; the call still routes through it rather than hand-building the envelope, so every reader in this package constructs its package exactly one way.
+//
+// This function takes the name readOdfFormulaMathMl carried before this package's DocumentPackage-native API landed. The two remaining names below it are the same ladder every other format has -- readOdfFormulaContent for the flat ContentDocument pivot, readOdfFormulaMathMl for the raw MathML nodes plus StarMath annotation with no pivot shaping at all -- so a caller picks the level it needs rather than the level this module happened to expose first.
+export function readOdfFormula(pkg: Package): DocumentPackage {
+  return assemblePackage(readOdfFormulaContent(pkg));
 }

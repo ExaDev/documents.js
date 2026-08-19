@@ -57,7 +57,7 @@ export function resolvePageLayoutProperties(pkg: Package, masterPageName: string
   return pageLayout === undefined ? undefined : childrenWithTag(pageLayout, 'style:page-layout-properties')[0];
 }
 
-// Resolves one draw:page's own size through the full chain, or undefined if any link doesn't resolve -- the caller supplies its own format-appropriate fallback (a presentation and a drawing document have genuinely different real-world defaults; see readOdp/readOdg's own DEFAULT_PAGE_SIZE constants) rather than this shared function baking one in.
+// Resolves one draw:page's own size through the full chain, or undefined if any link doesn't resolve -- the caller supplies its own format-appropriate fallback (a presentation and a drawing document have genuinely different real-world defaults; see readOdpContent/readOdgContent's own DEFAULT_PAGE_SIZE constants) rather than this shared function baking one in.
 export function resolveDrawPageSize(page: XmlElement, pkg: Package): PageSize | undefined {
   const masterPageName = attrValue(page, 'draw:master-page-name');
   const properties = resolvePageLayoutProperties(pkg, masterPageName);

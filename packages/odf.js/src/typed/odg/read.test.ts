@@ -2,9 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { PAGE_SIZE_A4 } from 'document-schema.js';
 import type { Package } from '../../model/package';
 import { el, txt } from '../../xml/fragment';
-import { readOdg } from './read';
+import { assertPackageRoundTrip, drawingPackage } from '../../test-support/document-package';
+import { readOdg, readOdgContent } from './read';
 
-// A full, real-shape .odg fixture assembled from XML shapes verified against genuine LibreOffice 26.2 output (a StarBasic macro run headlessly against the LibreOffice UNO API to construct actual draw:rect/ellipse/line/path/custom-shape geometry, then the resulting content.xml inspected directly -- NOT hand-authored guesses; see typed/shared/path.ts's own top-of-file note for the full verification method), matching this package's other typed-reader tests' established convention of building packages programmatically from ground-truth-verified shapes rather than loading a committed binary fixture (mirroring readOdp's own read.test.ts).
+// A full, real-shape .odg fixture assembled from XML shapes verified against genuine LibreOffice 26.2 output (a StarBasic macro run headlessly against the LibreOffice UNO API to construct actual draw:rect/ellipse/line/path/custom-shape geometry, then the resulting content.xml inspected directly -- NOT hand-authored guesses; see typed/shared/path.ts's own top-of-file note for the full verification method), matching this package's other typed-reader tests' established convention of building packages programmatically from ground-truth-verified shapes rather than loading a committed binary fixture (mirroring readOdpContent's own read.test.ts).
 
 function stylesXml(): Package['parts'][string] {
   return {
@@ -80,14 +81,14 @@ function buildFixturePackage(): Package {
   return { parts: { 'content.xml': contentXml, 'styles.xml': stylesXml(), 'meta.xml': metaXml } };
 }
 
-describe('readOdg', () => {
+describe('readOdgContent', () => {
   it('reads draw:page elements in native document order (no p:sldIdLst-style indirection, matching odp)', () => {
-    const { pages } = readOdg(buildFixturePackage());
+    const { pages } = readOdgContent(buildFixturePackage());
     expect(pages).toHaveLength(2);
   });
 
-  it('resolves page size from the master-page -> page-layout chain, identically to readOdp', () => {
-    const { pages } = readOdg(buildFixturePackage());
+  it('resolves page size from the master-page -> page-layout chain, identically to readOdpContent', () => {
+    const { pages } = readOdgContent(buildFixturePackage());
     expect(pages[0]?.size.widthPt).toBeCloseTo((21 * 72) / 2.54, 6);
     expect(pages[0]?.size.heightPt).toBeCloseTo((29.7 * 72) / 2.54, 6);
   });
@@ -95,23 +96,23 @@ describe('readOdg', () => {
   it('falls back to A4 (LibreOffice Draw\'s own real default page size) when the master-page/page-layout chain does not resolve', () => {
     const pkg = buildFixturePackage();
     delete pkg.parts['styles.xml'];
-    const { pages } = readOdg(pkg);
+    const { pages } = readOdgContent(pkg);
     expect(pages[0]?.size).toEqual(PAGE_SIZE_A4);
   });
 
   it('reads every recognised vector primitive kind onto the first page\'s own vectors array', () => {
-    const { pages } = readOdg(buildFixturePackage());
+    const { pages } = readOdgContent(buildFixturePackage());
     const kinds = pages[0]?.vectors.map((v) => v.kind);
     expect(kinds).toEqual(['ellipse', 'line', 'path', 'path', 'rect', 'ellipse', 'rect']);
   });
 
   it('salvages the unrecognised custom-shape preset ("smiley") as nothing at all (no real text content in this fixture) rather than a vector', () => {
-    const { pages } = readOdg(buildFixturePackage());
+    const { pages } = readOdgContent(buildFixturePackage());
     expect(pages[0]?.shapes).toEqual([]);
   });
 
   it('reads the closed curve\'s real svg:d geometry correctly end to end (viewBox-scaled cubic segment)', () => {
-    const { pages } = readOdg(buildFixturePackage());
+    const { pages } = readOdgContent(buildFixturePackage());
     const path = pages[0]?.vectors.find((v) => v.kind === 'path' && v.subpaths[0]?.closed === true);
     if (path?.kind !== 'path') {
       throw new Error('expected the closed curve path vector');
@@ -121,7 +122,7 @@ describe('readOdg', () => {
   });
 
   it('reads the polygon\'s draw:points geometry as a closed straight-line path', () => {
-    const { pages } = readOdg(buildFixturePackage());
+    const { pages } = readOdgContent(buildFixturePackage());
     const polygon = pages[0]?.vectors.find((v) => v.kind === 'path' && v.subpaths[0]?.closed === true && v.subpaths[0]?.segments.length === 3);
     if (polygon?.kind !== 'path') {
       throw new Error('expected the polygon path vector');
@@ -130,30 +131,62 @@ describe('readOdg', () => {
   });
 
   it('reads a recognised custom-shape preset\'s fill from its own graphic-family style', () => {
-    const { pages } = readOdg(buildFixturePackage());
+    const { pages } = readOdgContent(buildFixturePackage());
     const rectPreset = pages[0]?.vectors.find((v) => v.kind === 'rect');
     expect(rectPreset?.fill).toEqual({ r: 0, g: 0.5019607843137255, b: 1 });
   });
 
   it('reads a second page\'s draw:frame text content via the SAME shared shape-walking logic odp uses', () => {
-    const { pages } = readOdg(buildFixturePackage());
+    const { pages } = readOdgContent(buildFixturePackage());
     expect(pages[1]?.shapes).toHaveLength(1);
     expect(pages[1]?.shapes[0]?.blocks[0]).toMatchObject({ kind: 'paragraph', runs: [{ text: 'Page two text' }] });
   });
 
   it('reads document metadata via meta.xml', () => {
-    const { metadata } = readOdg(buildFixturePackage());
+    const { metadata } = readOdgContent(buildFixturePackage());
     expect(metadata.title).toBe('My Drawing');
   });
 
   it('reads an empty pages array for a package with no office:drawing at all', () => {
     const pkg: Package = { parts: { 'content.xml': { kind: 'xml', nodes: [el('office:document-content', {}, [el('office:body')])] } } };
-    expect(readOdg(pkg).pages).toEqual([]);
+    expect(readOdgContent(pkg).pages).toEqual([]);
   });
 
   it('reads an empty pages array and empty metadata for a package with no content.xml at all', () => {
-    const result = readOdg({ parts: {} });
+    const result = readOdgContent({ parts: {} });
     expect(result.pages).toEqual([]);
     expect(result.metadata).toEqual({});
+  });
+});
+
+describe('readOdg: the package-native reader over the same fixture', () => {
+  it('assembles the fixture into a drawing package whose tree flattens back to readOdgContent output exactly', () => {
+    const pkg = buildFixturePackage();
+    const content = readOdgContent(pkg);
+    const documentPackage = readOdg(pkg);
+
+    expect(documentPackage.kind).toBe('drawing');
+    expect(documentPackage.metadata).toEqual(content.metadata);
+    // One draw-page group per authored ContentDrawPage. These are the document's OWN pages, not the package envelope's rendered `pages` array -- which stays absent, since no layout pass has run.
+    expect(documentPackage.children).toHaveLength(content.pages.length);
+    expect(documentPackage.pages).toBeUndefined();
+    assertPackageRoundTrip(documentPackage, { kind: 'drawing', ...content });
+  });
+
+  it('carries each page\'s size on its group node, its shapes as groups, and its vector primitives as the leaves after them', () => {
+    const pkg = buildFixturePackage();
+    const content = readOdgContent(pkg);
+    const documentPackage = drawingPackage(readOdg(pkg));
+    const firstPage = documentPackage.children[0];
+    const firstContentPage = content.pages[0];
+    if (firstPage === undefined || firstContentPage === undefined) {
+      throw new Error('expected at least one draw page');
+    }
+    expect(firstPage.node.kind).toBe('drawPage');
+    expect(firstPage.node.size).toEqual(firstContentPage.size);
+    // A shape is a container and becomes its own group; a vector is a textless primitive with no inner structure and stays a leaf, after every shape group -- so the page's children are the two arrays concatenated in that order.
+    expect(firstPage.children).toHaveLength(firstContentPage.shapes.length + firstContentPage.vectors.length);
+    expect(firstPage.children.slice(firstContentPage.shapes.length)).toEqual(firstContentPage.vectors);
+    expect(firstContentPage.vectors.length).toBeGreaterThan(0);
   });
 });

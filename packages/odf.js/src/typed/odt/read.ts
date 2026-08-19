@@ -1,5 +1,5 @@
-import type { ContentBlock, ContentParagraph, ContentSection, LayoutMetadata, Margins, PageSize } from 'document-schema.js';
-import { PAGE_SIZE_A4 } from 'document-schema.js';
+import type { ContentBlock, ContentParagraph, ContentSection, DocumentPackage, LayoutMetadata, Margins, PageSize } from 'document-schema.js';
+import { assemblePackage, PAGE_SIZE_A4 } from 'document-schema.js';
 import type { Package } from '../../model/package';
 import type { XmlElement, XmlNode } from '../../model/node';
 import { rootElement, findChildElement, childrenWithTag, attrValue } from '../../xml/query';
@@ -27,7 +27,7 @@ const CONTENT_PART = 'content.xml';
 const STYLES_PART = 'styles.xml';
 const AUTOMATIC_STYLE_PARTS = [CONTENT_PART, STYLES_PART] as const;
 
-// text:outline-level's ODF schema default when the attribute is absent is 1 (OASIS ODF 1.2 part 1); an unparseable or non-positive value degrades to the same default rather than throwing, matching this reader's general "malformed-but-salvageable input degrades gracefully" posture (readOdt itself has no diagnostics channel to report it through).
+// text:outline-level's ODF schema default when the attribute is absent is 1 (OASIS ODF 1.2 part 1); an unparseable or non-positive value degrades to the same default rather than throwing, matching this reader's general "malformed-but-salvageable input degrades gracefully" posture (readOdtContent itself has no diagnostics channel to report it through).
 function readOutlineLevel(headingElement: XmlElement): number {
   const raw = attrValue(headingElement, 'text:outline-level');
   if (raw === undefined) {
@@ -73,7 +73,7 @@ function readBlocks(nodes: readonly XmlNode[], pkg: Package, listIdState: OdfLis
 function parseKnownOdfLength(value: string): number {
   const parsed = parseOdfLength(value);
   if (parsed === undefined) {
-    throw new Error(`readOdt: internal error -- "${value}" is not a valid ODF length literal`);
+    throw new Error(`readOdtContent: internal error -- "${value}" is not a valid ODF length literal`);
   }
   return parsed;
 }
@@ -81,7 +81,7 @@ function parseKnownOdfLength(value: string): number {
 const DEFAULT_MARGIN_PT = parseKnownOdfLength('2cm');
 const DEFAULT_MARGINS: Margins = { topPt: DEFAULT_MARGIN_PT, rightPt: DEFAULT_MARGIN_PT, bottomPt: DEFAULT_MARGIN_PT, leftPt: DEFAULT_MARGIN_PT };
 
-// A style:page-layout can live in either part's own office:automatic-styles (verified against real LibreOffice output) -- mirroring readOdp's own findPageLayoutElement (typed/odp/read.ts), which searches both content.xml and styles.xml for the identical reason (and cascade.ts's own collectStyles, which does the same for style:style/style:default-style). Duplicated here in full, deliberately, rather than importing readOdp's own private helper: this reader's own "first master page in document order" master-page selection differs enough from readOdp's own per-slide draw:master-page-name lookup that sharing just the page-layout half would leave the master-page half split across two modules for no real gain -- and readOdp's own findPageLayoutElement was never exported for reuse in the first place.
+// A style:page-layout can live in either part's own office:automatic-styles (verified against real LibreOffice output) -- mirroring readOdpContent's own findPageLayoutElement (typed/odp/read.ts), which searches both content.xml and styles.xml for the identical reason (and cascade.ts's own collectStyles, which does the same for style:style/style:default-style). Duplicated here in full, deliberately, rather than importing readOdpContent's own private helper: this reader's own "first master page in document order" master-page selection differs enough from readOdpContent's own per-slide draw:master-page-name lookup that sharing just the page-layout half would leave the master-page half split across two modules for no real gain -- and readOdpContent's own findPageLayoutElement was never exported for reuse in the first place.
 function findPageLayoutElement(pkg: Package, pageLayoutName: string | undefined): XmlElement | undefined {
   if (pageLayoutName === undefined) {
     return undefined;
@@ -106,7 +106,7 @@ function findPageLayoutElement(pkg: Package, pageLayoutName: string | undefined)
 
 // Reads the FIRST style:master-page (styles.xml's office:master-styles, in document order) and its associated style:page-layout into PageSize/Margins, via geometry.ts's own parsing helpers. A document with more than one master page (a mid-document page-style change, e.g. switching to a landscape layout partway through) has every master page AFTER the first silently ignored -- a deliberate, tracked scope gap, not an oversight: ODF's own multi-master-page mechanism doesn't correspond to anything ContentSection currently models (one ContentSection carries exactly one pageSize/margins pair for its own blocks), and building that mapping is genuinely separate, larger work from this reader's own current job of proving the single-section, single-page-layout path end to end.
 //
-// ODF/LibreOffice's own out-of-the-box defaults for a freshly created, unmodified text document -- confirmed directly against a real Writer document's own style:page-layout-properties (21cm x 29.7cm page, 2cm margins on every side) -- used only when a package's styles.xml is missing, malformed, or has no master page/page layout this reader can resolve. Deliberately A4-based rather than reusing document-schema.js's own PAGE_SIZE_LETTER convention (which ooxml.js's docx reader falls back to): Word's real default is genuinely Letter-sized, but ODF/LibreOffice's real default is genuinely A4-sized, so each reader's own fallback should reflect the format it actually reads, not a single cross-format constant -- mirroring readOdp's own SLIDE_SIZE_WIDESCREEN fallback choice for the same reason.
+// ODF/LibreOffice's own out-of-the-box defaults for a freshly created, unmodified text document -- confirmed directly against a real Writer document's own style:page-layout-properties (21cm x 29.7cm page, 2cm margins on every side) -- used only when a package's styles.xml is missing, malformed, or has no master page/page layout this reader can resolve. Deliberately A4-based rather than reusing document-schema.js's own PAGE_SIZE_LETTER convention (which ooxml.js's docx reader falls back to): Word's real default is genuinely Letter-sized, but ODF/LibreOffice's real default is genuinely A4-sized, so each reader's own fallback should reflect the format it actually reads, not a single cross-format constant -- mirroring readOdpContent's own SLIDE_SIZE_WIDESCREEN fallback choice for the same reason.
 function readFirstMasterPageGeometry(pkg: Package): { pageSize: PageSize; margins: Margins } {
   const stylesPart = pkg.parts[STYLES_PART];
   const stylesRoot = stylesPart?.kind === 'xml' ? rootElement(stylesPart.nodes) : undefined;
@@ -126,16 +126,16 @@ function readFirstMasterPageGeometry(pkg: Package): { pageSize: PageSize; margin
 }
 
 // Package -> OdtDocument. Throws only when content.xml itself, or its own office:body/office:text element, is missing -- a genuinely unusable package, mirroring exactly how ooxml.js's own readDocx throws when word/document.xml or its w:body is missing, rather than degrading gracefully the way a merely malformed or absent OPTIONAL part (meta.xml, styles.xml, an individual style reference) does throughout the rest of this reader.
-export function readOdt(pkg: Package): OdtDocument {
+export function readOdtContent(pkg: Package): OdtDocument {
   const contentPart = pkg.parts[CONTENT_PART];
   if (contentPart?.kind !== 'xml') {
-    throw new Error(`readOdt: package has no ${CONTENT_PART} part`);
+    throw new Error(`readOdtContent: package has no ${CONTENT_PART} part`);
   }
   const contentRoot = rootElement(contentPart.nodes);
   const body = contentRoot === undefined ? undefined : findChildElement(contentRoot.children, 'office:body');
   const textElement = body === undefined ? undefined : findChildElement(body.children, 'office:text');
   if (textElement === undefined) {
-    throw new Error(`readOdt: ${CONTENT_PART} has no office:body/office:text element`);
+    throw new Error(`readOdtContent: ${CONTENT_PART} has no office:body/office:text element`);
   }
 
   const metadata = readOdfMetadata(pkg);
@@ -144,4 +144,14 @@ export function readOdt(pkg: Package): OdtDocument {
   const blocks = readBlocks(textElement.children, pkg, listIdState);
 
   return { metadata, sections: [{ pageSize, margins, blocks }] };
+}
+
+// Package -> DocumentPackage: this module's PRIMARY entry point, and the one a caller reaching for "read a .odt" should use. readOdtContent above stays exactly what it always was -- the flat, ContentDocument-level reader -- and this function is nothing more than its result spliced into the 'wordprocessing' ContentDocument envelope and handed to document-schema.js's own assemblePackage.
+//
+// assemblePackage rather than bare decompose, per that function's own doc comment ("the tree-form DocumentPackage every construction site reports"): decompose alone yields the `children` array for a caller composing its own package boundary, whereas a reader IS a construction site and owes its caller the whole package -- envelope spliced on, styles table minted over the result -- exactly as documents.js's own conversion pipeline already does at every package it builds. factorStyles is not called here either: assemblePackage already mints, and re-minting an already-minted package is a no-op by law (iii).
+//
+// No `pages` argument is passed, and none can be: `pages` carries each RENDERED page's own size, which only a layout pass can report. A reader runs strictly before any layout, so the package it returns is a content-only one -- its nodes carry no `frames` and its root carries no `pages`, which is the honest shape for a document nothing has laid out yet.
+export function readOdt(pkg: Package): DocumentPackage {
+  const { metadata, sections } = readOdtContent(pkg);
+  return assemblePackage({ kind: 'wordprocessing', metadata, sections });
 }

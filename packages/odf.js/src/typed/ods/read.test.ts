@@ -9,9 +9,10 @@ import { el, txt } from '../../xml/fragment';
 import { bytesToBase64 } from '../../util/base64';
 import { parsePackage } from '../../package-io/read';
 import { parseOdfLength } from '../shared/units';
-import { readOds } from './read';
+import { assertPackageRoundTrip, spreadsheetPackage } from '../../test-support/document-package';
+import { readOds, readOdsContent } from './read';
 
-// This suite reads real, unmodified LibreOffice 26.2-generated .ods fixtures (src/typed/ods/fixtures/*.ods, built via a headless UNO Basic macro driving the SAME UNO calls the Calc UI itself uses -- Format > Columns > Width, Format > Rows > Height, Format > Print Areas, Format > Page Style's Sheet tab -- never hand-edited afterwards) rather than programmatically reconstructing the expected XML shapes, mirroring readOdt's own established convention: this reader's own design brief is explicit that print-settings attribute names and the repeat-row/repeat-column mechanism must each be proven against genuine producer output, not just this package's own idea of what that output looks like. A handful of narrow scope-boundary/hazard-proof tests at the end use small, synthetic, hand-built packages instead (via el/txt), since a genuinely million-row repeat isn't something worth shipping as a binary fixture when the exact real repeat count is already established (typed/shared/a1.test.ts, citing a real LibreOffice-shipped .ots template).
+// This suite reads real, unmodified LibreOffice 26.2-generated .ods fixtures (src/typed/ods/fixtures/*.ods, built via a headless UNO Basic macro driving the SAME UNO calls the Calc UI itself uses -- Format > Columns > Width, Format > Rows > Height, Format > Print Areas, Format > Page Style's Sheet tab -- never hand-edited afterwards) rather than programmatically reconstructing the expected XML shapes, mirroring readOdtContent's own established convention: this reader's own design brief is explicit that print-settings attribute names and the repeat-row/repeat-column mechanism must each be proven against genuine producer output, not just this package's own idea of what that output looks like. A handful of narrow scope-boundary/hazard-proof tests at the end use small, synthetic, hand-built packages instead (via el/txt), since a genuinely million-row repeat isn't something worth shipping as a binary fixture when the exact real repeat count is already established (typed/shared/a1.test.ts, citing a real LibreOffice-shipped .ots template).
 
 const FIXTURES_DIR = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');
 
@@ -28,8 +29,8 @@ function knownLength(value: string): number {
   return parsed;
 }
 
-describe('readOds: kitchen-sink.ods (real LibreOffice output)', () => {
-  const { metadata, sheets } = readOds(loadFixture('kitchen-sink.ods'));
+describe('readOdsContent: kitchen-sink.ods (real LibreOffice output)', () => {
+  const { metadata, sheets } = readOdsContent(loadFixture('kitchen-sink.ods'));
   const data = sheets.find((sheet) => sheet.name === 'Data');
   const summary = sheets.find((sheet) => sheet.name === 'Summary');
   if (data === undefined || summary === undefined) {
@@ -209,8 +210,8 @@ describe('readOds: kitchen-sink.ods (real LibreOffice output)', () => {
   });
 });
 
-describe('readOds: minimal.ods (real LibreOffice output, default/unmodified sheet)', () => {
-  const { sheets } = readOds(loadFixture('minimal.ods'));
+describe('readOdsContent: minimal.ods (real LibreOffice output, default/unmodified sheet)', () => {
+  const { sheets } = readOdsContent(loadFixture('minimal.ods'));
   const sheet = sheets[0];
   if (sheet === undefined) {
     throw new Error('expected at least one sheet');
@@ -251,8 +252,8 @@ describe('readOds: minimal.ods (real LibreOffice output, default/unmodified shee
 //   - an 8x8 PNG anchored TO CELL C5 (column index 2, row index 4), sized 3cm x 2cm, positioned 0.5cm/0.3cm past its anchor cell's own top-left, with a real UNO Title and Description set (svg:title/svg:desc);
 //   - a LibreOffice Draw document embedded as an OLE object anchored TO CELL B8 (column index 1, row index 7), sized 4cm x 3cm, offset 0.2cm/0.1cm, containing one real orange rectangle;
 //   - the same PNG anchored TO PAGE at an absolute 7cm/0.9cm, sized 1.5cm x 1cm.
-describe('readOds: sheet-anchors.ods (real LibreOffice output -- anchored images and an embedded object)', () => {
-  const { sheets } = readOds(loadFixture('sheet-anchors.ods'));
+describe('readOdsContent: sheet-anchors.ods (real LibreOffice output -- anchored images and an embedded object)', () => {
+  const { sheets } = readOdsContent(loadFixture('sheet-anchors.ods'));
   const sheet = sheets[0];
   if (sheet === undefined) {
     throw new Error('expected at least one sheet');
@@ -335,14 +336,14 @@ describe('readOds: sheet-anchors.ods (real LibreOffice output -- anchored images
   });
 
   it('leaves embeddedObjects undefined on a sheet that has none, rather than writing an empty array', () => {
-    expect(readOds(loadFixture('kitchen-sink.ods')).sheets[0]?.embeddedObjects).toBeUndefined();
-    expect(readOds(loadFixture('kitchen-sink.ods')).sheets[0]?.images).toEqual([]);
+    expect(readOdsContent(loadFixture('kitchen-sink.ods')).sheets[0]?.embeddedObjects).toBeUndefined();
+    expect(readOdsContent(loadFixture('kitchen-sink.ods')).sheets[0]?.images).toEqual([]);
   });
 });
 
 // sheet-formula.ods was built the same way as sheet-anchors.ods above (a Java UNO client against a headless LibreOffice 26.2, saved with the calc8 filter, never hand-edited afterwards): a one-sheet Calc document named "Formulas" carrying two ordinary cells and ONE real LibreOffice Math object -- a com.sun.star.drawing.OLE2Shape with Math's own CLSID 078B7ABA-54FC-457F-8551-6147E776A997, its Formula property set to the StarMath expression "f(x) = {x^2} over {2} + sqrt {x}", anchored TO CELL C4 (column index 2, row index 3) at a 0.4cm/0.2cm cell-relative offset. Its saved shape confirms, on a genuinely produced file, everything typed/draw/embedded.ts's formula path is built on: the frame is an ordinary draw:frame with a draw:object href of "./Object 1" plus the usual ObjectReplacements preview sibling, the outer manifest declares "Object 1/" as application/vnd.oasis.opendocument.formula, and that sub-document's own content.xml is a BARE <math> root with no office:body (and, notably, no meta.xml part of its own at all).
-describe('readOds: sheet-formula.ods (real LibreOffice output -- a Math object anchored to a cell)', () => {
-  const { sheets } = readOds(loadFixture('sheet-formula.ods'));
+describe('readOdsContent: sheet-formula.ods (real LibreOffice output -- a Math object anchored to a cell)', () => {
+  const { sheets } = readOdsContent(loadFixture('sheet-formula.ods'));
   const sheet = sheets[0];
   if (sheet === undefined) {
     throw new Error('expected at least one sheet');
@@ -355,7 +356,7 @@ describe('readOds: sheet-formula.ods (real LibreOffice output -- a Math object a
     expect(sheet.embeddedObjects?.[0]?.document.kind).toBe('formula');
   });
 
-  it('carries the formula\'s real MathML through, with its own StarMath annotation -- the same payload readOdfFormulaDocument produces for a standalone .odf', () => {
+  it('carries the formula\'s real MathML through, with its own StarMath annotation -- the same payload readOdfFormulaContent produces for a standalone .odf', () => {
     const document = sheet.embeddedObjects?.[0]?.document;
     if (document?.kind !== 'formula') {
       throw new Error('expected a formula ContentDocument');
@@ -396,7 +397,7 @@ describe('readOds: sheet-formula.ods (real LibreOffice output -- a Math object a
   });
 });
 
-describe('readOds: anchored drawings (synthetic packages -- the scope boundaries and group flattening real LibreOffice output does not exercise)', () => {
+describe('readOdsContent: anchored drawings (synthetic packages -- the scope boundaries and group flattening real LibreOffice output does not exercise)', () => {
   // Only the PNG magic-byte signature matters to sniffImageFormat -- the rest is arbitrary filler, matching typed/draw/shapes.test.ts's own convention.
   const pngBase64 = bytesToBase64(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]));
 
@@ -421,14 +422,14 @@ describe('readOds: anchored drawings (synthetic packages -- the scope boundaries
       el('table:table-cell', {}, [imageFrame(frameBox)]),
     ]);
     const table = el('table:table', { 'table:name': 'Sheet1' }, [el('table:table-row', { 'table:number-rows-repeated': '3' }, []), row]);
-    const { sheets } = readOds(drawingPackage(table));
+    const { sheets } = readOdsContent(drawingPackage(table));
     expect(sheets[0]?.images[0]).toMatchObject({ anchorRow: 3, anchorColumn: 5, offsetXPt: 10, offsetYPt: 20 });
   });
 
   it('walks through a draw:g group, composing the group\'s own draw:transform onto the frame exactly as walkDrawShapes does for a slide', () => {
     const group = el('draw:g', { 'draw:transform': 'translate(5pt 7pt)' }, [imageFrame(frameBox)]);
     const table = el('table:table', { 'table:name': 'Sheet1' }, [el('table:table-row', {}, [el('table:table-cell', {}, [group])])]);
-    const { sheets } = readOds(drawingPackage(table));
+    const { sheets } = readOdsContent(drawingPackage(table));
     expect(sheets[0]?.images[0]).toMatchObject({ anchorRow: 0, anchorColumn: 0, offsetXPt: 15, offsetYPt: 27 });
   });
 
@@ -436,26 +437,26 @@ describe('readOds: anchored drawings (synthetic packages -- the scope boundaries
     const textBox = el('draw:frame', frameBox, [el('draw:text-box', {}, [el('text:p', {}, [txt('floating')])])]);
     const rect = el('draw:rect', frameBox);
     const table = el('table:table', { 'table:name': 'Sheet1' }, [el('table:table-row', {}, [el('table:table-cell', {}, [textBox, rect])])]);
-    const { sheets } = readOds(drawingPackage(table));
+    const { sheets } = readOdsContent(drawingPackage(table));
     expect(sheets[0]?.images).toEqual([]);
     expect(sheets[0]?.embeddedObjects).toBeUndefined();
   });
 
   it('skips a frame with no resolvable geometry at all, matching readDrawFrame\'s own documented inherited-positioning boundary', () => {
     const table = el('table:table', { 'table:name': 'Sheet1' }, [el('table:table-row', {}, [el('table:table-cell', {}, [imageFrame({})])])]);
-    expect(readOds(drawingPackage(table)).sheets[0]?.images).toEqual([]);
+    expect(readOdsContent(drawingPackage(table)).sheets[0]?.images).toEqual([]);
   });
 
   it('reads an anchored image from a cell that also has real content, without disturbing that cell\'s own value', () => {
     const cell = el('table:table-cell', { 'office:value-type': 'string' }, [el('text:p', {}, [txt('has a picture')]), imageFrame(frameBox)]);
     const table = el('table:table', { 'table:name': 'Sheet1' }, [el('table:table-row', {}, [cell])]);
-    const { sheets } = readOds(drawingPackage(table));
+    const { sheets } = readOdsContent(drawingPackage(table));
     expect(sheets[0]?.cells[0]?.displayText).toBe('has a picture');
     expect(sheets[0]?.images[0]).toMatchObject({ anchorRow: 0, anchorColumn: 0 });
   });
 });
 
-describe('readOds: repeat-count hazards (synthetic packages -- proving this reader never materializes a huge repeated run, real confirmed counts from typed/shared/a1.test.ts)', () => {
+describe('readOdsContent: repeat-count hazards (synthetic packages -- proving this reader never materializes a huge repeated run, real confirmed counts from typed/shared/a1.test.ts)', () => {
   // A real LibreOffice-shipped .ots template's own trailing empty rows carry table:number-rows-repeated="1016575" (confirmed in typed/shared/a1.test.ts, from /Applications/LibreOffice.app/Contents/Resources/template/common/wizard/styles/*.ots) -- reused here verbatim rather than re-deriving a fresh huge fixture, since the real count is already established ground truth.
   const HUGE_ROW_REPEAT = 1016575;
   const HUGE_COLUMN_REPEAT = 1024; // a1.test.ts's own "real trailing-repeated-cell block" example.
@@ -478,40 +479,40 @@ describe('readOds: repeat-count hazards (synthetic packages -- proving this read
   }
 
   it('does not allocate one ContentSheetCell per repeated empty position: a >1,000,000-row repeat block yields exactly one real cell', () => {
-    const { sheets } = readOds(buildHugeRepeatPackage());
+    const { sheets } = readOdsContent(buildHugeRepeatPackage());
     expect(sheets[0]?.cells).toHaveLength(1);
     expect(sheets[0]?.cells[0]).toMatchObject({ row: 0, column: 0, value: { kind: 'string', value: 'Header' }, displayText: 'Header' });
   });
 
   it('does not allocate one ContentSheetRow per repeated row: only the two real table:table-row XML elements are represented', () => {
-    const { sheets } = readOds(buildHugeRepeatPackage());
+    const { sheets } = readOdsContent(buildHugeRepeatPackage());
     expect(sheets[0]?.rows).toHaveLength(2);
     expect(sheets[0]?.rows[1]?.index).toBe(1); // the huge repeat block's own STARTING row index, not a materialized count.
   });
 
   it('does not allocate one ContentSheetColumn per repeated column: a 1024-column repeat block yields exactly one column entry', () => {
-    const { sheets } = readOds(buildHugeRepeatPackage());
+    const { sheets } = readOdsContent(buildHugeRepeatPackage());
     expect(sheets[0]?.columns).toHaveLength(1);
     expect(sheets[0]?.columns[0]?.index).toBe(0);
   });
 
   it('completes in well under a second, confirming no O(repeatCount) work happened at all', () => {
     const start = performance.now();
-    readOds(buildHugeRepeatPackage());
+    readOdsContent(buildHugeRepeatPackage());
     expect(performance.now() - start).toBeLessThan(1000);
   });
 });
 
-describe('readOds: error and fallback paths (synthetic packages -- not something real LibreOffice output can exercise)', () => {
+describe('readOdsContent: error and fallback paths (synthetic packages -- not something real LibreOffice output can exercise)', () => {
   it('reads an empty sheets array for a package with no content.xml at all', () => {
-    const result = readOds({ parts: {} });
+    const result = readOdsContent({ parts: {} });
     expect(result.sheets).toEqual([]);
     expect(result.metadata).toEqual({});
   });
 
   it('reads an empty sheets array for a package with no office:spreadsheet at all', () => {
     const pkg: Package = { parts: { 'content.xml': { kind: 'xml', nodes: [el('office:document-content', {}, [el('office:body')])] } } };
-    expect(readOds(pkg).sheets).toEqual([]);
+    expect(readOdsContent(pkg).sheets).toEqual([]);
   });
 
   it('skips a table:table with no table:name at all, rather than fabricating one', () => {
@@ -523,7 +524,7 @@ describe('readOds: error and fallback paths (synthetic packages -- not something
         },
       },
     };
-    expect(readOds(pkg).sheets).toEqual([]);
+    expect(readOdsContent(pkg).sheets).toEqual([]);
   });
 
   it('reads a table:table with no rows/columns at all as a sheet with empty arrays, not a throw', () => {
@@ -535,13 +536,13 @@ describe('readOds: error and fallback paths (synthetic packages -- not something
         },
       },
     };
-    const { sheets } = readOds(pkg);
+    const { sheets } = readOdsContent(pkg);
     expect(sheets).toHaveLength(1);
     expect(sheets[0]).toMatchObject({ name: 'Empty', cells: [], columns: [], rows: [] });
   });
 });
 
-describe('readOds: cell background/borders/alignment/verticalAlignment (synthetic packages -- the real cascade, including a genuine style:parent-style-name chain matching kitchen-sink.ods\'s own real ce1..ce5 -> "Default" -> table-cell family default-style shape)', () => {
+describe('readOdsContent: cell background/borders/alignment/verticalAlignment (synthetic packages -- the real cascade, including a genuine style:parent-style-name chain matching kitchen-sink.ods\'s own real ce1..ce5 -> "Default" -> table-cell family default-style shape)', () => {
   interface TableCellStyleOptions {
     cellProperties?: Record<string, string>;
     paragraphProperties?: Record<string, string>;
@@ -599,7 +600,7 @@ describe('readOds: cell background/borders/alignment/verticalAlignment (syntheti
       el('table:table-column', {}, []),
       el('table:table-row', {}, [stringCell('a')]),
     ]);
-    const { sheets } = readOds(sheetPackage([], table));
+    const { sheets } = readOdsContent(sheetPackage([], table));
     expect(sheets[0]?.columns[0]?.widthPt).toBe(64);
     expect(sheets[0]?.rows[0]?.heightPt).toBe(15);
   });
@@ -607,14 +608,14 @@ describe('readOds: cell background/borders/alignment/verticalAlignment (syntheti
   it('resolves fo:background-color from the cell\'s own table:style-name -> table-cell family style', () => {
     const ce1 = tableCellStyle('ce1', { cellProperties: { 'fo:background-color': '#ff0000' } });
     const table = el('table:table', { 'table:name': 'Sheet1' }, [el('table:table-row', {}, [stringCell('red', { 'table:style-name': 'ce1' })])]);
-    const { sheets } = readOds(sheetPackage([ce1], table));
+    const { sheets } = readOdsContent(sheetPackage([ce1], table));
     expect(sheets[0]?.cells[0]?.background).toEqual({ r: 1, g: 0, b: 0 });
   });
 
   it('expands the fo:border shorthand onto all four edges', () => {
     const ce1 = tableCellStyle('ce1', { cellProperties: { 'fo:border': '0.5pt solid #0000ff' } });
     const table = el('table:table', { 'table:name': 'Sheet1' }, [el('table:table-row', {}, [stringCell('bordered', { 'table:style-name': 'ce1' })])]);
-    const { sheets } = readOds(sheetPackage([ce1], table));
+    const { sheets } = readOdsContent(sheetPackage([ce1], table));
     const expectedEdge = { color: { r: 0, g: 0, b: 1 }, widthPt: 0.5, style: 'solid' };
     expect(sheets[0]?.cells[0]?.borders).toEqual({ left: expectedEdge, right: expectedEdge, top: expectedEdge, bottom: expectedEdge });
   });
@@ -622,7 +623,7 @@ describe('readOds: cell background/borders/alignment/verticalAlignment (syntheti
   it('lets a per-edge fo:border-top override just that one edge', () => {
     const ce1 = tableCellStyle('ce1', { cellProperties: { 'fo:border': '1pt solid #000000', 'fo:border-top': '2pt dotted #ffff00' } });
     const table = el('table:table', { 'table:name': 'Sheet1' }, [el('table:table-row', {}, [stringCell('bordered', { 'table:style-name': 'ce1' })])]);
-    const { sheets } = readOds(sheetPackage([ce1], table));
+    const { sheets } = readOdsContent(sheetPackage([ce1], table));
     const borders = sheets[0]?.cells[0]?.borders;
     expect(borders?.top).toEqual({ color: { r: 1, g: 1, b: 0 }, widthPt: 2, style: 'dotted' });
     expect(borders?.bottom).toEqual({ color: { r: 0, g: 0, b: 0 }, widthPt: 1, style: 'solid' });
@@ -632,7 +633,7 @@ describe('readOds: cell background/borders/alignment/verticalAlignment (syntheti
     const parent = tableCellStyle('Parent', { cellProperties: { 'fo:border': '1pt solid #000000' } });
     const child = tableCellStyle('ce1', { cellProperties: { 'fo:border-bottom': '1pt none #000000' }, parentStyleName: 'Parent' });
     const table = el('table:table', { 'table:name': 'Sheet1' }, [el('table:table-row', {}, [stringCell('partial', { 'table:style-name': 'ce1' })])]);
-    const { sheets } = readOds(sheetPackage([parent, child], table));
+    const { sheets } = readOdsContent(sheetPackage([parent, child], table));
     const borders = sheets[0]?.cells[0]?.borders;
     expect(borders?.bottom).toBeUndefined();
     expect(borders?.top).toEqual({ color: { r: 0, g: 0, b: 0 }, widthPt: 1, style: 'solid' });
@@ -641,28 +642,28 @@ describe('readOds: cell background/borders/alignment/verticalAlignment (syntheti
   it('reads style:vertical-align from the cell\'s own table-cell-properties', () => {
     const ce1 = tableCellStyle('ce1', { cellProperties: { 'style:vertical-align': 'middle' } });
     const table = el('table:table', { 'table:name': 'Sheet1' }, [el('table:table-row', {}, [stringCell('centred', { 'table:style-name': 'ce1' })])]);
-    const { sheets } = readOds(sheetPackage([ce1], table));
+    const { sheets } = readOdsContent(sheetPackage([ce1], table));
     expect(sheets[0]?.cells[0]?.verticalAlignment).toBe('middle');
   });
 
   it('leaves verticalAlignment undefined for style:vertical-align="automatic" (no matching enum member), rather than guessing', () => {
     const ce1 = tableCellStyle('ce1', { cellProperties: { 'style:vertical-align': 'automatic' } });
     const table = el('table:table', { 'table:name': 'Sheet1' }, [el('table:table-row', {}, [stringCell('auto', { 'table:style-name': 'ce1' })])]);
-    const { sheets } = readOds(sheetPackage([ce1], table));
+    const { sheets } = readOdsContent(sheetPackage([ce1], table));
     expect(sheets[0]?.cells[0]?.verticalAlignment).toBeUndefined();
   });
 
   it('reads fo:text-align from the cell style\'s own style:paragraph-properties as an alignment override', () => {
     const ce1 = tableCellStyle('ce1', { paragraphProperties: { 'fo:text-align': 'center' } });
     const table = el('table:table', { 'table:name': 'Sheet1' }, [el('table:table-row', {}, [stringCell('centred', { 'table:style-name': 'ce1' })])]);
-    const { sheets } = readOds(sheetPackage([ce1], table));
+    const { sheets } = readOdsContent(sheetPackage([ce1], table));
     expect(sheets[0]?.cells[0]?.alignment).toBe('center');
   });
 
   it('leaves alignment undefined for a cell whose style sets no fo:text-align at all -- the value-kind default stays in effect elsewhere, this reader never fabricates one', () => {
     const ce1 = tableCellStyle('ce1', { cellProperties: { 'fo:background-color': '#ff0000' } });
     const table = el('table:table', { 'table:name': 'Sheet1' }, [el('table:table-row', {}, [stringCell('red', { 'table:style-name': 'ce1' })])]);
-    const { sheets } = readOds(sheetPackage([ce1], table));
+    const { sheets } = readOdsContent(sheetPackage([ce1], table));
     expect(sheets[0]?.cells[0]?.alignment).toBeUndefined();
   });
 
@@ -670,7 +671,7 @@ describe('readOds: cell background/borders/alignment/verticalAlignment (syntheti
     const defaultStyle = tableCellDefaultStyle({ cellProperties: { 'fo:background-color': '#00ff00' } });
     const ce1 = tableCellStyle('ce1', { cellProperties: { 'style:vertical-align': 'top' } }); // no background of its own
     const table = el('table:table', { 'table:name': 'Sheet1' }, [el('table:table-row', {}, [stringCell('inherited', { 'table:style-name': 'ce1' })])]);
-    const { sheets } = readOds(sheetPackage([defaultStyle, ce1], table));
+    const { sheets } = readOdsContent(sheetPackage([defaultStyle, ce1], table));
     expect(sheets[0]?.cells[0]?.background).toEqual({ r: 0, g: 1, b: 0 });
     expect(sheets[0]?.cells[0]?.verticalAlignment).toBe('top');
   });
@@ -681,17 +682,76 @@ describe('readOds: cell background/borders/alignment/verticalAlignment (syntheti
       el('style:table-cell-properties', { 'fo:background-color': '#0000ff' }),
     ]);
     const table = el('table:table', { 'table:name': 'Sheet1' }, [el('table:table-row', {}, [stringCell('overridden', { 'table:style-name': 'ce1' })])]);
-    const { sheets } = readOds(sheetPackage([parent, ce1], table));
+    const { sheets } = readOdsContent(sheetPackage([parent, ce1], table));
     expect(sheets[0]?.cells[0]?.background).toEqual({ r: 0, g: 0, b: 1 });
   });
 
   it('leaves background/borders/alignment/verticalAlignment all undefined for a cell with no table:style-name at all', () => {
     const table = el('table:table', { 'table:name': 'Sheet1' }, [el('table:table-row', {}, [stringCell('plain')])]);
-    const { sheets } = readOds(sheetPackage([], table));
+    const { sheets } = readOdsContent(sheetPackage([], table));
     const cell = sheets[0]?.cells[0];
     expect(cell?.background).toBeUndefined();
     expect(cell?.borders).toBeUndefined();
     expect(cell?.alignment).toBeUndefined();
     expect(cell?.verticalAlignment).toBeUndefined();
+  });
+});
+
+describe('readOds: the package-native reader over the same real fixtures', () => {
+  it('assembles kitchen-sink.ods into a spreadsheet package whose tree flattens back to readOdsContent output exactly', () => {
+    const pkg = loadFixture('kitchen-sink.ods');
+    const content = readOdsContent(pkg);
+    const documentPackage = readOds(pkg);
+
+    expect(documentPackage.kind).toBe('spreadsheet');
+    expect(documentPackage.metadata).toEqual(content.metadata);
+    expect(documentPackage.children).toHaveLength(content.sheets.length);
+    assertPackageRoundTrip(documentPackage, { kind: 'spreadsheet', ...content });
+  });
+
+  it('keeps a sheet\'s grid and print settings on its group node, since a sheet holds addressable data rather than block flow', () => {
+    const pkg = loadFixture('kitchen-sink.ods');
+    const content = readOdsContent(pkg);
+    const documentPackage = spreadsheetPackage(readOds(pkg));
+    const firstSheet = documentPackage.children[0];
+    const firstContentSheet = content.sheets[0];
+    if (firstSheet === undefined || firstContentSheet === undefined) {
+      throw new Error('expected at least one sheet');
+    }
+    expect(firstSheet.node.kind).toBe('sheet');
+    expect(firstSheet.node.name).toBe(firstContentSheet.name);
+    expect(firstSheet.node.cells).toEqual(firstContentSheet.cells);
+    expect(firstSheet.node.printSettings).toEqual(firstContentSheet.printSettings);
+    // A sheet group's extent holds no paragraphs at all, so the minting pass has nothing to factor and never stamps a ref on one.
+    expect(firstSheet.style).toBeUndefined();
+  });
+
+  it('carries a sheet\'s anchored images and embedded sub-documents as its group\'s children', () => {
+    const pkg = loadFixture('sheet-anchors.ods');
+    const content = readOdsContent(pkg);
+    const documentPackage = spreadsheetPackage(readOds(pkg));
+    const sheet = documentPackage.children[0];
+    const contentSheet = content.sheets[0];
+    if (sheet === undefined || contentSheet === undefined) {
+      throw new Error('expected at least one sheet');
+    }
+    const images = contentSheet.images ?? [];
+    const embedded = contentSheet.embeddedObjects ?? [];
+    expect(images.length + embedded.length).toBeGreaterThan(0);
+    // Images first, then embedded objects -- the fixed order flatten's own partition reverses.
+    expect(sheet.children).toEqual([...images, ...embedded]);
+    assertPackageRoundTrip(documentPackage, { kind: 'spreadsheet', ...content });
+  });
+
+  it('round-trips sheet-formula.ods, whose embedded Math object stays one intact leaf carrying its own formula document', () => {
+    const pkg = loadFixture('sheet-formula.ods');
+    const content = readOdsContent(pkg);
+    assertPackageRoundTrip(readOds(pkg), { kind: 'spreadsheet', ...content });
+  });
+
+  it('assembles minimal.ods into a package that round-trips identically', () => {
+    const pkg = loadFixture('minimal.ods');
+    const content = readOdsContent(pkg);
+    assertPackageRoundTrip(readOds(pkg), { kind: 'spreadsheet', ...content });
   });
 });

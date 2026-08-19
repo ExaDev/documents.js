@@ -3,7 +3,8 @@ import type { ContentListMembership, ContentParagraph, ContentSlide } from 'docu
 import type { Package } from '../../model/package';
 import { el, txt } from '../../xml/fragment';
 import { bytesToBase64 } from '../../util/base64';
-import { readOdp } from './read';
+import { assertPackageRoundTrip, presentationPackage } from '../../test-support/document-package';
+import { readOdp, readOdpContent } from './read';
 
 // A full, real-shape .odp fixture assembled from XML shapes verified against genuine LibreOffice 26.2 output (soffice --headless --convert-to odp on hand-built .fodp source, and an odp -> odp round trip to confirm LibreOffice's OWN writer's exact serialization -- see this repository's own commit history for the verification method): multiple draw:page elements in native document order, a rotated text frame, a grouped pair of shapes, an image, a table, and speaker notes, matching this package's other typed-reader tests' established convention of building packages programmatically from ground-truth-verified shapes rather than loading a committed binary fixture (mirroring ooxml.js's own src/typed/pptx/read.test.ts).
 
@@ -114,9 +115,9 @@ function paragraphsWithText(slides: readonly ContentSlide[], shapeName: string, 
   return paragraphs;
 }
 
-describe('readOdp: text:list content inside slide text frames', () => {
+describe('readOdpContent: text:list content inside slide text frames', () => {
   it('reads a nested text:list as one numId across both depths, with level read off the actual text:list-in-text:list-item nesting and document order preserved across listed and unlisted paragraphs', () => {
-    const paragraphs = paragraphsWithText(readOdp(buildListFixturePackage()).slides, 'Body', ['Intro', 'Alpha', 'Beta', 'Beta.1', 'Beta.2', 'Gamma', 'Delta']);
+    const paragraphs = paragraphsWithText(readOdpContent(buildListFixturePackage()).slides, 'Body', ['Intro', 'Alpha', 'Beta', 'Beta.1', 'Beta.2', 'Gamma', 'Delta']);
     const [, alpha, beta, beta1, beta2, gamma] = paragraphs;
     expect([alpha?.list?.level, beta?.list?.level, beta1?.list?.level, beta2?.list?.level, gamma?.list?.level]).toEqual([0, 0, 1, 1, 0]);
     const numId = alpha?.list?.numId;
@@ -125,7 +126,7 @@ describe('readOdp: text:list content inside slide text frames', () => {
   });
 
   it('mints a distinct numId per top-level text:list encounter -- a sibling list in the same text box and a list in a different frame never share an identity', () => {
-    const { slides } = readOdp(buildListFixturePackage());
+    const { slides } = readOdpContent(buildListFixturePackage());
     const body = paragraphsWithText(slides, 'Body', ['Intro', 'Alpha', 'Beta', 'Beta.1', 'Beta.2', 'Gamma', 'Delta']);
     const aside = paragraphsWithText(slides, 'Aside', ['Epsilon']);
     const firstListId = body[1]?.list?.numId;
@@ -135,27 +136,27 @@ describe('readOdp: text:list content inside slide text frames', () => {
   });
 
   it('leaves list undefined on paragraphs outside any text:list, including one sharing a text box with a list', () => {
-    const { slides } = readOdp(buildListFixturePackage());
+    const { slides } = readOdpContent(buildListFixturePackage());
     expect(paragraphsWithText(slides, 'Body', ['Intro', 'Alpha', 'Beta', 'Beta.1', 'Beta.2', 'Gamma', 'Delta'])[0]?.list).toBeUndefined();
     // The main fixture's title frame proves the same for a text box that never carried a list at all.
-    expect(readOdp(buildFixturePackage()).slides[0]?.shapes.find((s) => s.name === 'Title')?.blocks[0]).not.toHaveProperty('list');
+    expect(readOdpContent(buildFixturePackage()).slides[0]?.shapes.find((s) => s.name === 'Title')?.blocks[0]).not.toHaveProperty('list');
   });
 
   it('resolves the ordered-vs-bullet kind prefix from the referenced text:list-style, and leaves an unstyled list unprefixed -- the same shared numId convention the odt reader mints', () => {
-    const paragraphs = paragraphsWithText(readOdp(buildListFixturePackage()).slides, 'Body', ['Intro', 'Alpha', 'Beta', 'Beta.1', 'Beta.2', 'Gamma', 'Delta']);
+    const paragraphs = paragraphsWithText(readOdpContent(buildListFixturePackage()).slides, 'Body', ['Intro', 'Alpha', 'Beta', 'Beta.1', 'Beta.2', 'Gamma', 'Delta']);
     expect(paragraphs[1]?.list).toEqual({ numId: 'bullet:list1', level: 0 } satisfies ContentListMembership);
     expect(paragraphs[6]?.list).toEqual({ numId: 'list2', level: 0 } satisfies ContentListMembership);
   });
 });
 
-describe('readOdp', () => {
+describe('readOdpContent', () => {
   it('reads slides in native document order (draw:page order, no p:sldIdLst-style indirection to resolve)', () => {
-    const { slides } = readOdp(buildFixturePackage());
+    const { slides } = readOdpContent(buildFixturePackage());
     expect(slides).toHaveLength(2);
   });
 
   it('resolves slide size from the master-page -> page-layout chain (draw:master-page-name -> style:master-page -> style:page-layout-name -> style:page-layout-properties)', () => {
-    const { slides } = readOdp(buildFixturePackage());
+    const { slides } = readOdpContent(buildFixturePackage());
     expect(slides[0]?.size).toEqual({ widthPt: 720, heightPt: 540 });
     expect(slides[1]?.size).toEqual({ widthPt: 720, heightPt: 540 });
   });
@@ -163,12 +164,12 @@ describe('readOdp', () => {
   it('falls back to document-schema.js\'s own SLIDE_SIZE_WIDESCREEN when the master-page/page-layout chain does not resolve', () => {
     const pkg = buildFixturePackage();
     delete pkg.parts['styles.xml'];
-    const { slides } = readOdp(pkg);
+    const { slides } = readOdpContent(pkg);
     expect(slides[0]?.size.widthPt).toBeGreaterThan(0);
   });
 
   it('reads a rotated shape\'s real text content and its pixel-verified geometry (see transform.test.ts for the render-based derivation)', () => {
-    const { slides } = readOdp(buildFixturePackage());
+    const { slides } = readOdpContent(buildFixturePackage());
     const title = slides[0]?.shapes.find((s) => s.name === 'Title');
     expect(title).toBeDefined();
     expect(title?.blocks[0]).toMatchObject({ kind: 'paragraph', runs: [{ text: 'Slide One Title' }] });
@@ -176,29 +177,29 @@ describe('readOdp', () => {
   });
 
   it('flattens a grouped pair of shapes into the slide\'s own flat shape list, in document order', () => {
-    const { slides } = readOdp(buildFixturePackage());
+    const { slides } = readOdpContent(buildFixturePackage());
     const names = slides[0]?.shapes.map((s) => s.name);
     expect(names).toEqual(['Title', 'A', 'B']);
   });
 
   it('extracts speaker notes text, joining multiple text:p lines with a newline', () => {
-    const { slides } = readOdp(buildFixturePackage());
+    const { slides } = readOdpContent(buildFixturePackage());
     expect(slides[0]?.notes).toBe('First line of notes.\nSecond line.');
   });
 
   it('reads an empty string for notes when a slide carries no presentation:notes at all', () => {
-    const { slides } = readOdp(buildFixturePackage());
+    const { slides } = readOdpContent(buildFixturePackage());
     expect(slides[1]?.notes).toBe('');
   });
 
   it('reads an image shape\'s referenced media part on the slide with no notes', () => {
-    const { slides } = readOdp(buildFixturePackage());
+    const { slides } = readOdpContent(buildFixturePackage());
     const imageShape = slides[1]?.shapes.find((s) => s.blocks[0]?.kind === 'image');
     expect(imageShape?.blocks[0]).toMatchObject({ kind: 'image', format: 'png', widthPt: 60, heightPt: 60 });
   });
 
   it('reads a table shape with a spanned header row and a covered cell', () => {
-    const { slides } = readOdp(buildFixturePackage());
+    const { slides } = readOdpContent(buildFixturePackage());
     const tableShape = slides[1]?.shapes.find((s) => s.blocks[0]?.kind === 'table');
     const table = tableShape?.blocks[0];
     if (table?.kind !== 'table') {
@@ -210,18 +211,52 @@ describe('readOdp', () => {
   });
 
   it('reads document metadata via meta.xml', () => {
-    const { metadata } = readOdp(buildFixturePackage());
+    const { metadata } = readOdpContent(buildFixturePackage());
     expect(metadata.title).toBe('My Presentation');
   });
 
   it('reads an empty slides array for a package with no office:presentation at all', () => {
     const pkg: Package = { parts: { 'content.xml': { kind: 'xml', nodes: [el('office:document-content', {}, [el('office:body')])] } } };
-    expect(readOdp(pkg).slides).toEqual([]);
+    expect(readOdpContent(pkg).slides).toEqual([]);
   });
 
   it('reads an empty slides array and empty metadata for a package with no content.xml at all', () => {
-    const result = readOdp({ parts: {} });
+    const result = readOdpContent({ parts: {} });
     expect(result.slides).toEqual([]);
     expect(result.metadata).toEqual({});
+  });
+});
+
+describe('readOdp: the package-native reader over the same fixture', () => {
+  it('assembles the fixture into a presentation package whose tree flattens back to readOdpContent output exactly', () => {
+    const pkg = buildFixturePackage();
+    const content = readOdpContent(pkg);
+    const documentPackage = readOdp(pkg);
+
+    expect(documentPackage.kind).toBe('presentation');
+    expect(documentPackage.metadata).toEqual(content.metadata);
+    // One slide group per ContentSlide, each holding its own shapes as groups -- never one slide's paragraphs flattened across its shapes.
+    expect(documentPackage.children).toHaveLength(content.slides.length);
+    assertPackageRoundTrip(documentPackage, { kind: 'presentation', ...content });
+  });
+
+  it('keeps each slide\'s shapes as their own groups, with the slide descriptor carrying size and notes', () => {
+    const documentPackage = presentationPackage(readOdp(buildFixturePackage()));
+    const content = readOdpContent(buildFixturePackage());
+    const firstSlide = documentPackage.children[0];
+    const firstContentSlide = content.slides[0];
+    if (firstSlide === undefined || firstContentSlide === undefined) {
+      throw new Error('expected at least one slide');
+    }
+    expect(firstSlide.node.kind).toBe('slide');
+    expect(firstSlide.node.size).toEqual(firstContentSlide.size);
+    expect(firstSlide.node.notes).toBe(firstContentSlide.notes);
+    expect(firstSlide.children).toHaveLength(firstContentSlide.shapes.length);
+  });
+
+  it('round-trips the list fixture, whose slide text frames carry real text:list nesting', () => {
+    const pkg = buildListFixturePackage();
+    const content = readOdpContent(pkg);
+    assertPackageRoundTrip(readOdp(pkg), { kind: 'presentation', ...content });
   });
 });

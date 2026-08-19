@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import type { Package } from '../../model/package';
 import { el } from '../../xml/fragment';
 import { parsePackage } from '../../package-io/read';
-import { readOdt } from '../odt/read';
+import { readOdtContent } from '../odt/read';
 import { subDocumentPackage } from './subdocument';
 
 const FIXTURES_DIR = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');
@@ -16,11 +16,11 @@ function loadFixture(name: string): Package {
 }
 
 describe('subDocumentPackage', () => {
-  it('re-keys a real .odb form sub-document into a Package readOdt accepts unmodified', () => {
+  it('re-keys a real .odb form sub-document into a Package readOdtContent accepts unmodified', () => {
     const sub = subDocumentPackage(loadFixture('form-and-report.odb'), 'forms/Obj11');
     // "Configurations2/" is a genuine zero-length zip DIRECTORY entry real LibreOffice writes into a form sub-document, surfaced as a part like any other -- re-keyed here rather than filtered out, since deciding what is "really" a part is the package reader's own concern, not this helper's.
     expect(Object.keys(sub.parts).sort()).toEqual(['Configurations2/', 'content.xml', 'manifest.rdf', 'settings.xml', 'styles.xml']);
-    expect(readOdt(sub).sections).toHaveLength(1);
+    expect(readOdtContent(sub).sections).toHaveLength(1);
   });
 
   it('accepts a prefix with or without a trailing slash, producing the identical result', () => {

@@ -92,6 +92,9 @@ export { parsePageSize, parseMargins, parseBox, parseLinePoints } from './typed/
 
 export { type Alignment, AlignmentSchema } from 'document-schema.js';
 
+// The type every primary reader below returns, re-exported so a consumer can name it without reaching past odf.js for a second dependency -- the same reason AlignmentSchema is re-exported above. The value-level surface it belongs to (DocumentPackageSchema, assemblePackage, flattenPackage, decompose, factorStyles) deliberately stays where it is defined: this package constructs packages, it does not own the vocabulary, and re-exporting the transform would put a second import path on functions whose home is document-schema.js.
+export type { DocumentPackage } from 'document-schema.js';
+
 export { getOdfSpaceCount, measureOdfNodeLength, sumOdfNodeLength, decodeOdfText } from './typed/shared/text';
 
 export { resolveStyle, resolveStyleElementChain, findStyleElement } from './typed/shared/cascade';
@@ -127,19 +130,22 @@ export type { DrawPageContent } from './typed/draw/shapes';
 export { readDrawObjectReference } from './typed/draw/embedded';
 export type { EmbeddedDrawObject, EmbeddedDocumentKind } from './typed/draw/embedded';
 
-export { readOdp } from './typed/odp/read';
+// --- The typed readers, each at two levels. readOdt/readOdp/readOdg/readOds/readOdfFormula are the PRIMARY entry points and return document-schema.js's DocumentPackage -- the single hierarchical artefact (kind, metadata, tables, and a `children` tree of one group per top-level container), assembled via that package's own assemblePackage so the styles table is minted exactly as it is at every other package construction site in this family. The *Content functions beneath them are the same readers' flat, ContentDocument-level output ({ metadata, sections|slides|pages|sheets }, or a whole ContentDocument for the formula case), unchanged in behaviour and still the right call for a consumer that works in the flat pivot -- documents.js's own conversion pipeline reads at this level today. Each pair is one read, not two: the package-native function calls its own *Content sibling and reshapes the result, so the two can never disagree about what the file says.
+//
+// The *Content names are the ones the flat readers carry now; each was previously the bare readOdX name that its package-native sibling took over (readOdfFormulaContent was readOdfFormulaDocument). readOdfFormulaMathMl is likewise the former readOdfFormula -- the raw MathML-plus-StarMath reader, unchanged in behaviour and giving up only its name, since a caller typing "readOdfFormula" is asking for the format's primary reader, not its rawest one. ---
+export { readOdp, readOdpContent } from './typed/odp/read';
 export type { OdpDocument } from './typed/odp/read';
 
-export { readOdt } from './typed/odt/read';
+export { readOdt, readOdtContent } from './typed/odt/read';
 export type { OdtDocument } from './typed/odt/read';
 
-export { readOdg } from './typed/odg/read';
+export { readOdg, readOdgContent } from './typed/odg/read';
 export type { OdgDocument } from './typed/odg/read';
 
-export { readOds } from './typed/ods/read';
+export { readOds, readOdsContent } from './typed/ods/read';
 export type { OdsDocument } from './typed/ods/read';
 
-export { readOdfFormula, readOdfFormulaDocument } from './typed/formula/read';
+export { readOdfFormula, readOdfFormulaContent, readOdfFormulaMathMl } from './typed/formula/read';
 export type { OdfFormulaDocument } from './typed/formula/read';
 
 export { readOdm } from './typed/odm/read';

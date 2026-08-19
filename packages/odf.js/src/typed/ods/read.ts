@@ -11,10 +11,11 @@ import type {
   ContentSheetPrintSettings,
   ContentSheetRepeatRange,
   ContentSheetRow,
+  DocumentPackage,
   LayoutMetadata,
   Margins,
 } from 'document-schema.js';
-import { PAGE_SIZE_A4 } from 'document-schema.js';
+import { assemblePackage, PAGE_SIZE_A4 } from 'document-schema.js';
 import type { XmlElement, XmlNode } from '../../model/node';
 import type { Package } from '../../model/package';
 import { attrValue, childrenWithTag, findChildElement, rootElement } from '../../xml/query';
@@ -31,10 +32,10 @@ import { parseOdfTransform } from '../shared/transform';
 import { readDrawFrame } from '../draw/shapes';
 import type { EmbeddedDrawObject } from '../draw/embedded';
 import { readDrawObjectReference } from '../draw/embedded';
-import { readOdfFormulaDocument } from '../formula/read';
-import { readOdg } from '../odg/read';
-import { readOdp } from '../odp/read';
-import { readOdt } from '../odt/read';
+import { readOdfFormulaContent } from '../formula/read';
+import { readOdgContent } from '../odg/read';
+import { readOdpContent } from '../odp/read';
+import { readOdtContent } from '../odt/read';
 
 // Package -> OdsDocument: a spreadsheet reader deliberately built GEOMETRY- and PRINT-SETTINGS-rich rather than a minimal cell-values-only reader (a real requirement from this reader's own design brief, not optional polish) -- real column widths/row heights, hidden rows/columns, merged ranges, every office:value-type variant with its own OpenFormula string carried verbatim, and a genuinely populated ContentSheetPrintSettings (page geometry, print range, scale/fit-to-page, repeat rows/columns, gridlines/headers, page order, manual breaks). Every ODF attribute name and structural shape below was confirmed against real LibreOffice 26.2 output (a headless UNO Basic macro building a real .ods with every one of these features actually configured through the same UNO calls the Calc UI itself uses -- Format > Columns > Width, Format > Rows > Height, Format > Print Areas, Format > Page Style's Sheet tab, a real merged range, a real cross-sheet SUM formula, every value-type including a GBP currency cell and a genuine #DIV/0! formula error -- then the resulting content.xml/styles.xml inspected directly), not assumed from memory or from xlsx's own different mechanisms. See this module's own inline notes at each surprising point (table:table-header-rows/columns as the REAL repeat-row/column mechanism, NOT a named range; style:master-page-name living on the table:table's own style:style[family="table"], NOT on table:table itself; the UNO API's own PageScale-vs-ScaleToPagesX/Y mutual-exclusivity quirk that shaped nothing in the READER but is worth knowing when re-deriving a fixture) for the exact evidence.
 //
@@ -45,7 +46,7 @@ import { readOdt } from '../odt/read';
 // 1. ANCHORED TO A CELL: the draw:frame is a DIRECT CHILD OF THE table:table-cell it is anchored to, and its svg:x/svg:y are offsets from THAT CELL'S own top-left corner (verified numerically: a shape positioned 0.5cm/0.3cm beyond its anchor cell's origin serialises as svg:x="0.5cm" svg:y="0.3cm", regardless of where that cell sits on the sheet). The anchor cell reference is therefore not read from any attribute at all -- ODF cells carry no address attribute (see the repeat-count note below) -- it IS the running TableCursor position this reader already computes for every cell, exactly the same way ContentSheetCell.row/column are resolved.
 // 2. ANCHORED TO THE PAGE: the draw:frame sits inside a table:shapes element, a child of table:table itself appearing BEFORE its column definitions, and its svg:x/svg:y are absolute from the sheet's own origin. ContentSheetImage has no "page-anchored" variant, so such an image is reported at anchorRow/anchorColumn 0 with its absolute offsets carried through unchanged -- not an approximation: cell (0,0)'s own top-left IS the sheet origin, so the two coordinate systems coincide exactly there.
 //
-// A draw:g group is walked through (its own draw:transform composed onto each child via readDrawFrame's existing groupFunctions parameter, exactly as walkDrawShapes does for a slide), so a grouped anchored image is still found. What a sheet CANNOT carry is anything ContentSheetSchema has nowhere to put: a floating text box or a table frame (ContentSheet has no `shapes` array at all, unlike ContentSlide/ContentDrawPage), a bare vector primitive (no `vectors` array either -- the same scope boundary walkDrawShapes already documents for presentations), and an embedded CHART object (see typed/draw/embedded.ts's own SCOPE note: ContentEmbeddedObjectKind has no 'chart' member to map one onto). Each is skipped rather than mapped onto an approximation of a different kind. An embedded FORMULA object -- a real LibreOffice Math OLE object anchored to a cell -- is no longer in that skipped list: document-schema.js 2.2.0's ContentDocument union carries a genuine 'formula' variant, so readDrawObjectReference resolves one and readEmbeddedObjectDocument hands it to readOdfFormulaDocument like any other embedded kind.
+// A draw:g group is walked through (its own draw:transform composed onto each child via readDrawFrame's existing groupFunctions parameter, exactly as walkDrawShapes does for a slide), so a grouped anchored image is still found. What a sheet CANNOT carry is anything ContentSheetSchema has nowhere to put: a floating text box or a table frame (ContentSheet has no `shapes` array at all, unlike ContentSlide/ContentDrawPage), a bare vector primitive (no `vectors` array either -- the same scope boundary walkDrawShapes already documents for presentations), and an embedded CHART object (see typed/draw/embedded.ts's own SCOPE note: ContentEmbeddedObjectKind has no 'chart' member to map one onto). Each is skipped rather than mapped onto an approximation of a different kind. An embedded FORMULA object -- a real LibreOffice Math OLE object anchored to a cell -- is no longer in that skipped list: document-schema.js 2.2.0's ContentDocument union carries a genuine 'formula' variant, so readDrawObjectReference resolves one and readEmbeddedObjectDocument hands it to readOdfFormulaContent like any other embedded kind.
 //
 // SCOPE: table:print-ranges is a space-separated list of cell-range-address strings per the OASIS spec, but ContentSheetPrintSettingsSchema's own `printRange` models only ONE range -- a document defining more than one non-contiguous print range has every range after the first silently ignored (a documented, narrow scope boundary, not a silent one).
 
@@ -54,12 +55,12 @@ const CONTENT_PART = 'content.xml';
 function parseKnownOdfLength(value: string): number {
   const parsed = parseOdfLength(value);
   if (parsed === undefined) {
-    throw new Error(`readOds: internal error -- "${value}" is not a valid ODF length literal`);
+    throw new Error(`readOdsContent: internal error -- "${value}" is not a valid ODF length literal`);
   }
   return parsed;
 }
 
-// LibreOffice Calc's own real out-of-the-box default page geometry for an untouched page style (confirmed directly via the UNO API's own PageStyle.Width/Height/*Margin properties on a freshly created, unmodified Calc document -- 21.001cm x 29.7cm, 2cm margins on every side -- even though a truly untouched style:page-layout-properties element omits fo:page-width/height/margin-* from the SAVED XML entirely, per real LibreOffice output). Numerically identical to readOdt's own default page size/margins choice (PAGE_SIZE_A4 + 2cm), which is not a coincidence: Calc and Writer share the same locale-driven default page geometry, and both readers' own fallback should reflect the real, confirmed default rather than an assumed one.
+// LibreOffice Calc's own real out-of-the-box default page geometry for an untouched page style (confirmed directly via the UNO API's own PageStyle.Width/Height/*Margin properties on a freshly created, unmodified Calc document -- 21.001cm x 29.7cm, 2cm margins on every side -- even though a truly untouched style:page-layout-properties element omits fo:page-width/height/margin-* from the SAVED XML entirely, per real LibreOffice output). Numerically identical to readOdtContent's own default page size/margins choice (PAGE_SIZE_A4 + 2cm), which is not a coincidence: Calc and Writer share the same locale-driven default page geometry, and both readers' own fallback should reflect the real, confirmed default rather than an assumed one.
 const DEFAULT_MARGIN_PT = parseKnownOdfLength('2cm');
 const DEFAULT_MARGINS: Margins = { topPt: DEFAULT_MARGIN_PT, rightPt: DEFAULT_MARGIN_PT, bottomPt: DEFAULT_MARGIN_PT, leftPt: DEFAULT_MARGIN_PT };
 
@@ -107,7 +108,7 @@ function readRowLayout(rowElement: XmlElement, pkg: Package): { heightPt: number
   return { heightPt, manualBreak };
 }
 
-// A cell's own rendered text, read via paragraph.ts's existing run-reading logic (readOdfParagraph) rather than a bare text-node walk, so bold/italic/colour/etc. on the cell's own text:span runs survive into ContentSheetCell.runs -- and displayText is derived from those SAME runs, never computed separately, so the two can never disagree. Multiple text:p children (a manually line-broken cell, Alt+Enter in Calc) are joined with a synthetic newline run between them, mirroring how readOdp's own readSlideNotes joins multiple text:p lines with '\n'.
+// A cell's own rendered text, read via paragraph.ts's existing run-reading logic (readOdfParagraph) rather than a bare text-node walk, so bold/italic/colour/etc. on the cell's own text:span runs survive into ContentSheetCell.runs -- and displayText is derived from those SAME runs, never computed separately, so the two can never disagree. Multiple text:p children (a manually line-broken cell, Alt+Enter in Calc) are joined with a synthetic newline run between them, mirroring how readOdpContent's own readSlideNotes joins multiple text:p lines with '\n'.
 function readCellText(cellElement: XmlElement, pkg: Package): { runs: ContentRun[]; displayText: string } {
   const paragraphs = childrenWithTag(cellElement, 'text:p');
   const runs: ContentRun[] = [];
@@ -220,28 +221,28 @@ interface TableWalkResult {
   manualBreakColumns: number[];
 }
 
-// An embedded sub-document -> the ContentDocument variant its own typed reader produces. This is the kind -> reader dispatch typed/draw/embedded.ts deliberately leaves to its caller (see that module's own note on the import cycle it would otherwise create): readOds is one of the four readers dispatched to, so a spreadsheet embedded inside a spreadsheet is plain self-recursion here, needing no indirection at all.
+// An embedded sub-document -> the ContentDocument variant its own typed reader produces. This is the kind -> reader dispatch typed/draw/embedded.ts deliberately leaves to its caller (see that module's own note on the import cycle it would otherwise create): readOdsContent is one of the four readers dispatched to, so a spreadsheet embedded inside a spreadsheet is plain self-recursion here, needing no indirection at all.
 function readEmbeddedObjectDocument(reference: EmbeddedDrawObject): ContentDocument {
   switch (reference.objectKind) {
     case 'wordprocessing': {
-      const { metadata, sections } = readOdt(reference.package);
+      const { metadata, sections } = readOdtContent(reference.package);
       return { kind: 'wordprocessing', metadata, sections };
     }
     case 'presentation': {
-      const { metadata, slides } = readOdp(reference.package);
+      const { metadata, slides } = readOdpContent(reference.package);
       return { kind: 'presentation', metadata, slides };
     }
     case 'drawing': {
-      const { metadata, pages } = readOdg(reference.package);
+      const { metadata, pages } = readOdgContent(reference.package);
       return { kind: 'drawing', metadata, pages };
     }
     case 'spreadsheet': {
-      const { metadata, sheets } = readOds(reference.package);
+      const { metadata, sheets } = readOdsContent(reference.package);
       return { kind: 'spreadsheet', metadata, sheets };
     }
     case 'formula':
-      // The one embedded kind whose own reader already returns a finished ContentDocument (readOdfFormulaDocument), because a formula document has no per-format {metadata, sections/slides/pages/sheets} shape to re-wrap -- its whole content IS the MathML.
-      return readOdfFormulaDocument(reference.package);
+      // The one embedded kind whose own reader already returns a finished ContentDocument (readOdfFormulaContent), because a formula document has no per-format {metadata, sections/slides/pages/sheets} shape to re-wrap -- its whole content IS the MathML.
+      return readOdfFormulaContent(reference.package);
   }
 }
 
@@ -523,7 +524,7 @@ function readSheet(tableElement: XmlElement, pkg: Package): ContentSheet | undef
   return sheet;
 }
 
-export function readOds(pkg: Package): OdsDocument {
+export function readOdsContent(pkg: Package): OdsDocument {
   const contentPart = pkg.parts[CONTENT_PART];
   const root = contentPart?.kind === 'xml' ? rootElement(contentPart.nodes) : undefined;
   const body = root === undefined ? undefined : findChildElement(root.children, 'office:body');
@@ -539,4 +540,10 @@ export function readOds(pkg: Package): OdsDocument {
   }
 
   return { metadata: readOdfMetadata(pkg), sheets };
+}
+
+// Package -> DocumentPackage: this module's PRIMARY entry point, the spreadsheet mirror of readOdtContent/readOdt (see src/typed/odt/read.ts's own note on why assemblePackage rather than bare decompose, and why no `pages` argument). readOdsContent above is unchanged and remains the flat, ContentDocument-level reader.
+export function readOds(pkg: Package): DocumentPackage {
+  const { metadata, sheets } = readOdsContent(pkg);
+  return assemblePackage({ kind: 'spreadsheet', metadata, sheets });
 }

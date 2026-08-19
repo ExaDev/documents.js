@@ -24,7 +24,7 @@ describe('readOdbForm: form-and-report.odb (real LibreOffice output)', () => {
     expect(form.href).toBe('forms/Obj11');
   });
 
-  it('reads the sub-document as the ordinary ODF text document it genuinely is, through readOdt unmodified', () => {
+  it('reads the sub-document as the ordinary ODF text document it genuinely is, through readOdtContent unmodified', () => {
     expect(form.document.sections).toHaveLength(1);
     expect(form.document.metadata).toBeDefined();
   });
