@@ -1,0 +1,15 @@
+{
+  "name": "document-mcp",
+  "description": "MCP server exposing documents.js's document-conversion, .odb, metadata, and font tooling as MCP tools",
+  "version": "1.0.0",
+  "author": {
+    "name": "ExaDev",
+    "url": "https://github.com/ExaDev"
+  },
+  "mcpServers": {
+    "document-mcp": {
+      "command": "npx",
+      "args": ["-y", "document-mcp"]
+    }
+  }
+}
