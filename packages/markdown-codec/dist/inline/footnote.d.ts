@@ -1,0 +1,2 @@
+import { a as matchFootnoteDefinitionMarker, i as isValidFootnoteLabel, n as FootnoteLabelMatch, o as matchFootnoteLabel, r as FootnoteLabelSet, t as FootnoteDefinitionMatch } from "../footnote-CKk4JbLk.js";
+export { FootnoteDefinitionMatch, FootnoteLabelMatch, FootnoteLabelSet, isValidFootnoteLabel, matchFootnoteDefinitionMarker, matchFootnoteLabel };
