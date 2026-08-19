@@ -7,6 +7,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 import { defineConfig } from 'vitest/config';
 
 import { BACKGROUND_COLOR, BRAND_COLOR } from './src/design-tokens';
+import { name as packageName } from './package.json' with { type: 'json' };
 
 // GitHub Pages serves this repo at /documents/ (exadev.github.io is already the org's own Pages root, so this app can never live at the bare domain). Local dev stays at '/'.
 const base = process.env.CI ? '/documents/' : '/';
@@ -25,18 +26,19 @@ function tryExecGit(args: string[]): string | undefined {
   }
 }
 
-// Handles both the HTTPS form GitHub Actions' checkout uses (optionally with embedded credentials) and the SSH form a local clone might use -- the regex searches rather than anchors from the start, so a credentials prefix before "github.com" doesn't break the match.
+// Handles both the HTTPS form GitHub Actions' checkout uses (optionally with embedded credentials) and the SSH form a local clone might use -- the regex searches rather than anchors from the start, so a credentials prefix before "github.com" doesn't break the match. The repo group is deliberately non-greedy over "anything" rather than "anything but a dot": a repo name is free to contain dots of its own (this workspace's own origin, ExaDev/documents.js, is exactly such a name), and the non-greedy quantifier already stops at the shortest match that still lets the optional ".git" suffix and end-of-string anchor succeed, so a real ".git" suffix is still stripped correctly either way.
 function parseGitHubRepoUrl(remoteUrl: string): string {
-  const match = /github\.com[:/]([^/]+)\/([^/.]+?)(?:\.git)?$/.exec(remoteUrl);
+  const match = /github\.com[:/]([^/]+)\/(.+?)(?:\.git)?$/.exec(remoteUrl);
   if (match === null) throw new Error(`Could not parse a GitHub owner/repo from origin remote URL: ${remoteUrl}`);
   const [, owner, repo] = match;
   return `https://github.com/${owner}/${repo}`;
 }
 
 const commitSha = execGit(['rev-parse', 'HEAD']);
-// semantic-release's default tagFormat is 'v${version}' (release.config.ts doesn't override it) -- validated here so an unrelated tag some clone happens to have checked out can't be mistaken for a release.
+// @exadev/semantic-release-workspace's tagFormat is '${pkg.name}@${version}' (see release-workspace.config.json and the orchestrator's own release.ts), not semantic-release's bare 'v${version}' default -- validated here so an unrelated tag some clone happens to have checked out, or a sibling package's release tag reachable from this same commit, can't be mistaken for this package's own release.
 const exactTag = tryExecGit(['describe', '--tags', '--exact-match', 'HEAD']);
-const releaseTag = exactTag !== undefined && /^v\d+\.\d+\.\d+$/.test(exactTag) ? exactTag : null;
+const releaseTagPattern = new RegExp(`^${packageName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}@\\d+\\.\\d+\\.\\d+$`);
+const releaseTag = exactTag !== undefined && releaseTagPattern.test(exactTag) ? exactTag : null;
 const repoUrl = parseGitHubRepoUrl(execGit(['remote', 'get-url', 'origin']));
 // %ct is the committer date as Unix seconds -- for a release commit this is effectively its release time (semantic-release commits, tags, and publishes the release in the same CI step), and for an ordinary commit it's simply when that commit was made. Multiplied to milliseconds for direct use with Date.now()-based relative time.
 const commitTimestampMs = Number(execGit(['show', '-s', '--format=%ct', 'HEAD'])) * 1000;
