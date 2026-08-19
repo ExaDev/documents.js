@@ -1,3 +1,24 @@
+# [4.0.0](https://github.com/ExaDev/markdown-codec/compare/v3.1.1...v4.0.0) (2026-08-19)
+
+
+* feat(api)!: make readMarkdown/writeMarkdown DocumentPackage-native ([6ce1abf](https://github.com/ExaDev/markdown-codec/commit/6ce1abf840f6e1bf3620a2a283b3bf725b12fd76))
+
+
+### Bug Fixes
+
+* **write:** report dropped package tables and type flattenPackage's own errors ([4655d5e](https://github.com/ExaDev/markdown-codec/commit/4655d5e53f921287b989e98427f68883cf42c932))
+
+
+### BREAKING CHANGES
+
+* readMarkdown returns { documentPackage: DocumentPackage },
+not { document: ContentDocument }; writeMarkdown accepts a DocumentPackage,
+not a ContentDocument; and markdownCodec decodes to a DocumentPackage. A
+caller that wants the previous flat behaviour should rename its calls to
+readMarkdownContent, writeMarkdownContent, and markdownContentCodec, whose
+signatures and behaviour are unchanged. The result field is documentPackage
+rather than package because package is a reserved word in strict mode.
+
 ## [3.1.1](https://github.com/ExaDev/markdown-codec/compare/v3.1.0...v3.1.1) (2026-08-19)
 
 # [3.1.0](https://github.com/ExaDev/markdown-codec/compare/v3.0.1...v3.1.0) (2026-08-18)
