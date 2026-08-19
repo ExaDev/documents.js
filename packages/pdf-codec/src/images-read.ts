@@ -1,0 +1,326 @@
+import type { RawImage } from './image/png-decode';
+import { encodePng } from './image/png-encode';
+import type { JpegInfo } from './image/jpeg-info';
+import { readJpegInfo } from './image/jpeg-info';
+import type { Jpeg2000Image } from './image/jpeg2000';
+import { decodeJpeg2000 } from './image/jpeg2000';
+import type { PdfDiagnosticSink } from './diagnostics';
+import { decodeStream } from './filters';
+import type { PdfObjectResolver } from './interpret';
+import type { PdfDict, PdfObject } from './objects';
+import { asArray, asBool, asName, asNumber, dictGet } from './objects';
+
+// Turns an Image XObject (or an inline image's dict+data) into bytes ready to store as a LayoutImageAsset. A DCTDecode (JPEG) image passes through completely undecoded -- its compressed bytes ARE the deliverable, exactly mirroring the write path's own lossless JPEG passthrough. Everything else is decoded to raw samples and re-encoded as PNG via image/png-encode.ts, since LayoutImageAsset only ever stores 'png' or 'jpeg'.
+
+export interface ExtractedPdfImage {
+  readonly format: 'png' | 'jpeg';
+  readonly bytes: Uint8Array<ArrayBuffer>;
+  readonly widthPx: number;
+  readonly heightPx: number;
+}
+
+type ResolvedColorSpace =
+  | { readonly kind: 'gray' }
+  | { readonly kind: 'rgb' }
+  | { readonly kind: 'cmyk' }
+  | { readonly kind: 'indexed'; readonly base: ResolvedColorSpace; readonly lookup: Uint8Array<ArrayBuffer> }
+  | { readonly kind: 'unsupported'; readonly name: string };
+
+function componentsOf(cs: ResolvedColorSpace): number {
+  if (cs.kind === 'gray') {
+    return 1;
+  }
+  if (cs.kind === 'cmyk') {
+    return 4;
+  }
+  return 3; // rgb, and indexed's own per-pixel sample count (handled separately -- this is only used for a resolved *base* space)
+}
+
+function resolveColorSpace(csObj: PdfObject | undefined, resolver: PdfObjectResolver, sink: PdfDiagnosticSink): ResolvedColorSpace {
+  const resolved = resolver.resolve(csObj);
+  const directName = resolved?.kind === 'name' ? resolved.name : undefined;
+  if (directName !== undefined) {
+    if (directName === 'DeviceGray' || directName === 'CalGray' || directName === 'G') {
+      return { kind: 'gray' };
+    }
+    if (directName === 'DeviceRGB' || directName === 'CalRGB' || directName === 'RGB') {
+      return { kind: 'rgb' };
+    }
+    if (directName === 'DeviceCMYK' || directName === 'CMYK') {
+      return { kind: 'cmyk' };
+    }
+    return { kind: 'unsupported', name: directName };
+  }
+  const arr = resolved?.kind === 'array' ? resolved.items : undefined;
+  if (arr === undefined) {
+    return { kind: 'unsupported', name: '(missing or invalid /ColorSpace)' };
+  }
+  const family = asName(arr[0]);
+  if (family === 'ICCBased') {
+    const streamObj = resolver.resolve(arr[1]);
+    const n = streamObj?.kind === 'stream' ? asNumber(dictGet(streamObj.dict, 'N')) : undefined;
+    if (n === 1) {
+      return { kind: 'gray' };
+    }
+    if (n === 4) {
+      return { kind: 'cmyk' };
+    }
+    return { kind: 'rgb' }; // 3-component ICC (by far the common case) and any unlabelled profile both treated as RGB
+  }
+  if (family === 'Indexed') {
+    const base = resolveColorSpace(arr[1], resolver, sink);
+    const lookupObj = resolver.resolve(arr[3]);
+    let lookup: Uint8Array<ArrayBuffer>;
+    if (lookupObj?.kind === 'stream') {
+      lookup = decodeStream(lookupObj.raw, lookupObj.dict, sink).bytes;
+    } else if (lookupObj?.kind === 'string') {
+      lookup = lookupObj.bytes;
+    } else {
+      lookup = new Uint8Array(0);
+    }
+    return { kind: 'indexed', base, lookup };
+  }
+  if (family === 'CalGray') {
+    return { kind: 'gray' };
+  }
+  if (family === 'CalRGB') {
+    return { kind: 'rgb' };
+  }
+  return { kind: 'unsupported', name: family ?? '(unrecognised array colour space)' };
+}
+
+// Unpacks sub-byte-depth samples (1/2/4-bit) into one array entry per sample, each row starting on its own byte boundary -- the same row-padding convention PNG's own IDAT payload uses. The 8-bit case is a fast path: already byte-aligned, one sample per byte.
+function unpackSamples(data: Uint8Array<ArrayBuffer>, width: number, height: number, componentsPerPixel: number, bitsPerComponent: number): number[] {
+  if (bitsPerComponent === 8) {
+    return Array.from(data.subarray(0, width * height * componentsPerPixel));
+  }
+  const samplesPerRow = width * componentsPerPixel;
+  const bytesPerRow = Math.ceil((samplesPerRow * bitsPerComponent) / 8);
+  const out: number[] = [];
+  for (let row = 0; row < height; row++) {
+    const rowStart = row * bytesPerRow;
+    let bitPos = 0;
+    for (let s = 0; s < samplesPerRow; s++) {
+      let value = 0;
+      for (let b = 0; b < bitsPerComponent; b++) {
+        const byteIndex = rowStart + Math.floor(bitPos / 8);
+        const bitIndex = 7 - (bitPos % 8);
+        const bit = ((data[byteIndex] ?? 0) >> bitIndex) & 1;
+        value = (value << 1) | bit;
+        bitPos++;
+      }
+      out.push(value);
+    }
+  }
+  return out;
+}
+
+function scaleToByte(value: number, maxValue: number, inverted: boolean): number {
+  const v = inverted ? maxValue - value : value;
+  return maxValue === 255 ? v : Math.round((v * 255) / maxValue);
+}
+
+function cmykToRgbByte(c: number, m: number, y: number, k: number): { r: number; g: number; b: number } {
+  return { r: Math.round(255 * (1 - c) * (1 - k)), g: Math.round(255 * (1 - m) * (1 - k)), b: Math.round(255 * (1 - y) * (1 - k)) };
+}
+
+function sampleFromPalette(base: ResolvedColorSpace, lookup: Uint8Array<ArrayBuffer>, offset: number): { r: number; g: number; b: number } {
+  if (base.kind === 'gray') {
+    const g = lookup[offset] ?? 0;
+    return { r: g, g, b: g };
+  }
+  if (base.kind === 'cmyk') {
+    return cmykToRgbByte((lookup[offset] ?? 0) / 255, (lookup[offset + 1] ?? 0) / 255, (lookup[offset + 2] ?? 0) / 255, (lookup[offset + 3] ?? 0) / 255);
+  }
+  return { r: lookup[offset] ?? 0, g: lookup[offset + 1] ?? 0, b: lookup[offset + 2] ?? 0 };
+}
+
+function buildRawImage(data: Uint8Array<ArrayBuffer>, width: number, height: number, bitsPerComponent: number, colorSpace: ResolvedColorSpace, inverted: boolean): RawImage {
+  const maxValue = (1 << bitsPerComponent) - 1;
+
+  if (colorSpace.kind === 'indexed') {
+    const indices = unpackSamples(data, width, height, 1, bitsPerComponent);
+    const baseComponents = componentsOf(colorSpace.base);
+    const out = new Uint8Array(width * height * (colorSpace.base.kind === 'gray' ? 1 : 3));
+    let outIdx = 0;
+    for (const index of indices) {
+      const rgb = sampleFromPalette(colorSpace.base, colorSpace.lookup, index * baseComponents);
+      if (colorSpace.base.kind === 'gray') {
+        out[outIdx++] = rgb.r;
+      } else {
+        out[outIdx++] = rgb.r;
+        out[outIdx++] = rgb.g;
+        out[outIdx++] = rgb.b;
+      }
+    }
+    return { width, height, channels: colorSpace.base.kind === 'gray' ? 1 : 3, data: out };
+  }
+
+  if (colorSpace.kind === 'gray') {
+    const samples = unpackSamples(data, width, height, 1, bitsPerComponent);
+    const out = Uint8Array.from(samples, (v) => scaleToByte(v, maxValue, inverted));
+    return { width, height, channels: 1, data: out };
+  }
+
+  if (colorSpace.kind === 'rgb') {
+    const samples = unpackSamples(data, width, height, 3, bitsPerComponent);
+    const out = Uint8Array.from(samples, (v) => scaleToByte(v, maxValue, inverted));
+    return { width, height, channels: 3, data: out };
+  }
+
+  // cmyk
+  const samples = unpackSamples(data, width, height, 4, bitsPerComponent);
+  const out = new Uint8Array(width * height * 3);
+  for (let px = 0; px < width * height; px++) {
+    const c = scaleToByte(samples[px * 4] ?? 0, maxValue, inverted) / 255;
+    const m = scaleToByte(samples[px * 4 + 1] ?? 0, maxValue, inverted) / 255;
+    const y = scaleToByte(samples[px * 4 + 2] ?? 0, maxValue, inverted) / 255;
+    const k = scaleToByte(samples[px * 4 + 3] ?? 0, maxValue, inverted) / 255;
+    const rgb = cmykToRgbByte(c, m, y, k);
+    out[px * 3] = rgb.r;
+    out[px * 3 + 1] = rgb.g;
+    out[px * 3 + 2] = rgb.b;
+  }
+  return { width, height, channels: 3, data: out };
+}
+
+function readSoftMaskAlpha(dict: PdfDict, width: number, height: number, resolver: PdfObjectResolver, sink: PdfDiagnosticSink): Uint8Array<ArrayBuffer> | undefined {
+  const smaskObj = resolver.resolve(dictGet(dict, 'SMask'));
+  if (smaskObj?.kind !== 'stream') {
+    return undefined;
+  }
+  const decoded = decodeStream(smaskObj.raw, smaskObj.dict, sink);
+  if (decoded.remainingFilter !== undefined) {
+    return undefined; // an encoded (e.g. DCT) soft mask is out of scope -- degrade to no alpha rather than guess
+  }
+  const smaskWidth = asNumber(dictGet(smaskObj.dict, 'Width')) ?? width;
+  const smaskHeight = asNumber(dictGet(smaskObj.dict, 'Height')) ?? height;
+  const smaskBpc = asNumber(dictGet(smaskObj.dict, 'BitsPerComponent')) ?? 8;
+  if (smaskWidth !== width || smaskHeight !== height || smaskBpc !== 8) {
+    return undefined; // a differently-sized or differently-depthed mask needs resampling this module doesn't do
+  }
+  return decoded.bytes.subarray(0, width * height);
+}
+
+// ISO 32000-1 7.4.9: for a JPXDecode image the codestream is authoritative about how many components there are and how deep their samples run, and /BitsPerComponent "shall not be present" at all. /ColorSpace is optional, and when it IS present it overrides whatever the JP2 boxes said -- which is the only reason the dictionary is consulted here rather than the codestream alone.
+function jpeg2000ChannelKind(image: Jpeg2000Image, dict: PdfDict, resolver: PdfObjectResolver, sink: PdfDiagnosticSink): 'gray' | 'rgb' | 'cmyk' {
+  const declared = dictGet(dict, 'ColorSpace') ?? dictGet(dict, 'CS');
+  if (declared !== undefined) {
+    const resolved = resolveColorSpace(declared, resolver, sink);
+    if (resolved.kind === 'gray' || resolved.kind === 'rgb' || resolved.kind === 'cmyk') {
+      return resolved.kind;
+    }
+  }
+  if (image.colourSpace === 'greyscale') {
+    return 'gray';
+  }
+  if (image.colourSpace === 'cmyk') {
+    return 'cmyk';
+  }
+  if (image.colourSpace === 'srgb' || image.colourSpace === 'sycc' || image.colourSpace === 'e-srgb' || image.colourSpace === 'rommrgb') {
+    return 'rgb';
+  }
+  // A bare codestream carries no colour specification of its own, so the component count is the only thing left to go on -- the same fallback every JPEG 2000 reader makes.
+  return image.components.length >= 4 ? 'cmyk' : image.components.length >= 3 ? 'rgb' : 'gray';
+}
+
+function readJpeg2000Image(dict: PdfDict, raw: Uint8Array<ArrayBuffer>, resolver: PdfObjectResolver, sink: PdfDiagnosticSink): ExtractedPdfImage | undefined {
+  let image: Jpeg2000Image;
+  try {
+    image = decodeJpeg2000(raw, { onWarning: (message) => sink({ code: 'image/jpx-degraded', severity: 'warning', message }) });
+  } catch (error) {
+    sink({ code: 'image/jpx-undecodable', severity: 'warning', message: `JPXDecode image could not be decoded (${error instanceof Error ? error.message : String(error)}); skipping this image` });
+    return undefined;
+  }
+
+  const kind = jpeg2000ChannelKind(image, dict, resolver, sink);
+  const required = kind === 'cmyk' ? 4 : kind === 'rgb' ? 3 : 1;
+  if (image.components.length < required) {
+    sink({ code: 'image/jpx-undecodable', severity: 'warning', message: `JPXDecode image resolves to a ${kind} colour space but carries only ${String(image.components.length)} component(s); skipping this image` });
+    return undefined;
+  }
+  if (image.components.length > required) {
+    // An extra channel is an opacity or auxiliary one (a JP2 cdef box says which). Compositing it would need /SMaskInData handling this codec does not implement, so it is dropped rather than mistaken for colour.
+    sink({ code: 'image/jpx-extra-channels', severity: 'info', message: `JPXDecode image carries ${String(image.components.length)} components where its colour space needs ${String(required)}; the extra channel(s) are ignored` });
+  }
+
+  // The codestream's own sample depth is whatever it declares; a RawImage is always eight bits per channel, so anything else is scaled onto that range.
+  const maximum = (1 << image.bitDepth) - 1;
+  const scale = (value: number): number => (image.bitDepth === 8 ? value : Math.round((value * 255) / maximum));
+  const pixels = image.width * image.height;
+  const channels = kind === 'gray' ? 1 : 3;
+  const data = new Uint8Array(pixels * channels);
+  if (kind === 'cmyk') {
+    for (let i = 0; i < pixels; i++) {
+      const rgb = cmykToRgbByte(scale(image.components[0]?.[i] ?? 0) / 255, scale(image.components[1]?.[i] ?? 0) / 255, scale(image.components[2]?.[i] ?? 0) / 255, scale(image.components[3]?.[i] ?? 0) / 255);
+      data[i * 3] = rgb.r;
+      data[i * 3 + 1] = rgb.g;
+      data[i * 3 + 2] = rgb.b;
+    }
+  } else {
+    for (let channel = 0; channel < channels; channel++) {
+      const plane = image.components[channel];
+      for (let i = 0; i < pixels; i++) {
+        data[i * channels + channel] = scale(plane?.[i] ?? 0);
+      }
+    }
+  }
+
+  const rawImage: RawImage = { width: image.width, height: image.height, channels, data };
+  const alpha = readSoftMaskAlpha(dict, image.width, image.height, resolver, sink);
+  const withAlpha: RawImage = alpha !== undefined ? { ...rawImage, alpha } : rawImage;
+  return { format: 'png', bytes: encodePng(withAlpha), widthPx: image.width, heightPx: image.height };
+}
+
+export function readImageXObject(dict: PdfDict, raw: Uint8Array<ArrayBuffer>, resolver: PdfObjectResolver, sink: PdfDiagnosticSink): ExtractedPdfImage | undefined {
+  if (asBool(dictGet(dict, 'ImageMask') ?? dictGet(dict, 'IM')) === true) {
+    sink({ code: 'image/mask-unsupported', severity: 'info', message: 'an /ImageMask stencil paints with the current fill colour rather than standing alone as an image; skipping' });
+    return undefined;
+  }
+
+  // The resolver is threaded in here, and only here, because JBIG2Decode's own /JBIG2Globals DecodeParms entry is a stream that a producer essentially always writes as an indirect reference -- no other filter this codec implements has a parameter that needs dereferencing.
+  const decoded = decodeStream(raw, dict, sink, (obj) => resolver.resolve(obj));
+  if (decoded.remainingFilter === 'DCTDecode') {
+    let info: JpegInfo;
+    try {
+      info = readJpegInfo(decoded.bytes);
+    } catch {
+      sink({ code: 'image/undecodable', severity: 'warning', message: 'DCTDecode image bytes did not look like a valid JPEG (no SOF marker found); skipping this image' });
+      return undefined;
+    }
+    return { format: 'jpeg', bytes: decoded.bytes, widthPx: info.width, heightPx: info.height };
+  }
+  if (decoded.remainingFilter === 'JPXDecode') {
+    return readJpeg2000Image(dict, decoded.bytes, resolver, sink);
+  }
+  if (decoded.remainingFilter !== undefined) {
+    return undefined; // decodeStream already raised 'pdf/unsupported-filter'
+  }
+
+  const width = asNumber(dictGet(dict, 'Width') ?? dictGet(dict, 'W'));
+  const height = asNumber(dictGet(dict, 'Height') ?? dictGet(dict, 'H'));
+  if (width === undefined || height === undefined || width <= 0 || height <= 0) {
+    sink({ code: 'image/undecodable', severity: 'warning', message: 'image XObject is missing a valid /Width or /Height; skipping' });
+    return undefined;
+  }
+
+  const bitsPerComponent = asNumber(dictGet(dict, 'BitsPerComponent') ?? dictGet(dict, 'BPC')) ?? 8;
+  if (bitsPerComponent !== 1 && bitsPerComponent !== 2 && bitsPerComponent !== 4 && bitsPerComponent !== 8) {
+    sink({ code: 'image/unsupported-bit-depth', severity: 'warning', message: `image has an unsupported /BitsPerComponent (${String(bitsPerComponent)}); skipping` });
+    return undefined;
+  }
+
+  const colorSpace = resolveColorSpace(dictGet(dict, 'ColorSpace') ?? dictGet(dict, 'CS'), resolver, sink);
+  if (colorSpace.kind === 'unsupported') {
+    sink({ code: 'image/unsupported-colorspace', severity: 'warning', message: `image has an unsupported colour space (${colorSpace.name}); skipping` });
+    return undefined;
+  }
+
+  const decodeArr = asArray(dictGet(dict, 'Decode'));
+  const inverted = decodeArr !== undefined && asNumber(decodeArr[0]) === 1 && asNumber(decodeArr[1]) === 0;
+
+  const rawImage = buildRawImage(decoded.bytes, width, height, bitsPerComponent, colorSpace, inverted);
+  const alpha = readSoftMaskAlpha(dict, width, height, resolver, sink);
+  const withAlpha: RawImage = alpha !== undefined ? { ...rawImage, alpha } : rawImage;
+  return { format: 'png', bytes: encodePng(withAlpha), widthPx: width, heightPx: height };
+}
