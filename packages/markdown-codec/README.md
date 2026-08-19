@@ -2,9 +2,9 @@
 
 [![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/markdown-codec) [![npm](https://img.shields.io/badge/npm-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/markdown-codec) [![Release](https://img.shields.io/github/v/release/ExaDev/markdown-codec)](https://github.com/ExaDev/markdown-codec/releases/latest) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/markdown-codec/ci.yml?branch=main)](https://github.com/ExaDev/markdown-codec/actions)
 
-> Hand-written CommonMark+GFM ⇄ `ContentDocument` codec, built on [document-schema.js](https://github.com/ExaDev/document-schema.js).
+> Hand-written CommonMark+GFM ⇄ `DocumentPackage` codec, built on [document-schema.js](https://github.com/ExaDev/document-schema.js).
 
-The same "hand-write the format instead of wrapping a third-party library" bet as [`pdf-codec`](https://github.com/ExaDev/pdf-codec), aimed at CommonMark and GFM. No `micromark`/`remark`/`marked`/`markdown-it`/`commonmark`/`mdast`/`unified`/`turndown`/`showdown` dependency (enforced by eslint `no-restricted-imports`). Runtime dependencies: `document-schema.js` (the shared pivot) and `zod`. `readMarkdown`/`writeMarkdown` read and write that pivot's `ContentDocument` directly — the same model [`documents.js`](https://github.com/ExaDev/documents.js) builds docx/pptx/odt/odp conversions around.
+The same "hand-write the format instead of wrapping a third-party library" bet as [`pdf-codec`](https://github.com/ExaDev/pdf-codec), aimed at CommonMark and GFM. No `micromark`/`remark`/`marked`/`markdown-it`/`commonmark`/`mdast`/`unified`/`turndown`/`showdown` dependency (enforced by eslint `no-restricted-imports`). Runtime dependencies: `document-schema.js` (the shared pivot) and `zod`. `readMarkdown`/`writeMarkdown` read and write that pivot's tree-form `DocumentPackage`; `readMarkdownContent`/`writeMarkdownContent` read and write the flat `ContentDocument` underneath it — the same model [`documents.js`](https://github.com/ExaDev/documents.js) builds docx/pptx/odt/odp conversions around. See [Two encodings](#two-encodings-documentpackage-and-contentdocument).
 
 ```mermaid
 graph TD
@@ -51,7 +51,7 @@ graph TD
 
 ## Status
 
-The scanner, block parser, and inline parser are complete hand-written implementations of CommonMark 0.31.2's two-phase algorithm plus GFM's table/strikethrough/autolink/task-list-item extensions and GitHub's footnotes (see [Footnotes](#footnotes)). `readMarkdown`/`writeMarkdown`/`markdownCodec` are wired and real. Conformance suites measure the full public surface (`readMarkdown` → `writeMarkdown` → reparse → render to HTML) against the vendored CommonMark/GFM corpora — see [Fidelity](#fidelity) for why the rate is below 100% (dominated by what `ContentDocument` can represent, not parsing gaps).
+The scanner, block parser, and inline parser are complete hand-written implementations of CommonMark 0.31.2's two-phase algorithm plus GFM's table/strikethrough/autolink/task-list-item extensions and GitHub's footnotes (see [Footnotes](#footnotes)). Both encodings' read/write pairs and both `z.codec()` pairs are wired and real. Conformance suites measure the full public surface (`readMarkdownContent` → `writeMarkdownContent` → reparse → render to HTML) against the vendored CommonMark/GFM corpora — see [Fidelity](#fidelity) for why the rate is below 100% (dominated by what `ContentDocument` can represent, not parsing gaps).
 
 ## Getting started
 
@@ -78,20 +78,22 @@ Reading and writing markdown text:
 ```ts
 import { readMarkdown, writeMarkdown } from 'markdown-codec';
 
-const { document, diagnostics } = readMarkdown('# Title\n\nSome **bold** text with a [link](https://example.com).', {
-  frontMatter: true, // parse a leading YAML front matter block into ContentDocument.metadata
+const { documentPackage, diagnostics } = readMarkdown('# Title\n\nSome **bold** text with a [link](https://example.com).', {
+  frontMatter: true, // parse a leading YAML front matter block into the package's metadata
   footnotes: true, // recognise [^label] markers and [^label]: definitions (default; see Footnotes)
   images: (destination) => undefined, // a synchronous MarkdownImageResolver port for non-data: URI images
 });
 
-const markdown = writeMarkdown(document, {
+const markdown = writeMarkdown(documentPackage, {
   bulletListMarker: '-',
   emphasisMarker: '_',
-  frontMatter: true, // emit ContentDocument.metadata back out as a leading front matter block
+  frontMatter: true, // emit the package's metadata back out as a leading front matter block
 });
 ```
 
-Both accept an optional `signal` (`AbortSignal`) and `sink` (`MarkdownDiagnosticSink`, called once per recoverable issue or construct-mapping gap — see [Gotchas](#gotchas-and-quirks)). `writeMarkdown` throws `MarkdownUnsupportedDocumentKindError` for a non-`'wordprocessing'` `ContentDocument`.
+`documentPackage` is a `DocumentPackage` — document-schema.js's tree form, with a minted styles table (see [Two encodings](#two-encodings-documentpackage-and-contentdocument)). The field is named `documentPackage` rather than `package` because `package` is a reserved word in strict mode, so `const { package } = readMarkdown(src)` would not parse.
+
+Both accept an optional `signal` (`AbortSignal`) and `sink` (`MarkdownDiagnosticSink`, called once per recoverable issue or construct-mapping gap — see [Gotchas](#gotchas-and-quirks)). `writeMarkdown` throws `MarkdownUnsupportedDocumentKindError` for a package whose `kind` is not `'wordprocessing'`.
 
 The same round trip as a schema-validated [`z.codec()`](https://zod.dev) pair, mirroring `pdf-codec`'s `pdfCodec`:
 
@@ -99,11 +101,33 @@ The same round trip as a schema-validated [`z.codec()`](https://zod.dev) pair, m
 import { z } from 'zod';
 import { markdownCodec, MarkdownBytesSchema } from 'markdown-codec';
 
-const document = z.decode(markdownCodec, bytes); // throws if bytes are not well-formed UTF-8
-const bytes2 = z.encode(markdownCodec, document);
+const documentPackage = z.decode(markdownCodec, bytes); // throws if bytes are not well-formed UTF-8
+const bytes2 = z.encode(markdownCodec, documentPackage);
 ```
 
 `MarkdownBytesSchema` checks for well-formed UTF-8. The no-options form only; `readMarkdown`/`writeMarkdown` remain the entry points for an `AbortSignal` or diagnostic sink. Every construct-mapping gap reports through the sink as a stable code (e.g. `md/nested-emphasis-flattened`) — see `MarkdownDiagnosticCodes` and [Gotchas](#gotchas-and-quirks).
+
+## Two encodings: `DocumentPackage` and `ContentDocument`
+
+document-schema.js states one document in two shapes, and owns the transform between them: the flat `ContentDocument` every codec's lowering pipeline actually builds, and the tree-form `DocumentPackage` a serialised artefact carries — sections, headings, lists, and construct boundaries as real nested groups, plus a styles table minted over repeated property tuples. `assemblePackage` goes flat → tree (`decompose` then `factorStyles`), `flattenPackage` goes tree → flat, and the two are inverses.
+
+This package exposes a read/write pair and a codec at each level. The unsuffixed names are the tree-form ones and are what to reach for by default — a codec is a construction site, so the tree is what a caller gets unless they ask for otherwise. The `Content`-suffixed names are the flat pair one level down, mirroring the `readXlsx`/`readXlsxContent` naming already in [`ooxml.js`](https://github.com/ExaDev/ooxml.js):
+
+| Level | Read | Write | Codec | Value type |
+| --- | --- | --- | --- | --- |
+| Tree (default) | `readMarkdown` | `writeMarkdown` | `markdownCodec` | `DocumentPackage` |
+| Flat | `readMarkdownContent` | `writeMarkdownContent` | `markdownContentCodec` | `ContentDocument` |
+
+The tree pair is exactly the flat pair with the transform composed on — `readMarkdown` is `assemblePackage` over `readMarkdownContent`, `writeMarkdown` is `flattenPackage` before `writeMarkdownContent` — so both render identical markdown from the same source, pinned in `src/package.test.ts`. Options, diagnostics, and error behaviour are identical at both levels.
+
+Reach for the flat pair when composing a package boundary by hand (`decompose`/`flattenPackage` directly, or `factorStyles` with your own minting policy), when feeding a `ContentDocument`-consuming builder such as `documents.js`'s conversion pipeline, or when a layout stage needs to stamp frames onto content before it is decomposed. Everything else wants the tree.
+
+```ts
+import { readMarkdownContent, writeMarkdownContent } from 'markdown-codec';
+
+const { document } = readMarkdownContent(source); // a ContentDocument: kind, metadata, sections
+const markdown = writeMarkdownContent(document);
+```
 
 ## Architecture
 
@@ -120,7 +144,7 @@ Modelled on `pdf-codec`'s own layering, aimed at CommonMark+GFM instead of PDF:
 - **`src/shared/`** — string-shape conventions `src/lower`/`src/emit` agree on (`style-constants.ts`, `list-id.ts`'s opaque `numId`). Re-exported so `documents.js`'s `MarkdownEditor` reuses the identical grammar.
 - **`src/lower/`** — AST → `ContentDocument` lowering (thin adapter, not a second parser); top-of-file table maps each construct to its diagnostic gap.
 - **`src/emit/`** — `ContentDocument` → markdown text emission, the structural inverse of `src/lower`.
-- **`src/read.ts`** / **`src/write.ts`** / **`src/codec.ts`** — public `readMarkdown`/`writeMarkdown` entry points and `markdownCodec` (`z.codec()` pair).
+- **`src/read.ts`** / **`src/write.ts`** / **`src/codec.ts`** — the public entry points at both levels: `readMarkdown`/`writeMarkdown`/`markdownCodec` over `DocumentPackage`, and `readMarkdownContent`/`writeMarkdownContent`/`markdownContentCodec` over `ContentDocument`. The tree-form functions are thin compositions of `document-schema.js`'s `assemblePackage`/`flattenPackage` onto the flat ones; no conversion logic of their own lives here.
 
 ## Vendored assets
 
@@ -151,7 +175,7 @@ To run a single test file: `pnpm vitest run src/path/to/file.test.ts`.
 - **Zod-first schema/type/guard**, matching `pdf-codec`/`documents.js`: every model type inferred from its Zod schema.
 - **No type assertions.** Every loosely-typed value narrowed through a type guard or Zod parse at the boundary.
 - **No markdown-parsing library dependency**, enforced by eslint `no-restricted-imports`.
-- **`z.codec()` for the round trip** (`markdownCodec`), matching `pdf-codec`'s `pdfCodec`: wraps the independently-tested `readMarkdown`/`writeMarkdown` with automatic two-way schema validation (no-options form only).
+- **`z.codec()` for the round trip** (`markdownCodec`, `markdownContentCodec`), matching `pdf-codec`'s `pdfCodec`: each wraps the independently-tested read/write pair at its own level with automatic two-way schema validation (no-options form only).
 - **Shrink-only conformance exclusion list.** Every spec example the read → write → reparse → render pipeline does not reproduce byte for byte is named in `src/test-support/conformance-exclusions.ts`, with a test asserting it genuinely still fails — the list shrinks as gaps close, never quietly grows.
 - **Conventional commits**, enforced via commitlint + husky.
 
@@ -185,12 +209,12 @@ GitHub's footnote extension (`[^label]` markers, `[^label]: body` definitions) i
 
 The two halves of a footnote map onto **two different mechanisms**, and that split is structural rather than a choice:
 
-- **A definition becomes an `anchor` construct.** `readMarkdown` emits document-schema.js 4.2.0's construct boundary markers — a `constructStart` carrying `{ kind: 'anchor', anchorType: 'footnote', name }`, the definition's own lowered body blocks, and a `constructEnd`. The body rides the construct's extent rather than `AnchorDescriptor.definition`, which names a key in a package-level definitions table a flat `ContentDocument` has no root to carry; a body is genuinely block content (several paragraphs, a code block, a list) that a string field could not have held either way. A bodyless `[^1]:` lowers to the point anchor the same descriptor describes: a pair with nothing between it.
+- **A definition becomes an `anchor` construct.** Lowering emits document-schema.js's construct boundary markers — a `constructStart` carrying `{ kind: 'anchor', anchorType: 'footnote', name }`, the definition's own lowered body blocks, and a `constructEnd` — which is what `readMarkdownContent` returns in its block flow, and what `decompose` promotes to a construct group of its own in the `DocumentPackage` `readMarkdown` returns (the descriptor rides the group's `node`, the body blocks its `children`). The body rides the construct's extent rather than `AnchorDescriptor.definition`, which names a key in a package-level definitions table a flat `ContentDocument` has no root to carry; a body is genuinely block content (several paragraphs, a code block, a list) that a string field could not have held either way. A bodyless `[^1]:` lowers to the point anchor the same descriptor describes: a pair with nothing between it.
 - **A reference site stays a marked run.** A construct's extent is block-scoped by document-schema.js's own definition, and a reference sits between two runs inside a paragraph, so no block-level boundary marker can bracket it without splitting the paragraph in two. The schema names this gap itself and parks the inline-anchor case on a run-level extent mechanism it has not shipped. Until it does, the reference is a `ContentRun` keeping its own `[^label]` spelling and carrying `FOOTNOTE_REFERENCE_FONT_MARKER`, reported through `md/footnote-reference-preserved-as-text`.
 
 Definitions are recognised only at the document's own top level. Inside a block quote or a list item, the pair's extent would sit inside a scope the enclosing container had already opened, which the marker contract forbids a producer from emitting — so the text stays an ordinary paragraph there. A heading inside a definition body is flattened to literal ATX text for the same reason.
 
-`writeMarkdown` is the inverse and validates first: a section's markers must pair as balanced brackets (checked through document-schema.js's own `findConstructMarkerImbalance`, the shared definition every codec and `decompose` agree on) or it throws `MarkdownUnbalancedConstructMarkersError`. A construct kind with no markdown syntax — a bookmark, a division, a tracked change — renders transparently: its extent still appears in place, only the construct's own identity is lost.
+Emission is the inverse and validates first: a section's markers must pair as balanced brackets (checked through document-schema.js's own `findConstructMarkerImbalance`, the shared definition every codec and `decompose` agree on) or `writeMarkdownContent` throws `MarkdownUnbalancedConstructMarkersError`. A tree already satisfies that balance by construction — `decompose` refuses to build one from an unbalanced stream — so `writeMarkdown` reaches this check only on a hand-built package flattened back to an unbalanced flow. A construct kind with no markdown syntax — a bookmark, a division, a tracked change — renders transparently: its extent still appears in place, only the construct's own identity is lost.
 
 ## Fidelity
 
@@ -222,9 +246,9 @@ Conventional Commits enforced by commitlint (`commitlint.config.ts`) via a husky
 
 ## References
 
-- [document-schema.js](https://github.com/ExaDev/document-schema.js) — owns the shared `ContentDocument` pivot.
+- [document-schema.js](https://github.com/ExaDev/document-schema.js) — owns both shared encodings (`ContentDocument`, `DocumentPackage`) and the `assemblePackage`/`flattenPackage` transform between them.
 - [pdf-codec](https://github.com/ExaDev/pdf-codec) — the sibling whose scaffold, tooling, and "hand-write the format" philosophy this project mirrors.
-- [documents.js](https://github.com/ExaDev/documents.js) — bridges markdown to docx/odt/PDF via this package's `ContentDocument`. Markdown has no presentation/spreadsheet/drawing variant, so pptx/odp/ods/odg are structurally out of reach.
+- [documents.js](https://github.com/ExaDev/documents.js) — bridges markdown to docx/odt/PDF via this package's `ContentDocument` (the flat pair; its own conversion pipeline assembles the package itself). Markdown has no presentation/spreadsheet/drawing variant, so pptx/odp/ods/odg are structurally out of reach.
 - [CommonMark Spec](https://spec.commonmark.org/) — the base specification targeted.
 - [GitHub Flavored Markdown Spec](https://github.github.com/gfm/) — GFM extensions layered on top.
 - [WHATWG HTML § named character references](https://html.spec.whatwg.org/multipage/named-characters.html) — the entity table `assets/html-entities/` vendors.
