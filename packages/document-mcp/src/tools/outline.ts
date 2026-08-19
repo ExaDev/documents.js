@@ -4,12 +4,12 @@ import { createLocalDocumentConverter, type DocumentFormat } from 'documents.js'
 import { z } from 'zod';
 import { DocumentInputSchema, resolveDocumentInput } from '../io/document-input';
 
-// The outline tool needs the source's own content tree, and documents.js exposes no format-dispatch content reader at its barrel -- the DocumentConverter port is the one generic entry that reads any source format and reports the tree-form DocumentPackage on ConversionResult.package. The conversion target is therefore an internal detail, and it must preserve the source's content kind: a projection conversion (docx-to-csv renders a spreadsheet package for a wordprocessing source) would outline the projection, not the document. Each source below gets a deterministic same-content-kind target that also avoids a PDF layout pass wherever the matrix allows one -- the two exceptions are structural: odf's only conversion is to pdf (the package is formula-kind, pages populated by the one layout an odf can run), and a pdf source's content view IS the reconstruction, a read of the layout it already records rather than a new layout pass.
+// The outline tool needs the source's own content tree, and documents.js exposes no format-dispatch content reader at its barrel -- the DocumentConverter port is the one generic entry that reads any source format and reports the tree-form DocumentPackage on ConversionResult.package. The conversion target is therefore an internal detail, and it must preserve the source's content kind: a projection conversion (docx-to-csv renders a spreadsheet package for a wordprocessing source) would outline the projection, not the document. Each source below gets a deterministic same-content-kind target that also avoids a PDF layout pass wherever the matrix allows one -- the exceptions are structural: odf's only conversion is to pdf (the package is formula-kind, pages populated by the one layout an odf can run); odg also routes to pdf, since documents.js's SVG writer refuses a multi-page document (buildSvgText throws SvgMultiPageNotSpecifiedError past one page) and an odg source is not bounded to one page, so pdf is the only target in the matrix that stays same-content-kind ('drawing') without that ceiling; and a pdf source's content view IS the reconstruction, a read of the layout it already records rather than a new layout pass.
 const OUTLINE_PROBE_TARGETS: Record<DocumentFormat, DocumentFormat> = {
   csv: 'ods',
   docx: 'odt',
   odf: 'pdf',
-  odg: 'svg',
+  odg: 'pdf',
   odt: 'docx',
   odp: 'pptx',
   ods: 'xlsx',
@@ -52,7 +52,7 @@ export function registerOutlineTools(server: McpServer): void {
     {
       title: 'Outline document',
       description:
-        "Projects a document's table of contents as a structured outline: reads the source through documents.js's DocumentConverter port, takes the tree-form DocumentPackage the conversion reports, and runs document-outline.js's buildOutline over it. Groups carry { text, level, children } (a heading's, list item's, slide's, sheet's, or page's own label plus nested children); leaves carry { kind, text }. The outline is over the source's own content -- the internal conversion target preserves it and is never pdf unless the source is odf, the one format that only converts to pdf.",
+        "Projects a document's table of contents as a structured outline: reads the source through documents.js's DocumentConverter port, takes the tree-form DocumentPackage the conversion reports, and runs document-outline.js's buildOutline over it. Groups carry { text, level, children } (a heading's, list item's, slide's, sheet's, or page's own label plus nested children); leaves carry { kind, text }. The outline is over the source's own content -- the internal conversion target preserves it and is pdf only for odf (the one format that only converts to pdf) and odg (whose alternative, svg, cannot represent more than one page).",
       inputSchema: z.object({
         source: DocumentInputSchema.describe('The document to outline.'),
       }),
