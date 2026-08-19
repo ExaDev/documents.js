@@ -1,0 +1,210 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  commitlint:
+    name: Commitlint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Validate the last commit with commitlint
+        if: github.event_name == 'push'
+        run: pnpm exec commitlint --last --verbose
+      - name: Validate every PR commit with commitlint
+        if: github.event_name == 'pull_request'
+        run: pnpm exec commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm build
+      - run: pnpm exec attw --pack
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      # Cloudflare Workers (workerd) runtime test -- pnpm install above already built the workerd binary (allowBuilds in pnpm-workspace.yaml), so this exercises the document-outline.js surface inside a Workers isolate, enforcing zero Node-only API usage on the tested paths at runtime.
+      - run: pnpm test:workers
+
+  test-smoke:
+    name: Smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build && node -e "require('./dist/index.cjs')" && node --input-type=module -e "import('./dist/index.js').then(m => console.log(Object.keys(m).length + ' exports'))"
+
+  release:
+    name: Release
+    needs: [commitlint, lint, typecheck, test, test-smoke]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # to push the release commit/tag and create the GitHub Release
+      issues: write # to comment on released issues
+      pull-requests: write # to comment on released pull requests
+      id-token: write # OIDC identity for npm trusted publishing (no NPM_TOKEN)
+    outputs:
+      published: ${{ steps.before.outputs.version != steps.after.outputs.version }}
+      version: ${{ steps.after.outputs.version }}
+    steps:
+      # main requires status checks to merge, and the default GITHUB_TOKEN has no bypass for that -- @semantic-release/git's own push of the release commit is a direct push to main, so it needs a token from an actor the branch ruleset explicitly allows to bypass (see ExaDev/.github and each repo's own ruleset). Everything else in this job (release notes, GitHub Release creation, issue/PR comments, OIDC npm publish) keeps using secrets.GITHUB_TOKEN below, unaffected -- only checkout's own git credentials need the elevated token, since that's what the later `git push` inherits.
+      - name: Generate a token for the release push
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: "4473709"
+          private-key: ${{ secrets.AUTOMERGE_APP_PRIVATE_KEY }}
+      - uses: actions/checkout@v7
+        with:
+          # semantic-release analyses the full commit history since the last release.
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: pnpm
+          # registry-url is deliberately absent. Setting it makes setup-node write an .npmrc containing an _authToken line, and that line wins over the OIDC token exchange -- so the setting that looks like it configures the registry is exactly the one that would stop trusted publishing working.
+      - run: pnpm install --frozen-lockfile
+      - name: Read pre-release version
+        id: before
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Upgrade npm for OIDC trusted publishing (needs npm CLI >=11.5.1)
+        run: npm install -g npm@latest
+      - name: Release
+        # HUSKY=0 so the commit-msg hook never fires against the automated release commit.
+        run: HUSKY=0 pnpm exec semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Blanked, not omitted -- an inherited NPM_TOKEN/NODE_AUTH_TOKEN from a workflow-level env block, reusable workflow, or composite action would otherwise be used in preference to the OIDC exchange.
+          NPM_TOKEN: ''
+          NODE_AUTH_TOKEN: ''
+      - name: Read post-release version
+        id: after
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+  publish-github-packages:
+    name: Publish alias to GitHub Packages
+    needs: release
+    if: needs.release.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main # the release commit semantic-release just pushed
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: pnpm
+          # Deliberately NOT setup-node's own registry-url/scope inputs (see ExaDev/documents.js#309): those write an @exadev:registry=https://npm.pkg.github.com/ *install-time* scope-to-registry mapping into .npmrc, and per setup-node's own docs an empty/omitted `scope` still falls back to the repository owner (ExaDev) when the target is GitHub Packages -- there is no way to get just the auth-token line out of that mechanism without also redirecting every @exadev-scoped *install* through it, which breaks `pnpm install` below: @exadev/eslint-config is a real devDependency published only to the default registry, never mirrored to GitHub Packages. publishConfig.registry (set explicitly below) already fully determines pnpm publish's *target* registry on its own; only the host-scoped auth token below is genuinely needed, added after install so install never sees any @exadev scope mapping at all.
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Rewrite package name and registry for the GitHub Packages scope
+        # GitHub Packages requires the npm package name to be scoped to the repo owner. Rewriting the fields rather than keeping a second package.json means this alias cannot drift away from the real package's metadata. publishConfig.registry has to be overridden too: it takes precedence over the .npmrc registry-url set by setup-node above, so without this the publish silently targets registry.npmjs.org instead -- confirmed failure mode, not a hypothetical (404 on the npmjs.org registry, since GITHUB_TOKEN isn't a credential it recognises).
+        run: |
+          npm pkg set name="@exadev/document-outline.js"
+          npm pkg set publishConfig.registry="https://npm.pkg.github.com"
+      - name: Configure the GitHub Packages auth token for publish only
+        run: echo "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}" >> ~/.npmrc
+      - run: pnpm publish --access public --no-git-checks
+
+  attest:
+    name: Attest SBOM and build provenance
+    needs: release
+    if: needs.release.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main # the release commit semantic-release just pushed
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      # Pack into a directory of its own, separate from dist/ (tsdown's raw build output). The attestation subject has to be the artefact that actually ships -- attesting dist/ itself would mix in files that never leave the repo, producing digests that match nothing a consumer can download.
+      - run: pnpm pack --pack-destination release-artifact
+      - run: pnpm sbom --sbom-format spdx --prod > release-artifact/sbom.spdx.json
+      # attest-sbom/attest-build-provenance are deprecated wrappers around actions/attest; called as two steps (sbom-path present vs. absent) rather than one, since actions/attest's docs don't clearly state whether passing both together attests SBOM and provenance in a single call or SBOM only -- two steps is the unambiguous equivalent of what this replaced.
+      - name: Attest SBOM
+        uses: actions/attest@v4
+        with:
+          subject-path: release-artifact/*.tgz
+          sbom-path: release-artifact/sbom.spdx.json
+      - name: Attest build provenance
+        uses: actions/attest@v4
+        with:
+          subject-path: release-artifact/*.tgz
