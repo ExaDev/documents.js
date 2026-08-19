@@ -5,7 +5,8 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ExaDev/documents.js.git"
+    "url": "git+https://github.com/ExaDev/documents.js.git",
+    "directory": "packages/documents.js"
   },
   "homepage": "https://github.com/ExaDev/documents.js#readme",
   "bugs": {

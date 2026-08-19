@@ -5,7 +5,8 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ExaDev/document-outline.js.git"
+    "url": "git+https://github.com/ExaDev/documents.js.git",
+    "directory": "packages/document-outline.js"
   },
   "homepage": "https://github.com/ExaDev/document-outline.js#readme",
   "bugs": {

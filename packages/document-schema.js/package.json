@@ -5,7 +5,8 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ExaDev/document-schema.js.git"
+    "url": "git+https://github.com/ExaDev/documents.js.git",
+    "directory": "packages/document-schema.js"
   },
   "homepage": "https://github.com/ExaDev/document-schema.js#readme",
   "bugs": {

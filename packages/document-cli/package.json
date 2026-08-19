@@ -5,7 +5,8 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ExaDev/document-cli.git"
+    "url": "git+https://github.com/ExaDev/documents.js.git",
+    "directory": "packages/document-cli"
   },
   "homepage": "https://github.com/ExaDev/document-cli#readme",
   "bugs": {
@@ -89,7 +90,8 @@
   "dependencies": {
     "commander": "^15.0.0",
     "document-outline.js": "^1.0.0",
-    "documents.js": "^3.1.5",
+    "document-schema.js": "^4.3.0",
+    "documents.js": "^4.0.13",
     "ink": "^7.1.1",
     "ink-text-input": "^6.0.0",
     "react": "^19.2.8"
