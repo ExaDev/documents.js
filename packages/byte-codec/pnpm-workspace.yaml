@@ -1,4 +1,0 @@
-# workerd (the Cloudflare Workers runtime vitest-pool-workers drives the workers tests through) and esbuild (its bundler) both ship native binaries installed via a postinstall script -- pnpm 11 ignores those by default, so allow them explicitly. This file's existence also brings byte-codec to family parity (every other repo carries a pnpm-workspace.yaml); byte-codec intentionally keeps the stricter global minimum-release-age rather than overriding it here, since vitest-pool-workers 0.20.1 resolves age-eligible under the global window.
-allowBuilds:
-  esbuild: true
-  workerd: true
