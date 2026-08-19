@@ -1,0 +1,127 @@
+# documents.js
+
+> A family of independent, MIT-licensed TypeScript packages for lossless, type-safe document conversion — OOXML (docx/pptx/xlsx), OpenDocument (odt/ods/odp), Markdown, and PDF — sharing a common Zod-based schema layer, plus the CLI, MCP server, and web UI built on top of them.
+
+This repository is a pnpm workspace: one repository, one lockfile, one CI pipeline, and one release run, holding every package in the family under `packages/`. Each package keeps its own version, its own changelog, its own npm release cadence, and its own README — consolidating the repositories did not merge the packages into one artifact, and there is no lockstep version shared between them. What is shared is everything that was previously copied: the workspace settings, the task pipeline, the git hooks, commit-message validation, dependency automation, and the release orchestration.
+
+## Packages
+
+The packages layer from foundation up to user-facing interfaces. Each depends only on the layers below it.
+
+### Foundation
+
+| Package | What it is |
+| --- | --- |
+| [`document-schema.js`](packages/document-schema.js/README.md) | The canonical, format-agnostic content and layout schemas shared by every codec, plus the structural transform between them (`decompose`/`flattenPackage`/`factorStyles`/`assemblePackage`, converting a flat `ContentDocument` to and from the `DocumentPackage` tree). Free of any format-specific or I/O behaviour: the transform lives here because every codec depends on this package and none of them depends on `documents.js`, so it is the only layer a codec can reach to expose `DocumentPackage` publicly without a dependency cycle. |
+| [`byte-codec`](packages/byte-codec/README.md) | Generic byte-level primitives (`ByteWriter`, `ByteReader`, CRC-32, deflate/inflate) and PNG/JPEG image encoding and decoding, with zero knowledge of any document format. |
+| [`document-outline.js`](packages/document-outline.js/README.md) | Utilities for consumers holding a tree-form `DocumentPackage`: the TOC outline projection, effective-property resolution, and the flatten/leaf-text/stable-hash helpers. Depends on the schema alone, and is consumed by the interface packages rather than by the codecs. |
+
+### Format codecs
+
+Each converts one document format to and from the shared schema, built on `document-schema.js`:
+
+| Package | Formats |
+| --- | --- |
+| [`ooxml.js`](packages/ooxml.js/README.md) | OOXML packages (docx, pptx, xlsx) to and from JSON. |
+| [`odf.js`](packages/odf.js/README.md) | OpenDocument packages (odt, ods, odp) to and from JSON. |
+| [`markdown-codec`](packages/markdown-codec/README.md) | CommonMark+GFM to and from the shared content schema. |
+| [`pdf-codec`](packages/pdf-codec/README.md) | Parses arbitrary real-world PDFs and generates new ones, also depending on `byte-codec`. |
+
+### Conversion engine
+
+| Package | What it is |
+| --- | --- |
+| [`documents.js`](packages/documents.js/README.md) | Bidirectional docx/pptx to and from PDF conversion, and a read+write editable OOXML document model, built on `ooxml.js` and depending on every codec above. |
+
+### Interfaces
+
+Each exposes the conversion engine through a different surface:
+
+| Package | Surface |
+| --- | --- |
+| [`document-cli`](packages/document-cli/README.md) | CLI and interactive Ink TUI covering every docx/pptx/odt/odp/ods/odg/odf/pdf/odm/odb/xlsx/markdown conversion, bridge, and editor as a scriptable command or a terminal app. |
+| [`document-mcp`](packages/document-mcp/README.md) | MCP server exposing the conversion, `.odb`, metadata, and font tooling as MCP tools. |
+| [`documents`](packages/documents/README.md) | Client-only, statically-built web UI for every conversion and editing tool in the ecosystem, also depending directly on `markdown-codec` and `odf.js`. The one package here that is never published: it deploys to GitHub Pages instead. |
+
+## PDF is an equal peer, not a junction
+
+PDF is one document format among those this ecosystem handles — never a special "hub" format that every other format converts through to get somewhere else. The real interchange between codecs is the format-agnostic schema in `document-schema.js` (`ContentDocument` for semantic content, `LayoutDocument` for fixed page layout): each codec converts one on-disk format to and from that schema, and a cross-format conversion is source → schema → target, not source → PDF → target. PDF enters that flow only when a user genuinely asks for a PDF (or hands the ecosystem a PDF as the source), in which case it is treated exactly like any other source or target format — no more privileged than docx, odt, or markdown.
+
+This matters for anyone building on top of the conversion engine (the CLI, MCP server, or web UI). A feature like "preview this document" must render the document's own native representation (its `ContentDocument`), not silently round-trip every format through a PDF rendition just because a PDF happens to be easy to display — that would make PDF a junction in disguise, re-introducing exactly the coupling the schema layer exists to remove, and paying a full layout-engine + font-resolution + PDF-write pass for a side effect the caller never asked for. The same applies to inspection, metadata, and any other tooling: operate on the native representation, and reach for PDF only when the user's actual request names PDF.
+
+## Conventions
+
+Individual packages set their own build and test configuration, but as a family they share:
+
+- TypeScript with Zod 4 for schema definition and validation.
+- MIT licensing (the `documents` web UI does not yet declare a license field).
+- Hand-written, dependency-minimal codecs over pulling in heavyweight format libraries — see each package's own README for what it deliberately avoids depending on.
+- The foundation and format-codec packages (`byte-codec`, `document-schema.js`, `document-outline.js`, `ooxml.js`, `odf.js`, `markdown-codec`, `pdf-codec`, `documents.js`) are Worker-isomorphic: their published `src/` must not import `node:*`/bare Node builtins or use the Node-only `Buffer` global, enforced per-package via an ESLint `no-restricted-imports`/`no-restricted-globals` rule and proven at runtime by a workerd test suite. The interface packages (`document-cli`, `document-mcp`, `documents`) are not held to this, since they legitimately run under Node or a browser rather than needing Worker portability.
+
+## Working in the workspace
+
+```sh
+pnpm install          # one install for every package
+pnpm build            # tsdown per package, in dependency order, plus the web UI's vite build
+pnpm lint             # eslint per package, plus the root's own tooling files
+pnpm typecheck        # tsc per package (web-only and Node programs both, where a package has both)
+pnpm test             # vitest unit suites
+pnpm test:coverage    # the same suites with coverage
+pnpm test:workers     # the same code inside workerd, the real Cloudflare Workers runtime
+pnpm test:smoke       # each package's built dist/ exercised as a real artifact
+pnpm test:corpus      # the real-world conformance corpora (gitignored, so local only)
+```
+
+Every one of these runs through turbo, so a package whose inputs have not changed replays a cached result rather than re-running.
+
+To scope a run, drive turbo directly rather than adding a filter to the scripts above. The scripts name two task sets (the underscore tasks every package defines, and the web UI's plainly-named ones — see the pipeline note below), and turbo unions an explicitly named `package#task` with whatever `--filter` selects, so `pnpm test --filter=pdf-codec` would run the web UI's tests too:
+
+```sh
+pnpm exec turbo run _test --filter=pdf-codec           # one package and its dependencies
+pnpm exec turbo run _test _build --affected            # whatever the current branch changed
+pnpm exec turbo run documents#test                     # the web UI alone
+```
+
+Each package also keeps its own scripts, so `pnpm --dir packages/odf.js test:watch` (or running the script from inside that directory) still works for focused work on a single package.
+
+### How the task pipeline is wired
+
+`turbo.json` is the whole story, and two details in it are worth knowing before editing it.
+
+The tasks the root pipeline runs are the underscore-prefixed ones (`_build`, `_lint`, `_test`, …). Each package already used that convention: its public `build` script was `turbo run _build`, and `_build` held the real command. Running the public names from the root would make turbo invoke those wrapper scripts, which invoke turbo again — the recursive-call case Turborepo's own documentation warns about. The root reaches straight past the wrappers to the leaf commands, and the wrappers stay usable inside a single package. The web UI predates the convention and names its scripts plainly, so it gets package-scoped `documents#…` entries instead.
+
+Every task depends on `^_build` — its dependencies' builds. In the separate repositories a sibling arrived pre-built from the npm registry, so nothing needed building before a typecheck, lint, or test run. Here a sibling is a symlink into `packages/<name>`, whose `dist/` exists only once that package's own build has run, and `tsc`, type-aware ESLint, and vitest all resolve imports through it.
+
+### Dependency ranges between packages
+
+A dependency on a sibling is written as an ordinary semver range (`"document-schema.js": "^4.3.0"`), not `workspace:*`. With `linkWorkspacePackages: true` in `pnpm-workspace.yaml`, pnpm links the workspace copy whenever that range is satisfied by the version in `packages/`, and silently falls back to the npm registry when it is not. That fallback is the failure mode to watch for: a range left behind by an older release still installs, still typechecks, and still passes tests — against a published tarball rather than the sibling in this repository, with no topological edge for turbo to order and no reason for the two to agree. After bumping a package's major or minor version, check that every sibling range still admits it; `pnpm list --recursive --depth 0` shows which internal dependencies resolved to a workspace link and which to a registry version.
+
+The release orchestrator maintains these ranges from then on: when a package releases, every dependent's range is rewritten, committed, and pushed before that dependent's own release runs.
+
+## Releases
+
+Releases run through [`@exadev/semantic-release-workspace`](https://github.com/ExaDev/semantic-release-workspace), configured by `release-workspace.config.json` and invoked as `pnpm release` from the `release` job in `.github/workflows/ci.yml`. One orchestrator run replaces the per-package release workflows the separate repositories each had:
+
+- It discovers the packages from `pnpm-workspace.yaml`, builds the dependency graph from their manifests, and releases them in topological order, so a package is only published after every sibling it depends on.
+- Each package's release is decided by its own commit history: `semantic-release` runs per package with the commit list path-filtered to that package's own directory, and tags in `name@version` form so every package's tags stay distinct in the one shared tag namespace.
+- The moment a package releases, every not-yet-released dependent's dependency range is rewritten on disk, committed, and pushed — before that dependent's own release runs, so its published artifact and the repository never disagree. A package whose only change is such a bump still gets a patch release, because its published dependency range changed.
+- Publishing itself is the standard plugin pipeline (`@semantic-release/changelog`, `npm`, `github`, `git`), scoped per package. npm authentication is OIDC trusted publishing: no `NPM_TOKEN` anywhere, `id-token: write` on the job, and deliberately no `registry-url` on `setup-node` — setting it writes an `.npmrc` `_authToken` line that wins over the OIDC exchange, so the input that looks like it configures the registry is the one that would break trusted publishing.
+- The web UI is `private: true`, so `@semantic-release/npm` skips publishing it while still versioning, tagging, and changelogging it; its GitHub Pages deploy runs after the release job, building from the release commit.
+
+Release configuration is **only** at the root. The orchestrator sets `tagFormat`, `plugins`, `analyzeCommits`, and `generateNotes` explicitly on every per-package run, so a `release.config.*` inside a package would be overridden by construction rather than honoured — which is why the per-package release configs are gone rather than kept alongside this one.
+
+`commitlint.config.ts` derives its allowed commit types from `release-workspace.config.json`'s own `releaseRules`, preserving the invariant each package's own config was built around: a conventional-commit type cannot trigger a release without also being accepted by commit-message validation, or the reverse.
+
+## CI
+
+`.github/workflows/ci.yml` holds one job per task — Commitlint, Lint, Typecheck, Test, Test (workerd), Smoke test — each running that task once across the workspace through turbo, followed by Release and the web UI's Pages deploy on `main`. On a pull request every turbo task runs with `--affected`, restricting work to the packages the branch changed and their dependents; on `main` the full workspace runs, so the caches later runs restore from are complete and the release gate covers everything. Each job restores turbo's cache keyed by task, so an unchanged package costs a cache replay rather than a rebuild.
+
+Dependabot covers the root manifest and every package's, batching minor and patch updates into one pull request and leaving majors individual; `.github/workflows/dependabot-auto-merge.yml` auto-merges the former once CI is green. The cross-repository `sibling-released` dispatch the separate repositories used to propagate version bumps between themselves is gone: the orchestrator does that inside a single run now, in dependency order, without a pull request per bump.
+
+## Naming note
+
+The repository is named `documents.js`, and so is one of the packages inside it (`packages/documents.js`). They are not the same thing: the repository is this workspace, holding every package in the family, while `documents.js` is the specific published package that implements the conversion engine.
+
+## Contributing
+
+Conventional commits, enforced by commitlint through a `commit-msg` hook. `pre-commit` runs ESLint over staged files in the package that owns them; `pre-push` runs typecheck and unit tests across the workspace, both through turbo, so the cost is proportional to what actually changed. Work in whichever package's directory the change belongs to; each package's own README documents its architecture and the format-specific decisions behind it.
