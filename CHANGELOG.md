@@ -1,3 +1,18 @@
+# [4.0.0](https://github.com/ExaDev/documents.js/compare/v3.1.5...v4.0.0) (2026-08-19)
+
+
+* refactor!: source the package boundary from document-schema.js ([13e989e](https://github.com/ExaDev/documents.js/commit/13e989e69b26279b3fc31a5b5da1794f7a7d75cc))
+
+
+### BREAKING CHANGES
+
+* assemblePackage, decompose, flattenPackage, factorStyles,
+ConstructMarkerImbalanceError, and the PackageChildren type are no longer
+exported from documents.js, and src/convert/decompose, flatten, factor-styles,
+and canonicalise are gone from the "./*" subpath surface.
+Import all six names from document-schema.js instead.
+They are the same functions, published by the package that owns both encodings.
+
 ## [3.1.5](https://github.com/ExaDev/documents.js/compare/v3.1.4...v3.1.5) (2026-08-19)
 
 ## [3.1.4](https://github.com/ExaDev/documents.js/compare/v3.1.3...v3.1.4) (2026-08-19)
