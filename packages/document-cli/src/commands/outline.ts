@@ -8,7 +8,7 @@ import { createDiagnosticReporter } from '../runtime/diagnostics';
 import { EXIT_SUCCESS, EXIT_USAGE_ERROR, mapErrorToExit } from '../runtime/exit-codes';
 import { readInput } from '../runtime/io';
 import { createFilesystemMarkdownImageResolver } from '../runtime/markdown-images';
-import { addDelimiterOption, addQuietOption, addTimeoutOption, addVerboseOption } from './options';
+import { addQuietOption, addTimeoutOption, addVerboseOption } from './options';
 import { KNOWN_DOCUMENT_FORMATS, formatError } from './shared';
 
 // The conversion this command runs exists only for ConversionResult.package -- its output bytes are discarded, since the outline projects over the tree-form DocumentPackage, not over any rendered target. A PDF-bypassing bridge is the cheapest conversion that still populates a package (no layout engine runs), so each of the ten content formats bridges to a sibling it shares a registry entry with; the two formats outside that set each take the one conversion they actually have -- pdf reconstructs through pdf-to-docx (a PDF carries no content tree of its own to read), and odf renders through odf-to-pdf (its only conversion; the outline reads the formula package that conversion builds, not the rendered pages). The target is otherwise incidental: the package a bridge leaves behind is built from the source document's own content, so the outline it feeds is the source document's outline.
@@ -60,7 +60,6 @@ interface OutlineCliOptions {
   readonly json: boolean;
   readonly quiet: boolean;
   readonly verbose: boolean;
-  readonly delimiter?: string;
 }
 
 async function runOutline(input: string, options: OutlineCliOptions): Promise<number> {
@@ -82,9 +81,8 @@ async function runOutline(input: string, options: OutlineCliOptions): Promise<nu
       { source: { format: source, bytes: new Uint8Array(inputBytes) }, targetFormat: target },
       {
         signal,
-        // Resolved exactly as buildConversionAction resolves the same two options for a live conversion: a markdown source's own non-data: images resolve against the input file's directory rather than degrading to alt text with an unresolved-image diagnostic, and a csv source reads with the caller's --delimiter. Both are threaded only to the edges that read them, so wiring them unconditionally is a no-op for every other source format.
+        // Resolved exactly as buildConversionAction resolves the same option for a live conversion: a markdown source's own non-data: images resolve against the input file's directory rather than degrading to alt text with an unresolved-image diagnostic. Threaded only to the edge that reads it, so wiring it unconditionally is a no-op for every other source format.
         images: createFilesystemMarkdownImageResolver(input === '-' ? '.' : dirname(resolve(input))),
-        delimiter: options.delimiter,
       },
     );
 
@@ -125,7 +123,6 @@ export function registerOutlineCommand(program: Command): void {
   command.option('--json', 'emit the outline tree as JSON instead of indented text (diagnostics as NDJSON on stderr)', false);
   addQuietOption(command);
   addVerboseOption(command);
-  addDelimiterOption(command);
   command.action(async (input: string, options: OutlineCliOptions) => {
     process.exitCode = await runOutline(input, options);
   });
