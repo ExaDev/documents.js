@@ -1,3 +1,11 @@
+# [4.3.0](https://github.com/ExaDev/document-schema.js/compare/v4.2.0...v4.3.0) (2026-08-19)
+
+
+### Features
+
+* add the flat/tree structural transform beside the schemas it relates ([d97eff4](https://github.com/ExaDev/document-schema.js/commit/d97eff43ddf35a246df4ea09b138cc155ac4449e))
+* export the package boundary from the public entry point ([02b0b66](https://github.com/ExaDev/document-schema.js/commit/02b0b66c8817b212bc61789a3b7f0162d0d9e862))
+
 # [4.2.0](https://github.com/ExaDev/document-schema.js/compare/v4.1.0...v4.2.0) (2026-08-18)
 
 
