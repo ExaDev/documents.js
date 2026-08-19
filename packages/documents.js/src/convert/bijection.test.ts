@@ -4,7 +4,7 @@ import { assemblePackage, ContentDocumentSchema, DocumentPackageSchema, factorSt
 // The canonicaliser is deliberately absent from document-schema.js's index barrel (it exists to give the minting pass one tuple-identity recipe, not to publish a sort order as an API guarantee), so it comes in by subpath -- the same one recipe the transform itself uses, never a second one restated here.
 import { canonicalise } from 'document-schema.js/canonicalise';
 import { decodePackage as decodeOdfPackage } from 'odf.js';
-import { buildXlsxPackage, decodePackage as decodeOoxmlPackage, readXlsxContent } from 'ooxml.js';
+import { buildXlsxPackageFromContent, decodePackage as decodeOoxmlPackage, readXlsxContent } from 'ooxml.js';
 import { readCsvContent } from '../csv/read';
 import { csvToPdf, docxToPdf, markdownToPdf, odfToPdf, odgToPdf, odpToPdf, odsToPdf, odtToPdf, pdfToDocx, pdfToOdg, pdfToOds, pptxToPdf, svgToPdf } from './convert';
 import { readMarkdownContent } from '../markdown/read';
@@ -106,7 +106,7 @@ function corpus(): readonly CorpusEntry[] {
     readCsvContent('h1,h2,h3\n42.5,TRUE,2024-01-15\n"1,234",plain,x'),
     readSvgContent(SVG_TEXT),
     // xlsx through ooxml.js's own spreadsheet pair -- the one ContentDocument source with no odf.js reader behind it.
-    readXlsxContent(buildXlsxPackage(readOdsContent(decodeOdfPackage(gridOdsBytes())))),
+    readXlsxContent(buildXlsxPackageFromContent(readOdsContent(decodeOdfPackage(gridOdsBytes())))),
     // Editors per kind: a live-view build, encoded and read back through the same reader every other corpus entry uses -- the editor surface, not a rebuild of reader output.
     readDocxContent(decodeOoxmlPackage(editorDocxBytes())),
     readOdsContent(decodeOdfPackage(editorOdsBytes())),

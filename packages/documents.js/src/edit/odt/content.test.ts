@@ -38,7 +38,7 @@ function officeText(pkg: Package): XmlElement {
   return text;
 }
 
-// Every vector this package wrote into a text document's flow, read back through odf.js's OWN readDrawPageContent -- the same reader readOdg uses for a real drawing page -- rather than through an inverse written alongside the writer. A text-anchored vector lives inside the text:p it is anchored to (see OdtBody.appendVectors), so this hands that paragraph's children to the reader exactly as readOdg hands it a draw:page's.
+// Every vector this package wrote into a text document's flow, read back through odf.js's OWN readDrawPageContent -- the same reader readOdgContent uses for a real drawing page -- rather than through an inverse written alongside the writer. A text-anchored vector lives inside the text:p it is anchored to (see OdtBody.appendVectors), so this hands that paragraph's children to the reader exactly as readOdg hands it a draw:page's.
 function readFlowVectors(pkg: Package): ContentVector[] {
   return childrenWithTag(officeText(pkg), 'text:p').flatMap((paragraph) => readDrawPageContent(paragraph.children, pkg).vectors);
 }

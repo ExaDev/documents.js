@@ -11,7 +11,7 @@ export interface DetectedFormulaFrame {
   readonly frame: Box;
 }
 
-// The same DetectedFormulaFrame plus the index of the ContentShape odf.js's own readOdp produced for this exact frame -- see collectSlideFormulaFrames below for how that index is derived rather than guessed.
+// The same DetectedFormulaFrame plus the index of the ContentShape odf.js's own readOdpContent produced for this exact frame -- see collectSlideFormulaFrames below for how that index is derived rather than guessed.
 export interface DetectedSlideFormulaFrame extends DetectedFormulaFrame {
   readonly shapeIndex: number;
 }
@@ -87,7 +87,7 @@ export function collectFormulaFrames(nodes: readonly XmlNode[], pkg: Package): r
   return out;
 }
 
-// Every formula frame on one draw:page, each paired with the index of the ContentShape odf.js's own readOdp produced for it. That index is DERIVED, not guessed: readOdp's readSlide builds a slide's shapes array via walkDrawShapes(page.children, ...), which walks draw:frame and draw:g in document order, recurses into a group's own children, and pushes exactly one shape per draw:frame whose geometry readDrawFrame resolves (skipping any it cannot). This function performs the identical traversal with the identical skip condition, so the Nth shape it counts IS slide.shapes[N] -- including for a frame nested inside a group, which is why an odp slide containing a draw:g no longer has to be skipped wholesale.
+// Every formula frame on one draw:page, each paired with the index of the ContentShape odf.js's own readOdpContent produced for it. That index is DERIVED, not guessed: the upstream reader's readSlide builds a slide's shapes array via walkDrawShapes(page.children, ...), which walks draw:frame and draw:g in document order, recurses into a group's own children, and pushes exactly one shape per draw:frame whose geometry readDrawFrame resolves (skipping any it cannot). This function performs the identical traversal with the identical skip condition, so the Nth shape it counts IS slide.shapes[N] -- including for a frame nested inside a group, which is why an odp slide containing a draw:g no longer has to be skipped wholesale.
 //
 // Geometry here is strictly readDrawFrame's, with no flow-anchored fallback: a frame walkDrawShapes could not resolve produced no shape at all, so there is nothing on the slide for a formula to attach to.
 export function collectSlideFormulaFrames(pageChildren: readonly XmlNode[], pkg: Package): readonly DetectedSlideFormulaFrame[] {

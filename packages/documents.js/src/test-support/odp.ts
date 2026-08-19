@@ -8,7 +8,7 @@ function enc(s: string): Uint8Array<ArrayBuffer> {
   return new TextEncoder().encode(s);
 }
 
-// A genuine, decodable 2x2 PNG (not just the bare magic-number stub some other tests use), since this fixture's image needs to survive all the way through writePdf's own image-embedding path, not merely readOdp's read-time format sniffing.
+// A genuine, decodable 2x2 PNG (not just the bare magic-number stub some other tests use), since this fixture's image needs to survive all the way through writePdf's own image-embedding path, not merely readOdpContent's read-time format sniffing.
 function tinyPngBase64(): string {
   const bytes = encodePng({ width: 2, height: 2, channels: 3, data: new Uint8Array([255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 0]) });
   return bytesToBase64(bytes);
@@ -26,7 +26,7 @@ function stylesXmlPart(): Package['parts'][string] {
   };
 }
 
-// Slide 1: a rotated title frame with real text, a grouped pair of shapes, and speaker notes. Slide 2: an image and a table, no notes -- exercising the same shape variety (rotation, grouping, image, table, notes) odf.js's own readOdp fixture already verified against genuine LibreOffice output, just re-assembled here so odpToPdf's own tests can drive it all the way through to PDF bytes.
+// Slide 1: a rotated title frame with real text, a grouped pair of shapes, and speaker notes. Slide 2: an image and a table, no notes -- exercising the same shape variety (rotation, grouping, image, table, notes) odf.js's own odp-reader fixture already verified against genuine LibreOffice output, just re-assembled here so odpToPdf's own tests can drive it all the way through to PDF bytes.
 function buildFixturePackage(): Package {
   const titleFrame = el('draw:frame', { 'draw:name': 'Title', 'svg:width': '200pt', 'svg:height': '60pt', 'draw:transform': 'rotate(0.5235987755982988) translate(50pt 50pt)' }, [
     el('draw:text-box', {}, [el('text:p', {}, [txt('Hello from odp')])]),

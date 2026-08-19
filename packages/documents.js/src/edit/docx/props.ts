@@ -36,7 +36,7 @@ export function ensureFirstChild(parent: XmlElement, tag: string): XmlElement {
 
 const TOGGLE_OFF_VALUES = new Set(['0', 'false', 'off']);
 
-// A toggle property (w:b, w:i, w:strike, w:u's presence form) reflects only this run/paragraph's OWN direct formatting, not the fully style-cascaded effective value -- resolving the cascade is ooxml.js's readDocx's job, for the conversion pipeline; this editor is a direct-formatting view, matching how the DocxRun/DocxParagraph API is documented.
+// A toggle property (w:b, w:i, w:strike, w:u's presence form) reflects only this run/paragraph's OWN direct formatting, not the fully style-cascaded effective value -- resolving the cascade is ooxml.js's readDocxContent's job, for the conversion pipeline; this editor is a direct-formatting view, matching how the DocxRun/DocxParagraph API is documented.
 export function getToggle(propsElement: XmlElement | undefined, tag: string): boolean {
   if (propsElement === undefined) {
     return false;

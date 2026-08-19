@@ -123,7 +123,7 @@ describe('buildOdgPackage', () => {
     if (built.kind !== 'drawing') {
       throw new Error('expected a drawing ContentDocument');
     }
-    // Reread through odf.js's own real readOdg, not this package's writer echoing its input back.
+    // Reread through odf.js's own real readOdgContent, not this package's writer echoing its input back.
     const rotations = built.pages[0]!.vectors.map((v) => (v.kind === 'line' ? undefined : v.rotationDeg));
     expect(rotations[0]).toBeCloseTo(20, 4);
     expect(rotations[1]).toBeCloseTo(-35, 4);

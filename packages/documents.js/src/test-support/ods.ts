@@ -40,7 +40,7 @@ function buildFixturePackage(): Package {
         el('office:automatic-styles', {}, [
           el('style:style', { 'style:name': 'ColA', 'style:family': 'table-column' }, [el('style:table-column-properties', { 'style:column-width': '3cm' })]),
           el('style:style', { 'style:name': 'ColB', 'style:family': 'table-column' }, [el('style:table-column-properties', { 'style:column-width': '2cm' })]),
-          // table:table's own print-settings master page is a DIRECT attribute of its style:style[family="table"] element -- confirmed by odf.js's own readOds (readPrintSettings calls attrValue(tableStyleElement, 'style:master-page-name') on the style element itself, never a nested style:table-properties child), unlike odp's own draw:master-page-name which sits directly on draw:page instead.
+          // table:table's own print-settings master page is a DIRECT attribute of its style:style[family="table"] element -- confirmed by odf.js's own readOdsContent (readPrintSettings calls attrValue(tableStyleElement, 'style:master-page-name') on the style element itself, never a nested style:table-properties child), unlike odp's own draw:master-page-name which sits directly on draw:page instead.
           el('style:style', { 'style:name': 'DataTable', 'style:family': 'table', 'style:master-page-name': 'Default' }),
         ]),
         el('office:body', {}, [el('office:spreadsheet', {}, [table])]),
@@ -215,7 +215,7 @@ export function richOdsPackage(): Package {
   return decodePackage(richOdsBytes());
 }
 
-// A fourth fixture, purpose-built for the per-cell decoration wiring (ContentSheetCell's background/borders/alignment/verticalAlignment, all four added to document-schema.js's ContentSheetCellSchema and all four genuinely populated by odf.js's own readOds -- see typed/shared/table.ts's readCellStyleDecoration). Deliberately hand-authored ODF XML rather than built through createOds/OdsCell, for the same independent-construction reason this module's other fixtures are: OdsCell has no decoration setter at all today, so the editor could not express this fixture even if it were the right tool.
+// A fourth fixture, purpose-built for the per-cell decoration wiring (ContentSheetCell's background/borders/alignment/verticalAlignment, all four added to document-schema.js's ContentSheetCellSchema and all four genuinely populated by odf.js's own readOdsContent -- see typed/shared/table.ts's readCellStyleDecoration). Deliberately hand-authored ODF XML rather than built through createOds/OdsCell, for the same independent-construction reason this module's other fixtures are: OdsCell has no decoration setter at all today, so the editor could not express this fixture even if it were the right tool.
 //
 // One sheet, "Decorated", one row of two cells: A1 carries a yellow fo:background-color, a full fo:border shorthand, an explicit fo:text-align="right" and style:vertical-align="top"; B1 carries only a red fo:border-bottom, with no background, no alignment, and no vertical alignment of its own -- so a single fixture exercises both the "declares everything" and the "declares exactly one edge and nothing else" branches of the layout wiring at once.
 function buildDecoratedFixturePackage(): Package {

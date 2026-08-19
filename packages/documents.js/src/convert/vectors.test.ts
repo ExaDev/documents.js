@@ -60,7 +60,7 @@ describe('recovered vector geometry reaching real output bytes', () => {
     expect(collectDrawingMlVectors(ooxmlPart(pdfToPptx(SOURCE_PDF), 'ppt/slides/slide1.xml'), 'p:spPr').map((vector) => vector.kind)).toEqual(EXPECTED_KINDS);
   });
 
-  // Read back through odf.js's OWN readDrawPageContent, the same reader readOdg uses for a real drawing page -- a genuinely independent oracle, unlike the DrawingML side, whose reader is written alongside this package's writer.
+  // Read back through odf.js's OWN readDrawPageContent, the same reader readOdgContent uses for a real drawing page -- a genuinely independent oracle, unlike the DrawingML side, whose reader is written alongside this package's writer.
   it('pdfToOdt writes every recovered vector as a real draw: primitive anchored in the text flow', () => {
     const pkg = decodeOdfPackage(pdfToOdt(SOURCE_PDF));
     const vectors = childrenWithTag(odfBodyChild(pkg, 'office:text'), 'text:p').flatMap((paragraph) => readDrawPageContent(paragraph.children, pkg).vectors);
@@ -306,8 +306,8 @@ describe('readOdpContent: a hand-authored slide interleaving a real shape and a 
     expect(drawingBlock.document.pages[0]!.vectors).toMatchObject([{ kind: 'rect', fill: { r: 0, g: 0, b: 1 } }]);
   });
 
-  // The dedicated correspondence check this module's own design assumes but did not, before this task, independently verify from source: odf.js's readOdp (which builds slide.shapes via its own walkDrawShapes) and readDrawPageContent (which this package's own collectSlideVectorGroups calls to get BOTH shapes and vectors from one shared paintOrder counter) must agree on the ARRAY POSITION they assign the same real shape, or insertBeforeShapeIndex would be meaningless. Verified directly here against the same hand-authored fixture, independently of collectSlideVectorGroups' own internal use of it.
-  it('confirms readOdp\'s own shape array and readDrawPageContent\'s own shape array agree on position for the same fixture', () => {
+  // The dedicated correspondence check this module's own design assumes but did not, before this task, independently verify from source: odf.js's readOdpContent (which builds slide.shapes via its own walkDrawShapes) and readDrawPageContent (which this package's own collectSlideVectorGroups calls to get BOTH shapes and vectors from one shared paintOrder counter) must agree on the ARRAY POSITION they assign the same real shape, or insertBeforeShapeIndex would be meaningless. Verified directly here against the same hand-authored fixture, independently of collectSlideVectorGroups' own internal use of it.
+  it('confirms readOdpContent\'s own shape array and readDrawPageContent\'s own shape array agree on position for the same fixture', () => {
     const pkg = decodeOdfPackage(odpBytes());
     const presentationContent = readOdpContent(pkg);
     if (presentationContent.kind !== 'presentation') {

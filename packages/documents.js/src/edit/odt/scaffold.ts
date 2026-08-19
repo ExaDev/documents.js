@@ -28,7 +28,7 @@ function declaration(): XmlNode {
   };
 }
 
-// style:page-layout (in styles.xml's own office:automatic-styles) carries the actual page geometry; style:master-page (in office:master-styles) merely names it -- this is the exact chain odf.js's own readOdt reads back via readFirstMasterPageGeometry (src/typed/odt/read.ts), so a document built by this scaffold round-trips its own default page size/margins through this package's own reader too.
+// style:page-layout (in styles.xml's own office:automatic-styles) carries the actual page geometry; style:master-page (in office:master-styles) merely names it -- this is the exact chain odf.js's own readOdtContent reads back via readFirstMasterPageGeometry (src/typed/odt/read.ts), so a document built by this scaffold round-trips its own default page size/margins through this package's own reader too.
 function buildPageLayout(): XmlElement {
   return el('style:page-layout', { 'style:name': PAGE_LAYOUT_NAME }, [
     el('style:page-layout-properties', {

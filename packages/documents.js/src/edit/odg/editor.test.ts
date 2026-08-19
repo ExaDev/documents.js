@@ -1,5 +1,5 @@
 import type { Package, XmlElement } from 'odf.js';
-import { decodePackage, readOdg } from 'odf.js';
+import { decodePackage, readOdgContent } from 'odf.js';
 import { describe, expect, it } from 'vitest';
 import type { ContentSubpath } from 'document-schema.js';
 import { minimalOdgBytes } from '../../test-support/odg';
@@ -121,7 +121,7 @@ describe('OdgPage.vectors: re-obtaining a live handle on an already-created vect
     expect(created.fill).toEqual(BLUE);
   });
 
-  it('mutating fill and stroke through a re-obtained handle survives toBytes() and is read back by odf.js\'s own readOdg', () => {
+  it('mutating fill and stroke through a re-obtained handle survives toBytes() and is read back by odf.js\'s own readOdgContent', () => {
     const editor = createOdg();
     const page = editor.addPage();
     page.addRect({ frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 }, fill: RED });
@@ -151,7 +151,7 @@ describe('OdgPage.vectors: re-obtaining a live handle on an already-created vect
       }
     }
 
-    const { pages } = readOdg(decodePackage(reopened.toBytes()));
+    const { pages } = readOdgContent(decodePackage(reopened.toBytes()));
     const firstPage = pages[0];
     if (firstPage === undefined) {
       throw new Error('expected a page');
@@ -190,7 +190,7 @@ describe('OdgPage.vectors: re-obtaining a live handle on an already-created vect
     rect.remove();
 
     expect(page.vectors().map((v) => v.kind)).toEqual(['ellipse']);
-    const { pages } = readOdg(decodePackage(editor.toBytes()));
+    const { pages } = readOdgContent(decodePackage(editor.toBytes()));
     expect(pages[0]?.vectors.map((v) => v.kind)).toEqual(['ellipse']);
   });
 
@@ -237,7 +237,7 @@ describe('paint order: vectors and shapes come back in document-add order, with 
       expect(child.type === 'element' ? child.attributes.some((a) => a.name === 'draw:z-index') : false).toBe(false);
     }
 
-    const { pages } = readOdg(pkg);
+    const { pages } = readOdgContent(pkg);
     expect(pages[0]?.vectors.map((v) => v.kind)).toEqual(['rect', 'ellipse', 'line', 'path']);
     expect(pages[0]?.shapes).toHaveLength(2);
   });
@@ -249,12 +249,12 @@ describe('paint order: vectors and shapes come back in document-add order, with 
     page.addRect({ frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 }, fill: RED });
     page.addEllipse({ frame: { xPt: 20, yPt: 0, widthPt: 10, heightPt: 10 }, fill: BLUE });
 
-    const { pages } = readOdg(editor.toPackage());
+    const { pages } = readOdgContent(editor.toPackage());
     expect(pages[0]?.vectors.map((v) => v.kind)).toEqual(['line', 'rect', 'ellipse']);
   });
 });
 
-describe('full editor round trip: open a real odg, add shapes and vectors including a curved path, save, reread via odf.js\'s own readOdg', () => {
+describe('full editor round trip: open a real odg, add shapes and vectors including a curved path, save, reread via odf.js\'s own readOdgContent', () => {
   it('every new addition survives, including the curve\'s exact segment data through the svg:d regenerate/reparse round trip', () => {
     const editor = openOdg(minimalOdgBytes());
     const page = editor.pages()[0];
@@ -290,8 +290,8 @@ describe('full editor round trip: open a real odg, add shapes and vectors includ
     }
     expect(reopenedPage.shapes().map((s) => s.name ?? s.text)).toContain('New label');
 
-    // ...then, independently, via odf.js's own readOdg -- the actual downstream reader this package's ContentDocument pipeline depends on, proving the written package is genuinely valid ODF, not merely self-consistent with this package's own reader.
-    const { pages } = readOdg(decodePackage(bytes));
+    // ...then, independently, via odf.js's own readOdgContent -- the actual downstream reader this package's ContentDocument pipeline depends on, proving the written package is genuinely valid ODF, not merely self-consistent with this package's own reader.
+    const { pages } = readOdgContent(decodePackage(bytes));
     const firstPage = pages[0];
     if (firstPage === undefined) {
       throw new Error('expected a page');

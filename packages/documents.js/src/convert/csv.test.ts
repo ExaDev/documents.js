@@ -1,4 +1,4 @@
-import { buildXlsxPackage, decodePackage as decodeOoxmlPackage, encodePackage as encodeOoxmlPackage, readXlsxContent } from 'ooxml.js';
+import { buildXlsxPackageFromContent, decodePackage as decodeOoxmlPackage, encodePackage as encodeOoxmlPackage, readXlsxContent } from 'ooxml.js';
 import { describe, expect, it } from 'vitest';
 import { decodeCsvText, encodeCsvText } from '../csv/text';
 import { TSV_DELIMITER, parseCsvRecords } from '../csv/records';
@@ -43,7 +43,7 @@ describe('csv composition: same-variant bridges', () => {
       throw new Error('expected a spreadsheet ContentDocument');
     }
     const twoSheets = { ...sheetOne, sheets: [...sheetOne.sheets, { ...sheetOne.sheets[0]!, name: 'Second' }] };
-    const xlsxBytes = encodeOoxmlPackage(buildXlsxPackage(twoSheets));
+    const xlsxBytes = encodeOoxmlPackage(buildXlsxPackageFromContent(twoSheets));
     expect(() => xlsxToCsv(xlsxBytes)).toThrow(CsvSheetNotSpecifiedError);
     expect(parseCsvRecords(decodeCsvText(xlsxToCsv(xlsxBytes, { sheet: 'Second' })))).toEqual([['A'], ['1']]);
   });

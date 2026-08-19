@@ -3,11 +3,11 @@ import type { XmlElement, XmlNode } from 'ooxml.js';
 import { childrenWithTag } from 'ooxml.js';
 import type { OmmlDiagnostic } from '../../omml/shared';
 
-// Shared pieces src/ooxml/docx/embedded-objects.ts's own spliceDocxEmbeddedObjects builds on: locating every body paragraph readDocx itself walked, the "is this paragraph nothing but non-content markers" test's own shared tag set, and an OOXML equation's own stand-in frame. The splice itself (the combined formula-and-vector pass, replacing what used to be this module's own spliceDocxFormulas) now lives in embedded-objects.ts, alongside the vector-only paragraph test it needs too -- see that module's own top comment.
+// Shared pieces src/ooxml/docx/embedded-objects.ts's own spliceDocxEmbeddedObjects builds on: locating every body paragraph the upstream reader itself walked, the "is this paragraph nothing but non-content markers" test's own shared tag set, and an OOXML equation's own stand-in frame. The splice itself (the combined formula-and-vector pass, replacing what used to be this module's own spliceDocxFormulas) now lives in embedded-objects.ts, alongside the vector-only paragraph test it needs too -- see that module's own top comment.
 
 export type OmmlDiagnosticSink = (diagnostic: OmmlDiagnostic, context: { readonly sourcePath?: string }) => void;
 
-// The containers readDocx's own body walk descends into, mirrored exactly. Every w:p produces exactly one top-level ContentParagraph block and nothing else produces one at all (a w:tbl becomes a table block, a w:drawing an image block, w:pageBreakBefore a pageBreak block), so the Nth w:p in the body IS the Nth paragraph-kind block across the sections readDocx returned. This walk mirrors exactly the containers readDocx's own readSections/readBodyBlocks descend into, so that correspondence holds for a paragraph nested in a w:sdt, a w:ins, or an mc:AlternateContent branch too.
+// The containers the upstream reader's own body walk descends into, mirrored exactly. Every w:p produces exactly one top-level ContentParagraph block and nothing else produces one at all (a w:tbl becomes a table block, a w:drawing an image block, w:pageBreakBefore a pageBreak block), so the Nth w:p in the body IS the Nth paragraph-kind block across the sections that reader returned. This walk mirrors exactly the containers that reader's own readSections/readBodyBlocks descend into, so that correspondence holds for a paragraph nested in a w:sdt, a w:ins, or an mc:AlternateContent branch too.
 export function collectBodyParagraphs(nodes: readonly XmlNode[], out: XmlElement[]): void {
   for (const node of nodes) {
     if (node.type !== 'element') {
@@ -23,7 +23,7 @@ export function collectBodyParagraphs(nodes: readonly XmlNode[], out: XmlElement
     } else if (node.tag === 'w:ins') {
       collectBodyParagraphs(node.children, out);
     } else if (node.tag === 'mc:AlternateContent') {
-      // readDocx prefers mc:Fallback over mc:Choice, so this must too -- picking the other branch could see a different paragraph count entirely.
+      // The upstream reader prefers mc:Fallback over mc:Choice, so this must too -- picking the other branch could see a different paragraph count entirely.
       const target = childrenWithTag(node, 'mc:Fallback')[0] ?? childrenWithTag(node, 'mc:Choice')[0];
       if (target !== undefined) {
         collectBodyParagraphs(target.children, out);

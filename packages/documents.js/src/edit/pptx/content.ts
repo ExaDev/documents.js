@@ -102,7 +102,7 @@ function appendShape(slide: PptxSlide, shape: ContentShape, options?: BuildPptxP
   if (shape.name !== undefined) {
     textBox.name = shape.name;
   }
-  // ContentShape's insets are required numbers (document-schema.js's ContentShapeSchema), so thread them unconditionally -- matching ooxml.js's own readPptx, which reads them back as defaults (91440/45720 EMU) when the source carried none. Setting them writes real lIns/tIns/rIns/bIns EMU attributes onto a:bodyPr.
+  // ContentShape's insets are required numbers (document-schema.js's ContentShapeSchema), so thread them unconditionally -- matching ooxml.js's own readPptxContent, which reads them back as defaults (91440/45720 EMU) when the source carried none. Setting them writes real lIns/tIns/rIns/bIns EMU attributes onto a:bodyPr.
   textBox.insetLeftPt = shape.insetLeftPt;
   textBox.insetTopPt = shape.insetTopPt;
   textBox.insetRightPt = shape.insetRightPt;

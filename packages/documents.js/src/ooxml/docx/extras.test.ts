@@ -43,7 +43,7 @@ describe('readDocxExtras', () => {
     expect(extras.numbering).toEqual({});
   });
 
-  it('propagates readDocx\'s own error for a package with no word/document.xml', () => {
+  it('propagates the upstream reader\'s own error for a package with no word/document.xml', () => {
     expect(() => readDocxExtras({ parts: {} })).toThrow(/word\/document\.xml/);
   });
 });

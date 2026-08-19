@@ -51,7 +51,7 @@ describe('odbTablesToSpreadsheetDocument', () => {
     ]);
   });
 
-  it('produces a real, non-empty printSettings for every sheet, so buildXlsxPackage has something to write', () => {
+  it('produces a real, non-empty printSettings for every sheet, so the xlsx builder has something to write', () => {
     const content = odbTablesToSpreadsheetDocument([TABLE]);
     if (content.kind !== 'spreadsheet') {
       throw new Error('expected a spreadsheet ContentDocument');

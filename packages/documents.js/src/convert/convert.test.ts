@@ -181,7 +181,7 @@ describe('odpToPdf', () => {
     expect(layout.pages[1]?.items.some((item) => item.kind === 'image')).toBe(true);
   });
 
-  // "Should work for free" claims deserve verification, not just assumption: presentation:notes is read into ContentSlide.notes by odf.js's own readOdp, and src/layout/slides.ts's hidden-annotation notes mechanism (already built and proven for pptxToPdf) carries any ContentSlide.notes through to the PDF regardless of which reader produced the ContentSlide -- this asserts that is genuinely true for odp too, with zero new notes-handling code written for this change.
+  // "Should work for free" claims deserve verification, not just assumption: presentation:notes is read into ContentSlide.notes by odf.js's own readOdpContent, and src/layout/slides.ts's hidden-annotation notes mechanism (already built and proven for pptxToPdf) carries any ContentSlide.notes through to the PDF regardless of which reader produced the ContentSlide -- this asserts that is genuinely true for odp too, with zero new notes-handling code written for this change.
   it('carries odp speaker notes through to the PDF via the existing hidden-annotation mechanism, with no new notes-handling code', () => {
     const pdfBytes = odpToPdf(minimalOdpBytes());
     const layout = readPdf(pdfBytes);
@@ -190,7 +190,7 @@ describe('odpToPdf', () => {
     expect(layout.pages[1]?.notes).toBeUndefined();
   });
 
-  // The fixture's draw:transform="rotate(0.5235987755982988) ..." is exactly 30 degrees; odf.js's own readOdp resolves that to ContentShape.rotationDeg -30 (its own read.test.ts asserts the identical value for the identical transform string), and convertPresentationToLayout's shapePlacement negates it again (DrawingML/ODF rotate clockwise, the PDF writer rotates counter-clockwise) to land on +30 here -- the same shared shapePlacement code pptxToPdf's own rotated-shape handling uses. wrapRunsToWidth fragments the title into one LayoutText per word, so this looks for the title's first word rather than the whole phrase.
+  // The fixture's draw:transform="rotate(0.5235987755982988) ..." is exactly 30 degrees; odf.js's own readOdpContent resolves that to ContentShape.rotationDeg -30 (its own read.test.ts asserts the identical value for the identical transform string), and convertPresentationToLayout's shapePlacement negates it again (DrawingML/ODF rotate clockwise, the PDF writer rotates counter-clockwise) to land on +30 here -- the same shared shapePlacement code pptxToPdf's own rotated-shape handling uses. wrapRunsToWidth fragments the title into one LayoutText per word, so this looks for the title's first word rather than the whole phrase.
   it('reads a rotated shape through to positioned PDF text (rotation resolved by the same shared shape-placement code pptxToPdf uses)', () => {
     const pdfBytes = odpToPdf(minimalOdpBytes());
     const layout = readPdf(pdfBytes);
@@ -240,7 +240,7 @@ describe('odsToPdf', () => {
     expect(text).toContain('1'); // row-number header label
   });
 
-  // End-to-end proof for the per-cell decoration wiring, all the way from real ODF style XML: decoratedOdsBytes declares fo:background-color / fo:border / fo:text-align / style:vertical-align on real table-cell styles, odf.js's readOds resolves all four onto ContentSheetCell, and src/layout/sheets.ts turns them into genuine LayoutRect/LayoutLine items and a genuinely different text position. Asserted against convertSpreadsheetToLayout's own output (the exact LayoutDocument odsToPdf builds internally) rather than a readPdf round trip, so the assertions pin what src/layout/sheets.ts itself emitted rather than what survived a second, independently-tested encode/decode hop -- a DocumentPackage no longer carries the items themselves, only each node's fused frames.
+  // End-to-end proof for the per-cell decoration wiring, all the way from real ODF style XML: decoratedOdsBytes declares fo:background-color / fo:border / fo:text-align / style:vertical-align on real table-cell styles, odf.js's readOdsContent resolves all four onto ContentSheetCell, and src/layout/sheets.ts turns them into genuine LayoutRect/LayoutLine items and a genuinely different text position. Asserted against convertSpreadsheetToLayout's own output (the exact LayoutDocument odsToPdf builds internally) rather than a readPdf round trip, so the assertions pin what src/layout/sheets.ts itself emitted rather than what survived a second, independently-tested encode/decode hop -- a DocumentPackage no longer carries the items themselves, only each node's fused frames.
   it('renders a decorated cell\'s own background, borders, alignment, and vertical alignment into the resulting layout', () => {
     const content = readOdsContent(decodeOdfPackage(decoratedOdsBytes()));
     if (content.kind !== 'spreadsheet') {
@@ -367,7 +367,7 @@ describe('pdfToDocx', () => {
     expect(text).toContain('Round trip content');
   });
 
-  // Exercises the full ooxml.js-backed docx read path (readDocx's style cascade) through the layout render and back: a bold, coloured, explicitly-sized run must still read back as bold/coloured/sized after the round trip, not just as plain text. A single word (rather than a phrase) sidesteps the reconstruction pipeline's separately-documented word-spacing-inference quirk, which is unrelated to this migration and not what this test targets.
+  // Exercises the full ooxml.js-backed docx read path (the flat docx reader's style cascade) through the layout render and back: a bold, coloured, explicitly-sized run must still read back as bold/coloured/sized after the round trip, not just as plain text. A single word (rather than a phrase) sidesteps the reconstruction pipeline's separately-documented word-spacing-inference quirk, which is unrelated to this migration and not what this test targets.
   it('round-trips a bold, coloured, sized run through docxToPdf then pdfToDocx', () => {
     const editor = createDocx();
     const run = editor.body.appendParagraph().appendRun({ text: 'StyledRun' });

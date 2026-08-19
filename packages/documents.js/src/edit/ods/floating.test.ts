@@ -1,6 +1,6 @@
 import type { ContentEmbeddedObject, ContentSheetImage, MathMlElement, MathMlNode } from 'document-schema.js';
 import type { Package, XmlElement } from 'odf.js';
-import { attrValue, bytesToBase64, childrenWithTag, decodePackage, elementsWithTag, encodePackage, readManifest, readOdfFormula, rootElement } from 'odf.js';
+import { attrValue, bytesToBase64, childrenWithTag, decodePackage, elementsWithTag, encodePackage, readManifest, readOdfFormulaMathMl, rootElement } from 'odf.js';
 import { describe, expect, it } from 'vitest';
 import { formulaDocument } from '../../model/formula';
 import { createOds } from './editor';
@@ -141,14 +141,14 @@ describe('OdsSheet.addEmbeddedObject', () => {
     return { objectKind: 'formula', document: FRACTION, frame: { xPt: 10, yPt: 20, widthPt: 30, heightPt: 15 }, ...overrides };
   }
 
-  it('writes a real formula sub-document odf.js\'s own readOdfFormula reads straight back, referenced from a draw:object at the object\'s own already-absolute frame', () => {
+  it('writes a real formula sub-document odf.js\'s own readOdfFormulaMathMl reads straight back, referenced from a draw:object at the object\'s own already-absolute frame', () => {
     const editor = createOds();
     editor.sheets()[0]!.addEmbeddedObject(formulaObject());
     const pkg = editor.toPackage();
 
     const subPart = pkg.parts['Object 1/content.xml'];
     expect(subPart?.kind).toBe('xml');
-    const recovered = readOdfFormula({ parts: { 'content.xml': subPart! } });
+    const recovered = readOdfFormulaMathMl({ parts: { 'content.xml': subPart! } });
     expect(signature(recovered.mathml)).toBe('mfrac(mi(a),mi(b))');
 
     const frame = elementsWithTag([contentRoot(pkg)], 'draw:frame')[0]!;

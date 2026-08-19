@@ -618,7 +618,7 @@ export function layoutNode(node: MathMlNode, ctx: LayoutContext): MathBox {
   }
 }
 
-// The public entry point: lays out a full formula (odf.js's own readOdfFormula's `mathml: XmlNode[]` -- the children of the <math> root element) at a given font size/colour, using `options.metrics` for every measurement. Multiple root-level nodes (rare, but the MathML content model permits more than one child directly under <math>) are laid out as an implicit row, matching how a <mrow> would combine them.
+// The public entry point: lays out a full formula (odf.js's own readOdfFormulaMathMl's `mathml: XmlNode[]` -- the children of the <math> root element) at a given font size/colour, using `options.metrics` for every measurement. Multiple root-level nodes (rare, but the MathML content model permits more than one child directly under <math>) are laid out as an implicit row, matching how a <mrow> would combine them.
 export function layoutFormula(mathml: readonly MathMlNode[], options: LayoutFormulaOptions): MathLayoutResult {
   const diagnostics: MathDiagnostic[] = [];
   const ctx = rootContext(options, diagnostics);

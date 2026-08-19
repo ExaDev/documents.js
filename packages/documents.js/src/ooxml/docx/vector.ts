@@ -4,7 +4,7 @@ import { attr, childrenWithTag, textContent } from 'ooxml.js';
 import { readDrawingMlVector } from '../../edit/drawingml/vector';
 import { emuToPt } from '../../model/units';
 
-// Detects a paragraph's own recovered-vector runs -- the read-side counterpart to src/edit/docx/paragraph.ts's own appendVectorAnchors/src/edit/docx/vector.ts's buildAnchoredVectorDrawing. A vector-only w:drawing/wp:anchor leaves no trace in ooxml.js's own readDocx at all (see this repo's own README gotcha on the reader-side gap this closes), so this is a second, independent pass over the same w:p this package's own reader already produced a ContentParagraph block from.
+// Detects a paragraph's own recovered-vector runs -- the read-side counterpart to src/edit/docx/paragraph.ts's own appendVectorAnchors/src/edit/docx/vector.ts's buildAnchoredVectorDrawing. A vector-only w:drawing/wp:anchor leaves no trace in ooxml.js's own readDocxContent at all (see this repo's own README gotcha on the reader-side gap this closes), so this is a second, independent pass over the same w:p this package's own reader already produced a ContentParagraph block from.
 
 export interface DetectedParagraphVector {
   readonly drawingElement: XmlElement;

@@ -343,7 +343,7 @@ function convertNodes(nodes: readonly XmlNode[], ctx: ReadContext): MathMlElemen
   return out;
 }
 
-// One m:oMath (or m:oMathPara) element -> the MathML node sequence a ContentFormula.mathml holds: exactly the children of a <math> root, matching what odf.js's own readOdfFormula produces for an ODF formula and what write.ts consumes on the way back out.
+// One m:oMath (or m:oMathPara) element -> the MathML node sequence a ContentFormula.mathml holds: exactly the children of a <math> root, matching what odf.js's own readOdfFormulaMathMl produces for an ODF formula and what write.ts consumes on the way back out.
 export function readOfficeMath(element: XmlElement): OmmlReadResult {
   const diagnostics: OmmlDiagnostic[] = [];
   const mathml = convertNodes([element], { diagnostics });
