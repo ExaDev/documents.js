@@ -223,7 +223,7 @@ export class DocxTableRow {
     return out;
   }
 
-  // Row height (ECMA-376 w:trPr/w:trHeight, value in twentieths-of-a-point). w:hRule="atLeast" preserves the source's intent -- a minimum row height that grows to fit taller content -- without clipping it the way "exact" would; odf.js's own reader resolves an ODF row height the same way (style:row-height is the value, content can still grow the row). This is the only row property this editor models because it is the only one ContentTableRow carries; readDocx does not populate row.heightPt (an ooxml.js reader gap), so this is genuinely one-directional -- only the odt -> docx bridge can carry a row height through today, never the reverse.
+  // Row height (ECMA-376 w:trPr/w:trHeight, value in twentieths-of-a-point). w:hRule="atLeast" preserves the source's intent -- a minimum row height that grows to fit taller content -- without clipping it the way "exact" would; odf.js's own reader resolves an ODF row height the same way (style:row-height is the value, content can still grow the row). This is the only row property this editor models because it is the only one ContentTableRow carries; The upstream docx reader does not populate row.heightPt (an ooxml.js reader gap), so this is genuinely one-directional -- only the odt -> docx bridge can carry a row height through today, never the reverse.
   get heightPt(): number | undefined {
     const trPr = this.trPrElement(false);
     const trHeight = trPr === undefined ? undefined : directChildElement(trPr, 'w:trHeight');

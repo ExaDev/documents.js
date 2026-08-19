@@ -317,7 +317,7 @@ describe('step 7: gridlines are one line per boundary, never one per cell', () =
 
 describe('cell text sizing: a run with no sizePt of its own defaults to the nominal CELL size, not shared.ts\'s docx-paragraph nominal size', () => {
   it('does not truncate real-world-shaped text (runs present, no sizePt) that comfortably fits at the 10pt cell default but would overflow at shared.ts\'s 18pt paragraph default', () => {
-    // Confirmed as a real bug via this module's own real-file verification against a genuine LibreOffice-generated .ods: odf.js's readOds populates `runs` for every cell with any text at all (not only genuinely mixed-formatting cells), and those runs carry no sizePt -- 'Acme Corp' (9 chars) at 18pt (90pt) overflows an 85pt-wide real column and gets wrongly truncated to 'Acme Cor', even though the very same text at the intended 10pt nominal size (50pt) fits comfortably.
+    // Confirmed as a real bug via this module's own real-file verification against a genuine LibreOffice-generated .ods: odf.js's readOdsContent populates `runs` for every cell with any text at all (not only genuinely mixed-formatting cells), and those runs carry no sizePt -- 'Acme Corp' (9 chars) at 18pt (90pt) overflows an 85pt-wide real column and gets wrongly truncated to 'Acme Cor', even though the very same text at the intended 10pt nominal size (50pt) fits comfortably.
     const s = sheet([stringCell(0, 0, 'Acme Corp')], { columns: [{ index: 0, widthPt: 85 }] });
     const layout = convert([s]);
     const texts = textItems(layout.pages[0]!.items);

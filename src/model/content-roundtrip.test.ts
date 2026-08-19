@@ -12,7 +12,7 @@ import { readPptxContent } from '../ooxml/pptx/read';
 //
 // This file isolates just one of those stages: readDocxContent/buildDocxPackage and readPptxContent/buildPptxPackage, composed directly against each other with no LayoutDocument or PDF bytes anywhere in the loop (sample docx/pptx -> readXContent -> ContentDocument -> buildXPackage -> sample docx/pptx again -> readXContent -> ContentDocument). Comparing the two ContentDocument values this composition produces means a failure here points specifically at the read/write pair for that one format, never at the layout engine or the PDF codec.
 
-const PNG_BYTES = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3, 4]); // real PNG magic bytes (ooxml.js's readPptx sniffs the format from these, not from a file extension) followed by a few arbitrary payload bytes -- the payload is never decoded as an actual image anywhere in this read/write pair, only carried through as an opaque blob
+const PNG_BYTES = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3, 4]); // real PNG magic bytes (ooxml.js's readPptxContent sniffs the format from these, not from a file extension) followed by a few arbitrary payload bytes -- the payload is never decoded as an actual image anywhere in this read/write pair, only carried through as an opaque blob
 
 function isParagraph(block: ContentBlock): block is ContentParagraph {
   return block.kind === 'paragraph';
@@ -43,7 +43,7 @@ describe('docx: readDocxContent/buildDocxPackage read -> build -> read stability
     table.cell(1, 0).paragraphs()[0]!.appendRun({ text: 'A2' });
     table.cell(1, 1).paragraphs()[0]!.appendRun({ text: 'B2' });
 
-    // ooxml.js's readDocx (2.6.1+) now reads a real ContentImageBlock for an inline w:drawing -- readDocxContent (this package's own thin adapter over it) inherits that for free, with zero code change on this package's side. readDocx represents the image as TWO adjacent blocks sourced from the one physical <w:p>: a paragraph block carrying that paragraph's own (here all-empty) runs, immediately followed by the image block -- buildDocxPackage's appendBlocks (src/edit/docx/content.ts) recognises exactly that pattern and writes it back as the single physical paragraph it came from, which is what makes the full expect(roundTripped).toEqual(original) below hold byte-for-byte rather than accumulating a spurious empty paragraph before every image on every round trip.
+    // ooxml.js's flat docx reader (image reading since ooxml.js 2.6.1) now reads a real ContentImageBlock for an inline w:drawing -- readDocxContent (this package's own thin adapter over it) inherits that for free, with zero code change on this package's side. The upstream reader represents the image as TWO adjacent blocks sourced from the one physical <w:p>: a paragraph block carrying that paragraph's own (here all-empty) runs, immediately followed by the image block -- buildDocxPackage's appendBlocks (src/edit/docx/content.ts) recognises exactly that pattern and writes it back as the single physical paragraph it came from, which is what makes the full expect(roundTripped).toEqual(original) below hold byte-for-byte rather than accumulating a spurious empty paragraph before every image on every round trip.
     editor.body.appendParagraph().insertImageAfter({ format: 'png', bytes: PNG_BYTES, widthPt: 40, heightPt: 40 });
 
     editor.body.appendParagraph().appendRun({ text: 'Closing paragraph.' });

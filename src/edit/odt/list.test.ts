@@ -30,7 +30,7 @@ describe('OdtList / OdtListItem: structural nesting', () => {
 
     expect(top?.list?.level).toBe(0);
     expect(nested?.list?.level).toBe(1);
-    // Both paragraphs belong to the same top-level list, even though the nested one is one level deeper -- odf.js's own readOdt assigns one synthetic numId per top-level text:list and threads it through every nested text:list beneath it.
+    // Both paragraphs belong to the same top-level list, even though the nested one is one level deeper -- odf.js's own readOdtContent assigns one synthetic numId per top-level text:list and threads it through every nested text:list beneath it.
     expect(nested?.list?.numId).toBe(top?.list?.numId);
   });
 

@@ -1,5 +1,5 @@
 import type { ContentCodec } from 'document-schema.js';
-import { buildXlsxPackage, readXlsxContent } from 'ooxml.js';
+import { buildXlsxPackageFromContent, readXlsxContent } from 'ooxml.js';
 import { readPdf, writePdf } from 'pdf-codec';
 import type { LayoutDocument } from 'pdf-codec';
 import type { DocumentFormat } from '../convert/port';
@@ -59,7 +59,7 @@ export interface DocumentFormatCodecs {
   readonly layout?: LayoutEntryCodec;
 }
 
-// xlsx now has a real content codec too, wrapping ooxml.js's own readXlsxContent/buildXlsxPackage exactly the way every other OPC/ODF format's entry wraps its own readXContent/buildXPackage pair. This does not contradict the README's Architecture-section statement that documents.js does not re-export readXlsxContent/buildXlsxPackage as public API: that statement is about src/index.ts's own export surface (still true -- neither name is exported from there), not about whether this internal registry may call them. Wrapping them here, behind the same DocumentFormatCodecs shape every other format already uses, is what lets readDocumentMetadata/setDocumentMetadata/buildDocumentBytes treat xlsx uniformly with the rest of DocumentFormat rather than special-casing it -- see each of those modules' own comments for exactly which xlsx special-cases this closed. odf (a standalone formula document) has a content.read but no content.write: odf.js has no write path for a formula document at all, so `write` is left unset rather than stubbed.
+// xlsx now has a real content codec too, wrapping ooxml.js's own readXlsxContent/buildXlsxPackageFromContent (the flat ContentDocument builder; ooxml.js 4.0.0 gives the bare buildXlsxPackage name to the tree-form DocumentPackage counterpart, which this flat-form pipeline does not use) exactly the way every other OPC/ODF format's entry wraps its own readXContent/buildXPackage pair. The xlsx pair is also re-exported at the src/index.ts boundary (readXlsxContent as-is, the flat builder under this package's own buildXlsxPackage name); this internal registry calling them directly changes nothing about that public surface. Wrapping them here, behind the same DocumentFormatCodecs shape every other format already uses, is what lets readDocumentMetadata/setDocumentMetadata/buildDocumentBytes treat xlsx uniformly with the rest of DocumentFormat rather than special-casing it -- see each of those modules' own comments for exactly which xlsx special-cases this closed. odf (a standalone formula document) has a content.read but no content.write: odf.js has no write path for a formula document at all, so `write` is left unset rather than stubbed.
 export const DOCUMENT_FORMAT_CODECS: Readonly<Record<DocumentFormat, DocumentFormatCodecs>> = {
   docx: {
     content: {
@@ -155,7 +155,7 @@ export const DOCUMENT_FORMAT_CODECS: Readonly<Record<DocumentFormat, DocumentFor
         throwIfAborted(options?.signal);
         return readXlsxContent(decodeDocumentPackage('xlsx', requireArrayBufferBytes(bytes)));
       },
-      write: (content) => encodeDocumentPackage('xlsx', buildXlsxPackage(content)),
+      write: (content) => encodeDocumentPackage('xlsx', buildXlsxPackageFromContent(content)),
     },
   },
 };

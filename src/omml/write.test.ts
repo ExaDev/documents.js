@@ -6,7 +6,7 @@ import { buildOfficeMath, buildOfficeMathParagraph } from './write';
 
 // MathML -> OMML structural translation. Every assertion below is about the ACTUAL OMML element tree written (m:f/m:rad/m:sSub/m:m/...), not about a rendered result -- this module produces markup a real docx-math-aware consumer renders, so the markup itself is the thing under test.
 
-// Hand-built MathML nodes, the same "structurally compatible mirror" shape odf.js's own readOdfFormula produces (see src/mathml/nodes.ts's own module comment) -- no XML parsing needed to construct an input tree.
+// Hand-built MathML nodes, the same "structurally compatible mirror" shape odf.js's own readOdfFormulaMathMl produces (see src/mathml/nodes.ts's own module comment) -- no XML parsing needed to construct an input tree.
 function mel(tag: string, attrs: Record<string, string> = {}, children: MathMlNode[] = []): MathMlElement {
   return { type: 'element', tag, attributes: Object.entries(attrs).map(([name, value]) => ({ name, value })), children };
 }

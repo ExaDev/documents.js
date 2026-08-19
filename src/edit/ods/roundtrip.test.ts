@@ -1,5 +1,5 @@
 import type { Package, XmlElement } from 'odf.js';
-import { readOds } from 'odf.js';
+import { readOdsContent } from 'odf.js';
 import { describe, expect, it } from 'vitest';
 import { minimalOdsBytes } from '../../test-support/ods';
 import { COLUMN_REPEAT_ATTR, COLUMN_TAG, ROW_REPEAT_ATTR, ROW_TAG, isElementWithTag } from './address';
@@ -21,8 +21,8 @@ function findTableElement(pkg: Package): XmlElement {
   return table;
 }
 
-// The task's own headline requirement: open a REAL ods, set every ContentCellValueSchema variant across several cells, add a formula, save, and reread with odf.js's own readOds -- not this package's own getters -- to prove the bytes on disk (not just this editor's in-memory view of them) are correct.
-describe('open -> edit -> save -> reopen: every ContentCellValueSchema variant survives a real readOds cycle', () => {
+// The task's own headline requirement: open a REAL ods, set every ContentCellValueSchema variant across several cells, add a formula, save, and reread with odf.js's own readOdsContent -- not this package's own getters -- to prove the bytes on disk (not just this editor's in-memory view of them) are correct.
+describe('open -> edit -> save -> reopen: every ContentCellValueSchema variant survives a real readOdsContent cycle', () => {
   it('number/percentage/currency/boolean/date/time/string/empty all round-trip to their correct kind and value', () => {
     const editor = openOds(minimalOdsBytes());
     const sheet = editor.sheet('Data');
@@ -42,8 +42,8 @@ describe('open -> edit -> save -> reopen: every ContentCellValueSchema variant s
     formulaCell.formula = 'of:=SUM([.A11:.C11])';
     formulaCell.value = { kind: 'number', value: 128.206 };
 
-    const reread = readOds(editor.toPackage()); // reread from the SAME in-memory package this editor produced
-    const rereadFromBytes = readOds(openOds(editor.toBytes()).toPackage()); // and independently from a fresh byte round trip, to catch anything that only breaks through actual (de)serialization
+    const reread = readOdsContent(editor.toPackage()); // reread from the SAME in-memory package this editor produced
+    const rereadFromBytes = readOdsContent(openOds(editor.toBytes()).toPackage()); // and independently from a fresh byte round trip, to catch anything that only breaks through actual (de)serialization
 
     for (const document of [reread, rereadFromBytes]) {
       const dataSheet = document.sheets.find((s) => s.name === 'Data');
@@ -73,7 +73,7 @@ describe('open -> edit -> save -> reopen: every ContentCellValueSchema variant s
     const sheet = editor.sheet('Data');
     sheet.cell(20, 0).value = { kind: 'error', value: '#DIV/0!' };
 
-    const document = readOds(openOds(editor.toBytes()).toPackage());
+    const document = readOdsContent(openOds(editor.toBytes()).toPackage());
     const dataSheet = document.sheets.find((s) => s.name === 'Data')!;
     const cell = dataSheet.cells.find((c) => c.row === 20 && c.column === 0);
     expect(cell?.value).toEqual({ kind: 'string', value: '#DIV/0!' });
@@ -86,7 +86,7 @@ describe('open -> edit -> save -> reopen: every ContentCellValueSchema variant s
     const anchor = sheet.mergeCells(15, 0, 2, 3);
     anchor.value = { kind: 'string', value: 'Merged Header' };
 
-    const document = readOds(openOds(editor.toBytes()).toPackage());
+    const document = readOdsContent(openOds(editor.toBytes()).toPackage());
     const dataSheet = document.sheets.find((s) => s.name === 'Data')!;
     const anchorCell = dataSheet.cells.find((c) => c.row === 15 && c.column === 0);
     expect(anchorCell?.value).toEqual({ kind: 'string', value: 'Merged Header' });
@@ -121,14 +121,14 @@ describe('write-side repeat-count avoidance: a far-out cell address never materi
     expect(columnElements.length).toBeLessThanOrEqual(2);
   });
 
-  it('and reading that same file back through odf.js\'s own readOds is fast -- proof the file itself, not just this editor\'s in-memory view, stayed compact', () => {
+  it('and reading that same file back through odf.js\'s own readOdsContent is fast -- proof the file itself, not just this editor\'s in-memory view, stayed compact', () => {
     const editor = createOds();
     const sheet = editor.sheets()[0]!;
     sheet.cell(50000, 500).value = { kind: 'string', value: 'far away' };
     const bytes = editor.toBytes();
 
     const start = performance.now();
-    const document = readOds(openOds(bytes).toPackage());
+    const document = readOdsContent(openOds(bytes).toPackage());
     const elapsedMs = performance.now() - start;
     expect(elapsedMs).toBeLessThan(3000);
 

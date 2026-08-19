@@ -88,7 +88,7 @@ describe('OdpShape.rotationDeg', () => {
     expect(shape.rotationDeg).toBeUndefined();
   });
 
-  // Round trip through odf.js's own resolveOdfShapeGeometry (the exact function this package's own read path -- odf.js's readOdp -- uses), not just through OdpShape's own getter: this proves buildTransformAttr's draw:transform genuinely reproduces frame+rotationDeg for a real ODF consumer's reading, not merely for this class's own paired getter/setter.
+  // Round trip through odf.js's own resolveOdfShapeGeometry (the exact function this package's own read path -- odf.js's readOdpContent -- uses), not just through OdpShape's own getter: this proves buildTransformAttr's draw:transform genuinely reproduces frame+rotationDeg for a real ODF consumer's reading, not merely for this class's own paired getter/setter.
   it('setting rotationDeg produces a draw:transform that resolveOdfShapeGeometry reads back to the same frame and rotation', () => {
     const pkg = createEmptyOdpPackage();
     const frame = { xPt: 50, yPt: 50, widthPt: 200, heightPt: 60 };

@@ -81,7 +81,7 @@ export class OdtListItem {
     return new OdtParagraph(this.node.children, paragraphElement, this.pkg);
   }
 
-  // Starts a further-nested text:list one level deeper, directly inside this item -- odf.js's own readOdt increments ContentParagraph.list.level by exactly one per text:list nested this way (src/typed/odt/read.ts's readListItems).
+  // Starts a further-nested text:list one level deeper, directly inside this item -- odf.js's own readOdtContent increments ContentParagraph.list.level by exactly one per text:list nested this way (src/typed/odt/read.ts's readListItems).
   addNestedList(): OdtList {
     const listElement = el('text:list', { 'text:style-name': internBulletListStyle(this.pkg) });
     this.node.children.push(listElement);

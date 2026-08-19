@@ -1,4 +1,4 @@
-import { decodePackage, readOdp } from 'odf.js';
+import { decodePackage, readOdpContent } from 'odf.js';
 import { describe, expect, it } from 'vitest';
 import { assertAutomaticStylesOnlyAppended } from '../../test-support/odf-style-fidelity';
 import { minimalOdpBytes, minimalOdpPackage } from '../../test-support/odp';
@@ -11,7 +11,7 @@ describe('openOdp / createOdp', () => {
     const editor = openOdp(minimalOdpBytes());
     const slides = editor.slides();
     expect(slides).toHaveLength(2);
-    // Only the Title frame is a DIRECT child of draw:page -- shapes() (like pptx's own PptxSlide.shapes()) does not flatten a draw:g group's own children into the slide's flat shape list; that flattening is odf.js's own readOdp/walkDrawShapes concern (the ContentDocument-reading path), not this live-view editor's.
+    // Only the Title frame is a DIRECT child of draw:page -- shapes() (like pptx's own PptxSlide.shapes()) does not flatten a draw:g group's own children into the slide's flat shape list; that flattening is odf.js's own readOdpContent/walkDrawShapes concern (the ContentDocument-reading path), not this live-view editor's.
     expect(slides[0]?.shapes().map((s) => s.name)).toEqual(['Title']);
   });
 
@@ -78,12 +78,12 @@ describe('OdpSlide.notes', () => {
     expect(decodePackage(editor.toBytes())).toEqual(editor.toPackage());
   });
 
-  it('writes multi-line notes as one text:p per line, matching odf.js\'s own readOdp (which joins them back with a newline)', () => {
+  it('writes multi-line notes as one text:p per line, matching odf.js\'s own readOdpContent (which joins them back with a newline)', () => {
     const editor = createOdp();
     const slide = editor.addSlide();
     slide.notes = 'First line\nSecond line';
     expect(slide.notes).toBe('First line\nSecond line');
-    const { slides } = readOdp(editor.toPackage());
+    const { slides } = readOdpContent(editor.toPackage());
     expect(slides[0]?.notes).toBe('First line\nSecond line');
   });
 
@@ -133,7 +133,7 @@ describe('live-view fidelity for odp', () => {
   });
 });
 
-describe('full editor round trip: build a presentation from scratch, save, reread via odf.js\'s own readOdp', () => {
+describe('full editor round trip: build a presentation from scratch, save, reread via odf.js\'s own readOdpContent', () => {
   it('a new slide, a styled multi-paragraph text box, an image, a rotated shape, and speaker notes all survive, as read by odf.js itself', () => {
     const editor = createOdp();
     const slide = editor.addSlide();
@@ -169,8 +169,8 @@ describe('full editor round trip: build a presentation from scratch, save, rerea
     const reopenedRotated = reopenedShapes.find((s) => s.text === 'Rotated');
     expect(reopenedRotated?.rotationDeg).toBeCloseTo(45, 6);
 
-    // ...then, independently, via odf.js's own readOdp -- the actual downstream reader this package's ContentDocument pipeline depends on, proving the written package is genuinely valid ODF, not merely self-consistent with this package's own reader.
-    const { slides } = readOdp(decodePackage(bytes));
+    // ...then, independently, via odf.js's own readOdpContent -- the actual downstream reader this package's ContentDocument pipeline depends on, proving the written package is genuinely valid ODF, not merely self-consistent with this package's own reader.
+    const { slides } = readOdpContent(decodePackage(bytes));
     expect(slides).toHaveLength(1);
     const [readSlide] = slides;
     expect(readSlide?.notes).toBe('These are the freshly written speaker notes.');

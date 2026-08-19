@@ -51,11 +51,11 @@ const NOOP_RENDER_DIAGNOSTIC_SINK: MarkdownRenderDiagnosticSink = () => {
 };
 
 export interface RenderMarkdownOptions extends WriteMarkdownOptions {
-  // Called once per degrade decision this module makes while flattening a non-wordprocessing ContentDocument. Never called for a 'wordprocessing' document -- there is nothing to degrade on that path, since it goes straight to writeMarkdown.
+  // Called once per degrade decision this module makes while flattening a non-wordprocessing ContentDocument. Never called for a 'wordprocessing' document -- there is nothing to degrade on that path, since it goes straight to writeMarkdownContent.
   readonly onDiagnostic?: MarkdownRenderDiagnosticSink;
 }
 
-// A synthesised A4/1in section, exactly like markdown-codec's own INVENTED_PAGE_GEOMETRY default (ReadMarkdownOptions.pageSize/margins falling back to PAGE_SIZE_A4/its own DEFAULT_MARGINS) -- writeMarkdown never reads a section's pageSize/margins at all (markdown has no page-geometry construct), so these values are here purely to satisfy ContentSection's own schema shape, not because they affect the rendered text.
+// A synthesised A4/1in section, exactly like markdown-codec's own INVENTED_PAGE_GEOMETRY default (ReadMarkdownOptions.pageSize/margins falling back to PAGE_SIZE_A4/its own DEFAULT_MARGINS) -- writeMarkdownContent never reads a section's pageSize/margins at all (markdown has no page-geometry construct), so these values are here purely to satisfy ContentSection's own schema shape, not because they affect the rendered text.
 const SYNTHETIC_MARGINS = { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 };
 
 // A column with no width of its own (a spreadsheet cell reader that never individuated it) falls back to this -- again cosmetic: no markdown table renderer reads ContentTable.columnWidthsPt.
@@ -233,7 +233,7 @@ function degradedBlocksFor(document: Exclude<ContentDocument, { kind: 'wordproce
   }
 }
 
-// The one entry point this module exists to add: ContentDocument (any of its five kinds) -> Markdown text. A 'wordprocessing' document goes straight to buildMarkdownText/writeMarkdown -- markdown-codec already understands that shape natively, so there is nothing this module should do differently. Every other kind is flattened first (see the per-kind functions above) into a synthetic 'wordprocessing' document built from the real blocks it carries, then handed to the exact same buildMarkdownText call -- so a flattened presentation/spreadsheet/drawing gets every ordinary wordprocessing-side behaviour (list rendering, table-cell formatting diagnostics, front matter, style options) for free, with zero duplicated emission logic.
+// The one entry point this module exists to add: ContentDocument (any of its five kinds) -> Markdown text. A 'wordprocessing' document goes straight to buildMarkdownText/markdown-codec's writeMarkdownContent -- markdown-codec already understands that shape natively, so there is nothing this module should do differently. Every other kind is flattened first (see the per-kind functions above) into a synthetic 'wordprocessing' document built from the real blocks it carries, then handed to the exact same buildMarkdownText call -- so a flattened presentation/spreadsheet/drawing gets every ordinary wordprocessing-side behaviour (list rendering, table-cell formatting diagnostics, front matter, style options) for free, with zero duplicated emission logic.
 export function renderContentDocumentToMarkdown(document: ContentDocument, options?: RenderMarkdownOptions): string {
   if (document.kind === 'wordprocessing') {
     return buildMarkdownText(document, options);

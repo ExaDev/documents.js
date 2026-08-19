@@ -3,15 +3,15 @@ import { describe, expect, it } from 'vitest';
 import { docxWithTableCellEquationPackage, minimalDocxPackage } from '../../test-support/docx';
 import { readDocxContent } from './read';
 
-// readDocxContent is now a thin adapter over ooxml.js's own readDocx: the WordprocessingML style cascade, theme resolution, and document-order section/block walking all live upstream in ooxml.js now, with their own test coverage there. These tests exercise only the wrapping this file is actually responsible for -- ContentDocument's discriminant/formatVersion, the metadata/sections passthrough -- not the OOXML semantics readDocx itself resolves.
+// readDocxContent is now a thin adapter over ooxml.js's own readDocxContent (the flat reader; the bare readDocx name reads the tree-form DocumentPackage since ooxml.js 4.0.0): the WordprocessingML style cascade, theme resolution, and document-order section/block walking all live upstream in ooxml.js now, with their own test coverage there. These tests exercise only the wrapping this file is actually responsible for -- ContentDocument's discriminant/formatVersion, the metadata/sections passthrough -- not the OOXML semantics readDocx itself resolves.
 
 describe('readDocxContent', () => {
-  it('wraps readDocx into a wordprocessing ContentDocument', () => {
+  it('wraps ooxml.js\'s readDocxContent into a wordprocessing ContentDocument', () => {
     const doc = readDocxContent(minimalDocxPackage());
     expect(doc.kind).toBe('wordprocessing');
   });
 
-  it('passes sections through from readDocx unchanged, including a paragraph and a table', () => {
+  it('passes sections through from ooxml.js\'s readDocxContent unchanged, including a paragraph and a table', () => {
     const doc = readDocxContent(minimalDocxPackage());
     if (doc.kind !== 'wordprocessing') {
       throw new Error('expected a wordprocessing document');
@@ -27,14 +27,14 @@ describe('readDocxContent', () => {
     expect(firstCellBlock?.kind === 'paragraph' ? firstCellBlock.runs[0]?.text : undefined).toBe('A1');
   });
 
-  it('spreads metadata from readDocx, leaving LayoutMetadata\'s PDF-only producer field unset', () => {
+  it('spreads metadata from ooxml.js\'s readDocxContent, leaving LayoutMetadata\'s PDF-only producer field unset', () => {
     const doc = readDocxContent(minimalDocxPackage());
     // The fixture package carries no docProps/core.xml, so every field is undefined -- confirming the mapping doesn't invent a value, not merely that it round-trips one.
     expect(doc.metadata).toEqual({});
     expect(doc.metadata.producer).toBeUndefined();
   });
 
-  it('propagates readDocx\'s own error for a package with no word/document.xml', () => {
+  it('propagates the upstream reader\'s own error for a package with no word/document.xml', () => {
     expect(() => readDocxContent({ parts: {} })).toThrow(/word\/document\.xml/);
   });
 
@@ -49,7 +49,7 @@ describe('readDocxContent', () => {
       throw new Error('expected a table');
     }
     const cells = table.rows[0]?.cells ?? [];
-    // The first cell is ordinary text and is left exactly as readDocx read it.
+    // The first cell is ordinary text and is left exactly as the upstream reader read it.
     expect(cells[0]?.blocks.some((block) => block.kind === 'paragraph')).toBe(true);
     // The second cell's equation-only paragraph is recovered as a real formula embedded-object block in THAT cell's own blocks.
     expect(cells[1]?.blocks.some((block) => block.kind === 'embeddedObject' && block.objectKind === 'formula')).toBe(true);

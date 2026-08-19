@@ -1,7 +1,7 @@
 import { flattenPackage, type ContentDocument, type DocumentPackage } from 'document-schema.js';
 
 import { decodePackage as decodeOdfPackage } from 'odf.js';
-import { buildXlsxPackage, decodePackage as decodeOoxmlPackage, encodePackage as encodeOoxmlPackage, readXlsxContent } from 'ooxml.js';
+import { buildXlsxPackageFromContent, decodePackage as decodeOoxmlPackage, encodePackage as encodeOoxmlPackage, readXlsxContent } from 'ooxml.js';
 import { describe, expect, it, vi } from 'vitest';
 import { createDocx } from '../edit/docx/editor';
 import { createOdp } from '../edit/odp/editor';
@@ -488,7 +488,7 @@ describe('odp <-> pptx: a table shape survives odpToPptx', () => {
 
 // --- ods <-> xlsx ------------------------------------------------------------------------------------------------
 //
-// The least mature of the three bridges -- ooxml.js's buildXlsxPackage is a brand-new xlsx writer -- so this section is deliberately the most scrutinised: every ContentCellValue kind ODS can actually produce, a merged range, a formula carried verbatim, and column widths checked against a stated numeric tolerance rather than exact equality.
+// The least mature of the three bridges -- ooxml.js's flat xlsx writer (buildXlsxPackageFromContent since ooxml.js 4.0.0) was brand-new when this section was written -- so this section is deliberately the most scrutinised: every ContentCellValue kind ODS can actually produce, a merged range, a formula carried verbatim, and column widths checked against a stated numeric tolerance rather than exact equality.
 //
 // COLUMN WIDTH TOLERANCE: 1pt. ptToColumnWidthChars (ooxml.js's src/typed/xlsx/units.ts) is a best-effort ALGEBRAIC inverse of columnWidthCharsToPt's own two Math.trunc() pixel-grid roundings -- that module's own doc comment says as much: "not guaranteed exact for every x". The underlying grid is 96 pixels/inch, so one truncated pixel is 1/96in = 0.75pt; empirically walking columnWidthCharsToPt(ptToColumnWidthChars(x).toFixed(2)) across a wide range of realistic column widths (1..400pt, quarter-point steps) never exceeds 0.75pt of drift. 1pt is used as the assertion tolerance -- comfortably above the observed 0.75pt maximum (so the test isn't flaky against a legitimate off-by-one-pixel rounding), while still tight enough to catch a genuine regression (a wrong unit, a dropped conversion, a swapped axis would all produce errors far larger than 1pt).
 const COLUMN_WIDTH_TOLERANCE_PT = 1;
@@ -511,13 +511,13 @@ describe('ods <-> xlsx: ods -> xlsx (one hop, the character-width-unit conversio
     expect(cellAt(sheet, 1, 1)?.value).toEqual({ kind: 'number', value: 42.5 });
     expect(cellAt(sheet, 1, 2)?.value).toEqual({ kind: 'boolean', value: true });
 
-    // ooxml.js's buildXlsxPackage/readXlsxContent (2.6.1+) now carry a full xlsx number-format engine: a percentage cell writes a real "0%"-family numFmt and reads back as genuine 'percentage', and a currency cell writes a real "[$USD]#,##0.00"-family numFmt (the ISO currency code embedded in the format code itself, not a separate cell attribute -- xlsx has no dedicated currency cell type) and reads back as genuine 'currency' with that code recovered. Both are a real fidelity improvement over the previous "downgrades to plain number" behaviour -- the semantic kind now survives, not just the numeric value.
+    // ooxml.js's xlsx writer/readXlsxContent (2.6.1+) now carry a full xlsx number-format engine: a percentage cell writes a real "0%"-family numFmt and reads back as genuine 'percentage', and a currency cell writes a real "[$USD]#,##0.00"-family numFmt (the ISO currency code embedded in the format code itself, not a separate cell attribute -- xlsx has no dedicated currency cell type) and reads back as genuine 'currency' with that code recovered. Both are a real fidelity improvement over the previous "downgrades to plain number" behaviour -- the semantic kind now survives, not just the numeric value.
     expect(cellAt(sheet, 2, 0)?.value).toEqual({ kind: 'percentage', value: 0.15 });
     expect(cellAt(sheet, 2, 1)?.value).toEqual({ kind: 'currency', value: 9.99, currency: 'USD' });
     // The same number-format engine now reads a date-only numFmt back as genuine 'date' rather than the previous catch-all 'dateTime' -- xlsx still has only the one combined date/time serial wire type, but the reader can now tell a date-only format code from one that also carries a time component.
     expect(cellAt(sheet, 2, 2)?.value).toEqual({ kind: 'date', value: '2026-01-15' });
 
-    // A source ODS 'time' cell has no numeric serial to write at all -- its own ContentCellValue carries an ISO-8601 duration STRING ("PT14H30M00S"), not a fractional-day number, so buildXlsxPackage cannot express it as an xlsx date/time serial and writes it as a plain string cell instead. The value string still survives byte-for-byte, just honestly labelled as text rather than mislabelled as a date/time.
+    // A source ODS 'time' cell has no numeric serial to write at all -- its own ContentCellValue carries an ISO-8601 duration STRING ("PT14H30M00S"), not a fractional-day number, so the xlsx writer cannot express it as an xlsx date/time serial and writes it as a plain string cell instead. The value string still survives byte-for-byte, just honestly labelled as text rather than mislabelled as a date/time.
     expect(cellAt(sheet, 3, 0)?.value).toEqual({ kind: 'string', value: 'PT14H30M00S' });
 
     // Formula: written verbatim into <f>, never parsed, translated, or evaluated -- the exact OpenFormula-syntax string ODS carried survives byte-for-byte, even though it is not valid Excel A1 syntax (a real Excel opening this file would show a formula error; this bridge makes no claim about cross-application formula semantics, only about byte preservation).
@@ -593,7 +593,7 @@ describe('ods <-> xlsx: ods -> xlsx -> ods (double hop, starting from ods)', () 
   });
 });
 
-// A genuinely independent xlsx starting point -- built directly via ooxml.js's own buildXlsxPackage + encodePackage, NOT via odsToXlsx -- so this describe block's own round trip doesn't merely re-exercise odsToXlsx's own output. Includes an 'error' cell, the one ContentCellValue kind ODS structurally cannot ever produce on read (OdsCell.value's own getter, src/edit/ods/cell.ts: "Reading it back can never reproduce kind:'error' -- no writer ... can put that value-type on the wire -- and that is a property of the format, not a gap in this editor"), since xlsx's own t="e" cell type is a genuine ECMA-376 wire format ODS has no equivalent for.
+// A genuinely independent xlsx starting point -- built directly via ooxml.js's own buildXlsxPackageFromContent + encodePackage, NOT via odsToXlsx -- so this describe block's own round trip doesn't merely re-exercise odsToXlsx's own output. Includes an 'error' cell, the one ContentCellValue kind ODS structurally cannot ever produce on read (OdsCell.value's own getter, src/edit/ods/cell.ts: "Reading it back can never reproduce kind:'error' -- no writer ... can put that value-type on the wire -- and that is a property of the format, not a gap in this editor"), since xlsx's own t="e" cell type is a genuine ECMA-376 wire format ODS has no equivalent for.
 function buildXlsxNativeContentDocument(): ContentDocument {
   return {
     kind: 'spreadsheet',
@@ -617,7 +617,7 @@ function buildXlsxNativeContentDocument(): ContentDocument {
 
 describe('ods <-> xlsx: xlsx -> ods -> xlsx (double hop, starting from a genuine xlsx source)', () => {
   it('carries the formula and plain-text cell verbatim, and documents the error-kind -> string-kind loss unique to routing through ods', () => {
-    const originalXlsxBytes = encodeOoxmlPackage(buildXlsxPackage(buildXlsxNativeContentDocument()));
+    const originalXlsxBytes = encodeOoxmlPackage(buildXlsxPackageFromContent(buildXlsxNativeContentDocument()));
 
     const odsBytes = xlsxToOds(originalXlsxBytes);
     const roundTrippedBytes = odsToXlsx(odsBytes);
@@ -635,7 +635,7 @@ describe('ods <-> xlsx: xlsx -> ods -> xlsx (double hop, starting from a genuine
   it('throws when the signal is already aborted', () => {
     const controller = new AbortController();
     controller.abort();
-    const xlsxBytes = encodeOoxmlPackage(buildXlsxPackage(buildXlsxNativeContentDocument()));
+    const xlsxBytes = encodeOoxmlPackage(buildXlsxPackageFromContent(buildXlsxNativeContentDocument()));
     expect(() => xlsxToOds(xlsxBytes, { signal: controller.signal })).toThrow();
   });
 });
@@ -764,7 +764,7 @@ describe('docx <-> markdown: docx -> markdown -> docx', () => {
     expect(styledRun?.bold).toBe(true);
     expect(styledRun?.italic).toBe(true);
     expect(styledRun?.strike).toBe(true);
-    // Colour has no markdown source construct at all -- the docxToMarkdown hop drops it, matching writeMarkdown's own documented CommonMark-vocabulary narrowing.
+    // Colour has no markdown source construct at all -- the docxToMarkdown hop drops it, matching writeMarkdownContent's own documented CommonMark-vocabulary narrowing.
     expect(styledRun?.color).toBeUndefined();
   });
 });
