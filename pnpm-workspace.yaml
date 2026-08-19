@@ -1,0 +1,35 @@
+packages:
+  - "packages/*"
+
+# pnpm 11 defaults this to false, which means a dependency on a sibling package resolves from the npm registry even when the workspace holds a version satisfying the range -- confirmed by direct install here before this setting existed: every internal edge landed in node_modules/.pnpm/<name>@<version> rather than symlinking to packages/<name>. That is not a monorepo; it is a set of independent packages sharing a directory, with turbo unable to see a single topological edge between them. Setting it true links a sibling whenever the declared range is satisfied by the workspace version, and falls back to the registry when it is not (see README.md on the ranges that still need reconciling).
+linkWorkspacePackages: true
+
+# Every setting below is carried over from the per-package pnpm-workspace.yaml files this one replaces, reconciled where they disagreed. pnpm reads workspace-level settings only from the workspace root, so a copy sitting in packages/<name>/ would be silently inert -- the reconciliation is not a preference, it is the only place these can take effect.
+
+# workerd (the Cloudflare Workers runtime @cloudflare/vitest-pool-workers drives the workers test suites through) and esbuild (its bundler) both ship native binaries installed via a postinstall script -- pnpm 11 ignores those by default, so allow them explicitly. Union of every package's own list: every package with a workerd suite allowed both, the web UI allowed esbuild alone (it runs no such suite), and allowing a build script the web UI never triggers costs nothing.
+allowBuilds:
+  esbuild: true
+  workerd: true
+
+# 60 minutes, the value every package but byte-codec carried. byte-codec alone omitted it, deliberately keeping the stricter 7-day global default, but a single workspace cannot hold two values, and the strict default is the one that breaks: minimumReleaseAgeExclude is NOT honoured by `pnpm install --frozen-lockfile` (the mode CI runs) -- pnpm's "verify an already-resolved lockfile" pass re-checks every entry's raw publish age against minimumReleaseAge with no exceptions (pnpm/pnpm#10361, #9997, #10438), so only minimumReleaseAge itself can unblock CI after a same-day release of an org-owned dependency. 60 keeps every third-party dependency behind an hour of public availability rather than disabling the freshness gate outright.
+minimumReleaseAge: 60
+
+# Bare package names (no @version), per pnpm's own documented syntax (https://pnpm.io/settings#minimumreleaseageexclude -- "webpack" exempts every version, not just one). Union of every package's own list. The unscoped names are all workspace members now, which pnpm links locally rather than fetching, so their entries only matter while a member's declared range still resolves from the registry instead of the workspace (see the version-range note in README.md); the @exadev entries are org-owned packages published only by their own semantic-release CI with npm OIDC trusted publishing, so a version-agnostic exemption is a deliberate, low-risk carry-forward rather than an entry needing an edit on every release.
+minimumReleaseAgeExclude:
+  - byte-codec
+  - document-cli
+  - document-mcp
+  - document-outline.js
+  - document-schema.js
+  - documents.js
+  - markdown-codec
+  - odf.js
+  - ooxml.js
+  - pdf-codec
+  - "@exadev/eslint-config"
+  - "@exadev/semantic-release-workspace"
+
+# fast-uri < 3.1.5 is vulnerable to host confusion via a backslash authority introducer (GHSA-hht2-r2mx-9j9m). It is a transitive devDependency (ajv -> @commitlint/config-validator -> commitlint), several layers below anything declared directly, so there is no direct dependency to bump -- only this override forces every resolution of it onto a patched version regardless of what commitlint's own dependency tree asks for. js-yaml carried the same treatment in documents.js's own file.
+overrides:
+  fast-uri: ^3.1.5
+  js-yaml: ^4.3.1

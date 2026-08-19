@@ -1,0 +1,55 @@
+{
+  "name": "documents-js-monorepo",
+  "private": true,
+  "description": "Workspace root for the documents.js ecosystem: the shared schema layer, the format codecs, the conversion engine, and the CLI, MCP server, and web UI built on them. Never published -- it exists to hold the workspace, the task pipeline, and the release orchestration.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ExaDev/documents.js.git"
+  },
+  "homepage": "https://github.com/ExaDev/documents.js#readme",
+  "bugs": {
+    "url": "https://github.com/ExaDev/documents.js/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@11.6.0",
+  "scripts": {
+    "build": "turbo run _build documents#build",
+    "lint": "turbo run _lint documents#lint",
+    "typecheck": "turbo run _typecheck _typecheck:node documents#typecheck",
+    "test": "turbo run _test documents#test",
+    "test:coverage": "turbo run _test:coverage documents#test:coverage",
+    "test:workers": "turbo run _test:workers",
+    "test:smoke": "turbo run _test:smoke",
+    "test:corpus": "turbo run _test:corpus",
+    "_lint": "eslint . --cache --max-warnings 0",
+    "_typecheck": "tsc -p tsconfig.json",
+    "release": "semantic-release-workspace release --config release-workspace.config.json",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^21.2.1",
+    "@commitlint/config-conventional": "^21.2.0",
+    "@eslint/js": "^10.0.1",
+    "@exadev/eslint-config": "^2.1.1",
+    "@exadev/semantic-release-workspace": "^1.0.0",
+    "@semantic-release/changelog": "^7.0.0",
+    "@semantic-release/commit-analyzer": "^13.0.1",
+    "@semantic-release/git": "^11.0.1",
+    "@semantic-release/github": "^12.0.9",
+    "@semantic-release/npm": "^13.1.5",
+    "@semantic-release/release-notes-generator": "^14.1.1",
+    "@types/node": "^26.2.0",
+    "eslint": "^10.8.1",
+    "globals": "^17.9.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.3.0",
+    "semantic-release": "^25.0.9",
+    "turbo": "^2.10.8",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.66.0"
+  }
+}
