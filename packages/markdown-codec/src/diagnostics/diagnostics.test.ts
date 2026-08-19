@@ -1,12 +1,13 @@
-// Coverage sweep: every entry in MarkdownDiagnosticCodes must be reachable from some real input to this package's own read/write surface (parseMarkdown, lowerMarkdown, emitMarkdown) -- a code that exists in the table but that nothing ever fires is dead documentation, worse than no documentation at all. Each case below is deliberately minimal and independent of src/block/block.test.ts, src/lower/lower.test.ts, and src/emit/emit.test.ts's own (more thoroughly asserted) per-gap tests -- this file only cares whether the code fires at all, not what else the surrounding output looks like. The final test asserts the codes proven reachable here cover the whole MarkdownDiagnosticCodes table, so the list can never grow a new, silently-unreachable entry.
+// Coverage sweep: every entry in MarkdownDiagnosticCodes must be reachable from some real input to this package's own read/write surface (parseMarkdown, lowerMarkdown, emitMarkdown, writeMarkdown) -- a code that exists in the table but that nothing ever fires is dead documentation, worse than no documentation at all. Each case below is deliberately minimal and independent of src/block/block.test.ts, src/lower/lower.test.ts, src/emit/emit.test.ts, and src/package.test.ts's own (more thoroughly asserted) per-gap tests -- this file only cares whether the code fires at all, not what else the surrounding output looks like. The final test asserts the codes proven reachable here cover the whole MarkdownDiagnosticCodes table, so the list can never grow a new, silently-unreachable entry.
 
-import type { ContentBlock, ContentDocument, ContentTable } from 'document-schema.js';
+import type { ContentBlock, ContentDocument, ContentTable, DocumentPackage } from 'document-schema.js';
 import { PAGE_SIZE_A4 } from 'document-schema.js';
 import { describe, expect, it } from 'vitest';
 import { parseMarkdown } from '../block/block';
 import { emitMarkdown } from '../emit/emit';
 import { lowerMarkdown } from '../lower/lower';
 import { createDiagnosticCollector } from '../test-support/diagnostics';
+import { writeMarkdown } from '../write';
 import { MarkdownDiagnosticCodes } from './diagnostics';
 
 function minimalDocument(blocks: readonly ContentBlock[]): ContentDocument {
@@ -234,6 +235,14 @@ describe('every MarkdownDiagnosticCodes entry is reachable from real input', () 
     ]), { sink: collector.sink });
     expect(collector.has(MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED)).toBe(true);
     reached.add(MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED);
+  });
+
+  it('PACKAGE_TABLE_DROPPED: a DocumentPackage carrying a non-empty definitions table', () => {
+    const collector = createDiagnosticCollector();
+    const pkg: DocumentPackage = { kind: 'wordprocessing', metadata: {}, children: [], definitions: { d1: { kind: 'bookmark' } } };
+    writeMarkdown(pkg, { sink: collector.sink });
+    expect(collector.has(MarkdownDiagnosticCodes.PACKAGE_TABLE_DROPPED)).toBe(true);
+    reached.add(MarkdownDiagnosticCodes.PACKAGE_TABLE_DROPPED);
   });
 
   it('has no dead code: every value in MarkdownDiagnosticCodes was proven reachable above', () => {

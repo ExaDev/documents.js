@@ -4,11 +4,11 @@
 //
 // The blockquote fixture below is not decorative: two blockquote paragraphs share an indentLeftPt tuple, which is the one construct this package's lowering produces that assemblePackage's minting actually hoists onto a styles-table entry. It is the case where "assemblePackage" and "decompose plus an envelope" produce genuinely different values, so it is the case that proves which one readMarkdown calls.
 
-import { assemblePackage, DocumentPackageSchema, flattenPackage, isPackageGroup, isSectionConstructGroupNode, type SectionConstructGroupNode } from 'document-schema.js';
+import { assemblePackage, DocumentPackageSchema, flattenPackage, isPackageGroup, isSectionConstructGroupNode, type DocumentPackage, type SectionConstructGroupNode } from 'document-schema.js';
 import { z } from 'zod';
 import { describe, expect, it } from 'vitest';
 import { markdownCodec, markdownContentCodec } from './codec';
-import { MarkdownDiagnosticCodes, MarkdownUnsupportedDocumentKindError } from './diagnostics/diagnostics';
+import { MarkdownDiagnosticCodes, MarkdownPackageFlattenError, MarkdownUnsupportedDocumentKindError } from './diagnostics/diagnostics';
 import { readMarkdown, readMarkdownContent } from './read';
 import { writeMarkdown, writeMarkdownContent } from './write';
 
@@ -40,6 +40,16 @@ const SAMPLE = [
 const BLOCKQUOTED = '> Quoted one.\n>\n> Quoted two.\n\n> Quoted three.\n>\n> Quoted four.\n';
 
 const SAMPLE_BYTES = new TextEncoder().encode(SAMPLE);
+
+// SAMPLE above carries exactly one footnote, in the simplest possible shape (a single-paragraph body straight after the reference). The construct-group path is the one genuinely new structural shape decompose promotes over a bare {metadata, sections} envelope, so it gets its own fixture set here, one shape per case that the parser and lowerer treat differently (src/footnote.test.ts pins each at the flat ContentDocument level; these same shapes are exercised here at the tree level instead).
+const FOOTNOTE_SHAPES = {
+  bodyless: 'Body[^1].\n\n[^1]:\n',
+  duplicateLabel: 'Body[^1] and[^1] again.\n\n[^1]: first\n\n[^1]: second\n',
+  multiParagraphBody: 'Body[^1].\n\n[^1]: One.\n\n    Two.\n\n    Three.\n',
+  afterList: 'Body[^1].\n\n- a\n- b\n\n[^1]: note\n',
+  afterBlockquote: 'Body[^1].\n\n> quoted\n\n[^1]: note\n',
+  afterHeading: '# Heading\n\nBody[^1].\n\n[^1]: note\n',
+} as const;
 
 // Construct groups sit wherever their marker pair sat in the block flow, which for a footnote definition following a heading is inside that heading's own group rather than at the section's top level -- so this walks the whole subtree rather than filtering one children array.
 function collectConstructGroups(node: unknown): SectionConstructGroupNode[] {
@@ -139,10 +149,87 @@ describe('writeMarkdown: DocumentPackage -> markdown text', () => {
     expect(() => writeMarkdown(spreadsheet)).toThrow(MarkdownUnsupportedDocumentKindError);
   });
 
+  it('throws MarkdownUnsupportedDocumentKindError, not a bare Error, for a formula package with no formula node -- flattenPackage has its own single-ContentFormula-node constraint for this kind that this check pre-empts entirely', () => {
+    // Hand-built rather than routed through assemblePackage: assemblePackage(ContentDocument) always produces exactly one formula node for a 'formula' document, so this empty-children shape (the one flattenPackage itself rejects) can only arise from a caller constructing a DocumentPackage directly.
+    const formula: DocumentPackage = { kind: 'formula', metadata: {}, children: [] };
+
+    expect(() => writeMarkdown(formula)).toThrow(MarkdownUnsupportedDocumentKindError);
+  });
+
   it('throws an already-aborted signal before flattening', () => {
     const documentPackage = readMarkdown(SAMPLE).documentPackage;
 
     expect(() => writeMarkdown(documentPackage, { signal: AbortSignal.abort() })).toThrow();
+  });
+
+  it('wraps flattenPackage\'s own bare Error as MarkdownPackageFlattenError when a group carries a style ref the package has no styles table to resolve', () => {
+    // A minimal, hand-built reproduction of the one flattenPackage failure reachable for a 'wordprocessing' package: the section group below still references its minted style, but the package's own top-level styles table has been stripped out from under it.
+    const { styles, ...packageWithoutStyles } = readMarkdown(BLOCKQUOTED).documentPackage;
+    expect(styles).toBeDefined();
+
+    expect(() => writeMarkdown(packageWithoutStyles)).toThrow(MarkdownPackageFlattenError);
+    expect(() => writeMarkdown(packageWithoutStyles)).toThrow(/style ref/);
+  });
+
+  it('reports a PACKAGE_TABLE_DROPPED diagnostic per non-empty package-level table flattenPackage cannot carry into markdown', () => {
+    const base = readMarkdown(SAMPLE).documentPackage;
+    const withExtraTables = {
+      ...base,
+      definitions: { d1: { kind: 'bookmark' } },
+      layers: { l1: { kind: 'layer' } },
+      attachments: { a1: { kind: 'file' } },
+      destinations: { dest1: { kind: 'anchor' } },
+      pages: [{ widthPt: 100, heightPt: 100 }],
+    };
+
+    const seen: string[] = [];
+    writeMarkdown(withExtraTables, { sink: (diagnostic) => seen.push(diagnostic.code) });
+
+    expect(seen.filter((code) => code === MarkdownDiagnosticCodes.PACKAGE_TABLE_DROPPED)).toHaveLength(5);
+  });
+
+  it('reports nothing extra, and renders identically, for a package that carries none of those tables', () => {
+    const base = readMarkdown(SAMPLE).documentPackage;
+    const seen: string[] = [];
+
+    const written = writeMarkdown(base, { sink: (diagnostic) => seen.push(diagnostic.code) });
+
+    expect(seen.filter((code) => code === MarkdownDiagnosticCodes.PACKAGE_TABLE_DROPPED)).toHaveLength(0);
+    expect(written).toBe(writeMarkdown(base));
+  });
+});
+
+describe('the construct-group path over footnote shapes beyond SAMPLE\'s single case', () => {
+  for (const [name, source] of Object.entries(FOOTNOTE_SHAPES)) {
+    it(`${name}: readMarkdown is assemblePackage(readMarkdownContent(...).document), and flattens back to it exactly`, () => {
+      const { documentPackage } = readMarkdown(source);
+      const { document } = readMarkdownContent(source);
+
+      expect(documentPackage).toEqual(assemblePackage(document));
+      expect(flattenPackage(documentPackage)).toEqual(document);
+    });
+
+    it(`${name}: writeMarkdown renders byte-identical text to writeMarkdownContent`, () => {
+      const { documentPackage } = readMarkdown(source);
+      const { document } = readMarkdownContent(source);
+
+      expect(writeMarkdown(documentPackage)).toBe(writeMarkdownContent(document));
+    });
+  }
+
+  it('promotes exactly one construct group per definition, including both definitions sharing a duplicated label', () => {
+    expect(readMarkdown(FOOTNOTE_SHAPES.bodyless).documentPackage.children.flatMap(collectConstructGroups)).toHaveLength(1);
+    expect(readMarkdown(FOOTNOTE_SHAPES.multiParagraphBody).documentPackage.children.flatMap(collectConstructGroups)).toHaveLength(1);
+    expect(readMarkdown(FOOTNOTE_SHAPES.afterList).documentPackage.children.flatMap(collectConstructGroups)).toHaveLength(1);
+    expect(readMarkdown(FOOTNOTE_SHAPES.afterBlockquote).documentPackage.children.flatMap(collectConstructGroups)).toHaveLength(1);
+    expect(readMarkdown(FOOTNOTE_SHAPES.afterHeading).documentPackage.children.flatMap(collectConstructGroups)).toHaveLength(1);
+    expect(readMarkdown(FOOTNOTE_SHAPES.duplicateLabel).documentPackage.children.flatMap(collectConstructGroups)).toHaveLength(2);
+  });
+
+  it('lowers a bodyless definition to a construct group with no body blocks between its start and end', () => {
+    const [group] = readMarkdown(FOOTNOTE_SHAPES.bodyless).documentPackage.children.flatMap(collectConstructGroups);
+
+    expect(group?.children).toEqual([]);
   });
 });
 

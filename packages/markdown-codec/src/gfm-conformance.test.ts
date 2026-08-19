@@ -6,6 +6,7 @@
 //
 // The one remaining tagged extension, `tagfilter`, is genuinely out of scope: it is an output-sanitisation pass over already-parsed raw HTML, not a parsing rule at all, and this package's read side has no HTML output to sanitise.
 
+import { assemblePackage, flattenPackage } from 'document-schema.js';
 import { describe, expect, it } from 'vitest';
 import { parseMarkdown } from './block/block';
 import { renderDocumentToHtml } from './html/render';
@@ -13,7 +14,7 @@ import { readMarkdownContent } from './read';
 import { GFM_EXCLUSIONS } from './test-support/conformance-exclusions';
 import type { SpecExample } from './test-support/spec-corpus';
 import { loadGfmExtensionExamples } from './test-support/spec-corpus';
-import { writeMarkdownContent } from './write';
+import { writeMarkdown, writeMarkdownContent } from './write';
 
 const GFM_EXTENSIONS = ['table', 'strikethrough', 'autolink', 'disabled'];
 
@@ -40,5 +41,13 @@ describe.each(GFM_EXTENSIONS)('GFM %s extension conformance', (extension) => {
   const excluded = examples.filter((example) => GFM_EXCLUSIONS.has(example.example));
   it.each(excluded.map((example) => [`example ${String(example.example)} (${example.section})`, example] as const))('excluded %s still fails', (_name, example) => {
     expect(render(example)).not.toBe(example.html);
+  });
+
+  // The tree pair's own two properties (src/package.test.ts's (i) and (ii)), re-checked over this extension's own tagged examples -- mirroring src/conformance.test.ts's own "tree pair matches the flat pair" block, extended here to the GFM extensions (all four toggles on, matching this suite's own default read options).
+  it.each(examples.map((example) => [`example ${String(example.example)} (${example.section})`, example] as const))('%s: flattenPackage(assemblePackage(document)) reproduces document, and writeMarkdown renders what writeMarkdownContent renders', (_name, example) => {
+    const { document } = readMarkdownContent(example.markdown);
+
+    expect(flattenPackage(assemblePackage(document))).toEqual(document);
+    expect(writeMarkdown(assemblePackage(document))).toBe(writeMarkdownContent(document));
   });
 });
