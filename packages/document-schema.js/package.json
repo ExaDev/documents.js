@@ -1,0 +1,110 @@
+{
+  "name": "document-schema.js",
+  "version": "4.3.0",
+  "description": "The canonical, format-agnostic content and document-package schemas shared by ooxml.js, odf.js, documents.js, pdf-codec, and markdown-codec, plus the structural transform between them -- no format-specific or I/O behaviour.",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ExaDev/document-schema.js.git"
+  },
+  "homepage": "https://github.com/ExaDev/document-schema.js#readme",
+  "bugs": {
+    "url": "https://github.com/ExaDev/document-schema.js/issues"
+  },
+  "exports": {
+    ".": {
+      "types": {
+        "import": "./dist/index.d.ts",
+        "require": "./dist/index.d.cts"
+      },
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./*": {
+      "types": {
+        "import": "./dist/*.d.ts",
+        "require": "./dist/*.d.cts"
+      },
+      "import": "./dist/*.js",
+      "require": "./dist/*.cjs"
+    },
+    "./schemas/*.schema.json": "./schemas/*.schema.json"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "schemas"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "registry": "https://registry.npmjs.org/"
+  },
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "turbo run _build",
+    "_build": "tsdown && node scripts/generate-json-schemas.mjs",
+    "prepublishOnly": "pnpm run lint && pnpm run typecheck && pnpm run build && publint && attw --pack",
+    "lint": "turbo run _lint",
+    "_lint": "eslint . --fix --cache --max-warnings 0",
+    "typecheck": "turbo run _typecheck _typecheck:node",
+    "_typecheck": "tsc -p tsconfig.json",
+    "_typecheck:node": "tsc -p tsconfig.node.json",
+    "test": "turbo run _test",
+    "_test": "vitest run --project unit",
+    "test:workers": "turbo run _test:workers",
+    "_test:workers": "vitest run --config vitest.workers.config.ts",
+    "test:watch": "vitest --project unit",
+    "test:coverage": "turbo run _test:coverage",
+    "_test:coverage": "vitest run --project unit --coverage",
+    "test:smoke": "turbo run _test:smoke",
+    "_test:smoke": "pnpm run build && vitest run --project smoke",
+    "prepare": "husky",
+    "release": "semantic-release"
+  },
+  "keywords": [
+    "document",
+    "content-model",
+    "zod",
+    "schema",
+    "docx",
+    "pptx",
+    "xlsx",
+    "odt",
+    "odp",
+    "ods"
+  ],
+  "license": "MIT",
+  "packageManager": "pnpm@11.6.0",
+  "dependencies": {
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
+    "@cloudflare/vitest-pool-workers": "^0.20.1",
+    "@commitlint/cli": "^21.2.1",
+    "@commitlint/config-conventional": "^21.2.0",
+    "@eslint/js": "^10.0.1",
+    "@exadev/eslint-config": "^2.1.0",
+    "@semantic-release/changelog": "^7.0.0",
+    "@semantic-release/git": "^11.0.1",
+    "@types/node": "^26.1.1",
+    "@vitest/coverage-v8": "^4.1.10",
+    "eslint": "^10.8.0",
+    "globals": "^17.8.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.2.0",
+    "publint": "^0.3.21",
+    "semantic-release": "^25.0.8",
+    "tsdown": "^0.22.13",
+    "turbo": "^2.10.8",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.65.0",
+    "vitest": "^4.1.10"
+  }
+}
