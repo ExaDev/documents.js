@@ -363,6 +363,26 @@ describe('dist/cli.js csv and svg conversions', () => {
   });
 });
 
+describe('dist/cli.js outline: multi-page odg', () => {
+  // Regression coverage for the odg bridge target: OUTLINE_CONVERSION_TARGET.odg used to be 'svg', and buildSvgText refuses a multi-page document outright (SvgMultiPageNotSpecifiedError) since outline has no --page flag to answer it with -- every multi-page .odg failed outright. The bridge target is 'odp' now, which has no such per-page write constraint -- the trade-off being that each drawing page becomes a presentation slide group (labelled "Slide N", document-outline.js's own presentation-variant convention) rather than a "Page N" draw-page group, since odp is a cross-variant bridge and svg is the only same-variant target odg has, and svg is exactly the format whose own write side cannot hold more than one page at all.
+  it('outlines a multi-page odg as one group per page, with no --page flag needed', async () => {
+    const tmpDir = await mkdtemp(join(tmpdir(), 'document-cli-smoke-'));
+    try {
+      const inputPath = join(tmpDir, 'multi.odg');
+      const editor = createOdg();
+      editor.addPage().addTextBox({ frame: { xPt: 20, yPt: 20, widthPt: 100, heightPt: 50 }, text: 'First page text' });
+      editor.addPage().addTextBox({ frame: { xPt: 20, yPt: 20, widthPt: 100, heightPt: 50 }, text: 'Second page text' });
+      await writeFile(inputPath, editor.toBytes());
+
+      const { code, stdout } = await spawnCli(['outline', inputPath]);
+      expect(code).toBe(EXIT_SUCCESS);
+      expect(stdout.toString('utf8')).toBe('Slide 1\n  First page text\nSlide 2\n  Second page text\n');
+    } finally {
+      await rm(tmpDir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('dist/cli.js tui: non-interactive stdout', () => {
   it('exits with a clear, non-crashing error about needing a TTY, never launching Ink at all', async () => {
     const { code, stdout, stderr } = await spawnCli(['tui']);

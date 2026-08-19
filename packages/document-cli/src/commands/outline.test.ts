@@ -1,7 +1,7 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createDocx, createOds, docxToPdf } from 'documents.js';
+import { createDocx, createOdg, createOds, docxToPdf } from 'documents.js';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createProgram } from '../program';
 import { EXIT_SUCCESS, EXIT_USAGE_ERROR } from '../runtime/exit-codes';
@@ -94,6 +94,23 @@ describe('outline', () => {
     expect(exitCode).toBe(EXIT_SUCCESS);
     // Cells are addressable data, not outline content -- a sheet's group carries its images and embedded objects, so a cell-only sheet renders as a bare label with nothing under it.
     expect(stdout).toBe('Q1\nQ2\n');
+  });
+
+  // Regression coverage for OUTLINE_CONVERSION_TARGET.odg: it used to bridge to 'svg', and buildSvgText refuses to write a multi-page document at all (SvgMultiPageNotSpecifiedError) since this command has no --page flag to answer it with -- every multi-page .odg failed outright with an error naming a target format ('svg') the caller never asked for. The bridge target is 'odp' now (a registered odg conversion pair with no per-document page-selection constraint), so this exercises the one source format the original entry made impossible to outline past a single page.
+  it('outlines a multi-page odg as one group per page, with no --page selection needed', async () => {
+    const drawingPath = join(workspace, 'slides.odg');
+    const editor = createOdg();
+    editor.addPage().addTextBox({ frame: { xPt: 10, yPt: 10, widthPt: 100, heightPt: 20 }, text: 'First page text' });
+    editor.addPage().addTextBox({ frame: { xPt: 10, yPt: 10, widthPt: 100, heightPt: 20 }, text: 'Second page text' });
+    editor.addPage().addTextBox({ frame: { xPt: 10, yPt: 10, widthPt: 100, heightPt: 20 }, text: 'Third page text' });
+    await writeFile(drawingPath, editor.toBytes());
+
+    const { exitCode, stdout, stderr } = await runCli(['outline', drawingPath]);
+
+    expect(stderr).toBe('');
+    expect(exitCode).toBe(EXIT_SUCCESS);
+    // odp is a presentation-variant bridge, so each drawing page becomes a slide group -- "Slide N", document-outline.js's own presentation convention, rather than the "Page N" a same-variant drawing bridge would use.
+    expect(stdout).toBe('Slide 1\n  First page text\nSlide 2\n  Second page text\nSlide 3\n  Third page text\n');
   });
 
   it('outlines a pdf source through its reconstruction, printing recovered paragraph text as flat leaf lines', async () => {

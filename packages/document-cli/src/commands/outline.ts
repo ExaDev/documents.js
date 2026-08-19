@@ -21,7 +21,7 @@ const OUTLINE_CONVERSION_TARGET: Readonly<Record<DocumentFormat, DocumentFormat>
   xlsx: 'ods',
   ods: 'xlsx',
   csv: 'xlsx',
-  odg: 'svg',
+  odg: 'odp',
   svg: 'odg',
   pdf: 'docx',
   odf: 'pdf',
