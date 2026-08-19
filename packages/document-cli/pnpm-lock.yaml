@@ -76,8 +76,8 @@ importers:
         specifier: ^17.3.0
         version: 17.3.0
       odf.js:
-        specifier: ^4.0.2
-        version: 4.0.2
+        specifier: ^4.0.3
+        version: 4.0.3
       pdf-codec:
         specifier: ^3.0.0
         version: 3.0.0
@@ -1735,6 +1735,10 @@ packages:
     resolution: {integrity: sha512-ckdp0yIItnQKPK23ciINygPbKPQanvodeLT9uJIj1EtQpjIlaMqHT/8iKdoql2zrgOol0rUguJAsEWCHEr44Gw==}
     engines: {node: '>=20'}
 
+  document-schema.js@4.3.0:
+    resolution: {integrity: sha512-Ao6bE/q4JGVy6hOX7UGYBZUsekU6GzI19+t+M6jBpGmPuDEeHM5MXSIxbtty45tsKEYmf0seeLybb2DaLZyxPg==}
+    engines: {node: '>=20'}
+
   documents.js@3.1.2:
     resolution: {integrity: sha512-JhW4woX9T0KIUmIu7Q7zX1XRqLv0xhW3/u8IVtQb6qiu8koZsD6K9lkkS8Ul4KekGHUs921hZZt5zo5M+/MqbQ==}
     engines: {node: '>=20'}
@@ -2615,6 +2619,10 @@ packages:
 
   odf.js@4.0.2:
     resolution: {integrity: sha512-4nAnVDc34eDEj6FOKwH2hxqZroiqHVu+YYn+roNQFxjHDm/o0vRVzh3EM7h+ayEQK78r0fpGQxa3Pp8gt4QxGQ==}
+    engines: {node: '>=20'}
+
+  odf.js@4.0.3:
+    resolution: {integrity: sha512-XmC2ULP8DjUpkdqQ9FPfG7IBDQ44yH5kGuOLSja0/mqDdlB7zAaALMVA+unQB+eKnHNF5deuRSROYJMxyJ39Ag==}
     engines: {node: '>=20'}
 
   onetime@5.1.2:
@@ -4999,6 +5007,10 @@ snapshots:
     dependencies:
       zod: 4.4.3
 
+  document-schema.js@4.3.0:
+    dependencies:
+      zod: 4.4.3
+
   documents.js@3.1.2:
     dependencies:
       byte-codec: 1.1.9
@@ -5810,6 +5822,13 @@ snapshots:
   odf.js@4.0.2:
     dependencies:
       document-schema.js: 4.2.0
+      fast-xml-parser: 5.11.0
+      fflate: 0.8.3
+      zod: 4.4.3
+
+  odf.js@4.0.3:
+    dependencies:
+      document-schema.js: 4.3.0
       fast-xml-parser: 5.11.0
       fflate: 0.8.3
       zod: 4.4.3
