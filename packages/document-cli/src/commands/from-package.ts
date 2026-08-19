@@ -1,5 +1,6 @@
 import { type Command } from 'commander';
-import { UnrecognizedDocumentSchemaError, buildCsvText, buildDocumentBytes, buildSvgText, documentFromJson, encodeCsvText, encodeSvgText, flattenPackage } from 'documents.js';
+import { flattenPackage } from 'document-schema.js';
+import { UnrecognizedDocumentSchemaError, buildCsvText, buildDocumentBytes, buildSvgText, documentFromJson, encodeCsvText, encodeSvgText } from 'documents.js';
 import { createRuntimeSignal } from '../runtime/abort';
 import { createDiagnosticReporter } from '../runtime/diagnostics';
 import { EXIT_INPUT_ERROR, EXIT_SUCCESS, EXIT_USAGE_ERROR, mapErrorToExit } from '../runtime/exit-codes';

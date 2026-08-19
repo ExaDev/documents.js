@@ -1,6 +1,6 @@
 import { os } from '@orpc/server';
+import { assemblePackage, flattenPackage } from 'document-schema.js';
 import {
-  assemblePackage,
   ContentDocumentSchema,
   createLocalDocumentConverter,
   decodeDocumentPackage,
@@ -10,7 +10,6 @@ import {
   documentPackageWithSchema,
   DOCUMENT_FORMATS,
   extractSourceFontsForFormat,
-  flattenPackage,
   LayoutDocumentSchema,
   readCsvContent,
   readDocxContent,
