@@ -5,7 +5,8 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ExaDev/markdown-codec.git"
+    "url": "git+https://github.com/ExaDev/documents.js.git",
+    "directory": "packages/markdown-codec"
   },
   "homepage": "https://github.com/ExaDev/markdown-codec#readme",
   "bugs": {

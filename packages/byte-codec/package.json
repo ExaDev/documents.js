@@ -5,7 +5,8 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ExaDev/byte-codec.git"
+    "url": "git+https://github.com/ExaDev/documents.js.git",
+    "directory": "packages/byte-codec"
   },
   "homepage": "https://github.com/ExaDev/byte-codec#readme",
   "bugs": {

@@ -4,6 +4,11 @@
   "version": "1.26.19",
   "type": "module",
   "description": "A client-only, statically-built web UI for every conversion and editing tool in the documents.js ecosystem.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ExaDev/documents.js.git",
+    "directory": "packages/documents"
+  },
   "packageManager": "pnpm@11.6.0",
   "engines": {
     "node": ">=20"
@@ -39,7 +44,8 @@
     "@vanilla-extract/recipes": "^0.5.7",
     "dexie": "^4.4.4",
     "dexie-react-hooks": "^4.4.0",
-    "documents.js": "^3.1.5",
+    "document-schema.js": "^4.3.0",
+    "documents.js": "^4.0.13",
     "markdown-codec": "^4.0.0",
     "odf.js": "^5.0.0",
     "react": "^19.2.8",
