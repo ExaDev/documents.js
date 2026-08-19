@@ -13,3 +13,4 @@ minimumReleaseAgeExclude:
   - pdf-codec
   - markdown-codec
   - byte-codec
+  - document-outline.js
