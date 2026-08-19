@@ -236,6 +236,19 @@ export type {
   ListParagraph,
 } from 'document-schema.js';
 
+// --- Style resolution: the pure helpers that turn a group's `style` ref plus a leaf's own direct properties into the properties that actually render, and the styles-table shapes those refs and the styles-minting pass above name. A tree reader's paragraphs and runs are NOT self-describing -- readDocx/readPptx/readXlsx factor repeated formatting into `styles` entries and leave only a `style: 's1'` ref on the enclosing group, stripping the matching keys off every paragraph/run that ref covers (see typed/document-package.ts's own module comment for why every reader mints rather than calling bare decompose). Reading a run or paragraph's real formatting out of a tree therefore means walking its ancestor groups' `style` refs and resolving them, which is exactly what these four functions do: resolveStyleChain collects the chain of entries from root to a given node, overlayStyleEntries merges that chain outermost-first (nearest wins), and applyParagraphStyleProperties/applyRunStyleProperties gap-fill a resolved entry onto a paragraph/run that already carries some direct properties of its own (a key the node already has always wins over the entry, never the reverse). Re-exported here for the same reason the tree vocabulary above is: a caller holding what readDocx/readPptx/readXlsx return should not need a second dependency just to read a run's own bold/colour back out of it. ---
+export {
+  StylesTableSchema,
+  StyleEntrySchema,
+  StyleParagraphPropertiesSchema,
+  StyleRunPropertiesSchema,
+  resolveStyleChain,
+  overlayStyleEntries,
+  applyParagraphStyleProperties,
+  applyRunStyleProperties,
+} from 'document-schema.js';
+export type { StylesTable, StyleEntry, StyleParagraphProperties, StyleRunProperties } from 'document-schema.js';
+
 export { applyColorTransforms } from './typed/shared/color';
 export type { ColorTransform } from './typed/shared/color';
 
