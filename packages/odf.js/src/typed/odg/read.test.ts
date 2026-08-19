@@ -188,5 +188,20 @@ describe('readOdg: the package-native reader over the same fixture', () => {
     expect(firstPage.children).toHaveLength(firstContentPage.shapes.length + firstContentPage.vectors.length);
     expect(firstPage.children.slice(firstContentPage.shapes.length)).toEqual(firstContentPage.vectors);
     expect(firstContentPage.vectors.length).toBeGreaterThan(0);
+
+    // The first page alone has zero shapes, so the assertions above would hold even if shape-group assembly were dropped entirely -- the second page is the fixture's only page with a shape on it, so the "shapes as groups" half of this test's own name is actually exercised here.
+    const secondPage = documentPackage.children[1];
+    const secondContentPage = content.pages[1];
+    if (secondPage === undefined || secondContentPage === undefined) {
+      throw new Error('expected a second draw page');
+    }
+    expect(secondContentPage.shapes.length).toBeGreaterThan(0);
+    expect(secondContentPage.vectors).toHaveLength(0);
+    expect(secondPage.children).toHaveLength(secondContentPage.shapes.length);
+    const [shapeGroup] = secondPage.children;
+    if (shapeGroup === undefined || !('children' in shapeGroup)) {
+      throw new Error("expected the second page's shape to decompose into its own group node, not a bare leaf");
+    }
+    expect(shapeGroup.children.length).toBeGreaterThan(0);
   });
 });
