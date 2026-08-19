@@ -7,6 +7,7 @@ import { registerFromPackageCommand } from './commands/from-package';
 import { registerMetadataCommand } from './commands/metadata';
 import { registerOdbCommands } from './commands/odb';
 import { registerOdmCommand } from './commands/odm';
+import { registerOutlineCommand } from './commands/outline';
 import { registerPdfInspectCommand } from './commands/pdf-inspect';
 import { registerSetMetadataCommand } from './commands/set-metadata';
 import { EXIT_SUCCESS, EXIT_USAGE_ERROR } from './runtime/exit-codes';
@@ -34,6 +35,7 @@ export function createProgram(): Command {
   registerFontsCommand(program);
   registerDocxExtrasCommand(program);
   registerMetadataCommand(program);
+  registerOutlineCommand(program);
   registerSetMetadataCommand(program);
 
   return program;
