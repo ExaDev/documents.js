@@ -1,4 +1,4 @@
-import type { DocumentPackage } from 'document-schema.js';
+import { assemblePackage, flattenPackage, type DocumentPackage } from 'document-schema.js';
 
 import { decodePackage as decodeOdfPackage } from 'odf.js';
 import { decodePackage as decodeOoxmlPackage, readXlsxContent } from 'ooxml.js';
@@ -22,8 +22,6 @@ import { minimalOdsBytes } from '../test-support/ods';
 import { minimalOdtBytes } from '../test-support/odt';
 import { docxToPdf, odtToDocx } from './convert';
 import { buildDocumentBytes } from './from-package';
-import { assemblePackage } from './factor-styles';
-import { flattenPackage } from './flatten';
 import type { LayoutItem } from 'pdf-codec';
 
 function wordprocessingPackage(): DocumentPackage {

@@ -1,10 +1,9 @@
-import type { ContentBlock, DocumentPackage } from 'document-schema.js';
+import { assemblePackage, type ContentBlock, type DocumentPackage } from 'document-schema.js';
 
 import { describe, expect, it } from 'vitest';
 import { latexToFormula } from './lower';
 import { lintMathCoherence } from './lint';
 import { buildFormulaBlock } from '../model/formula';
-import { assemblePackage } from '../convert/factor-styles';
 
 // The coherence lint's contract: re-parse, re-lower, compare -- and report divergence as a warning carrying the stored provenance, never as an automatic re-derivation (the schema's atomic pair-edit rule: the layers stay exactly as stored). These tests also pin that the lint WRITES nothing: every assertion re-reads the same package object after linting.
 

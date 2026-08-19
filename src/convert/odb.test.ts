@@ -1,10 +1,9 @@
-import { DocumentPackageSchema } from 'document-schema.js';
+import { DocumentPackageSchema, flattenPackage } from 'document-schema.js';
 import { decodePackage as decodeOoxmlPackage, readXlsxContent } from 'ooxml.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { embeddedHsqldbCachedOdbBytes, embeddedHsqldbOdbBytes } from '../test-support/odb';
 import { odbToCsv, odbToXlsx } from './convert';
 import { OdbTableNotSpecifiedError } from '../odb/csv';
-import { flattenPackage } from './flatten';
 
 // The genuine byte-level round trip for odbToXlsx/odbToCsv: embeddedHsqldbOdbBytes() (src/test-support/odb.ts) is a real, zipped .odb package -- mimetype/manifest/content.xml/database/script all present -- decoded exactly the way a caller's own bytes would be, through decodePackage -> readOdbTables -> odbTablesToSpreadsheetDocument/buildOdbTableCsv. See this repo's own real-LibreOffice verification notes (README Fidelity, this task's own final report) for confirmation the generated xlsx opens correctly in genuine LibreOffice.
 

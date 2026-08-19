@@ -1,13 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { ConstructDescriptor, ContentBlock, ContentDocument, ContentShape, DocumentPackage, PageSize } from 'document-schema.js';
-import { ContentDocumentSchema, DocumentPackageSchema } from 'document-schema.js';
+import { assemblePackage, ContentDocumentSchema, DocumentPackageSchema, factorStyles, flattenPackage } from 'document-schema.js';
+// The canonicaliser is deliberately absent from document-schema.js's index barrel (it exists to give the minting pass one tuple-identity recipe, not to publish a sort order as an API guarantee), so it comes in by subpath -- the same one recipe the transform itself uses, never a second one restated here.
+import { canonicalise } from 'document-schema.js/canonicalise';
 import { decodePackage as decodeOdfPackage } from 'odf.js';
 import { buildXlsxPackage, decodePackage as decodeOoxmlPackage, readXlsxContent } from 'ooxml.js';
 import { readCsvContent } from '../csv/read';
 import { csvToPdf, docxToPdf, markdownToPdf, odfToPdf, odgToPdf, odpToPdf, odsToPdf, odtToPdf, pdfToDocx, pdfToOdg, pdfToOds, pptxToPdf, svgToPdf } from './convert';
-import { assemblePackage, factorStyles } from './factor-styles';
-import { flattenPackage } from './flatten';
-import { canonicalise } from './canonicalise';
 import { readMarkdownContent } from '../markdown/read';
 import { readDocxContent } from '../ooxml/docx/read';
 import { readPptxContent } from '../ooxml/pptx/read';
@@ -43,7 +42,7 @@ function canon(value: unknown): unknown {
   return JSON.parse(JSON.stringify(normaliseEmbeddedObjects(canonicalise(value))));
 }
 
-// The bijection's one declared normalisation: decompose concatenates a sheet's images and embedded objects into a single children array and flatten rebuilds embeddedObjects only when an embedded object exists, so a present-but-empty array -- schema-legal, emitted by no codec -- cannot survive the round trip and normalises to the field absent. Applied to BOTH sides of every comparison so law (i) stays an equivalence over canonical forms; the direction is pinned outright in decompose.test.ts. Recursive because a sheet can sit inside an embedded document, whose own sheets can carry the same field.
+// The bijection's one declared normalisation: decompose concatenates a sheet's images and embedded objects into a single children array and flatten rebuilds embeddedObjects only when an embedded object exists, so a present-but-empty array -- schema-legal, emitted by no codec -- cannot survive the round trip and normalises to the field absent. Applied to BOTH sides of every comparison so law (i) stays an equivalence over canonical forms; the direction is pinned outright by the transform's own decompose tests, which live with the transform in document-schema.js. Recursive because a sheet can sit inside an embedded document, whose own sheets can carry the same field.
 function normaliseEmbeddedObjects(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(normaliseEmbeddedObjects);
   if (typeof value !== 'object' || value === null) return value;
@@ -308,7 +307,7 @@ describe('decompose/flatten bijection laws over the real corpus', () => {
     expect(minting.length).toBeGreaterThan(0);
   });
 
-  // The same anti-vacuity guard, narrowed to the construct entries: laws (ii) and (iii) say nothing about construct groups unless a construct group actually carries a ref, and a construct entry that minted nothing would pass all three laws while proving only that its leaves round-trip. Every construct entry except the deliberately empty one is built to mint on its own construct wrapper, so this pins that the promotion and minting really do compose over the corpus rather than only in factor-styles.test.ts's single fixture.
+  // The same anti-vacuity guard, narrowed to the construct entries: laws (ii) and (iii) say nothing about construct groups unless a construct group actually carries a ref, and a construct entry that minted nothing would pass all three laws while proving only that its leaves round-trip. Every construct entry except the deliberately empty one is built to mint on its own construct wrapper, so this pins that the promotion and minting really do compose over the corpus rather than only over the hand-built fixture document-schema.js's own minting tests use.
   it('the construct corpus mints refs onto the construct groups themselves', () => {
     const withConstructRefs = constructCorpus().filter((entry) => constructGroupRefsOf(assemblePackage(entry.content, entry.pages)).length > 0);
     expect(withConstructRefs.map((entry) => entry.name)).toEqual(constructCorpus().filter((entry) => entry.name !== 'construct with no children (an open marker immediately closed)').map((entry) => entry.name));
