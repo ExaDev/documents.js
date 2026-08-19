@@ -1,5 +1,5 @@
 import type { ContentBlock, ContentImageBlock, ContentParagraph, ContentRun, ContentSheet, ContentSheetCell, ContentTableCell, ContentTable, ContentVector, DocumentPackage, LayoutFrame } from 'document-schema.js';
-import { COLOR_BLACK, DEFAULT_LAYOUT_FONT } from 'document-schema.js';
+import { COLOR_BLACK, DEFAULT_LAYOUT_FONT, flattenPackage } from 'document-schema.js';
 import { LAYOUT_FORMAT_VERSION, writePdf } from 'pdf-codec';
 import { flipY } from '../model/geometry';
 import { convertVector } from '../layout/drawing';
@@ -8,7 +8,6 @@ import { NOMINAL_TEXT_SIZE_PT, pushCellBorderLines, registerImage, runFont } fro
 import { DOCUMENT_FORMAT_CODECS, requireArrayBufferBytes } from '../codecs/registry';
 import type { DocumentFormat } from './port';
 import type { LayoutDocument, LayoutImage, LayoutImageAsset, LayoutItem, LayoutLink, LayoutPage, LayoutText } from 'pdf-codec';
-import { flattenPackage } from './flatten';
 
 // Builds any DocumentFormat's own bytes from an already-assembled tree-form DocumentPackage -- the reverse of what every ergonomic X-to-PDF/PDF-to-X conversion's own onDocument callback hands back. The tree is flattened once at this boundary (flattenPackage, which also materialises any styles-table refs away): the builders' public signatures already take the flat ContentDocument, so nothing downstream of this point knows the tree exists -- the boundary design in one sentence. Every target except 'pdf' dispatches through DOCUMENT_FORMAT_CODECS (src/codecs/registry.ts), building a fresh package through the identical buildXPackage function the matching pdf-to-X/bridge conversion already uses, then encoding it with that format's own codec -- xlsx goes through this exact same dispatch (DOCUMENT_FORMAT_CODECS.xlsx.content.write wraps ooxml.js's buildXlsxPackage), no longer a named exception. 'odf' still has no builder at all -- a standalone formula document has no write path from ContentDocument to begin with -- so it alone is rejected outright ahead of the registry lookup.
 export function buildDocumentBytes(pkg: DocumentPackage, target: DocumentFormat): Uint8Array<ArrayBuffer> {

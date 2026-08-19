@@ -1,7 +1,7 @@
 import { bytesToBase64 } from 'ooxml.js';
 import { describe, expect, it } from 'vitest';
 import type { ContentDocument, ContentDrawPage, ContentImageBlock, ContentParagraph, ContentRun, ContentSection, ContentSheet, ContentSheetCell, ContentSheetPrintSettings, ContentShape, ContentSlide, ContentTable, ContentVector } from 'document-schema.js';
-import { type DocumentPackage } from 'document-schema.js';
+import { assemblePackage, type DocumentPackage } from 'document-schema.js';
 import { encodePng } from 'byte-codec';
 import { createStandardFontMeasurer, loadMathFont } from 'pdf-codec';
 import { convertWordprocessingToLayout } from './engine';
@@ -10,7 +10,6 @@ import { reconstructWordprocessing } from './reconstruct';
 import { convertSpreadsheetToLayout } from './sheets';
 import { convertPresentationToLayout } from './slides';
 import { layoutDocumentFromPackage } from '../convert/from-package';
-import { assemblePackage } from '../convert/factor-styles';
 import type { LayoutItem } from 'pdf-codec';
 const mathMetricsAt = (sizePt: number) => loadMathFont().metricsAt(sizePt);
 

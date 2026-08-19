@@ -1,4 +1,4 @@
-import type { ContentDocument, DocumentPackage } from 'document-schema.js';
+import { flattenPackage, type ContentDocument, type DocumentPackage } from 'document-schema.js';
 
 import { decodePackage as decodeOdfPackage } from 'odf.js';
 import { buildXlsxPackage, decodePackage as decodeOoxmlPackage, encodePackage as encodeOoxmlPackage, readXlsxContent } from 'ooxml.js';
@@ -20,7 +20,6 @@ import { minimalOdtBytes } from '../test-support/odt';
 import { decodeMarkdownText, encodeMarkdownText } from '../markdown/text';
 import { richMarkdownText } from '../test-support/markdown';
 import { docxToMarkdown, docxToOdt, docxToPptx, markdownToDocx, markdownToOdt, odpToPptx, odsToXlsx, odtToDocx, odtToMarkdown, pptxToDocx, pptxToOdp, xlsxToOds } from './convert';
-import { flattenPackage } from './flatten';
 
 // The dedicated round-trip suite for the six PDF-bypassing cross-format bridges (convert.ts's own "Six cross-format bridges" section) -- exercised via both directions and both starting points for each of the three pairs (odt<->docx, odp<->pptx, ods<->xlsx), per the project's own explicit "we should also have .odt <-> .docx roundtrip tests and similar for the other types" requirement. Real-file, real-LibreOffice verification (independently-produced odt/odp/ods opened through the bridge and back into LibreOffice) is a separate, manual, non-CI-gated step -- see this repo's own README Fidelity section and test:corpus precedent for why that class of check deliberately never runs inside `pnpm test`.
 
