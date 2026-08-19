@@ -9,18 +9,18 @@
 import { describe, expect, it } from 'vitest';
 import { parseMarkdown } from './block/block';
 import { renderDocumentToHtml } from './html/render';
-import { readMarkdown } from './read';
+import { readMarkdownContent } from './read';
 import { GFM_EXCLUSIONS } from './test-support/conformance-exclusions';
 import type { SpecExample } from './test-support/spec-corpus';
 import { loadGfmExtensionExamples } from './test-support/spec-corpus';
-import { writeMarkdown } from './write';
+import { writeMarkdownContent } from './write';
 
 const GFM_EXTENSIONS = ['table', 'strikethrough', 'autolink', 'disabled'];
 
 // read -> write -> reparse -> render, all through this package's real public surface -- the identical bar src/conformance.test.ts holds the CommonMark corpus to, applied here to the GFM extensions (all four toggles default on, matching this package's own CommonMark+GFM target). See that file's own top-of-file note for the full rationale.
 function render(example: SpecExample): string {
-  const { document } = readMarkdown(example.markdown);
-  const rewritten = writeMarkdown(document);
+  const { document } = readMarkdownContent(example.markdown);
+  const rewritten = writeMarkdownContent(document);
   return renderDocumentToHtml(parseMarkdown(rewritten).document);
 }
 

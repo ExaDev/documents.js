@@ -1,6 +1,6 @@
 // GitHub footnotes end to end (ExaDev/markdown-codec#66): the block/inline phases that recognise `[^label]` and `[^label]: body`, the lowering that turns a definition into an `anchor` construct's boundary-marker pair (document-schema.js 4.2.0) and a reference into a marked run, and the writer that renders both back. Deliberately one file across all four stages rather than four scattered additions: the whole point of the feature is that the two halves of a footnote are carried by two DIFFERENT mechanisms and still have to reproduce each other, which no single-stage test can show.
 //
-// The round-trip assertion below is "read -> write -> read -> write reproduces the same text", not "write reproduces the source byte for byte". That is not a weaker bar chosen for convenience: this package normalises freely on the way out (it escapes ASCII punctuation, regenerates code fences, and picks its own bullet glyph), so byte equality with arbitrary source text is not a property `writeMarkdown` has for ANY construct. What must hold, and what is asserted, is that nothing about a footnote is lost on the way through -- the second pass produces the identical document and the identical text.
+// The round-trip assertion below is "read -> write -> read -> write reproduces the same text", not "write reproduces the source byte for byte". That is not a weaker bar chosen for convenience: this package normalises freely on the way out (it escapes ASCII punctuation, regenerates code fences, and picks its own bullet glyph), so byte equality with arbitrary source text is not a property `writeMarkdownContent` has for ANY construct. What must hold, and what is asserted, is that nothing about a footnote is lost on the way through -- the second pass produces the identical document and the identical text.
 
 import type { ContentBlock, ContentDocument } from 'document-schema.js';
 import { PAGE_SIZE_A4 } from 'document-schema.js';
@@ -8,10 +8,10 @@ import { describe, expect, it } from 'vitest';
 import { parseMarkdown } from './block/block';
 import { MarkdownDiagnosticCodes, MarkdownUnbalancedConstructMarkersError } from './diagnostics/diagnostics';
 import { emitMarkdown } from './emit/emit';
-import { readMarkdown } from './read';
+import { readMarkdownContent } from './read';
 import { FOOTNOTE_REFERENCE_FONT_MARKER } from './shared/style-constants';
 import { createDiagnosticCollector } from './test-support/diagnostics';
-import { writeMarkdown } from './write';
+import { writeMarkdownContent } from './write';
 
 function blocksOf(document: ContentDocument): ContentBlock[] {
   if (document.kind !== 'wordprocessing') {
@@ -21,7 +21,7 @@ function blocksOf(document: ContentDocument): ContentBlock[] {
 }
 
 function lowered(source: string): ContentBlock[] {
-  return blocksOf(readMarkdown(source).document);
+  return blocksOf(readMarkdownContent(source).document);
 }
 
 function minimalDocument(blocks: readonly ContentBlock[]): ContentDocument {
@@ -30,10 +30,10 @@ function minimalDocument(blocks: readonly ContentBlock[]): ContentDocument {
 
 // One full pass through the public surface and back, twice -- see this file's own top-of-file note on why the fixed point, rather than the source text, is what a round trip is measured against here.
 function roundTrip(source: string): { readonly written: string; readonly rewritten: string; readonly document: ContentDocument; readonly reread: ContentDocument } {
-  const document = readMarkdown(source).document;
-  const written = writeMarkdown(document);
-  const reread = readMarkdown(written).document;
-  return { written, rewritten: writeMarkdown(reread), document, reread };
+  const document = readMarkdownContent(source).document;
+  const written = writeMarkdownContent(document);
+  const reread = readMarkdownContent(written).document;
+  return { written, rewritten: writeMarkdownContent(reread), document, reread };
 }
 
 describe('reading footnote definitions', () => {
@@ -203,7 +203,7 @@ describe('lowering a footnote onto the schema', () => {
 
   it('lowers a reference to a marked run keeping its own source spelling', () => {
     const collector = createDiagnosticCollector();
-    const document = readMarkdown('see[^1]\n\n[^1]: note', { sink: collector.sink }).document;
+    const document = readMarkdownContent('see[^1]\n\n[^1]: note', { sink: collector.sink }).document;
     expect(blocksOf(document)[0]).toEqual({
       kind: 'paragraph',
       runs: [{ text: 'see' }, { text: '[^1]', fontFamily: FOOTNOTE_REFERENCE_FONT_MARKER }],
@@ -212,7 +212,7 @@ describe('lowering a footnote onto the schema', () => {
   });
 
   it('carries a reference inside a link as one run of that link', () => {
-    expect(blocksOf(readMarkdown('[text[^1]](/u)\n\n[^1]: note').document)[0]).toEqual({
+    expect(blocksOf(readMarkdownContent('[text[^1]](/u)\n\n[^1]: note').document)[0]).toEqual({
       kind: 'paragraph',
       runs: [{ text: 'text', hyperlink: '/u' }, { text: '[^1]', hyperlink: '/u', fontFamily: FOOTNOTE_REFERENCE_FONT_MARKER }],
     });
@@ -220,7 +220,7 @@ describe('lowering a footnote onto the schema', () => {
 
   it('flattens a heading inside a definition body to literal ATX text, and says so', () => {
     const collector = createDiagnosticCollector();
-    const document = readMarkdown('[^1]: intro\n\n    ## inner', { sink: collector.sink }).document;
+    const document = readMarkdownContent('[^1]: intro\n\n    ## inner', { sink: collector.sink }).document;
     expect(blocksOf(document)).toEqual([
       { kind: 'constructStart', descriptor: { kind: 'anchor', anchorType: 'footnote', name: '1' } },
       { kind: 'paragraph', runs: [{ text: 'intro' }] },
@@ -341,6 +341,6 @@ describe('round trip', () => {
   it('keeps a definition body that a plain reparse would otherwise flatten into the surrounding flow', () => {
     const { written } = roundTrip('intro[^1]\n\n[^1]: first\n\n    second\n\nafter the note');
     expect(written).toBe('intro[^1]\n\n[^1]: first\n\n    second\n\nafter the note');
-    expect(blocksOf(readMarkdown(written).document).map((block) => block.kind)).toEqual(['paragraph', 'constructStart', 'paragraph', 'paragraph', 'constructEnd', 'paragraph']);
+    expect(blocksOf(readMarkdownContent(written).document).map((block) => block.kind)).toEqual(['paragraph', 'constructStart', 'paragraph', 'paragraph', 'constructEnd', 'paragraph']);
   });
 });
