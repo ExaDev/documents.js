@@ -1,0 +1,6 @@
+{
+  // A no-op Worker whose only purpose is to host document-outline.js's source as the module graph the workers test suite (test/workers/**) imports against under the real workerd runtime -- there is no fetch handler to exercise, only the outline builder and its helpers running inside a Cloudflare Workers isolate to prove the package carries zero Node-only API usage.
+  "name": "document-outline-workers-test",
+  "main": "src/index.ts",
+  "compatibility_date": "2024-09-23"
+}

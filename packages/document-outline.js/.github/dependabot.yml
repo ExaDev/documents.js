@@ -1,0 +1,13 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    cooldown:
+      default-days: 7
+      exclude:
+        - "document-schema.js"
+    commit-message:
+      prefix: "build"
+      include: "scope"
