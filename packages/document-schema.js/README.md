@@ -52,7 +52,7 @@ graph TD
 
 The `LayoutDocument` family (pages of positioned `LayoutItem`s — `text`/`image`/`rect`/`line`/`ellipse`/`path`/`link` in PDF user-space coordinates) no longer lives here: 4.0.0 demoted it to a pdf-codec-private model ([pdf-codec#65](https://github.com/ExaDev/pdf-codec/issues/65)), where the only codec that ever read or wrote it owns it outright. `documentFromJson` recognises old layout-document `$schema` URIs and throws a tombstone pointing at pdf-codec rather than failing as if the value were unrelated. Dependents stay on document-schema.js 3.x via semver until their own majors, so the demotion is not a cascade-breaker.
 
-The package contains only [Zod](https://zod.dev) schemas, their inferred types, trivial schema-attached helpers (hex-colour conversion, recursive structural type guards, the style-resolution helpers of `src/definitions.ts`, the construct-marker balance check of `src/content.ts`), and one small structural interface (`ContentCodec`, see [Codecs](#codecs)). No XML, ZIP, PDF, or binary handling; the sole dependency is `zod`.
+The package contains [Zod](https://zod.dev) schemas, their inferred types, trivial schema-attached helpers (hex-colour conversion, recursive structural type guards, the style-resolution helpers of `src/definitions.ts`, the construct-marker balance check of `src/content.ts`), one small structural interface (`ContentCodec`, see [Codecs](#codecs)), and the structural transform between the two encodings it defines (`decompose`/`flattenPackage`/`factorStyles`/`assemblePackage`, see [The package boundary](#the-package-boundary)). No format-specific behaviour and no I/O of any kind — no XML, ZIP, PDF, or binary handling; the sole dependency is `zod`.
 
 Two format-agnostic helpers live here because they operate on the content model itself: cell-addressing utilities in `src/a1.ts` (0-based row/column indices, row-first order matching `ContentSheetCell`'s `{row, column}`) and the `FontFace` interface in `src/font-port.ts` (`{family, bold, italic}`).
 
@@ -102,7 +102,33 @@ The flat `ContentDocument` and the tree are **one format, two encodings**, relat
 2. **Effective-property equality, universally** — resolve styles first, then compare: a factored and an unfactored serialisation of one document are equal (this is also why content hashing and structural diffing resolve first).
 3. **Minting idempotence** — factoring a package a second time mints the identical styles table: `decompose(flatten(decompose(x))) === decompose(x)`.
 
-The codecs do not change: they keep producing flat `ContentDocument`s (their natural reading shape); decomposition runs once at the package boundary in documents.js and flatten runs once where a builder consumes a package.
+The codecs do not change: they keep producing flat `ContentDocument`s (their natural reading shape); decomposition runs once where a package is assembled and flatten runs once where a builder consumes one. Both directions live here — see [The package boundary](#the-package-boundary).
+
+## The package boundary
+
+The transform between the two encodings lives in this package, alongside the schemas that define them:
+
+```ts
+import { assemblePackage, decompose, factorStyles, flattenPackage } from 'document-schema.js';
+
+// The one call a construction site makes: decompose the flat content into the tree, splice the envelope
+// onto the root, and mint a styles table over the result. `pages` is optional -- pass it once a layout
+// pass has produced each rendered page's own size.
+const pkg = assemblePackage(content, pages);
+
+// The inverse, with every style ref resolved away: a fully materialised, ref-free ContentDocument.
+const flat = flattenPackage(pkg);
+
+// The two halves on their own, for a caller composing its own boundary.
+const children = decompose(content);   // flat -> the tree `children` a package carries
+const reminted = factorStyles(pkg);    // re-mint an already-assembled tree (idempotent)
+```
+
+`decompose` throws `ConstructMarkerImbalanceError` — carrying `src/content.ts`'s own `ConstructMarkerImbalance` payload, so a caller narrows with `instanceof` and reads the offending block index rather than parsing a message — when a container's `constructStart`/`constructEnd` markers do not pair up. Promotion is defined only over a balanced stream, so an unbalanced one is refused rather than repaired into a plausible tree.
+
+**This is a deliberate amendment to the "schemas only" charter, not a drift from it.** The transform is not business logic and not format-specific behaviour: it is the canonical, purely structural, zero-I/O relationship between the two shapes this package already defines, and its correctness contract *is* the three laws above. It lives here because it has to: `ooxml.js`, `odf.js`, `markdown-codec`, and `pdf-codec` all depend on this package and none of them depends on `documents.js`, so a codec whose public read/write functions speak `DocumentPackage` directly can only reach the transform if the transform sits at or below the schema layer. Everything the charter actually guards against — XML, ZIP, PDF, fonts, layout, bytes, filesystem — remains firmly out.
+
+The laws are pinned in `src/bijection.test.ts` over a corpus spanning every document kind, every leaf the tree vocabulary admits, and every grouping signal `decompose` reads (headings, list levels, and construct boundaries in each block flow that admits them). `documents.js` runs the same law harness over its own real-format corpus — reader output for every format it supports, editor builds, and conversion captures carrying a layout pass's real frames and pages — which is the complement this package cannot host, since every reader in it belongs to a package that depends on this one.
 
 ## Fidelity constructs
 
@@ -199,7 +225,7 @@ Each is its own root field rather than three more tenants of `definitions`, for 
 
 A styles entry carries `{ paragraph?, run? }` sub-objects of **resolved canonical properties only**: paragraph `alignment`/`list`/`spacingBeforePt`/`spacingAfterPt`/`lineSpacing`/`indentLeftPt`/`indentFirstLinePt`, run `bold`/`italic`/`underline`/`strike`/`fontFamily`/`sizePt`/`color`. Never `frames`, never `sourcePath`, never `styleId` (per-node facts — a position is a fact about a node, not a style), never a `basedOn` graph (the table is a dictionary, not a program) — and the ban list is **enforced by schema shape** (strict objects that reject those keys outright), not merely documented.
 
-Resolution is one overlay chain — outermost ancestor group's style, each nearer group's style, the node's own direct properties; innermost wins, with the resolved run half applying one level further down as run defaults under each run's own properties. `src/definitions.ts` exports the pure helpers that implement it (`overlayStyleEntries`, `resolveStyleChain`, `applyParagraphStyleProperties`, `applyRunStyleProperties`); minting entries (the deterministic frequency pass that factors repeated property tuples into `s1`, `s2`, … refs) is documents.js's boundary behaviour, not this package's.
+Resolution is one overlay chain — outermost ancestor group's style, each nearer group's style, the node's own direct properties; innermost wins, with the resolved run half applying one level further down as run defaults under each run's own properties. `src/definitions.ts` exports the pure helpers that implement it (`overlayStyleEntries`, `resolveStyleChain`, `applyParagraphStyleProperties`, `applyRunStyleProperties`), and `factorStyles` (`src/factor-styles.ts`) is the deterministic frequency pass that mints entries, factoring repeated property tuples into `s1`, `s2`, … refs — see [The package boundary](#the-package-boundary).
 
 Every module is also importable directly — `tsdown` builds one file per source module, and `package.json`'s `"./*"` export makes each individually resolvable:
 
@@ -311,7 +337,7 @@ try {
 
 - [ooxml.js](https://github.com/ExaDev/ooxml.js) — `readDocx`/`readPptx`/`readXlsxContent` return types are typed against this package's schemas, not a local lookalike.
 - [odf.js](https://github.com/ExaDev/odf.js) — ODF typed readers return the same shared types, so ODF and OOXML speak the identical pivot.
-- [documents.js](https://github.com/ExaDev/documents.js) — primary consumer of `ContentDocument` and `DocumentPackage`; its `DOCUMENT_FORMAT_CODECS` registry implements `ContentCodec` per format, and its package boundary runs decompose/flatten against the tree form.
+- [documents.js](https://github.com/ExaDev/documents.js) — primary consumer of `ContentDocument` and `DocumentPackage`; its `DOCUMENT_FORMAT_CODECS` registry implements `ContentCodec` per format, and its conversion pipeline calls `assemblePackage`/`flattenPackage` from here at every package construction site.
 - [pdf-codec](https://github.com/ExaDev/pdf-codec) — owns its layout item model outright since 4.0.0; `readPdf`/`writePdf` operate on pdf-codec's own `LayoutDocument`, and this package's `ContentDocument` remains its content pivot.
 - [markdown-codec](https://github.com/ExaDev/markdown-codec) — `readMarkdown`/`writeMarkdown` read and write this package's `ContentDocument` directly.
 
