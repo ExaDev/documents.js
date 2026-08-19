@@ -1,0 +1,19 @@
+name: Sibling dependency instant update
+
+# Delegates to ExaDev/.github's reusable workflow, the single canonical copy of this logic shared across every documents.js-family repo -- see that repo's README for what each trigger does and why. Requires this repo's pnpm-workspace.yaml to exclude every sibling package it depends on from the org's minimumReleaseAge supply-chain gate, and requires this repo to have access to the AUTOMERGE_APP_PRIVATE_KEY org secret (selected per-repo).
+
+on:
+  repository_dispatch:
+    types: [sibling-released]
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    uses: ExaDev/.github/.github/workflows/sibling-dependency-update.yml@main
+    secrets: inherit

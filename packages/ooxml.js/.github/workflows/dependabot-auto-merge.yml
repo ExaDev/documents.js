@@ -1,0 +1,64 @@
+name: Dependabot auto-merge
+
+# Two auto-merge policies in one workflow. Sibling ExaDev packages (document-schema.js) merge unconditionally once green -- no cooldown, matching this family's existing convention. Every other (third-party) dependency merges only for a minor or patch bump; a major bump still opens a PR via Dependabot but is left for manual review. Third-party updates additionally carry dependabot.yml's own 7-day cooldown before Dependabot proposes them at all. The merge authenticates via a GitHub App installation token (app ID 4473709) rather than GITHUB_TOKEN specifically so the resulting push to main cascades into ci.yml/release instead of being silently skipped by GitHub's anti-recursion protection. That same App also holds an unconditional bypass_actor entry on the branch ruleset's required_status_checks rule (added to let semantic-release push its own release commit, which can never itself carry a passing check-run since its `[skip ci]` message means no check ever runs against it) -- but bypass_actors only take effect for a raw ref update (a direct push, or an explicit admin-override merge), not for the standard `gh pr merge` path this step uses: confirmed directly against this same App on 2026-08-12 (ExaDev/pdf-codec's sibling-dependency-update run genuinely waited for Commitlint/Lint/Typecheck/Test/Smoke-test before merging) and against an OrganizationAdmin bypass actor on the identical rule (ExaDev/documents PR #8, blocked while checks were pending, merged only once they passed). So `gh pr merge --auto --rebase` here is genuinely gated by main's required checks like any other merge; this workflow's own decide step (sibling vs. minor/patch) only decides whether to request the merge at all, not whether checks are honoured once requested.
+
+on:
+  # pull_request_target, not pull_request -- a workflow run triggered by dependabot[bot]'s own pull_request
+  # event gets NO secret access at all (a hard GitHub Actions security restriction against a compromised
+  # dependency update exfiltrating secrets), so secrets.AUTOMERGE_APP_PRIVATE_KEY would resolve empty
+  # regardless of how correctly the secret itself is configured. pull_request_target runs using the base
+  # branch's own workflow file and normal secret access instead. Safe here specifically because this job
+  # never checks out or executes the PR's own code -- it only calls the GitHub API (fetch-metadata, gh pr
+  # merge), which is exactly the case pull_request_target's own security guidance calls out as safe.
+  pull_request_target:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Fetch Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+      - name: Decide whether to auto-merge
+        id: decide
+        env:
+          DEPENDENCY_NAMES: ${{ steps.metadata.outputs.dependency-names }}
+          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
+        run: |
+          siblings="document-schema.js"
+          is_sibling=false
+          for name in $(echo "$DEPENDENCY_NAMES" | tr ',' ' '); do
+            name=$(echo "$name" | xargs)
+            for sib in $siblings; do
+              if [ "$name" = "$sib" ]; then
+                is_sibling=true
+              fi
+            done
+          done
+          if [ "$is_sibling" = "true" ]; then
+            echo "merge=true" >> "$GITHUB_OUTPUT"
+          elif [ "$UPDATE_TYPE" = "version-update:semver-minor" ] || [ "$UPDATE_TYPE" = "version-update:semver-patch" ]; then
+            echo "merge=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "merge=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Generate a token for the merge
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: "4473709"
+          private-key: ${{ secrets.AUTOMERGE_APP_PRIVATE_KEY }}
+      - name: Enable auto-merge
+        if: steps.decide.outputs.merge == 'true'
+        run: gh pr merge --auto --rebase "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
