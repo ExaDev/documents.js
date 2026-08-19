@@ -6,17 +6,21 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 describe('smoke: ESM/CJS parity', () => {
-  it('loads the ESM build and exposes the tree-form package and node schemas', async () => {
+  it('loads the ESM build and exposes the tree-form package and node schemas plus the package-boundary transform', async () => {
     const esm = await import('../dist/index.js');
     expect(typeof esm.DocumentPackageSchema.parse).toBe('function');
     expect(typeof esm.PackageNodeSchema.safeParse).toBe('function');
     expect(typeof esm.ConstructDescriptorSchema.safeParse).toBe('function');
     expect(typeof esm.SectionConstructGroupSchema.safeParse).toBe('function');
     expect(typeof esm.resolveStyleChain).toBe('function');
+    for (const name of ['assemblePackage', 'decompose', 'factorStyles', 'flattenPackage']) {
+      expect(typeof esm[name]).toBe('function');
+    }
+    expect(typeof esm.ConstructMarkerImbalanceError).toBe('function');
     expect(esm.LayoutDocumentSchema).toBeUndefined();
   });
 
-  it('loads the CJS build and exposes the tree-form package and node schemas', () => {
+  it('loads the CJS build and exposes the tree-form package and node schemas plus the package-boundary transform', () => {
     const require = createRequire(import.meta.url);
     const cjs = require('../dist/index.cjs');
     expect(typeof cjs.DocumentPackageSchema.parse).toBe('function');
@@ -24,6 +28,10 @@ describe('smoke: ESM/CJS parity', () => {
     expect(typeof cjs.ConstructDescriptorSchema.safeParse).toBe('function');
     expect(typeof cjs.SectionConstructGroupSchema.safeParse).toBe('function');
     expect(typeof cjs.resolveStyleChain).toBe('function');
+    for (const name of ['assemblePackage', 'decompose', 'factorStyles', 'flattenPackage']) {
+      expect(typeof cjs[name]).toBe('function');
+    }
+    expect(typeof cjs.ConstructMarkerImbalanceError).toBe('function');
     expect(cjs.LayoutDocumentSchema).toBeUndefined();
   });
 });
