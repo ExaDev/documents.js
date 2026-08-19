@@ -34,9 +34,21 @@ jobs:
       - name: Validate the last commit with commitlint
         if: github.event_name == 'push'
         run: pnpm exec commitlint --last --verbose
+      - name: Find the PR commit-lint range start
+        if: github.event_name == 'pull_request'
+        id: lint-range
+        # Every package's history was imported into packages/<name> verbatim rather than rewritten (see the root README on the migration), so it was authored -- and validated by commitlint -- under that package's own, now-superseded standalone config, not this workspace's. fc476c76 is the last of the ten import merges, the commit after which every commit on main is new workspace-native history this repo's own commitlint.config.ts actually governed when it was written. An ordinary PR's base is always a descendant of that commit once the migration itself has landed on main, so this only ever widens the range for the one-time landing PR whose base predates the migration; every later PR computes the identical `from` its base.sha would have given directly.
+        run: |
+          MIGRATION_BOUNDARY=fc476c767bf26fa275ad7c33bad8519ecb525993
+          BASE=${{ github.event.pull_request.base.sha }}
+          if git merge-base --is-ancestor "$MIGRATION_BOUNDARY" "$BASE"; then
+            echo "from=$BASE" >> "$GITHUB_OUTPUT"
+          else
+            echo "from=$MIGRATION_BOUNDARY" >> "$GITHUB_OUTPUT"
+          fi
       - name: Validate every PR commit with commitlint
         if: github.event_name == 'pull_request'
-        run: pnpm exec commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
+        run: pnpm exec commitlint --from ${{ steps.lint-range.outputs.from }} --to ${{ github.event.pull_request.head.sha }} --verbose
 
   lint:
     name: Lint
