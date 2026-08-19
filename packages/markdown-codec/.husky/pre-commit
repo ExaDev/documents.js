@@ -1,2 +1,0 @@
-# Lint and auto-fix staged TypeScript files.
-npx lint-staged
