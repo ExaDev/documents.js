@@ -9,7 +9,9 @@ import {
   listGroup,
   paragraph,
   presentationPackage,
+  sectionConstructGroup,
   sectionGroup,
+  shapeConstructGroup,
   shapeGroup,
   sheetGroup,
   sheetImage,
@@ -108,6 +110,35 @@ describe('effectivePackage', () => {
         ]),
       ]),
     );
+  });
+
+  it('threads a section construct group\'s own ref down to its subtree, same as a heading group\'s', () => {
+    const factored = wordprocessingPackage(
+      [sectionGroup([sectionConstructGroup([paragraph('inside')], { style: 'outer' })])],
+      { styles },
+    );
+    const resolved = effectivePackage(factored);
+    expectSchemaValid(resolved, 'resolved');
+    expect(resolved).toEqual(
+      wordprocessingPackage([
+        sectionGroup([{ node: { kind: 'contentControl', controlType: 'richText' }, children: [{ kind: 'paragraph', runs: [{ text: 'inside', bold: true }], indentLeftPt: 24 }] }]),
+      ]),
+    );
+  });
+
+  it('threads a shape construct group\'s own ref down to its subtree, same as a shape group\'s', () => {
+    const factored = presentationPackage(
+      [slideGroup([shapeGroup([shapeConstructGroup([paragraph('inside')], { style: 'outer' })])])],
+      { styles },
+    );
+    const resolved = effectivePackage(factored);
+    expectSchemaValid(resolved, 'presentation resolved');
+    asGroup(resolved.children[0]!);
+    asGroup(resolved.children[0].children[0]!);
+    expect(resolved.children[0].children[0].children[0]).toEqual({
+      node: { kind: 'contentControl', controlType: 'richText' },
+      children: [{ kind: 'paragraph', runs: [{ text: 'inside', bold: true }], indentLeftPt: 24 }],
+    });
   });
 
   it('does not rewrite leaf-local payload: table cell paragraphs pass through untouched', () => {

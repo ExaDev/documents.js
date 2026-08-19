@@ -12,7 +12,9 @@ import {
   pageBreak,
   paragraph,
   presentationPackage,
+  sectionConstructGroup,
   sectionGroup,
+  shapeConstructGroup,
   shapeGroup,
   sheetGroup,
   sheetImage,
@@ -229,6 +231,34 @@ describe('wordprocessing outlines', () => {
       },
     ]);
   });
+
+  it('projects a construct group transparently: no node of its own, children attach at the current scope', () => {
+    const before = paragraph('before');
+    const inside = paragraph('inside');
+    const after = paragraph('after');
+    const pkg = wordprocessingPackage([sectionGroup([before, sectionConstructGroup([inside]), after])]);
+    expectSchemaValid(pkg);
+    expect(buildOutline(pkg)).toEqual([before, inside, after]);
+  });
+
+  it('gives a construct group its own self-contained heading nesting: neither inherited from, nor leaked into, the surrounding stack', () => {
+    const innerBody = paragraph('inner body');
+    const tail = paragraph('tail');
+    const pkg = wordprocessingPackage([
+      sectionGroup([
+        headingGroup('Outer', 1, [sectionConstructGroup([headingGroup('Inner', 1, [innerBody])]), tail]),
+      ]),
+    ]);
+    expectSchemaValid(pkg);
+    // 'Inner' is level 1, same as 'Outer', but it nests as Outer's child (not a sibling that would pop Outer closed) because the construct's fresh scope never sees Outer's open heading stack at all -- and 'tail' lands back at Outer's own scope, proving the construct's internal stack never leaked out either.
+    expect(buildOutline(pkg)).toEqual([
+      {
+        text: 'Outer',
+        level: 1,
+        children: [{ text: 'Inner', level: 1, children: [innerBody] }, tail],
+      },
+    ]);
+  });
 });
 
 describe('presentation outlines', () => {
@@ -279,6 +309,23 @@ describe('presentation outlines', () => {
     const pkg = presentationPackage([slideGroup([shapeGroup([titleStyled])])]);
     expectSchemaValid(pkg);
     expect(buildOutline(pkg)).toEqual([{ text: 'Slide 1', level: 1, children: [titleStyled] }]);
+  });
+
+  it('projects a shape construct group transparently, with its own self-contained list nesting', () => {
+    const before = paragraph('before');
+    const nested = listGroup('nested', 0, []);
+    const after = paragraph('after');
+    const pkg = presentationPackage([
+      slideGroup([shapeGroup([before, shapeConstructGroup([nested]), after])]),
+    ]);
+    expectSchemaValid(pkg);
+    expect(buildOutline(pkg)).toEqual([
+      {
+        text: 'Slide 1',
+        level: 1,
+        children: [before, { text: 'nested', level: 0, children: [] }, after],
+      },
+    ]);
   });
 });
 
@@ -331,6 +378,17 @@ describe('drawing outlines', () => {
       expect.objectContaining({ kind: 'paragraph' }),
       expect.objectContaining({ kind: 'paragraph' }),
     ]);
+  });
+
+  it('flattens a shape construct group with no leaf of its own, unlike a list group anchor', () => {
+    // A construct's node is a ConstructDescriptor, not content -- it contributes nothing to the flat leaf sequence, only its children do.
+    const inside = paragraph('inside');
+    const pkg = drawingPackage([drawPageGroup([shapeGroup([shapeConstructGroup([inside])])])]);
+    expectSchemaValid(pkg);
+    const outline = buildOutline(pkg);
+    const page = outline[0];
+    if (page === undefined || !('children' in page)) throw new Error('expected a group node');
+    expect(page.children).toEqual([inside]);
   });
 });
 

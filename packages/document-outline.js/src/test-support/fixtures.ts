@@ -1,12 +1,15 @@
 // Fixture builders for every tree-form DocumentPackage kind, shaped against the real document-schema.js 4.0.0 field requirements -- every builder's output is asserted to pass DocumentPackageSchema.parse in the tests that use it, so a schema change in document-schema.js breaks these fixtures loudly instead of silently testing against a shape that no longer exists. Two layers: the leaf builders (paragraphs, tables, images, vectors, ...) and the group/package builders (headingGroup/sectionGroup/wordprocessingPackage/...), mirroring the tree's own two vocabularies. Never imported by src/index.ts and never reaching dist/ -- test-only, mirroring the family's test-support convention.
 import type {
-  ContentBlock,
   ContentCellValue,
   ContentEmbeddedObject,
+  ContentEmbeddedObjectBlock,
+  ContentImageBlock,
+  ContentPageBreak,
   ContentParagraph,
   ContentRun,
   ContentSheetCell,
   ContentSheetImage,
+  ContentTable,
   ContentVector,
   DocumentPackage,
   DrawPageChild,
@@ -19,8 +22,10 @@ import type {
   Margins,
   PageSize,
   SectionChild,
+  SectionConstructGroupNode,
   SectionGroupNode,
   ShapeChild,
+  ShapeConstructGroupNode,
   ShapeGroupNode,
   SheetChild,
   SheetGroupNode,
@@ -55,7 +60,7 @@ export function paragraph(text: string, options: ParagraphOptions = {}): Content
   };
 }
 
-export function table(rows: string[][]): ContentBlock {
+export function table(rows: string[][]): ContentTable {
   return {
     kind: 'table',
     rows: rows.map((cells) => ({
@@ -65,7 +70,7 @@ export function table(rows: string[][]): ContentBlock {
   };
 }
 
-export function imageBlock(altText?: string): ContentBlock {
+export function imageBlock(altText?: string): ContentImageBlock {
   return {
     kind: 'image',
     format: 'png',
@@ -76,7 +81,7 @@ export function imageBlock(altText?: string): ContentBlock {
   };
 }
 
-export function pageBreak(): ContentBlock {
+export function pageBreak(): ContentPageBreak {
   return { kind: 'pageBreak' };
 }
 
@@ -141,7 +146,7 @@ export function embeddedFormulaObject(): ContentEmbeddedObject {
 }
 
 // The block-level spelling of an embedded object inside a section's or shape's block flow (ContentEmbeddedObjectBlock adds the kind discriminator to ContentEmbeddedObject's own fields).
-export function embeddedObjectBlock(): ContentBlock {
+export function embeddedObjectBlock(): ContentEmbeddedObjectBlock {
   return { ...embeddedObject(), kind: 'embeddedObject' };
 }
 
@@ -184,6 +189,23 @@ export function headingGroup(text: string, headingLevel: number, children: Secti
 export function listGroup(text: string, level: number, children: ListChild[] = [], options: GroupOptions = {}): ListGroupNode {
   return {
     node: { ...paragraph(text), list: { level } },
+    ...(options.style !== undefined ? { style: options.style } : {}),
+    children,
+  };
+}
+
+// A construct group's node is a ConstructDescriptor, never a paragraph -- richText is the simplest member of the discriminated union (kind + controlType only), which is all these fixtures need since the outline builder never reads a construct's descriptor fields, only its kind (to recognise the wrapper) and its children.
+export function sectionConstructGroup(children: SectionChild[], options: GroupOptions = {}): SectionConstructGroupNode {
+  return {
+    node: { kind: 'contentControl', controlType: 'richText' },
+    ...(options.style !== undefined ? { style: options.style } : {}),
+    children,
+  };
+}
+
+export function shapeConstructGroup(children: ShapeChild[], options: GroupOptions = {}): ShapeConstructGroupNode {
+  return {
+    node: { kind: 'contentControl', controlType: 'richText' },
     ...(options.style !== undefined ? { style: options.style } : {}),
     children,
   };

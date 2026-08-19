@@ -3,6 +3,8 @@ import {
   applyRunStyleProperties,
   isHeadingGroupNode,
   isListGroupNode,
+  isSectionConstructGroupNode,
+  isShapeConstructGroupNode,
   resolveStyleChain,
   type ContentParagraph,
   type ContentVector,
@@ -13,7 +15,9 @@ import {
   type ListGroupNode,
   type PackageGroup,
   type SectionChild,
+  type SectionConstructGroupNode,
   type SectionGroupNode,
+  type ShapeConstructGroupNode,
   type ShapeGroupNode,
   type SheetGroupNode,
   type SlideGroupNode,
@@ -103,6 +107,30 @@ function resolveShapeGroup(styles: StylesTable, chain: readonly string[], group:
   return { node: group.node, children };
 }
 
+// A construct group carries the same optional style ref as every other wrapper (chainWithRef treats it identically), and its own children are a section flow it wraps -- resolved with resolveSectionChildren, same as a heading group's, not the flattening/reset a decompose walk applies when building the tree in the first place. That reset governs how a construct's extent nests when the tree is FIRST built; it says nothing about a later resolve pass over the tree the schema already validated, whose only job is threading each group's style chain down to the paragraphs in its subtree.
+function resolveSectionConstructGroup(
+  styles: StylesTable,
+  chain: readonly string[],
+  group: SectionConstructGroupNode,
+): SectionConstructGroupNode {
+  const own = chainWithRef(chain, group);
+  const children = resolveSectionChildren(styles, own, group.children);
+  if (group.style === undefined && children === group.children) return group;
+  return { node: group.node, children };
+}
+
+// The ShapeChild/ListChild counterpart: a construct group wrapping a list/shape flow, resolved with resolveListChildren, same as a shape group's.
+function resolveShapeConstructGroup(
+  styles: StylesTable,
+  chain: readonly string[],
+  group: ShapeConstructGroupNode,
+): ShapeConstructGroupNode {
+  const own = chainWithRef(chain, group);
+  const children = resolveListChildren(styles, own, group.children);
+  if (group.style === undefined && children === group.children) return group;
+  return { node: group.node, children };
+}
+
 function resolveHeadingGroup(styles: StylesTable, chain: readonly string[], group: HeadingGroupNode): HeadingGroupNode {
   const own = chainWithRef(chain, group);
   // An empty chain plus no own ref is the no-entry case; anything else resolves, and resolveStyleChain itself is the loud refusal on a ref the table does not carry.
@@ -149,6 +177,7 @@ function resolveSectionChildren(styles: StylesTable, chain: readonly string[], c
     let resolved: SectionChild;
     if (isHeadingGroupNode(child)) resolved = resolveHeadingGroup(styles, chain, child);
     else if (isListGroupNode(child)) resolved = resolveListGroup(styles, chain, child);
+    else if (isSectionConstructGroupNode(child)) resolved = resolveSectionConstructGroup(styles, chain, child);
     else if (child.kind === 'paragraph') resolved = resolveParagraphLeaf(styles, chain, child);
     else resolved = child;
     changed ||= resolved !== child;
@@ -157,13 +186,14 @@ function resolveSectionChildren(styles: StylesTable, chain: readonly string[], c
   return changed ? out : children;
 }
 
-// One list-flow child position -- the shared vocabulary of shape flows and list-group children (ListGroupNode | ContentBlock), so one function serves both.
+// One list-flow child position -- the shared vocabulary of shape flows and list-group children (ListGroupNode | ShapeConstructGroupNode | ContentBlock), so one function serves both.
 function resolveListChildren(styles: StylesTable, chain: readonly string[], children: ListChild[]): ListChild[] {
   let changed = false;
   const out: ListChild[] = [];
   for (const child of children) {
     let resolved: ListChild;
     if (isListGroupNode(child)) resolved = resolveListGroup(styles, chain, child);
+    else if (isShapeConstructGroupNode(child)) resolved = resolveShapeConstructGroup(styles, chain, child);
     else if (child.kind === 'paragraph') resolved = resolveParagraphLeaf(styles, chain, child);
     else resolved = child;
     changed ||= resolved !== child;
