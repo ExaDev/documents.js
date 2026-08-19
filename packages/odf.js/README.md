@@ -155,7 +155,7 @@ Every bare `readOdX` name now belongs to the package-native reader. Callers of t
 
 The rename is a compile error at every call site, never a silent behaviour change: each new bare name returns a `DocumentPackage`, which is assignable to none of the old return types.
 
-`readOdm`, `readOdbInventory`, `readOdbForm`, and `readOdbReport` are untouched. None of them reads document content — a master document's chapters are external file references and a `.odb`'s forms and reports are structure descriptions — so none has a `ContentDocument` to decompose, and none gains a package-native form.
+`readOdm`, `readOdbInventory`, `readOdbForm`, and `readOdbReport` are untouched, and none gains a package-native form. `readOdm`'s chapters are external file references and `readOdbInventory`/`readOdbReport` describe structure rather than content, so none of those three has a `ContentDocument` to decompose. `readOdbForm` is the exception that proves the rule rather than a fourth case of it: a form's sub-document is a complete, ordinary ODF text document, so `readOdbForm` does call `readOdtContent` on it and does return an `OdtDocument` — but that document is one component nested inside the form's own control-tree result, not the function's own top-level return value, so there is no `DocumentPackage`-native `readOdbForm` to add without changing what the function returns altogether.
 
 ### The lossless core
 
