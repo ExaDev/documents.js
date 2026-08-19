@@ -1,6 +1,8 @@
 import {
   isHeadingGroupNode,
   isListGroupNode,
+  isSectionConstructGroupNode,
+  isShapeConstructGroupNode,
   isShapeGroupNode,
   type ContentFormula,
   type ContentParagraph,
@@ -42,69 +44,103 @@ export function buildOutline(pkg: DocumentPackage): OutlineChild[] {
   }
 }
 
-function wordprocessingOutline(sections: readonly SectionGroupNode[]): OutlineChild[] {
-  const root: OutlineChild[] = [];
-  // Heading groups currently open, deepest last. Each entry is the OutlineNode itself -- a node carries both its level and its children, so it is the scope. An empty stack means the root scope: content before any heading, and documents with no headings at all, attach directly to the root array.
-  const headingStack: OutlineNode[] = [];
-  // List-item groups currently open inside the innermost heading scope. Reset by every heading group and every plain paragraph leaf: list nesting is a sub-structure of a heading group, never a bridge across groups or across intervening unlevelled paragraphs.
-  const listStack: OutlineNode[] = [];
-  // The scope every non-heading attachment targets: the innermost open heading group's children, or the root array when no heading is open.
-  const headingScope = (): OutlineChild[] => headingStack.at(-1)?.children ?? root;
-  // One walk serves every nesting depth: a heading/list group projects its anchor through the stack machine, then its children walk with the newly opened node as the live scope -- which is how a tree section's internal nesting survives intact while the stacks still carry open scopes ACROSS section boundaries (the outer loop never resets them).
-  const walk = (children: readonly SectionChild[]): void => {
-    for (const child of children) {
-      if (isHeadingGroupNode(child)) {
-        listStack.length = 0;
-        const level = child.node.headingLevel;
-        for (let top = headingStack.at(-1); top !== undefined && top.level >= level; top = headingStack.at(-1)) {
-          headingStack.pop();
-        }
-        const node: OutlineNode = { text: paragraphText(child.node), level, children: [] };
-        const parent = headingStack.at(-1);
-        (parent !== undefined ? parent.children : root).push(node);
-        headingStack.push(node);
-        walk(child.children);
-      } else if (isListGroupNode(child)) {
-        openListGroup(listStack, headingScope(), paragraphText(child.node), child.node.list.level);
-        walk(child.children);
-      } else if (child.kind === 'paragraph') {
-        // A paragraph at a leaf position carries neither grouping signal (the decomposition only anchors paragraphs that carry one; a Heading-styled paragraph without headingLevel is exactly such a leaf), so it sits flat at its scope and closes the list nesting: list items nest under the last list item, never across an intervening plain paragraph, which would otherwise leave a later deeper item traversing before an earlier sibling and break the document-order guarantee.
-        listStack.length = 0;
-        headingScope().push(child);
-      } else {
-        const parent = listStack.at(-1);
-        (parent !== undefined ? parent.children : headingScope()).push(child);
+// The mutable state one wordprocessing projection thread carries: the root scope and the two open-group stacks. Bundled so a construct group's own subtree (self-contained per document-schema.js's construct-group contract: "transparent to the flow it wraps") can run the identical walk over a FRESH instance -- its internal heading/list nesting neither inherits the surrounding open groups nor leaks back into them -- while the outer, section-spanning walk keeps threading one shared instance across every section (the stacks stay open across section boundaries, by design; see the per-kind contract above).
+interface SectionFlowScope {
+  readonly root: OutlineChild[];
+  readonly headingStack: OutlineNode[];
+  readonly listStack: OutlineNode[];
+}
+
+function freshSectionFlowScope(): SectionFlowScope {
+  return { root: [], headingStack: [], listStack: [] };
+}
+
+// The scope every non-heading attachment targets: the innermost open heading group's children, or the root array when no heading is open.
+function headingScopeOf(scope: SectionFlowScope): OutlineChild[] {
+  return scope.headingStack.at(-1)?.children ?? scope.root;
+}
+
+// One walk serves every nesting depth: a heading/list group projects its anchor through the stack machine, then its children walk with the newly opened node as the live scope -- which is how a tree section's internal nesting survives intact while the stacks still carry open scopes ACROSS section boundaries (the caller decides whether to reuse one scope across sections or start fresh).
+function walkSectionFlow(scope: SectionFlowScope, children: readonly SectionChild[]): void {
+  for (const child of children) {
+    if (isHeadingGroupNode(child)) {
+      scope.listStack.length = 0;
+      const level = child.node.headingLevel;
+      for (let top = scope.headingStack.at(-1); top !== undefined && top.level >= level; top = scope.headingStack.at(-1)) {
+        scope.headingStack.pop();
       }
+      const node: OutlineNode = { text: paragraphText(child.node), level, children: [] };
+      const parent = scope.headingStack.at(-1);
+      (parent !== undefined ? parent.children : scope.root).push(node);
+      scope.headingStack.push(node);
+      walkSectionFlow(scope, child.children);
+    } else if (isListGroupNode(child)) {
+      openListGroup(scope.listStack, headingScopeOf(scope), paragraphText(child.node), child.node.list.level);
+      walkSectionFlow(scope, child.children);
+    } else if (isSectionConstructGroupNode(child)) {
+      // A construct group carries no text/level of its own (its node is a ConstructDescriptor, not a paragraph), so it can never become an OutlineNode -- it attaches at the CURRENT scope exactly as any other non-paragraph block does (the innermost open list group, else the innermost open heading scope), disturbing neither stack, while its own children project as a wholly self-contained section flow via a fresh scope.
+      const parent = scope.listStack.at(-1);
+      (parent !== undefined ? parent.children : headingScopeOf(scope)).push(...projectSectionFlow(child.children));
+    } else if (child.kind === 'paragraph') {
+      // A paragraph at a leaf position carries neither grouping signal (the decomposition only anchors paragraphs that carry one; a Heading-styled paragraph without headingLevel is exactly such a leaf), so it sits flat at its scope and closes the list nesting: list items nest under the last list item, never across an intervening plain paragraph, which would otherwise leave a later deeper item traversing before an earlier sibling and break the document-order guarantee.
+      scope.listStack.length = 0;
+      headingScopeOf(scope).push(child);
+    } else {
+      const parent = scope.listStack.at(-1);
+      (parent !== undefined ? parent.children : headingScopeOf(scope)).push(child);
     }
-  };
-  for (const section of sections) {
-    walk(section.children);
   }
-  return root;
+}
+
+// Runs a section flow through its own fresh scope and returns its projected root -- the self-contained walk a construct group's subtree needs, and equally the top-level entry point for a plain section list.
+function projectSectionFlow(children: readonly SectionChild[]): OutlineChild[] {
+  const scope = freshSectionFlowScope();
+  walkSectionFlow(scope, children);
+  return scope.root;
+}
+
+function wordprocessingOutline(sections: readonly SectionGroupNode[]): OutlineChild[] {
+  const scope = freshSectionFlowScope();
+  for (const section of sections) {
+    walkSectionFlow(scope, section.children);
+  }
+  return scope.root;
+}
+
+// One list/shape flow's walk: a list group projects its anchor through the stack machine (openListGroup carries the same level-popping semantics as the heading stack above, on list.level's 0-based scale), a construct group attaches transparently with its own subtree self-contained (the ShapeChild/ListChild counterpart of walkSectionFlow's construct handling), and every other child is a leaf that sits at the current list scope.
+function walkShapeFlow(listStack: OutlineNode[], scope: OutlineChild[], children: readonly ShapeChild[]): void {
+  for (const child of children) {
+    if (isListGroupNode(child)) {
+      openListGroup(listStack, scope, paragraphText(child.node), child.node.list.level);
+      walkShapeFlow(listStack, scope, child.children);
+    } else if (isShapeConstructGroupNode(child)) {
+      const parent = listStack.at(-1);
+      (parent !== undefined ? parent.children : scope).push(...projectShapeFlow(child.children));
+    } else if (child.kind === 'paragraph') {
+      // Same flat-and-close rule as wordprocessing's plain paragraphs, and it also covers the heading-styled paragraph leaf a shape's flow legitimately carries (headingLevel is not a depth signal in a shape -- see the per-kind contract above).
+      listStack.length = 0;
+      scope.push(child);
+    } else {
+      const parent = listStack.at(-1);
+      (parent !== undefined ? parent.children : scope).push(child);
+    }
+  }
+}
+
+// Runs a shape/list flow through a fresh scope and returns its projected children -- the self-contained walk a construct group's subtree needs.
+function projectShapeFlow(children: readonly ShapeChild[]): OutlineChild[] {
+  const scope: OutlineChild[] = [];
+  walkShapeFlow([], scope, children);
+  return scope;
 }
 
 function presentationOutline(slides: readonly SlideGroupNode[]): OutlineNode[] {
   return slides.map((slide, index) => {
     const group: OutlineNode = { text: `Slide ${String(index + 1)}`, level: 1, children: [] };
     const listStack: OutlineNode[] = [];
-    const walk = (children: readonly ShapeChild[]): void => {
-      for (const child of children) {
-        if (isListGroupNode(child)) {
-          openListGroup(listStack, group.children, paragraphText(child.node), child.node.list.level);
-          walk(child.children);
-        } else if (child.kind === 'paragraph') {
-          // Same flat-and-close rule as wordprocessing's plain paragraphs, and it also covers the heading-styled paragraph leaf a shape's flow legitimately carries (headingLevel is not a depth signal in a shape -- see the per-kind contract above).
-          listStack.length = 0;
-          group.children.push(child);
-        } else {
-          const parent = listStack.at(-1);
-          (parent !== undefined ? parent.children : group.children).push(child);
-        }
-      }
-    };
     // The slide's own children are its shape groups; walking each shape's children in order takes the slide's paragraphs across its shapes -- the deliberate TOC lossiness (the shape boundary the source format carries is the decomposition's to preserve, not the outline's).
     for (const shape of slide.children) {
-      walk(shape.children);
+      walkShapeFlow(listStack, group.children, shape.children);
     }
     return group;
   });
@@ -135,6 +171,9 @@ function flattenListFlow(children: readonly ListChild[]): OutlineLeaf[] {
   for (const child of children) {
     if (isListGroupNode(child)) {
       leaves.push(child.node, ...flattenListFlow(child.children));
+    } else if (isShapeConstructGroupNode(child)) {
+      // A construct group's node is a ConstructDescriptor, not content -- unlike a list group's paragraph anchor, it has nothing of its own to surface as a leaf, so only its children flatten through (transparent wrapper, matching the per-kind contract above).
+      leaves.push(...flattenListFlow(child.children));
     } else {
       leaves.push(child);
     }
