@@ -1,7 +1,6 @@
-import type { DocumentPackage } from 'document-schema.js';
+import { flattenPackage, type DocumentPackage } from 'document-schema.js';
 import { describe, expect, it } from 'vitest';
 import { markdownToDocx, markdownToOdt, markdownToPdf } from './convert';
-import { flattenPackage } from './flatten';
 
 // A real 1x1 PNG (the same one markdown-codec's own lower.test.ts resolves through its MarkdownImageResolver port), decoded from base64 via atob so detectImageFormat/readImageDimensions accept it and a genuine ContentImageBlock is produced rather than the alt-text degradation an unresolvable image becomes.
 const ONE_PIXEL_PNG = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='), (char) => char.codePointAt(0)!);

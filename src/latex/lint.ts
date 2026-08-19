@@ -1,8 +1,7 @@
-import type { ContentBlock, ContentFormula, DocumentPackage, MathExpression, MathSymbolEntry } from 'document-schema.js';
+import { flattenPackage, type ContentBlock, type ContentFormula, type DocumentPackage, type MathExpression, type MathSymbolEntry } from 'document-schema.js';
 import type { MathLintDiagnostic } from './diagnostics';
 import { lowerLatex } from './lower';
 import { reduceRational } from './rational';
-import { flattenPackage } from '../convert/flatten';
 
 // The coherence lint: the two-layer model's read-only audit. For every formula carrying BOTH a presentation string and a content tree, re-parse the stored presentation with the same pinned parser, re-run the same lowering against the document's own symbol table, and compare the result with the stored content. Divergence means somebody edited one layer deliberately since the content was last derived -- the schema's atomic pair-edit rule guarantees the layers never drift by accident -- so the finding is a WARNING carrying the stored provenance (where the formula came from and what has touched it, per the edit trail), never an automatic re-derivation: this function computes a derived comparison view at comparison time and writes nothing back, exactly the discipline the schema's own comment prescribes.
 //

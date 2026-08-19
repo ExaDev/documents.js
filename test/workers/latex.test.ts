@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { assemblePackage, buildMarkdownText, latexToFormula, lintMathCoherence, readMarkdownContent } from '../../src';
+import { assemblePackage } from 'document-schema.js';
+import { buildMarkdownText, latexToFormula, lintMathCoherence, readMarkdownContent } from '../../src';
 
 // Proves the whole LaTeX lowering path (the pinned temml parser through the lowering, the markdown read pass, the write reconstruction, and the coherence lint) executes inside a Cloudflare Workers isolate with no Node-only API usage -- temml is pure JavaScript whose DOM-touching entry points (render/renderMathInElement) are never called by this package, and whose parser/MathML-tree builder feature-detect `document` before using it (see src/latex/temml.ts's own top-of-file comment). If temml's parse path (or anything this feature pulls in) touched node:fs/Buffer/process at module top level or during a call, the workerd isolate would throw at import or fail these assertions rather than pass.
 describe('the LaTeX lowering under the Cloudflare Workers runtime', () => {
