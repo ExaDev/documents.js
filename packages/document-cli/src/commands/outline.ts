@@ -2,7 +2,7 @@ import { dirname, resolve } from 'node:path';
 import { type Command } from 'commander';
 import { buildOutline, isOutlineNode, outlineLeafText, type OutlineChild, type OutlineLeaf } from 'document-outline.js';
 import { type DocumentFormat, createLocalDocumentConverter } from 'documents.js';
-import { inferFormatFromExtension } from '../format';
+import { inferFormatFromExtension, isDocumentFormat } from '../format';
 import { createRuntimeSignal } from '../runtime/abort';
 import { createDiagnosticReporter } from '../runtime/diagnostics';
 import { EXIT_SUCCESS, EXIT_USAGE_ERROR, mapErrorToExit } from '../runtime/exit-codes';
@@ -60,16 +60,35 @@ interface OutlineCliOptions {
   readonly json: boolean;
   readonly quiet: boolean;
   readonly verbose: boolean;
+  readonly from?: string;
+}
+
+// Mirrors resolveTargetFormat's own resolution order (commands/shared.ts), source-side: an explicit --from always wins, falling back to the input path's own extension, and finally a usage error. Extracted as its own function rather than inlined in runOutline because the three failure messages differ by cause (an unrecognised --from value, stdin with nothing to infer from, a real path with no recognised extension) and inlining them would bury that distinction in the try block below.
+function resolveSourceFormat(input: string, from: string | undefined): { readonly format: DocumentFormat } | { readonly errorMessage: string } {
+  if (from !== undefined) {
+    if (!isDocumentFormat(from)) {
+      return { errorMessage: `unknown --from format '${from}'; expected one of ${KNOWN_DOCUMENT_FORMATS}` };
+    }
+    return { format: from };
+  }
+  if (input === '-') {
+    return { errorMessage: `cannot infer a source format from stdin; pass --from <format> (${KNOWN_DOCUMENT_FORMATS})` };
+  }
+  const inferred = inferFormatFromExtension(input);
+  if (inferred === undefined) {
+    return { errorMessage: `cannot infer a source format from '${input}'; rename the file with a recognised extension (${KNOWN_DOCUMENT_FORMATS}) or pass --from <format>` };
+  }
+  return { format: inferred };
 }
 
 async function runOutline(input: string, options: OutlineCliOptions): Promise<number> {
   const command = 'outline';
-  const source = inferFormatFromExtension(input);
-  if (source === undefined) {
-    process.stderr.write(`[${command}] cannot infer a source format from '${input}'; rename the file with a recognised extension (${KNOWN_DOCUMENT_FORMATS})\n`);
+  const source = resolveSourceFormat(input, options.from);
+  if ('errorMessage' in source) {
+    process.stderr.write(`[${command}] ${source.errorMessage}\n`);
     return EXIT_USAGE_ERROR;
   }
-  const target = OUTLINE_CONVERSION_TARGET[source];
+  const target = OUTLINE_CONVERSION_TARGET[source.format];
 
   const { signal, getAbortReason } = createRuntimeSignal({ timeoutMs: options.timeout });
   const reporter = createDiagnosticReporter({ json: options.json, quiet: options.quiet, command });
@@ -78,10 +97,10 @@ async function runOutline(input: string, options: OutlineCliOptions): Promise<nu
     const inputBytes = await readInput(input, { signal });
     const converter = createLocalDocumentConverter();
     const result = await converter.convert(
-      { source: { format: source, bytes: new Uint8Array(inputBytes) }, targetFormat: target },
+      { source: { format: source.format, bytes: new Uint8Array(inputBytes) }, targetFormat: target },
       {
         signal,
-        // Resolved exactly as buildConversionAction resolves the same option for a live conversion: a markdown source's own non-data: images resolve against the input file's directory rather than degrading to alt text with an unresolved-image diagnostic. Threaded only to the edge that reads it, so wiring it unconditionally is a no-op for every other source format.
+        // Resolved exactly as buildConversionAction resolves the same option for a live conversion: a markdown source's own non-data: images resolve against the input file's directory rather than degrading to alt text with an unresolved-image diagnostic. For stdin the base directory is the current working directory, matching buildConversionAction's own stdin handling -- '-' reaches this line now that resolveSourceFormat above requires --from for it rather than failing before this conversion ever runs.
         images: createFilesystemMarkdownImageResolver(input === '-' ? '.' : dirname(resolve(input))),
       },
     );
@@ -93,7 +112,7 @@ async function runOutline(input: string, options: OutlineCliOptions): Promise<nu
 
     // The port declares `package` optional (a remote adapter is free to report none), while the local converter this command uses populates one on every conversion -- so an absent package is a broken contract, not a document with an empty outline, and fails loudly instead of printing nothing.
     if (result.package === undefined) {
-      throw new Error(`the ${source}-to-${target} conversion produced no intermediate DocumentPackage`);
+      throw new Error(`the ${source.format}-to-${target} conversion produced no intermediate DocumentPackage`);
     }
 
     const outline = buildOutline(result.package);
@@ -123,6 +142,7 @@ export function registerOutlineCommand(program: Command): void {
   command.option('--json', 'emit the outline tree as JSON instead of indented text (diagnostics as NDJSON on stderr)', false);
   addQuietOption(command);
   addVerboseOption(command);
+  command.option('--from <format>', `source format when it cannot be inferred from the input path, e.g. reading from stdin (${KNOWN_DOCUMENT_FORMATS})`);
   command.action(async (input: string, options: OutlineCliOptions) => {
     process.exitCode = await runOutline(input, options);
   });

@@ -383,6 +383,22 @@ describe('dist/cli.js outline: multi-page odg', () => {
   });
 });
 
+describe('dist/cli.js outline: --from and stdin', () => {
+  it('fails with a stdin-specific usage error naming --from, not the file-rename advice meant for a real path', async () => {
+    const { code, stdout, stderr } = await spawnCli(['outline', '-'], { input: buildFixtureDocxBytes() });
+    expect(code).toBe(EXIT_USAGE_ERROR);
+    expect(stdout.length).toBe(0);
+    expect(stderr.toString('utf8')).toContain('cannot infer a source format from stdin; pass --from <format>');
+  });
+
+  it('outlines a document piped in on stdin once --from names its format', async () => {
+    const { code, stdout, stderr } = await spawnCli(['outline', '-', '--from', 'docx'], { input: buildFixtureDocxBytes() });
+    expect(code).toBe(EXIT_SUCCESS);
+    expect(stderr.length).toBe(0);
+    expect(stdout.toString('utf8')).toBe('Hello from the document-cli smoke test\n');
+  });
+});
+
 describe('dist/cli.js tui: non-interactive stdout', () => {
   it('exits with a clear, non-crashing error about needing a TTY, never launching Ink at all', async () => {
     const { code, stdout, stderr } = await spawnCli(['tui']);
