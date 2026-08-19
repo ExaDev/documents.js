@@ -1,0 +1,19 @@
+# workerd (the Cloudflare Workers runtime vitest-pool-workers drives the workers tests through) and esbuild (its bundler) both ship native binaries installed via a postinstall script -- pnpm 11 ignores those by default, so allow them explicitly. ooxml.js intentionally keeps the stricter global minimum-release-age rather than overriding it here, since vitest-pool-workers 0.20.2 resolves age-eligible under the global window.
+allowBuilds:
+  esbuild: true
+  workerd: true
+# minimumReleaseAgeExclude is NOT honoured by `pnpm install --frozen-lockfile` (the mode CI runs): pnpm's own "verify an already-resolved lockfile" pass ignores per-package excludes entirely and re-checks every entry's raw publish age against minimumReleaseAge with no exceptions -- confirmed by direct reproduction against real pnpm versions, and matches multiple open upstream reports (pnpm/pnpm#10361, #9997, #10438). `pnpm add <exact-version>` has its own separate, more permissive "explicit informed consent" path that DOES auto-populate this list and proceed -- which is why a local `pnpm add` can succeed while the exact same dependency then fails CI's `--frozen-lockfile` install moments later, even with the version already listed below. minimumReleaseAge itself (which frozen-lockfile verification DOES respect) is the only lever that unblocks CI for a same-day sibling-package release.
+minimumReleaseAge: 60
+# Bare package names (no @version), per pnpm's own documented syntax (https://pnpm.io/settings#minimumreleaseageexclude -- "webpack" exempts every version, not just one) -- document-schema.js and @exadev/eslint-config are this org's own sibling packages, published only via their own semantic-release CI with npm OIDC trusted publishing, so a version-agnostic exemption is a deliberate, low-risk carry-forward rather than an entry this file needs updating on every single release.
+minimumReleaseAgeExclude:
+  - documents.js
+  - odf.js
+  - document-schema.js
+  - pdf-codec
+  - markdown-codec
+  - byte-codec
+  - '@exadev/eslint-config'
+
+# fast-uri < 3.1.5 is vulnerable to host confusion via a backslash authority introducer (GHSA-hht2-r2mx-9j9m). It's a transitive devDependency (ajv -> @commitlint/config-validator -> commitlint), several layers below anything this repo declares directly, so there is no direct dependency to bump -- only this override forces every resolution of it onto a patched version regardless of what commitlint's own dependency tree asks for.
+overrides:
+  fast-uri: ^3.1.5
