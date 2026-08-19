@@ -95,9 +95,9 @@ export function serialToIsoDateTime(serial: number, date1904: boolean): string |
 //
 // The exact inverses of the three functions above, and what lets typed/xlsx/build.ts write a temporal cell the way every mainstream producer does -- a real numeric serial displayed through a date/time number format -- rather than through ST_CellType's own rare t="d" ISO-8601 variant, which real Excel does not render as a date and which collapses xlsx's three ContentCellValue temporal kinds onto one indistinguishable wire form.
 //
-// Only the 1900 system is inverted: buildXlsxPackage writes no <workbookPr> at all, so every workbook it produces is a 1900-system one (CT_WorkbookPr/@date1904's own schema default is false, which readDate1904 above reads back) -- a 1904 inverse would have no caller to write for.
+// Only the 1900 system is inverted: buildXlsxPackageFromContent writes no <workbookPr> at all, so every workbook it produces is a 1900-system one (CT_WorkbookPr/@date1904's own schema default is false, which readDate1904 above reads back) -- a 1904 inverse would have no caller to write for.
 //
-// Each returns undefined for anything that is not the exact canonical ContentCellValue spelling, and for any spelling that names a moment with no serial (a date before the epoch, an hour past 23, an impossible calendar day). buildXlsxPackage degrades such a cell to a plain text cell carrying the original string verbatim rather than fabricating a serial for it.
+// Each returns undefined for anything that is not the exact canonical ContentCellValue spelling, and for any spelling that names a moment with no serial (a date before the epoch, an hour past 23, an impossible calendar day). buildXlsxPackageFromContent degrades such a cell to a plain text cell carrying the original string verbatim rather than fabricating a serial for it.
 
 const ISO_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 const ISO_TIME_PATTERN = /^(\d{2}):(\d{2}):(\d{2})$/;

@@ -6,10 +6,10 @@ import type { XmlNode } from '../../model/node';
 import { el, txt } from '../../xml/fragment';
 import { decodePackage, encodePackage } from '../../codec';
 import { elementsWithTag, rootElement } from '../util';
-import { readDocx } from './read';
-import { buildDocxPackage } from './write';
+import { readDocxContent } from './read';
+import { buildDocxPackageFromContent } from './write';
 
-// The round trip these tests actually assert: a docx read into sections, written back out through buildDocxPackage, and read again must produce the identical sections. Every fixture below is a real word/document.xml body, so the assertion is over the whole pair rather than over the writer's XML in isolation -- what the writer emits only matters inasmuch as readDocx reads the same model back out of it.
+// The round trip these tests actually assert: a docx read into sections, written back out through buildDocxPackageFromContent, and read again must produce the identical sections. Every fixture below is a real word/document.xml body, so the assertion is over the whole pair rather than over the writer's XML in isolation -- what the writer emits only matters inasmuch as readDocxContent reads the same model back out of it.
 
 const TINY_PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 const HYPERLINK_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink';
@@ -27,9 +27,9 @@ function para(text: string, ...extra: XmlNode[]): XmlNode {
 
 // Read, write, read: the second read's sections are what every assertion compares against the first's.
 function roundTrip(source: Package): { before: ContentSection[]; after: ContentSection[]; written: Package } {
-  const before = readDocx(source);
-  const written = buildDocxPackage(before);
-  return { before: before.sections, after: readDocx(written).sections, written };
+  const before = readDocxContent(source);
+  const written = buildDocxPackageFromContent(before);
+  return { before: before.sections, after: readDocxContent(written).sections, written };
 }
 
 function expectStableRoundTrip(source: Package): ContentSection[] {
@@ -38,12 +38,12 @@ function expectStableRoundTrip(source: Package): ContentSection[] {
   return after;
 }
 
-describe('buildDocxPackage: package scaffolding', () => {
+describe('buildDocxPackageFromContent: package scaffolding', () => {
   it('writes a package that re-zips and decodes back to the same parts', () => {
-    const pkg = buildDocxPackage(readDocx(docxPackage([para('hello')])));
+    const pkg = buildDocxPackageFromContent(readDocxContent(docxPackage([para('hello')])));
     const reDecoded = decodePackage(encodePackage(pkg));
     expect(Object.keys(reDecoded.parts).sort()).toEqual(Object.keys(pkg.parts).sort());
-    expect(readDocx(reDecoded).sections).toEqual(readDocx(pkg).sections);
+    expect(readDocxContent(reDecoded).sections).toEqual(readDocxContent(pkg).sections);
   });
 
   it('declares every part it writes in [Content_Types].xml, including the media default for an embedded image', () => {
@@ -58,7 +58,7 @@ describe('buildDocxPackage: package scaffolding', () => {
       'word/_rels/document.xml.rels': { kind: 'xml', nodes: [el('Relationships', {}, [el('Relationship', { Id: 'rIdImg', Type: IMAGE_REL, Target: 'media/image1.png' })])] },
       'word/media/image1.png': { kind: 'binary', base64: TINY_PNG_BASE64 },
     });
-    const written = buildDocxPackage(readDocx(source));
+    const written = buildDocxPackageFromContent(readDocxContent(source));
     expect(written.parts['word/media/image1.png']).toEqual({ kind: 'binary', base64: TINY_PNG_BASE64 });
     const types = rootElement(written.parts['[Content_Types].xml']);
     const declared = elementsWithTag(types === undefined ? [] : [types], 'Default').map((element) => element.attributes.find((a) => a.name === 'Extension')?.value);
@@ -75,23 +75,23 @@ describe('buildDocxPackage: package scaffolding', () => {
     ]);
     const app = el('Properties', {}, [el('Application', {}, [txt('ooxml.js')])]);
     const source = docxPackage([para('body')], { 'docProps/core.xml': { kind: 'xml', nodes: [core] }, 'docProps/app.xml': { kind: 'xml', nodes: [app] } });
-    const before = readDocx(source);
-    expect(readDocx(buildDocxPackage(before)).metadata).toEqual(before.metadata);
+    const before = readDocxContent(source);
+    expect(readDocxContent(buildDocxPackageFromContent(before)).metadata).toEqual(before.metadata);
   });
 
   it('writes an empty document for a content value carrying no sections at all', () => {
-    const sections = readDocx(buildDocxPackage({ sections: [] })).sections;
+    const sections = readDocxContent(buildDocxPackageFromContent({ sections: [] })).sections;
     expect(sections).toHaveLength(1);
     expect(sections[0]?.blocks).toEqual([]);
   });
 
   it('refuses a block list whose construct markers do not balance rather than writing a document that cannot be read back', () => {
     const blocks: ContentBlock[] = [{ kind: 'constructStart', descriptor: { kind: 'anchor', anchorType: 'bookmark', name: 'unclosed' } }, { kind: 'paragraph', runs: [{ text: 'x' }] }];
-    expect(() => buildDocxPackage({ sections: [{ pageSize: { widthPt: 612, heightPt: 792 }, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 }, blocks }] })).toThrow(/unclosedStart/);
+    expect(() => buildDocxPackageFromContent({ sections: [{ pageSize: { widthPt: 612, heightPt: 792 }, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 }, blocks }] })).toThrow(/unclosedStart/);
   });
 });
 
-describe('buildDocxPackage: content round trip', () => {
+describe('buildDocxPackageFromContent: content round trip', () => {
   it('round-trips paragraph properties, run formatting, headings, lists, and page breaks', () => {
     const styled = el('w:p', {}, [
       el('w:pPr', {}, [
@@ -121,9 +121,9 @@ describe('buildDocxPackage: content round trip', () => {
         el('w:bookmarkEnd', { 'w:id': '3' }),
       ]),
     ]);
-    const before = readDocx(source);
+    const before = readDocxContent(source);
     expect(before.sections[0]?.blocks.map((block) => block.kind)).toEqual(['paragraph', 'pageBreak', 'constructStart', 'paragraph', 'constructEnd']);
-    const after = readDocx(buildDocxPackage(before)).sections[0]?.blocks ?? [];
+    const after = readDocxContent(buildDocxPackageFromContent(before)).sections[0]?.blocks ?? [];
     expect(findConstructMarkerImbalance(after)).toBeUndefined();
     const paragraphs = after.flatMap((block) => (block.kind === 'paragraph' ? [block] : []));
     // No spurious paragraph gained on the way out, and "Chapter 1" is not displaced to the end of the flow.
@@ -133,15 +133,15 @@ describe('buildDocxPackage: content round trip', () => {
     expect(kinds.indexOf('pageBreak')).toBeLessThan(kinds.lastIndexOf('paragraph'));
   });
 
-  // A ContentDocument from another codec (markdown-codec, odf.js, pdf-codec) can hand this writer a page break directly followed by a table, a shape readDocx itself never produces but buildDocxPackage still has to honour: WordprocessingML has no page-break element for a table to carry, so the break becomes its own empty paragraph immediately before the table, not displaced after it.
+  // A ContentDocument from another codec (markdown-codec, odf.js, pdf-codec) can hand this writer a page break directly followed by a table, a shape readDocxContent itself never produces but buildDocxPackageFromContent still has to honour: WordprocessingML has no page-break element for a table to carry, so the break becomes its own empty paragraph immediately before the table, not displaced after it.
   it('keeps a page break immediately before a table rather than displacing it after the table', () => {
     const blocks: ContentBlock[] = [
       { kind: 'paragraph', runs: [{ text: 'before' }] },
       { kind: 'pageBreak' },
       { kind: 'table', columnWidthsPt: [72], rows: [{ cells: [{ blocks: [{ kind: 'paragraph', runs: [{ text: 'cell' }] }] }] }] },
     ];
-    const written = buildDocxPackage({ sections: [{ pageSize: { widthPt: 612, heightPt: 792 }, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 }, blocks }] });
-    const after = readDocx(written).sections[0]?.blocks ?? [];
+    const written = buildDocxPackageFromContent({ sections: [{ pageSize: { widthPt: 612, heightPt: 792 }, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 }, blocks }] });
+    const after = readDocxContent(written).sections[0]?.blocks ?? [];
     const kinds = after.map((block) => block.kind);
     expect(kinds.indexOf('pageBreak')).toBeGreaterThan(-1);
     expect(kinds.indexOf('pageBreak')).toBeLessThan(kinds.indexOf('table'));
@@ -224,7 +224,7 @@ describe('buildDocxPackage: content round trip', () => {
   });
 });
 
-describe('buildDocxPackage: construct round trip', () => {
+describe('buildDocxPackageFromContent: construct round trip', () => {
   it('round-trips a content control with its type, tag, alias, lock, and options', () => {
     const sdt = el('w:sdt', {}, [
       el('w:sdtPr', {}, [el('w:alias', { 'w:val': 'Status' }), el('w:tag', { 'w:val': 'status' }), el('w:lock', { 'w:val': 'sdtLocked' }), el('w:dropDownList', {}, [el('w:listItem', { 'w:displayText': 'Draft' }), el('w:listItem', { 'w:displayText': 'Final' })])]),
@@ -272,7 +272,7 @@ describe('buildDocxPackage: construct round trip', () => {
       { kind: 'paragraph', runs: [{ text: 'anonymous' }] },
       { kind: 'constructEnd' },
     ];
-    const written = buildDocxPackage({ sections: [{ pageSize: { widthPt: 612, heightPt: 792 }, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 }, blocks }] });
+    const written = buildDocxPackageFromContent({ sections: [{ pageSize: { widthPt: 612, heightPt: 792 }, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 }, blocks }] });
     const document = rootElement(written.parts['word/document.xml']);
     const insEls = elementsWithTag(document === undefined ? [] : [document], 'w:ins');
     expect(insEls.length).toBeGreaterThan(0);
@@ -290,11 +290,11 @@ describe('buildDocxPackage: construct round trip', () => {
       { kind: 'constructEnd' },
       { kind: 'constructEnd' },
     ];
-    const written = buildDocxPackage({ sections: [{ pageSize: { widthPt: 612, heightPt: 792 }, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 }, blocks }] });
+    const written = buildDocxPackageFromContent({ sections: [{ pageSize: { widthPt: 612, heightPt: 792 }, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 }, blocks }] });
     const document = rootElement(written.parts['word/document.xml']);
     const body = document === undefined ? undefined : document.children[0];
     expect(body?.type === 'element' ? body.children.map((child) => (child.type === 'element' ? child.tag : child.type)) : undefined).toEqual(['w:bookmarkStart', 'w:p', 'w:bookmarkEnd', 'w:sectPr']);
-    const descriptors = readDocx(written).sections[0]?.blocks.flatMap((block) => (block.kind === 'constructStart' ? [block.descriptor] : [])) ?? [];
+    const descriptors = readDocxContent(written).sections[0]?.blocks.flatMap((block) => (block.kind === 'constructStart' ? [block.descriptor] : [])) ?? [];
     expect(descriptors).toContainEqual({ kind: 'anchor', anchorType: 'bookmark', name: 'intro' });
     expect(descriptors).toContainEqual({ kind: 'provenance', change: 'insertion', author: 'Ada' });
   });
@@ -352,7 +352,7 @@ describe('buildDocxPackage: construct round trip', () => {
     expect(start?.kind === 'constructStart' ? start.descriptor : undefined).toEqual({ kind: 'field', instruction: ' PAGE ' });
   });
 
-  // The kinds readDocx never produces, which a ContentDocument from another codec still can. Each writes its content and drops only the descriptor, since WordprocessingML has no block-level element for any of them -- what must never happen is an element written where it does not parse.
+  // The kinds readDocxContent never produces, which a ContentDocument from another codec still can. Each writes its content and drops only the descriptor, since WordprocessingML has no block-level element for any of them -- what must never happen is an element written where it does not parse.
   it.each([
     ['a block-scoped link', { kind: 'link', target: { kind: 'external', uri: 'https://example.com' } }],
     ['a named division', { kind: 'division', name: 'part-one' }],
@@ -360,8 +360,8 @@ describe('buildDocxPackage: construct round trip', () => {
     ['a footnote anchor', { kind: 'anchor', anchorType: 'footnote', name: '1' }],
   ] satisfies [string, ConstructDescriptor][])('writes %s as its own content, with no wrapper element and no lost paragraph', (_label, descriptor) => {
     const blocks: ContentBlock[] = [{ kind: 'constructStart', descriptor }, { kind: 'paragraph', runs: [{ text: 'inside' }] }, { kind: 'constructEnd' }];
-    const written = buildDocxPackage({ sections: [{ pageSize: { widthPt: 612, heightPt: 792 }, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 }, blocks }] });
-    const roundTripped = readDocx(written).sections[0]?.blocks ?? [];
+    const written = buildDocxPackageFromContent({ sections: [{ pageSize: { widthPt: 612, heightPt: 792 }, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 }, blocks }] });
+    const roundTripped = readDocxContent(written).sections[0]?.blocks ?? [];
     expect(roundTripped.map((block) => block.kind)).toEqual(['paragraph']);
     const paragraph = roundTripped[0];
     expect(paragraph?.kind === 'paragraph' ? paragraph.runs[0]?.text : undefined).toBe('inside');

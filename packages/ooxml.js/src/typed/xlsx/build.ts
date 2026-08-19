@@ -23,6 +23,8 @@ import { ptToColumnWidthChars } from './units';
 import { pageSizeToPaperSizeCode, ptToUniversalMeasure, writeXmlBool } from './util';
 
 // ContentDocument (kind: 'spreadsheet') -> Package: the first genuinely NEW xlsx package this ecosystem writes from scratch, rather than decoding/re-encoding an existing one -- every part below is constructed directly via xml/fragment.ts's el/txt, matching typed/xlsx/content.ts's own readXlsxContent as its read-side inverse: writing everything that reader reads, through the same number-format vocabulary that reader classifies (see renderCellValue and typed/xlsx/number-format.ts's own write-side section), and honestly re-approximating the one lossy conversion left on the way in (column-width characters). The single exception is cell comments: the reader reads them (typed/xlsx/comments.ts) but this writer emits no comments or threaded-comments part, so ContentSheetCell.comment does not survive a round trip through this pair. See typed/xlsx/content.test.ts and typed/xlsx/build.test.ts for the real-LibreOffice round-trip verification this pairing is built and tested against.
+//
+// This is the flat, content-level half of the xlsx write pair: buildXlsxPackage (typed/document-package.ts) is the primary name, flattening a tree-form DocumentPackage (styles-table refs materialised away) and handing the result straight to this function.
 
 const SML_NS = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
 const REL_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
@@ -536,9 +538,9 @@ function buildWorksheetPart(sheet: ContentSheet, sharedStrings: SharedStringTabl
 
 // --- entry point -----------------------------------------------------------------------------------------------
 
-export function buildXlsxPackage(document: ContentDocument): Package {
+export function buildXlsxPackageFromContent(document: ContentDocument): Package {
   if (document.kind !== 'spreadsheet') {
-    throw new Error(`buildXlsxPackage: expected a ContentDocument of kind "spreadsheet", got "${document.kind}"`);
+    throw new Error(`buildXlsxPackageFromContent: expected a ContentDocument of kind "spreadsheet", got "${document.kind}"`);
   }
 
   const sheets = document.sheets;

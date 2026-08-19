@@ -59,7 +59,7 @@ export {
 } from './compact';
 export type { CompactPackage, CompactPart, CompactXmlNode, CompactAttrPairs } from './compact';
 
-// --- The shared content model: one block model (paragraphs, tables, images, page breaks) underlying both readDocx's sections and readPptx's slides, plus the geometry/colour/unit primitives it's expressed in. Sourced from document-schema.js, the sibling package that also backs documents.js's own PDF-side pivot -- these re-exports keep ooxml.js's own public API surface unchanged even though the definitions no longer live in this package. ---
+// --- The shared content model: one block model (paragraphs, tables, images, page breaks) underlying both readDocxContent's sections and readPptxContent's slides, plus the geometry/colour/unit primitives it's expressed in. Sourced from document-schema.js, the sibling package that also backs documents.js's own PDF-side pivot -- these re-exports keep ooxml.js's own public API surface unchanged even though the definitions no longer live in this package. ---
 export {
   BoxSchema,
   MarginsSchema,
@@ -101,7 +101,7 @@ export {
   ContentSheetPrintSettingsSchema,
 } from 'document-schema.js';
 
-// --- The fidelity construct vocabulary: the descriptor kinds a construct carries, and the flat form's constructStart/constructEnd marker pair that brackets the blocks one spans. readDocx produces these markers for every block-scoped docx construct (see typed/docx/constructs.ts) and buildDocxPackage writes them back, so they belong on this package's own surface alongside the block model they sit in. findConstructMarkerImbalance is document-schema.js's single shared definition of the bracket-matching contract, re-exported so a consumer validates a block list against the same check both halves of this package do. ---
+// --- The fidelity construct vocabulary: the descriptor kinds a construct carries, and the flat form's constructStart/constructEnd marker pair that brackets the blocks one spans. readDocxContent produces these markers for every block-scoped docx construct (see typed/docx/constructs.ts) and buildDocxPackageFromContent writes them back, so they belong on this package's own surface alongside the block model they sit in. findConstructMarkerImbalance is document-schema.js's single shared definition of the bracket-matching contract, re-exported so a consumer validates a block list against the same check both halves of this package do. ---
 export {
   ConstructDescriptorSchema,
   ContentControlDescriptorSchema,
@@ -171,6 +171,71 @@ export type {
   ContentSheetPrintSettings,
 } from 'document-schema.js';
 
+// --- The DocumentPackage tree: the shape readDocx/readPptx/readXlsx return and buildDocxPackage/buildXlsxPackage accept, plus the node vocabulary a caller walks it with (one group per top-level container, headings and lists nested, constructs promoted to the region they span) and the four transforms between it and the flat ContentDocument. Sourced from document-schema.js and re-exported here for the same reason the content model above is: a caller of this package's own readers should be able to name, validate, and traverse what those readers hand back without taking a second dependency to do it. assemblePackage is what every reader here calls (decompose then the styles-minting pass); flattenPackage is what every writer here calls; decompose and factorStyles are for a caller composing its own boundary. ---
+export {
+  DocumentPackageSchema,
+  SectionGroupSchema,
+  SlideGroupSchema,
+  SheetGroupSchema,
+  DrawPageGroupSchema,
+  ShapeGroupSchema,
+  HeadingGroupSchema,
+  ListGroupSchema,
+  SectionConstructGroupSchema,
+  ShapeConstructGroupSchema,
+  PackageGroupSchema,
+  PackageLeafSchema,
+  PackageNodeSchema,
+  PackageBlockLeafSchema,
+  isSectionGroupNode,
+  isSlideGroupNode,
+  isSheetGroupNode,
+  isDrawPageGroupNode,
+  isShapeGroupNode,
+  isHeadingGroupNode,
+  isListGroupNode,
+  isSectionConstructGroupNode,
+  isShapeConstructGroupNode,
+  isPackageGroup,
+  isPackageLeaf,
+  isPackageNode,
+  isPackageBlockLeaf,
+  assemblePackage,
+  factorStyles,
+  decompose,
+  flattenPackage,
+  ConstructMarkerImbalanceError,
+} from 'document-schema.js';
+export type {
+  DocumentPackage,
+  PackageChildren,
+  SectionGroupNode,
+  SlideGroupNode,
+  SheetGroupNode,
+  DrawPageGroupNode,
+  ShapeGroupNode,
+  HeadingGroupNode,
+  ListGroupNode,
+  SectionConstructGroupNode,
+  ShapeConstructGroupNode,
+  PackageGroup,
+  PackageLeaf,
+  PackageNode,
+  PackageBlockLeaf,
+  SectionChild,
+  ShapeChild,
+  ListChild,
+  SheetChild,
+  DrawPageChild,
+  SectionDescriptor,
+  SlideDescriptor,
+  SheetDescriptor,
+  DrawPageDescriptor,
+  ShapeDescriptor,
+  HeadingParagraph,
+  ListParagraph,
+} from 'document-schema.js';
+
 export { applyColorTransforms } from './typed/shared/color';
 export type { ColorTransform } from './typed/shared/color';
 
@@ -180,24 +245,28 @@ export type { DocumentMetadata } from './typed/shared/metadata';
 export { sniffImageFormat } from './image/sniff';
 export type { ImageFormat } from './image/sniff';
 
-// --- docx: a WordprocessingML reader resolving the full style cascade (docDefaults -> named-style basedOn chains -> paragraph-mark run properties -> character styles -> direct formatting) and DrawingML theme references (including w:themeColor run colours) into ordered sections of paragraphs/tables/page-breaks, with every block-scoped fidelity construct (structured document tags, fields, bookmarks, tracked changes) bracketed by construct-boundary markers -- paired with buildDocxPackage, its write-side inverse over those same sections. ---
-export { readDocx, CommentSchema, DocxDocumentSchema, FootnoteSchema } from './typed/docx/read';
+// --- The DocumentPackage-native surface: one reader per format producing document-schema.js's tree-form DocumentPackage, one writer per format consuming it. These carry the primary names because the tree is what a caller holding a whole document wants; each wraps the flat, content-level function of the same format (readDocxContent/readPptxContent/readXlsxContent, buildDocxPackageFromContent/buildXlsxPackageFromContent, all still exported below) through assemblePackage on the way out and flattenPackage on the way in. See typed/document-package.ts for why every reader mints styles rather than calling bare decompose, and for what a docx's comments/footnotes/headers/footers/numbering do instead of riding the tree. ---
+export { readDocx, buildDocxPackage, readPptx, readXlsx, buildXlsxPackage } from './typed/document-package';
+
+// --- docx: a WordprocessingML reader resolving the full style cascade (docDefaults -> named-style basedOn chains -> paragraph-mark run properties -> character styles -> direct formatting) and DrawingML theme references (including w:themeColor run colours) into ordered sections of paragraphs/tables/page-breaks, with every block-scoped fidelity construct (structured document tags, fields, bookmarks, tracked changes) bracketed by construct-boundary markers -- paired with buildDocxPackageFromContent, its write-side inverse over those same sections. This is the flat pair readDocx/buildDocxPackage above wrap, exported in its own right: DocxDocument's comments, footnotes, headers, footers, and numbering definitions have no ContentDocument spelling and therefore no tree spelling, so readDocxContent is the only reader in this package that returns them at all. ---
+export { readDocxContent, CommentSchema, DocxDocumentSchema, FootnoteSchema } from './typed/docx/read';
 export type { Comment, DocxDocument, Footnote } from './typed/docx/read';
-export { buildDocxPackage } from './typed/docx/write';
+export { buildDocxPackageFromContent } from './typed/docx/write';
 export type { DocxContent } from './typed/docx/write';
 
 // word/numbering.xml's own abstractNum/num level definitions (glyph format, start-at value, restart rule) -- a companion to, not a replacement for, ContentListMembership's existing per-paragraph numId/level tracking. See numbering.ts's own doc comment for why this is a separate keyed structure rather than a ContentListMembership field.
 export { NumberingDefinitionSchema, NumberingLevelSchema, readNumberingDefinitions } from './typed/docx/numbering';
 export type { NumberingDefinition, NumberingDefinitions, NumberingLevel } from './typed/docx/numbering';
 
-// --- pptx: a PresentationML reader resolving the placeholder -> layout -> master -> theme inheritance cascade and DrawingML geometry into slides of positioned, styled shapes. ---
-export { readPptx, PptxDocumentSchema } from './typed/pptx/read';
+// --- pptx: a PresentationML reader resolving the placeholder -> layout -> master -> theme inheritance cascade and DrawingML geometry into slides of positioned, styled shapes. The flat half of readPptx above; read-only either way, since this package has no PresentationML writer. ---
+export { readPptxContent, PptxDocumentSchema } from './typed/pptx/read';
 export type { PptxDocument } from './typed/pptx/read';
 
-export { readXlsx, XlsxWorkbookSchema, XlsxSheetSchema, XlsxCellSchema, DefinedNameSchema } from './typed/xlsx';
+// The lossy, cell-values-only xlsx reading view (sheet names, cell references, resolved values, formulas, merged ranges, defined names -- no formats, styles, geometry, or charts), with no write side and no ContentDocument shape. It held the name readXlsx until that name went to the package-native reader above; readXlsxWorkbook says what it returns, exactly as readXlsxContent beside it does.
+export { readXlsxWorkbook, XlsxWorkbookSchema, XlsxSheetSchema, XlsxCellSchema, DefinedNameSchema } from './typed/xlsx';
 export type { XlsxWorkbook, XlsxSheet, XlsxCell, DefinedName } from './typed/xlsx';
 
-// --- xlsx (rich): a geometry- and print-settings-rich SpreadsheetML reader/writer pair around ContentDocument (kind: 'spreadsheet') -- column widths, row heights, hidden rows/columns, merged ranges, every cell value kind xlsx itself distinguishes, cell comments (legacy notes and [MS-XLSX] threads), and print settings (page size/margins/scale/fit-to-page/repeat rows-columns/gridlines/headers/page order/manual breaks). readXlsxContent matches readOds's own established bar in the sibling odf.js package; buildXlsxPackage is this package's first writer of genuinely new xlsx content, the read side's honest inverse (comments excepted: the reader reads them, the writer emits no comment part, so they do not survive this pair). Distinct from readXlsx above (XlsxWorkbook, a lossy one-way cell-values-only projection with no write side) -- both stay exported since they serve different callers. ---
+// --- xlsx (rich): a geometry- and print-settings-rich SpreadsheetML reader/writer pair around ContentDocument (kind: 'spreadsheet') -- column widths, row heights, hidden rows/columns, merged ranges, every cell value kind xlsx itself distinguishes, cell comments (legacy notes and [MS-XLSX] threads), and print settings (page size/margins/scale/fit-to-page/repeat rows-columns/gridlines/headers/page order/manual breaks). readXlsxContent matches readOds's own established bar in the sibling odf.js package; buildXlsxPackageFromContent is this package's first writer of genuinely new xlsx content, the read side's honest inverse (comments excepted: the reader reads them, the writer emits no comment part, so they do not survive this pair). Distinct from readXlsxWorkbook above (XlsxWorkbook, a lossy one-way cell-values-only projection with no write side) -- both stay exported since they serve different callers. ---
 export { readXlsxContent } from './typed/xlsx/content';
-export { buildXlsxPackage } from './typed/xlsx/build';
+export { buildXlsxPackageFromContent } from './typed/xlsx/build';
 

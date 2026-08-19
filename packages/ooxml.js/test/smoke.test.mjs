@@ -13,8 +13,16 @@ const FUNCTIONS = [
   'readDocx',
   'readPptx',
   'readXlsx',
-  'readXlsxContent',
+  'buildDocxPackage',
   'buildXlsxPackage',
+  'readDocxContent',
+  'readPptxContent',
+  'readXlsxWorkbook',
+  'readXlsxContent',
+  'buildDocxPackageFromContent',
+  'buildXlsxPackageFromContent',
+  'assemblePackage',
+  'flattenPackage',
   'toCompact',
   'fromCompact',
   'decodeCompactPackage',
@@ -61,11 +69,17 @@ describe.each([
     expect(api.decodePackage(api.encodePackage(pkg1))).toEqual(pkg1);
   });
 
-  it('readDocx extracts decoded entity text', () => {
-    const doc = api.readDocx(pkg1);
+  it('readDocxContent extracts decoded entity text', () => {
+    const doc = api.readDocxContent(pkg1);
     const firstBlock = doc.sections[0]?.blocks[0];
     expect(firstBlock?.kind).toBe('paragraph');
     expect(firstBlock?.kind === 'paragraph' ? firstBlock.runs[0]?.text : undefined).toBe('Smoke & test');
+  });
+
+  it('readDocx returns the tree-form DocumentPackage, and buildDocxPackage writes it back', () => {
+    const document = api.readDocx(pkg1);
+    expect(document.kind).toBe('wordprocessing');
+    expect(api.readDocx(api.decodePackage(api.encodePackage(api.buildDocxPackage(document))))).toEqual(document);
   });
 
   it('the Package <-> CompactPackage codec round-trips', () => {

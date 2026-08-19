@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { decodePackage, zipPackage } from '../index';
-import { readXlsx } from './xlsx';
+import { readXlsxWorkbook } from './xlsx';
 
 function enc(s: string): Uint8Array<ArrayBuffer> {
   return new TextEncoder().encode(s);
@@ -41,10 +41,10 @@ function xlsxParts(): Record<string, Uint8Array<ArrayBuffer>> {
   };
 }
 
-describe('readXlsx', () => {
+describe('readXlsxWorkbook', () => {
   it('projects cell values, resolving shared strings and the sheet name via the workbook rels', () => {
     const pkg = decodePackage(zipPackage(xlsxParts()));
-    const workbook = readXlsx(pkg);
+    const workbook = readXlsxWorkbook(pkg);
     expect(workbook.sheets).toHaveLength(1);
     expect(workbook.sheets[0]?.name).toBe('Sheet1');
     expect(workbook.sheets[0]?.cells).toEqual([
@@ -55,7 +55,7 @@ describe('readXlsx', () => {
 
   it('returns an empty workbook when there are no worksheet parts', () => {
     const pkg = decodePackage(zipPackage({ '[Content_Types].xml': CONTENT_TYPES, '_rels/.rels': ROOT_RELS }));
-    expect(readXlsx(pkg)).toEqual({ sheets: [], definedNames: [] });
+    expect(readXlsxWorkbook(pkg)).toEqual({ sheets: [], definedNames: [] });
   });
 
   it('falls back to the filename-derived Sheet<number> name when the workbook correlation is absent', () => {
@@ -68,7 +68,7 @@ describe('readXlsx', () => {
         'xl/worksheets/sheet1.xml': SHEET1,
       }),
     );
-    const sheet = readXlsx(pkg).sheets[0];
+    const sheet = readXlsxWorkbook(pkg).sheets[0];
     expect(sheet?.name).toBe('Sheet1');
     expect(sheet?.cells).toEqual([
       { reference: 'A1', value: 'Hello' },
@@ -93,7 +93,7 @@ describe('readXlsx', () => {
         'xl/worksheets/sheet1.xml': sheet1Xml,
       }),
     );
-    const workbook = readXlsx(pkg);
+    const workbook = readXlsxWorkbook(pkg);
     expect(workbook.sheets).toHaveLength(1);
     expect(workbook.sheets[0]?.name).toBe('Sheet1');
     expect(workbook.sheets[0]?.cells).toEqual([
@@ -105,10 +105,10 @@ describe('readXlsx', () => {
 
   it('omits the formula field on cells without an <f> child and reports empty merged ranges / defined names when absent', () => {
     const pkg = decodePackage(zipPackage(xlsxParts()));
-    const sheet = readXlsx(pkg).sheets[0];
+    const sheet = readXlsxWorkbook(pkg).sheets[0];
     // Cells in SHEET1 have no <f> children, so none carry a formula field.
     expect(sheet?.cells.every((cell) => !('formula' in cell))).toBe(true);
     expect(sheet?.mergedRanges).toEqual([]);
-    expect(readXlsx(pkg).definedNames).toEqual([]);
+    expect(readXlsxWorkbook(pkg).definedNames).toEqual([]);
   });
 });

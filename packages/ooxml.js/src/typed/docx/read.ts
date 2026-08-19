@@ -31,6 +31,8 @@ import {
 
 // Package -> DocxDocument. Walks word/document.xml directly, resolving the full style cascade (docDefaults -> named-style basedOn chains -> paragraph-mark run properties -> character styles -> direct formatting) and DrawingML theme references for each run, so document order, styling, and geometry are all preserved -- unlike a naive reader that flattens paragraphs/tables into separate arrays with no shared ordering. Headers/footers keep their prior flat-text projection; live PAGE/NUMPAGES field substitution is not implemented -- fields resolve to their cached result text (Word already computed it), which is correct for every field except one whose value would change under a different pagination this reader doesn't perform. Ported from documents.js's src/ooxml/docx/read.ts (the section/style-cascade walk) merged with this package's own prior comment/footnote/header/footer reading.
 //
+// This is the flat, content-level half of the docx read pair: readDocx (typed/document-package.ts) wraps it into a tree-form DocumentPackage, which is the primary name and the shape a caller holding a whole document wants. Reach for this one when you need what the tree has no spelling for -- the comments, footnotes, header/footer text, and numbering definitions DocxDocument carries outside `sections` -- or when driving a pipeline that already works in flat ContentSection[].
+//
 // Block-scoped fidelity constructs (structured document tags, complex and simple fields, bookmarks, tracked insertions/deletions/moves) are read into document-schema.js's constructStart/constructEnd marker pairs bracketing the blocks they span -- see typed/docx/constructs.ts for the descriptor shapes and the block-scope rule that decides which real-world occurrences are representable and which are not.
 
 export const CommentSchema = z.object({
@@ -794,14 +796,14 @@ function readHeaderFooterText(pkg: Package, prefix: string): string[] {
 // Resolves a generic OOXML Package into DocxDocument: the WordprocessingML style cascade, DrawingML theme resolution (including w:themeColor run-colour references, resolved against the theme's own colour scheme), ordered sections of paragraphs/tables/page-breaks/images (document order preserved, including inside tables, with cell background AND border styling read from w:tcBorders), the block-scoped fidelity constructs (structured document tags, fields, bookmarks, tracked changes) as constructStart/constructEnd marker pairs, plus comments, footnotes, header/footer text, and word/numbering.xml's own abstractNum/num level definitions (numbering.ts's readNumberingDefinitions). An inline (wp:inline) or floating/anchored (wp:anchor) w:drawing is resolved to a real ContentImageBlock via the containing part's own relationships, sniffed from its actual media-part bytes rather than trusted from any extension/content-type -- but a floating image's own wp:anchor position (page/margin/paragraph-relative offset) is never read, since ContentImageBlock has no absolute positioning field to record it in; it lands in the block flow at the point its w:drawing was encountered, same as an inline image.
 //
 // Information not modelled here is still dropped: section break types other than plain w:sectPr (ContentSection itself has no field to record w:type's nextPage/continuous/evenPage/oddPage distinction); live PAGE/NUMPAGES field re-evaluation; w:themeShade/w:themeTint refinement of a resolved theme colour; a floating image's own anchored position; any image whose bytes don't sniff as PNG/JPEG; and every run-level construct occurrence -- a field, bookmark, content control, or tracked change covering a sub-sequence of one paragraph's runs rather than whole blocks (see typed/docx/constructs.ts for why, and typed/docx/write.ts for the write side of what does survive).
-export function readDocx(pkg: Package): DocxDocument {
+export function readDocxContent(pkg: Package): DocxDocument {
   const documentRoot = rootElement(pkg.parts[DOCUMENT_PART_PATH]);
   if (documentRoot === undefined) {
-    throw new Error(`readDocx: package has no ${DOCUMENT_PART_PATH} part`);
+    throw new Error(`readDocxContent: package has no ${DOCUMENT_PART_PATH} part`);
   }
   const body = childrenWithTag(documentRoot, 'w:body')[0];
   if (body === undefined) {
-    throw new Error(`readDocx: ${DOCUMENT_PART_PATH} has no w:body element`);
+    throw new Error(`readDocxContent: ${DOCUMENT_PART_PATH} has no w:body element`);
   }
 
   const docRels = resolveRelationships(pkg, DOCUMENT_PART_PATH);

@@ -1,7 +1,7 @@
 import type { Package } from '../../model/package';
 import { childrenWithTag, elementsWithTag, rootElement, textContent } from '../util';
 
-// Shared strings: each <si> holds one or more <t> runs (plain text, or rich-text runs nested in <r>); their text concatenates into the indexed string value. Shared verbatim between the lossy xlsx.ts's readXlsx and this directory's own richer readXlsxContent -- both need the identical shared-string table, just consumed differently, so this lives as one function rather than two near-identical copies.
+// Shared strings: each <si> holds one or more <t> runs (plain text, or rich-text runs nested in <r>); their text concatenates into the indexed string value. Shared verbatim between the lossy xlsx.ts's readXlsxWorkbook and this directory's own richer readXlsxContent -- both need the identical shared-string table, just consumed differently, so this lives as one function rather than two near-identical copies.
 export function loadSharedStrings(pkg: Package): string[] {
   const root = rootElement(pkg.parts['xl/sharedStrings.xml']);
   if (root === undefined) {

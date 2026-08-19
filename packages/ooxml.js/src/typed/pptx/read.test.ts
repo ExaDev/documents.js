@@ -4,9 +4,9 @@ import { describe, expect, it } from 'vitest';
 import type { ContentBlock, ContentImageBlock, ContentParagraph, ContentTable } from 'document-schema.js';
 import { el, txt } from '../../xml/fragment';
 import { bytesToBase64 } from '../../util/base64';
-import { PptxDocumentSchema, readPptx } from './read';
+import { PptxDocumentSchema, readPptxContent } from './read';
 
-// Ported from documents.js's src/ooxml/pptx/read.test.ts, adapted to readPptx's own PptxDocument shape (no wrapping ContentDocument discriminant) and dropping the dependency on documents.js's own PNG encoder (out of this port's scope): sniffImageFormat only inspects magic bytes, so a bare PNG-signature-prefixed byte array stands in for a real encoded PNG here.
+// Ported from documents.js's src/ooxml/pptx/read.test.ts, adapted to readPptxContent's own PptxDocument shape (no wrapping ContentDocument discriminant) and dropping the dependency on documents.js's own PNG encoder (out of this port's scope): sniffImageFormat only inspects magic bytes, so a bare PNG-signature-prefixed byte array stands in for a real encoded PNG here.
 
 function asParagraph(block: ContentBlock | undefined): ContentParagraph {
   if (block?.kind !== 'paragraph') {
@@ -207,34 +207,34 @@ function buildFixturePackage(): Package {
   };
 }
 
-describe('readPptx: slide size and order', () => {
+describe('readPptxContent: slide size and order', () => {
   it('reads slide size from p:sldSz', () => {
-    const doc = readPptx(buildFixturePackage());
+    const doc = readPptxContent(buildFixturePackage());
     expect(doc.slides[0]?.size).toEqual({ widthPt: 960, heightPt: 540 });
   });
 
   it('orders slides via p:sldIdLst, not slide filename order', () => {
-    const doc = readPptx(buildFixturePackage());
+    const doc = readPptxContent(buildFixturePackage());
     // sldIdLst lists slide2 before slide1, so slides[0] must be slide2's content ("Second Slide").
     const firstShapeText = asParagraph(doc.slides[0]?.shapes[0]?.blocks[0]).runs[0]?.text;
     expect(firstShapeText).toBe('Second Slide');
   });
 
   it('reads document metadata via readCoreProperties', () => {
-    const doc = readPptx(buildFixturePackage());
+    const doc = readPptxContent(buildFixturePackage());
     expect(doc.metadata.title).toBe('Fixture Deck');
   });
 });
 
-describe('readPptx: placeholder inheritance and run cascade', () => {
+describe('readPptxContent: placeholder inheritance and run cascade', () => {
   it('inherits the title placeholder\'s geometry from the layout when the slide has none of its own', () => {
-    const doc = readPptx(buildFixturePackage());
+    const doc = readPptxContent(buildFixturePackage());
     const titleShape = doc.slides[1]?.shapes.find((s) => s.name === 'Title 1');
     expect(titleShape?.frame).toEqual({ xPt: 72, yPt: 36, widthPt: 816, heightPt: 90 });
   });
 
   it('a run with no own rPr fully inherits size/bold/font/colour from the master titleStyle', () => {
-    const doc = readPptx(buildFixturePackage());
+    const doc = readPptxContent(buildFixturePackage());
     const titleShape = doc.slides[1]?.shapes.find((s) => s.name === 'Title 1');
     const run = asParagraph(titleShape?.blocks[0]).runs[0];
     expect(run?.text).toBe('Hello');
@@ -245,7 +245,7 @@ describe('readPptx: placeholder inheritance and run cascade', () => {
   });
 
   it('a run\'s own explicit properties override the cascade only for the fields it sets', () => {
-    const doc = readPptx(buildFixturePackage());
+    const doc = readPptxContent(buildFixturePackage());
     const titleShape = doc.slides[1]?.shapes.find((s) => s.name === 'Title 1');
     const run = asParagraph(titleShape?.blocks[0]).runs[1];
     expect(run?.text).toBe(' World');
@@ -256,9 +256,9 @@ describe('readPptx: placeholder inheritance and run cascade', () => {
   });
 });
 
-describe('readPptx: paragraph formatting', () => {
+describe('readPptxContent: paragraph formatting', () => {
   it('reads alignment, indent, absolute spacing, and percentage line spacing', () => {
-    const doc = readPptx(buildFixturePackage());
+    const doc = readPptxContent(buildFixturePackage());
     const bodyShape = doc.slides[1]?.shapes.find((s) => s.name === 'Body 1');
     const para = asParagraph(bodyShape?.blocks[0]);
     expect(para.alignment).toBe('center');
@@ -269,14 +269,14 @@ describe('readPptx: paragraph formatting', () => {
   });
 
   it('resolves an external hyperlink through the slide\'s own relationships', () => {
-    const doc = readPptx(buildFixturePackage());
+    const doc = readPptxContent(buildFixturePackage());
     const bodyShape = doc.slides[1]?.shapes.find((s) => s.name === 'Body 1');
     const para = asParagraph(bodyShape?.blocks[0]);
     expect(para.runs[0]?.hyperlink).toBe('https://example.com');
   });
 
   it('reads underline and strikethrough', () => {
-    const doc = readPptx(buildFixturePackage());
+    const doc = readPptxContent(buildFixturePackage());
     const bodyShape = doc.slides[1]?.shapes.find((s) => s.name === 'Body 1');
     const para = asParagraph(bodyShape?.blocks[0]);
     expect(para.runs[1]?.underline).toBe(true);
@@ -284,9 +284,9 @@ describe('readPptx: paragraph formatting', () => {
   });
 });
 
-describe('readPptx: text-box insets and autofit', () => {
+describe('readPptxContent: text-box insets and autofit', () => {
   it('reads explicit a:bodyPr insets and a:normAutofit scaling', () => {
-    const doc = readPptx(buildFixturePackage());
+    const doc = readPptxContent(buildFixturePackage());
     const bodyShape = doc.slides[1]?.shapes.find((s) => s.name === 'Body 1');
     expect(bodyShape?.insetLeftPt).toBe(14.4);
     expect(bodyShape?.insetTopPt).toBe(7.2);
@@ -297,7 +297,7 @@ describe('readPptx: text-box insets and autofit', () => {
   });
 
   it('falls back to ECMA-376\'s default insets when a:bodyPr is absent, with no autofit', () => {
-    const doc = readPptx(buildFixturePackage());
+    const doc = readPptxContent(buildFixturePackage());
     const titleShape = doc.slides[1]?.shapes.find((s) => s.name === 'Title 1');
     expect(titleShape?.insetLeftPt).toBe(7.2);
     expect(titleShape?.insetTopPt).toBe(3.6);
@@ -308,7 +308,7 @@ describe('readPptx: text-box insets and autofit', () => {
   });
 
   it('reads zero insets for a picture, which has no text body at all', () => {
-    const doc = readPptx(buildFixturePackage());
+    const doc = readPptxContent(buildFixturePackage());
     const picShape = doc.slides[1]?.shapes.find((s) => s.name === 'Picture 1');
     expect(picShape?.insetLeftPt).toBe(0);
     expect(picShape?.insetTopPt).toBe(0);
@@ -317,9 +317,9 @@ describe('readPptx: text-box insets and autofit', () => {
   });
 });
 
-describe('readPptx: images', () => {
+describe('readPptxContent: images', () => {
   it('reads a PNG image, sized to the shape\'s own frame', () => {
-    const doc = readPptx(buildFixturePackage());
+    const doc = readPptxContent(buildFixturePackage());
     const picShape = doc.slides[1]?.shapes.find((s) => s.name === 'Picture 1');
     const image = asImage(picShape?.blocks[0]);
     expect(image.kind).toBe('image');
@@ -329,9 +329,9 @@ describe('readPptx: images', () => {
   });
 });
 
-describe('readPptx: tables', () => {
+describe('readPptxContent: tables', () => {
   it('reads column widths, a merged cell\'s colSpan, and its continuation cell as empty', () => {
-    const doc = readPptx(buildFixturePackage());
+    const doc = readPptxContent(buildFixturePackage());
     const tableShape = doc.slides[1]?.shapes.find((s) => s.name === 'Table 1');
     const table = asTable(tableShape?.blocks[0]);
     expect(table.columnWidthsPt).toEqual([100, 150]);
@@ -341,7 +341,7 @@ describe('readPptx: tables', () => {
   });
 
   it('reads a row\'s explicit height, and leaves it undefined when a:tr has no h attribute', () => {
-    const doc = readPptx(buildFixturePackage());
+    const doc = readPptxContent(buildFixturePackage());
     const tableShape = doc.slides[1]?.shapes.find((s) => s.name === 'Table 1');
     const table = asTable(tableShape?.blocks[0]);
     expect(table.rows[0]?.heightPt).toBe(36);
@@ -349,31 +349,31 @@ describe('readPptx: tables', () => {
   });
 
   it('reads a cell\'s background fill', () => {
-    const doc = readPptx(buildFixturePackage());
+    const doc = readPptxContent(buildFixturePackage());
     const tableShape = doc.slides[1]?.shapes.find((s) => s.name === 'Table 1');
     const table = asTable(tableShape?.blocks[0]);
     expect(table.rows[1]?.cells[0]?.background).toEqual({ r: 1, g: 0, b: 0 });
   });
 });
 
-describe('readPptx: group shapes', () => {
+describe('readPptxContent: group shapes', () => {
   it('flattens a group\'s child shape into the slide\'s flat shape list at its absolute (transformed) position', () => {
-    const doc = readPptx(buildFixturePackage());
+    const doc = readPptxContent(buildFixturePackage());
     const grouped = doc.slides[1]?.shapes.find((s) => s.name === 'Grouped shape');
     // group off=(100,100)pt ext=(200,200)pt, chOff=(0,0) chExt=(100,100)pt -> scale 2x; child local (10,10,20,20)pt -> absolute (120,120,40,40)pt.
     expect(grouped?.frame).toEqual({ xPt: 120, yPt: 120, widthPt: 40, heightPt: 40 });
   });
 });
 
-describe('readPptx: rotation', () => {
+describe('readPptxContent: rotation', () => {
   it('carries a shape\'s own rotationDeg through unchanged', () => {
-    const doc = readPptx(buildFixturePackage());
+    const doc = readPptxContent(buildFixturePackage());
     const rotated = doc.slides[0]?.shapes.find((s) => s.name === 'Rotated');
     expect(rotated?.rotationDeg).toBe(45);
   });
 
   it('leaves rotationDeg undefined for an unrotated shape', () => {
-    const doc = readPptx(buildFixturePackage());
+    const doc = readPptxContent(buildFixturePackage());
     const titleShape = doc.slides[1]?.shapes.find((s) => s.name === 'Title 1');
     expect(titleShape?.rotationDeg).toBeUndefined();
   });
@@ -449,9 +449,9 @@ function rotationCompositionFixturePackage(): Package {
   };
 }
 
-describe('readPptx: rotation composed through rotated/flipped ancestor groups', () => {
+describe('readPptxContent: rotation composed through rotated/flipped ancestor groups', () => {
   it('composes an unrotated shape\'s position and rotation through a single rotated (unflipped) group', () => {
-    const doc = readPptx(rotationCompositionFixturePackage());
+    const doc = readPptxContent(rotationCompositionFixturePackage());
     const shape = doc.slides[0]?.shapes.find((s) => s.name === 'InRotGroup');
     expect(shape?.frame.xPt).toBeCloseTo(230, 9);
     expect(shape?.frame.yPt).toBeCloseTo(250, 9);
@@ -461,7 +461,7 @@ describe('readPptx: rotation composed through rotated/flipped ancestor groups', 
   });
 
   it('composes a shape\'s own rotation through a rotated AND flipped group, negating the sense of the shape\'s own rotation', () => {
-    const doc = readPptx(rotationCompositionFixturePackage());
+    const doc = readPptxContent(rotationCompositionFixturePackage());
     const shape = doc.slides[0]?.shapes.find((s) => s.name === 'InRotFlipGroup');
     expect(shape?.frame.xPt).toBeCloseTo(230, 9);
     expect(shape?.frame.yPt).toBeCloseTo(130, 9);
@@ -470,7 +470,7 @@ describe('readPptx: rotation composed through rotated/flipped ancestor groups', 
   });
 
   it('composes position and rotation through two levels of nested rotated groups', () => {
-    const doc = readPptx(rotationCompositionFixturePackage());
+    const doc = readPptxContent(rotationCompositionFixturePackage());
     const shape = doc.slides[0]?.shapes.find((s) => s.name === 'InNestedGroups');
     expect(shape?.frame.xPt).toBeCloseTo(330, 9);
     expect(shape?.frame.yPt).toBeCloseTo(330, 9);
@@ -479,9 +479,9 @@ describe('readPptx: rotation composed through rotated/flipped ancestor groups', 
   });
 });
 
-describe('readPptx: sourcePath', () => {
+describe('readPptxContent: sourcePath', () => {
   it('assigns slides[N].shapes[N] to each shape, in the flattened document order', () => {
-    const doc = readPptx(buildFixturePackage());
+    const doc = readPptxContent(buildFixturePackage());
     // sldIdLst orders slide2 before slide1, so slides[0] is slide2 (one shape) and slides[1] is slide1.
     expect(doc.slides[0]?.shapes[0]?.sourcePath).toBe('slides[0].shapes[0]');
     const titleShape = doc.slides[1]?.shapes.find((s) => s.name === 'Title 1');
@@ -491,7 +491,7 @@ describe('readPptx: sourcePath', () => {
   });
 
   it('assigns slides[N].shapes[N].blocks[N] and .runs[N] to a shape\'s paragraph content', () => {
-    const doc = readPptx(buildFixturePackage());
+    const doc = readPptxContent(buildFixturePackage());
     const titleShape = doc.slides[1]?.shapes.find((s) => s.name === 'Title 1');
     const titlePara = asParagraph(titleShape?.blocks[0]);
     expect(titlePara.sourcePath).toBe('slides[1].shapes[0].blocks[0]');
@@ -500,7 +500,7 @@ describe('readPptx: sourcePath', () => {
   });
 
   it('assigns a group\'s flattened child shape its own position in the slide\'s flat shape list', () => {
-    const doc = readPptx(buildFixturePackage());
+    const doc = readPptxContent(buildFixturePackage());
     const grouped = doc.slides[1]?.shapes.find((s) => s.name === 'Grouped shape');
     // spTree1 order: title(0), body(1), pic(2), table(3), grouped child(4).
     expect(grouped?.sourcePath).toBe('slides[1].shapes[4]');
@@ -508,7 +508,7 @@ describe('readPptx: sourcePath', () => {
   });
 
   it('nests a table shape\'s own cell content under slides[N].shapes[N].blocks[N].rows[N].cells[N].blocks[N]', () => {
-    const doc = readPptx(buildFixturePackage());
+    const doc = readPptxContent(buildFixturePackage());
     const tableShape = doc.slides[1]?.shapes.find((s) => s.name === 'Table 1');
     const table = asTable(tableShape?.blocks[0]);
     expect(table.sourcePath).toBe('slides[1].shapes[3].blocks[0]');
@@ -520,14 +520,14 @@ describe('readPptx: sourcePath', () => {
   });
 });
 
-describe('readPptx: notes', () => {
+describe('readPptxContent: notes', () => {
   it('prefers the notes slide\'s own body placeholder over concatenating every a:t (excluding the slide-number field)', () => {
-    const doc = readPptx(buildFixturePackage());
+    const doc = readPptxContent(buildFixturePackage());
     expect(doc.slides[1]?.notes).toBe('Speaker notes here');
   });
 
   it('is an empty string for a slide with no notesSlide relationship', () => {
-    const doc = readPptx(buildFixturePackage());
+    const doc = readPptxContent(buildFixturePackage());
     expect(doc.slides[0]?.notes).toBe('');
   });
 });
@@ -574,9 +574,9 @@ function cellText(block: ContentBlock | undefined, row: number, column: number):
   return asParagraph(block.rows[row]?.cells[column]?.blocks[0]).runs[0]?.text;
 }
 
-describe('readPptx: chart graphic frames', () => {
+describe('readPptxContent: chart graphic frames', () => {
   it('reads the chart part\'s cached series/category model as a table block', () => {
-    const doc = readPptx(chartFixturePackage());
+    const doc = readPptxContent(chartFixturePackage());
     const chartShape = doc.slides[0]?.shapes.find((s) => s.name === 'Chart 1');
     const table = asTable(chartShape?.blocks[0]);
     // Header row: empty corner cell over the category column, then one column per series.
@@ -586,7 +586,7 @@ describe('readPptx: chart graphic frames', () => {
   });
 
   it('reads one row per category index, in index order, with each series\' cached value in its own column', () => {
-    const doc = readPptx(chartFixturePackage());
+    const doc = readPptxContent(chartFixturePackage());
     const chartShape = doc.slides[0]?.shapes.find((s) => s.name === 'Chart 1');
     const table = asTable(chartShape?.blocks[0]);
     expect(cellText(table, 1, 0)).toBe('Q1');
@@ -599,7 +599,7 @@ describe('readPptx: chart graphic frames', () => {
   });
 
   it('splits the frame\'s own width evenly across the category and series columns', () => {
-    const doc = readPptx(chartFixturePackage());
+    const doc = readPptxContent(chartFixturePackage());
     const chartShape = doc.slides[0]?.shapes.find((s) => s.name === 'Chart 1');
     expect(asTable(chartShape?.blocks[0]).columnWidthsPt).toEqual([120, 120, 120]);
   });
@@ -620,14 +620,14 @@ describe('readPptx: chart graphic frames', () => {
         'ppt/slides/slide1.xml': { kind: 'xml', nodes: [slide] },
       },
     };
-    const doc = readPptx(pkg);
+    const doc = readPptxContent(pkg);
     const chartShape = doc.slides[0]?.shapes.find((s) => s.name === 'Chart 1');
     expect(chartShape?.frame).toEqual({ xPt: 72, yPt: 144, widthPt: 360, heightPt: 216 });
     expect(chartShape?.blocks).toEqual([]);
   });
 
   it('assigns sourcePath into the chart table\'s cells', () => {
-    const doc = readPptx(chartFixturePackage());
+    const doc = readPptxContent(chartFixturePackage());
     const chartShape = doc.slides[0]?.shapes.find((s) => s.name === 'Chart 1');
     const table = asTable(chartShape?.blocks[0]);
     expect(table.sourcePath).toBe('slides[0].shapes[0].blocks[0]');
@@ -686,9 +686,9 @@ function smartArtFixturePackage(): Package {
   };
 }
 
-describe('readPptx: SmartArt graphic frames', () => {
+describe('readPptxContent: SmartArt graphic frames', () => {
   it('reads the data model\'s node text as paragraphs in diagram order (depth-first, siblings by srcOrd)', () => {
-    const doc = readPptx(smartArtFixturePackage());
+    const doc = readPptxContent(smartArtFixturePackage());
     const diagramShape = doc.slides[0]?.shapes.find((s) => s.name === 'Diagram 1');
     const texts = (diagramShape?.blocks ?? []).map((b) => asParagraph(b).runs.map((run) => run.text).join(''));
     expect(texts).toEqual(['Strategy', 'Quality', 'Details', 'Cost', 'Assistant']);
@@ -697,14 +697,14 @@ describe('readPptx: SmartArt graphic frames', () => {
   it('keeps the frame\'s geometry with empty content when the data model relationship resolves to no readable part', () => {
     const pkg = smartArtFixturePackage();
     delete pkg.parts['ppt/diagrams/data1.xml'];
-    const doc = readPptx(pkg);
+    const doc = readPptxContent(pkg);
     const diagramShape = doc.slides[0]?.shapes.find((s) => s.name === 'Diagram 1');
     expect(diagramShape?.frame).toEqual({ xPt: 72, yPt: 144, widthPt: 360, heightPt: 216 });
     expect(diagramShape?.blocks).toEqual([]);
   });
 
   it('assigns sourcePath to each diagram paragraph', () => {
-    const doc = readPptx(smartArtFixturePackage());
+    const doc = readPptxContent(smartArtFixturePackage());
     const diagramShape = doc.slides[0]?.shapes.find((s) => s.name === 'Diagram 1');
     expect(asParagraph(diagramShape?.blocks[0]).sourcePath).toBe('slides[0].shapes[0].blocks[0]');
     expect(asParagraph(diagramShape?.blocks[4]).sourcePath).toBe('slides[0].shapes[0].blocks[4]');
@@ -748,9 +748,9 @@ function oleFixturePackage(): Package {
   };
 }
 
-describe('readPptx: OLE graphic frames', () => {
+describe('readPptxContent: OLE graphic frames', () => {
   it('reads the fallback picture as an image block sized to the frame', () => {
-    const doc = readPptx(oleFixturePackage());
+    const doc = readPptxContent(oleFixturePackage());
     const oleShape = doc.slides[0]?.shapes.find((s) => s.name === 'Object 1');
     const image = asImage(oleShape?.blocks[0]);
     expect(image.format).toBe('png');
@@ -763,7 +763,7 @@ describe('readPptx: OLE graphic frames', () => {
     // The fallback relationship points at a part the package does not carry.
     const pkg = oleFixturePackage();
     delete pkg.parts['ppt/media/oleFallback.png'];
-    const doc = readPptx(pkg);
+    const doc = readPptxContent(pkg);
     const oleShape = doc.slides[0]?.shapes.find((s) => s.name === 'Object 1');
     expect(oleShape?.frame).toEqual({ xPt: 72, yPt: 144, widthPt: 360, heightPt: 216 });
     expect(asParagraph(oleShape?.blocks[0]).runs[0]?.text).toBe('Excel.Sheet.12');
@@ -785,14 +785,14 @@ describe('readPptx: OLE graphic frames', () => {
         'ppt/slides/slide1.xml': { kind: 'xml', nodes: [slide] },
       },
     };
-    const doc = readPptx(pkg);
+    const doc = readPptxContent(pkg);
     const oleShape = doc.slides[0]?.shapes.find((s) => s.name === 'Object 1');
     expect(oleShape?.frame).toEqual({ xPt: 72, yPt: 144, widthPt: 360, heightPt: 216 });
     expect(oleShape?.blocks).toEqual([]);
   });
 
   it('assigns sourcePath to the fallback image block', () => {
-    const doc = readPptx(oleFixturePackage());
+    const doc = readPptxContent(oleFixturePackage());
     const oleShape = doc.slides[0]?.shapes.find((s) => s.name === 'Object 1');
     expect(asImage(oleShape?.blocks[0]).sourcePath).toBe('slides[0].shapes[0].blocks[0]');
   });
@@ -831,12 +831,12 @@ function outlineLevelFixturePackage(): Package {
 }
 
 function outlineParagraph(text: string): ContentParagraph {
-  const doc = readPptx(outlineLevelFixturePackage());
+  const doc = readPptxContent(outlineLevelFixturePackage());
   const shape = doc.slides[0]?.shapes.find((s) => s.name === 'Outline Body');
   return asParagraph(shape?.blocks.find((b) => b.kind === 'paragraph' && asParagraph(b).runs[0]?.text === text));
 }
 
-describe('readPptx: paragraph outline levels', () => {
+describe('readPptxContent: paragraph outline levels', () => {
   it('reads a:pPr/@lvl into list.level, with no numId -- DrawingML paragraphs carry no numbering identity', () => {
     const para = outlineParagraph('level two');
     expect(para.list).toEqual({ level: 2 });
@@ -844,7 +844,7 @@ describe('readPptx: paragraph outline levels', () => {
   });
 
   it('emits list membership that validates against ContentListMembershipSchema with numId optional (document-schema.js 3.3.0)', () => {
-    const doc = readPptx(outlineLevelFixturePackage());
+    const doc = readPptxContent(outlineLevelFixturePackage());
     expect(() => PptxDocumentSchema.parse(doc)).not.toThrow();
   });
 
@@ -866,7 +866,7 @@ describe('readPptx: paragraph outline levels', () => {
   });
 
   it('reads a slide of mixed levels back in document order', () => {
-    const doc = readPptx(outlineLevelFixturePackage());
+    const doc = readPptxContent(outlineLevelFixturePackage());
     const shape = doc.slides[0]?.shapes.find((s) => s.name === 'Outline Body');
     const read = (shape?.blocks ?? []).map((b) => {
       const para = asParagraph(b);

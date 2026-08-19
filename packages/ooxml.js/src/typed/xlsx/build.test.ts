@@ -6,11 +6,11 @@ import type { Package } from '../../model/package';
 import { encodePackage } from '../../codec';
 import { parsePackage } from '../../package-io/read';
 import { childrenWithTag, decodeEntities, rootElement } from '../util';
-import { buildXlsxPackage } from './build';
+import { buildXlsxPackageFromContent } from './build';
 import { readXlsxContent } from './content';
 import { BUILTIN_NUMBER_FORMATS } from './number-format';
 
-// buildXlsxPackage's own real-LibreOffice validation (`soffice --headless --convert-to ods` against a genuine built .xlsx, confirming Excel/LibreOffice actually open the file rather than merely well-formed XML) is a manual verification step, deliberately NOT wired into this vitest suite -- this package's CI runners have no LibreOffice installed (unlike documents.js's own gitignored, opt-in test:corpus project, which exists for exactly this reason: real-third-party-software checks that need a local tool this repo's CI can't assume). This suite instead verifies everything checkable in-process: the produced Package's own XML structure (parsed back through this package's own lossless parsePackage/encodePackage, never assumed), and that readXlsxContent(buildXlsxPackage(x)) round-trips the real content.
+// buildXlsxPackageFromContent's own real-LibreOffice validation (`soffice --headless --convert-to ods` against a genuine built .xlsx, confirming Excel/LibreOffice actually open the file rather than merely well-formed XML) is a manual verification step, deliberately NOT wired into this vitest suite -- this package's CI runners have no LibreOffice installed (unlike documents.js's own gitignored, opt-in test:corpus project, which exists for exactly this reason: real-third-party-software checks that need a local tool this repo's CI can't assume). This suite instead verifies everything checkable in-process: the produced Package's own XML structure (parsed back through this package's own lossless parsePackage/encodePackage, never assumed), and that readXlsxContent(buildXlsxPackageFromContent(x)) round-trips the real content.
 
 const KITCHEN_SINK_SHEET: ContentSheet = {
   name: 'Data',
@@ -74,15 +74,15 @@ const DOCUMENT: ContentDocument = {
   sheets: [KITCHEN_SINK_SHEET, SUMMARY_SHEET],
 };
 
-describe('buildXlsxPackage: rejects a non-spreadsheet ContentDocument', () => {
+describe('buildXlsxPackageFromContent: rejects a non-spreadsheet ContentDocument', () => {
   it('throws for a wordprocessing document', () => {
     const wrongKind: ContentDocument = { kind: 'wordprocessing', metadata: {}, sections: [] };
-    expect(() => buildXlsxPackage(wrongKind)).toThrow(/spreadsheet/);
+    expect(() => buildXlsxPackageFromContent(wrongKind)).toThrow(/spreadsheet/);
   });
 });
 
-describe('buildXlsxPackage: produces a structurally valid xlsx package', () => {
-  const pkg = buildXlsxPackage(DOCUMENT);
+describe('buildXlsxPackageFromContent: produces a structurally valid xlsx package', () => {
+  const pkg = buildXlsxPackageFromContent(DOCUMENT);
 
   it('writes every required OPC/SpreadsheetML part', () => {
     expect(Object.keys(pkg.parts).sort()).toEqual(
@@ -128,8 +128,8 @@ describe('buildXlsxPackage: produces a structurally valid xlsx package', () => {
   });
 });
 
-describe('readXlsxContent(buildXlsxPackage(x)) round-trips real content', () => {
-  const pkg = buildXlsxPackage(DOCUMENT);
+describe('readXlsxContent(buildXlsxPackageFromContent(x)) round-trips real content', () => {
+  const pkg = buildXlsxPackageFromContent(DOCUMENT);
   const roundTripped = readXlsxContent(pkg);
   if (roundTripped.kind !== 'spreadsheet') {
     throw new Error('expected a spreadsheet ContentDocument');
@@ -204,7 +204,7 @@ describe('readXlsxContent(buildXlsxPackage(x)) round-trips real content', () => 
   });
 });
 
-describe('buildXlsxPackage: an empty sheet with no cells/columns/rows still produces a structurally valid worksheet', () => {
+describe('buildXlsxPackageFromContent: an empty sheet with no cells/columns/rows still produces a structurally valid worksheet', () => {
   const emptyDocument: ContentDocument = {
     kind: 'spreadsheet',
     metadata: {},
@@ -221,7 +221,7 @@ describe('buildXlsxPackage: an empty sheet with no cells/columns/rows still prod
   };
 
   it('builds and round-trips without throwing, dimension falling back to "A1"', () => {
-    const pkg = buildXlsxPackage(emptyDocument);
+    const pkg = buildXlsxPackageFromContent(emptyDocument);
     const worksheet = rootElement(pkg.parts['xl/worksheets/sheet1.xml']);
     if (worksheet === undefined) {
       throw new Error('expected a worksheet root element');
@@ -333,8 +333,8 @@ function formatCodeOf(pkg: Package, reference: string): string | undefined {
   return match === undefined ? BUILTIN_NUMBER_FORMATS.get(Number(numFmtId)) : decodeEntities(attributeOf(match, 'formatCode') ?? '');
 }
 
-describe('buildXlsxPackage: writes a real number format for every value kind xlsx has no cell type for', () => {
-  const pkg = buildXlsxPackage(
+describe('buildXlsxPackageFromContent: writes a real number format for every value kind xlsx has no cell type for', () => {
+  const pkg = buildXlsxPackageFromContent(
     singleSheetDocument([
       { row: 0, column: 0, value: { kind: 'percentage', value: 0.4256 }, displayText: '0.4256' },
       { row: 0, column: 1, value: { kind: 'currency', value: 99.99, currency: 'GBP' }, displayText: '99.99' },
@@ -419,8 +419,8 @@ describe('buildXlsxPackage: writes a real number format for every value kind xls
   });
 });
 
-describe('buildXlsxPackage: a temporal value with no valid serial degrades to text, never to a fabricated serial', () => {
-  const pkg = buildXlsxPackage(
+describe('buildXlsxPackageFromContent: a temporal value with no valid serial degrades to text, never to a fabricated serial', () => {
+  const pkg = buildXlsxPackageFromContent(
     singleSheetDocument([
       // An ODF-style duration rather than the canonical HH:MM:SS wall-clock spelling.
       { row: 0, column: 0, value: { kind: 'time', value: 'PT14H30M00S' }, displayText: 'PT14H30M00S' },
@@ -451,8 +451,8 @@ describe('buildXlsxPackage: a temporal value with no valid serial degrades to te
   });
 });
 
-describe('buildXlsxPackage: a workbook needing no number formats writes the same minimal styles part it always did', () => {
-  const pkg = buildXlsxPackage(
+describe('buildXlsxPackageFromContent: a workbook needing no number formats writes the same minimal styles part it always did', () => {
+  const pkg = buildXlsxPackageFromContent(
     singleSheetDocument([
       { row: 0, column: 0, value: { kind: 'string', value: 'Name' }, displayText: 'Name' },
       { row: 0, column: 1, value: { kind: 'number', value: 1234.56 }, displayText: '1234.56' },
@@ -471,7 +471,7 @@ describe('buildXlsxPackage: a workbook needing no number formats writes the same
   });
 });
 
-describe('buildXlsxPackage: a formula cell with a cached STRING result writes t="str" literally, never shared-string-indexed', () => {
+describe('buildXlsxPackageFromContent: a formula cell with a cached STRING result writes t="str" literally, never shared-string-indexed', () => {
   const document: ContentDocument = {
     kind: 'spreadsheet',
     metadata: {},
@@ -488,7 +488,7 @@ describe('buildXlsxPackage: a formula cell with a cached STRING result writes t=
   };
 
   it('writes t="str" with a literal <v>, not a shared-string index, and the sharedStrings table stays empty', () => {
-    const pkg = buildXlsxPackage(document);
+    const pkg = buildXlsxPackageFromContent(document);
     const worksheet = rootElement(pkg.parts['xl/worksheets/sheet1.xml']);
     if (worksheet === undefined) {
       throw new Error('expected a worksheet root element');
@@ -509,7 +509,7 @@ describe('buildXlsxPackage: a formula cell with a cached STRING result writes t=
   });
 });
 
-// Cell decoration (background/borders/alignment/verticalAlignment) is interned into the same cellXfs table as the number format and emitted as real <fills>/<borders>/<alignment>. This describes a round trip through buildXlsxPackage -> readXlsxContent, asserting both the written XML structure and the read-back ContentSheetCell fields, since the kitchen-sink ContentSheet above carries no decoration at all.
+// Cell decoration (background/borders/alignment/verticalAlignment) is interned into the same cellXfs table as the number format and emitted as real <fills>/<borders>/<alignment>. This describes a round trip through buildXlsxPackageFromContent -> readXlsxContent, asserting both the written XML structure and the read-back ContentSheetCell fields, since the kitchen-sink ContentSheet above carries no decoration at all.
 const DECORATED_SHEET: ContentSheet = {
   name: 'Decorated',
   cells: [
@@ -548,8 +548,8 @@ const DECORATED_SHEET: ContentSheet = {
   },
 };
 
-describe('buildXlsxPackage: writes cell decoration (fills/borders/alignment) into xl/styles.xml', () => {
-  const pkg = buildXlsxPackage({ kind: 'spreadsheet', metadata: { title: undefined, author: undefined, subject: undefined, keywords: undefined, creator: undefined, producer: undefined, createdIso: undefined, modifiedIso: undefined }, sheets: [DECORATED_SHEET] });
+describe('buildXlsxPackageFromContent: writes cell decoration (fills/borders/alignment) into xl/styles.xml', () => {
+  const pkg = buildXlsxPackageFromContent({ kind: 'spreadsheet', metadata: { title: undefined, author: undefined, subject: undefined, keywords: undefined, creator: undefined, producer: undefined, createdIso: undefined, modifiedIso: undefined }, sheets: [DECORATED_SHEET] });
   const styles = rootElement(pkg.parts['xl/styles.xml']);
   if (styles === undefined) {
     throw new Error('expected xl/styles.xml to have a root element');
@@ -606,8 +606,8 @@ describe('buildXlsxPackage: writes cell decoration (fills/borders/alignment) int
   });
 });
 
-describe('readXlsxContent(buildXlsxPackage(x)) round-trips cell decoration', () => {
-  const pkg = buildXlsxPackage({ kind: 'spreadsheet', metadata: { title: undefined, author: undefined, subject: undefined, keywords: undefined, creator: undefined, producer: undefined, createdIso: undefined, modifiedIso: undefined }, sheets: [DECORATED_SHEET] });
+describe('readXlsxContent(buildXlsxPackageFromContent(x)) round-trips cell decoration', () => {
+  const pkg = buildXlsxPackageFromContent({ kind: 'spreadsheet', metadata: { title: undefined, author: undefined, subject: undefined, keywords: undefined, creator: undefined, producer: undefined, createdIso: undefined, modifiedIso: undefined }, sheets: [DECORATED_SHEET] });
   const result = readXlsxContent(pkg);
   if (result.kind !== 'spreadsheet') {
     throw new Error('expected a spreadsheet ContentDocument');

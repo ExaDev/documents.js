@@ -5,6 +5,8 @@ import { attr, childrenWithTag, elementsWithTag, rootElement, textContent } from
 import { loadSharedStrings } from './xlsx/shared-strings';
 
 // Lossy ergonomic projection of a SpreadsheetML (xlsx) package into a reading view. This is a one-way read view over the generic Package model: it keeps sheet names, cell references, resolved string and numeric values, cell formulas, merged-cell ranges, and defined names, and discards everything else (formats, styles, charts, and all other markup). It is not a round-trip path — encoding this view back to OOXML is not supported.
+//
+// A different reading view from readXlsxContent (typed/xlsx/content.ts) and from the tree-form readXlsx (typed/document-package.ts), not a lesser version of either: this one answers "what are the cell values" and nothing else. It held the name readXlsx until that went to the package-native reader; readXlsxWorkbook names what it returns, exactly as readXlsxContent beside it does.
 
 export const XlsxCellSchema = z.object({
   reference: z.string(),
@@ -165,7 +167,7 @@ function readMergedRanges(worksheet: XmlElement): string[] {
 }
 
 // Entry point of the lossy one-way projection: returns the workbook's sheets (display names, cells with resolved values and any formulas, and merged-cell ranges) plus its defined names. Not a round-trip path.
-export function readXlsx(pkg: Package): XlsxWorkbook {
+export function readXlsxWorkbook(pkg: Package): XlsxWorkbook {
   const sharedStrings = loadSharedStrings(pkg);
   const names = resolveSheetNames(pkg);
   const definedNames = readDefinedNames(pkg);

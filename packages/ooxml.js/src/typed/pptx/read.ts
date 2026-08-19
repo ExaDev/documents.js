@@ -18,6 +18,8 @@ import { readChartTable } from './chart';
 import { readDiagramText } from './diagram';
 
 // Package -> PptxDocument. Walks PresentationML directly: document order, placeholder inheritance, and theme resolution all matter for conversion fidelity in a way a flat text/shape-list projection doesn't preserve. Ported from documents.js's src/ooxml/pptx/read.ts.
+//
+// This is the flat, content-level half of the pptx read pair: readPptx (typed/document-package.ts) wraps it into a tree-form DocumentPackage, which is the primary name. Both are read-only -- this package has no PresentationML writer, so neither has an inverse.
 
 export const PptxDocumentSchema = z.object({
   metadata: DocumentMetadataSchema,
@@ -461,7 +463,7 @@ function readSlide(pkg: Package, slidePath: string, size: PageSize): ContentSlid
 }
 
 // Resolves a generic OOXML Package into PptxDocument: slide order via p:sldIdLst (never slide filename order), the placeholder -> layout -> master -> theme inheritance cascade, DrawingML geometry, and embedded images sniffed from their media parts. It is a one-way read, not a round-trip path, and a PptxDocument cannot be written back to a package.
-export function readPptx(pkg: Package): PptxDocument {
+export function readPptxContent(pkg: Package): PptxDocument {
   const presentationRoot = rootElement(pkg.parts[PRESENTATION_PATH]);
   const size = readSlideSize(presentationRoot);
   const slides = readSlidePathsInOrder(pkg, presentationRoot).map((slidePath) => readSlide(pkg, slidePath, size));

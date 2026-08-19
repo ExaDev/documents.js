@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { decodePackage, zipPackage } from '../index';
-import { readDocx } from './docx/read';
+import { readDocxContent } from './docx/read';
 
-// Integration-level coverage for readDocx, exercised through a real zip round trip (decodePackage(zipPackage(...))) rather than raw Package/XmlElement fixtures -- the deep style-cascade, table-merge, and section-boundary coverage lives in ./docx/read.test.ts and ./docx/styles.test.ts. This file replaces the pre-existing flat-shape (paragraphs/tables/hyperlinks) test suite, which asserted a shape readDocx no longer has -- see the BREAKING CHANGE described in DocxDocument's own doc comment.
+// Integration-level coverage for readDocxContent, exercised through a real zip round trip (decodePackage(zipPackage(...))) rather than raw Package/XmlElement fixtures -- the deep style-cascade, table-merge, and section-boundary coverage lives in ./docx/read.test.ts and ./docx/styles.test.ts. This file replaces the pre-existing flat-shape (paragraphs/tables/hyperlinks) test suite, which asserted a shape readDocxContent no longer has -- see the BREAKING CHANGE described in DocxDocument's own doc comment.
 
 function enc(s: string): Uint8Array<ArrayBuffer> {
   return new TextEncoder().encode(s);
@@ -29,9 +29,9 @@ function docxParts(): Record<string, Uint8Array<ArrayBuffer>> {
   };
 }
 
-describe('readDocx', () => {
+describe('readDocxContent', () => {
   it('projects paragraphs into a single section, with runs carrying the bold toggle and decoded entities', () => {
-    const result = readDocx(decodePackage(zipPackage(docxParts())));
+    const result = readDocxContent(decodePackage(zipPackage(docxParts())));
     expect(result.sections).toHaveLength(1);
     const blocks = result.sections[0]?.blocks ?? [];
     expect(blocks).toHaveLength(2);
@@ -57,11 +57,11 @@ describe('readDocx', () => {
         '_rels/.rels': ROOT_RELS_DOCX,
       }),
     );
-    expect(() => readDocx(pkg)).toThrow(/word\/document\.xml/);
+    expect(() => readDocxContent(pkg)).toThrow(/word\/document\.xml/);
   });
 });
 
-// A representative package exercising the expanded constructs: a 2x2 table, a hyperlink resolved through the document rels, a header, a footer, a comment, a real footnote plus a separator footnote, and a numbered list paragraph -- all still document-order-preserved through readDocx's sections, unlike the old flat paragraphs/tables/hyperlinks arrays.
+// A representative package exercising the expanded constructs: a 2x2 table, a hyperlink resolved through the document rels, a header, a footer, a comment, a real footnote plus a separator footnote, and a numbered list paragraph -- all still document-order-preserved through readDocxContent's sections, unlike the old flat paragraphs/tables/hyperlinks arrays.
 const RICH_CONTENT_TYPES = enc(
   '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/comments.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml"/><Override PartName="/word/footnotes.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml"/><Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/><Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/></Types>',
 );
@@ -107,9 +107,9 @@ function richDocxParts(): Record<string, Uint8Array<ArrayBuffer>> {
   };
 }
 
-describe('readDocx expanded constructs', () => {
+describe('readDocxContent expanded constructs', () => {
   it('projects a 2x2 table into rows of cells, each carrying its paragraph text, in document order among the section\'s blocks', () => {
-    const result = readDocx(decodePackage(zipPackage(richDocxParts())));
+    const result = readDocxContent(decodePackage(zipPackage(richDocxParts())));
     const blocks = result.sections[0]?.blocks ?? [];
     const tableBlock = blocks[0];
     if (tableBlock?.kind !== 'table') {
@@ -130,7 +130,7 @@ describe('readDocx expanded constructs', () => {
   });
 
   it('resolves a hyperlink target through the document rels part', () => {
-    const result = readDocx(decodePackage(zipPackage(richDocxParts())));
+    const result = readDocxContent(decodePackage(zipPackage(richDocxParts())));
     const blocks = result.sections[0]?.blocks ?? [];
     const hyperlinkPara = blocks[1];
     if (hyperlinkPara?.kind !== 'paragraph') {
@@ -141,27 +141,27 @@ describe('readDocx expanded constructs', () => {
   });
 
   it('reads header and footer text from their parts', () => {
-    const result = readDocx(decodePackage(zipPackage(richDocxParts())));
+    const result = readDocxContent(decodePackage(zipPackage(richDocxParts())));
     expect(result.headers).toEqual(['Header text']);
     expect(result.footers).toEqual(['Footer text']);
   });
 
   it('reads comment author and text from word/comments.xml', () => {
-    const result = readDocx(decodePackage(zipPackage(richDocxParts())));
+    const result = readDocxContent(decodePackage(zipPackage(richDocxParts())));
     expect(result.comments).toHaveLength(1);
     expect(result.comments[0]?.author).toBe('Ann');
     expect(result.comments[0]?.text).toBe('comment text');
   });
 
   it('reads footnotes and skips separator and continuation marks', () => {
-    const result = readDocx(decodePackage(zipPackage(richDocxParts())));
+    const result = readDocxContent(decodePackage(zipPackage(richDocxParts())));
     expect(result.footnotes).toHaveLength(1);
     expect(result.footnotes[0]?.text).toBe('real footnote');
     expect(result.footnotes[0]?.type).toBeUndefined();
   });
 
   it('reads list membership from a paragraph w:numPr', () => {
-    const result = readDocx(decodePackage(zipPackage(richDocxParts())));
+    const result = readDocxContent(decodePackage(zipPackage(richDocxParts())));
     const blocks = result.sections[0]?.blocks ?? [];
     const listParagraph = blocks.find((b) => b.kind === 'paragraph' && b.list !== undefined);
     expect(listParagraph?.kind === 'paragraph' ? listParagraph.list : undefined).toEqual({ numId: '1', level: 0 });
@@ -172,7 +172,7 @@ describe('readDocx expanded constructs', () => {
     const documentXml = enc(
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:pPr><w:numPr><w:ilvl w:val="2"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>nested item</w:t></w:r></w:p></w:body></w:document>',
     );
-    const result = readDocx(
+    const result = readDocxContent(
       decodePackage(
         zipPackage({
           '[Content_Types].xml': CONTENT_TYPES_DOCX,
@@ -191,7 +191,7 @@ describe('readDocx expanded constructs', () => {
     const documentXml = enc(
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Body paragraph</w:t></w:r></w:p><w:tbl><w:tr><w:tc><w:p><w:r><w:t>Cell paragraph</w:t></w:r></w:p></w:tc></w:tr></w:tbl></w:body></w:document>',
     );
-    const result = readDocx(
+    const result = readDocxContent(
       decodePackage(
         zipPackage({
           '[Content_Types].xml': CONTENT_TYPES_DOCX,
@@ -218,7 +218,7 @@ describe('readDocx expanded constructs', () => {
     const documentXml = enc(
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:sdt><w:sdtContent><w:p><w:r><w:t>SDT paragraph</w:t></w:r></w:p></w:sdtContent></w:sdt></w:body></w:document>',
     );
-    const result = readDocx(
+    const result = readDocxContent(
       decodePackage(
         zipPackage({
           '[Content_Types].xml': CONTENT_TYPES_DOCX,

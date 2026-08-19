@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { decodePackage, zipPackage } from '../index';
-import { readPptx } from './pptx/read';
+import { readPptxContent } from './pptx/read';
 
-// Integration-level coverage for readPptx, exercised through a real zip round trip (decodePackage(zipPackage(...))) rather than raw Package/XmlElement fixtures -- the deep placeholder-inheritance, run-cascade, group-transform, and table coverage lives in ./pptx/read.test.ts and ./pptx/inherit.test.ts. This file replaces the pre-existing flat-shape (index/text/shapes/tables) test suite, which asserted a shape readPptx no longer has -- see the BREAKING CHANGE described in PptxDocument's own doc comment.
+// Integration-level coverage for readPptxContent, exercised through a real zip round trip (decodePackage(zipPackage(...))) rather than raw Package/XmlElement fixtures -- the deep placeholder-inheritance, run-cascade, group-transform, and table coverage lives in ./pptx/read.test.ts and ./pptx/inherit.test.ts. This file replaces the pre-existing flat-shape (index/text/shapes/tables) test suite, which asserted a shape readPptxContent no longer has -- see the BREAKING CHANGE described in PptxDocument's own doc comment.
 
 function enc(s: string): Uint8Array<ArrayBuffer> {
   return new TextEncoder().encode(s);
@@ -82,9 +82,9 @@ function shapeText(shape: { blocks: { kind: string; runs?: { text: string }[] }[
   return block?.kind === 'paragraph' ? block.runs?.[0]?.text : undefined;
 }
 
-describe('readPptx', () => {
+describe('readPptxContent', () => {
   it('projects slides in numeric order (via p:sldIdLst) with each shape\'s own text', () => {
-    const result = readPptx(decodePackage(zipPackage(pptxParts())));
+    const result = readPptxContent(decodePackage(zipPackage(pptxParts())));
     expect(result.slides).toHaveLength(2);
     expect(shapeText(result.slides[0]?.shapes[0])).toBe('First slide');
     expect(shapeText(result.slides[1]?.shapes[0])).toBe('Second ');
@@ -95,7 +95,7 @@ describe('readPptx', () => {
     const emptyPresentation = enc(
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><p:sldIdLst/></p:presentation>',
     );
-    const result = readPptx(
+    const result = readPptxContent(
       decodePackage(
         zipPackage({
           '[Content_Types].xml': CONTENT_TYPES_PPTX,
@@ -108,7 +108,7 @@ describe('readPptx', () => {
   });
 
   it('projects per-slide shapes, a table, and resolved notes', () => {
-    const result = readPptx(decodePackage(zipPackage(pptxWithNotesParts())));
+    const result = readPptxContent(decodePackage(zipPackage(pptxWithNotesParts())));
     expect(result.slides).toHaveLength(2);
     const first = result.slides[0];
     const second = result.slides[1];
@@ -134,7 +134,7 @@ describe('readPptx', () => {
   it('reads document metadata via readCoreProperties', () => {
     const parts = pptxParts();
     parts['docProps/core.xml'] = enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<cp:coreProperties xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Fixture Deck</dc:title></cp:coreProperties>');
-    const result = readPptx(decodePackage(zipPackage(parts)));
+    const result = readPptxContent(decodePackage(zipPackage(parts)));
     expect(result.metadata.title).toBe('Fixture Deck');
   });
 });

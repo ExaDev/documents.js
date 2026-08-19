@@ -8,13 +8,15 @@ import type { DocumentMetadata } from '../shared/metadata';
 import { ptToEighthPoints, ptToEmu, ptToHalfPoints, ptToTwips } from '../shared/units';
 import { TABLE_OF_CONTENTS_GALLERY, isDeletedChange } from './constructs';
 
-// ContentSection[] -> Package: the write side of readDocx, and this package's second writer of genuinely new content after typed/xlsx/build.ts's buildXlsxPackage (whose part-scaffolding conventions this follows). It builds a complete, fresh docx package -- content types, package and document relationships, media parts, core/extended properties, and word/document.xml -- rather than editing a decoded one, so a ContentDocument that never came from a docx writes out just as well as one that did.
+// ContentSection[] -> Package: the write side of readDocxContent, and this package's second writer of genuinely new content after typed/xlsx/build.ts's buildXlsxPackageFromContent (whose part-scaffolding conventions this follows). It builds a complete, fresh docx package -- content types, package and document relationships, media parts, core/extended properties, and word/document.xml -- rather than editing a decoded one, so a ContentDocument that never came from a docx writes out just as well as one that did.
 //
-// It is readDocx's honest inverse over ContentSection: page geometry, paragraphs with their fully-resolved direct formatting, runs (including external hyperlinks), lists, headings, tables (grids, spans, shading, borders, row heights), page breaks, images, and the block-scoped construct markers all survive a round trip through the pair. What does NOT survive, stated rather than implied:
-// - No styles.xml, numbering.xml, comments, footnotes, headers, or footers are written. readDocx reads all of those into DocxDocument fields outside `sections`, and each needs machinery of its own; a paragraph's styleId is still written as a w:pStyle reference, resolving to nothing without the style part, since every property that style would have contributed is already spelled as direct formatting by then.
+// This is the flat, content-level half of the docx write pair: buildDocxPackage (typed/document-package.ts) is the primary name, flattening a tree-form DocumentPackage (styles-table refs materialised away) and handing the result straight to this function.
+//
+// It is readDocxContent's honest inverse over ContentSection: page geometry, paragraphs with their fully-resolved direct formatting, runs (including external hyperlinks), lists, headings, tables (grids, spans, shading, borders, row heights), page breaks, images, and the block-scoped construct markers all survive a round trip through the pair. What does NOT survive, stated rather than implied:
+// - No styles.xml, numbering.xml, comments, footnotes, headers, or footers are written. readDocxContent reads all of those into DocxDocument fields outside `sections`, and each needs machinery of its own; a paragraph's styleId is still written as a w:pStyle reference, resolving to nothing without the style part, since every property that style would have contributed is already spelled as direct formatting by then.
 // - A run whose boolean properties are absent but which carries some other property (a colour, a size) reads back with those booleans false rather than absent, because the w:rPr the other property forces is itself what the read-side cascade turns an absent w:b into. A run with no properties at all writes no w:rPr and round-trips exactly.
-// - Four construct shapes are written as their content with no wrapper, because WordprocessingML has no block-level element for them: a `link` (its own hyperlink is run-level, so a block-scoped link has no element to be), a `division` (no block container answers to one), a `provenance` whose change is `formatChange` (w:pPrChange is a child of w:pPr describing one paragraph's old properties, not a wrapper over a block flow), and an `anchor` whose type is a footnote, endnote, or comment reference (each of those is a run-level reference into a part this writer does not emit). readDocx produces none of them, so this only bounds what a foreign ContentDocument can carry through here.
-// - A field construct whose extent contains no paragraph at all, and a section whose last block is not a paragraph, each gain one empty paragraph on the way out (the field characters and the section break both need a paragraph to live in). Everything readDocx itself produces already has one.
+// - Four construct shapes are written as their content with no wrapper, because WordprocessingML has no block-level element for them: a `link` (its own hyperlink is run-level, so a block-scoped link has no element to be), a `division` (no block container answers to one), a `provenance` whose change is `formatChange` (w:pPrChange is a child of w:pPr describing one paragraph's old properties, not a wrapper over a block flow), and an `anchor` whose type is a footnote, endnote, or comment reference (each of those is a run-level reference into a part this writer does not emit). readDocxContent produces none of them, so this only bounds what a foreign ContentDocument can carry through here.
+// - A field construct whose extent contains no paragraph at all, and a section whose last block is not a paragraph, each gain one empty paragraph on the way out (the field characters and the section break both need a paragraph to live in). Everything readDocxContent itself produces already has one.
 // - A page break immediately before a table or an image -- w:pageBreakBefore is a paragraph property, so neither can carry it directly -- becomes its own empty paragraph carrying the break, immediately before that content rather than displaced to the end of the flow.
 
 const WML_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
@@ -45,7 +47,7 @@ const REL_IMAGE = `${REL_NS}/image`;
 
 const DOCUMENT_PART_PATH = 'word/document.xml';
 
-// The input readDocx's own output satisfies directly (a DocxDocument is assignable to it), narrowed to the two fields this writer can express: everything else DocxDocument carries -- comments, footnotes, headers, footers, numbering definitions -- lives in parts this writer does not emit.
+// The input readDocxContent's own output satisfies directly (a DocxDocument is assignable to it), narrowed to the two fields this writer can express: everything else DocxDocument carries -- comments, footnotes, headers, footers, numbering definitions -- lives in parts this writer does not emit.
 export interface DocxContent {
   readonly metadata?: DocumentMetadata;
   readonly sections: readonly ContentSection[];
@@ -244,7 +246,7 @@ function buildParagraph(paragraph: ContentParagraph, state: WriteState, pageBrea
   return el('w:p', {}, [...(pPr === undefined ? [] : [pPr]), ...content]);
 }
 
-// readDocx lifts a paragraph's own images out into sibling blocks after it, so the inverse puts each one back into the run it came out of: the paragraph's trailing empty-text runs, in order, are exactly the runs a drawing-only run reads back as. An image with no such run left takes a fresh one.
+// readDocxContent lifts a paragraph's own images out into sibling blocks after it, so the inverse puts each one back into the run it came out of: the paragraph's trailing empty-text runs, in order, are exactly the runs a drawing-only run reads back as. An image with no such run left takes a fresh one.
 function trailingEmptyRunElements(paragraph: ContentParagraph, element: XmlElement): XmlElement[] {
   const runElements: XmlElement[] = [];
   for (const child of element.children) {
@@ -450,7 +452,7 @@ type FlowItem = { readonly kind: 'block'; readonly block: ContentBlock } | { rea
 function parseFlow(blocks: readonly ContentBlock[]): FlowItem[] {
   const imbalance = findConstructMarkerImbalance(blocks);
   if (imbalance !== undefined) {
-    throw new Error(`buildDocxPackage: construct markers do not balance (${imbalance.kind} at block ${String(imbalance.index)})`);
+    throw new Error(`buildDocxPackageFromContent: construct markers do not balance (${imbalance.kind} at block ${String(imbalance.index)})`);
   }
   const roots: FlowItem[] = [];
   const stack: FlowItem[][] = [roots];
@@ -605,7 +607,7 @@ function buildFlowItems(items: readonly FlowItem[], state: WriteState, deleted: 
       availableImageRuns = [];
       continue;
     }
-    // An embedded object has no WordprocessingML block element this writer can produce (readDocx never reads one either), so it contributes nothing rather than a placeholder that would read back as content it is not. A pending page break is left untouched here rather than consumed: since this block contributes no output of its own, the break still belongs to whatever comes next.
+    // An embedded object has no WordprocessingML block element this writer can produce (readDocxContent never reads one either), so it contributes nothing rather than a placeholder that would read back as content it is not. A pending page break is left untouched here rather than consumed: since this block contributes no output of its own, the break still belongs to whatever comes next.
     lastParagraph = undefined;
     availableImageRuns = [];
   }
@@ -746,8 +748,8 @@ function buildExtendedPropertiesPart(metadata: DocumentMetadata): XmlPart {
   return xmlPart(el('Properties', { xmlns: EXTENDED_PROPS_NS }, children));
 }
 
-// ContentSection[] (plus optional document metadata) -> a complete docx Package, built part by part rather than edited into an existing one. The read-side inverse is readDocx; see this module's own header for exactly what survives the pair and what does not.
-export function buildDocxPackage(content: DocxContent): Package {
+// ContentSection[] (plus optional document metadata) -> a complete docx Package, built part by part rather than edited into an existing one. The read-side inverse is readDocxContent; see this module's own header for exactly what survives the pair and what does not.
+export function buildDocxPackageFromContent(content: DocxContent): Package {
   const state = newWriteState();
   const sections = content.sections.length === 0 ? [{ pageSize: { widthPt: 612, heightPt: 792 }, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 }, blocks: [] }] : content.sections;
   // The document part is built first so every hyperlink and image relationship it needs already exists by the time the relationship and content-type parts are written.

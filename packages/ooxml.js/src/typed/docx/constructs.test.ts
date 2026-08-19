@@ -4,10 +4,10 @@ import { findConstructMarkerImbalance } from 'document-schema.js';
 import type { Package } from '../../model/package';
 import type { XmlNode } from '../../model/node';
 import { el, txt } from '../../xml/fragment';
-import { readDocx } from './read';
+import { readDocxContent } from './read';
 import { insertConstructMarkers } from './constructs';
 
-// The block-scope rule in action: which real docx spellings of a structured document tag, field, bookmark, or tracked change become a constructStart/constructEnd pair, and which ones (the run-level occurrences, and the pairs whose extents cross) are deliberately not representable. Every fixture here is a whole word/document.xml body, so each case is read exactly as readDocx would read a real file.
+// The block-scope rule in action: which real docx spellings of a structured document tag, field, bookmark, or tracked change become a constructStart/constructEnd pair, and which ones (the run-level occurrences, and the pairs whose extents cross) are deliberately not representable. Every fixture here is a whole word/document.xml body, so each case is read exactly as readDocxContent would read a real file.
 
 function docxPackage(bodyChildren: XmlNode[]): Package {
   const body = el('w:body', {}, [...bodyChildren, el('w:sectPr', {}, [el('w:pgSz', { 'w:w': '12240', 'w:h': '15840' })])]);
@@ -19,7 +19,7 @@ function para(text: string, ...extra: XmlNode[]): XmlNode {
 }
 
 function blocksOf(bodyChildren: XmlNode[]): ContentBlock[] {
-  return readDocx(docxPackage(bodyChildren)).sections[0]?.blocks ?? [];
+  return readDocxContent(docxPackage(bodyChildren)).sections[0]?.blocks ?? [];
 }
 
 // A compact, order-preserving projection of a block list: each construct marker as its descriptor (or a bare close), each paragraph as its text, everything else as its kind -- so a test asserts the whole shape at once rather than probing indices one at a time.
@@ -157,7 +157,7 @@ describe('docx constructs: tracked changes', () => {
     expect(outline(blocksOf([paragraph]))).toEqual(['kept added ']);
   });
 
-  // This block-level w:del (a tracked-change element wrapping whole w:p elements directly) is not a shape Word itself ever emits -- CT_RunTrackChange has no w:p in its content model, so this is reader tolerance of malformed input, not a spelling buildDocxPackage produces. Word's own multi-paragraph deletion repeats the in-paragraph shape (a w:del wrapping each paragraph's own runs, with that paragraph's own mark also marked deleted) once per paragraph; see write.test.ts's own round-trip coverage for the writer's actual output shape.
+  // This block-level w:del (a tracked-change element wrapping whole w:p elements directly) is not a shape Word itself ever emits -- CT_RunTrackChange has no w:p in its content model, so this is reader tolerance of malformed input, not a spelling buildDocxPackageFromContent produces. Word's own multi-paragraph deletion repeats the in-paragraph shape (a w:del wrapping each paragraph's own runs, with that paragraph's own mark also marked deleted) once per paragraph; see write.test.ts's own round-trip coverage for the writer's actual output shape.
   it('reads a block-level w:del wrapping whole paragraphs as one deletion construct over both', () => {
     const del = el('w:del', { 'w:id': '1', 'w:author': 'Grace', 'w:date': '2026-08-18T10:00:00Z' }, [
       el('w:p', {}, [el('w:r', {}, [el('w:delText', {}, [txt('first')])])]),
@@ -307,7 +307,7 @@ describe('docx constructs: scope boundaries', () => {
   it('drops a bookmark whose extent straddles a section break rather than splitting it across two sections', () => {
     const sectionBreak = el('w:p', {}, [el('w:pPr', {}, [el('w:sectPr', {}, [el('w:pgSz', { 'w:w': '11906', 'w:h': '16838' })])])]);
     const body = [el('w:bookmarkStart', { 'w:id': '1', 'w:name': 'straddles' }), para('first section'), sectionBreak, para('second section'), el('w:bookmarkEnd', { 'w:id': '1' })];
-    const doc = readDocx(docxPackage(body));
+    const doc = readDocxContent(docxPackage(body));
     expect(outline(doc.sections[0]?.blocks ?? [])).toEqual(['first section', '']);
     expect(outline(doc.sections[1]?.blocks ?? [])).toEqual(['second section']);
   });
@@ -315,7 +315,7 @@ describe('docx constructs: scope boundaries', () => {
   it('leaves every section\'s markers balanced by document-schema.js\'s own bracket-matching check', () => {
     const sdt = el('w:sdt', {}, [el('w:sdtPr', {}, [el('w:richText')]), el('w:sdtContent', {}, [para('controlled')])]);
     const body = [el('w:bookmarkStart', { 'w:id': '1', 'w:name': 'b' }), sdt, el('w:ins', { 'w:id': '2' }, [para('added')]), el('w:bookmarkEnd', { 'w:id': '1' })];
-    for (const section of readDocx(docxPackage(body)).sections) {
+    for (const section of readDocxContent(docxPackage(body)).sections) {
       expect(findConstructMarkerImbalance(section.blocks)).toBeUndefined();
     }
   });
