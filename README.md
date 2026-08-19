@@ -60,12 +60,12 @@ Requires Node.js `>=20` and pnpm `11.6.0` (pinned via `packageManager` in `packa
 pnpm install
 ```
 
-Install as a dependency in another project:
+Install as a dependency in another project. The package boundary transform (`assemblePackage`/`decompose`/`flattenPackage`/`factorStyles`) lives in `document-schema.js`, so a caller using it needs that package installed too, matching the major `documents.js` itself depends on (`^4`) — a different major hands back a `DocumentPackage` from one package's barrel and a transform from an incompatible copy, with no resolution error to catch the mismatch:
 
 ```sh
-pnpm add documents.js
+pnpm add documents.js document-schema.js
 # or
-npm install documents.js
+npm install documents.js document-schema.js
 ```
 
 ## Usage
