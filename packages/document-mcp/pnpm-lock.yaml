@@ -11,6 +11,9 @@ importers:
       '@modelcontextprotocol/server':
         specifier: ^2.0.0
         version: 2.0.0
+      document-outline.js:
+        specifier: ^1.0.0
+        version: 1.0.0
       documents.js:
         specifier: ^3.1.2
         version: 3.1.2
@@ -1620,6 +1623,10 @@ packages:
   dir-glob@3.0.1:
     resolution: {integrity: sha512-WkrWp9GR4KXfKGYzOLmTuGVi1UWFfws377n9cc55/tb6DuqyF6pcQ5AbiHEshaDpY9v6oaSr2XCDidGmMwdzIA==}
     engines: {node: '>=8'}
+
+  document-outline.js@1.0.0:
+    resolution: {integrity: sha512-x55gJFT4eyPieUkHRDbpV5ty3qeNRnPx96/h2T+PwHGINX1HCqMLrtkpqciSYUzrcKFG/s2hrQa1+Vk0Tz5Gow==}
+    engines: {node: '>=20'}
 
   document-schema.js@3.3.0:
     resolution: {integrity: sha512-Jcg+sLEKF6T2w6WdCD1S0DcKFt1Kpk/rO1AZlE7fi0pqN4Ys8tN3qeY97DPc78QRy+EkbCW5hKLwM0EyV+Ojqw==}
@@ -4612,6 +4619,11 @@ snapshots:
   dir-glob@3.0.1:
     dependencies:
       path-type: 4.0.0
+
+  document-outline.js@1.0.0:
+    dependencies:
+      document-schema.js: 4.2.0
+      zod: 4.4.3
 
   document-schema.js@3.3.0:
     dependencies:
