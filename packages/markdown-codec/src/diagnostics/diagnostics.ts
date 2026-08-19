@@ -50,6 +50,8 @@ export const MarkdownDiagnosticCodes = {
   FOOTNOTE_BODY_HEADING_FLATTENED: 'md/footnote-body-heading-flattened',
   // src/emit (write side: ContentDocument -> markdown)
   CONSTRUCT_UNREPRESENTED: 'md/construct-unrepresented',
+  // src/write.ts (tree write side: DocumentPackage -> markdown, ahead of flattening)
+  PACKAGE_TABLE_DROPPED: 'md/package-table-dropped',
   HEADING_LEVEL_CLAMPED: 'md/heading-level-clamped',
   ADJACENT_LINKS_MERGED: 'md/adjacent-links-merged',
   CODE_SPAN_AS_MONOSPACE_RUN: 'md/code-span-as-monospace-run',
@@ -136,5 +138,14 @@ export class MarkdownUnsupportedDocumentKindError extends MarkdownWriteError {
     super('md/write-side-not-wordprocessing', `writeMarkdown only supports a 'wordprocessing' ContentDocument, got '${kind}'`);
     this.name = 'MarkdownUnsupportedDocumentKindError';
     this.kind = kind;
+  }
+}
+
+// Thrown by writeMarkdown when document-schema.js's own flattenPackage rejects the package it was handed -- a group carrying a style ref with no top-level styles table to resolve it against is the one case reachable for a 'wordprocessing' package (writeMarkdown's own kind check above rules out the formula/spreadsheet-specific cases flattenPackage also guards). flattenPackage itself throws a bare Error for this, which is not part of this package's own documented error hierarchy -- wrapped here so a caller catching MarkdownWriteError catches it too, rather than needing to know about a dependency's own internal exception type.
+export class MarkdownPackageFlattenError extends MarkdownWriteError {
+  constructor(cause: unknown) {
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    super('md/package-flatten-failed', `flattening the package for write failed: ${detail}`);
+    this.name = 'MarkdownPackageFlattenError';
   }
 }
