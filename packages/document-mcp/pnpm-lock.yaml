@@ -15,8 +15,8 @@ importers:
         specifier: ^1.0.0
         version: 1.0.0
       documents.js:
-        specifier: ^3.1.4
-        version: 3.1.4
+        specifier: ^3.1.5
+        version: 3.1.5
       zod:
         specifier: ^4.2.0
         version: 4.4.3
@@ -1640,8 +1640,8 @@ packages:
     resolution: {integrity: sha512-Ao6bE/q4JGVy6hOX7UGYBZUsekU6GzI19+t+M6jBpGmPuDEeHM5MXSIxbtty45tsKEYmf0seeLybb2DaLZyxPg==}
     engines: {node: '>=20'}
 
-  documents.js@3.1.4:
-    resolution: {integrity: sha512-wY2NNZ9EovgolHOXZlToC1fhEwnTbStg+xhGmdmhKNXj7l83/FfbQeBcLETmilRcT7C86uiSVxyfzbQA+XaqVg==}
+  documents.js@3.1.5:
+    resolution: {integrity: sha512-uv9xKnaK8kQRtzo2Tk0Ll/N/z+I4K4VyLrnHuNW57yTd4LPV2879FecbW0pEZ/rHeYFeaNU01SwNsl5rB0oHGA==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -2576,10 +2576,6 @@ packages:
 
   pathe@2.0.3:
     resolution: {integrity: sha512-WUjGcAqP1gQacoQe+OBJsFA7Ld4DyXuUIjZ5cc75cLHvJ7dtNsTugphxIADwspS+AraAUePCKrSVtPLFj/F88w==}
-
-  pdf-codec@3.0.3:
-    resolution: {integrity: sha512-MH6nh50HYh0hhxAuF7OTGQO3gfCBhLECl/uaxZ6REJ4+oTsAlnXtO5jJkd4v6t/paElFiKeZ83kDCUPHJNEOdA==}
-    engines: {node: '>=20'}
 
   pdf-codec@3.0.4:
     resolution: {integrity: sha512-EwGetkta3q/LBIu94883mES1uKmlIls8f8Mi0L/03xaV8uR1YftSwxnO00Vg+rWxPeE8TaCdZQVIExAhJtKvPQ==}
@@ -4645,7 +4641,7 @@ snapshots:
     dependencies:
       zod: 4.4.3
 
-  documents.js@3.1.4:
+  documents.js@3.1.5:
     dependencies:
       byte-codec: 1.1.9
       document-schema.js: 4.3.0
@@ -4653,7 +4649,7 @@ snapshots:
       markdown-codec: 3.1.0
       odf.js: 4.0.1
       ooxml.js: 3.1.0
-      pdf-codec: 3.0.3
+      pdf-codec: 3.0.4
       temml: 0.13.4
       zod: 4.4.3
 
@@ -5494,13 +5490,6 @@ snapshots:
   path-type@4.0.0: {}
 
   pathe@2.0.3: {}
-
-  pdf-codec@3.0.3:
-    dependencies:
-      byte-codec: 1.1.9
-      document-schema.js: 4.3.0
-      fflate: 0.8.3
-      zod: 4.4.3
 
   pdf-codec@3.0.4:
     dependencies:
