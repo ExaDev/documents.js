@@ -1,0 +1,8 @@
+{
+  // A no-op Worker whose only purpose is to host an isomorphic slice of document-cli's source as the module graph the workers test suite (test/workers/**) imports against under the real workerd runtime -- there is no fetch handler to exercise, only this CLI's own pure wrapper functions (formatSqlResultSetTable, mapErrorToExit) running inside a Cloudflare Workers isolate to prove the documents.js paths they delegate to (hsqldbCellDisplayText, the error classes used in instanceof checks) carry no Node-only API usage on the paths the test exercises.
+  //
+  // Unlike the library packages in this family (documents.js, pdf-codec, odf.js, ...), document-cli's own barrel src/index.ts CANNOT be the Worker main here: it re-exports createProgram (commander) and buildConversionAction/formatError (commands/shared.ts, which top-level-imports node:fs/promises and node:path), so evaluating that barrel inside a workerd isolate would throw at import. src/sql-result-format.ts is instead the isomorphic leaf module the test exercises directly -- a pure function of a documents.js SqlResultSet that calls hsqldbCellDisplayText per cell, with no commander/Ink/node:fs/process.stdin anywhere in its import graph. The test file (test/workers/document-cli.test.ts) independently imports the other modules under test (src/runtime/exit-codes); those form their own isomorphic subgraph.
+  "name": "document-cli-workers-test",
+  "main": "src/sql-result-format.ts",
+  "compatibility_date": "2024-09-23"
+}
