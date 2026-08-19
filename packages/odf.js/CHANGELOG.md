@@ -1,3 +1,23 @@
+# [5.0.0](https://github.com/ExaDev/odf.js/compare/v4.0.3...v5.0.0) (2026-08-19)
+
+
+### Features
+
+* read every ODF content format into a DocumentPackage ([668f046](https://github.com/ExaDev/odf.js/commit/668f0468a322d202806a90af22ab93310f7623ee))
+
+
+### BREAKING CHANGES
+
+* the flat typed readers move to *Content names, freeing
+the bare names for the DocumentPackage-native readers: readOdt ->
+readOdtContent, readOdp -> readOdpContent, readOdg -> readOdgContent,
+readOds -> readOdsContent, readOdfFormulaDocument ->
+readOdfFormulaContent, and readOdfFormula -> readOdfFormulaMathMl.
+Behaviour is unchanged in every case; each new bare name returns a
+DocumentPackage, which is assignable to none of the old return types, so
+an unmigrated call site fails to compile rather than changing meaning
+silently.
+
 ## [4.0.3](https://github.com/ExaDev/odf.js/compare/v4.0.2...v4.0.3) (2026-08-19)
 
 ## [4.0.2](https://github.com/ExaDev/odf.js/compare/v4.0.1...v4.0.2) (2026-08-18)
