@@ -52,7 +52,7 @@ describe('setDocumentMetadata: pdf direct-patch path', () => {
   });
 });
 
-// xlsx rebuilds through DOCUMENT_FORMAT_CODECS.xlsx.content (ooxml.js's readXlsxContent/buildXlsxPackage, src/codecs/registry.ts) exactly like every other rebuild format above -- real xlsx bytes (via the odsToXlsx bridge over richOdsBytes, the same real-fixture pattern src/convert/bridges.test.ts already uses) prove the round trip genuinely works, not merely that the type system accepts 'xlsx' as a RebuildFormat.
+// xlsx rebuilds through DOCUMENT_FORMAT_CODECS.xlsx.content (ooxml.js's readXlsxContent/buildXlsxPackageFromContent, src/codecs/registry.ts) exactly like every other rebuild format above -- real xlsx bytes (via the odsToXlsx bridge over richOdsBytes, the same real-fixture pattern src/convert/bridges.test.ts already uses) prove the round trip genuinely works, not merely that the type system accepts 'xlsx' as a RebuildFormat.
 describe('setDocumentMetadata: rebuild path (xlsx)', () => {
   it('patches only the overridden field, leaving the source spreadsheet content untouched', () => {
     const xlsxBytes = odsToXlsx(richOdsBytes());

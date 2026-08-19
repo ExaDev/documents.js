@@ -65,7 +65,7 @@ function walkForImageFrames(nodes: readonly XmlNode[], groupFunctions: readonly 
 
 // Every draw:frame resolving to a real embedded image found ANYWHERE beneath `nodes`, in document order: directly among them, nested inside a draw:g group (composing that group's own draw:transform), or anchored inline inside a paragraph's own run content. This is deliberately a deep walk rather than a direct-children scan -- an image inserted inline in a LibreOffice paragraph is a draw:frame child of text:p, and one dropped into a grouped diagram is a draw:frame child of draw:g; neither is a direct child of the container a caller starts from.
 //
-// Positioning the results back into a caller's own model is the caller's job, not this function's -- see src/odf/odt/read.ts's own collectImagePlacements, which (unlike its formula/vector counterparts) never consumes the paragraph an image is found in: ContentImageBlock has nowhere to record inline membership, so an image always arrives as its own adjacent block, mirroring ooxml.js's own readDocx convention for a docx inline image exactly.
+// Positioning the results back into a caller's own model is the caller's job, not this function's -- see src/odf/odt/read.ts's own collectImagePlacements, which (unlike its formula/vector counterparts) never consumes the paragraph an image is found in: ContentImageBlock has nowhere to record inline membership, so an image always arrives as its own adjacent block, mirroring ooxml.js's own readDocxContent convention for a docx inline image exactly.
 export function collectImageFrames(nodes: readonly XmlNode[], pkg: Package): readonly DetectedImageFrame[] {
   const out: DetectedImageFrame[] = [];
   walkForImageFrames(nodes, [], pkg, out);

@@ -97,7 +97,7 @@ export interface CreateEmptyOdtPackageOptions {
   readonly metadata?: LayoutMetadata;
 }
 
-// Builds a minimal but genuinely valid, openable odt package from nothing: the mandatory mimetype part (via setDocumentMediaType), a content.xml with an empty office:automatic-styles and an empty office:body/office:text, a styles.xml with the page-layout -> master-page chain readOdt itself resolves for page geometry, a minimal meta.xml, and a manifest listing every part (via syncManifest) -- the same four-part shape (mimetype, content.xml, styles.xml, META-INF/manifest.xml, plus meta.xml) odf.js's own round-trip fixtures use. A caller passing no options gets byte-for-byte the same package as before office:meta population existed -- options.metadata is purely additive.
+// Builds a minimal but genuinely valid, openable odt package from nothing: the mandatory mimetype part (via setDocumentMediaType), a content.xml with an empty office:automatic-styles and an empty office:body/office:text, a styles.xml with the page-layout -> master-page chain readOdtContent itself resolves for page geometry, a minimal meta.xml, and a manifest listing every part (via syncManifest) -- the same four-part shape (mimetype, content.xml, styles.xml, META-INF/manifest.xml, plus meta.xml) odf.js's own round-trip fixtures use. A caller passing no options gets byte-for-byte the same package as before office:meta population existed -- options.metadata is purely additive.
 export function createEmptyOdtPackage(options?: CreateEmptyOdtPackageOptions): Package {
   const pkg: Package = {
     parts: {
