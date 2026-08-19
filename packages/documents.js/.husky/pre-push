@@ -1,2 +1,0 @@
-# Run the full test suite before push to catch breakage early.
-npx vitest run --project unit

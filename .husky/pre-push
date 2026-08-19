@@ -1,0 +1,5 @@
+# Typecheck and unit tests across the workspace before push, to catch breakage early. Both run
+# through turbo, so an unchanged package is a cache hit rather than a re-run: the cost is
+# proportional to what actually changed, not to the size of the workspace.
+pnpm typecheck
+pnpm test
