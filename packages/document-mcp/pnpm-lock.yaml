@@ -16,7 +16,7 @@ importers:
         version: 1.0.0
       documents.js:
         specifier: ^4.0.1
-        version: 4.0.1
+        version: 4.0.2
       zod:
         specifier: ^4.2.0
         version: 4.4.3
@@ -1640,8 +1640,8 @@ packages:
     resolution: {integrity: sha512-Ao6bE/q4JGVy6hOX7UGYBZUsekU6GzI19+t+M6jBpGmPuDEeHM5MXSIxbtty45tsKEYmf0seeLybb2DaLZyxPg==}
     engines: {node: '>=20'}
 
-  documents.js@4.0.1:
-    resolution: {integrity: sha512-Sf+KASXX47nIXG5R/hMbISJLip34z9Bp4tkYM4iqDzMeVqQm9m5pIh2WgUt2VnsHiRHgp5a/QN4J9b/IpkAYHg==}
+  documents.js@4.0.2:
+    resolution: {integrity: sha512-TTscvVMqyIackUF/oYewSC2J9eeu+NXOf8PYXIZuRt+bhetTTmF0XkZi58rQjuQdtuKb1DZ4Gsi5yOCedzawtg==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -2455,16 +2455,16 @@ packages:
     resolution: {integrity: sha512-P2fSMZr3wTsJR5dMJno2lNNJQEGBfLJaJ/GNpOzTxCY/81jA7d0DsYoHKZuzqIhVGmsOTMh4+6w0DKMxlLLl0g==}
     engines: {node: '>=20'}
 
-  odf.js@4.0.1:
-    resolution: {integrity: sha512-S7hZ6+TcqQH0muuEb7PmivMQs1KaohKCqN8PBdJJNtggEW2UxAC7XPm52KGpWVlBNHS/rPTqt7+xveK4hO7aOw==}
+  odf.js@4.0.3:
+    resolution: {integrity: sha512-XmC2ULP8DjUpkdqQ9FPfG7IBDQ44yH5kGuOLSja0/mqDdlB7zAaALMVA+unQB+eKnHNF5deuRSROYJMxyJ39Ag==}
     engines: {node: '>=20'}
 
   onetime@6.0.0:
     resolution: {integrity: sha512-1FlR+gjXK7X+AsAHso35MnyN5KqGwJRi/31ft6x0M194ht7S+rWAvd7PHss9xSKMzE0asv1pyIHaJYq+BbacAQ==}
     engines: {node: '>=12'}
 
-  ooxml.js@3.1.0:
-    resolution: {integrity: sha512-zfY5Or81HedeSY+m4q0HuptBmKr8j2sdkA1F4muqvJcewt4tyesMXUcaCXdswK+pvwzhMG3g3bNCxohJnRrZZw==}
+  ooxml.js@3.1.1:
+    resolution: {integrity: sha512-7Ocgv6ck6gIBsbr2w7W8amjId8Yacx0N9/53rFgSo/0GmFVjUXsi1mY2vFb5WDTP8IvLeyu3qUdQnVbKqee1vQ==}
     engines: {node: '>=20'}
 
   optionator@0.9.4:
@@ -4641,14 +4641,14 @@ snapshots:
     dependencies:
       zod: 4.4.3
 
-  documents.js@4.0.1:
+  documents.js@4.0.2:
     dependencies:
       byte-codec: 1.1.9
       document-schema.js: 4.3.0
       fflate: 0.8.3
       markdown-codec: 3.1.1
-      odf.js: 4.0.1
-      ooxml.js: 3.1.0
+      odf.js: 4.0.3
+      ooxml.js: 3.1.1
       pdf-codec: 3.0.4
       temml: 0.13.4
       zod: 4.4.3
@@ -5380,7 +5380,7 @@ snapshots:
       fflate: 0.8.3
       zod: 4.4.3
 
-  odf.js@4.0.1:
+  odf.js@4.0.3:
     dependencies:
       document-schema.js: 4.3.0
       fast-xml-parser: 5.11.0
@@ -5391,7 +5391,7 @@ snapshots:
     dependencies:
       mimic-fn: 4.0.0
 
-  ooxml.js@3.1.0:
+  ooxml.js@3.1.1:
     dependencies:
       document-schema.js: 4.3.0
       fast-xml-parser: 5.11.0
