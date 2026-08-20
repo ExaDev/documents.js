@@ -90,7 +90,7 @@
   "packageManager": "pnpm@11.6.0",
   "dependencies": {
     "commander": "^15.0.0",
-    "document-outline.js": "^1.0.3",
+    "document-outline.js": "^1.0.4",
     "document-schema.js": "^4.3.7",
     "documents.js": "^4.0.23",
     "ink": "^7.1.1",
