@@ -146,7 +146,7 @@ importers:
         specifier: ^1.0.2
         version: link:../document-outline.js
       document-schema.js:
-        specifier: ^4.3.5
+        specifier: ^4.3.6
         version: link:../document-schema.js
       documents.js:
         specifier: ^4.0.22
