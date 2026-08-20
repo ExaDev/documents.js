@@ -18,6 +18,7 @@ import { buildAnchoredVectorDrawing } from './vector';
 export interface ParagraphInit {
   readonly text?: string;
   readonly styleId?: string;
+  readonly headingLevel?: number;
   readonly alignment?: 'left' | 'center' | 'right' | 'justify';
 }
 
@@ -308,6 +309,27 @@ export class DocxParagraph {
     numPr.children = [el('w:ilvl', { 'w:val': String(value.level) }), el('w:numId', { 'w:val': value.numId })];
   }
 
+  // The canonical heading depth (document-schema.js's headingLevel, 1-based), stored as w:outlineLvl (0-based -- the identical +1 mapping ooxml.js's own docx reader applies reading it back). This is the depth signal Word's navigation pane and TOC fields read; the heading's VISUAL style is a separate fact carried by w:pStyle, which is why both are written for a heading rather than one standing in for the other.
+  get headingLevel(): number | undefined {
+    const pPr = this.pPr(false);
+    const outlineLvl = pPr === undefined ? undefined : directChild(pPr, 'w:outlineLvl');
+    const val = outlineLvl === undefined ? undefined : attr(outlineLvl, 'w:val');
+    return val === undefined ? undefined : Number(val) + 1;
+  }
+
+  set headingLevel(value: number | undefined) {
+    if (value === undefined) {
+      const pPr = this.pPr(false);
+      const existing = pPr === undefined ? undefined : directChild(pPr, 'w:outlineLvl');
+      if (existing !== undefined && pPr !== undefined) {
+        removeChild(pPr.children, existing);
+      }
+      return;
+    }
+    const outlineLvl = getOrCreateChildElement(this.pPr(true), 'w:outlineLvl', PPR_ORDER, () => el('w:outlineLvl'));
+    setAttr(outlineLvl, 'w:val', String(value - 1));
+  }
+
   // Appends a real OMML display equation (m:oMathPara > m:oMath) to the end of this paragraph, translated from `mathml` by src/omml/write.ts -- genuinely editable Word math, not a picture and not a plain-text stand-in. m:oMathPara is a member of WordprocessingML's own EG_PContent, so it is a direct child of w:p exactly as a w:r is, and needs no run to sit inside.
   //
   // Returns the translation's own result: `written` is false when the MathML produced no OMML content at all (an empty formula), which is a caller's signal to fall back to its own stand-in rather than leave the paragraph empty; `diagnostics` reports every construct that degraded or was approximated on the way through.
@@ -369,13 +391,17 @@ export class DocxParagraph {
 
 export function buildParagraph(init: ParagraphInit = {}): XmlElement {
   const paragraph = el('w:p');
-  if (init.styleId !== undefined || init.alignment !== undefined) {
+  if (init.styleId !== undefined || init.alignment !== undefined || init.headingLevel !== undefined) {
     const pPr = el('w:pPr');
     if (init.styleId !== undefined) {
       pPr.children.push(el('w:pStyle', { 'w:val': init.styleId }));
     }
     if (init.alignment !== undefined) {
       pPr.children.push(el('w:jc', { 'w:val': init.alignment === 'justify' ? 'both' : init.alignment }));
+    }
+    // Pushed last of the three: CT_PPrGeneral puts w:outlineLvl after w:jc, and this builder's push order is already the schema order.
+    if (init.headingLevel !== undefined) {
+      pPr.children.push(el('w:outlineLvl', { 'w:val': String(init.headingLevel - 1) }));
     }
     paragraph.children.push(pPr);
   }

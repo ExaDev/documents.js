@@ -21,7 +21,8 @@ export const RPR_ORDER: readonly string[] = [
   'w:u',
 ];
 
-export const PPR_ORDER: readonly string[] = ['w:pStyle', 'w:numPr', 'w:spacing', 'w:ind', 'w:jc', 'w:rPr'];
+// w:outlineLvl sits between w:jc and w:rPr in CT_PPrGeneral's own sequence (the order Word enforces), so it belongs in this editor's ordering table the moment any writer can emit it.
+export const PPR_ORDER: readonly string[] = ['w:pStyle', 'w:numPr', 'w:spacing', 'w:ind', 'w:jc', 'w:outlineLvl', 'w:rPr'];
 
 // w:rPr must always be the first child of w:r (CT_R), and w:pPr must always be the first child of w:p (CT_P) -- a fixed-prefix invariant distinct from (and simpler than) the ordering *among* sibling properties that insertInSchemaOrder handles, so it gets its own dedicated helper rather than being folded into RPR_ORDER/PPR_ORDER (which order properties *within* rPr/pPr, not rPr/pPr's own position among w:r's or w:p's other children).
 export function ensureFirstChild(parent: XmlElement, tag: string): XmlElement {

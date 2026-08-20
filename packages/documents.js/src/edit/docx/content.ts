@@ -136,6 +136,9 @@ function populateParagraph(paragraph: DocxParagraph, block: ContentParagraph): v
   paragraph.styleId = block.styleId;
   paragraph.alignment = block.alignment;
   paragraph.list = block.list;
+  if (block.headingLevel !== undefined) {
+    paragraph.headingLevel = block.headingLevel;
+  }
   if (block.spacingBeforePt !== undefined) {
     paragraph.spacingBeforePt = block.spacingBeforePt;
   }
