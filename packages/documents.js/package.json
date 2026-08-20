@@ -21,6 +21,14 @@
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
     },
+    "./read": {
+      "types": {
+        "import": "./dist/convert/from-pdf.d.ts",
+        "require": "./dist/convert/from-pdf.d.cts"
+      },
+      "import": "./dist/convert/from-pdf.js",
+      "require": "./dist/convert/from-pdf.cjs"
+    },
     "./*": {
       "types": {
         "import": "./dist/*.d.ts",
@@ -33,6 +41,13 @@
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "read": [
+        "./dist/convert/from-pdf.d.ts"
+      ]
+    }
+  },
   "bin": {
     "documents.js": "./dist/bin.js"
   },

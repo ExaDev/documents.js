@@ -14,7 +14,8 @@ import { readPptxContent } from '../ooxml/pptx/read';
 import { collectDrawingMlVectors } from '../test-support/drawingml-vector';
 import { minimalOdgBytes } from '../test-support/odg';
 import { VECTOR_FIXTURE, vectorDrawingBlock } from '../test-support/vectors';
-import { docxToOdt, odgToPdf, odpToPptx, odtToDocx, pdfToDocx, pdfToOdp, pdfToOdt, pdfToPptx, pptxToOdp } from './convert';
+import { docxToOdt, odgToPdf, odpToPptx, odtToDocx, pptxToOdp } from './convert';
+import { pdfToDocx, pdfToOdp, pdfToOdt, pdfToPptx } from './from-pdf';
 
 // End-to-end proof that a page's painted geometry survives all the way from a real file, through PDF, into each of the four wordprocessing/presentation targets as real vector shapes -- not just that each builder writes markup when handed a drawing block (src/edit/{docx,pptx,odt,odp}/content.test.ts prove that in isolation) but that the recovery and the writing actually meet.
 //
