@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Package } from '../../src';
-import { buildXlsxPackage, bytesToBase64, decodePackage, el, encodePackage, flattenPackage, readPptxContent, readXlsx, readXlsxContent, zipPackage } from '../../src';
+import { buildXlsxPackage, bytesToBase64, decodePackage, el, encodePackage, flattenPackage, readDocxContent, readPptxContent, readXlsx, readXlsxContent, zipPackage } from '../../src';
 import { minimalXlsxBytes } from '../../src/test-support/embedded';
 
 // Proves ooxml.js's xlsx decode path executes inside a Cloudflare Workers isolate (workerd, via @cloudflare/vitest-pool-workers) with no Node-only APIs. The path under test -- zipPackage (fflate, pure JS) -> decodePackage -> readXlsxContent (fast-xml-parser, pure JS) -- is deliberately Node-free; if any step touched node:fs/Buffer/process the workerd isolate would throw rather than these passing. The minimal xlsx parts are built inline as a Record<string, Uint8Array> (no node:fs/readFileSync -- workerd has no fs) and round-trip through the same zip/decode path src/typed/xlsx.test.ts already exercises under node. This is the runtime proof for ooxml.js issue #17. The second test extends the same proof to the DocumentPackage boundary readXlsx/buildXlsxPackage sit on, since a structural transform is exactly the sort of pure-object code that could quietly acquire a Node dependency without any test noticing under node.
@@ -89,6 +89,42 @@ describe('ooxml.js pptx OLE embedded-object recovery under the Cloudflare Worker
     const shape = doc.slides[0]?.shapes[0];
     // No fallback picture, so the frame's blocks are the progId stand-in paragraph plus the recovered embedded object.
     const embedded = shape?.blocks.find((block) => block.kind === 'embeddedObject');
+    expect(embedded?.kind === 'embeddedObject' ? embedded.objectKind : undefined).toBe('spreadsheet');
+    const sheet = embedded?.kind === 'embeddedObject' && embedded.document.kind === 'spreadsheet' ? embedded.document.sheets[0] : undefined;
+    expect(sheet?.cells[0]?.value).toEqual({ kind: 'string', value: 'Recovered cell' });
+  });
+});
+
+describe('ooxml.js docx OLE embedded-object recovery under the Cloudflare Workers runtime', () => {
+  it('recovers an OLE-embedded xlsx inside a docx with no Node-only APIs on the path', () => {
+    // The docx arm of the embedded-object recovery -- document relationship resolution -> binary payload part -> readEmbeddedOoxmlPayload (which cycles back through this reader for a wordprocessing payload) -> ContentEmbeddedObjectBlock lifted beside its paragraph -- adds a new import edge onto the same Worker-isomorphic contract, so it gets its own isolate proof rather than inheriting the pptx one. The host docx is built inline in the Package object model (the VML preview has no reader, so it contributes nothing) and its embeddings part carries the same real minimal xlsx bytes the node suites use.
+    const objectParagraph = el('w:p', {}, [
+      el('w:r', {}, [
+        el('w:object', { 'w:dxaOrig': '1920', 'w:dyaOrig': '1200' }, [
+          el('v:shape', { id: '_x0000_i1025', type: '#_x0000_t75' }, [el('v:imagedata', { 'r:id': 'rIdPreview', 'o:title': '' })]),
+          el('o:OLEObject', { Type: 'Embed', ProgID: 'Excel.Sheet.12', 'r:id': 'rIdOle' }),
+        ]),
+      ]),
+    ]);
+    const body = el('w:body', {}, [objectParagraph, el('w:sectPr', {}, [el('w:pgSz', { 'w:w': '12240', 'w:h': '15840' })])]);
+    const relElement = (id: string, type: string, target: string) => el('Relationship', { Id: id, Type: type, Target: target });
+    const pkg: Package = {
+      parts: {
+        'word/document.xml': { kind: 'xml', nodes: [el('w:document', {}, [body])] },
+        'word/_rels/document.xml.rels': {
+          kind: 'xml',
+          nodes: [
+            el('Relationships', {}, [
+              relElement('rIdOle', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject', 'embeddings/oleObject1.xlsx'),
+              relElement('rIdPreview', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image', 'media/olePreview.png'),
+            ]),
+          ],
+        },
+        'word/embeddings/oleObject1.xlsx': { kind: 'binary', base64: bytesToBase64(minimalXlsxBytes()) },
+      },
+    };
+    const doc = readDocxContent(pkg);
+    const embedded = doc.sections[0]?.blocks.find((block) => block.kind === 'embeddedObject');
     expect(embedded?.kind === 'embeddedObject' ? embedded.objectKind : undefined).toBe('spreadsheet');
     const sheet = embedded?.kind === 'embeddedObject' && embedded.document.kind === 'spreadsheet' ? embedded.document.sheets[0] : undefined;
     expect(sheet?.cells[0]?.value).toEqual({ kind: 'string', value: 'Recovered cell' });
