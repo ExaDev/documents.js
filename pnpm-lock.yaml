@@ -519,7 +519,7 @@ importers:
         specifier: ^4.3.5
         version: link:../document-schema.js
       documents.js:
-        specifier: ^4.0.21
+        specifier: ^4.0.22
         version: link:../documents.js
       markdown-codec:
         specifier: ^4.0.8
