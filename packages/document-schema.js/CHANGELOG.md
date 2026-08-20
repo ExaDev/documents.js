@@ -1,3 +1,12 @@
+# [4.4.0](https://github.com/ExaDev/documents.js/compare/document-schema.js@4.3.7...document-schema.js@4.4.0) (2026-08-20)
+
+
+### Features
+
+* **schema:** carry the source residue field on every content node a reader produces ([d82fd5a](https://github.com/ExaDev/documents.js/commit/d82fd5a0192b921f750ec8f2291fee5f284db256))
+* **schema:** define the quarantined source residue value ({ format, xml }) as its own module ([45e1b1a](https://github.com/ExaDev/documents.js/commit/45e1b1a4022e0200c347f1bd9e0bbb2366e4a7f7))
+* **schema:** residue on construct descriptors (division excepted) and a package-level source table ([42ed0fb](https://github.com/ExaDev/documents.js/commit/42ed0fb7bda41900a52c47c892fef2c9261600e8))
+
 ## [4.3.7](https://github.com/ExaDev/documents.js/compare/document-schema.js@4.3.6...document-schema.js@4.3.7) (2026-08-20)
 
 ## [4.3.6](https://github.com/ExaDev/documents.js/compare/document-schema.js@4.3.5...document-schema.js@4.3.6) (2026-08-20)
