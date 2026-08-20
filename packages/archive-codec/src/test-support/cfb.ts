@@ -1,4 +1,4 @@
-// A hand-built minimal [MS-CFB] compound-file writer for the reader's tests (ooxml.js's embedded-payload fixtures mirror this layout in their own test-support): given slash-separated stream paths and their bytes, it emits a genuine version-3 compound file (512-byte sectors, 4096-byte mini-stream cutoff, 64-byte mini sectors) whose header, DIFAT, FAT, directory, and mini-FAT the reader under test must parse to get the streams back.
+// A hand-built minimal [MS-CFB] compound-file writer for the reader's tests (ooxml.js's embedded-payload fixtures mirror this layout in their own test-support): given slash-separated stream paths and their bytes, it emits a genuine compound file -- version 3 (512-byte sectors) by default, version 4 (4096-byte sectors, the 512-byte header zero-padded out to the full sector-sized header region) via the majorVersion option -- always with the 4096-byte mini-stream cutoff and 64-byte mini sectors both versions mandate, whose header, DIFAT, FAT, directory, and mini-FAT the reader under test must parse to get the streams back.
 //
 // Construction, in the order the bytes are laid out:
 //
@@ -15,6 +15,10 @@ export interface CompoundFileEntrySpec {
   readonly bytes: Uint8Array<ArrayBuffer>;
 }
 
+export interface CompoundFileOptions {
+  readonly majorVersion?: 3 | 4;
+}
+
 interface StorageNode {
   readonly name: string;
   readonly children: StorageNode[];
@@ -27,15 +31,12 @@ interface DirectoryRecord {
   rightId: number;
 }
 
-const SECTOR_SIZE = 512;
 const MINI_SECTOR_SIZE = 64;
 const MINI_STREAM_CUTOFF = 4096;
 const FREESECT = 0xffffffff;
 const ENDOFCHAIN = 0xfffffffe;
 const FATSECT = 0xfffffffd;
 const NOSTREAM = 0xffffffff;
-const ENTRIES_PER_DIRECTORY_SECTOR = SECTOR_SIZE / 128;
-const FAT_ENTRIES_PER_SECTOR = SECTOR_SIZE / 4;
 
 const enc = (s: string): Uint8Array<ArrayBuffer> => new TextEncoder().encode(s);
 
@@ -87,8 +88,15 @@ function padToMultiple(bytes: Uint8Array<ArrayBuffer>, multiple: number): Uint8A
   return padded;
 }
 
-// Builds the compound file for the given entries. Stream order and storage layout are deterministic (input order), so identical inputs produce byte-identical files.
-export function compoundFile(entries: readonly CompoundFileEntrySpec[]): Uint8Array<ArrayBuffer> {
+// Builds the compound file for the given entries (version 3 unless majorVersion names 4). Stream order and storage layout are deterministic (input order), so identical inputs produce byte-identical files.
+export function compoundFile(entries: readonly CompoundFileEntrySpec[], options: CompoundFileOptions = {}): Uint8Array<ArrayBuffer> {
+  // Sector geometry is the version's own: 512-byte sectors for version 3, 4096 for version 4 -- whose 512-byte header the file zero-pads out to the full first sector ([MS-CFB] 2.2), so sector N always starts at (N + 1) * sectorSize, never 512 + N * sectorSize.
+  const majorVersion = options.majorVersion ?? 3;
+  const sectorSize = majorVersion === 4 ? 4096 : 512;
+  const sectorShift = majorVersion === 4 ? 12 : 9;
+  const entriesPerDirectorySector = sectorSize / 128;
+  const fatEntriesPerSector = sectorSize / 4;
+
   const root: StorageNode = { name: '', children: [] };
   for (const entry of entries) {
     const segments = entry.path.split('/');
@@ -150,17 +158,17 @@ export function compoundFile(entries: readonly CompoundFileEntrySpec[]): Uint8Ar
   }
   const miniSectorCount = miniStream.length / MINI_SECTOR_SIZE;
 
-  const bigSectorCounts = bigStreamRecords.map(({ node }) => Math.ceil((node.stream ?? new Uint8Array(0)).length / SECTOR_SIZE));
-  const directorySectorCount = Math.ceil(records.length / ENTRIES_PER_DIRECTORY_SECTOR);
-  const miniStreamSectorCount = Math.ceil(miniStream.length / SECTOR_SIZE);
-  const miniFatSectorCount = miniSectorCount === 0 ? 0 : Math.ceil(miniSectorCount / FAT_ENTRIES_PER_SECTOR);
+  const bigSectorCounts = bigStreamRecords.map(({ node }) => Math.ceil((node.stream ?? new Uint8Array(0)).length / sectorSize));
+  const directorySectorCount = Math.ceil(records.length / entriesPerDirectorySector);
+  const miniStreamSectorCount = Math.ceil(miniStream.length / sectorSize);
+  const miniFatSectorCount = miniSectorCount === 0 ? 0 : Math.ceil(miniSectorCount / fatEntriesPerSector);
   const dataSectorCount = bigSectorCounts.reduce((total, count) => total + count, 0);
   // FAT-sector fixed point: the FAT sectors must between them map every sector of the file, themselves included.
   let fatSectorCount = 1;
   let totalSectors: number;
   for (;;) {
     totalSectors = fatSectorCount + directorySectorCount + dataSectorCount + miniStreamSectorCount + miniFatSectorCount;
-    const needed = Math.max(1, Math.ceil(totalSectors / FAT_ENTRIES_PER_SECTOR));
+    const needed = Math.max(1, Math.ceil(totalSectors / fatEntriesPerSector));
     if (needed === fatSectorCount) {
       break;
     }
@@ -183,7 +191,7 @@ export function compoundFile(entries: readonly CompoundFileEntrySpec[]): Uint8Ar
   nextSector += miniStreamSectorCount;
   const miniFatStart = nextSector;
 
-  const fat = new Uint32Array(fatSectorCount * FAT_ENTRIES_PER_SECTOR).fill(FREESECT);
+  const fat = new Uint32Array(fatSectorCount * fatEntriesPerSector).fill(FREESECT);
   const chain = (start: number, count: number): void => {
     for (let i = 0; i < count; i++) {
       fat[start + i] = i === count - 1 ? ENDOFCHAIN : start + i + 1;
@@ -200,7 +208,7 @@ export function compoundFile(entries: readonly CompoundFileEntrySpec[]): Uint8Ar
   chain(miniFatStart, miniFatSectorCount);
 
   // The mini-FAT: one chain per small stream over its run of consecutive mini sectors.
-  const miniFat = new Uint32Array(miniFatSectorCount * FAT_ENTRIES_PER_SECTOR).fill(FREESECT);
+  const miniFat = new Uint32Array(miniFatSectorCount * fatEntriesPerSector).fill(FREESECT);
   for (const { id, node } of smallStreamRecords) {
     const start = miniStartOf.get(id) ?? 0;
     const count = Math.ceil((node.stream ?? new Uint8Array(0)).length / MINI_SECTOR_SIZE);
@@ -210,7 +218,7 @@ export function compoundFile(entries: readonly CompoundFileEntrySpec[]): Uint8Ar
   }
 
   // Directory sectors: entry n sits at byte n * 128 of the concatenated chain.
-  const directory = new Uint8Array(directorySectorCount * SECTOR_SIZE);
+  const directory = new Uint8Array(directorySectorCount * sectorSize);
   for (const { node, id, rightId } of records) {
     const entry = new DataView(directory.buffer, id * 128, 128);
     const childId = node.children.length === 0 ? NOSTREAM : (recordOf.get(node.children[0] ?? node)?.id ?? NOSTREAM);
@@ -225,19 +233,19 @@ export function compoundFile(entries: readonly CompoundFileEntrySpec[]): Uint8Ar
     }
   }
 
-  // The header: version 3, little-endian, 512-byte sectors, 64-byte mini sectors, DIFAT in the header array only.
-  const file = new Uint8Array(SECTOR_SIZE + totalSectors * SECTOR_SIZE);
+  // The header: little-endian, the version's own sector shifts, DIFAT in the header array only. The directory-sector count is 0 for version 3 (the spec fixes it there) and the real count for version 4; the reader deliberately does not cross-check either way, but the writer stays spec-conformant.
+  const file = new Uint8Array(sectorSize + totalSectors * sectorSize);
   const view = new DataView(file.buffer);
   const magic = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1];
   for (let i = 0; i < magic.length; i++) {
     file[i] = magic[i] ?? 0;
   }
   put16(view, 0x18, 0x3e); // minor version: the value producers commonly write; readers ignore it
-  put16(view, 0x1a, 3); // major version 3
+  put16(view, 0x1a, majorVersion);
   put16(view, 0x1c, 0xfffe); // byte order: little-endian
-  put16(view, 0x1e, 9); // sector shift: 2^9 = 512-byte sectors
+  put16(view, 0x1e, sectorShift);
   put16(view, 0x20, 6); // mini sector shift: 2^6 = 64-byte mini sectors
-  put32(view, 0x28, 0); // number of directory sectors: MUST be 0 for version 3
+  put32(view, 0x28, majorVersion === 3 ? 0 : directorySectorCount);
   put32(view, 0x2c, fatSectorCount);
   put32(view, 0x30, directoryStart);
   put32(view, 0x38, MINI_STREAM_CUTOFF);
@@ -250,22 +258,22 @@ export function compoundFile(entries: readonly CompoundFileEntrySpec[]): Uint8Ar
   }
 
   const copySector = (sector: number, bytes: Uint8Array): void => {
-    file.set(bytes, SECTOR_SIZE + sector * SECTOR_SIZE);
+    file.set(bytes, sectorSize + sector * sectorSize);
   };
   for (let i = 0; i < fatSectorCount; i++) {
-    copySector(fatSectors[i] ?? 0, new Uint8Array(fat.buffer, i * SECTOR_SIZE, SECTOR_SIZE));
+    copySector(fatSectors[i] ?? 0, new Uint8Array(fat.buffer, i * sectorSize, sectorSize));
   }
   for (let i = 0; i < directorySectorCount; i++) {
-    copySector(directoryStart + i, directory.subarray(i * SECTOR_SIZE, (i + 1) * SECTOR_SIZE));
+    copySector(directoryStart + i, directory.subarray(i * sectorSize, (i + 1) * sectorSize));
   }
   for (let i = 0; i < bigStreamRecords.length; i++) {
-    copySector(bigStartOf.get(bigStreamRecords[i]?.id ?? -1) ?? 0, padToMultiple(bigStreamRecords[i]?.node.stream ?? new Uint8Array(0), SECTOR_SIZE));
+    copySector(bigStartOf.get(bigStreamRecords[i]?.id ?? -1) ?? 0, padToMultiple(bigStreamRecords[i]?.node.stream ?? new Uint8Array(0), sectorSize));
   }
   if (miniStream.length > 0) {
     copySector(miniStreamStart, miniStream);
   }
   for (let i = 0; i < miniFatSectorCount; i++) {
-    copySector(miniFatStart + i, new Uint8Array(miniFat.buffer, i * SECTOR_SIZE, SECTOR_SIZE));
+    copySector(miniFatStart + i, new Uint8Array(miniFat.buffer, i * sectorSize, sectorSize));
   }
   return file;
 }

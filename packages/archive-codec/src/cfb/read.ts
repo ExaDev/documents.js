@@ -95,12 +95,12 @@ export function readCompoundFile(bytes: Uint8Array<ArrayBuffer>, options: ReadCo
   const firstMiniFatSector = u32(view, 0x3c);
   const firstDifatSector = u32(view, 0x44);
 
-  // Sector N occupies bytes [(N + 1) * sectorSize, (N + 2) * sectorSize): the header takes the first sectorSize bytes of the file (its second half is unused padding in version 3), so a sector number is valid only when the file fully contains its end. This derivation doubles as every chain's cycle bound -- a chain of more than sectorCount sectors must revisit one, because every valid sector number is below sectorCount.
+  // Sector N occupies bytes [(N + 1) * sectorSize, (N + 2) * sectorSize): the header takes the first sectorSize bytes of the file (the 3584 bytes past version 4's 512-byte header are zero padding; version 3's header fills its 512-byte sector exactly), so a sector number is valid only when the file fully contains its end. This derivation doubles as every chain's cycle bound -- a chain of more than sectorCount sectors must revisit one, because every valid sector number is below sectorCount.
   const sectorCount = Math.floor(bytes.length / sectorSize) - 1;
   if (sectorCount < 1) {
     throw new CompoundFileFormatError(`compound file holds no complete ${sectorSize}-byte sector after its header`);
   }
-  const sectorOffset = (sector: number): number => HEADER_SIZE + sector * sectorSize;
+  const sectorOffset = (sector: number): number => (sector + 1) * sectorSize;
   const sectorBytes = (sector: number): Uint8Array<ArrayBuffer> => bytes.subarray(sectorOffset(sector), sectorOffset(sector) + sectorSize);
 
   // The DIFAT: the header's 109-entry array, extended by DIFAT sectors chained through their final slot when the file has more FAT sectors than the header can name. FREESECT entries are padding, not locations.
