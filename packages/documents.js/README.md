@@ -116,7 +116,7 @@ const pdfFromXlsx = xlsxToPdf(xlsxBytes); // composes xlsxToOds -> odsToPdf inte
 const xlsxBytes2 = pdfToXlsx(pdfFromXlsx); // composes pdfToOds -> odsToXlsx internally
 
 const pdfFromMarkdown = markdownToPdf(markdownBytes);
-const markdownBytes2 = pdfToMarkdown(pdfFromMarkdown); // the lossiest conversion in the whole package -- see Fidelity
+const markdownBytes2 = pdfToMarkdown(pdfFromMarkdown); // the lossiest conversion in the whole package -- see Fidelity; it does carry page boundaries (one '<!-- page break -->' marker per page) and rank-inferred heading levels
 
 const pdfFromCsv = csvToPdf(csvBytes); // composes csvToOds -> odsToPdf internally
 const csvBytes2 = pdfToCsv(pdfFromCsv); // composes pdfToOds -> odsToCsv internally; recovers what was printed, then heuristically re-types it
@@ -126,6 +126,8 @@ const svgBytes2 = pdfToSvg(pdfFromSvg); // readPdf -> reconstructDrawing -> buil
 ```
 
 Each accepts an optional `signal` (`AbortSignal`) and either `onSubstitution` (X → PDF, called per character not representable in a standard-14 font) or `sink` (PDF → X, called per recoverable parse diagnostic). Every X → PDF conversion additionally accepts `fonts` (extra `ProvidedFont` faces) and `onFontSubstitution` (per family+weight+style that resolved to something else). Neither is needed for the common case — see [Fonts](#fonts).
+
+**Cancellation granularity, for CPU-metered runtimes** (ExaDev/documents.js#585): every conversion here is synchronous end to end, and the `signal` is honoured at page boundaries — once per page in pdf-codec's `readPdf`/`writePdf` page loops and once per page in each of this package's four reconstructors (wordprocessing/presentation/drawing/spreadsheet). An abort arriving mid-conversion therefore takes effect at the next page boundary, not instantly: a single page's content-stream interpretation, pdf-codec's document-open phase, and the per-target build/encode stage after reconstruction are not interruptible, and parse cost is roughly linear in decompressed content length — budget for the worst single page, not the page count. A shared `AbortSignal` makes a deadline enforceable at that granularity on Cloudflare Workers; it cannot convert a synchronous conversion into a resumable or streaming one (an async page-at-a-time API is a deliberate non-goal of the current surface — see pdf-codec's README for the same statement from the codec side).
 
 ### Cross-format bridges
 
@@ -716,7 +718,7 @@ Read as **row → column**. `✓` lossless, `~` bounded, `✗` lossy, `✗✗` s
 
 **PDF → ods** recovers what was printed, not what was entered. The printed string always survives in `displayText`; re-typed `value` is explicitly probabilistic inference.
 
-**`markdownToPdf`/`pdfToMarkdown`** is the lossiest round trip: `markdownToPdf` is faithful, but `pdfToMarkdown` stacks reconstruction lossiness PLUS markdown's coarser vocabulary (no colour, font, size, alignment). The PDF-composed markdown bridges (`xlsxToMarkdown`/`markdownToXlsx`, `csvToMarkdown`/`markdownToCsv`) stack the same two losses in both directions — hence their `✗✗` cells.
+**`markdownToPdf`/`pdfToMarkdown`** is the lossiest round trip: `markdownToPdf` is faithful, but `pdfToMarkdown` stacks reconstruction lossiness PLUS markdown's coarser vocabulary (no colour, font, size, alignment). Two structure signals do survive it (ExaDev/documents.js#584): every page boundary arrives as an exact `<!-- page break -->` marker (one per boundary — the one fact a rendered PDF states precisely), and headings are inferred from font size — each distinct size at least 2pt above the document's modal body size is a heading, ranked largest-first into `Heading1..6`, which inverts this package's own heading render sizes exactly and is a heuristic (the well-worn "largest text is the title" reading) for any other producer. Tables reach markdown as GFM pipe tables wherever the gridline-lattice gate succeeds; a table rendered without drawn gridlines (which includes every `markdownToPdf`-authored one, markdown carrying no border concept) correctly comes back as tab-separated prose rather than invented structure. The PDF-composed markdown bridges (`xlsxToMarkdown`/`markdownToXlsx`, `csvToMarkdown`/`markdownToCsv`) stack the same two losses in both directions — hence their `✗✗` cells.
 
 **The six same-variant bridge pairs** (odt⇄docx, odp⇄pptx, ods⇄xlsx, csv⇄ods, csv⇄xlsx, svg⇄odg) bypass PDF entirely — no layout engine, no reconstruction. Text, styling, tables, lists, rotated shapes survive completely. `ods⇄xlsx` has small format-boundary limits (time cells, formula dialects). Embedded formulas survive `odtToDocx` as real OOXML math. The csv pairs are bounded by what csv itself carries: toward ods/xlsx nothing the csv had is lost, while writing to csv collapses each cell to its `displayText` — formulas become their rendered values, formatting disappears, and a multi-sheet source must name the sheet it wants. The svg pair carries the six vector primitives losslessly in both directions; its one asymmetry is paint defaults — SVG's absent-fill-is-black versus a drawing frame's no-fill.
 
