@@ -1,3 +1,15 @@
+## [4.0.10](https://github.com/ExaDev/documents.js/compare/ooxml.js@4.0.9...ooxml.js@4.0.10) (2026-08-20)
+
+
+### Bug Fixes
+
+* point package homepage and bugs URLs at the monorepo, not the old standalone repos ([bb0a875](https://github.com/ExaDev/documents.js/commit/bb0a8752dcac584660f21979540bc06bbda41110))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^4.3.5
+
 ## [4.0.9](https://github.com/ExaDev/documents.js/compare/ooxml.js@4.0.8...ooxml.js@4.0.9) (2026-08-20)
 
 
