@@ -801,7 +801,7 @@ importers:
   packages/odf.js:
     dependencies:
       document-schema.js:
-        specifier: ^4.3.3
+        specifier: ^4.3.4
         version: link:../document-schema.js
       fast-xml-parser:
         specifier: ^5.10.1
