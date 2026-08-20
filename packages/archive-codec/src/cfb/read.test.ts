@@ -35,6 +35,19 @@ describe('readCompoundFile', () => {
     expect(streams.find((s) => s.path === 'Large')?.bytes).toEqual(large);
   });
 
+  it('extracts both FAT- and mini-stream-resident streams from a version-4 file (4096-byte sectors)', () => {
+    // Version 4 zero-pads the 512-byte header out to the full 4096-byte first sector ([MS-CFB] 2.2), so sector N starts at (N + 1) * 4096 -- an offset that only coincides with version 3's 512 + N * sectorSize because version 3's sector size is itself 512. Real-world .bin embeds written by 64-bit producers are version 4, so this is the layout the embedded-object recovery path genuinely meets.
+    const small = enc('mini stream payload');
+    const large = enc('V'.repeat(4096));
+    const streams = readCompoundFile(compoundFile([
+      { path: 'Large', bytes: large },
+      { path: 'Small', bytes: small },
+    ], { majorVersion: 4 }));
+    expect(streams.map((s) => s.path)).toEqual(['Large', 'Small']);
+    expect(streams.find((s) => s.path === 'Small')?.bytes).toEqual(small);
+    expect(streams.find((s) => s.path === 'Large')?.bytes).toEqual(large);
+  });
+
   it('derives slash-joined paths for streams nested inside storages', () => {
     const payload = enc('nested');
     const streams = readCompoundFile(compoundFile([
