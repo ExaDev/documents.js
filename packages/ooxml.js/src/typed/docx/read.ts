@@ -157,6 +157,12 @@ function readDrawingImage(drawing: XmlElement, ctx: DocxReadContext): ContentIma
   if (cx === undefined || cy === undefined) {
     return undefined;
   }
+  const widthPt = emuToPt(Number(cx));
+  const heightPt = emuToPt(Number(cy));
+  // Malformed geometry (a non-numeric EMU value) degrades to no image, the same tier readObjectEmbeddedObject applies below and every other numeric attribute reader here degrades on: a NaN widthPt would emit a block no geometry schema accepts, poisoning the whole section for downstream validators.
+  if (!Number.isFinite(widthPt) || !Number.isFinite(heightPt)) {
+    return undefined;
+  }
   const docPr = childrenWithTag(container, 'wp:docPr')[0];
   const altText = docPr === undefined ? undefined : (attr(docPr, 'descr') ?? attr(docPr, 'title'));
   const blip = elementsWithTag(container.children, 'a:blip')[0];
@@ -171,7 +177,7 @@ function readDrawingImage(drawing: XmlElement, ctx: DocxReadContext): ContentIma
   if (format === undefined) {
     return undefined;
   }
-  const image: ContentImageBlock = { kind: 'image', format, base64: mediaPart.base64, widthPt: emuToPt(Number(cx)), heightPt: emuToPt(Number(cy)) };
+  const image: ContentImageBlock = { kind: 'image', format, base64: mediaPart.base64, widthPt, heightPt };
   if (altText !== undefined) {
     image.altText = decodeEntities(altText);
   }
@@ -185,6 +191,12 @@ function readObjectEmbeddedObject(object: XmlElement, ctx: DocxReadContext): Con
   if (dxaOrig === undefined || dyaOrig === undefined) {
     return undefined;
   }
+  const widthPt = twipsToPt(Number(dxaOrig));
+  const heightPt = twipsToPt(Number(dyaOrig));
+  // Malformed geometry (a non-numeric ST_TwipsMeasure) degrades to no block, the same tier readDrawingImage above applies and readOutlineLevel's malformed @lvl is the family's own example of: a NaN widthPt would emit a block no geometry schema accepts, poisoning the whole section for downstream validators. Checked before any relationship resolution, so a doomed object never decodes its payload.
+  if (!Number.isFinite(widthPt) || !Number.isFinite(heightPt)) {
+    return undefined;
+  }
   const oleObject = elementsWithTag([object], 'o:OLEObject')[0];
   const rId = oleObject === undefined ? undefined : attr(oleObject, 'r:id');
   const rel = rId === undefined ? undefined : ctx.rels.get(rId);
@@ -193,7 +205,7 @@ function readObjectEmbeddedObject(object: XmlElement, ctx: DocxReadContext): Con
     return undefined;
   }
   const payload = readEmbeddedOoxmlPayload(base64ToBytes(payloadPart.base64));
-  return payload === undefined ? undefined : { kind: 'embeddedObject', objectKind: payload.objectKind, document: payload.document, frame: { xPt: 0, yPt: 0, widthPt: twipsToPt(Number(dxaOrig)), heightPt: twipsToPt(Number(dyaOrig)) } };
+  return payload === undefined ? undefined : { kind: 'embeddedObject', objectKind: payload.objectKind, document: payload.document, frame: { xPt: 0, yPt: 0, widthPt, heightPt } };
 }
 
 // Collects every w:drawing and w:object found anywhere inside a paragraph's own content (nested inside w:r, w:hyperlink, w:ins, w:fldSimple), in document order. Deleted subtrees (w:del, w:moveFrom) are excluded unless the caller is carrying deletions -- mirroring readParagraphRuns' own tracked-changes handling, since a deleted drawing's own w:r sits inside w:del alongside w:delText runs, and a drawing lifted out of a deletion the reader is not carrying would appear as live content. A w:object is pushed at its own position and then recursed into, so a w:drawing nested inside it (a modern producer's mc:AlternateContent preview spelling) is still collected as an image in its own right, exactly as it was before embedded-object recovery existed.
