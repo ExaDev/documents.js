@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { ContentBlock, ContentConstructStart, ContentEmbeddedObjectBlock, ContentImageBlock, ContentParagraph, ContentTable } from 'document-schema.js';
 import { el, txt } from '../../xml/fragment';
 import { bytesToBase64 } from '../../util/base64';
+import { zipPackage } from '../../zip';
 import { minimalXlsxBytes } from '../../test-support/embedded';
 import { readDocxContent } from './read';
 
@@ -570,6 +571,17 @@ describe('readDocxContent: embedded OLE objects', () => {
     const pkg = oleObjectFixturePackage({ target: 'file:///C:/data/Book1.xlsx', external: true });
     const doc = readDocxContent(pkg);
     expect(doc.sections[0]?.blocks).toHaveLength(1);
+  });
+
+  it('skips a ZIP payload that is not a recognisable OOXML package without poisoning the host read', () => {
+    // A ZIP payload that fails to decode as one of the three OOXML flavours (here: a plain archive) is skipped exactly like a non-ZIP payload -- one bad embedded object can never fail the whole document read.
+    const pkg = oleObjectFixturePackage({ target: 'embeddings/payload.zip' });
+    pkg.parts['word/embeddings/payload.zip'] = { kind: 'binary', base64: bytesToBase64(zipPackage({ 'readme.txt': new TextEncoder().encode('not a document package') })) };
+    const doc = readDocxContent(pkg);
+    expect(doc.sections[0]?.blocks).toHaveLength(1);
+    const paragraph = asParagraph(doc.sections[0]?.blocks[0]);
+    expect(paragraph.runs).toHaveLength(1);
+    expect(paragraph.runs[0]?.text).toBe('');
   });
 });
 

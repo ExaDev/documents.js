@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { ContentBlock, ContentEmbeddedObjectBlock, ContentImageBlock, ContentParagraph, ContentTable } from 'document-schema.js';
 import { el, txt } from '../../xml/fragment';
 import { bytesToBase64 } from '../../util/base64';
+import { zipPackage } from '../../zip';
 import { minimalXlsxBytes } from '../../test-support/embedded';
 import { PptxDocumentSchema, readPptxContent } from './read';
 
@@ -826,6 +827,16 @@ describe('readPptxContent: OLE graphic frames', () => {
     // The classic OLE compound-file .bin payload: rIdOle retargeted at a part whose bytes carry the OLE/CFB magic -- no reader in this ecosystem decodes it, so the frame's content is exactly what it was before embedded recovery existed.
     const pkg = oleFixturePackage('../embeddings/oleObject1.bin');
     pkg.parts['ppt/embeddings/oleObject1.bin'] = { kind: 'binary', base64: bytesToBase64(new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, 0x01, 0x02, 0x03, 0x04])) };
+    const doc = readPptxContent(pkg);
+    const oleShape = doc.slides[0]?.shapes.find((s) => s.name === 'Object 1');
+    expect(oleShape?.blocks).toHaveLength(1);
+    expect(asImage(oleShape?.blocks[0]).format).toBe('png');
+  });
+
+  it('keeps the fallback-picture behaviour when the payload is a ZIP but not a recognisable package, so the host read is never poisoned', () => {
+    // A ZIP payload that fails to decode as one of the three OOXML flavours (here: a plain archive) must be a non-event for the host slide, exactly like a non-ZIP payload -- one bad embedded object can never fail the whole document read.
+    const pkg = oleFixturePackage('../embeddings/payload.zip');
+    pkg.parts['ppt/embeddings/payload.zip'] = { kind: 'binary', base64: bytesToBase64(zipPackage({ 'readme.txt': new TextEncoder().encode('not a document package') })) };
     const doc = readPptxContent(pkg);
     const oleShape = doc.slides[0]?.shapes.find((s) => s.name === 'Object 1');
     expect(oleShape?.blocks).toHaveLength(1);
