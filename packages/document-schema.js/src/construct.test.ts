@@ -250,3 +250,32 @@ describe('the construct descriptor union', () => {
     expect(ConstructDescriptorSchema.parse(roundTripped)).toEqual(descriptor);
   });
 });
+
+describe('the quarantined residue field on construct descriptors', () => {
+  // A construct with no cross-format analogue degrades to the nearest semantic kind with its format-specific specifics quarantined in residue -- the descriptor IS the construct's node payload, so the descriptor carries the same per-node `source` field every content node carries, and a matched marker pair moves it across the flat/tree boundary untouched (the descriptor object is embedded, never copied). This is the channel reaching the descriptor's node position, not the descriptor-only escape hatch the module header warns against: the field, its shape, and its opacity contract are src/source.ts's, spelt identically everywhere.
+
+  it('rides on every descriptor kind except division, riding the flat form inside the constructStart marker\'s own descriptor payload', () => {
+    const residue = { format: 'docx', xml: '<w:docPartObj><w:docPartGallery w:val="Cover Pages"/></w:docPartObj>' };
+    const carriers = [
+      { kind: 'contentControl', controlType: 'richText', source: residue },
+      { kind: 'field', instruction: 'PAGE', source: residue },
+      { kind: 'anchor', anchorType: 'bookmark', name: 'b1', source: residue },
+      { kind: 'link', target: { kind: 'external', uri: 'https://example.com' }, source: residue },
+      { kind: 'provenance', change: 'insertion', source: residue },
+    ];
+    for (const descriptor of carriers) {
+      expect(ConstructDescriptorSchema.safeParse(descriptor).success).toBe(true);
+      const roundTripped: unknown = JSON.parse(JSON.stringify(descriptor));
+      expect(ConstructDescriptorSchema.parse(roundTripped)).toEqual(descriptor);
+    }
+  });
+
+  it('refuses residue on division -- the field name is already taken by the external-chapter link (DivisionSource, landed 4.1.0)', () => {
+    // division.source IS text:section-source's { href, sectionName? }; one name cannot mean two facts, and renaming the landed field is a major this additive release does not get to make. Division's own residue rows (ODF text:filter-name) wait on that rename.
+    expect(
+      DivisionDescriptorSchema.safeParse({ kind: 'division', name: 'Ch1', source: { format: 'odt', xml: '<text:filter-name>x</text:filter-name>' } })
+        .success,
+    ).toBe(false);
+    expect(DivisionDescriptorSchema.safeParse({ kind: 'division', name: 'Ch1', source: { href: 'chapter2.odt' } }).success).toBe(true);
+  });
+});

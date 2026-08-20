@@ -1,8 +1,9 @@
 import { z } from 'zod';
+import { SourceResidueSchema } from './source';
 
 // The harmonised semantic construct vocabulary (ExaDev/document-schema.js#22, landed additively per ExaDev/document-schema.js#24): the descriptor payloads a package-tree group may carry in place of a container descriptor or an anchor paragraph. The tree was designed construct-capable from day one -- a group is `{ node, children }`, and a construct is exactly that shape with a descriptor as its node and its extent as its children -- so these kinds land without a second structural break: a 4.0.0 tree contains none of them and parses identically under this release.
 
-// The vocabulary is format-agnostic by construction: every kind below is confirmed by at least two of the four codec inventories (ExaDev/ooxml.js#65, ExaDev/odf.js#59, ExaDev/markdown-codec#63, ExaDev/pdf-codec#66), and a construct with no cross-format analogue never gets a bespoke kind -- it degrades to the nearest kind here with its format-specific specifics quarantined in the residue channel that ExaDev/document-schema.js#22 still owns. This module deliberately does NOT define that residue channel: channel 2 is a per-node and package-level `source` facility spanning the whole content model, not a construct-descriptor field, and pre-empting it with a descriptor-only escape hatch would mint exactly the parallel shape the facility exists to avoid.
+// The vocabulary is format-agnostic by construction: every kind below is confirmed by at least two of the four codec inventories (ExaDev/ooxml.js#65, ExaDev/odf.js#59, ExaDev/markdown-codec#63, ExaDev/pdf-codec#66), and a construct with no cross-format analogue never gets a bespoke kind -- it degrades to the nearest kind here with its format-specific specifics quarantined in the residue channel (src/source.ts, landed by ExaDev/documents.js#718). That channel is a per-node and package-level `source` facility spanning the whole content model, and it reaches this module the only way it can without minting the parallel shape a descriptor-only escape hatch would have made: the identical field, shape, and opacity contract, spelt on each descriptor below because a descriptor is a node position -- the construct group's own node payload -- never as a local special case. One deliberate exception: `division` carries no residue field, because its `source` already names the external-chapter link (DivisionSource below, landed 4.1.0) and one name cannot mean two facts; renaming that landed field wants a major, so division's own residue rows (ODF text:filter-name) wait on it.
 
 // EXTENT SCOPE, stated once because it bounds every kind below: a construct group wraps BLOCK-scoped extents -- the block flow of a section, a heading group, a shape, or a list item. It does not wrap a sub-sequence of one paragraph's runs, because a run-level extent is not expressible without changing ContentParagraph's own shape, and the content model is unchanged by this release. The run-level constructs the formats do carry keep their existing homes: an external hyperlink stays on ContentRun.hyperlink (the standing reconciliation on ExaDev/document-schema.js#22 -- `link` groups are for block-scoped and annotated extents a flat run field cannot express, never a replacement for it), and the inline field/bookmark/tracked-change cases wait on a run-level extent mechanism rather than being forced into a block wrapper that would split the paragraph they sit inside.
 
@@ -39,6 +40,7 @@ export const ContentControlDescriptorSchema = z.strictObject({
   value: z.string().optional(), // the control's current scalar value where it has one -- PDF AcroForm `/V`, a date control's date, a text input's text. A control whose value IS its rendered content carries that content in `children` and leaves this absent.
   checked: z.boolean().optional(), // a checkbox or radio control's state, which is a boolean in every format that has one and would lose its type spelled through `value`
   options: z.array(z.string()).optional(), // the choice list of a dropDown/comboBox control: docx `w:listItem` entries, PDF AcroForm `/Opt`, an ODF form control's list source
+  source: SourceResidueSchema.optional(), // quarantined residue (src/source.ts) -- the format-specific specifics of a control that degraded to this kind, e.g. a docx SDT's own w:docPartObj gallery
 });
 export type ContentControlDescriptor = z.infer<typeof ContentControlDescriptorSchema>;
 
@@ -49,6 +51,7 @@ export const FieldDescriptorSchema = z.strictObject({
   kind: z.literal('field'),
   instruction: z.string(), // the producer's own field code, verbatim: docx `w:instrText` text or `w:fldSimple/@w:instr`, an ODF field element with its attributes, a pptx `a:fld/@type`
   cachedResult: z.string().optional(), // the field's last-computed display text where the producer cached a scalar one (an ODF field element's own text content, a pptx `a:fld`'s `a:t`). A field whose result is block content carries that content in `children` and leaves this absent -- the two are the block and the scalar case of one fact, never two encodings of the same one.
+  source: SourceResidueSchema.optional(), // quarantined residue (src/source.ts)
 });
 export type FieldDescriptor = z.infer<typeof FieldDescriptorSchema>;
 
@@ -69,6 +72,7 @@ export const AnchorDescriptorSchema = z.strictObject({
   anchorType: AnchorTypeSchema,
   name: z.string(), // the anchor's own name: docx `w:name`, ODF `text:name`, a PDF destination name. Required -- an anchor nothing can address is not an anchor.
   definition: z.string().optional(), // the definitions-table key holding this marker's body, for the note and comment cases; the entry's own tenant vocabulary carries the body, its author, and its date
+  source: SourceResidueSchema.optional(), // quarantined residue (src/source.ts)
 });
 export type AnchorDescriptor = z.infer<typeof AnchorDescriptorSchema>;
 
@@ -90,6 +94,7 @@ export const LinkDescriptorSchema = z.strictObject({
   kind: z.literal('link'),
   target: LinkTargetSchema,
   title: z.string().optional(), // the annotation a run field has nowhere to put: a markdown link/image title, a PDF link annotation's contents
+  source: SourceResidueSchema.optional(), // quarantined residue (src/source.ts)
 });
 export type LinkDescriptor = z.infer<typeof LinkDescriptorSchema>;
 
@@ -103,6 +108,7 @@ export const ProvenanceDescriptorSchema = z.strictObject({
   change: ProvenanceChangeSchema,
   author: z.string().optional(),
   dateIso: z.string().optional(), // ISO-8601, matching LayoutMetadata's own createdIso/modifiedIso spelling rather than minting a second date convention
+  source: SourceResidueSchema.optional(), // quarantined residue (src/source.ts) -- e.g. the move relation pairing moveFrom with moveTo, which the ooxml inventory's own verdict leaves as residue
 });
 export type ProvenanceDescriptor = z.infer<typeof ProvenanceDescriptorSchema>;
 
