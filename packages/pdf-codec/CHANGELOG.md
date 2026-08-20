@@ -1,3 +1,11 @@
+## [3.0.12](https://github.com/ExaDev/documents.js/compare/pdf-codec@3.0.11...pdf-codec@3.0.12) (2026-08-20)
+
+
+### Dependencies
+
+- Updated document-schema.js to ^4.3.7
+- Updated byte-codec to ^1.1.13
+
 ## [3.0.11](https://github.com/ExaDev/documents.js/compare/pdf-codec@3.0.10...pdf-codec@3.0.11) (2026-08-20)
 
 
