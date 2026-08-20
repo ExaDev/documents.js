@@ -943,6 +943,9 @@ importers:
 
   packages/ooxml.js:
     dependencies:
+      archive-codec:
+        specifier: ^1.0.1
+        version: link:../archive-codec
       document-schema.js:
         specifier: ^4.3.7
         version: link:../document-schema.js
