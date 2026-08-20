@@ -1,3 +1,5 @@
+## [1.1.10](https://github.com/ExaDev/documents.js/compare/byte-codec@1.1.9...byte-codec@1.1.10) (2026-08-20)
+
 ## [1.1.9](https://github.com/ExaDev/byte-codec/compare/v1.1.8...v1.1.9) (2026-08-12)
 
 ## [1.1.8](https://github.com/ExaDev/byte-codec/compare/v1.1.7...v1.1.8) (2026-08-12)
