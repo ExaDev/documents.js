@@ -4,9 +4,11 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { zipPackage, ODF_MEDIA_TYPES } from 'odf.js';
 import * as esm from '../dist/index.js';
+import * as esmRead from '../dist/convert/from-pdf.js';
 
 const require = createRequire(import.meta.url);
 const cjs = require('../dist/index.cjs');
+const cjsRead = require('../dist/convert/from-pdf.cjs');
 
 // A representative slice of the public surface, not an exhaustive list: ooxml.js's re-exported lossless core, the read+write live-view editors, the hand-written PDF codec, and the ergonomic conversions -- enough to catch a genuinely broken dual build without duplicating src/index.ts's own export list here.
 const FUNCTIONS = [
@@ -470,6 +472,25 @@ describe('dist/ end-to-end: markdownToPdf then pdfToMarkdown, and markdownToDocx
       .join(' ');
     expect(docxText).toContain('Smoke Test Heading');
     expect(docxText).toContain('markdown');
+  });
+});
+
+// The read-only entry (package.json `./read` -> dist/convert/from-pdf.js/.cjs): loads in both builds and genuinely converts a PDF produced through the root barrel, proving the entry's own read pipeline (readPdf via pdf-codec's read module, reconstruction, the markdown build leg) reaches the built dist/ artifact working. The graph-width half of the guarantee (nothing reachable from this entry touches an X-to-PDF renderer or a vendored font asset) is held at the source level by src/read-graph.test.ts, which walks across the workspace boundary into pdf-codec's own source.
+describe('dist/ end-to-end: the documents.js/read entry, from both builds', () => {
+  it('exports the pdfTo* family in both builds', () => {
+    for (const name of ['pdfToDocx', 'pdfToPptx', 'pdfToOdt', 'pdfToOdp', 'pdfToOds', 'pdfToOdg', 'pdfToMarkdown', 'pdfToCsv', 'pdfToSvg', 'pdfToXlsx']) {
+      expect(typeof esmRead[name], `read entry must export ${name}`).toBe('function');
+      expect(typeof cjsRead[name], `read entry must export ${name} (CJS)`).toBe('function');
+    }
+  });
+
+  it('pdfToMarkdown converts a PDF produced through the root barrel', () => {
+    const pdfBytes = esm.odtToPdf(minimalOdtBytes());
+    expect(new TextDecoder('latin1').decode(pdfBytes.subarray(0, 5))).toBe('%PDF-');
+    const markdownBytes = esmRead.pdfToMarkdown(pdfBytes);
+    const markdown = new TextDecoder().decode(markdownBytes);
+    expect(markdown).toContain('Hello from the odt smoke test');
+    expect(cjsRead.pdfToMarkdown(pdfBytes).length).toBe(markdownBytes.length);
   });
 });
 

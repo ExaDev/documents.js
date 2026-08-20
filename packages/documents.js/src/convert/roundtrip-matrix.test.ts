@@ -22,7 +22,8 @@ import { gridOdsBytes, minimalOdsBytes, richOdsBytes } from '../test-support/ods
 import { minimalOdtBytes } from '../test-support/odt';
 import { minimalDocxBytes } from '../test-support/docx';
 import { minimalPptxBytes } from '../test-support/pptx';
-import { csvToOds, docxToMarkdown, docxToOdt, docxToPdf, docxToPptx, markdownToDocx, markdownToOdt, markdownToPdf, odfToPdf, odgToPdf, odpToPdf, odpToPptx, odpToOdt, odsToCsv, odsToPdf, odsToXlsx, odtToDocx, odtToMarkdown, odtToOdp, odtToPdf, pdfToDocx, pdfToMarkdown, pdfToOdg, pdfToOdp, pdfToOds, pdfToOdt, pdfToPptx, pdfToXlsx, pptxToDocx, pptxToOdp, pptxToPdf, xlsxToOds, xlsxToPdf, xlsxToMarkdown, markdownToXlsx } from './convert';
+import { csvToOds, docxToMarkdown, docxToOdt, docxToPdf, docxToPptx, markdownToDocx, markdownToOdt, markdownToPdf, odfToPdf, odgToPdf, odpToPdf, odpToPptx, odpToOdt, odsToCsv, odsToPdf, odsToXlsx, odtToDocx, odtToMarkdown, odtToOdp, odtToPdf, pptxToDocx, pptxToOdp, pptxToPdf, xlsxToOds, xlsxToPdf, xlsxToMarkdown, markdownToXlsx } from './convert';
+import { pdfToDocx, pdfToMarkdown, pdfToOdg, pdfToOdp, pdfToOds, pdfToOdt, pdfToPptx, pdfToXlsx } from './from-pdf';
 import { createLocalDocumentConverter } from './local';
 import type { DocumentFormat } from './port';
 

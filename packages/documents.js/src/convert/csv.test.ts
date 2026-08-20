@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { decodeCsvText, encodeCsvText } from '../csv/text';
 import { TSV_DELIMITER, parseCsvRecords } from '../csv/records';
 import { CsvSheetNotSpecifiedError } from '../csv/write';
-import { csvToMarkdown, csvToOds, csvToPdf, csvToXlsx, markdownToCsv, odsToCsv, pdfToCsv, xlsxToCsv } from './convert';
+import { csvToMarkdown, csvToOds, csvToPdf, csvToXlsx, markdownToCsv, odsToCsv, xlsxToCsv } from './convert';
+import { pdfToCsv } from './from-pdf';
 import { createLocalDocumentConverter } from './local';
 
 const CSV_TEXT = 'Name,Amount\nWidget,42.5\nGadget,7\n';

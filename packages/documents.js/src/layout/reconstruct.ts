@@ -22,7 +22,9 @@ import type {
   LayoutFrame,
 } from 'document-schema.js';
 
-import { resolveStandardFont, STANDARD_METRICS } from 'pdf-codec';
+// Deep-imported from pdf-codec's asset-free read-side modules rather than its root barrel: the reconstruction path is part of this package's read-only graph (documents.js/read), and the barrel's write half would drag the vendored font assets into it. See src/read-graph.test.ts.
+import { resolveStandardFont } from 'pdf-codec/fonts';
+import { STANDARD_METRICS } from 'pdf-codec/afm-widths';
 import type { LayoutDocument, LayoutEllipse, LayoutImage, LayoutImageAsset, LayoutItem, LayoutLine, LayoutPage, LayoutPath, LayoutRect, LayoutSubpath, LayoutText } from 'pdf-codec';
 import { buildDrawingBlock } from '../model/embedded-drawing';
 import type { Box, Margins } from 'document-schema.js';

@@ -158,58 +158,6 @@ export function odfToPdf(bytes: Uint8Array<ArrayBuffer>, options?: DocumentToPdf
   return out;
 }
 
-export interface PdfToDocumentOptions {
-  readonly signal?: AbortSignal;
-  readonly sink?: PdfDiagnosticSink;
-  // Called exactly once, synchronously, with the DocumentPackage (the readPdf-produced layout, and the reconstructed content built from it) this conversion built internally, before the function returns its bytes -- see DocumentToPdfOptions.onDocument for the mirrored X-to-PDF side of this same side channel.
-  readonly onDocument?: (pkg: DocumentPackage) => void;
-}
-
-// Forwards to convertDocument (src/convert/composition.ts).
-export function pdfToDocx(bytes: Uint8Array<ArrayBuffer>, options?: PdfToDocumentOptions): Uint8Array<ArrayBuffer> {
-  return convertDocument('pdf', 'docx', bytes, options);
-}
-
-// Forwards to convertDocument (src/convert/composition.ts).
-export function pdfToPptx(bytes: Uint8Array<ArrayBuffer>, options?: PdfToDocumentOptions): Uint8Array<ArrayBuffer> {
-  return convertDocument('pdf', 'pptx', bytes, options);
-}
-
-// Forwards to convertDocument (src/convert/composition.ts).
-export function pdfToOdt(bytes: Uint8Array<ArrayBuffer>, options?: PdfToDocumentOptions): Uint8Array<ArrayBuffer> {
-  return convertDocument('pdf', 'odt', bytes, options);
-}
-
-// Forwards to convertDocument (src/convert/composition.ts).
-export function pdfToOdp(bytes: Uint8Array<ArrayBuffer>, options?: PdfToDocumentOptions): Uint8Array<ArrayBuffer> {
-  return convertDocument('pdf', 'odp', bytes, options);
-}
-
-// Forwards to convertDocument (src/convert/composition.ts).
-export function pdfToOdg(bytes: Uint8Array<ArrayBuffer>, options?: PdfToDocumentOptions): Uint8Array<ArrayBuffer> {
-  return convertDocument('pdf', 'odg', bytes, options);
-}
-
-// Forwards to convertDocument (src/convert/composition.ts).
-export function pdfToOds(bytes: Uint8Array<ArrayBuffer>, options?: PdfToDocumentOptions): Uint8Array<ArrayBuffer> {
-  return convertDocument('pdf', 'ods', bytes, options);
-}
-
-// Forwards to convertDocument (src/convert/composition.ts).
-export function pdfToMarkdown(bytes: Uint8Array<ArrayBuffer>, options?: PdfToDocumentOptions): Uint8Array<ArrayBuffer> {
-  return convertDocument('pdf', 'markdown', bytes, options);
-}
-
-// pdf bytes -> csv bytes: the reverse of csvToPdf above -- convertDocument's pathfinder resolves this as [pdf -> ods fromPdf, ods -> csv bridge], reconstructing the pdf's tabular layout into a spreadsheet ContentDocument and then writing its lone or selected sheet as RFC 4180 text. `onDocument` reports the last hop's package under the composition engine's own "fires exactly once, on the last hop" convention: the odsToCsv bridge hop's content-only package.
-export function pdfToCsv(bytes: Uint8Array<ArrayBuffer>, options?: PdfToDocumentOptions & CsvWriteOptions): Uint8Array<ArrayBuffer> {
-  return convertDocument('pdf', 'csv', bytes, options);
-}
-
-// pdf bytes -> svg bytes: the reverse of svgToPdf above -- convertDocument resolves this as a single [pdf -> svg fromPdf] hop, reconstructDrawing mapping readPdf's recovered vector items near-1:1 into a drawing ContentDocument and buildSvgText writing the six shape primitives back out. `page` selects which page of a multi-page PDF becomes the (single-page) svg, the same caller decision CsvWriteOptions.sheet holds for sheets; omitting it on a multi-page PDF throws SvgMultiPageNotSpecifiedError rather than truncating.
-export function pdfToSvg(bytes: Uint8Array<ArrayBuffer>, options?: PdfToDocumentOptions & SvgWriteOptions): Uint8Array<ArrayBuffer> {
-  return convertDocument('pdf', 'svg', bytes, options);
-}
-
 // The same-variant cross-format bridges (odt<->docx, odp<->pptx, ods<->xlsx, csv<->ods, csv<->xlsx, svg<->odg, and -- further down this section -- markdown<->docx, markdown<->odt), each bypassing PDF entirely. Every conversion above this point pivots through a LayoutDocument; these pairs don't have that problem: both formats in each pair already read into and build from the identical ContentDocument variant, so the bridge is nothing more than reader -> writer, with no layout engine, no font measurement, and no geometry-based reconstruction in between. Each forwarder below hands the pair to convertDocument (src/convert/composition.ts), whose pathfinder resolves it as a single same-variant bridge hop and runs the identical decode/read/build/encode sequence.
 export interface DocumentBridgeOptions {
   readonly signal?: AbortSignal;
@@ -337,16 +285,11 @@ export function odpToOdt(bytes: Uint8Array<ArrayBuffer>, options?: DocumentBridg
   return convertDocument('odp', 'odt', bytes, options);
 }
 
-// xlsx bytes <-> PDF bytes: xlsx has no layout engine of its own, so convertDocument's pathfinder resolves this as [xlsx -> ods bridge, ods -> pdf toPdf] -- the identical composed route the hand-written body used to hard-code. The `onDocument` callback reports the last hop's package under the composition engine's own "fires exactly once, on the last hop" convention (see convertDocument's own doc): for xlsxToPdf that is the odsToPdf hop's content+layout; for pdfToXlsx that is the odsToXlsx bridge hop's content-only package.
+// xlsx bytes -> PDF bytes: xlsx has no layout engine of its own, so convertDocument's pathfinder resolves this as [xlsx -> ods bridge, ods -> pdf toPdf] -- the identical composed route the hand-written body used to hard-code. The `onDocument` callback reports the last hop's package under the composition engine's own "fires exactly once, on the last hop" convention (see convertDocument's own doc): the odsToPdf hop's content+layout. The reverse direction (pdfToXlsx) lives in from-pdf.ts with the rest of the pdf-sourced family.
 
 // Forwards to convertDocument (src/convert/composition.ts).
 export function xlsxToPdf(bytes: Uint8Array<ArrayBuffer>, options?: DocumentToPdfOptions): Uint8Array<ArrayBuffer> {
   return convertDocument('xlsx', 'pdf', bytes, options);
-}
-
-// Forwards to convertDocument (src/convert/composition.ts).
-export function pdfToXlsx(bytes: Uint8Array<ArrayBuffer>, options?: PdfToDocumentOptions): Uint8Array<ArrayBuffer> {
-  return convertDocument('pdf', 'xlsx', bytes, options);
 }
 
 // xlsx <-> markdown: xlsx and markdown share no ContentDocument variant (spreadsheet vs wordprocessing), so convertDocument's pathfinder resolves this as [xlsx -> ods, ods -> pdf, pdf -> markdown] -- three hops, both legs' lossiness inherited in full (the single lossiest path in the package). onDocument reports the last hop's package under the composition engine's own "fires exactly once, on the last hop" convention.
