@@ -1,3 +1,16 @@
+# [4.1.0](https://github.com/ExaDev/documents.js/compare/documents.js@4.0.26...documents.js@4.1.0) (2026-08-20)
+
+
+### Features
+
+* **convert:** add a documents.js/read entry point excluding the write path ([7062671](https://github.com/ExaDev/documents.js/commit/706267156f9e8130245a4adc7b50e3a5a3307441))
+
+
+### Dependencies
+
+- Updated pdf-codec to ^3.1.0
+- Updated markdown-codec to ^4.0.12
+
 ## [4.0.26](https://github.com/ExaDev/documents.js/compare/documents.js@4.0.25...documents.js@4.0.26) (2026-08-20)
 
 
