@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MAX_WALK_DEPTH } from 'archive-codec';
 import { unzipPackage, zipPackage } from '../zip';
+import { oleObjectBin } from '../test-support/cfb';
 import { minimalDocxBytes, minimalPptxBytes, minimalXlsxBytes } from '../test-support/embedded';
 import { readEmbeddedOoxmlPayload } from './embedded';
 
@@ -34,6 +35,26 @@ describe('readEmbeddedOoxmlPayload', () => {
     expect(payload?.document.kind).toBe('presentation');
     const slide = payload?.document.kind === 'presentation' ? payload.document.slides[0] : undefined;
     expect(slide?.shapes[0]?.blocks[0]?.kind).toBe('paragraph');
+  });
+
+  it('decodes an xlsx wrapped in a classic OLE compound-file Package stream (the .bin spelling)', () => {
+    // The legacy real-world shape: oleObject1.bin is a CFB compound file whose root storage carries the embedded file as an OLE-packaged 'Package' stream -- here a mini-stream-resident one, since a small embed lands below the 4096-byte cutoff. The recovery must see through both wrappings (compound file, then OLE packaging) to the ZIP and reuse the same nested-package decode the direct-ZIP spelling takes.
+    const payload = readEmbeddedOoxmlPayload(oleObjectBin(minimalXlsxBytes()));
+    expect(payload?.objectKind).toBe('spreadsheet');
+    expect(payload?.document.kind).toBe('spreadsheet');
+    const sheet = payload?.document.kind === 'spreadsheet' ? payload.document.sheets[0] : undefined;
+    expect(sheet?.name).toBe('Embedded');
+    expect(sheet?.cells[0]?.value).toEqual({ kind: 'string', value: 'Recovered cell' });
+  });
+
+  it('returns undefined for a well-formed compound file carrying no Package stream (native legacy streams stay opaque)', () => {
+    // A .bin whose CFB holds a native stream (BIFF Workbook, WordDocument, ...) rather than a Package stream: outside this recovery's scope by design, so the payload degrades to nothing without a throw.
+    expect(readEmbeddedOoxmlPayload(oleObjectBin(enc('legacy native stream bytes'), { streamName: 'Workbook' }))).toBeUndefined();
+  });
+
+  it('returns undefined for a compound file whose Package stream holds a non-ZIP file', () => {
+    // The OLE packaging wrapping something other than an OOXML package (a plain text file, say) has no nested document to recover.
+    expect(readEmbeddedOoxmlPayload(oleObjectBin(enc('just some packaged text, not a zip')))).toBeUndefined();
   });
 
   it('returns undefined for a non-ZIP payload (the classic OLE compound file)', () => {

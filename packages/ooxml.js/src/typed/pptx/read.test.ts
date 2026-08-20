@@ -5,6 +5,7 @@ import type { ContentBlock, ContentEmbeddedObjectBlock, ContentImageBlock, Conte
 import { el, txt } from '../../xml/fragment';
 import { bytesToBase64 } from '../../util/base64';
 import { zipPackage } from '../../zip';
+import { oleObjectBin } from '../../test-support/cfb';
 import { minimalXlsxBytes } from '../../test-support/embedded';
 import { PptxDocumentSchema, readPptxContent } from './read';
 
@@ -824,8 +825,22 @@ describe('readPptxContent: OLE graphic frames', () => {
     expect(sheet?.cells[0]?.value).toEqual({ kind: 'string', value: 'Recovered cell' });
   });
 
-  it('keeps a non-ZIP OLE payload on exactly the fallback-picture behaviour, with no embedded block', () => {
-    // The classic OLE compound-file .bin payload: rIdOle retargeted at a part whose bytes carry the OLE/CFB magic -- no reader in this ecosystem decodes it, so the frame's content is exactly what it was before embedded recovery existed.
+  it('recovers a classic compound-file .bin payload (an OLE-packaged xlsx) as an embeddedObject block alongside the fallback picture', () => {
+    // The legacy real-world spelling: rIdOle targets ../embeddings/oleObject1.bin, whose bytes are a CFB compound file carrying the embedded xlsx as an OLE-packaged 'Package' stream. The frame lands on the same two blocks the direct-ZIP spelling produces: the fallback picture plus the recovered sub-document, sized to the frame's own geometry.
+    const pkg = oleFixturePackage('../embeddings/oleObject1.bin');
+    pkg.parts['ppt/embeddings/oleObject1.bin'] = { kind: 'binary', base64: bytesToBase64(oleObjectBin(minimalXlsxBytes())) };
+    const doc = readPptxContent(pkg);
+    const oleShape = doc.slides[0]?.shapes.find((s) => s.name === 'Object 1');
+    expect(asImage(oleShape?.blocks[0]).format).toBe('png');
+    const embedded = asEmbeddedObject(oleShape?.blocks[1]);
+    expect(embedded.objectKind).toBe('spreadsheet');
+    expect(embedded.frame).toEqual({ xPt: 72, yPt: 144, widthPt: 360, heightPt: 216 });
+    const sheet = embedded.document.kind === 'spreadsheet' ? embedded.document.sheets[0] : undefined;
+    expect(sheet?.cells[0]?.value).toEqual({ kind: 'string', value: 'Recovered cell' });
+  });
+
+  it('keeps a malformed compound-file .bin payload on exactly the fallback-picture behaviour, with no embedded block and no slide-read failure', () => {
+    // rIdOle retargeted at a part whose bytes carry the OLE/CFB magic but no walkable structure -- the named CompoundFileFormatError the decode throws is a property of the embedded payload, degraded to nothing rather than poisoning the host slide read (the #737 failure policy extended to the CFB gate).
     const pkg = oleFixturePackage('../embeddings/oleObject1.bin');
     pkg.parts['ppt/embeddings/oleObject1.bin'] = { kind: 'binary', base64: bytesToBase64(new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, 0x01, 0x02, 0x03, 0x04])) };
     const doc = readPptxContent(pkg);
