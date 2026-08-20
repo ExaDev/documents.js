@@ -1,11 +1,14 @@
-// A declarative composition engine for documents.js's conversion surface: a plain-data primitive registry (FORMAT_NODES, TRANSFORMS, LAYOUT_ENGINES, RECONSTRUCTORS) drives three real executors (bridge / toPdf / fromPdf) and a minimum-cost graph pathfinder (resolveCompositionPlan), surfaced through a single convertDocument entry point that resolves a path between any two DocumentFormats and runs each hop against the real primitives. This file calls real functions at runtime -- it generates nothing. Each executor reproduces the exact decode/read/layout/build/encode sequence and option-threading of the corresponding hand-written function in convert.ts (docxToPdf/pdfToOdt/odtToDocx/docxToPptx/xlsxToPdf/xlsxToMarkdown/odgToPdf/markdownToPdf), so a later stage can rewire convert.ts's own bodies onto these executors without changing observable behaviour.
+// A declarative composition engine for documents.js's conversion surface: a plain-data primitive registry (FORMAT_NODES, TRANSFORMS, RECONSTRUCTORS) drives the read-side executors (bridge / fromPdf) and a minimum-cost graph pathfinder (resolveCompositionPlan), with the plan runner (runCompositionPlan) parameterised by an executor binding so the same loop serves both this module's read-only entry (convertDocumentFromPdf) and composition-to-pdf.ts's full convertDocument. This file calls real functions at runtime -- it generates nothing. Each executor reproduces the exact decode/read/layout/build/encode sequence and option-threading of the corresponding hand-written function in convert.ts (pdfToOdt/odtToDocx/docxToPptx/xlsxToMarkdown), so a later stage can rewire convert.ts's own bodies onto these executors without changing observable behaviour.
+//
+// This module is deliberately the READ half of the engine: nothing here imports the X-to-PDF renderers, so nothing here imports writePdf, a font registry, a font measurer, or the vendored font assets those pull in. The toPdf executor (executeToPdf, the layout engines, and the full convertDocument that binds them) lives in composition-to-pdf.ts, and a consumer that only ever converts FROM pdf (the documents.js/read entry, src/convert/from-pdf.ts) reaches this module without ever reaching that one -- the split the package's read-graph guard test (src/read-graph.test.ts) holds. readPdf itself is imported from 'pdf-codec/read' for the same reason: the pdf-codec root barrel's write half must not enter this graph.
 //
 // odf (a standalone formula document) and odm (an ODF master document) are deliberately NOT part of this engine: odfToPdf renders through src/mathml's own formula-positioning path rather than a ContentDocument -> LayoutDocument layout engine, and odmToPdf needs a caller-supplied resolveSubDocument callback that a fixed bytes-in/bytes-out contract cannot express. Both stay as the dedicated functions in convert.ts.
 
-import { assemblePackage, type ContentDocument, type DocumentPackage, type FontSubstitution, type MathFontMetrics, type PageSize, type PositionedFormula, type ProvidedFont } from 'document-schema.js';
+import { assemblePackage, type ContentDocument, type DocumentPackage, type FontSubstitution, type ProvidedFont } from 'document-schema.js';
 import { buildXlsxPackageFromContent, decodePackage as decodeOoxmlPackage, encodePackage as encodeOoxmlPackage, readXlsxContent, type Package as OoxmlPackage } from 'ooxml.js';
 import { decodePackage as decodeOdfPackage, encodePackage as encodeOdfPackage } from 'odf.js';
-import { createFontMeasurer, createFontRegistry, loadMathFont, readPdf, writePdf, type FontRegistry, type PdfDiagnosticSink, type WinAnsiSubstitution } from 'pdf-codec';
+import { readPdf } from 'pdf-codec/read';
+import type { LayoutDocument, PdfDiagnosticSink, WinAnsiSubstitution } from 'pdf-codec';
 import { type MarkdownImageResolver } from 'markdown-codec';
 
 import { buildDocxPackage } from '../edit/docx/content';
@@ -31,26 +34,16 @@ import { decodeSvgText, encodeSvgText } from '../svg/text';
 import { readSvgContent } from '../svg/read';
 import { buildSvgText } from '../svg/write';
 import type { CellTypeInferenceSink } from '../layout/cell-typing';
-import { convertDrawingToLayout } from '../layout/drawing';
-import { convertWordprocessingToLayout } from '../layout/engine';
 import { reconstructDrawing, reconstructPresentation, reconstructSpreadsheet, reconstructWordprocessing, type ReconstructOptions } from '../layout/reconstruct';
-import { convertSpreadsheetToLayout } from '../layout/sheets';
-import { convertPresentationToLayout } from '../layout/slides';
 import { type OmmlDiagnostic } from '../omml/shared';
 import { throwIfAborted } from '../ports/abort';
 import { type ClockPort } from '../ports/clock';
-import { resolveMetadataTimestamps } from '../model/metadata';
-import { createDocumentFontRegistry, type FontSourcePackage } from '../fonts/registry';
 import { drawingToPresentation, presentationToDrawing, presentationToWordprocessing, wordprocessingToPresentation } from './variant-bridges';
 import { type ContentVariant, UnsupportedConversionError } from './capability';
 import { type DocumentFormat } from './port';
-import type { LayoutDocument } from 'pdf-codec';
 
 // ooxml.js's and odf.js's Package types are structurally identical (src/interop.test.ts is the standing type-level proof, mutually assignable in both directions), so a single canonical alias covers both: every package-format read/build/encode/decode closure below flows an ooxml.js Package through odf.js primitives (and vice versa) without a cast at the boundary. This is the identical structural-typing bet createDocumentFontRegistry's own FontSourcePackage union already rests on.
 type SourcePackage = OoxmlPackage;
-
-// A thin factory over pdf-codec's cached loadMathFont singleton, injected into each formula-placing layout engine's options as `mathMetricsAt` -- the identical one-liner convert.ts defines (line 45), restated here so this module owns no dependency on convert.ts. The drawing engine takes no mathMetricsAt (formulas cannot embed in a drawing), so it is wired per-variant in executeToPdf rather than unconditionally.
-const mathMetricsAt = (sizePt: number): MathFontMetrics => loadMathFont().metricsAt(sizePt);
 
 // The union of every option field any conversion in this package accepts, all optional: the ComposedDocumentOptions shape (convert.ts:283) promoted to cover the X-to-PDF and PDF-to-X-only fields too, so a single options object threads through every hop of a composed path. Each hop's executor reads only the fields relevant to its stage: the toPdf hop consumes fonts/onFontSubstitution/onSubstitution/clock, the fromPdf hop consumes sink, bridges consume onMathDiagnostic/images, and signal/onDocument are shared.
 export interface UnifiedConversionOptions {
@@ -106,8 +99,8 @@ interface TextFormatNode {
 
 export type FormatNode = PackageFormatNode | TextFormatNode;
 
-// Narrowing on the boolean-literal hasSourcePackage discriminant (not on family), so the text half stays open to further plain-text families without touching any executor: TypeScript narrows a discriminated union on literal true/false just as it does on string literals.
-function isTextFormatNode(node: FormatNode): node is TextFormatNode {
+// Narrowing on the boolean-literal hasSourcePackage discriminant (not on family), so the text half stays open to further plain-text families without touching any executor: TypeScript narrows a discriminated union on literal true/false just as it does on string literals. Exported because composition-to-pdf.ts's executeToPdf branches through the same narrowing.
+export function isTextFormatNode(node: FormatNode): node is TextFormatNode {
   return !node.hasSourcePackage;
 }
 
@@ -206,8 +199,8 @@ export const FORMAT_NODES: Readonly<Record<ContentFormat, FormatNode>> = {
   },
 };
 
-// The formats that have a direct layout-engine path to/from PDF (convertXToLayout + writePdf). xlsx and csv are deliberately absent: neither has a layout engine of its own, so the pathfinder routes each <-> pdf through ods instead (e.g. csv -> ods bridge, then ods -> pdf toPdf), reproducing the composed route xlsxToPdf/pdfToXlsx already hard-code in convert.ts. svg is present: its read half produces a drawing ContentDocument whose page geometry comes from the svg root's own viewBox/width/height, and convertDrawingToLayout renders it unmodified.
-const LAYOUT_CAPABLE: ReadonlySet<ContentFormat> = new Set<ContentFormat>(['docx', 'pptx', 'odt', 'odp', 'ods', 'odg', 'svg', 'markdown']);
+// The formats that have a direct layout-engine path to/from PDF (convertXToLayout + writePdf). xlsx and csv are deliberately absent: neither has a layout engine of its own, so the pathfinder routes each <-> pdf through ods instead (e.g. csv -> ods bridge, then ods -> pdf toPdf), reproducing the composed route xlsxToPdf/pdfToXlsx already hard-code in convert.ts. svg is present: its read half produces a drawing ContentDocument whose page geometry comes from the svg root's own viewBox/width/height, and convertDrawingToLayout renders it unmodified. Exported because composition-to-pdf.ts's executeToPdf is the executor that enforces it.
+export const LAYOUT_CAPABLE: ReadonlySet<ContentFormat> = new Set<ContentFormat>(['docx', 'pptx', 'odt', 'odp', 'ods', 'odg', 'svg', 'markdown']);
 
 // Cross-variant transforms keyed by `${fromVariant}->${toVariant}`. Each wrapper narrows its input with a runtime kind guard so the underlying transform receives its exact concrete variant type -- the same "no cast, narrow at the boundary" discipline every read/build closure above follows. Today wordprocessing <-> presentation and drawing <-> presentation transforms exist (src/convert/variant-bridges.ts); the pathfinder derives its cross-variant edges from this object's keys, so adding a transform here is the single change needed to teach both the pathfinder and the bridge executor a new variant crossing.
 const TRANSFORMS: Readonly<Record<string, (doc: ContentDocument) => ContentDocument>> = {
@@ -237,14 +230,7 @@ const TRANSFORMS: Readonly<Record<string, (doc: ContentDocument) => ContentDocum
   },
 };
 
-// Layout engines and reconstructors keyed by variant -- declarative registries the executors dispatch through. Each maps a LayoutVariant to the concrete function the corresponding convert.ts path already calls: convertWordprocessingToLayout for the flow/pagination engine docx/odt/markdown feed, convertPresentationToLayout for the direct-placement engine pptx/odp feed, convertSpreadsheetToLayout for ods/xlsx's own column/row-band pagination, convertDrawingToLayout for odg's vector-primitive vocabulary, and the four reconstruct* counterparts for the PDF -> X reverse direction.
-const LAYOUT_ENGINES = {
-  wordprocessing: convertWordprocessingToLayout,
-  presentation: convertPresentationToLayout,
-  spreadsheet: convertSpreadsheetToLayout,
-  drawing: convertDrawingToLayout,
-} as const;
-
+// Reconstructors keyed by variant -- the declarative registry executeFromPdf dispatches through, mapping a LayoutVariant to the concrete reconstruct* function the corresponding convert.ts PDF-to-X path already calls. The layout-engine counterpart (LAYOUT_ENGINES) lives in composition-to-pdf.ts with the toPdf executor it serves.
 const RECONSTRUCTORS: Readonly<Record<LayoutVariant, (doc: LayoutDocument, options?: ReconstructOptions) => ContentDocument>> = {
   wordprocessing: reconstructWordprocessing,
   presentation: reconstructPresentation,
@@ -255,7 +241,7 @@ const RECONSTRUCTORS: Readonly<Record<LayoutVariant, (doc: LayoutDocument, optio
 // --- Executors: real functions, parameterised by the registry ----------------------------------
 
 // decode(source) -> read(source) -> [optional cross-variant transform] -> build(target) -> encode(target), reproducing the exact sequence and option-threading of convert.ts's bridge functions (odtToDocx/docxToOdt/markdownToDocx/docxToPptx). onMathDiagnostic reaches the docx reader and builder only (via the registry closures); images reach the markdown reader only; throwIfAborted frames the read and build stages exactly as the hand-written bridges do. The pathfinder only proposes a bridge hop when source and target either share a variant (same-variant direct copy) or have a TRANSFORMS entry between their variants (cross-variant semantic transform), so a missing transform here is a pathfinder bug, not a runtime hazard.
-function executeBridge(source: ContentFormat, target: ContentFormat, bytes: Uint8Array<ArrayBuffer>, options?: UnifiedConversionOptions): Uint8Array<ArrayBuffer> {
+export function executeBridge(source: ContentFormat, target: ContentFormat, bytes: Uint8Array<ArrayBuffer>, options?: UnifiedConversionOptions): Uint8Array<ArrayBuffer> {
   throwIfAborted(options?.signal);
   const sourceNode = FORMAT_NODES[source];
   const targetNode = FORMAT_NODES[target];
@@ -299,80 +285,8 @@ function executeBridge(source: ContentFormat, target: ContentFormat, bytes: Uint
   return out;
 }
 
-// decode(source) -> [extract source fonts] -> build font registry -> read(source) -> resolve metadata -> layout engine by variant -> writePdf, reproducing the exact sequence and option-threading of convert.ts's *ToPdf functions (docxToPdf/odtToPdf/odpToPdf/odsToPdf/odgToPdf/markdownToPdf). The font registry is built from the source package's own embedded faces for package formats (createDocumentFontRegistry) and from caller-supplied faces alone for markdown (createFontRegistry), matching markdownToPdf's own documented divergence. The drawing engine takes no mathMetricsAt and produces no positioned formulas, so writePdf is called without `formulas` for that variant -- byte-identical to odgToPdf. markdownToPdf's leading throwIfAborted (decodeMarkdownText has no abort hook of its own) is reproduced; the package paths match docxToPdf/odtToPdf by not checking abort until writePdf's own loops do.
-function executeToPdf(format: ContentFormat, bytes: Uint8Array<ArrayBuffer>, options?: UnifiedConversionOptions): Uint8Array<ArrayBuffer> {
-  if (!LAYOUT_CAPABLE.has(format)) {
-    throw new Error(`executeToPdf: '${format}' has no layout engine of its own`);
-  }
-  const node = FORMAT_NODES[format];
-
-  let content: ContentDocument;
-  let fonts: FontRegistry;
-  if (isTextFormatNode(node)) {
-    throwIfAborted(options?.signal);
-    const text = node.decode(bytes);
-    const read = node.read(text, options);
-    content = { ...read, metadata: resolveMetadataTimestamps(read.metadata, options?.clock) };
-    fonts = createFontRegistry({ fonts: options?.fonts, onSubstitution: options?.onFontSubstitution });
-  } else {
-    const pkg = node.decode(bytes);
-    const read = node.read(pkg, options);
-    content = { ...read, metadata: resolveMetadataTimestamps(read.metadata, options?.clock) };
-    const fontSource: FontSourcePackage = node.family === 'odf' ? { kind: 'odf', package: pkg } : format === 'pptx' ? { kind: 'pptx', package: pkg } : { kind: 'docx', package: pkg };
-    fonts = createDocumentFontRegistry(fontSource, { fonts: options?.fonts, onFontSubstitution: options?.onFontSubstitution });
-  }
-  const measurer = createFontMeasurer(fonts);
-
-  // Layout by variant. Every engine returns { document, pages } plus (for the three that render embedded formulas) positioned MathML; the drawing engine takes no mathMetricsAt and produces no positioned formulas, so writePdf omits `formulas` for it -- the exact odgToPdf divergence. Each engine also stamps the placements it computed onto `content`'s own nodes in place (frames), so the content reported below is the fused unified package half, not the bare read output.
-  let layout: LayoutDocument;
-  let pages: readonly PageSize[];
-  let formulas: readonly PositionedFormula[] | undefined;
-  switch (content.kind) {
-    case 'wordprocessing': {
-      const result = LAYOUT_ENGINES.wordprocessing(content, { measurer, mathMetricsAt });
-      layout = result.document;
-      pages = result.pages;
-      formulas = result.formulas;
-      break;
-    }
-    case 'presentation': {
-      const result = LAYOUT_ENGINES.presentation(content, { measurer, mathMetricsAt });
-      layout = result.document;
-      pages = result.pages;
-      formulas = result.formulas;
-      break;
-    }
-    case 'spreadsheet': {
-      const result = LAYOUT_ENGINES.spreadsheet(content, { measurer, mathMetricsAt, signal: options?.signal });
-      layout = result.document;
-      pages = result.pages;
-      formulas = result.formulas;
-      break;
-    }
-    case 'drawing': {
-      const result = LAYOUT_ENGINES.drawing(content, { measurer });
-      layout = result.document;
-      pages = result.pages;
-      break;
-    }
-    default: {
-      throw new Error(`executeToPdf: cannot lay out a '${content.kind}' document`);
-    }
-  }
-
-  // The output bytes are built first and the package reported after them (the ownership rule every construction site follows), with assemblePackage decomposing the framed content + rendered page sizes into the tree-form DocumentPackage onDocument's contract now states.
-  if (formulas === undefined) {
-    const out = writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution, fonts });
-    options?.onDocument?.(assemblePackage(content, pages));
-    return out;
-  }
-  const out = writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution, formulas, fonts });
-  options?.onDocument?.(assemblePackage(content, pages));
-  return out;
-}
-
 // readPdf -> reconstruct(target variant) -> build(target) -> encode(target), reproducing the exact sequence and option-threading of convert.ts's pdfTo* functions (pdfToDocx/pdfToOdt/pdfToOdp/pdfToOds/pdfToOdg/pdfToMarkdown). sink reaches readPdf; signal reaches both readPdf and the reconstructor. onCellTypeInference reaches the reconstructor (reconstructSpreadsheet's audit channel) AND csv's read -- the two places a cell re-typing decision can happen, threaded on the one options object every hop receives; the ergonomic pdfTo* functions do not declare it, so a caller wanting that audit channel on a pdf -> spreadsheet route passes it to convertDocument directly (the first-class entry point every named function forwards to). The package build half is called with no options, matching pdfTo*'s own `buildXPackage(content)` calls (no clock, no onMathDiagnostic threaded on this direction); the text build half receives options because csv's build consumes { delimiter, sheet }.
-function executeFromPdf(target: ContentFormat, bytes: Uint8Array<ArrayBuffer>, options?: UnifiedConversionOptions): Uint8Array<ArrayBuffer> {
+export function executeFromPdf(target: ContentFormat, bytes: Uint8Array<ArrayBuffer>, options?: UnifiedConversionOptions): Uint8Array<ArrayBuffer> {
   const node = FORMAT_NODES[target];
   const layout = readPdf(bytes, { signal: options?.signal, sink: options?.sink });
   const content = RECONSTRUCTORS[node.variant](layout, { signal: options?.signal, onCellTypeInference: options?.onCellTypeInference });
@@ -540,42 +454,58 @@ export function resolveCompositionPlan(source: DocumentFormat, target: DocumentF
   return { hops };
 }
 
-// Narrows a DocumentFormat to the ContentFormat union (the ten formats with a FORMAT_NODES entry). pdf and odf are excluded: pdf is the layout pivot reached only via toPdf/fromPdf edges, and odf is the special-case format this engine does not route at all. Used by convertDocument to narrow a hop's DocumentFormat endpoints to the ContentFormat the executors are typed against.
+// Narrows a DocumentFormat to the ContentFormat union (the ten formats with a FORMAT_NODES entry). pdf and odf are excluded: pdf is the layout pivot reached only via toPdf/fromPdf edges, and odf is the special-case format this engine does not route at all. Used by runCompositionPlan to narrow a hop's DocumentFormat endpoints to the ContentFormat the executors are typed against.
 function isContentFormat(format: DocumentFormat): format is ContentFormat {
   return format !== 'pdf' && format !== 'odf';
 }
 
-// The entry point: resolves a path between source and target and executes each hop in order, feeding the previous hop's output bytes into the next hop's input. Options thread to whichever hop consumes each field (fonts/onFontSubstitution/onSubstitution/clock reach the toPdf hop; sink reaches the fromPdf hop; onMathDiagnostic/images reach bridge hops; signal reaches every hop), and onDocument fires exactly once -- on the LAST hop, so the caller receives the package that actually produced the output bytes (content+layout for a toPdf/fromPdf final hop, content-only for a bridge final hop) -- mirroring the convention the original hand-written composed functions already followed (each forwarded onDocument to its own last hop). Throws UnsupportedConversionError (from capability.ts) for any pair the pathfinder cannot route.
-export function convertDocument(source: DocumentFormat, target: DocumentFormat, bytes: Uint8Array<ArrayBuffer>, options?: UnifiedConversionOptions): Uint8Array<ArrayBuffer> {
-  const plan = resolveCompositionPlan(source, target);
-  if (plan === undefined) {
-    throw new UnsupportedConversionError(source, target);
-  }
+// The executor binding a plan runner dispatches through. bridge and fromPdf are always present (both live in this module); toPdf is bound only by composition-to-pdf.ts's full convertDocument, because the executor that renders a PDF is exactly the half of the engine a read-only caller must not reach. A plan needing a toPdf hop against a binding that carries none fails loudly below -- for the read-only entry that state is unreachable by construction (pdf as a source never routes back through pdf; Dijkstra never revisits a node), so the throw is an internal-invariant guard, not a caller-facing branch.
+export interface CompositionExecutorBinding {
+  readonly bridge: (source: ContentFormat, target: ContentFormat, bytes: Uint8Array<ArrayBuffer>, options?: UnifiedConversionOptions) => Uint8Array<ArrayBuffer>;
+  readonly fromPdf: (target: ContentFormat, bytes: Uint8Array<ArrayBuffer>, options?: UnifiedConversionOptions) => Uint8Array<ArrayBuffer>;
+  readonly toPdf?: (source: ContentFormat, bytes: Uint8Array<ArrayBuffer>, options?: UnifiedConversionOptions) => Uint8Array<ArrayBuffer>;
+}
+
+// Executes a resolved plan hop by hop, feeding the previous hop's output bytes into the next hop's input. Options thread to whichever hop consumes each field (fonts/onFontSubstitution/onSubstitution/clock reach the toPdf hop; sink reaches the fromPdf hop; onMathDiagnostic/images reach bridge hops; signal reaches every hop), and onDocument fires exactly once -- on the LAST hop, so the caller receives the package that actually produced the output bytes (content+layout for a toPdf/fromPdf final hop, content-only for a bridge final hop) -- mirroring the convention the original hand-written composed functions already followed (each forwarded onDocument to its own last hop). One loop serves both bindings (read-only and full) so the two entries can never drift apart in execution semantics -- the identical executors run either way.
+export function runCompositionPlan(plan: ConversionPlan, bytes: Uint8Array<ArrayBuffer>, options: UnifiedConversionOptions | undefined, executors: CompositionExecutorBinding): Uint8Array<ArrayBuffer> {
   let current = bytes;
   for (let i = 0; i < plan.hops.length; i++) {
     const hop = plan.hops[i];
     if (hop === undefined) {
-      throw new Error('convertDocument: resolveCompositionPlan returned a malformed hop');
+      throw new Error('runCompositionPlan: resolveCompositionPlan returned a malformed hop');
     }
     // onDocument fires on the last hop only: null out onDocument for every hop before the last, then pass the caller's options through unchanged on the final hop so the callback receives the package that actually produced the output bytes. This mirrors the convention the original hand-written composed functions (xlsxToPdf/pdfToXlsx/xlsxToMarkdown/markdownToXlsx) already followed -- each forwarded onDocument to its own last hop, never the first -- so a caller of xlsxToPdf still receives the odsToPdf hop's content+layout package rather than the intermediate xlsx->ods bridge's content-only one.
     const isLastHop = i === plan.hops.length - 1;
     const hopOptions: UnifiedConversionOptions | undefined = isLastHop ? options : options === undefined ? undefined : { ...options, onDocument: undefined };
     if (hop.executor === 'toPdf') {
       if (!isContentFormat(hop.from)) {
-        throw new Error(`convertDocument: toPdf source '${hop.from}' is not a content format`);
+        throw new Error(`runCompositionPlan: toPdf source '${hop.from}' is not a content format`);
       }
-      current = executeToPdf(hop.from, current, hopOptions);
+      const toPdf = executors.toPdf;
+      if (toPdf === undefined) {
+        throw new Error(`runCompositionPlan: the plan's ${hop.from} -> ${hop.to} hop needs a toPdf executor, but this binding carries none (the read-only entry cannot render PDFs)`);
+      }
+      current = toPdf(hop.from, current, hopOptions);
     } else if (hop.executor === 'fromPdf') {
       if (!isContentFormat(hop.to)) {
-        throw new Error(`convertDocument: fromPdf target '${hop.to}' is not a content format`);
+        throw new Error(`runCompositionPlan: fromPdf target '${hop.to}' is not a content format`);
       }
-      current = executeFromPdf(hop.to, current, hopOptions);
+      current = executors.fromPdf(hop.to, current, hopOptions);
     } else {
       if (!isContentFormat(hop.from) || !isContentFormat(hop.to)) {
-        throw new Error(`convertDocument: bridge endpoints '${hop.from}' -> '${hop.to}' are not both content formats`);
+        throw new Error(`runCompositionPlan: bridge endpoints '${hop.from}' -> '${hop.to}' are not both content formats`);
       }
-      current = executeBridge(hop.from, hop.to, current, hopOptions);
+      current = executors.bridge(hop.from, hop.to, current, hopOptions);
     }
   }
   return current;
+}
+
+// The read-only entry: resolves a pdf -> target route and runs it through this module's bridge/fromPdf executors alone -- the forward target of every pdfTo* function (src/convert/from-pdf.ts), and the one conversion entry whose module graph excludes the X-to-PDF renderers entirely. Behaviour is identical to convertDocument('pdf', target, ...) by construction: the same pathfinder resolves the plan and the same executors run its hops, and a route out of pdf never contains a toPdf hop (pdf is the source, and Dijkstra never revisits a node), so the absent executor is never consulted. Every target the pdfTo* family names is routable; an unroutable pair throws the same UnsupportedConversionError convertDocument would.
+export function convertDocumentFromPdf(target: ContentFormat, bytes: Uint8Array<ArrayBuffer>, options?: UnifiedConversionOptions): Uint8Array<ArrayBuffer> {
+  const plan = resolveCompositionPlan('pdf', target);
+  if (plan === undefined) {
+    throw new UnsupportedConversionError('pdf', target);
+  }
+  return runCompositionPlan(plan, bytes, options, { bridge: executeBridge, fromPdf: executeFromPdf });
 }
