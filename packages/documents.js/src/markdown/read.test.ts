@@ -9,6 +9,25 @@ describe('readMarkdownContent', () => {
     expect(content.kind).toBe('wordprocessing');
   });
 
+  // The read-side inverse of src/markdown/write.ts's page-break marker: an `<!-- page break -->` HTML comment lowers (via markdown-codec's own HTML block arm) to an HTMLPreformatted paragraph carrying that literal text, and this pass promotes exactly that paragraph to a pageBreak block -- so markdownToPdf re-renders a real page boundary and a pdfToMarkdown -> markdownToPdf round trip regenerates markers from real boundaries instead of accumulating them as visible literal text.
+  it('reads a page-break marker back as a pageBreak block', () => {
+    const content = readMarkdownContent('Before\n\n<!-- page break -->\n\nAfter\n');
+    if (content.kind !== 'wordprocessing') {
+      throw new Error('expected a wordprocessing ContentDocument');
+    }
+    const kinds = content.sections[0]?.blocks.map((block) => block.kind);
+    expect(kinds).toEqual(['paragraph', 'pageBreak', 'paragraph']);
+  });
+
+  it('leaves other HTML-preformatted paragraphs as paragraphs', () => {
+    const content = readMarkdownContent('Before\n\n<div>genuine raw html</div>\n\nAfter\n');
+    if (content.kind !== 'wordprocessing') {
+      throw new Error('expected a wordprocessing ContentDocument');
+    }
+    const kinds = content.sections[0]?.blocks.map((block) => block.kind);
+    expect(kinds).toEqual(['paragraph', 'paragraph', 'paragraph']);
+  });
+
   it('lowers a heading to a Heading1-styled paragraph, matching odf.js/ooxml.js\'s own convention', () => {
     const content = readMarkdownContent(richMarkdownText());
     if (content.kind !== 'wordprocessing') {
