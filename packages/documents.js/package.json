@@ -90,7 +90,7 @@
     "markdown-codec": "^4.0.9",
     "odf.js": "^5.0.6",
     "ooxml.js": "^4.0.11",
-    "pdf-codec": "^3.0.10",
+    "pdf-codec": "^3.0.11",
     "temml": "0.13.4",
     "zod": "^4.4.3"
   },
