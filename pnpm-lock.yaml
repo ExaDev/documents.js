@@ -25,8 +25,8 @@ importers:
         specifier: ^2.1.1
         version: 2.1.1(eslint@10.8.1(jiti@2.7.0))(typescript-eslint@8.67.0(eslint@10.8.1(jiti@2.7.0))(typescript@6.0.3))
       '@exadev/semantic-release-workspace':
-        specifier: ^1.0.0
-        version: 1.0.0(@semantic-release/changelog@7.0.0(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/commit-analyzer@13.0.1(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/git@11.0.1(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/github@12.0.9(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/npm@13.1.5(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/release-notes-generator@14.1.1(semantic-release@25.0.9(typescript@6.0.3)))(semantic-release@25.0.9(typescript@6.0.3))
+        specifier: ^1.0.1
+        version: 1.0.1(@semantic-release/changelog@7.0.0(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/commit-analyzer@13.0.1(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/git@11.0.1(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/github@12.0.9(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/npm@13.1.5(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/release-notes-generator@14.1.1(semantic-release@25.0.9(typescript@6.0.3)))(semantic-release@25.0.9(typescript@6.0.3))
       '@semantic-release/changelog':
         specifier: ^7.0.0
         version: 7.0.0(semantic-release@25.0.9(typescript@6.0.3))
@@ -2205,8 +2205,8 @@ packages:
       eslint: '>=10.0.0'
       typescript-eslint: '>=8.0.0'
 
-  '@exadev/semantic-release-workspace@1.0.0':
-    resolution: {integrity: sha512-9K6j3L5Q1+s9TMaYa0dqUP3bo6a9P6BP+9J4JcWkdtnxOWNyaDF7RPEEMQhG1XVoKe6iY8Iz9vJqEjoelH1gMw==}
+  '@exadev/semantic-release-workspace@1.0.1':
+    resolution: {integrity: sha512-sa/3hbdW1XOXB+W/oad4h+Yvgn28X3lVn3xVCJgkhVNAQlaPB+TTZGx92UIWOOcFGN21I2QhklIwrc/6CIv+VA==}
     engines: {node: '>=20'}
     hasBin: true
     peerDependencies:
@@ -7973,7 +7973,7 @@ snapshots:
       eslint: 10.8.1(jiti@2.7.0)
       typescript-eslint: 8.67.0(eslint@10.8.1(jiti@2.7.0))(typescript@6.0.3)
 
-  '@exadev/semantic-release-workspace@1.0.0(@semantic-release/changelog@7.0.0(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/commit-analyzer@13.0.1(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/git@11.0.1(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/github@12.0.9(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/npm@13.1.5(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/release-notes-generator@14.1.1(semantic-release@25.0.9(typescript@6.0.3)))(semantic-release@25.0.9(typescript@6.0.3))':
+  '@exadev/semantic-release-workspace@1.0.1(@semantic-release/changelog@7.0.0(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/commit-analyzer@13.0.1(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/git@11.0.1(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/github@12.0.9(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/npm@13.1.5(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/release-notes-generator@14.1.1(semantic-release@25.0.9(typescript@6.0.3)))(semantic-release@25.0.9(typescript@6.0.3))':
     dependencies:
       '@semantic-release/changelog': 7.0.0(semantic-release@25.0.9(typescript@6.0.3))
       '@semantic-release/commit-analyzer': 13.0.1(semantic-release@25.0.9(typescript@6.0.3))
