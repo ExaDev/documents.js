@@ -365,7 +365,7 @@ importers:
         specifier: ^5.0.6
         version: link:../odf.js
       pdf-codec:
-        specifier: ^3.0.10
+        specifier: ^3.0.11
         version: link:../pdf-codec
       publint:
         specifier: ^0.3.22
