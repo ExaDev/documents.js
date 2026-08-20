@@ -1,10 +1,11 @@
 import { z } from 'zod';
 import type { Package } from '../../model/package';
 import type { XmlElement, XmlNode } from '../../model/node';
-import type { Alignment, Box, ContentBlock, ContentImageBlock, ContentParagraph, ContentRun, ContentShape, ContentSlide, ContentTable, ContentTableCell, PageSize } from 'document-schema.js';
+import type { Alignment, Box, ContentBlock, ContentEmbeddedObjectBlock, ContentImageBlock, ContentParagraph, ContentRun, ContentShape, ContentSlide, ContentTable, ContentTableCell, PageSize } from 'document-schema.js';
 import { ContentSlideSchema, SLIDE_SIZE_WIDESCREEN } from 'document-schema.js';
 import { drawingMlFontSizeToPt, emuToPt } from '../shared/units';
 import { sniffImageFormat } from '../../image/sniff';
+import { readEmbeddedOoxmlPayload } from '../embedded';
 import type { GroupChildTransform } from '../shared/drawingml';
 import { applyGroupTransform, composeGroupTransform, composeShapeRotationDeg, readGroupXfrm, readSolidFillColor, readXfrm } from '../shared/drawingml';
 import { DocumentMetadataSchema, readCoreProperties } from '../shared/metadata';
@@ -340,6 +341,19 @@ function relatedPartRoot(rId: string | undefined, slideRels: ReadonlyMap<string,
   return rel === undefined ? undefined : rootElement(pkg.parts[rel.target]);
 }
 
+// Resolves the OLE object's own payload (p:oleObj/@r:id -> slide relationship -> embeddings part) through readEmbeddedOoxmlPayload: a ZIP payload (a modern producer's embedded xlsx/docx/pptx) becomes the recovered sub-document's ContentEmbeddedObjectBlock at the frame's own geometry, while the classic non-ZIP OLE compound-file payload (.bin) returns undefined and leaves the frame's content to the fallback-picture rules above. Undefined follows the same convention as readBlipImage: an id, relationship, or part that does not line up leaves the shape with no embedded content, never a partial block.
+function readOleEmbeddedObject(graphicData: XmlElement, slideRels: ReadonlyMap<string, Relationship>, pkg: Package, frame: Box): ContentEmbeddedObjectBlock | undefined {
+  const oleObj = elementsWithTag([graphicData], 'p:oleObj')[0];
+  const rId = oleObj === undefined ? undefined : attr(oleObj, 'r:id');
+  const rel = rId === undefined ? undefined : slideRels.get(rId);
+  const payloadPart = rel === undefined ? undefined : pkg.parts[rel.target];
+  if (payloadPart?.kind !== 'binary') {
+    return undefined;
+  }
+  const payload = readEmbeddedOoxmlPayload(base64ToBytes(payloadPart.base64));
+  return payload === undefined ? undefined : { kind: 'embeddedObject', objectKind: payload.objectKind, document: payload.document, frame };
+}
+
 function readGraphicFrameShape(gf: XmlElement, context: SlideInheritanceContext, slideRels: ReadonlyMap<string, Relationship>, pkg: Package, parentTransform: GroupChildTransform | undefined): ContentShape | undefined {
   // p:graphicFrame's own transform is a direct p:xfrm child (not nested under p:spPr, unlike p:sp/p:pic) -- verified against ECMA-376's CT_GraphicalObjectFrame element sequence.
   const xfrm = readXfrm(childrenWithTag(gf, 'p:xfrm')[0]);
@@ -370,7 +384,7 @@ function readGraphicFrameShape(gf: XmlElement, context: SlideInheritanceContext,
     const dataModelRoot = relatedPartRoot(relIds === undefined ? undefined : attr(relIds, 'r:dm'), slideRels, pkg);
     blocks = dataModelRoot === undefined ? [] : readDiagramText(dataModelRoot);
   } else if (uri === OLE_GRAPHIC_URI && graphicData !== undefined) {
-    // An OLE object's own payload (p:oleObj/@r:id's embedded part) is an arbitrary external application's data with no structured content to recover; what the slide actually displays is the fallback picture (mc:Fallback > p:oleObj > p:pic under the mc:AlternateContent wrapper, or a p:pic directly under p:oleObj where a producer skipped the wrapper), so that picture is read like any other blip image. With no reachable picture, the p:oleObj's progId at least records what kind of object the frame holds.
+    // What the slide actually displays is the OLE object's fallback picture (mc:Fallback > p:oleObj > p:pic under the mc:AlternateContent wrapper, or a p:pic directly under p:oleObj where a producer skipped the wrapper), so that picture is read like any other blip image. With no reachable picture, the p:oleObj's progId at least records what kind of object the frame holds. The object's own payload (p:oleObj/@r:id's embedded part) is additionally decoded when it is a ZIP archive -- a modern producer's embedded xlsx/docx/pptx -- and its recovered sub-document appended as an embeddedObject block beside whatever the display path produced (readOleEmbeddedObject below); the classic non-ZIP OLE compound-file payload stays opaque external-application data.
     const image = readBlipImage(graphicData, slideRels, pkg, frame);
     if (image !== undefined) {
       blocks = [image];
@@ -378,6 +392,10 @@ function readGraphicFrameShape(gf: XmlElement, context: SlideInheritanceContext,
       const oleObj = elementsWithTag([graphicData], 'p:oleObj')[0];
       const progId = oleObj === undefined ? undefined : attr(oleObj, 'progId');
       blocks = progId === undefined ? [] : [{ kind: 'paragraph', runs: [{ text: progId }] }];
+    }
+    const embedded = readOleEmbeddedObject(graphicData, slideRels, pkg, frame);
+    if (embedded !== undefined) {
+      blocks.push(embedded);
     }
   } else {
     // Any other graphic frame kind keeps its geometry with empty content.
