@@ -80,7 +80,7 @@ describe('docx constructs: structured document tags', () => {
     expect(outline(blocksOf([sdt]))[0]).toEqual({ kind: 'contentControl', controlType: 'date', value: '2026-08-18T00:00:00Z' });
   });
 
-  it('reads a Table of Contents docPartObj gallery as an index control, and any other gallery as a plain rich-text container', () => {
+  it('reads a Table of Contents docPartObj gallery as an index control, and any other gallery as a plain rich-text container with its docPartObj quarantined in residue', () => {
     const toc = el('w:sdt', {}, [
       el('w:sdtPr', {}, [el('w:docPartObj', {}, [el('w:docPartGallery', { 'w:val': 'Table of Contents' }), el('w:docPartUnique')])]),
       el('w:sdtContent', {}, [para('Chapter 1')]),
@@ -89,8 +89,13 @@ describe('docx constructs: structured document tags', () => {
       el('w:sdtPr', {}, [el('w:docPartObj', {}, [el('w:docPartGallery', { 'w:val': 'Cover Pages' })])]),
       el('w:sdtContent', {}, [para('Title page')]),
     ]);
+    // The TOC gallery is the one the semantic vocabulary names, so it needs no residue; every other gallery degrades to richText with the whole w:docPartObj element carried verbatim -- the serialisation the lossless layer's own builder produces for that subtree, the same equivalence class it round-trips within.
     expect(outline(blocksOf([toc]))[0]).toEqual({ kind: 'contentControl', controlType: 'index' });
-    expect(outline(blocksOf([coverPage]))[0]).toEqual({ kind: 'contentControl', controlType: 'richText' });
+    expect(outline(blocksOf([coverPage]))[0]).toEqual({
+      kind: 'contentControl',
+      controlType: 'richText',
+      source: { format: 'docx', xml: '<w:docPartObj><w:docPartGallery w:val="Cover Pages"></w:docPartGallery></w:docPartObj>' },
+    });
   });
 
   it('nests a content control inside a tracked insertion as nested marker pairs, innermost closing first', () => {

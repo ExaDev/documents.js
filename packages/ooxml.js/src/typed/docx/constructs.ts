@@ -1,5 +1,6 @@
-import type { AnchorDescriptor, ConstructDescriptor, ContentBlock, ContentControlDescriptor, ContentControlLock, ContentControlType, ProvenanceChange, ProvenanceDescriptor } from 'document-schema.js';
+import type { AnchorDescriptor, ConstructDescriptor, ContentBlock, ContentControlDescriptor, ContentControlLock, ContentControlType, ProvenanceChange, ProvenanceDescriptor, SourceResidue } from 'document-schema.js';
 import type { XmlElement } from '../../model/node';
+import { buildXml } from '../../xml/build';
 import { attr, childrenWithTag, decodeEntities, textContent } from '../util';
 
 // The docx side of document-schema.js's fidelity construct vocabulary (its src/construct.ts): reading a WordprocessingML construct into a ConstructDescriptor, and placing the flat form's constructStart/constructEnd marker pair around the blocks that construct spans. Shared by the reader (typed/docx/read.ts) and the writer (typed/docx/write.ts), so one module owns both the descriptor shapes and the bracket placement rules the two halves must agree on.
@@ -164,12 +165,18 @@ const LOCK_BY_VALUE: ReadonlyMap<string, ContentControlLock> = new Map([
   ['sdtContentLocked', 'both'],
 ]);
 
-// The one w:docPartObj gallery that is an index rather than an ordinary building-block container -- document-schema.js's `index` member names docx's TOC-as-SDT explicitly, and every other gallery (Cover Pages, Watermarks, Quick Parts) is a container of arbitrary content with no index semantics, so those degrade to richText and the gallery name itself has no home until the residue channel exists.
+// The one w:docPartObj gallery that is an index rather than an ordinary building-block container -- document-schema.js's `index` member names docx's TOC-as-SDT explicitly, and every other gallery (Cover Pages, Watermarks, Quick Parts) is a container of arbitrary content with no index semantics, so those degrade to richText with the whole w:docPartObj/w:docPartList element quarantined verbatim in the descriptor's residue (the residue channel's first consumer).
 export const TABLE_OF_CONTENTS_GALLERY = 'Table of Contents';
 
-function readControlType(sdtPr: XmlElement | undefined): ContentControlType {
+// What a w:sdtPr's own type child says the control is, plus the docPart residue when that payload is what degraded to richText: one walk decides both, so the semantic verdict and the quarantined original can never disagree about which element won. The residue carries the element subtree as the lossless layer's own builder serialises it -- the same equivalence class that layer round-trips within, so a same-format writer can re-emit it (write.ts does) without this typed layer ever interpreting the text.
+interface ControlTypeReading {
+  readonly controlType: ContentControlType;
+  readonly galleryResidue: SourceResidue | undefined;
+}
+
+function readControlType(sdtPr: XmlElement | undefined): ControlTypeReading {
   if (sdtPr === undefined) {
-    return 'richText';
+    return { controlType: 'richText', galleryResidue: undefined };
   }
   for (const child of sdtPr.children) {
     if (child.type !== 'element') {
@@ -177,14 +184,17 @@ function readControlType(sdtPr: XmlElement | undefined): ContentControlType {
     }
     const mapped = CONTROL_TYPE_BY_TAG.get(child.tag);
     if (mapped !== undefined) {
-      return mapped;
+      return { controlType: mapped, galleryResidue: undefined };
     }
     if (child.tag === 'w:docPartObj' || child.tag === 'w:docPartList') {
       const gallery = childrenWithTag(child, 'w:docPartGallery')[0];
-      return (gallery === undefined ? undefined : attr(gallery, 'w:val')) === TABLE_OF_CONTENTS_GALLERY ? 'index' : 'richText';
+      if ((gallery === undefined ? undefined : attr(gallery, 'w:val')) === TABLE_OF_CONTENTS_GALLERY) {
+        return { controlType: 'index', galleryResidue: undefined };
+      }
+      return { controlType: 'richText', galleryResidue: { format: 'docx', xml: buildXml([child]) } };
     }
   }
-  return 'richText';
+  return { controlType: 'richText', galleryResidue: undefined };
 }
 
 function readListItemOptions(sdtPr: XmlElement): string[] | undefined {
@@ -218,7 +228,11 @@ function readCheckboxState(sdtPr: XmlElement): boolean | undefined {
 
 export function readContentControlDescriptor(sdt: XmlElement): ContentControlDescriptor {
   const sdtPr = childrenWithTag(sdt, 'w:sdtPr')[0];
-  const descriptor: ContentControlDescriptor = { kind: 'contentControl', controlType: readControlType(sdtPr) };
+  const { controlType, galleryResidue } = readControlType(sdtPr);
+  const descriptor: ContentControlDescriptor = { kind: 'contentControl', controlType };
+  if (galleryResidue !== undefined) {
+    descriptor.source = galleryResidue;
+  }
   if (sdtPr === undefined) {
     return descriptor;
   }
