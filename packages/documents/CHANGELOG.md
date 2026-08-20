@@ -1,3 +1,18 @@
+## [1.26.26](https://github.com/ExaDev/documents.js/compare/documents@1.26.25...documents@1.26.26) (2026-08-20)
+
+
+### Bug Fixes
+
+* sync document-schema.js and documents versions with published state ([61ea77f](https://github.com/ExaDev/documents.js/commit/61ea77fdc4e23fb53b8c1f41fe786d36334d6d08))
+
+
+### Dependencies
+
+- Updated documents.js to ^4.0.21
+- Updated odf.js to ^5.0.4
+- Updated markdown-codec to ^4.0.7
+- Updated document-schema.js to ^4.3.4
+
 ## [1.26.19](https://github.com/ExaDev/documents/compare/v1.26.18...v1.26.19) (2026-08-19)
 
 ## [1.26.18](https://github.com/ExaDev/documents/compare/v1.26.17...v1.26.18) (2026-08-19)
