@@ -1,15 +1,16 @@
-import type { XmlNode } from 'ooxml.js';
+import type { XmlElement, XmlNode } from 'ooxml.js';
+import { attr } from 'ooxml.js';
 import { describe, expect, it } from 'vitest';
 import { el } from '../../xml/fragment';
 import { buildParagraph, DocxParagraph } from './paragraph';
 
-function paragraphFromXml(): { container: XmlNode[]; paragraph: DocxParagraph } {
+function paragraphFromXml(): { container: XmlNode[]; paragraph: DocxParagraph; paragraphElement: XmlElement } {
   const paragraphElement = el('w:p', {}, [
     el('w:r', {}, [el('w:t', {}, [{ type: 'text', value: 'Hello ' }])]),
     el('w:r', {}, [el('w:t', {}, [{ type: 'text', value: 'world' }])]),
   ]);
   const container: XmlNode[] = [paragraphElement];
-  return { container, paragraph: new DocxParagraph(container, paragraphElement) };
+  return { container, paragraph: new DocxParagraph(container, paragraphElement), paragraphElement };
 }
 
 describe('DocxParagraph.text and runs', () => {
@@ -68,6 +69,19 @@ describe('DocxParagraph styleId / alignment / list', () => {
     expect(paragraph.list).toEqual({ numId: '3', level: 2 });
     paragraph.list = undefined;
     expect(paragraph.list).toBeUndefined();
+  });
+
+  it('headingLevel defaults to undefined, stores as 0-based w:outlineLvl, and can be cleared', () => {
+    const { paragraph, paragraphElement } = paragraphFromXml();
+    expect(paragraph.headingLevel).toBeUndefined();
+    paragraph.headingLevel = 2;
+    // w:outlineLvl is 0-based where the schema's headingLevel is 1-based -- the same +1 mapping ooxml.js's own docx reader applies on the way back in.
+    const pPr = paragraphElement.children.find((c): c is XmlElement => c.type === 'element' && c.tag === 'w:pPr');
+    const outlineLvl = pPr?.children.find((c): c is XmlElement => c.type === 'element' && c.tag === 'w:outlineLvl');
+    expect(outlineLvl === undefined ? undefined : attr(outlineLvl, 'w:val')).toBe('1');
+    expect(paragraph.headingLevel).toBe(2);
+    paragraph.headingLevel = undefined;
+    expect(paragraph.headingLevel).toBeUndefined();
   });
 });
 
