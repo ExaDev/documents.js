@@ -16,8 +16,8 @@ importers:
         specifier: ^1.1.9
         version: 1.1.9
       document-schema.js:
-        specifier: ^4.3.1
-        version: 4.3.1
+        specifier: ^4.3.2
+        version: 4.3.2
       fflate:
         specifier: ^0.8.3
         version: 0.8.3
@@ -1512,12 +1512,12 @@ packages:
     resolution: {integrity: sha512-WkrWp9GR4KXfKGYzOLmTuGVi1UWFfws377n9cc55/tb6DuqyF6pcQ5AbiHEshaDpY9v6oaSr2XCDidGmMwdzIA==}
     engines: {node: '>=8'}
 
-  document-schema.js@4.3.0:
-    resolution: {integrity: sha512-Ao6bE/q4JGVy6hOX7UGYBZUsekU6GzI19+t+M6jBpGmPuDEeHM5MXSIxbtty45tsKEYmf0seeLybb2DaLZyxPg==}
-    engines: {node: '>=20'}
-
   document-schema.js@4.3.1:
     resolution: {integrity: sha512-97Zb51z4Shl6jdnCL++Z0u5eAY35OAGT2HR1z7i/WGK3PJShn0HHBuAEgKgE3PR279tY0cXraCFEFZwWvFg8Wg==}
+    engines: {node: '>=20'}
+
+  document-schema.js@4.3.2:
+    resolution: {integrity: sha512-vsU/WgJx6ikaFWd+LhxLFNfznxp2yylWdgpNBEhrrnF0ZhvkWsTaT51x3tkCZnuug1FSvz/1d8PJsXIXzrHRrg==}
     engines: {node: '>=20'}
 
   dot-prop@5.3.0:
@@ -4384,11 +4384,11 @@ snapshots:
     dependencies:
       path-type: 4.0.0
 
-  document-schema.js@4.3.0:
+  document-schema.js@4.3.1:
     dependencies:
       zod: 4.4.3
 
-  document-schema.js@4.3.1:
+  document-schema.js@4.3.2:
     dependencies:
       zod: 4.4.3
 
@@ -4988,7 +4988,7 @@ snapshots:
 
   markdown-codec@4.0.2:
     dependencies:
-      document-schema.js: 4.3.0
+      document-schema.js: 4.3.1
       zod: 4.4.3
 
   marked-terminal@7.3.0(marked@15.0.12):
@@ -5104,7 +5104,7 @@ snapshots:
 
   odf.js@5.0.0:
     dependencies:
-      document-schema.js: 4.3.0
+      document-schema.js: 4.3.1
       fast-xml-parser: 5.10.1
       fflate: 0.8.3
       zod: 4.4.3
@@ -5115,7 +5115,7 @@ snapshots:
 
   ooxml.js@4.0.6:
     dependencies:
-      document-schema.js: 4.3.0
+      document-schema.js: 4.3.1
       fast-xml-parser: 5.10.1
       fflate: 0.8.3
       zod: 4.4.3
@@ -5216,7 +5216,7 @@ snapshots:
   pdf-codec@3.0.4:
     dependencies:
       byte-codec: 1.1.9
-      document-schema.js: 4.3.0
+      document-schema.js: 4.3.1
       fflate: 0.8.3
       zod: 4.4.3
 
