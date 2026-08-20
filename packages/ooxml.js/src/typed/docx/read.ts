@@ -4,7 +4,7 @@ import type { XmlElement, XmlNode } from '../../model/node';
 import type { Color, ContentBlock, ContentBorder, ContentCellBorders, ContentEmbeddedObjectBlock, ContentImageBlock, ContentListMembership, ContentParagraph, ContentRun, ContentSection, ContentStrokeStyle, ContentTable, ContentTableCell, Margins, PageSize, ProvenanceChange } from 'document-schema.js';
 import { COLOR_BLACK, ContentSectionSchema, PAGE_SIZE_LETTER, clampHeadingLevel, rgbHexToColor } from 'document-schema.js';
 import { DocumentMetadataSchema, readCoreProperties } from '../shared/metadata';
-import { readEmbeddedOoxmlPayload } from '../embedded';
+import { readEmbeddedPayloadPart } from '../embedded';
 import { eighthPointsToPt, emuToPt, twipsToPt } from '../shared/units';
 import type { DrawingTheme } from '../shared/drawingml';
 import { EMPTY_THEME, readTheme } from '../shared/drawingml';
@@ -184,7 +184,7 @@ function readDrawingImage(drawing: XmlElement, ctx: DocxReadContext): ContentIma
   return image;
 }
 
-// Resolves a w:object's OLE payload (o:OLEObject/@r:id -> document relationship -> embeddings part) through readEmbeddedOoxmlPayload: a ZIP payload (a modern producer's embedded xlsx/docx/pptx) becomes the recovered sub-document's ContentEmbeddedObjectBlock, sized from w:object's own w:dxaOrig/w:dyaOrig (twips), while the classic non-ZIP OLE compound-file payload (.bin) and a ZIP that does not decode as one of the three OOXML flavours both return undefined and are skipped, exactly as unhandled markup is -- second-order content degrades, it never fails the host read. Undefined follows the same convention as readDrawingImage: an id, relationship, or part that does not line up (including an externally-linked object, whose relationship target is a URI no part key matches) leaves the paragraph with no embedded block, never a partial one. The frame sits at the origin because an inline flow object has no absolute position to record -- ContentEmbeddedObjectBlock's frame is required, and 0/0 is the honest spelling of "positioned by the flow", the same narrowing readDrawingImage makes for wp:anchor.
+// Resolves a w:object's OLE payload (o:OLEObject/@r:id -> document relationship -> embeddings part) through readEmbeddedPayloadPart: a ZIP payload (a modern producer's embedded xlsx/docx/pptx) becomes the recovered sub-document's ContentEmbeddedObjectBlock, sized from w:object's own w:dxaOrig/w:dyaOrig (twips), while the classic non-ZIP OLE compound-file payload (.bin) and a ZIP that does not decode as one of the three OOXML flavours both return undefined and are skipped, exactly as unhandled markup is -- second-order content degrades, it never fails the host read. Undefined follows the same convention as readDrawingImage: an id, relationship, or part that does not line up (including an externally-linked object, whose relationship target is a URI no part key matches) leaves the paragraph with no embedded block, never a partial one. The frame sits at the origin because an inline flow object has no absolute position to record -- ContentEmbeddedObjectBlock's frame is required, and 0/0 is the honest spelling of "positioned by the flow", the same narrowing readDrawingImage makes for wp:anchor.
 function readObjectEmbeddedObject(object: XmlElement, ctx: DocxReadContext): ContentEmbeddedObjectBlock | undefined {
   const dxaOrig = attr(object, 'w:dxaOrig');
   const dyaOrig = attr(object, 'w:dyaOrig');
@@ -204,7 +204,7 @@ function readObjectEmbeddedObject(object: XmlElement, ctx: DocxReadContext): Con
   if (payloadPart?.kind !== 'binary') {
     return undefined;
   }
-  const payload = readEmbeddedOoxmlPayload(base64ToBytes(payloadPart.base64));
+  const payload = readEmbeddedPayloadPart(payloadPart);
   return payload === undefined ? undefined : { kind: 'embeddedObject', objectKind: payload.objectKind, document: payload.document, frame: { xPt: 0, yPt: 0, widthPt, heightPt } };
 }
 

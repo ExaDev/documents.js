@@ -720,8 +720,8 @@ describe('readPptxContent: SmartArt graphic frames', () => {
   });
 });
 
-// An OLE graphic frame's a:graphicData wraps an mc:AlternateContent: the mc:Choice side's p:oleObj names the embedded payload, while the mc:Fallback side repeats the p:oleObj carrying the raster picture every renderer actually displays. The payload target is parameterised so a test can point rIdOle at whatever part shape it needs (the ZIP-payload case reuses the default .xlsx target; the classic-OLE case retargets to a .bin part) -- the fixture itself ships no embeddings part, so the default fixture keeps exercising exactly the fallback/progId paths.
-function oleFixturePackage(payloadTarget = '../embeddings/oleObject1.xlsx'): Package {
+// An OLE graphic frame's a:graphicData wraps an mc:AlternateContent: the mc:Choice side's p:oleObj names the embedded payload, while the mc:Fallback side repeats the p:oleObj carrying the raster picture every renderer actually displays. The payload target is parameterised so a test can point rIdOle at whatever part shape it needs (the ZIP-payload case reuses the default .xlsx target; the classic-OLE case retargets to a .bin part), and frameCount emits that many frames all pointing at the SAME payload relationship -- the copy-pasted-object shape -- while the fixture still ships no embeddings part, so the default fixture keeps exercising exactly the fallback/progId paths.
+function oleFixturePackage(payloadTarget = '../embeddings/oleObject1.xlsx', frameCount = 1): Package {
   const choiceOleObj = el('p:oleObj', { spid: '3', 'r:id': 'rIdOle', progId: 'Excel.Sheet.12', showAsIcon: '0' }, [el('p:embed')]);
   const fallbackOleObj = el('p:oleObj', { spid: '3', 'r:id': 'rIdOle', progId: 'Excel.Sheet.12' }, [
     el('p:pic', {}, [
@@ -729,16 +729,17 @@ function oleFixturePackage(payloadTarget = '../embeddings/oleObject1.xlsx'): Pac
       el('p:blipFill', {}, [el('a:blip', { 'r:embed': 'rIdFallback' })]),
     ]),
   ]);
-  const oleFrame = el('p:graphicFrame', {}, [
-    el('p:nvGraphicFramePr', {}, [el('p:cNvPr', { id: '2', name: 'Object 1' })]),
-    el('p:xfrm', {}, [el('a:off', { x: '914400', y: '1828800' }), el('a:ext', { cx: '4572000', cy: '2743200' })]),
-    el('a:graphic', {}, [
-      el('a:graphicData', { uri: 'http://schemas.openxmlformats.org/presentationml/2006/ole' }, [
-        el('mc:AlternateContent', {}, [el('mc:Choice', { Requires: 'v' }, [choiceOleObj]), el('mc:Fallback', {}, [fallbackOleObj])]),
+  const oleFrame = (index: number): XmlElement =>
+    el('p:graphicFrame', {}, [
+      el('p:nvGraphicFramePr', {}, [el('p:cNvPr', { id: String(index + 2), name: `Object ${index + 1}` })]),
+      el('p:xfrm', {}, [el('a:off', { x: '914400', y: '1828800' }), el('a:ext', { cx: '4572000', cy: '2743200' })]),
+      el('a:graphic', {}, [
+        el('a:graphicData', { uri: 'http://schemas.openxmlformats.org/presentationml/2006/ole' }, [
+          el('mc:AlternateContent', {}, [el('mc:Choice', { Requires: 'v' }, [choiceOleObj]), el('mc:Fallback', {}, [fallbackOleObj])]),
+        ]),
       ]),
-    ]),
-  ]);
-  const slide = el('p:sld', {}, [el('p:cSld', {}, [el('p:spTree', {}, [oleFrame])])]);
+    ]);
+  const slide = el('p:sld', {}, [el('p:cSld', {}, [el('p:spTree', {}, Array.from({ length: frameCount }, (_, index) => oleFrame(index)))])]);
   const presentation = el('p:presentation', {}, [el('p:sldIdLst', {}, [el('p:sldId', { id: '256', 'r:id': 'rId1' })])]);
   const presentationRels = rels([{ id: 'rId1', type: SLIDE_REL, target: 'slides/slide1.xml' }]);
   const slideRels = rels([
@@ -841,6 +842,17 @@ describe('readPptxContent: OLE graphic frames', () => {
     const oleShape = doc.slides[0]?.shapes.find((s) => s.name === 'Object 1');
     expect(oleShape?.blocks).toHaveLength(1);
     expect(asImage(oleShape?.blocks[0]).format).toBe('png');
+  });
+
+  it('decodes an embeddings part shared by two OLE frames once, both blocks carrying the same recovered document', () => {
+    // Copy-pasted objects point two frames at one embeddings part: the payload is one part of one package, so it is decoded once per read and both blocks share the recovered nested document object rather than each holding an independently decoded copy of identical bytes.
+    const pkg = oleFixturePackage('../embeddings/oleObject1.xlsx', 2);
+    pkg.parts['ppt/embeddings/oleObject1.xlsx'] = { kind: 'binary', base64: bytesToBase64(minimalXlsxBytes()) };
+    const doc = readPptxContent(pkg);
+    const first = asEmbeddedObject(doc.slides[0]?.shapes.find((s) => s.name === 'Object 1')?.blocks[1]);
+    const second = asEmbeddedObject(doc.slides[0]?.shapes.find((s) => s.name === 'Object 2')?.blocks[1]);
+    expect(second.objectKind).toBe('spreadsheet');
+    expect(second.document).toBe(first.document);
   });
 });
 

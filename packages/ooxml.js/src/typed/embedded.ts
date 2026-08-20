@@ -1,9 +1,10 @@
 import { isZipArchive, walkArchive, type ArchiveWalkEntry } from 'archive-codec';
 import type { ContentDocument } from 'document-schema.js';
 import type { XmlElement } from '../model/node';
-import type { Package } from '../model/package';
+import type { BinaryPart, Package } from '../model/package';
 import { packageFromEntries } from '../package-io/read';
 import type { ContentEmbeddedObjectKind } from 'document-schema.js';
+import { base64ToBytes } from '../util/base64';
 import { readDocxContent } from './docx/read';
 import { readPptxContent } from './pptx/read';
 import { readXlsxContent } from './xlsx/content';
@@ -67,6 +68,22 @@ export function readEmbeddedOoxmlPayload(bytes: Uint8Array<ArrayBuffer>): Embedd
     // The one catch in this package's runtime source, existing because a ZIP's structural soundness cannot be probed without inflating it: the magic-byte gate above sees four bytes, and corruption anywhere past them only surfaces as a throw from inside the inflate (the walk's own unzip, or a walk guard refusing an out-of-contract payload). It marks the same boundary a caught inflate failure already marks elsewhere in the family (byte-codec's inflateTolerant catches over untrusted PDF/PNG streams) and converts a property of the embedded payload into the degrade-tier undefined above -- nothing about the host document is silenced, because the host read continues outside this function whatever happens in here.
     return undefined;
   }
+}
+
+// One embeddings part decodes once per package read, however many OLE frames point at it (copy-pasted objects are the common case): the decoded payload is memoised on the Part object itself, so the cache lives exactly as long as the decoded package does and frames sharing a part carry the same nested document object -- reader output is immutable throughout this family, and structural sharing is exactly what "the same embedded object twice" means. Only successful decodes are cached; an undecodable payload costs one magic-byte check per frame, the cheap case by construction.
+const payloadByPart = new WeakMap<BinaryPart, EmbeddedOoxmlPayload>();
+
+// The reader-facing entry: an embeddings part (already narrowed to its binary arm by the caller's kind check) decoded through readEmbeddedOoxmlPayload, memoised per part so the shared-part case decodes once.
+export function readEmbeddedPayloadPart(part: BinaryPart): EmbeddedOoxmlPayload | undefined {
+  const cached = payloadByPart.get(part);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const payload = readEmbeddedOoxmlPayload(base64ToBytes(part.base64));
+  if (payload !== undefined) {
+    payloadByPart.set(part, payload);
+  }
+  return payload;
 }
 
 // The wordprocessing and presentation arms rebuild the ContentDocument envelope the same way readDocx/readPptx (typed/document-package.ts) do: readDocxContent/readPptxContent return their own per-format shapes whose extras (comments, footnotes, headers, footers, numbering on DocxDocument) have no ContentDocument spelling and so do not ride the embedded document. The spreadsheet arm needs no wrap -- readXlsxContent already returns a full ContentDocument.
