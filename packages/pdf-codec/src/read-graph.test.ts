@@ -23,20 +23,31 @@ function resolveRelativeSpecifier(fromFile: string, specifier: string): string {
   throw new Error(`read-graph walk: cannot resolve '${specifier}' imported by ${fromFile}`);
 }
 
-// Extracts a module's runtime import edges: comment-stripped source minus type-only statements, then every remaining `from '<relative>'`. Comment stripping comes first because this codebase's module comments quote specifiers in prose ('src/write.ts', './read') and a prose mention must never count as an edge.
-function relativeRuntimeImports(file: string): readonly string[] {
-  const withoutComments = readFileSync(file, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+// Extracts a module's runtime import edges from its source text: comment-stripped source minus type-only statements, then every remaining specifier in one of the three runtime import forms -- `from '<relative>'` (named, default, and re-export statements all end in one), bare `import '<relative>'` (side-effect), and `import('<relative>')` with a string-literal specifier (dynamic, but a bundler still ships the target). Comment stripping comes first because this codebase's module comments quote specifiers in prose ('src/write.ts', './read') and a prose mention must never count as an edge. A dynamic import with a computed (non-literal) specifier is not statically walkable by any means this test has; none exists in this package.
+function runtimeImportSpecifiers(source: string): readonly string[] {
+  const withoutComments = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
   const withoutTypeStatements = withoutComments
     .replace(/\bimport\s+type\s*\{[\s\S]*?\}\s*from\s*['"][^'"]+['"];?/g, '')
     .replace(/\bexport\s+type\s*\{[\s\S]*?\}\s*from\s*['"][^'"]+['"];?/g, '')
     .replace(/^\s*(?:import|export)\s+type\s[^;\n]*\bfrom\s*['"][^'"]+['"];?/gm, '');
+  const patterns = [
+    /\bfrom\s+['"](\.[^'"]+)['"]/g,
+    /\bimport\s+['"](\.[^'"]+)['"]/g,
+    /\bimport\s*\(\s*['"](\.[^'"]+)['"]\s*\)/g,
+  ];
   const specifiers: string[] = [];
-  for (const match of withoutTypeStatements.matchAll(/\bfrom\s+['"](\.[^'"]+)['"]/g)) {
-    if (match[1] !== undefined) {
-      specifiers.push(match[1]);
+  for (const pattern of patterns) {
+    for (const match of withoutTypeStatements.matchAll(pattern)) {
+      if (match[1] !== undefined) {
+        specifiers.push(match[1]);
+      }
     }
   }
   return specifiers;
+}
+
+function relativeRuntimeImports(file: string): readonly string[] {
+  return runtimeImportSpecifiers(readFileSync(file, 'utf8'));
 }
 
 // Walks every module statically reachable from one root, tracking each edge so a violation can be reported as the actual import chain that caused it, not just the offending file.
@@ -104,5 +115,22 @@ describe('the read path module graph excludes the write path and font assets', (
       throw new Error('read-graph guard: package.json exports has no ./read entry -- the read-only entry point must stay declared, not just wildcard-reachable');
     }
     expect(parsed.exports['./read'].import).toBe('./dist/read.js');
+  });
+});
+
+describe('the edge extractor recognises every runtime import form', () => {
+  // The walk is only honest if no import statement form can silently contribute zero edges, so the extractor's import-form contract is pinned in its own right: named/default/re-export statements, side-effect imports, and string-literal dynamic imports all count, while type-only statements and comment-stripped prose never do.
+  it('side-effect and dynamic imports count as edges; type-only statements and comments never do', () => {
+    const specifiers = runtimeImportSpecifiers([
+      "import './side-effect';",
+      "import { readPdf } from './read';",
+      "import reader from './default-form';",
+      "export { helper } from './re-export';",
+      "await import('./dynamic');",
+      "import type { PdfDiagnosticSink } from './type-only';",
+      "// import './commented-side-effect';",
+      "/* import './block-commented-side-effect' */",
+    ].join('\n'));
+    expect([...specifiers].sort()).toEqual(['./default-form', './dynamic', './re-export', './read', './side-effect']);
   });
 });
