@@ -21,6 +21,7 @@ The packages layer from foundation up to user-facing interfaces. Each depends on
 | [`document-schema.js`](packages/document-schema.js/README.md) | The canonical, format-agnostic content and document-package schema shared by every codec, plus the structural transform between them (`decompose`/`flattenPackage`/`factorStyles`/`assemblePackage`, converting a flat `ContentDocument` to and from the tree-form `DocumentPackage`). Free of any format-specific or I/O behaviour: the transform lives here because every codec depends on this package and none of them depends on `documents.js`, so it is the only layer a codec can reach to expose `DocumentPackage` publicly without a dependency cycle. |
 | [`byte-codec`](packages/byte-codec/README.md) | Generic byte-level primitives (`ByteWriter`, `ByteReader`, CRC-32, deflate/inflate) and PNG/JPEG image encoding and decoding, with zero knowledge of any document format. |
 | [`document-outline.js`](packages/document-outline.js/README.md) | Utilities for consumers holding a tree-form `DocumentPackage`: the TOC outline projection, effective-property resolution, and the flatten/leaf-text/stable-hash helpers. Depends on the schema alone, and is consumed by the interface packages rather than by the codecs. |
+| [`archive-codec`](packages/archive-codec/README.md) | Recursive archive (ZIP-in-ZIP) detection and walking with depth and cumulative decompressed-size guards, zero document-format knowledge. Not yet consumed by any sibling package — `ooxml.js` recovering OOXML embedded objects (e.g. an OLE-embedded xlsx) through it is tracked separately (#733, #734). |
 
 ### Format codecs
 
@@ -62,7 +63,7 @@ Individual packages set their own build and test configuration, but as a family 
 - TypeScript with Zod 4 for schema definition and validation.
 - MIT licensing (the `documents` web UI does not yet declare a license field).
 - Hand-written, dependency-minimal codecs over pulling in heavyweight format libraries — see each package's own README for what it deliberately avoids depending on.
-- The foundation and format-codec packages (`byte-codec`, `document-schema.js`, `document-outline.js`, `ooxml.js`, `odf.js`, `markdown-codec`, `pdf-codec`, `documents.js`) are Worker-isomorphic: their published `src/` must not import `node:*`/bare Node builtins or use the Node-only `Buffer` global, enforced per-package via an ESLint `no-restricted-imports`/`no-restricted-globals` rule and proven at runtime by a workerd test suite. The interface packages (`document-cli`, `document-mcp`, `documents`) are not held to this, since they legitimately run under Node or a browser rather than needing Worker portability.
+- The foundation and format-codec packages (`byte-codec`, `document-schema.js`, `document-outline.js`, `archive-codec`, `ooxml.js`, `odf.js`, `markdown-codec`, `pdf-codec`, `documents.js`) are Worker-isomorphic: their published `src/` must not import `node:*`/bare Node builtins or use the Node-only `Buffer` global, enforced per-package via an ESLint `no-restricted-imports`/`no-restricted-globals` rule and proven at runtime by a workerd test suite. The interface packages (`document-cli`, `document-mcp`, `documents`) are not held to this, since they legitimately run under Node or a browser rather than needing Worker portability.
 
 ## Working in the workspace
 

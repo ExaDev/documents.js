@@ -16,6 +16,7 @@ minimumReleaseAge: 60
 
 # Bare package names (no @version), per pnpm's own documented syntax (https://pnpm.io/settings#minimumreleaseageexclude -- "webpack" exempts every version, not just one). Union of every package's own list. The unscoped names are all workspace members now, which pnpm links locally rather than fetching, so their entries only matter while a member's declared range still resolves from the registry instead of the workspace (see the version-range note in README.md); the @exadev entries are org-owned packages published only by their own semantic-release CI with npm OIDC trusted publishing, so a version-agnostic exemption is a deliberate, low-risk carry-forward rather than an entry needing an edit on every release.
 minimumReleaseAgeExclude:
+  - archive-codec
   - byte-codec
   - document-cli
   - document-mcp
