@@ -7,8 +7,10 @@ import {
   incrementalUpdatePdf,
   minimalClassicXrefPdf,
   nonZeroOriginMediaBoxPdf,
+  pagelessPdf,
   pdfWithForeignHiddenAnnotationPdf,
   rotatedPagePdf,
+  twoPagesFirstWithoutResourcesPdf,
   unsupportedSecurityHandlerPdf,
   withInfoDictPdf,
   xrefStreamWithObjectStreamPdf,
@@ -190,6 +192,23 @@ describe('readPdf: cancellation', () => {
     const controller = new AbortController();
     controller.abort();
     expect(() => readPdf(minimalClassicXrefPdf(), { signal: controller.signal })).toThrow();
+  });
+
+  it('throws for an aborted signal even when the document has no pages for the page loop to check inside', () => {
+    const controller = new AbortController();
+    controller.abort();
+    expect(() => readPdf(pagelessPdf(), { signal: controller.signal })).toThrow();
+  });
+
+  // The abort contract's real granularity (ExaDev/documents.js#585): the signal is consulted once per page-loop iteration, so a signal aborted WHILE page 1 is being read (here: the sink fires on page 1's missing-/Resources warning and aborts) stops the parse before page 2 is ever interpreted, rather than running to completion.
+  it('honours an aborted signal between pages, not only before reading begins', () => {
+    const controller = new AbortController();
+    const sink = (diagnostic: PdfDiagnostic): void => {
+      if (diagnostic.code === 'pdf/object-missing-value') {
+        controller.abort();
+      }
+    };
+    expect(() => readPdf(twoPagesFirstWithoutResourcesPdf(), { signal: controller.signal, sink })).toThrow();
   });
 });
 
