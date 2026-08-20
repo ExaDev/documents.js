@@ -1,8 +1,8 @@
 # document-schema.js
 
-[![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/document-schema.js) [![npm](https://img.shields.io/badge/npm-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/document-schema.js) [![Release](https://img.shields.io/github/v/release/ExaDev/document-schema.js)](https://github.com/ExaDev/document-schema.js/releases/latest) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/document-schema.js/ci.yml?branch=main)](https://github.com/ExaDev/document-schema.js/actions)
+[![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/documents.js/tree/main/packages/document-schema.js) [![npm](https://img.shields.io/badge/npm-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/document-schema.js) [![npm version](https://img.shields.io/npm/v/document-schema.js)](https://www.npmjs.com/package/document-schema.js) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/documents.js/ci.yml?branch=main)](https://github.com/ExaDev/documents.js/actions)
 
-> The canonical, format-agnostic content and document-package schema pivot shared by [ooxml.js](https://github.com/ExaDev/ooxml.js), [odf.js](https://github.com/ExaDev/odf.js), [documents.js](https://github.com/ExaDev/documents.js), [pdf-codec](https://github.com/ExaDev/pdf-codec), and [markdown-codec](https://github.com/ExaDev/markdown-codec).
+> The canonical, format-agnostic content and document-package schema pivot shared by [ooxml.js](../ooxml.js/README.md), [odf.js](../odf.js/README.md), [documents.js](https://github.com/ExaDev/documents.js), [pdf-codec](../pdf-codec/README.md), and [markdown-codec](../markdown-codec/README.md).
 
 Both `ooxml.js` and `documents.js` independently arrived at the same content vocabulary, producing two field-identical copies in two places. This package is the fix: one schema, imported by every format package instead of redefined by each. It also sidesteps a circular dependency (`documents.js` depends on both `ooxml.js` and `odf.js`).
 
@@ -35,15 +35,15 @@ graph TD
     odf --> cli
     pdfcodec --> cli
 
-    click schema "https://github.com/ExaDev/document-schema.js" "document-schema.js"
-    click ooxml "https://github.com/ExaDev/ooxml.js" "ooxml.js"
-    click odf "https://github.com/ExaDev/odf.js" "odf.js"
-    click pdfcodec "https://github.com/ExaDev/pdf-codec" "pdf-codec"
-    click mdcodec "https://github.com/ExaDev/markdown-codec" "markdown-codec"
-    click bytecodec "https://github.com/ExaDev/byte-codec" "byte-codec"
+    click schema "https://github.com/ExaDev/documents.js/tree/main/packages/document-schema.js" "document-schema.js"
+    click ooxml "https://github.com/ExaDev/documents.js/tree/main/packages/ooxml.js" "ooxml.js"
+    click odf "https://github.com/ExaDev/documents.js/tree/main/packages/odf.js" "odf.js"
+    click pdfcodec "https://github.com/ExaDev/documents.js/tree/main/packages/pdf-codec" "pdf-codec"
+    click mdcodec "https://github.com/ExaDev/documents.js/tree/main/packages/markdown-codec" "markdown-codec"
+    click bytecodec "https://github.com/ExaDev/documents.js/tree/main/packages/byte-codec" "byte-codec"
     click documents "https://github.com/ExaDev/documents.js" "documents.js"
-    click mcp "https://github.com/ExaDev/document-mcp" "document-mcp"
-    click cli "https://github.com/ExaDev/document-cli" "document-cli"
+    click mcp "https://github.com/ExaDev/documents.js/tree/main/packages/document-mcp" "document-mcp"
+    click cli "https://github.com/ExaDev/documents.js/tree/main/packages/document-cli" "document-cli"
 
     style schema fill:#f9a825,stroke:#333,stroke-width:3px
 ```
@@ -88,7 +88,7 @@ const laidOut = DocumentPackageSchema.parse({ ...pkg, pages: [{ widthPt: 612, he
 
 ## The package tree
 
-`DocumentPackage` ([#20](https://github.com/ExaDev/document-schema.js/issues/20)) is the promoted single hierarchical artefact — one tree where 3.x carried `{ formatVersion, content, pages }` with the content flat. The tree's vocabulary is defined in `src/package-node.ts` and was proven first as [document-outline.js](https://github.com/ExaDev/document-outline.js)'s phase-1 `decompose`/`flatten` implementation ([document-outline.js#2](https://github.com/ExaDev/document-outline.js/issues/2)); this package's schemas are that shape's schema-home port, matching it node for node:
+`DocumentPackage` ([#20](https://github.com/ExaDev/document-schema.js/issues/20)) is the promoted single hierarchical artefact — one tree where 3.x carried `{ formatVersion, content, pages }` with the content flat. The tree's vocabulary is defined in `src/package-node.ts` and was proven first as [document-outline.js](../document-outline.js/README.md)'s phase-1 `decompose`/`flatten` implementation ([document-outline.js#2](https://github.com/ExaDev/document-outline.js/issues/2)); this package's schemas are that shape's schema-home port, matching it node for node:
 
 - **Groups** are `{ node, children }` where `node` embeds either an anchor paragraph (heading groups and list-item groups carry the full `ContentParagraph` — runs, formatting, frames — never a projected text label) or a container descriptor: `{ kind: 'section', pageSize, margins }`, `{ kind: 'slide', size, notes }`, `{ kind: 'sheet', name, cells, columns, rows, printSettings }`, `{ kind: 'drawPage', size }`, each tagged with a `kind` the flat container type does not carry, or a shape group's untagged frame descriptor, or — since 4.1.0 — a **construct descriptor** (see [Fidelity constructs](#fidelity-constructs)).
 - **Bare leaves** carry their own `kind` and never `children`. Discrimination is structural on `node`+`children`, not on the presence of a `kind`. Every `ContentBlock` kind is a legal leaf except the two construct boundary markers, which are the flat form's encoding of something the tree carries as a group (see [Constructs in the flat form](#constructs-in-the-flat-form)).
@@ -335,11 +335,11 @@ try {
 
 ## Used by
 
-- [ooxml.js](https://github.com/ExaDev/ooxml.js) — `readDocx`/`readPptx`/`readXlsxContent` return types are typed against this package's schemas, not a local lookalike.
-- [odf.js](https://github.com/ExaDev/odf.js) — ODF typed readers return the same shared types, so ODF and OOXML speak the identical pivot.
+- [ooxml.js](../ooxml.js/README.md) — `readDocx`/`readPptx`/`readXlsxContent` return types are typed against this package's schemas, not a local lookalike.
+- [odf.js](../odf.js/README.md) — ODF typed readers return the same shared types, so ODF and OOXML speak the identical pivot.
 - [documents.js](https://github.com/ExaDev/documents.js) — primary consumer of `ContentDocument` and `DocumentPackage`; its `DOCUMENT_FORMAT_CODECS` registry implements `ContentCodec` per format, and its conversion pipeline calls `assemblePackage`/`flattenPackage` from here at every package construction site.
-- [pdf-codec](https://github.com/ExaDev/pdf-codec) — owns its layout item model outright since 4.0.0; `readPdf`/`writePdf` operate on pdf-codec's own `LayoutDocument`, and this package's `ContentDocument` remains its content pivot.
-- [markdown-codec](https://github.com/ExaDev/markdown-codec) — `readMarkdown`/`writeMarkdown` read and write this package's `ContentDocument` directly.
+- [pdf-codec](../pdf-codec/README.md) — owns its layout item model outright since 4.0.0; `readPdf`/`writePdf` operate on pdf-codec's own `LayoutDocument`, and this package's `ContentDocument` remains its content pivot.
+- [markdown-codec](../markdown-codec/README.md) — `readMarkdown`/`writeMarkdown` read and write this package's `ContentDocument` directly.
 
 None depend on each other for this vocabulary — each depends on `document-schema.js` directly.
 
@@ -360,15 +360,25 @@ pnpm test:smoke    # turbo run _test:smoke -> rebuilds dist/ and schemas/ first,
 
 To run a single test file: `pnpm vitest run src/path/to/file.test.ts`.
 
+## Release and publishing
+
+Release, CI, and commit-message conventions are all workspace-wide, not package-local — see the [monorepo root README](../../README.md#releases) for the mechanism (topological per-package `semantic-release` via `@exadev/semantic-release-workspace`, OIDC trusted npm publishing, automatic sibling dependency-range rewriting) and its [known gap](../../README.md#releases) note on GitHub Packages republishing and SBOM/provenance signing, both dropped in the migration to this monorepo and not yet restored.
+
+## Contributing
+
+Conventional Commits, enforced workspace-wide by commitlint through a root `commit-msg` hook. Work inside `packages/document-schema.js/`; see the [root README](../../README.md#contributing) for the shared git hooks and history conventions.
+
 ## npm aliases
 
-This package also publishes under the following alternate npm names — the identical build, same version, republished by CI alongside the primary `document-schema.js` package:
+This package also published under the following alternate npm names from the pre-monorepo pipeline:
 
 - [document-content-model](https://www.npmjs.com/package/document-content-model)
 - [doc-model.js](https://www.npmjs.com/package/doc-model.js)
 - [doc-schema.js](https://www.npmjs.com/package/doc-schema.js)
 - [document-schema](https://www.npmjs.com/package/document-schema)
 - [document-model.js](https://www.npmjs.com/package/document-model.js)
+
+**Frozen since the monorepo migration** — see the [root README's release note](../../README.md#releases): the alias republish step was dropped along with GitHub Packages mirroring and SBOM/provenance signing, and nothing today keeps any of the five in sync with `document-schema.js`'s own releases. Tracked in [ExaDev/documents.js#730](https://github.com/ExaDev/documents.js/issues/730).
 
 ## License
 

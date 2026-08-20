@@ -1,6 +1,6 @@
 # pdf-codec
 
-[![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/pdf-codec) [![npm](https://img.shields.io/badge/npm-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/pdf-codec) [![Release](https://img.shields.io/github/v/release/ExaDev/pdf-codec)](https://github.com/ExaDev/pdf-codec/releases/latest) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/pdf-codec/ci.yml?branch=main)](https://github.com/ExaDev/pdf-codec/actions)
+[![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/documents.js/tree/main/packages/pdf-codec) [![npm](https://img.shields.io/badge/npm-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/pdf-codec) [![npm version](https://img.shields.io/npm/v/pdf-codec)](https://www.npmjs.com/package/pdf-codec) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/documents.js/ci.yml?branch=main)](https://github.com/ExaDev/documents.js/actions)
 
 > A hand-written, dependency-minimal PDF codec: parses arbitrary real-world PDFs into a structured, positioned-content document and generates new PDFs from one, built on its own codec-owned `LayoutDocument` item model and [Zod 4](https://zod.dev) codecs.
 
@@ -39,15 +39,15 @@ graph TD
     odf --> cli
     pdfcodec --> cli
 
-    click schema "https://github.com/ExaDev/document-schema.js" "document-schema.js"
-    click ooxml "https://github.com/ExaDev/ooxml.js" "ooxml.js"
-    click odf "https://github.com/ExaDev/odf.js" "odf.js"
-    click pdfcodec "https://github.com/ExaDev/pdf-codec" "pdf-codec"
-    click mdcodec "https://github.com/ExaDev/markdown-codec" "markdown-codec"
-    click bytecodec "https://github.com/ExaDev/byte-codec" "byte-codec"
+    click schema "https://github.com/ExaDev/documents.js/tree/main/packages/document-schema.js" "document-schema.js"
+    click ooxml "https://github.com/ExaDev/documents.js/tree/main/packages/ooxml.js" "ooxml.js"
+    click odf "https://github.com/ExaDev/documents.js/tree/main/packages/odf.js" "odf.js"
+    click pdfcodec "https://github.com/ExaDev/documents.js/tree/main/packages/pdf-codec" "pdf-codec"
+    click mdcodec "https://github.com/ExaDev/documents.js/tree/main/packages/markdown-codec" "markdown-codec"
+    click bytecodec "https://github.com/ExaDev/documents.js/tree/main/packages/byte-codec" "byte-codec"
     click documents "https://github.com/ExaDev/documents.js" "documents.js"
-    click mcp "https://github.com/ExaDev/document-mcp" "document-mcp"
-    click cli "https://github.com/ExaDev/document-cli" "document-cli"
+    click mcp "https://github.com/ExaDev/documents.js/tree/main/packages/document-mcp" "document-mcp"
+    click cli "https://github.com/ExaDev/documents.js/tree/main/packages/document-cli" "document-cli"
 
     style pdfcodec fill:#f9a825,stroke:#333,stroke-width:3px
 ```
@@ -174,7 +174,7 @@ const image = decodeJpeg2000(jp2OrCodestreamBytes); // -> { width, height, bitDe
 
 Both accept a whole JP2 file or a bare codestream; `decodeJpeg2000` takes an optional `onWarning` for recoverable cases and throws `Jpeg2000UnsupportedError` for anything outside [JPEG 2000 scope](#jpeg-2000-scope). Inside a PDF none of this needs calling: `readPdf` decodes a `/JPXDecode` image XObject through the same path automatically.
 
-The generic byte- and image-container primitives (`crc32`, `deflate`/`inflate`/`inflateTolerant`, `ByteReader`/`ByteWriter`/`concatBytes`, `readJpegInfo`, `decodePng`/`encodePng`, `unfilterScanlines`/`filterScanlines`) are re-exported from [byte-codec](https://github.com/ExaDev/byte-codec). The PDF-specific image codecs (`decodeCcittFax`, `decodeJbig2Embedded`, `decodeJpeg2000`/`readJpeg2000Metadata`/`parseJp2Container`) stay here.
+The generic byte- and image-container primitives (`crc32`, `deflate`/`inflate`/`inflateTolerant`, `ByteReader`/`ByteWriter`/`concatBytes`, `readJpegInfo`, `decodePng`/`encodePng`, `unfilterScanlines`/`filterScanlines`) are re-exported from [byte-codec](../byte-codec/README.md). The PDF-specific image codecs (`decodeCcittFax`, `decodeJbig2Embedded`, `decodeJpeg2000`/`readJpeg2000Metadata`/`parseJp2Container`) stay here.
 
 Every module under `src/` is also deep-importable directly by its own subpath:
 
@@ -275,13 +275,11 @@ A differential test pins the *set* of template positions and offsets but not the
 
 ## Release and publishing
 
-`.github/workflows/ci.yml` runs commitlint, lint, typecheck, the unit suite, and the smoke test on every push and pull request. On a push to `main` where those all pass, `release.config.ts` drives [semantic-release](https://semantic-release.gitbook.io/semantic-release): commit history since the last tag decides the version bump, `CHANGELOG.md` and `package.json` are committed back to `main`, a GitHub Release is cut, and the package publishes to [npmjs.org](https://www.npmjs.com/package/pdf-codec) — via npm's OIDC trusted publishing, so no `NPM_TOKEN` exists anywhere in the pipeline.
-
-Whether that release actually published a new version is detected by diffing `package.json`'s version before and after the release step. Two further jobs gate on that: one republishes the same build under the scoped `@exadev/pdf-codec` alias to GitHub Packages (authenticating with `GITHUB_TOKEN`), and one packs the release, generates an SPDX SBOM (`pnpm sbom`), and signs both an SBOM and a build-provenance attestation against that exact tarball — verifiable independently of the registry, and still present if the package is later unpublished.
+Release, CI, and commit-message conventions are all workspace-wide, not package-local — see the [monorepo root README](../../README.md#releases) for the mechanism (topological per-package `semantic-release` via `@exadev/semantic-release-workspace`, OIDC trusted npm publishing, automatic sibling dependency-range rewriting) and its [known gap](../../README.md#releases) note on GitHub Packages republishing and SBOM/provenance signing, both dropped in the migration to this monorepo and not yet restored.
 
 ## Contributing
 
-Commits follow Conventional Commits (`feat:`, `fix:`, `test:`, `chore:`, …), enforced by commitlint (`commitlint.config.ts`) via a husky `commit-msg` hook and a CI `commitlint` job — semantic-release's version bump depends on these being well-formed, not just style. A husky `pre-commit` hook runs `lint-staged` (`eslint --fix` on staged `*.ts` files) and `pre-push` runs the test suite. The package's scripts are turbo-wrapped:
+Conventional Commits, enforced workspace-wide by commitlint through a root `commit-msg` hook. Work inside `packages/pdf-codec/`; see the [root README](../../README.md#contributing) for the shared git hooks and history conventions. The package's own scripts are turbo-wrapped:
 
 ```sh
 pnpm build         # tsdown (ESM + CJS + .d.ts)
@@ -298,17 +296,19 @@ There is a single `main` branch and no open pull request workflow established so
 ## References
 
 - [documents.js](https://github.com/ExaDev/documents.js) — the package this codec was extracted from, and its principal downstream consumer: docx/pptx/odt/odp/ods/odg ⇄ PDF conversion, and MathML formula rendering (its own `src/mathml/` typesetting engine feeds a real `MathBox` into this package's `writePdf({ formulas })` with zero cast).
-- [document-schema.js](https://github.com/ExaDev/document-schema.js) — the sibling package that owns the canonical `ContentDocument`/`DocumentPackage` pivots the wider family shares, plus the shared leaf shapes and port types this package imports (`Color`, `LayoutFont`, `LayoutMetadata`, `TextMeasurer`, the math family). The `LayoutDocument` item family itself lived there until moving into this package.
+- [document-schema.js](../document-schema.js/README.md) — the sibling package that owns the canonical `ContentDocument`/`DocumentPackage` pivots the wider family shares, plus the shared leaf shapes and port types this package imports (`Color`, `LayoutFont`, `LayoutMetadata`, `TextMeasurer`, the math family). The `LayoutDocument` item family itself lived there until moving into this package.
 - [qpdf](https://qpdf.sourceforge.io/) — the independent implementation that produces this package's encrypted-PDF test fixtures. A build-time and test-time tool only, never a dependency of the package itself.
 - The specifications `src/crypto/` implements, each cited in the module that implements it and checked against published conformance vectors: [RFC 1321](https://www.rfc-editor.org/rfc/rfc1321) (MD5), [FIPS 180-4](https://csrc.nist.gov/pubs/fips/180-4/upd1/final) (SHA-256/384/512), [FIPS 197](https://csrc.nist.gov/pubs/fips/197/final) (AES), and [NIST SP 800-38A](https://csrc.nist.gov/pubs/sp/800/38/a/final) (CBC mode). The standard security handler is ISO 32000-1 7.6, extended for revisions 5 and 6 by ISO 32000-2 7.6.4.3.
 - [STIX Two Math](https://github.com/stipub/stixfonts) — the embedded math font, vendored at `assets/fonts/STIXTwoMath-Regular.otf` and embedded into `dist/` as a base64 string (`src/assets/stix-two-math-font.ts`, generated by `scripts/generate-math-font-asset.mjs`). Copyright 2001-2021 The STIX Fonts Project Authors, licensed [OFL-1.1](assets/fonts/OFL.txt) — see `assets/fonts/NOTICE.md` for the exact source commit and version.
 
 ## npm aliases
 
-This package also publishes under the following alternate npm names — the identical build, same version, republished by CI alongside the primary `pdf-codec` package:
+This package also published under the following alternate npm names from the pre-monorepo pipeline:
 
 - [pdf-codec.js](https://www.npmjs.com/package/pdf-codec.js)
 - [pdf-parser.js](https://www.npmjs.com/package/pdf-parser.js)
+
+**Frozen since the monorepo migration** — see the [root README's release note](../../README.md#releases): the alias republish step was dropped along with GitHub Packages mirroring and SBOM/provenance signing, and nothing today keeps either name in sync with `pdf-codec`'s own releases. Tracked in [ExaDev/documents.js#729](https://github.com/ExaDev/documents.js/issues/729).
 
 ## License
 

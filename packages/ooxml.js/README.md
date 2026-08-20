@@ -1,6 +1,6 @@
 # ooxml.js
 
-[![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/ooxml.js) [![npm](https://img.shields.io/badge/npm-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/ooxml.js) [![Release](https://img.shields.io/github/v/release/ExaDev/ooxml.js)](https://github.com/ExaDev/ooxml.js/releases/latest) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/ooxml.js/ci.yml?branch=main)](https://github.com/ExaDev/ooxml.js/actions)
+[![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/documents.js/tree/main/packages/ooxml.js) [![npm](https://img.shields.io/badge/npm-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/ooxml.js) [![npm version](https://img.shields.io/npm/v/ooxml.js)](https://www.npmjs.com/package/ooxml.js) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/documents.js/ci.yml?branch=main)](https://github.com/ExaDev/documents.js/actions)
 
 > Type-safe, lossless round-trip conversion between OOXML packages (`.docx`, `.pptx`, `.xlsx`) and a faithful JSON model, built on [Zod 4](https://zod.dev) codecs.
 
@@ -35,15 +35,15 @@ graph TD
     odf --> cli
     pdfcodec --> cli
 
-    click schema "https://github.com/ExaDev/document-schema.js" "document-schema.js"
-    click ooxml "https://github.com/ExaDev/ooxml.js" "ooxml.js"
-    click odf "https://github.com/ExaDev/odf.js" "odf.js"
-    click pdfcodec "https://github.com/ExaDev/pdf-codec" "pdf-codec"
-    click mdcodec "https://github.com/ExaDev/markdown-codec" "markdown-codec"
-    click bytecodec "https://github.com/ExaDev/byte-codec" "byte-codec"
+    click schema "https://github.com/ExaDev/documents.js/tree/main/packages/document-schema.js" "document-schema.js"
+    click ooxml "https://github.com/ExaDev/documents.js/tree/main/packages/ooxml.js" "ooxml.js"
+    click odf "https://github.com/ExaDev/documents.js/tree/main/packages/odf.js" "odf.js"
+    click pdfcodec "https://github.com/ExaDev/documents.js/tree/main/packages/pdf-codec" "pdf-codec"
+    click mdcodec "https://github.com/ExaDev/documents.js/tree/main/packages/markdown-codec" "markdown-codec"
+    click bytecodec "https://github.com/ExaDev/documents.js/tree/main/packages/byte-codec" "byte-codec"
     click documents "https://github.com/ExaDev/documents.js" "documents.js"
-    click mcp "https://github.com/ExaDev/document-mcp" "document-mcp"
-    click cli "https://github.com/ExaDev/document-cli" "document-cli"
+    click mcp "https://github.com/ExaDev/documents.js/tree/main/packages/document-mcp" "document-mcp"
+    click cli "https://github.com/ExaDev/documents.js/tree/main/packages/document-cli" "document-cli"
 
     style ooxml fill:#f9a825,stroke:#333,stroke-width:3px
 ```
@@ -310,18 +310,16 @@ Conversion is **part-content-faithful**: every XML part re-serialises to equival
 
 ## Release and publishing
 
-`.github/workflows/ci.yml` runs commitlint, lint, typecheck, unit, and smoke on every push/PR. On push to `main`, `release.config.ts` drives [semantic-release](https://semantic-release.gitbook.io/semantic-release): commit history decides the bump, `CHANGELOG.md`/`package.json` commit back to `main`, a GitHub Release is cut, and the package publishes to [npmjs.org](https://www.npmjs.com/package/ooxml.js) via OIDC trusted publishing (no `NPM_TOKEN`).
-
-Release success is detected by diffing `package.json`'s version before/after. Two further jobs gate on that: one republishes under `@exadev/ooxml.js` to GitHub Packages (via `GITHUB_TOKEN`), and one packs the release, generates an SPDX SBOM (`pnpm sbom`), and signs an SBOM and a build-provenance attestation — verifiable independently of the registry, and present even if the package is later unpublished.
+Release, CI, and commit-message conventions are all workspace-wide, not package-local — see the [monorepo root README](../../README.md#releases) for the mechanism (topological per-package `semantic-release` via `@exadev/semantic-release-workspace`, OIDC trusted npm publishing, automatic sibling dependency-range rewriting) and its [known gap](../../README.md#releases) note on GitHub Packages republishing and SBOM/provenance signing, both dropped in the migration to this monorepo and not yet restored.
 
 ## Contributing
 
-Commits follow Conventional Commits (`feat:`, `fix:`, `test:`, `chore:`, …), enforced by commitlint (`commitlint.config.ts`) via a husky `commit-msg` hook and a CI job — semantic-release's version bump depends on these being well-formed. A husky `pre-commit` runs `lint-staged` (`eslint --fix` on staged `*.ts`); `pre-push` runs the test suite. Single `main` branch; no open PR workflow established.
+Conventional Commits, enforced workspace-wide by commitlint through a root `commit-msg` hook. Work inside `packages/ooxml.js/`; see the [root README](../../README.md#contributing) for the shared git hooks and history conventions.
 
 ## References
 
-- [document-schema.js](https://github.com/ExaDev/document-schema.js) — canonical `ContentBlock`/`ContentSection`/geometry/colour schemas and `ContentDocument`/`LayoutMetadata` types shared with `odf.js` and `documents.js`, plus the `DocumentPackage` tree and the `decompose`/`flattenPackage`/`assemblePackage`/`factorStyles` transform this package's primary readers and writers are built on.
-- [odf.js](https://github.com/ExaDev/odf.js) — sibling OpenDocument Format package, also on `document-schema.js`.
+- [document-schema.js](../document-schema.js/README.md) — canonical `ContentBlock`/`ContentSection`/geometry/colour schemas and `ContentDocument`/`LayoutMetadata` types shared with `odf.js` and `documents.js`, plus the `DocumentPackage` tree and the `decompose`/`flattenPackage`/`assemblePackage`/`factorStyles` transform this package's primary readers and writers are built on.
+- [odf.js](../odf.js/README.md) — sibling OpenDocument Format package, also on `document-schema.js`.
 - [documents.js](https://github.com/ExaDev/documents.js) — adds PDF conversion and a read-and-write docx/pptx editor on top of this package.
 
 ## License

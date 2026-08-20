@@ -1,10 +1,10 @@
 # document-mcp
 
-[![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/document-mcp) [![npm](https://img.shields.io/badge/npm-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/document-mcp) [![Release](https://img.shields.io/github/v/release/ExaDev/document-mcp)](https://github.com/ExaDev/document-mcp/releases/latest) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/document-mcp/ci.yml?branch=main)](https://github.com/ExaDev/document-mcp/actions)
+[![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/documents.js/tree/main/packages/document-mcp) [![npm](https://img.shields.io/badge/npm-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/document-mcp) [![npm version](https://img.shields.io/npm/v/document-mcp)](https://www.npmjs.com/package/document-mcp) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/documents.js/ci.yml?branch=main)](https://github.com/ExaDev/documents.js/actions)
 
 > An MCP (Model Context Protocol) server exposing [`documents.js`](https://github.com/ExaDev/documents.js)'s document-conversion, `.odb`, metadata, and font tooling as MCP tools, so an MCP-speaking agent can convert, inspect, and edit docx/pptx/odt/odp/ods/odg/odf/pdf/odb/xlsx/markdown documents without writing TypeScript against `documents.js` directly.
 
-`document-mcp` adds no conversion or editing logic of its own — it is a dispatch layer over `documents.js`'s existing conversion functions, `DocumentConverter` port, and `.odb`/PDF readers, wired up as MCP tools served over stdio. [`document-cli`](https://github.com/ExaDev/document-cli) is the sibling frontend over the identical `documents.js` library — a terminal CLI/TUI rather than an MCP server — so the two are independent consumers of one shared implementation and can expose different subsets of it. A `convert_document` call's fidelity — which `(source, targetFormat)` pairs round-trip losslessly, which are a best-effort reconstruction, and why — is exactly what [`documents.js`'s own Fidelity section](https://github.com/ExaDev/documents.js#fidelity) documents, table included; it is not restated here.
+`document-mcp` adds no conversion or editing logic of its own — it is a dispatch layer over `documents.js`'s existing conversion functions, `DocumentConverter` port, and `.odb`/PDF readers, wired up as MCP tools served over stdio. [`document-cli`](../document-cli/README.md) is the sibling frontend over the identical `documents.js` library — a terminal CLI/TUI rather than an MCP server — so the two are independent consumers of one shared implementation and can expose different subsets of it. A `convert_document` call's fidelity — which `(source, targetFormat)` pairs round-trip losslessly, which are a best-effort reconstruction, and why — is exactly what [`documents.js`'s own Fidelity section](../documents.js/README.md#fidelity) documents, table included; it is not restated here.
 
 ```mermaid
 graph TD
@@ -38,16 +38,16 @@ graph TD
     odf --> cli
     pdfcodec --> cli
 
-    click schema "https://github.com/ExaDev/document-schema.js" "document-schema.js"
-    click ooxml "https://github.com/ExaDev/ooxml.js" "ooxml.js"
-    click odf "https://github.com/ExaDev/odf.js" "odf.js"
-    click pdfcodec "https://github.com/ExaDev/pdf-codec" "pdf-codec"
-    click mdcodec "https://github.com/ExaDev/markdown-codec" "markdown-codec"
-    click bytecodec "https://github.com/ExaDev/byte-codec" "byte-codec"
+    click schema "https://github.com/ExaDev/documents.js/tree/main/packages/document-schema.js" "document-schema.js"
+    click ooxml "https://github.com/ExaDev/documents.js/tree/main/packages/ooxml.js" "ooxml.js"
+    click odf "https://github.com/ExaDev/documents.js/tree/main/packages/odf.js" "odf.js"
+    click pdfcodec "https://github.com/ExaDev/documents.js/tree/main/packages/pdf-codec" "pdf-codec"
+    click mdcodec "https://github.com/ExaDev/documents.js/tree/main/packages/markdown-codec" "markdown-codec"
+    click bytecodec "https://github.com/ExaDev/documents.js/tree/main/packages/byte-codec" "byte-codec"
     click documents "https://github.com/ExaDev/documents.js" "documents.js"
-    click outline "https://github.com/ExaDev/document-outline.js" "document-outline.js"
-    click mcp "https://github.com/ExaDev/document-mcp" "document-mcp"
-    click cli "https://github.com/ExaDev/document-cli" "document-cli"
+    click outline "https://github.com/ExaDev/documents.js/tree/main/packages/document-outline.js" "document-outline.js"
+    click mcp "https://github.com/ExaDev/documents.js/tree/main/packages/document-mcp" "document-mcp"
+    click cli "https://github.com/ExaDev/documents.js/tree/main/packages/document-cli" "document-cli"
 
     style mcp fill:#f9a825,stroke:#333,stroke-width:3px
 ```
@@ -211,9 +211,9 @@ Every tool that takes or produces document bytes goes through the same two hybri
 | `fonts` | Lists every source-embedded font face a docx/pptx/odt/odp/ods/odg document carries (family, weight/style, byte length). |
 | `describe_font_file` | Reads a standalone `.ttf`/`.otf` font file and reports the family/bold/italic triple it declares about itself. |
 | `docx_extras` | Reads a docx's own comments, footnotes, headers, footers, and numbering definitions — data the `ContentDocument` pivot cannot carry, so no other tool sees it. |
-| `pdf_inspect` | Parses a PDF and reports a summary (page count, per-page size and item-kind histogram, metadata, embedded image formats), or the entire parsed `LayoutDocument` with `full: true`. |
+| `pdf_inspect` | Parses a PDF and reports a summary (page count, per-page size and item-kind histogram, metadata, embedded image formats), or with `full: true` the entire parsed `LayoutDocument` as plain JSON — no `$schema` stamp, since that family moved to `pdf-codec` at `document-schema.js` 4.0.0 and lost its schema-stamped envelope. |
 | `odm_to_pdf` | Converts a `.odm` (ODF master document) to PDF. A `.odm` never carries its chapters' content inline, so each chapter resolves via a caller-supplied `chapters` href-to-document map and/or a `chaptersDir` searched by basename. |
-| `from_package` | Rebuilds real document bytes in a target format from a `DocumentPackage` previously serialised to JSON (e.g. by a conversion tool's own `onDocument`/package-dump step). |
+| `from_package` | Rebuilds real document bytes in a target format from a `DocumentPackage` previously serialised to JSON (e.g. by a conversion tool's own `onDocument`/package-dump step). Only a package genuinely written by a current dump round-trips: the `$schema` URI it carries pins the `document-schema.js` release that wrote it, and a pre-4.0.0 dump (the flat `{ formatVersion, content, pages }` envelope) is rejected with an error naming the pinned release, the flat-to-tree change, and the remedy — a layout-document dump gets its own pointer, naming the move to `pdf-codec`. |
 | `outline_document` | Projects a document's own table of contents as structured JSON: groups (`{ text, level, children }`) for headings, list items, slides, sheets, and draw pages, leaves (`{ kind, text }`) for the content between them. The outline is over the source's own content — read through `documents.js`'s `DocumentConverter` port and built by `document-outline.js`'s `buildOutline`. |
 | `odb_tables` | Lists every table an embedded `.odb` database declares — column names, types, and row data — across every storage tier `documents.js` supports (HSQLDB TEXT/CACHED/BINARY, Firebird gbak backups). |
 | `odb_forms` | Lists every form an `.odb` database declares, with each form's own data source and field-bound controls. |
@@ -226,13 +226,17 @@ Every tool that takes or produces document bytes goes through the same two hybri
 ## References
 
 - [documents.js](https://github.com/ExaDev/documents.js) — the library this server exposes.
-- [document-outline.js](https://github.com/ExaDev/document-outline.js) — the artefact-utilities package over document-schema.js's tree-form `DocumentPackage` whose `buildOutline` powers `outline_document`.
-- [document-cli](https://github.com/ExaDev/document-cli) — the sibling CLI/TUI over the same library, whose toolchain this repository's scaffold mirrors.
+- [document-outline.js](../document-outline.js/README.md) — the artefact-utilities package over document-schema.js's tree-form `DocumentPackage` whose `buildOutline` powers `outline_document`.
+- [document-cli](../document-cli/README.md) — the sibling CLI/TUI over the same library, whose toolchain this repository's scaffold mirrors.
 - [Model Context Protocol](https://modelcontextprotocol.io) — the protocol this server implements, via [`@modelcontextprotocol/server`](https://www.npmjs.com/package/@modelcontextprotocol/server).
 
 ## Gotchas
 
 - **Runtime dependencies are `documents.js` + `document-outline.js` + `@modelcontextprotocol/server` + `zod` only; `pdf-codec` and `odf.js` are devDependencies (test-support only).** `document-outline.js` is the one dependency beyond the server stack itself: `outline_document` imports `buildOutline`/`outlineLeafText` from it, and documents.js deliberately does not re-export them (the outline projection lives in the family's artefact-utilities package, which depends only on `document-schema.js` — already a transitive dependency via documents.js — so it adds no second copy of anything). Every runtime reach into `pdf-codec`/`odf.js` — `ProvidedFont`/`FontSubstitution`/`describeFontFace`/the `WinAnsi` substitution shape — goes through `documents.js`'s own re-exports, so a published install pulls in no direct `pdf-codec`/`odf.js` dependency. `odf.js` survives in `devDependencies` solely because `src/test-support/odm-fixture.ts` and `src/test-support/embedded-font-fixture.ts` build real ODF package fixtures from its low-level XML primitives (`zipPackage`/`el`/`rootElement`), and `src/test-support/` is excluded from the `tsdown` build — only `src/index.ts` and `src/bin.ts` are entry points — so neither fixture module ever ships in `dist/`.
+
+## Contributing
+
+Release, CI, and commit-message conventions are all workspace-wide, not package-local — see the [monorepo root README](../../README.md#releases) for the release mechanism and [its Contributing section](../../README.md#contributing) for the shared git hooks and history conventions. Work inside `packages/document-mcp/`.
 
 ## License
 

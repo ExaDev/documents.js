@@ -1,12 +1,12 @@
 # odf.js
 
-[![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/odf.js) [![npm](https://img.shields.io/badge/npm-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/odf.js) [![Release](https://img.shields.io/github/v/release/ExaDev/odf.js)](https://github.com/ExaDev/odf.js/releases/latest) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/odf.js/ci.yml?branch=main)](https://github.com/ExaDev/odf.js/actions)
+[![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/documents.js/tree/main/packages/odf.js) [![npm](https://img.shields.io/badge/npm-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/odf.js) [![npm version](https://img.shields.io/npm/v/odf.js)](https://www.npmjs.com/package/odf.js) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/documents.js/ci.yml?branch=main)](https://github.com/ExaDev/documents.js/actions)
 
 > A hand-written, dependency-minimal codec for the OpenDocument Format (ODF — OASIS/ISO 26300): `.odt`/`.ods`/`.odp`/`.odg`/`.odf`/`.odb`/`.odm` and their template variants, built on [Zod 4](https://zod.dev) codecs.
 
-`odf.js` is the ODF sibling of [`ooxml.js`](https://github.com/ExaDev/ooxml.js), mirroring its architecture: a lossless ZIP-of-XML core that round-trips any package byte-for-content-faithful, with typed readers layered on top. Two ODF-specific differences shape the design: ODF has no relationship mechanism (inter-part references are direct paths, with an exhaustive `META-INF/manifest.xml`), and ODF has no inline/direct formatting — every formatting difference must be a named "automatic style," so `odf.js` owns a style-interning subsystem (`src/styles/`) with no OOXML equivalent.
+`odf.js` is the ODF sibling of [`ooxml.js`](../ooxml.js/README.md), mirroring its architecture: a lossless ZIP-of-XML core that round-trips any package byte-for-content-faithful, with typed readers layered on top. Two ODF-specific differences shape the design: ODF has no relationship mechanism (inter-part references are direct paths, with an exhaustive `META-INF/manifest.xml`), and ODF has no inline/direct formatting — every formatting difference must be a named "automatic style," so `odf.js` owns a style-interning subsystem (`src/styles/`) with no OOXML equivalent.
 
-**This package does not depend on `ooxml.js`.** `ooxml.js`'s branding and SBOM are scoped to ECMA-376/OOXML; depending on it would be the wrong signal for an OASIS-standard codec and would force a breaking `ooxml.js` release for every ODF-only fix. The small generic ZIP/XML/`Package` layer is duplicated, kept structurally identical so TypeScript's structural typing makes both packages' values interchangeable for a shared consumer like `documents.js`. Both depend on [`document-schema.js`](https://github.com/ExaDev/document-schema.js) for the genuinely identical `ContentDocument`/`DocumentPackage` content model.
+**This package does not depend on `ooxml.js`.** `ooxml.js`'s branding and SBOM are scoped to ECMA-376/OOXML; depending on it would be the wrong signal for an OASIS-standard codec and would force a breaking `ooxml.js` release for every ODF-only fix. The small generic ZIP/XML/`Package` layer is duplicated, kept structurally identical so TypeScript's structural typing makes both packages' values interchangeable for a shared consumer like `documents.js`. Both depend on [`document-schema.js`](../document-schema.js/README.md) for the genuinely identical `ContentDocument`/`DocumentPackage` content model.
 
 ```mermaid
 graph TD
@@ -37,15 +37,15 @@ graph TD
     odf --> cli
     pdfcodec --> cli
 
-    click schema "https://github.com/ExaDev/document-schema.js" "document-schema.js"
-    click ooxml "https://github.com/ExaDev/ooxml.js" "ooxml.js"
-    click odf "https://github.com/ExaDev/odf.js" "odf.js"
-    click pdfcodec "https://github.com/ExaDev/pdf-codec" "pdf-codec"
-    click mdcodec "https://github.com/ExaDev/markdown-codec" "markdown-codec"
-    click bytecodec "https://github.com/ExaDev/byte-codec" "byte-codec"
+    click schema "https://github.com/ExaDev/documents.js/tree/main/packages/document-schema.js" "document-schema.js"
+    click ooxml "https://github.com/ExaDev/documents.js/tree/main/packages/ooxml.js" "ooxml.js"
+    click odf "https://github.com/ExaDev/documents.js/tree/main/packages/odf.js" "odf.js"
+    click pdfcodec "https://github.com/ExaDev/documents.js/tree/main/packages/pdf-codec" "pdf-codec"
+    click mdcodec "https://github.com/ExaDev/documents.js/tree/main/packages/markdown-codec" "markdown-codec"
+    click bytecodec "https://github.com/ExaDev/documents.js/tree/main/packages/byte-codec" "byte-codec"
     click documents "https://github.com/ExaDev/documents.js" "documents.js"
-    click mcp "https://github.com/ExaDev/document-mcp" "document-mcp"
-    click cli "https://github.com/ExaDev/document-cli" "document-cli"
+    click mcp "https://github.com/ExaDev/documents.js/tree/main/packages/document-mcp" "document-mcp"
+    click cli "https://github.com/ExaDev/documents.js/tree/main/packages/document-cli" "document-cli"
 
     style odf fill:#f9a825,stroke:#333,stroke-width:3px
 ```
@@ -99,7 +99,7 @@ To run a single test file: `pnpm vitest run src/path/to/file.test.ts`.
 
 ### Reading a document
 
-A typed reader takes a `Package` (bytes go through `decodePackage`/`parsePackage` first) and returns a [`DocumentPackage`](https://github.com/ExaDev/document-schema.js#the-package-tree) — `document-schema.js`'s single hierarchical artefact, where structure, layout, and content are fused in one tree and a `styles` table has already been minted over it:
+A typed reader takes a `Package` (bytes go through `decodePackage`/`parsePackage` first) and returns a [`DocumentPackage`](../document-schema.js/README.md#the-package-tree) — `document-schema.js`'s single hierarchical artefact, where structure, layout, and content are fused in one tree and a `styles` table has already been minted over it:
 
 ```ts
 import { decodePackage, readOdt } from 'odf.js';
@@ -241,16 +241,16 @@ Layered from a lossless core outward, mirroring `ooxml.js`:
 
 ## Release and publishing
 
-`.github/workflows/ci.yml` runs commitlint, lint, typecheck, unit, and smoke tests on every push/PR. On a push to `main` where all pass, `release.config.ts` drives [semantic-release](https://semantic-release.gitbook.io/semantic-release): version bump from commit history, `CHANGELOG.md`/`package.json` committed back, GitHub Release cut, and npm publish via OIDC trusted publishing (no `NPM_TOKEN`). Once a release publishes (detected by diffing `package.json`'s version): a `sibling-released` event dispatches to `documents.js`/`document-cli`, the build republishes under `@exadev/odf.js` to GitHub Packages, and an SPDX SBOM plus build-provenance attestation are signed against the tarball.
+Release, CI, and commit-message conventions are all workspace-wide, not package-local — see the [monorepo root README](../../README.md#releases) for the mechanism (topological per-package `semantic-release` via `@exadev/semantic-release-workspace`, OIDC trusted npm publishing, automatic sibling dependency-range rewriting) and its [known gap](../../README.md#releases) note on GitHub Packages republishing and SBOM/provenance signing, both dropped in the migration to this monorepo and not yet restored.
 
 ## Contributing
 
-Conventional Commits (`feat:`, `fix:`, `test:`, `chore:`, …), enforced by commitlint via a husky `commit-msg` hook and a CI job. A `pre-commit` hook runs `lint-staged` (`eslint --fix` on staged `*.ts`); `pre-push` runs the test suite. Single `main` branch, no open PR workflow.
+Conventional Commits, enforced workspace-wide by commitlint through a root `commit-msg` hook. Work inside `packages/odf.js/`; see the [root README](../../README.md#contributing) for the shared git hooks and history conventions.
 
 ## References
 
-- [ooxml.js](https://github.com/ExaDev/ooxml.js) — the OOXML sibling; architecturally mirrored, deliberately not depended on.
-- [document-schema.js](https://github.com/ExaDev/document-schema.js) — the canonical `ContentDocument`/`DocumentPackage` schema both packages depend on, and the home of the `assemblePackage`/`flattenPackage`/`decompose`/`factorStyles` transform between the two encodings.
+- [ooxml.js](../ooxml.js/README.md) — the OOXML sibling; architecturally mirrored, deliberately not depended on.
+- [document-schema.js](../document-schema.js/README.md) — the canonical `ContentDocument`/`DocumentPackage` schema both packages depend on, and the home of the `assemblePackage`/`flattenPackage`/`decompose`/`factorStyles` transform between the two encodings.
 - [documents.js](https://github.com/ExaDev/documents.js) — the downstream consumer; its own `readOdtContent`/`readOdpContent`/`readOdsContent`/`readOdgContent` adapters wrap this package's flat `*Content` readers into `ContentDocument`s, adding the odt/odp formula, image, and vector detection passes those readers deliberately leave out.
 
 ## License
