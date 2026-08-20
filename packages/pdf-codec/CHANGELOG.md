@@ -1,3 +1,16 @@
+## [3.0.10](https://github.com/ExaDev/documents.js/compare/pdf-codec@3.0.9...pdf-codec@3.0.10) (2026-08-20)
+
+
+### Bug Fixes
+
+* point package homepage and bugs URLs at the monorepo, not the old standalone repos ([1b605e8](https://github.com/ExaDev/documents.js/commit/1b605e846393f417001227758a8606347c04e219))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^4.3.5
+- Updated byte-codec to ^1.1.11
+
 ## [3.0.9](https://github.com/ExaDev/documents.js/compare/pdf-codec@3.0.8...pdf-codec@3.0.9) (2026-08-20)
 
 
