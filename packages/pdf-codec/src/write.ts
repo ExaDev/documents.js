@@ -11,6 +11,7 @@ import type { ContentWriteContext } from './content-write';
 import { writeContentStream } from './content-write';
 import type { EmbeddedFace, EmbeddedFaceSubstitution } from './embedded-font';
 import { collectEmbeddedGlyphs } from './embedded-font';
+import { NOTES_ANNOTATION_AUTHOR } from './notes-annotation-author';
 import { buildEmbeddedFontObjects } from './embedded-font-write';
 import { winAnsiGlyphName } from './encoding';
 import type { FontRegistry } from './font-registry';
@@ -242,8 +243,6 @@ function isLinkItem(item: { readonly kind: string }): item is LayoutLink {
 
 // PDF has no native concept of hidden presenter notes, but it does have a standard construct for "a note attached to a page that isn't part of the page's visible content": a /Subtype /Text annotation (the same one Acrobat's own sticky-note tool creates), with the Hidden annotation flag (ISO 32000-1 Table 165, bit position 2, value 2 -- "do not display the annotation... regardless of its annotation flags... in any way") set so it never renders or prints. This is how pptx speaker notes survive pptxToPdf -> pdfToPptx: reusing a real, standard PDF construct that generic PDF tooling already knows to preserve in an Annots array, rather than a bespoke private dictionary key nothing else would recognise. /T marks authorship so read.ts's readPageNotes only ever treats an annotation genuinely written by this function as recovered notes, not a real sticky note a human or another tool happened to leave on the page.
 const NOTES_ANNOTATION_HIDDEN_FLAG = 2;
-// Exported so read.ts's readPageNotes checks the exact same marker, rather than a second, driftable copy of the string.
-export const NOTES_ANNOTATION_AUTHOR = 'documents.js:notes';
 
 function buildNotesAnnotDict(notes: string): PdfObject {
   return pdfDict({
