@@ -156,6 +156,18 @@ describe('reconstructWordprocessing: heading inference from font size', () => {
     const [heading] = paragraphs(doc);
     expect(heading!.styleId).toBe('Heading1');
     expect(heading!.runs.every((r) => r.bold !== true)).toBe(true);
+    // Dropped means the key is absent, not present-with-undefined -- an explicit `bold: undefined` survives 'bold' in run and trips toStrictEqual against a key-absent object, so the dropped run must be shape-identical to a run that was never bold.
+    expect(heading!.runs.every((r) => !('bold' in r))).toBe(true);
+  });
+
+  it('omits absent bold/italic on plain runs rather than writing them as explicit undefined keys', () => {
+    const pg = page(612, 792, [
+      text({ text: 'Plain run', xPt: 50, yPt: 700, widthPt: 60 }),
+      text({ text: 'more', xPt: 50, yPt: 688, widthPt: 30 }),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    const [para] = paragraphs(doc);
+    expect(para!.runs.every((r) => !('bold' in r) && !('italic' in r))).toBe(true);
   });
 });
 
