@@ -246,6 +246,47 @@ describe('the construct tables at the package root', () => {
   });
 });
 
+describe('the package-level source residue table at the root', () => {
+  it('accepts a keyed table of residue values, each keyed by the producer\'s own identifier for what it reconstructs', () => {
+    const withResidue = {
+      ...wordprocessingPackage(),
+      source: {
+        'word/settings.xml': { format: 'docx', xml: '<w:settings/>' },
+        frontmatter: { format: 'markdown', xml: '<dc:custom>unmapped half</dc:custom>' },
+      },
+    };
+    const parsed = DocumentPackageSchema.parse(withResidue);
+    expect(parsed.source?.['word/settings.xml']).toEqual({ format: 'docx', xml: '<w:settings/>' });
+    expect(parsed.source?.frontmatter).toEqual({ format: 'markdown', xml: '<dc:custom>unmapped half</dc:custom>' });
+  });
+
+  it('rejects a malformed residue value -- the table validates the channel\'s shape, it does not tenant it', () => {
+    const broken = { ...wordprocessingPackage(), source: { s: { format: 'rtf', xml: '<x/>' } } };
+    expect(DocumentPackageSchema.safeParse(broken).success).toBe(false);
+    const shapeless = { ...wordprocessingPackage(), source: { s: { kind: 'source', xml: '<x/>' } } };
+    expect(DocumentPackageSchema.safeParse(shapeless).success).toBe(false);
+  });
+
+  it('is its own root field, not a definitions tenant -- a residue key and a definitions key never collide because they are separate namespaces', () => {
+    const parsed = DocumentPackageSchema.parse({
+      ...wordprocessingPackage(),
+      definitions: { frontmatter: { kind: 'some-tenant', note: 'an unrelated entry under the same name' } },
+      source: { frontmatter: { format: 'markdown', xml: '<x/>' } },
+    });
+    expect(parsed.definitions?.frontmatter).toEqual({ kind: 'some-tenant', note: 'an unrelated entry under the same name' });
+    expect(parsed.source?.frontmatter).toEqual({ format: 'markdown', xml: '<x/>' });
+  });
+
+  it('preserves the table through a JSON round trip', () => {
+    const original = {
+      ...wordprocessingPackage(),
+      source: { 'meta/custom.xml': { format: 'docx', xml: '<ds:customXML/>' } },
+    };
+    const roundTripped: unknown = JSON.parse(JSON.stringify(DocumentPackageSchema.parse(original)));
+    expect(DocumentPackageSchema.parse(roundTripped)).toEqual(original);
+  });
+});
+
 describe('the construct kinds are additive over 4.0.0', () => {
   it('parses a 4.0.0 tree carrying none of the new kinds or tables, unchanged and field for field', () => {
     for (const original of [wordprocessingPackage(), spreadsheetPackage(), formulaPackage()]) {

@@ -190,6 +190,23 @@ describe('factorStyles minting', () => {
     expect(DocumentPackageSchema.safeParse(refactored).success).toBe(true);
   });
 
+  it('carries a package\'s source residue table through re-factoring untouched, and never factors residue into a styles entry', () => {
+    const doc = wordprocessingDoc([
+      paragraph([run('one')], { indentLeftPt: 20, source: { format: 'docx', xml: '<w:proofErr/>' } }),
+      paragraph([run('two')], { indentLeftPt: 20, source: { format: 'docx', xml: '<w:proofErr/>' } }),
+    ]);
+    const minted = assemblePackage(doc);
+    // The per-node residue must ride the round trip on the paragraphs themselves (minting strips only mintable style keys -- residue is not one and never becomes one), and the package-level table must come back verbatim for the same reason definitions does.
+    const withResidue: DocumentPackage = { ...minted, source: { 'word/settings.xml': { format: 'docx', xml: '<w:settings/>' } } };
+    const refactored = factorStyles(withResidue);
+    expect(refactored.source).toEqual({ 'word/settings.xml': { format: 'docx', xml: '<w:settings/>' } });
+    expect(refactored.styles?.s1).toEqual({ paragraph: { indentLeftPt: 20 } });
+    const flat = flattenPackage(refactored);
+    if (flat.kind !== 'wordprocessing') throw new Error('flatten must return the wordprocessing arm');
+    expect(flat.sections[0]?.blocks[0]).toMatchObject({ source: { format: 'docx', xml: '<w:proofErr/>' } });
+    expect(JSON.stringify(refactored.styles)).not.toContain('proofErr');
+  });
+
   it('keeps flat output free of refs and effective-equal to the unfactored form, combining halves on one wrapper', () => {
     const doc = wordprocessingDoc([
       paragraph([run('one', { bold: true, sizePt: 14 })], { indentLeftPt: 20, alignment: 'left' }),
