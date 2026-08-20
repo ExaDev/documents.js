@@ -466,6 +466,18 @@ describe('pdfToMarkdown', () => {
     expect(text).toMatch(/^## Part 1 Scope/m);
   });
 
+  // The docx consequence of the same inference: ooxml.js's writer emits w:outlineLvl only from the canonical headingLevel (never from a Heading{N} styleId), so rereading the produced docx through the real reader must find the outline level on the title paragraph -- a styleId alone would leave a dangling w:pStyle pointing at a styles.xml entry the writer never writes, with no outline level at all.
+  it('carries inferred heading levels into pdfToDocx as outline levels, not a bare Heading styleId', () => {
+    const source = '# Quarterly Report\n\nThis is body paragraph zero of ordinary prose.\n\nThis is body paragraph one of ordinary prose.\n\nThis is body paragraph two of ordinary prose.\n';
+    const docxBytes = pdfToDocx(markdownToPdf(encodeMarkdownText(source)));
+    const content = readDocxContent(decodeOoxmlPackage(docxBytes));
+    if (content.kind !== 'wordprocessing') {
+      throw new Error('expected wordprocessing');
+    }
+    const heading = content.sections.flatMap((s) => s.blocks).find((b) => b.kind === 'paragraph' && b.headingLevel !== undefined);
+    expect(heading).toMatchObject({ kind: 'paragraph', styleId: 'Heading1', headingLevel: 1 });
+  });
+
   // ExaDev/documents.js#584 ask 3, pinned end to end: where the table recovery's gridline-lattice gate succeeds, the recovered ContentTable already flows through buildMarkdownText into a real GFM pipe table (markdown-codec's emitTable) -- this test holds that wiring at the markdown surface. The fixture is a spreadsheet printed WITH gridlines (gridOdsBytes through the ordinary odsToPdf path, the same one the pdfToDocx lattice test uses), because a markdown-authored table renders no lattice at all: markdown carries no border concept, so the cells' text arrives as tab-separated prose instead. The gate refusing alignment-only structure is the documented, intended boundary -- recovery requires the drawn lattice, never invented geometry.
   it('recovers a drawn-lattice table as a GFM pipe table, through odsToPdf then pdfToMarkdown', () => {
     const text = decodeMarkdownText(pdfToMarkdown(odsToPdf(gridOdsBytes())));
