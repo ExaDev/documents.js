@@ -1,3 +1,10 @@
+## [4.3.4](https://github.com/ExaDev/documents.js/compare/document-schema.js@4.3.3...document-schema.js@4.3.4) (2026-08-20)
+
+
+### Bug Fixes
+
+* sync document-schema.js and documents versions with published state ([1f0c1bc](https://github.com/ExaDev/documents.js/commit/1f0c1bcc44522a7ea62c0f62a9a8fc053a052b32))
+
 ## [4.3.1](https://github.com/ExaDev/documents.js/compare/document-schema.js@4.3.0...document-schema.js@4.3.1) (2026-08-20)
 
 
