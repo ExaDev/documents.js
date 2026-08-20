@@ -1,9 +1,10 @@
 import type { Package } from '../../model/package';
 import type { XmlElement } from '../../model/node';
 import { describe, expect, it } from 'vitest';
-import type { ContentBlock, ContentImageBlock, ContentParagraph, ContentTable } from 'document-schema.js';
+import type { ContentBlock, ContentEmbeddedObjectBlock, ContentImageBlock, ContentParagraph, ContentTable } from 'document-schema.js';
 import { el, txt } from '../../xml/fragment';
 import { bytesToBase64 } from '../../util/base64';
+import { minimalXlsxBytes } from '../../test-support/embedded';
 import { PptxDocumentSchema, readPptxContent } from './read';
 
 // Ported from documents.js's src/ooxml/pptx/read.test.ts, adapted to readPptxContent's own PptxDocument shape (no wrapping ContentDocument discriminant) and dropping the dependency on documents.js's own PNG encoder (out of this port's scope): sniffImageFormat only inspects magic bytes, so a bare PNG-signature-prefixed byte array stands in for a real encoded PNG here.
@@ -25,6 +26,13 @@ function asTable(block: ContentBlock | undefined): ContentTable {
 function asImage(block: ContentBlock | undefined): ContentImageBlock {
   if (block?.kind !== 'image') {
     throw new Error('expected an image block');
+  }
+  return block;
+}
+
+function asEmbeddedObject(block: ContentBlock | undefined): ContentEmbeddedObjectBlock {
+  if (block?.kind !== 'embeddedObject') {
+    throw new Error('expected an embeddedObject block');
   }
   return block;
 }
@@ -711,8 +719,8 @@ describe('readPptxContent: SmartArt graphic frames', () => {
   });
 });
 
-// An OLE graphic frame's a:graphicData wraps an mc:AlternateContent: the mc:Choice side's p:oleObj names the embedded payload (never read -- an external application's data with no structured content to recover), while the mc:Fallback side repeats the p:oleObj carrying the raster picture every renderer actually displays. That fallback picture is the only realistic content to recover (readGraphicFrameShape in src/typed/pptx/read.ts).
-function oleFixturePackage(): Package {
+// An OLE graphic frame's a:graphicData wraps an mc:AlternateContent: the mc:Choice side's p:oleObj names the embedded payload, while the mc:Fallback side repeats the p:oleObj carrying the raster picture every renderer actually displays. The payload target is parameterised so a test can point rIdOle at whatever part shape it needs (the ZIP-payload case reuses the default .xlsx target; the classic-OLE case retargets to a .bin part) -- the fixture itself ships no embeddings part, so the default fixture keeps exercising exactly the fallback/progId paths.
+function oleFixturePackage(payloadTarget = '../embeddings/oleObject1.xlsx'): Package {
   const choiceOleObj = el('p:oleObj', { spid: '3', 'r:id': 'rIdOle', progId: 'Excel.Sheet.12', showAsIcon: '0' }, [el('p:embed')]);
   const fallbackOleObj = el('p:oleObj', { spid: '3', 'r:id': 'rIdOle', progId: 'Excel.Sheet.12' }, [
     el('p:pic', {}, [
@@ -733,7 +741,7 @@ function oleFixturePackage(): Package {
   const presentation = el('p:presentation', {}, [el('p:sldIdLst', {}, [el('p:sldId', { id: '256', 'r:id': 'rId1' })])]);
   const presentationRels = rels([{ id: 'rId1', type: SLIDE_REL, target: 'slides/slide1.xml' }]);
   const slideRels = rels([
-    { id: 'rIdOle', type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject', target: '../embeddings/oleObject1.xlsx' },
+    { id: 'rIdOle', type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject', target: payloadTarget },
     { id: 'rIdFallback', type: IMAGE_REL, target: '../media/oleFallback.png' },
   ]);
 
@@ -795,6 +803,33 @@ describe('readPptxContent: OLE graphic frames', () => {
     const doc = readPptxContent(oleFixturePackage());
     const oleShape = doc.slides[0]?.shapes.find((s) => s.name === 'Object 1');
     expect(asImage(oleShape?.blocks[0]).sourcePath).toBe('slides[0].shapes[0].blocks[0]');
+  });
+
+  it('recovers a ZIP-payload OLE object as an embeddedObject block alongside the fallback picture', () => {
+    // The payload part the fixture's rIdOle already targets now really exists: a minimal xlsx, as a modern producer writes an embedded workbook.
+    const pkg = oleFixturePackage();
+    pkg.parts['ppt/embeddings/oleObject1.xlsx'] = { kind: 'binary', base64: bytesToBase64(minimalXlsxBytes()) };
+    const doc = readPptxContent(pkg);
+    const oleShape = doc.slides[0]?.shapes.find((s) => s.name === 'Object 1');
+    // Both blocks: the picture every renderer displays, and the recovered sub-document's content.
+    expect(asImage(oleShape?.blocks[0]).format).toBe('png');
+    const embedded = asEmbeddedObject(oleShape?.blocks[1]);
+    expect(embedded.objectKind).toBe('spreadsheet');
+    expect(embedded.frame).toEqual({ xPt: 72, yPt: 144, widthPt: 360, heightPt: 216 });
+    // The nested document is the genuinely decoded workbook, not just an envelope block.
+    const sheet = embedded.document.kind === 'spreadsheet' ? embedded.document.sheets[0] : undefined;
+    expect(sheet?.name).toBe('Embedded');
+    expect(sheet?.cells[0]?.value).toEqual({ kind: 'string', value: 'Recovered cell' });
+  });
+
+  it('keeps a non-ZIP OLE payload on exactly the fallback-picture behaviour, with no embedded block', () => {
+    // The classic OLE compound-file .bin payload: rIdOle retargeted at a part whose bytes carry the OLE/CFB magic -- no reader in this ecosystem decodes it, so the frame's content is exactly what it was before embedded recovery existed.
+    const pkg = oleFixturePackage('../embeddings/oleObject1.bin');
+    pkg.parts['ppt/embeddings/oleObject1.bin'] = { kind: 'binary', base64: bytesToBase64(new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, 0x01, 0x02, 0x03, 0x04])) };
+    const doc = readPptxContent(pkg);
+    const oleShape = doc.slides[0]?.shapes.find((s) => s.name === 'Object 1');
+    expect(oleShape?.blocks).toHaveLength(1);
+    expect(asImage(oleShape?.blocks[0]).format).toBe('png');
   });
 });
 
