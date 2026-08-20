@@ -4,7 +4,11 @@ import { parseXml } from '../xml/parse';
 import { unzipPackage } from '../zip';
 
 export function parsePackage(bytes: Uint8Array<ArrayBuffer>): Package {
-  const entries = unzipPackage(bytes);
+  return packageFromEntries(unzipPackage(bytes));
+}
+
+// The classify-and-parse half of parsePackage, split out for a caller that already holds unzipped entries and needs a bounded inflate between the bytes and this step: the embedded-object decode (typed/embedded.ts) walks its payload through archive-codec's guarded walk first, so its entries arrive pre-decompressed and budget-checked rather than coming from this module's own unbounded unzip.
+export function packageFromEntries(entries: Record<string, Uint8Array<ArrayBuffer>>): Package {
   const parts: Package['parts'] = {};
   for (const [path, partBytes] of Object.entries(entries)) {
     if (looksLikeXml(partBytes)) {
