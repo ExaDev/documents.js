@@ -1,3 +1,5 @@
+## [4.0.12](https://github.com/ExaDev/documents.js/compare/markdown-codec@4.0.11...markdown-codec@4.0.12) (2026-08-20)
+
 ## [4.0.11](https://github.com/ExaDev/documents.js/compare/markdown-codec@4.0.10...markdown-codec@4.0.11) (2026-08-20)
 
 ## [4.0.10](https://github.com/ExaDev/documents.js/compare/markdown-codec@4.0.9...markdown-codec@4.0.10) (2026-08-20)
