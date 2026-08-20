@@ -8,9 +8,9 @@
     "url": "git+https://github.com/ExaDev/documents.js.git",
     "directory": "packages/document-cli"
   },
-  "homepage": "https://github.com/ExaDev/document-cli#readme",
+  "homepage": "https://github.com/ExaDev/documents.js/tree/main/packages/document-cli",
   "bugs": {
-    "url": "https://github.com/ExaDev/document-cli/issues"
+    "url": "https://github.com/ExaDev/documents.js/issues"
   },
   "bin": {
     "document-cli": "./dist/cli.js",

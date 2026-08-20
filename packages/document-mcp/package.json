@@ -8,9 +8,9 @@
     "url": "git+https://github.com/ExaDev/documents.js.git",
     "directory": "packages/document-mcp"
   },
-  "homepage": "https://github.com/ExaDev/document-mcp#readme",
+  "homepage": "https://github.com/ExaDev/documents.js/tree/main/packages/document-mcp",
   "bugs": {
-    "url": "https://github.com/ExaDev/document-mcp/issues"
+    "url": "https://github.com/ExaDev/documents.js/issues"
   },
   "bin": {
     "document-mcp": "./dist/bin.js"
