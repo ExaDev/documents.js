@@ -236,7 +236,7 @@ Every tool that takes or produces document bytes goes through the same two hybri
 
 ## Contributing
 
-Release, CI, and commit-message conventions are all workspace-wide, not package-local — see the [monorepo root README](../../README.md#releases) for the release mechanism and [its Contributing section](../../README.md#contributing) for the shared git hooks and history conventions. Work inside `packages/document-mcp/`.
+Release, CI, and commit-message conventions are all workspace-wide, not package-local — see the [monorepo root README](../../README.md#releases) for the release mechanism and [CONTRIBUTING.md](../../CONTRIBUTING.md) for the shared git hooks and history conventions. Work inside `packages/document-mcp/`.
 
 ## License
 

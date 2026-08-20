@@ -135,4 +135,4 @@ The repository is named `documents.js`, and so is one of the packages inside it 
 
 ## Contributing
 
-Conventional commits, enforced by commitlint through a `commit-msg` hook; the same hook also rejects a commit message carrying a `Claude-Session:` trailer, since that line is agent bookkeeping rather than project history. `pre-commit` additionally rejects a merge commit on `main` and a squash merge (detected via a lingering `SQUASH_MSG`) — history stays linear by rebasing, never merging or squashing — before running ESLint over staged files in the package that owns them. `pre-push` runs typecheck and unit tests across the workspace, both through turbo, so the cost is proportional to what actually changed. Work in whichever package's directory the change belongs to; each package's own README documents its architecture and the format-specific decisions behind it.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the git hooks and history conventions, and for the checklist to follow when adding a new package to the workspace.

@@ -279,7 +279,7 @@ Release, CI, and commit-message conventions are all workspace-wide, not package-
 
 ## Contributing
 
-Conventional Commits, enforced workspace-wide by commitlint through a root `commit-msg` hook. Work inside `packages/pdf-codec/`; see the [root README](../../README.md#contributing) for the shared git hooks and history conventions. The package's own scripts are turbo-wrapped:
+Conventional Commits, enforced workspace-wide by commitlint through a root `commit-msg` hook. Work inside `packages/pdf-codec/`; see [CONTRIBUTING.md](../../CONTRIBUTING.md) for the shared git hooks and history conventions. The package's own scripts are turbo-wrapped:
 
 ```sh
 pnpm build         # tsdown (ESM + CJS + .d.ts)

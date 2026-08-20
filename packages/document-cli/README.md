@@ -290,7 +290,7 @@ pnpm test:workers  # turbo run _test:workers -> vitest run --config vitest.worke
 
 ## Contributing
 
-Release, CI, and commit-message conventions are all workspace-wide, not package-local — see the [monorepo root README](../../README.md#releases) for the release mechanism and [its Contributing section](../../README.md#contributing) for the shared git hooks and history conventions. Work inside `packages/document-cli/`.
+Release, CI, and commit-message conventions are all workspace-wide, not package-local — see the [monorepo root README](../../README.md#releases) for the release mechanism and [CONTRIBUTING.md](../../CONTRIBUTING.md) for the shared git hooks and history conventions. Work inside `packages/document-cli/`.
 
 ## License
 
