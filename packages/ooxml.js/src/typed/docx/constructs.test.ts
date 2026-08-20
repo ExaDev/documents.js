@@ -199,7 +199,7 @@ describe('docx constructs: bookmarks', () => {
     expect(outline(blocksOf(body))).toEqual([{ kind: 'anchor', anchorType: 'bookmark', name: '_Ref9' }, 'Chapter', ')']);
   });
 
-  it('drops a bookmark whose extent is a sub-sequence of one paragraph\'s runs', () => {
+  it("reads a bookmark whose extent is a sub-sequence of one paragraph's runs as a run-level construct extent", () => {
     const body = [
       el('w:p', {}, [
         el('w:r', {}, [el('w:t', {}, [txt('before ')])]),
@@ -209,7 +209,108 @@ describe('docx constructs: bookmarks', () => {
         el('w:r', {}, [el('w:t', {}, [txt(' after')])]),
       ]),
     ];
-    expect(outline(blocksOf(body))).toEqual(['before marked after']);
+    const first = blocksOf(body)[0];
+    if (first?.kind !== 'paragraph') {
+      throw new Error('expected a paragraph block');
+    }
+    expect(first.runs.map((run) => run.text).join('')).toBe('before marked after');
+    expect(first.constructs).toEqual([{ descriptor: { kind: 'anchor', anchorType: 'bookmark', name: 'midway' }, startRun: 1, endRun: 2 }]);
+  });
+
+  it('keeps both of two bookmarks whose run-level extents cross rather than nest', () => {
+    const body = [
+      el('w:p', {}, [
+        el('w:r', {}, [el('w:t', {}, [txt('one ')])]),
+        el('w:bookmarkStart', { 'w:id': '1', 'w:name': 'first' }),
+        el('w:r', {}, [el('w:t', {}, [txt('two ')])]),
+        el('w:bookmarkStart', { 'w:id': '2', 'w:name': 'second' }),
+        el('w:r', {}, [el('w:t', {}, [txt('three ')])]),
+        el('w:bookmarkEnd', { 'w:id': '1' }),
+        el('w:r', {}, [el('w:t', {}, [txt(' four')])]),
+        el('w:bookmarkEnd', { 'w:id': '2' }),
+      ]),
+    ];
+    const first = blocksOf(body)[0];
+    if (first?.kind !== 'paragraph') {
+      throw new Error('expected a paragraph block');
+    }
+    expect(first.constructs).toEqual([
+      { descriptor: { kind: 'anchor', anchorType: 'bookmark', name: 'first' }, startRun: 1, endRun: 3 },
+      { descriptor: { kind: 'anchor', anchorType: 'bookmark', name: 'second' }, startRun: 2, endRun: 4 },
+    ]);
+  });
+
+  it("reads a bookmark opening mid-paragraph and closing at the paragraph's tail as a run extent reaching the end", () => {
+    const body = [
+      el('w:p', {}, [
+        el('w:r', {}, [el('w:t', {}, [txt('unmarked ')])]),
+        el('w:bookmarkStart', { 'w:id': '6', 'w:name': 'tail' }),
+        el('w:r', {}, [el('w:t', {}, [txt('marked')])]),
+        el('w:r', {}, [el('w:t', {}, [txt(' also')])]),
+        el('w:bookmarkEnd', { 'w:id': '6' }),
+      ]),
+    ];
+    const first = blocksOf(body)[0];
+    if (first?.kind !== 'paragraph') {
+      throw new Error('expected a paragraph block');
+    }
+    expect(outline(blocksOf(body))).toEqual(['unmarked marked also']);
+    expect(first.constructs).toEqual([{ descriptor: { kind: 'anchor', anchorType: 'bookmark', name: 'tail' }, startRun: 1, endRun: 3 }]);
+  });
+
+  it("reads a bookmark with nothing between its halves inside one paragraph as a point run extent", () => {
+    const body = [
+      el('w:p', {}, [
+        el('w:r', {}, [el('w:t', {}, [txt('before')])]),
+        el('w:bookmarkStart', { 'w:id': '8', 'w:name': 'point' }),
+        el('w:bookmarkEnd', { 'w:id': '8' }),
+        el('w:r', {}, [el('w:t', {}, [txt(' after')])]),
+      ]),
+    ];
+    const first = blocksOf(body)[0];
+    if (first?.kind !== 'paragraph') {
+      throw new Error('expected a paragraph block');
+    }
+    expect(first.constructs).toEqual([{ descriptor: { kind: 'anchor', anchorType: 'bookmark', name: 'point' }, startRun: 1, endRun: 1 }]);
+  });
+
+  it('keeps a bookmark bracketing a whole paragraph on the block-marker path, never on the run-level field', () => {
+    const body = [
+      el('w:p', {}, [
+        el('w:bookmarkStart', { 'w:id': '3', 'w:name': '_Ref9' }),
+        el('w:r', {}, [el('w:t', {}, [txt('Chapter')])]),
+        el('w:bookmarkEnd', { 'w:id': '3' }),
+      ]),
+    ];
+    const marked = blocksOf(body);
+    expect(outline(marked)).toEqual([{ kind: 'anchor', anchorType: 'bookmark', name: '_Ref9' }, 'Chapter', ')']);
+    const paragraphBlock = marked[1];
+    if (paragraphBlock?.kind !== 'paragraph') {
+      throw new Error('expected a paragraph block');
+    }
+    expect(paragraphBlock.constructs).toBeUndefined();
+  });
+
+  it("still drops a bookmark whose interior halves sit in two different paragraphs -- one paragraph can't host the pair", () => {
+    const body = [
+      el('w:p', {}, [
+        el('w:r', {}, [el('w:t', {}, [txt('first')])]),
+        el('w:bookmarkStart', { 'w:id': '9', 'w:name': 'spans' }),
+        el('w:r', {}, [el('w:t', {}, [txt(' half')])]),
+      ]),
+      el('w:p', {}, [
+        el('w:r', {}, [el('w:t', {}, [txt('second')])]),
+        el('w:bookmarkEnd', { 'w:id': '9' }),
+        el('w:r', {}, [el('w:t', {}, [txt(' half')])]),
+      ]),
+    ];
+    for (const block of blocksOf(body)) {
+      if (block.kind !== 'paragraph') {
+        throw new Error('expected a paragraph block');
+      }
+      expect(block.constructs).toBeUndefined();
+    }
+    expect(outline(blocksOf(body))).toEqual(['first half', 'second half']);
   });
 
   it('drops a bookmark whose two halves sit in different block lists', () => {
