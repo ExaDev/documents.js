@@ -1023,7 +1023,7 @@ importers:
   packages/pdf-codec:
     dependencies:
       byte-codec:
-        specifier: ^1.1.12
+        specifier: ^1.1.13
         version: link:../byte-codec
       document-schema.js:
         specifier: ^4.3.6
