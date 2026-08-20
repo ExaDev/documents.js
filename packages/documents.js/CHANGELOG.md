@@ -1,3 +1,10 @@
+## [4.0.21](https://github.com/ExaDev/documents.js/compare/documents.js@4.0.20...documents.js@4.0.21) (2026-08-20)
+
+
+### Bug Fixes
+
+* restore documents.js version baseline to the published 4.0.20 ([986dec9](https://github.com/ExaDev/documents.js/commit/986dec999a7c65ec86d26a491184932d983fe070))
+
 ## [4.0.14](https://github.com/ExaDev/documents.js/compare/documents.js@4.0.13...documents.js@4.0.14) (2026-08-20)
 
 
