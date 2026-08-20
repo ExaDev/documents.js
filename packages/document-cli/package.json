@@ -92,7 +92,7 @@
     "commander": "^15.0.0",
     "document-outline.js": "^1.0.4",
     "document-schema.js": "^4.3.7",
-    "documents.js": "^4.0.23",
+    "documents.js": "^4.0.24",
     "ink": "^7.1.1",
     "ink-text-input": "^6.0.0",
     "react": "^19.2.8"
