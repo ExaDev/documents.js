@@ -85,7 +85,7 @@
   "packageManager": "pnpm@11.6.0",
   "dependencies": {
     "byte-codec": "^1.1.10",
-    "document-schema.js": "^4.3.3",
+    "document-schema.js": "^4.3.4",
     "fflate": "^0.8.3",
     "markdown-codec": "^4.0.6",
     "odf.js": "^5.0.2",
