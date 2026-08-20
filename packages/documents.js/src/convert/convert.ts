@@ -29,7 +29,7 @@ import { extractSourceFonts } from '../fonts/registry';
 import { throwIfAborted } from '../ports/abort';
 import { resolveMetadataTimestamps } from '../model/metadata';
 import type { ClockPort } from '../ports/clock';
-import { convertDocument } from './composition';
+import { convertDocument } from './composition-to-pdf';
 import type { CellTypeInferenceSink } from '../layout/cell-typing';
 import type { SvgDiagnosticSink } from '../svg/diagnostics';
 

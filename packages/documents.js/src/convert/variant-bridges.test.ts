@@ -6,7 +6,8 @@ import { readOdgContent } from '../odf/odg/read';
 import { readOdpContent } from '../odf/odp/read';
 import { minimalOdgBytes } from '../test-support/odg';
 import { minimalOdpBytes } from '../test-support/odp';
-import { convertDocument, resolveCompositionPlan } from './composition';
+import { resolveCompositionPlan } from './composition';
+import { convertDocument } from './composition-to-pdf';
 import type { DocumentFormat } from './port';
 import { drawingToPresentation, presentationToDrawing } from './variant-bridges';
 
