@@ -1,3 +1,18 @@
+## [2.1.22](https://github.com/ExaDev/documents.js/compare/document-mcp@2.1.21...document-mcp@2.1.22) (2026-08-20)
+
+
+### Bug Fixes
+
+* point package homepage and bugs URLs at the monorepo, not the old standalone repos ([bb0a875](https://github.com/ExaDev/documents.js/commit/bb0a8752dcac584660f21979540bc06bbda41110))
+
+
+### Dependencies
+
+- Updated documents.js to ^4.0.22
+- Updated pdf-codec to ^3.0.10
+- Updated odf.js to ^5.0.5
+- Updated document-outline.js to ^1.0.2
+
 ## [2.1.21](https://github.com/ExaDev/documents.js/compare/document-mcp@2.1.20...document-mcp@2.1.21) (2026-08-20)
 
 
