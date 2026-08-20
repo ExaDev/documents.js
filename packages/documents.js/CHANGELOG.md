@@ -1,3 +1,20 @@
+## [4.0.14](https://github.com/ExaDev/documents.js/compare/documents.js@4.0.13...documents.js@4.0.14) (2026-08-20)
+
+
+### Bug Fixes
+
+* reconcile package versions/deps with published state, fix smoke-test build race ([da4caa7](https://github.com/ExaDev/documents.js/commit/da4caa76e885f644755311eea9f529040e41743a))
+
+
+### Dependencies
+
+- Updated pdf-codec to ^3.0.9
+- Updated ooxml.js to ^4.0.9
+- Updated odf.js to ^5.0.4
+- Updated markdown-codec to ^4.0.7
+- Updated document-schema.js to ^4.3.4
+- Updated byte-codec to ^1.1.10
+
 ## [4.0.13](https://github.com/ExaDev/documents.js/compare/v4.0.12...v4.0.13) (2026-08-19)
 
 ## [4.0.12](https://github.com/ExaDev/documents.js/compare/v4.0.11...v4.0.12) (2026-08-19)
