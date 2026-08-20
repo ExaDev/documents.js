@@ -5,6 +5,7 @@ import type { ContentBlock, ContentConstructStart, ContentEmbeddedObjectBlock, C
 import { el, txt } from '../../xml/fragment';
 import { bytesToBase64 } from '../../util/base64';
 import { zipPackage } from '../../zip';
+import { oleObjectBin } from '../../test-support/cfb';
 import { minimalDocxBytes, minimalXlsxBytes } from '../../test-support/embedded';
 import { attr, childrenWithTag, elementsWithTag, rootElement } from '../util';
 import { readDocxContent } from './read';
@@ -556,8 +557,21 @@ describe('readDocxContent: embedded OLE objects', () => {
     expect(asImage(doc.sections[0]?.blocks[2]).altText).toBe('Drawing after the object');
   });
 
-  it('keeps a non-ZIP OLE payload (the classic compound-file .bin) skipped exactly as before, with no embedded block and no crash', () => {
-    // rIdOle retargeted at a part whose bytes carry the OLE/CFB magic -- no reader in this ecosystem decodes it, so the paragraph's blocks are exactly what they were before embedded recovery existed.
+  it('recovers a classic compound-file .bin payload (an OLE-packaged xlsx) as an embeddedObject block', () => {
+    // The legacy real-world spelling: rIdOle targets embeddings/oleObject1.bin, whose bytes are a CFB compound file carrying the embedded xlsx as an OLE-packaged 'Package' stream. The recovery must land on the same embeddedObject block the direct-ZIP spelling produces, sized identically from w:object's own geometry.
+    const pkg = oleObjectFixturePackage({ target: 'embeddings/oleObject1.bin' });
+    pkg.parts['word/embeddings/oleObject1.bin'] = { kind: 'binary', base64: bytesToBase64(oleObjectBin(minimalXlsxBytes())) };
+    const doc = readDocxContent(pkg);
+    expect(doc.sections[0]?.blocks).toHaveLength(2);
+    const embedded = asEmbeddedObject(doc.sections[0]?.blocks[1]);
+    expect(embedded.objectKind).toBe('spreadsheet');
+    expect(embedded.frame).toEqual({ xPt: 0, yPt: 0, widthPt: 96, heightPt: 60 });
+    const sheet = embedded.document.kind === 'spreadsheet' ? embedded.document.sheets[0] : undefined;
+    expect(sheet?.cells[0]?.value).toEqual({ kind: 'string', value: 'Recovered cell' });
+  });
+
+  it('keeps a malformed compound-file .bin payload skipped, with no embedded block and no host-read failure', () => {
+    // rIdOle retargeted at a part whose bytes carry the OLE/CFB magic but no walkable structure -- the named CompoundFileFormatError this decode throws is a property of the embedded payload, degraded to nothing rather than failing the paragraph, section, or document around it (the #737 failure policy extended to the CFB gate).
     const pkg = oleObjectFixturePackage({ target: 'embeddings/oleObject1.bin' });
     pkg.parts['word/embeddings/oleObject1.bin'] = { kind: 'binary', base64: bytesToBase64(new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, 0x01, 0x02, 0x03, 0x04])) };
     const doc = readDocxContent(pkg);

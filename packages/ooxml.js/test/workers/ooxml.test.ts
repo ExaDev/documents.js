@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Package } from '../../src';
 import { buildDocxPackageFromContent, buildXlsxPackage, bytesToBase64, decodePackage, el, encodePackage, flattenPackage, readDocxContent, readPptxContent, readXlsx, readXlsxContent, zipPackage } from '../../src';
+import { oleObjectBin } from '../../src/test-support/cfb';
 import { minimalXlsxBytes } from '../../src/test-support/embedded';
 
 // Proves ooxml.js's xlsx decode path executes inside a Cloudflare Workers isolate (workerd, via @cloudflare/vitest-pool-workers) with no Node-only APIs. The path under test -- zipPackage (fflate, pure JS) -> decodePackage -> readXlsxContent (fast-xml-parser, pure JS) -- is deliberately Node-free; if any step touched node:fs/Buffer/process the workerd isolate would throw rather than these passing. The minimal xlsx parts are built inline as a Record<string, Uint8Array> (no node:fs/readFileSync -- workerd has no fs) and round-trip through the same zip/decode path src/typed/xlsx.test.ts already exercises under node. This is the runtime proof for ooxml.js issue #17. The second test extends the same proof to the DocumentPackage boundary readXlsx/buildXlsxPackage sit on, since a structural transform is exactly the sort of pure-object code that could quietly acquire a Node dependency without any test noticing under node.
@@ -61,8 +62,7 @@ describe('ooxml.js xlsx decode and package assembly under the Cloudflare Workers
 });
 
 describe('ooxml.js pptx OLE embedded-object recovery under the Cloudflare Workers runtime', () => {
-  it('recovers an OLE-embedded xlsx inside a pptx with no Node-only APIs on the path', () => {
-    // The full embedded-object recovery path -- slide relationship resolution -> binary payload part -> archive-codec's isZipArchive -> nested parsePackage -> readXlsxContent -> ContentEmbeddedObjectBlock -- is published runtime src, so it is held to the same Worker-isomorphism contract as the rest of this package. The host pptx is built inline in the Package object model (no fallback picture: the frame's display path is not what this test proves) and its embeddings part carries the same real minimal xlsx bytes the node suites use (src/test-support/embedded.ts), so the nested decode runs over genuine ZIP bytes inside the isolate.
+  const pptxWithOlePayload = (partPath: string, payloadBytes: Uint8Array<ArrayBuffer>): Package => {
     const choiceOleObj = el('p:oleObj', { spid: '3', 'r:id': 'rIdOle', progId: 'Excel.Sheet.12' }, [el('p:embed')]);
     const oleFrame = el('p:graphicFrame', {}, [
       el('p:nvGraphicFramePr', {}, [el('p:cNvPr', { id: '2', name: 'Object 1' })]),
@@ -76,18 +76,32 @@ describe('ooxml.js pptx OLE embedded-object recovery under the Cloudflare Worker
     const slide = el('p:sld', {}, [el('p:cSld', {}, [el('p:spTree', {}, [oleFrame])])]);
     const presentation = el('p:presentation', {}, [el('p:sldIdLst', {}, [el('p:sldId', { id: '256', 'r:id': 'rId1' })])]);
     const relElement = (id: string, type: string, target: string) => el('Relationship', { Id: id, Type: type, Target: target });
-    const pkg: Package = {
+    return {
       parts: {
         'ppt/presentation.xml': { kind: 'xml', nodes: [presentation] },
         'ppt/_rels/presentation.xml.rels': { kind: 'xml', nodes: [el('Relationships', {}, [relElement('rId1', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide', 'slides/slide1.xml')])] },
         'ppt/slides/slide1.xml': { kind: 'xml', nodes: [slide] },
-        'ppt/slides/_rels/slide1.xml.rels': { kind: 'xml', nodes: [el('Relationships', {}, [relElement('rIdOle', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject', '../embeddings/oleObject1.xlsx')])] },
-        'ppt/embeddings/oleObject1.xlsx': { kind: 'binary', base64: bytesToBase64(minimalXlsxBytes()) },
+        'ppt/slides/_rels/slide1.xml.rels': { kind: 'xml', nodes: [el('Relationships', {}, [relElement('rIdOle', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject', `../embeddings/${partPath}`)])] },
+        [`ppt/embeddings/${partPath}`]: { kind: 'binary', base64: bytesToBase64(payloadBytes) },
       },
     };
-    const doc = readPptxContent(pkg);
+  };
+
+  it('recovers an OLE-embedded xlsx inside a pptx with no Node-only APIs on the path', () => {
+    // The full embedded-object recovery path -- slide relationship resolution -> binary payload part -> archive-codec's isZipArchive -> nested parsePackage -> readXlsxContent -> ContentEmbeddedObjectBlock -- is published runtime src, so it is held to the same Worker-isomorphism contract as the rest of this package. The host pptx is built inline in the Package object model (no fallback picture: the frame's display path is not what this test proves) and its embeddings part carries the same real minimal xlsx bytes the node suites use (src/test-support/embedded.ts), so the nested decode runs over genuine ZIP bytes inside the isolate.
+    const doc = readPptxContent(pptxWithOlePayload('oleObject1.xlsx', minimalXlsxBytes()));
     const shape = doc.slides[0]?.shapes[0];
     // No fallback picture, so the frame's blocks are the progId stand-in paragraph plus the recovered embedded object.
+    const embedded = shape?.blocks.find((block) => block.kind === 'embeddedObject');
+    expect(embedded?.kind === 'embeddedObject' ? embedded.objectKind : undefined).toBe('spreadsheet');
+    const sheet = embedded?.kind === 'embeddedObject' && embedded.document.kind === 'spreadsheet' ? embedded.document.sheets[0] : undefined;
+    expect(sheet?.cells[0]?.value).toEqual({ kind: 'string', value: 'Recovered cell' });
+  });
+
+  it('recovers a classic compound-file .bin payload (an OLE-packaged xlsx) inside the isolate too', () => {
+    // The CFB arm of the same recovery -- isCompoundFile -> archive-codec's bounded compound-file reader -> OLE Package unwrapping -> the ZIP path above -- is what makes the whole payload surface Worker-isomorphic, so the .bin spelling gets its own isolate proof rather than inheriting the ZIP one. The mini-stream placement the builder chooses for a payload below the 4096-byte cutoff exercises the mini-FAT walk under workerd as well.
+    const doc = readPptxContent(pptxWithOlePayload('oleObject1.bin', oleObjectBin(minimalXlsxBytes())));
+    const shape = doc.slides[0]?.shapes[0];
     const embedded = shape?.blocks.find((block) => block.kind === 'embeddedObject');
     expect(embedded?.kind === 'embeddedObject' ? embedded.objectKind : undefined).toBe('spreadsheet');
     const sheet = embedded?.kind === 'embeddedObject' && embedded.document.kind === 'spreadsheet' ? embedded.document.sheets[0] : undefined;
