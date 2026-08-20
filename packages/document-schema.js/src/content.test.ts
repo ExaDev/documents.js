@@ -24,6 +24,7 @@ import {
 } from './content';
 import type { ConstructDescriptor } from './construct';
 import { LayoutFrameSchema } from './geometry';
+import type { SourceResidue } from './source';
 
 const paragraph: ContentBlock = {
   kind: 'paragraph',
@@ -614,6 +615,130 @@ describe('sourcePath', () => {
       blocks: [],
     });
     expect(shapeWithoutSourcePath.sourcePath).toBeUndefined();
+  });
+});
+
+describe('source (the quarantined residue channel)', () => {
+  // One residue value reused across positions, plus a second format spelling, so the tests pin that the field is the SAME facility everywhere rather than per-node lookalikes.
+  const docxResidue: SourceResidue = { format: 'docx', xml: '<w:proofErr w:type="spellStart"/>' };
+  const odfResidue: SourceResidue = { format: 'odt', xml: '<text:filter-name>x</text:filter-name>' };
+
+  it('rides on every block leaf kind and on runs, surviving a JSON round trip', () => {
+    const paragraphWithResidue: ContentBlock = {
+      kind: 'paragraph',
+      runs: [{ text: 'carries residue', source: docxResidue }],
+      source: docxResidue,
+    };
+    const imageWithResidue: ContentBlock = { kind: 'image', format: 'png', base64: 'AA==', widthPt: 100, heightPt: 50, source: docxResidue };
+    const pageBreakWithResidue: ContentBlock = { kind: 'pageBreak', source: docxResidue };
+    const tableWithResidue: ContentTable = {
+      kind: 'table',
+      rows: [{ cells: [{ blocks: [paragraph], source: docxResidue }] }],
+      columnWidthsPt: [100],
+      source: docxResidue,
+    };
+    const embeddedWithResidue: ContentBlock = {
+      kind: 'embeddedObject',
+      objectKind: 'drawing',
+      document: drawingDocument(),
+      frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 100 },
+      source: docxResidue,
+    };
+
+    for (const block of [paragraphWithResidue, imageWithResidue, pageBreakWithResidue, tableWithResidue, embeddedWithResidue]) {
+      expect(isContentBlock(block)).toBe(true);
+      const parsed = ContentBlockSchema.parse(block);
+      const roundTripped: unknown = JSON.parse(JSON.stringify(parsed));
+      expect(ContentBlockSchema.parse(roundTripped)).toEqual(block);
+    }
+
+    const shapeWithResidue = ContentShapeSchema.parse({
+      frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 100 },
+      insetLeftPt: 0,
+      insetTopPt: 0,
+      insetRightPt: 0,
+      insetBottomPt: 0,
+      blocks: [],
+      source: docxResidue,
+    });
+    expect(shapeWithResidue.source).toEqual(docxResidue);
+  });
+
+  it('rides on every container and per-kind node a format reader produces, across all five document kinds', () => {
+    const wordprocessingBase = wordprocessingDocument();
+    if (wordprocessingBase.kind !== 'wordprocessing') throw new Error('fixture must be a wordprocessing document');
+    const wordprocessing = ContentDocumentSchema.parse({
+      ...wordprocessingBase,
+      sections: [{ ...wordprocessingBase.sections[0], source: docxResidue, blocks: [{ kind: 'pageBreak', source: docxResidue }] }],
+    });
+    if (wordprocessing.kind !== 'wordprocessing') throw new Error('parse must return the wordprocessing arm');
+    expect(wordprocessing.sections[0]?.source).toEqual(docxResidue);
+
+    const presentationBase = presentationDocument();
+    if (presentationBase.kind !== 'presentation') throw new Error('fixture must be a presentation document');
+    const presentation = ContentDocumentSchema.parse({
+      ...presentationBase,
+      slides: presentationBase.slides.map((slide) => ({ ...slide, source: docxResidue })),
+    });
+    if (presentation.kind !== 'presentation') throw new Error('parse must return the presentation arm');
+    expect(presentation.slides.every((slide) => slide.source !== undefined)).toBe(true);
+
+    const spreadsheetBase = spreadsheetDocument();
+    if (spreadsheetBase.kind !== 'spreadsheet') throw new Error('fixture must be a spreadsheet document');
+    const spreadsheet = ContentDocumentSchema.parse({
+      ...spreadsheetBase,
+      sheets: spreadsheetBase.sheets.map((sheet) => ({
+        ...sheet,
+        source: odfResidue,
+        cells: sheet.cells.map((cell) => ({ ...cell, source: odfResidue })),
+        images: sheet.images.map((image) => ({ ...image, source: odfResidue })),
+      })),
+    });
+    if (spreadsheet.kind !== 'spreadsheet') throw new Error('parse must return the spreadsheet arm');
+    expect(spreadsheet.sheets[0]?.source).toEqual(odfResidue);
+
+    const drawingBase = drawingDocument();
+    if (drawingBase.kind !== 'drawing') throw new Error('fixture must be a drawing document');
+    const drawing = ContentDocumentSchema.parse({
+      ...drawingBase,
+      pages: drawingBase.pages.map((page) => ({
+        ...page,
+        source: odfResidue,
+        vectors: page.vectors.map((vector) => ({ ...vector, source: odfResidue })),
+      })),
+    });
+    if (drawing.kind !== 'drawing') throw new Error('parse must return the drawing arm');
+    expect(drawing.pages[0]?.source).toEqual(odfResidue);
+
+    const formulaBase = formulaDocument();
+    if (formulaBase.kind !== 'formula') throw new Error('fixture must be a formula document');
+    const formula = ContentDocumentSchema.parse({
+      ...formulaBase,
+      formula: { ...formulaBase.formula, source: odfResidue },
+    });
+    if (formula.kind !== 'formula') throw new Error('parse must return the formula arm');
+    expect(formula.formula.source).toEqual(odfResidue);
+  });
+
+  it('rides on a standalone embedded object (the sheet-children leaf position)', () => {
+    const parsed = ContentEmbeddedObjectSchema.parse({ ...drawingEmbeddedObject, source: docxResidue });
+    expect(parsed.source).toEqual(docxResidue);
+  });
+
+  it('keeps the construct boundary markers bare -- a smuggled source is not part of either marker\'s shape', () => {
+    // The marker schemas are plain z.objects like every content schema (accept-and-ignore unknown keys), so a source placed on a marker parses to a value WITHOUT it: the marker's own shape is { kind, descriptor } and nothing else, pinned here so the flat form never grows a second residue position beside the descriptor's own.
+    const smuggled = ContentConstructStartSchema.parse({
+      kind: 'constructStart',
+      descriptor: { kind: 'field', instruction: 'PAGE' },
+      source: docxResidue,
+    });
+    expect('source' in smuggled).toBe(false);
+    expect(ContentConstructEndSchema.parse({ kind: 'constructEnd', source: docxResidue })).toEqual({ kind: 'constructEnd' });
+  });
+
+  it('is absent by default, matching every other optional per-node field', () => {
+    expect(ContentRunSchema.parse({ text: 'No residue' })).toEqual({ text: 'No residue' });
+    expect(ContentParagraphSchema.parse({ kind: 'paragraph', runs: [{ text: 'No residue' }] })).toEqual({ kind: 'paragraph', runs: [{ text: 'No residue' }] });
   });
 });
 
