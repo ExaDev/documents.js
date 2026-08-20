@@ -1,5 +1,5 @@
 import type { WriteMarkdownOptions } from 'markdown-codec';
-import { MarkdownUnsupportedDocumentKindError, writeMarkdownContent } from 'markdown-codec';
+import { HTML_PREFORMATTED_STYLE_ID, MarkdownUnsupportedDocumentKindError, writeMarkdownContent } from 'markdown-codec';
 import type { ContentBlock, ContentConstructEnd, ContentConstructStart, ContentDocument, ContentTableCell } from 'document-schema.js';
 import { formulaOfBlock, formulaPlaceholderText } from '../model/formula';
 
@@ -26,6 +26,11 @@ const MATH_BLOCK_STYLE_ID = 'MathBlock';
 const MATH_INLINE_FONT_MARKER = 'Cambria Math';
 const MATH_INLINE_SOURCE = 'markdown:math-inline';
 
+// The markdown spelling of a page break, and the second genuine semantic transformation markdownBlock performs (ExaDev/documents.js#584): markdown-codec's own writer drops a ContentPageBreak block entirely -- correctly, by that package's own documented model, since its own read side can never produce one and markdown has no page construct to lose fidelity from. This package's conversions DO produce pageBreak blocks (every PDF-to-wordprocessing reconstruction inserts one per page boundary, and docx/odt explicit breaks read as them), and for the text-extraction consumers pdfToMarkdown exists for, the page boundary is exact, free information a markdown output should carry. An HTML comment is the marker shape because it is the one markdown spelling that carries metadata without claiming to be content: CommonMark defines it as an HTML block (markdown-codec's reader lowers it as an HTMLPreformatted paragraph carrying the literal text, so the marker survives a markdown round trip), and no renderer displays it.
+//
+// The read-side inverse lives in src/markdown/read.ts and turns this exact literal back into a pageBreak block, so the marker MEANS a page break rather than decorating one: markdownToPdf re-renders a real page boundary, and a pdfToMarkdown -> markdownToPdf round trip regenerates markers from real boundaries instead of accumulating the previous round's markers as visible literal text.
+export const PAGE_BREAK_MARKER = '<!-- page break -->';
+
 function formulaParagraph(formula: NonNullable<ReturnType<typeof formulaOfBlock>>): ContentBlock {
   const latex = formula.presentation?.latex;
   if (latex === undefined) {
@@ -41,6 +46,10 @@ function markdownBlock(block: ContentBlock): ContentBlock {
   // A construct marker sits inline in the same flat block array a real reader/writer round trip would produce (flattenPackage writes constructStart/constructEnd back around the region a construct group promoted from) -- see this module's own MarkdownConstructUnsupportedError comment for why it cannot pass through to writeMarkdownContent.
   if (block.kind === 'constructStart' || block.kind === 'constructEnd') {
     throw new MarkdownConstructUnsupportedError(block);
+  }
+  // A pageBreak block becomes the marker paragraph -- HTMLPreformatted so markdown-codec's emitter writes the text verbatim (a plain paragraph's runs would go through escapeMarkdownText, which backslash-escapes the '<', '!', '-', and '>' the marker is made of).
+  if (block.kind === 'pageBreak') {
+    return { kind: 'paragraph', runs: [{ text: PAGE_BREAK_MARKER }], styleId: HTML_PREFORMATTED_STYLE_ID };
   }
   // A table is recursive too -- ContentTableCell.blocks is itself ContentBlock[], so a table cell could carry its own nested embeddedObject (or another nested table) needing the identical treatment as a top-level block.
   if (block.kind === 'table') {
