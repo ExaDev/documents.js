@@ -68,20 +68,31 @@ function resolveSpecifier(fromFile: string, specifier: string): string {
   return '';
 }
 
-// Extracts a module's runtime import edges: comment-stripped source minus type-only statements, then every remaining `from '...'`. Comment stripping comes first because this codebase's module comments quote specifiers in prose and a prose mention must never count as an edge.
-function runtimeImports(file: string): readonly string[] {
-  const withoutComments = readFileSync(file, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+// Extracts a module's runtime import edges from its source text: comment-stripped source minus type-only statements, then every remaining specifier in one of the three runtime import forms -- `from '...'` (named, default, and re-export statements all end in one), bare `import '...'` (side-effect), and `import('...')` with a string-literal specifier (dynamic, but a bundler still ships the target). Comment stripping comes first because this codebase's module comments quote specifiers in prose and a prose mention must never count as an edge. A dynamic import with a computed (non-literal) specifier is not statically walkable by any means this test has; none exists in this package.
+function runtimeImportSpecifiers(source: string): readonly string[] {
+  const withoutComments = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
   const withoutTypeStatements = withoutComments
     .replace(/\bimport\s+type\s*\{[\s\S]*?\}\s*from\s*['"][^'"]+['"];?/g, '')
     .replace(/\bexport\s+type\s*\{[\s\S]*?\}\s*from\s*['"][^'"]+['"];?/g, '')
     .replace(/^\s*(?:import|export)\s+type\s[^;\n]*\bfrom\s*['"][^'"]+['"];?/gm, '');
+  const patterns = [
+    /\bfrom\s+['"]([^'"]+)['"]/g,
+    /\bimport\s+['"]([^'"]+)['"]/g,
+    /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
+  ];
   const specifiers: string[] = [];
-  for (const match of withoutTypeStatements.matchAll(/\bfrom\s+['"]([^'"]+)['"]/g)) {
-    if (match[1] !== undefined) {
-      specifiers.push(match[1]);
+  for (const pattern of patterns) {
+    for (const match of withoutTypeStatements.matchAll(pattern)) {
+      if (match[1] !== undefined) {
+        specifiers.push(match[1]);
+      }
     }
   }
   return specifiers;
+}
+
+function runtimeImports(file: string): readonly string[] {
+  return runtimeImportSpecifiers(readFileSync(file, 'utf8'));
 }
 
 // Walks every module statically reachable from one root, tracking each edge so a violation can be reported as the actual import chain that caused it, not just the offending file.
@@ -156,5 +167,21 @@ describe('the documents.js/read entry module graph excludes every X-to-PDF rende
       throw new Error('read-graph guard: package.json exports has no ./read entry -- the read-only entry point must stay declared, not just wildcard-reachable');
     }
     expect(parsed.exports['./read'].import).toBe('./dist/convert/from-pdf.js');
+  });
+});
+
+describe('the edge extractor recognises every runtime import form', () => {
+  // The walk is only honest if no import statement form can silently contribute zero edges, so the extractor's import-form contract is pinned in its own right: named/default/re-export statements, side-effect imports, and string-literal dynamic imports (relative or package-specifier) all count, while type-only statements and comment-stripped prose never do.
+  it('side-effect and dynamic imports count as edges; type-only statements and comments never do', () => {
+    const specifiers = runtimeImportSpecifiers([
+      "import './side-effect';",
+      "import { convertDocumentFromPdf } from './composition';",
+      "export { pdfToDocx } from './from-pdf';",
+      "const codec = await import('pdf-codec/read');",
+      "import type { DocumentPackage } from 'document-schema.js';",
+      "// import './commented-side-effect';",
+      "/* import './block-commented-side-effect' */",
+    ].join('\n'));
+    expect([...specifiers].sort()).toEqual(['./composition', './from-pdf', './side-effect', 'pdf-codec/read']);
   });
 });
