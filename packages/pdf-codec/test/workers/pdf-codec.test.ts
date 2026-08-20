@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { readPdf } from '../../src';
+import { readPdf } from '../../src/read';
+import { createFontRegistry, writePdf } from '../../src';
 
-// Proves pdf-codec's read path executes inside a Cloudflare Workers isolate (workerd, via @cloudflare/vitest-pool-workers) with no Node-only APIs. The fixture is built inline rather than read from disk because workerd exposes no node:fs -- and building it from the package's own format rules (object table, classic cross-reference, parenthesised content-stream string) is itself a check that nothing in the construction path needs Node either. If readPdf (or any of its byte-codec/document-schema.js/fflate/zod dependencies) touched a Node-only API, the workerd isolate would throw rather than this passing. This is the runtime complement to attw's static module-resolution check.
+// Proves pdf-codec's read path executes inside a Cloudflare Workers isolate (workerd, via @cloudflare/vitest-pool-workers) with no Node-only APIs. The read test imports through src/read.ts -- the module behind the package.json `./read` entry point -- so one test proves both that the read pipeline executes in the isolate and that the read-only entry itself works; the module-graph-width half of that entry's guarantee is held separately by src/read-graph.test.ts. The write test below exercises the opposite end: a real font registry resolving Calibri onto the vendored, metric-compatible Carlito face, which decodes the embedded asset, subsets it, and embeds a genuine TrueType font program -- exactly the modules the read entry exists to exclude, proven to run in the isolate when a caller does want them. Fixtures are built inline rather than read from disk because workerd exposes no node:fs -- and building them from the package's own format rules (object table, classic cross-reference, parenthesised content-stream string) is itself a check that nothing in the construction path needs Node either. This is the runtime complement to attw's static module-resolution check.
 
 // A minimal, structurally ordinary single-page PDF built by literal ASCII concatenation with inline byte-offset tracking -- the same construction idea src/test-support/pdf.ts uses for the node fixtures, reimplemented here so the workerd test stays self-contained and pulls in no test-support code (only the package src barrel). Produces: Catalog -> Pages -> one Page (MediaBox [0 0 200 100]) with a Helvetica /F1 font and a content stream drawing "(Hello)", plus a classic (ISO 32000-1 7.5.4) cross-reference table. Each xref entry is padded to the mandatory fixed 20 bytes.
 function minimalClassicXrefPdf(): Uint8Array {
@@ -56,13 +57,36 @@ function minimalClassicXrefPdf(): Uint8Array {
 }
 
 describe('pdf-codec under the Cloudflare Workers runtime', () => {
-  it('readPdf parses a minimal single-page PDF inside a workerd isolate (no Node API)', () => {
+  it('readPdf (via the read-only ./read entry module) parses a minimal single-page PDF inside a workerd isolate (no Node API)', () => {
     const doc = readPdf(minimalClassicXrefPdf());
     expect(doc.pages.length).toBeGreaterThanOrEqual(1);
     // MediaBox [0 0 200 100] -> widthPt 200, heightPt 100, the same mapping the node read suite asserts.
     expect(doc.pages[0]).toMatchObject({ widthPt: 200, heightPt: 100 });
     // The "(Hello)" Tj operand is the one text item recovered from the content stream.
     const textItems = doc.pages[0]!.items.filter((item) => item.kind === 'text');
+    expect(textItems[0]).toMatchObject({ kind: 'text', text: 'Hello' });
+  });
+
+  it('writePdf embeds the vendored Carlito face through a font registry inside a workerd isolate', () => {
+    // Read a real document back, relabel its one text run's family as Calibri, and write it through a registry: the registry resolves Calibri onto the vendored Carlito face, so this exercises the asset modules the read-only entry exists to exclude -- font-registry.ts's module-scope asset imports, the sfnt parse, the glyph subsetting, and the /Type0 + /CIDFontType2 + /FontFile2 embedding group -- inside the isolate.
+    const doc = readPdf(minimalClassicXrefPdf());
+    const calibriDoc = {
+      ...doc,
+      pages: doc.pages.map((page) => ({
+        ...page,
+        items: page.items.map((item) => item.kind === 'text' ? { ...item, font: { ...item.font, family: 'Calibri' } } : item),
+      })),
+    };
+    const pdfBytes = writePdf(calibriDoc, { fonts: createFontRegistry() });
+    expect(new TextDecoder('latin1').decode(pdfBytes.subarray(0, 5))).toBe('%PDF-');
+    const raw = new TextDecoder('latin1').decode(pdfBytes);
+    expect(raw).toContain('/Subtype /Type0');
+    expect(raw).toContain('/Subtype /CIDFontType2');
+    expect(raw).toContain('/FontFile2');
+
+    // The embedded-face document reads back through the same isolate: the text still extracts as 'Hello'.
+    const reread = readPdf(pdfBytes);
+    const textItems = reread.pages[0]!.items.filter((item) => item.kind === 'text');
     expect(textItems[0]).toMatchObject({ kind: 'text', text: 'Hello' });
   });
 });

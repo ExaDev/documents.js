@@ -597,7 +597,7 @@ To run a single test file: `pnpm vitest run src/path/to/file.test.ts`.
 - **Live views, not flatten-and-regenerate.** Editor classes hold a reference into the real `Package`/`XmlElement` objects; saving is `encodePackage(pkg)`.
 - **Three-tier PDF-read failure policy** — throw for unprocessable files, recover-with-diagnostic for malformed-but-salvageable, degrade-with-diagnostic for unsupported features. See pdf-codec's README.
 - **Conventional commits**, enforced via commitlint + husky.
-- **Worker-isomorphic runtime.** `src/` is typechecked against a web-only environment (`lib: ["ES2024", "WebWorker"]`, no `@types/node`); `eslint` bans Node-only imports/globals; `test:workers` proves PDF-bypassing paths run in `workerd`.
+- **Worker-isomorphic runtime.** `src/` is typechecked against a web-only environment (`lib: ["ES2024", "WebWorker"]`, no `@types/node`); `eslint` bans Node-only imports/globals; `test:workers` proves both the PDF-bypassing paths and the PDF pivot itself (`pdfToMarkdown` through the read-only entry module, `markdownToPdf` through the full write path) run in `workerd`.
 
 ## Gotchas and quirks
 
