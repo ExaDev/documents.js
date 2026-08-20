@@ -129,6 +129,8 @@ describe('reconstructWordprocessing: heading inference from font size', () => {
     const doc = reconstructWordprocessing(docFrom([pg]));
     const paras = paragraphs(doc);
     expect(paras.map((p) => p.styleId)).toEqual(['Heading1', undefined, 'Heading2', undefined]);
+    // The canonical headingLevel rides alongside the styleId spelling, matching markdown-codec's own lowerHeading: headingLevel is the only signal decompose groups on and the only one the docx writer turns into w:outlineLvl, so a Heading styleId without it would strand the heading ungrouped and unoutlined downstream.
+    expect(paras.map((p) => p.headingLevel)).toEqual([1, undefined, 2, undefined]);
   });
 
   it('leaves body text at the modal size as an ordinary paragraph, however bold', () => {
