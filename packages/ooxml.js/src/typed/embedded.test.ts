@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { zipPackage } from '../zip';
+import { MAX_WALK_DEPTH } from 'archive-codec';
+import { unzipPackage, zipPackage } from '../zip';
 import { minimalDocxBytes, minimalPptxBytes, minimalXlsxBytes } from '../test-support/embedded';
 import { readEmbeddedOoxmlPayload } from './embedded';
 
@@ -59,5 +60,15 @@ describe('readEmbeddedOoxmlPayload', () => {
       'word/document.xml': enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>'),
     });
     expect(readEmbeddedOoxmlPayload(bytes)).toBeUndefined();
+  });
+
+  it('returns undefined for a payload whose entries nest ZIPs beyond archive-codec\'s walk depth, even when its root is a valid xlsx', () => {
+    // The nested decode runs behind archive-codec's recursive-walk guards (a depth cap and one shared cumulative decompressed-bytes budget -- the bounded inflate this package's own fflate unzip has no equivalent of). This payload IS a valid xlsx at its root, but it also carries an entry that is a chain of ZIPs nested one level deeper than MAX_WALK_DEPTH -- the shape a decompression bomb's nesting leverage takes. A walk that hits a guard limit means the payload as a whole stands outside the guards' contract, so no embedded block is decoded from it at all; without the gateway the root flavour would decode fine and the deep chain would ride along as an inert binary part.
+    let chain: Uint8Array<ArrayBuffer> = minimalXlsxBytes();
+    for (let level = 0; level <= MAX_WALK_DEPTH; level++) {
+      chain = zipPackage({ 'nest.zip': chain });
+    }
+    const bombShaped = zipPackage({ ...unzipPackage(minimalXlsxBytes()), 'word/embeddings/deep.bin': chain });
+    expect(readEmbeddedOoxmlPayload(bombShaped)).toBeUndefined();
   });
 });
