@@ -41,9 +41,18 @@ export const ContentListMembershipSchema = z.object({
 });
 export type ContentListMembership = z.infer<typeof ContentListMembershipSchema>;
 
+// A run-scoped construct extent: one construct (src/construct.ts) whose extent is a sub-sequence of ONE paragraph's runs -- the mechanism the marker pair below deliberately is not, and the answer to the deferral construct.ts carried since 4.1.0 ("wait on a run-level extent mechanism rather than being forced into a block wrapper that would split the paragraph"). The entry is a descriptor plus a half-open run range: runs startRun..endRun are the extent, startRun === endRun is a point anchor at the boundary before run startRun, and endRun === runs.length reaches the paragraph's end. Ranges are data, not brackets -- two entries may cross freely (WordprocessingML's own bookmarks overlap by w:id with no imposed nesting), which is exactly what a bracket pair cannot express and the reason this is an extent array rather than markers spliced into the runs.
+export const RunConstructExtentSchema = z.object({
+  descriptor: ConstructDescriptorSchema, // the construct this extent opens -- the identical payload a construct group or a constructStart marker carries, so one descriptor vocabulary serves both scopes
+  startRun: z.number().int().nonnegative(), // the first run of the extent, counting only the runs this paragraph itself carries
+  endRun: z.number().int().nonnegative(), // one past the last run of the extent; equal to startRun for a point anchor
+});
+export type RunConstructExtent = z.infer<typeof RunConstructExtentSchema>;
+
 export const ContentParagraphSchema = z.object({
   kind: z.literal('paragraph'),
   runs: z.array(ContentRunSchema),
+  constructs: z.array(RunConstructExtentSchema).optional(), // the run-scoped constructs this paragraph carries (RunConstructExtent above) -- absent when it carries none, which is the overwhelming common case. Scope split, stated once: a construct bracketing whole BLOCKS is the constructStart/constructEnd marker pair below, never this field; a construct covering a sub-sequence of this paragraph's runs is this field, never a marker pair. One occurrence, one scope, one encoding.
   styleId: z.string().optional(), // w:pStyle/@w:val, e.g. 'Heading1' -- round-trip-only: a producer's own style name, meaningful only to a consumer that already knows that producer's naming convention
   headingLevel: z.number().int().positive().optional(), // canonical, format-agnostic heading depth (1 = the outermost heading), independent of styleId's own producer-specific spelling -- e.g. docx's w:outlineLvl (0-based, so read as level + 1), odf's text:outline-level (already 1-based), markdown's '#' count. Deliberately unbounded here (ODF alone permits ten levels): a format whose own vocabulary tops out lower than what's present (six for HTML/Markdown) clamps on its own way out, via clampHeadingLevel below, rather than this canonical field silently losing information a richer source format actually carried.
   alignment: AlignmentSchema.optional(),
@@ -88,6 +97,8 @@ export type ContentPageBreak = z.infer<typeof ContentPageBreakSchema>;
 // -- Construct boundary markers: the flat form's encoding of a fidelity construct (src/construct.ts) --
 //
 // The package tree carries a construct as a group -- `{ node: <descriptor>, children: <the extent it spans> }` (src/package-node.ts) -- but the flat form has no wrapper to hang an extent off: a section's, shape's, or table cell's content is one block list and nothing else. So the flat encoding of a construct is a matched pair of markers bracketing the blocks it spans, and decompose promotes each pair into the group the tree already has. The pair is what makes the 4.1.0 descriptor vocabulary reachable at all from the only shape a codec ever produces: every codec (ooxml.js, odf.js, markdown-codec, pdf-codec) reads and writes ContentDocument, so a construct facility wired only onto the tree is a facility no codec can emit into.
+//
+// BLOCK scope only -- and, since the run-level extent mechanism landed, one of two scopes rather than the only one: this pair brackets whole blocks, while a construct covering a sub-sequence of one paragraph's runs is a RunConstructExtent on that paragraph's own constructs field (see the schema above). The two mechanisms never encode one occurrence between them -- a producer picks by where the source format put the construct's extent, not by preference -- and the pair keeps its half of that split for the same reason it always had it: a marker is a member of the block list, so it can sit nowhere else.
 //
 // THE BRACKET-MATCHING CONTRACT, stated once and binding on every producer and consumer: markers pair exactly as balanced parentheses do -- a `constructEnd` closes the nearest preceding still-open `constructStart` in the SAME block list, and the blocks between them are that construct's extent. That is the entire pairing mechanism; there is deliberately no id, name, or other pairing key on either marker. Matching never straddles a block list: a pair opened in a section's blocks closes in that same array, and a pair opened inside a table cell closes inside that cell -- which is also the only way a construct inside a table is expressible in EITHER encoding, since decomposition treats a table as one leaf and never descends into its cells. A block list whose markers do not balance (an end with no open start, or a start still open when the list ends) is malformed input rather than a shape to repair: see findConstructMarkerImbalance below, the one shared definition of that check.
 //
@@ -229,6 +240,17 @@ export function isContentConstructEnd(value: unknown): value is ContentConstruct
   return isRecord(value) && value.kind === 'constructEnd';
 }
 
+// The run-extent guard, exported beside the marker guards for the same consumers: the block guard's paragraph arm (immediately below), which must recognise a well-formed constructs array without parsing the whole paragraph, and any codec or reader that has to recognise a run-level extent without a full parse. It validates the entry's own shape -- a record carrying a descriptor the construct vocabulary accepts and two non-negative integer bounds -- and deliberately NOT the range's validity against a paragraph's runs: that cross-object fact is findRunConstructFault's to state, exactly as bracket balance is findConstructMarkerImbalance's.
+export function isRunConstructExtent(value: unknown): value is RunConstructExtent {
+  if (!isRecord(value)) return false;
+  if (!ConstructDescriptorSchema.safeParse(value.descriptor).success) return false;
+  return isValidRunBound(value.startRun) && isValidRunBound(value.endRun);
+}
+
+function isValidRunBound(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
+}
+
 // Recursive structural guard. Used via z.custom so table cells (and now embedded-object documents) validate without a recursive Zod schema (which collapses to `unknown` under z.lazy in this Zod version).
 export function isContentBlock(value: unknown): value is ContentBlock {
   if (!isRecord(value)) {
@@ -236,7 +258,11 @@ export function isContentBlock(value: unknown): value is ContentBlock {
   }
   const kind = value.kind;
   if (kind === 'paragraph') {
-    return Array.isArray(value.runs) && value.runs.every(isContentRun);
+    return (
+      Array.isArray(value.runs) &&
+      value.runs.every(isContentRun) &&
+      (value.constructs === undefined || (Array.isArray(value.constructs) && value.constructs.every(isRunConstructExtent)))
+    );
   }
   if (kind === 'image') {
     return (
@@ -297,6 +323,25 @@ export function findConstructMarkerImbalance(blocks: readonly ContentBlock[]): C
   const outermostUnclosed = openStartIndices[0];
   if (outermostUnclosed !== undefined) {
     return { kind: 'unclosedStart', index: outermostUnclosed };
+  }
+  return undefined;
+}
+
+// Where a paragraph's run-level construct extents stop naming real runs: an `invertedRange` is an extent whose end precedes its start, a `beyondRuns` one whose bounds reach outside 0..runs.length (a negative bound included -- the schema's non-negative integers already refuse it at parse time, but this helper's contract is stated over runtime values, not only parsed ones). `index` is the offending entry's own position in the paragraph's constructs array. The run-level twin of findConstructMarkerImbalance above, existing for the same reason: a codec emitting run extents, and any consumer walking them, must agree on exactly one definition of a well-formed extent, and no schema can express it -- the range bound is the paragraph's own runs.length, a cross-object fact no single node's schema states. Deliberately silent on crossing extents: two entries whose ranges overlap are well-formed data (see RunConstructExtentSchema), not a fault, because ranges impose no nesting the way a bracket sequence must.
+export type RunConstructFault =
+  | { kind: 'invertedRange'; index: number }
+  | { kind: 'beyondRuns'; index: number };
+
+export function findRunConstructFault(paragraph: ContentParagraph): RunConstructFault | undefined {
+  const constructs = paragraph.constructs;
+  if (constructs === undefined) return undefined;
+  for (const [index, extent] of constructs.entries()) {
+    if (extent.startRun > extent.endRun) {
+      return { kind: 'invertedRange', index };
+    }
+    if (extent.startRun < 0 || extent.endRun > paragraph.runs.length) {
+      return { kind: 'beyondRuns', index };
+    }
   }
   return undefined;
 }

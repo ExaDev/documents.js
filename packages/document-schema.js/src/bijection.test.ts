@@ -438,6 +438,73 @@ function constructCorpus(): readonly CorpusEntry[] {
       name: 'construct inside a drawing page shape flow',
       content: { kind: 'drawing', metadata: {}, pages: [{ size: { widthPt: 300, heightPt: 300 }, shapes: [shapeWithConstruct], vectors: [] }] },
     },
+    ...runExtentCorpus(),
+  ];
+}
+
+// --- The run-level extent corpus -----------------------------------------------------------------------------
+
+// The run-level extent mechanism (ContentParagraph.constructs, src/content.ts) is a signal the boundary must carry like any other -- and, unlike the block markers, one it carries by EMBEDDING rather than by transforming: a paragraph is atomic to decomposition (a bare leaf, or a heading/list group's anchor, its runs never regrouped), so decompose and flatten pass the field through on the same node object and no walk below needs a change. These entries pin that for every placement a run extent can sit in, plus the properties (crossing ranges, descriptor residue, minting alongside) that must survive all three laws verbatim.
+function runExtentCorpus(): readonly CorpusEntry[] {
+  // A bare-leaf paragraph carrying a whole-list extent, a crossing pair, a point extent, and a descriptor with residue -- every property of the mechanism in one flow, alongside a block marker pair so both encodings of the construct vocabulary sit in the same document and neither disturbs the other.
+  const runExtentParagraph: ContentBlock = {
+    kind: 'paragraph',
+    runs: [{ text: 'before ' }, { text: 'marked ' }, { text: 'words' }, { text: ' after' }],
+    constructs: [
+      { descriptor: { kind: 'anchor', anchorType: 'bookmark', name: 'outer' }, startRun: 0, endRun: 4 },
+      { descriptor: { kind: 'anchor', anchorType: 'bookmark', name: 'crosser' }, startRun: 1, endRun: 3 },
+      { descriptor: { kind: 'anchor', anchorType: 'footnote', name: '1', definition: 'n1' }, startRun: 4, endRun: 4 },
+      { descriptor: { kind: 'contentControl', controlType: 'richText', source: GALLERY_RESIDUE }, startRun: 1, endRun: 2 },
+    ],
+  };
+  // A heading anchor and a list anchor each carrying a run extent: the tree embeds the whole paragraph as the group's node, so the field must ride the anchor the same way it rides a leaf.
+  const headingWithExtent: ContentBlock = {
+    kind: 'paragraph',
+    runs: [{ text: 'Chapter' }, { text: ' (draft)' }],
+    headingLevel: 1,
+    constructs: [{ descriptor: { kind: 'anchor', anchorType: 'bookmark', name: '_Toc1' }, startRun: 0, endRun: 1 }],
+  };
+  const listWithExtent: ContentBlock = {
+    kind: 'paragraph',
+    runs: [{ text: 'item with a mid-paragraph field' }],
+    list: { numId: 'n1', level: 0 },
+    constructs: [{ descriptor: { kind: 'field', instruction: 'DATE' }, startRun: 0, endRun: 1 }],
+  };
+  // A table-cell paragraph carrying a run extent: the cell's blocks are flat in BOTH encodings, so this paragraph never crosses the boundary machinery at all -- the same immunity a cell's own marker pair already has.
+  const cellWithRunExtent: ContentBlock = {
+    kind: 'table',
+    rows: [{ cells: [{ blocks: [{ kind: 'paragraph', runs: [{ text: 'cell text' }], constructs: [{ descriptor: { kind: 'anchor', anchorType: 'bookmark', name: 'cellmark' }, startRun: 0, endRun: 1 }] }] }] }],
+    columnWidthsPt: [120],
+  };
+  // Two paragraphs sharing an indent tuple AND carrying run extents, so minting actually strips-and-copies them (rebuildParagraph's spread must carry the constructs field through the copy, or law (i) fails here while passing the styles-free entries above).
+  const mintingExtentParagraph = (text: string, name: string): ContentBlock => ({
+    kind: 'paragraph',
+    runs: [{ text }],
+    indentLeftPt: 24,
+    constructs: [{ descriptor: { kind: 'anchor', anchorType: 'bookmark', name }, startRun: 0, endRun: 1 }],
+  });
+  return [
+    constructSectionEntry('run-level extents on a bare leaf, alongside a block marker pair', [
+      constructParagraph('plain'),
+      runExtentParagraph,
+      constructStart({ kind: 'field', instruction: 'PAGE' }),
+      constructParagraph('block-scoped', { indentLeftPt: 24 }),
+      CONSTRUCT_END,
+    ]),
+    constructSectionEntry('run-level extents on a heading anchor and a list anchor', [
+      headingWithExtent,
+      constructParagraph('body under the heading'),
+      listWithExtent,
+    ]),
+    constructSectionEntry('run-level extent inside a table cell (flat in both encodings)', [
+      constructParagraph('before the table'),
+      cellWithRunExtent,
+      constructParagraph('after the table'),
+    ]),
+    constructSectionEntry('run-level extents on paragraphs that mint (stripping copies the field)', [
+      mintingExtentParagraph('one', 'b1'),
+      mintingExtentParagraph('two', 'b2'),
+    ]),
   ];
 }
 
@@ -484,10 +551,18 @@ describe('decompose/flatten bijection laws over the schema-vocabulary corpus', (
     expect(minting.length).toBeGreaterThan(0);
   });
 
-  // The same anti-vacuity guard, narrowed to the construct entries: laws (ii) and (iii) say nothing about construct groups unless a construct group actually carries a ref, and a construct entry that minted nothing would pass all three laws while proving only that its leaves round-trip. Every construct entry except the deliberately empty one is built to mint on its own construct wrapper, so this pins that the promotion and minting really do compose over the corpus rather than only in factor-styles.test.ts's single fixture.
+  // The same anti-vacuity guard, narrowed to the construct entries: laws (ii) and (iii) say nothing about construct groups unless a construct group actually carries a ref, and a construct entry that minted nothing would pass all three laws while proving only that its leaves round-trip. Every construct entry except the deliberately empty one is built to mint on its own construct wrapper, so this pins that the promotion and minting really do compose over the corpus rather than only in factor-styles.test.ts's single fixture. The run-level extent entries are excluded: their wrappers are ordinary groups (a run extent has no construct group of its own -- that is the point of the mechanism), so their anti-vacuity guard is the one immediately below.
   it('the construct corpus mints refs onto the construct groups themselves', () => {
-    const withConstructRefs = constructCorpus().filter((entry) => constructGroupRefsOf(assemblePackage(entry.content, entry.pages)).length > 0);
-    expect(withConstructRefs.map((entry) => entry.name)).toEqual(constructCorpus().filter((entry) => entry.name !== 'construct with no children (an open marker immediately closed)').map((entry) => entry.name));
+    const runExtentNames = new Set(runExtentCorpus().map((entry) => entry.name));
+    const blockConstructEntries = constructCorpus().filter((entry) => !runExtentNames.has(entry.name));
+    const withConstructRefs = blockConstructEntries.filter((entry) => constructGroupRefsOf(assemblePackage(entry.content, entry.pages)).length > 0);
+    expect(withConstructRefs.map((entry) => entry.name)).toEqual(blockConstructEntries.filter((entry) => entry.name !== 'construct with no children (an open marker immediately closed)').map((entry) => entry.name));
+  });
+
+  // The run-level extent corpus's own anti-vacuity guard: laws say nothing about minting unless it actually runs over a paragraph carrying constructs, and an entry where every extent paragraph was left unstripped would pass all three laws while proving only that untouched objects survive an embed. At least one entry must mint a styles table, which is what makes rebuildParagraph's strip-copy the path the constructs field rides through.
+  it('the run-level extent corpus exercises real minting over paragraphs carrying constructs', () => {
+    const minting = runExtentCorpus().filter((entry) => Object.keys(assemblePackage(entry.content, entry.pages).styles ?? {}).length > 0);
+    expect(minting.length).toBeGreaterThan(0);
   });
 
   // Every ContentDocument kind must be represented, or a kind could quietly stop being exercised while the suite still passed on the other four.
