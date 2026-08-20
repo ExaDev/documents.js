@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { zipPackage } from '../zip';
 import { minimalDocxBytes, minimalPptxBytes, minimalXlsxBytes } from '../test-support/embedded';
-import { readEmbeddedOoxmlPayload, UnrecognisedOoxmlPackageError } from './embedded';
+import { readEmbeddedOoxmlPayload } from './embedded';
 
 // Coverage for the shared embedded-object decode (src/typed/embedded.ts): nested-ZIP payload bytes -> flavour detection -> the matching typed reader -> the ContentEmbeddedObject payload (objectKind + a genuinely recovered nested ContentDocument). Fixtures come from src/test-support/embedded.ts -- real minimal OOXML packages zipped inline, because the pipeline under test unzips actual bytes (a hand-built Package value would skip the parse step entirely).
 
@@ -41,8 +41,23 @@ describe('readEmbeddedOoxmlPayload', () => {
     expect(readEmbeddedOoxmlPayload(bytes)).toBeUndefined();
   });
 
-  it('rejects a ZIP that is not a recognisable OOXML package with the named error', () => {
+  it('returns undefined for a ZIP that is not a recognisable OOXML package (a plain archive, not a document)', () => {
+    // A "Package"-ProgID embed of a plain .zip: valid archive, none of the three OOXML entry parts. An embedded payload is second-order content -- the caller chose to open the host document, not this archive -- so an unrecognisable flavour is a degrade-tier non-event, never a thrown error that kills the host read.
     const bytes = zipPackage({ 'readme.txt': enc('just a file, not a document package') });
-    expect(() => readEmbeddedOoxmlPayload(bytes)).toThrow(UnrecognisedOoxmlPackageError);
+    expect(readEmbeddedOoxmlPayload(bytes)).toBeUndefined();
+  });
+
+  it('returns undefined for a corrupt ZIP payload (magic bytes present, structure truncated)', () => {
+    // A truncated archive passes the magic-byte gate (the gate is four bytes long and cannot see structural corruption), then fails inside the unzip itself -- the raw inflate failure must degrade exactly like an unrecognisable flavour rather than propagating out of the host read.
+    const truncated = minimalDocxBytes().slice(0, 30);
+    expect(readEmbeddedOoxmlPayload(truncated)).toBeUndefined();
+  });
+
+  it('returns undefined for a docx payload whose document part carries no w:body', () => {
+    // The entry part exists and parses, but readDocxContent's own precondition (a w:body to walk) does not hold -- detection verifies that precondition before dispatching, so a malformed nested docx degrades instead of throwing from inside the nested read.
+    const bytes = zipPackage({
+      'word/document.xml': enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>'),
+    });
+    expect(readEmbeddedOoxmlPayload(bytes)).toBeUndefined();
   });
 });
