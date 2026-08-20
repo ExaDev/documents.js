@@ -1,5 +1,5 @@
-import type { Alignment, ConstructDescriptor, ContentBlock, ContentCellBorders, ContentControlDescriptor, ContentEmbeddedObjectBlock, ContentImageBlock, ContentParagraph, ContentRun, ContentSection, ContentTable, ContentTableCell, ProvenanceChange, ProvenanceDescriptor } from 'document-schema.js';
-import { colorToRgbHex, findConstructMarkerImbalance } from 'document-schema.js';
+import type { Alignment, AnchorDescriptor, ConstructDescriptor, ContentBlock, ContentCellBorders, ContentControlDescriptor, ContentEmbeddedObjectBlock, ContentImageBlock, ContentParagraph, ContentRun, ContentSection, ContentTable, ContentTableCell, ProvenanceChange, ProvenanceDescriptor } from 'document-schema.js';
+import { colorToRgbHex, findConstructMarkerImbalance, findRunConstructFault } from 'document-schema.js';
 import type { Package, XmlPart } from '../../model/package';
 import type { XmlElement, XmlNode } from '../../model/node';
 import { el, txt } from '../../xml/fragment';
@@ -21,6 +21,7 @@ import { TABLE_OF_CONTENTS_GALLERY, isDeletedChange } from './constructs';
 // - An embedded object's VML preview picture is not regenerated: the reader never read one into the model (no VML reader exists, and real producers ship WMF/EMF previews this ecosystem has no writer for), so the written w:object carries only its o:OLEObject payload reference and Word shows a blank until activated. An embedded object whose nested document this package cannot serialise (presentation -- read-only here; drawing/formula -- ODF/MathML spellings) is refused with a thrown error rather than silently dropped, inverting the reader's degrade-tier rule at the write boundary where the caller has explicitly asked for a document.
 // - A run whose boolean properties are absent but which carries some other property (a colour, a size) reads back with those booleans false rather than absent, because the w:rPr the other property forces is itself what the read-side cascade turns an absent w:b into. A run with no properties at all writes no w:rPr and round-trips exactly.
 // - Four construct shapes are written as their content with no wrapper, because WordprocessingML has no block-level element for them: a `link` (its own hyperlink is run-level, so a block-scoped link has no element to be), a `division` (no block container answers to one), a `provenance` whose change is `formatChange` (w:pPrChange is a child of w:pPr describing one paragraph's old properties, not a wrapper over a block flow), and an `anchor` whose type is a footnote, endnote, or comment reference (each of those is a run-level reference into a part this writer does not emit). readDocxContent produces none of them, so this only bounds what a foreign ContentDocument can carry through here.
+// - Of a paragraph's run-level construct extents (ContentParagraph.constructs), only bookmark anchors write back -- as their w:bookmarkStart/End halves between the runs the range names (interleaveRunConstructExtents below); a run extent of any other kind writes its paragraph's content untouched and loses the descriptor, and an extent whose range does not name real runs is refused with a thrown error rather than written at a made-up position.
 // - A field construct whose extent contains no paragraph at all, and a section whose last block is not a paragraph, each gain one empty paragraph on the way out (the field characters and the section break both need a paragraph to live in). Everything readDocxContent itself produces already has one.
 // - A page break immediately before a table or an image -- w:pageBreakBefore is a paragraph property, so neither can carry it directly -- becomes its own empty paragraph carrying the break, immediately before that content rather than displaced to the end of the flow.
 
@@ -252,9 +253,60 @@ function buildParagraph(paragraph: ContentParagraph, state: WriteState, pageBrea
   if (pPr !== undefined && changeTag !== undefined && provenance !== undefined) {
     pPr.children.push(el('w:rPr', {}, [el(changeTag, trackChangeAttrs(state, provenance))]));
   }
-  const runs = paragraph.runs.map((run) => buildRun(run, state, deleted));
+  const runs = interleaveRunConstructExtents(paragraph.runs.map((run) => buildRun(run, state, deleted)), paragraph, state);
   const content = changeTag === undefined || provenance === undefined ? runs : [el(changeTag, trackChangeAttrs(state, provenance), runs)];
   return el('w:p', {}, [...(pPr === undefined ? [] : [pPr]), ...content]);
+}
+
+// The write side of a run-level construct extent (document-schema.js's ContentParagraph.constructs): a bookmark's two halves go back between the runs its range names -- the exact inverse of the reader's run-position walk, so the pair reads back at the positions it was written from. Only bookmark anchors have a run-level spelling here (WordprocessingML's w:bookmarkStart/End are the one range-marker pair this vocabulary carries at run level); a run extent of any other kind writes its paragraph's content untouched and loses only the descriptor, the same content-preserving policy the block-level foreign constructs follow. Closes are emitted before opens at a shared boundary, so adjacent extents nest rather than interleave -- a convention the reader is indifferent to (both halves land on the same run position either way) but one that keeps the written XML well-nested for Word itself.
+function interleaveRunConstructExtents(runElements: readonly XmlElement[], paragraph: ContentParagraph, state: WriteState): XmlElement[] {
+  if (paragraph.constructs === undefined) {
+    return [...runElements];
+  }
+  const fault = findRunConstructFault(paragraph);
+  if (fault !== undefined) {
+    throw new Error(`buildDocxPackageFromContent: run-level construct extent at index ${String(fault.index)} of a paragraph does not name real runs (${fault.kind})`);
+  }
+  const bookmarks = paragraph.constructs.filter(
+    (extent): extent is { descriptor: AnchorDescriptor; startRun: number; endRun: number } =>
+      extent.descriptor.kind === 'anchor' && extent.descriptor.anchorType === 'bookmark',
+  );
+  if (bookmarks.length === 0) {
+    return [...runElements];
+  }
+  const closingAt = new Map<number, XmlElement[]>();
+  const openingAt = new Map<number, { element: XmlElement }[]>();
+  for (const bookmark of bookmarks) {
+    const id = String(state.nextMarkerId++);
+    const open = el('w:bookmarkStart', { 'w:id': id, 'w:name': encodeXmlText(bookmark.descriptor.name) });
+    const opens = openingAt.get(bookmark.startRun);
+    if (opens === undefined) {
+      openingAt.set(bookmark.startRun, [{ element: open }]);
+    } else {
+      opens.push({ element: open });
+    }
+    const close = el('w:bookmarkEnd', { 'w:id': id });
+    const closes = closingAt.get(bookmark.endRun);
+    if (closes === undefined) {
+      closingAt.set(bookmark.endRun, [close]);
+    } else {
+      closes.push(close);
+    }
+  }
+  const out: XmlElement[] = [];
+  for (let position = 0; position <= runElements.length; position++) {
+    for (const close of closingAt.get(position) ?? []) {
+      out.push(close);
+    }
+    for (const { element } of openingAt.get(position) ?? []) {
+      out.push(element);
+    }
+    const run = runElements[position];
+    if (run !== undefined) {
+      out.push(run);
+    }
+  }
+  return out;
 }
 
 // readDocxContent lifts a paragraph's own images out into sibling blocks after it, so the inverse puts each one back into the run it came out of: the paragraph's trailing empty-text runs, in order, are exactly the runs a drawing-only run reads back as. An image with no such run left takes a fresh one.

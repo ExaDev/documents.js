@@ -1,11 +1,11 @@
-import type { AnchorDescriptor, ConstructDescriptor, ContentBlock, ContentControlDescriptor, ContentControlLock, ContentControlType, ProvenanceChange, ProvenanceDescriptor, SourceResidue } from 'document-schema.js';
+import type { AnchorDescriptor, ConstructDescriptor, ContentBlock, ContentControlDescriptor, ContentControlLock, ContentControlType, ProvenanceChange, ProvenanceDescriptor, RunConstructExtent, SourceResidue } from 'document-schema.js';
 import type { XmlElement } from '../../model/node';
 import { buildXml } from '../../xml/build';
 import { attr, childrenWithTag, decodeEntities, textContent } from '../util';
 
 // The docx side of document-schema.js's fidelity construct vocabulary (its src/construct.ts): reading a WordprocessingML construct into a ConstructDescriptor, and placing the flat form's constructStart/constructEnd marker pair around the blocks that construct spans. Shared by the reader (typed/docx/read.ts) and the writer (typed/docx/write.ts), so one module owns both the descriptor shapes and the bracket placement rules the two halves must agree on.
 //
-// EXTENT SCOPE, the single constraint that decides which real-world docx constructs are representable here at all: a marker pair brackets whole BLOCKS. document-schema.js states this on the marker schemas themselves -- a construct group wraps a section's, cell's, or shape's block flow, never a sub-sequence of one paragraph's runs, because a run-level extent is not expressible without changing ContentParagraph's own shape. So a field, bookmark, SDT, or tracked change spanning one or more whole paragraphs becomes a marker pair, and the same construct sitting mid-paragraph (a PAGE field inside a sentence, a bookmark over three words, a few inserted words in an otherwise untouched paragraph) has no encoding and is not emitted. The reader's own qualification tests below are exactly that distinction, made per construct.
+// EXTENT SCOPE, the single constraint that decides which real-world docx constructs are representable here at all: a marker pair brackets whole BLOCKS. document-schema.js states this on the marker schemas themselves -- a construct group wraps a section's, cell's, or shape's block flow, never a sub-sequence of one paragraph's runs, because a run-level extent lives on ContentParagraph's own constructs field instead (RunConstructExtent -- one scope, one encoding). So a field, bookmark, SDT, or tracked change spanning one or more whole paragraphs becomes a marker pair. Of the mid-paragraph cases, a bookmark whose halves both sit inside one paragraph is read onto that paragraph's run-level constructs field (runBookmarkExtents below); a mid-paragraph field, inline SDT, or partial tracked change still has no encoding here -- the text comes through as runs, the construct does not. The reader's own qualification tests below are exactly that distinction, made per construct.
 
 // The element children of a w:p that carry no visible content of their own: paragraph properties, and the range/annotation markers that punctuate a paragraph without contributing to it. Everything else -- w:r, w:hyperlink, w:fldSimple, w:ins, w:del, w:sdt, w:smartTag, mc:AlternateContent, m:oMath -- is content-bearing. This set is what "first content-bearing child" and "last content-bearing child" mean in the qualification tests below: a bookmark or field marker sitting outside every content-bearing child brackets the whole paragraph, one sitting between them brackets a sub-sequence of its runs and is out of scope.
 const NON_CONTENT_PARAGRAPH_CHILDREN: ReadonlySet<string> = new Set([
@@ -84,7 +84,7 @@ function compareExtents(a: ConstructExtent, b: ConstructExtent): number {
   return a.startIndex - b.startIndex || b.endIndex - a.endIndex || a.order - b.order;
 }
 
-// The flat form pairs markers as balanced brackets, so an extent that starts inside another and ends outside it has no encoding at all: bracket matching would silently re-pair the two into a different nesting than the source meant. WordprocessingML's own marker-paired constructs (w:bookmarkStart/End keyed by w:id, w:fldChar begin/end) are free to overlap that way, so the crossing case is real input rather than a malformed one -- it is dropped here, exactly as a run-level extent is, rather than being emitted as a pair that would decode to the wrong nesting. Structural constructs (w:sdt, w:ins, w:del) are XML elements and so nest by construction; only bookmark and field extents can ever be rejected here.
+// The flat form pairs markers as balanced brackets, so an extent that starts inside another and ends outside it has no encoding at all: bracket matching would silently re-pair the two into a different nesting than the source meant. WordprocessingML's own marker-paired constructs (w:bookmarkStart/End keyed by w:id, w:fldChar begin/end) are free to overlap that way, so the crossing case is real input rather than a malformed one -- it is dropped here, the drop document-schema.js ratifies for block-scoped crossings (construct.ts's extent-scope note), rather than being emitted as a pair that would decode to the wrong nesting. Within one paragraph, crossing bookmark extents are NOT dropped: run-level ranges are data, not brackets, so both survive as entries on the paragraph's constructs field (runBookmarkExtents below). Structural constructs (w:sdt, w:ins, w:del) are XML elements and so nest by construction; only bookmark and field extents can ever be rejected here.
 function acceptProperlyNested(extents: readonly ConstructExtent[]): ConstructExtent[] {
   const sorted = [...extents].sort(compareExtents);
   const accepted: ConstructExtent[] = [];
@@ -140,6 +140,59 @@ export function insertConstructMarkers(blocks: readonly ContentBlock[], extents:
     }
   }
   return out;
+}
+
+// --- run-level construct extents (a bookmark covering a sub-sequence of one paragraph's runs) ------------------------
+
+// A bookmark half encountered inside a paragraph's own run walk (readParagraphRuns): `runPosition` is the number of runs the walk had emitted when it reached the half -- the half's position among the paragraph's ContentRuns, which is exactly what a RunConstructExtent's startRun/endRun name. `element` is kept so the pairing below can ask the paragraph's content index whether the half sits at block scope or between runs.
+export interface ParagraphBookmarkHalf {
+  readonly element: XmlElement;
+  readonly id: string;
+  readonly name: string | undefined;
+  readonly kind: 'start' | 'end';
+  readonly runPosition: number;
+}
+
+// Whether a half brackets whole blocks rather than a run sub-sequence: a direct paragraph child sitting outside every content-bearing child (leading or trailing) is block-scoped -- the position recordParagraphBookmarks gives a block index to -- while a child between content, or a half nested inside a content-bearing container (w:hyperlink, w:ins, an inline w:sdt), sits between runs by construction and is run-scoped. The container case answers "not found among the direct children" rather than being an error: the run walk recurses where the content index does not, and a half inside a container is definitionally interior to the paragraph's run sequence.
+function isBlockScopedHalf(half: ParagraphBookmarkHalf, index: ParagraphContentIndex): boolean {
+  const position = index.elements.indexOf(half.element);
+  if (position === -1) {
+    return false;
+  }
+  const leading = index.firstContentIndex === -1 || position < index.firstContentIndex;
+  const trailing = index.lastContentIndex === -1 || position > index.lastContentIndex;
+  return leading || trailing;
+}
+
+// Pairs one paragraph's own bookmark halves by w:id into run-level construct extents (document-schema.js's RunConstructExtent): a pair whose halves both sit in THIS paragraph and are not both block-scoped becomes an entry on the paragraph's constructs field. A pair with both halves block-scoped is skipped -- that is the block-marker path's extent (recordParagraphBookmarks has already emitted its events, and one occurrence must never carry both encodings) -- and everything else about the pairing mirrors the block path's own rules: exactly one start and one end per id, a name on the start, and an end that does not precede the start. A pair split across two paragraphs is never seen here at all (each paragraph pairs only its own halves), so it stays dropped exactly as before. Crossing pairs need no special case: run ranges are data, not brackets, so two extents that overlap are two entries.
+export function runBookmarkExtents(halves: readonly ParagraphBookmarkHalf[], index: ParagraphContentIndex): RunConstructExtent[] {
+  const byId = new Map<string, ParagraphBookmarkHalf[]>();
+  for (const half of halves) {
+    const existing = byId.get(half.id);
+    if (existing === undefined) {
+      byId.set(half.id, [half]);
+    } else {
+      existing.push(half);
+    }
+  }
+  const extents: RunConstructExtent[] = [];
+  for (const pair of byId.values()) {
+    const starts = pair.filter((half) => half.kind === 'start');
+    const ends = pair.filter((half) => half.kind === 'end');
+    const open = starts[0];
+    const close = ends[0];
+    if (starts.length !== 1 || ends.length !== 1 || open === undefined || close === undefined) {
+      continue;
+    }
+    if (open.name === undefined || close.runPosition < open.runPosition) {
+      continue;
+    }
+    if (isBlockScopedHalf(open, index) && isBlockScopedHalf(close, index)) {
+      continue;
+    }
+    extents.push({ descriptor: bookmarkAnchorDescriptor(open.name), startRun: open.runPosition, endRun: close.runPosition });
+  }
+  return extents;
 }
 
 // --- content controls (w:sdt) --------------------------------------------------------------------------------------
