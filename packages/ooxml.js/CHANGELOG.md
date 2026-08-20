@@ -1,3 +1,22 @@
+# [4.2.0](https://github.com/ExaDev/documents.js/compare/ooxml.js@4.1.1...ooxml.js@4.2.0) (2026-08-20)
+
+
+### Bug Fixes
+
+* **ooxml:** gate gallery-residue restoration on the richText controlType that mints it ([d89230f](https://github.com/ExaDev/documents.js/commit/d89230f15dcba0e3665497372c7ea7b3d18a8293))
+
+
+### Features
+
+* **ooxml:** carry a non-TOC docx SDT gallery in residue and restore it on write ([cc4b9be](https://github.com/ExaDev/documents.js/commit/cc4b9becd728cee1334e4c438f26d638d1bb71ce))
+* recover classic OLE compound-file .bin embedded payloads ([2c731fe](https://github.com/ExaDev/documents.js/commit/2c731fe49e39fd6a3f48f6c8bf85aff1c924bb50)), closes [#737](https://github.com/ExaDev/documents.js/issues/737)
+* write recovered embedded OOXML objects back out as w:object OLE markup ([710f283](https://github.com/ExaDev/documents.js/commit/710f28300d12ea4bdc1879111451a1791c7a8788))
+
+
+### Dependencies
+
+- Updated archive-codec to ^1.1.0
+
 ## [4.1.1](https://github.com/ExaDev/documents.js/compare/ooxml.js@4.1.0...ooxml.js@4.1.1) (2026-08-20)
 
 # [4.1.0](https://github.com/ExaDev/documents.js/compare/ooxml.js@4.0.12...ooxml.js@4.1.0) (2026-08-20)
