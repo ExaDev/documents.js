@@ -9,6 +9,10 @@
     "url": "git+https://github.com/ExaDev/documents.js.git",
     "directory": "packages/documents"
   },
+  "homepage": "https://github.com/ExaDev/documents.js/tree/main/packages/documents",
+  "bugs": {
+    "url": "https://github.com/ExaDev/documents.js/issues"
+  },
   "packageManager": "pnpm@11.6.0",
   "engines": {
     "node": ">=20"

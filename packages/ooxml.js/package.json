@@ -8,9 +8,9 @@
     "url": "git+https://github.com/ExaDev/documents.js.git",
     "directory": "packages/ooxml.js"
   },
-  "homepage": "https://github.com/ExaDev/ooxml.js#readme",
+  "homepage": "https://github.com/ExaDev/documents.js/tree/main/packages/ooxml.js",
   "bugs": {
-    "url": "https://github.com/ExaDev/ooxml.js/issues"
+    "url": "https://github.com/ExaDev/documents.js/issues"
   },
   "exports": {
     ".": {

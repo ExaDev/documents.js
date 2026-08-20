@@ -8,9 +8,9 @@
     "url": "git+https://github.com/ExaDev/documents.js.git",
     "directory": "packages/byte-codec"
   },
-  "homepage": "https://github.com/ExaDev/byte-codec#readme",
+  "homepage": "https://github.com/ExaDev/documents.js/tree/main/packages/byte-codec",
   "bugs": {
-    "url": "https://github.com/ExaDev/byte-codec/issues"
+    "url": "https://github.com/ExaDev/documents.js/issues"
   },
   "license": "MIT",
   "exports": {

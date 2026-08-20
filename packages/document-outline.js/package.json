@@ -8,9 +8,9 @@
     "url": "git+https://github.com/ExaDev/documents.js.git",
     "directory": "packages/document-outline.js"
   },
-  "homepage": "https://github.com/ExaDev/document-outline.js#readme",
+  "homepage": "https://github.com/ExaDev/documents.js/tree/main/packages/document-outline.js",
   "bugs": {
-    "url": "https://github.com/ExaDev/document-outline.js/issues"
+    "url": "https://github.com/ExaDev/documents.js/issues"
   },
   "license": "MIT",
   "exports": {

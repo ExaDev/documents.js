@@ -8,9 +8,9 @@
     "url": "git+https://github.com/ExaDev/documents.js.git",
     "directory": "packages/document-schema.js"
   },
-  "homepage": "https://github.com/ExaDev/document-schema.js#readme",
+  "homepage": "https://github.com/ExaDev/documents.js/tree/main/packages/document-schema.js",
   "bugs": {
-    "url": "https://github.com/ExaDev/document-schema.js/issues"
+    "url": "https://github.com/ExaDev/documents.js/issues"
   },
   "exports": {
     ".": {
