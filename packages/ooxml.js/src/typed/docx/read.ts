@@ -16,7 +16,7 @@ import { attr, childrenWithTag, decodeEntities, elementsWithTag, resolveRelation
 import type { DocxStyleContext } from './styles';
 import { resolveParagraphProperties, resolveRunProperties } from './styles';
 import { NumberingDefinitionSchema, readNumberingDefinitions } from './numbering';
-import type { ConstructExtent, ParagraphContentIndex } from './constructs';
+import type { ConstructExtent, ParagraphBookmarkHalf, ParagraphContentIndex } from './constructs';
 import {
   PROVENANCE_CHANGE_BY_TAG,
   bookmarkAnchorDescriptor,
@@ -27,6 +27,7 @@ import {
   isDeletedChange,
   readContentControlDescriptor,
   readProvenanceDescriptor,
+  runBookmarkExtents,
   runInstructionText,
 } from './constructs';
 
@@ -34,7 +35,7 @@ import {
 //
 // This is the flat, content-level half of the docx read pair: readDocx (typed/document-package.ts) wraps it into a tree-form DocumentPackage, which is the primary name and the shape a caller holding a whole document wants. Reach for this one when you need what the tree has no spelling for -- the comments, footnotes, header/footer text, and numbering definitions DocxDocument carries outside `sections` -- or when driving a pipeline that already works in flat ContentSection[].
 //
-// Block-scoped fidelity constructs (structured document tags, complex and simple fields, bookmarks, tracked insertions/deletions/moves) are read into document-schema.js's constructStart/constructEnd marker pairs bracketing the blocks they span -- see typed/docx/constructs.ts for the descriptor shapes and the block-scope rule that decides which real-world occurrences are representable and which are not.
+// Block-scoped fidelity constructs (structured document tags, complex and simple fields, bookmarks, tracked insertions/deletions/moves) are read into document-schema.js's constructStart/constructEnd marker pairs bracketing the blocks they span, and a bookmark covering a sub-sequence of one paragraph's runs is read onto that paragraph's own run-level constructs field (ContentParagraph.constructs) -- see typed/docx/constructs.ts for the descriptor shapes and the scope rules that decide which real-world occurrences are representable and which are not.
 
 export const CommentSchema = z.object({
   author: z.string().optional(),
@@ -255,8 +256,8 @@ function readRun(run: XmlElement, paragraph: XmlElement, context: DocxStyleConte
   };
 }
 
-// Walks a paragraph's own children producing its runs, tracking two things across siblings: complex-field state (w:fldChar begin/separate/end -- only the cached result between separate and end is visible content) and the enclosing hyperlink target (w:hyperlink, resolved via the document's relationships), threaded through w:ins/w:moveTo/w:sdt/w:fldSimple recursion. w:del and w:moveFrom are recursed into only when the caller is carrying deletions -- i.e. when the whole paragraph is itself a tracked deletion or move-from, so that every run it yields is labelled as deleted by the enclosing provenance construct. A mid-paragraph deletion stays excluded, because lifting those runs into the paragraph's own text would render deleted words as live text, which is strictly worse than the existing omission.
-function readParagraphRuns(paragraph: XmlElement, ctx: DocxReadContext, carryDeletions: boolean): ContentRun[] {
+// Walks a paragraph's own children producing its runs, tracking two things across siblings: complex-field state (w:fldChar begin/separate/end -- only the cached result between separate and end is visible content) and the enclosing hyperlink target (w:hyperlink, resolved via the document's relationships), threaded through w:ins/w:moveTo/w:sdt/w:fldSimple recursion. w:del and w:moveFrom are recursed into only when the caller is carrying deletions -- i.e. when the whole paragraph is itself a tracked deletion or move-from, so that every run it yields is labelled as deleted by the enclosing provenance construct. A mid-paragraph deletion stays excluded, because lifting those runs into the paragraph's own text would render deleted words as live text, which is strictly worse than the existing omission. Bookmark halves are recorded into `halves` at the run position the walk had reached -- the run-level counterpart of the block-index events recordParagraphBookmarks collects, paired into run-level construct extents by runBookmarkExtents (typed/docx/constructs.ts).
+function readParagraphRuns(paragraph: XmlElement, ctx: DocxReadContext, carryDeletions: boolean, halves: ParagraphBookmarkHalf[]): ContentRun[] {
   const runs: ContentRun[] = [];
   let fieldState: 'none' | 'code' | 'result' = 'none';
 
@@ -300,6 +301,18 @@ function readParagraphRuns(paragraph: XmlElement, ctx: DocxReadContext, carryDel
         if (sdtContent !== undefined) {
           walk(sdtContent.children, hyperlinkTarget);
         }
+      } else if (node.tag === 'w:bookmarkStart' || node.tag === 'w:bookmarkEnd') {
+        const id = attr(node, 'w:id');
+        if (id !== undefined) {
+          const name = attr(node, 'w:name');
+          halves.push({
+            element: node,
+            id,
+            name: node.tag === 'w:bookmarkStart' && name !== undefined ? decodeEntities(name) : undefined,
+            kind: node.tag === 'w:bookmarkStart' ? 'start' : 'end',
+            runPosition: runs.length,
+          });
+        }
       }
     }
   }
@@ -312,9 +325,14 @@ function readParagraph(paragraph: XmlElement, ctx: DocxReadContext, carryDeletio
   const pPr = childrenWithTag(paragraph, 'w:pPr')[0];
   const pStyleEl = pPr === undefined ? undefined : childrenWithTag(pPr, 'w:pStyle')[0];
   const props = resolveParagraphProperties(paragraph, ctx.styles);
+  // The paragraph's own run-level construct extents: the run walk's bookmark halves, paired against the content index so a block-scoped pair stays on the marker path. Absent rather than empty when the paragraph carries none -- the common case costs nothing.
+  const halves: ParagraphBookmarkHalf[] = [];
+  const runs = readParagraphRuns(paragraph, ctx, carryDeletions, halves);
+  const constructs = runBookmarkExtents(halves, indexParagraphContent(paragraph));
   return {
     kind: 'paragraph',
-    runs: readParagraphRuns(paragraph, ctx, carryDeletions),
+    runs,
+    ...(constructs.length > 0 ? { constructs } : {}),
     styleId: pStyleEl === undefined ? undefined : attr(pStyleEl, 'w:val'),
     // w:outlineLvl is 0-based (0 is a level-1 heading). Word's own outline levels run 1-9 while the schema's heading domain is 1-6, so clampHeadingLevel narrows levels 7-9 onto 6 -- the same closest-matching-value convention readAlignment (styles.ts) applies to w:jc's both/distribute.
     headingLevel: props.outlineLvl === undefined ? undefined : clampHeadingLevel(props.outlineLvl + 1),
@@ -521,7 +539,7 @@ function newFlowState(): FlowState {
   return { blocks: [], extents: [], sectionBreaks: [], bookmarkEvents: [], openFields: [], order: 0 };
 }
 
-// Pairs the flow's bookmark halves by w:id into extents. A bookmark survives only when it has exactly one start and one end in this block list, both carry a name and sit at a block boundary, and the end does not precede the start. Everything else -- a half whose partner lies in a different block list (inside a table cell, or on the far side of a structured document tag), a duplicate id, a bookmark whose extent is a sub-sequence of one paragraph's runs -- has no block-scoped encoding and is not emitted.
+// Pairs the flow's bookmark halves by w:id into extents. A bookmark survives only when it has exactly one start and one end in this block list, both carry a name and sit at a block boundary, and the end does not precede the start. Everything else -- a half whose partner lies in a different block list (inside a table cell, or on the far side of a structured document tag), a duplicate id, a bookmark whose extent is a sub-sequence of one paragraph's runs -- has no block-scoped encoding and is not emitted as a marker pair; the run-level case lands on the paragraph's own constructs field instead (runBookmarkExtents, called from readParagraph), and the rest stay dropped.
 function resolveBookmarkExtents(events: readonly BookmarkEvent[]): ConstructExtent[] {
   const byId = new Map<string, BookmarkEvent[]>();
   for (const event of events) {
@@ -563,7 +581,7 @@ function wholeParagraphTrackedChange(index: ParagraphContentIndex): { element: X
   return { element: first, change };
 }
 
-// A bookmark half inside a paragraph brackets whole blocks only when it sits outside every content-bearing child: a leading half opens (or closes) at the paragraph itself, a trailing one at the position after the paragraph's last block. A half between content children marks a sub-sequence of runs and is recorded as unqualified so resolveBookmarkExtents drops the whole pair rather than emitting a marker at the wrong place.
+// A bookmark half inside a paragraph brackets whole blocks only when it sits outside every content-bearing child: a leading half opens (or closes) at the paragraph itself, a trailing one at the position after the paragraph's last block. A half between content children marks a sub-sequence of runs and is recorded as unqualified so resolveBookmarkExtents drops the whole pair rather than emitting a marker at the wrong place -- dropping it from the BLOCK stream is not losing it when both halves sit in one paragraph, because runBookmarkExtents picks the pair up onto that paragraph's constructs field.
 function recordParagraphBookmarks(index: ParagraphContentIndex, paragraphIndex: number, endIndex: number, state: FlowState): void {
   index.elements.forEach((element, position) => {
     if (element.tag !== 'w:bookmarkStart' && element.tag !== 'w:bookmarkEnd') {
@@ -728,7 +746,7 @@ function readBlockScope(nodes: readonly XmlNode[], ctx: DocxReadContext, carryDe
 
 // A mid-document section break is an otherwise-ordinary w:p whose w:pPr carries its own w:sectPr, describing the section that paragraph (and everything since the previous break) belongs to; the body's own trailing w:sectPr (a direct child, not nested in any paragraph) closes the final section. Multi-section support falls out of this directly: the body is walked once, and each break just cuts the resulting block list.
 //
-// Every section's blocks are their own bracket scope, so an extent straddling a section break is dropped rather than being split into two half-constructs -- the same not-representable case as a run-level extent, and the reason the split happens after the walk rather than during it (a construct's own two ends are only known once both have been seen).
+// Every section's blocks are their own bracket scope, so an extent straddling a section break is dropped rather than being split into two half-constructs -- one of the not-representable cases document-schema.js's extent-scope note ratifies (cross-list pairing is ids, and the marker contract refuses ids), and the reason the split happens after the walk rather than during it (a construct's own two ends are only known once both have been seen).
 function readSections(body: XmlElement, ctx: DocxReadContext): ContentSection[] {
   const state = newFlowState();
   collectFlowNodes(body.children, ctx, state, false);
@@ -828,7 +846,7 @@ function readHeaderFooterText(pkg: Package, prefix: string): string[] {
 
 // Resolves a generic OOXML Package into DocxDocument: the WordprocessingML style cascade, DrawingML theme resolution (including w:themeColor run-colour references, resolved against the theme's own colour scheme), ordered sections of paragraphs/tables/page-breaks/images (document order preserved, including inside tables, with cell background AND border styling read from w:tcBorders), the block-scoped fidelity constructs (structured document tags, fields, bookmarks, tracked changes) as constructStart/constructEnd marker pairs, plus comments, footnotes, header/footer text, and word/numbering.xml's own abstractNum/num level definitions (numbering.ts's readNumberingDefinitions). An inline (wp:inline) or floating/anchored (wp:anchor) w:drawing is resolved to a real ContentImageBlock via the containing part's own relationships, sniffed from its actual media-part bytes rather than trusted from any extension/content-type -- but a floating image's own wp:anchor position (page/margin/paragraph-relative offset) is never read, since ContentImageBlock has no absolute positioning field to record it in; it lands in the block flow at the point its w:drawing was encountered, same as an inline image. A w:object/o:OLEObject whose payload part is itself a ZIP archive (a modern producer's embedded xlsx/docx/pptx) is decoded through the shared embedded-object helper (typed/embedded.ts) into a sibling ContentEmbeddedObjectBlock sized from w:dxaOrig/w:dyaOrig and lifted through the same convention as an image block; a payload that does not decode as one of the three OOXML flavours degrades to no embedded block rather than failing the read.
 //
-// Information not modelled here is still dropped: section break types other than plain w:sectPr (ContentSection itself has no field to record w:type's nextPage/continuous/evenPage/oddPage distinction); live PAGE/NUMPAGES field re-evaluation; w:themeShade/w:themeTint refinement of a resolved theme colour; a floating image's own anchored position; any image whose bytes don't sniff as PNG/JPEG; a w:object's VML preview picture (v:imagedata -- no VML reader exists here, and real producers ship WMF/EMF previews anyway); a w:object sitting inside a header, footer, or footnote (embedded-object recovery walks the document body's block flow only -- headers/footers keep their flat-text projection via readHeaderFooterText, and footnotes ride DocxDocument.footnotes as text, so neither has a block flow to lift an object into); the classic non-ZIP OLE compound-file payload (.bin -- opaque external-application data, left skipped exactly as unhandled markup) and a ZIP payload that does not decode as one of the three OOXML flavours (both degrade to no embedded block, never a failed read); and every run-level construct occurrence -- a field, bookmark, content control, or tracked change covering a sub-sequence of one paragraph's runs rather than whole blocks (see typed/docx/constructs.ts for why, and typed/docx/write.ts for the write side of what does survive).
+// Information not modelled here is still dropped: section break types other than plain w:sectPr (ContentSection itself has no field to record w:type's nextPage/continuous/evenPage/oddPage distinction); live PAGE/NUMPAGES field re-evaluation; w:themeShade/w:themeTint refinement of a resolved theme colour; a floating image's own anchored position; any image whose bytes don't sniff as PNG/JPEG; a w:object's VML preview picture (v:imagedata -- no VML reader exists here, and real producers ship WMF/EMF previews anyway); a w:object sitting inside a header, footer, or footnote (embedded-object recovery walks the document body's block flow only -- headers/footers keep their flat-text projection via readHeaderFooterText, and footnotes ride DocxDocument.footnotes as text, so neither has a block flow to lift an object into); the classic non-ZIP OLE compound-file payload (.bin -- opaque external-application data, left skipped exactly as unhandled markup) and a ZIP payload that does not decode as one of the three OOXML flavours (both degrade to no embedded block, never a failed read); and the run-level construct occurrences still without an encoding here -- a mid-paragraph field, inline SDT, or partial tracked change, and a bookmark whose two halves sit in different paragraphs (a same-paragraph bookmark pair, crossing included, lands on ContentParagraph.constructs; see typed/docx/constructs.ts for the scope rules, and typed/docx/write.ts for the write side of what does survive).
 export function readDocxContent(pkg: Package): DocxDocument {
   const documentRoot = rootElement(pkg.parts[DOCUMENT_PART_PATH]);
   if (documentRoot === undefined) {

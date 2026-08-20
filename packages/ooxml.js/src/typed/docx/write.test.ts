@@ -364,6 +364,110 @@ describe('buildDocxPackageFromContent: construct round trip', () => {
     expect(body?.type === 'element' ? body.children.map((child) => (child.type === 'element' ? child.tag : child.type)) : undefined).toEqual(['w:bookmarkStart', 'w:p', 'w:bookmarkEnd', 'w:sectPr']);
   });
 
+  it('round-trips a bookmark whose extent is a sub-sequence of one paragraph\'s runs, as a run-level construct extent', () => {
+    const source = docxPackage([
+      el('w:p', {}, [
+        el('w:r', {}, [el('w:t', {}, [txt('before ')])]),
+        el('w:bookmarkStart', { 'w:id': '4', 'w:name': 'midway' }),
+        el('w:r', {}, [el('w:t', {}, [txt('marked')])]),
+        el('w:bookmarkEnd', { 'w:id': '4' }),
+        el('w:r', {}, [el('w:t', {}, [txt(' after')])]),
+      ]),
+    ]);
+    const { before, after, written } = roundTrip(source);
+    expect(after).toEqual(before);
+    const paragraph = before[0]?.blocks[0];
+    expect(paragraph?.kind === 'paragraph' ? paragraph.constructs : undefined).toEqual([
+      { descriptor: { kind: 'anchor', anchorType: 'bookmark', name: 'midway' }, startRun: 1, endRun: 2 },
+    ]);
+    // The writer puts the halves back between the runs the range names -- inside the paragraph, never around it.
+    const document = rootElement(written.parts['word/document.xml']);
+    const body = document === undefined ? undefined : document.children[0];
+    const paragraphElement = body?.type === 'element' ? body.children.find((child) => child.type === 'element' && child.tag === 'w:p') : undefined;
+    const tags = paragraphElement?.type === 'element' ? paragraphElement.children.map((child) => (child.type === 'element' ? child.tag : child.type)) : undefined;
+    expect(tags).toEqual(['w:r', 'w:bookmarkStart', 'w:r', 'w:bookmarkEnd', 'w:r']);
+  });
+
+  it('round-trips two bookmarks whose run-level extents cross, keeping both', () => {
+    const source = docxPackage([
+      el('w:p', {}, [
+        el('w:r', {}, [el('w:t', {}, [txt('one ')])]),
+        el('w:bookmarkStart', { 'w:id': '1', 'w:name': 'first' }),
+        el('w:r', {}, [el('w:t', {}, [txt('two ')])]),
+        el('w:bookmarkStart', { 'w:id': '2', 'w:name': 'second' }),
+        el('w:r', {}, [el('w:t', {}, [txt('three ')])]),
+        el('w:bookmarkEnd', { 'w:id': '1' }),
+        el('w:r', {}, [el('w:t', {}, [txt(' four')])]),
+        el('w:bookmarkEnd', { 'w:id': '2' }),
+      ]),
+    ]);
+    const sections = expectStableRoundTrip(source);
+    const paragraph = sections[0]?.blocks[0];
+    expect(paragraph?.kind === 'paragraph' ? paragraph.constructs : undefined).toEqual([
+      { descriptor: { kind: 'anchor', anchorType: 'bookmark', name: 'first' }, startRun: 1, endRun: 3 },
+      { descriptor: { kind: 'anchor', anchorType: 'bookmark', name: 'second' }, startRun: 2, endRun: 4 },
+    ]);
+  });
+
+  it('round-trips a point run extent and one reaching the paragraph\'s tail', () => {
+    const source = docxPackage([
+      el('w:p', {}, [
+        el('w:r', {}, [el('w:t', {}, [txt('unmarked ')])]),
+        el('w:bookmarkStart', { 'w:id': '5', 'w:name': 'tail' }),
+        el('w:r', {}, [el('w:t', {}, [txt('marked')])]),
+        el('w:bookmarkStart', { 'w:id': '6', 'w:name': 'point' }),
+        el('w:bookmarkEnd', { 'w:id': '6' }),
+        el('w:r', {}, [el('w:t', {}, [txt(' also')])]),
+        el('w:bookmarkEnd', { 'w:id': '5' }),
+      ]),
+    ]);
+    const sections = expectStableRoundTrip(source);
+    const paragraph = sections[0]?.blocks[0];
+    expect(paragraph?.kind === 'paragraph' ? paragraph.constructs : undefined).toEqual([
+      { descriptor: { kind: 'anchor', anchorType: 'bookmark', name: 'tail' }, startRun: 1, endRun: 3 },
+      { descriptor: { kind: 'anchor', anchorType: 'bookmark', name: 'point' }, startRun: 2, endRun: 2 },
+    ]);
+  });
+
+  it('writes a non-bookmark run-level construct extent as its paragraph\'s own content, with no markers', () => {
+    // The kinds readDocxContent never produces at run level, which a ContentDocument from another codec still can: a run-scoped field or content control has no w:r-level spelling here, so its runs write as ordinary content and only the descriptor is lost -- the same content-preserving policy the block-level foreign constructs above follow.
+    const written = buildDocxPackageFromContent({
+      sections: [{
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+        blocks: [
+          {
+            kind: 'paragraph',
+            runs: [{ text: 'plain ' }, { text: 'fielded' }],
+            constructs: [{ descriptor: { kind: 'field', instruction: 'DATE' }, startRun: 1, endRun: 2 }],
+          },
+        ],
+      }],
+    });
+    const document = rootElement(written.parts['word/document.xml']);
+    expect(elementsWithTag(document === undefined ? [] : [document], 'w:bookmarkStart')).toHaveLength(0);
+    expect(elementsWithTag(document === undefined ? [] : [document], 'w:fldChar')).toHaveLength(0);
+    const roundTripped = readDocxContent(written).sections[0]?.blocks[0];
+    expect(roundTripped?.kind === 'paragraph' ? roundTripped.runs.map((run) => run.text).join('') : undefined).toBe('plain fielded');
+  });
+
+  it('refuses a run-level extent whose range does not name real runs, rather than writing markers at a made-up position', () => {
+    const faulty = {
+      sections: [{
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+        blocks: [
+          {
+            kind: 'paragraph' as const,
+            runs: [{ text: 'x' }],
+            constructs: [{ descriptor: { kind: 'anchor' as const, anchorType: 'bookmark' as const, name: 'beyond' }, startRun: 0, endRun: 5 }],
+          },
+        ],
+      }],
+    };
+    expect(() => buildDocxPackageFromContent(faulty)).toThrowError(/run-level construct extent/);
+  });
+
   it('round-trips a multi-paragraph complex field, putting its characters back inside the extent\'s own paragraphs', () => {
     const source = docxPackage([
       el('w:p', {}, [
