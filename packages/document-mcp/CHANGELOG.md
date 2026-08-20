@@ -1,3 +1,13 @@
+## [2.1.21](https://github.com/ExaDev/documents.js/compare/document-mcp@2.1.20...document-mcp@2.1.21) (2026-08-20)
+
+
+### Dependencies
+
+- Updated documents.js to ^4.0.21
+- Updated pdf-codec to ^3.0.9
+- Updated odf.js to ^5.0.4
+- Updated document-outline.js to ^1.0.1
+
 ## [2.1.18](https://github.com/ExaDev/document-mcp/compare/v2.1.17...v2.1.18) (2026-08-19)
 
 ## [2.1.17](https://github.com/ExaDev/document-mcp/compare/v2.1.16...v2.1.17) (2026-08-19)
