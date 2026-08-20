@@ -210,7 +210,7 @@ importers:
         specifier: ^1.0.3
         version: link:../document-outline.js
       document-schema.js:
-        specifier: ^4.3.6
+        specifier: ^4.3.7
         version: link:../document-schema.js
       documents.js:
         specifier: ^4.0.23
