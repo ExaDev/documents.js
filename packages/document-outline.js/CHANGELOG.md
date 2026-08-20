@@ -1,3 +1,15 @@
+## [1.0.1](https://github.com/ExaDev/documents.js/compare/document-outline.js@1.0.0...document-outline.js@1.0.1) (2026-08-20)
+
+
+### Bug Fixes
+
+* **document-outline.js:** project and resolve construct groups ([0f286d1](https://github.com/ExaDev/documents.js/commit/0f286d1480c3dc5d5ea88564039b87a5f9459f04))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^4.3.4
+
 # 1.0.0 (2026-08-19)
 
 
