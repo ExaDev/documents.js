@@ -583,7 +583,7 @@ importers:
         specifier: ^4.3.7
         version: link:../document-schema.js
       documents.js:
-        specifier: ^4.0.23
+        specifier: ^4.0.24
         version: link:../documents.js
       markdown-codec:
         specifier: ^4.0.10
