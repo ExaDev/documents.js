@@ -365,7 +365,8 @@ function paragraphToContentParagraph(paragraph: TextParagraph, pageIndex: number
   const dominantLeftX = modeOf(paragraph.lines.map((l) => l.items[0]!.xPt), 1);
   const alignment: Alignment | undefined = paragraph.lines.every((l) => Math.abs(l.items[0]!.xPt - dominantLeftX) <= LEFT_ALIGN_TOLERANCE_PT) ? 'left' : undefined;
 
-  const result: ContentParagraph = { kind: 'paragraph', runs: [], alignment, ...(headingLevel !== undefined ? { styleId: `Heading${String(headingLevel)}` } : {}) };
+  // Both spellings of the inferred depth, matching markdown-codec's own lowerHeading: styleId is this family's producer-specific Heading{N} spelling, while headingLevel is the canonical signal the schema documents -- decompose groups on headingLevel alone (a Heading styleId without it never becomes a HeadingGroupNode), the docx writer emits w:outlineLvl from it, and the tree/outline consumers read it. styleId without headingLevel would strand the heading ungrouped and unoutlined everywhere except the markdown emitter.
+  const result: ContentParagraph = { kind: 'paragraph', runs: [], alignment, ...(headingLevel !== undefined ? { styleId: `Heading${String(headingLevel)}`, headingLevel } : {}) };
   paragraph.lines.forEach((line, lineIndex) => {
     // One frame per clustered line, stamped on the paragraph node itself -- the paragraph's own rendered placements, aggregated from exactly the items it was clustered from (the runs inside carry their own finer-grained frames via pushRunsForLine).
     stampFrame(result, pageIndex, lineBox(line, pageIndex));
