@@ -649,7 +649,7 @@ importers:
         specifier: ^5.0.4
         version: link:../odf.js
       ooxml.js:
-        specifier: ^4.0.8
+        specifier: ^4.0.9
         version: link:../ooxml.js
       pdf-codec:
         specifier: ^3.0.6
