@@ -1,20 +1,24 @@
-import type { Alignment, ConstructDescriptor, ContentBlock, ContentCellBorders, ContentControlDescriptor, ContentImageBlock, ContentParagraph, ContentRun, ContentSection, ContentTable, ContentTableCell, ProvenanceChange, ProvenanceDescriptor } from 'document-schema.js';
+import type { Alignment, ConstructDescriptor, ContentBlock, ContentCellBorders, ContentControlDescriptor, ContentEmbeddedObjectBlock, ContentImageBlock, ContentParagraph, ContentRun, ContentSection, ContentTable, ContentTableCell, ProvenanceChange, ProvenanceDescriptor } from 'document-schema.js';
 import { colorToRgbHex, findConstructMarkerImbalance } from 'document-schema.js';
 import type { Package, XmlPart } from '../../model/package';
 import type { XmlElement, XmlNode } from '../../model/node';
 import { el, txt } from '../../xml/fragment';
 import { encodeXmlText } from '../../xml/entities';
 import { parseXml } from '../../xml/parse';
+import { encodePackage } from '../../codec';
+import { bytesToBase64 } from '../../util/base64';
 import type { DocumentMetadata } from '../shared/metadata';
 import { ptToEighthPoints, ptToEmu, ptToHalfPoints, ptToTwips } from '../shared/units';
+import { buildXlsxPackageFromContent } from '../xlsx/build';
 import { TABLE_OF_CONTENTS_GALLERY, isDeletedChange } from './constructs';
 
 // ContentSection[] -> Package: the write side of readDocxContent, and this package's second writer of genuinely new content after typed/xlsx/build.ts's buildXlsxPackageFromContent (whose part-scaffolding conventions this follows). It builds a complete, fresh docx package -- content types, package and document relationships, media parts, core/extended properties, and word/document.xml -- rather than editing a decoded one, so a ContentDocument that never came from a docx writes out just as well as one that did.
 //
 // This is the flat, content-level half of the docx write pair: buildDocxPackage (typed/document-package.ts) is the primary name, flattening a tree-form DocumentPackage (styles-table refs materialised away) and handing the result straight to this function.
 //
-// It is readDocxContent's honest inverse over ContentSection: page geometry, paragraphs with their fully-resolved direct formatting, runs (including external hyperlinks), lists, headings, tables (grids, spans, shading, borders, row heights), page breaks, images, and the block-scoped construct markers all survive a round trip through the pair -- a degraded gallery's w:docPartObj included, restored from the descriptor's residue (restoreGalleryElement below). What does NOT survive, stated rather than implied:
+// It is readDocxContent's honest inverse over ContentSection: page geometry, paragraphs with their fully-resolved direct formatting, runs (including external hyperlinks), lists, headings, tables (grids, spans, shading, borders, row heights), page breaks, images, embedded objects, and the block-scoped construct markers all survive a round trip through the pair -- a degraded gallery's w:docPartObj included, restored from the descriptor's residue (restoreGalleryElement below). What does NOT survive, stated rather than implied:
 // - No styles.xml, numbering.xml, comments, footnotes, headers, or footers are written. readDocxContent reads all of those into DocxDocument fields outside `sections`, and each needs machinery of its own; a paragraph's styleId is still written as a w:pStyle reference, resolving to nothing without the style part, since every property that style would have contributed is already spelled as direct formatting by then.
+// - An embedded object's VML preview picture is not regenerated: the reader never read one into the model (no VML reader exists, and real producers ship WMF/EMF previews this ecosystem has no writer for), so the written w:object carries only its o:OLEObject payload reference and Word shows a blank until activated. An embedded object whose nested document this package cannot serialise (presentation -- read-only here; drawing/formula -- ODF/MathML spellings) is refused with a thrown error rather than silently dropped, inverting the reader's degrade-tier rule at the write boundary where the caller has explicitly asked for a document.
 // - A run whose boolean properties are absent but which carries some other property (a colour, a size) reads back with those booleans false rather than absent, because the w:rPr the other property forces is itself what the read-side cascade turns an absent w:b into. A run with no properties at all writes no w:rPr and round-trips exactly.
 // - Four construct shapes are written as their content with no wrapper, because WordprocessingML has no block-level element for them: a `link` (its own hyperlink is run-level, so a block-scoped link has no element to be), a `division` (no block container answers to one), a `provenance` whose change is `formatChange` (w:pPrChange is a child of w:pPr describing one paragraph's old properties, not a wrapper over a block flow), and an `anchor` whose type is a footnote, endnote, or comment reference (each of those is a run-level reference into a part this writer does not emit). readDocxContent produces none of them, so this only bounds what a foreign ContentDocument can carry through here.
 // - A field construct whose extent contains no paragraph at all, and a section whose last block is not a paragraph, each gain one empty paragraph on the way out (the field characters and the section break both need a paragraph to live in). Everything readDocxContent itself produces already has one.
@@ -35,16 +39,20 @@ const DRAWING_PIC_NS = 'http://schemas.openxmlformats.org/drawingml/2006/picture
 const MARKUP_COMPAT_NS = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
 const W14_NS = 'http://schemas.microsoft.com/office/word/2010/wordml';
 const W15_NS = 'http://schemas.microsoft.com/office/word/2012/wordml';
+const VML_OFFICE_NS = 'urn:schemas-microsoft-com:office:office';
 
 const CT_DOCUMENT = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml';
 const CT_CORE_PROPS = 'application/vnd.openxmlformats-package.core-properties+xml';
 const CT_EXTENDED_PROPS = 'application/vnd.openxmlformats-officedocument.extended-properties+xml';
+const CT_EMBEDDED_DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const CT_EMBEDDED_XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 const REL_OFFICE_DOCUMENT = `${REL_NS}/officeDocument`;
 const REL_CORE_PROPS = `${PKG_RELS_NS}/metadata/core-properties`;
 const REL_EXTENDED_PROPS = `${REL_NS}/extended-properties`;
 const REL_HYPERLINK = `${REL_NS}/hyperlink`;
 const REL_IMAGE = `${REL_NS}/image`;
+const REL_OLE_OBJECT = `${REL_NS}/oleObject`;
 
 const DOCUMENT_PART_PATH = 'word/document.xml';
 
@@ -66,12 +74,14 @@ interface WriteState {
   readonly hyperlinkIds: Map<string, string>;
   readonly mediaIds: Map<string, string>;
   readonly mediaParts: Map<string, { format: 'png' | 'jpeg'; base64: string }>;
+  readonly embeddingIds: Map<string, string>;
+  readonly embeddingParts: Map<string, EmbeddedPayload>;
   nextDrawingId: number;
   nextMarkerId: number;
 }
 
 function newWriteState(): WriteState {
-  return { relationships: [], hyperlinkIds: new Map(), mediaIds: new Map(), mediaParts: new Map(), nextDrawingId: 1, nextMarkerId: 1 };
+  return { relationships: [], hyperlinkIds: new Map(), mediaIds: new Map(), mediaParts: new Map(), embeddingIds: new Map(), embeddingParts: new Map(), nextDrawingId: 1, nextMarkerId: 1 };
 }
 
 function addRelationship(state: WriteState, type: string, target: string, external: boolean): string {
@@ -374,6 +384,53 @@ function buildDrawing(image: ContentImageBlock, state: WriteState): XmlElement {
   ]);
 }
 
+// --- embedded objects -------------------------------------------------------------------------------------------------
+
+// The OLE payload part this writer produces for one embedded object: the nested document re-serialised through its own format's builder and zipped -- the direct-ZIP spelling, not a classic OLE compound-file wrapper, matching what readEmbeddedOoxmlPayload accepts at any embeddings path (the payload is detected by ZIP magic and entry part, never by extension or content type).
+interface EmbeddedPayload {
+  readonly extension: 'docx' | 'xlsx';
+  readonly progId: string;
+  readonly base64: string;
+}
+
+// Serialises an embedded object's nested document into its OLE payload bytes, dispatching on the document's own kind rather than the block's objectKind label: the payload's bytes, part extension, and ProgID are all properties of the document being serialised, and while schema treats the objectKind/document.kind pairing as a producer convention rather than a constraint, the only coherent rule for a writer is one source of truth -- the document itself. The ProgIDs are the canonical OLE names of the OOXML-era Office applications (what a real producer's o:OLEObject carries and what Word launches to activate the embed); the schema carries no progId field, so the writer synthesises one per kind.
+//
+// A document kind with no serialiser in this package is refused loudly rather than silently dropped: readDocxContent recovers embedded wordprocessing, presentation, and spreadsheet documents alike, so silently skipping the presentation case would re-create exactly the read-once-never-written loss this emitter exists to close. Presentation is read-only here (no buildPptxPackage exists), and drawing/formula are ODF/MathML spellings no OOXML OLE payload corresponds to -- the reader's degrade-tier rule (second-order content never fails the host read) inverts at the write boundary, where the caller is explicitly asking for a document and a writer that cannot produce one faithfully says so.
+function embeddedPayloadOf(document: ContentEmbeddedObjectBlock['document']): EmbeddedPayload {
+  switch (document.kind) {
+    case 'wordprocessing':
+      return { extension: 'docx', progId: 'Word.Document.12', base64: bytesToBase64(encodePackage(buildDocxPackageFromContent(document))) };
+    case 'spreadsheet':
+      return { extension: 'xlsx', progId: 'Excel.Sheet.12', base64: bytesToBase64(encodePackage(buildXlsxPackageFromContent(document))) };
+    default:
+      throw new Error(
+        `buildDocxPackageFromContent: an embedded object carrying a ${document.kind} document has no OOXML OLE payload this writer can produce (embedded wordprocessing and spreadsheet documents serialise through their own builders; presentation is read-only in this package, and drawing/formula are ODF/MathML spellings)`,
+      );
+  }
+}
+
+// One embeddings part and one relationship per distinct payload, mirroring imageRelationshipId: copy-pasted objects (the common case -- the reader decodes one shared part and hands both blocks the same nested document) serialise to identical bytes and therefore re-share one part, never one duplicate part per occurrence.
+function embeddedObjectRelationshipId(state: WriteState, payload: EmbeddedPayload): string {
+  const existing = state.embeddingIds.get(payload.base64);
+  if (existing !== undefined) {
+    return existing;
+  }
+  const name = `oleObject${state.embeddingParts.size + 1}.${payload.extension}`;
+  state.embeddingParts.set(name, payload);
+  const id = addRelationship(state, REL_OLE_OBJECT, `embeddings/${name}`, false);
+  state.embeddingIds.set(payload.base64, id);
+  return id;
+}
+
+// readObjectEmbeddedObject's inverse: w:dxaOrig/w:dyaOrig carry the block frame's size in twips (the reader skips a w:object missing either attribute, so both are always written -- position is not written, since an inline flow object has none and the reader's own frame sits at the origin), and o:OLEObject names the payload part through its relationship. No VML preview picture (v:shape/v:imagedata) is emitted: the reader never read one into the model (no VML reader exists, and real producers ship WMF/EMF previews this ecosystem has no writer for), so there are no preview bytes to carry and regenerating one is out of scope -- Word shows the object as blank until activated. ProgID and DrawAspect are Word's own activation vocabulary; this package's reader reads only r:id.
+function buildObjectElement(block: ContentEmbeddedObjectBlock, state: WriteState): XmlElement {
+  const payload = embeddedPayloadOf(block.document);
+  const relId = embeddedObjectRelationshipId(state, payload);
+  return el('w:object', { 'w:dxaOrig': String(ptToTwips(block.frame.widthPt)), 'w:dyaOrig': String(ptToTwips(block.frame.heightPt)) }, [
+    el('o:OLEObject', { Type: 'Embed', ProgID: payload.progId, DrawAspect: 'Content', 'r:id': relId }),
+  ]);
+}
+
 // --- construct markers ------------------------------------------------------------------------------------------------
 
 // The four tracked-change elements that wrap a block flow. formatChange has no entry: w:pPrChange is a child of w:pPr recording one paragraph's superseded properties, not a wrapper over blocks, so a formatChange construct writes its content unwrapped rather than as an element that would not parse where it sits.
@@ -635,9 +692,28 @@ function buildFlowItems(items: readonly FlowItem[], state: WriteState, deleted: 
       availableImageRuns = [];
       continue;
     }
-    // An embedded object has no WordprocessingML block element this writer can produce (it has no w:object/o:OLEObject emitter, even though readDocxContent does recover such blocks from one), so it contributes nothing rather than a placeholder that would read back as content it is not. A pending page break is left untouched here rather than consumed: since this block contributes no output of its own, the break still belongs to whatever comes next.
-    lastParagraph = undefined;
-    availableImageRuns = [];
+    // The embedded-object inverse of readParagraphLiftedBlocks: the reader lifted the w:object out of the paragraph that contained it as a sibling block, so the writer puts it back into that paragraph's trailing empty run (the run an object-only w:r reads back as), falling back to a fresh run on the last paragraph or a paragraph of its own -- the same placement ladder an image follows, since both were lifted by the same convention. A pending page break is materialised first because a w:object cannot carry w:pageBreakBefore itself, exactly as for an image.
+    if (block.kind === 'embeddedObject') {
+      if (pendingPageBreak) {
+        const breakParagraph = el('w:p', {}, [el('w:pPr', {}, [el('w:pageBreakBefore')])]);
+        nodes.push(breakParagraph);
+        lastParagraph = breakParagraph;
+        availableImageRuns = [];
+        pendingPageBreak = false;
+      }
+      const object = buildObjectElement(block, state);
+      const reusable = availableImageRuns.shift();
+      if (reusable !== undefined) {
+        reusable.children.push(object);
+      } else if (lastParagraph !== undefined) {
+        lastParagraph.children.push(el('w:r', {}, [object]));
+      } else {
+        const paragraph = el('w:p', {}, [el('w:r', {}, [object])]);
+        lastParagraph = paragraph;
+        nodes.push(paragraph);
+      }
+      continue;
+    }
   }
   if (pendingPageBreak) {
     nodes.push(el('w:p', {}, [el('w:pPr', {}, [el('w:pageBreakBefore')])]));
@@ -698,6 +774,7 @@ function buildDocumentPart(sections: readonly ContentSection[], state: WriteStat
       'xmlns:wp': DRAWING_WP_NS,
       'xmlns:pic': DRAWING_PIC_NS,
       'xmlns:mc': MARKUP_COMPAT_NS,
+      'xmlns:o': VML_OFFICE_NS,
       'xmlns:w14': W14_NS,
       'xmlns:w15': W15_NS,
       'mc:Ignorable': 'w14 w15',
@@ -709,7 +786,9 @@ function buildDocumentPart(sections: readonly ContentSection[], state: WriteStat
 
 // --- package scaffolding ----------------------------------------------------------------------------------------------
 
-function buildContentTypesPart(mediaFormats: ReadonlySet<'png' | 'jpeg'>): XmlPart {
+// The embeddings parts are declared per part (Override) rather than per extension (Default): each carries the content type of the format the nested document serialised into, and an Override names exactly the part written without making any claim about other files sharing its extension elsewhere in someone else's package.
+function buildContentTypesPart(state: WriteState): XmlPart {
+  const mediaFormats = new Set([...state.mediaParts.values()].map((media) => media.format));
   const defaults: XmlElement[] = [
     el('Default', { Extension: 'rels', ContentType: 'application/vnd.openxmlformats-package.relationships+xml' }),
     el('Default', { Extension: 'xml', ContentType: 'application/xml' }),
@@ -720,11 +799,15 @@ function buildContentTypesPart(mediaFormats: ReadonlySet<'png' | 'jpeg'>): XmlPa
   if (mediaFormats.has('jpeg')) {
     defaults.push(el('Default', { Extension: 'jpeg', ContentType: 'image/jpeg' }));
   }
+  const embeddingOverrides = [...state.embeddingParts].map(([name, payload]) =>
+    el('Override', { PartName: `/word/embeddings/${name}`, ContentType: payload.extension === 'docx' ? CT_EMBEDDED_DOCX : CT_EMBEDDED_XLSX }),
+  );
   const root = el('Types', { xmlns: CONTENT_TYPES_NS }, [
     ...defaults,
     el('Override', { PartName: `/${DOCUMENT_PART_PATH}`, ContentType: CT_DOCUMENT }),
     el('Override', { PartName: '/docProps/core.xml', ContentType: CT_CORE_PROPS }),
     el('Override', { PartName: '/docProps/app.xml', ContentType: CT_EXTENDED_PROPS }),
+    ...embeddingOverrides,
   ]);
   return xmlPart(root);
 }
@@ -784,7 +867,7 @@ export function buildDocxPackageFromContent(content: DocxContent): Package {
   const documentPart = buildDocumentPart(sections, state);
   const metadata = content.metadata ?? {};
   const parts: Package['parts'] = {
-    '[Content_Types].xml': buildContentTypesPart(new Set([...state.mediaParts.values()].map((media) => media.format))),
+    '[Content_Types].xml': buildContentTypesPart(state),
     '_rels/.rels': buildPackageRelsPart(),
     [DOCUMENT_PART_PATH]: documentPart,
     'word/_rels/document.xml.rels': buildDocumentRelsPart(state),
@@ -793,6 +876,9 @@ export function buildDocxPackageFromContent(content: DocxContent): Package {
   };
   for (const [name, media] of state.mediaParts) {
     parts[`word/media/${name}`] = { kind: 'binary', base64: media.base64 };
+  }
+  for (const [name, payload] of state.embeddingParts) {
+    parts[`word/embeddings/${name}`] = { kind: 'binary', base64: payload.base64 };
   }
   return { parts };
 }
