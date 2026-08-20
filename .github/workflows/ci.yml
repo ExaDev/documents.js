@@ -130,6 +130,10 @@ jobs:
     name: Release
     needs: [commitlint, lint, typecheck, test, test-workers, test-smoke]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    # Two pushes to main close together must never run this job at the same time. The orchestrator's own dependency-bump-and-release cascade pushes to main mid-run, and semantic-release's own stale-checkout guard (comparing this job's local HEAD against a fresh `git ls-remote` of the real repository on every per-package release) will correctly refuse to publish the instant it sees ANY commit land on main that this checkout doesn't have yet -- including a concurrent Release run's own pushes. One run racing another this way is how ooxml.js, pdf-codec, documents.js, document-cli, and document-mcp all silently skipped a release they needed (ExaDev/documents.js#735): every package after the point the two runs' pushes interleaved reported "no release", correctly by that check's own logic, but wrongly for what the cascade needed. `cancel-in-progress: false` queues the second run behind the first rather than cancelling either -- cancelling mid-release would leave whichever packages it had already published without their downstream dependents' bumps.
+    concurrency:
+      group: release-workspace
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
