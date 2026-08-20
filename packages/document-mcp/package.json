@@ -87,7 +87,7 @@
   "packageManager": "pnpm@11.6.0",
   "dependencies": {
     "@modelcontextprotocol/server": "^2.0.0",
-    "document-outline.js": "^1.0.4",
+    "document-outline.js": "^1.0.5",
     "documents.js": "^4.0.26",
     "zod": "^4.2.0"
   },
