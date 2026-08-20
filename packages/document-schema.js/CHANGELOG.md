@@ -1,3 +1,10 @@
+## [4.3.1](https://github.com/ExaDev/documents.js/compare/document-schema.js@4.3.0...document-schema.js@4.3.1) (2026-08-20)
+
+
+### Bug Fixes
+
+* reconcile package versions/deps with published state, fix smoke-test build race ([8b7ca0c](https://github.com/ExaDev/documents.js/commit/8b7ca0c9a7ab1de968cef75d32aed35e75da0124))
+
 # [4.3.0](https://github.com/ExaDev/document-schema.js/compare/v4.2.0...v4.3.0) (2026-08-19)
 
 
