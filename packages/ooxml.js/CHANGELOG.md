@@ -1,3 +1,28 @@
+# [4.1.0](https://github.com/ExaDev/documents.js/compare/ooxml.js@4.0.12...ooxml.js@4.1.0) (2026-08-20)
+
+
+### Bug Fixes
+
+* bound the embedded-payload inflate through archive-codec's walk guards ([5a56114](https://github.com/ExaDev/documents.js/commit/5a561144dbf9238185be57e7b42bc2f4474d3c25))
+* degrade non-numeric docx object and image geometry to no block ([20fa8b9](https://github.com/ExaDev/documents.js/commit/20fa8b921b83daab33cc884fb0a4e01043e5fc0f))
+* degrade undecodable embedded OLE payloads instead of failing the host read ([94cfced](https://github.com/ExaDev/documents.js/commit/94cfcedd7ac003ae7a927ad932a8e7453203dd50))
+
+
+### Features
+
+* recover embedded OOXML objects from docx w:object markup ([b0198c3](https://github.com/ExaDev/documents.js/commit/b0198c380a6727546d96de2c8fb0a5483f2136d8))
+* recover ZIP-payload OLE objects in pptx as embedded content documents ([24c237b](https://github.com/ExaDev/documents.js/commit/24c237b1d4263a6841fa1438ff315c58808ecc4b)), closes [#734](https://github.com/ExaDev/documents.js/issues/734)
+
+
+### Performance Improvements
+
+* decode an embeddings part shared by OLE frames once per read ([eb4d1b2](https://github.com/ExaDev/documents.js/commit/eb4d1b2ad33ad781ff1e5d22617aaf31d3ab4b8d))
+
+
+### Dependencies
+
+- Updated archive-codec to ^1.0.2
+
 ## [4.0.12](https://github.com/ExaDev/documents.js/compare/ooxml.js@4.0.11...ooxml.js@4.0.12) (2026-08-20)
 
 
