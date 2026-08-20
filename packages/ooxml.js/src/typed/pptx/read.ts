@@ -5,7 +5,7 @@ import type { Alignment, Box, ContentBlock, ContentEmbeddedObjectBlock, ContentI
 import { ContentSlideSchema, SLIDE_SIZE_WIDESCREEN } from 'document-schema.js';
 import { drawingMlFontSizeToPt, emuToPt } from '../shared/units';
 import { sniffImageFormat } from '../../image/sniff';
-import { readEmbeddedOoxmlPayload } from '../embedded';
+import { readEmbeddedPayloadPart } from '../embedded';
 import type { GroupChildTransform } from '../shared/drawingml';
 import { applyGroupTransform, composeGroupTransform, composeShapeRotationDeg, readGroupXfrm, readSolidFillColor, readXfrm } from '../shared/drawingml';
 import { DocumentMetadataSchema, readCoreProperties } from '../shared/metadata';
@@ -341,7 +341,7 @@ function relatedPartRoot(rId: string | undefined, slideRels: ReadonlyMap<string,
   return rel === undefined ? undefined : rootElement(pkg.parts[rel.target]);
 }
 
-// Resolves the OLE object's own payload (p:oleObj/@r:id -> slide relationship -> embeddings part) through readEmbeddedOoxmlPayload: a ZIP payload (a modern producer's embedded xlsx/docx/pptx) becomes the recovered sub-document's ContentEmbeddedObjectBlock at the frame's own geometry, while the classic non-ZIP OLE compound-file payload (.bin) and a ZIP that does not decode as one of the three OOXML flavours both return undefined and leave the frame's content to the fallback-picture rules above -- second-order content degrades, it never fails the host read. Undefined follows the same convention as readBlipImage: an id, relationship, or part that does not line up leaves the shape with no embedded content, never a partial block.
+// Resolves the OLE object's own payload (p:oleObj/@r:id -> slide relationship -> embeddings part) through readEmbeddedPayloadPart: a ZIP payload (a modern producer's embedded xlsx/docx/pptx) becomes the recovered sub-document's ContentEmbeddedObjectBlock at the frame's own geometry, while the classic non-ZIP OLE compound-file payload (.bin) and a ZIP that does not decode as one of the three OOXML flavours both return undefined and leave the frame's content to the fallback-picture rules above -- second-order content degrades, it never fails the host read. Undefined follows the same convention as readBlipImage: an id, relationship, or part that does not line up leaves the shape with no embedded content, never a partial block.
 function readOleEmbeddedObject(graphicData: XmlElement, slideRels: ReadonlyMap<string, Relationship>, pkg: Package, frame: Box): ContentEmbeddedObjectBlock | undefined {
   const oleObj = elementsWithTag([graphicData], 'p:oleObj')[0];
   const rId = oleObj === undefined ? undefined : attr(oleObj, 'r:id');
@@ -350,7 +350,7 @@ function readOleEmbeddedObject(graphicData: XmlElement, slideRels: ReadonlyMap<s
   if (payloadPart?.kind !== 'binary') {
     return undefined;
   }
-  const payload = readEmbeddedOoxmlPayload(base64ToBytes(payloadPart.base64));
+  const payload = readEmbeddedPayloadPart(payloadPart);
   return payload === undefined ? undefined : { kind: 'embeddedObject', objectKind: payload.objectKind, document: payload.document, frame };
 }
 
