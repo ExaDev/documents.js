@@ -25,8 +25,8 @@ importers:
         specifier: ^2.1.1
         version: 2.1.1(eslint@10.8.1(jiti@2.7.0))(typescript-eslint@8.67.0(eslint@10.8.1(jiti@2.7.0))(typescript@6.0.3))
       '@exadev/semantic-release-workspace':
-        specifier: ^1.0.1
-        version: 1.0.1(@semantic-release/changelog@7.0.0(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/commit-analyzer@13.0.1(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/git@11.0.1(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/github@12.0.9(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/npm@13.1.5(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/release-notes-generator@14.1.1(semantic-release@25.0.9(typescript@6.0.3)))(semantic-release@25.0.9(typescript@6.0.3))
+        specifier: ^1.0.3
+        version: 1.0.3(@semantic-release/changelog@7.0.0(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/commit-analyzer@13.0.1(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/git@11.0.1(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/github@12.0.9(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/npm@13.1.5(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/release-notes-generator@14.1.1(semantic-release@25.0.9(typescript@6.0.3)))(semantic-release@25.0.9(typescript@6.0.3))
       '@semantic-release/changelog':
         specifier: ^7.0.0
         version: 7.0.0(semantic-release@25.0.9(typescript@6.0.3))
@@ -147,7 +147,7 @@ importers:
         version: link:../document-outline.js
       document-schema.js:
         specifier: ^4.3.3
-        version: link:../document-schema.js
+        version: 4.3.3
       documents.js:
         specifier: ^4.0.20
         version: link:../documents.js
@@ -329,7 +329,7 @@ importers:
     dependencies:
       document-schema.js:
         specifier: ^4.0.0
-        version: link:../document-schema.js
+        version: 4.3.3
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -517,7 +517,7 @@ importers:
         version: 4.4.0(dexie@4.4.5)(react@19.2.8)
       document-schema.js:
         specifier: ^4.3.3
-        version: link:../document-schema.js
+        version: 4.3.3
       documents.js:
         specifier: ^4.0.20
         version: link:../documents.js
@@ -634,11 +634,11 @@ importers:
   packages/documents.js:
     dependencies:
       byte-codec:
-        specifier: ^1.1.9
+        specifier: ^1.1.10
         version: link:../byte-codec
       document-schema.js:
         specifier: ^4.3.3
-        version: link:../document-schema.js
+        version: 4.3.3
       fflate:
         specifier: ^0.8.3
         version: 0.8.3
@@ -729,7 +729,7 @@ importers:
     dependencies:
       document-schema.js:
         specifier: ^4.3.3
-        version: link:../document-schema.js
+        version: 4.3.3
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -802,7 +802,7 @@ importers:
     dependencies:
       document-schema.js:
         specifier: ^4.3.3
-        version: link:../document-schema.js
+        version: 4.3.3
       fast-xml-parser:
         specifier: ^5.10.1
         version: 5.11.0
@@ -881,7 +881,7 @@ importers:
     dependencies:
       document-schema.js:
         specifier: ^4.3.3
-        version: link:../document-schema.js
+        version: 4.3.3
       fast-xml-parser:
         specifier: ^5.10.1
         version: 5.11.0
@@ -959,11 +959,11 @@ importers:
   packages/pdf-codec:
     dependencies:
       byte-codec:
-        specifier: ^1.1.8
+        specifier: ^1.1.10
         version: link:../byte-codec
       document-schema.js:
         specifier: ^4.3.3
-        version: link:../document-schema.js
+        version: 4.3.3
       fflate:
         specifier: ^0.8.3
         version: 0.8.3
@@ -2205,8 +2205,8 @@ packages:
       eslint: '>=10.0.0'
       typescript-eslint: '>=8.0.0'
 
-  '@exadev/semantic-release-workspace@1.0.1':
-    resolution: {integrity: sha512-sa/3hbdW1XOXB+W/oad4h+Yvgn28X3lVn3xVCJgkhVNAQlaPB+TTZGx92UIWOOcFGN21I2QhklIwrc/6CIv+VA==}
+  '@exadev/semantic-release-workspace@1.0.3':
+    resolution: {integrity: sha512-VsXGteFCwW4e07nJHn9CgfVADxOfbE15CAr9P+1g3QWEKxOfqHdS2YdbiQ6fftk0lGqPne7ml7Bv9MdotZGcwQ==}
     engines: {node: '>=20'}
     hasBin: true
     peerDependencies:
@@ -4002,6 +4002,10 @@ packages:
   dir-glob@3.0.1:
     resolution: {integrity: sha512-WkrWp9GR4KXfKGYzOLmTuGVi1UWFfws377n9cc55/tb6DuqyF6pcQ5AbiHEshaDpY9v6oaSr2XCDidGmMwdzIA==}
     engines: {node: '>=8'}
+
+  document-schema.js@4.3.3:
+    resolution: {integrity: sha512-nSxpMVe21hnQstwdlbBeocoYlL8lKfLT0+1XxWrOVTcrJJZsCCaoYdyefqSVVtXcipWdUgK3uhEa5bSiYwAI5w==}
+    engines: {node: '>=20'}
 
   dom-helpers@5.2.1:
     resolution: {integrity: sha512-nRCa7CK3VTrM2NmGkIy4cbK7IZlgBE/PYMn55rrXefr5xXDP0LdtfPnblFDoVdcAfslJ7or6iqAUnx0CCGIWQA==}
@@ -7973,7 +7977,7 @@ snapshots:
       eslint: 10.8.1(jiti@2.7.0)
       typescript-eslint: 8.67.0(eslint@10.8.1(jiti@2.7.0))(typescript@6.0.3)
 
-  '@exadev/semantic-release-workspace@1.0.1(@semantic-release/changelog@7.0.0(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/commit-analyzer@13.0.1(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/git@11.0.1(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/github@12.0.9(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/npm@13.1.5(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/release-notes-generator@14.1.1(semantic-release@25.0.9(typescript@6.0.3)))(semantic-release@25.0.9(typescript@6.0.3))':
+  '@exadev/semantic-release-workspace@1.0.3(@semantic-release/changelog@7.0.0(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/commit-analyzer@13.0.1(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/git@11.0.1(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/github@12.0.9(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/npm@13.1.5(semantic-release@25.0.9(typescript@6.0.3)))(@semantic-release/release-notes-generator@14.1.1(semantic-release@25.0.9(typescript@6.0.3)))(semantic-release@25.0.9(typescript@6.0.3))':
     dependencies:
       '@semantic-release/changelog': 7.0.0(semantic-release@25.0.9(typescript@6.0.3))
       '@semantic-release/commit-analyzer': 13.0.1(semantic-release@25.0.9(typescript@6.0.3))
@@ -9726,6 +9730,10 @@ snapshots:
   dir-glob@3.0.1:
     dependencies:
       path-type: 4.0.0
+
+  document-schema.js@4.3.3:
+    dependencies:
+      zod: 4.4.3
 
   dom-helpers@5.2.1:
     dependencies:
