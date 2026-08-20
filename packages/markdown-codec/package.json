@@ -1,6 +1,6 @@
 {
   "name": "markdown-codec",
-  "version": "4.0.9",
+  "version": "4.0.10",
   "description": "Hand-written CommonMark+GFM <-> DocumentPackage codec, built on document-schema.js",
   "type": "module",
   "repository": {
