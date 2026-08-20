@@ -213,7 +213,7 @@ importers:
         specifier: ^4.3.6
         version: link:../document-schema.js
       documents.js:
-        specifier: ^4.0.22
+        specifier: ^4.0.23
         version: link:../documents.js
       ink:
         specifier: ^7.1.1
