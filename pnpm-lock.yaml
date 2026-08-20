@@ -28,8 +28,8 @@ importers:
         specifier: ^5.0.0
         version: 5.0.0
       ooxml.js:
-        specifier: ^4.0.6
-        version: 4.0.6
+        specifier: ^4.0.7
+        version: 4.0.7
       pdf-codec:
         specifier: ^3.0.4
         version: 3.0.4
@@ -2319,8 +2319,8 @@ packages:
     resolution: {integrity: sha512-1FlR+gjXK7X+AsAHso35MnyN5KqGwJRi/31ft6x0M194ht7S+rWAvd7PHss9xSKMzE0asv1pyIHaJYq+BbacAQ==}
     engines: {node: '>=12'}
 
-  ooxml.js@4.0.6:
-    resolution: {integrity: sha512-sukG8sq6hvW7eZx2lYlYZX4F/ez6o33yMGxcgWIhv2eNOx0fuJJ0BDyyXqzABF2RwhqdT2LNS8Pslnw3mJLyRg==}
+  ooxml.js@4.0.7:
+    resolution: {integrity: sha512-Yc7m5HxvGNG3N5QFVTZVuZP3VNQvXLKyxR1xlMFplqLMPUX0778AT4PVGo2zIZ1gfa164GHC3PVrVlje85PcMg==}
     engines: {node: '>=20'}
 
   optionator@0.9.4:
@@ -5113,9 +5113,9 @@ snapshots:
     dependencies:
       mimic-fn: 4.0.0
 
-  ooxml.js@4.0.6:
+  ooxml.js@4.0.7:
     dependencies:
-      document-schema.js: 4.3.0
+      document-schema.js: 4.3.1
       fast-xml-parser: 5.10.1
       fflate: 0.8.3
       zod: 4.4.3
