@@ -1,6 +1,6 @@
 {
   "name": "byte-codec",
-  "version": "1.1.10",
+  "version": "1.1.11",
   "description": "Generic byte-level primitives (ByteWriter, ByteReader, CRC-32, deflate/inflate) and PNG/JPEG image encoding/decoding with zero PDF knowledge — the shared utility package for the documents.js family.",
   "type": "module",
   "repository": {
