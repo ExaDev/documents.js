@@ -19,7 +19,7 @@
   "scripts": {
     "build": "turbo run _build",
     "lint": "turbo run _lint",
-    "typecheck": "turbo run _typecheck _typecheck:node",
+    "typecheck": "turbo run _typecheck _typecheck:node _typecheck:attw",
     "test": "turbo run _test",
     "test:coverage": "turbo run _test:coverage",
     "test:workers": "turbo run _test:workers",

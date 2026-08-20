@@ -74,11 +74,8 @@ jobs:
       - uses: ./.github/actions/setup-workspace
         with:
           task: typecheck
-          # attw --pack per published package, as each package's own typecheck job did: it checks the package's declared types resolve under every module resolution mode, which needs dist/ to exist, hence the build first. The web UI is filtered out -- it publishes nothing and exposes no types.
-          command: |
-            pnpm typecheck $TURBO_FLAGS
-            pnpm build $TURBO_FLAGS
-            pnpm --recursive --filter='!documents' exec attw --pack
+          # _typecheck:attw (attw --pack per published package, checking each package's declared types resolve under every module resolution mode) is one of the tasks `pnpm typecheck` already runs through turbo, depending on that package's own _build the same way _test:smoke does -- no separate `pnpm build` step or raw shell loop needed to give it a dist/ to inspect. The web UI has no _typecheck:attw script at all, so turbo skips it there: it publishes nothing and exposes no types.
+          command: pnpm typecheck $TURBO_FLAGS
 
   test:
     name: Test

@@ -25,6 +25,12 @@
       "inputs": ["$TURBO_DEFAULT$", "tsconfig.json", "tsconfig.node.json"],
       "outputs": []
     },
+    // attw --pack inspects the package's own dist/ against its own package.json exports map, so it depends on this package's own _build (which also builds every sibling `_build` depends on) rather than `^_build` -- the only task here that needs its own build rather than its dependencies'. Previously a raw shell loop in ci.yml's Typecheck job (`pnpm --recursive --filter='!documents' exec attw --pack`), preceded by an explicit `pnpm build` purely to give it a dist/ to inspect; both re-ran uncached on every push regardless of what changed. A package that doesn't publish (`documents`) has no `_typecheck:attw` script, so turbo silently skips it here the same way it already skips packages missing `_test:corpus`.
+    "_typecheck:attw": {
+      "dependsOn": ["_build"],
+      "inputs": ["package.json"],
+      "outputs": []
+    },
     "_lint": {
       "dependsOn": ["^_build"],
       "inputs": ["$TURBO_DEFAULT$", "eslint.config.ts"],
