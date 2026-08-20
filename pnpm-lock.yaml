@@ -516,7 +516,7 @@ importers:
         specifier: ^4.4.0
         version: 4.4.0(dexie@4.4.5)(react@19.2.8)
       document-schema.js:
-        specifier: ^4.3.4
+        specifier: ^4.3.5
         version: link:../document-schema.js
       documents.js:
         specifier: ^4.0.21
