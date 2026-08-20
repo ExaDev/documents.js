@@ -1,3 +1,10 @@
+## [4.3.5](https://github.com/ExaDev/documents.js/compare/document-schema.js@4.3.4...document-schema.js@4.3.5) (2026-08-20)
+
+
+### Bug Fixes
+
+* point package homepage and bugs URLs at the monorepo, not the old standalone repos ([1b605e8](https://github.com/ExaDev/documents.js/commit/1b605e846393f417001227758a8606347c04e219))
+
 ## [4.3.4](https://github.com/ExaDev/documents.js/compare/document-schema.js@4.3.3...document-schema.js@4.3.4) (2026-08-20)
 
 
