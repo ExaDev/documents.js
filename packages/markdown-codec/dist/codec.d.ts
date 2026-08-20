@@ -51,6 +51,23 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
   destinations: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodObject<{
     kind: z.ZodString;
   }, z.core.$loose>>>;
+  source: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodObject<{
+    format: z.ZodEnum<{
+      docx: "docx";
+      pptx: "pptx";
+      xlsx: "xlsx";
+      odt: "odt";
+      ods: "ods";
+      odp: "odp";
+      odg: "odg";
+      odm: "odm";
+      odb: "odb";
+      odf: "odf";
+      markdown: "markdown";
+      pdf: "pdf";
+    }>;
+    xml: z.ZodString;
+  }, z.core.$strict>>>;
   symbolTable: z.ZodOptional<z.ZodObject<{
     symbols: z.ZodArray<z.ZodObject<{
       glyph: z.ZodString;
@@ -65,9 +82,9 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
       symbol: z.ZodString;
       name: z.ZodOptional<z.ZodString>;
       dimension: z.ZodRecord<z.ZodEnum<{
-        time: "time";
         length: "length";
         mass: "mass";
+        time: "time";
         electricCurrent: "electricCurrent";
         thermodynamicTemperature: "thermodynamicTemperature";
         amountOfSubstance: "amountOfSubstance";
@@ -155,6 +172,23 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
   destinations: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodObject<{
     kind: z.ZodString;
   }, z.core.$loose>>>;
+  source: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodObject<{
+    format: z.ZodEnum<{
+      docx: "docx";
+      pptx: "pptx";
+      xlsx: "xlsx";
+      odt: "odt";
+      ods: "ods";
+      odp: "odp";
+      odg: "odg";
+      odm: "odm";
+      odb: "odb";
+      odf: "odf";
+      markdown: "markdown";
+      pdf: "pdf";
+    }>;
+    xml: z.ZodString;
+  }, z.core.$strict>>>;
   symbolTable: z.ZodOptional<z.ZodObject<{
     symbols: z.ZodArray<z.ZodObject<{
       glyph: z.ZodString;
@@ -169,9 +203,9 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
       symbol: z.ZodString;
       name: z.ZodOptional<z.ZodString>;
       dimension: z.ZodRecord<z.ZodEnum<{
-        time: "time";
         length: "length";
         mass: "mass";
+        time: "time";
         electricCurrent: "electricCurrent";
         thermodynamicTemperature: "thermodynamicTemperature";
         amountOfSubstance: "amountOfSubstance";
@@ -259,6 +293,23 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
   destinations: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodObject<{
     kind: z.ZodString;
   }, z.core.$loose>>>;
+  source: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodObject<{
+    format: z.ZodEnum<{
+      docx: "docx";
+      pptx: "pptx";
+      xlsx: "xlsx";
+      odt: "odt";
+      ods: "ods";
+      odp: "odp";
+      odg: "odg";
+      odm: "odm";
+      odb: "odb";
+      odf: "odf";
+      markdown: "markdown";
+      pdf: "pdf";
+    }>;
+    xml: z.ZodString;
+  }, z.core.$strict>>>;
   symbolTable: z.ZodOptional<z.ZodObject<{
     symbols: z.ZodArray<z.ZodObject<{
       glyph: z.ZodString;
@@ -273,9 +324,9 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
       symbol: z.ZodString;
       name: z.ZodOptional<z.ZodString>;
       dimension: z.ZodRecord<z.ZodEnum<{
-        time: "time";
         length: "length";
         mass: "mass";
+        time: "time";
         electricCurrent: "electricCurrent";
         thermodynamicTemperature: "thermodynamicTemperature";
         amountOfSubstance: "amountOfSubstance";
@@ -363,6 +414,23 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
   destinations: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodObject<{
     kind: z.ZodString;
   }, z.core.$loose>>>;
+  source: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodObject<{
+    format: z.ZodEnum<{
+      docx: "docx";
+      pptx: "pptx";
+      xlsx: "xlsx";
+      odt: "odt";
+      ods: "ods";
+      odp: "odp";
+      odg: "odg";
+      odm: "odm";
+      odb: "odb";
+      odf: "odf";
+      markdown: "markdown";
+      pdf: "pdf";
+    }>;
+    xml: z.ZodString;
+  }, z.core.$strict>>>;
   symbolTable: z.ZodOptional<z.ZodObject<{
     symbols: z.ZodArray<z.ZodObject<{
       glyph: z.ZodString;
@@ -377,9 +445,9 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
       symbol: z.ZodString;
       name: z.ZodOptional<z.ZodString>;
       dimension: z.ZodRecord<z.ZodEnum<{
-        time: "time";
         length: "length";
         mass: "mass";
+        time: "time";
         electricCurrent: "electricCurrent";
         thermodynamicTemperature: "thermodynamicTemperature";
         amountOfSubstance: "amountOfSubstance";
@@ -430,6 +498,23 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
       pageRef: z.ZodOptional<z.ZodString>;
       editTrail: z.ZodArray<z.ZodString>;
     }, z.core.$strip>>;
+    source: z.ZodOptional<z.ZodObject<{
+      format: z.ZodEnum<{
+        docx: "docx";
+        pptx: "pptx";
+        xlsx: "xlsx";
+        odt: "odt";
+        ods: "ods";
+        odp: "odp";
+        odg: "odg";
+        odm: "odm";
+        odb: "odb";
+        odf: "odf";
+        markdown: "markdown";
+        pdf: "pdf";
+      }>;
+      xml: z.ZodString;
+    }, z.core.$strict>>;
   }, z.core.$strip>>;
   pages: z.ZodOptional<z.ZodArray<z.ZodObject<{
     widthPt: z.ZodNumber;
@@ -479,6 +564,23 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
   destinations: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodObject<{
     kind: z.ZodString;
   }, z.core.$loose>>>;
+  source: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodObject<{
+    format: z.ZodEnum<{
+      docx: "docx";
+      pptx: "pptx";
+      xlsx: "xlsx";
+      odt: "odt";
+      ods: "ods";
+      odp: "odp";
+      odg: "odg";
+      odm: "odm";
+      odb: "odb";
+      odf: "odf";
+      markdown: "markdown";
+      pdf: "pdf";
+    }>;
+    xml: z.ZodString;
+  }, z.core.$strict>>>;
   symbolTable: z.ZodOptional<z.ZodObject<{
     symbols: z.ZodArray<z.ZodObject<{
       glyph: z.ZodString;
@@ -493,9 +595,9 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
       symbol: z.ZodString;
       name: z.ZodOptional<z.ZodString>;
       dimension: z.ZodRecord<z.ZodEnum<{
-        time: "time";
         length: "length";
         mass: "mass";
+        time: "time";
         electricCurrent: "electricCurrent";
         thermodynamicTemperature: "thermodynamicTemperature";
         amountOfSubstance: "amountOfSubstance";
@@ -547,6 +649,23 @@ declare const markdownContentCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffe
       leftPt: z.ZodNumber;
     }, z.core.$strip>;
     blocks: z.ZodArray<z.ZodCustom<import("document-schema.js").ContentBlock, import("document-schema.js").ContentBlock>>;
+    source: z.ZodOptional<z.ZodObject<{
+      format: z.ZodEnum<{
+        docx: "docx";
+        pptx: "pptx";
+        xlsx: "xlsx";
+        odt: "odt";
+        ods: "ods";
+        odp: "odp";
+        odg: "odg";
+        odm: "odm";
+        odb: "odb";
+        odf: "odf";
+        markdown: "markdown";
+        pdf: "pdf";
+      }>;
+      xml: z.ZodString;
+    }, z.core.$strict>>;
   }, z.core.$strip>>;
   symbolTable: z.ZodOptional<z.ZodObject<{
     symbols: z.ZodArray<z.ZodObject<{
@@ -562,9 +681,9 @@ declare const markdownContentCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffe
       symbol: z.ZodString;
       name: z.ZodOptional<z.ZodString>;
       dimension: z.ZodRecord<z.ZodEnum<{
-        time: "time";
         length: "length";
         mass: "mass";
+        time: "time";
         electricCurrent: "electricCurrent";
         thermodynamicTemperature: "thermodynamicTemperature";
         amountOfSubstance: "amountOfSubstance";
@@ -625,6 +744,23 @@ declare const markdownContentCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffe
       lineSpacingReduction: z.ZodOptional<z.ZodNumber>;
       paintOrder: z.ZodOptional<z.ZodNumber>;
       sourcePath: z.ZodOptional<z.ZodString>;
+      source: z.ZodOptional<z.ZodObject<{
+        format: z.ZodEnum<{
+          docx: "docx";
+          pptx: "pptx";
+          xlsx: "xlsx";
+          odt: "odt";
+          ods: "ods";
+          odp: "odp";
+          odg: "odg";
+          odm: "odm";
+          odb: "odb";
+          odf: "odf";
+          markdown: "markdown";
+          pdf: "pdf";
+        }>;
+        xml: z.ZodString;
+      }, z.core.$strict>>;
       frames: z.ZodOptional<z.ZodArray<z.ZodObject<{
         pageIndex: z.ZodNumber;
         xPt: z.ZodNumber;
@@ -635,6 +771,23 @@ declare const markdownContentCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffe
       blocks: z.ZodArray<z.ZodCustom<import("document-schema.js").ContentBlock, import("document-schema.js").ContentBlock>>;
     }, z.core.$strip>>;
     notes: z.ZodString;
+    source: z.ZodOptional<z.ZodObject<{
+      format: z.ZodEnum<{
+        docx: "docx";
+        pptx: "pptx";
+        xlsx: "xlsx";
+        odt: "odt";
+        ods: "ods";
+        odp: "odp";
+        odg: "odg";
+        odm: "odm";
+        odb: "odb";
+        odf: "odf";
+        markdown: "markdown";
+        pdf: "pdf";
+      }>;
+      xml: z.ZodString;
+    }, z.core.$strict>>;
   }, z.core.$strip>>;
   symbolTable: z.ZodOptional<z.ZodObject<{
     symbols: z.ZodArray<z.ZodObject<{
@@ -650,9 +803,9 @@ declare const markdownContentCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffe
       symbol: z.ZodString;
       name: z.ZodOptional<z.ZodString>;
       dimension: z.ZodRecord<z.ZodEnum<{
-        time: "time";
         length: "length";
         mass: "mass";
+        time: "time";
         electricCurrent: "electricCurrent";
         thermodynamicTemperature: "thermodynamicTemperature";
         amountOfSubstance: "amountOfSubstance";
@@ -747,6 +900,23 @@ declare const markdownContentCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffe
         }, z.core.$strip>>;
         hyperlink: z.ZodOptional<z.ZodString>;
         sourcePath: z.ZodOptional<z.ZodString>;
+        source: z.ZodOptional<z.ZodObject<{
+          format: z.ZodEnum<{
+            docx: "docx";
+            pptx: "pptx";
+            xlsx: "xlsx";
+            odt: "odt";
+            ods: "ods";
+            odp: "odp";
+            odg: "odg";
+            odm: "odm";
+            odb: "odb";
+            odf: "odf";
+            markdown: "markdown";
+            pdf: "pdf";
+          }>;
+          xml: z.ZodString;
+        }, z.core.$strict>>;
         frames: z.ZodOptional<z.ZodArray<z.ZodObject<{
           pageIndex: z.ZodNumber;
           xPt: z.ZodNumber;
@@ -841,6 +1011,23 @@ declare const markdownContentCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffe
         }, z.core.$strip>>>;
       }, z.core.$strip>>;
       sourcePath: z.ZodOptional<z.ZodString>;
+      source: z.ZodOptional<z.ZodObject<{
+        format: z.ZodEnum<{
+          docx: "docx";
+          pptx: "pptx";
+          xlsx: "xlsx";
+          odt: "odt";
+          ods: "ods";
+          odp: "odp";
+          odg: "odg";
+          odm: "odm";
+          odb: "odb";
+          odf: "odf";
+          markdown: "markdown";
+          pdf: "pdf";
+        }>;
+        xml: z.ZodString;
+      }, z.core.$strict>>;
       frames: z.ZodOptional<z.ZodArray<z.ZodObject<{
         pageIndex: z.ZodNumber;
         xPt: z.ZodNumber;
@@ -870,6 +1057,23 @@ declare const markdownContentCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffe
       heightPt: z.ZodNumber;
       altText: z.ZodOptional<z.ZodString>;
       sourcePath: z.ZodOptional<z.ZodString>;
+      source: z.ZodOptional<z.ZodObject<{
+        format: z.ZodEnum<{
+          docx: "docx";
+          pptx: "pptx";
+          xlsx: "xlsx";
+          odt: "odt";
+          ods: "ods";
+          odp: "odp";
+          odg: "odg";
+          odm: "odm";
+          odb: "odb";
+          odf: "odf";
+          markdown: "markdown";
+          pdf: "pdf";
+        }>;
+        xml: z.ZodString;
+      }, z.core.$strict>>;
       frames: z.ZodOptional<z.ZodArray<z.ZodObject<{
         pageIndex: z.ZodNumber;
         xPt: z.ZodNumber;
@@ -924,6 +1128,23 @@ declare const markdownContentCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffe
       }, z.core.$strip>>;
     }, z.core.$strip>;
     embeddedObjects: z.ZodOptional<z.ZodArray<z.ZodCustom<import("document-schema.js").ContentEmbeddedObject, import("document-schema.js").ContentEmbeddedObject>>>;
+    source: z.ZodOptional<z.ZodObject<{
+      format: z.ZodEnum<{
+        docx: "docx";
+        pptx: "pptx";
+        xlsx: "xlsx";
+        odt: "odt";
+        ods: "ods";
+        odp: "odp";
+        odg: "odg";
+        odm: "odm";
+        odb: "odb";
+        odf: "odf";
+        markdown: "markdown";
+        pdf: "pdf";
+      }>;
+      xml: z.ZodString;
+    }, z.core.$strict>>;
   }, z.core.$strip>>;
   symbolTable: z.ZodOptional<z.ZodObject<{
     symbols: z.ZodArray<z.ZodObject<{
@@ -939,9 +1160,9 @@ declare const markdownContentCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffe
       symbol: z.ZodString;
       name: z.ZodOptional<z.ZodString>;
       dimension: z.ZodRecord<z.ZodEnum<{
-        time: "time";
         length: "length";
         mass: "mass";
+        time: "time";
         electricCurrent: "electricCurrent";
         thermodynamicTemperature: "thermodynamicTemperature";
         amountOfSubstance: "amountOfSubstance";
@@ -1002,6 +1223,23 @@ declare const markdownContentCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffe
       lineSpacingReduction: z.ZodOptional<z.ZodNumber>;
       paintOrder: z.ZodOptional<z.ZodNumber>;
       sourcePath: z.ZodOptional<z.ZodString>;
+      source: z.ZodOptional<z.ZodObject<{
+        format: z.ZodEnum<{
+          docx: "docx";
+          pptx: "pptx";
+          xlsx: "xlsx";
+          odt: "odt";
+          ods: "ods";
+          odp: "odp";
+          odg: "odg";
+          odm: "odm";
+          odb: "odb";
+          odf: "odf";
+          markdown: "markdown";
+          pdf: "pdf";
+        }>;
+        xml: z.ZodString;
+      }, z.core.$strict>>;
       frames: z.ZodOptional<z.ZodArray<z.ZodObject<{
         pageIndex: z.ZodNumber;
         xPt: z.ZodNumber;
@@ -1041,6 +1279,23 @@ declare const markdownContentCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffe
       }, z.core.$strip>>;
       paintOrder: z.ZodOptional<z.ZodNumber>;
       sourcePath: z.ZodOptional<z.ZodString>;
+      source: z.ZodOptional<z.ZodObject<{
+        format: z.ZodEnum<{
+          docx: "docx";
+          pptx: "pptx";
+          xlsx: "xlsx";
+          odt: "odt";
+          ods: "ods";
+          odp: "odp";
+          odg: "odg";
+          odm: "odm";
+          odb: "odb";
+          odf: "odf";
+          markdown: "markdown";
+          pdf: "pdf";
+        }>;
+        xml: z.ZodString;
+      }, z.core.$strict>>;
       frames: z.ZodOptional<z.ZodArray<z.ZodObject<{
         pageIndex: z.ZodNumber;
         xPt: z.ZodNumber;
@@ -1078,6 +1333,23 @@ declare const markdownContentCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffe
       }, z.core.$strip>>;
       paintOrder: z.ZodOptional<z.ZodNumber>;
       sourcePath: z.ZodOptional<z.ZodString>;
+      source: z.ZodOptional<z.ZodObject<{
+        format: z.ZodEnum<{
+          docx: "docx";
+          pptx: "pptx";
+          xlsx: "xlsx";
+          odt: "odt";
+          ods: "ods";
+          odp: "odp";
+          odg: "odg";
+          odm: "odm";
+          odb: "odb";
+          odf: "odf";
+          markdown: "markdown";
+          pdf: "pdf";
+        }>;
+        xml: z.ZodString;
+      }, z.core.$strict>>;
       frames: z.ZodOptional<z.ZodArray<z.ZodObject<{
         pageIndex: z.ZodNumber;
         xPt: z.ZodNumber;
@@ -1111,6 +1383,23 @@ declare const markdownContentCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffe
       }, z.core.$strip>;
       paintOrder: z.ZodOptional<z.ZodNumber>;
       sourcePath: z.ZodOptional<z.ZodString>;
+      source: z.ZodOptional<z.ZodObject<{
+        format: z.ZodEnum<{
+          docx: "docx";
+          pptx: "pptx";
+          xlsx: "xlsx";
+          odt: "odt";
+          ods: "ods";
+          odp: "odp";
+          odg: "odg";
+          odm: "odm";
+          odb: "odb";
+          odf: "odf";
+          markdown: "markdown";
+          pdf: "pdf";
+        }>;
+        xml: z.ZodString;
+      }, z.core.$strict>>;
       frames: z.ZodOptional<z.ZodArray<z.ZodObject<{
         pageIndex: z.ZodNumber;
         xPt: z.ZodNumber;
@@ -1180,6 +1469,23 @@ declare const markdownContentCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffe
       }, z.core.$strip>>;
       paintOrder: z.ZodOptional<z.ZodNumber>;
       sourcePath: z.ZodOptional<z.ZodString>;
+      source: z.ZodOptional<z.ZodObject<{
+        format: z.ZodEnum<{
+          docx: "docx";
+          pptx: "pptx";
+          xlsx: "xlsx";
+          odt: "odt";
+          ods: "ods";
+          odp: "odp";
+          odg: "odg";
+          odm: "odm";
+          odb: "odb";
+          odf: "odf";
+          markdown: "markdown";
+          pdf: "pdf";
+        }>;
+        xml: z.ZodString;
+      }, z.core.$strict>>;
       frames: z.ZodOptional<z.ZodArray<z.ZodObject<{
         pageIndex: z.ZodNumber;
         xPt: z.ZodNumber;
@@ -1188,6 +1494,23 @@ declare const markdownContentCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffe
         heightPt: z.ZodNumber;
       }, z.core.$strip>>>;
     }, z.core.$strip>], "kind">>;
+    source: z.ZodOptional<z.ZodObject<{
+      format: z.ZodEnum<{
+        docx: "docx";
+        pptx: "pptx";
+        xlsx: "xlsx";
+        odt: "odt";
+        ods: "ods";
+        odp: "odp";
+        odg: "odg";
+        odm: "odm";
+        odb: "odb";
+        odf: "odf";
+        markdown: "markdown";
+        pdf: "pdf";
+      }>;
+      xml: z.ZodString;
+    }, z.core.$strict>>;
   }, z.core.$strip>>;
   symbolTable: z.ZodOptional<z.ZodObject<{
     symbols: z.ZodArray<z.ZodObject<{
@@ -1203,9 +1526,9 @@ declare const markdownContentCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffe
       symbol: z.ZodString;
       name: z.ZodOptional<z.ZodString>;
       dimension: z.ZodRecord<z.ZodEnum<{
-        time: "time";
         length: "length";
         mass: "mass";
+        time: "time";
         electricCurrent: "electricCurrent";
         thermodynamicTemperature: "thermodynamicTemperature";
         amountOfSubstance: "amountOfSubstance";
@@ -1256,6 +1579,23 @@ declare const markdownContentCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffe
       pageRef: z.ZodOptional<z.ZodString>;
       editTrail: z.ZodArray<z.ZodString>;
     }, z.core.$strip>>;
+    source: z.ZodOptional<z.ZodObject<{
+      format: z.ZodEnum<{
+        docx: "docx";
+        pptx: "pptx";
+        xlsx: "xlsx";
+        odt: "odt";
+        ods: "ods";
+        odp: "odp";
+        odg: "odg";
+        odm: "odm";
+        odb: "odb";
+        odf: "odf";
+        markdown: "markdown";
+        pdf: "pdf";
+      }>;
+      xml: z.ZodString;
+    }, z.core.$strict>>;
   }, z.core.$strip>;
   symbolTable: z.ZodOptional<z.ZodObject<{
     symbols: z.ZodArray<z.ZodObject<{
@@ -1271,9 +1611,9 @@ declare const markdownContentCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffe
       symbol: z.ZodString;
       name: z.ZodOptional<z.ZodString>;
       dimension: z.ZodRecord<z.ZodEnum<{
-        time: "time";
         length: "length";
         mass: "mass";
+        time: "time";
         electricCurrent: "electricCurrent";
         thermodynamicTemperature: "thermodynamicTemperature";
         amountOfSubstance: "amountOfSubstance";
