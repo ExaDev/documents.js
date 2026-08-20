@@ -90,7 +90,7 @@
   "dependencies": {
     "commander": "^15.0.0",
     "document-outline.js": "^1.0.0",
-    "document-schema.js": "^4.3.3",
+    "document-schema.js": "^4.3.4",
     "documents.js": "^4.0.20",
     "ink": "^7.1.1",
     "ink-text-input": "^6.0.0",
