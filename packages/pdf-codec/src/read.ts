@@ -55,6 +55,8 @@ export function readPdf(bytes: Uint8Array<ArrayBuffer>, options?: ReadPdfOptions
   if (!hasPdfHeader(bytes)) {
     throw new PdfParseError('pdf/no-header', 'no "%PDF-" header found within the first bytes of the file; this does not look like a PDF at all');
   }
+  // Checked before openPdfDocument rather than relying solely on the page loop's per-iteration check below: the document-open phase (xref resolution, object parsing) runs before any page, and a document with an empty page tree never enters the loop at all -- without this check, an already-aborted signal on such a file would return a parsed document instead of throwing.
+  throwIfAborted(signal);
   const doc = openPdfDocument(bytes, sink);
   const fontResolver = createFontResolver({ resolver: doc, sink });
   const images: Record<string, LayoutImageAsset> = {};

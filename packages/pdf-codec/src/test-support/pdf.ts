@@ -92,6 +92,28 @@ export function minimalClassicXrefPdf(): Uint8Array<ArrayBuffer> {
   return b.bytes();
 }
 
+// A structurally valid document with an empty page tree: the page loop over doc.pages() has zero iterations, so a signal whose only check lives inside that loop would never be consulted -- the abort-contract gap this fixture exists to hold closed.
+export function pagelessPdf(): Uint8Array<ArrayBuffer> {
+  const b = new FixtureBuilder().header('1.4');
+  b.object(1, '<< /Type /Catalog /Pages 2 0 R >>');
+  b.object(2, '<< /Type /Pages /Kids [] /Count 0 >>');
+  b.classicXrefAndTrailer(2, '/Root 1 0 R');
+  return b.bytes();
+}
+
+// A two-page document whose FIRST page has no /Resources dict (a deterministic, per-page-1 recoverable warning through the sink) and whose second page carries ordinary text content. Reading it with a signal that the sink aborts on page 1's warning distinguishes "the page loop checks between pages" (throws before page 2 is ever interpreted) from "the signal is only consulted once up front" (returns normally after reading both).
+export function twoPagesFirstWithoutResourcesPdf(): Uint8Array<ArrayBuffer> {
+  const b = new FixtureBuilder().header('1.4');
+  b.object(1, '<< /Type /Catalog /Pages 2 0 R >>');
+  b.object(2, '<< /Type /Pages /Kids [3 0 R 5 0 R] /Count 2 >>');
+  b.object(3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] >>');
+  b.object(4, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+  b.object(5, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /Font << /F1 4 0 R >> >> /Contents 6 0 R >>');
+  b.stream(6, '<< >>', enc(HELLO_CONTENT));
+  b.classicXrefAndTrailer(6, '/Root 1 0 R');
+  return b.bytes();
+}
+
 // The single highest-value fixture in the suite: Word/PowerPoint/Chrome/LibreOffice all default to PDF 1.5+ cross-reference *streams* with object streams, not the classic table our own writer emits -- a reader that only handles the classic form would fail on the overwhelming majority of real-world, non-self-produced PDFs. Catalog/Pages/Page are packed into one compressed object stream (a stream object itself is never permitted inside an object stream, per ISO 32000-1 7.5.7, so the content stream, the object stream, and the xref stream itself all remain ordinary top-level objects). The xref stream is self-referential: its own entry describes its own byte offset.
 export function xrefStreamWithObjectStreamPdf(): Uint8Array<ArrayBuffer> {
   const catalogBody = '<< /Type /Catalog /Pages 2 0 R >>';
