@@ -296,10 +296,14 @@ function clusterIntoParagraphs(lines: readonly TextLine[]): TextParagraph[] {
   return paragraphs;
 }
 
-// Two of the plan's four break signals (vertical gap, indent change) are implemented directly. The other two (alignment classification changing, a justified block's short final line) need first classifying each line's own alignment from its right-margin distance -- a real additional analysis this pass doesn't attempt; gap and indent already catch the large majority of real paragraph boundaries.
+// Two of the plan's four break signals (vertical gap, indent change) are implemented directly, plus the font-size discontinuity below. The other two (alignment classification changing, a justified block's short final line) need first classifying each line's own alignment from its right-margin distance -- a real additional analysis this pass doesn't attempt; gap and indent already catch the large majority of real paragraph boundaries.
 function startsNewParagraph(prev: TextLine, next: TextLine, modalSpacing: number, dominantLeftX: number): boolean {
   const gap = prev.baselineY - next.baselineY;
   if (gap > PARAGRAPH_GAP_MULTIPLIER * modalSpacing) {
+    return true;
+  }
+  // A font-size discontinuity is a paragraph boundary even at ordinary line spacing: a heading sits tight above the body it names, so the gap signal alone merges the two into one glued paragraph (the observed "**Part 1 Scope **This is body..." failure, ExaDev/documents.js#584), and the same discontinuity is what the presentation direction's own clusterIntoBlocks already refuses to merge across -- its fontSizesClose condition -- so this brings the two clusterers onto one rule rather than inventing a new one.
+  if (!fontSizesClose(prev.items[0]!.sizePt, next.items[0]!.sizePt)) {
     return true;
   }
   const nextLeft = next.items[0]!.xPt;
