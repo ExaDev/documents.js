@@ -1,12 +1,14 @@
 import type { Package } from '../../model/package';
-import type { XmlElement } from '../../model/node';
+import type { XmlElement, XmlNode } from '../../model/node';
 import { describe, expect, it } from 'vitest';
 import type { ContentBlock, ContentConstructStart, ContentEmbeddedObjectBlock, ContentImageBlock, ContentParagraph, ContentTable } from 'document-schema.js';
 import { el, txt } from '../../xml/fragment';
 import { bytesToBase64 } from '../../util/base64';
 import { zipPackage } from '../../zip';
-import { minimalXlsxBytes } from '../../test-support/embedded';
+import { minimalDocxBytes, minimalXlsxBytes } from '../../test-support/embedded';
+import { attr, childrenWithTag, elementsWithTag, rootElement } from '../util';
 import { readDocxContent } from './read';
+import { buildDocxPackageFromContent } from './write';
 
 // Ported from documents.js's src/ooxml/docx/read.test.ts, adapted to readDocxContent's own DocxDocument shape (sections directly, not wrapped in a ContentDocument discriminated union) and merged with this package's comment/footnote/header/footer coverage.
 
@@ -590,6 +592,112 @@ describe('readDocxContent: embedded OLE objects', () => {
     pkg.parts['word/embeddings/oleObject1.xlsx'] = { kind: 'binary', base64: bytesToBase64(minimalXlsxBytes()) };
     const doc = readDocxContent(pkg);
     expect(doc.sections[0]?.blocks).toHaveLength(1);
+  });
+});
+
+// Every element with the given tag anywhere in the node forest -- the write-side assertions below need to reach a w:object nested inside w:body > w:p > w:r, far below the part root.
+function findAllElements(nodes: readonly XmlNode[], tag: string, out: XmlElement[] = []): XmlElement[] {
+  for (const node of nodes) {
+    if (node.type !== 'element') {
+      continue;
+    }
+    if (node.tag === tag) {
+      out.push(node);
+    }
+    findAllElements(node.children, tag, out);
+  }
+  return out;
+}
+
+describe('embedded OLE objects: write-side round trip', () => {
+  it('round-trips a recovered spreadsheet embed through build -> re-read with the nested document, payload part, relationship, and content-type override all intact', () => {
+    const pkg = oleObjectFixturePackage({ target: 'embeddings/oleObject1.xlsx' });
+    pkg.parts['word/embeddings/oleObject1.xlsx'] = { kind: 'binary', base64: bytesToBase64(minimalXlsxBytes()) };
+    const before = readDocxContent(pkg);
+    const written = buildDocxPackageFromContent(before);
+    const after = readDocxContent(written);
+
+    // The paragraph keeps its own (run-text-empty) block and the object's recovered content survives as the sibling embedded block, frame intact.
+    expect(after.sections[0]?.blocks).toHaveLength(2);
+    const embedded = asEmbeddedObject(after.sections[0]?.blocks[1]);
+    expect(embedded.objectKind).toBe('spreadsheet');
+    expect(embedded.frame).toEqual({ xPt: 0, yPt: 0, widthPt: 96, heightPt: 60 });
+    // The nested document is the genuinely re-serialised workbook, not just an envelope block.
+    const sheet = embedded.document.kind === 'spreadsheet' ? embedded.document.sheets[0] : undefined;
+    expect(sheet?.name).toBe('Embedded');
+    expect(sheet?.cells[0]?.value).toEqual({ kind: 'string', value: 'Recovered cell' });
+
+    // The written markup derives w:dxaOrig/w:dyaOrig from the block's frame (pt -> twips) and carries a ProgID Word can activate the payload with.
+    const documentRoot = rootElement(written.parts['word/document.xml']);
+    const objects = findAllElements(documentRoot === undefined ? [] : [documentRoot], 'w:object');
+    expect(objects).toHaveLength(1);
+    const objectElement = objects[0];
+    if (objectElement === undefined) {
+      throw new Error('expected a written w:object element');
+    }
+    expect(attr(objectElement, 'w:dxaOrig')).toBe('1920');
+    expect(attr(objectElement, 'w:dyaOrig')).toBe('1200');
+    const oleObject = childrenWithTag(objectElement, 'o:OLEObject')[0];
+    expect(attr(oleObject!, 'ProgID')).toBe('Excel.Sheet.12');
+
+    // The payload part itself, its relationship, and its content-type override all exist in the written package.
+    expect(written.parts['word/embeddings/oleObject1.xlsx']?.kind).toBe('binary');
+    const relsRoot = rootElement(written.parts['word/_rels/document.xml.rels']);
+    const oleRel = elementsWithTag(relsRoot === undefined ? [] : [relsRoot], 'Relationship').find((relationship) => attr(relationship, 'Type') === OLE_OBJECT_REL);
+    expect(attr(oleRel!, 'Target')).toBe('embeddings/oleObject1.xlsx');
+    expect(attr(oleRel!, 'TargetMode')).toBeUndefined();
+    const typesRoot = rootElement(written.parts['[Content_Types].xml']);
+    const embeddingOverride = elementsWithTag(typesRoot === undefined ? [] : [typesRoot], 'Override').find((candidate) => attr(candidate, 'PartName') === '/word/embeddings/oleObject1.xlsx');
+    expect(attr(embeddingOverride!, 'ContentType')).toBe('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  });
+
+  it('round-trips a recovered wordprocessing embed (a nested docx) with the nested sections intact and the docx content-type override', () => {
+    const pkg = oleObjectFixturePackage({ target: 'embeddings/oleObject1.docx' });
+    pkg.parts['word/embeddings/oleObject1.docx'] = { kind: 'binary', base64: bytesToBase64(minimalDocxBytes()) };
+    const written = buildDocxPackageFromContent(readDocxContent(pkg));
+    const after = readDocxContent(written);
+    const embedded = asEmbeddedObject(after.sections[0]?.blocks[1]);
+    expect(embedded.objectKind).toBe('wordprocessing');
+    const paragraph = embedded.document.kind === 'wordprocessing' ? embedded.document.sections[0]?.blocks[0] : undefined;
+    expect(paragraph?.kind === 'paragraph' ? paragraph.runs[0]?.text : undefined).toBe('Embedded memo');
+    expect(written.parts['word/embeddings/oleObject1.docx']?.kind).toBe('binary');
+    const documentRoot = rootElement(written.parts['word/document.xml']);
+    const oleObject = findAllElements(documentRoot === undefined ? [] : [documentRoot], 'o:OLEObject')[0];
+    expect(attr(oleObject!, 'ProgID')).toBe('Word.Document.12');
+    const typesRoot = rootElement(written.parts['[Content_Types].xml']);
+    const embeddingOverride = elementsWithTag(typesRoot === undefined ? [] : [typesRoot], 'Override').find((candidate) => attr(candidate, 'PartName') === '/word/embeddings/oleObject1.docx');
+    expect(attr(embeddingOverride!, 'ContentType')).toBe('application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+  });
+
+  it('writes one embeddings part for two objects sharing a payload, both blocks surviving the re-read', () => {
+    // The copy-pasted-object shape: two w:object runs point their r:id at one embeddings part, and the reader hands both blocks the same recovered document. Identical nested documents serialise to identical bytes, so the writer must re-share one part rather than shipping a duplicate.
+    const secondObjectRun = el('w:r', {}, [
+      el('w:object', { 'w:dxaOrig': '1920', 'w:dyaOrig': '1200' }, [el('o:OLEObject', { Type: 'Embed', ProgID: 'Excel.Sheet.12', 'r:id': 'rIdOle' })]),
+    ]);
+    const pkg = oleObjectFixturePackage({ target: 'embeddings/oleObject1.xlsx' }, [secondObjectRun]);
+    pkg.parts['word/embeddings/oleObject1.xlsx'] = { kind: 'binary', base64: bytesToBase64(minimalXlsxBytes()) };
+    const written = buildDocxPackageFromContent(readDocxContent(pkg));
+    const after = readDocxContent(written);
+    expect(after.sections[0]?.blocks).toHaveLength(3);
+    expect(asEmbeddedObject(after.sections[0]?.blocks[1]).objectKind).toBe('spreadsheet');
+    expect(asEmbeddedObject(after.sections[0]?.blocks[2]).objectKind).toBe('spreadsheet');
+    const embeddingPartNames = Object.keys(written.parts).filter((path) => path.startsWith('word/embeddings/'));
+    expect(embeddingPartNames).toEqual(['word/embeddings/oleObject1.xlsx']);
+  });
+
+  it('restores an object and a drawing lifted from one paragraph back into that paragraph, preserving their encounter order', () => {
+    const pkg = oleObjectFixturePackage({ target: 'embeddings/oleObject1.xlsx' }, [el('w:r', {}, [drawingElement('wp:inline', 'rIdPreview', 'Drawing after the object')])]);
+    pkg.parts['word/embeddings/oleObject1.xlsx'] = { kind: 'binary', base64: bytesToBase64(minimalXlsxBytes()) };
+    const after = readDocxContent(buildDocxPackageFromContent(readDocxContent(pkg)));
+    expect(after.sections[0]?.blocks).toHaveLength(3);
+    expect(asEmbeddedObject(after.sections[0]?.blocks[1]).objectKind).toBe('spreadsheet');
+    expect(asImage(after.sections[0]?.blocks[2]).altText).toBe('Drawing after the object');
+  });
+
+  it('refuses an embedded presentation document loudly rather than silently dropping the recovered sub-document', () => {
+    // ooxml.js has no pptx writer (PresentationML is read-only in this package), so a presentation embed -- which readDocxContent genuinely recovers -- has no bytes this writer can produce. The reader's degrade-tier rule inverts at the write boundary: a builder asked for a document it cannot faithfully produce throws instead of writing a file that silently lost the embed.
+    const block: ContentEmbeddedObjectBlock = { kind: 'embeddedObject', objectKind: 'presentation', document: { kind: 'presentation', metadata: {}, slides: [] }, frame: { xPt: 0, yPt: 0, widthPt: 96, heightPt: 60 } };
+    expect(() => buildDocxPackageFromContent({ sections: [{ pageSize: { widthPt: 612, heightPt: 792 }, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 }, blocks: [block] }] })).toThrow(/presentation/);
   });
 });
 
