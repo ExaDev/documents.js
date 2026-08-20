@@ -16,6 +16,7 @@ import { assemblePackage, factorStyles } from './factor-styles';
 import { flattenPackage } from './flatten';
 import type { PageSize } from './geometry';
 import { DocumentPackageSchema, type DocumentPackage } from './package';
+import type { SourceResidue } from './source';
 
 // THE PACKAGE BOUNDARY'S MERGE GATE: the three bijection laws run over a corpus spanning every document kind, every leaf the tree vocabulary admits, and every grouping signal decompose reads. document-outline.js proved the laws property-wise over its local corpus in phase 1, and documents.js runs this same law harness over its own REAL corpus -- reader outputs for every format, editors per kind, onDocument captures carrying the layout pass's real frames and pages. That corpus cannot live here: every reader in it belongs to a package that depends on this one (ooxml.js, odf.js, markdown-codec, pdf-codec), so importing it would invert the dependency the schema layer exists to keep one-way. What lives here instead is the same harness over hand-built content covering the same structural ground, and documents.js's own suite stays the gate over real format output -- the two are complementary, not redundant: this one pins the transform against the schema's whole vocabulary, that one pins it against what codecs actually emit.
 //
@@ -70,6 +71,10 @@ const PRINT_SETTINGS: ContentSheetPrintSettings = {
   pageOrder: 'downThenOver',
 };
 
+// One residue value for the corpus's per-node positions and one for its descriptor positions, so the laws pin both spellings of the channel -- the field on ordinary content nodes, and the field inside a construct descriptor riding a marker pair across the boundary.
+const DOCX_RESIDUE: SourceResidue = { format: 'docx', xml: '<w:proofErr w:type="spellStart"/>' };
+const GALLERY_RESIDUE: SourceResidue = { format: 'docx', xml: '<w:docPartObj><w:docPartGallery w:val="Cover Pages"/></w:docPartObj>' };
+
 interface ParagraphOptions {
   readonly headingLevel?: number;
   readonly listLevel?: number;
@@ -79,6 +84,7 @@ interface ParagraphOptions {
   readonly lineSpacing?: number;
   readonly styleId?: string;
   readonly sourcePath?: string;
+  readonly residue?: SourceResidue;
   readonly frames?: readonly { pageIndex: number; xPt: number; yPt: number; widthPt: number; heightPt: number }[];
   readonly bold?: boolean;
   readonly sizePt?: number;
@@ -95,6 +101,7 @@ function paragraph(text: string, options: ParagraphOptions = {}): ContentBlock {
     ...(options.lineSpacing !== undefined ? { lineSpacing: options.lineSpacing } : {}),
     ...(options.styleId !== undefined ? { styleId: options.styleId } : {}),
     ...(options.sourcePath !== undefined ? { sourcePath: options.sourcePath } : {}),
+    ...(options.residue !== undefined ? { source: options.residue } : {}),
     ...(options.frames !== undefined ? { frames: options.frames.map((frame) => ({ ...frame })) } : {}),
   };
 }
@@ -192,11 +199,30 @@ function corpus(): readonly CorpusEntry[] {
     },
     {
       name: 'wordprocessing carrying the ban-list fields alongside mintable ones',
-      // styleId, sourcePath, and frames repeat exactly as often as the mintable keys do, and must stay per-node throughout the round trip.
+      // styleId, sourcePath, frames, and per-node source residue repeat exactly as often as the mintable keys do, and must stay per-node throughout the round trip -- minting must never factor residue into a styles entry any more than it factors a position or a path.
       content: wordprocessing([[
-        paragraph('one', { styleId: 'Body', sourcePath: 'word/document.xml#p1', indentLeftPt: 20, frames: [{ pageIndex: 0, xPt: 72, yPt: 700, widthPt: 451, heightPt: 14 }] }),
-        paragraph('two', { styleId: 'Body', sourcePath: 'word/document.xml#p1', indentLeftPt: 20, frames: [{ pageIndex: 0, xPt: 72, yPt: 680, widthPt: 451, heightPt: 14 }] }),
+        paragraph('one', { styleId: 'Body', sourcePath: 'word/document.xml#p1', indentLeftPt: 20, residue: DOCX_RESIDUE, frames: [{ pageIndex: 0, xPt: 72, yPt: 700, widthPt: 451, heightPt: 14 }] }),
+        paragraph('two', { styleId: 'Body', sourcePath: 'word/document.xml#p1', indentLeftPt: 20, residue: DOCX_RESIDUE, frames: [{ pageIndex: 0, xPt: 72, yPt: 680, widthPt: 451, heightPt: 14 }] }),
       ]]),
+    },
+    {
+      name: 'wordprocessing with per-node residue on a container, a run, and a table cell, and descriptor residue inside a construct pair',
+      // Every spelling of the channel in one document: source on the section container (rides the tree's section descriptor through omit+extend), on a run, on a table cell (flat in both encodings), and inside a construct descriptor (rides the marker pair's own payload across the boundary). All three laws must hold verbatim -- the channel is carried, never interpreted, never factored.
+      content: {
+        kind: 'wordprocessing',
+        metadata: {},
+        sections: [{
+          ...SECTION_GEOMETRY,
+          source: DOCX_RESIDUE,
+          blocks: [
+            { kind: 'constructStart', descriptor: { kind: 'contentControl', controlType: 'richText', source: GALLERY_RESIDUE } },
+            paragraph('in a degraded gallery control', { residue: DOCX_RESIDUE }),
+            { kind: 'constructEnd' },
+            { kind: 'paragraph', runs: [{ text: 'run-level residue', source: DOCX_RESIDUE }] },
+            { kind: 'table', rows: [{ cells: [{ blocks: [paragraph('cell')], source: DOCX_RESIDUE }] }], columnWidthsPt: [100] },
+          ],
+        }],
+      },
     },
     {
       name: 'wordprocessing with fused frames across two pages and a populated pages array',
