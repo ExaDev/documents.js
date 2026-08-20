@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Package } from '../../src';
-import { buildXlsxPackage, bytesToBase64, decodePackage, el, encodePackage, flattenPackage, readDocxContent, readPptxContent, readXlsx, readXlsxContent, zipPackage } from '../../src';
+import { buildDocxPackageFromContent, buildXlsxPackage, bytesToBase64, decodePackage, el, encodePackage, flattenPackage, readDocxContent, readPptxContent, readXlsx, readXlsxContent, zipPackage } from '../../src';
 import { minimalXlsxBytes } from '../../src/test-support/embedded';
 
 // Proves ooxml.js's xlsx decode path executes inside a Cloudflare Workers isolate (workerd, via @cloudflare/vitest-pool-workers) with no Node-only APIs. The path under test -- zipPackage (fflate, pure JS) -> decodePackage -> readXlsxContent (fast-xml-parser, pure JS) -- is deliberately Node-free; if any step touched node:fs/Buffer/process the workerd isolate would throw rather than these passing. The minimal xlsx parts are built inline as a Record<string, Uint8Array> (no node:fs/readFileSync -- workerd has no fs) and round-trip through the same zip/decode path src/typed/xlsx.test.ts already exercises under node. This is the runtime proof for ooxml.js issue #17. The second test extends the same proof to the DocumentPackage boundary readXlsx/buildXlsxPackage sit on, since a structural transform is exactly the sort of pure-object code that could quietly acquire a Node dependency without any test noticing under node.
@@ -128,5 +128,12 @@ describe('ooxml.js docx OLE embedded-object recovery under the Cloudflare Worker
     expect(embedded?.kind === 'embeddedObject' ? embedded.objectKind : undefined).toBe('spreadsheet');
     const sheet = embedded?.kind === 'embeddedObject' && embedded.document.kind === 'spreadsheet' ? embedded.document.sheets[0] : undefined;
     expect(sheet?.cells[0]?.value).toEqual({ kind: 'string', value: 'Recovered cell' });
+
+    // And the write side of the pair, all the way back out through the nested serialisation: the w:object emitter re-serialises the recovered workbook through buildXlsxPackageFromContent and encodePackage (a second zip, inside the isolate) before the host docx itself is ever assembled -- proving that whole new path is Node-free by executing it here, the same convention the xlsx write-side proof above follows. The re-read recovers the same embedded content from the rewritten package.
+    const rewritten = buildDocxPackageFromContent(doc);
+    const reEmbedded = readDocxContent(rewritten).sections[0]?.blocks.find((block) => block.kind === 'embeddedObject');
+    expect(reEmbedded?.kind === 'embeddedObject' ? reEmbedded.objectKind : undefined).toBe('spreadsheet');
+    const reSheet = reEmbedded?.kind === 'embeddedObject' && reEmbedded.document.kind === 'spreadsheet' ? reEmbedded.document.sheets[0] : undefined;
+    expect(reSheet?.cells[0]?.value).toEqual({ kind: 'string', value: 'Recovered cell' });
   });
 });
