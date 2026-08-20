@@ -880,7 +880,7 @@ importers:
   packages/ooxml.js:
     dependencies:
       document-schema.js:
-        specifier: ^4.3.5
+        specifier: ^4.3.6
         version: link:../document-schema.js
       fast-xml-parser:
         specifier: ^5.10.1
