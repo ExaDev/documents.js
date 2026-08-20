@@ -962,7 +962,7 @@ importers:
         specifier: ^1.1.11
         version: link:../byte-codec
       document-schema.js:
-        specifier: ^4.3.4
+        specifier: ^4.3.5
         version: link:../document-schema.js
       fflate:
         specifier: ^0.8.3
