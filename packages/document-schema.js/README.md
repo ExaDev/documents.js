@@ -235,8 +235,6 @@ The construct verdicts (semantic / residue / derivable — derivable meaning rec
 
 ## Definitions tables and styles
 
-## Definitions tables and styles
-
 The package root carries a generic definitions-table facility ([#21](https://github.com/ExaDev/document-schema.js/issues/21)): named tables whose entries tree nodes reference by string id. **Styles were the first tenant**; link, footnote, and comment definitions ride the tenant-generic `definitions` table (entries tagged with a `kind` discriminator and an open body, `src/definitions.ts`) alongside it — which is why that generic table exists rather than the facility being shaped around styles.
 
 4.1.0 adds three more tables of that same generic type at the root ([#24](https://github.com/ExaDev/document-schema.js/issues/24), proposed by [pdf-codec#66](https://github.com/ExaDev/pdf-codec/issues/66)) — no new entry shape is minted anywhere:
