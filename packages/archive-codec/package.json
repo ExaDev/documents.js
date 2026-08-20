@@ -1,6 +1,6 @@
 {
   "name": "archive-codec",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Recursive archive (ZIP-in-ZIP) detection and walking with depth and cumulative decompressed-size guards - zero document-format knowledge, the archive utility package for the documents.js family.",
   "type": "module",
   "repository": {
