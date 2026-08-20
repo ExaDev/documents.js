@@ -1,3 +1,15 @@
+# [3.1.0](https://github.com/ExaDev/documents.js/compare/pdf-codec@3.0.12...pdf-codec@3.1.0) (2026-08-20)
+
+
+### Bug Fixes
+
+* stop the pdf read pipeline statically importing the write path ([2ee097a](https://github.com/ExaDev/documents.js/commit/2ee097ab89619b23c5cb6210878dba9d05d99a07))
+
+
+### Features
+
+* declare pdf-codec/read as the read-only entry point ([388427a](https://github.com/ExaDev/documents.js/commit/388427aff6042510429ac7054e5c819a0c58d45e))
+
 ## [3.0.12](https://github.com/ExaDev/documents.js/compare/pdf-codec@3.0.11...pdf-codec@3.0.12) (2026-08-20)
 
 
