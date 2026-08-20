@@ -205,22 +205,67 @@ function estimateModalLineSpacing(lines: readonly TextLine[]): number {
 
 export function reconstructWordprocessing(doc: LayoutDocument, options?: ReconstructOptions): ContentDocument {
   const signal = options?.signal;
+  const headingLevels = headingSizeLevels(doc);
   const sections: ContentSection[] = [];
   let currentGroup: LayoutPage[] = [];
   let groupStartPageIndex = 0;
   for (const page of doc.pages) {
     throwIfAborted(signal);
     if (currentGroup.length > 0 && !samePageSize(currentGroup[0]!, page)) {
-      sections.push(buildSection(currentGroup, groupStartPageIndex, doc.images));
+      sections.push(buildSection(currentGroup, groupStartPageIndex, doc.images, headingLevels));
       groupStartPageIndex += currentGroup.length;
       currentGroup = [];
     }
     currentGroup.push(page);
   }
   if (currentGroup.length > 0) {
-    sections.push(buildSection(currentGroup, groupStartPageIndex, doc.images));
+    sections.push(buildSection(currentGroup, groupStartPageIndex, doc.images, headingLevels));
   }
   return { kind: 'wordprocessing', metadata: doc.metadata, sections };
+}
+
+// --- Heading inference from font size (ExaDev/documents.js#584 ask 2) -----------------------------------------
+//
+// PDF has no semantic headings, so reconstructing one is inference, and relative font size against the document's modal body size is the signal -- the same category of heuristic the paragraph clustering above already applies to baseline spacing. The level is assigned by RANK, not by absolute ratio: every distinct size sitting at least HEADING_MIN_SIZE_DELTA_PT above the modal body size is a heading size, ranked largest-first into Heading1, Heading2, ... Ranking is what inverts this package's own write side exactly (the layout engine renders Heading1..4 at 28/22/18/14pt against a 12pt body, so '# Title / ## Section' round-trips its levels back), and it generalises honestly to foreign PDFs, where "the largest text is the title, the next largest are sections" is the well-worn reading. Sizes within the delta of the body -- including this package's own Heading5 (12pt) and Heading6 (11pt) render sizes -- carry no signal and stay paragraphs: a size a document's body itself can have is not evidence of anything.
+//
+// The census runs over every text item in the document, table text included: a paragraph's own dominant size must land on a census bucket to be classified, and the modal body size is strengthened, not skewed, by table text at body size. A document whose only text is headings degenerates to "the modal size is the heading size", classifying nothing -- the conservative failure.
+
+// The smallest gap between the modal body size and a size that counts as heading-sized. 2pt admits the layout engine's own Heading4 (14pt against a 12pt body) with no margin to spare and excludes sub-point rounding jitter and nominal "slightly larger" text (13pt), which is genuinely indistinguishable from emphasis.
+const HEADING_MIN_SIZE_DELTA_PT = 2;
+
+// ATX's own ceiling: six '#' levels. A document with more than six distinct heading sizes clamps the deepest ones here rather than inventing deeper levels markdown cannot spell (markdown-codec's emitter clamps through document-schema.js's own clampHeadingLevel for the same reason).
+const MAX_HEADING_LEVEL = 6;
+
+function headingSizeLevels(doc: LayoutDocument): ReadonlyMap<number, number> {
+  const sizes: number[] = [];
+  for (const page of doc.pages) {
+    for (const item of page.items) {
+      if (item.kind === 'text') {
+        sizes.push(item.sizePt);
+      }
+    }
+  }
+  if (sizes.length === 0) {
+    return new Map();
+  }
+  const bodySizePt = modeOf(sizes, 0.5);
+  const headingBuckets = new Set<number>();
+  for (const size of sizes) {
+    const bucket = Math.round(size / 0.5) * 0.5;
+    if (bucket - bodySizePt >= HEADING_MIN_SIZE_DELTA_PT) {
+      headingBuckets.add(bucket);
+    }
+  }
+  const levels = new Map<number, number>();
+  [...headingBuckets].sort((a, b) => b - a).forEach((bucket, index) => {
+    levels.set(bucket, Math.min(index + 1, MAX_HEADING_LEVEL));
+  });
+  return levels;
+}
+
+// A clustered paragraph's dominant size, bucketed the same way the census buckets -- the key its heading level (if any) is looked up by.
+function headingLevelOf(paragraph: TextParagraph, levels: ReadonlyMap<number, number>): number | undefined {
+  return levels.get(modeOf(paragraph.lines.flatMap((line) => line.items.map((item) => item.sizePt)), 0.5));
 }
 
 function samePageSize(a: LayoutPage, b: LayoutPage): boolean {
@@ -229,19 +274,19 @@ function samePageSize(a: LayoutPage, b: LayoutPage): boolean {
 
 // Margins have no PDF equivalent to recover -- there is no principled way to distinguish "intentional margin" from "wherever the content happened to start" from geometry alone, so this deliberately reports zero rather than fabricating a plausible-looking value (ZERO_MARGINS, defined above).
 // startPageIndex is this section's own first page's absolute index in the whole LayoutDocument -- a frame's pageIndex names a page of the SOURCE document, not a page within one section, so every block this section builds stamps absolute indices derived from it.
-function buildSection(pages: readonly LayoutPage[], startPageIndex: number, images: Record<string, LayoutImageAsset>): ContentSection {
+function buildSection(pages: readonly LayoutPage[], startPageIndex: number, images: Record<string, LayoutImageAsset>, headingLevels: ReadonlyMap<number, number>): ContentSection {
   const blocks: ContentBlock[] = [];
   pages.forEach((page, i) => {
     if (i > 0) {
       blocks.push({ kind: 'pageBreak' });
     }
-    blocks.push(...reconstructPageBlocks(page, startPageIndex + i, images));
+    blocks.push(...reconstructPageBlocks(page, startPageIndex + i, images, headingLevels));
   });
   return { pageSize: { widthPt: pages[0]!.widthPt, heightPt: pages[0]!.heightPt }, margins: ZERO_MARGINS, blocks };
 }
 
 // Table recovery runs FIRST, because it decides what is left for everything after it: text inside a recovered lattice belongs to the table, not to the page's paragraph flow, and the lattice's own strokes belong to the table's structure, not to the recovered vector content. Both recoveries are no-ops on a page without the geometry to support them, so a text-only page produces exactly the blocks it always did. See the shared recovery section below for the full reasoning behind each gate.
-function reconstructPageBlocks(page: LayoutPage, pageIndex: number, images: Record<string, LayoutImageAsset>): ContentBlock[] {
+function reconstructPageBlocks(page: LayoutPage, pageIndex: number, images: Record<string, LayoutImageAsset>, headingLevels: ReadonlyMap<number, number>): ContentBlock[] {
   const recoveredTable = recoverTable(page, pageIndex);
   const consumedText = recoveredTable?.consumedText;
   const textItems = page.items.filter((i): i is LayoutText => i.kind === 'text' && consumedText?.has(i) !== true);
@@ -251,7 +296,7 @@ function reconstructPageBlocks(page: LayoutPage, pageIndex: number, images: Reco
 
   const positioned: { yPt: number; block: ContentBlock }[] = [];
   for (const paragraph of paragraphs) {
-    positioned.push({ yPt: paragraph.lines[0]!.baselineY, block: paragraphToContentParagraph(paragraph, pageIndex) });
+    positioned.push({ yPt: paragraph.lines[0]!.baselineY, block: paragraphToContentParagraph(paragraph, pageIndex, headingLevelOf(paragraph, headingLevels)) });
   }
   for (const img of imageItems) {
     const asset = images[img.imageId];
@@ -316,11 +361,11 @@ function startsNewParagraph(prev: TextLine, next: TextLine, modalSpacing: number
 
 const LEFT_ALIGN_TOLERANCE_PT = 2;
 
-function paragraphToContentParagraph(paragraph: TextParagraph, pageIndex: number): ContentParagraph {
+function paragraphToContentParagraph(paragraph: TextParagraph, pageIndex: number, headingLevel: number | undefined): ContentParagraph {
   const dominantLeftX = modeOf(paragraph.lines.map((l) => l.items[0]!.xPt), 1);
   const alignment: Alignment | undefined = paragraph.lines.every((l) => Math.abs(l.items[0]!.xPt - dominantLeftX) <= LEFT_ALIGN_TOLERANCE_PT) ? 'left' : undefined;
 
-  const result: ContentParagraph = { kind: 'paragraph', runs: [], alignment };
+  const result: ContentParagraph = { kind: 'paragraph', runs: [], alignment, ...(headingLevel !== undefined ? { styleId: `Heading${String(headingLevel)}` } : {}) };
   paragraph.lines.forEach((line, lineIndex) => {
     // One frame per clustered line, stamped on the paragraph node itself -- the paragraph's own rendered placements, aggregated from exactly the items it was clustered from (the runs inside carry their own finer-grained frames via pushRunsForLine).
     stampFrame(result, pageIndex, lineBox(line, pageIndex));
@@ -333,6 +378,10 @@ function paragraphToContentParagraph(paragraph: TextParagraph, pageIndex: number
     }
     pushRunsForLine(result.runs, line, pageIndex);
   });
+  // An inferred heading's weight is structural, carried by the Heading{N} styleId every downstream consumer resolves (the layout engine's own headingStyleFor, Word's built-in heading styles) -- leaving run-level bold in place would render markdown as '# **Title**', the literal '**bold** run' noise this inference exists to replace. Everything else about the runs (italic, colour, family, size) is genuine information and stays.
+  if (headingLevel !== undefined) {
+    result.runs = result.runs.map((run) => (run.bold === true ? { ...run, bold: undefined } : run));
+  }
 
   return result;
 }

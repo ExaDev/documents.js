@@ -113,6 +113,50 @@ describe('reconstructWordprocessing: paragraph clustering', () => {
   });
 });
 
+describe('reconstructWordprocessing: heading inference from font size', () => {
+  // The layout engine's own heading render sizes (src/layout/shared.ts HEADING_STYLES: 28/22/18/14pt against a 12pt body) are what this inference must invert, so the fixture mirrors them: two distinct sizes above the body, ranked largest-first into Heading1 and Heading2 -- exactly what a markdownToPdf of '# Title / ## Section / body' draws.
+  it('assigns Heading1/Heading2 by rank of distinct sizes above the modal body size', () => {
+    const pg = page(612, 792, [
+      text({ text: 'The Title', xPt: 50, yPt: 740, widthPt: 90, sizePt: 28 }),
+      text({ text: 'body line one', xPt: 50, yPt: 700, widthPt: 80 }),
+      text({ text: 'body line two', xPt: 50, yPt: 688, widthPt: 80 }),
+      text({ text: 'body line three', xPt: 50, yPt: 676, widthPt: 80 }),
+      text({ text: 'A Section', xPt: 50, yPt: 640, widthPt: 70, sizePt: 22 }),
+      text({ text: 'more body', xPt: 50, yPt: 620, widthPt: 60 }),
+      text({ text: 'even more body', xPt: 50, yPt: 608, widthPt: 70 }),
+      text({ text: 'still body', xPt: 50, yPt: 596, widthPt: 60 }),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    const paras = paragraphs(doc);
+    expect(paras.map((p) => p.styleId)).toEqual(['Heading1', undefined, 'Heading2', undefined]);
+  });
+
+  it('leaves body text at the modal size as an ordinary paragraph, however bold', () => {
+    const pg = page(612, 792, [
+      text({ text: 'Bold but body-sized', xPt: 50, yPt: 700, widthPt: 110, bold: true }),
+      text({ text: 'plain body', xPt: 50, yPt: 688, widthPt: 60 }),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    const paras = paragraphs(doc);
+    expect(paras).toHaveLength(1);
+    expect(paras[0]!.styleId).toBeUndefined();
+    expect(paras[0]!.runs[0]!.bold).toBe(true);
+  });
+
+  it('drops run-level bold on an inferred heading -- the heading style carries the weight', () => {
+    const pg = page(612, 792, [
+      text({ text: 'The Title', xPt: 50, yPt: 740, widthPt: 90, sizePt: 28, bold: true }),
+      text({ text: 'body line one', xPt: 50, yPt: 700, widthPt: 80 }),
+      text({ text: 'body line two', xPt: 50, yPt: 688, widthPt: 80 }),
+      text({ text: 'body line three', xPt: 50, yPt: 676, widthPt: 80 }),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    const [heading] = paragraphs(doc);
+    expect(heading!.styleId).toBe('Heading1');
+    expect(heading!.runs.every((r) => r.bold !== true)).toBe(true);
+  });
+});
+
 describe('reconstructWordprocessing: runs within a line', () => {
   it('inserts a tab run for a horizontal gap exceeding 2em', () => {
     const pg = page(612, 792, [text({ text: 'Left', xPt: 50, yPt: 700, widthPt: 20 }), text({ text: 'Right', xPt: 100, yPt: 700, widthPt: 20 })]); // gap = 100-70 = 30 > 2*12=24
