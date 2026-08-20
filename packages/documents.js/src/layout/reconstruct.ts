@@ -83,10 +83,11 @@ function textItemVerticalExtent(item: LayoutText): { ascentPt: number; descentPt
 }
 
 function textItemToContentRun(item: LayoutText): ContentRun {
+  // Absent bold/italic are omitted rather than written as explicit undefined keys, so every run this reconstruction produces has the same shape whether the flag was dropped by the heading inference above or never present -- and a consumer's toStrictEqual against a key-absent run object holds.
   return {
     text: item.text,
-    bold: item.font.weight === 'bold' ? true : undefined,
-    italic: item.font.style === 'italic' ? true : undefined,
+    ...(item.font.weight === 'bold' ? { bold: true } : {}),
+    ...(item.font.style === 'italic' ? { italic: true } : {}),
     fontFamily: item.font.family,
     sizePt: item.sizePt,
     color: item.color,
@@ -379,9 +380,16 @@ function paragraphToContentParagraph(paragraph: TextParagraph, pageIndex: number
     }
     pushRunsForLine(result.runs, line, pageIndex);
   });
-  // An inferred heading's weight is structural, carried by the Heading{N} styleId every downstream consumer resolves (the layout engine's own headingStyleFor, Word's built-in heading styles) -- leaving run-level bold in place would render markdown as '# **Title**', the literal '**bold** run' noise this inference exists to replace. Everything else about the runs (italic, colour, family, size) is genuine information and stays.
+  // An inferred heading's weight is structural, carried by the heading itself (both the canonical headingLevel and the Heading{N} styleId spelling) -- leaving run-level bold in place would render markdown as '# **Title**', the literal '**bold** run' noise this inference exists to replace. Everything else about the runs (italic, colour, family, size) is genuine information and stays. The dropped key is omitted outright rather than written as an explicit `bold: undefined`, so the run is shape-identical to one that was never bold (an explicit-undefined key survives `'bold' in run` and trips toStrictEqual against a key-absent object).
   if (headingLevel !== undefined) {
-    result.runs = result.runs.map((run) => (run.bold === true ? { ...run, bold: undefined } : run));
+    result.runs = result.runs.map((run) => {
+      if (run.bold !== true) {
+        return run;
+      }
+      const withoutBold: ContentRun = { ...run };
+      delete withoutBold.bold;
+      return withoutBold;
+    });
   }
 
   return result;
