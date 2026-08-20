@@ -87,6 +87,30 @@ describe('reconstructWordprocessing: paragraph clustering', () => {
     expect(paras).toHaveLength(2);
     expect(paras[1]!.runs[0]!.text).toContain('Indented');
   });
+
+  // ExaDev/documents.js#584: a heading sits tight above its body at ordinary line spacing, so the gap signal alone glues them into one paragraph -- the observed "**Part 1 Scope **This is body..." merge. A font-size discontinuity between adjacent lines is a third break signal, the same one the presentation direction's own clusterIntoBlocks already refuses to merge across (its fontSizesClose merge condition).
+  it('starts a new paragraph at a font-size discontinuity even when the vertical gap alone would not trigger one', () => {
+    const pg = page(612, 792, [
+      text({ text: 'A Heading', xPt: 50, yPt: 700, widthPt: 80, sizePt: 22 }),
+      text({ text: 'body one', xPt: 50, yPt: 688, widthPt: 50 }), // gap 12 = modal spacing, same margin -- only the size differs
+      text({ text: 'body two', xPt: 50, yPt: 676, widthPt: 50 }),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    const paras = paragraphs(doc);
+    expect(paras).toHaveLength(2);
+    expect(paras[0]!.runs.map((r) => r.text).join('')).toBe('A Heading');
+    expect(paras[1]!.runs.map((r) => r.text).join('')).toBe('body one body two');
+  });
+
+  it('still merges adjacent lines whose sizes differ only within the close tolerance (superscripts, rounding jitter)', () => {
+    const pg = page(612, 792, [
+      text({ text: 'Same para', xPt: 50, yPt: 700, widthPt: 60, sizePt: 12 }),
+      text({ text: 'continues', xPt: 50, yPt: 688, widthPt: 50, sizePt: 12.5 }), // within fontSizesClose's 1pt tolerance
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    const paras = paragraphs(doc);
+    expect(paras).toHaveLength(1);
+  });
 });
 
 describe('reconstructWordprocessing: runs within a line', () => {
