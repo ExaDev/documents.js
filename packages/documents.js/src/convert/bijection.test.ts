@@ -27,6 +27,7 @@ import { minimalPptxBytes } from '../test-support/pptx';
 import { richMarkdownText } from '../test-support/markdown';
 import { minimalOdgBytes } from '../test-support/odg';
 import { minimalOdpBytes } from '../test-support/odp';
+import { oleEmbeddedDocxBytes, oleEmbeddedPptxBytes } from '../test-support/ole';
 import { gridOdsBytes, minimalOdsBytes } from '../test-support/ods';
 import { sheetFormulaOdsBytes } from '../test-support/ods-formula';
 import { minimalOdtBytes } from '../test-support/odt';
@@ -124,6 +125,9 @@ function corpus(): readonly CorpusEntry[] {
       content: { kind: 'wordprocessing', metadata: chapterOne.metadata, sections: [...chapterOne.sections, ...chapterTwo.sections] },
     });
   }
+  // OLE-embedded OOXML hosts: the ContentEmbeddedObjectBlock both ooxml.js readers emit when an embeddings part is itself a ZIP package -- a nested ContentDocument riding a block, the one block shape whose content is itself a whole document, so the three laws must hold over it in both the section flow (docx) and the shape flow (pptx).
+  entries.push({ name: 'reader output: docx with an OLE-embedded xlsx', content: readDocxContent(decodeOoxmlPackage(oleEmbeddedDocxBytes())) });
+  entries.push({ name: 'reader output: pptx with an OLE-embedded xlsx', content: readPptxContent(decodeOoxmlPackage(oleEmbeddedPptxBytes())) });
   // onDocument captures: real frames, real pages, real styles minting over real formatting repetition.
   entries.push({ name: 'docxToPdf capture (wrapped runs carry multiple frames)', ...captured((onDocument) => docxToPdf(minimalDocxBytes(), { onDocument })) });
   entries.push({ name: 'pptxToPdf capture', ...captured((onDocument) => pptxToPdf(minimalPptxBytes(), { onDocument })) });
@@ -136,6 +140,9 @@ function corpus(): readonly CorpusEntry[] {
   entries.push({ name: 'svgToPdf capture', ...captured((onDocument) => svgToPdf(new TextEncoder().encode(SVG_TEXT), { onDocument })) });
   entries.push({ name: 'odfToPdf capture (formula tree)', ...captured((onDocument) => odfToPdf(odfFormulaBytes(FRACTION_FORMULA), { onDocument })) });
   entries.push({ name: 'odsToPdf capture with embedded formula', ...captured((onDocument) => odsToPdf(sheetFormulaOdsBytes(), { onDocument })) });
+  // The OLE hosts through the full conversion path too: the layout engines skip non-formula embeddedObject kinds harmlessly (the pptx fallback picture still renders), and the laws must hold over the stamped-frames tree these captures carry.
+  entries.push({ name: 'docxToPdf capture with an OLE-embedded xlsx', ...captured((onDocument) => docxToPdf(oleEmbeddedDocxBytes(), { onDocument })) });
+  entries.push({ name: 'pptxToPdf capture with an OLE-embedded xlsx', ...captured((onDocument) => pptxToPdf(oleEmbeddedPptxBytes(), { onDocument })) });
   // Reconstruction outputs: PDF bytes read back and reconstructed per direction.
   const pdfBytes = odsToPdf(gridOdsBytes());
   entries.push({ name: 'pdfToDocx reconstruction capture', ...captured((onDocument) => pdfToDocx(pdfBytes, { onDocument })) });
@@ -311,6 +318,30 @@ describe('decompose/flatten bijection laws over the real corpus', () => {
   it('the construct corpus mints refs onto the construct groups themselves', () => {
     const withConstructRefs = constructCorpus().filter((entry) => constructGroupRefsOf(assemblePackage(entry.content, entry.pages)).length > 0);
     expect(withConstructRefs.map((entry) => entry.name)).toEqual(constructCorpus().filter((entry) => entry.name !== 'construct with no children (an open marker immediately closed)').map((entry) => entry.name));
+  });
+
+  // And narrowed to the OLE-embedded entries: the laws would hold vacuously over an entry whose embedded block never materialised, so every OLE entry (reader outputs and conversion captures alike) must genuinely carry an embeddedObject block holding a recovered nested spreadsheet -- the shape the entries exist to pin.
+  it('the OLE corpus entries carry genuinely recovered embeddedObject blocks', () => {
+    const oleEntries = corpus().filter((entry) => entry.name.includes('OLE-embedded'));
+    expect(oleEntries.length).toBeGreaterThan(0);
+    for (const entry of oleEntries) {
+      const blocks =
+        entry.content.kind === 'wordprocessing'
+          ? entry.content.sections.flatMap((section) => section.blocks)
+          : entry.content.kind === 'presentation'
+            ? entry.content.slides.flatMap((slide) => slide.shapes.flatMap((shape) => shape.blocks))
+            : [];
+      const embedded = blocks.find((block) => block.kind === 'embeddedObject');
+      if (embedded?.kind !== 'embeddedObject') {
+        throw new Error(`${entry.name}: no embeddedObject block anywhere in the document`);
+      }
+      expect(embedded.objectKind).toBe('spreadsheet');
+      if (embedded.document.kind !== 'spreadsheet') {
+        throw new Error(`${entry.name}: the embedded block carries no spreadsheet document`);
+      }
+      expect(embedded.document.sheets[0]?.name).toBe('Embedded');
+      expect(embedded.document.sheets[0]?.cells[0]?.value).toEqual({ kind: 'string', value: 'Recovered cell' });
+    }
   });
 });
 
