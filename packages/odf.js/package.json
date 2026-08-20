@@ -8,9 +8,9 @@
     "url": "git+https://github.com/ExaDev/documents.js.git",
     "directory": "packages/odf.js"
   },
-  "homepage": "https://github.com/ExaDev/odf.js#readme",
+  "homepage": "https://github.com/ExaDev/documents.js/tree/main/packages/odf.js",
   "bugs": {
-    "url": "https://github.com/ExaDev/odf.js/issues"
+    "url": "https://github.com/ExaDev/documents.js/issues"
   },
   "exports": {
     ".": {

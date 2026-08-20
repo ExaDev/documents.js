@@ -8,9 +8,9 @@
     "url": "git+https://github.com/ExaDev/documents.js.git",
     "directory": "packages/pdf-codec"
   },
-  "homepage": "https://github.com/ExaDev/pdf-codec#readme",
+  "homepage": "https://github.com/ExaDev/documents.js/tree/main/packages/pdf-codec",
   "bugs": {
-    "url": "https://github.com/ExaDev/pdf-codec/issues"
+    "url": "https://github.com/ExaDev/documents.js/issues"
   },
   "exports": {
     ".": {
