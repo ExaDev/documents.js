@@ -26,6 +26,24 @@ describe('buildMarkdownText', () => {
     expect(text).toContain('A1');
   });
 
+  // A pageBreak block is the one block kind every PDF-to-X reconstruction emits that markdown-codec's own writer silently drops (emit.ts has no page construct to lose fidelity from, by that package's own documented model) -- this package's marker mapping is what carries a reconstructed page boundary into the markdown text at all (ExaDev/documents.js#584).
+  it('emits an HTML comment page-break marker for a pageBreak block, positioned between the content it separates', () => {
+    const document = markerDocument([
+      { kind: 'paragraph', runs: [{ text: 'First page content' }] },
+      { kind: 'pageBreak' },
+      { kind: 'paragraph', runs: [{ text: 'Second page content' }] },
+    ]);
+    const text = buildMarkdownText(document);
+    expect(text).toContain('<!-- page break -->');
+    expect(text.indexOf('First page content')).toBeLessThan(text.indexOf('<!-- page break -->'));
+    expect(text.indexOf('<!-- page break -->')).toBeLessThan(text.indexOf('Second page content'));
+  });
+
+  it('emits no page-break marker for a document without pageBreak blocks', () => {
+    const document = markerDocument([{ kind: 'paragraph', runs: [{ text: 'Just one page' }] }]);
+    expect(buildMarkdownText(document)).not.toContain('<!-- page break -->');
+  });
+
   it('throws MarkdownUnsupportedDocumentKindError for a non-wordprocessing ContentDocument', () => {
     const presentation: ContentDocument = { kind: 'presentation', metadata: {}, slides: [] };
     expect(() => buildMarkdownText(presentation)).toThrow(MarkdownUnsupportedDocumentKindError);

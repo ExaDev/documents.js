@@ -435,6 +435,28 @@ describe('pdfToMarkdown', () => {
     controller.abort();
     expect(() => pdfToMarkdown(pdfBytes, { signal: controller.signal })).toThrow();
   });
+
+  // ExaDev/documents.js#584 ask 1: the reconstructed pageBreak blocks (one per page boundary) reach the markdown text as `<!-- page break -->` markers rather than being dropped by markdown-codec's writer -- exact page-boundary information, one marker per boundary, none for a single-page document.
+  it('emits one page-break marker per page boundary, and none for a single page', () => {
+    const longMarkdown = `# Long Document\n\n${Array.from({ length: 80 }, (_, i) => `Paragraph ${String(i)} of ordinary prose content long enough to fill several printed pages.`).join('\n\n')}\n`;
+    const pdfBytes = markdownToPdf(encodeMarkdownText(longMarkdown));
+    const pageCount = readPdf(pdfBytes).pages.length;
+    expect(pageCount).toBeGreaterThan(1);
+    const text = decodeMarkdownText(pdfToMarkdown(pdfBytes));
+    const markerCount = text.split('<!-- page break -->').length - 1;
+    expect(markerCount).toBe(pageCount - 1);
+
+    const singlePageText = decodeMarkdownText(pdfToMarkdown(markdownToPdf(encodeMarkdownText('# Just one page\n\nShort body.\n'))));
+    expect(singlePageText).not.toContain('<!-- page break -->');
+  });
+
+  // The marker MEANS a page break rather than decorating one: readMarkdownContent's marker promotion turns each one back into a pageBreak block, so re-rendering the markdown honours the boundary -- this round trip lands on the same page count it started from, rather than printing the markers as literal text.
+  it('re-renders pdfToMarkdown output at the same page count, markers honoured as real breaks', () => {
+    const longMarkdown = `# Long Document\n\n${Array.from({ length: 80 }, (_, i) => `Paragraph ${String(i)} of ordinary prose content long enough to fill several printed pages.`).join('\n\n')}\n`;
+    const pageCount = readPdf(markdownToPdf(encodeMarkdownText(longMarkdown))).pages.length;
+    const markdownBytes = pdfToMarkdown(markdownToPdf(encodeMarkdownText(longMarkdown)));
+    expect(readPdf(markdownToPdf(markdownBytes)).pages.length).toBe(pageCount);
+  });
 });
 
 describe('pdfToOdt', () => {
