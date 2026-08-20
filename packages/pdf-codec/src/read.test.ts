@@ -87,6 +87,7 @@ describe('readPdf: PDFs that open without a password', () => {
     ['AES-256 with its objects packed into a compressed object stream', aes256ObjectStreamsPdf],
   ];
 
+  // AES-256's key derivation runs the SHA-256/384/512 hardened hash of ISO 32000-2 Algorithm 2.B, which is CPU-bound and slow enough under load to miss vitest's default 5000ms timeout on a busy CI runner -- applied to every fixture in this loop for a consistent timeout across the table, not just the AES-256 entries.
   for (const [label, fixture] of fixtures) {
     it(`decrypts and reads a permissions-only PDF encrypted with ${label}`, () => {
       const doc = readPdf(fixture());
@@ -95,14 +96,14 @@ describe('readPdf: PDFs that open without a password', () => {
       expect(textLayoutItems(doc.pages[0]!.items)).toMatchObject([{ text: ENCRYPTED_FIXTURE_PAGE_TEXT }]);
       expect(doc.metadata.title).toBe(ENCRYPTED_FIXTURE_TITLE);
       expect(doc.metadata.author).toBe(ENCRYPTED_FIXTURE_AUTHOR);
-    });
+    }, 15000);
   }
 
   it('reports no diagnostics at all while decrypting', () => {
     const diagnostics: PdfDiagnostic[] = [];
     readPdf(aes256EmptyUserPasswordPdf(), { sink: (diagnostic) => diagnostics.push(diagnostic) });
     expect(diagnostics).toEqual([]);
-  });
+  }, 15000);
 });
 
 describe('readPdf: PDFs it refuses to open', () => {
@@ -111,9 +112,10 @@ describe('readPdf: PDFs it refuses to open', () => {
     expect(() => readPdf(rc4Bits128RealUserPasswordPdf())).toThrow(PdfPasswordRequiredError);
   });
 
+  // AES-256's key derivation is CPU-bound (see the timeout note above the fixtures table) -- slow enough under load to miss vitest's default 5000ms timeout.
   it('throws PdfPasswordRequiredError for an AES-256 file with a real user password', () => {
     expect(() => readPdf(aes256RealUserPasswordPdf())).toThrow(PdfPasswordRequiredError);
-  });
+  }, 15000);
 
   it('throws PdfEncryptedError, not PdfPasswordRequiredError, for a security handler no password could open', () => {
     expect(() => readPdf(unsupportedSecurityHandlerPdf())).toThrow(PdfEncryptedError);
