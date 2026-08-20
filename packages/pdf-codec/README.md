@@ -185,6 +185,14 @@ import { readJpegInfo } from 'pdf-codec/image/jpeg-info';
 
 This works via package.json's `"./*"` wildcard export, resolving any `pdf-codec/<path>` subpath to the correspondingly-named file under `dist/` — both ESM `import` and CJS `require` resolve the same way.
 
+One subpath is a declared entry point in its own right: **`pdf-codec/read`** (an explicit `exports` entry onto `src/read.ts`, the read pipeline's own module). A consumer that only ever reads PDFs and imports the root barrel statically reaches `write.ts`'s module-scope imports — `math-font.ts` (the vendored STIX Two Math font) and `font-registry.ts` (the four Carlito/Caladea faces), together ~2.9 MB of font binaries it can never execute, which on Cloudflare Workers' free plan (3 MB gzipped for an entire Worker) is most of the budget. The read entry's module graph provably excludes them:
+
+```ts
+import { readPdf } from 'pdf-codec/read';
+```
+
+`src/read-graph.test.ts` walks the entry's static import graph and fails the build if `write.ts`, `math-font.ts`, `font-registry.ts`, or any asset module becomes reachable (type-only imports are exempt — they erase at compile time — so a read-side module can keep typing against the root barrel's types while its runtime graph stays narrow). The entry carries `readPdf` and the read pipeline's own helpers (`normalizeRotation`, `pageRotationTransform`, `decodePdfString`, `parsePdfDate`); the other read-adjacent surfaces it does not itself own stay deep-importable through the wildcard and are asset-free the same way — the diagnostics vocabulary (`pdf-codec/diagnostics`), the `LayoutDocument` item family (`pdf-codec/layout`), and standard-14 resolution/AFM metrics (`pdf-codec/fonts`, `pdf-codec/afm-widths`).
+
 ## Architecture
 
 The package is layered from generic primitives outward to the codec itself:

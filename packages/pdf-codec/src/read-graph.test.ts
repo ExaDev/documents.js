@@ -74,6 +74,11 @@ function chainTo(root: string, module: string, predecessors: ReadonlyMap<string,
 }
 
 // The modules whose reachability from a read entry is the defect #720 describes: the write entry itself (write.ts, whose own graph is the whole write path), the two modules that eagerly import the vendored font assets at module scope (math-font.ts: STIX Two Math; font-registry.ts: the Carlito/Caladea faces), and the asset modules those imports pull in. Everything else on the write side is caught transitively -- it reaches one of these.
+// Narrowing guard for the package.json JSON.parse boundary (no assertions, per family discipline).
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 function isForbidden(module: string): boolean {
   const relative = module.startsWith(SRC_DIR) ? module.slice(SRC_DIR.length) : undefined;
   if (relative === undefined) {
@@ -91,5 +96,13 @@ describe('the read path module graph excludes the write path and font assets', (
       forbidden.map((module) => chainTo(root, module, reachable)),
       `the read pipeline's module graph must not reach the write path or the vendored font assets; offending chain(s):\n  ${forbidden.map((module) => chainTo(root, module, reachable)).join('\n  ')}`,
     ).toEqual([]);
+  });
+
+  it('the package.json ./read export maps onto the read module, pinning the read-only entry', () => {
+    const parsed: unknown = JSON.parse(readFileSync(join(SRC_DIR, '..', 'package.json'), 'utf8'));
+    if (!isRecord(parsed) || !isRecord(parsed.exports) || !isRecord(parsed.exports['./read'])) {
+      throw new Error('read-graph guard: package.json exports has no ./read entry -- the read-only entry point must stay declared, not just wildcard-reachable');
+    }
+    expect(parsed.exports['./read'].import).toBe('./dist/read.js');
   });
 });
