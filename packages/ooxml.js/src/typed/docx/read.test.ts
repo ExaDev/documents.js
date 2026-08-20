@@ -1,8 +1,10 @@
 import type { Package } from '../../model/package';
 import type { XmlElement } from '../../model/node';
 import { describe, expect, it } from 'vitest';
-import type { ContentBlock, ContentConstructStart, ContentImageBlock, ContentParagraph, ContentTable } from 'document-schema.js';
+import type { ContentBlock, ContentConstructStart, ContentEmbeddedObjectBlock, ContentImageBlock, ContentParagraph, ContentTable } from 'document-schema.js';
 import { el, txt } from '../../xml/fragment';
+import { bytesToBase64 } from '../../util/base64';
+import { minimalXlsxBytes } from '../../test-support/embedded';
 import { readDocxContent } from './read';
 
 // Ported from documents.js's src/ooxml/docx/read.test.ts, adapted to readDocxContent's own DocxDocument shape (sections directly, not wrapped in a ContentDocument discriminated union) and merged with this package's comment/footnote/header/footer coverage.
@@ -10,6 +12,7 @@ import { readDocxContent } from './read';
 const HYPERLINK_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink';
 const THEME_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme';
 const IMAGE_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image';
+const OLE_OBJECT_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject';
 const PICTURE_GRAPHIC_URI = 'http://schemas.openxmlformats.org/drawingml/2006/picture';
 
 // A genuine, minimal 1x1 transparent PNG -- real magic bytes, so sniffImageFormat actually recognises it, not a placeholder string.
@@ -464,6 +467,13 @@ function asImage(block: ContentBlock | undefined): ContentImageBlock {
   return block;
 }
 
+function asEmbeddedObject(block: ContentBlock | undefined): ContentEmbeddedObjectBlock {
+  if (block?.kind !== 'embeddedObject') {
+    throw new Error('expected an embeddedObject block');
+  }
+  return block;
+}
+
 describe('readDocxContent: images', () => {
   it('reads an inline (wp:inline) w:drawing as a real ContentImageBlock, sized from wp:extent EMU converted to points', () => {
     const doc = readDocxContent(buildFixturePackage());
@@ -486,6 +496,80 @@ describe('readDocxContent: images', () => {
   it('assigns the image its own sourcePath alongside its containing paragraph', () => {
     const doc = readDocxContent(buildFixturePackage());
     expect(sourcePathOf(doc.sections[1]?.blocks[2])).toBe('sections[1].blocks[2]');
+  });
+});
+
+// An inline OLE object's real-world spelling: a w:r carries a w:object whose w:dxaOrig/w:dyaOrig (twips) size it, whose v:shape > v:imagedata names the raster preview picture rendered in its place (a VML spelling this reader has no path for, so the preview contributes no image block), and whose o:OLEObject names the payload part through its own relationship. The payload relationship is parameterised so a test can point rIdOle at whatever part shape it needs (the ZIP-payload case targets the default embeddings/oleObject1.xlsx; the classic-OLE case retargets to a .bin; the linked case goes external) -- the fixture itself ships no embeddings part, so each test adds exactly the payload bytes it wants. extraRuns splices additional runs after the object run inside the same paragraph.
+function oleObjectFixturePackage(oleRel: { target: string; external?: boolean }, extraRuns: XmlElement[] = []): Package {
+  const objectRun = el('w:r', {}, [
+    el('w:object', { 'w:dxaOrig': '1920', 'w:dyaOrig': '1200' }, [
+      el('v:shape', { id: '_x0000_i1025', type: '#_x0000_t75', style: 'width:96pt;height:60pt' }, [
+        el('v:imagedata', { 'r:id': 'rIdPreview', 'o:title': '' }),
+      ]),
+      el('o:OLEObject', { Type: 'Embed', ProgID: 'Excel.Sheet.12', ShapeID: '_x0000_i1025', DrawAspect: 'Content', ObjectID: '_1702998213', 'r:id': 'rIdOle' }),
+    ]),
+  ]);
+  const paragraph = el('w:p', {}, [objectRun, ...extraRuns]);
+  const body = el('w:body', {}, [paragraph, el('w:sectPr', {}, [el('w:pgSz', { 'w:w': '12240', 'w:h': '15840' })])]);
+  const documentRels = rels([
+    oleRel.external === true ? { id: 'rIdOle', type: OLE_OBJECT_REL, target: oleRel.target, external: true } : { id: 'rIdOle', type: OLE_OBJECT_REL, target: oleRel.target },
+    { id: 'rIdPreview', type: IMAGE_REL, target: 'media/olePreview.png' },
+  ]);
+  return {
+    parts: {
+      'word/document.xml': { kind: 'xml', nodes: [el('w:document', {}, [body])] },
+      'word/_rels/document.xml.rels': { kind: 'xml', nodes: [documentRels] },
+      'word/media/olePreview.png': { kind: 'binary', base64: TINY_PNG_BASE64 },
+    },
+  };
+}
+
+describe('readDocxContent: embedded OLE objects', () => {
+  it('recovers a ZIP-payload OLE object as an embeddedObject block carrying the genuinely decoded sub-document', () => {
+    // The payload part rIdOle targets now really exists: a minimal xlsx, as a modern producer writes an embedded workbook.
+    const pkg = oleObjectFixturePackage({ target: 'embeddings/oleObject1.xlsx' });
+    pkg.parts['word/embeddings/oleObject1.xlsx'] = { kind: 'binary', base64: bytesToBase64(minimalXlsxBytes()) };
+    const doc = readDocxContent(pkg);
+    // The paragraph contributes its own (run-text-empty) block, then the object's recovered content as a sibling -- the same lifting convention an inline image follows. The VML preview has no reader, so it adds no image block.
+    expect(doc.sections[0]?.blocks).toHaveLength(2);
+    const embedded = asEmbeddedObject(doc.sections[0]?.blocks[1]);
+    expect(embedded.objectKind).toBe('spreadsheet');
+    // w:object's own w:dxaOrig/w:dyaOrig (twips) size the block; an inline flow object has no absolute position, so the frame sits at the origin.
+    expect(embedded.frame).toEqual({ xPt: 0, yPt: 0, widthPt: 96, heightPt: 60 });
+    // The nested document is the genuinely decoded workbook, not just an envelope block.
+    const sheet = embedded.document.kind === 'spreadsheet' ? embedded.document.sheets[0] : undefined;
+    expect(sheet?.name).toBe('Embedded');
+    expect(sheet?.cells[0]?.value).toEqual({ kind: 'string', value: 'Recovered cell' });
+    expect(sourcePathOf(doc.sections[0]?.blocks[1])).toBe('sections[0].blocks[1]');
+  });
+
+  it('lifts an object and a drawing from one paragraph in their markup encounter order', () => {
+    // A drawing run after the object run (reusing the fixture's own preview image part) must lift its image block after the object's embedded block, not before it.
+    const pkg = oleObjectFixturePackage({ target: 'embeddings/oleObject1.xlsx' }, [el('w:r', {}, [drawingElement('wp:inline', 'rIdPreview', 'Drawing after the object')])]);
+    pkg.parts['word/embeddings/oleObject1.xlsx'] = { kind: 'binary', base64: bytesToBase64(minimalXlsxBytes()) };
+    const doc = readDocxContent(pkg);
+    expect(doc.sections[0]?.blocks).toHaveLength(3);
+    expect(asEmbeddedObject(doc.sections[0]?.blocks[1]).objectKind).toBe('spreadsheet');
+    expect(asImage(doc.sections[0]?.blocks[2]).altText).toBe('Drawing after the object');
+  });
+
+  it('keeps a non-ZIP OLE payload (the classic compound-file .bin) skipped exactly as before, with no embedded block and no crash', () => {
+    // rIdOle retargeted at a part whose bytes carry the OLE/CFB magic -- no reader in this ecosystem decodes it, so the paragraph's blocks are exactly what they were before embedded recovery existed.
+    const pkg = oleObjectFixturePackage({ target: 'embeddings/oleObject1.bin' });
+    pkg.parts['word/embeddings/oleObject1.bin'] = { kind: 'binary', base64: bytesToBase64(new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, 0x01, 0x02, 0x03, 0x04])) };
+    const doc = readDocxContent(pkg);
+    expect(doc.sections[0]?.blocks).toHaveLength(1);
+    // The w:r carrying the object reads as an empty-text run, exactly as it did before embedded recovery existed.
+    const paragraph = asParagraph(doc.sections[0]?.blocks[0]);
+    expect(paragraph.runs).toHaveLength(1);
+    expect(paragraph.runs[0]?.text).toBe('');
+  });
+
+  it('skips an externally-linked OLE object (TargetMode External) without resolving its target', () => {
+    // A linked object's relationship target is a URI, not a package part -- the same part-lookup convention the image path applies leaves the paragraph as it was, and no ZIP detection ever runs against the link.
+    const pkg = oleObjectFixturePackage({ target: 'file:///C:/data/Book1.xlsx', external: true });
+    const doc = readDocxContent(pkg);
+    expect(doc.sections[0]?.blocks).toHaveLength(1);
   });
 });
 

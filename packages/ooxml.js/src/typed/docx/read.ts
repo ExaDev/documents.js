@@ -1,9 +1,10 @@
 import { z } from 'zod';
 import type { Package } from '../../model/package';
 import type { XmlElement, XmlNode } from '../../model/node';
-import type { Color, ContentBlock, ContentBorder, ContentCellBorders, ContentImageBlock, ContentListMembership, ContentParagraph, ContentRun, ContentSection, ContentStrokeStyle, ContentTable, ContentTableCell, Margins, PageSize, ProvenanceChange } from 'document-schema.js';
+import type { Color, ContentBlock, ContentBorder, ContentCellBorders, ContentEmbeddedObjectBlock, ContentImageBlock, ContentListMembership, ContentParagraph, ContentRun, ContentSection, ContentStrokeStyle, ContentTable, ContentTableCell, Margins, PageSize, ProvenanceChange } from 'document-schema.js';
 import { COLOR_BLACK, ContentSectionSchema, PAGE_SIZE_LETTER, clampHeadingLevel, rgbHexToColor } from 'document-schema.js';
 import { DocumentMetadataSchema, readCoreProperties } from '../shared/metadata';
+import { readEmbeddedOoxmlPayload } from '../embedded';
 import { eighthPointsToPt, emuToPt, twipsToPt } from '../shared/units';
 import type { DrawingTheme } from '../shared/drawingml';
 import { EMPTY_THEME, readTheme } from '../shared/drawingml';
@@ -177,8 +178,26 @@ function readDrawingImage(drawing: XmlElement, ctx: DocxReadContext): ContentIma
   return image;
 }
 
-// Collects every w:drawing found anywhere inside a paragraph's own content (nested inside w:r, w:hyperlink, w:ins, w:fldSimple), in document order. Deleted subtrees (w:del, w:moveFrom) are excluded unless the caller is carrying deletions -- mirroring readParagraphRuns' own tracked-changes handling, since a deleted drawing's own w:r sits inside w:del alongside w:delText runs, and a drawing lifted out of a deletion the reader is not carrying would appear as live content.
-function collectDrawings(nodes: readonly XmlNode[], carryDeletions: boolean, out: XmlElement[]): void {
+// Resolves a w:object's OLE payload (o:OLEObject/@r:id -> document relationship -> embeddings part) through readEmbeddedOoxmlPayload: a ZIP payload (a modern producer's embedded xlsx/docx/pptx) becomes the recovered sub-document's ContentEmbeddedObjectBlock, sized from w:object's own w:dxaOrig/w:dyaOrig (twips), while the classic non-ZIP OLE compound-file payload (.bin) returns undefined and is skipped, exactly as unhandled markup is. Undefined follows the same convention as readDrawingImage: an id, relationship, or part that does not line up (including an externally-linked object, whose relationship target is a URI no part key matches) leaves the paragraph with no embedded block, never a partial one. The frame sits at the origin because an inline flow object has no absolute position to record -- ContentEmbeddedObjectBlock's frame is required, and 0/0 is the honest spelling of "positioned by the flow", the same narrowing readDrawingImage makes for wp:anchor.
+function readObjectEmbeddedObject(object: XmlElement, ctx: DocxReadContext): ContentEmbeddedObjectBlock | undefined {
+  const dxaOrig = attr(object, 'w:dxaOrig');
+  const dyaOrig = attr(object, 'w:dyaOrig');
+  if (dxaOrig === undefined || dyaOrig === undefined) {
+    return undefined;
+  }
+  const oleObject = elementsWithTag([object], 'o:OLEObject')[0];
+  const rId = oleObject === undefined ? undefined : attr(oleObject, 'r:id');
+  const rel = rId === undefined ? undefined : ctx.rels.get(rId);
+  const payloadPart = rel === undefined ? undefined : ctx.pkg.parts[rel.target];
+  if (payloadPart?.kind !== 'binary') {
+    return undefined;
+  }
+  const payload = readEmbeddedOoxmlPayload(base64ToBytes(payloadPart.base64));
+  return payload === undefined ? undefined : { kind: 'embeddedObject', objectKind: payload.objectKind, document: payload.document, frame: { xPt: 0, yPt: 0, widthPt: twipsToPt(Number(dxaOrig)), heightPt: twipsToPt(Number(dyaOrig)) } };
+}
+
+// Collects every w:drawing and w:object found anywhere inside a paragraph's own content (nested inside w:r, w:hyperlink, w:ins, w:fldSimple), in document order. Deleted subtrees (w:del, w:moveFrom) are excluded unless the caller is carrying deletions -- mirroring readParagraphRuns' own tracked-changes handling, since a deleted drawing's own w:r sits inside w:del alongside w:delText runs, and a drawing lifted out of a deletion the reader is not carrying would appear as live content. A w:object is pushed at its own position and then recursed into, so a w:drawing nested inside it (a modern producer's mc:AlternateContent preview spelling) is still collected as an image in its own right, exactly as it was before embedded-object recovery existed.
+function collectLiftedElements(nodes: readonly XmlNode[], carryDeletions: boolean, out: XmlElement[]): void {
   for (const node of nodes) {
     if (node.type !== 'element') {
       continue;
@@ -186,26 +205,28 @@ function collectDrawings(nodes: readonly XmlNode[], carryDeletions: boolean, out
     if (!carryDeletions && (node.tag === 'w:del' || node.tag === 'w:moveFrom')) {
       continue;
     }
-    if (node.tag === 'w:drawing') {
+    if (node.tag === 'w:drawing' || node.tag === 'w:object') {
       out.push(node);
-      continue;
+      if (node.tag === 'w:drawing') {
+        continue;
+      }
     }
-    collectDrawings(node.children, carryDeletions, out);
+    collectLiftedElements(node.children, carryDeletions, out);
   }
 }
 
-// ContentRun has no field to carry an inline image (unlike ContentShape's blocks list in pptx) -- an image found inside a paragraph's own runs is therefore surfaced as its own sibling ContentImageBlock, appended immediately after that paragraph's block, rather than nested inside it. This preserves block-level document order (the image still appears right after the paragraph that contained it) at the cost of losing the image's exact character-level position within that paragraph's text -- a real, bounded scope narrowing forced by ContentParagraph's own shape, not a silent drop.
-function readParagraphImages(paragraph: XmlElement, ctx: DocxReadContext, carryDeletions: boolean): ContentImageBlock[] {
-  const drawings: XmlElement[] = [];
-  collectDrawings(paragraph.children, carryDeletions, drawings);
-  const images: ContentImageBlock[] = [];
-  for (const drawing of drawings) {
-    const image = readDrawingImage(drawing, ctx);
-    if (image !== undefined) {
-      images.push(image);
+// ContentRun has no field to carry an inline image or embedded object (unlike ContentShape's blocks list in pptx) -- media found inside a paragraph's own runs is therefore surfaced as its own sibling block (ContentImageBlock or ContentEmbeddedObjectBlock), appended immediately after that paragraph's block in the order the markup introduced them, rather than nested inside it. This preserves block-level document order (each lifted block still appears right after the paragraph that contained it, and drawings and objects keep their relative order) at the cost of losing each one's exact character-level position within that paragraph's text -- a real, bounded scope narrowing forced by ContentParagraph's own shape, not a silent drop.
+function readParagraphLiftedBlocks(paragraph: XmlElement, ctx: DocxReadContext, carryDeletions: boolean): ContentBlock[] {
+  const lifted: XmlElement[] = [];
+  collectLiftedElements(paragraph.children, carryDeletions, lifted);
+  const blocks: ContentBlock[] = [];
+  for (const element of lifted) {
+    const block = element.tag === 'w:object' ? readObjectEmbeddedObject(element, ctx) : readDrawingImage(element, ctx);
+    if (block !== undefined) {
+      blocks.push(block);
     }
   }
-  return images;
+  return blocks;
 }
 
 function readRun(run: XmlElement, paragraph: XmlElement, context: DocxStyleContext): ContentRun {
@@ -610,7 +631,7 @@ function collectParagraph(paragraph: XmlElement, ctx: DocxReadContext, state: Fl
   // The pageBreak block above sits outside every extent recorded here: it is the paragraph's own w:pageBreakBefore rendered as a preceding block, not part of any construct that brackets the paragraph.
   const paragraphIndex = state.blocks.length;
   state.blocks.push(readParagraph(paragraph, ctx, paragraphDeleted));
-  state.blocks.push(...readParagraphImages(paragraph, ctx, paragraphDeleted));
+  state.blocks.push(...readParagraphLiftedBlocks(paragraph, ctx, paragraphDeleted));
   const endIndex = state.blocks.length;
 
   if (tracked !== undefined) {
@@ -626,7 +647,7 @@ function collectParagraph(paragraph: XmlElement, ctx: DocxReadContext, state: Fl
   }
 }
 
-// Walks block-level content (w:p, w:tbl) into one flat block list plus the construct extents bracketing it. A structured document tag (w:sdt), a tracked change (w:ins/w:del/w:moveFrom/w:moveTo), and mc:AlternateContent (Fallback preferred, else the first Choice) all recurse into the SAME list rather than starting a nested one: the first two become construct extents over the blocks they contributed, and alternate content is unwrapped as before, since a taken branch is content rather than a construct. Any w:drawing found inside a paragraph is surfaced as a sibling ContentImageBlock immediately following that paragraph's own block -- see readParagraphImages.
+// Walks block-level content (w:p, w:tbl) into one flat block list plus the construct extents bracketing it. A structured document tag (w:sdt), a tracked change (w:ins/w:del/w:moveFrom/w:moveTo), and mc:AlternateContent (Fallback preferred, else the first Choice) all recurse into the SAME list rather than starting a nested one: the first two become construct extents over the blocks they contributed, and alternate content is unwrapped as before, since a taken branch is content rather than a construct. Any w:drawing or w:object found inside a paragraph is surfaced as a sibling ContentImageBlock/ContentEmbeddedObjectBlock immediately following that paragraph's own block -- see readParagraphLiftedBlocks.
 function collectFlowNodes(nodes: readonly XmlNode[], ctx: DocxReadContext, state: FlowState, carryDeletions: boolean): void {
   for (const node of nodes) {
     if (node.type !== 'element') {
@@ -793,9 +814,9 @@ function readHeaderFooterText(pkg: Package, prefix: string): string[] {
   return out;
 }
 
-// Resolves a generic OOXML Package into DocxDocument: the WordprocessingML style cascade, DrawingML theme resolution (including w:themeColor run-colour references, resolved against the theme's own colour scheme), ordered sections of paragraphs/tables/page-breaks/images (document order preserved, including inside tables, with cell background AND border styling read from w:tcBorders), the block-scoped fidelity constructs (structured document tags, fields, bookmarks, tracked changes) as constructStart/constructEnd marker pairs, plus comments, footnotes, header/footer text, and word/numbering.xml's own abstractNum/num level definitions (numbering.ts's readNumberingDefinitions). An inline (wp:inline) or floating/anchored (wp:anchor) w:drawing is resolved to a real ContentImageBlock via the containing part's own relationships, sniffed from its actual media-part bytes rather than trusted from any extension/content-type -- but a floating image's own wp:anchor position (page/margin/paragraph-relative offset) is never read, since ContentImageBlock has no absolute positioning field to record it in; it lands in the block flow at the point its w:drawing was encountered, same as an inline image.
+// Resolves a generic OOXML Package into DocxDocument: the WordprocessingML style cascade, DrawingML theme resolution (including w:themeColor run-colour references, resolved against the theme's own colour scheme), ordered sections of paragraphs/tables/page-breaks/images (document order preserved, including inside tables, with cell background AND border styling read from w:tcBorders), the block-scoped fidelity constructs (structured document tags, fields, bookmarks, tracked changes) as constructStart/constructEnd marker pairs, plus comments, footnotes, header/footer text, and word/numbering.xml's own abstractNum/num level definitions (numbering.ts's readNumberingDefinitions). An inline (wp:inline) or floating/anchored (wp:anchor) w:drawing is resolved to a real ContentImageBlock via the containing part's own relationships, sniffed from its actual media-part bytes rather than trusted from any extension/content-type -- but a floating image's own wp:anchor position (page/margin/paragraph-relative offset) is never read, since ContentImageBlock has no absolute positioning field to record it in; it lands in the block flow at the point its w:drawing was encountered, same as an inline image. A w:object/o:OLEObject whose payload part is itself a ZIP archive (a modern producer's embedded xlsx/docx/pptx) is decoded through the shared embedded-object helper (typed/embedded.ts) into a sibling ContentEmbeddedObjectBlock sized from w:dxaOrig/w:dyaOrig and lifted through the same convention as an image block.
 //
-// Information not modelled here is still dropped: section break types other than plain w:sectPr (ContentSection itself has no field to record w:type's nextPage/continuous/evenPage/oddPage distinction); live PAGE/NUMPAGES field re-evaluation; w:themeShade/w:themeTint refinement of a resolved theme colour; a floating image's own anchored position; any image whose bytes don't sniff as PNG/JPEG; and every run-level construct occurrence -- a field, bookmark, content control, or tracked change covering a sub-sequence of one paragraph's runs rather than whole blocks (see typed/docx/constructs.ts for why, and typed/docx/write.ts for the write side of what does survive).
+// Information not modelled here is still dropped: section break types other than plain w:sectPr (ContentSection itself has no field to record w:type's nextPage/continuous/evenPage/oddPage distinction); live PAGE/NUMPAGES field re-evaluation; w:themeShade/w:themeTint refinement of a resolved theme colour; a floating image's own anchored position; any image whose bytes don't sniff as PNG/JPEG; a w:object's VML preview picture (v:imagedata -- no VML reader exists here, and real producers ship WMF/EMF previews anyway); the classic non-ZIP OLE compound-file payload (.bin -- opaque external-application data, left skipped exactly as unhandled markup); and every run-level construct occurrence -- a field, bookmark, content control, or tracked change covering a sub-sequence of one paragraph's runs rather than whole blocks (see typed/docx/constructs.ts for why, and typed/docx/write.ts for the write side of what does survive).
 export function readDocxContent(pkg: Package): DocxDocument {
   const documentRoot = rootElement(pkg.parts[DOCUMENT_PART_PATH]);
   if (documentRoot === undefined) {
