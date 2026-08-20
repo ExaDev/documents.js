@@ -522,7 +522,7 @@ importers:
         specifier: ^4.0.22
         version: link:../documents.js
       markdown-codec:
-        specifier: ^4.0.8
+        specifier: ^4.0.9
         version: link:../markdown-codec
       odf.js:
         specifier: ^5.0.5
