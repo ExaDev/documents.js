@@ -310,7 +310,7 @@ importers:
         specifier: ^1.0.4
         version: link:../document-outline.js
       documents.js:
-        specifier: ^4.0.24
+        specifier: ^4.0.25
         version: link:../documents.js
       zod:
         specifier: ^4.2.0
