@@ -2,9 +2,11 @@
 import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 import * as esm from '../dist/index.js';
+import * as esmRead from '../dist/read.js';
 
 const require = createRequire(import.meta.url);
 const cjs = require('../dist/index.cjs');
+const cjsRead = require('../dist/read.cjs');
 
 // A representative slice of the public surface, not an exhaustive list -- enough to catch a genuinely broken dual build without duplicating src/index.ts's own export list here. Classes (ByteReader, ByteWriter, PdfParseError, PdfEncryptedError) are real invocable functions at runtime (typeof === 'function'), so they're checked here alongside ordinary functions rather than in OBJECTS below.
 const FUNCTIONS = [
@@ -138,5 +140,34 @@ describe.each([
       const layout = api.readPdf(pdfBytes);
       expect(layout.pages).toHaveLength(1);
     });
+  });
+});
+
+// The read-only entry (package.json `./read` -> dist/read.js/.cjs, the read pipeline's own module): loads in both builds, carries the read surface, and genuinely reads a PDF through the built artifact. The graph-width half of the guarantee (nothing reachable from this module touches the write path or the vendored font assets) is held at the source level by src/read-graph.test.ts; this block proves the built entry itself stays a working read pipeline after the tsdown build.
+describe.each([
+  ['ESM', esmRead],
+  ['CJS', cjsRead],
+])('%s read entry', (_label, api) => {
+  it('exports the read pipeline surface', () => {
+    for (const name of ['readPdf', 'normalizeRotation', 'pageRotationTransform', 'decodePdfString', 'parsePdfDate']) {
+      expect(typeof api[name], `read entry must export ${name}`).toBe('function');
+    }
+  });
+
+  it('reads a PDF produced through the root barrel', () => {
+    const doc = {
+      formatVersion: 1,
+      metadata: {},
+      pages: [{ widthPt: 200, heightPt: 100, items: [{ kind: 'text', text: 'read entry smoke', xPt: 10, yPt: 50, font: HELVETICA, sizePt: 12, color: BLACK }] }],
+      images: {},
+    };
+    const pdfBytes = esm.writePdf(doc);
+    const layout = api.readPdf(pdfBytes);
+    expect(layout.pages).toHaveLength(1);
+    const text = layout.pages[0].items
+      .filter((item) => item.kind === 'text')
+      .map((item) => item.text)
+      .join(' ');
+    expect(text).toContain('read entry smoke');
   });
 });

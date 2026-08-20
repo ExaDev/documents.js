@@ -21,6 +21,14 @@
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
     },
+    "./read": {
+      "types": {
+        "import": "./dist/read.d.ts",
+        "require": "./dist/read.d.cts"
+      },
+      "import": "./dist/read.js",
+      "require": "./dist/read.cjs"
+    },
     "./*": {
       "types": {
         "import": "./dist/*.d.ts",
@@ -33,6 +41,13 @@
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "read": [
+        "./dist/read.d.ts"
+      ]
+    }
+  },
   "files": [
     "dist"
   ],
