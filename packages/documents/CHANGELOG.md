@@ -1,3 +1,10 @@
+## [1.26.32](https://github.com/ExaDev/documents.js/compare/documents@1.26.31...documents@1.26.32) (2026-08-20)
+
+
+### Bug Fixes
+
+* declare the documents web UI's MIT licence ([3dda5b0](https://github.com/ExaDev/documents.js/commit/3dda5b08af00382aa980b6dd88ef124649240b63))
+
 ## [1.26.31](https://github.com/ExaDev/documents.js/compare/documents@1.26.30...documents@1.26.31) (2026-08-20)
 
 
