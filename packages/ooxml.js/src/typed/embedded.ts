@@ -1,4 +1,4 @@
-import { isZipArchive, walkArchive, type ArchiveWalkEntry } from 'archive-codec';
+import { isCompoundFile, isZipArchive, readCompoundFile, readOlePackage, walkArchive, type ArchiveWalkEntry } from 'archive-codec';
 import type { ContentDocument } from 'document-schema.js';
 import type { XmlElement } from '../model/node';
 import type { BinaryPart, Package } from '../model/package';
@@ -10,7 +10,7 @@ import { readPptxContent } from './pptx/read';
 import { readXlsxContent } from './xlsx/content';
 import { childrenWithTag, rootElement } from './util';
 
-// The shared embedded-object decode: an OOXML package's OLE embeddings (pptx's p:oleObj/@r:id target part, docx's o:OLEObject/@r:id target part) hold either a classic OLE compound-file blob (.bin -- opaque external-application data this ecosystem has no reader for) or, as every modern producer writes an OOXML embeddee, a whole nested OOXML package zipped into the part's bytes. This module recovers that second case: ZIP magic checked up front (archive-codec's isZipArchive -- a byte check, never a parse-and-catch), the bytes walked through archive-codec's guarded recursive walk (the bounded inflate -- see readEmbeddedOoxmlPayload's own comment) with the walk's root entries assembled into a nested Package, the flavour detected from the nested package's own entry part, and the matching typed reader run to produce the nested ContentDocument that ContentEmbeddedObject.document carries.
+// The shared embedded-object decode: an OOXML package's OLE embeddings (pptx's p:oleObj/@r:id target part, docx's o:OLEObject/@r:id target part) hold either a whole nested OOXML package zipped into the part's bytes (every modern producer's spelling), or a classic OLE compound-file blob (.bin) whose root storage carries the real file as an OLE-packaged 'Package' stream. This module recovers both: payload magic checked up front (archive-codec's isZipArchive and isCompoundFile -- byte checks, never a parse-and-catch), a .bin unwrapped through archive-codec's CFB reader and OLE-package parser to the ZIP a modern embed packages, the ZIP bytes walked through archive-codec's guarded recursive walk (the bounded inflate -- see readEmbeddedOoxmlPayload's own comment) with the walk's root entries assembled into a nested Package, the flavour detected from the nested package's own entry part, and the matching typed reader run to produce the nested ContentDocument that ContentEmbeddedObject.document carries.
 //
 // Flavour detection is by entry-part path, not [Content_Types].xml overrides, for two reasons: the three entry paths are exactly what the readers themselves dispatch on (readDocxContent throws without word/document.xml, readSlidePathsInOrder reads ppt/presentation.xml, resolveSheetEntries reads xl/workbook.xml), so detection by the same paths -- plus the one further precondition a reader of the three has, readDocxContent's w:body (hasDocxBody below) -- guarantees the chosen reader's precondition already holds; and the macro-enabled variants (docm/pptm/xlsm) share these exact paths -- the macro payload is an extra vbaProject.bin part, not a different entry -- so they map onto the same three content kinds with no separate case.
 //
@@ -54,23 +54,40 @@ function rootEntriesOf(walk: readonly ArchiveWalkEntry[]): Record<string, Uint8A
   return entries;
 }
 
-// Decodes an embedded-object payload part's bytes into the ContentEmbeddedObject payload (objectKind + the whole nested ContentDocument). Returns undefined when the bytes are not a ZIP at all -- the classic OLE compound-file payload, whose recovery is out of scope and whose caller keeps whatever behaviour it had before -- or when the bytes are a ZIP that does not decode into one of the three OOXML flavours: a plain archive no reader recognises, structurally corrupt zip data, a payload outside archive-codec's walk guards, or a nested document a reader refuses (a docx without a w:body). An embedded payload is second-order content -- the caller chose to open the host document, not whatever bytes sit in its embeddings part -- so under the family's tiered read policy every one of those is a degrade-tier non-event (odf.js's embedded precedent resolves unknown kinds to undefined rather than throwing), and this function is total: one bad embedded object can never fail the whole host read.
+// Decodes an embedded-object payload part's bytes into the ContentEmbeddedObject payload (objectKind + the whole nested ContentDocument). The payload takes one of three shapes: bytes that are a ZIP directly (a modern producer's embedded xlsx/docx/pptx), bytes that are a classic OLE compound file (the .bin spelling) whose root storage carries the real file as an OLE-packaged 'Package' stream -- unwrapped through archive-codec's CFB reader and OLE-package parser, then decoded as the ZIP a modern embed packages -- or bytes that are neither, which keep whatever behaviour the caller had before. Returns undefined whenever there is no nested document to recover: a non-ZIP non-CFB payload, a compound file with no Package stream (native legacy streams such as BIFF stay opaque by scope), a Package stream whose file is not a ZIP, a ZIP that does not decode into one of the three OOXML flavours, structurally corrupt zip data, a payload outside archive-codec's walk guards, or a nested document a reader refuses (a docx without a w:body). An embedded payload is second-order content -- the caller chose to open the host document, not whatever bytes sit in its embeddings part -- so under the family's tiered read policy every one of those is a degrade-tier non-event (odf.js's embedded precedent resolves unknown kinds to undefined rather than throwing), and this function is total: one bad embedded object can never fail the whole host read.
 export function readEmbeddedOoxmlPayload(bytes: Uint8Array<ArrayBuffer>): EmbeddedOoxmlPayload | undefined {
-  if (!isZipArchive(bytes)) {
+  if (!isZipArchive(bytes) && !isCompoundFile(bytes)) {
     return undefined;
   }
   try {
     // The nested inflate runs behind archive-codec's recursive-walk guards rather than through this package's own unbounded unzip: fflate's unzipSync carries no size cap, an embeddings part is untrusted second-order bytes in which a small host entry can declare an unbounded decompressed body, and a bomb's leverage is exactly what the walk's one shared cumulative decompressed-bytes budget (MAX_WALK_TOTAL_BYTES) and depth cap bound -- the outer package parse keeps its own direct unzip because that is the file the caller chose to open. A walk that hits a guard throws (the guards truncate nothing), which the catch below degrades like any other undecodable payload; building the nested Package from the walk's own root entries (packageFromEntries) means the bytes are inflated exactly once, not once for the walk and again for the parse.
-    const nested = packageFromEntries(rootEntriesOf(walkArchive(bytes)));
+    const zipBytes = zipBytesOfPayload(bytes);
+    if (zipBytes === undefined) {
+      return undefined;
+    }
+    const nested = packageFromEntries(rootEntriesOf(walkArchive(zipBytes)));
     const objectKind = detectFlavour(nested);
     return objectKind === undefined ? undefined : { objectKind, document: readNestedDocument(objectKind, nested) };
   } catch {
-    // The one catch in this package's runtime source, existing because a ZIP's structural soundness cannot be probed without inflating it: the magic-byte gate above sees four bytes, and corruption anywhere past them only surfaces as a throw from inside the inflate (the walk's own unzip, or a walk guard refusing an out-of-contract payload). It marks the same boundary a caught inflate failure already marks elsewhere in the family (byte-codec's inflateTolerant catches over untrusted PDF/PNG streams) and converts a property of the embedded payload into the degrade-tier undefined above -- nothing about the host document is silenced, because the host read continues outside this function whatever happens in here.
+    // The one catch in this package's runtime source, existing because a payload's structural soundness cannot be probed without parsing it: the magic-byte gates above see a handful of bytes, and corruption anywhere past them only surfaces as a throw from inside the parse -- the walk's own unzip, a walk guard refusing an out-of-contract payload, archive-codec's CompoundFileFormatError on a malformed compound file, or its OlePackageFormatError on a malformed Package stream. It marks the same boundary a caught inflate failure already marks elsewhere in the family (byte-codec's inflateTolerant catches over untrusted PDF/PNG streams) and converts a property of the embedded payload into the degrade-tier undefined above -- nothing about the host document is silenced, because the host read continues outside this function whatever happens in here.
     return undefined;
   }
 }
 
-// One embeddings part decodes once per package read, however many OLE frames point at it (copy-pasted objects are the common case): the decoded payload is memoised on the Part object itself, so the cache lives exactly as long as the decoded package does and frames sharing a part carry the same nested document object -- reader output is immutable throughout this family, and structural sharing is exactly what "the same embedded object twice" means. Only successful decodes are cached; an undecodable payload costs one magic-byte check per frame, the cheap case by construction.
+// The ZIP bytes to decode for a payload part: the part's own bytes when it is a ZIP directly, and otherwise -- for the classic OLE compound-file .bin spelling -- the file carried in its root storage's 'Package' stream. Returns undefined for every legitimate no-recovery shape (no Package stream, or a packaged file that is not a ZIP); a malformed compound file or Package stream throws, which readEmbeddedOoxmlPayload's catch degrades exactly like corrupt ZIP data.
+function zipBytesOfPayload(bytes: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> | undefined {
+  if (isZipArchive(bytes)) {
+    return bytes;
+  }
+  const packageStream = readCompoundFile(bytes).find((stream) => stream.path === 'Package');
+  if (packageStream === undefined) {
+    return undefined;
+  }
+  const fileBytes = readOlePackage(packageStream.bytes).fileBytes;
+  return isZipArchive(fileBytes) ? fileBytes : undefined;
+}
+
+// One embeddings part decodes once per package read, however many OLE frames point at it (copy-pasted objects are the common case): the decoded payload is memoised on the Part object itself, so the cache lives exactly as long as the decoded package does and frames sharing a part carry the same nested document object -- reader output is immutable throughout this family, and structural sharing is exactly what "the same embedded object twice" means. Only successful decodes are cached; a payload that decodes to nothing costs its magic-byte checks per frame, plus -- for the compound-file spelling -- one guarded CFB parse per frame, still bounded work by construction.
 const payloadByPart = new WeakMap<BinaryPart, EmbeddedOoxmlPayload>();
 
 // The reader-facing entry: an embeddings part (already narrowed to its binary arm by the caller's kind check) decoded through readEmbeddedOoxmlPayload, memoised per part so the shared-part case decodes once.
