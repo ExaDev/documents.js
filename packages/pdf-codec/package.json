@@ -1,6 +1,6 @@
 {
   "name": "pdf-codec",
-  "version": "3.0.4",
+  "version": "3.0.8",
   "description": "Hand-written, dependency-minimal PDF codec: parses arbitrary real-world PDFs and generates new ones, built on its own codec-owned LayoutDocument item model and Zod 4 codecs.",
   "type": "module",
   "repository": {
@@ -64,7 +64,7 @@
     "test:corpus": "turbo run _test:corpus",
     "_test:corpus": "vitest run --project corpus",
     "test:smoke": "turbo run _test:smoke",
-    "_test:smoke": "tsdown && vitest run --project smoke",
+    "_test:smoke": "vitest run --project smoke",
     "prepare": "husky",
     "release": "semantic-release"
   },
@@ -82,13 +82,13 @@
   "packageManager": "pnpm@11.6.0",
   "dependencies": {
     "byte-codec": "^1.1.8",
-    "document-schema.js": "^4.3.0",
+    "document-schema.js": "^4.3.3",
     "fflate": "^0.8.3",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
-    "@cloudflare/vitest-pool-workers": "^0.20.2",
+    "@cloudflare/vitest-pool-workers": "^0.21.2",
     "@commitlint/cli": "^21.2.1",
     "@commitlint/config-conventional": "^21.2.0",
     "@eslint/js": "^10.0.1",

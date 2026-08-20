@@ -1,6 +1,6 @@
 {
   "name": "odf.js",
-  "version": "5.0.0",
+  "version": "5.0.3",
   "description": "Type-safe, lossless round-trip conversion between OpenDocument Format packages (odt, ods, odp) and JSON, hand-written and dependency-minimal, built on Zod 4 codecs.",
   "type": "module",
   "repository": {
@@ -61,7 +61,7 @@
     "test:coverage": "turbo run _test:coverage",
     "_test:coverage": "vitest run --project unit --coverage",
     "test:smoke": "turbo run _test:smoke",
-    "_test:smoke": "tsdown && vitest run --project smoke",
+    "_test:smoke": "vitest run --project smoke",
     "prepare": "husky",
     "release": "semantic-release"
   },
@@ -78,7 +78,7 @@
   "license": "MIT",
   "packageManager": "pnpm@11.6.0",
   "dependencies": {
-    "document-schema.js": "^4.3.0",
+    "document-schema.js": "^4.3.3",
     "fast-xml-parser": "^5.10.1",
     "fflate": "^0.8.3",
     "zod": "^4.4.3"

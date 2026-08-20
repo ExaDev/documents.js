@@ -1,6 +1,6 @@
 {
   "name": "markdown-codec",
-  "version": "4.0.0",
+  "version": "4.0.6",
   "description": "Hand-written CommonMark+GFM <-> DocumentPackage codec, built on document-schema.js",
   "type": "module",
   "repository": {
@@ -64,7 +64,7 @@
     "test:corpus": "turbo run _test:corpus",
     "_test:corpus": "vitest run --project corpus",
     "test:smoke": "turbo run _test:smoke",
-    "_test:smoke": "tsdown && vitest run --project smoke",
+    "_test:smoke": "vitest run --project smoke",
     "prepare": "husky",
     "release": "semantic-release"
   },
@@ -80,12 +80,12 @@
   "license": "MIT",
   "packageManager": "pnpm@11.6.0",
   "dependencies": {
-    "document-schema.js": "^4.3.0",
+    "document-schema.js": "^4.3.3",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
-    "@cloudflare/vitest-pool-workers": "^0.20.2",
+    "@cloudflare/vitest-pool-workers": "^0.21.2",
     "@commitlint/cli": "^21.2.1",
     "@commitlint/config-conventional": "^21.2.0",
     "@eslint/js": "^10.0.1",
