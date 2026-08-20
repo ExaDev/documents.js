@@ -1,10 +1,10 @@
 # markdown-codec
 
-[![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/markdown-codec) [![npm](https://img.shields.io/badge/npm-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/markdown-codec) [![Release](https://img.shields.io/github/v/release/ExaDev/markdown-codec)](https://github.com/ExaDev/markdown-codec/releases/latest) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/markdown-codec/ci.yml?branch=main)](https://github.com/ExaDev/markdown-codec/actions)
+[![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/documents.js/tree/main/packages/markdown-codec) [![npm](https://img.shields.io/badge/npm-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/markdown-codec) [![npm version](https://img.shields.io/npm/v/markdown-codec)](https://www.npmjs.com/package/markdown-codec) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/documents.js/ci.yml?branch=main)](https://github.com/ExaDev/documents.js/actions)
 
-> Hand-written CommonMark+GFM ⇄ `DocumentPackage` codec, built on [document-schema.js](https://github.com/ExaDev/document-schema.js).
+> Hand-written CommonMark+GFM ⇄ `DocumentPackage` codec, built on [document-schema.js](../document-schema.js/README.md).
 
-The same "hand-write the format instead of wrapping a third-party library" bet as [`pdf-codec`](https://github.com/ExaDev/pdf-codec), aimed at CommonMark and GFM. No `micromark`/`remark`/`marked`/`markdown-it`/`commonmark`/`mdast`/`unified`/`turndown`/`showdown` dependency (enforced by eslint `no-restricted-imports`). Runtime dependencies: `document-schema.js` (the shared pivot) and `zod`. `readMarkdown`/`writeMarkdown` read and write that pivot's tree-form `DocumentPackage`; `readMarkdownContent`/`writeMarkdownContent` read and write the flat `ContentDocument` underneath it — the same model [`documents.js`](https://github.com/ExaDev/documents.js) builds docx/pptx/odt/odp conversions around. See [Two encodings](#two-encodings-documentpackage-and-contentdocument).
+The same "hand-write the format instead of wrapping a third-party library" bet as [`pdf-codec`](../pdf-codec/README.md), aimed at CommonMark and GFM. No `micromark`/`remark`/`marked`/`markdown-it`/`commonmark`/`mdast`/`unified`/`turndown`/`showdown` dependency (enforced by eslint `no-restricted-imports`). Runtime dependencies: `document-schema.js` (the shared pivot) and `zod`. `readMarkdown`/`writeMarkdown` read and write that pivot's tree-form `DocumentPackage`; `readMarkdownContent`/`writeMarkdownContent` read and write the flat `ContentDocument` underneath it — the same model [`documents.js`](https://github.com/ExaDev/documents.js) builds docx/pptx/odt/odp conversions around. See [Two encodings](#two-encodings-documentpackage-and-contentdocument).
 
 ```mermaid
 graph TD
@@ -36,15 +36,15 @@ graph TD
     odf --> cli
     pdfcodec --> cli
 
-    click schema "https://github.com/ExaDev/document-schema.js" "document-schema.js"
-    click ooxml "https://github.com/ExaDev/ooxml.js" "ooxml.js"
-    click odf "https://github.com/ExaDev/odf.js" "odf.js"
-    click pdfcodec "https://github.com/ExaDev/pdf-codec" "pdf-codec"
-    click bytecodec "https://github.com/ExaDev/byte-codec" "byte-codec"
-    click mdcodec "https://github.com/ExaDev/markdown-codec" "markdown-codec"
+    click schema "https://github.com/ExaDev/documents.js/tree/main/packages/document-schema.js" "document-schema.js"
+    click ooxml "https://github.com/ExaDev/documents.js/tree/main/packages/ooxml.js" "ooxml.js"
+    click odf "https://github.com/ExaDev/documents.js/tree/main/packages/odf.js" "odf.js"
+    click pdfcodec "https://github.com/ExaDev/documents.js/tree/main/packages/pdf-codec" "pdf-codec"
+    click bytecodec "https://github.com/ExaDev/documents.js/tree/main/packages/byte-codec" "byte-codec"
+    click mdcodec "https://github.com/ExaDev/documents.js/tree/main/packages/markdown-codec" "markdown-codec"
     click documents "https://github.com/ExaDev/documents.js" "documents.js"
-    click mcp "https://github.com/ExaDev/document-mcp" "document-mcp"
-    click cli "https://github.com/ExaDev/document-cli" "document-cli"
+    click mcp "https://github.com/ExaDev/documents.js/tree/main/packages/document-mcp" "document-mcp"
+    click cli "https://github.com/ExaDev/documents.js/tree/main/packages/document-cli" "document-cli"
 
     style mdcodec fill:#f9a825,stroke:#333,stroke-width:3px
 ```
@@ -111,7 +111,7 @@ const bytes2 = z.encode(markdownCodec, documentPackage);
 
 document-schema.js states one document in two shapes, and owns the transform between them: the flat `ContentDocument` every codec's lowering pipeline actually builds, and the tree-form `DocumentPackage` a serialised artefact carries — sections, headings, lists, and construct boundaries as real nested groups, plus a styles table minted over repeated property tuples. `assemblePackage` goes flat → tree (`decompose` then `factorStyles`), `flattenPackage` goes tree → flat. Only one direction is a genuine round trip: `flattenPackage(assemblePackage(document))` reproduces `document` exactly, for any `ContentDocument` this package's own read side produces (checked against the full CommonMark and GFM conformance corpora, not just a hand-picked fixture — see `src/conformance.test.ts`/`src/gfm-conformance.test.ts`'s own "tree pair matches the flat pair" suite). `assemblePackage(flattenPackage(documentPackage))` does not, in general, reproduce `documentPackage` — a package carrying `definitions`/`layers`/`attachments`/`destinations`/`pages` loses all of them on the way through `flattenPackage`, which carries forward only `metadata` and `symbolTable` (see [Gotchas](#gotchas-and-quirks)).
 
-This package exposes a read/write pair and a codec at each level. The unsuffixed names are the tree-form ones and are what to reach for by default — a codec is a construction site, so the tree is what a caller gets unless they ask for otherwise. The `Content`-suffixed names are the flat pair one level down, mirroring the `readXlsx`/`readXlsxContent` naming already in [`ooxml.js`](https://github.com/ExaDev/ooxml.js):
+This package exposes a read/write pair and a codec at each level. The unsuffixed names are the tree-form ones and are what to reach for by default — a codec is a construction site, so the tree is what a caller gets unless they ask for otherwise. The `Content`-suffixed names are the flat pair one level down, mirroring the `readXlsx`/`readXlsxContent` naming already in [`ooxml.js`](../ooxml.js/README.md):
 
 | Level | Read | Write | Codec | Value type |
 | --- | --- | --- | --- | --- |
@@ -237,18 +237,16 @@ Every non-passing example is named individually in `src/test-support/conformance
 
 ## Release and publishing
 
-`.github/workflows/ci.yml` runs commitlint, lint, typecheck, unit suite (incl. conformance), and smoke test on every push/PR. On a push to `main` where those pass, `release.config.ts` drives [semantic-release](https://semantic-release.gitbook.io/semantic-release): commit history decides the version bump, `CHANGELOG.md` and `package.json` are committed back to `main`, a GitHub Release is cut, and the package publishes to [npmjs.org](https://www.npmjs.com/package/markdown-codec) via OIDC trusted publishing (no `NPM_TOKEN`).
-
-Release detection diffs `package.json`'s version before/after the release step. Four further jobs gate on that: a `sibling-released` `repository_dispatch` to `documents.js`; a republish under `@exadev/markdown-codec` to GitHub Packages (`GITHUB_TOKEN`); a republish under `mrkdwn.js` to npmjs.org (same OIDC exchange); and an SPDX SBOM + build-provenance attestation signed against the packed tarball.
+Release, CI, and commit-message conventions are all workspace-wide, not package-local — see the [monorepo root README](../../README.md#releases) for the mechanism (topological per-package `semantic-release` via `@exadev/semantic-release-workspace`, OIDC trusted npm publishing, automatic sibling dependency-range rewriting) and its [known gap](../../README.md#releases) note on GitHub Packages republishing and SBOM/provenance signing, both dropped in the migration to this monorepo and not yet restored.
 
 ## Contributing
 
-Conventional Commits enforced by commitlint (`commitlint.config.ts`) via a husky `commit-msg` hook and CI job — semantic-release's version bump depends on well-formed messages. `pre-commit` runs `lint-staged` (`eslint --fix` on staged `*.ts`); `pre-push` runs the test suite. Single `main` branch, no open PR workflow.
+Conventional Commits, enforced workspace-wide by commitlint through a root `commit-msg` hook. Work inside `packages/markdown-codec/`; see the [root README](../../README.md#contributing) for the shared git hooks and history conventions.
 
 ## References
 
-- [document-schema.js](https://github.com/ExaDev/document-schema.js) — owns both shared encodings (`ContentDocument`, `DocumentPackage`) and the `assemblePackage`/`flattenPackage` transform between them.
-- [pdf-codec](https://github.com/ExaDev/pdf-codec) — the sibling whose scaffold, tooling, and "hand-write the format" philosophy this project mirrors.
+- [document-schema.js](../document-schema.js/README.md) — owns both shared encodings (`ContentDocument`, `DocumentPackage`) and the `assemblePackage`/`flattenPackage` transform between them.
+- [pdf-codec](../pdf-codec/README.md) — the sibling whose scaffold, tooling, and "hand-write the format" philosophy this project mirrors.
 - [documents.js](https://github.com/ExaDev/documents.js) — bridges markdown to docx/odt/PDF via this package's `ContentDocument` (the flat pair; its own conversion pipeline assembles the package itself). Markdown has no presentation/spreadsheet/drawing variant, so pptx/odp/ods/odg are structurally out of reach.
 - [CommonMark Spec](https://spec.commonmark.org/) — the base specification targeted.
 - [GitHub Flavored Markdown Spec](https://github.github.com/gfm/) — GFM extensions layered on top.
@@ -256,9 +254,11 @@ Conventional Commits enforced by commitlint (`commitlint.config.ts`) via a husky
 
 ## npm aliases
 
-This package also publishes under the alternate name — identical build, same version, republished by CI:
+This package also published under an alternate name from the pre-monorepo pipeline:
 
 - [mrkdwn.js](https://www.npmjs.com/package/mrkdwn.js)
+
+**Frozen since the monorepo migration** — see the [root README's release note](../../README.md#releases): the alias republish step was dropped along with GitHub Packages mirroring and SBOM/provenance signing, and nothing today keeps this name in sync with `markdown-codec`'s own releases. Tracked in [ExaDev/documents.js#728](https://github.com/ExaDev/documents.js/issues/728).
 
 ## License
 

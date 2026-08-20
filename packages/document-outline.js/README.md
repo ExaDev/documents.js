@@ -1,6 +1,6 @@
 # document-outline.js
 
-[![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/document-outline.js) [![npm](https://img.shields.io/badge/npm-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/document-outline.js) [![Release](https://img.shields.io/github/v/release/ExaDev/document-outline.js)](https://github.com/ExaDev/document-outline.js/releases/latest) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/document-outline.js/ci.yml?branch=main)](https://github.com/ExaDev/document-outline.js/actions)
+[![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/documents.js/tree/main/packages/document-outline.js) [![npm](https://img.shields.io/badge/npm-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/document-outline.js) [![npm version](https://img.shields.io/npm/v/document-outline.js)](https://www.npmjs.com/package/document-outline.js) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/documents.js/ci.yml?branch=main)](https://github.com/ExaDev/documents.js/actions)
 
 > Utilities for consumers holding a tree-form `DocumentPackage` (document-schema.js 4.0.0) — the table-of-contents projection, effective-property resolution, and the flatten-to-leaves / leaf-text / stable-hash helpers — without importing the producer that made it. The outline package for the [documents.js family](https://github.com/ExaDev). Worker-isomorphic: the same code runs under Node and inside a Cloudflare Workers isolate.
 
@@ -106,7 +106,7 @@ The phase-1 `decompose`/`flatten` pair and its property-tested bijection — the
 - Worker-isomorphic (see the [family-wide convention](https://github.com/ExaDev/documents.js/blob/main/README.md#conventions)): runtime `src/` must not import `node:*`, a bare Node builtin, or use the `Buffer` global — enforced by a `no-restricted-imports`/`no-restricted-globals` ESLint rule and exercised in CI by running a test suite inside an actual `workerd` isolate (`pnpm test:workers`).
 - Only `src/index.ts` may be named `index.*` — a custom ESLint rule (`local/no-non-barrel-index`) rejects any other module using an `index` basename, since that would be a hidden entry point the `exports` map in `package.json` doesn't advertise.
 - `OutlineNodeSchema` follows document-schema.js's `z.custom` hand-written-guard pattern (`ContentBlock` is the precedent): `z.lazy()` collapses recursive schemas' static type to `unknown` in the pinned zod 4, so the recursion lives in a plain function guard instead.
-- Releases are fully automated: a push to `main` runs `semantic-release` in CI, which determines the version from Conventional Commit messages and publishes to npm via OIDC trusted publishing (no local `NPM_TOKEN` needed). There is no manual publish step.
+- Release, CI, and commit-message conventions are all workspace-wide, not package-local — see the [monorepo root README](../../README.md#releases) for the mechanism (topological per-package `semantic-release` via `@exadev/semantic-release-workspace`, OIDC trusted npm publishing) and its [known gap](../../README.md#releases) note on GitHub Packages republishing and SBOM/provenance signing, dropped in the migration to this monorepo and not yet restored.
 
 ## Install
 

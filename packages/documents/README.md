@@ -1,8 +1,8 @@
 # documents
 
-[![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/documents) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/documents/ci.yml?branch=main)](https://github.com/ExaDev/documents/actions)
+[![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/documents.js/tree/main/packages/documents) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/documents.js/ci.yml?branch=main)](https://github.com/ExaDev/documents.js/actions)
 
-> A client-only, statically-built web UI for every conversion and editing tool in the [documents.js ecosystem](../README.md) — convert and edit docx, pptx, xlsx, odt, odp, ods, odg, csv, svg, pdf, and markdown documents entirely in the browser, with no server component.
+> A client-only, statically-built web UI for every conversion and editing tool in the [documents.js ecosystem](../../README.md) — convert and edit docx, pptx, xlsx, odt, odp, ods, odg, csv, svg, pdf, and markdown documents entirely in the browser, with no server component.
 
 Private (unpublished to npm); deployed as a static site to GitHub Pages.
 
@@ -57,8 +57,8 @@ The app is split into a main-thread UI and a Web Worker that holds the only code
 
 ## Contributing
 
-Releases are fully automated: a push to `main` runs `semantic-release` in CI (Conventional Commits, no manual version bump or publish step), and the GitHub Pages deploy is built from the post-release commit so a release's deployed site always matches its tagged version.
+Release, CI, and commit-message conventions are all workspace-wide, not package-local — see the [monorepo root README](../../README.md#releases) for the mechanism. This package is `private: true`, so the orchestrator versions and changelogs it without publishing to npm; its GitHub Pages deploy runs after the release job, built from the post-release commit so a release's deployed site always matches its tagged version.
 
 ## References
 
-- [documents.js ecosystem overview](../README.md) — how this app relates to the sibling packages it depends on.
+- [documents.js ecosystem overview](../../README.md) — how this app relates to the sibling packages it depends on.
