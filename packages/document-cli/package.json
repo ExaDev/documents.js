@@ -1,6 +1,6 @@
 {
   "name": "document-cli",
-  "version": "3.1.5",
+  "version": "3.1.8",
   "description": "CLI and interactive Ink TUI for documents.js: every docx/pptx/odt/odp/ods/odg/odf/pdf/odm/odb/xlsx/csv/svg/markdown conversion, bridge, and editor as a scriptable command or a terminal app.",
   "type": "module",
   "repository": {
@@ -63,7 +63,7 @@
     "test:coverage": "turbo run _test:coverage",
     "_test:coverage": "vitest run --project unit --coverage",
     "test:smoke": "turbo run _test:smoke",
-    "_test:smoke": "tsdown && vitest run --project smoke",
+    "_test:smoke": "vitest run --project smoke",
     "test:workers": "turbo run _test:workers",
     "_test:workers": "vitest run --config vitest.workers.config.ts",
     "prepare": "husky",
@@ -90,8 +90,8 @@
   "dependencies": {
     "commander": "^15.0.0",
     "document-outline.js": "^1.0.0",
-    "document-schema.js": "^4.3.0",
-    "documents.js": "^4.0.13",
+    "document-schema.js": "^4.3.3",
+    "documents.js": "^4.0.20",
     "ink": "^7.1.1",
     "ink-text-input": "^6.0.0",
     "react": "^19.2.8"
@@ -113,7 +113,7 @@
     "husky": "^9.1.7",
     "ink-testing-library": "^4.0.0",
     "lint-staged": "^17.3.0",
-    "odf.js": "^5.0.0",
+    "odf.js": "^5.0.3",
     "pdf-codec": "^3.0.0",
     "publint": "^0.3.22",
     "semantic-release": "^25.0.8",

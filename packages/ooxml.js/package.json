@@ -1,6 +1,6 @@
 {
   "name": "ooxml.js",
-  "version": "4.0.6",
+  "version": "4.0.8",
   "description": "Type-safe, lossless round-trip conversion between OOXML packages (docx, pptx, xlsx) and JSON, built on Zod 4 codecs.",
   "type": "module",
   "repository": {
@@ -60,7 +60,7 @@
     "test:coverage": "turbo run _test:coverage",
     "_test:coverage": "vitest run --project unit --coverage",
     "test:smoke": "turbo run _test:smoke",
-    "_test:smoke": "tsdown && vitest run --project smoke",
+    "_test:smoke": "vitest run --project smoke",
     "test:workers": "turbo run _test:workers",
     "_test:workers": "vitest run --config vitest.workers.config.ts",
     "prepare": "husky",
@@ -79,7 +79,7 @@
   "license": "MIT",
   "packageManager": "pnpm@11.6.0",
   "dependencies": {
-    "document-schema.js": "^4.3.0",
+    "document-schema.js": "^4.3.3",
     "fast-xml-parser": "^5.10.1",
     "fflate": "^0.8.3",
     "zod": "^4.4.3"

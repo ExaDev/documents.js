@@ -146,10 +146,10 @@ importers:
         specifier: ^1.0.0
         version: link:../document-outline.js
       document-schema.js:
-        specifier: ^4.3.0
+        specifier: ^4.3.3
         version: link:../document-schema.js
       documents.js:
-        specifier: ^4.0.13
+        specifier: ^4.0.20
         version: link:../documents.js
       ink:
         specifier: ^7.1.1
@@ -210,7 +210,7 @@ importers:
         specifier: ^17.3.0
         version: 17.3.0
       odf.js:
-        specifier: ^5.0.0
+        specifier: ^5.0.3
         version: link:../odf.js
       pdf-codec:
         specifier: ^3.0.0
@@ -246,7 +246,7 @@ importers:
         specifier: ^1.0.0
         version: link:../document-outline.js
       documents.js:
-        specifier: ^4.0.13
+        specifier: ^4.0.20
         version: link:../documents.js
       zod:
         specifier: ^4.2.0
@@ -301,7 +301,7 @@ importers:
         specifier: ^5.0.0
         version: link:../odf.js
       pdf-codec:
-        specifier: ^3.0.4
+        specifier: ^3.0.8
         version: link:../pdf-codec
       publint:
         specifier: ^0.3.22
@@ -402,8 +402,8 @@ importers:
         specifier: ^0.18.5
         version: 0.18.5
       '@cloudflare/vitest-pool-workers':
-        specifier: ^0.20.1
-        version: 0.20.3(@vitest/runner@4.1.11)(@vitest/snapshot@4.1.11)(vitest@4.1.11)
+        specifier: ^0.21.2
+        version: 0.21.3(@vitest/runner@4.1.11)(@vitest/snapshot@4.1.11)(vitest@4.1.11)
       '@commitlint/cli':
         specifier: ^21.2.1
         version: 21.2.2(@types/node@26.2.0)(conventional-commits-parser@7.1.2)(typescript@6.0.3)
@@ -516,16 +516,16 @@ importers:
         specifier: ^4.4.0
         version: 4.4.0(dexie@4.4.5)(react@19.2.8)
       document-schema.js:
-        specifier: ^4.3.0
+        specifier: ^4.3.3
         version: link:../document-schema.js
       documents.js:
-        specifier: ^4.0.13
+        specifier: ^4.0.20
         version: link:../documents.js
       markdown-codec:
-        specifier: ^4.0.0
+        specifier: ^4.0.6
         version: link:../markdown-codec
       odf.js:
-        specifier: ^5.0.0
+        specifier: ^5.0.3
         version: link:../odf.js
       react:
         specifier: ^19.2.8
@@ -637,22 +637,22 @@ importers:
         specifier: ^1.1.9
         version: link:../byte-codec
       document-schema.js:
-        specifier: ^4.3.0
+        specifier: ^4.3.3
         version: link:../document-schema.js
       fflate:
         specifier: ^0.8.3
         version: 0.8.3
       markdown-codec:
-        specifier: ^4.0.0
+        specifier: ^4.0.6
         version: link:../markdown-codec
       odf.js:
-        specifier: ^5.0.0
+        specifier: ^5.0.2
         version: link:../odf.js
       ooxml.js:
-        specifier: ^4.0.6
+        specifier: ^4.0.8
         version: link:../ooxml.js
       pdf-codec:
-        specifier: ^3.0.4
+        specifier: ^3.0.6
         version: link:../pdf-codec
       temml:
         specifier: 0.13.4
@@ -728,7 +728,7 @@ importers:
   packages/markdown-codec:
     dependencies:
       document-schema.js:
-        specifier: ^4.3.0
+        specifier: ^4.3.3
         version: link:../document-schema.js
       zod:
         specifier: ^4.4.3
@@ -738,8 +738,8 @@ importers:
         specifier: ^0.18.5
         version: 0.18.5
       '@cloudflare/vitest-pool-workers':
-        specifier: ^0.20.2
-        version: 0.20.3(@vitest/runner@4.1.11)(@vitest/snapshot@4.1.11)(vitest@4.1.11)
+        specifier: ^0.21.2
+        version: 0.21.3(@vitest/runner@4.1.11)(@vitest/snapshot@4.1.11)(vitest@4.1.11)
       '@commitlint/cli':
         specifier: ^21.2.1
         version: 21.2.2(@types/node@26.2.0)(conventional-commits-parser@7.1.2)(typescript@6.0.3)
@@ -801,7 +801,7 @@ importers:
   packages/odf.js:
     dependencies:
       document-schema.js:
-        specifier: ^4.3.0
+        specifier: ^4.3.3
         version: link:../document-schema.js
       fast-xml-parser:
         specifier: ^5.10.1
@@ -880,7 +880,7 @@ importers:
   packages/ooxml.js:
     dependencies:
       document-schema.js:
-        specifier: ^4.3.0
+        specifier: ^4.3.3
         version: link:../document-schema.js
       fast-xml-parser:
         specifier: ^5.10.1
@@ -962,7 +962,7 @@ importers:
         specifier: ^1.1.8
         version: link:../byte-codec
       document-schema.js:
-        specifier: ^4.3.0
+        specifier: ^4.3.3
         version: link:../document-schema.js
       fflate:
         specifier: ^0.8.3
@@ -975,8 +975,8 @@ importers:
         specifier: ^0.18.5
         version: 0.18.5
       '@cloudflare/vitest-pool-workers':
-        specifier: ^0.20.2
-        version: 0.20.3(@vitest/runner@4.1.11)(@vitest/snapshot@4.1.11)(vitest@4.1.11)
+        specifier: ^0.21.2
+        version: 0.21.3(@vitest/runner@4.1.11)(@vitest/snapshot@4.1.11)(vitest@4.1.11)
       '@commitlint/cli':
         specifier: ^21.2.1
         version: 21.2.2(@types/node@26.2.0)(conventional-commits-parser@7.1.2)(typescript@6.0.3)
