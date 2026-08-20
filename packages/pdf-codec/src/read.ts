@@ -18,7 +18,7 @@ import type { Matrix } from './matrix';
 import { applyMatrix, matrixRotationDegrees, matrixScaleX, matrixScaleY, multiplyMatrices, translationMatrix } from './matrix';
 import type { PdfDict, PdfObject } from './objects';
 import { asArray, asName, asNumber, dictGet } from './objects';
-import { NOTES_ANNOTATION_AUTHOR } from './write';
+import { NOTES_ANNOTATION_AUTHOR } from './notes-annotation-author';
 
 // readPdf(bytes, options?) -> LayoutDocument: the top of the read pipeline, assembling every other src/pdf/* read module (document.ts's object store and page tree, interpret.ts's graphics/text extraction, font-read.ts's width/decode, images-read.ts's PNG/JPEG recovery) into the same pivot model src/pdf/write.ts consumes on the way out, so a document round-trips through readPdf -> writePdf structurally even though neither claims byte- or content-fidelity.
 
