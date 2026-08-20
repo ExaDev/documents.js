@@ -1,3 +1,15 @@
+## [5.0.5](https://github.com/ExaDev/documents.js/compare/odf.js@5.0.4...odf.js@5.0.5) (2026-08-20)
+
+
+### Bug Fixes
+
+* point package homepage and bugs URLs at the monorepo, not the old standalone repos ([bb0a875](https://github.com/ExaDev/documents.js/commit/bb0a8752dcac584660f21979540bc06bbda41110))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^4.3.5
+
 ## [5.0.4](https://github.com/ExaDev/documents.js/compare/odf.js@5.0.3...odf.js@5.0.4) (2026-08-20)
 
 
