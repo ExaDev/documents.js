@@ -16,8 +16,8 @@ importers:
         specifier: ^1.1.9
         version: 1.1.9
       document-schema.js:
-        specifier: ^4.3.1
-        version: 4.3.1
+        specifier: ^4.3.3
+        version: 4.3.3
       fflate:
         specifier: ^0.8.3
         version: 0.8.3
@@ -1511,10 +1511,6 @@ packages:
   dir-glob@3.0.1:
     resolution: {integrity: sha512-WkrWp9GR4KXfKGYzOLmTuGVi1UWFfws377n9cc55/tb6DuqyF6pcQ5AbiHEshaDpY9v6oaSr2XCDidGmMwdzIA==}
     engines: {node: '>=8'}
-
-  document-schema.js@4.3.0:
-    resolution: {integrity: sha512-Ao6bE/q4JGVy6hOX7UGYBZUsekU6GzI19+t+M6jBpGmPuDEeHM5MXSIxbtty45tsKEYmf0seeLybb2DaLZyxPg==}
-    engines: {node: '>=20'}
 
   document-schema.js@4.3.1:
     resolution: {integrity: sha512-97Zb51z4Shl6jdnCL++Z0u5eAY35OAGT2HR1z7i/WGK3PJShn0HHBuAEgKgE3PR279tY0cXraCFEFZwWvFg8Wg==}
@@ -4388,11 +4384,11 @@ snapshots:
     dependencies:
       path-type: 4.0.0
 
-  document-schema.js@4.3.0:
+  document-schema.js@4.3.1:
     dependencies:
       zod: 4.4.3
 
-  document-schema.js@4.3.1:
+  document-schema.js@4.3.3:
     dependencies:
       zod: 4.4.3
 
@@ -5112,7 +5108,7 @@ snapshots:
 
   odf.js@5.0.0:
     dependencies:
-      document-schema.js: 4.3.0
+      document-schema.js: 4.3.1
       fast-xml-parser: 5.10.1
       fflate: 0.8.3
       zod: 4.4.3
