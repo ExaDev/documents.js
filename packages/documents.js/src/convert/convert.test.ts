@@ -465,6 +465,16 @@ describe('pdfToMarkdown', () => {
     expect(text).toMatch(/^# Quarterly Report/m);
     expect(text).toMatch(/^## Part 1 Scope/m);
   });
+
+  // ExaDev/documents.js#584 ask 3, pinned end to end: where the table recovery's gridline-lattice gate succeeds, the recovered ContentTable already flows through buildMarkdownText into a real GFM pipe table (markdown-codec's emitTable) -- this test holds that wiring at the markdown surface. The fixture is a spreadsheet printed WITH gridlines (gridOdsBytes through the ordinary odsToPdf path, the same one the pdfToDocx lattice test uses), because a markdown-authored table renders no lattice at all: markdown carries no border concept, so the cells' text arrives as tab-separated prose instead. The gate refusing alignment-only structure is the documented, intended boundary -- recovery requires the drawn lattice, never invented geometry.
+  it('recovers a drawn-lattice table as a GFM pipe table, through odsToPdf then pdfToMarkdown', () => {
+    const text = decodeMarkdownText(pdfToMarkdown(odsToPdf(gridOdsBytes())));
+    const pipeRows = text.split('\n').filter((line) => line.startsWith('|'));
+    expect(pipeRows.length).toBeGreaterThanOrEqual(2);
+    expect(pipeRows.some((row) => row.includes('Alpha') && row.includes('Beta') && row.includes('Gamma'))).toBe(true);
+    // A GFM table needs its delimiter row to reparse as a table at all.
+    expect(pipeRows.some((row) => /^\|(\s*-{3,}\s*\|)+$/.test(row))).toBe(true);
+  });
 });
 
 describe('pdfToOdt', () => {
