@@ -47,7 +47,7 @@ function markdownBlock(block: ContentBlock): ContentBlock {
   if (block.kind === 'constructStart' || block.kind === 'constructEnd') {
     throw new MarkdownConstructUnsupportedError(block);
   }
-  // A pageBreak block becomes the marker paragraph -- HTMLPreformatted so markdown-codec's emitter writes the text verbatim (a plain paragraph's runs would go through escapeMarkdownText, which backslash-escapes the '<', '!', '-', and '>' the marker is made of).
+  // A pageBreak block becomes the marker paragraph -- HTMLPreformatted so markdown-codec's emitter writes the text verbatim (a plain paragraph's runs would go through escapeMarkdownText, which backslash-escapes the '<', '!', '-', and '>' the marker is made of). This transform recurses (markdownTableCell below), so a pageBreak inside a ContentTableCell also becomes a marker -- but there it is a one-way annotation for human readers of the markdown text, not an invertible directive: GFM cell content is inline-only, so the marker can never round-trip back as the block-scoped HTMLPreformatted paragraph the read side promotes (see src/markdown/read.ts).
   if (block.kind === 'pageBreak') {
     return { kind: 'paragraph', runs: [{ text: PAGE_BREAK_MARKER }], styleId: HTML_PREFORMATTED_STYLE_ID };
   }
