@@ -61,7 +61,7 @@ This matters for anyone building on top of the conversion engine (the CLI, MCP s
 Individual packages set their own build and test configuration, but as a family they share:
 
 - TypeScript with Zod 4 for schema definition and validation.
-- MIT licensing (the `documents` web UI does not yet declare a license field).
+- MIT licensing.
 - Hand-written, dependency-minimal codecs over pulling in heavyweight format libraries — see each package's own README for what it deliberately avoids depending on.
 - The foundation and format-codec packages (`byte-codec`, `document-schema.js`, `document-outline.js`, `archive-codec`, `ooxml.js`, `odf.js`, `markdown-codec`, `pdf-codec`, `documents.js`) are Worker-isomorphic: their published `src/` must not import `node:*`/bare Node builtins or use the Node-only `Buffer` global, enforced per-package via an ESLint `no-restricted-imports`/`no-restricted-globals` rule and proven at runtime by a workerd test suite. The interface packages (`document-cli`, `document-mcp`, `documents`) are not held to this, since they legitimately run under Node or a browser rather than needing Worker portability.
 

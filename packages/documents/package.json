@@ -13,6 +13,7 @@
   "bugs": {
     "url": "https://github.com/ExaDev/documents.js/issues"
   },
+  "license": "MIT",
   "packageManager": "pnpm@11.6.0",
   "engines": {
     "node": ">=20"

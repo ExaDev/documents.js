@@ -62,3 +62,7 @@ Release, CI, and commit-message conventions are all workspace-wide, not package-
 ## References
 
 - [documents.js ecosystem overview](../../README.md) — how this app relates to the sibling packages it depends on.
+
+## License
+
+MIT
