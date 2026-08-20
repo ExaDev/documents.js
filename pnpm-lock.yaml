@@ -149,7 +149,7 @@ importers:
         specifier: ^4.3.4
         version: link:../document-schema.js
       documents.js:
-        specifier: ^4.0.20
+        specifier: ^4.0.21
         version: link:../documents.js
       ink:
         specifier: ^7.1.1
