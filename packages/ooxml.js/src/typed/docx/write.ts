@@ -4,6 +4,7 @@ import type { Package, XmlPart } from '../../model/package';
 import type { XmlElement, XmlNode } from '../../model/node';
 import { el, txt } from '../../xml/fragment';
 import { encodeXmlText } from '../../xml/entities';
+import { parseXml } from '../../xml/parse';
 import type { DocumentMetadata } from '../shared/metadata';
 import { ptToEighthPoints, ptToEmu, ptToHalfPoints, ptToTwips } from '../shared/units';
 import { TABLE_OF_CONTENTS_GALLERY, isDeletedChange } from './constructs';
@@ -12,7 +13,7 @@ import { TABLE_OF_CONTENTS_GALLERY, isDeletedChange } from './constructs';
 //
 // This is the flat, content-level half of the docx write pair: buildDocxPackage (typed/document-package.ts) is the primary name, flattening a tree-form DocumentPackage (styles-table refs materialised away) and handing the result straight to this function.
 //
-// It is readDocxContent's honest inverse over ContentSection: page geometry, paragraphs with their fully-resolved direct formatting, runs (including external hyperlinks), lists, headings, tables (grids, spans, shading, borders, row heights), page breaks, images, and the block-scoped construct markers all survive a round trip through the pair. What does NOT survive, stated rather than implied:
+// It is readDocxContent's honest inverse over ContentSection: page geometry, paragraphs with their fully-resolved direct formatting, runs (including external hyperlinks), lists, headings, tables (grids, spans, shading, borders, row heights), page breaks, images, and the block-scoped construct markers all survive a round trip through the pair -- a degraded gallery's w:docPartObj included, restored from the descriptor's residue (restoreGalleryElement below). What does NOT survive, stated rather than implied:
 // - No styles.xml, numbering.xml, comments, footnotes, headers, or footers are written. readDocxContent reads all of those into DocxDocument fields outside `sections`, and each needs machinery of its own; a paragraph's styleId is still written as a w:pStyle reference, resolving to nothing without the style part, since every property that style would have contributed is already spelled as direct formatting by then.
 // - A run whose boolean properties are absent but which carries some other property (a colour, a size) reads back with those booleans false rather than absent, because the w:rPr the other property forces is itself what the read-side cascade turns an absent w:b into. A run with no properties at all writes no w:rPr and round-trips exactly.
 // - Four construct shapes are written as their content with no wrapper, because WordprocessingML has no block-level element for them: a `link` (its own hyperlink is run-level, so a block-scoped link has no element to be), a `division` (no block container answers to one), a `provenance` whose change is `formatChange` (w:pPrChange is a child of w:pPr describing one paragraph's old properties, not a wrapper over a block flow), and an `anchor` whose type is a footnote, endnote, or comment reference (each of those is a run-level reference into a part this writer does not emit). readDocxContent produces none of them, so this only bounds what a foreign ContentDocument can carry through here.
@@ -441,9 +442,33 @@ function buildSdtProperties(descriptor: ContentControlDescriptor): XmlElement {
     children.push(el('w:date', descriptor.value === undefined ? {} : { 'w:fullDate': encodeXmlText(descriptor.value) }));
     return el('w:sdtPr', {}, children);
   }
+  const restored = restoreGalleryElement(descriptor);
+  if (restored !== undefined) {
+    children.push(restored);
+    return el('w:sdtPr', {}, children);
+  }
   const typeTag = SDT_TYPE_ELEMENT[descriptor.controlType];
   children.push(el(typeTag ?? 'w:richText'));
   return el('w:sdtPr', {}, children);
+}
+
+// The restorable tier's first consumer: a richText control that degraded from a docx gallery (constructs.ts) carries its w:docPartObj/w:docPartList element verbatim in descriptor.source, and this re-emits that element in place of the default w:richText type element -- the same-format pair loses the gallery name no longer. Re-serialising opaque residue text is re-emission, not interpretation (the channel's own contract), and the parse here is the honest inverse of the buildXml that minted the text -- a deserialisation of a value this package's own reader produced, not the hand-written-XML-string pattern src/xml/fragment.ts's convention exists to discourage. One restoration site, one residue shape: docx residue of any other shape has no sdtPr spelling, and docx residue that does not parse as XML at all is malformed producer data (this package's own reader never mints unparseable text) and fails loudly rather than writing a control that silently pretends it carried none.
+function restoreGalleryElement(descriptor: ContentControlDescriptor): XmlElement | undefined {
+  const source = descriptor.source;
+  if (source?.format !== 'docx') {
+    return undefined;
+  }
+  let nodes: XmlNode[];
+  try {
+    nodes = parseXml(source.xml);
+  } catch (error) {
+    throw new Error(`buildDocxPackageFromContent: a content control carries docx residue that does not parse as XML: ${source.xml}`, { cause: error });
+  }
+  const first = nodes[0];
+  if (nodes.length !== 1 || first?.type !== 'element' || (first.tag !== 'w:docPartObj' && first.tag !== 'w:docPartList')) {
+    return undefined;
+  }
+  return first;
 }
 
 // The reader turns a matched marker pair back into a construct by bracket position, so the writer works from the same shape: the flat list is parsed into the nesting its brackets already describe, and each construct then chooses whether it is an element wrapping its extent (w:sdt, w:ins) or a pair of sibling markers around it (w:bookmarkStart/End) or characters injected into the extent's own paragraphs (a field).

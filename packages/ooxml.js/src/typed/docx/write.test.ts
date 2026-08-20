@@ -251,6 +251,26 @@ describe('buildDocxPackageFromContent: construct round trip', () => {
     ]);
   });
 
+  it('round-trips a non-TOC gallery through the residue channel: the docPartObj degrades to richText on read and is restored on write', () => {
+    // The restorable tier's first consumer (document-schema.js's residue channel): a Cover Pages SDT reads back as a richText control carrying its w:docPartObj verbatim in descriptor.source, and the writer re-emits the element from that residue in place of the default w:richText type element -- so the same-format pair loses the gallery name no longer.
+    const coverPage = el('w:sdt', {}, [
+      el('w:sdtPr', {}, [el('w:alias', { 'w:val': 'Title' }), el('w:docPartObj', {}, [el('w:docPartGallery', { 'w:val': 'Cover Pages' })])]),
+      el('w:sdtContent', {}, [para('Title page')]),
+    ]);
+    const { before, after, written } = roundTrip(docxPackage([coverPage]));
+    expect(after).toEqual(before);
+    const descriptor = before[0]?.blocks[0];
+    expect(descriptor?.kind === 'constructStart' ? descriptor.descriptor : undefined).toEqual({
+      kind: 'contentControl',
+      controlType: 'richText',
+      alias: 'Title',
+      source: { format: 'docx', xml: '<w:docPartObj><w:docPartGallery w:val="Cover Pages"></w:docPartGallery></w:docPartObj>' },
+    });
+    const document = rootElement(written.parts['word/document.xml']);
+    const galleries = document === undefined ? [] : elementsWithTag([document], 'w:docPartGallery');
+    expect(galleries.map((gallery) => gallery.attributes.find((attribute) => attribute.name === 'w:val')?.value)).toEqual(['Cover Pages']);
+  });
+
   it('round-trips a tracked insertion and a tracked deletion, keeping the deleted text as deleted text, and wraps each paragraph\'s own runs rather than the paragraph itself', () => {
     const ins = el('w:ins', { 'w:id': '1', 'w:author': 'Ada', 'w:date': '2026-08-18T09:00:00Z' }, [para('added')]);
     const del = el('w:del', { 'w:id': '2', 'w:author': 'Grace' }, [el('w:p', {}, [el('w:r', {}, [el('w:delText', {}, [txt('removed')])])])]);
