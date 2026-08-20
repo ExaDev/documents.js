@@ -20,10 +20,10 @@ const PICTURE_GRAPHIC_URI = 'http://schemas.openxmlformats.org/drawingml/2006/pi
 const TINY_PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 
 // wp:inline and wp:anchor share the identical wp:extent/wp:docPr/a:graphic/a:graphicData/pic:pic/pic:blipFill/a:blip shape -- only the outer container tag (and, for wp:anchor, the positioning elements readDrawingImage deliberately never reads) differs.
-function drawingElement(containerTag: 'wp:inline' | 'wp:anchor', rId: string, altText: string): XmlElement {
+function drawingElement(containerTag: 'wp:inline' | 'wp:anchor', rId: string, altText: string, extent: { cx: string; cy: string } = { cx: '914400', cy: '457200' }): XmlElement {
   return el('w:drawing', {}, [
     el(containerTag, {}, [
-      el('wp:extent', { cx: '914400', cy: '457200' }), // 1in x 0.5in -> 72pt x 36pt
+      el('wp:extent', extent), // default 1in x 0.5in -> 72pt x 36pt
       el('wp:docPr', { id: '1', name: 'Picture 1', descr: altText }),
       el('a:graphic', {}, [
         el('a:graphicData', { uri: PICTURE_GRAPHIC_URI }, [el('pic:pic', {}, [el('pic:blipFill', {}, [el('a:blip', { 'r:embed': rId })])])]),
@@ -501,9 +501,9 @@ describe('readDocxContent: images', () => {
 });
 
 // An inline OLE object's real-world spelling: a w:r carries a w:object whose w:dxaOrig/w:dyaOrig (twips) size it, whose v:shape > v:imagedata names the raster preview picture rendered in its place (a VML spelling this reader has no path for, so the preview contributes no image block), and whose o:OLEObject names the payload part through its own relationship. The payload relationship is parameterised so a test can point rIdOle at whatever part shape it needs (the ZIP-payload case targets the default embeddings/oleObject1.xlsx; the classic-OLE case retargets to a .bin; the linked case goes external) -- the fixture itself ships no embeddings part, so each test adds exactly the payload bytes it wants. extraRuns splices additional runs after the object run inside the same paragraph.
-function oleObjectFixturePackage(oleRel: { target: string; external?: boolean }, extraRuns: XmlElement[] = []): Package {
+function oleObjectFixturePackage(oleRel: { target: string; external?: boolean }, extraRuns: XmlElement[] = [], dxaOrig = '1920'): Package {
   const objectRun = el('w:r', {}, [
-    el('w:object', { 'w:dxaOrig': '1920', 'w:dyaOrig': '1200' }, [
+    el('w:object', { 'w:dxaOrig': dxaOrig, 'w:dyaOrig': '1200' }, [
       el('v:shape', { id: '_x0000_i1025', type: '#_x0000_t75', style: 'width:96pt;height:60pt' }, [
         el('v:imagedata', { 'r:id': 'rIdPreview', 'o:title': '' }),
       ]),
@@ -582,6 +582,24 @@ describe('readDocxContent: embedded OLE objects', () => {
     const paragraph = asParagraph(doc.sections[0]?.blocks[0]);
     expect(paragraph.runs).toHaveLength(1);
     expect(paragraph.runs[0]?.text).toBe('');
+  });
+
+  it('skips a w:object whose w:dxaOrig is not numeric, rather than emitting a NaN-sized frame', () => {
+    // Malformed geometry degrades to no block, the tier every other numeric attribute reader here degrades on (readOutlineLevel's malformed @lvl is the family's own example): a NaN widthPt would emit a ContentEmbeddedObjectBlock no schema validator accepts, poisoning the whole section for every downstream consumer.
+    const pkg = oleObjectFixturePackage({ target: 'embeddings/oleObject1.xlsx' }, [], 'not-a-number');
+    pkg.parts['word/embeddings/oleObject1.xlsx'] = { kind: 'binary', base64: bytesToBase64(minimalXlsxBytes()) };
+    const doc = readDocxContent(pkg);
+    expect(doc.sections[0]?.blocks).toHaveLength(1);
+  });
+});
+
+describe('readDocxContent: malformed image geometry', () => {
+  it('skips a w:drawing whose wp:extent carries a non-numeric EMU value, rather than emitting a NaN-sized image', () => {
+    // The pre-existing parity hazard the embedded-object path would otherwise have widened: Number('nine') is NaN, and a NaN widthPt image block fails ContentImageBlock's own geometry schema for every downstream validator.
+    const pkg = oleObjectFixturePackage({ target: 'embeddings/oleObject1.xlsx' }, [el('w:r', {}, [drawingElement('wp:inline', 'rIdPreview', 'Broken extent', { cx: 'nine', cy: '457200' })])]);
+    const doc = readDocxContent(pkg);
+    // No embeddings part ships, so the object contributes nothing either -- the paragraph's own block is all that remains.
+    expect(doc.sections[0]?.blocks).toHaveLength(1);
   });
 });
 
