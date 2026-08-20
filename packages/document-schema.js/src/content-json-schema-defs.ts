@@ -5,7 +5,7 @@ import { schemaUriFor } from './schema-io';
 // The hand-authored JSON Schema $defs fragments spliced into content-document.schema.json's `override()` callback (scripts/generate-json-schemas.mjs), lifted out into their own src module rather than staying inline in that script. The reason is single-sourcing, not tidiness: this exact object needs to be reachable from two places that cannot share an import graph --
 //
 //   1. scripts/generate-json-schemas.mjs itself, which only ever runs against the freshly-built ../dist/ (it imports every other schema it needs the same way), so it imports CONTENT_DEFS from '../dist/content-json-schema-defs.js', the file tsdown emits for this module (entry: 'src/**/*.ts', one dist file per src file -- see tsdown.config.ts).
-//   2. content-json-schema-defs.test.ts (src/, run directly by vitest's "unit" project against source, never against dist), which imports this exact same CONTENT_DEFS value straight from here and asserts it stays byte-for-byte in step with a live z.toJSONSchema() call over each fragment's real exported Zod schema counterpart (ContentParagraphSchema, ContentRunSchema, ContentListMembershipSchema, ContentImageBlockSchema, ContentPageBreakSchema, ColorSchema, BoxSchema, LayoutFrameSchema, PageSizeSchema, MarginsSchema, AlignmentSchema, ContentStrokeStyleSchema, ContentBorderSchema, ContentCellBordersSchema, the package tree's non-recursive descriptors and anchors from src/package-node.ts: SectionDescriptorSchema, SlideDescriptorSchema, SheetDescriptorSchema, DrawPageDescriptorSchema, ShapeDescriptorSchema, HeadingParagraphSchema, ListParagraphSchema, the sheet grid and vector leaves from src/content.ts: ContentSheetCellSchema, ContentCellValueSchema, ContentSheetCellCommentSchema, ContentSheetColumnSchema, ContentSheetRowSchema, ContentSheetPrintSettingsSchema, ContentSheetPrintRangeSchema, ContentSheetRepeatRangeSchema, ContentSheetImageSchema, ContentStrokeSchema, ContentPathPointSchema, ContentPathSegmentSchema, ContentSubpathSchema, ContentVectorSchema, and the definitions facility from src/definitions.ts: StyleParagraphPropertiesSchema, StyleRunPropertiesSchema, StyleEntrySchema, DefinitionEntrySchema, the whole construct descriptor vocabulary from src/construct.ts: ContentControlDescriptorSchema, FieldDescriptorSchema, AnchorDescriptorSchema, LinkTargetSchema, LinkDescriptorSchema, ProvenanceDescriptorSchema, DivisionSourceSchema, DivisionDescriptorSchema, ConstructDescriptorSchema, the flat form's two construct boundary markers from src/content.ts: ContentConstructStartSchema, ContentConstructEndSchema, plus the non-recursive math leaves from src/math.ts: ExactRationalSchema, DimensionVectorSchema, MathPresentationSchema, MathProvenanceSchema, MathUncertaintySchema, MathNumSchema, MathQtySchema, MathSymSchema, MathUnparsedSchema, MathSymbolEntrySchema, MathUnitSchema, MathNormalisationContextSchema, SymbolTableSchema) -- see that test file's own top comment for why this is the only structural defence this generator has against silently drifting away from the schemas it's meant to describe.
+//   2. content-json-schema-defs.test.ts (src/, run directly by vitest's "unit" project against source, never against dist), which imports this exact same CONTENT_DEFS value straight from here and asserts it stays byte-for-byte in step with a live z.toJSONSchema() call over each fragment's real exported Zod schema counterpart (ContentParagraphSchema, ContentRunSchema, ContentListMembershipSchema, ContentImageBlockSchema, ContentPageBreakSchema, ColorSchema, BoxSchema, LayoutFrameSchema, PageSizeSchema, MarginsSchema, AlignmentSchema, ContentStrokeStyleSchema, ContentBorderSchema, ContentCellBordersSchema, the package tree's non-recursive descriptors and anchors from src/package-node.ts: SectionDescriptorSchema, SlideDescriptorSchema, SheetDescriptorSchema, DrawPageDescriptorSchema, ShapeDescriptorSchema, HeadingParagraphSchema, ListParagraphSchema, the sheet grid and vector leaves from src/content.ts: ContentSheetCellSchema, ContentCellValueSchema, ContentSheetCellCommentSchema, ContentSheetColumnSchema, ContentSheetRowSchema, ContentSheetPrintSettingsSchema, ContentSheetPrintRangeSchema, ContentSheetRepeatRangeSchema, ContentSheetImageSchema, ContentStrokeSchema, ContentPathPointSchema, ContentPathSegmentSchema, ContentSubpathSchema, ContentVectorSchema, and the definitions facility from src/definitions.ts: StyleParagraphPropertiesSchema, StyleRunPropertiesSchema, StyleEntrySchema, DefinitionEntrySchema, the whole construct descriptor vocabulary from src/construct.ts: ContentControlDescriptorSchema, FieldDescriptorSchema, AnchorDescriptorSchema, LinkTargetSchema, LinkDescriptorSchema, ProvenanceDescriptorSchema, DivisionSourceSchema, DivisionDescriptorSchema, ConstructDescriptorSchema, the flat form's two construct boundary markers from src/content.ts: ContentConstructStartSchema, ContentConstructEndSchema, the quarantined residue value from src/source.ts: SourceResidueSchema, plus the non-recursive math leaves from src/math.ts: ExactRationalSchema, DimensionVectorSchema, MathPresentationSchema, MathProvenanceSchema, MathUncertaintySchema, MathNumSchema, MathQtySchema, MathSymSchema, MathUnparsedSchema, MathSymbolEntrySchema, MathUnitSchema, MathNormalisationContextSchema, SymbolTableSchema) -- see that test file's own top comment for why this is the only structural defence this generator has against silently drifting away from the schemas it's meant to describe.
 //
 // If CONTENT_DEFS stayed inline in the .mjs script, only path 1 above would work: the script imports Zod schemas exclusively from '../dist/index.js' (a build artefact that may not exist, and per eslint.config.ts/tsconfig.json is deliberately excluded from both linting and typechecking, matching test/smoke.test.mjs's own precedent) -- a test that has to import through that path would only ever run after a build, which `pnpm test` (the "unit" vitest project, run standalone in CI's own "test" job, with no build step beforehand) never guarantees. Living here instead, this is an ordinary, fully typechecked and linted src module like any other -- CONTENT_DEFS just happens to be consumed by a script as well as by the package's own test suite.
 //
@@ -78,6 +78,16 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     type: 'string',
     enum: ['left', 'center', 'right', 'justify'],
   },
+  // The quarantined residue channel (src/source.ts): one `source: { format, xml }` value riding every content node, construct descriptor (division excepted -- its `source` names the external-chapter link, landed 4.1.0), and the package root's per-key table. A real, non-recursive Zod schema, so this fragment is held to the live z.toJSONSchema() comparison by content-json-schema-defs.test.ts like the descriptors beside it.
+  SourceResidue: {
+    type: 'object',
+    properties: {
+      format: { type: 'string', enum: ['docx', 'pptx', 'xlsx', 'odt', 'ods', 'odp', 'odg', 'odm', 'odb', 'odf', 'markdown', 'pdf'] },
+      xml: { type: 'string' }, // opaque text -- validation stops at "is a string"; everything about the content is the producer's to know
+    },
+    required: ['format', 'xml'],
+    additionalProperties: false,
+  },
   ContentStrokeStyle: {
     type: 'string',
     enum: ['solid', 'dashed', 'dotted', 'double'],
@@ -124,6 +134,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       color: { $ref: '#/$defs/Color' },
       hyperlink: { type: 'string' }, // resolved external URI
       sourcePath: { type: 'string' },
+      source: { $ref: '#/$defs/SourceResidue' },
       frames: { type: 'array', items: { $ref: '#/$defs/LayoutFrame' } },
     },
     required: ['text'],
@@ -144,6 +155,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       indentLeftPt: { type: 'number' },
       indentFirstLinePt: { type: 'number' },
       sourcePath: { type: 'string' },
+      source: { $ref: '#/$defs/SourceResidue' },
       frames: { type: 'array', items: { $ref: '#/$defs/LayoutFrame' } },
     },
     required: ['kind', 'runs'],
@@ -159,6 +171,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       heightPt: { type: 'number', exclusiveMinimum: 0 },
       altText: { type: 'string' },
       sourcePath: { type: 'string' },
+      source: { $ref: '#/$defs/SourceResidue' },
       frames: { type: 'array', items: { $ref: '#/$defs/LayoutFrame' } },
     },
     required: ['kind', 'format', 'base64', 'widthPt', 'heightPt'],
@@ -169,6 +182,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     properties: {
       kind: { type: 'string', const: 'pageBreak' },
       sourcePath: { type: 'string' },
+      source: { $ref: '#/$defs/SourceResidue' },
       frames: { type: 'array', items: { $ref: '#/$defs/LayoutFrame' } },
     },
     required: ['kind'],
@@ -184,6 +198,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       background: { $ref: '#/$defs/Color' },
       borders: { $ref: '#/$defs/ContentCellBorders' },
       sourcePath: { type: 'string' },
+      source: { $ref: '#/$defs/SourceResidue' },
       frames: { type: 'array', items: { $ref: '#/$defs/LayoutFrame' } },
     },
     required: ['blocks'],
@@ -207,6 +222,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       // Pre-existing discrepancy, not fixed here: ContentTableSchema.columnWidthsPt is z.array(z.number().positive()), stricter than isContentBlock's own runtime guard (src/content.ts), which only checks `typeof w === 'number'` for each width in its 'table' branch. This fragment matches the stricter declared Zod schema, not the looser guard -- flagged, not silently normalized away.
       columnWidthsPt: { type: 'array', items: { type: 'number', exclusiveMinimum: 0 } },
       sourcePath: { type: 'string' },
+      source: { $ref: '#/$defs/SourceResidue' },
       frames: { type: 'array', items: { $ref: '#/$defs/LayoutFrame' } },
     },
     required: ['kind', 'rows', 'columnWidthsPt'],
@@ -221,6 +237,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       document: { $ref: CONTENT_DOCUMENT_URI },
       frame: { $ref: '#/$defs/Box' },
       sourcePath: { type: 'string' },
+      source: { $ref: '#/$defs/SourceResidue' },
       frames: { type: 'array', items: { $ref: '#/$defs/LayoutFrame' } },
       // Cell-anchor position, all four optional -- only set on an embedded object held in a ContentSheetSchema.embeddedObjects array; mirrors ContentSheetImageSchema's own anchorRow/anchorColumn/offsetXPt/offsetYPt representation exactly (see schemas/content-document.schema.json's own ContentSheetImage fragment, generated -- not hand-transcribed -- since that schema is a real z.object()).
       anchorRow: { type: 'integer', minimum: 0, maximum: MAX_SAFE_INTEGER },
@@ -299,6 +316,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     properties: {
       pageSize: { $ref: '#/$defs/PageSize' },
       margins: { $ref: '#/$defs/Margins' },
+      source: { $ref: '#/$defs/SourceResidue' },
       kind: { type: 'string', const: 'section' },
     },
     required: ['pageSize', 'margins', 'kind'],
@@ -309,6 +327,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     properties: {
       size: { $ref: '#/$defs/PageSize' },
       notes: { type: 'string' },
+      source: { $ref: '#/$defs/SourceResidue' },
       kind: { type: 'string', const: 'slide' },
     },
     required: ['size', 'notes', 'kind'],
@@ -322,6 +341,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       columns: { type: 'array', items: { $ref: '#/$defs/ContentSheetColumn' } },
       rows: { type: 'array', items: { $ref: '#/$defs/ContentSheetRow' } },
       printSettings: { $ref: '#/$defs/ContentSheetPrintSettings' },
+      source: { $ref: '#/$defs/SourceResidue' },
       kind: { type: 'string', const: 'sheet' },
     },
     required: ['name', 'cells', 'columns', 'rows', 'printSettings', 'kind'],
@@ -331,6 +351,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     type: 'object',
     properties: {
       size: { $ref: '#/$defs/PageSize' },
+      source: { $ref: '#/$defs/SourceResidue' },
       kind: { type: 'string', const: 'drawPage' },
     },
     required: ['size', 'kind'],
@@ -351,6 +372,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       lineSpacingReduction: { type: 'number', minimum: 0 },
       paintOrder: { type: 'number' },
       sourcePath: { type: 'string' },
+      source: { $ref: '#/$defs/SourceResidue' },
       frames: { type: 'array', items: { $ref: '#/$defs/LayoutFrame' } },
     },
     required: ['frame', 'insetLeftPt', 'insetTopPt', 'insetRightPt', 'insetBottomPt'],
@@ -372,6 +394,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       indentLeftPt: { type: 'number' },
       indentFirstLinePt: { type: 'number' },
       sourcePath: { type: 'string' },
+      source: { $ref: '#/$defs/SourceResidue' },
       frames: { type: 'array', items: { $ref: '#/$defs/LayoutFrame' } },
     },
     required: ['kind', 'runs', 'headingLevel'],
@@ -393,6 +416,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       indentLeftPt: { type: 'number' },
       indentFirstLinePt: { type: 'number' },
       sourcePath: { type: 'string' },
+      source: { $ref: '#/$defs/SourceResidue' },
       frames: { type: 'array', items: { $ref: '#/$defs/LayoutFrame' } },
     },
     required: ['kind', 'runs', 'list'],
@@ -415,6 +439,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       verticalAlignment: { type: 'string', enum: ['top', 'middle', 'bottom'] },
       comment: { $ref: '#/$defs/ContentSheetCellComment' },
       sourcePath: { type: 'string' },
+      source: { $ref: '#/$defs/SourceResidue' },
       frames: { type: 'array', items: { $ref: '#/$defs/LayoutFrame' } },
     },
     required: ['row', 'column', 'value', 'displayText'],
@@ -602,6 +627,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       heightPt: { type: 'number', exclusiveMinimum: 0 },
       altText: { type: 'string' },
       sourcePath: { type: 'string' },
+      source: { $ref: '#/$defs/SourceResidue' },
       frames: { type: 'array', items: { $ref: '#/$defs/LayoutFrame' } },
       anchorRow: { type: 'integer', minimum: 0, maximum: MAX_SAFE_INTEGER },
       anchorColumn: { type: 'integer', minimum: 0, maximum: MAX_SAFE_INTEGER },
@@ -674,6 +700,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
           stroke: { $ref: '#/$defs/ContentStroke' },
           paintOrder: { type: 'number' },
           sourcePath: { type: 'string' },
+      source: { $ref: '#/$defs/SourceResidue' },
           frames: { type: 'array', items: { $ref: '#/$defs/LayoutFrame' } },
         },
         required: ['kind', 'frame'],
@@ -689,6 +716,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
           stroke: { $ref: '#/$defs/ContentStroke' },
           paintOrder: { type: 'number' },
           sourcePath: { type: 'string' },
+      source: { $ref: '#/$defs/SourceResidue' },
           frames: { type: 'array', items: { $ref: '#/$defs/LayoutFrame' } },
         },
         required: ['kind', 'frame'],
@@ -703,6 +731,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
           stroke: { $ref: '#/$defs/ContentStroke' },
           paintOrder: { type: 'number' },
           sourcePath: { type: 'string' },
+      source: { $ref: '#/$defs/SourceResidue' },
           frames: { type: 'array', items: { $ref: '#/$defs/LayoutFrame' } },
         },
         required: ['kind', 'from', 'to', 'stroke'],
@@ -720,6 +749,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
           stroke: { $ref: '#/$defs/ContentStroke' },
           paintOrder: { type: 'number' },
           sourcePath: { type: 'string' },
+      source: { $ref: '#/$defs/SourceResidue' },
           frames: { type: 'array', items: { $ref: '#/$defs/LayoutFrame' } },
         },
         required: ['kind', 'frame', 'subpaths'],
@@ -738,6 +768,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       anchorColumn: { type: 'integer', minimum: 0, maximum: MAX_SAFE_INTEGER },
       offsetXPt: { type: 'number' },
       offsetYPt: { type: 'number' },
+      source: { $ref: '#/$defs/SourceResidue' },
     },
     required: ['objectKind', 'document', 'frame'],
     additionalProperties: false,
@@ -1137,6 +1168,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       presentation: { $ref: '#/$defs/MathPresentation' },
       content: { $ref: '#/$defs/MathExpression' },
       provenance: { $ref: '#/$defs/MathProvenance' },
+      source: { $ref: '#/$defs/SourceResidue' },
     },
     required: ['mathml'],
     additionalProperties: false,

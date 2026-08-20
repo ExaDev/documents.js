@@ -7,11 +7,14 @@ import type { Box, LayoutFrame } from './geometry';
 import { MathExpressionSchema, MathPresentationSchema, MathProvenanceSchema, SymbolTableSchema } from './math';
 import { MathMlNodeSchema } from './mathml';
 import { LayoutMetadataSchema } from './metadata';
+import { SourceResidueSchema, type SourceResidue } from './source';
 import { AlignmentSchema } from './style';
 
 // The shared block model underlying a wordprocessing document's sections and a presentation document's slides. Ported from ooxml.js's src/typed/shared/content.ts (itself ported from documents.js's src/model/content.ts) -- the canonical home now; ooxml.js and documents.js both import this instead of maintaining their own copy. The ContentDocument envelope below (kind + wordprocessing/presentation/spreadsheet/drawing/formula variants) is this package's own addition on top of that shared vocabulary, matching documents.js's existing model/content.ts shape, since a caller needs a single top-level value to carry through a conversion pipeline.
 
 // sourcePath is assigned by each format's reader at read time; this package only defines the field, it doesn't generate values. Known limitation: sourcePath values are stable within one read+layout pass over a single document, not across edits -- inserting content earlier in a document shifts every later path. It exists for tagged/accessible-PDF-style traceability and debugging, not edit-tracking, and not (any more, see `frames` immediately below) as the mechanism a node's own rendered position is found through.
+
+// The quarantined residue channel (src/source.ts): an optional `source: { format, xml }` on every content node below that a format reader produces -- the same node set that carries sourcePath and frames, plus the containers and the formula. It holds what has no cross-format meaning (a proofing mark, a custom XML payload, raw HTML in markdown): carried verbatim, validated as opaque text, never semantically interpreted anywhere in this package, and never factored into a styles entry (the styles table's strict objects reject the key). A same-format writer may re-emit its own residue verbatim; every other consumer leaves it alone. The generalises-a-precedent lineage: starMath beside canonical MathML, styleId's opaque producer names, sourcePath traceability -- one field, one shape, everywhere.
 
 // The fusion primitive every content-kind leaf below adds via its own literal `frames?: LayoutFrame[]` field (Zod's discriminated-union/object model needs the field spliced in field-by-field per variant, not layered on generically through this generic type) -- FusedNode<T> names that exact pattern once, for a consumer describing "a content node carrying its own rendered position(s)" in the general case rather than repeating the union of leaf types by hand. A node's own `frames` entries record wherever -- and on however many pages -- its rendered content actually landed, replacing DocumentPackage's old two-tree design of correlating a wholly separate LayoutDocument's own positioned items back to their originating ContentDocument node purely by matching sourcePath strings (see src/package.ts). A node with more than one frame appeared in more than one rendered position -- a paragraph's runs wrapping across a page boundary is the common case -- without the content itself needing to be split or duplicated. `frames` is absent on a content-only value that has never been through a layout pass, exactly mirroring how DocumentPackage.layout used to be absent for the same reason.
 export type FusedNode<T> = T & { frames?: LayoutFrame[] };
@@ -27,6 +30,7 @@ export const ContentRunSchema = z.object({
   color: ColorSchema.optional(),
   hyperlink: z.string().optional(), // resolved external URI
   sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
+  source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
   frames: z.array(LayoutFrameSchema).optional(), // this run's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
 });
 export type ContentRun = z.infer<typeof ContentRunSchema>;
@@ -50,6 +54,7 @@ export const ContentParagraphSchema = z.object({
   indentLeftPt: z.number().optional(),
   indentFirstLinePt: z.number().optional(),
   sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
+  source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
   frames: z.array(LayoutFrameSchema).optional(), // this paragraph's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
 });
 export type ContentParagraph = z.infer<typeof ContentParagraphSchema>;
@@ -67,6 +72,7 @@ export const ContentImageBlockSchema = z.object({
   heightPt: z.number().positive(),
   altText: z.string().optional(),
   sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
+  source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
   frames: z.array(LayoutFrameSchema).optional(), // this image's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
 });
 export type ContentImageBlock = z.infer<typeof ContentImageBlockSchema>;
@@ -74,6 +80,7 @@ export type ContentImageBlock = z.infer<typeof ContentImageBlockSchema>;
 export const ContentPageBreakSchema = z.object({
   kind: z.literal('pageBreak'),
   sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
+  source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
   frames: z.array(LayoutFrameSchema).optional(), // where this page break actually landed, once a layout pass has fused one in -- see FusedNode above
 });
 export type ContentPageBreak = z.infer<typeof ContentPageBreakSchema>;
@@ -109,6 +116,7 @@ export interface ContentTableCell {
   background?: Color;
   borders?: ContentCellBorders;
   sourcePath?: string;
+  source?: SourceResidue; // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
   frames?: LayoutFrame[]; // this cell's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
 }
 
@@ -123,6 +131,7 @@ export interface ContentTable {
   rows: ContentTableRow[];
   columnWidthsPt: number[];
   sourcePath?: string; // deterministic, document-order-derived path assigned by the format reader
+  source?: SourceResidue; // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
   frames?: LayoutFrame[]; // this table's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
 }
 
@@ -138,6 +147,7 @@ export interface ContentEmbeddedObject {
   anchorColumn?: number;
   offsetXPt?: number; // offset from the anchor cell's own top-left corner
   offsetYPt?: number;
+  source?: SourceResidue; // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
 }
 
 // The block-level anchoring point for an embedded object inside a wordprocessing section's or a presentation/drawing shape's own block flow -- reuses ContentEmbeddedObject's fields directly (frame included) rather than nesting a separate `embeddedObject: ContentEmbeddedObject` field, since ContentEmbeddedObject already carries its own frame and duplicating it would just be two copies of the same position.
@@ -319,6 +329,7 @@ export const ContentTableCellSchema = z.object({
   background: ColorSchema.optional(),
   borders: ContentCellBordersSchema.optional(),
   sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
+  source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
   frames: z.array(LayoutFrameSchema).optional(), // this cell's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
 });
 
@@ -332,6 +343,7 @@ export const ContentTableSchema = z.object({
   rows: z.array(ContentTableRowSchema),
   columnWidthsPt: z.array(z.number().positive()),
   sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
+  source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
   frames: z.array(LayoutFrameSchema).optional(), // this table's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
 });
 
@@ -340,6 +352,7 @@ export const ContentSectionSchema = z.object({
   pageSize: PageSizeSchema,
   margins: MarginsSchema,
   blocks: z.array(ContentBlockSchema),
+  source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts); rides the tree's section descriptor automatically (omit+extend, src/package-node.ts)
 });
 export type ContentSection = z.infer<typeof ContentSectionSchema>;
 
@@ -356,6 +369,7 @@ export const ContentShapeSchema = z.object({
   lineSpacingReduction: z.number().nonnegative().optional(),
   paintOrder: z.number().optional(),
   sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
+  source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
   frames: z.array(LayoutFrameSchema).optional(), // this shape's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
   blocks: z.array(ContentBlockSchema),
 });
@@ -365,6 +379,7 @@ export const ContentSlideSchema = z.object({
   size: PageSizeSchema,
   shapes: z.array(ContentShapeSchema),
   notes: z.string(),
+  source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts); rides the tree's slide descriptor automatically (omit+extend, src/package-node.ts)
 });
 export type ContentSlide = z.infer<typeof ContentSlideSchema>;
 
@@ -416,6 +431,7 @@ export const ContentSheetCellSchema = z.object({
   verticalAlignment: z.enum(['top', 'middle', 'bottom']).optional(), // absent means 'bottom'
   comment: ContentSheetCellCommentSchema.optional(), // a cell-anchored annotation -- a legacy note or a threaded comment; see ContentSheetCellCommentSchema above
   sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
+  source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
   frames: z.array(LayoutFrameSchema).optional(), // this cell's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
 });
 export type ContentSheetCell = z.infer<typeof ContentSheetCellSchema>;
@@ -484,6 +500,7 @@ export const ContentSheetSchema = z.object({
   images: z.array(ContentSheetImageSchema),
   printSettings: ContentSheetPrintSettingsSchema,
   embeddedObjects: z.array(ContentEmbeddedObjectSchema).optional(),
+  source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts); rides the tree's sheet descriptor automatically (omit+extend, src/package-node.ts)
 });
 export type ContentSheet = z.infer<typeof ContentSheetSchema>;
 
@@ -531,6 +548,7 @@ export const ContentVectorSchema = z.discriminatedUnion('kind', [
     stroke: ContentStrokeSchema.optional(),
     paintOrder: z.number().optional(),
     sourcePath: z.string().optional(),
+    source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
     frames: z.array(LayoutFrameSchema).optional(), // this vector's own rendered position(s), once a layout pass has fused one in -- see FusedNode above
   }),
   z.object({
@@ -541,6 +559,7 @@ export const ContentVectorSchema = z.discriminatedUnion('kind', [
     stroke: ContentStrokeSchema.optional(),
     paintOrder: z.number().optional(),
     sourcePath: z.string().optional(),
+    source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
     frames: z.array(LayoutFrameSchema).optional(),
   }),
   z.object({
@@ -550,6 +569,7 @@ export const ContentVectorSchema = z.discriminatedUnion('kind', [
     stroke: ContentStrokeSchema,
     paintOrder: z.number().optional(),
     sourcePath: z.string().optional(),
+    source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
     frames: z.array(LayoutFrameSchema).optional(),
   }),
   z.object({
@@ -562,6 +582,7 @@ export const ContentVectorSchema = z.discriminatedUnion('kind', [
     stroke: ContentStrokeSchema.optional(),
     paintOrder: z.number().optional(),
     sourcePath: z.string().optional(),
+    source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
     frames: z.array(LayoutFrameSchema).optional(),
   }),
 ]);
@@ -572,6 +593,7 @@ export const ContentDrawPageSchema = z.object({
   size: PageSizeSchema,
   shapes: z.array(ContentShapeSchema),
   vectors: z.array(ContentVectorSchema),
+  source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts); rides the tree's draw-page descriptor automatically (omit+extend, src/package-node.ts)
 });
 export type ContentDrawPage = z.infer<typeof ContentDrawPageSchema>;
 
@@ -589,6 +611,8 @@ export const ContentFormulaSchema = z.object({
   content: MathExpressionSchema.optional(),
   // Where this formula came from and what has touched it since (src/math.ts's MathProvenanceSchema).
   provenance: MathProvenanceSchema.optional(),
+  // Quarantined residue (src/source.ts) -- opaque text the producing format carries and no other format interprets; the formula document's own node position, since a formula package's single leaf is the formula itself.
+  source: SourceResidueSchema.optional(),
 });
 export type ContentFormula = z.infer<typeof ContentFormulaSchema>;
 
