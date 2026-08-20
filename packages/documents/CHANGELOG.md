@@ -1,3 +1,18 @@
+## [1.26.27](https://github.com/ExaDev/documents.js/compare/documents@1.26.26...documents@1.26.27) (2026-08-20)
+
+
+### Bug Fixes
+
+* point package homepage and bugs URLs at the monorepo, not the old standalone repos ([bb0a875](https://github.com/ExaDev/documents.js/commit/bb0a8752dcac584660f21979540bc06bbda41110))
+
+
+### Dependencies
+
+- Updated documents.js to ^4.0.22
+- Updated odf.js to ^5.0.5
+- Updated markdown-codec to ^4.0.8
+- Updated document-schema.js to ^4.3.5
+
 ## [1.26.26](https://github.com/ExaDev/documents.js/compare/documents@1.26.25...documents@1.26.26) (2026-08-20)
 
 
