@@ -146,6 +146,8 @@ Both docx readers read the block-scoped fidelity constructs — structured docum
 
 A construct whose extent is a sub-sequence of one paragraph's runs — a field inside a sentence, a bookmark over three words, a few inserted words in an otherwise untouched paragraph — has no marker encoding: the marker pair brackets whole blocks, so those occurrences keep their existing treatment (the text still comes through; the construct itself does not). See the gotchas below.
 
+A construct with format-specific specifics the harmonised vocabulary does not name carries them in the descriptor's quarantined `source` residue (`document-schema.js`'s residue channel): an SDT whose `w:docPartObj` gallery is not the Table of Contents degrades to a `richText` control with the whole `w:docPartObj` element carried verbatim, and the docx writer re-emits that element from the residue in place of the default `w:richText` type element — the restorable tier in action, the gallery name no longer lost to the round trip.
+
 ### Migrating from 3.x
 
 The `DocumentPackage` readers and writers took the primary names, and the functions that held them were renamed rather than removed. Every one of them still behaves exactly as it did:
