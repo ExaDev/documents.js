@@ -457,6 +457,14 @@ describe('pdfToMarkdown', () => {
     const markdownBytes = pdfToMarkdown(markdownToPdf(encodeMarkdownText(longMarkdown)));
     expect(readPdf(markdownToPdf(markdownBytes)).pages.length).toBe(pageCount);
   });
+
+  // ExaDev/documents.js#584 ask 2 end to end: the layout engine renders Heading1/Heading2 at 28/22pt against a 12pt body, and the reconstruction's rank-based heading inference inverts exactly that -- the round-tripped title and section come back as ATX headings, not the '**bold**' runs they used to collapse into.
+  it('recovers heading levels through markdownToPdf then pdfToMarkdown', () => {
+    const source = '# Quarterly Report\n\n## Part 1 Scope\n\nThis is body paragraph zero of ordinary prose.\n\nThis is body paragraph one of ordinary prose.\n\nThis is body paragraph two of ordinary prose.\n';
+    const text = decodeMarkdownText(pdfToMarkdown(markdownToPdf(encodeMarkdownText(source))));
+    expect(text).toMatch(/^# Quarterly Report/m);
+    expect(text).toMatch(/^## Part 1 Scope/m);
+  });
 });
 
 describe('pdfToOdt', () => {
