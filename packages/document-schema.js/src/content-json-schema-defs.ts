@@ -140,11 +140,23 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     required: ['text'],
     additionalProperties: false,
   },
+  // A run-scoped construct extent (src/content.ts's RunConstructExtentSchema): one construct covering a sub-sequence of one paragraph's runs, as a descriptor plus a half-open run range. A plain z.object reaching only the strict-object descriptor vocabulary, so it is held to the live comparison by content-json-schema-defs.test.ts.
+  RunConstructExtent: {
+    type: 'object',
+    properties: {
+      descriptor: { $ref: '#/$defs/ConstructDescriptor' },
+      startRun: { type: 'integer', minimum: 0, maximum: MAX_SAFE_INTEGER },
+      endRun: { type: 'integer', minimum: 0, maximum: MAX_SAFE_INTEGER },
+    },
+    required: ['descriptor', 'startRun', 'endRun'],
+    additionalProperties: false,
+  },
   ContentParagraph: {
     type: 'object',
     properties: {
       kind: { type: 'string', const: 'paragraph' },
       runs: { type: 'array', items: { $ref: '#/$defs/ContentRun' } },
+      constructs: { type: 'array', items: { $ref: '#/$defs/RunConstructExtent' } }, // the run-scoped construct extents this paragraph carries -- see src/content.ts's own field comment for the block-marker/run-extent scope split
       styleId: { type: 'string' }, // w:pStyle/@w:val, e.g. 'Heading1'
       headingLevel: { type: 'integer', exclusiveMinimum: 0, maximum: MAX_SAFE_INTEGER }, // canonical, format-agnostic heading depth -- see src/content.ts's own field comment
       alignment: { $ref: '#/$defs/Alignment' },
@@ -384,6 +396,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     properties: {
       kind: { type: 'string', const: 'paragraph' },
       runs: { type: 'array', items: { $ref: '#/$defs/ContentRun' } },
+      constructs: { type: 'array', items: { $ref: '#/$defs/RunConstructExtent' } },
       styleId: { type: 'string' },
       headingLevel: { type: 'integer', exclusiveMinimum: 0, maximum: MAX_SAFE_INTEGER },
       alignment: { $ref: '#/$defs/Alignment' },
@@ -406,6 +419,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     properties: {
       kind: { type: 'string', const: 'paragraph' },
       runs: { type: 'array', items: { $ref: '#/$defs/ContentRun' } },
+      constructs: { type: 'array', items: { $ref: '#/$defs/RunConstructExtent' } },
       styleId: { type: 'string' },
       headingLevel: { type: 'integer', exclusiveMinimum: 0, maximum: MAX_SAFE_INTEGER },
       alignment: { $ref: '#/$defs/Alignment' },
