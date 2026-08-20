@@ -1,3 +1,10 @@
+## [1.1.11](https://github.com/ExaDev/documents.js/compare/byte-codec@1.1.10...byte-codec@1.1.11) (2026-08-20)
+
+
+### Bug Fixes
+
+* point package homepage and bugs URLs at the monorepo, not the old standalone repos ([1b605e8](https://github.com/ExaDev/documents.js/commit/1b605e846393f417001227758a8606347c04e219))
+
 ## [1.1.10](https://github.com/ExaDev/documents.js/compare/byte-codec@1.1.9...byte-codec@1.1.10) (2026-08-20)
 
 ## [1.1.9](https://github.com/ExaDev/byte-codec/compare/v1.1.8...v1.1.9) (2026-08-12)
