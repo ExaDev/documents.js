@@ -258,7 +258,7 @@ function buildParagraph(paragraph: ContentParagraph, state: WriteState, pageBrea
   return el('w:p', {}, [...(pPr === undefined ? [] : [pPr]), ...content]);
 }
 
-// The write side of a run-level construct extent (document-schema.js's ContentParagraph.constructs): a bookmark's two halves go back between the runs its range names -- the exact inverse of the reader's run-position walk, so the pair reads back at the positions it was written from. Only bookmark anchors have a run-level spelling here (WordprocessingML's w:bookmarkStart/End are the one range-marker pair this vocabulary carries at run level); a run extent of any other kind writes its paragraph's content untouched and loses only the descriptor, the same content-preserving policy the block-level foreign constructs follow. Closes are emitted before opens at a shared boundary, so adjacent extents nest rather than interleave -- a convention the reader is indifferent to (both halves land on the same run position either way) but one that keeps the written XML well-nested for Word itself.
+// The write side of a run-level construct extent (document-schema.js's ContentParagraph.constructs): a bookmark's two halves go back between the runs its range names -- the exact inverse of the reader's run-position walk, so the pair reads back at the positions it was written from. Only bookmark anchors have a run-level spelling here (WordprocessingML's w:bookmarkStart/End are the one range-marker pair this vocabulary carries at run level); a run extent of any other kind writes its paragraph's content untouched and loses only the descriptor, the same content-preserving policy the block-level foreign constructs follow. At a shared boundary the halves go out in three groups -- closes of extents that opened earlier, then opens, then point extents (startRun === endRun) as one adjacent start-then-end pair each -- a convention the reader is indifferent to (both halves land on the same run position either way) but one the written XML needs: WordprocessingML pairs the halves by w:id with start-before-end ordering, so a point's end emitted among the boundary's closes would precede its own start, and pairing point halves keeps two points at one position from interleaving by id, which is the shape Word itself writes for adjacent point bookmarks.
 function interleaveRunConstructExtents(runElements: readonly XmlElement[], paragraph: ContentParagraph, state: WriteState): XmlElement[] {
   if (paragraph.constructs === undefined) {
     return [...runElements];
@@ -275,22 +275,27 @@ function interleaveRunConstructExtents(runElements: readonly XmlElement[], parag
     return [...runElements];
   }
   const closingAt = new Map<number, XmlElement[]>();
-  const openingAt = new Map<number, { element: XmlElement }[]>();
+  const openingAt = new Map<number, XmlElement[]>();
+  const pointAt = new Map<number, XmlElement[]>();
+  const push = (map: Map<number, XmlElement[]>, position: number, element: XmlElement): void => {
+    const existing = map.get(position);
+    if (existing === undefined) {
+      map.set(position, [element]);
+    } else {
+      existing.push(element);
+    }
+  };
   for (const bookmark of bookmarks) {
     const id = String(state.nextMarkerId++);
     const open = el('w:bookmarkStart', { 'w:id': id, 'w:name': encodeXmlText(bookmark.descriptor.name) });
-    const opens = openingAt.get(bookmark.startRun);
-    if (opens === undefined) {
-      openingAt.set(bookmark.startRun, [{ element: open }]);
-    } else {
-      opens.push({ element: open });
-    }
     const close = el('w:bookmarkEnd', { 'w:id': id });
-    const closes = closingAt.get(bookmark.endRun);
-    if (closes === undefined) {
-      closingAt.set(bookmark.endRun, [close]);
+    if (bookmark.startRun === bookmark.endRun) {
+      // A point extent's halves are emitted as one adjacent pair, never split across the close/open groups: its end among the closes would precede its own start, and its start among the opens would let a second point at the same position interleave with it by id.
+      push(pointAt, bookmark.startRun, open);
+      push(pointAt, bookmark.startRun, close);
     } else {
-      closes.push(close);
+      push(openingAt, bookmark.startRun, open);
+      push(closingAt, bookmark.endRun, close);
     }
   }
   const out: XmlElement[] = [];
@@ -298,8 +303,11 @@ function interleaveRunConstructExtents(runElements: readonly XmlElement[], parag
     for (const close of closingAt.get(position) ?? []) {
       out.push(close);
     }
-    for (const { element } of openingAt.get(position) ?? []) {
-      out.push(element);
+    for (const open of openingAt.get(position) ?? []) {
+      out.push(open);
+    }
+    for (const half of pointAt.get(position) ?? []) {
+      out.push(half);
     }
     const run = runElements[position];
     if (run !== undefined) {

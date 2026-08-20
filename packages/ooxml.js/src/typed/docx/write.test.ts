@@ -38,6 +38,36 @@ function expectStableRoundTrip(source: Package): ContentSection[] {
   return after;
 }
 
+// The written order of a paragraph's run-and-bookmark children, described by bookmark NAME rather than the id the writer mints: an order assertion over the writer's own XML, which the round-trip assertions cannot express (readDocxContent pairs halves by id at run positions, so it reads an inverted pair back as the same extent it wrote from).
+function writtenBookmarkOrder(paragraphElement: XmlNode | undefined): string[] | undefined {
+  if (paragraphElement?.type !== 'element') {
+    return undefined;
+  }
+  const nameById = new Map<string, string>();
+  for (const child of paragraphElement.children) {
+    if (child.type === 'element' && child.tag === 'w:bookmarkStart') {
+      const id = child.attributes.find((attribute) => attribute.name === 'w:id')?.value;
+      const name = child.attributes.find((attribute) => attribute.name === 'w:name')?.value;
+      if (id !== undefined && name !== undefined) {
+        nameById.set(id, name);
+      }
+    }
+  }
+  const described: string[] = [];
+  for (const child of paragraphElement.children) {
+    if (child.type !== 'element' || (child.tag !== 'w:r' && child.tag !== 'w:bookmarkStart' && child.tag !== 'w:bookmarkEnd')) {
+      continue;
+    }
+    if (child.tag === 'w:r') {
+      described.push('run');
+      continue;
+    }
+    const id = child.attributes.find((attribute) => attribute.name === 'w:id')?.value ?? '';
+    described.push(`${child.tag === 'w:bookmarkStart' ? 'start' : 'end'}(${nameById.get(id) ?? id})`);
+  }
+  return described;
+}
+
 describe('buildDocxPackageFromContent: package scaffolding', () => {
   it('writes a package that re-zips and decodes back to the same parts', () => {
     const pkg = buildDocxPackageFromContent(readDocxContent(docxPackage([para('hello')])));
@@ -427,6 +457,44 @@ describe('buildDocxPackageFromContent: construct round trip', () => {
       { descriptor: { kind: 'anchor', anchorType: 'bookmark', name: 'tail' }, startRun: 1, endRun: 3 },
       { descriptor: { kind: 'anchor', anchorType: 'bookmark', name: 'point' }, startRun: 2, endRun: 2 },
     ]);
+  });
+
+  it('writes a point run extent\'s own halves as a start-then-end pair, not an inverted one', () => {
+    // WordprocessingML pairs w:bookmarkStart/End by w:id with start-before-end ordering, so the ORDER of a point extent's own two halves is load-bearing for every consumer that pairs by id and order (Word included): the boundary convention of emitting closes before opens exists for two DIFFERENT extents meeting at one boundary, and applied to a point's own halves it would put the bookmarkEnd first. The written order of the neighbouring range extent is pinned too -- its close lands after the last run it covers, the point pair between the runs its position names.
+    const source = docxPackage([
+      el('w:p', {}, [
+        el('w:r', {}, [el('w:t', {}, [txt('unmarked ')])]),
+        el('w:bookmarkStart', { 'w:id': '5', 'w:name': 'tail' }),
+        el('w:r', {}, [el('w:t', {}, [txt('marked')])]),
+        el('w:bookmarkStart', { 'w:id': '6', 'w:name': 'point' }),
+        el('w:bookmarkEnd', { 'w:id': '6' }),
+        el('w:r', {}, [el('w:t', {}, [txt(' also')])]),
+        el('w:bookmarkEnd', { 'w:id': '5' }),
+      ]),
+    ]);
+    const { written } = roundTrip(source);
+    const document = rootElement(written.parts['word/document.xml']);
+    const body = document === undefined ? undefined : document.children[0];
+    const paragraphElement = body?.type === 'element' ? body.children.find((child) => child.type === 'element' && child.tag === 'w:p') : undefined;
+    expect(writtenBookmarkOrder(paragraphElement)).toEqual(['run', 'start(tail)', 'run', 'start(point)', 'end(point)', 'run', 'end(tail)']);
+  });
+
+  it('writes two point run extents sharing one run position with each start before its own end', () => {
+    const source = docxPackage([
+      el('w:p', {}, [
+        el('w:r', {}, [el('w:t', {}, [txt('one ')])]),
+        el('w:bookmarkStart', { 'w:id': '1', 'w:name': 'first' }),
+        el('w:bookmarkEnd', { 'w:id': '1' }),
+        el('w:bookmarkStart', { 'w:id': '2', 'w:name': 'second' }),
+        el('w:bookmarkEnd', { 'w:id': '2' }),
+        el('w:r', {}, [el('w:t', {}, [txt('two')])]),
+      ]),
+    ]);
+    const { written } = roundTrip(source);
+    const document = rootElement(written.parts['word/document.xml']);
+    const body = document === undefined ? undefined : document.children[0];
+    const paragraphElement = body?.type === 'element' ? body.children.find((child) => child.type === 'element' && child.tag === 'w:p') : undefined;
+    expect(writtenBookmarkOrder(paragraphElement)).toEqual(['run', 'start(first)', 'end(first)', 'start(second)', 'end(second)', 'run']);
   });
 
   it('writes a non-bookmark run-level construct extent as its paragraph\'s own content, with no markers', () => {
