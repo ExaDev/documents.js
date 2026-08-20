@@ -246,7 +246,7 @@ importers:
         specifier: ^1.0.2
         version: link:../document-outline.js
       documents.js:
-        specifier: ^4.0.21
+        specifier: ^4.0.22
         version: link:../documents.js
       zod:
         specifier: ^4.2.0
