@@ -1,3 +1,15 @@
+## [4.0.8](https://github.com/ExaDev/documents.js/compare/markdown-codec@4.0.7...markdown-codec@4.0.8) (2026-08-20)
+
+
+### Bug Fixes
+
+* point package homepage and bugs URLs at the monorepo, not the old standalone repos ([1b605e8](https://github.com/ExaDev/documents.js/commit/1b605e846393f417001227758a8606347c04e219))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^4.3.5
+
 ## [4.0.7](https://github.com/ExaDev/documents.js/compare/markdown-codec@4.0.6...markdown-codec@4.0.7) (2026-08-20)
 
 
