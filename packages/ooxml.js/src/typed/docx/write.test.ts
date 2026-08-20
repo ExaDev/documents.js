@@ -271,6 +271,25 @@ describe('buildDocxPackageFromContent: construct round trip', () => {
     expect(galleries.map((gallery) => gallery.attributes.find((attribute) => attribute.name === 'w:val')?.value)).toEqual(['Cover Pages']);
   });
 
+  it('does not restore gallery residue on a controlType the reader never mints it on: a hand-built plainText control keeps its w:text element', () => {
+    // Restoration is gated on the controlType the reader mints the residue on (richText, constructs.ts's degradation verdict), not on residue shape alone: a hand-built descriptor of any other controlType carrying docPartObj-shaped docx residue keeps its own semantic type element rather than having it silently replaced, and the residue stays quarantined for the same-format consumer that owns it.
+    const written = buildDocxPackageFromContent({
+      sections: [{
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+        blocks: [
+          { kind: 'constructStart', descriptor: { kind: 'contentControl', controlType: 'plainText', source: { format: 'docx', xml: '<w:docPartObj><w:docPartGallery w:val="Cover Pages"></w:docPartGallery></w:docPartObj>' } } },
+          { kind: 'paragraph', runs: [{ text: 'plain' }] },
+          { kind: 'constructEnd' },
+        ],
+      }],
+    });
+    const document = rootElement(written.parts['word/document.xml']);
+    const root = document === undefined ? [] : [document];
+    expect(elementsWithTag(root, 'w:text')).toHaveLength(1);
+    expect(elementsWithTag(root, 'w:docPartObj')).toHaveLength(0);
+  });
+
   it('round-trips a tracked insertion and a tracked deletion, keeping the deleted text as deleted text, and wraps each paragraph\'s own runs rather than the paragraph itself', () => {
     const ins = el('w:ins', { 'w:id': '1', 'w:author': 'Ada', 'w:date': '2026-08-18T09:00:00Z' }, [para('added')]);
     const del = el('w:del', { 'w:id': '2', 'w:author': 'Grace' }, [el('w:p', {}, [el('w:r', {}, [el('w:delText', {}, [txt('removed')])])])]);
