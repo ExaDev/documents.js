@@ -7,7 +7,8 @@ import { crc32, decodePng, readJpegInfo } from 'byte-codec';
 import { wrapRunsToWidth } from './text-layout';
 import type { SourcedFragment, SourcedRun } from './text-layout';
 import type { LayoutDocument, LayoutImageAsset, LayoutItem, LayoutPage, LayoutText } from 'pdf-codec';
-import { LAYOUT_FORMAT_VERSION } from 'pdf-codec';
+// Deep-imported from pdf-codec's layout module rather than its root barrel: this module sits in the reconstruction path's graph (documents.js/read), and the barrel's write half would drag the vendored font assets into it. See src/read-graph.test.ts.
+import { LAYOUT_FORMAT_VERSION } from 'pdf-codec/layout';
 
 // Layout logic genuinely shared between src/layout/slides.ts (pptx, direct placement) and src/layout/engine.ts (docx, flow/pagination): run styling, line-height measurement, alignment, and image-asset registration have no format-specific knowledge of their own -- duplicating them between the two engines would just be two copies to keep in sync.
 

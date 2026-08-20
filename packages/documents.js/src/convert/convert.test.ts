@@ -26,7 +26,8 @@ import { richMarkdownText } from '../test-support/markdown';
 import { minimalOdpBytes } from '../test-support/odp';
 import { decoratedOdsBytes, gridOdsBytes, minimalOdsBytes } from '../test-support/ods';
 import { minimalOdtBytes } from '../test-support/odt';
-import { docxToPdf, inlineOdmSectionToContentSection, markdownToPdf, odgToPdf, odmToPdf, OdmUnresolvedSectionError, odpToPdf, odsToPdf, odsToXlsx, odtToPdf, pdfToDocx, pdfToMarkdown, pdfToOdg, pdfToOdp, pdfToOds, pdfToOdt, pdfToPptx, pdfToXlsx, pptxToPdf, xlsxToPdf } from './convert';
+import { docxToPdf, inlineOdmSectionToContentSection, markdownToPdf, odgToPdf, odmToPdf, OdmUnresolvedSectionError, odpToPdf, odsToPdf, odsToXlsx, odtToPdf, pptxToPdf, xlsxToPdf } from './convert';
+import { pdfToDocx, pdfToMarkdown, pdfToOdg, pdfToOdp, pdfToOds, pdfToOdt, pdfToPptx, pdfToXlsx } from './from-pdf';
 import type { LayoutItem, LayoutLine, LayoutPath, LayoutRect, LayoutText } from 'pdf-codec';
 
 // Builds the same intermediate LayoutDocument odgToPdf itself builds internally (readOdgContent -> convertDrawingToLayout), so a test can assert on 'path'/'rect' LayoutItem kinds directly -- readPdf's own content-stream interpreter does not reconstruct 'path'/'line'/'ellipse' items at all (pdf-codec's interpret.ts), so round-tripping the fixture's curve/z-order back through readPdf is not possible; this is the direct way to prove them.
