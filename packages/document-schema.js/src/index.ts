@@ -6,6 +6,7 @@ export * from './mathml';
 export * from './math';
 export * from './content';
 export * from './definitions';
+export * from './source';
 export * from './construct';
 export * from './package-node';
 export * from './package';
