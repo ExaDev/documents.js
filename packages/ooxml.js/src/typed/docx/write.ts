@@ -607,7 +607,7 @@ function buildFlowItems(items: readonly FlowItem[], state: WriteState, deleted: 
       availableImageRuns = [];
       continue;
     }
-    // An embedded object has no WordprocessingML block element this writer can produce (readDocxContent never reads one either), so it contributes nothing rather than a placeholder that would read back as content it is not. A pending page break is left untouched here rather than consumed: since this block contributes no output of its own, the break still belongs to whatever comes next.
+    // An embedded object has no WordprocessingML block element this writer can produce (it has no w:object/o:OLEObject emitter, even though readDocxContent does recover such blocks from one), so it contributes nothing rather than a placeholder that would read back as content it is not. A pending page break is left untouched here rather than consumed: since this block contributes no output of its own, the break still belongs to whatever comes next.
     lastParagraph = undefined;
     availableImageRuns = [];
   }
