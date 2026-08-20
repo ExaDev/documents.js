@@ -1,3 +1,11 @@
+## [4.0.26](https://github.com/ExaDev/documents.js/compare/documents.js@4.0.25...documents.js@4.0.26) (2026-08-20)
+
+
+### Dependencies
+
+- Updated ooxml.js to ^4.1.1
+- Updated markdown-codec to ^4.0.11
+
 ## [4.0.25](https://github.com/ExaDev/documents.js/compare/documents.js@4.0.24...documents.js@4.0.25) (2026-08-20)
 
 
