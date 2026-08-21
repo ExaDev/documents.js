@@ -189,7 +189,7 @@ function readBlocks(nodes: readonly XmlNode[], pkg: Package, state: OdtFlowState
   };
   const readOneParagraph = (element: XmlElement): ReadParagraph => {
     const halves: OdfMarkerHalf[] = [];
-    const paragraph = readOdfParagraph(element, pkg, { provenanceRegions: state.provenanceRegions, markersOut: halves, definitions: state.definitions, format: 'odt' });
+    const paragraph = readOdfParagraph(element, pkg, { provenanceRegions: state.provenanceRegions, markersOut: halves, definitions: state.definitions, listIdState: state.listIdState, format: 'odt' });
     return { element, paragraph: readParagraphOrHeading(element, paragraph), halves, lifted: readAnchoredFrameBlocks(element, pkg, state) };
   };
   for (const node of nodes) {
