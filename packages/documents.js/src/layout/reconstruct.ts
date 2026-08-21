@@ -26,7 +26,7 @@ import type {
 // Deep-imported from pdf-codec's asset-free read-side modules rather than its root barrel: the reconstruction path is part of this package's read-only graph (documents.js/read), and the barrel's write half would drag the vendored font assets into it. See src/read-graph.test.ts.
 import { resolveStandardFont } from 'pdf-codec/fonts';
 import { STANDARD_METRICS } from 'pdf-codec/afm-widths';
-import type { LayoutAnnotation, LayoutDocument, LayoutEllipse, LayoutFormField, LayoutImage, LayoutImageAsset, LayoutInternalLink, LayoutItem, LayoutLine, LayoutLink, LayoutPage, LayoutPath, LayoutRect, LayoutSubpath, LayoutText } from 'pdf-codec';
+import type { LayoutAnnotation, LayoutDocument, LayoutEllipse, LayoutFormField, LayoutImage, LayoutImageAsset, LayoutInternalLink, LayoutItem, LayoutLine, LayoutLink, LayoutPage, LayoutPath, LayoutRect, LayoutStructureElement, LayoutSubpath, LayoutText } from 'pdf-codec';
 import { buildDrawingBlock } from '../model/embedded-drawing';
 import type { Box, Margins } from 'document-schema.js';
 import { flipY } from '../model/geometry';
@@ -209,20 +209,21 @@ export function reconstructWordprocessing(doc: LayoutDocument, options?: Reconst
   const signal = options?.signal;
   doc = dropHiddenLayerContent(doc);
   const headingLevels = headingSizeLevels(doc);
+  const structure = indexStructure(doc);
   const sections: ContentSection[] = [];
   let currentGroup: LayoutPage[] = [];
   let groupStartPageIndex = 0;
   for (const page of doc.pages) {
     throwIfAborted(signal);
     if (currentGroup.length > 0 && !samePageSize(currentGroup[0]!, page)) {
-      sections.push(buildSection(currentGroup, groupStartPageIndex, doc.images, headingLevels, doc.form));
+      sections.push(buildSection(currentGroup, groupStartPageIndex, doc.images, headingLevels, doc.form, structure));
       groupStartPageIndex += currentGroup.length;
       currentGroup = [];
     }
     currentGroup.push(page);
   }
   if (currentGroup.length > 0) {
-    sections.push(buildSection(currentGroup, groupStartPageIndex, doc.images, headingLevels, doc.form));
+    sections.push(buildSection(currentGroup, groupStartPageIndex, doc.images, headingLevels, doc.form, structure));
   }
   return { kind: 'wordprocessing', metadata: doc.metadata, sections };
 }
@@ -244,6 +245,93 @@ function dropHiddenLayerContent(doc: LayoutDocument): LayoutDocument {
     ...doc,
     pages: doc.pages.map((page) => ({ ...page, items: page.items.filter((item) => layerOf(item) === undefined || !hidden.has(layerOf(item)!)) })),
   };
+}
+
+// --- Tagged structure (#760): the producer's own semantics, replacing geometric inference wherever the file states the fact. ---
+//
+// A tagged PDF is the one format state this reconstruction otherwise infers: headings, table cells, and grouping containers are STATED in /StructTreeRoot, not guessed from geometry. readPdf flattens that tree into LayoutDocument.structure and stamps each item with its owning element's id; the index below turns those two facts into the three queries the reconstruction consumes -- the heading level an item's owning element chain implies, the cell/row/table a text item belongs to, and the chain of division elements (/Part /Sect /Div) enclosing it. Everything is a nearest-ancestor walk: a /Span inside an /H2 reads as heading content exactly as direct ownership would, the same way effective properties resolve down a style chain.
+
+const HEADING_LEVELS: ReadonlyMap<string, number> = new Map([['H1', 1], ['H2', 2], ['H3', 3], ['H4', 4], ['H5', 5], ['H6', 6]]);
+// The grouping types mapped to the schema's division construct -- the shape document-schema.js's own construct vocabulary names tagged PDF's /Sect and /Div as its cross-format analogue for, plus /Part as the coarsest grouping. /Art and /BlockQuote stay out deliberately: they are semantic block containers closer to a block quote than a named division, and conflating them would invent grouping the schema keeps distinct.
+const DIVISION_TYPES: ReadonlySet<string> = new Set(['Part', 'Sect', 'Div']);
+const CELL_TYPES: ReadonlySet<string> = new Set(['TD', 'TH']);
+const ROW_TYPES: ReadonlySet<string> = new Set(['TR']);
+const TABLE_TYPES: ReadonlySet<string> = new Set(['Table']);
+
+// One flattened structure element: its place in the tree stated as a parent link (the nested LayoutStructureElement only carries children), plus the pre-order position the tree walk assigned it -- the document order rows and cells of a tagged table sort by.
+interface StructureNode {
+  readonly id: string;
+  readonly type: string;
+  readonly parent: StructureNode | undefined;
+  readonly order: number;
+}
+
+interface StructureIndex {
+  readonly nodeOfItem: (item: LayoutItem) => StructureNode | undefined;
+}
+
+// The link kinds carry no structure id by the same line the layer filter draws -- an annotation is an anchored construct, not painted stream content.
+function indexStructure(doc: LayoutDocument): StructureIndex | undefined {
+  if (doc.structure === undefined || doc.structure.length === 0) {
+    return undefined;
+  }
+  const byId = new Map<string, StructureNode>();
+  let order = 0;
+  const walk = (element: LayoutStructureElement, parent: StructureNode | undefined): void => {
+    const node: StructureNode = { id: element.id, type: element.type, parent, order: order++ };
+    byId.set(element.id, node);
+    for (const child of element.children) {
+      walk(child, node);
+    }
+  };
+  for (const root of doc.structure) {
+    walk(root, undefined);
+  }
+  return {
+    nodeOfItem: (item: LayoutItem): StructureNode | undefined =>
+      item.kind === 'link' || item.kind === 'internalLink' ? undefined : byId.get(item.structure ?? ''),
+  };
+}
+
+// The nearest node of one of `types` on the ancestor path from `node` (inclusive).
+function nearestOfType(node: StructureNode | undefined, types: ReadonlySet<string>): StructureNode | undefined {
+  for (let current = node; current !== undefined; current = current.parent) {
+    if (types.has(current.type)) {
+      return current;
+    }
+  }
+  return undefined;
+}
+
+// The heading level implied by an item's owning chain: the first H1..H6 element at or above its owner, or undefined when the chain names none.
+function nearestHeadingLevel(node: StructureNode | undefined): number | undefined {
+  for (let current = node; current !== undefined; current = current.parent) {
+    const level = HEADING_LEVELS.get(current.type);
+    if (level !== undefined) {
+      return level;
+    }
+  }
+  return undefined;
+}
+
+// A paragraph's heading resolution against the structure tree. A non-undefined result is AUTHORITATIVE: `level` set means the owning chain names an H element (regardless of font size), and `level` undefined means every item is tagged and none is heading-owned -- the producer says body, which VETOES the geometric census rather than merely failing to confirm it. Undefined itself means structure makes no claim (some item untagged, or the items' levels disagree because clustering merged across a heading boundary), and the geometric census decides.
+function structureHeadingLevel(items: readonly LayoutText[], structure: StructureIndex): { readonly level?: number } | undefined {
+  if (items.length === 0 || items.some((item) => structure.nodeOfItem(item) === undefined)) {
+    return undefined;
+  }
+  let level: number | undefined;
+  for (const item of items) {
+    const itemLevel = nearestHeadingLevel(structure.nodeOfItem(item));
+    if (itemLevel === undefined) {
+      return { level: undefined };
+    }
+    if (level === undefined) {
+      level = itemLevel;
+    } else if (level !== itemLevel) {
+      return undefined;
+    }
+  }
+  return { level };
 }
 
 // --- Heading inference from font size (ExaDev/documents.js#584 ask 2) -----------------------------------------
@@ -296,42 +384,71 @@ function samePageSize(a: LayoutPage, b: LayoutPage): boolean {
 
 // Margins have no PDF equivalent to recover -- there is no principled way to distinguish "intentional margin" from "wherever the content happened to start" from geometry alone, so this deliberately reports zero rather than fabricating a plausible-looking value (ZERO_MARGINS, defined above).
 // startPageIndex is this section's own first page's absolute index in the whole LayoutDocument -- a frame's pageIndex names a page of the SOURCE document, not a page within one section, so every block this section builds stamps absolute indices derived from it.
-function buildSection(pages: readonly LayoutPage[], startPageIndex: number, images: Record<string, LayoutImageAsset>, headingLevels: ReadonlyMap<number, number>, form: readonly LayoutFormField[] | undefined): ContentSection {
+function buildSection(pages: readonly LayoutPage[], startPageIndex: number, images: Record<string, LayoutImageAsset>, headingLevels: ReadonlyMap<number, number>, form: readonly LayoutFormField[] | undefined, structure: StructureIndex | undefined): ContentSection {
   const blocks: ContentBlock[] = [];
+  // Each content block's division chain, keyed by the block object itself so the marker splices reconcileLinks and the annotation/form construct appenders perform can never desync it -- and so a block nobody recorded (a page break, a construct marker) passes through the division wrap without opening or closing anything.
+  const divisionByBlock = new WeakMap<ContentBlock, readonly string[]>();
   pages.forEach((page, i) => {
     if (i > 0) {
       blocks.push({ kind: 'pageBreak' });
     }
-    blocks.push(...reconstructPageBlocks(page, startPageIndex + i, images, headingLevels, form));
-  });  return { pageSize: { widthPt: pages[0]!.widthPt, heightPt: pages[0]!.heightPt }, margins: ZERO_MARGINS, blocks };
+    blocks.push(...reconstructPageBlocks(page, startPageIndex + i, images, headingLevels, form, structure, divisionByBlock));
+  });
+  return { pageSize: { widthPt: pages[0]!.widthPt, heightPt: pages[0]!.heightPt }, margins: ZERO_MARGINS, blocks: wrapDivisionExtents(blocks, divisionByBlock) };
 }
 
 // Table recovery runs FIRST, because it decides what is left for everything after it: text inside a recovered lattice belongs to the table, not to the page's paragraph flow, and the lattice's own strokes belong to the table's structure, not to the recovered vector content. Both recoveries are no-ops on a page without the geometry to support them, so a text-only page produces exactly the blocks it always did. See the shared recovery section below for the full reasoning behind each gate.
-function reconstructPageBlocks(page: LayoutPage, pageIndex: number, images: Record<string, LayoutImageAsset>, headingLevels: ReadonlyMap<number, number>, form: readonly LayoutFormField[] | undefined): ContentBlock[] {
-  const recoveredTable = recoverTable(page, pageIndex);
-  const consumedText = recoveredTable?.consumedText;
-  const textItems = page.items.filter((i): i is LayoutText => i.kind === 'text' && consumedText?.has(i) !== true);
+function reconstructPageBlocks(page: LayoutPage, pageIndex: number, images: Record<string, LayoutImageAsset>, headingLevels: ReadonlyMap<number, number>, form: readonly LayoutFormField[] | undefined, structure: StructureIndex | undefined, divisionByBlock: WeakMap<ContentBlock, readonly string[]>): ContentBlock[] {
+  const recoveredTables = recoverTables(page, pageIndex, structure);
+  const consumedText = new Set<LayoutText>();
+  const claimedItems = new Set<LayoutItem>();
+  for (const recovered of recoveredTables) {
+    for (const item of recovered.consumedText) {
+      consumedText.add(item);
+    }
+    for (const item of recovered.latticeItems) {
+      claimedItems.add(item);
+    }
+  }
+  const textItems = page.items.filter((i): i is LayoutText => i.kind === 'text' && !consumedText.has(i));
   const imageItems = page.items.filter((i): i is LayoutImage => i.kind === 'image');
   const lines = clusterIntoLines(textItems);
   const paragraphs = clusterIntoParagraphs(lines);
 
+  // The one place a block's division chain is recorded from its own source items -- the chain of /Part /Sect /Div elements enclosing them, common-prefixed across the cluster (a paragraph geometry merged across a division boundary claims only the divisions both halves share).
+  const recordDivisions = (block: ContentBlock, items: readonly LayoutItem[]): void => {
+    if (structure !== undefined) {
+      divisionByBlock.set(block, divisionChainOf(items, structure));
+    }
+  };
+
   const positioned: { yPt: number; block: ContentBlock }[] = [];
   for (const paragraph of paragraphs) {
-    positioned.push({ yPt: paragraph.lines[0]!.baselineY, block: paragraphToContentParagraph(paragraph, pageIndex, headingLevelOf(paragraph, headingLevels)) });
+    const paragraphItems = paragraph.lines.flatMap((line) => line.items);
+    // Structure over geometry: an authoritative resolution replaces the census outright -- including the level-undefined veto, where a producer-tagged body paragraph at heading SIZE stays a paragraph.
+    const structural = structure === undefined ? undefined : structureHeadingLevel(paragraphItems, structure);
+    const headingLevel = structural !== undefined ? structural.level : headingLevelOf(paragraph, headingLevels);
+    const block = paragraphToContentParagraph(paragraph, pageIndex, headingLevel);
+    recordDivisions(block, paragraphItems);
+    positioned.push({ yPt: paragraph.lines[0]!.baselineY, block });
   }
   for (const img of imageItems) {
     const asset = images[img.imageId];
     if (asset !== undefined) {
       const block: ContentBlock = { kind: 'image', format: asset.format, base64: asset.base64, widthPt: img.widthPt, heightPt: img.heightPt };
       stampFrame(block, pageIndex, { xPt: img.xPt, yPt: img.yPt, widthPt: img.widthPt, heightPt: img.heightPt });
+      recordDivisions(block, [img]);
       positioned.push({ yPt: img.yPt, block });
     }
   }
-  if (recoveredTable !== undefined) {
-    positioned.push({ yPt: recoveredTable.topYPt, block: recoveredTable.table });
+  for (const recovered of recoveredTables) {
+    recordDivisions(recovered.table, [...recovered.consumedText]);
+    positioned.push({ yPt: recovered.topYPt, block: recovered.table });
   }
-  const recoveredVectors = recoverPageVectors(page, pageIndex, recoveredTable?.latticeItems ?? NO_ITEMS);
+  const recoveredVectors = recoverPageVectors(page, pageIndex, claimedItems);
   if (recoveredVectors !== undefined) {
+    const vectorItems = page.items.filter((item) => !claimedItems.has(item) && layoutItemToVector(item, page.heightPt) !== undefined);
+    recordDivisions(recoveredVectors.block, vectorItems);
     positioned.push({ yPt: recoveredVectors.topYPt, block: recoveredVectors.block });
   }
   positioned.sort((a, b) => b.yPt - a.yPt);
@@ -340,6 +457,58 @@ function reconstructPageBlocks(page: LayoutPage, pageIndex: number, images: Reco
   appendAnnotationConstructs(blocks, page, pageIndex);
   appendFormFieldConstructs(blocks, form, pageIndex);
   return blocks;
+}
+
+// A block's division chain: for each item, the /Part /Sect /Div elements enclosing it outermost-first, common-prefixed across every item in the cluster -- a paragraph the geometry merged across a division boundary claims only the divisions both halves share, never the one either half alone sits in.
+function divisionChainOf(items: readonly LayoutItem[], structure: StructureIndex): readonly string[] {
+  let prefix: readonly string[] | undefined;
+  for (const item of items) {
+    const chain: string[] = [];
+    for (let current = structure.nodeOfItem(item); current !== undefined; current = current.parent) {
+      if (DIVISION_TYPES.has(current.type)) {
+        chain.push(current.id);
+      }
+    }
+    chain.reverse();
+    if (prefix === undefined) {
+      prefix = chain;
+      continue;
+    }
+    let shared = 0;
+    while (shared < prefix.length && shared < chain.length && prefix[shared] === chain[shared]) {
+      shared += 1;
+    }
+    prefix = prefix.slice(0, shared);
+  }
+  return prefix ?? [];
+}
+
+// Wraps a section flow's blocks in balanced division construct pairs: a /Sect extent becomes constructStart(division) before its first block and constructEnd after its last, nested divisions nesting naturally and a division spanning a page break holding one pair across it (a page break is not content -- it neither opens nor closes anything). Markers must pair within one container's flow, so this runs once per ContentSection, the one container whose blocks array holds the whole extent. The descriptor carries no name: tagged PDF's /T is a display title, not the addressing name ODF text:name gives a division, and conflating them would invent an address the file never stated.
+function wrapDivisionExtents(blocks: readonly ContentBlock[], divisionByBlock: WeakMap<ContentBlock, readonly string[]>): ContentBlock[] {
+  const out: ContentBlock[] = [];
+  const open: string[] = [];
+  for (const block of blocks) {
+    const chain = divisionByBlock.get(block);
+    if (chain !== undefined) {
+      while (open.length > 0 && !chain.includes(open[open.length - 1]!)) {
+        out.push({ kind: 'constructEnd' });
+        open.pop();
+      }
+      for (const id of chain) {
+        if (open.includes(id)) {
+          continue;
+        }
+        out.push({ kind: 'constructStart', descriptor: { kind: 'division' } });
+        open.push(id);
+      }
+    }
+    out.push(block);
+  }
+  while (open.length > 0) {
+    out.push({ kind: 'constructEnd' });
+    open.pop();
+  }
+  return out;
 }
 
 // --- Link reconciliation (#721): the row that names this file. An external URI link whose rect covers recovered runs becomes ContentRun.hyperlink on exactly those runs -- the standing reconciliation that keeps run-level external hyperlinks out of construct form wherever a flat run field CAN express them. Everything else (an external link matching no run, and every internal link, whose target the run field cannot spell) becomes a link construct pair bracketing the single best-matching block. One block, never a wider extent: a construct's extent must not cross a heading or list scope (the schema's own rule), and a single block can never close a scope some earlier block opened -- the conservative bound that keeps every emitted pair promotable.
@@ -565,18 +734,28 @@ function paragraphToContentParagraph(paragraph: TextParagraph, pageIndex: number
 
 export function reconstructPresentation(doc: LayoutDocument, options?: ReconstructOptions): ContentDocument {
   const signal = options?.signal;
+  const structure = indexStructure(doc);
   const slides = doc.pages.map((page, pageIndex) => {
     throwIfAborted(signal);
-    return reconstructSlide(page, pageIndex, doc.images);
+    return reconstructSlide(page, pageIndex, doc.images, structure);
   });
   return { kind: 'presentation', metadata: doc.metadata, slides };
 }
 
 // Table and vector recovery run here on exactly the same terms as in reconstructPageBlocks above -- same detector, same gates, same exclusions -- differing only in the container each result has to be wrapped in: a slide holds nothing but ContentShapes, so a recovered table and a recovered drawing each become a shape framed at the geometry they were recovered from, rather than a bare block placed in a flow.
-function reconstructSlide(page: LayoutPage, pageIndex: number, images: Record<string, LayoutImageAsset>): ContentSlide {
-  const recoveredTable = recoverTable(page, pageIndex);
-  const consumedText = recoveredTable?.consumedText;
-  const textItems = page.items.filter((i): i is LayoutText => i.kind === 'text' && consumedText?.has(i) !== true);
+function reconstructSlide(page: LayoutPage, pageIndex: number, images: Record<string, LayoutImageAsset>, structure: StructureIndex | undefined): ContentSlide {
+  const recoveredTables = recoverTables(page, pageIndex, structure);
+  const consumedText = new Set<LayoutText>();
+  const claimedItems = new Set<LayoutItem>();
+  for (const recovered of recoveredTables) {
+    for (const item of recovered.consumedText) {
+      consumedText.add(item);
+    }
+    for (const item of recovered.latticeItems) {
+      claimedItems.add(item);
+    }
+  }
+  const textItems = page.items.filter((i): i is LayoutText => i.kind === 'text' && !consumedText.has(i));
   const imageItems = page.items.filter((i): i is LayoutImage => i.kind === 'image');
 
   const lines = clusterIntoLines(textItems);
@@ -589,10 +768,10 @@ function reconstructSlide(page: LayoutPage, pageIndex: number, images: Record<st
       imageShapes.push(shape);
     }
   }
-  const recoveredVectors = recoverPageVectors(page, pageIndex, recoveredTable?.latticeItems ?? NO_ITEMS);
+  const recoveredVectors = recoverPageVectors(page, pageIndex, claimedItems);
   // Vectors paint behind everything else, matching src/layout/drawing.ts's own documented vectors-then-shapes fallback for a page whose true interleaving is unknown -- and it is unknown here for the same reason: a slide's shapes array carries no ordering field relating it to content recovered outside it.
   const vectorShapes: ContentShape[] = recoveredVectors === undefined ? [] : [wrapBlockInShape(recoveredVectors.block, { xPt: 0, yPt: 0, widthPt: page.widthPt, heightPt: page.heightPt }, page.heightPt, pageIndex)];
-  const tableShapes: ContentShape[] = recoveredTable === undefined ? [] : [wrapBlockInShape(recoveredTable.table, recoveredTable.frame, page.heightPt, pageIndex)];
+  const tableShapes: ContentShape[] = recoveredTables.map((recovered) => wrapBlockInShape(recovered.table, recovered.frame, page.heightPt, pageIndex));
 
   // Images before text shapes in z-order (plan Step 10). notes recovers LayoutPage's own private page-dictionary entry (see pdf/write.ts/read.ts) when the source PDF was produced by this package's own pptxToPdf -- absent (falls back to '') for a PDF from any other producer, since nothing else would ever write it.
   return { size: { widthPt: page.widthPt, heightPt: page.heightPt }, shapes: [...vectorShapes, ...imageShapes, ...tableShapes, ...textShapes], notes: page.notes ?? '' };
@@ -973,6 +1152,115 @@ interface RecoveredTable {
   readonly latticeItems: ReadonlySet<LayoutItem>; // the strokes that formed the lattice, excluded from vector recovery
 }
 
+// The dispatcher both text-bearing directions recover tables through: the producer's own /Table tagging first (stated semantics, no lattice required), the drawn-gridline lattice second. A tagged table is authoritative -- where the file says what the rows and cells are, geometry only gets to measure them.
+function recoverTables(page: LayoutPage, pageIndex: number, structure: StructureIndex | undefined): RecoveredTable[] {
+  if (structure !== undefined) {
+    const tagged = recoverTaggedTables(page, pageIndex, structure);
+    if (tagged.length > 0) {
+      return tagged;
+    }
+  }
+  const lattice = recoverTable(page, pageIndex);
+  return lattice === undefined ? [] : [lattice];
+}
+
+// One tagged table: rows are the /TR descendants of its /Table element in document order, cells positional by their TD/TH order within the row, every cell's blocks built from exactly the text items its owning cell element claims. A /TH degrades to an ordinary cell -- the content vocabulary has no header-cell spelling to state one with (the same honest narrowing radio fields took), while the structure table the reader emitted still carries the fact. Column widths are the only geometry-derived values, measured from the cells' own item extents.
+function recoverTaggedTables(page: LayoutPage, pageIndex: number, structure: StructureIndex): RecoveredTable[] {
+  interface TaggedCell {
+    readonly table: StructureNode;
+    readonly row: StructureNode;
+    readonly cell: StructureNode;
+    readonly items: LayoutText[];
+  }
+  const cellsByTable = new Map<string, { table: StructureNode; cells: TaggedCell[] }>();
+  for (const item of page.items) {
+    if (item.kind !== 'text') {
+      continue;
+    }
+    const cell = nearestOfType(structure.nodeOfItem(item), CELL_TYPES);
+    // A cell not under a TR under a Table is a malformed chain -- the file's tagging cannot state a grid for it, so the lattice-or-nothing fallback decides.
+    const row = nearestOfType(cell?.parent, ROW_TYPES);
+    const table = nearestOfType(row?.parent, TABLE_TYPES);
+    if (cell === undefined || row === undefined || table === undefined) {
+      continue;
+    }
+    const entry = cellsByTable.get(table.id) ?? { table, cells: [] };
+    entry.cells.push({ table, row, cell, items: [item] });
+    cellsByTable.set(table.id, entry);
+  }
+  if (cellsByTable.size === 0) {
+    return [];
+  }
+  // A tagged table with drawn rules claims them as its own structure exactly as the lattice path does, so the same strokes never recover twice (once as a table's gridlines, once as free vectors).
+  const latticeItems: ReadonlySet<LayoutItem> = detectGridLattice(page.items)?.sourceItems ?? NO_ITEMS;
+  const recovered: RecoveredTable[] = [];
+  for (const { cells } of cellsByTable.values()) {
+    const rowsById = new Map<string, { row: StructureNode; cells: TaggedCell[] }>();
+    for (const cellEntry of cells) {
+      const rowEntry = rowsById.get(cellEntry.row.id) ?? { row: cellEntry.row, cells: [] };
+      rowEntry.cells.push(cellEntry);
+      rowsById.set(cellEntry.row.id, rowEntry);
+    }
+    const rows = [...rowsById.values()].sort((a, b) => a.row.order - b.row.order);
+    for (const row of rows) {
+      row.cells.sort((a, b) => a.cell.order - b.cell.order);
+    }
+    const columnCount = Math.max(...rows.map((row) => row.cells.length));
+    const columnWidthsPt: number[] = [];
+    for (let j = 0; j < columnCount; j++) {
+      let minX = Number.POSITIVE_INFINITY;
+      let maxX = Number.NEGATIVE_INFINITY;
+      for (const row of rows) {
+        const cellEntry = row.cells[j];
+        if (cellEntry === undefined) {
+          continue;
+        }
+        for (const item of cellEntry.items) {
+          minX = Math.min(minX, item.xPt);
+          maxX = Math.max(maxX, item.xPt + (item.widthPt ?? 0));
+        }
+      }
+      const width = maxX - minX;
+      // The same nominal fallback the spreadsheet direction's last-column measurement takes: only reached when no item in the column reports a width at all.
+      columnWidthsPt.push(width > 0 ? width : DEFAULT_COLUMN_WIDTH_FALLBACK_PT);
+    }
+    const allItems = cells.flatMap((cellEntry) => cellEntry.items);
+    const contentRows: ContentTableRow[] = rows.map((row) => {
+      const contentCells: ContentTableCell[] = [];
+      for (let j = 0; j < columnCount; j++) {
+        const cellEntry = row.cells[j];
+        const cell: ContentTableCell = { blocks: cellBlocksFromItems(cellEntry?.items ?? [], pageIndex) };
+        if (cellEntry !== undefined) {
+          stampFrame(cell, pageIndex, textItemsPdfBox(cellEntry.items));
+        }
+        contentCells.push(cell);
+      }
+      return { cells: contentCells };
+    });
+    const box = textItemsPdfBox(allItems);
+    const table: ContentTable = { kind: 'table', rows: contentRows, columnWidthsPt };
+    stampFrame(table, pageIndex, box);
+    recovered.push({ table, frame: flipY(box, page.heightPt), topYPt: box.yPt + box.heightPt, consumedText: new Set(allItems), latticeItems });
+  }
+  return recovered;
+}
+
+// The PDF-space bounding box of a set of text items, using the same real AFM ascent/descent extents every other frame stamp in this module measures with.
+function textItemsPdfBox(items: readonly LayoutText[]): { xPt: number; yPt: number; widthPt: number; heightPt: number } {
+  let minX = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (const item of items) {
+    const { ascentPt, descentPt } = textItemVerticalExtent(item);
+    minX = Math.min(minX, item.xPt);
+    maxX = Math.max(maxX, item.xPt + (item.widthPt ?? 0));
+    minY = Math.min(minY, item.yPt - descentPt);
+    maxY = Math.max(maxY, item.yPt + ascentPt);
+  }
+  return { xPt: minX, yPt: minY, widthPt: maxX - minX, heightPt: maxY - minY };
+}
+
 // One cell's own text, as one ContentParagraph per recovered line. A table cell's text genuinely can wrap across lines (unlike a spreadsheet cell's -- see buildGridFromTextClustering's own note), and geometry alone cannot say whether two stacked lines in a cell were one wrapped paragraph or two separate ones, so each line stays its own paragraph rather than being joined on a guess. This is the same choice reconstructPresentation's own blockToShape already makes for a slide text box, for the same reason.
 function cellBlocksFromItems(items: readonly LayoutText[], pageIndex: number): ContentBlock[] {
   return clusterIntoLines(items).map((line) => lineToParagraph(line, pageIndex));
@@ -1088,18 +1376,7 @@ function buildCellsFromGroups(groups: ReadonlyMap<string, readonly LayoutText[]>
     const column = Number(columnPart);
     const cell: ContentSheetCell = { row, column, value: inferredCellValue(displayText, row, column, context), displayText };
     // The cell's frame is the PDF-space bounding box of exactly the items clustered into it -- the printed extent of that cell's own content, which is all a rendered PDF carries about where the cell was.
-    let minX = Number.POSITIVE_INFINITY;
-    let maxX = Number.NEGATIVE_INFINITY;
-    let minY = Number.POSITIVE_INFINITY;
-    let maxY = Number.NEGATIVE_INFINITY;
-    for (const item of items) {
-      const { ascentPt, descentPt } = textItemVerticalExtent(item);
-      minX = Math.min(minX, item.xPt);
-      maxX = Math.max(maxX, item.xPt + (item.widthPt ?? 0));
-      minY = Math.min(minY, item.yPt - descentPt);
-      maxY = Math.max(maxY, item.yPt + ascentPt);
-    }
-    stampFrame(cell, pageIndex, { xPt: minX, yPt: minY, widthPt: maxX - minX, heightPt: maxY - minY });
+    stampFrame(cell, pageIndex, textItemsPdfBox(items));
     cells.push(cell);
   }
   cells.sort((a, b) => a.row - b.row || a.column - b.column);
