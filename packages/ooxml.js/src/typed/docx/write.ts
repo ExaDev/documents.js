@@ -68,7 +68,7 @@ export interface DocxContent {
 }
 
 // The port that lets a docx carrying an embedded presentation round-trip (#742): presentation ContentDocument -> whole pptx file bytes. This package has no PresentationML writer of its own (pptx is read-only here), and the one pptx writer in the ecosystem -- documents.js's editor scaffold -- lives one layer up, where this package cannot reach it without inverting the family's dependency direction. The port resolves that without the inversion: a caller holding a pptx serialiser injects it, and the writer serialises the embedded presentation into a genuine word/embeddings/oleObjectN.pptx payload exactly as an embedded workbook serialises through buildXlsxPackageFromContent. The returned bytes are the OLE payload verbatim -- the reader detects the payload by ZIP magic and decodes its flavour from the nested package's own entry part, never by extension or content type, so any conforming pptx byte stream round-trips. An embedded presentation with no serialiser injected is still refused with a thrown error: a silent drop would re-create exactly the read-once-never-written loss the embedded emitter exists to close.
-export type EmbeddedPresentationSerialiser = (document: Extract<ContentDocument, { kind: 'presentation' }>) => Uint8Array;
+export type EmbeddedPresentationSerialiser = (document: Extract<ContentDocument, { kind: 'presentation' }>) => Uint8Array<ArrayBuffer>;
 
 export interface BuildDocxContentOptions {
   readonly serialiseEmbeddedPresentation?: EmbeddedPresentationSerialiser;
