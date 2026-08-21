@@ -1,15 +1,18 @@
-import type { Box, ContentBlock, ContentDocument, ContentParagraph, ContentSection, DefinitionsTable, DocumentPackage, LayoutMetadata, Margins, PageSize, ProvenanceDescriptor } from 'document-schema.js';
+import type { Box, ContentBlock, ContentDocument, ContentParagraph, ContentSection, DefinitionsTable, DocumentPackage, LayoutMetadata, Margins, PageSize, ProvenanceDescriptor, SourceResidue } from 'document-schema.js';
 import { assemblePackage, PAGE_SIZE_A4 } from 'document-schema.js';
 import type { Package } from '../../model/package';
 import type { XmlElement, XmlNode } from '../../model/node';
 import { rootElement, findChildElement, childrenWithTag, attrValue } from '../../xml/query';
 import { mintOdfListNumId, readOdfListParagraphs, type OdfListIdState } from '../shared/list';
 import {
+  addOdfPackageResidue,
   collectOdfDataStyleDefinitions,
   collectOdfFieldMasterDefinitions,
   collectOdfFontFaceDefinitions,
+  collectOdfNonContentPartResidue,
   collectOdfProvenanceRegions,
   insertOdfConstructMarkers,
+  isOdfExtensionElement,
   isOdfIndexWrapper,
   odfDivisionDescriptor,
   odfIndexControlDescriptor,
@@ -56,6 +59,8 @@ export interface OdtDocument {
   headerFooterParts?: OdtHeaderFooterPart[];
   // Which master page each section's page geometry came from, positional over `sections` -- the reference a consumer resolves headerFooterParts through. Present only when styles.xml declares at least one master page at all.
   sectionMasterPages?: (string | undefined)[];
+  // The package-tier residue table: document-level tenants no content node owns (xforms models, DDE declarations and links, vendor-extension elements) plus every non-content XML part keyed by its own part path. Present only when at least one row quarantined -- the flat ContentDocument has no root source table, so this field is how the table reaches readOdt's assembled package root, the same route the definitions table takes.
+  source?: Record<string, SourceResidue>;
 }
 
 // One header/footer variant under one style:master-page. The variant names ODF's own three-per-kind split (the plain style:header/style:footer is the default -- right-page, in a mirrored layout -- with -left and -first beside it); a variant the master page spells style:display="false" contributes no part, since it renders nothing.
@@ -135,6 +140,8 @@ interface OdtFlowState {
   readonly liftFrames: boolean;
   readonly sectionSplits: OdtSectionSplit[];
   readonly masterPageByStyleName: Map<string | undefined, string | undefined>;
+  // The package-tier residue rows the block walk itself discovers (document-level tenants no content node owns), spliced into the document result after the walk alongside the non-content parts.
+  readonly packageResidue: Record<string, SourceResidue>;
   masterPage: string | undefined;
   order: number;
 }
@@ -302,6 +309,8 @@ function readBlocks(nodes: readonly XmlNode[], pkg: Package, state: OdtFlowState
       const order = state.order++;
       blocks.push(...readBlocks(node.children, pkg, state, startIndex));
       state.wrapperExtents.push({ startIndex, endIndex: baseIndex + blocks.length, order, descriptor: odfDivisionDescriptor(node, pkg) });
+      // A DDE-linked section's text:dde-source (the live-link statement itself, beside the cached blocks the walk just read): DivisionDescriptor's source field names the external-chapter link and its residue spelling is blocked by the field-name collision, so the link quarantines at the package tier.
+      addOdfPackageResidue(state.packageResidue, 'dde-links', 'odt', ...childrenWithTag(node, 'text:dde-source'));
     } else if (isOdfIndexWrapper(node)) {
       const startIndex = baseIndex + blocks.length;
       const order = state.order++;
@@ -313,6 +322,14 @@ function readBlocks(nodes: readonly XmlNode[], pkg: Package, state: OdtFlowState
     } else if (node.tag === 'office:forms') {
       // Form controls in an ordinary text document: point contentControl constructs in pre-order, through the same form-tree walker the odb reader uses (typed/shared/forms.ts). ODF form controls have no rendered block extent -- their geometry lives in the drawing layer's draw:control elements, which no reader resolves -- so these are point pairs, safe to emit directly: a marker sequence is transparent to the bracket-matching splice pass, which counts them as blocks at their own indices.
       blocks.push(...readOdfFormControlConstructs(node, 'odt'));
+      // The XForms half of the same container: an xforms:model is a whole form definition this vocabulary has no analogue for, so it quarantines at the package tier (all models of the document under one key) rather than degrading to a control it is not.
+      addOdfPackageResidue(state.packageResidue, 'xforms', 'odt', ...childrenWithTag(node, 'xforms:model'));
+    } else if (node.tag === 'text:dde-connection-decls') {
+      // DDE connection declarations: the declaration side of a live-link system no content node owns, so the container's declarations quarantine at the package tier while contributing no blocks -- exactly like the field-master decls that were collected before the walk.
+      addOdfPackageResidue(state.packageResidue, 'dde-connections', 'odt', ...childrenWithTag(node, 'text:dde-connection-decl'));
+    } else if (isOdfExtensionElement(node)) {
+      // Vendor-extension elements: producer-private vocabulary this family's stated policy never chases, quarantined at the package tier keyed by their own tag (same-tag occurrences concatenate into one entry).
+      addOdfPackageResidue(state.packageResidue, node.tag, 'odt', node);
     }
   }
   return blocks;
@@ -443,7 +460,7 @@ export function readOdtContent(pkg: Package, options: OdtReadOptions = {}): OdtD
     collectOdfFontFaceDefinitions(part.nodes, definitions.entries);
   }
 
-  const state: OdtFlowState = { listIdState: { next: 1 }, provenanceRegions, definitions, wrapperExtents: [], markerEvents: [], liftFrames: options.frames !== 'none', sectionSplits: [], masterPageByStyleName: new Map(), masterPage: firstMasterPageName, order: 0 };
+  const state: OdtFlowState = { listIdState: { next: 1 }, provenanceRegions, definitions, wrapperExtents: [], markerEvents: [], liftFrames: options.frames !== 'none', sectionSplits: [], masterPageByStyleName: new Map(), packageResidue: {}, masterPage: firstMasterPageName, order: 0 };
   const walked = readBlocks(textElement.children, pkg, state);
   const { extents: markerExtents, paired } = resolveOdfMarkerEvents(state.markerEvents);
   const extents: OdfConstructExtent[] = [...state.wrapperExtents, ...markerExtents];
@@ -480,12 +497,17 @@ export function readOdtContent(pkg: Package, options: OdtReadOptions = {}): OdtD
     }
   }
 
+  // The document-level residue table closes over the walk's own discoveries with the one row that needs no walk at all: every non-content XML part of the package, keyed by its own part path.
+  const packageResidue: Record<string, SourceResidue> = { ...state.packageResidue };
+  collectOdfNonContentPartResidue(pkg, 'odt', packageResidue);
+
   return {
     metadata,
     sections,
     ...(Object.keys(definitions.entries).length > 0 ? { definitions: definitions.entries } : {}),
     ...(headerFooterParts.length > 0 ? { headerFooterParts } : {}),
     ...(masterPageElements.length > 0 ? { sectionMasterPages: masterPages } : {}),
+    ...(Object.keys(packageResidue).length > 0 ? { source: packageResidue } : {}),
   };
 }
 
@@ -495,11 +517,14 @@ export function readOdtContent(pkg: Package, options: OdtReadOptions = {}): OdtD
 //
 // No `pages` argument is passed, and none can be: `pages` carries each RENDERED page's own size, which only a layout pass can report. A reader runs strictly before any layout, so the package it returns is a content-only one -- its nodes carry no `frames` and its root carries no `pages`, which is the honest shape for a document nothing has laid out yet.
 export function readOdt(pkg: Package, options: OdtReadOptions = {}): DocumentPackage {
-  const { metadata, sections, definitions } = readOdtContent(pkg, options);
+  const { metadata, sections, definitions, source } = readOdtContent(pkg, options);
   const assembled = assemblePackage({ kind: 'wordprocessing', metadata, sections });
-  // The definitions table has no flat-ContentDocument spelling to ride through assemblePackage's envelope splice (the flat form is the codec-exchange CONTENT shape; package-level tables are tree-only), so it attaches to the freshly assembled root here -- the same route factorStyles' re-entry uses to carry it, and minting never reads it either way.
+  // The definitions table has no flat-ContentDocument spelling to ride through assemblePackage's envelope splice (the flat form is the codec-exchange CONTENT shape; package-level tables are tree-only), so it attaches to the freshly assembled root here -- the same route factorStyles' re-entry uses to carry it, and minting never reads it either way. The package-tier residue table rides the identical route, per that channel's own contract.
   if (definitions !== undefined) {
     assembled.definitions = definitions;
+  }
+  if (source !== undefined) {
+    assembled.source = source;
   }
   return assembled;
 }
