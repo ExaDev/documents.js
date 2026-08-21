@@ -17,6 +17,7 @@ export type { MarkdownDiagnostic, MarkdownDiagnosticSeverity, MarkdownDiagnostic
 export {
   MarkdownDiagnosticCodes,
   MarkdownInputTooLargeError,
+  MarkdownInvalidRunConstructExtentError,
   MarkdownInvalidUtf8Error,
   MarkdownNestingLimitExceededError,
   MarkdownParseError,

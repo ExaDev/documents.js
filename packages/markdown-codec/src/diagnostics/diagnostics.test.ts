@@ -66,9 +66,9 @@ describe('every MarkdownDiagnosticCodes entry is reachable from real input', () 
     reached.add(MarkdownDiagnosticCodes.NESTED_EMPHASIS_FLATTENED);
   });
 
-  it('LINK_TITLE_DROPPED: a link carrying a title', () => {
+  it('LINK_TITLE_DROPPED: the one titled shape left with nowhere to ride, a nested image inside a link', () => {
     const collector = createDiagnosticCollector();
-    lowerMarkdown('[a](/b "t")', { sink: collector.sink });
+    lowerMarkdown('[![alt](/img.png "t")](/page)', { sink: collector.sink });
     expect(collector.has(MarkdownDiagnosticCodes.LINK_TITLE_DROPPED)).toBe(true);
     reached.add(MarkdownDiagnosticCodes.LINK_TITLE_DROPPED);
   });

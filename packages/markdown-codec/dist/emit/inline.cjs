@@ -143,7 +143,20 @@ function escapeLinkDestination(destination) {
 	if (!/[\s()]/.test(destination)) return destination;
 	return `<${destination.replace(/[<>]/g, (char) => `\\${char}`)}>`;
 }
-function emitRuns(runs, context) {
+function renderLinkTitle(title) {
+	return title.replace(/[\n\r]+/g, " ").replace(/["\\]/g, (char) => `\\${char}`);
+}
+function linkTitleCovering(constructs, start, end) {
+	let tightest;
+	for (const extent of constructs ?? []) {
+		if (extent.descriptor.kind !== "link" || extent.descriptor.title === void 0) continue;
+		if (extent.startRun > start || extent.endRun < end) continue;
+		const current = tightest;
+		if (current === void 0 || extent.startRun > current.startRun || extent.startRun === current.startRun && extent.endRun < current.endRun) tightest = extent;
+	}
+	return tightest?.descriptor.kind === "link" ? tightest.descriptor.title : void 0;
+}
+function emitRuns(runs, context, constructs = void 0) {
 	let out = "";
 	let index = 0;
 	while (index < runs.length) {
@@ -165,19 +178,22 @@ function emitRuns(runs, context) {
 			severity: "info",
 			message: `${String(group.length)} adjacent runs share the hyperlink "${hyperlink}"; markdown has no way to place two link boundaries back to back, so they render as one link spanning their combined text`
 		});
-		if (group.length === 1 && isPlainAutolink(group[0])) out += `<${group[0].text}>`;
+		const title = linkTitleCovering(constructs, index, groupEnd);
+		if (title === void 0 && group.length === 1 && isPlainAutolink(group[0])) out += `<${group[0].text}>`;
 		else {
 			const linkText = renderNestedStyles(group, 0, context);
-			out += `[${linkText}](${escapeLinkDestination(hyperlink)})`;
+			out += `[${linkText}](${escapeLinkDestination(hyperlink)}${title === void 0 ? "" : ` "${renderLinkTitle(title)}"`})`;
 		}
 		index = groupEnd;
 	}
 	return out;
 }
-function emitRunsSingleLine(runs, context) {
-	return emitRuns(runs, context).replace(/\\\n/g, " ");
+function emitRunsSingleLine(runs, context, constructs = void 0) {
+	return emitRuns(runs, context, constructs).replace(/\\\n/g, " ");
 }
 //#endregion
 exports.emitRuns = emitRuns;
 exports.emitRunsSingleLine = emitRunsSingleLine;
+exports.escapeLinkDestination = escapeLinkDestination;
 exports.escapeMarkdownText = escapeMarkdownText;
+exports.renderLinkTitle = renderLinkTitle;

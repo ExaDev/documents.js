@@ -18,6 +18,8 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
       list: z.ZodOptional<z.ZodObject<{
         numId: z.ZodOptional<z.ZodString>;
         level: z.ZodNumber;
+        checked: z.ZodOptional<z.ZodBoolean>;
+        itemId: z.ZodOptional<z.ZodString>;
       }, z.core.$strip>>;
       spacingBeforePt: z.ZodOptional<z.ZodNumber>;
       spacingAfterPt: z.ZodOptional<z.ZodNumber>;
@@ -82,9 +84,9 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
       symbol: z.ZodString;
       name: z.ZodOptional<z.ZodString>;
       dimension: z.ZodRecord<z.ZodEnum<{
+        time: "time";
         length: "length";
         mass: "mass";
-        time: "time";
         electricCurrent: "electricCurrent";
         thermodynamicTemperature: "thermodynamicTemperature";
         amountOfSubstance: "amountOfSubstance";
@@ -139,6 +141,8 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
       list: z.ZodOptional<z.ZodObject<{
         numId: z.ZodOptional<z.ZodString>;
         level: z.ZodNumber;
+        checked: z.ZodOptional<z.ZodBoolean>;
+        itemId: z.ZodOptional<z.ZodString>;
       }, z.core.$strip>>;
       spacingBeforePt: z.ZodOptional<z.ZodNumber>;
       spacingAfterPt: z.ZodOptional<z.ZodNumber>;
@@ -203,9 +207,9 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
       symbol: z.ZodString;
       name: z.ZodOptional<z.ZodString>;
       dimension: z.ZodRecord<z.ZodEnum<{
+        time: "time";
         length: "length";
         mass: "mass";
-        time: "time";
         electricCurrent: "electricCurrent";
         thermodynamicTemperature: "thermodynamicTemperature";
         amountOfSubstance: "amountOfSubstance";
@@ -260,6 +264,8 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
       list: z.ZodOptional<z.ZodObject<{
         numId: z.ZodOptional<z.ZodString>;
         level: z.ZodNumber;
+        checked: z.ZodOptional<z.ZodBoolean>;
+        itemId: z.ZodOptional<z.ZodString>;
       }, z.core.$strip>>;
       spacingBeforePt: z.ZodOptional<z.ZodNumber>;
       spacingAfterPt: z.ZodOptional<z.ZodNumber>;
@@ -324,9 +330,9 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
       symbol: z.ZodString;
       name: z.ZodOptional<z.ZodString>;
       dimension: z.ZodRecord<z.ZodEnum<{
+        time: "time";
         length: "length";
         mass: "mass";
-        time: "time";
         electricCurrent: "electricCurrent";
         thermodynamicTemperature: "thermodynamicTemperature";
         amountOfSubstance: "amountOfSubstance";
@@ -381,6 +387,8 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
       list: z.ZodOptional<z.ZodObject<{
         numId: z.ZodOptional<z.ZodString>;
         level: z.ZodNumber;
+        checked: z.ZodOptional<z.ZodBoolean>;
+        itemId: z.ZodOptional<z.ZodString>;
       }, z.core.$strip>>;
       spacingBeforePt: z.ZodOptional<z.ZodNumber>;
       spacingAfterPt: z.ZodOptional<z.ZodNumber>;
@@ -445,9 +453,9 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
       symbol: z.ZodString;
       name: z.ZodOptional<z.ZodString>;
       dimension: z.ZodRecord<z.ZodEnum<{
+        time: "time";
         length: "length";
         mass: "mass";
-        time: "time";
         electricCurrent: "electricCurrent";
         thermodynamicTemperature: "thermodynamicTemperature";
         amountOfSubstance: "amountOfSubstance";
@@ -531,6 +539,8 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
       list: z.ZodOptional<z.ZodObject<{
         numId: z.ZodOptional<z.ZodString>;
         level: z.ZodNumber;
+        checked: z.ZodOptional<z.ZodBoolean>;
+        itemId: z.ZodOptional<z.ZodString>;
       }, z.core.$strip>>;
       spacingBeforePt: z.ZodOptional<z.ZodNumber>;
       spacingAfterPt: z.ZodOptional<z.ZodNumber>;
@@ -595,9 +605,9 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
       symbol: z.ZodString;
       name: z.ZodOptional<z.ZodString>;
       dimension: z.ZodRecord<z.ZodEnum<{
+        time: "time";
         length: "length";
         mass: "mass";
-        time: "time";
         electricCurrent: "electricCurrent";
         thermodynamicTemperature: "thermodynamicTemperature";
         amountOfSubstance: "amountOfSubstance";
@@ -687,9 +697,9 @@ declare const markdownContentCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffe
       symbol: z.ZodString;
       name: z.ZodOptional<z.ZodString>;
       dimension: z.ZodRecord<z.ZodEnum<{
+        time: "time";
         length: "length";
         mass: "mass";
-        time: "time";
         electricCurrent: "electricCurrent";
         thermodynamicTemperature: "thermodynamicTemperature";
         amountOfSubstance: "amountOfSubstance";
@@ -809,9 +819,9 @@ declare const markdownContentCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffe
       symbol: z.ZodString;
       name: z.ZodOptional<z.ZodString>;
       dimension: z.ZodRecord<z.ZodEnum<{
+        time: "time";
         length: "length";
         mass: "mass";
-        time: "time";
         electricCurrent: "electricCurrent";
         thermodynamicTemperature: "thermodynamicTemperature";
         amountOfSubstance: "amountOfSubstance";
@@ -1166,9 +1176,9 @@ declare const markdownContentCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffe
       symbol: z.ZodString;
       name: z.ZodOptional<z.ZodString>;
       dimension: z.ZodRecord<z.ZodEnum<{
+        time: "time";
         length: "length";
         mass: "mass";
-        time: "time";
         electricCurrent: "electricCurrent";
         thermodynamicTemperature: "thermodynamicTemperature";
         amountOfSubstance: "amountOfSubstance";
@@ -1532,9 +1542,9 @@ declare const markdownContentCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffe
       symbol: z.ZodString;
       name: z.ZodOptional<z.ZodString>;
       dimension: z.ZodRecord<z.ZodEnum<{
+        time: "time";
         length: "length";
         mass: "mass";
-        time: "time";
         electricCurrent: "electricCurrent";
         thermodynamicTemperature: "thermodynamicTemperature";
         amountOfSubstance: "amountOfSubstance";
@@ -1617,9 +1627,9 @@ declare const markdownContentCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffe
       symbol: z.ZodString;
       name: z.ZodOptional<z.ZodString>;
       dimension: z.ZodRecord<z.ZodEnum<{
+        time: "time";
         length: "length";
         mass: "mass";
-        time: "time";
         electricCurrent: "electricCurrent";
         thermodynamicTemperature: "thermodynamicTemperature";
         amountOfSubstance: "amountOfSubstance";

@@ -11,8 +11,8 @@
 // ContentPageBreak and ContentEmbeddedObjectBlock have no markdown representation of any kind (this package's own src/lower never produces either, but ContentDocument is a shared pivot a caller can construct directly) -- both are silently dropped, contributing no output at all; this is not one of this package's own named mapping gaps (there was never a markdown construct to lose fidelity from), so it carries no diagnostic code.
 
 import type { ConstructDescriptor, ContentBlock, ContentConstructEnd, ContentConstructStart, ContentDocument, ContentParagraph } from 'document-schema.js';
-import { clampHeadingLevel, findConstructMarkerImbalance } from 'document-schema.js';
-import { MarkdownUnbalancedConstructMarkersError, MarkdownUnsupportedDocumentKindError } from '../diagnostics/diagnostics';
+import { clampHeadingLevel, findConstructMarkerImbalance, findRunConstructFault } from 'document-schema.js';
+import { MarkdownInvalidRunConstructExtentError, MarkdownUnbalancedConstructMarkersError, MarkdownUnsupportedDocumentKindError } from '../diagnostics/diagnostics';
 import type { MarkdownDiagnosticSink } from '../diagnostics/diagnostics';
 import { MarkdownDiagnosticCodes, NOOP_MARKDOWN_DIAGNOSTIC_SINK } from '../diagnostics/diagnostics';
 import { DEFAULT_BULLET_LIST_MARKER, DEFAULT_CODE_FENCE_CHAR, DEFAULT_EMPHASIS_MARKER, DEFAULT_HEADING_STYLE, DEFAULT_LINE_ENDING, DEFAULT_ORDERED_LIST_DELIMITER, DEFAULT_THEMATIC_BREAK_CHAR } from '../defaults/defaults';
@@ -24,9 +24,14 @@ import { CODE_BLOCK_STYLE_ID, HORIZONTAL_RULE_STYLE_ID, HTML_PREFORMATTED_STYLE_
 import { emitFrontMatter } from './front-matter';
 import { emitImage } from './image';
 import type { InlineEmitContext } from './inline';
-import { emitRuns } from './inline';
+import { emitRuns, escapeLinkDestination, escapeMarkdownText, renderLinkTitle } from './inline';
 import type { TableEmitContext } from './table';
 import { emitTable } from './table';
+
+// Whether an image destination is itself an embedded-bytes spelling -- the one case where re-emitting the destination verbatim would re-embed the very bytes WriteMarkdownOptions.images: false asks to omit.
+function isDataUri(destination: string): boolean {
+  return destination.startsWith('data:');
+}
 
 interface EmitContext extends TableEmitContext {
   readonly bulletMarker: string;
@@ -121,13 +126,13 @@ function renderParagraphBody(paragraph: ContentParagraph, context: EmitContext):
     if (level !== headingLevel) {
       context.sink({ code: MarkdownDiagnosticCodes.HEADING_LEVEL_CLAMPED, severity: 'info', message: `heading level ${String(headingLevel)} exceeds ATX's own six-"#" ceiling and is clamped to ${String(level)}` });
     }
-    const text = emitRuns(paragraph.runs, context);
+    const text = emitRuns(paragraph.runs, context, paragraph.constructs);
     if (context.headingStyle === 'setext' && level <= MAX_SETEXT_LEVEL) {
       return renderSetextHeading(level, text);
     }
     return `${'#'.repeat(level)} ${text}`;
   }
-  return emitRuns(paragraph.runs, context);
+  return emitRuns(paragraph.runs, context, paragraph.constructs);
 }
 
 // Applies blockquote wrapping ('> ' repeated per recovered nesting level, on every line of the body) on top of renderParagraphBody's own construct-specific rendering -- see this module's own top-of-file note for exactly which styleIds this applies to, and MarkdownDiagnosticCodes.PARAGRAPH_INDENT_DROPPED for the ones it does not.
@@ -343,17 +348,30 @@ function renderFootnoteDefinition(name: string, body: string): string {
 
 // A construct markdown has a syntax for renders as that syntax; one it does not is TRANSPARENT -- its extent still renders in place, and only the construct's own identity is lost. That is the correct degrade rather than dropping the extent: a ContentDocument reaching this writer from another codec (an odt division, a docx content control, a tracked-change wrapper) carries real content inside markers markdown cannot spell, and dropping the wrapper's content along with the wrapper would lose the document, not just the construct.
 //
-// `anchor` is the only descriptor kind with a markdown spelling at all, and only for its footnote arm: a bookmark, an endnote, and a comment have no CommonMark or GFM syntax, and neither does any of the other five descriptor kinds.
+// `anchor` has a markdown spelling for its footnote arm, and `link` for exactly one shape: the titled resolved image src/lower/lower.ts brackets with a pair -- `![alt](dest "title")`, the destination restored verbatim from the descriptor's target instead of re-embedded as a data: URI. Everything else (a bookmark, an endnote, a comment, an internal-target link, any other descriptor kind) has no CommonMark or GFM syntax at all.
 function renderConstruct(item: ConstructItem, context: EmitContext): string {
-  const body = renderItems(item.children, context);
   const { descriptor } = item;
   if (descriptor.kind === 'anchor' && descriptor.anchorType === 'footnote') {
+    const body = renderItems(item.children, context);
     if (isValidFootnoteLabel(descriptor.name)) {
       return renderFootnoteDefinition(descriptor.name, body);
     }
     context.sink({ code: MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED, severity: 'info', message: `a footnote anchor's own name "${descriptor.name}" cannot be spelled as a "[^label]:" marker (whitespace or "]" would reparse as something else); its own extent still renders in place, but the construct itself is not represented` });
     return body;
   }
+  if (descriptor.kind === 'link' && descriptor.target.kind === 'external') {
+    // The mint condition is exact -- a pair around precisely one image block, the shape this package's own read side mints. A link construct of any other shape (an annotated block extent from another codec, a run-level pair flattened into a block list) renders transparently below rather than being guessed at.
+    const onlyChild = item.children.length === 1 && !isConstructItem(item.children[0]!) ? item.children[0]!.block : undefined;
+    if (onlyChild?.kind === 'image' && !isDataUri(descriptor.target.uri)) {
+      const alt = escapeMarkdownText(onlyChild.altText ?? '');
+      return `![${alt}](${escapeLinkDestination(descriptor.target.uri)}${descriptor.title === undefined ? '' : ` "${renderLinkTitle(descriptor.title)}"`})`;
+    }
+    if (onlyChild?.kind === 'image' && isDataUri(descriptor.target.uri) && !context.embedImages) {
+      // The destination IS the bytes and the caller asked for no bytes -- the pair falls back to the plain no-bytes rendering and the construct goes unrepresented for it.
+      return emitImage(onlyChild, false);
+    }
+  }
+  const body = renderItems(item.children, context);
   const detail = descriptor.kind === 'anchor' ? `${descriptor.kind} (${descriptor.anchorType})` : descriptor.kind;
   context.sink({ code: MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED, severity: 'info', message: `a "${detail}" construct has no markdown syntax; its own extent still renders in place, but the construct itself is not represented` });
   return body;
@@ -401,7 +419,27 @@ function emitBlocks(blocks: readonly ContentBlock[], context: EmitContext): stri
   if (imbalance !== undefined) {
     throw new MarkdownUnbalancedConstructMarkersError(imbalance.kind, imbalance.index);
   }
+  validateRunConstructExtents(blocks);
   return renderItems(groupConstructItems(blocks, 0).items, context);
+}
+
+// A paragraph's run-level construct extents must name real runs before anything renders them -- the run-level twin of the marker-balance check above, through document-schema.js's own findRunConstructFault so every codec and consumer agree on one definition of well-formed. Tables are walked into because a cell's block list holds its own paragraphs (and nothing else descends further: a table inside a table cell is not a shape GFM or this model produces).
+function validateRunConstructExtents(blocks: readonly ContentBlock[]): void {
+  for (const block of blocks) {
+    if (block.kind === 'paragraph' && block.constructs !== undefined) {
+      const fault = findRunConstructFault(block);
+      if (fault !== undefined) {
+        throw new MarkdownInvalidRunConstructExtentError(fault.kind, fault.index);
+      }
+    }
+    if (block.kind === 'table') {
+      for (const row of block.rows) {
+        for (const cell of row.cells) {
+          validateRunConstructExtents(cell.blocks);
+        }
+      }
+    }
+  }
 }
 
 export function emitMarkdown(document: ContentDocument, options: WriteMarkdownOptions = {}): string {

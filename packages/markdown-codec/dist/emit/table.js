@@ -53,7 +53,7 @@ function renderCellText(cell, context) {
 			});
 			continue;
 		}
-		const text = emitRunsSingleLine(block.runs, context);
+		const text = emitRunsSingleLine(block.runs, context, block.constructs);
 		if (text.length > 0) parts.push(text);
 	}
 	return escapeUnescapedPipes(parts.join(" "));

@@ -19,7 +19,6 @@ declare const MarkdownDiagnosticCodes: {
   readonly INVENTED_PAGE_GEOMETRY: "md/invented-page-geometry";
   readonly NESTED_EMPHASIS_FLATTENED: "md/nested-emphasis-flattened";
   readonly LINK_TITLE_DROPPED: "md/link-title-dropped";
-  readonly CODE_BLOCK_INFO_STRING_DROPPED: "md/code-block-info-string-dropped";
   readonly BLOCKQUOTE_NESTED_DEPTH: "md/blockquote-nested-depth";
   readonly LIST_ITEM_BLOCK_UNLISTED: "md/list-item-block-unlisted";
   readonly LIST_ITEM_MULTI_BLOCK_FLATTENED: "md/list-item-multi-block-flattened";
@@ -66,6 +65,11 @@ declare class MarkdownUnbalancedConstructMarkersError extends MarkdownWriteError
   readonly blockIndex: number;
   constructor(imbalanceKind: 'unmatchedEnd' | 'unclosedStart', blockIndex: number);
 }
+declare class MarkdownInvalidRunConstructExtentError extends MarkdownWriteError {
+  readonly faultKind: 'invertedRange' | 'beyondRuns';
+  readonly entryIndex: number;
+  constructor(faultKind: 'invertedRange' | 'beyondRuns', entryIndex: number);
+}
 declare class MarkdownUnsupportedDocumentKindError extends MarkdownWriteError {
   readonly kind: string;
   constructor(kind: string);
@@ -74,4 +78,4 @@ declare class MarkdownPackageFlattenError extends MarkdownWriteError {
   constructor(cause: unknown);
 }
 //#endregion
-export { MarkdownInputTooLargeError as a, MarkdownPackageFlattenError as c, MarkdownUnsupportedDocumentKindError as d, MarkdownWriteError as f, MarkdownDiagnosticSink as i, MarkdownParseError as l, MarkdownDiagnosticCodes as n, MarkdownInvalidUtf8Error as o, NOOP_MARKDOWN_DIAGNOSTIC_SINK as p, MarkdownDiagnosticSeverity as r, MarkdownNestingLimitExceededError as s, MarkdownDiagnostic as t, MarkdownUnbalancedConstructMarkersError as u };
+export { MarkdownInputTooLargeError as a, MarkdownNestingLimitExceededError as c, MarkdownUnbalancedConstructMarkersError as d, MarkdownUnsupportedDocumentKindError as f, MarkdownDiagnosticSink as i, MarkdownPackageFlattenError as l, NOOP_MARKDOWN_DIAGNOSTIC_SINK as m, MarkdownDiagnosticCodes as n, MarkdownInvalidRunConstructExtentError as o, MarkdownWriteError as p, MarkdownDiagnosticSeverity as r, MarkdownInvalidUtf8Error as s, MarkdownDiagnostic as t, MarkdownParseError as u };
