@@ -1,4 +1,4 @@
-import { i as MarkdownDiagnosticSink } from "../diagnostics-DVFklCTL.cjs";
+import { i as MarkdownDiagnosticSink } from "../diagnostics-CwpvDXtH.cjs";
 import { t as LinkReferenceDefinition } from "../link-Dv4kxVjk.cjs";
 //#region src/block/definitions.d.ts
 declare function extractDefinitions(content: string, references: Map<string, LinkReferenceDefinition>, sink?: MarkdownDiagnosticSink, startLine?: number): string;

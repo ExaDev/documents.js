@@ -19,7 +19,7 @@ declare const MarkdownDiagnosticCodes: {
   readonly INVENTED_PAGE_GEOMETRY: "md/invented-page-geometry";
   readonly NESTED_EMPHASIS_FLATTENED: "md/nested-emphasis-flattened";
   readonly LINK_TITLE_DROPPED: "md/link-title-dropped";
-  readonly BLOCKQUOTE_NESTED_DEPTH: "md/blockquote-nested-depth";
+  readonly BLOCKQUOTE_CONTAINER_SKIPPED: "md/blockquote-container-skipped";
   readonly LIST_ITEM_BLOCK_UNLISTED: "md/list-item-block-unlisted";
   readonly IMAGE_UNRESOLVED: "md/image-unresolved";
   readonly RAW_HTML_PRESERVED_AS_TEXT: "md/raw-html-preserved-as-text";
