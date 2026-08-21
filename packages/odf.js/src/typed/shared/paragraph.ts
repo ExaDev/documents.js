@@ -36,8 +36,8 @@ export interface OdfParagraphContext {
   readonly format?: OdfResidueFormat;
 }
 
-// One note or annotation body's own block flow: text:p paragraphs and text:list lists, read through the same shared walkers the main body uses, in the body's own document order. Anything else in a body contributes nothing, exactly as readBlocks treats unknown block-level elements -- an annotation's dc:creator/dc:date children land here and are skipped, having already been read into the entry's own fields.
-function readOdfConstructBodyBlocks(body: XmlElement, pkg: Package, context: OdfParagraphContext, listIdState: OdfListIdState): ContentBlock[] {
+// One note or annotation body's own block flow (and a master page's header/footer body's -- the same shape ODF reuses for every detached block container that is not the document body itself): text:p paragraphs and text:list lists, read through the same shared walkers the main body uses, in the body's own document order. Anything else in a body contributes nothing, exactly as readBlocks treats unknown block-level elements -- an annotation's dc:creator/dc:date children land here and are skipped, having already been read into the entry's own fields.
+export function readOdfConstructBodyBlocks(body: XmlElement, pkg: Package, context: OdfParagraphContext, listIdState: OdfListIdState): ContentBlock[] {
   const blocks: ContentBlock[] = [];
   const bodyContext: OdfParagraphContext = { ...context, listIdState };
   for (const child of body.children) {

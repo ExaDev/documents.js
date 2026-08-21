@@ -3,8 +3,9 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { Package } from '../../model/package';
+import type { XmlElement } from '../../model/node';
 import type { ContentBlock, ContentParagraph, ContentTable } from 'document-schema.js';
-import { PAGE_SIZE_A4 } from 'document-schema.js';
+import { flattenPackage, PAGE_SIZE_A4 } from 'document-schema.js';
 import { el, txt } from '../../xml/fragment';
 import { parsePackage } from '../../package-io/read';
 import { parseOdfLength } from '../shared/units';
@@ -230,6 +231,128 @@ describe('readOdtContent: minimal.odt (real LibreOffice output, default/unmodifi
     expect(heading.runs.map((r) => r.text).join('')).toBe('Minimal Document');
     const body = asParagraph(section.blocks[1]);
     expect(body.list).toBeUndefined();
+  });
+});
+
+describe('readOdtContent: master pages after the first, and header/footer content (synthetic packages built to the OASIS grammar)', () => {
+  // Every package below carries content.xml + styles.xml with two style:master-page elements: "Standard" (A4 portrait) and "Landscape" (A4 landscape), matching the shape a real Writer document's own mid-document page-style switch produces. The fixtures are programmatic per the issue's own stated gate: real-producer verification for these rows is outstanding (shared with the corpus gate).
+  function masterPage(name: string, pageLayoutName: string, children: XmlElement[] = []): XmlElement {
+    return el('style:master-page', { 'style:name': name, 'style:page-layout-name': pageLayoutName }, children);
+  }
+
+  function pageLayout(name: string, widthPt: string, heightPt: string): XmlElement {
+    return el('style:page-layout', { 'style:name': name }, [el('style:page-layout-properties', { 'fo:page-width': widthPt, 'fo:page-height': heightPt })]);
+  }
+
+  function packageWith(textChildren: XmlElement[], automaticStyles: XmlElement[] = [], landscapeChildren: XmlElement[] = []): Package {
+    return {
+      parts: {
+        'content.xml': { kind: 'xml', nodes: [el('office:document-content', {}, [el('office:automatic-styles', {}, automaticStyles), el('office:body', {}, [el('office:text', {}, textChildren)])])] },
+        'styles.xml': {
+          kind: 'xml',
+          nodes: [
+            el('office:document-styles', {}, [
+              el('office:automatic-styles', {}, [pageLayout('PM1', '210mm', '297mm'), pageLayout('PM2', '297mm', '210mm')]),
+              el('office:master-styles', {}, [masterPage('Standard', 'PM1'), masterPage('Landscape', 'PM2', landscapeChildren)]),
+            ]),
+          ],
+        },
+      },
+    };
+  }
+
+  it('keeps one section when no paragraph style names a master page', () => {
+    const pkg = packageWith([el('text:p', {}, [txt('body')])]);
+    const { sections } = readOdtContent(pkg);
+    expect(sections).toHaveLength(1);
+    expect(sections[0]?.breakType).toBeUndefined();
+  });
+
+  it('splits a second section at a paragraph whose style switches master page, with that master page\'s geometry and breakType nextPage', () => {
+    const switchStyle = el('style:style', { 'style:name': 'LandscapePara', 'style:family': 'paragraph' }, [
+      el('style:paragraph-properties', { 'style:master-page-name': 'Landscape' }),
+    ]);
+    const pkg = packageWith(
+      [el('text:p', {}, [txt('portrait')]), el('text:p', { 'text:style-name': 'LandscapePara' }, [txt('landscape')])],
+      [switchStyle],
+    );
+    const { sections, sectionMasterPages } = readOdtContent(pkg);
+    expect(sections).toHaveLength(2);
+    expect(sections[0]?.pageSize).toEqual({ widthPt: knownLength('210mm'), heightPt: knownLength('297mm') });
+    expect(sections[1]?.pageSize).toEqual({ widthPt: knownLength('297mm'), heightPt: knownLength('210mm') });
+    expect(sections[1]?.breakType).toBe('nextPage');
+    expect(sections[1]?.blocks).toHaveLength(1);
+    expect(sectionMasterPages).toEqual(['Standard', 'Landscape']);
+  });
+
+  it('starts the document on the master page the first paragraph names, without an empty leading section', () => {
+    const switchStyle = el('style:style', { 'style:name': 'LandscapePara', 'style:family': 'paragraph' }, [
+      el('style:paragraph-properties', { 'style:master-page-name': 'Landscape' }),
+    ]);
+    const pkg = packageWith([el('text:p', { 'text:style-name': 'LandscapePara' }, [txt('starts landscape')])], [switchStyle]);
+    const { sections, sectionMasterPages } = readOdtContent(pkg);
+    expect(sections).toHaveLength(1);
+    expect(sections[0]?.pageSize.widthPt).toBeCloseTo(knownLength('297mm'), 5);
+    expect(sectionMasterPages).toEqual(['Landscape']);
+  });
+
+  it('survives the package boundary: the split sections, geometry, and breakType all flatten back out of readOdt\'s tree exactly', () => {
+    const switchStyle = el('style:style', { 'style:name': 'LandscapePara', 'style:family': 'paragraph' }, [
+      el('style:paragraph-properties', { 'style:master-page-name': 'Landscape' }),
+    ]);
+    const pkg = packageWith(
+      [el('text:p', {}, [txt('portrait')]), el('text:p', { 'text:style-name': 'LandscapePara' }, [txt('landscape')])],
+      [switchStyle],
+    );
+    const flat = flattenPackage(readOdt(pkg));
+    if (flat.kind !== 'wordprocessing') {
+      throw new Error('expected a wordprocessing document');
+    }
+    const { sections } = readOdtContent(pkg);
+    expect(flat.sections).toEqual(sections);
+  });
+
+  it('drops a construct extent that spans the master-page switch, keeping each section\'s own markers balanced', () => {
+    const switchStyle = el('style:style', { 'style:name': 'LandscapePara', 'style:family': 'paragraph' }, [
+      el('style:paragraph-properties', { 'style:master-page-name': 'Landscape' }),
+    ]);
+    const pkg = packageWith(
+      [el('text:section', { 'text:name': 'SpansSwitch' }, [el('text:p', {}, [txt('before')]), el('text:p', { 'text:style-name': 'LandscapePara' }, [txt('after')])])],
+      [switchStyle],
+    );
+    const { sections } = readOdtContent(pkg);
+    expect(sections).toHaveLength(2);
+    for (const section of sections) {
+      // Each section's marker list balances on its own -- the division's extent crossed the section boundary, and a pair split across two block lists has no encoding (the same ratification a table-cell-straddling pair takes).
+      expect(section.blocks.filter((block) => block.kind === 'constructStart')).toHaveLength(0);
+      expect(section.blocks.filter((block) => block.kind === 'constructEnd')).toHaveLength(0);
+    }
+  });
+
+  it('reads a master page\'s style:header and style:footer as block content keyed to that master page', () => {
+    const pkg = packageWith([el('text:p', {}, [txt('body')])], [], [
+      el('style:header', {}, [el('text:p', {}, [txt('Header line')])]),
+      el('style:footer', {}, [el('text:p', {}, [el('text:page-number', {}, [txt('2')])])]),
+    ]);
+    const { headerFooterParts } = readOdtContent(pkg);
+    expect(headerFooterParts).toHaveLength(2);
+    expect(headerFooterParts?.[0]).toMatchObject({ masterPage: 'Landscape', kind: 'header', variant: 'default' });
+    expect(headerFooterParts?.[0]?.blocks).toHaveLength(1);
+    expect(headerFooterParts?.[1]).toMatchObject({ masterPage: 'Landscape', kind: 'footer', variant: 'default' });
+    // A field inside a footer is real run content with its field extent, not a bare string.
+    const footerParagraph = headerFooterParts?.[1]?.blocks[0];
+    expect(footerParagraph).toMatchObject({ kind: 'paragraph', runs: [{ text: '2' }] });
+  });
+
+  it('reads the left and first header variants under their own variant names, and skips a style:display="false" header', () => {
+    const pkg = packageWith([el('text:p', {}, [txt('body')])], [], [
+      el('style:header', { 'style:display': 'false' }),
+      el('style:header-left', {}, [el('text:p', {}, [txt('left header')])]),
+      el('style:header-first', {}, [el('text:p', {}, [txt('first header')])]),
+      el('style:footer-first', {}, [el('text:p', {}, [txt('first footer')])]),
+    ]);
+    const { headerFooterParts } = readOdtContent(pkg);
+    expect(headerFooterParts?.map((part) => `${part.kind}:${part.variant}`)).toEqual(['header:left', 'header:first', 'footer:first']);
   });
 });
 
