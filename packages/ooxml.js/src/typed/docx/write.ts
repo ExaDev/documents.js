@@ -788,7 +788,10 @@ function buildBlockFlow(blocks: readonly ContentBlock[], state: WriteState, dele
 // --- sections and the document part ---------------------------------------------------------------------------------
 
 function buildSectionProperties(section: ContentSection): XmlElement {
+  // CT_SectPr's own child sequence puts w:type before w:pgSz, so an emitted break kind lands ahead of the geometry it qualifies. An absent breakType writes no w:type at all: that absence IS WordprocessingML's own nextPage default, and spelling it would turn "no break kind declared" into "break kind declared as the default" on the way back in.
+  const type = section.breakType === undefined ? [] : [el('w:type', { 'w:val': section.breakType })];
   return el('w:sectPr', {}, [
+    ...type,
     el('w:pgSz', { 'w:w': String(ptToTwips(section.pageSize.widthPt)), 'w:h': String(ptToTwips(section.pageSize.heightPt)) }),
     el('w:pgMar', {
       'w:top': String(ptToTwips(section.margins.topPt)),
