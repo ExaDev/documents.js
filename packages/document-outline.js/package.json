@@ -65,7 +65,7 @@
   },
   "packageManager": "pnpm@11.6.0",
   "dependencies": {
-    "document-schema.js": "^4.6.0",
+    "document-schema.js": "^4.7.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
