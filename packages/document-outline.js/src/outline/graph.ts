@@ -81,10 +81,9 @@ function entryNodeFace(id: string, field: TableField, properties: Record<string,
 
 const TABLE_FIELD_NAMES = new Set<string>(TABLE_FIELDS);
 
-// The default policy: extract every table entry (the reused content the definitions facility exists to hold), inline everything else -- envelope facts, tree-node properties, scalars -- including table entries' own innards (an entry is a unit; its halves are not re-factored).
-export function defaultExtractionPolicy(path: PropertyPath, _value: unknown): ExtractionDecision {
-  return path.length === 2 && typeof path[0] === 'string' && TABLE_FIELD_NAMES.has(path[0]) ? 'extract' : 'inline';
-}
+// The default policy: extract every table entry (the reused content the definitions facility exists to hold), inline everything else -- envelope facts, tree-node properties, scalars -- including table entries' own innards (an entry is a unit; its halves are not re-factored). Declared as an ExtractionPolicy rather than a standalone two-parameter function so the default is typed exactly as the custom policies it sits beside (and composes with), with no unused second parameter to spell.
+export const defaultExtractionPolicy: ExtractionPolicy = (path) =>
+  path.length === 2 && typeof path[0] === 'string' && TABLE_FIELD_NAMES.has(path[0]) ? 'extract' : 'inline';
 
 // The projected own-content walk of one value: `hash` is what feeds the owning node's stableContentHash (refs dereferenced to entry hashes, extracted values replaced by their node ids), `properties` is the graph face (the same content minus ref keys and extracted keys, which become edges), and `edges` are the DEFINED_BY/PROPERTY relations discovered inside, for the owner to emit under its own id once that id is known.
 interface Walked {
