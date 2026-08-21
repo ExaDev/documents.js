@@ -408,34 +408,9 @@ function readPageNotes(page: PdfDict, resolver: PdfObjectResolver): string | und
   return undefined;
 }
 
-// --- PDF string decoding and /Info metadata: our own writer always emits UTF-16BE-with-BOM (write.ts's textToPdfString); a third-party producer's plain-ASCII PDFDocEncoding is approximated as a direct byte-per-character (Latin-1-ish) decode, correct for the overwhelming common ASCII-only case. ---
+// --- PDF string decoding and /Info metadata: the scalar decoders themselves live in pdf-text.ts (shared with the other read-side modules; deep-importable as pdf-codec/pdf-text through the wildcard export). ---
 
-export function decodePdfString(bytes: Uint8Array<ArrayBuffer>): string {
-  if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) {
-    let out = '';
-    for (let i = 2; i + 1 < bytes.length; i += 2) {
-      out += String.fromCharCode(((bytes[i] ?? 0) << 8) | (bytes[i + 1] ?? 0));
-    }
-    return out;
-  }
-  return Array.from(bytes, (b) => String.fromCharCode(b)).join('');
-}
-
-// ISO 32000-1 7.9.4: "D:YYYYMMDDHHmmSSOHH'mm'" with every field after the year optional and O one of +/-/Z.
-const PDF_DATE_PATTERN = /^D:(\d{4})(\d{2})?(\d{2})?(\d{2})?(\d{2})?(\d{2})?([+\-Z])?(\d{2})?'?(\d{2})?'?$/;
-
-export function parsePdfDate(raw: string | undefined): string | undefined {
-  if (raw === undefined) {
-    return undefined;
-  }
-  const match = PDF_DATE_PATTERN.exec(raw);
-  if (match === null) {
-    return undefined;
-  }
-  const [, year, month = '01', day = '01', hour = '00', minute = '00', second = '00', tzSign, tzHour = '00', tzMinute = '00'] = match;
-  const offset = tzSign === undefined || tzSign === 'Z' ? 'Z' : `${tzSign}${tzHour}:${tzMinute}`;
-  return `${year}-${month}-${day}T${hour}:${minute}:${second}${offset}`;
-}
+import { decodePdfString, parsePdfDate } from './pdf-text';
 
 function readMetadata(trailer: PdfDict, resolver: PdfObjectResolver): LayoutMetadata {
   const info = resolver.resolveDict(dictGet(trailer, 'Info'));
