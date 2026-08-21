@@ -1,4 +1,4 @@
-import type { Alignment, AnchorDescriptor, ConstructDescriptor, ContentBlock, ContentCellBorders, ContentControlDescriptor, ContentEmbeddedObjectBlock, ContentImageBlock, ContentParagraph, ContentRun, ContentSection, ContentTable, ContentTableCell, FieldDescriptor, LinkDescriptor, ProvenanceChange, ProvenanceDescriptor } from 'document-schema.js';
+import type { Alignment, AnchorDescriptor, ConstructDescriptor, ContentBlock, ContentCellBorders, ContentControlDescriptor, ContentDocument, ContentEmbeddedObjectBlock, ContentImageBlock, ContentParagraph, ContentRun, ContentSection, ContentTable, ContentTableCell, FieldDescriptor, LinkDescriptor, ProvenanceChange, ProvenanceDescriptor } from 'document-schema.js';
 import { colorToRgbHex, findConstructMarkerImbalance, findRunConstructFault } from 'document-schema.js';
 import type { Package, XmlPart } from '../../model/package';
 import type { XmlElement, XmlNode } from '../../model/node';
@@ -18,7 +18,7 @@ import { TABLE_OF_CONTENTS_GALLERY, isDeletedChange } from './constructs';
 //
 // It is readDocxContent's honest inverse over ContentSection: page geometry, paragraphs with their fully-resolved direct formatting, runs (including external hyperlinks), lists, headings, tables (grids, spans, shading, borders, row heights), page breaks, images, embedded objects, and the block-scoped construct markers all survive a round trip through the pair -- a degraded gallery's w:docPartObj included, restored from the descriptor's residue (restoreGalleryElement below). What does NOT survive, stated rather than implied:
 // - No styles.xml, numbering.xml, comments, footnotes, headers, or footers are written. readDocxContent reads all of those into DocxDocument fields outside `sections`, and each needs machinery of its own; a paragraph's styleId is still written as a w:pStyle reference, resolving to nothing without the style part, since every property that style would have contributed is already spelled as direct formatting by then.
-// - An embedded object's VML preview picture is not regenerated: the reader never read one into the model (no VML reader exists, and real producers ship WMF/EMF previews this ecosystem has no writer for), so the written w:object carries only its o:OLEObject payload reference and Word shows a blank until activated. An embedded object whose nested document this package cannot serialise (presentation -- read-only here; drawing/formula -- ODF/MathML spellings) is refused with a thrown error rather than silently dropped, inverting the reader's degrade-tier rule at the write boundary where the caller has explicitly asked for a document.
+// - An embedded object's VML preview picture is not regenerated: the reader never read one into the model (no VML reader exists, and real producers ship WMF/EMF previews this ecosystem has no writer for), so the written w:object carries only its o:OLEObject payload reference and Word shows a blank until activated. An embedded presentation serialises through the injected port (options.serialiseEmbeddedPresentation -- BuildDocxContentOptions's own comment states why it is a port); without one injected, and for a nested document of any other kind this package cannot serialise (drawing/formula -- ODF/MathML spellings), the block is refused with a thrown error rather than silently dropped, inverting the reader's degrade-tier rule at the write boundary where the caller has explicitly asked for a document.
 // - A run whose boolean properties are absent but which carries some other property (a colour, a size) reads back with those booleans false rather than absent, because the w:rPr the other property forces is itself what the read-side cascade turns an absent w:b into. A run with no properties at all writes no w:rPr and round-trips exactly.
 // - Four construct shapes are written as their content with no wrapper, because WordprocessingML has no block-level element for them: a `link` (its own hyperlink is run-level, so a block-scoped link has no element to be), a `division` (no block container answers to one), a `provenance` whose change is `formatChange` (w:pPrChange is a child of w:pPr describing one paragraph's old properties, not a wrapper over a block flow), and an `anchor` whose type is a footnote, endnote, or comment (each of those is a run-level reference or range into parts this writer does not emit -- a comment extent or note reference written without its word/comments.xml, word/footnotes.xml, or word/endnotes.xml body would point at nothing). readDocxContent produces the last of those, so this bounds what its own output carries through here.
 // - Of a paragraph's run-level construct extents (ContentParagraph.constructs), bookmark anchors write back as their w:bookmarkStart/End halves between the runs the range names, fields as their w:fldChar begin/instruction/separate/end characters between the same runs, and internal links as one w:hyperlink/@w:anchor wrapping exactly the runs they cover (interleaveRunConstructExtents below). A run extent of any other kind -- a contentControl from a legacy w:ffData form field, a comment extent, a note reference -- writes its paragraph's content untouched and loses only the descriptor (rebuilding the ffData control payload, or emitting a reference into a part this writer never writes, is out of scope), and an extent whose range does not name real runs is refused with a thrown error rather than written at a made-up position.
@@ -47,6 +47,10 @@ const CT_CORE_PROPS = 'application/vnd.openxmlformats-package.core-properties+xm
 const CT_EXTENDED_PROPS = 'application/vnd.openxmlformats-officedocument.extended-properties+xml';
 const CT_EMBEDDED_DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const CT_EMBEDDED_XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+const CT_EMBEDDED_PPTX = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+
+// The content type an embeddings part is declared with, by the extension the payload serialised into -- each names the format of the nested document the part holds, so an Override can declare exactly that part without claiming anything about other files sharing the extension elsewhere.
+const EMBEDDED_PART_CONTENT_TYPES: Readonly<Record<'docx' | 'xlsx' | 'pptx', string>> = { docx: CT_EMBEDDED_DOCX, xlsx: CT_EMBEDDED_XLSX, pptx: CT_EMBEDDED_PPTX };
 
 const REL_OFFICE_DOCUMENT = `${REL_NS}/officeDocument`;
 const REL_CORE_PROPS = `${PKG_RELS_NS}/metadata/core-properties`;
@@ -63,6 +67,13 @@ export interface DocxContent {
   readonly sections: readonly ContentSection[];
 }
 
+// The port that lets a docx carrying an embedded presentation round-trip (#742): presentation ContentDocument -> whole pptx file bytes. This package has no PresentationML writer of its own (pptx is read-only here), and the one pptx writer in the ecosystem -- documents.js's editor scaffold -- lives one layer up, where this package cannot reach it without inverting the family's dependency direction. The port resolves that without the inversion: a caller holding a pptx serialiser injects it, and the writer serialises the embedded presentation into a genuine word/embeddings/oleObjectN.pptx payload exactly as an embedded workbook serialises through buildXlsxPackageFromContent. The returned bytes are the OLE payload verbatim -- the reader detects the payload by ZIP magic and decodes its flavour from the nested package's own entry part, never by extension or content type, so any conforming pptx byte stream round-trips. An embedded presentation with no serialiser injected is still refused with a thrown error: a silent drop would re-create exactly the read-once-never-written loss the embedded emitter exists to close.
+export type EmbeddedPresentationSerialiser = (document: Extract<ContentDocument, { kind: 'presentation' }>) => Uint8Array;
+
+export interface BuildDocxContentOptions {
+  readonly serialiseEmbeddedPresentation?: EmbeddedPresentationSerialiser;
+}
+
 interface WriteRelationship {
   readonly id: string;
   readonly type: string;
@@ -77,12 +88,13 @@ interface WriteState {
   readonly mediaParts: Map<string, { format: 'png' | 'jpeg'; base64: string }>;
   readonly embeddingIds: Map<string, string>;
   readonly embeddingParts: Map<string, EmbeddedPayload>;
+  readonly serialiseEmbeddedPresentation: EmbeddedPresentationSerialiser | undefined;
   nextDrawingId: number;
   nextMarkerId: number;
 }
 
-function newWriteState(): WriteState {
-  return { relationships: [], hyperlinkIds: new Map(), mediaIds: new Map(), mediaParts: new Map(), embeddingIds: new Map(), embeddingParts: new Map(), nextDrawingId: 1, nextMarkerId: 1 };
+function newWriteState(options: BuildDocxContentOptions | undefined): WriteState {
+  return { relationships: [], hyperlinkIds: new Map(), mediaIds: new Map(), mediaParts: new Map(), embeddingIds: new Map(), embeddingParts: new Map(), serialiseEmbeddedPresentation: options?.serialiseEmbeddedPresentation, nextDrawingId: 1, nextMarkerId: 1 };
 }
 
 function addRelationship(state: WriteState, type: string, target: string, external: boolean): string {
@@ -531,23 +543,32 @@ function buildDrawing(image: ContentImageBlock, state: WriteState): XmlElement {
 
 // The OLE payload part this writer produces for one embedded object: the nested document re-serialised through its own format's builder and zipped -- the direct-ZIP spelling, not a classic OLE compound-file wrapper, matching what readEmbeddedOoxmlPayload accepts at any embeddings path (the payload is detected by ZIP magic and entry part, never by extension or content type).
 interface EmbeddedPayload {
-  readonly extension: 'docx' | 'xlsx';
+  readonly extension: 'docx' | 'xlsx' | 'pptx';
   readonly progId: string;
   readonly base64: string;
 }
 
 // Serialises an embedded object's nested document into its OLE payload bytes, dispatching on the document's own kind rather than the block's objectKind label: the payload's bytes, part extension, and ProgID are all properties of the document being serialised, and while schema treats the objectKind/document.kind pairing as a producer convention rather than a constraint, the only coherent rule for a writer is one source of truth -- the document itself. The ProgIDs are the canonical OLE names of the OOXML-era Office applications (what a real producer's o:OLEObject carries and what Word launches to activate the embed); the schema carries no progId field, so the writer synthesises one per kind.
 //
-// A document kind with no serialiser in this package is refused loudly rather than silently dropped: readDocxContent recovers embedded wordprocessing, presentation, and spreadsheet documents alike, so silently skipping the presentation case would re-create exactly the read-once-never-written loss this emitter exists to close. Presentation is read-only here (no buildPptxPackage exists), and drawing/formula are ODF/MathML spellings no OOXML OLE payload corresponds to -- the reader's degrade-tier rule (second-order content never fails the host read) inverts at the write boundary, where the caller is explicitly asking for a document and a writer that cannot produce one faithfully says so.
-function embeddedPayloadOf(document: ContentEmbeddedObjectBlock['document']): EmbeddedPayload {
+// A presentation document serialises through the injected port (state.serialiseEmbeddedPresentation, BuildDocxContentOptions's own comment states why it is a port), and a document kind with no serialiser at all is refused loudly rather than silently dropped: readDocxContent recovers embedded wordprocessing, presentation, and spreadsheet documents alike, so silently skipping any of them would re-create exactly the read-once-never-written loss this emitter exists to close. Drawing/formula are ODF/MathML spellings no OOXML OLE payload corresponds to -- the reader's degrade-tier rule (second-order content never fails the host read) inverts at the write boundary, where the caller is explicitly asking for a document and a writer that cannot produce one faithfully says so.
+function embeddedPayloadOf(document: ContentEmbeddedObjectBlock['document'], state: WriteState): EmbeddedPayload {
   switch (document.kind) {
     case 'wordprocessing':
       return { extension: 'docx', progId: 'Word.Document.12', base64: bytesToBase64(encodePackage(buildDocxPackageFromContent(document))) };
     case 'spreadsheet':
       return { extension: 'xlsx', progId: 'Excel.Sheet.12', base64: bytesToBase64(encodePackage(buildXlsxPackageFromContent(document))) };
+    case 'presentation': {
+      const serialise = state.serialiseEmbeddedPresentation;
+      if (serialise === undefined) {
+        throw new Error(
+          'buildDocxPackageFromContent: an embedded object carrying a presentation document has no serialiser (this package has no PresentationML writer; pass options.serialiseEmbeddedPresentation -- documents.js wires one from its own pptx builder)',
+        );
+      }
+      return { extension: 'pptx', progId: 'PowerPoint.Show.12', base64: bytesToBase64(serialise(document)) };
+    }
     default:
       throw new Error(
-        `buildDocxPackageFromContent: an embedded object carrying a ${document.kind} document has no OOXML OLE payload this writer can produce (embedded wordprocessing and spreadsheet documents serialise through their own builders; presentation is read-only in this package, and drawing/formula are ODF/MathML spellings)`,
+        `buildDocxPackageFromContent: an embedded object carrying a ${document.kind} document has no OOXML OLE payload this writer can produce (embedded wordprocessing and spreadsheet documents serialise through their own builders, a presentation through options.serialiseEmbeddedPresentation, and drawing/formula are ODF/MathML spellings)`,
       );
   }
 }
@@ -567,7 +588,7 @@ function embeddedObjectRelationshipId(state: WriteState, payload: EmbeddedPayloa
 
 // readObjectEmbeddedObject's inverse: w:dxaOrig/w:dyaOrig carry the block frame's size in twips (the reader skips a w:object missing either attribute, so both are always written -- position is not written, since an inline flow object has none and the reader's own frame sits at the origin), and o:OLEObject names the payload part through its relationship. No VML preview picture (v:shape/v:imagedata) is emitted: the reader never read one into the model (no VML reader exists, and real producers ship WMF/EMF previews this ecosystem has no writer for), so there are no preview bytes to carry and regenerating one is out of scope -- Word shows the object as blank until activated. ProgID and DrawAspect are Word's own activation vocabulary; this package's reader reads only r:id.
 function buildObjectElement(block: ContentEmbeddedObjectBlock, state: WriteState): XmlElement {
-  const payload = embeddedPayloadOf(block.document);
+  const payload = embeddedPayloadOf(block.document, state);
   const relId = embeddedObjectRelationshipId(state, payload);
   return el('w:object', { 'w:dxaOrig': String(ptToTwips(block.frame.widthPt)), 'w:dyaOrig': String(ptToTwips(block.frame.heightPt)) }, [
     el('o:OLEObject', { Type: 'Embed', ProgID: payload.progId, DrawAspect: 'Content', 'r:id': relId }),
@@ -946,7 +967,7 @@ function buildContentTypesPart(state: WriteState): XmlPart {
     defaults.push(el('Default', { Extension: 'jpeg', ContentType: 'image/jpeg' }));
   }
   const embeddingOverrides = [...state.embeddingParts].map(([name, payload]) =>
-    el('Override', { PartName: `/word/embeddings/${name}`, ContentType: payload.extension === 'docx' ? CT_EMBEDDED_DOCX : CT_EMBEDDED_XLSX }),
+    el('Override', { PartName: `/word/embeddings/${name}`, ContentType: EMBEDDED_PART_CONTENT_TYPES[payload.extension] }),
   );
   const root = el('Types', { xmlns: CONTENT_TYPES_NS }, [
     ...defaults,
@@ -1006,8 +1027,8 @@ function buildExtendedPropertiesPart(metadata: DocumentMetadata): XmlPart {
 }
 
 // ContentSection[] (plus optional document metadata) -> a complete docx Package, built part by part rather than edited into an existing one. The read-side inverse is readDocxContent; see this module's own header for exactly what survives the pair and what does not.
-export function buildDocxPackageFromContent(content: DocxContent): Package {
-  const state = newWriteState();
+export function buildDocxPackageFromContent(content: DocxContent, options?: BuildDocxContentOptions): Package {
+  const state = newWriteState(options);
   const sections = content.sections.length === 0 ? [{ pageSize: { widthPt: 612, heightPt: 792 }, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 }, blocks: [] }] : content.sections;
   // The document part is built first so every hyperlink and image relationship it needs already exists by the time the relationship and content-type parts are written.
   const documentPart = buildDocumentPart(sections, state);

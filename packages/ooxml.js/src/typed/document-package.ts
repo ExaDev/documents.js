@@ -3,6 +3,7 @@ import { assemblePackage, flattenPackage } from 'document-schema.js';
 import type { Package } from '../model/package';
 import { readDocxContent } from './docx/read';
 import { buildDocxPackageFromContent } from './docx/write';
+import type { BuildDocxContentOptions } from './docx/write';
 import { readPptxContent } from './pptx/read';
 import { buildXlsxPackageFromContent } from './xlsx/build';
 import { readXlsxContent } from './xlsx/content';
@@ -24,13 +25,13 @@ export function readDocx(pkg: Package): DocumentPackage {
   return assemblePackage({ kind: 'wordprocessing', metadata, sections });
 }
 
-// The inverse: a wordprocessing DocumentPackage -> a complete, freshly-built docx Package (never a write-back into a decoded one). Exactly buildDocxPackageFromContent's own fidelity, since that is what this delegates to once the tree is flattened -- see its module comment for what a docx round trip through the pair does and does not preserve.
-export function buildDocxPackage(document: DocumentPackage): Package {
+// The inverse: a wordprocessing DocumentPackage -> a complete, freshly-built docx Package (never a write-back into a decoded one). Exactly buildDocxPackageFromContent's own fidelity, since that is what this delegates to once the tree is flattened -- see its module comment for what a docx round trip through the pair does and does not preserve. The options are that flat writer's own, threaded straight through: an embedded presentation block rides the tree exactly like a flat one, so the injected serialiser (BuildDocxContentOptions's own comment states why it is a port) has to reach the flat writer or the tree pair would refuse what the flat pair serialises.
+export function buildDocxPackage(document: DocumentPackage, options?: BuildDocxContentOptions): Package {
   const content = flattenPackage(document);
   if (content.kind !== 'wordprocessing') {
     throw new Error(`buildDocxPackage: expected a DocumentPackage of kind "wordprocessing", got "${content.kind}"`);
   }
-  return buildDocxPackageFromContent(content);
+  return buildDocxPackageFromContent(content, options);
 }
 
 // A decoded pptx Package -> the tree-form DocumentPackage, via readPptxContent's own placeholder/layout/master/theme inheritance walk. Read-only: PresentationML has no writer in this package, so there is no buildPptxPackage to pair this with.
