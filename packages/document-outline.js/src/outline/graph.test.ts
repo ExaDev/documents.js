@@ -53,6 +53,98 @@ function edgesBetween(graph: PropertyGraph, from: string, kind: string): Propert
   return graph.edges.filter((edge) => edge.from === from && edge.kind === kind);
 }
 
+describe('content-addressed deduplication', () => {
+  it('splits nodes when the same style KEY names different entry content in two documents', () => {
+    const docA = wordprocessingPackage([sectionGroup([headingGroup('Shared', 1, [], { style: 's1' })])], {
+      styles: { s1: { run: { bold: true } } },
+    });
+    const docB = wordprocessingPackage([sectionGroup([headingGroup('Shared', 1, [], { style: 's1' })])], {
+      styles: { s1: { run: { italic: true } } },
+    });
+    const graph = projectDocumentGraph([
+      { id: 'a', package: docA },
+      { id: 'b', package: docB },
+    ]);
+    // Hashing the bare ref key would wrongly merge these; the entry content keeps them apart, cascading to the referencing headings.
+    expect(graph.nodes.filter((node) => node.kind === 'styleEntry')).toHaveLength(2);
+    const headings = graph.nodes.filter((node) => node.kind === 'paragraph' && node.headingLevel === 1);
+    expect(headings).toHaveLength(2);
+    expect(headings[0]!.id).not.toBe(headings[1]!.id);
+  });
+
+  it('collapses an identical whole subtree to one shared subtree with only seam edges per document', () => {
+    const sharedSection = sectionGroup([headingGroup('Terms', 1, [paragraph('All rights reserved.')]), paragraph('Fine print.')]);
+    const docA = wordprocessingPackage([sharedSection, sectionGroup([paragraph('Document A only.')])], { metadata: { title: 'A' } });
+    const docB = wordprocessingPackage([sectionGroup([paragraph('Document B only.')]), sharedSection], { metadata: { title: 'B' } });
+    const graph = projectDocumentGraph([
+      { id: 'a', package: docA },
+      { id: 'b', package: docB },
+    ]);
+    expectSchemaValid(docA, 'docA');
+    expectSchemaValid(docB, 'docB');
+    const sections = graph.nodes.filter((node) => node.kind === 'section');
+    expect(sections).toHaveLength(3); // the shared one plus each document's own final section
+    const shared = sections.find((section) => graph.edges.some((edge) => edge.kind === 'CONTAINS' && edge.from === section.id && edge.order === 0 && graph.edges.some((rootEdge) => rootEdge.kind === 'CONTAINS' && rootEdge.from === 'a' && rootEdge.to === section.id)))!;
+    // One shared section node, referenced by each document's own root at its own local order.
+    const seams = graph.edges.filter((edge) => edge.kind === 'CONTAINS' && edge.to === shared.id);
+    expect(seams.map((edge) => ({ from: edge.from, order: edge.order })).sort((x, y) => x.from.localeCompare(y.from))).toEqual([
+      { from: 'a', order: 0 },
+      { from: 'b', order: 1 },
+    ]);
+    // Every descendant of the shared section is also emitted exactly once: the heading anchor, two paragraphs, and each document's own leaf.
+    expect(graph.nodes.filter((node) => node.kind === 'paragraph')).toHaveLength(5);
+  });
+
+  it('deduplicates repeated content within one document: one node, one edge per position', () => {
+    const repeated = paragraph('Standard disclaimer.');
+    const pkg = wordprocessingPackage([sectionGroup([repeated, paragraph('Body.'), repeated])]);
+    const graph = projectDocumentGraph([{ id: 'doc', package: pkg }]);
+    const matches = graph.nodes.filter((node) => node.kind === 'paragraph' && JSON.stringify(node).includes('Standard disclaimer.'));
+    expect(matches).toHaveLength(1);
+    const contains = graph.edges.filter((edge) => edge.to === matches[0]!.id && edge.kind === 'CONTAINS');
+    expect(contains.map((edge) => edge.order)).toEqual([0, 2]);
+  });
+});
+
+describe('Merkle-DAG edit behaviour', () => {
+  const before = () => wordprocessingPackage([sectionGroup([paragraph('First.'), paragraph('Last.')])]);
+  const after = () => wordprocessingPackage([sectionGroup([paragraph('First.'), paragraph('Inserted.'), paragraph('Last.')])]);
+
+  it('insertion between siblings changes no sibling identity, only local order values', () => {
+    const beforeGraph = projectDocumentGraph([{ id: 'doc', package: before() }]);
+    const afterGraph = projectDocumentGraph([{ id: 'doc', package: after() }]);
+    const idOf = (graph: PropertyGraph, text: string) => nodeByText(graph, text).id;
+    expect(idOf(afterGraph, 'First.')).toBe(idOf(beforeGraph, 'First.'));
+    expect(idOf(afterGraph, 'Last.')).toBe(idOf(beforeGraph, 'Last.'));
+    const afterSection = afterGraph.nodes.find((node) => node.kind === 'section')!;
+    const orders = afterGraph.edges
+      .filter((edge) => edge.from === afterSection.id && edge.kind === 'CONTAINS')
+      .map((edge) => ({ order: edge.order, to: edge.to }));
+    expect(orders).toEqual([
+      { order: 0, to: idOf(afterGraph, 'First.') },
+      { order: 1, to: idOf(afterGraph, 'Inserted.') },
+      { order: 2, to: idOf(afterGraph, 'Last.') },
+    ]);
+  });
+
+  it('modification mints a new node and new ancestors while the old nodes persist beside them', () => {
+    const edited = wordprocessingPackage([sectionGroup([paragraph('First, revised.'), paragraph('Last.')])]);
+    const graph = projectDocumentGraph([
+      { id: 'v1', package: before() },
+      { id: 'v2', package: edited },
+    ]);
+    const v1First = nodeByText(graph, 'First.');
+    const v2First = nodeByText(graph, 'First, revised.');
+    expect(v1First.id).not.toBe(v2First.id);
+    // The Merkle cascade: every ancestor of the edited leaf is a new node too, so the two sections are distinct.
+    expect(graph.nodes.filter((node) => node.kind === 'section')).toHaveLength(2);
+    // The unchanged sibling keeps its identity and is shared by both versions.
+    const last = graph.nodes.filter((node) => node.kind === 'paragraph' && JSON.stringify(node).includes('Last.'));
+    expect(last).toHaveLength(1);
+    expect(graph.edges.filter((edge) => edge.kind === 'CONTAINS' && edge.to === last[0]!.id)).toHaveLength(2);
+  });
+});
+
 describe('projectDocumentGraph', () => {
   it('is deterministic: the same input projects to the same graph, nodes and edges in the same order', () => {
     const boilerplate = paragraph('Please see attached.');
