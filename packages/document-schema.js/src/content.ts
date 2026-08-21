@@ -147,7 +147,9 @@ export interface ContentTable {
 }
 
 // ContentEmbeddedObject is mutually recursive with ContentDocument (an embedded object carries a whole ContentDocument, which can itself contain another embedded object -- e.g. a formula embedded inside a drawing embedded inside a spreadsheet) -- hand-written, mirroring ContentTable/ContentBlock's own recursive-guard-plus-z.custom pattern immediately below, since z.lazy() collapses to `unknown` for recursive children in this pinned Zod version. Every objectKind names an embedded whole sub-document of the identically-named ContentDocument kind, 'formula' included now that ContentDocument has a real 'formula' variant of its own (below) -- so an embedded equation carries genuine MathML rather than, as before, a wordprocessing document standing in for one. That pairing is a producer convention, not a constraint this schema enforces: objectKind and document.kind are independently typed, and nothing here rejects a mismatched pair. A 'formula' object is expected to be short enough that a layout engine can reasonably lay it out and render it; the other four are expected to round-trip through this model losslessly without ever being laid out or rendered. This package holds schemas only, so no rendering/layout logic lives here regardless of objectKind.
-export type ContentEmbeddedObjectKind = 'formula' | 'wordprocessing' | 'presentation' | 'spreadsheet' | 'drawing';
+//
+// 'chart' is the one member that does not name a ContentDocument kind of its own, because a chart is not a document kind: it names a chart graphic frame's cached series/category model (an xlsx or pptx chart part), which a producer carries as a small spreadsheet ContentDocument -- one sheet whose cells are that cached table -- since a sheet is the honest document-granularity spelling of tabular data. That is the objectKind/document pairing being a convention rather than a constraint, doing real work: 'chart' says what the frame held (so a consumer can tell a chart from an embedded workbook), document.kind says how the payload is shaped, and neither lies about the other.
+export type ContentEmbeddedObjectKind = 'formula' | 'wordprocessing' | 'presentation' | 'spreadsheet' | 'drawing' | 'chart';
 
 export interface ContentEmbeddedObject {
   objectKind: ContentEmbeddedObjectKind;
@@ -205,7 +207,8 @@ function isContentEmbeddedObjectKind(value: unknown): value is ContentEmbeddedOb
     value === 'wordprocessing' ||
     value === 'presentation' ||
     value === 'spreadsheet' ||
-    value === 'drawing'
+    value === 'drawing' ||
+    value === 'chart'
   );
 }
 

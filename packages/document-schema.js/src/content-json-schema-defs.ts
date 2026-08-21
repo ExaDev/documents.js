@@ -16,7 +16,7 @@ type JsonSchema = z.core.JSONSchema.JSONSchema;
 // Zod's own `.int()` bag range (node_modules/zod/v4/core/json-schema-processors.js's numberProcessor), reproduced verbatim wherever a hand-authored integer field below mirrors a real `z.number().int()...` field -- confirmed empirically against ContentListMembershipSchema.level and ContentTableCellSchema.colSpan/rowSpan.
 export const MAX_SAFE_INTEGER = Number.MAX_SAFE_INTEGER;
 
-export const EMBEDDED_OBJECT_KINDS = ['formula', 'wordprocessing', 'presentation', 'spreadsheet', 'drawing'];
+export const EMBEDDED_OBJECT_KINDS = ['formula', 'wordprocessing', 'presentation', 'spreadsheet', 'drawing', 'chart'];
 
 // The genuine cycle back to a whole ContentDocument: ContentEmbeddedObject(Block)'s own `document` field. Resolved once here since both the ContentEmbeddedObjectBlock fragment below and scripts/generate-json-schemas.mjs's own override() branch for the standalone ContentEmbeddedObjectSchema need the identical URI.
 export const CONTENT_DOCUMENT_URI = schemaUriFor('ContentDocument');
