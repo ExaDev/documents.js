@@ -1,7 +1,7 @@
 
 import type { ContentDocument, ContentVector } from 'document-schema.js';
 import type { Package, XmlElement } from 'odf.js';
-import { bytesToBase64, childrenWithTag, decodePackage, encodePackage, findChildElement, readDrawPageContent, rootElement } from 'odf.js';
+import { bytesToBase64, childrenWithTag, decodePackage, encodePackage, elementsWithTag, findChildElement, readDrawPageContent, rootElement } from 'odf.js';
 import { attr } from 'ooxml.js';
 import { encodePng } from 'byte-codec';
 import { describe, expect, it } from 'vitest';
@@ -87,6 +87,93 @@ describe('buildOdtPackage', () => {
     // runs() only surfaces text:span children, and the tab was written as a bare text:tab (not wrapped in a span) -- so paragraph.text (which does see it, via decodeOdfText) carries the tab, but runs() shows only the two real spans.
     expect(paragraph!.runs().map((r) => r.text)).toEqual(['Left', 'Right']);
     expect(paragraph!.text).toBe('Left\tRight');
+  });
+
+  // The heading contract the whole bridge hangs off: a paragraph carrying the canonical headingLevel becomes a real text:h element with text:outline-level and the ODF Heading_20_N style spelling -- never the producer's verbatim "Heading2", a synthetic cross-format shape no odt defines. Read back, odf.js's readParagraphOrHeading derives both spellings from the one text:h, restoring the exact input.
+  it('writes a headingLevel paragraph as a real text:h, not a styled text:p, and round-trips it', () => {
+    const content = wordDoc([
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+        blocks: [
+          { kind: 'paragraph', styleId: 'Heading2', headingLevel: 2, runs: [{ text: 'Chapter' }] },
+          { kind: 'paragraph', runs: [{ text: 'Body' }] },
+        ],
+      },
+    ]);
+    const pkg = buildOdtPackage(content);
+    const [heading] = childrenWithTag(officeText(pkg), 'text:h');
+    expect(heading).toBeDefined();
+    expect(attr(heading!, 'text:outline-level')).toBe('2');
+    expect(attr(heading!, 'text:style-name')).toBe('Heading_20_2');
+    expect(childrenWithTag(officeText(pkg), 'text:p')).toHaveLength(1);
+    const roundTripped = readOdtContent(pkg);
+    if (roundTripped.kind !== 'wordprocessing') {
+      throw new Error('expected a wordprocessing ContentDocument');
+    }
+    expect(roundTripped.sections[0]!.blocks[0]).toMatchObject({ kind: 'paragraph', styleId: 'Heading2', headingLevel: 2, runs: [{ text: 'Chapter' }] });
+  });
+
+  // The promote lands BEFORE the applyStyleChange-based setters, so alignment resolves the heading style's own cascade and layers on top of it -- both facts then survive the round trip together, rather than the alignment intern repointing the paragraph away from its heading identity or vice versa.
+  it('layers paragraph properties on top of the promoted heading style', () => {
+    const content = wordDoc([
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+        blocks: [{ kind: 'paragraph', styleId: 'Heading1', headingLevel: 1, alignment: 'center', runs: [{ text: 'Title' }] }],
+      },
+    ]);
+    const roundTripped = readOdtContent(buildOdtPackage(content));
+    if (roundTripped.kind !== 'wordprocessing') {
+      throw new Error('expected a wordprocessing ContentDocument');
+    }
+    expect(roundTripped.sections[0]!.blocks[0]).toMatchObject({ kind: 'paragraph', headingLevel: 1, alignment: 'center' });
+  });
+
+  it('writes a headingLevel paragraph inside a list item as the text:h ODF allows there', () => {
+    const content = wordDoc([
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+        blocks: [{ kind: 'paragraph', list: { numId: 'L1', level: 0 }, headingLevel: 2, runs: [{ text: 'Item heading' }] }],
+      },
+    ]);
+    const pkg = buildOdtPackage(content);
+    // text:list-item directly contains its member text:p/text:h elements -- the heading sits inside the item, not beside the list.
+    expect(elementsWithTag([officeText(pkg)], 'text:h')).toHaveLength(1);
+    const roundTripped = readOdtContent(pkg);
+    if (roundTripped.kind !== 'wordprocessing') {
+      throw new Error('expected a wordprocessing ContentDocument');
+    }
+    expect(roundTripped.sections[0]!.blocks[0]).toMatchObject({ kind: 'paragraph', headingLevel: 2, list: { level: 0 }, runs: [{ text: 'Item heading' }] });
+  });
+
+  // odf.js's own reader reads table:table-cell content as text:p only (typed/shared/table.ts), so promoting a cell paragraph to text:h would write text its own reader cannot read back. The write side mirrors that scope: a cell heading stays a text:p carrying its text and the style reference, the heading level degrading exactly as the reader's own documented cell-scope gap does.
+  it('keeps a heading paragraph inside a table cell a text:p, mirroring odf.js\'s own cell reading scope', () => {
+    const content = wordDoc([
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+        blocks: [
+          {
+            kind: 'table',
+            columnWidthsPt: [100],
+            rows: [{ cells: [{ blocks: [{ kind: 'paragraph', styleId: 'Heading3', headingLevel: 3, runs: [{ text: 'Cell heading' }] }] }] }],
+          },
+        ],
+      },
+    ]);
+    const pkg = buildOdtPackage(content);
+    expect(elementsWithTag([contentRoot(pkg)], 'text:h')).toHaveLength(0);
+    const roundTripped = readOdtContent(pkg);
+    if (roundTripped.kind !== 'wordprocessing') {
+      throw new Error('expected a wordprocessing ContentDocument');
+    }
+    const table = roundTripped.sections[0]!.blocks[0];
+    if (table?.kind !== 'table') {
+      throw new Error('expected a table block');
+    }
+    expect(table.rows[0]!.cells[0]!.blocks[0]).toMatchObject({ kind: 'paragraph', styleId: 'Heading3', runs: [{ text: 'Cell heading' }] });
   });
 
   it('inserts a page break between sections', () => {
