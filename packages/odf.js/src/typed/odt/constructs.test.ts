@@ -124,8 +124,12 @@ describe('readOdtContent: TOC and index wrappers as index content controls', () 
       if (blocks[0]?.kind !== 'constructStart') {
         throw new Error('expected a constructStart marker');
       }
-      expect(blocks[0].descriptor.kind, tag).toBe('contentControl');
-      expect(blocks[0].descriptor.controlType, tag).toBe('index');
+      const descriptor = blocks[0].descriptor;
+      expect(descriptor.kind, tag).toBe('contentControl');
+      if (descriptor.kind !== 'contentControl') {
+        throw new Error('expected a content control descriptor');
+      }
+      expect(descriptor.controlType, tag).toBe('index');
     }
   });
 
