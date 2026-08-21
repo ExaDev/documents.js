@@ -435,6 +435,22 @@ describe('readDrawPageContent: draw:custom-shape presets', () => {
     expect(shapes[0]?.blocks[0]).toMatchObject({ kind: 'paragraph', runs: [{ text: 'Hello' }] });
   });
 
+  it('an unrecognised preset\'s whole draw:enhanced-geometry element quarantines in the salvaged text shape\'s residue, so the preset definition survives beside the approximation', () => {
+    const shape = el('draw:custom-shape', { 'draw:name': 'CustomSmiley1', 'svg:x': '0pt', 'svg:y': '0pt', 'svg:width': '50pt', 'svg:height': '30pt' }, [
+      el('text:p', {}, [txt('Hello')]),
+      el('draw:enhanced-geometry', { 'svg:viewBox': '0 0 21600 21600', 'draw:type': 'smiley', 'draw:enhanced-path': 'M 0 0 L 21600 0 21600 21600 0 21600 0 0 Z N' }),
+    ]);
+    const { shapes } = readDrawPageContent([shape], { parts: {} });
+    expect(shapes[0]?.source?.format).toBe('odg');
+    expect(shapes[0]?.source?.xml).toContain('<draw:enhanced-geometry');
+    expect(shapes[0]?.source?.xml).toContain('draw:type="smiley"');
+  });
+
+  it('a recognised preset\'s vector carries no residue -- the approximation replaces the enhanced-geometry wholesale', () => {
+    const { vectors } = readDrawPageContent([customShape('CustomRect1', 'rectangle')], { parts: {} });
+    expect(vectors[0]?.source).toBeUndefined();
+  });
+
   it('an unrecognised preset with NO real text content is skipped entirely -- nothing worth preserving', () => {
     const { shapes, vectors } = readDrawPageContent([customShape('CustomSmiley1', 'smiley')], { parts: {} });
     expect(shapes).toEqual([]);
