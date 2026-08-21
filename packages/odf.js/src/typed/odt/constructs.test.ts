@@ -382,6 +382,46 @@ describe('readOdtContent: anchored draw:frames in text flow', () => {
     expect(blocks[1].runs[0]?.text).toBe('Box paragraph.');
   });
 
+  it('extends a block-scoped bookmark ending after a paragraph\'s anchored frame over that frame\'s lifted block', () => {
+    // The bookmark-end physically follows the frame in the paragraph's own child order, so the bookmark's block extent covers the paragraph AND the frame's lifted block -- the lifted encoding places those blocks after the paragraph precisely because they sat inside the bookmark's physical range.
+    const pkg = odtPackage([
+      el('text:p', {}, [
+        el('text:bookmark-start', { 'text:name': 'around-frame' }),
+        txt('Anchoring text '),
+        el('draw:frame', { 'text:anchor-type': 'as-char', 'svg:width': '2cm', 'svg:height': '1cm' }, [
+          el('draw:image', { 'xlink:href': 'Pictures/image1.png' }),
+        ]),
+        el('text:bookmark-end', { 'text:name': 'around-frame' }),
+      ]),
+      paragraph('after'),
+    ]);
+    pkg.parts['Pictures/image1.png'] = { kind: 'binary', base64: PNG_BASE64 };
+    const blocks = firstSectionBlocks(pkg);
+    expect(blocks.map((block) => block.kind)).toEqual(['constructStart', 'paragraph', 'image', 'constructEnd', 'paragraph']);
+    if (blocks[0]?.kind !== 'constructStart') {
+      throw new Error('expected the bookmark\'s constructStart marker');
+    }
+    expect(blocks[0].descriptor).toEqual({ kind: 'anchor', anchorType: 'bookmark', name: 'around-frame' });
+  });
+
+  it('excludes a paragraph\'s lifted frame from a bookmark whose end physically precedes the frame', () => {
+    // The frame follows the bookmark-end in child order, so it sits outside the bookmark's physical range even though a draw:frame is not "content" for the paragraph-edge test -- the trailing half's extent stops before the lifted block.
+    const pkg = odtPackage([
+      el('text:p', {}, [
+        el('text:bookmark-start', { 'text:name': 'before-frame' }),
+        txt('Anchoring text '),
+        el('text:bookmark-end', { 'text:name': 'before-frame' }),
+        el('draw:frame', { 'text:anchor-type': 'as-char', 'svg:width': '2cm', 'svg:height': '1cm' }, [
+          el('draw:image', { 'xlink:href': 'Pictures/image1.png' }),
+        ]),
+      ]),
+      paragraph('after'),
+    ]);
+    pkg.parts['Pictures/image1.png'] = { kind: 'binary', base64: PNG_BASE64 };
+    const blocks = firstSectionBlocks(pkg);
+    expect(blocks.map((block) => block.kind)).toEqual(['constructStart', 'paragraph', 'constructEnd', 'image', 'paragraph']);
+  });
+
   it('reads an embedded formula frame as a ContentEmbeddedObjectBlock carrying the formula document', () => {
     const mathml = el('math', {}, [el('mrow', {}, [el('mi', {}, [txt('x')])])]);
     const pkg = odtPackage([

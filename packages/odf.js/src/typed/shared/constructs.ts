@@ -204,8 +204,8 @@ function edgePosition(siblings: readonly XmlNode[], index: number): 'leading' | 
   return 'trailing';
 }
 
-// The block index a block-scoped half opens or closes at: a leading half sits at its own paragraph's block position, a trailing one just past it (so a leading start with a trailing end in the same paragraph brackets exactly that paragraph). Undefined when the half is not block-scoped -- interior to the paragraph's run sequence, or nested inside a container element.
-export function odfMarkerHalfEventIndex(half: OdfMarkerHalf, paragraphElement: XmlElement, paragraphStartIndex: number): number | undefined {
+// The block index a block-scoped half opens or closes at: a leading half sits at its own paragraph's block position, a trailing one just past it (so a leading start with a trailing end in the same paragraph brackets exactly that paragraph), advanced past the lifted-frame blocks that physically precede the half in the paragraph's own child order -- a reader that lifts a paragraph's anchored frames to blocks after it passes that count, so a bookmark ending after a frame covers the frame's block while one ending before it does not. Undefined when the half is not block-scoped -- interior to the paragraph's run sequence, or nested inside a container element.
+export function odfMarkerHalfEventIndex(half: OdfMarkerHalf, paragraphElement: XmlElement, paragraphStartIndex: number, liftedBlocksBeforeHalf = 0): number | undefined {
   if (half.parent !== paragraphElement) {
     return undefined;
   }
@@ -217,7 +217,7 @@ export function odfMarkerHalfEventIndex(half: OdfMarkerHalf, paragraphElement: X
   if (edge === 'leading') {
     return paragraphStartIndex;
   }
-  return edge === 'trailing' ? paragraphStartIndex + 1 : undefined;
+  return edge === 'trailing' ? paragraphStartIndex + 1 + liftedBlocksBeforeHalf : undefined;
 }
 
 // Whether a half brackets whole blocks rather than a run sub-sequence: a direct child of the paragraph sitting outside every content-bearing sibling. A half whose parent is not the paragraph element (one nested inside a text:span or text:a) is never block-scoped, since its parent is itself content.
@@ -343,7 +343,7 @@ export function insertOdfConstructMarkers(blocks: readonly ContentBlock[], exten
   return out;
 }
 
-// A marker half promoted to block scope: the block index it opens or closes at (a leading half at its own paragraph's position, a trailing one just past it -- mirroring how ooxml.js's bookmark events index a leading half at the paragraph and a trailing one at endIndex), whether it actually qualified, and the discovery order.
+// A marker half promoted to block scope: the block index it opens or closes at (a leading half at its own paragraph's position, a trailing one just past it, advanced past the lifted-frame blocks physically preceding the half -- mirroring how ooxml.js's bookmark events index a leading half at the paragraph and a trailing one at endIndex), whether it actually qualified, and the discovery order.
 export interface OdfMarkerEvent {
   readonly kind: OdfMarkerKind;
   readonly side: 'start' | 'end';
