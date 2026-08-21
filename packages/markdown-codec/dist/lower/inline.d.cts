@@ -1,19 +1,16 @@
 import { v as MarkdownInlineNode } from "../ast-8XCbjRQT.cjs";
-import { i as MarkdownDiagnosticSink } from "../diagnostics-BWK1iGy7.cjs";
-import { ContentRun } from "document-schema.js";
+import { i as MarkdownDiagnosticSink } from "../diagnostics-DFP4B9ma.cjs";
+import { ContentRun, RunConstructExtent } from "document-schema.js";
 //#region src/lower/inline.d.ts
 interface InlineLowerContext {
   readonly sink: MarkdownDiagnosticSink;
   readonly rawHtml: 'preserve' | 'drop';
 }
-interface RunStyle {
-  readonly bold?: boolean;
-  readonly italic?: boolean;
-  readonly strike?: boolean;
-  readonly hyperlink?: string;
+interface InlineLowerResult {
+  readonly runs: ContentRun[];
+  readonly linkTitleExtents: readonly RunConstructExtent[];
 }
-declare function lowerInlineNode(node: MarkdownInlineNode, style: RunStyle, context: InlineLowerContext): ContentRun[];
-declare function lowerInlineNodes(nodes: readonly MarkdownInlineNode[], context: InlineLowerContext): ContentRun[];
+declare function lowerInlineNodes(nodes: readonly MarkdownInlineNode[], context: InlineLowerContext): InlineLowerResult;
 declare function lowerCodeBlockRun(literal: string): ContentRun;
 //#endregion
-export { InlineLowerContext, lowerCodeBlockRun, lowerInlineNode, lowerInlineNodes };
+export { InlineLowerContext, InlineLowerResult, lowerCodeBlockRun, lowerInlineNodes };

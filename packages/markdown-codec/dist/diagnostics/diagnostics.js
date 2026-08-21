@@ -11,7 +11,6 @@ const MarkdownDiagnosticCodes = {
 	INVENTED_PAGE_GEOMETRY: "md/invented-page-geometry",
 	NESTED_EMPHASIS_FLATTENED: "md/nested-emphasis-flattened",
 	LINK_TITLE_DROPPED: "md/link-title-dropped",
-	CODE_BLOCK_INFO_STRING_DROPPED: "md/code-block-info-string-dropped",
 	BLOCKQUOTE_NESTED_DEPTH: "md/blockquote-nested-depth",
 	LIST_ITEM_BLOCK_UNLISTED: "md/list-item-block-unlisted",
 	LIST_ITEM_MULTI_BLOCK_FLATTENED: "md/list-item-multi-block-flattened",
@@ -83,6 +82,16 @@ var MarkdownUnbalancedConstructMarkersError = class extends MarkdownWriteError {
 		this.blockIndex = blockIndex;
 	}
 };
+var MarkdownInvalidRunConstructExtentError = class extends MarkdownWriteError {
+	faultKind;
+	entryIndex;
+	constructor(faultKind, entryIndex) {
+		super("md/run-construct-extent-invalid", `a paragraph's run-level construct extent ${faultKind === "invertedRange" ? "ends before it starts" : "reaches outside the paragraph's own runs"} (constructs entry ${String(entryIndex)}); a run extent must name real runs in 0..runs.length`);
+		this.name = "MarkdownInvalidRunConstructExtentError";
+		this.faultKind = faultKind;
+		this.entryIndex = entryIndex;
+	}
+};
 var MarkdownUnsupportedDocumentKindError = class extends MarkdownWriteError {
 	kind;
 	constructor(kind) {
@@ -99,4 +108,4 @@ var MarkdownPackageFlattenError = class extends MarkdownWriteError {
 	}
 };
 //#endregion
-export { MarkdownDiagnosticCodes, MarkdownInputTooLargeError, MarkdownInvalidUtf8Error, MarkdownNestingLimitExceededError, MarkdownPackageFlattenError, MarkdownParseError, MarkdownUnbalancedConstructMarkersError, MarkdownUnsupportedDocumentKindError, MarkdownWriteError, NOOP_MARKDOWN_DIAGNOSTIC_SINK };
+export { MarkdownDiagnosticCodes, MarkdownInputTooLargeError, MarkdownInvalidRunConstructExtentError, MarkdownInvalidUtf8Error, MarkdownNestingLimitExceededError, MarkdownPackageFlattenError, MarkdownParseError, MarkdownUnbalancedConstructMarkersError, MarkdownUnsupportedDocumentKindError, MarkdownWriteError, NOOP_MARKDOWN_DIAGNOSTIC_SINK };

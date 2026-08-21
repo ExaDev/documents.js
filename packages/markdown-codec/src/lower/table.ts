@@ -12,13 +12,14 @@ function toParagraphAlignment(alignment: MarkdownTableAlignment): Alignment | un
 }
 
 function lowerTableCell(cell: MarkdownTableCellNode, alignment: MarkdownTableAlignment | undefined, context: InlineLowerContext): ContentTableCell {
-  const runs = lowerInlineNodes(cell.children, context);
+  const inline = lowerInlineNodes(cell.children, context);
   const paragraphAlignment = toParagraphAlignment(alignment ?? 'none');
   return {
     blocks: [
       {
         kind: 'paragraph',
-        runs,
+        runs: inline.runs,
+        ...(inline.linkTitleExtents.length > 0 ? { constructs: [...inline.linkTitleExtents] } : {}),
         ...(paragraphAlignment === undefined ? {} : { alignment: paragraphAlignment }),
       },
     ],

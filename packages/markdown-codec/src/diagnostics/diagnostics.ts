@@ -129,6 +129,21 @@ export class MarkdownUnbalancedConstructMarkersError extends MarkdownWriteError 
   }
 }
 
+// Thrown by writeMarkdown/writeMarkdownContent when a paragraph's run-level construct extent (document-schema.js's RunConstructExtent, ContentParagraph.constructs) does not name real runs -- an inverted range, or bounds reaching outside 0..runs.length. The run-level twin of MarkdownUnbalancedConstructMarkersError, detected through document-schema.js's own findRunConstructFault for the same reason that check uses findConstructMarkerImbalance: one shared definition of "well-formed" every codec and consumer agrees on. The throw tier rather than a degrade because a range that names no real runs has no position to render anything at -- guessing one would silently move a construct onto runs the producer never pointed it at.
+export class MarkdownInvalidRunConstructExtentError extends MarkdownWriteError {
+  // Which way the range was faulty and the offending entry's own index in the paragraph's constructs array -- carried verbatim from findRunConstructFault so a caller can locate it without re-running the walk.
+  readonly faultKind: 'invertedRange' | 'beyondRuns';
+  readonly entryIndex: number;
+
+  constructor(faultKind: 'invertedRange' | 'beyondRuns', entryIndex: number) {
+    const description = faultKind === 'invertedRange' ? 'ends before it starts' : 'reaches outside the paragraph\'s own runs';
+    super('md/run-construct-extent-invalid', `a paragraph's run-level construct extent ${description} (constructs entry ${String(entryIndex)}); a run extent must name real runs in 0..runs.length`);
+    this.name = 'MarkdownInvalidRunConstructExtentError';
+    this.faultKind = faultKind;
+    this.entryIndex = entryIndex;
+  }
+}
+
 // Thrown by writeMarkdown when handed a ContentDocument whose kind is not 'wordprocessing' -- markdown has no presentation/spreadsheet/drawing equivalent to render, matching ooxml.js's buildXlsxPackage's own "throw outright for the wrong document kind" convention (see documents.js's src/ooxml/xlsx precedent) rather than accepting a value a caller would need to pre-check themselves. Extends MarkdownWriteError, not MarkdownParseError -- this is a write-time failure (writeMarkdown's own entry point), never reachable from readMarkdown at all.
 export class MarkdownUnsupportedDocumentKindError extends MarkdownWriteError {
   readonly kind: string;

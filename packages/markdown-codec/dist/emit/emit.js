@@ -1,14 +1,17 @@
 import { isValidFootnoteLabel } from "../inline/footnote.js";
 import "../defaults/defaults.js";
-import { MarkdownDiagnosticCodes, MarkdownUnbalancedConstructMarkersError, MarkdownUnsupportedDocumentKindError, NOOP_MARKDOWN_DIAGNOSTIC_SINK } from "../diagnostics/diagnostics.js";
+import { MarkdownDiagnosticCodes, MarkdownInvalidRunConstructExtentError, MarkdownUnbalancedConstructMarkersError, MarkdownUnsupportedDocumentKindError, NOOP_MARKDOWN_DIAGNOSTIC_SINK } from "../diagnostics/diagnostics.js";
 import { parseListNumId } from "../shared/list-id.js";
 import { CODE_BLOCK_STYLE_ID, HORIZONTAL_RULE_STYLE_ID, HTML_PREFORMATTED_STYLE_ID, MATH_BLOCK_STYLE_ID, QUOTE_STYLE_ID, parseHeadingStyleId } from "../shared/style-constants.js";
 import { emitFrontMatter } from "./front-matter.js";
-import { emitRuns } from "./inline.js";
+import { emitRuns, escapeLinkDestination, escapeMarkdownText, renderLinkTitle } from "./inline.js";
 import { emitImage } from "./image.js";
 import { emitTable } from "./table.js";
-import { clampHeadingLevel, findConstructMarkerImbalance } from "document-schema.js";
+import { clampHeadingLevel, findConstructMarkerImbalance, findRunConstructFault } from "document-schema.js";
 //#region src/emit/emit.ts
+function isDataUri(destination) {
+	return destination.startsWith("data:");
+}
 const MAX_SETEXT_LEVEL = 2;
 const SETEXT_LEVEL_1_CHAR = "=";
 const SETEXT_LEVEL_2_CHAR = "-";
@@ -51,7 +54,10 @@ function renderParagraphBody(paragraph, context) {
 	if (paragraph.styleId === "CodeBlock") {
 		const literal = paragraph.runs.map((run) => run.text).join("");
 		const fence = codeFenceFor(literal, context.codeFenceChar);
-		return literal.length === 0 ? `${fence}\n${fence}` : `${fence}\n${literal}\n${fence}`;
+		const remainder = paragraph.source?.format === "markdown" ? paragraph.source.xml : void 0;
+		const info = [paragraph.codeLanguage, remainder].filter((part) => part !== void 0 && part.length > 0).join(" ");
+		const opening = info.length > 0 ? `${fence} ${info}` : fence;
+		return literal.length === 0 ? `${opening}\n${fence}` : `${opening}\n${literal}\n${fence}`;
 	}
 	if (paragraph.styleId === "HTMLPreformatted") return paragraph.runs.map((run) => run.text).join("");
 	if (paragraph.styleId === "MathBlock") return `$$\n${paragraph.runs.map((run) => run.text).join("")}\n$$`;
@@ -63,11 +69,11 @@ function renderParagraphBody(paragraph, context) {
 			severity: "info",
 			message: `heading level ${String(headingLevel)} exceeds ATX's own six-"#" ceiling and is clamped to ${String(level)}`
 		});
-		const text = emitRuns(paragraph.runs, context);
+		const text = emitRuns(paragraph.runs, context, paragraph.constructs);
 		if (context.headingStyle === "setext" && level <= MAX_SETEXT_LEVEL) return renderSetextHeading(level, text);
 		return `${"#".repeat(level)} ${text}`;
 	}
-	return emitRuns(paragraph.runs, context);
+	return emitRuns(paragraph.runs, context, paragraph.constructs);
 }
 function renderParagraph(paragraph, context) {
 	const body = renderParagraphBody(paragraph, context);
@@ -232,9 +238,9 @@ function renderFootnoteDefinition(name, body) {
 	return [`${marker} ${firstLine}`, ...restLines.map((line) => line.length === 0 ? line : `${indent}${line}`)].join("\n");
 }
 function renderConstruct(item, context) {
-	const body = renderItems(item.children, context);
 	const { descriptor } = item;
 	if (descriptor.kind === "anchor" && descriptor.anchorType === "footnote") {
+		const body = renderItems(item.children, context);
 		if (isValidFootnoteLabel(descriptor.name)) return renderFootnoteDefinition(descriptor.name, body);
 		context.sink({
 			code: MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
@@ -243,6 +249,12 @@ function renderConstruct(item, context) {
 		});
 		return body;
 	}
+	if (descriptor.kind === "link" && descriptor.target.kind === "external") {
+		const onlyChild = item.children.length === 1 && !isConstructItem(item.children[0]) ? item.children[0].block : void 0;
+		if (onlyChild?.kind === "image" && !isDataUri(descriptor.target.uri)) return `![${escapeMarkdownText(onlyChild.altText ?? "")}](${escapeLinkDestination(descriptor.target.uri)}${descriptor.title === void 0 ? "" : ` "${renderLinkTitle(descriptor.title)}"`})`;
+		if (onlyChild?.kind === "image" && isDataUri(descriptor.target.uri) && !context.embedImages) return emitImage(onlyChild, false);
+	}
+	const body = renderItems(item.children, context);
 	const detail = descriptor.kind === "anchor" ? `${descriptor.kind} (${descriptor.anchorType})` : descriptor.kind;
 	context.sink({
 		code: MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
@@ -283,7 +295,17 @@ function renderItems(items, context) {
 function emitBlocks(blocks, context) {
 	const imbalance = findConstructMarkerImbalance(blocks);
 	if (imbalance !== void 0) throw new MarkdownUnbalancedConstructMarkersError(imbalance.kind, imbalance.index);
+	validateRunConstructExtents(blocks);
 	return renderItems(groupConstructItems(blocks, 0).items, context);
+}
+function validateRunConstructExtents(blocks) {
+	for (const block of blocks) {
+		if (block.kind === "paragraph" && block.constructs !== void 0) {
+			const fault = findRunConstructFault(block);
+			if (fault !== void 0) throw new MarkdownInvalidRunConstructExtentError(fault.kind, fault.index);
+		}
+		if (block.kind === "table") for (const row of block.rows) for (const cell of row.cells) validateRunConstructExtents(cell.blocks);
+	}
 }
 function emitMarkdown(document, options = {}) {
 	if (document.kind !== "wordprocessing") throw new MarkdownUnsupportedDocumentKindError(document.kind);

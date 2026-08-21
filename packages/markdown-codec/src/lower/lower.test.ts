@@ -206,6 +206,72 @@ describe('images', () => {
   });
 });
 
+describe('link and image titles (the `link` construct annotation)', () => {
+  it('carries an inline link title as a run-level link construct extent over the link\'s own runs, hyperlink untouched on the runs', () => {
+    const block = paragraph(blocks('[text](http://example.com "the title")')[0]);
+    expect(block.runs).toEqual([{ text: 'text', hyperlink: 'http://example.com' }]);
+    expect(block.constructs).toEqual([
+      { descriptor: { kind: 'link', target: { kind: 'external', uri: 'http://example.com' }, title: 'the title' }, startRun: 0, endRun: 1 },
+    ]);
+  });
+
+  it('carries a reference link title from its definition once resolved, same shape as an inline title', () => {
+    const block = paragraph(blocks('[text][label]\n\n[label]: /url "ref title"')[0]);
+    expect(block.constructs).toEqual([
+      { descriptor: { kind: 'link', target: { kind: 'external', uri: '/url' }, title: 'ref title' }, startRun: 0, endRun: 1 },
+    ]);
+  });
+
+  it('scopes the extent to the link\'s own runs when the link sits inside emphasis, with surrounding runs outside it', () => {
+    const block = paragraph(blocks('a **b [c](/u "t") d** e')[0]);
+    expect(block.constructs).toEqual([
+      { descriptor: { kind: 'link', target: { kind: 'external', uri: '/u' }, title: 't' }, startRun: 2, endRun: 3 },
+    ]);
+  });
+
+  it('records one extent per titled link, ranges naming each link\'s own run span', () => {
+    const block = paragraph(blocks('[one](/1 "a") middle [two](/2 "b")')[0]);
+    expect(block.constructs).toEqual([
+      { descriptor: { kind: 'link', target: { kind: 'external', uri: '/1' }, title: 'a' }, startRun: 0, endRun: 1 },
+      { descriptor: { kind: 'link', target: { kind: 'external', uri: '/2' }, title: 'b' }, startRun: 2, endRun: 3 },
+    ]);
+  });
+
+  it('leaves the constructs field absent for an untitled link', () => {
+    const block = paragraph(blocks('[text](/u)')[0]);
+    expect(block.constructs).toBeUndefined();
+  });
+
+  it('carries a titled link inside a heading and inside a table cell, both paragraph positions', () => {
+    const heading = paragraph(blocks('# [t](/u "h")')[0]);
+    expect(heading.constructs).toHaveLength(1);
+    const table = blocks('| [t](/u "c") |\n| --- |\n| x |')[0];
+    if (table?.kind !== 'table') throw new Error('expected a table block');
+    const cell = table.rows[0]?.cells[0]?.blocks[0];
+    if (cell?.kind !== 'paragraph') throw new Error('expected a cell paragraph');
+    expect(cell.constructs).toHaveLength(1);
+  });
+
+  it('wraps a titled resolved image in a block-scoped link construct pair carrying the original destination and title', () => {
+    const onePixelPng = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+    const result = blocks(`![alt](${onePixelPng} "img title")`);
+    expect(result.map((block) => block.kind)).toEqual(['constructStart', 'image', 'constructEnd']);
+    const start = result[0];
+    if (start?.kind !== 'constructStart') throw new Error('expected a constructStart');
+    expect(start.descriptor).toEqual({ kind: 'link', target: { kind: 'external', uri: onePixelPng }, title: 'img title' });
+  });
+
+  it('still drops the title of a nested image (inside a link) and an unresolved top-level image, one LINK_TITLE_DROPPED each', () => {
+    const collector = createDiagnosticCollector();
+    const nested = paragraph(blocks('[![alt](/img.png "nested title")](/page)', { sink: collector.sink })[0]);
+    expect(nested.constructs).toBeUndefined();
+    const unresolved = blocks('![alt](/no.png "dropped title")\n\ntext', { sink: collector.sink, images: () => undefined })[0];
+    if (unresolved?.kind !== 'paragraph') throw new Error('expected the degraded image run paragraph');
+    expect(unresolved.constructs).toBeUndefined();
+    expect(collector.codes().filter((code) => code === MarkdownDiagnosticCodes.LINK_TITLE_DROPPED)).toHaveLength(2);
+  });
+});
+
 describe('raw HTML', () => {
   it('preserves block-level HTML as literal text by default, styled HTMLPreformatted', () => {
     const block = paragraph(blocks('<div>\nfoo\n</div>')[0]);
@@ -244,9 +310,9 @@ describe('gaps (MarkdownDiagnosticCodes)', () => {
     expect(runs.find((run) => run.text === 'b')).toMatchObject({ italic: true });
   });
 
-  it('LINK_TITLE_DROPPED fires for a link title', () => {
+  it('LINK_TITLE_DROPPED fires for the one titled shape left with nowhere to ride -- a nested image inside a link', () => {
     const collector = createDiagnosticCollector();
-    blocks('[text](http://example.com "a title")', { sink: collector.sink });
+    blocks('[![alt](/img.png "t")](/page)', { sink: collector.sink });
     expect(collector.has(MarkdownDiagnosticCodes.LINK_TITLE_DROPPED)).toBe(true);
   });
 

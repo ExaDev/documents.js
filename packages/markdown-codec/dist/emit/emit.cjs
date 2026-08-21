@@ -10,6 +10,9 @@ const require_emit_image = require("./image.cjs");
 const require_emit_table = require("./table.cjs");
 let document_schema_js = require("document-schema.js");
 //#region src/emit/emit.ts
+function isDataUri(destination) {
+	return destination.startsWith("data:");
+}
 const MAX_SETEXT_LEVEL = 2;
 const SETEXT_LEVEL_1_CHAR = "=";
 const SETEXT_LEVEL_2_CHAR = "-";
@@ -52,7 +55,10 @@ function renderParagraphBody(paragraph, context) {
 	if (paragraph.styleId === "CodeBlock") {
 		const literal = paragraph.runs.map((run) => run.text).join("");
 		const fence = codeFenceFor(literal, context.codeFenceChar);
-		return literal.length === 0 ? `${fence}\n${fence}` : `${fence}\n${literal}\n${fence}`;
+		const remainder = paragraph.source?.format === "markdown" ? paragraph.source.xml : void 0;
+		const info = [paragraph.codeLanguage, remainder].filter((part) => part !== void 0 && part.length > 0).join(" ");
+		const opening = info.length > 0 ? `${fence} ${info}` : fence;
+		return literal.length === 0 ? `${opening}\n${fence}` : `${opening}\n${literal}\n${fence}`;
 	}
 	if (paragraph.styleId === "HTMLPreformatted") return paragraph.runs.map((run) => run.text).join("");
 	if (paragraph.styleId === "MathBlock") return `$$\n${paragraph.runs.map((run) => run.text).join("")}\n$$`;
@@ -64,11 +70,11 @@ function renderParagraphBody(paragraph, context) {
 			severity: "info",
 			message: `heading level ${String(headingLevel)} exceeds ATX's own six-"#" ceiling and is clamped to ${String(level)}`
 		});
-		const text = require_emit_inline.emitRuns(paragraph.runs, context);
+		const text = require_emit_inline.emitRuns(paragraph.runs, context, paragraph.constructs);
 		if (context.headingStyle === "setext" && level <= MAX_SETEXT_LEVEL) return renderSetextHeading(level, text);
 		return `${"#".repeat(level)} ${text}`;
 	}
-	return require_emit_inline.emitRuns(paragraph.runs, context);
+	return require_emit_inline.emitRuns(paragraph.runs, context, paragraph.constructs);
 }
 function renderParagraph(paragraph, context) {
 	const body = renderParagraphBody(paragraph, context);
@@ -233,9 +239,9 @@ function renderFootnoteDefinition(name, body) {
 	return [`${marker} ${firstLine}`, ...restLines.map((line) => line.length === 0 ? line : `${indent}${line}`)].join("\n");
 }
 function renderConstruct(item, context) {
-	const body = renderItems(item.children, context);
 	const { descriptor } = item;
 	if (descriptor.kind === "anchor" && descriptor.anchorType === "footnote") {
+		const body = renderItems(item.children, context);
 		if (require_inline_footnote.isValidFootnoteLabel(descriptor.name)) return renderFootnoteDefinition(descriptor.name, body);
 		context.sink({
 			code: require_diagnostics_diagnostics.MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
@@ -244,6 +250,12 @@ function renderConstruct(item, context) {
 		});
 		return body;
 	}
+	if (descriptor.kind === "link" && descriptor.target.kind === "external") {
+		const onlyChild = item.children.length === 1 && !isConstructItem(item.children[0]) ? item.children[0].block : void 0;
+		if (onlyChild?.kind === "image" && !isDataUri(descriptor.target.uri)) return `![${require_emit_inline.escapeMarkdownText(onlyChild.altText ?? "")}](${require_emit_inline.escapeLinkDestination(descriptor.target.uri)}${descriptor.title === void 0 ? "" : ` "${require_emit_inline.renderLinkTitle(descriptor.title)}"`})`;
+		if (onlyChild?.kind === "image" && isDataUri(descriptor.target.uri) && !context.embedImages) return require_emit_image.emitImage(onlyChild, false);
+	}
+	const body = renderItems(item.children, context);
 	const detail = descriptor.kind === "anchor" ? `${descriptor.kind} (${descriptor.anchorType})` : descriptor.kind;
 	context.sink({
 		code: require_diagnostics_diagnostics.MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED,
@@ -284,7 +296,17 @@ function renderItems(items, context) {
 function emitBlocks(blocks, context) {
 	const imbalance = (0, document_schema_js.findConstructMarkerImbalance)(blocks);
 	if (imbalance !== void 0) throw new require_diagnostics_diagnostics.MarkdownUnbalancedConstructMarkersError(imbalance.kind, imbalance.index);
+	validateRunConstructExtents(blocks);
 	return renderItems(groupConstructItems(blocks, 0).items, context);
+}
+function validateRunConstructExtents(blocks) {
+	for (const block of blocks) {
+		if (block.kind === "paragraph" && block.constructs !== void 0) {
+			const fault = (0, document_schema_js.findRunConstructFault)(block);
+			if (fault !== void 0) throw new require_diagnostics_diagnostics.MarkdownInvalidRunConstructExtentError(fault.kind, fault.index);
+		}
+		if (block.kind === "table") for (const row of block.rows) for (const cell of row.cells) validateRunConstructExtents(cell.blocks);
+	}
 }
 function emitMarkdown(document, options = {}) {
 	if (document.kind !== "wordprocessing") throw new require_diagnostics_diagnostics.MarkdownUnsupportedDocumentKindError(document.kind);

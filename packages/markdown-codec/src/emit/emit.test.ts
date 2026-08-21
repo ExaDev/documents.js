@@ -1,15 +1,15 @@
 // Construct-by-construct tests for the ContentDocument -> markdown emission stage (src/emit/emit.ts), the structural inverse of src/lower/lower.test.ts. Most tests here build a ContentDocument directly (bypassing src/lower entirely) so each construct -- including a cross-format shape src/lower itself never produces, like a paragraph with indentLeftPt but no quotable styleId -- can be exercised in isolation; a handful round-trip through src/lower/lower.ts first where that is the more natural way to obtain a real value (a code span run, a task-list item).
 
-import type { ContentDocument, ContentImageBlock, ContentParagraph, ContentTable } from 'document-schema.js';
+import type { ContentBlock, ContentDocument, ContentImageBlock, ContentTable } from 'document-schema.js';
 import { PAGE_SIZE_A4 } from 'document-schema.js';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_MARGINS } from '../defaults/defaults';
-import { MarkdownDiagnosticCodes } from '../diagnostics/diagnostics';
+import { MarkdownDiagnosticCodes, MarkdownInvalidRunConstructExtentError } from '../diagnostics/diagnostics';
 import { lowerMarkdown } from '../lower/lower';
 import { createDiagnosticCollector } from '../test-support/diagnostics';
 import { emitMarkdown } from './emit';
 
-function doc(blocks: readonly (ContentParagraph | ContentTable | ContentImageBlock)[]): ContentDocument {
+function doc(blocks: readonly ContentBlock[]): ContentDocument {
   return {
     kind: 'wordprocessing',
     metadata: {},
@@ -190,6 +190,77 @@ describe('round trip through src/lower', () => {
     const second = lowerMarkdown(markdown);
     expect(second).toEqual(first);
     expect(markdown).not.toContain('\\(');
+  });
+});
+
+describe('link and image titles (the `link` construct annotation)', () => {
+  it('renders a titled link group as [text](dest "title"), reading the title from the covering run-level extent', () => {
+    const markdown = emitMarkdown(doc([
+      { kind: 'paragraph', runs: [{ text: 'text', hyperlink: '/u' }], constructs: [{ descriptor: { kind: 'link', target: { kind: 'external', uri: '/u' }, title: 'the title' }, startRun: 0, endRun: 1 }] },
+    ]));
+    expect(markdown).toBe('[text](/u "the title")');
+  });
+
+  it('uses the bracket form for an autolink-shaped run when a title extent covers it, since <...> has no title slot, and the text escapes as ordinary link text does', () => {
+    const markdown = emitMarkdown(doc([
+      { kind: 'paragraph', runs: [{ text: 'http://x', hyperlink: 'http://x' }], constructs: [{ descriptor: { kind: 'link', target: { kind: 'external', uri: 'http://x' }, title: 't' }, startRun: 0, endRun: 1 }] },
+    ]));
+    expect(markdown).toBe('[http\\:\\/\\/x](http://x "t")');
+  });
+
+  it('escapes double quotes and backslashes inside a rendered title', () => {
+    const markdown = emitMarkdown(doc([
+      { kind: 'paragraph', runs: [{ text: 'text', hyperlink: '/u' }], constructs: [{ descriptor: { kind: 'link', target: { kind: 'external', uri: '/u' }, title: 'say "hi" \\ done' }, startRun: 0, endRun: 1 }] },
+    ]));
+    expect(markdown).toBe('[text](/u "say \\"hi\\" \\\\ done")');
+  });
+
+  it('preserves a titled link byte for byte across a full lower -> emit -> lower round trip', () => {
+    for (const source of ['[text](/u "the title")', '[one](/1 "a") middle [two](/2 "b")']) {
+      const first = lowerMarkdown(source);
+      const markdown = emitMarkdown(first);
+      expect(markdown).toBe(source);
+      expect(lowerMarkdown(markdown)).toEqual(first);
+    }
+  });
+
+  it('preserves a titled link inside emphasis semantically -- the emit side re-spells the emphasis boundaries around the hyperlink group exactly as it already does for an untitled one, and the reparse reproduces the identical document', () => {
+    const first = lowerMarkdown('a **b [c](/u "t") d** e');
+    const markdown = emitMarkdown(first);
+    expect(lowerMarkdown(markdown)).toEqual(first);
+  });
+
+  it('renders a link construct wrapping exactly one image block as ![alt](dest "title"), restoring the original destination instead of re-embedding bytes', () => {
+    const blocks: ContentBlock[] = [
+      { kind: 'constructStart', descriptor: { kind: 'link', target: { kind: 'external', uri: 'https://example.com/a.png' }, title: 'img title' } },
+      { kind: 'image', format: 'png', base64: 'AAAA', widthPt: 1, heightPt: 1, altText: 'alt' },
+      { kind: 'constructEnd' },
+    ];
+    // A remote destination carries no bytes, so images: false (an "omit the bytes" switch) still renders it.
+    expect(emitMarkdown(doc(blocks), { images: false })).toBe('![alt](https://example.com/a.png "img title")');
+    expect(emitMarkdown(doc(blocks))).toBe('![alt](https://example.com/a.png "img title")');
+  });
+
+  it('falls back to the plain no-bytes image rendering when the construct destination is itself a data: URI and images: false asks for no bytes', () => {
+    const blocks: ContentBlock[] = [
+      { kind: 'constructStart', descriptor: { kind: 'link', target: { kind: 'external', uri: 'data:image/png;base64,QQ==' }, title: 't' } },
+      { kind: 'image', format: 'png', base64: 'QQ==', widthPt: 1, heightPt: 1, altText: 'alt' },
+      { kind: 'constructEnd' },
+    ];
+    expect(emitMarkdown(doc(blocks), { images: false })).toBe('![alt]()');
+  });
+
+  it('throws for a paragraph whose run-level construct extent does not name real runs', () => {
+    expect(() => {
+      emitMarkdown(doc([
+        { kind: 'paragraph', runs: [{ text: 'text', hyperlink: '/u' }], constructs: [{ descriptor: { kind: 'link', target: { kind: 'external', uri: '/u' }, title: 't' }, startRun: 0, endRun: 5 }] },
+      ]));
+    }).toThrow(MarkdownInvalidRunConstructExtentError);
+    expect(() => {
+      emitMarkdown(doc([
+        { kind: 'paragraph', runs: [{ text: 'text', hyperlink: '/u' }], constructs: [{ descriptor: { kind: 'link', target: { kind: 'external', uri: '/u' }, title: 't' }, startRun: 2, endRun: 1 }] },
+      ]));
+    }).toThrow(/ends before it starts/);
   });
 });
 
