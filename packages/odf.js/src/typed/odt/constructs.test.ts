@@ -139,3 +139,176 @@ describe('readOdtContent: TOC and index wrappers as index content controls', () 
     expect(blocks.filter((block) => block.kind === 'paragraph').map((block) => (block.kind === 'paragraph' ? block.runs[0]?.text : undefined))).toEqual(['Contents', 'Chapter One..........1']);
   });
 });
+
+describe('readOdtContent: tracked changes as provenance constructs', () => {
+  const REGIONS: XmlElement[] = [
+    el('text:tracked-changes', {}, [
+      el('text:changed-region', { 'xml:id': 'ins1' }, [
+        el('text:insertion', {}, [el('office:change-info', {}, [el('dc:creator', {}, [txt('A. Reviewer')]), el('dc:date', {}, [txt('2026-08-19T09:30:00')])])]),
+      ]),
+      el('text:changed-region', { 'xml:id': 'del1' }, [
+        el('text:deletion', {}, [el('office:change-info', {}, [el('dc:creator', {}, [txt('D. Editor')]), el('dc:date', {}, [txt('2026-08-19T10:00:00')])])]),
+      ]),
+    ]),
+  ];
+
+  it('reads a point text:change as a run-level provenance extent resolved from its changed-region', () => {
+    const pkg = odtPackage([...REGIONS, el('text:p', {}, [txt('inserted '), el('text:change', { 'text:change-id': 'ins1' }), txt('words')])]);
+    const blocks = firstSectionBlocks(pkg);
+    expect(blocks).toHaveLength(1);
+    if (blocks[0]?.kind !== 'paragraph') {
+      throw new Error('expected a paragraph');
+    }
+    expect(blocks[0].constructs).toEqual([
+      {
+        descriptor: { kind: 'provenance', change: 'insertion', author: 'A. Reviewer', dateIso: '2026-08-19T09:30:00' },
+        startRun: 1,
+        endRun: 1,
+      },
+    ]);
+  });
+
+  it('pairs interior change-start/-end in one paragraph into a run-level provenance extent', () => {
+    const pkg = odtPackage([
+      ...REGIONS,
+      el('text:p', {}, [txt('kept '), el('text:change-start', { 'text:change-id': 'del1' }), txt('deleted'), el('text:change-end', { 'text:change-id': 'del1' })]),
+    ]);
+    const blocks = firstSectionBlocks(pkg);
+    if (blocks[0]?.kind !== 'paragraph') {
+      throw new Error('expected a paragraph');
+    }
+    expect(blocks[0].constructs).toEqual([
+      {
+        descriptor: { kind: 'provenance', change: 'deletion', author: 'D. Editor', dateIso: '2026-08-19T10:00:00' },
+        startRun: 1,
+        endRun: 2,
+      },
+    ]);
+  });
+
+  it('brackets whole blocks with provenance markers when change-start leads one paragraph and change-end trails a later one', () => {
+    const pkg = odtPackage([
+      ...REGIONS,
+      el('text:p', {}, [el('text:change-start', { 'text:change-id': 'ins1' }), txt('first inserted')]),
+      el('text:p', {}, [txt('second inserted'), el('text:change-end', { 'text:change-id': 'ins1' })]),
+    ]);
+    const blocks = firstSectionBlocks(pkg);
+    expect(blocks.map((block) => block.kind)).toEqual(['constructStart', 'paragraph', 'paragraph', 'constructEnd']);
+    if (blocks[0]?.kind !== 'constructStart') {
+      throw new Error('expected a constructStart marker');
+    }
+    expect(blocks[0].descriptor).toEqual({ kind: 'provenance', change: 'insertion', author: 'A. Reviewer', dateIso: '2026-08-19T09:30:00' });
+  });
+
+  it('reads the region id spelled text:id (the ODF 1.0 form) as readily as xml:id', () => {
+    const legacyRegions = [
+      el('text:tracked-changes', {}, [
+        el('text:changed-region', { 'text:id': 'fmt1' }, [
+          el('text:format-change', {}, [el('office:change-info', {}, [el('dc:creator', {}, [txt('F. Stylist')])])]),
+        ]),
+      ]),
+    ];
+    const pkg = odtPackage([...legacyRegions, el('text:p', {}, [txt('restyled '), el('text:change', { 'text:change-id': 'fmt1' })])]);
+    const blocks = firstSectionBlocks(pkg);
+    if (blocks[0]?.kind !== 'paragraph') {
+      throw new Error('expected a paragraph');
+    }
+    expect(blocks[0].constructs).toEqual([
+      { descriptor: { kind: 'provenance', change: 'formatChange', author: 'F. Stylist' }, startRun: 1, endRun: 1 },
+    ]);
+  });
+
+  it('drops a change marker whose region id resolves to nothing, and contributes no blocks for the text:tracked-changes container itself', () => {
+    const pkg = odtPackage([
+      ...REGIONS,
+      el('text:p', {}, [txt('orphan marker '), el('text:change', { 'text:change-id': 'nosuch' }), txt('here')]),
+    ]);
+    const blocks = firstSectionBlocks(pkg);
+    expect(blocks).toHaveLength(1);
+    if (blocks[0]?.kind !== 'paragraph') {
+      throw new Error('expected a paragraph');
+    }
+    expect(blocks[0].constructs).toBeUndefined();
+  });
+
+  it('survives the package boundary with provenance markers intact', () => {
+    const pkg = odtPackage([
+      ...REGIONS,
+      el('text:p', {}, [el('text:change-start', { 'text:change-id': 'del1' }), txt('gone')]),
+      el('text:p', {}, [txt('also gone'), el('text:change-end', { 'text:change-id': 'del1' })]),
+    ]);
+    const flat = flattenPackage(readOdt(pkg));
+    if (flat.kind !== 'wordprocessing') {
+      throw new Error('expected a wordprocessing document');
+    }
+    expect(flat.sections[0]?.blocks.map((block) => block.kind)).toEqual(['constructStart', 'paragraph', 'paragraph', 'constructEnd']);
+  });
+});
+
+describe('readOdtContent: cross-paragraph bookmark pairing at block scope', () => {
+  it('brackets the blocks a leading bookmark-start and a trailing bookmark-end span', () => {
+    const pkg = odtPackage([
+      el('text:p', {}, [el('text:bookmark-start', { 'text:name': 'range' }), txt('first')]),
+      paragraph('middle'),
+      el('text:p', {}, [txt('last'), el('text:bookmark-end', { 'text:name': 'range' })]),
+    ]);
+    const blocks = firstSectionBlocks(pkg);
+    expect(blocks.map((block) => block.kind)).toEqual(['constructStart', 'paragraph', 'paragraph', 'paragraph', 'constructEnd']);
+    if (blocks[0]?.kind !== 'constructStart') {
+      throw new Error('expected a constructStart marker');
+    }
+    expect(blocks[0].descriptor).toEqual({ kind: 'anchor', anchorType: 'bookmark', name: 'range' });
+  });
+
+  it('drops the later-opening extent of a genuinely crossing pair (bookmark opened before a section, closed inside it), keeping the earlier one -- the deterministic rule the docx reader applies to the identical shape', () => {
+    const pkg = odtPackage([
+      el('text:p', {}, [el('text:bookmark-start', { 'text:name': 'straddler' }), txt('before')]),
+      el('text:section', { 'text:name': 'S' }, [
+        el('text:p', {}, [txt('inside'), el('text:bookmark-end', { 'text:name': 'straddler' })]),
+        paragraph('still inside'),
+      ]),
+      paragraph('after'),
+    ]);
+    const blocks = firstSectionBlocks(pkg);
+    // The bookmark opens at block 0 and closes at 2; the division spans 1..3. The pair crosses, so exactly one survives: the bookmark, whose start precedes the division's -- the same outermost/earliest-start resolution acceptProperlyNested applies in the docx reader, and the drop document-schema.js ratifies for block-scoped crossings. The section's own blocks still read; only its wrapper marker is lost.
+    expect(blocks.map((block) => block.kind)).toEqual(['constructStart', 'paragraph', 'paragraph', 'constructEnd', 'paragraph', 'paragraph']);
+    if (blocks[0]?.kind !== 'constructStart') {
+      throw new Error('expected a constructStart marker');
+    }
+    expect(blocks[0].descriptor).toEqual({ kind: 'anchor', anchorType: 'bookmark', name: 'straddler' });
+  });
+});
+
+describe('readOdtContent: field master declarations as a definitions table', () => {
+  it('reads variable, user-field, and sequence declarations into keyed definitions entries', () => {
+    const pkg = odtPackage([
+      el('text:variable-decls', {}, [
+        el('text:variable-decl', { 'text:name': 'total', 'office:value-type': 'float' }),
+      ]),
+      el('text:user-field-decls', {}, [
+        el('text:user-field-decl', { 'text:name': 'rate', 'office:value-type': 'percentage', 'office:value': '0.2', 'text:formula': 'oooc:=1/5' }),
+      ]),
+      el('text:sequence-decls', {}, [
+        el('text:sequence-decl', { 'text:name': 'Illustration', 'text:display-outline-level': '0' }),
+      ]),
+      paragraph('body'),
+    ]);
+    const document = readOdtContent(pkg);
+    expect(document.definitions).toEqual({
+      'variable:total': { kind: 'fieldMaster', family: 'variable', name: 'total', valueType: 'float' },
+      'user-field:rate': { kind: 'fieldMaster', family: 'user-field', name: 'rate', valueType: 'percentage', value: '0.2', formula: 'oooc:=1/5' },
+      'sequence:Illustration': { kind: 'fieldMaster', family: 'sequence', name: 'Illustration', displayOutlineLevel: 0 },
+    });
+    expect(firstSectionBlocks(pkg)).toHaveLength(1);
+  });
+
+  it('carries the definitions table onto the assembled package root', () => {
+    const pkg = odtPackage([
+      el('text:sequence-decls', {}, [el('text:sequence-decl', { 'text:name': 'Table' })]),
+      paragraph('body'),
+    ]);
+    expect(readOdt(pkg).definitions).toEqual({
+      'sequence:Table': { kind: 'fieldMaster', family: 'sequence', name: 'Table' },
+    });
+  });
+});
