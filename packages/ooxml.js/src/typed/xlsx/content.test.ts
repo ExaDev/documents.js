@@ -602,7 +602,27 @@ describe('readXlsxContent: chart graphic frames', () => {
 // A drawing picture reached through the same cascade as the chart fixture above: the worksheet's <drawing r:id> names a drawing part, whose xdr:twoCellAnchor this time carries an xdr:pic whose a:blip names a media part through the DRAWING's relationships. Anchor fields and frame come from the from/to markers through the same grid geometry the chart row resolves against.
 const TINY_PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 
-function pictureDrawingPackage(mediaBase64: string = TINY_PNG_BASE64): Package {
+// One anchor marker's four child values as the markup spells them, overridable per test against the fixture's defaults.
+interface AnchorMarkerText {
+  readonly col: string;
+  readonly colOff: string;
+  readonly row: string;
+  readonly rowOff: string;
+}
+
+const DEFAULT_FROM_MARKER: AnchorMarkerText = { col: '0', colOff: '19050', row: '1', rowOff: '0' };
+const DEFAULT_TO_MARKER: AnchorMarkerText = { col: '2', colOff: '0', row: '4', rowOff: '0' };
+
+function markerEl(tag: string, marker: AnchorMarkerText): ReturnType<typeof el> {
+  return el(tag, {}, [
+    el('xdr:col', {}, [txt(marker.col)]),
+    el('xdr:colOff', {}, [txt(marker.colOff)]),
+    el('xdr:row', {}, [txt(marker.row)]),
+    el('xdr:rowOff', {}, [txt(marker.rowOff)]),
+  ]);
+}
+
+function pictureDrawingPackage(mediaBase64: string = TINY_PNG_BASE64, markers: { to?: AnchorMarkerText } = {}): Package {
   const picture = el('xdr:pic', {}, [
     el('xdr:nvPicPr', {}, [el('xdr:cNvPr', { id: '2', name: 'Picture 1' })]),
     el('xdr:blipFill', {}, [el('a:blip', { 'r:embed': 'rIdImage' })]),
@@ -610,8 +630,8 @@ function pictureDrawingPackage(mediaBase64: string = TINY_PNG_BASE64): Package {
   ]);
   const drawing = el('xdr:wsDr', {}, [
     el('xdr:twoCellAnchor', {}, [
-      el('xdr:from', {}, [el('xdr:col', {}, [txt('0')]), el('xdr:colOff', {}, [txt('19050')]), el('xdr:row', {}, [txt('1')]), el('xdr:rowOff', {}, [txt('0')])]),
-      el('xdr:to', {}, [el('xdr:col', {}, [txt('2')]), el('xdr:colOff', {}, [txt('0')]), el('xdr:row', {}, [txt('4')]), el('xdr:rowOff', {}, [txt('0')])]),
+      markerEl('xdr:from', DEFAULT_FROM_MARKER),
+      markerEl('xdr:to', markers.to ?? DEFAULT_TO_MARKER),
       picture,
       el('xdr:clientData'),
     ]),
@@ -664,6 +684,16 @@ describe('readXlsxContent: drawing pictures', () => {
     if (document.kind !== 'spreadsheet') {
       throw new Error('expected a spreadsheet ContentDocument');
     }
+    expect(document.sheets[0]?.images).toEqual([]);
+  });
+
+  it('leaves a picture whose to-marker sits exactly on its from-marker unread rather than emitting a zero-size frame', () => {
+    const degenerate = pictureDrawingPackage(TINY_PNG_BASE64, { to: DEFAULT_FROM_MARKER });
+    const document = readXlsxContent(degenerate);
+    if (document.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    // ContentSheetImage's widthPt/heightPt are positive by schema, so a to-marker closing on the from-marker (a zero-size frame) has no spelling here -- the same skip the unsniffable-media case takes.
     expect(document.sheets[0]?.images).toEqual([]);
   });
 
