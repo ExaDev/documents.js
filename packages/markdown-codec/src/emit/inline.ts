@@ -6,10 +6,11 @@
 //
 // Preserved inline math (src/lower/inline.ts's own MATH_INLINE_PRESERVED_AS_TEXT case) is NOT given the same text-pattern-based exemption, deliberately: escapeMarkdownText already backslash-escapes every literal '(' and ')' it meets in ORDINARY text (both are in ESCAPE_CHARS below), so an ordinary escaped parenthetical remark -- "\(see below\)" -- is indistinguishable from a genuine preserved \( \) span once escaped, and a pattern-based exemption (tried and reverted) misrecognised the former as the latter on reparse. renderLeaf below instead keys off the run's own MATH_INLINE_FONT_MARKER fontFamily, the same non-pattern-based, opportunistic-reuse trick a code span's own Courier New marker already plays two paragraphs down.
 
-import type { ContentRun, RunConstructExtent } from 'document-schema.js';
+import type { AnchorDescriptor, ContentRun, RunConstructExtent } from 'document-schema.js';
 import type { MarkdownDiagnosticSink } from '../diagnostics/diagnostics';
 import { MarkdownDiagnosticCodes } from '../diagnostics/diagnostics';
-import { FOOTNOTE_REFERENCE_FONT_MARKER, MATH_INLINE_FONT_MARKER, MONOSPACE_FONT_FAMILY } from '../shared/style-constants';
+import { isValidFootnoteLabel } from '../inline/footnote';
+import { MATH_INLINE_FONT_MARKER, MONOSPACE_FONT_FAMILY } from '../shared/style-constants';
 
 export interface InlineEmitContext {
   readonly sink: MarkdownDiagnosticSink;
@@ -61,10 +62,22 @@ function renderCodeSpan(text: string): string {
   return needsPadding ? `${fence} ${text} ${fence}` : `${fence}${text}${fence}`;
 }
 
-// A run's own leaf text -- a code span for a monospace run, escaped literal text otherwise. Deliberately carries no bold/italic/strike wrapping of its own: renderNestedStyles applies that OUTSIDE this function, over a whole GROUP of runs at once, which is what keeps adjacent differently-styled runs from producing an ambiguous concatenated delimiter run (see this module's own top-of-file note).
+// The footnote-anchor extent naming run `index` as a reference site: a POINT extent (startRun === endRun === index, the boundary before that run), the shape both this package's own read side (src/lower/inline.ts's footnoteReference case) and ooxml.js's docx reader (a w:footnoteReference run) mint. A RANGED footnote anchor -- odf.js's reader spells its text:note reference that way -- is deliberately not matched: a markdown reference is a point, and a range over several runs has no single-run spelling, so its runs keep their own escaped text and only the construct is lost, the same silent loss every other run-level extent markdown has no syntax for already takes (a bookmark, a comment reference).
+function footnoteReferenceAt(constructs: readonly RunConstructExtent[] | undefined, index: number): AnchorDescriptor | undefined {
+  for (const extent of constructs ?? []) {
+    if (extent.descriptor.kind === 'anchor' && extent.descriptor.anchorType === 'footnote' && extent.startRun === index && extent.endRun === index) {
+      return extent.descriptor;
+    }
+  }
+  return undefined;
+}
+
+// A run's own leaf text -- a code span for a monospace run, the `[^label]` spelling for a footnote reference site, escaped literal text otherwise. Deliberately carries no bold/italic/strike wrapping of its own: renderNestedStyles applies that OUTSIDE this function, over a whole GROUP of runs at once, which is what keeps adjacent differently-styled runs from producing an ambiguous concatenated delimiter run (see this module's own top-of-file note).
 //
 // A run carrying this package's own markdown HTML residue (src/lower/inline.ts's rawHtml case) re-emits that residue verbatim: re-serialising opaque residue is the restorable tier's whole mechanism, and it is what distinguishes genuine preserved HTML from literal text that merely looks like a tag -- the pattern-matching exemption escapeMarkdownText used to carry (leave a recognised tag unescaped) could not tell those apart and is gone, so ordinary text now always escapes a literal '<' and a real HTML run never passes through escaping at all.
-function renderLeaf(run: ContentRun, context: InlineEmitContext): string {
+//
+// A footnote reference site is keyed off the run-level anchor extent naming it, not off anything about the run's own text: escapeMarkdownText escapes `[`, `^`, and `]`, so a deliberately-escaped literal `\[^1\]` and a genuine reference are the same run text by the time they reach here, and only the extent separates them (the identical non-pattern-based principle the math marker below plays). The spelling comes from the extent's own name -- the same authority the definition marker takes its label from (renderConstruct, src/emit/emit.ts) -- so the run's text is the materialised rendering (this package's own read mints it as `[^name]` verbatim; a foreign producer's contentless mark run loses nothing by being re-spelled). A name this package's own [^label] grammar cannot represent takes the definition half's degrade: the run's own text, escaped, plus CONSTRUCT_UNREPRESENTED.
+function renderLeaf(run: ContentRun, context: InlineEmitContext, index: number, constructs: readonly RunConstructExtent[] | undefined): string {
   if (run.source?.format === 'markdown') {
     return run.source.xml;
   }
@@ -72,9 +85,12 @@ function renderLeaf(run: ContentRun, context: InlineEmitContext): string {
     context.sink({ code: MarkdownDiagnosticCodes.CODE_SPAN_AS_MONOSPACE_RUN, severity: 'info', message: 'a run styled with the Courier New font family is rendered as a code span; a genuinely monospace run from another format is indistinguishable from a real markdown code span on the way back out' });
     return renderCodeSpan(run.text);
   }
-  if (run.fontFamily === FOOTNOTE_REFERENCE_FONT_MARKER) {
-    // The run's text already IS the reference's own `[^label]` spelling (src/lower/inline.ts), written out verbatim rather than escaped -- exactly the same reason the math case below skips escaping, and the reason the marker has to exist at all: escapeMarkdownText escapes `[`, `^`, and `]`, so a deliberately-escaped literal `\[^1\]` and a genuine reference are the same run text by the time they reach here, and only the marker separates them.
-    return run.text;
+  const footnote = footnoteReferenceAt(constructs, index);
+  if (footnote !== undefined && isValidFootnoteLabel(footnote.name)) {
+    return `[^${footnote.name}]`;
+  }
+  if (footnote !== undefined) {
+    context.sink({ code: MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED, severity: 'info', message: `a footnote reference anchor's own name "${footnote.name}" cannot be spelled as a "[^label]" marker (whitespace or "]" would reparse as something else); the run's own text renders escaped in its place, but the reference itself is not represented` });
   }
   if (run.fontFamily === MATH_INLINE_FONT_MARKER) {
     // The \( \) delimiters are regenerated fresh around the run's own (unescaped) text -- this run's text is never passed through escapeMarkdownText at all, since it is not "ordinary punctuation that happens to need escaping" but raw LaTeX carried verbatim (see this module's own top-of-file note on why a text-pattern-based recognition of an already-escaped '(...)' cannot distinguish this from ordinary parenthetical prose).
@@ -129,10 +145,10 @@ function wrapForStyle(body: string, key: StyleKey, context: InlineEmitContext, p
   return `${delimiter}${body}${delimiter}`;
 }
 
-// Groups `runs` hierarchically -- first by bold, then (within each bold/non-bold group) by italic, then by strike -- rendering each group's own inner content recursively before wrapping it, so a bold span containing an italic sub-span comes out as a single, properly nested `**bold *nested***`-shaped wrap rather than two independently-wrapped, directly-concatenated spans. `out`, threaded into wrapForStyle as `precedingText`, is what lets pickEmphasisMarker see the immediately preceding sibling's own trailing character.
-function renderNestedStyles(runs: readonly ContentRun[], depth: number, context: InlineEmitContext): string {
+// Groups `runs` hierarchically -- first by bold, then (within each bold/non-bold group) by italic, then by strike -- rendering each group's own inner content recursively before wrapping it, so a bold span containing an italic sub-span comes out as a single, properly nested `**bold *nested***`-shaped wrap rather than two independently-wrapped, directly-concatenated spans. `out`, threaded into wrapForStyle as `precedingText`, is what lets pickEmphasisMarker see the immediately preceding sibling's own trailing character. `base` is the index `runs[0]` occupies in the PARAGRAPH's own run array (a slice may start anywhere), threaded so a leaf's renderLeaf can look its run up in the paragraph's run-level construct extents; each recursive slice adjusts it by its own local offset.
+function renderNestedStyles(runs: readonly ContentRun[], depth: number, context: InlineEmitContext, base: number, constructs: readonly RunConstructExtent[] | undefined): string {
   if (depth >= STYLE_KEYS.length) {
-    return runs.map((run) => renderLeaf(run, context)).join('');
+    return runs.map((run, local) => renderLeaf(run, context, base + local, constructs)).join('');
   }
   const key = STYLE_KEYS[depth]!;
   let out = '';
@@ -147,16 +163,16 @@ function renderNestedStyles(runs: readonly ContentRun[], depth: number, context:
     while (end < runs.length && styleActive(runs[end]!, key) === active) {
       end += 1;
     }
-    const inner = renderNestedStyles(runs.slice(index, end), depth + 1, context);
+    const inner = renderNestedStyles(runs.slice(index, end), depth + 1, context, base + index, constructs);
     out += active ? wrapForStyle(inner, key, context, out) : inner;
     index = end;
   }
   return out;
 }
 
-function isPlainAutolink(run: ContentRun): boolean {
-  // An autolink's own <...> form can never be empty (CommonMark's own URI/email autolink grammar both require at least one character between the brackets) -- `<>` is not valid autolink syntax at all and would reparse as literal text, so an empty destination (only reachable via a `[](/url)`-shaped empty-text link whose text happens to equal its own empty destination) must fall through to the ordinary `[text](dest)` form instead. A monospace (code-span), math-marked, or footnote-reference-marked run is excluded the same way: each needs its own dedicated renderLeaf rendering (a code span's backtick fence, math's own \( \) delimiters, a reference's own unescaped `[^label]`), never the bare <...> autolink form, however coincidentally their own text might equal the surrounding hyperlink.
-  if (run.hyperlink === undefined || run.hyperlink.length === 0 || run.bold === true || run.italic === true || run.strike === true || run.fontFamily === MONOSPACE_FONT_FAMILY || run.fontFamily === MATH_INLINE_FONT_MARKER || run.fontFamily === FOOTNOTE_REFERENCE_FONT_MARKER) {
+function isPlainAutolink(run: ContentRun, footnoteReference: AnchorDescriptor | undefined): boolean {
+  // An autolink's own <...> form can never be empty (CommonMark's own URI/email autolink grammar both require at least one character between the brackets) -- `<>` is not valid autolink syntax at all and would reparse as literal text, so an empty destination (only reachable via a `[](/url)`-shaped empty-text link whose text happens to equal its own empty destination) must fall through to the ordinary `[text](dest)` form instead. A monospace (code-span), math-marked, or footnote-reference run is excluded the same way: each needs its own dedicated renderLeaf rendering (a code span's backtick fence, math's own \( \) delimiters, a reference's own unescaped `[^label]`), never the bare <...> autolink form, however coincidentally their own text might equal the surrounding hyperlink.
+  if (run.hyperlink === undefined || run.hyperlink.length === 0 || run.bold === true || run.italic === true || run.strike === true || run.fontFamily === MONOSPACE_FONT_FAMILY || run.fontFamily === MATH_INLINE_FONT_MARKER || footnoteReference !== undefined) {
     return false;
   }
   return run.text === run.hyperlink || run.hyperlink === `mailto:${run.text}`;
@@ -207,7 +223,7 @@ export function emitRuns(runs: readonly ContentRun[], context: InlineEmitContext
       while (end < runs.length && runs[end]?.hyperlink === undefined) {
         end += 1;
       }
-      out += renderNestedStyles(runs.slice(index, end), 0, context);
+      out += renderNestedStyles(runs.slice(index, end), 0, context, index, constructs);
       index = end;
       continue;
     }
@@ -221,10 +237,10 @@ export function emitRuns(runs: readonly ContentRun[], context: InlineEmitContext
       context.sink({ code: MarkdownDiagnosticCodes.ADJACENT_LINKS_MERGED, severity: 'info', message: `${String(group.length)} adjacent runs share the hyperlink "${hyperlink}"; markdown has no way to place two link boundaries back to back, so they render as one link spanning their combined text` });
     }
     const title = linkTitleCovering(constructs, index, groupEnd);
-    if (title === undefined && group.length === 1 && isPlainAutolink(group[0]!)) {
+    if (title === undefined && group.length === 1 && isPlainAutolink(group[0]!, footnoteReferenceAt(constructs, index))) {
       out += `<${group[0]!.text}>`;
     } else {
-      const linkText = renderNestedStyles(group, 0, context);
+      const linkText = renderNestedStyles(group, 0, context, index, constructs);
       out += `[${linkText}](${escapeLinkDestination(hyperlink)}${title === undefined ? '' : ` "${renderLinkTitle(title)}"`})`;
     }
     index = groupEnd;
