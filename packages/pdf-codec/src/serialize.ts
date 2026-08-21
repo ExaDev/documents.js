@@ -96,3 +96,8 @@ export function serializeObject(obj: PdfObject): Uint8Array<ArrayBuffer> {
   writeObject(writer, obj);
   return writer.toBytes();
 }
+
+// The same syntax as text -- the form the quarantined residue channel carries (document-schema.js's SourceResidue `xml` values): an opaque annotation dictionary, an output intent, a viewer-preferences blob. PDF syntax is ASCII-plus-hex-strings by construction here (writeObject always emits strings as hex), so a TextDecoder round trip is lossless.
+export function serializeObjectToText(obj: PdfObject): string {
+  return new TextDecoder().decode(serializeObject(obj));
+}
