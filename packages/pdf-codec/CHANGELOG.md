@@ -1,3 +1,25 @@
+# [3.2.0](https://github.com/ExaDev/documents.js/compare/pdf-codec@3.1.4...pdf-codec@3.2.0) (2026-08-21)
+
+
+### Bug Fixes
+
+* **pdf:** realign the read-entry smoke surface with the pdf-text split ([72a8b2e](https://github.com/ExaDev/documents.js/commit/72a8b2e266e5c23d1da54321f58046425952776c))
+
+
+### Features
+
+* **pdf:** read document language, mirror XMP Dublin Core, and quarantine package-level residue rows ([26b9f14](https://github.com/ExaDev/documents.js/commit/26b9f14edbaf48d7ed978bcfed7e294ac448ee1d))
+* **pdf:** read embedded files from the name tree, file attachments, and /AF ([531b27c](https://github.com/ExaDev/documents.js/commit/531b27c1a1a58e62672b8b47c8fab67ca8c3ad56))
+* **pdf:** read named destinations, the outline tree, and internal link annotations ([6c837bd](https://github.com/ExaDev/documents.js/commit/6c837bd1949fba55ceca2e71c3e004376b69d0ae)), closes [#721](https://github.com/ExaDev/documents.js/issues/721)
+* **pdf:** read optional-content groups and stamp /OC membership on extracted items ([b4f3e71](https://github.com/ExaDev/documents.js/commit/b4f3e713e575d1f9bf5e13bb9e0626ab9ae5b475))
+* **pdf:** read page annotations -- sticky notes, FreeText, markup, and residue for the opaque kinds ([ce91db2](https://github.com/ExaDev/documents.js/commit/ce91db22aa1371dab9decdc1b7c55731868a9bf8))
+* **pdf:** read the AcroForm field tree with types, values, flags, and widget placements ([1d2c0ec](https://github.com/ExaDev/documents.js/commit/1d2c0eca00afc58881ce8d810aad75c39d119547))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^4.8.0
+
 ## [3.1.4](https://github.com/ExaDev/documents.js/compare/pdf-codec@3.1.3...pdf-codec@3.1.4) (2026-08-21)
 
 
