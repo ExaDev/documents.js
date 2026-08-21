@@ -176,15 +176,15 @@ describe('definitions tables', () => {
     blocks: [{ kind: 'paragraph', runs: [{ text: 'The note body.' }] }],
   };
 
-  function footnotePackage(styleOfKey: string): DocumentPackage {
+  function footnotePackage(styleKey: string, definitionKey = 'n1'): DocumentPackage {
     return wordprocessingPackage(
       [
         sectionGroup([
-          { node: { kind: 'anchor', anchorType: 'footnote', name: '1', definition: 'n1' }, children: [] },
+          { node: { kind: 'anchor', anchorType: 'footnote', name: '1', definition: definitionKey }, children: [] },
           paragraph('Body text.'),
         ]),
       ],
-      { styles: { [styleOfKey]: { run: { bold: true } } }, definitions: { n1: NOTE_BODY } },
+      { styles: { [styleKey]: { run: { bold: true } } }, definitions: { [definitionKey]: NOTE_BODY } },
     );
   }
 
@@ -208,19 +208,7 @@ describe('definitions tables', () => {
   it('deduplicates anchor refs across documents naming the same entry content differently', () => {
     // Document b spells the identical entry under a different key and references it from an identically-shaped anchor.
     const a = footnotePackage('bold');
-    const b: DocumentPackage = {
-      ...footnotePackage('bold'),
-      definitions: { noteOne: NOTE_BODY },
-      children: [
-        {
-          ...a.children[0]!,
-          children: [
-            { node: { kind: 'anchor', anchorType: 'footnote', name: '1', definition: 'noteOne' }, children: [] },
-            paragraph('Body text.'),
-          ],
-        },
-      ],
-    };
+    const b = footnotePackage('bold', 'noteOne');
     expectSchemaValid(b, 'footnote-b');
     const graph = projectDocumentGraph([
       { id: 'a', package: a },
