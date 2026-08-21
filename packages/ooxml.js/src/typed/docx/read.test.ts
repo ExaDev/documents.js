@@ -471,6 +471,198 @@ describe('readDocxContent: multi-section support', () => {
   });
 });
 
+// One-paragraph documents for the run-level construct rows: each test spells the exact run-level markup it exercises (a mid-paragraph field, an internal hyperlink, a comment range, a note reference, a legacy form field), because what is under test is precisely where inside one paragraph's runs each construct's extent lands.
+function paragraphPackage(paragraph: XmlElement, extraParts: Package['parts'] = {}): Package {
+  const body = el('w:body', {}, [paragraph, el('w:sectPr', {}, [el('w:pgSz', { 'w:w': '12240', 'w:h': '15840' })])]);
+  return {
+    parts: {
+      'word/document.xml': { kind: 'xml', nodes: [el('w:document', {}, [body])] },
+      'word/_rels/document.xml.rels': { kind: 'xml', nodes: [rels([])] },
+      ...extraParts,
+    },
+  };
+}
+
+function textRun(text: string): XmlElement {
+  return el('w:r', {}, [el('w:t', { 'xml:space': 'preserve' }, [txt(text)])]);
+}
+
+function firstParagraph(doc: ReturnType<typeof readDocxContent>): ContentParagraph {
+  return asParagraph(doc.sections[0]?.blocks[0]);
+}
+
+describe('readDocxContent: run-level construct extents (the #750 docx rows)', () => {
+  it('emits a field run extent over a mid-paragraph complex field\'s result runs, keeping the instruction and dropping the code runs', () => {
+    const paragraph = el('w:p', {}, [
+      textRun('Page '),
+      el('w:r', {}, [el('w:fldChar', { 'w:fldCharType': 'begin' })]),
+      el('w:r', {}, [el('w:instrText', { 'xml:space': 'preserve' }, [txt(' NUMPAGES ')])]),
+      el('w:r', {}, [el('w:fldChar', { 'w:fldCharType': 'separate' })]),
+      textRun('10'),
+      el('w:r', {}, [el('w:fldChar', { 'w:fldCharType': 'end' })]),
+      textRun(' of pages'),
+    ]);
+    const paragraphRead = firstParagraph(readDocxContent(paragraphPackage(paragraph)));
+    expect(paragraphRead.runs.map((run) => run.text)).toEqual(['Page ', '10', ' of pages']);
+    expect(paragraphRead.constructs).toEqual([{ descriptor: { kind: 'field', instruction: ' NUMPAGES ' }, startRun: 1, endRun: 2 }]);
+  });
+
+  it('emits a field run extent over a mid-paragraph w:fldSimple\'s runs, carrying @w:instr as the instruction', () => {
+    const paragraph = el('w:p', {}, [
+      textRun('Today is '),
+      el('w:fldSimple', { 'w:instr': ' DATE ' }, [textRun('2026-08-20')]),
+      textRun('.'),
+    ]);
+    const paragraphRead = firstParagraph(readDocxContent(paragraphPackage(paragraph)));
+    expect(paragraphRead.runs.map((run) => run.text)).toEqual(['Today is ', '2026-08-20', '.']);
+    expect(paragraphRead.constructs).toEqual([{ descriptor: { kind: 'field', instruction: ' DATE ' }, startRun: 1, endRun: 2 }]);
+  });
+
+  it('does not double-encode a field the block walk already bracketed: a whole-paragraph field keeps its marker pair and gains no run extent', () => {
+    const paragraph = el('w:p', {}, [
+      el('w:r', {}, [el('w:fldChar', { 'w:fldCharType': 'begin' })]),
+      el('w:r', {}, [el('w:instrText', { 'xml:space': 'preserve' }, [txt(' PAGE ')])]),
+      el('w:r', {}, [el('w:fldChar', { 'w:fldCharType': 'separate' })]),
+      textRun('3'),
+      el('w:r', {}, [el('w:fldChar', { 'w:fldCharType': 'end' })]),
+    ]);
+    const doc = readDocxContent(paragraphPackage(paragraph));
+    expect(asConstructStart(doc.sections[0]?.blocks[0]).descriptor).toEqual({ kind: 'field', instruction: ' PAGE ' });
+    expect(asParagraph(doc.sections[0]?.blocks[1]).constructs).toBeUndefined();
+  });
+
+  it('emits a link run extent with an internal target for w:hyperlink/@w:anchor, leaving the runs\' own hyperlink unset', () => {
+    const paragraph = el('w:p', {}, [
+      textRun('See '),
+      el('w:hyperlink', { 'w:anchor': 'targetBookmark' }, [textRun('the section'), textRun(' below')]),
+      textRun(' for details'),
+    ]);
+    const paragraphRead = firstParagraph(readDocxContent(paragraphPackage(paragraph)));
+    expect(paragraphRead.runs.map((run) => run.hyperlink)).toEqual([undefined, undefined, undefined, undefined]);
+    expect(paragraphRead.constructs).toEqual([
+      { descriptor: { kind: 'link', target: { kind: 'internal', anchor: 'targetBookmark' } }, startRun: 1, endRun: 3 },
+    ]);
+  });
+
+  it('emits an anchor run extent for a mid-paragraph comment range, named by the comment\'s own w:id, and keeps the block marker pair for a range spanning whole blocks', () => {
+    const midParagraph = el('w:p', {}, [
+      textRun('Some '),
+      el('w:commentRangeStart', { 'w:id': '7' }),
+      textRun('commented'),
+      el('w:commentRangeEnd', { 'w:id': '7' }),
+      el('w:r', {}, [el('w:commentReference', { 'w:id': '7' })]),
+      textRun(' words'),
+    ]);
+    const mid = firstParagraph(readDocxContent(paragraphPackage(midParagraph)));
+    // The reference run contributes an empty-text run at its own position, and the range extent covers exactly the commented runs.
+    expect(mid.runs.map((run) => run.text)).toEqual(['Some ', 'commented', '', ' words']);
+    expect(mid.constructs).toEqual([
+      { descriptor: { kind: 'anchor', anchorType: 'comment', name: '7' }, startRun: 1, endRun: 2 },
+      { descriptor: { kind: 'anchor', anchorType: 'comment', name: '7' }, startRun: 2, endRun: 2 },
+    ]);
+
+    const blockScoped = el('w:body', {}, [
+      el('w:commentRangeStart', { 'w:id': '7' }),
+      el('w:p', {}, [textRun('Commented paragraph')]),
+      el('w:commentRangeEnd', { 'w:id': '7' }),
+      el('w:p', {}, [textRun('After')]),
+      el('w:sectPr', {}, [el('w:pgSz', { 'w:w': '12240', 'w:h': '15840' })]),
+    ]);
+    const doc = readDocxContent({ parts: { 'word/document.xml': { kind: 'xml', nodes: [el('w:document', {}, [blockScoped])] } } });
+    expect(asConstructStart(doc.sections[0]?.blocks[0]).descriptor).toEqual({ kind: 'anchor', anchorType: 'comment', name: '7' });
+    expect(asParagraph(doc.sections[0]?.blocks[1]).constructs).toBeUndefined();
+  });
+
+  it('reads the comment\'s own w:id beside its text, so an extent\'s name joins back to its body', () => {
+    const commentsPart = { kind: 'xml', nodes: [el('w:comments', {}, [el('w:comment', { 'w:id': '7', 'w:author': 'A Reviewer' }, [el('w:p', {}, [textRun('A remark')])])])] } as const;
+    const paragraph = el('w:p', {}, [textRun('Text'), el('w:r', {}, [el('w:commentReference', { 'w:id': '7' })])]);
+    const doc = readDocxContent(paragraphPackage(paragraph, { 'word/comments.xml': commentsPart }));
+    expect(doc.comments).toEqual([{ id: '7', author: 'A Reviewer', text: 'A remark' }]);
+    expect(firstParagraph(doc).constructs).toEqual([{ descriptor: { kind: 'anchor', anchorType: 'comment', name: '7' }, startRun: 1, endRun: 1 }]);
+  });
+
+  it('emits a point anchor at a footnote reference run, and reads the footnote\'s own w:id so the two join', () => {
+    const footnotesPart = { kind: 'xml', nodes: [el('w:footnotes', {}, [el('w:footnote', { 'w:id': '2' }, [el('w:p', {}, [textRun('The note body')])])])] } as const;
+    const paragraph = el('w:p', {}, [textRun('A claim'), el('w:r', {}, [el('w:footnoteReference', { 'w:id': '2' })])]);
+    const doc = readDocxContent(paragraphPackage(paragraph, { 'word/footnotes.xml': footnotesPart }));
+    expect(doc.footnotes).toEqual([{ id: '2', text: 'The note body' }]);
+    expect(firstParagraph(doc).constructs).toEqual([{ descriptor: { kind: 'anchor', anchorType: 'footnote', name: '2' }, startRun: 1, endRun: 1 }]);
+  });
+
+  it('emits a point anchor at an endnote reference run, and reads word/endnotes.xml with each note\'s own w:id', () => {
+    const endnotesPart = { kind: 'xml', nodes: [el('w:endnotes', {}, [el('w:endnote', { 'w:id': '1' }, [el('w:p', {}, [textRun('The endnote body')])])])] } as const;
+    const paragraph = el('w:p', {}, [textRun('A point'), el('w:r', {}, [el('w:endnoteReference', { 'w:id': '1' })])]);
+    const doc = readDocxContent(paragraphPackage(paragraph, { 'word/endnotes.xml': endnotesPart }));
+    expect(doc.endnotes).toEqual([{ id: '1', text: 'The endnote body' }]);
+    expect(firstParagraph(doc).constructs).toEqual([{ descriptor: { kind: 'anchor', anchorType: 'endnote', name: '1' }, startRun: 1, endRun: 1 }]);
+  });
+});
+
+describe('readDocxContent: legacy w:ffData form fields', () => {
+  function formFieldPackage(ffData: XmlElement, instruction: string, result: string): Package {
+    const paragraph = el('w:p', {}, [
+      textRun('Answer: '),
+      el('w:r', {}, [el('w:fldChar', { 'w:fldCharType': 'begin' }), ffData]),
+      el('w:r', {}, [el('w:instrText', { 'xml:space': 'preserve' }, [txt(instruction)])]),
+      el('w:r', {}, [el('w:fldChar', { 'w:fldCharType': 'separate' })]),
+      textRun(result),
+      el('w:r', {}, [el('w:fldChar', { 'w:fldCharType': 'end' })]),
+    ]);
+    return paragraphPackage(paragraph);
+  }
+
+  it('reads a checkbox form field as a contentControl run extent carrying its checked state, with the ffData quarantined verbatim in the residue', () => {
+    const ffData = el('w:ffData', {}, [el('w:name', { 'w:val': 'consentBox' }), el('w:checkBox', {}, [el('w:default', { 'w:val': '0' }), el('w:checked', { 'w:val': '1' })])]);
+    const paragraphRead = firstParagraph(readDocxContent(formFieldPackage(ffData, ' FORMCHECKBOX ', 'Yes')));
+    // The form field is ONE construct -- a contentControl -- never a field construct beside it: the FORMCHECKBOX instruction is mechanically derivable from the control type, so emitting both would encode one occurrence twice.
+    expect(paragraphRead.constructs).toEqual([
+      {
+        descriptor: {
+          kind: 'contentControl',
+          controlType: 'checkbox',
+          tag: 'consentBox',
+          checked: true,
+          source: { format: 'docx', xml: '<w:ffData><w:name w:val="consentBox"></w:name><w:checkBox><w:default w:val="0"></w:default><w:checked w:val="1"></w:checked></w:checkBox></w:ffData>' },
+        },
+        startRun: 1,
+        endRun: 2,
+      },
+    ]);
+    expect(paragraphRead.runs.map((run) => run.text)).toEqual(['Answer: ', 'Yes']);
+  });
+
+  it('reads a drop-down form field as a contentControl carrying its list options', () => {
+    const ffData = el('w:ffData', {}, [el('w:ddList', {}, [el('w:listItem', { 'w:val': 'red' }), el('w:listItem', { 'w:displayText': 'Green', 'w:val': 'green' })])]);
+    const paragraphRead = firstParagraph(readDocxContent(formFieldPackage(ffData, ' FORMDROPDOWN ', 'green')));
+    expect(paragraphRead.constructs?.[0]?.descriptor).toEqual({
+      kind: 'contentControl',
+      controlType: 'dropDown',
+      options: ['red', 'Green'],
+      source: { format: 'docx', xml: '<w:ffData><w:ddList><w:listItem w:val="red"></w:listItem><w:listItem w:displayText="Green" w:val="green"></w:listItem></w:ddList></w:ffData>' },
+    });
+  });
+
+  it('reads a text-input form field as a plainText contentControl', () => {
+    const ffData = el('w:ffData', {}, [el('w:textInput', {}, [el('w:default', { 'w:val': 'typed' })])]);
+    const paragraphRead = firstParagraph(readDocxContent(formFieldPackage(ffData, ' FORMTEXT ', 'typed')));
+    expect(paragraphRead.constructs?.[0]?.descriptor).toMatchObject({ kind: 'contentControl', controlType: 'plainText' });
+  });
+
+  it('reads a whole-paragraph form field as a block-scoped contentControl marker pair, not a run extent', () => {
+    const ffData = el('w:ffData', {}, [el('w:checkBox', {}, [el('w:default', { 'w:val': '1' })])]);
+    const paragraph = el('w:p', {}, [
+      el('w:r', {}, [el('w:fldChar', { 'w:fldCharType': 'begin' }), ffData]),
+      el('w:r', {}, [el('w:instrText', { 'xml:space': 'preserve' }, [txt(' FORMCHECKBOX ')])]),
+      el('w:r', {}, [el('w:fldChar', { 'w:fldCharType': 'separate' })]),
+      textRun('Yes'),
+      el('w:r', {}, [el('w:fldChar', { 'w:fldCharType': 'end' })]),
+    ]);
+    const doc = readDocxContent(paragraphPackage(paragraph));
+    expect(asConstructStart(doc.sections[0]?.blocks[0]).descriptor).toMatchObject({ kind: 'contentControl', controlType: 'checkbox', checked: true });
+    expect(asParagraph(doc.sections[0]?.blocks[1]).constructs).toBeUndefined();
+  });
+});
+
 function asImage(block: ContentBlock | undefined): ContentImageBlock {
   if (block?.kind !== 'image') {
     throw new Error('expected an image block');

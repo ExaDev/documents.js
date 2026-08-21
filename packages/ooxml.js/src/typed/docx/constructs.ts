@@ -144,17 +144,21 @@ export function insertConstructMarkers(blocks: readonly ContentBlock[], extents:
 
 // --- run-level construct extents (a bookmark covering a sub-sequence of one paragraph's runs) ------------------------
 
-// A bookmark half encountered inside a paragraph's own run walk (readParagraphRuns): `runPosition` is the number of runs the walk had emitted when it reached the half -- the half's position among the paragraph's ContentRuns, which is exactly what a RunConstructExtent's startRun/endRun name. `element` is kept so the pairing below can ask the paragraph's content index whether the half sits at block scope or between runs.
-export interface ParagraphBookmarkHalf {
+// Which id-paired marker family a half belongs to. WordprocessingML spells two of them identically -- w:bookmarkStart/End keyed by w:id naming a bookmark, and w:commentRangeStart/End keyed by w:id naming a comment's extent -- so one pairing mechanism serves both, discriminated only by which descriptor the family's start half mints.
+export type RangeMarkerFamily = 'bookmark' | 'comment';
+
+// A range-marker half encountered inside a paragraph's own run walk (readParagraphRuns): `runPosition` is the number of runs the walk had emitted when it reached the half -- the half's position among the paragraph's ContentRuns, which is exactly what a RunConstructExtent's startRun/endRun name. `element` is kept so the pairing below can ask the paragraph's content index whether the half sits at block scope or between runs.
+export interface ParagraphRangeMarkerHalf {
   readonly element: XmlElement;
+  readonly family: RangeMarkerFamily;
   readonly id: string;
   readonly name: string | undefined;
   readonly kind: 'start' | 'end';
   readonly runPosition: number;
 }
 
-// Whether a half brackets whole blocks rather than a run sub-sequence: a direct paragraph child sitting outside every content-bearing child (leading or trailing) is block-scoped -- the position recordParagraphBookmarks gives a block index to -- while a child between content, or a half nested inside a content-bearing container (w:hyperlink, w:ins, an inline w:sdt), sits between runs by construction and is run-scoped. The container case answers "not found among the direct children" rather than being an error: the run walk recurses where the content index does not, and a half inside a container is definitionally interior to the paragraph's run sequence.
-function isBlockScopedHalf(half: ParagraphBookmarkHalf, index: ParagraphContentIndex): boolean {
+// Whether a half brackets whole blocks rather than a run sub-sequence: a direct paragraph child sitting outside every content-bearing child (leading or trailing) is block-scoped -- the position recordParagraphRangeMarkers gives a block index to -- while a child between content, or a half nested inside a content-bearing container (w:hyperlink, w:ins, an inline w:sdt), sits between runs by construction and is run-scoped. The container case answers "not found among the direct children" rather than being an error: the run walk recurses where the content index does not, and a half inside a container is definitionally interior to the paragraph's run sequence.
+function isBlockScopedHalf(half: ParagraphRangeMarkerHalf, index: ParagraphContentIndex): boolean {
   const position = index.elements.indexOf(half.element);
   if (position === -1) {
     return false;
@@ -164,13 +168,14 @@ function isBlockScopedHalf(half: ParagraphBookmarkHalf, index: ParagraphContentI
   return leading || trailing;
 }
 
-// Pairs one paragraph's own bookmark halves by w:id into run-level construct extents (document-schema.js's RunConstructExtent): a pair whose halves both sit in THIS paragraph and are not both block-scoped becomes an entry on the paragraph's constructs field. A pair with both halves block-scoped is skipped -- that is the block-marker path's extent (recordParagraphBookmarks has already emitted its events, and one occurrence must never carry both encodings) -- and everything else about the pairing mirrors the block path's own rules: exactly one start and one end per id, a name on the start, and an end that does not precede the start. A pair split across two paragraphs is never seen here at all (each paragraph pairs only its own halves), so it stays dropped exactly as before. Crossing pairs need no special case: run ranges are data, not brackets, so two extents that overlap are two entries.
-export function runBookmarkExtents(halves: readonly ParagraphBookmarkHalf[], index: ParagraphContentIndex): RunConstructExtent[] {
-  const byId = new Map<string, ParagraphBookmarkHalf[]>();
+// Pairs one paragraph's own range-marker halves (bookmarks and comment extents alike) by family+w:id into run-level construct extents (document-schema.js's RunConstructExtent): a pair whose halves both sit in THIS paragraph and are not both block-scoped becomes an entry on the paragraph's constructs field. A pair with both halves block-scoped is skipped -- that is the block-marker path's extent (recordParagraphRangeMarkers has already emitted its events, and one occurrence must never carry both encodings) -- and everything else about the pairing mirrors the block path's own rules: exactly one start and one end per family+id, a name on a bookmark's start, and an end that does not precede the start. A bookmark is named by its own w:name; a comment extent by its w:id, the key WordprocessingML itself joins the extent to its w:comment body through (the flat model carries that body in DocxDocument.comments under the same id, so the join survives with no second vocabulary). A pair split across two paragraphs is never seen here at all (each paragraph pairs only its own halves), so it stays dropped exactly as before. Crossing pairs need no special case: run ranges are data, not brackets, so two extents that overlap are two entries.
+export function runRangeMarkerExtents(halves: readonly ParagraphRangeMarkerHalf[], index: ParagraphContentIndex): RunConstructExtent[] {
+  const byId = new Map<string, ParagraphRangeMarkerHalf[]>();
   for (const half of halves) {
-    const existing = byId.get(half.id);
+    const key = `${half.family}:${half.id}`;
+    const existing = byId.get(key);
     if (existing === undefined) {
-      byId.set(half.id, [half]);
+      byId.set(key, [half]);
     } else {
       existing.push(half);
     }
@@ -184,13 +189,19 @@ export function runBookmarkExtents(halves: readonly ParagraphBookmarkHalf[], ind
     if (starts.length !== 1 || ends.length !== 1 || open === undefined || close === undefined) {
       continue;
     }
-    if (open.name === undefined || close.runPosition < open.runPosition) {
+    const descriptor: AnchorDescriptor | undefined =
+      open.family === 'comment'
+        ? { kind: 'anchor', anchorType: 'comment', name: open.id }
+        : open.name === undefined
+          ? undefined
+          : bookmarkAnchorDescriptor(open.name);
+    if (descriptor === undefined || close.runPosition < open.runPosition) {
       continue;
     }
     if (isBlockScopedHalf(open, index) && isBlockScopedHalf(close, index)) {
       continue;
     }
-    extents.push({ descriptor: bookmarkAnchorDescriptor(open.name), startRun: open.runPosition, endRun: close.runPosition });
+    extents.push({ descriptor, startRun: open.runPosition, endRun: close.runPosition });
   }
   return extents;
 }
@@ -370,4 +381,63 @@ export function runInstructionText(run: XmlElement): string {
 export function fieldCharType(run: XmlElement): string | undefined {
   const fldChar = childrenWithTag(run, 'w:fldChar')[0];
   return fldChar === undefined ? undefined : attr(fldChar, 'w:fldCharType');
+}
+
+// --- legacy form fields (w:ffData on the run carrying a field's opening w:fldChar) ------------------------------------
+
+// WordprocessingML's pre-SDT form-field vocabulary, spelled as form controls in document-schema.js's harmonised set: a checkbox maps to 'checkbox', a drop-down list to 'dropDown', and a text input to 'plainText' -- the three members construct.ts's own control-type comments name w:ffData for. Anything else inside w:ffData (w:calcOnExit, macro hooks, help/status text, sizes) has no descriptor field and is quarantined verbatim in the descriptor's residue with the whole element, so a same-format writer can restore the control exactly; the FORMCHECKBOX/FORMTEXT/FORMDROPDOWN instruction is NOT additionally recorded -- it is mechanically derivable from the control type, and a form field is ONE construct (a contentControl), never a field construct beside it.
+const FORM_CONTROL_TYPE_BY_TAG: ReadonlyMap<string, ContentControlType> = new Map([
+  ['w:checkBox', 'checkbox'],
+  ['w:ddList', 'dropDown'],
+  ['w:textInput', 'plainText'],
+]);
+
+// ST_OnOff as the toggle convention styles.ts applies: an absent element means the caller's fallback, a present element without @w:val is true, and only '0'/'false'/'off' spell false.
+function readOnOff(element: XmlElement | undefined): boolean | undefined {
+  if (element === undefined) {
+    return undefined;
+  }
+  const val = attr(element, 'w:val');
+  return val === undefined || (val !== '0' && val !== 'false' && val !== 'off');
+}
+
+// The run carrying a field's opening w:fldChar, when that field is a legacy form field: the w:ffData child names the control. Returns undefined for an ordinary field (no w:ffData) -- the caller keeps its plain field descriptor.
+export function readFormControlDescriptor(beginRun: XmlElement): ContentControlDescriptor | undefined {
+  const ffData = childrenWithTag(beginRun, 'w:ffData')[0];
+  if (ffData === undefined) {
+    return undefined;
+  }
+  const descriptor: ContentControlDescriptor = { kind: 'contentControl', controlType: 'richText', source: { format: 'docx', xml: buildXml([ffData]) } };
+  const name = childrenWithTag(ffData, 'w:name')[0];
+  const nameVal = name === undefined ? undefined : attr(name, 'w:val');
+  if (nameVal !== undefined) {
+    descriptor.tag = decodeEntities(nameVal);
+  }
+  for (const child of ffData.children) {
+    if (child.type !== 'element') {
+      continue;
+    }
+    const controlType = FORM_CONTROL_TYPE_BY_TAG.get(child.tag);
+    if (controlType === undefined) {
+      continue;
+    }
+    descriptor.controlType = controlType;
+    if (child.tag === 'w:checkBox') {
+      descriptor.checked = readOnOff(childrenWithTag(child, 'w:checked')[0]) ?? readOnOff(childrenWithTag(child, 'w:default')[0]) ?? false;
+    } else if (child.tag === 'w:ddList') {
+      const options: string[] = [];
+      for (const item of childrenWithTag(child, 'w:listItem')) {
+        // CT_FFDDListEntry spells its value attribute w:val -- unlike the SDT vocabulary's otherwise-identical CT_DdlListItem, whose value attribute is w:value (readListItemOptions above).
+        const value = attr(item, 'w:displayText') ?? attr(item, 'w:val');
+        if (value !== undefined) {
+          options.push(decodeEntities(value));
+        }
+      }
+      if (options.length > 0) {
+        descriptor.options = options;
+      }
+    }
+    break;
+  }
+  return descriptor;
 }
