@@ -684,3 +684,77 @@ describe('readOdtContent: field master declarations as a definitions table', () 
     expect(new Set(numIds).size).toBe(3);
   });
 });
+
+// The quarantined residue rows that landed outside #764's slice (ExaDev/documents.js#769): inline constructs with no cross-format analogue (ruby, meta, the is-list-header flag) quarantine on their own paragraph; document-level tenants nothing else owns (xforms models, DDE declarations and links, vendor-extension elements) quarantine at the package tier; and the non-content parts quarantine at the package tier keyed by part path. Every fixture is programmatic, built to the OASIS grammar.
+describe('readOdtContent: residue rows', () => {
+  it('quarantines an xforms:model inside office:forms at the package tier, keyed xforms', () => {
+    const pkg = odtPackage([
+      el('office:forms', {}, [
+        el('xforms:model', { id: 'Model1' }, [el('xforms:instance')]),
+      ]),
+    ]);
+    const { source } = readOdtContent(pkg);
+    expect(source?.xforms).toMatchObject({ format: 'odt' });
+    expect(source?.xforms?.xml).toContain('<xforms:model id="Model1">');
+  });
+
+  it('quarantines a vendor-extension-namespace element at the package tier, keyed by its own tag', () => {
+    const pkg = odtPackage([el('loext:content', {}, [txt('extension content')])]);
+    const { source } = readOdtContent(pkg);
+    expect(source?.['loext:content']?.format).toBe('odt');
+    expect(source?.['loext:content']?.xml).toContain('<loext:content>');
+  });
+
+  it('quarantines DDE connection declarations and a section\'s text:dde-source at the package tier under their own keys', () => {
+    const pkg = odtPackage([
+      el('text:dde-connection-decls', {}, [
+        el('text:dde-connection-decl', { 'text:name': 'conn1', 'office:dde-application': 'soffice', 'office:dde-topic': './tmp/topic', 'office:dde-item': 'item' }),
+      ]),
+      el('text:section', { 'text:name': 'Linked' }, [
+        el('text:dde-source', { 'text:connection-name': 'conn1', 'text:dde-application': 'soffice' }),
+        el('text:p', {}, [txt('cached')]),
+      ]),
+    ]);
+    const { source } = readOdtContent(pkg);
+    expect(source?.['dde-connections']?.xml).toContain('text:dde-connection-decl');
+    expect(source?.['dde-links']?.xml).toContain('text:dde-source');
+  });
+
+  it('quarantines text:ruby and text:meta inline elements on their own paragraph, beside the style-chain residue they may share it with', () => {
+    const pkg = odtPackage([
+      el('text:p', {}, [txt('annotated '), el('text:ruby', {}, [el('text:ruby-base', {}, [txt('base')]), el('text:ruby-text', {}, [txt('text')])]), el('text:meta', { 'text:xml-id': 'meta1' }, [txt(' after')])]),
+    ]);
+    const paragraphBlock = firstSectionBlocks(pkg)[0];
+    if (paragraphBlock?.kind !== 'paragraph') {
+      throw new Error('expected a paragraph block');
+    }
+    expect(paragraphBlock.source?.format).toBe('odt');
+    expect(paragraphBlock.source?.xml).toContain('<text:ruby>');
+    expect(paragraphBlock.source?.xml).toContain('<text:meta');
+  });
+
+  it('quarantines a heading\'s text:is-list-header attribute as the heading paragraph\'s own residue', () => {
+    const pkg = odtPackage([el('text:h', { 'text:outline-level': '1', 'text:is-list-header': 'true' }, [txt('List header heading')])]);
+    const heading = firstSectionBlocks(pkg)[0];
+    if (heading?.kind !== 'paragraph') {
+      throw new Error('expected a paragraph block');
+    }
+    expect(heading.source?.xml).toContain('<text:h text:is-list-header="true"></text:h>');
+  });
+
+  it('quarantines a non-content XML part at the package tier keyed by its part path, and never the parts the reader consumes', () => {
+    const pkg = odtPackage([el('text:p', {}, [txt('body')])]);
+    pkg.parts['settings.xml'] = { kind: 'xml', nodes: [el('office:document-settings', {}, [el('config:config-item-set', { 'config:name': 'view-settings' })])] };
+    pkg.parts['meta.xml'] = { kind: 'xml', nodes: [el('office:document-meta', {}, [el('meta:generator', {}, [txt('LibreOffice')])])] };
+    pkg.parts['Thumbnails/thumbnail.png'] = { kind: 'binary', base64: 'iFA=' };
+    const { source } = readOdtContent(pkg);
+    expect(Object.keys(source ?? {}).sort()).toEqual(['settings.xml']);
+    expect(source?.['settings.xml']?.xml).toContain('<office:document-settings');
+  });
+
+  it('splices the package-tier residue table onto readOdt\'s assembled package root', () => {
+    const pkg = odtPackage([el('loext:content')]);
+    const assembled = readOdt(pkg);
+    expect(assembled.source?.['loext:content']?.format).toBe('odt');
+  });
+});
