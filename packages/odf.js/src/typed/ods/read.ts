@@ -1,4 +1,5 @@
 import type {
+  Box,
   ContentCellValue,
   ContentDocument,
   ContentEmbeddedObject,
@@ -31,7 +32,7 @@ import type { OdfTransformFunction } from '../shared/transform';
 import { parseOdfTransform } from '../shared/transform';
 import { readDrawFrame } from '../draw/shapes';
 import type { EmbeddedDrawObject } from '../draw/embedded';
-import { readDrawObjectReference } from '../draw/embedded';
+import { readDrawObjectReference, readOdfChartContent } from '../draw/embedded';
 import { readOdfFormulaContent } from '../formula/read';
 import { readOdgContent } from '../odg/read';
 import { readOdpContent } from '../odp/read';
@@ -222,7 +223,7 @@ interface TableWalkResult {
 }
 
 // An embedded sub-document -> the ContentDocument variant its own typed reader produces. This is the kind -> reader dispatch typed/draw/embedded.ts deliberately leaves to its caller (see that module's own note on the import cycle it would otherwise create): readOdsContent is one of the four readers dispatched to, so a spreadsheet embedded inside a spreadsheet is plain self-recursion here, needing no indirection at all.
-function readEmbeddedObjectDocument(reference: EmbeddedDrawObject): ContentDocument {
+function readEmbeddedObjectDocument(reference: EmbeddedDrawObject, frame: Box): ContentDocument {
   switch (reference.objectKind) {
     case 'wordprocessing': {
       const { metadata, sections } = readOdtContent(reference.package);
@@ -244,8 +245,8 @@ function readEmbeddedObjectDocument(reference: EmbeddedDrawObject): ContentDocum
       // The one embedded kind whose own reader already returns a finished ContentDocument (readOdfFormulaContent), because a formula document has no per-format {metadata, sections/slides/pages/sheets} shape to re-wrap -- its whole content IS the MathML.
       return readOdfFormulaContent(reference.package);
     case 'chart':
-      // document-schema.js's 'chart' member names an OOXML chart graphic frame's cached series/category model -- a kind no ODF reader mints (an ODS chart is not recovered as an embedded object at all), so reaching this arm means a caller handed this dispatch a foreign value. Stated explicitly so the switch stays exhaustive against the union.
-      throw new Error('readEmbeddedObjectDocument: an embedded chart object names an OOXML chart frame and has no ODF reader to dispatch to');
+      // A chart's document is the frame-sized drawing page carrying the chart's local data cache (see readOdfChartContent's own note); the chart element quarantines into the object's residue below.
+      return readOdfChartContent(reference.package, frame, 'ods').document;
   }
 }
 
@@ -267,11 +268,20 @@ function collectAnchoredFrame(
   }
 
   const reference = readDrawObjectReference(frameElement, pkg);
+  if (reference?.objectKind === 'chart') {
+    const { document, residue } = readOdfChartContent(reference.package, shape.frame, 'ods');
+    const chartObject: ContentEmbeddedObject = { objectKind: 'chart', document, frame: shape.frame, anchorRow, anchorColumn, offsetXPt: shape.frame.xPt, offsetYPt: shape.frame.yPt };
+    if (residue !== undefined) {
+      chartObject.source = residue;
+    }
+    embeddedObjects.push(chartObject);
+    return;
+  }
   if (reference !== undefined) {
     // Anchor fields are set exactly as they are for an anchored image just below -- document-schema.js 2.2.0 gave ContentEmbeddedObject the same anchorRow/anchorColumn/offsetXPt/offsetYPt quartet ContentSheetImage already carried, so an embedded object's own anchor cell is now genuinely representable rather than lost. `frame` keeps the coordinates the format itself stated (cell-relative for a cell-anchored object, sheet-absolute for a page-anchored one) and the offsets restate that frame's own origin against the named anchor cell, mirroring ContentSheetImage's own convention rather than inventing a second one.
     embeddedObjects.push({
       objectKind: reference.objectKind,
-      document: readEmbeddedObjectDocument(reference),
+      document: readEmbeddedObjectDocument(reference, shape.frame),
       frame: shape.frame,
       anchorRow,
       anchorColumn,
