@@ -3,6 +3,8 @@ import type { Package } from '../../model/package';
 import type { XmlElement } from '../../model/node';
 import { el, txt } from '../../xml/fragment';
 import { readOdfParagraph } from './paragraph';
+import type { DefinitionEntry } from 'document-schema.js';
+import type { OdfDefinitionsSink } from './constructs';
 
 function contentPackage(automaticStyleChildren: XmlElement[] = []): Package['parts'][string] {
   return { kind: 'xml', nodes: [el('office:document-content', {}, [el('office:automatic-styles', {}, automaticStyleChildren)])] };
@@ -279,8 +281,8 @@ describe('readOdfParagraph: run-level construct extents (fields, bookmarks)', ()
       el('text:note-body', {}, [el('text:p', {}, [txt('The note body.')])]),
     ]);
     const p = el('text:p', {}, [txt('Claim'), note, txt(' continues.')]);
-    const entries: Record<string, unknown> = {};
-    const sink = { entries, nextNoteOrdinal: 1 };
+    const entries: Record<string, DefinitionEntry> = {};
+    const sink: OdfDefinitionsSink = { entries, nextNoteOrdinal: 1, nextAnnotationOrdinal: 1 };
     const paragraph = readOdfParagraph(p, { parts: {} }, { definitions: sink });
     expect(paragraph.runs.map((run) => run.text)).toEqual(['Claim', '1', ' continues.']);
     expect(paragraph.constructs).toEqual([
@@ -299,7 +301,7 @@ describe('readOdfParagraph: run-level construct extents (fields, bookmarks)', ()
       el('text:note-body', {}, [el('text:p', {}, [txt('Endnote body.')])]),
     ]);
     const p = el('text:p', {}, [note]);
-    const sink = { entries: {}, nextNoteOrdinal: 1, nextAnnotationOrdinal: 1 };
+    const sink: OdfDefinitionsSink = { entries: {}, nextNoteOrdinal: 1, nextAnnotationOrdinal: 1 };
     const paragraph = readOdfParagraph(p, { parts: {} }, { definitions: sink });
     expect(paragraph.constructs).toEqual([
       { descriptor: { kind: 'anchor', anchorType: 'endnote', name: 'note1', definition: 'note:note1' }, startRun: 0, endRun: 1 },
@@ -314,7 +316,7 @@ describe('readOdfParagraph: run-level construct extents (fields, bookmarks)', ()
       el('text:p', {}, [txt('Comment body.')]),
     ]);
     const p = el('text:p', {}, [txt('Anchored '), annotation, txt('text')]);
-    const sink = { entries: {}, nextNoteOrdinal: 1, nextAnnotationOrdinal: 1 };
+    const sink: OdfDefinitionsSink = { entries: {}, nextNoteOrdinal: 1, nextAnnotationOrdinal: 1 };
     const paragraph = readOdfParagraph(p, { parts: {} }, { definitions: sink });
     expect(paragraph.runs.map((run) => run.text)).toEqual(['Anchored ', 'text']);
     expect(paragraph.constructs).toEqual([
@@ -355,7 +357,7 @@ describe('readOdfParagraph: run-level construct extents (fields, bookmarks)', ()
       el('office:annotation-end', { 'office:name': 'c1' }),
       txt(' b'),
     ]);
-    const sink = { entries: {}, nextNoteOrdinal: 1, nextAnnotationOrdinal: 1 };
+    const sink: OdfDefinitionsSink = { entries: {}, nextNoteOrdinal: 1, nextAnnotationOrdinal: 1 };
     const paragraph = readOdfParagraph(p, { parts: {} }, { definitions: sink });
     expect(paragraph.constructs).toEqual([
       { descriptor: { kind: 'anchor', anchorType: 'comment', name: 'c1', definition: 'comment:c1' }, startRun: 1, endRun: 2 },
