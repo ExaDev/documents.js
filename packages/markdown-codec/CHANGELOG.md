@@ -1,3 +1,26 @@
+# [4.1.0](https://github.com/ExaDev/documents.js/compare/markdown-codec@4.0.15...markdown-codec@4.1.0) (2026-08-21)
+
+
+### Bug Fixes
+
+* **documents.js:** pass construct markers through to markdown-codec's writer ([ea4c625](https://github.com/ExaDev/documents.js/commit/ea4c625c621fca63d82b37aa9527647bc99852ca))
+
+
+### Features
+
+* **markdown-codec:** blockquote container as a division construct pair ([c9d2fc0](https://github.com/ExaDev/documents.js/commit/c9d2fc0596c0ccee8406418e99d9ae859617607d))
+* **markdown-codec:** carry a fence's info string as the code language plus quarantined remainder ([ee9c859](https://github.com/ExaDev/documents.js/commit/ee9c859d4eb5ae7b97d54fb52f7f1186f46fad9e))
+* **markdown-codec:** carry link and image titles as link construct annotations ([579f09d](https://github.com/ExaDev/documents.js/commit/579f09dd44b7156d3d2196eb73efc9d25a608e11))
+* **markdown-codec:** display math as an embedded formula document ([e4ff1d5](https://github.com/ExaDev/documents.js/commit/e4ff1d5b97df092650db3a410dbb020a6b3ea58f))
+* **markdown-codec:** raw HTML restorable through quarantined markdown residue ([2a1fcb0](https://github.com/ExaDev/documents.js/commit/2a1fcb049d0c6d8548ee170c9d3332fb4f6f0a70))
+* **markdown-codec:** reference definitions and front matter through the package tree ([697c4c6](https://github.com/ExaDev/documents.js/commit/697c4c68f49e00d6b9ee2d7aa8e24b1ffbc7275c))
+* **markdown-codec:** task checkbox state and item identity on the list membership ([e948e4e](https://github.com/ExaDev/documents.js/commit/e948e4e66ca93de745324919fce5cac8df403a85))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^4.8.0
+
 ## [4.0.15](https://github.com/ExaDev/documents.js/compare/markdown-codec@4.0.14...markdown-codec@4.0.15) (2026-08-21)
 
 
