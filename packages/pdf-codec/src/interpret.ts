@@ -6,6 +6,7 @@ import type { PdfDict, PdfObject } from './objects';
 import { asArray, asName, asNumber, dictGet } from './objects';
 import { readContentStream } from './content-read';
 import type { PdfDiagnosticSink } from './diagnostics';
+import { decodePdfString } from './pdf-text';
 
 // The graphics/text state machine: walks a page's (or a recursed form XObject's) content-stream operations, tracking exactly the state v1 needs to recover -- CTM, fill/stroke colour, line width, and text position/font/size -- and emits one ExtractedItem per meaningful paint operation. Everything else (clipping, shadings, patterns) is deliberately not modelled; see the implementation plan's v1 scope for the reasoning. General path construction (m/l/c/v/y/h/re) and stroking ARE modelled, recovered as ExtractedPath below -- or, when the recovered geometry matches one of the three characteristic simple-shape patterns classifyShape recognises, as the more specific ExtractedRect/ExtractedEllipse/ExtractedLine instead.
 
@@ -18,12 +19,16 @@ export interface ExtractedTextRun {
   readonly endMatrix: Matrix; // Trm at the position the *next* glyph would start -- lets a caller derive the run's on-page width as the device-space distance between the two baseline points, with no separate unit bookkeeping
   readonly sizePt: number;
   readonly color: LayoutColor;
+  readonly layerName?: string; // the optional-content group in scope (innermost /OC BDC span, or the recursed form XObject's own)
+  readonly actualText?: string; // a /ActualText marked-content property in scope: the producer's replacement reading for extraction
+  readonly alt?: string; // a /Alt marked-content property in scope: the producer's alternate description
 }
 
 // The paint a recovered shape carries, shared by every extracted item that can be filled and/or stroked. At least one of the two is always set: `n` (the clip-only, paints-nothing operator) never emits an item at all, and every other path-painting operator fills, strokes, or does both.
 export interface ExtractedPaint {
   readonly fill: LayoutColor | undefined;
   readonly stroke: { readonly color: LayoutColor; readonly widthPt: number } | undefined;
+  readonly layerName?: string; // the optional-content group in scope -- membership is a fact of every painted item, not only text
 }
 
 // An axis-aligned rectangle, recovered from a single closed four-corner all-straight-line subpath under any CTM that leaves those corners axis-aligned -- so a bare `re` under a non-rotated CTM (by far the common case), a `re` under a 90-degree-multiple rotation (a rotated rectangle is still a rectangle), and a hand-constructed m/l/l/l/h rectangle all reach it, with any combination of fill and stroke. Anything else (a non-90-degree rotation, curves, multiple subpaths) falls through to ExtractedPath below instead.
@@ -53,6 +58,7 @@ export interface ExtractedLine {
   readonly y2Pt: number;
   readonly color: LayoutColor;
   readonly widthPt: number;
+  readonly layerName?: string; // the optional-content group in scope -- membership is a fact of every painted item, not only text
 }
 
 // One line or cubic-Bezier segment of a subpath, device-space (CTM-applied, not yet page-matrix-applied -- matching ExtractedRect's own convention), mirroring document-schema.js's LayoutPathSegment shape exactly so read.ts's conversion is a pure per-point transform.
@@ -79,6 +85,7 @@ export interface ExtractedImage {
   readonly resourceName: string;
   readonly resources: PdfDict;
   readonly matrix: Matrix; // the CTM at the moment of Do -- placement is x=ctm[4], y=ctm[5], width=|ctm[0]|, height=|ctm[3]| for the axis-aligned case
+  readonly layerName?: string; // the optional-content group in scope, or the image XObject dict's own /OC
 }
 
 export interface ExtractedInlineImage {
@@ -86,6 +93,7 @@ export interface ExtractedInlineImage {
   readonly dict: PdfDict; // BI dict, keys possibly abbreviated (/W /H /CS /BPC /F /DP /IM) -- images-read.ts normalises
   readonly data: Uint8Array<ArrayBuffer>;
   readonly matrix: Matrix;
+  readonly layerName?: string;
 }
 
 export type ExtractedItem = ExtractedTextRun | ExtractedRect | ExtractedEllipse | ExtractedLine | ExtractedPath | ExtractedImage | ExtractedInlineImage;
@@ -110,6 +118,8 @@ export interface InterpretContext {
   readonly fontMetrics: FontMetricsPort;
   readonly resolver: PdfObjectResolver;
   readonly sink: PdfDiagnosticSink;
+  // Resolves an /OC value (from a BDC property dict or an XObject dict) to the layer name readPdf's optional-content pass assigned it. Absent in interpret.ts's own unit tests, where no optional content exists.
+  readonly layerNameOf?: (obj: PdfObject | undefined) => string | undefined;
 }
 
 // Guards a self-referential or runaway chain of nested form XObjects -- a corrupt or adversarial file, not something a real producer emits.
@@ -149,6 +159,31 @@ function computeTrm(ctm: Matrix, ts: TextState): Matrix {
 
 function numAt(operands: readonly PdfObject[], index: number): number {
   return asNumber(operands[index]) ?? 0;
+}
+
+// The property dict a BDC's second operand names: an inline dictionary, or a name resolved through the resource dict's /Properties (ISO 32000-1 14.10.2).
+function markedContentProperties(operand: PdfObject | undefined, resources: PdfDict, resolver: PdfObjectResolver): PdfDict | undefined {
+  if (operand?.kind === 'dict') {
+    return operand;
+  }
+  if (operand?.kind === 'name') {
+    const properties = resolver.resolveDict(dictGet(resources, 'Properties'));
+    return properties === undefined ? undefined : resolver.resolveDict(dictGet(properties, operand.name));
+  }
+  return undefined;
+}
+
+// The string-valued accessibility properties a marked-content span puts in scope (/ActualText, /Alt) -- the tagged-PDF facts that ride marked content rather than structure elements, read here per #721's phase-6 subset.
+function markedContentStrings(props: PdfDict | undefined): { actualText?: string; alt?: string } {
+  if (props === undefined) {
+    return {};
+  }
+  const actualTextObj = dictGet(props, 'ActualText');
+  const altObj = dictGet(props, 'Alt');
+  return {
+    ...(actualTextObj?.kind === 'string' ? { actualText: decodePdfString(actualTextObj.bytes) } : {}),
+    ...(altObj?.kind === 'string' ? { alt: decodePdfString(altObj.bytes) } : {}),
+  };
 }
 
 function grayColor(value: number): LayoutColor {
@@ -393,8 +428,15 @@ function classifyShape(subpaths: readonly ExtractedSubpath[], paint: ExtractedPa
 export function interpretContentStream(bytes: Uint8Array<ArrayBuffer>, resources: PdfDict, context: InterpretContext): ExtractedItem[] {
   const items: ExtractedItem[] = [];
   const initialState: GraphicsState = { ctm: IDENTITY_MATRIX, fillColor: COLOR_BLACK, strokeColor: COLOR_BLACK, lineWidth: DEFAULT_LINE_WIDTH_PT };
-  runContentStream(bytes, resources, initialState, context, items, 0);
+  runContentStream(bytes, resources, initialState, context, items, 0, []);
   return items;
+}
+
+// What a BDC span puts in scope for the items it brackets (ISO 32000-1 14.10): optional-content membership, the replacement reading, and the alternate description. Nested spans stack; the innermost /OC in scope wins for membership, and an absent property in an inner span falls through to the enclosing one.
+interface MarkedContentProps {
+  readonly layerName?: string;
+  readonly actualText?: string;
+  readonly alt?: string;
 }
 
 // A subpath still being accumulated within one runContentStream call -- `segments` is mutable (pushed to as l/c/v/y arrive) and `closed` flips true on `h` (or the implicit closepath s/b/b* perform); once finalized it is pushed as-is into pathSubpaths, which is exactly ExtractedSubpath's own shape (a mutable segments array satisfies the readonly array field type).
@@ -411,13 +453,42 @@ function lastPointOf(subpath: MutableSubpath): Point {
   return last === undefined ? { x: subpath.startXPt, y: subpath.startYPt } : { x: last.xPt, y: last.yPt };
 }
 
-function runContentStream(bytes: Uint8Array<ArrayBuffer>, resources: PdfDict, initialState: GraphicsState, context: InterpretContext, items: ExtractedItem[], depth: number): void {
+function runContentStream(bytes: Uint8Array<ArrayBuffer>, resources: PdfDict, initialState: GraphicsState, context: InterpretContext, items: ExtractedItem[], depth: number, markedContent: MarkedContentProps[]): void {
   const operations = readContentStream(bytes, context.sink);
   const gsStack: GraphicsState[] = [];
   let gs = initialState;
   let ts = defaultTextState();
   let pathSubpaths: MutableSubpath[] = [];
   let currentSubpath: MutableSubpath | undefined;
+
+  // The innermost value of one marked-content property still in scope, searching outward from the top of the stack.
+  const inScope = (key: keyof MarkedContentProps): string | undefined => {
+    for (let i = markedContent.length - 1; i >= 0; i--) {
+      const value = markedContent[i]?.[key];
+      if (value !== undefined) {
+        return value;
+      }
+    }
+    return undefined;
+  };
+
+  // Every extracted item funnels through here so span membership lands on all of them uniformly: the span's layer fills an unstamped item (an XObject's own /OC already set), and the text-only properties land only on text runs.
+  const pushItem = (item: ExtractedItem): void => {
+    if (item.kind === 'text') {
+      const layer = item.layerName ?? inScope('layerName');
+      const actualText = inScope('actualText');
+      const alt = inScope('alt');
+      items.push({
+        ...item,
+        ...(layer !== undefined ? { layerName: layer } : {}),
+        ...(actualText !== undefined ? { actualText } : {}),
+        ...(alt !== undefined ? { alt } : {}),
+      });
+      return;
+    }
+    const layer = item.layerName ?? inScope('layerName');
+    items.push(layer === undefined ? item : { ...item, layerName: layer });
+  };
 
   // `m` starts a new subpath, finalizing whatever was previously open into pathSubpaths -- `re`'s own implicit leading `m` (see appendRectSubpath) reuses this too. Both a real paint operator and the very next `m` are the only two things that ever finalize a subpath.
   const finalizeCurrentSubpath = (): void => {
@@ -476,7 +547,7 @@ function runContentStream(bytes: Uint8Array<ArrayBuffer>, resources: PdfDict, in
         fill: isFillOp ? gs.fillColor : undefined,
         stroke: isStrokeOp ? { color: gs.strokeColor, widthPt: gs.lineWidth } : undefined,
       };
-      items.push(classifyShape(pathSubpaths, paint) ?? { kind: 'path', subpaths: pathSubpaths, fillRule: paintFillRuleFor(operator), ...paint });
+      pushItem(classifyShape(pathSubpaths, paint) ?? { kind: 'path', subpaths: pathSubpaths, fillRule: paintFillRuleFor(operator), ...paint });
     }
     resetPath();
   };
@@ -527,7 +598,7 @@ function runContentStream(bytes: Uint8Array<ArrayBuffer>, resources: PdfDict, in
       at += chunk.length;
     }
     const endMatrix = computeTrm(gs.ctm, ts);
-    items.push({ kind: 'text', codes: combined, fontResourceName: ts.fontResourceName, resources, startMatrix, endMatrix, sizePt: ts.fontSizePt, color: gs.fillColor });
+    pushItem({ kind: 'text', codes: combined, fontResourceName: ts.fontResourceName, resources, startMatrix, endMatrix, sizePt: ts.fontSizePt, color: gs.fillColor });
   };
 
   const showText = (bytes: Uint8Array<ArrayBuffer>): void => {
@@ -550,8 +621,10 @@ function runContentStream(bytes: Uint8Array<ArrayBuffer>, resources: PdfDict, in
       return;
     }
     const subtype = asName(dictGet(xobj.dict, 'Subtype'));
+    // An XObject dict's own /OC governs its whole extent, overriding the enclosing span's membership for the items it emits; with no /OC of its own, a form drawn inside a span belongs to that span.
+    const ownLayer = context.layerNameOf?.(dictGet(xobj.dict, 'OC'));
     if (subtype === 'Image') {
-      items.push({ kind: 'image', resourceName: name, resources, matrix: gs.ctm });
+      pushItem({ kind: 'image', resourceName: name, resources, matrix: gs.ctm, ...(ownLayer !== undefined ? { layerName: ownLayer } : {}) });
       return;
     }
     if (subtype === 'Form') {
@@ -564,13 +637,14 @@ function runContentStream(bytes: Uint8Array<ArrayBuffer>, resources: PdfDict, in
       const formResources = context.resolver.resolveDict(dictGet(xobj.dict, 'Resources')) ?? resources;
       const decoded = decodeStream(xobj.raw, xobj.dict, context.sink);
       const formState: GraphicsState = { ...gs, ctm: multiplyMatrices(formMatrix, gs.ctm) };
-      runContentStream(decoded.bytes, formResources, formState, context, items, depth + 1);
+      const formLayer = ownLayer ?? inScope('layerName');
+      runContentStream(decoded.bytes, formResources, formState, context, items, depth + 1, [formLayer !== undefined ? { layerName: formLayer } : {}]);
     }
   };
 
   for (const token of operations) {
     if (token.kind === 'inlineImage') {
-      items.push({ kind: 'inlineImage', dict: token.image.dict, data: token.image.data, matrix: gs.ctm });
+      pushItem({ kind: 'inlineImage', dict: token.image.dict, data: token.image.data, matrix: gs.ctm });
       continue;
     }
     const { operands, operator } = token.operation;
@@ -748,6 +822,18 @@ function runContentStream(bytes: Uint8Array<ArrayBuffer>, resources: PdfDict, in
       }
       case 'Do':
         handleDo(asName(operands[0]));
+        break;
+      case 'BDC': {
+        const props = markedContentProperties(operands[1], resources, context.resolver);
+        const layerName = context.layerNameOf?.(props === undefined ? undefined : dictGet(props, 'OC'));
+        markedContent.push({ ...(layerName !== undefined ? { layerName } : {}), ...markedContentStrings(props) });
+        break;
+      }
+      case 'BMC':
+        markedContent.push({});
+        break;
+      case 'EMC':
+        markedContent.pop();
         break;
       default:
         break; // every other operator (marked content, shading, clipping, ExtGState, dash pattern, line cap/join) is outside v1's extraction scope

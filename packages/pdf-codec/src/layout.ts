@@ -20,6 +20,9 @@ export const LayoutTextSchema = z.object({
   widthPt: z.number().nonnegative().optional(), // measured (write path) or reported (read path)
   rotationDeg: z.number().optional(),
   underline: z.boolean().optional(),
+  layer: z.string().optional(), // the optional-content group this item belongs to (a /OC BDC span or XObject dict), naming an entry in LayoutDocument.layers
+  actualText: z.string().optional(), // a /ActualText marked-content span over this run: the producer's own replacement reading for extraction
+  alt: z.string().optional(), // a /Alt marked-content span over this run: the producer's alternate description
   sourcePath: z.string().optional(), // deterministic, document-order-derived path copied from the ContentDocument item this was laid out from
 });
 export type LayoutText = z.infer<typeof LayoutTextSchema>;
@@ -32,6 +35,7 @@ export const LayoutImageSchema = z.object({
   widthPt: z.number().positive(),
   heightPt: z.number().positive(),
   rotationDeg: z.number().optional(),
+  layer: z.string().optional(), // the optional-content group this item belongs to, naming an entry in LayoutDocument.layers
   sourcePath: z.string().optional(), // deterministic, document-order-derived path copied from the ContentDocument item this was laid out from
 });
 export type LayoutImage = z.infer<typeof LayoutImageSchema>;
@@ -44,6 +48,7 @@ export const LayoutRectSchema = z.object({
   heightPt: z.number().nonnegative(),
   fill: ColorSchema.optional(),
   stroke: z.object({ color: ColorSchema, widthPt: z.number().positive() }).optional(),
+  layer: z.string().optional(), // the optional-content group this item belongs to, naming an entry in LayoutDocument.layers
   sourcePath: z.string().optional(), // deterministic, document-order-derived path copied from the ContentDocument item this was laid out from
 });
 export type LayoutRect = z.infer<typeof LayoutRectSchema>;
@@ -57,6 +62,7 @@ export const LayoutLineSchema = z.object({
   color: ColorSchema,
   widthPt: z.number().positive(),
   style: ContentStrokeStyleSchema.optional(), // stroke dash pattern hint; absent means 'solid', matching ContentStrokeSchema's own documented default
+  layer: z.string().optional(), // the optional-content group this item belongs to, naming an entry in LayoutDocument.layers
   sourcePath: z.string().optional(), // deterministic, document-order-derived path copied from the ContentDocument item this was laid out from
 });
 export type LayoutLine = z.infer<typeof LayoutLineSchema>;
@@ -69,6 +75,7 @@ export const LayoutEllipseSchema = z.object({
   heightPt: z.number().positive(),
   fill: ColorSchema.optional(),
   stroke: z.object({ color: ColorSchema, widthPt: z.number().positive() }).optional(),
+  layer: z.string().optional(), // the optional-content group this item belongs to, naming an entry in LayoutDocument.layers
   sourcePath: z.string().optional(), // deterministic, document-order-derived path copied from the ContentDocument item this was laid out from
 });
 export type LayoutEllipse = z.infer<typeof LayoutEllipseSchema>;
@@ -105,6 +112,7 @@ export const LayoutPathSchema = z.object({
   fillRule: z.enum(['nonzero', 'evenodd']).optional(),
   stroke: z.object({ color: ColorSchema, widthPt: z.number().positive() }).optional(),
   style: ContentStrokeStyleSchema.optional(), // stroke dash pattern hint; absent means 'solid', matching ContentStrokeSchema's own documented default
+  layer: z.string().optional(), // the optional-content group this item belongs to, naming an entry in LayoutDocument.layers
   sourcePath: z.string().optional(), // deterministic, document-order-derived path copied from the ContentDocument item this was laid out from
 });
 export type LayoutPath = z.infer<typeof LayoutPathSchema>;
@@ -207,6 +215,13 @@ export const LayoutAttachmentSchema = z.object({
 });
 export type LayoutAttachment = z.infer<typeof LayoutAttachmentSchema>;
 
+// One optional-content group with its visibility under the document's default configuration (/OCProperties /D): BaseState adjusted by the /ON and /OFF lists. `visible` is the DEFAULT VIEW's state, not a mandate -- a consumer decides what an invisible layer's content means for it.
+export const LayoutLayerSchema = z.object({
+  name: z.string(), // the OCG's /Name, or a reader-minted layerN when the producer left it unnamed
+  visible: z.boolean(),
+});
+export type LayoutLayer = z.infer<typeof LayoutLayerSchema>;
+
 export const LayoutDocumentSchema = z.object({
   formatVersion: z.literal(LAYOUT_FORMAT_VERSION),
   metadata: LayoutMetadataSchema,
@@ -215,5 +230,6 @@ export const LayoutDocumentSchema = z.object({
   destinations: z.array(LayoutDestinationSchema).optional(),
   outline: z.array(LayoutOutlineItemSchema).optional(),
   attachments: z.array(LayoutAttachmentSchema).optional(),
+  layers: z.array(LayoutLayerSchema).optional(),
 });
 export type LayoutDocument = z.infer<typeof LayoutDocumentSchema>;
