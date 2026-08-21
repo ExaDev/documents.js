@@ -272,4 +272,71 @@ describe('readOdfParagraph: run-level construct extents (fields, bookmarks)', ()
       },
     ]);
   });
+
+  it('reads a text:note as a citation run plus a footnote anchor extent, and reports the body to the definitions sink', () => {
+    const note = el('text:note', { 'text:note-class': 'footnote', 'text:id': 'ftn1' }, [
+      el('text:note-citation', {}, [txt('1')]),
+      el('text:note-body', {}, [el('text:p', {}, [txt('The note body.')])]),
+    ]);
+    const p = el('text:p', {}, [txt('Claim'), note, txt(' continues.')]);
+    const entries: Record<string, unknown> = {};
+    const sink = { entries, nextNoteOrdinal: 1 };
+    const paragraph = readOdfParagraph(p, { parts: {} }, { definitions: sink });
+    expect(paragraph.runs.map((run) => run.text)).toEqual(['Claim', '1', ' continues.']);
+    expect(paragraph.constructs).toEqual([
+      { descriptor: { kind: 'anchor', anchorType: 'footnote', name: 'ftn1', definition: 'note:ftn1' }, startRun: 1, endRun: 2 },
+    ]);
+    expect(entries['note:ftn1']).toEqual({
+      kind: 'footnote',
+      citation: '1',
+      body: [{ kind: 'paragraph', runs: [{ text: 'The note body.', bold: undefined, italic: undefined, underline: undefined, strike: undefined, fontFamily: undefined, sizePt: undefined, color: undefined }], styleId: undefined, alignment: undefined, spacingBeforePt: undefined, spacingAfterPt: undefined, lineSpacing: undefined, indentLeftPt: undefined, indentFirstLinePt: undefined }],
+    });
+  });
+
+  it('reads an endnote-class note with the endnote anchor type and a minted name when text:id is absent', () => {
+    const note = el('text:note', { 'text:note-class': 'endnote' }, [
+      el('text:note-citation', {}, [txt('i')]),
+      el('text:note-body', {}, [el('text:p', {}, [txt('Endnote body.')])]),
+    ]);
+    const p = el('text:p', {}, [note]);
+    const sink = { entries: {}, nextNoteOrdinal: 1, nextAnnotationOrdinal: 1 };
+    const paragraph = readOdfParagraph(p, { parts: {} }, { definitions: sink });
+    expect(paragraph.constructs).toEqual([
+      { descriptor: { kind: 'anchor', anchorType: 'endnote', name: 'note1', definition: 'note:note1' }, startRun: 0, endRun: 1 },
+    ]);
+    expect(sink.entries['note:note1']).toMatchObject({ kind: 'endnote', citation: 'i' });
+  });
+
+  it('reads an unnamed office:annotation as a point comment anchor at its run position, with its body and author in the definitions sink', () => {
+    const annotation = el('office:annotation', {}, [
+      el('dc:creator', {}, [txt('C. Reviewer')]),
+      el('dc:date', {}, [txt('2026-08-20T14:00:00')]),
+      el('text:p', {}, [txt('Comment body.')]),
+    ]);
+    const p = el('text:p', {}, [txt('Anchored '), annotation, txt('text')]);
+    const sink = { entries: {}, nextNoteOrdinal: 1, nextAnnotationOrdinal: 1 };
+    const paragraph = readOdfParagraph(p, { parts: {} }, { definitions: sink });
+    expect(paragraph.runs.map((run) => run.text)).toEqual(['Anchored ', 'text']);
+    expect(paragraph.constructs).toEqual([
+      { descriptor: { kind: 'anchor', anchorType: 'comment', name: 'annotation1', definition: 'comment:annotation1' }, startRun: 1, endRun: 1 },
+    ]);
+    expect(sink.entries['comment:annotation1']).toMatchObject({ kind: 'comment', author: 'C. Reviewer', dateIso: '2026-08-20T14:00:00' });
+  });
+
+  it('pairs a named office:annotation with its office:annotation-end over the runs between them', () => {
+    const annotation = el('office:annotation', { 'office:name': 'c1' }, [el('text:p', {}, [txt('Range comment.')])]);
+    const p = el('text:p', {}, [
+      txt('a '),
+      annotation,
+      txt('marked'),
+      el('office:annotation-end', { 'office:name': 'c1' }),
+      txt(' b'),
+    ]);
+    const sink = { entries: {}, nextNoteOrdinal: 1, nextAnnotationOrdinal: 1 };
+    const paragraph = readOdfParagraph(p, { parts: {} }, { definitions: sink });
+    expect(paragraph.constructs).toEqual([
+      { descriptor: { kind: 'anchor', anchorType: 'comment', name: 'c1', definition: 'comment:c1' }, startRun: 1, endRun: 2 },
+    ]);
+    expect(sink.entries['comment:c1']).toMatchObject({ kind: 'comment' });
+  });
 });
