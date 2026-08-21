@@ -964,7 +964,72 @@ describe('readDocxContent: comments, footnotes, headers, footers', () => {
     const doc = readDocxContent(buildFixturePackage());
     expect(doc.comments).toEqual([]);
     expect(doc.footnotes).toEqual([]);
+    expect(doc.endnotes).toEqual([]);
     expect(doc.headers).toEqual([]);
     expect(doc.footers).toEqual([]);
+  });
+});
+
+describe('readDocxContent: header/footer structure', () => {
+  const HEADER_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/header';
+  const FOOTER_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer';
+
+  function headerFooterPackage(): Package {
+    const firstSectionBreak = el('w:p', {}, [
+      el('w:pPr', {}, [
+        el('w:sectPr', {}, [
+          el('w:headerReference', { 'w:type': 'default', 'r:id': 'rIdHeader1' }),
+          el('w:footerReference', { 'w:type': 'even', 'r:id': 'rIdFooter1' }),
+          el('w:pgSz', { 'w:w': '11906', 'w:h': '16838' }),
+        ]),
+      ]),
+    ]);
+    const finalSectPr = el('w:sectPr', {}, [
+      el('w:headerReference', { 'w:type': 'default', 'r:id': 'rIdHeader1' }),
+      el('w:headerReference', { 'w:type': 'first', 'r:id': 'rIdHeader2' }),
+      el('w:pgSz', { 'w:w': '12240', 'w:h': '15840' }),
+    ]);
+    const body = el('w:body', {}, [firstSectionBreak, el('w:p', {}, [textRun('Second section')]), finalSectPr]);
+    return {
+      parts: {
+        'word/document.xml': { kind: 'xml', nodes: [el('w:document', {}, [body])] },
+        'word/_rels/document.xml.rels': {
+          kind: 'xml',
+          nodes: [
+            rels([
+              { id: 'rIdHeader1', type: HEADER_REL, target: 'header1.xml' },
+              { id: 'rIdHeader2', type: HEADER_REL, target: 'header2.xml' },
+              { id: 'rIdFooter1', type: FOOTER_REL, target: 'footer1.xml' },
+            ]),
+          ],
+        },
+        'word/header1.xml': { kind: 'xml', nodes: [el('w:hdr', {}, [el('w:p', {}, [textRun('Running header')]), el('w:p', {}, [textRun('Second line')])])] },
+        'word/header2.xml': { kind: 'xml', nodes: [el('w:hdr', {}, [el('w:p', {}, [textRun('First-page header')])])] },
+        'word/footer1.xml': { kind: 'xml', nodes: [el('w:ftr', {}, [el('w:p', {}, [textRun('Even-page footer')])])] },
+      },
+    };
+  }
+
+  it('reads each referenced header/footer part as block flow, walked by the same block machinery as the body', () => {
+    const doc = readDocxContent(headerFooterPackage());
+    expect(doc.headerFooterParts).toEqual([
+      { path: 'word/footer1.xml', kind: 'footer', blocks: [{ kind: 'paragraph', runs: [{ text: 'Even-page footer' }] }] },
+      { path: 'word/header1.xml', kind: 'header', blocks: [{ kind: 'paragraph', runs: [{ text: 'Running header' }] }, { kind: 'paragraph', runs: [{ text: 'Second line' }] }] },
+      { path: 'word/header2.xml', kind: 'header', blocks: [{ kind: 'paragraph', runs: [{ text: 'First-page header' }] }] },
+    ]);
+  });
+
+  it('records which section references which part at which slot, keeping the odd/even/first distinction, with a shared part named once by both sections', () => {
+    const doc = readDocxContent(headerFooterPackage());
+    expect(doc.sectionHeaderFooters).toEqual([
+      { header: { default: 'word/header1.xml' }, footer: { even: 'word/footer1.xml' } },
+      { header: { default: 'word/header1.xml', first: 'word/header2.xml' } },
+    ]);
+  });
+
+  it('keeps the flat header/footer text arrays unchanged (one entry per part, package-key order), as the derived summary they have always been', () => {
+    const doc = readDocxContent(headerFooterPackage());
+    expect(doc.headers).toEqual(['Running headerSecond line', 'First-page header']);
+    expect(doc.footers).toEqual(['Even-page footer']);
   });
 });

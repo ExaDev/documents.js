@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { Package } from '../../model/package';
 import type { XmlElement, XmlNode } from '../../model/node';
 import type { AnchorDescriptor, Color, ConstructDescriptor, ContentBlock, ContentBorder, ContentCellBorders, ContentControlDescriptor, ContentEmbeddedObjectBlock, ContentImageBlock, ContentListMembership, ContentParagraph, ContentRun, ContentSection, ContentStrokeStyle, ContentTable, ContentTableCell, Margins, PageSize, ProvenanceChange, RunConstructExtent } from 'document-schema.js';
-import { COLOR_BLACK, ContentSectionSchema, PAGE_SIZE_LETTER, clampHeadingLevel, rgbHexToColor } from 'document-schema.js';
+import { COLOR_BLACK, ContentBlockSchema, ContentSectionSchema, PAGE_SIZE_LETTER, clampHeadingLevel, rgbHexToColor } from 'document-schema.js';
 import { DocumentMetadataSchema, readCoreProperties } from '../shared/metadata';
 import { readEmbeddedPayloadPart } from '../embedded';
 import { eighthPointsToPt, emuToPt, twipsToPt } from '../shared/units';
@@ -32,7 +32,7 @@ import {
   runRangeMarkerExtents,
 } from './constructs';
 
-// Package -> DocxDocument. Walks word/document.xml directly, resolving the full style cascade (docDefaults -> named-style basedOn chains -> paragraph-mark run properties -> character styles -> direct formatting) and DrawingML theme references for each run, so document order, styling, and geometry are all preserved -- unlike a naive reader that flattens paragraphs/tables into separate arrays with no shared ordering. Headers/footers keep their prior flat-text projection; live PAGE/NUMPAGES field substitution is not implemented -- fields resolve to their cached result text (Word already computed it), which is correct for every field except one whose value would change under a different pagination this reader doesn't perform. Ported from documents.js's src/ooxml/docx/read.ts (the section/style-cascade walk) merged with this package's own prior comment/footnote/header/footer reading.
+// Package -> DocxDocument. Walks word/document.xml directly, resolving the full style cascade (docDefaults -> named-style basedOn chains -> paragraph-mark run properties -> character styles -> direct formatting) and DrawingML theme references for each run, so document order, styling, and geometry are all preserved -- unlike a naive reader that flattens paragraphs/tables into separate arrays with no shared ordering. Headers/footers are read BOTH ways: the flat concatenated-text arrays the reader always produced (headers/footers), and the structural model (headerFooterParts as block flow walked by the same machinery as the body, plus sectionHeaderFooters naming which section references which part at which of the default/first/even slots). Live PAGE/NUMPAGES field substitution is not implemented -- fields resolve to their cached result text (Word already computed it), which is correct for every field except one whose value would change under a different pagination this reader doesn't perform. Ported from documents.js's src/ooxml/docx/read.ts (the section/style-cascade walk) merged with this package's own prior comment/footnote/header/footer reading.
 //
 // This is the flat, content-level half of the docx read pair: readDocx (typed/document-package.ts) wraps it into a tree-form DocumentPackage, which is the primary name and the shape a caller holding a whole document wants. Reach for this one when you need what the tree has no spelling for -- the comments, footnotes, header/footer text, and numbering definitions DocxDocument carries outside `sections` -- or when driving a pipeline that already works in flat ContentSection[].
 //
@@ -52,6 +52,21 @@ export const FootnoteSchema = z.object({
 });
 export type Footnote = z.infer<typeof FootnoteSchema>;
 
+// One header/footer part read as content rather than as concatenated text: the part's own body walked by the same block machinery as the document body (its own construct-marker bracket scope, its own relationships for images), plus the part's own path -- the identity a section reference names.
+export const HeaderFooterPartSchema = z.object({
+  path: z.string(),
+  kind: z.enum(['header', 'footer']),
+  blocks: z.array(ContentBlockSchema),
+});
+export type HeaderFooterPart = z.infer<typeof HeaderFooterPartSchema>;
+
+// The reference slots a w:sectPr spells: which header/footer part each of the default, first-page, and even-page slots uses, named by part path. Word's own inheritance rule -- a section with no reference for a slot reuses the previous section's -- is a consumer concern, recorded here exactly as spelled; the evenAndOddHeaders setting in word/settings.xml that gates whether Word renders the even slot at all is not read.
+export const SectionHeaderFooterReferencesSchema = z.object({
+  header: z.partialRecord(z.enum(['default', 'first', 'even']), z.string()).optional(),
+  footer: z.partialRecord(z.enum(['default', 'first', 'even']), z.string()).optional(),
+});
+export type SectionHeaderFooterReferences = z.infer<typeof SectionHeaderFooterReferencesSchema>;
+
 export const DocxDocumentSchema = z.object({
   metadata: DocumentMetadataSchema,
   sections: z.array(ContentSectionSchema),
@@ -60,6 +75,9 @@ export const DocxDocumentSchema = z.object({
   endnotes: z.array(FootnoteSchema),
   headers: z.array(z.string()),
   footers: z.array(z.string()),
+  // The structural view of the header/footer layer: each referenced part as block flow, and per-section references (positional, one entry per `sections` entry) naming those parts by path. The flat `headers`/`footers` text arrays above stay as the derived summary they always were -- collapsing them into this model wants a breaking change to a published shape, tracked rather than taken here.
+  headerFooterParts: z.array(HeaderFooterPartSchema),
+  sectionHeaderFooters: z.array(SectionHeaderFooterReferencesSchema),
   // word/numbering.xml's own abstractNum/num definitions, keyed by w:numId -- see numbering.ts's own doc comment for why this sits as a separate top-level field rather than folded into ContentListMembership (the numId/level membership every list paragraph already carries via ContentParagraph.list, read unchanged by readListMembership below).
   numbering: z.record(z.string(), NumberingDefinitionSchema),
 });
@@ -908,7 +926,42 @@ function readBlockScope(nodes: readonly XmlNode[], ctx: DocxReadContext, carryDe
 // A mid-document section break is an otherwise-ordinary w:p whose w:pPr carries its own w:sectPr, describing the section that paragraph (and everything since the previous break) belongs to; the body's own trailing w:sectPr (a direct child, not nested in any paragraph) closes the final section. Multi-section support falls out of this directly: the body is walked once, and each break just cuts the resulting block list.
 //
 // Every section's blocks are their own bracket scope, so an extent straddling a section break is dropped rather than being split into two half-constructs -- one of the not-representable cases document-schema.js's extent-scope note ratifies (cross-list pairing is ids, and the marker contract refuses ids), and the reason the split happens after the walk rather than during it (a construct's own two ends are only known once both have been seen).
-function readSections(body: XmlElement, ctx: DocxReadContext): ContentSection[] {
+// One section's own header/footer references, read from its w:sectPr exactly as spelled: each w:headerReference/w:footerReference names a part through the document's own relationships and a slot (default/first/even). A reference whose r:id resolves to no relationship is left out rather than recorded against a target that does not exist.
+function readSectionHeaderFooters(sectPr: XmlElement, ctx: DocxReadContext): SectionHeaderFooterReferences {
+  const references: SectionHeaderFooterReferences = {};
+  for (const tag of ['w:headerReference', 'w:footerReference'] as const) {
+    const slot: Partial<Record<'default' | 'first' | 'even', string>> = {};
+    for (const reference of childrenWithTag(sectPr, tag)) {
+      const type = attr(reference, 'w:type');
+      const rId = attr(reference, 'r:id');
+      const target = rId === undefined ? undefined : ctx.rels.get(rId)?.target;
+      if ((type === 'default' || type === 'first' || type === 'even') && target !== undefined) {
+        slot[type] = target;
+      }
+    }
+    if (Object.keys(slot).length > 0) {
+      references[tag === 'w:headerReference' ? 'header' : 'footer'] = slot;
+    }
+  }
+  return references;
+}
+
+// Each referenced header/footer part as block flow: the part's own body walked by the same collectFlowNodes machinery the document body uses, against the part's OWN relationships (an image inside a header resolves through the header part's rels, not the document's) while sharing the document's style/theme cascade. Parts are listed in package-key order, the same deterministic order the flat text arrays use; a part no section references stays out -- the flat arrays remain the catch-all for those.
+function readHeaderFooterParts(pkg: Package, ctx: DocxReadContext, referencedPaths: ReadonlySet<string>): HeaderFooterPart[] {
+  const parts: HeaderFooterPart[] = [];
+  for (const path of [...referencedPaths].sort()) {
+    const root = rootElement(pkg.parts[path]);
+    if (root === undefined) {
+      continue;
+    }
+    const kind = root.tag === 'w:ftr' ? 'footer' : 'header';
+    const partCtx: DocxReadContext = { styles: ctx.styles, rels: resolveRelationships(pkg, path), pkg };
+    parts.push({ path, kind, blocks: readBlockScope(root.children, partCtx, false) });
+  }
+  return parts;
+}
+
+function readSections(body: XmlElement, ctx: DocxReadContext): { sections: ContentSection[]; headerFooters: SectionHeaderFooterReferences[] } {
   const state = newFlowState();
   collectFlowNodes(body.children, ctx, state, false);
   const extents = [...state.extents, ...resolveRangeMarkerExtents(state.rangeMarkerEvents)];
@@ -921,16 +974,19 @@ function readSections(body: XmlElement, ctx: DocxReadContext): ContentSection[] 
   }
 
   const sections: ContentSection[] = [];
+  const headerFooters: SectionHeaderFooterReferences[] = [];
   let from = 0;
   for (const sectionBreak of state.sectionBreaks) {
     sections.push(sliceSection(readPageSize(sectionBreak.sectPr), readMargins(sectionBreak.sectPr), readSectionBreakType(sectionBreak.sectPr), from, sectionBreak.index));
+    headerFooters.push(readSectionHeaderFooters(sectionBreak.sectPr, ctx));
     from = sectionBreak.index;
   }
   if (from < state.blocks.length || sections.length === 0) {
     sections.push(sliceSection(PAGE_SIZE_LETTER, DEFAULT_MARGINS, undefined, from, state.blocks.length));
+    headerFooters.push({});
   }
   sections.forEach((section, sectionIndex) => assignSourcePaths(section.blocks, `sections[${sectionIndex}]`));
-  return sections;
+  return { sections, headerFooters };
 }
 
 function readDocumentTheme(pkg: Package, docRels: ReadonlyMap<string, Relationship>): DrawingTheme {
@@ -1016,7 +1072,7 @@ function readHeaderFooterText(pkg: Package, prefix: string): string[] {
 
 // Resolves a generic OOXML Package into DocxDocument: the WordprocessingML style cascade, DrawingML theme resolution (including w:themeColor run-colour references, resolved against the theme's own colour scheme), ordered sections of paragraphs/tables/page-breaks/images (document order preserved, including inside tables, with cell background AND border styling read from w:tcBorders), the block-scoped fidelity constructs (structured document tags, fields, bookmarks, tracked changes) as constructStart/constructEnd marker pairs, plus comments, footnotes, header/footer text, and word/numbering.xml's own abstractNum/num level definitions (numbering.ts's readNumberingDefinitions). An inline (wp:inline) or floating/anchored (wp:anchor) w:drawing is resolved to a real ContentImageBlock via the containing part's own relationships, sniffed from its actual media-part bytes rather than trusted from any extension/content-type -- but a floating image's own wp:anchor position (page/margin/paragraph-relative offset) is never read, since ContentImageBlock has no absolute positioning field to record it in; it lands in the block flow at the point its w:drawing was encountered, same as an inline image. A w:object/o:OLEObject whose payload part is itself a ZIP archive (a modern producer's embedded xlsx/docx/pptx) is decoded through the shared embedded-object helper (typed/embedded.ts) into a sibling ContentEmbeddedObjectBlock sized from w:dxaOrig/w:dyaOrig and lifted through the same convention as an image block; a payload that does not decode as one of the three OOXML flavours degrades to no embedded block rather than failing the read.
 //
-// Information not modelled here is still dropped: live PAGE/NUMPAGES field re-evaluation; w:themeShade/w:themeTint refinement of a resolved theme colour; a floating image's own anchored position; any image whose bytes don't sniff as PNG/JPEG; a w:object's VML preview picture (v:imagedata -- no VML reader exists here, and real producers ship WMF/EMF previews anyway); a w:object sitting inside a header, footer, or footnote (embedded-object recovery walks the document body's block flow only -- headers/footers keep their flat-text projection via readHeaderFooterText, and footnotes ride DocxDocument.footnotes as text, so neither has a block flow to lift an object into); the classic non-ZIP OLE compound-file payload (.bin -- opaque external-application data, left skipped exactly as unhandled markup) and a ZIP payload that does not decode as one of the three OOXML flavours (both degrade to no embedded block, never a failed read); and the run-level construct occurrences still without an encoding here -- a mid-paragraph field, inline SDT, or partial tracked change, and a bookmark whose two halves sit in different paragraphs (a same-paragraph bookmark pair, crossing included, lands on ContentParagraph.constructs; see typed/docx/constructs.ts for the scope rules, and typed/docx/write.ts for the write side of what does survive).
+// Information not modelled here is still dropped: live PAGE/NUMPAGES field re-evaluation; w:themeShade/w:themeTint refinement of a resolved theme colour; a floating image's own anchored position; any image whose bytes don't sniff as PNG/JPEG; a w:object's VML preview picture (v:imagedata -- no VML reader exists here, and real producers ship WMF/EMF previews anyway); a w:object sitting inside a footnote (footnotes ride DocxDocument.footnotes as text, so there is no block flow to lift an object into -- a header/footer's own objects DO recover now, since those parts are walked as block flow); the evenAndOddHeaders setting in word/settings.xml that gates whether a section's even-page slot renders (the references themselves are recorded as spelled); Word's header/footer slot-inheritance rule (a section reusing the previous section's part when it spells no reference of its own -- a consumer concern, since this records exactly what the file spells); the classic non-ZIP OLE compound-file payload (.bin -- opaque external-application data, left skipped exactly as unhandled markup) and a ZIP payload that does not decode as one of the three OOXML flavours (both degrade to no embedded block, never a failed read); and the run-level construct occurrences still without an encoding here -- an inline SDT or partial tracked change, and a bookmark whose two halves sit in different paragraphs (a same-paragraph bookmark pair, crossing included, lands on ContentParagraph.constructs; see typed/docx/constructs.ts for the scope rules, and typed/docx/write.ts for the write side of what does survive).
 export function readDocxContent(pkg: Package): DocxDocument {
   const documentRoot = rootElement(pkg.parts[DOCUMENT_PART_PATH]);
   if (documentRoot === undefined) {
@@ -1034,14 +1090,25 @@ export function readDocxContent(pkg: Package): DocxDocument {
     pkg,
   };
 
+  const { sections, headerFooters } = readSections(body, ctx);
+  const referencedPaths = new Set<string>();
+  for (const references of headerFooters) {
+    for (const slot of [references.header, references.footer]) {
+      for (const path of Object.values(slot ?? {})) {
+        referencedPaths.add(path);
+      }
+    }
+  }
   return {
     metadata: readCoreProperties(pkg),
-    sections: readSections(body, ctx),
+    sections,
     comments: readComments(pkg),
     footnotes: readNotesPart(pkg, 'word/footnotes.xml', 'w:footnote'),
     endnotes: readNotesPart(pkg, 'word/endnotes.xml', 'w:endnote'),
     headers: readHeaderFooterText(pkg, 'word/header'),
     footers: readHeaderFooterText(pkg, 'word/footer'),
+    headerFooterParts: readHeaderFooterParts(pkg, ctx, referencedPaths),
+    sectionHeaderFooters: headerFooters,
     numbering: readNumberingDefinitions(pkg),
   };
 }
