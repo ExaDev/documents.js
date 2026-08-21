@@ -78,6 +78,31 @@ describe('readOdtContent: text:section as a division construct', () => {
     expect(blocks.map((block) => block.kind)).toEqual(['constructStart', 'paragraph', 'constructStart', 'paragraph', 'constructEnd', 'constructEnd']);
   });
 
+  it('places a nested section\'s marker pair over the nested section\'s own blocks when a paragraph precedes the outer wrapper', () => {
+    // The nested wrapper's extent must be indexed against the ONE flat block list, not the recursive call's own local array: with 'before' occupying block 0, Inner's pair belongs around 'inner text' (inside Outer), and Outer's around everything of its own -- never around 'before'.
+    const pkg = odtPackage([
+      paragraph('before'),
+      el('text:section', { 'text:name': 'Outer' }, [el('text:section', { 'text:name': 'Inner' }, [paragraph('inner text')])]),
+    ]);
+    const blocks = firstSectionBlocks(pkg);
+    expect(blocks.map((block) => block.kind)).toEqual(['paragraph', 'constructStart', 'constructStart', 'paragraph', 'constructEnd', 'constructEnd']);
+    const descriptors = blocks.filter((block) => block.kind === 'constructStart').map((block) => (block.kind === 'constructStart' ? block.descriptor : undefined));
+    expect(descriptors).toEqual([{ kind: 'division', name: 'Outer' }, { kind: 'division', name: 'Inner' }]);
+  });
+
+  it('places a nested index wrapper\'s marker pair over its cached body blocks when a paragraph precedes the enclosing section', () => {
+    const pkg = odtPackage([
+      paragraph('before'),
+      el('text:section', { 'text:name': 'S' }, [
+        el('text:table-of-content', { 'text:name': 'TOC' }, [el('text:index-body', {}, [paragraph('entry')])]),
+      ]),
+    ]);
+    const blocks = firstSectionBlocks(pkg);
+    expect(blocks.map((block) => block.kind)).toEqual(['paragraph', 'constructStart', 'constructStart', 'paragraph', 'constructEnd', 'constructEnd']);
+    const descriptors = blocks.filter((block) => block.kind === 'constructStart').map((block) => (block.kind === 'constructStart' ? block.descriptor : undefined));
+    expect(descriptors).toEqual([{ kind: 'division', name: 'S' }, { kind: 'contentControl', controlType: 'index', tag: 'TOC' }]);
+  });
+
   it('survives the package boundary: flattenPackage(readOdt(pkg)) reproduces the flat reader\'s blocks with markers intact', () => {
     const pkg = odtPackage([
       el('text:section', { 'text:name': 'S1' }, [
