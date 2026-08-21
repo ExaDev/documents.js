@@ -374,3 +374,20 @@ export function ocgPdf(): Uint8Array<ArrayBuffer> {
   b.classicXrefAndTrailer(9, '/Root 1 0 R');
   return b.bytes();
 }
+
+// The annotation cluster (#721 phase 4): a genuine third-party sticky note (a /T that is not this package's own presenter-notes marker), a FreeText, a Highlight carrying /QuadPoints, and a Stamp -- the opaque kind whose facts ride the quarantined residue channel. Page 2 carries no annotations at all, pinning that the page field is absent rather than an empty array.
+export function annotationsPdf(): Uint8Array<ArrayBuffer> {
+  const b = new FixtureBuilder().header('1.7');
+  b.object(1, '<< /Type /Catalog /Pages 2 0 R >>');
+  b.object(2, '<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>');
+  b.object(3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /Font << /F1 5 0 R >> >> /Contents 6 0 R /Annots [7 0 R 8 0 R 9 0 R 10 0 R] >>');
+  b.object(4, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /Font << /F1 5 0 R >> >> /Contents 6 0 R >>');
+  b.object(5, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+  b.stream(6, '<< >>', enc(HELLO_CONTENT));
+  b.object(7, '<< /Type /Annot /Subtype /Text /Rect [10 60 26 76] /Contents (A real reviewer note) /T (Reviewer) /M (D:20260819140300Z) >>');
+  b.object(8, '<< /Type /Annot /Subtype /FreeText /Rect [40 60 140 80] /Contents (Typed remark) /T (Reviewer) >>');
+  b.object(9, '<< /Type /Annot /Subtype /Highlight /Rect [12 30 60 42] /Contents (Marked passage) /T (Second reviewer) /QuadPoints [12 42 60 42 60 30 12 30] >>');
+  b.object(10, '<< /Type /Annot /Subtype /Stamp /Rect [100 20 140 40] /Contents (Approved) /T (Reviewer) /Name /Approved >>');
+  b.classicXrefAndTrailer(10, '/Root 1 0 R');
+  return b.bytes();
+}

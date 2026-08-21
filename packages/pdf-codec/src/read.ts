@@ -1,6 +1,7 @@
 import { bytesToBase64 } from './util/base64';
 import { crc32 } from './bytes/crc32';
 import { concatBytes } from './bytes/writer';
+import { readPageAnnotations } from './annotations';
 import { readAttachments } from './attachments';
 import { readOptionalContent } from './optional-content';
 import type { Color as LayoutColor, LayoutFont, LayoutMetadata } from 'document-schema.js';
@@ -184,8 +185,15 @@ function readPage(page: PdfDict, resolver: PdfObjectResolver, fontResolver: Font
   items.push(...readLinkAnnotations(page, pageMatrix, resolver, destinationRegistry));
 
   const notes = readPageNotes(page, resolver);
+  const annotations = readPageAnnotations(page, pageMatrix, resolver, sink);
 
-  return { widthPt: rotationResult.widthPt, heightPt: rotationResult.heightPt, items, ...(notes !== undefined ? { notes } : {}) };
+  return {
+    widthPt: rotationResult.widthPt,
+    heightPt: rotationResult.heightPt,
+    items,
+    ...(notes !== undefined ? { notes } : {}),
+    ...(annotations.length > 0 ? { annotations } : {}),
+  };
 }
 
 function convertExtractedItem(item: ExtractedItem, pageMatrix: Matrix, fontResolver: FontResolverService, images: Record<string, LayoutImageAsset>, imageIdCache: Map<PdfDict, string | null>, resolver: PdfObjectResolver, sink: PdfDiagnosticSink): LayoutItem | undefined {
