@@ -1,3 +1,11 @@
+## [4.4.1](https://github.com/ExaDev/documents.js/compare/documents.js@4.4.0...documents.js@4.4.1) (2026-08-21)
+
+
+### Dependencies
+
+- Updated ooxml.js to ^4.4.3
+- Updated odf.js to ^5.1.2
+
 # [4.4.0](https://github.com/ExaDev/documents.js/compare/documents.js@4.3.0...documents.js@4.4.0) (2026-08-21)
 
 
