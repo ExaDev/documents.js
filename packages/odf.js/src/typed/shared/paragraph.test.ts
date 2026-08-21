@@ -3,8 +3,17 @@ import type { Package } from '../../model/package';
 import type { XmlElement } from '../../model/node';
 import { el, txt } from '../../xml/fragment';
 import { readOdfParagraph } from './paragraph';
-import type { DefinitionEntry } from 'document-schema.js';
+import type { ContentParagraph, DefinitionEntry } from 'document-schema.js';
 import type { OdfDefinitionsSink } from './constructs';
+
+// DefinitionEntry's body is deliberately tenant-open (document-schema.js's definitions.ts), so a test reading an entry's body as block content narrows it itself rather than asserting.
+function bodyParagraphs(entry: DefinitionEntry | undefined): ContentParagraph[] {
+  const body = entry?.body;
+  if (!Array.isArray(body) || !body.every((block: unknown): block is ContentParagraph => typeof block === 'object' && block !== null && 'kind' in block && 'runs' in block && block.kind === 'paragraph')) {
+    throw new Error('expected a paragraph-only definitions body');
+  }
+  return body;
+}
 
 function contentPackage(automaticStyleChildren: XmlElement[] = []): Package['parts'][string] {
   return { kind: 'xml', nodes: [el('office:document-content', {}, [el('office:automatic-styles', {}, automaticStyleChildren)])] };
@@ -323,6 +332,19 @@ describe('readOdfParagraph: run-level construct extents (fields, bookmarks)', ()
       { descriptor: { kind: 'anchor', anchorType: 'comment', name: 'annotation1', definition: 'comment:annotation1' }, startRun: 1, endRun: 1 },
     ]);
     expect(sink.entries['comment:annotation1']).toMatchObject({ kind: 'comment', author: 'C. Reviewer', dateIso: '2026-08-20T14:00:00' });
+  });
+
+  it('assembles an annotation body\'s paragraphs and list items in document order, not paragraphs-then-lists', () => {
+    const annotation = el('office:annotation', {}, [
+      el('dc:creator', {}, [txt('C. Reviewer')]),
+      el('text:p', {}, [txt('First paragraph.')]),
+      el('text:list', {}, [el('text:list-item', {}, [el('text:p', {}, [txt('List item.')])])]),
+      el('text:p', {}, [txt('Second paragraph.')]),
+    ]);
+    const p = el('text:p', {}, [txt('Anchored '), annotation, txt('text')]);
+    const sink: OdfDefinitionsSink = { entries: {}, nextNoteOrdinal: 1, nextAnnotationOrdinal: 1 };
+    readOdfParagraph(p, { parts: {} }, { definitions: sink });
+    expect(bodyParagraphs(sink.entries['comment:annotation1']).map((block) => block.runs[0]?.text)).toEqual(['First paragraph.', 'List item.', 'Second paragraph.']);
   });
 
   it('quarantines the unmodellable half of the paragraph\'s own style chain as per-node residue when the context names the reading format', () => {
