@@ -404,6 +404,49 @@ describe('readOdtContent: anchored draw:frames in text flow', () => {
   });
 });
 
+describe('readOdtContent: office:forms in an ordinary text document', () => {
+  it('reads the form tree as a pre-order sequence of point contentControl constructs, control kinds mapped from their form: tags and names as tags', () => {
+    const pkg = odtPackage([
+      paragraph('Text around the form.'),
+      el('office:forms', {}, [
+        el('form:form', { 'form:name': 'MainForm', 'form:command': '"customers"', 'form:command-type': 'table' }, [
+          el('form:properties', {}, [el('form:property', { 'form:property-name': 'ObjIDinMSO', 'office:value': '1' })]),
+          el('form:text', { 'form:name': 'firstName', 'form:data-field': 'first_name', 'form:current-value': 'Ada' }),
+          el('form:checkbox', { 'form:name': 'active', 'form:current-state': 'checked' }),
+          el('form:listbox', { 'form:name': 'tier' }),
+          el('form:unknown-kind', { 'form:name': 'mystery' }),
+        ]),
+      ]),
+      paragraph('Text after the form.'),
+    ]);
+    const blocks = firstSectionBlocks(pkg);
+    expect(blocks.map((block) => block.kind)).toEqual([
+      'paragraph',
+      'constructStart',
+      'constructEnd',
+      'constructStart',
+      'constructEnd',
+      'constructStart',
+      'constructEnd',
+      'constructStart',
+      'constructEnd',
+      'constructStart',
+      'constructEnd',
+      'paragraph',
+    ]);
+    const descriptors = blocks.filter((block) => block.kind === 'constructStart').map((block) => (block.kind === 'constructStart' ? block.descriptor : undefined));
+    expect(descriptors[0]).toMatchObject({ kind: 'contentControl', controlType: 'group', tag: 'MainForm' });
+    expect(descriptors[1]).toMatchObject({ kind: 'contentControl', controlType: 'plainText', tag: 'firstName', value: 'Ada' });
+    expect(descriptors[2]).toMatchObject({ kind: 'contentControl', controlType: 'checkbox', tag: 'active', checked: true });
+    expect(descriptors[3]).toMatchObject({ kind: 'contentControl', controlType: 'dropDown', tag: 'tier' });
+    expect(descriptors[4]).toMatchObject({ kind: 'contentControl', controlType: 'richText', tag: 'mystery' });
+    // The form:properties bag quarantines into residue, and an unrecognised control kind quarantines its whole element.
+    expect(descriptors[0]?.source).toMatchObject({ format: 'odt' });
+    expect(descriptors[4]?.source).toMatchObject({ format: 'odt' });
+    expect(descriptors[1]?.source).toBeUndefined();
+  });
+});
+
 describe('readOdtContent: field master declarations as a definitions table', () => {
   it('reads variable, user-field, and sequence declarations into keyed definitions entries', () => {
     const pkg = odtPackage([
