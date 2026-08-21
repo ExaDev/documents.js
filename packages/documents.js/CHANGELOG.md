@@ -1,3 +1,19 @@
+# [4.3.0](https://github.com/ExaDev/documents.js/compare/documents.js@4.2.1...documents.js@4.3.0) (2026-08-21)
+
+
+### Features
+
+* **odf:** gate the odt frame lift behind a frames option, with documents.js opting out ([f3e63a1](https://github.com/ExaDev/documents.js/commit/f3e63a1176d3c4f99d8224152dc5a5e3091a0fb4))
+
+
+### Dependencies
+
+- Updated pdf-codec to ^3.1.4
+- Updated ooxml.js to ^4.4.1
+- Updated odf.js to ^5.1.0
+- Updated markdown-codec to ^4.0.15
+- Updated document-schema.js to ^4.7.0
+
 ## [4.2.1](https://github.com/ExaDev/documents.js/compare/documents.js@4.2.0...documents.js@4.2.1) (2026-08-21)
 
 
