@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { PdfDiagnostic } from './diagnostics';
 import type { LayoutText } from './layout';
 import { readPdf } from './read';
-import { minimalClassicXrefPdf, parentTreeMissingEntryPdf, taggedStructureInvertedParentsPdf, taggedStructurePdf } from './test-support/pdf';
+import { minimalClassicXrefPdf, parentTreeMissingEntryPdf, taggedFormPdf, taggedStructureInvertedParentsPdf, taggedStructurePdf } from './test-support/pdf';
 
 // Tagged structure (#760): the /StructTreeRoot element tree (the /K walk, /RoleMap resolution, /ClassMap attribute resolution, per-element /T //Lang //Alt //ActualText) and the (page, MCID) association through /ParentTree that stamps an owning element id onto extracted items -- each page keyed by its OWN /StructParents value, whose entry is an array of owning elements indexed by MCID (14.7.4.4). This is the one place PDF carries real semantics natively; everything downstream (documents.js's heading levels, division constructs, and lattice-free table recovery) is a consumer of these two facts.
 
@@ -75,6 +75,15 @@ describe('readPdf: marked-content association', () => {
     expect(structureNames(0)).toEqual([{ text: 'First page', structure: 'struct1' }]);
     // Page 2's array opens with a null for an MCID no element owns, so its stream marks MCID 1.
     expect(structureNames(1)).toEqual([{ text: 'Second page', structure: 'struct2' }]);
+  });
+
+  it('carries the enclosing page MCID onto content a form XObject paints, but not into a form that numbers its own MCIDs', () => {
+    const doc = readPdf(taggedFormPdf());
+    const textItem = (text: string) => doc.pages[0]!.items.find((i) => i.kind === 'text' && i.text === text);
+    // FmA is invoked inside the /P <</MCID 0>> span and declares no /StructParents of its own, so its text paints that span's content item.
+    expect(textItem('Inherited form text')).toMatchObject({ structure: 'struct1' });
+    // FmB declares /StructParents 3 and marks its own MCID 0 under that key -- the /Stm-qualified channel, which must not resolve against the page's numbering even though FmB is invoked inside the /P <</MCID 1>> span.
+    expect(textItem('Self-marked form text')).not.toHaveProperty('structure');
   });
 
   it('reports a diagnostic when a page declares /StructParents the parent tree does not carry', () => {

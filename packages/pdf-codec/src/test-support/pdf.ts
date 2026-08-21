@@ -593,6 +593,32 @@ export function taggedStructureInvertedParentsPdf(): Uint8Array<ArrayBuffer> {
   return b.bytes();
 }
 
+// Marked content painted through a form XObject (#760): a form invoked inside a page MCID span paints that span's content (the enclosing page MCID carries onto what it paints), while a form whose own dict declares /StructParents numbers its own MCIDs in its own parent-tree key, so neither its marked nor its unmarked content may inherit the invoking span. The second form's own MCID 0 DOES have an owner under key 3, pinning that the /Stm-qualified channel is left alone rather than looked up against the page's numbering.
+export function taggedFormPdf(): Uint8Array<ArrayBuffer> {
+  const b = new FixtureBuilder().header('1.7');
+  b.object(1, '<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 6 0 R >>');
+  b.object(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+  b.object(3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << /Font << /F1 4 0 R >> /XObject << /FmA 8 0 R /FmB 9 0 R >> >> /Contents 5 0 R /StructParents 0 >>');
+  b.object(4, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+  b.stream(
+    5,
+    '<< >>',
+    enc(['/P << /MCID 0 >> BDC', '/FmA Do', 'EMC', '/P << /MCID 1 >> BDC', '/FmB Do', 'EMC'].join('\n')),
+  );
+  b.object(6, '<< /Type /StructTreeRoot /K [7 0 R 10 0 R] /ParentTree 11 0 R >>');
+  b.object(7, '<< /Type /StructElem /S /P /P 6 0 R /T (Carried span) /K [0] >>');
+  b.stream(8, '<< /Type /XObject /Subtype /Form /BBox [0 0 200 30] /Resources << /Font << /F1 4 0 R >> >> >>', enc('BT /F1 12 Tf 10 10 Td (Inherited form text) Tj ET'));
+  b.stream(
+    9,
+    '<< /Type /XObject /Subtype /Form /StructParents 3 /BBox [0 0 200 30] /Resources << /Font << /F1 4 0 R >> >> >>',
+    enc(['/Span << /MCID 0 >> BDC', 'BT /F1 12 Tf 10 10 Td (Self-marked form text) Tj ET', 'EMC'].join('\n')),
+  );
+  b.object(10, '<< /Type /StructElem /S /P /P 6 0 R /T (Own numbering) /K [1] >>');
+  b.object(11, '<< /Nums [0 [7 0 R 10 0 R] 3 [10 0 R]] >>');
+  b.classicXrefAndTrailer(11, '/Root 1 0 R');
+  return b.bytes();
+}
+
 // A page whose /StructParents names a key the parent tree does not carry (#760) -- the inconsistent-mapping malformation real producers do create. The tree itself is healthy (key 0 names an owner for MCID 0) but the page declares 4, so its marked content resolves to no owner and the inconsistency surfaces as a diagnostic rather than silence.
 export function parentTreeMissingEntryPdf(): Uint8Array<ArrayBuffer> {
   const b = new FixtureBuilder().header('1.7');
