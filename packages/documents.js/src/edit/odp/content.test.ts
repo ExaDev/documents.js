@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { ContentDocument, ContentVector } from 'document-schema.js';
 import type { Package, XmlElement } from 'odf.js';
-import { bytesToBase64, childrenWithTag, decodePackage, encodePackage, findChildElement, readDrawPageContent, rootElement } from 'odf.js';
+import { bytesToBase64, childrenWithTag, decodePackage, encodePackage, elementsWithTag, findChildElement, readDrawPageContent, rootElement } from 'odf.js';
 import { readOdpContent } from '../../odf/odp/read';
 import { rotationsOf, VECTOR_FIXTURE, vectorDrawingBlock, withoutRotation } from '../../test-support/vectors';
 import { buildOdpPackage } from './content';
@@ -71,6 +71,30 @@ describe('buildOdpPackage', () => {
     expect(firstRun?.sizePt).toBe(24);
     const secondRun = paragraphs[1]?.runs()[0];
     expect(secondRun?.color).toEqual({ r: 0, g: 0, b: 1 });
+  });
+
+  // A shape text box is not office:text: draw:text-box's content model is (text:p | text:list)* with no text:h anywhere in it, so a paragraph carrying the canonical headingLevel stays the text:p populateParagraph has always written here -- its heading depth is dropped as a format-boundary loss on this target (the same class as odtToOdp's own heading-becomes-slide-boundary heuristic), never written as markup the model forbids and odf.js's own frame reader (typed/draw/shapes.ts) would silently skip.
+  it('keeps a heading paragraph in a text box a text:p, since draw:text-box has no text:h', () => {
+    const content = presentationDoc([
+      {
+        size: { widthPt: 960, heightPt: 540 },
+        notes: '',
+        shapes: [
+          {
+            frame: { xPt: 10, yPt: 10, widthPt: 400, heightPt: 100 },
+            ...ZERO_INSETS,
+            blocks: [{ kind: 'paragraph', styleId: 'Heading2', headingLevel: 2, runs: [{ text: 'Slide heading' }] }],
+          },
+        ],
+      },
+    ]);
+    const pkg = buildOdpPackage(content);
+    const part = pkg.parts['content.xml'];
+    expect(elementsWithTag(part?.kind === 'xml' ? part.nodes : [], 'text:h')).toHaveLength(0);
+    const editor = new OdpEditor(pkg);
+    const [slide] = editor.slides();
+    const [shape] = slide!.shapes();
+    expect(shape?.text).toBe('Slide heading');
   });
 
   it('writes a shape rotation back as a real draw:transform, unlike buildPptxPackage which has no rotation setter yet', () => {

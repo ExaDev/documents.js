@@ -63,6 +63,7 @@ function appendShape(page: OdgPage, shape: ContentShape): void {
     if (block.kind !== 'paragraph') {
       continue; // a table or nested image inside a text shape is out of scope for this bridge, mirroring buildOdpPackage's own identical comment.
     }
-    populateParagraph(textShape.appendParagraph(), block);
+    // headings: false -- a draw:text-box's content model is (text:p | text:list)* with no text:h anywhere in it (see PopulateParagraphOptions).
+    populateParagraph(textShape.appendParagraph(), block, { headings: false });
   }
 }

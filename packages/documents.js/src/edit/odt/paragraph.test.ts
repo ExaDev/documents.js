@@ -125,10 +125,11 @@ describe('OdtParagraph.headingLevel', () => {
     const paragraph = editor.body.appendParagraph({ text: 'Chapter' });
     expect(paragraph.headingLevel).toBeUndefined();
     paragraph.headingLevel = 3;
-    // The promote is a tag rename on the SAME element, not a remove-and-reinsert -- the live view keeps working, and editor.paragraphs() (which finds only text:p children, see its own comment) no longer lists the promoted heading, surfacing it again once demoted.
+    // The promote is a tag rename on the SAME element, not a remove-and-reinsert -- the live view keeps working, and editor.paragraphs() (which surfaces text:p and text:h both, see its own comment) still lists the paragraph as the heading it now is.
     expect(paragraph.headingLevel).toBe(3);
     expect(paragraph.text).toBe('Chapter');
-    expect(editor.paragraphs()).toHaveLength(0);
+    expect(editor.paragraphs()).toHaveLength(1);
+    expect(editor.paragraphs()[0]?.headingLevel).toBe(3);
     paragraph.headingLevel = undefined;
     expect(paragraph.headingLevel).toBeUndefined();
     expect(editor.paragraphs()).toHaveLength(1);
