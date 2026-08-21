@@ -1,3 +1,15 @@
+## [4.4.2](https://github.com/ExaDev/documents.js/compare/documents.js@4.4.1...documents.js@4.4.2) (2026-08-21)
+
+
+### Bug Fixes
+
+* **metadata:** read xlsx metadata from the workbook's own docProps, not a rendered PDF preview ([896bd06](https://github.com/ExaDev/documents.js/commit/896bd0654064f31d77e4fcb806abc7a711aa4ccb)), closes [#744](https://github.com/ExaDev/documents.js/issues/744)
+
+
+### Dependencies
+
+- Updated ooxml.js to ^4.4.4
+
 ## [4.4.1](https://github.com/ExaDev/documents.js/compare/documents.js@4.4.0...documents.js@4.4.1) (2026-08-21)
 
 
