@@ -225,8 +225,15 @@ export function isOdfBlockScopedHalf(half: OdfMarkerHalf, paragraphElement: XmlE
   return odfMarkerHalfEventIndex(half, paragraphElement, 0) !== undefined;
 }
 
-// Pairs one paragraph's own marker halves by their key into run-level construct extents (document-schema.js's RunConstructExtent): a pair both of whose halves sit in THIS paragraph and are not both block-scoped becomes an entry on the paragraph's constructs field. A pair with both halves block-scoped is skipped -- that is the block-marker path's extent (the odt reader emits its constructStart/constructEnd pair, and one occurrence must never carry both encodings); a half whose partner sits in a different paragraph is never seen here at all, so the block reader alone decides its fate. Everything else mirrors the docx rules: exactly one start and one end per key, and an end that does not precede its start. Crossing pairs need no special case -- run ranges are data, not brackets, so two extents that overlap are two entries.
-export function pairOdfMarkerHalves(halves: readonly OdfMarkerHalf[], paragraphElement: XmlElement): RunConstructExtent[] {
+// The document-level sink a paragraph's note and annotation reading reports definitions entries into, carrying the two deterministic ordinal counters that mint names for the constructs ODF leaves nameless (a note without text:id, an annotation without office:name -- both optional attributes in the schema even though every real producer writes them). One sink per document, threaded by reference, so minted names are unique across the whole body exactly the way list numIds are.
+export interface OdfDefinitionsSink {
+  readonly entries: Record<string, DefinitionEntry>;
+  nextNoteOrdinal: number;
+  nextAnnotationOrdinal: number;
+}
+
+// Pairs one paragraph's own marker halves by their key into run-level construct extents (document-schema.js's RunConstructExtent): a pair both of whose halves sit in THIS paragraph and are not both block-scoped becomes an entry on the paragraph's constructs field. A pair with both halves block-scoped is skipped -- that is the block-marker path's extent (the odt reader emits its constructStart/constructEnd pair, and one occurrence must never carry both encodings); a half whose partner sits in a different paragraph is never seen here at all, so the block reader alone decides its fate. Everything else mirrors the docx rules: exactly one start and one end per key, and an end that does not precede its start. Crossing pairs need no special case -- run ranges are data, not brackets, so two extents that overlap are two entries. The returned `paired` set names the half ELEMENTS a completed pair consumed, so the caller can give an unpaired annotation start its point-anchor fallback without re-emitting a paired one.
+export function pairOdfMarkerHalves(halves: readonly OdfMarkerHalf[], paragraphElement: XmlElement): { extents: RunConstructExtent[]; paired: Set<XmlElement> } {
   const byKey = new Map<string, OdfMarkerHalf[]>();
   for (const half of halves) {
     const existing = byKey.get(half.key);
@@ -237,6 +244,7 @@ export function pairOdfMarkerHalves(halves: readonly OdfMarkerHalf[], paragraphE
     }
   }
   const extents: RunConstructExtent[] = [];
+  const paired = new Set<XmlElement>();
   for (const pair of byKey.values()) {
     const starts = pair.filter((half) => half.side === 'start');
     const ends = pair.filter((half) => half.side === 'end');
@@ -256,8 +264,10 @@ export function pairOdfMarkerHalves(halves: readonly OdfMarkerHalf[], paragraphE
       continue;
     }
     extents.push({ descriptor, startRun: open.runPosition, endRun: close.runPosition });
+    paired.add(open.element);
+    paired.add(close.element);
   }
-  return extents;
+  return { extents, paired };
 }
 
 // --- block-scope construct extents and marker splicing ------------------------------------------------------------
@@ -342,10 +352,11 @@ export interface OdfMarkerEvent {
   readonly qualified: boolean;
   readonly order: number;
   readonly descriptor: () => RunConstructExtent['descriptor'] | undefined;
+  readonly element: XmlElement;
 }
 
-// Pairs the flow's marker events by (kind, key) into block-scoped extents. A pair survives only when it has exactly one start and one end, both halves qualified (sat at a paragraph edge), a descriptor that resolves, and an end that does not precede its start. Everything else -- a half whose partner sits interior to some paragraph, a pair split across two block lists (inside a table cell and outside it), a dangling half -- has no block-scoped encoding and stays dropped, the same rules the docx flow applies to w:bookmarkStart/End for the same reasons.
-export function resolveOdfMarkerEvents(events: readonly OdfMarkerEvent[]): OdfConstructExtent[] {
+// Pairs the flow's marker events by (kind, key) into block-scoped extents. A pair survives only when it has exactly one start and one end, both halves qualified (sat at a paragraph edge), a descriptor that resolves, and an end that does not precede its start. Everything else -- a half whose partner sits interior to some paragraph, a pair split across two block lists (inside a table cell and outside it), a dangling half -- has no block-scoped encoding and stays dropped, the same rules the docx flow applies to w:bookmarkStart/End for the same reasons. The returned `paired` set names the half ELEMENTS a completed pair consumed, for the same unpaired-annotation fallback the paragraph-level pairing reports.
+export function resolveOdfMarkerEvents(events: readonly OdfMarkerEvent[]): { extents: OdfConstructExtent[]; paired: Set<XmlElement> } {
   const byKey = new Map<string, OdfMarkerEvent[]>();
   for (const event of events) {
     const mapKey = `${event.kind} ${event.key}`;
@@ -357,6 +368,7 @@ export function resolveOdfMarkerEvents(events: readonly OdfMarkerEvent[]): OdfCo
     }
   }
   const extents: OdfConstructExtent[] = [];
+  const paired = new Set<XmlElement>();
   for (const pair of byKey.values()) {
     const starts = pair.filter((event) => event.side === 'start' && event.qualified);
     const ends = pair.filter((event) => event.side === 'end' && event.qualified);
@@ -373,8 +385,10 @@ export function resolveOdfMarkerEvents(events: readonly OdfMarkerEvent[]): OdfCo
       continue;
     }
     extents.push({ startIndex: open.index, endIndex: close.index, order: open.order, descriptor });
+    paired.add(open.element);
+    paired.add(close.element);
   }
-  return extents;
+  return { extents, paired };
 }
 
 // --- tracked changes (text:tracked-changes / text:changed-region) --------------------------------------------------

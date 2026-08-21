@@ -1,4 +1,4 @@
-import type { ContentBlock, ContentParagraph, ContentSection, DefinitionEntry, DefinitionsTable, DocumentPackage, LayoutMetadata, Margins, PageSize, ProvenanceDescriptor } from 'document-schema.js';
+import type { ContentBlock, ContentParagraph, ContentSection, DefinitionsTable, DocumentPackage, LayoutMetadata, Margins, PageSize, ProvenanceDescriptor } from 'document-schema.js';
 import { assemblePackage, PAGE_SIZE_A4 } from 'document-schema.js';
 import type { Package } from '../../model/package';
 import type { XmlElement, XmlNode } from '../../model/node';
@@ -14,6 +14,7 @@ import {
   odfMarkerHalfEventIndex,
   resolveOdfMarkerEvents,
   type OdfConstructExtent,
+  type OdfDefinitionsSink,
   type OdfMarkerEvent,
   type OdfMarkerHalf,
 } from '../shared/constructs';
@@ -67,6 +68,7 @@ function readParagraphOrHeading(element: XmlElement, paragraph: ContentParagraph
 interface OdtFlowState {
   readonly listIdState: OdfListIdState;
   readonly provenanceRegions: ReadonlyMap<string, ProvenanceDescriptor>;
+  readonly definitions: OdfDefinitionsSink;
   readonly wrapperExtents: OdfConstructExtent[];
   readonly markerEvents: OdfMarkerEvent[];
   order: number;
@@ -99,7 +101,7 @@ function readBlocks(nodes: readonly XmlNode[], pkg: Package, state: OdtFlowState
   };
   const readOneParagraph = (element: XmlElement): ReadParagraph => {
     const halves: OdfMarkerHalf[] = [];
-    const paragraph = readOdfParagraph(element, pkg, { provenanceRegions: state.provenanceRegions, markersOut: halves });
+    const paragraph = readOdfParagraph(element, pkg, { provenanceRegions: state.provenanceRegions, markersOut: halves, definitions: state.definitions });
     return { element, paragraph: readParagraphOrHeading(element, paragraph), halves };
   };
   for (const node of nodes) {
@@ -208,20 +210,31 @@ export function readOdtContent(pkg: Package): OdtDocument {
   const metadata = readOdfMetadata(pkg);
   const { pageSize, margins } = readFirstMasterPageGeometry(pkg);
 
-  // The document-level collections the block walk resolves against, gathered first because a marker anywhere in the body may reference a declaration or region stated anywhere else in it: tracked-change regions (id-keyed) and the definitions-table tenants (field master declarations, keys namespaced per family).
+  // The document-level collections the block walk resolves against, gathered first because a marker anywhere in the body may reference a declaration or region stated anywhere else in it: tracked-change regions (id-keyed), the definitions sink note and annotation bodies mint into, and the field master declarations (keys namespaced per family).
   const provenanceRegions = new Map<string, ProvenanceDescriptor>();
   collectOdfProvenanceRegions(textElement.children, provenanceRegions);
-  const definitions: Record<string, DefinitionEntry> = {};
-  collectOdfFieldMasterDefinitions(textElement.children, definitions);
+  const definitions: OdfDefinitionsSink = { entries: {}, nextNoteOrdinal: 1, nextAnnotationOrdinal: 1 };
+  collectOdfFieldMasterDefinitions(textElement.children, definitions.entries);
 
-  const state: OdtFlowState = { listIdState: { next: 1 }, provenanceRegions, wrapperExtents: [], markerEvents: [], order: 0 };
+  const state: OdtFlowState = { listIdState: { next: 1 }, provenanceRegions, definitions, wrapperExtents: [], markerEvents: [], order: 0 };
   const walked = readBlocks(textElement.children, pkg, state);
-  const blocks = insertOdfConstructMarkers(walked, [...state.wrapperExtents, ...resolveOdfMarkerEvents(state.markerEvents)]);
+  const { extents: markerExtents, paired } = resolveOdfMarkerEvents(state.markerEvents);
+  const extents: OdfConstructExtent[] = [...state.wrapperExtents, ...markerExtents];
+  // The block-scope twin of the paragraph reader's unpaired-annotation fallback: an annotation half that reached a paragraph edge but never met its office:annotation-end becomes a point construct at that block position, because the end element is optional and a single-position comment needs none.
+  for (const event of state.markerEvents) {
+    if (event.kind === 'annotation' && event.side === 'start' && !paired.has(event.element)) {
+      const descriptor = event.descriptor();
+      if (descriptor !== undefined) {
+        extents.push({ startIndex: event.index, endIndex: event.index, order: event.order, descriptor });
+      }
+    }
+  }
+  const blocks = insertOdfConstructMarkers(walked, extents);
 
   return {
     metadata,
     sections: [{ pageSize, margins, blocks }],
-    ...(Object.keys(definitions).length > 0 ? { definitions } : {}),
+    ...(Object.keys(definitions.entries).length > 0 ? { definitions: definitions.entries } : {}),
   };
 }
 
