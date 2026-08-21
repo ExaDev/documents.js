@@ -336,14 +336,23 @@ describe('link and image titles (the `link` construct annotation)', () => {
 });
 
 describe('raw HTML', () => {
-  it('preserves block-level HTML as literal text by default, styled HTMLPreformatted', () => {
-    const block = paragraph(blocks('<div>\nfoo\n</div>')[0]);
+  it('preserves block-level HTML as literal text by default, styled HTMLPreformatted, with the verbatim source quarantined as markdown residue on the paragraph', () => {
+    const block = paragraph(blocks('<div>\nfoo\n</div>\n\nafter')[0]);
     expect(block.styleId).toBe('HTMLPreformatted');
     expect(block.runs[0]?.text).toContain('<div>');
+    expect(block.source).toEqual({ format: 'markdown', xml: '<div>\nfoo\n</div>' });
   });
 
-  it('drops block-level HTML entirely when rawHtml: "drop"', () => {
-    expect(blocks('<div>\nfoo\n</div>\n\nafter', { rawHtml: 'drop' }).map((block) => block.kind)).toEqual(['paragraph']);
+  it('quarantines inline raw HTML verbatim as markdown residue on each tag\'s own run -- the parser emits one rawHtml node per tag, so the residue is per tag', () => {
+    const runs = paragraph(blocks('before <em>raw</em> after')[0]).runs;
+    expect(runs[1]?.source).toEqual({ format: 'markdown', xml: '<em>' });
+    expect(runs[3]?.source).toEqual({ format: 'markdown', xml: '</em>' });
+    expect(runs[0]?.source).toBeUndefined();
+  });
+
+  it('carries no residue when rawHtml: "drop" discards the HTML entirely', () => {
+    const block = paragraph(blocks('<div>\nfoo\n</div>\n\nafter', { rawHtml: 'drop' })[0]);
+    expect(block.source).toBeUndefined();
   });
 });
 

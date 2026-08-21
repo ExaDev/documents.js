@@ -59,7 +59,7 @@ function renderParagraphBody(paragraph, context) {
 		const opening = info.length > 0 ? `${fence} ${info}` : fence;
 		return literal.length === 0 ? `${opening}\n${fence}` : `${opening}\n${literal}\n${fence}`;
 	}
-	if (paragraph.styleId === "HTMLPreformatted") return paragraph.runs.map((run) => run.text).join("");
+	if (paragraph.styleId === "HTMLPreformatted") return paragraph.source?.format === "markdown" ? paragraph.source.xml : paragraph.runs.map((run) => run.text).join("");
 	if (paragraph.styleId === "MathBlock") return `$$\n${paragraph.runs.map((run) => run.text).join("")}\n$$`;
 	const headingLevel = paragraph.styleId === void 0 ? void 0 : parseHeadingStyleId(paragraph.styleId);
 	if (headingLevel !== void 0) {

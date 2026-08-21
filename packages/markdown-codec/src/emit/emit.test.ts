@@ -294,6 +294,29 @@ describe('round trip through src/lower', () => {
     expect(second).toEqual(first);
   });
 
+  it('re-emits a run\'s quarantined markdown HTML residue verbatim, so a tag the pattern matcher would miss still comes back as HTML', () => {
+    const markdown = emitMarkdown(doc([
+      { kind: 'paragraph', runs: [{ text: 'x', source: { format: 'markdown', xml: '<em>raw</em>' } }] },
+    ]));
+    expect(markdown).toBe('<em>raw</em>');
+  });
+
+  it('escapes a literal "<" in ordinary text with no HTML residue, so tag-shaped literal text never re-reads as HTML', () => {
+    const markdown = emitMarkdown(doc([
+      { kind: 'paragraph', runs: [{ text: 'a <div> b' }] },
+    ]));
+    expect(markdown).toBe('a \\<div\\> b');
+    // And the escaped spelling round-trips back to the same literal-text document.
+    expect(lowerMarkdown('a \\<div\\> b')).toEqual(lowerMarkdown(markdown));
+  });
+
+  it('re-emits an HTMLPreformatted paragraph\'s quarantined residue verbatim in place of the run text', () => {
+    const markdown = emitMarkdown(doc([
+      { kind: 'paragraph', runs: [{ text: 'trimmed' }], styleId: 'HTMLPreformatted', source: { format: 'markdown', xml: '<div>\nfoo\n</div>' } },
+    ]));
+    expect(markdown).toBe('<div>\nfoo\n</div>');
+  });
+
   it('preserves inline math (\\( \\)), delimiters included, across a full lower -> emit -> lower round trip (ExaDev/markdown-codec#53)', () => {
     const source = 'before \\(E = mc^2\\) after';
     const first = lowerMarkdown(source);
