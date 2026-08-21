@@ -14,6 +14,8 @@ export const StyleParagraphPropertiesSchema = z.strictObject({
   lineSpacing: z.number().positive().optional(), // multiple of single line height, matching ContentParagraphSchema's own field
   indentLeftPt: z.number().optional(),
   indentFirstLinePt: z.number().optional(),
+  pageBreakBefore: z.boolean().optional(), // the page-boundary flags ContentParagraph carries -- the styles-table spelling of a paragraph style that forces a page break
+  pageBreakAfter: z.boolean().optional(),
 });
 export type StyleParagraphProperties = z.infer<typeof StyleParagraphPropertiesSchema>;
 
@@ -127,6 +129,12 @@ export function applyParagraphStyleProperties(
   }
   if (effective.indentFirstLinePt === undefined && properties.indentFirstLinePt !== undefined) {
     effective.indentFirstLinePt = properties.indentFirstLinePt;
+  }
+  if (effective.pageBreakBefore === undefined && properties.pageBreakBefore !== undefined) {
+    effective.pageBreakBefore = properties.pageBreakBefore;
+  }
+  if (effective.pageBreakAfter === undefined && properties.pageBreakAfter !== undefined) {
+    effective.pageBreakAfter = properties.pageBreakAfter;
   }
   return effective;
 }

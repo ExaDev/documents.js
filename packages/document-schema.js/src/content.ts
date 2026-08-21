@@ -65,6 +65,9 @@ export const ContentParagraphSchema = z.object({
   lineSpacing: z.number().positive().optional(), // multiple of single line height
   indentLeftPt: z.number().optional(),
   indentFirstLinePt: z.number().optional(),
+  // Explicit page boundaries a paragraph style forces around its own paragraph (docx w:pageBreakBefore, ODF fo:break-before/fo:break-after="page"). A break INSIDE one page style is this per-paragraph flag; a break that SWITCHES page geometry is a section boundary (ContentSection.breakType), and the two never encode one occurrence between them -- the same split w:pageBreakBefore and w:sectPr already make in WordprocessingML.
+  pageBreakBefore: z.boolean().optional(),
+  pageBreakAfter: z.boolean().optional(),
   sourcePath: z.string().optional(), // deterministic, document-order-derived path assigned by the format reader
   source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts)
   frames: z.array(LayoutFrameSchema).optional(), // this paragraph's own rendered position(s), once a layout pass has fused one in -- see FusedNode above

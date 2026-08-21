@@ -798,6 +798,30 @@ describe('ContentParagraphSchema headingLevel', () => {
   });
 });
 
+describe('ContentParagraph pageBreakBefore/pageBreakAfter', () => {
+  it('parses both page-break flags, the canonical spelling of a paragraph style that forces a page boundary', () => {
+    const parsed = ContentParagraphSchema.parse({
+      kind: 'paragraph',
+      runs: [{ text: 'Starts a new page' }],
+      pageBreakBefore: true,
+      pageBreakAfter: true,
+    });
+    expect(parsed.pageBreakBefore).toBe(true);
+    expect(parsed.pageBreakAfter).toBe(true);
+  });
+
+  it('parses with both omitted, matching every other optional field', () => {
+    const parsed = ContentParagraphSchema.parse({ kind: 'paragraph', runs: [{ text: 'Body' }] });
+    expect(parsed.pageBreakBefore).toBeUndefined();
+    expect(parsed.pageBreakAfter).toBeUndefined();
+  });
+
+  it('rejects a non-boolean value for either flag', () => {
+    expect(ContentParagraphSchema.safeParse({ kind: 'paragraph', runs: [], pageBreakBefore: 'page' }).success).toBe(false);
+    expect(ContentParagraphSchema.safeParse({ kind: 'paragraph', runs: [], pageBreakAfter: 1 }).success).toBe(false);
+  });
+});
+
 describe('ContentListMembership numId', () => {
   it('parses a level-only membership, the shape a format with depth but no numbering identity produces (OOXML drawing paragraphs carry only a:pPr/@lvl)', () => {
     const parsed = ContentParagraphSchema.parse({
