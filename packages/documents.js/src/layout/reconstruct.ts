@@ -1,5 +1,6 @@
 import type {
   ContentBlock,
+  ContentConstructStart,
   ContentDocument,
   ContentDrawPage,
   ContentEmbeddedObjectBlock,
@@ -25,7 +26,7 @@ import type {
 // Deep-imported from pdf-codec's asset-free read-side modules rather than its root barrel: the reconstruction path is part of this package's read-only graph (documents.js/read), and the barrel's write half would drag the vendored font assets into it. See src/read-graph.test.ts.
 import { resolveStandardFont } from 'pdf-codec/fonts';
 import { STANDARD_METRICS } from 'pdf-codec/afm-widths';
-import type { LayoutDocument, LayoutEllipse, LayoutImage, LayoutImageAsset, LayoutItem, LayoutLine, LayoutPage, LayoutPath, LayoutRect, LayoutSubpath, LayoutText } from 'pdf-codec';
+import type { LayoutAnnotation, LayoutDocument, LayoutEllipse, LayoutFormField, LayoutImage, LayoutImageAsset, LayoutInternalLink, LayoutItem, LayoutLine, LayoutLink, LayoutPage, LayoutPath, LayoutRect, LayoutSubpath, LayoutText } from 'pdf-codec';
 import { buildDrawingBlock } from '../model/embedded-drawing';
 import type { Box, Margins } from 'document-schema.js';
 import { flipY } from '../model/geometry';
@@ -206,6 +207,7 @@ function estimateModalLineSpacing(lines: readonly TextLine[]): number {
 
 export function reconstructWordprocessing(doc: LayoutDocument, options?: ReconstructOptions): ContentDocument {
   const signal = options?.signal;
+  doc = dropHiddenLayerContent(doc);
   const headingLevels = headingSizeLevels(doc);
   const sections: ContentSection[] = [];
   let currentGroup: LayoutPage[] = [];
@@ -213,16 +215,35 @@ export function reconstructWordprocessing(doc: LayoutDocument, options?: Reconst
   for (const page of doc.pages) {
     throwIfAborted(signal);
     if (currentGroup.length > 0 && !samePageSize(currentGroup[0]!, page)) {
-      sections.push(buildSection(currentGroup, groupStartPageIndex, doc.images, headingLevels));
+      sections.push(buildSection(currentGroup, groupStartPageIndex, doc.images, headingLevels, doc.form));
       groupStartPageIndex += currentGroup.length;
       currentGroup = [];
     }
     currentGroup.push(page);
   }
   if (currentGroup.length > 0) {
-    sections.push(buildSection(currentGroup, groupStartPageIndex, doc.images, headingLevels));
+    sections.push(buildSection(currentGroup, groupStartPageIndex, doc.images, headingLevels, doc.form));
   }
   return { kind: 'wordprocessing', metadata: doc.metadata, sections };
+}
+
+// --- Optional-content visibility (#721): content in a layer the default configuration hides is not extracted as if visible. ---
+
+// The layer an item carries, with the annotation-rectangle kinds (link, internalLink) reading as none -- they are not layer-governed content.
+function layerOf(item: LayoutItem): string | undefined {
+  return item.kind === 'link' || item.kind === 'internalLink' ? undefined : item.layer;
+}
+
+// A shallow copy of the document whose pages carry only the items the default view shows -- annotations stay regardless (a sticky note pinned over hidden content is still a note). Everything downstream (clustering, table recovery, vector recovery) then works on visible content only, with no per-consumer visibility logic to forget.
+function dropHiddenLayerContent(doc: LayoutDocument): LayoutDocument {
+  const hidden = new Set((doc.layers ?? []).filter((layer) => layer.visible !== true).map((layer) => layer.name));
+  if (hidden.size === 0) {
+    return doc;
+  }
+  return {
+    ...doc,
+    pages: doc.pages.map((page) => ({ ...page, items: page.items.filter((item) => layerOf(item) === undefined || !hidden.has(layerOf(item)!)) })),
+  };
 }
 
 // --- Heading inference from font size (ExaDev/documents.js#584 ask 2) -----------------------------------------
@@ -275,19 +296,18 @@ function samePageSize(a: LayoutPage, b: LayoutPage): boolean {
 
 // Margins have no PDF equivalent to recover -- there is no principled way to distinguish "intentional margin" from "wherever the content happened to start" from geometry alone, so this deliberately reports zero rather than fabricating a plausible-looking value (ZERO_MARGINS, defined above).
 // startPageIndex is this section's own first page's absolute index in the whole LayoutDocument -- a frame's pageIndex names a page of the SOURCE document, not a page within one section, so every block this section builds stamps absolute indices derived from it.
-function buildSection(pages: readonly LayoutPage[], startPageIndex: number, images: Record<string, LayoutImageAsset>, headingLevels: ReadonlyMap<number, number>): ContentSection {
+function buildSection(pages: readonly LayoutPage[], startPageIndex: number, images: Record<string, LayoutImageAsset>, headingLevels: ReadonlyMap<number, number>, form: readonly LayoutFormField[] | undefined): ContentSection {
   const blocks: ContentBlock[] = [];
   pages.forEach((page, i) => {
     if (i > 0) {
       blocks.push({ kind: 'pageBreak' });
     }
-    blocks.push(...reconstructPageBlocks(page, startPageIndex + i, images, headingLevels));
-  });
-  return { pageSize: { widthPt: pages[0]!.widthPt, heightPt: pages[0]!.heightPt }, margins: ZERO_MARGINS, blocks };
+    blocks.push(...reconstructPageBlocks(page, startPageIndex + i, images, headingLevels, form));
+  });  return { pageSize: { widthPt: pages[0]!.widthPt, heightPt: pages[0]!.heightPt }, margins: ZERO_MARGINS, blocks };
 }
 
 // Table recovery runs FIRST, because it decides what is left for everything after it: text inside a recovered lattice belongs to the table, not to the page's paragraph flow, and the lattice's own strokes belong to the table's structure, not to the recovered vector content. Both recoveries are no-ops on a page without the geometry to support them, so a text-only page produces exactly the blocks it always did. See the shared recovery section below for the full reasoning behind each gate.
-function reconstructPageBlocks(page: LayoutPage, pageIndex: number, images: Record<string, LayoutImageAsset>, headingLevels: ReadonlyMap<number, number>): ContentBlock[] {
+function reconstructPageBlocks(page: LayoutPage, pageIndex: number, images: Record<string, LayoutImageAsset>, headingLevels: ReadonlyMap<number, number>, form: readonly LayoutFormField[] | undefined): ContentBlock[] {
   const recoveredTable = recoverTable(page, pageIndex);
   const consumedText = recoveredTable?.consumedText;
   const textItems = page.items.filter((i): i is LayoutText => i.kind === 'text' && consumedText?.has(i) !== true);
@@ -315,7 +335,151 @@ function reconstructPageBlocks(page: LayoutPage, pageIndex: number, images: Reco
     positioned.push({ yPt: recoveredVectors.topYPt, block: recoveredVectors.block });
   }
   positioned.sort((a, b) => b.yPt - a.yPt);
-  return positioned.map((p) => p.block);
+  const blocks = positioned.map((p) => p.block);
+  reconcileLinks(blocks, page, pageIndex);
+  appendAnnotationConstructs(blocks, page, pageIndex);
+  appendFormFieldConstructs(blocks, form, pageIndex);
+  return blocks;
+}
+
+// --- Link reconciliation (#721): the row that names this file. An external URI link whose rect covers recovered runs becomes ContentRun.hyperlink on exactly those runs -- the standing reconciliation that keeps run-level external hyperlinks out of construct form wherever a flat run field CAN express them. Everything else (an external link matching no run, and every internal link, whose target the run field cannot spell) becomes a link construct pair bracketing the single best-matching block. One block, never a wider extent: a construct's extent must not cross a heading or list scope (the schema's own rule), and a single block can never close a scope some earlier block opened -- the conservative bound that keeps every emitted pair promotable.
+
+function framesIntersect(a: { xPt: number; yPt: number; widthPt: number; heightPt: number }, b: { xPt: number; yPt: number; widthPt: number; heightPt: number }): boolean {
+  return a.xPt < b.xPt + b.widthPt && b.xPt < a.xPt + a.widthPt && a.yPt < b.yPt + b.heightPt && b.yPt < a.yPt + a.heightPt;
+}
+
+function intersectionArea(a: { xPt: number; yPt: number; widthPt: number; heightPt: number }, b: { xPt: number; yPt: number; widthPt: number; heightPt: number }): number {
+  const width = Math.min(a.xPt + a.widthPt, b.xPt + b.widthPt) - Math.max(a.xPt, b.xPt);
+  const height = Math.min(a.yPt + a.heightPt, b.yPt + b.heightPt) - Math.max(a.yPt, b.yPt);
+  return width > 0 && height > 0 ? width * height : 0;
+}
+
+function reconcileLinks(blocks: ContentBlock[], page: LayoutPage, pageIndex: number): void {
+  for (const item of page.items) {
+    if (item.kind !== 'link' && item.kind !== 'internalLink') {
+      continue;
+    }
+    if (item.kind === 'link') {
+      let matchedRun = false;
+      for (const block of blocks) {
+        if (block.kind !== 'paragraph') {
+          continue;
+        }
+        for (const run of block.runs) {
+          if ((run.frames ?? []).some((frame) => frame.pageIndex === pageIndex && framesIntersect(item, frame))) {
+            run.hyperlink = item.uri;
+            matchedRun = true;
+          }
+        }
+      }
+      if (matchedRun) {
+        continue;
+      }
+    }
+    wrapBestBlock(blocks, item, pageIndex, linkDescriptor(item));
+  }
+}
+
+function linkDescriptor(item: LayoutLink | LayoutInternalLink): ContentConstructStart['descriptor'] {
+  if (item.kind === 'link') {
+    return { kind: 'link', target: { kind: 'external', uri: item.uri }, ...(item.title !== undefined ? { title: item.title } : {}) };
+  }
+  return { kind: 'link', target: { kind: 'internal', anchor: item.destination }, ...(item.title !== undefined ? { title: item.title } : {}) };
+}
+
+// The frames a block carries on one page -- every content block may carry frames; the construct markers themselves never do (a boundary renders nothing and occupies no space).
+function blockFramesOn(block: ContentBlock, pageIndex: number): LayoutFrame[] {
+  return block.kind === 'constructStart' || block.kind === 'constructEnd' ? [] : (block.frames ?? []).filter((frame) => frame.pageIndex === pageIndex);
+}
+
+// Wraps the block with the largest intersection with `rect` in a construct pair; with no intersecting block, emits a point pair at the end of this page's blocks (an annotation rectangle that covers nothing anchors to a point, exactly as a footnote marker does).
+function wrapBestBlock(blocks: ContentBlock[], rect: { xPt: number; yPt: number; widthPt: number; heightPt: number }, pageIndex: number, descriptor: ContentConstructStart['descriptor']): void {
+  let bestIndex = -1;
+  let bestArea = 0;
+  blocks.forEach((block, index) => {
+    const area = blockFramesOn(block, pageIndex).reduce((sum, frame) => sum + intersectionArea(rect, frame), 0);
+    if (area > bestArea) {
+      bestArea = area;
+      bestIndex = index;
+    }
+  });
+  const start: ContentBlock = { kind: 'constructStart', descriptor };
+  const end: ContentBlock = { kind: 'constructEnd' };
+  if (bestIndex >= 0) {
+    blocks.splice(bestIndex, 0, start);
+    blocks.splice(bestIndex + 2, 0, end);
+  } else {
+    blocks.push(start, end);
+  }
+}
+
+// --- Annotation constructs (#721): every page annotation becomes a point anchor(comment) construct, its body in the package-level definitions table under the same deterministic key the composition executor mints -- the verdict row's marker-plus-definition split. The opaque kinds carry their raw dictionary through the descriptor's own residue field.
+function appendAnnotationConstructs(blocks: ContentBlock[], page: LayoutPage, pageIndex: number): void {
+  (page.annotations ?? []).forEach((annotation: LayoutAnnotation, annotIndex: number) => {
+    const key = `pdf-annot-${String(pageIndex)}-${String(annotIndex)}`;
+    blocks.push(
+      {
+        kind: 'constructStart',
+        descriptor: {
+          kind: 'anchor',
+          anchorType: 'comment',
+          name: key,
+          definition: key,
+          ...(annotation.source !== undefined ? { source: annotation.source } : {}),
+        },
+      },
+      { kind: 'constructEnd' },
+    );
+  });
+}
+
+// --- AcroForm constructs (#721): a terminal field's widget becomes a contentControl pair around its best-matching block (a form field's own printed content is the text inside its rect), or a point pair when nothing matches. Groups emit nothing -- they carry no content of their own and their children name them by prefix. Signature fields emit nothing here: certification binds to bytes a semantic pivot never reproduces, so they are residue, not a control.
+function controlTypeOf(field: LayoutFormField): 'plainText' | 'checkbox' | 'button' | 'dropDown' | 'comboBox' {
+  if (field.fieldType === 'text') {
+    return 'plainText';
+  }
+  if (field.fieldType === 'button') {
+    return 'button';
+  }
+  if (field.fieldType === 'combobox') {
+    return 'comboBox';
+  }
+  if (field.fieldType === 'listbox') {
+    return 'dropDown';
+  }
+  return 'checkbox'; // checkbox and radio: the boolean control -- the harmonised vocabulary has no separate radio member
+}
+
+function appendFormFieldConstructs(blocks: ContentBlock[], form: readonly LayoutFormField[] | undefined, pageIndex: number): void {
+  const visit = (fields: readonly LayoutFormField[]): void => {
+    for (const field of fields) {
+      visit(field.children);
+      if (field.fieldType === 'group' || field.fieldType === 'signature') {
+        continue;
+      }
+      for (const widget of field.widgets) {
+        if (widget.pageIndex !== pageIndex) {
+          continue;
+        }
+        wrapBestBlock(
+          blocks,
+          widget,
+          pageIndex,
+          {
+            kind: 'contentControl',
+            controlType: controlTypeOf(field),
+            tag: field.name,
+            ...(field.alias !== undefined ? { alias: field.alias } : {}),
+            ...(field.readOnly === true ? { lock: 'content' } : {}),
+            ...(field.value !== undefined ? { value: field.value } : {}),
+            ...(field.checked !== undefined ? { checked: field.checked } : {}),
+            ...(field.options !== undefined ? { options: [...field.options] } : {}),
+          },
+        );
+      }
+    }
+  };
+  visit(form ?? []);
 }
 
 interface TextParagraph {
