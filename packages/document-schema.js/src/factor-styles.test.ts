@@ -124,7 +124,8 @@ describe('factorStyles minting', () => {
     expect(flat.sections[0]?.blocks.every((block) => block.kind === 'paragraph' && block.pageBreakBefore === true)).toBe(true);
   });
 
-  it('mints run tuples on the wrapper whose extent covers the runs, stripping them from the runs', () => {    const body = shapeBlocks(paragraph([run('a', { bold: true, sizePt: 12 })]), paragraph([run('b', { bold: true, sizePt: 12 })]));
+  it('mints run tuples on the wrapper whose extent covers the runs, stripping them from the runs', () => {
+    const body = shapeBlocks(paragraph([run('a', { bold: true, sizePt: 12 })]), paragraph([run('b', { bold: true, sizePt: 12 })]));
     const doc: ContentDocument = { kind: 'presentation', metadata: {}, slides: [{ size: { widthPt: 960, heightPt: 540 }, shapes: [body], notes: '' }] };
     const minted = assemblePackage(doc);
     // Outermost-first: the slide wrapper's extent already covers both shape flows, so it (not the deeper shape group) carries the ref -- one entry styles every run in the slide, which is exactly the "slide body text" case the rule exists for.
