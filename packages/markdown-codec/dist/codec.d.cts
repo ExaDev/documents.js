@@ -122,6 +122,7 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
     producer: z.ZodOptional<z.ZodString>;
     createdIso: z.ZodOptional<z.ZodString>;
     modifiedIso: z.ZodOptional<z.ZodString>;
+    language: z.ZodOptional<z.ZodString>;
   }, z.core.$strip>;
   kind: z.ZodLiteral<"wordprocessing">;
 }, z.core.$strip>, z.ZodObject<{
@@ -245,6 +246,7 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
     producer: z.ZodOptional<z.ZodString>;
     createdIso: z.ZodOptional<z.ZodString>;
     modifiedIso: z.ZodOptional<z.ZodString>;
+    language: z.ZodOptional<z.ZodString>;
   }, z.core.$strip>;
   kind: z.ZodLiteral<"presentation">;
 }, z.core.$strip>, z.ZodObject<{
@@ -368,6 +370,7 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
     producer: z.ZodOptional<z.ZodString>;
     createdIso: z.ZodOptional<z.ZodString>;
     modifiedIso: z.ZodOptional<z.ZodString>;
+    language: z.ZodOptional<z.ZodString>;
   }, z.core.$strip>;
   kind: z.ZodLiteral<"spreadsheet">;
 }, z.core.$strip>, z.ZodObject<{
@@ -491,6 +494,7 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
     producer: z.ZodOptional<z.ZodString>;
     createdIso: z.ZodOptional<z.ZodString>;
     modifiedIso: z.ZodOptional<z.ZodString>;
+    language: z.ZodOptional<z.ZodString>;
   }, z.core.$strip>;
   kind: z.ZodLiteral<"drawing">;
 }, z.core.$strip>, z.ZodObject<{
@@ -643,6 +647,7 @@ declare const markdownCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffer>, Uin
     producer: z.ZodOptional<z.ZodString>;
     createdIso: z.ZodOptional<z.ZodString>;
     modifiedIso: z.ZodOptional<z.ZodString>;
+    language: z.ZodOptional<z.ZodString>;
   }, z.core.$strip>;
   kind: z.ZodLiteral<"formula">;
 }, z.core.$strip>], "kind">>;
@@ -736,6 +741,7 @@ declare const markdownContentCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffe
     producer: z.ZodOptional<z.ZodString>;
     createdIso: z.ZodOptional<z.ZodString>;
     modifiedIso: z.ZodOptional<z.ZodString>;
+    language: z.ZodOptional<z.ZodString>;
   }, z.core.$strip>;
 }, z.core.$strip>, z.ZodObject<{
   slides: z.ZodArray<z.ZodObject<{
@@ -858,6 +864,7 @@ declare const markdownContentCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffe
     producer: z.ZodOptional<z.ZodString>;
     createdIso: z.ZodOptional<z.ZodString>;
     modifiedIso: z.ZodOptional<z.ZodString>;
+    language: z.ZodOptional<z.ZodString>;
   }, z.core.$strip>;
 }, z.core.$strip>, z.ZodObject<{
   sheets: z.ZodArray<z.ZodObject<{
@@ -1215,6 +1222,7 @@ declare const markdownContentCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffe
     producer: z.ZodOptional<z.ZodString>;
     createdIso: z.ZodOptional<z.ZodString>;
     modifiedIso: z.ZodOptional<z.ZodString>;
+    language: z.ZodOptional<z.ZodString>;
   }, z.core.$strip>;
 }, z.core.$strip>, z.ZodObject<{
   pages: z.ZodArray<z.ZodObject<{
@@ -1581,6 +1589,7 @@ declare const markdownContentCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffe
     producer: z.ZodOptional<z.ZodString>;
     createdIso: z.ZodOptional<z.ZodString>;
     modifiedIso: z.ZodOptional<z.ZodString>;
+    language: z.ZodOptional<z.ZodString>;
   }, z.core.$strip>;
 }, z.core.$strip>, z.ZodObject<{
   formula: z.ZodObject<{
@@ -1666,6 +1675,7 @@ declare const markdownContentCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffe
     producer: z.ZodOptional<z.ZodString>;
     createdIso: z.ZodOptional<z.ZodString>;
     modifiedIso: z.ZodOptional<z.ZodString>;
+    language: z.ZodOptional<z.ZodString>;
   }, z.core.$strip>;
 }, z.core.$strip>], "kind">>;
 //#endregion
