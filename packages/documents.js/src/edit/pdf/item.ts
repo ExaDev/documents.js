@@ -2,7 +2,7 @@ import type { ContentStrokeStyle } from 'document-schema.js';
 import type { Color as LayoutColor } from 'document-schema.js';
 import type { LayoutFont } from 'document-schema.js';
 import { registerImageBytes, spliceOut } from './util';
-import type { LayoutEllipse, LayoutImage, LayoutImageAsset, LayoutItem, LayoutLine, LayoutLink, LayoutPath, LayoutRect, LayoutSubpath, LayoutText } from 'pdf-codec';
+import type { LayoutEllipse, LayoutImage, LayoutImageAsset, LayoutInternalLink, LayoutItem, LayoutLine, LayoutLink, LayoutPath, LayoutRect, LayoutSubpath, LayoutText } from 'pdf-codec';
 
 // Live-view classes over a page's own LayoutItem entries -- the PDF-editor equivalent of src/edit/docx/run.ts's DocxRun or src/edit/odg/vector.ts's OdgBoxVector/OdgLineVector/OdgPathVector, adapted to this package's own model: a LayoutItem is a plain, Zod-inferred object (not an XmlElement), so there is no attribute tree to read/write through -- every getter/setter here reads or mutates the actual object sitting inside the page's own `items` array directly, and saving is nothing more than writePdf(doc) (PdfEditor.toBytes()). `container` is that page's own `LayoutItem[]` array (the exact reference PdfPage.items()/append*/insert* hold), `node` is this item's own object inside it.
 //
@@ -29,9 +29,10 @@ abstract class PdfItemBase<T extends LayoutItem> {
     return this.node;
   }
 
-  // sourcePath is assigned only by a format reader at read time (document-schema.js's own layout.ts doc comment) -- never meaningfully settable here, so this exposes it read-only, matching what every LayoutItem variant actually carries.
+  // sourcePath is assigned only by a format reader at read time (document-schema.js's own layout.ts doc comment) -- never meaningfully settable here, so this exposes it read-only, matching what every LayoutItem variant actually carries. The internalLink item is the deliberate exception (an annotation rectangle is never laid out from a ContentDocument item), so it reads as undefined rather than being modelled on that variant.
   get sourcePath(): string | undefined {
-    return this.live().sourcePath;
+    const node = this.live();
+    return node.kind === 'internalLink' ? undefined : node.sourcePath;
   }
 
   remove(): void {
@@ -577,6 +578,57 @@ export function buildLinkItem(init: PdfLinkInit): LayoutLink {
   return { kind: 'link', uri: init.uri, xPt: init.xPt, yPt: init.yPt, widthPt: init.widthPt, heightPt: init.heightPt };
 }
 
+// An internal navigation link item (#721): destination names an entry of the document's destinations table rather than a URI. Geometry edits mirror PdfLinkItem's; the destination itself is read/write as the plain name it is.
+export class PdfInternalLinkItem extends PdfItemBase<LayoutInternalLink> {
+  readonly kind = 'internalLink' as const;
+
+  constructor(container: LayoutItem[], node: LayoutInternalLink) {
+    super(container, node, 'PdfInternalLinkItem');
+  }
+
+  get destination(): string {
+    return this.live().destination;
+  }
+
+  set destination(value: string) {
+    this.live().destination = value;
+  }
+
+  get xPt(): number {
+    return this.live().xPt;
+  }
+
+  set xPt(value: number) {
+    this.live().xPt = value;
+  }
+
+  get yPt(): number {
+    return this.live().yPt;
+  }
+
+  set yPt(value: number) {
+    this.live().yPt = value;
+  }
+
+  get widthPt(): number {
+    return this.live().widthPt;
+  }
+
+  set widthPt(value: number) {
+    requireNonNegative(value, 'widthPt');
+    this.live().widthPt = value;
+  }
+
+  get heightPt(): number {
+    return this.live().heightPt;
+  }
+
+  set heightPt(value: number) {
+    requireNonNegative(value, 'heightPt');
+    this.live().heightPt = value;
+  }
+}
+
 export class PdfLinkItem extends PdfItemBase<LayoutLink> {
   readonly kind = 'link' as const;
 
@@ -629,7 +681,7 @@ export class PdfLinkItem extends PdfItemBase<LayoutLink> {
 
 // --- dispatch --------------------------------------------------------------------------------------------------
 
-export type PdfItem = PdfTextItem | PdfImageItem | PdfRectItem | PdfEllipseItem | PdfLineItem | PdfPathItem | PdfLinkItem;
+export type PdfItem = PdfTextItem | PdfImageItem | PdfRectItem | PdfEllipseItem | PdfLineItem | PdfPathItem | PdfLinkItem | PdfInternalLinkItem;
 
 // Wraps whichever LayoutItem `node` actually is in its matching live-view class -- the read-side counterpart to buildTextItem/buildRectItem/etc above, and the single place kind-to-class dispatch lives. PdfPage's own items()/textItems()/imageItems()/etc, and every append*/insert*At below, funnel through this.
 export function wrapItem(container: LayoutItem[], node: LayoutItem, images: Record<string, LayoutImageAsset>): PdfItem {
@@ -642,6 +694,8 @@ export function wrapItem(container: LayoutItem[], node: LayoutItem, images: Reco
       return new PdfRectItem(container, node);
     case 'ellipse':
       return new PdfEllipseItem(container, node);
+    case 'internalLink':
+      return new PdfInternalLinkItem(container, node);
     case 'line':
       return new PdfLineItem(container, node);
     case 'path':

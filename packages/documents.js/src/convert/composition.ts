@@ -35,6 +35,7 @@ import { readSvgContent } from '../svg/read';
 import { buildSvgText } from '../svg/write';
 import type { CellTypeInferenceSink } from '../layout/cell-typing';
 import { reconstructDrawing, reconstructPresentation, reconstructSpreadsheet, reconstructWordprocessing, type ReconstructOptions } from '../layout/reconstruct';
+import { stampPdfPackageTables } from './pdf-package-tables';
 import { type OmmlDiagnostic } from '../omml/shared';
 import { throwIfAborted } from '../ports/abort';
 import { type ClockPort } from '../ports/clock';
@@ -293,7 +294,7 @@ export function executeFromPdf(target: ContentFormat, bytes: Uint8Array<ArrayBuf
   // The pages half derives from the read LayoutDocument's own pages -- every rendered page's size, indexed to match the frames the reconstructor attached to the content it built.
   const pages = layout.pages.map((page) => ({ widthPt: page.widthPt, heightPt: page.heightPt }));
 
-  // Build + encode the target first, then report the package (the ownership rule every construction site follows), with assemblePackage decomposing the reconstructed content + page sizes into the tree-form DocumentPackage.
+  // Build + encode the target first, then report the package (the ownership rule every construction site follows), with assemblePackage decomposing the reconstructed content + page sizes into the tree-form DocumentPackage. stampPdfPackageTables then lands the layout's document-level surfaces (destinations, outline, attachments, layers, residue, comment bodies) on the tree -- the tables the flat ContentDocument has no root for.
   let out: Uint8Array<ArrayBuffer>;
   if (isTextFormatNode(node)) {
     const text = node.build(content, options);
@@ -302,7 +303,9 @@ export function executeFromPdf(target: ContentFormat, bytes: Uint8Array<ArrayBuf
     const pkg = node.build(content);
     out = node.encode(pkg);
   }
-  options?.onDocument?.(assemblePackage(content, pages));
+  const reported = assemblePackage(content, pages);
+  stampPdfPackageTables(reported, layout);
+  options?.onDocument?.(reported);
   return out;
 }
 
