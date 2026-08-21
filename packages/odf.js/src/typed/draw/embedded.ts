@@ -2,14 +2,18 @@ import type { Box, ContentDocument, ContentEmbeddedObjectKind, SourceResidue } f
 import type { XmlElement, XmlNode } from '../../model/node';
 import type { Package } from '../../model/package';
 import { attrValue, childrenWithTag, elementsWithTag, findChildElement, rootElement } from '../../xml/query';
-import { findMathRoot } from '../formula/read';
+import { findMathRoot, readOdfFormulaContent } from '../formula/read';
 import { subDocumentPackage } from '../odb/subdocument';
 import { readOdfTable } from '../shared/table';
 import { odfResidue, type OdfResidueFormat } from '../shared/constructs';
+import { readOdgContent } from '../odg/read';
+import { readOdpContent } from '../odp/read';
+import { readOdsContent } from '../ods/read';
+import { readOdtContent } from '../odt/read';
 
 // A draw:frame's own EMBEDDED OBJECT reference (draw:object) resolved into the sub-Package it points at, plus the ContentEmbeddedObjectKind that sub-document actually is -- the draw: counterpart to shapes.ts's readDrawImageBlock (draw:image), kept in its own module because the two answer genuinely different questions: an image resolves to a binary part this package decodes itself, while an object resolves to a whole nested ODF DOCUMENT only a typed reader (readOdtContent/readOdsContent/readOdpContent/readOdgContent) can turn into content.
 //
-// WHY THIS MODULE DELIBERATELY DOES NOT CALL THOSE READERS ITSELF: it would have to import readOdsContent, which imports this module -- a genuine import cycle, and one that would grow a new edge every time another format learns to read embedded objects. Resolving the reference (which sub-package, which kind) needs no reader at all, so the split falls exactly where the dependency does: this module answers "what is embedded and where are its parts", and the calling format reader dispatches its own kind -> readX call from that.
+// WHY THE READER DISPATCH LIVES HERE, NOT IN EACH FORMAT READER: this module originally left the kind -> reader call to its callers, because dispatching from odt's reader would have imported ods's reader, which imports odt's right back -- a genuine reader cycle. That split only stood while odf's embedding edges all pointed one way (ods dispatched to embedded sub-documents and odt did not); odt's own anchored-frame reading made embedding symmetric -- a Writer document embeds a Calc sheet exactly as a Calc sheet embeds a Writer document (ExaDev/documents.js#761) -- and per-reader dispatch then re-creates the cycle whichever direction is refused. So the dispatch is inverted into this module: every format reader hands its embedded references to readEmbeddedObjectDocument below, and THIS module imports the readers. The resulting module cycles (odt/read -> here -> ods/read -> here) are safe under one discipline, the same one ooxml.js's own typed/embedded.ts states for its identical symmetric-embedding dispatch: every cross-use is call-time only, both sides export hoisted function declarations, and nothing at module-evaluation time may read a cycle partner's bindings (a top-level const whose initialiser touched a partner would TDZ, because ESM initialises a cycle's modules in an order the import graph does not pin). Reference resolution (which sub-package, which kind) stays reader-free exactly as before, so nothing above the dispatch grows a cycle edge.
 //
 // CONFIRMED against real, unmodified LibreOffice 26.2 output (src/typed/ods/fixtures/sheet-anchors.ods -- a real Calc sheet built through the same UNO calls the Calc UI itself uses, with a LibreOffice Draw document inserted as an OLE object anchored to a cell, then saved and unzipped directly):
 // - The reference is `<draw:object xlink:href="./Object 1" xlink:type="simple" xlink:show="embed" xlink:actuate="onLoad"/>`, a direct child of draw:frame -- a package-relative DIRECTORY path with a "./" prefix and NO trailing "/content.xml", so the href is exactly the prefix subDocumentPackage (typed/odb/subdocument.ts) already re-keys a sub-document's parts against, once that "./" is stripped.
@@ -82,6 +86,40 @@ export function readOdfChartContent(chartPackage: Package, frame: Box, format: O
   };
   // No residue when the package resolves no chart:chart element at all (the reference resolved on the office:chart body child, so a missing inner element is malformed-missing): the object still reads with its empty content rather than quarantining a fabricated element the source never had.
   return { document, residue: chartElement === undefined ? undefined : odfResidue(format, chartElement) };
+}
+
+// What dispatching one embedded sub-document to its own typed reader yields: the ContentDocument variant that reader produces, plus the residue the one kind with format-specific presentation specifics (a chart, quarantining its whole chart:chart element) attaches -- undefined for every other kind, so a caller shaping the result into its own block/object encoding treats both arms uniformly.
+export interface EmbeddedDocumentRead {
+  readonly document: ContentDocument;
+  readonly residue: SourceResidue | undefined;
+}
+
+// An embedded sub-document reference -> the ContentDocument its own typed reader produces, plus any residue that reader quarantines. This is the ONE kind -> reader dispatch table for the whole package (see this module's own top-of-file note for why it lives here rather than in each format reader): both frame-reading formats (odt's text-flow lift, ods's cell/page anchoring) hand every reference they resolve to this function, so a spreadsheet embedded in a Writer document and a Writer document embedded in a spreadsheet traverse the same table, and no format reader ever imports a sibling reader. A spreadsheet embedded inside a spreadsheet is plain self-recursion through the table's own 'spreadsheet' arm. `format` names the EMBEDDING format (the reader whose frame walk made the call), because the one arm that cares -- chart residue, so a same-format restorer knows whose serialisation it is reading -- is a property of where the object was found, not of what the object is. Every EmbeddedDocumentKind resolves: the reference itself already refused the unrepresentable shapes (a linked object, a .odb front-end), so a caller never needs an undefined arm to handle.
+export function readEmbeddedObjectDocument(reference: EmbeddedDrawObject, frame: Box, format: OdfResidueFormat): EmbeddedDocumentRead {
+  switch (reference.objectKind) {
+    case 'wordprocessing': {
+      const { metadata, sections } = readOdtContent(reference.package);
+      return { document: { kind: 'wordprocessing', metadata, sections }, residue: undefined };
+    }
+    case 'presentation': {
+      const { metadata, slides } = readOdpContent(reference.package);
+      return { document: { kind: 'presentation', metadata, slides }, residue: undefined };
+    }
+    case 'drawing': {
+      const { metadata, pages } = readOdgContent(reference.package);
+      return { document: { kind: 'drawing', metadata, pages }, residue: undefined };
+    }
+    case 'spreadsheet': {
+      const { metadata, sheets } = readOdsContent(reference.package);
+      return { document: { kind: 'spreadsheet', metadata, sheets }, residue: undefined };
+    }
+    case 'formula':
+      // The one embedded kind whose own reader already returns a finished ContentDocument (readOdfFormulaContent), because a formula document has no per-format {metadata, sections/slides/pages/sheets} shape to re-wrap -- its whole content IS the MathML.
+      return { document: readOdfFormulaContent(reference.package), residue: undefined };
+    case 'chart':
+      // A chart's document is the frame-sized drawing page carrying the chart's local data cache (see readOdfChartContent's own note above), and the chart element quarantines into the residue this return carries alongside it.
+      return readOdfChartContent(reference.package, frame, format);
+  }
 }
 
 // A sub-document's own content.xml -> the kind it is, across BOTH structural shapes: office:body's content child for an ordinary embedded document, and a bare MathML root for an embedded formula. The office:body path is tried first and the math-root path only when it yields nothing, so a document that genuinely has an office:body is never re-examined as a formula.
