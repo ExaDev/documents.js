@@ -1,3 +1,10 @@
+# [4.7.0](https://github.com/ExaDev/documents.js/compare/document-schema.js@4.6.0...document-schema.js@4.7.0) (2026-08-21)
+
+
+### Features
+
+* **schema:** add the chart member to ContentEmbeddedObjectKind ([c5f9942](https://github.com/ExaDev/documents.js/commit/c5f99426443972a661cb4fc845bbc096f2e195d9))
+
 # [4.6.0](https://github.com/ExaDev/documents.js/compare/document-schema.js@4.5.0...document-schema.js@4.6.0) (2026-08-21)
 
 
