@@ -28,6 +28,7 @@ import {
   type PdfImageItem,
   type PdfItem,
   type PdfLineItem,
+  type PdfInternalLinkItem,
   type PdfLinkItem,
   type PdfPage,
   type PdfPathItem,
@@ -317,6 +318,7 @@ const isPdfLineItem = (item: PdfItem): item is PdfLineItem => item.kind === 'lin
 const isPdfPathItem = (item: PdfItem): item is PdfPathItem => item.kind === 'path';
 const isPdfImageItem = (item: PdfItem): item is PdfImageItem => item.kind === 'image';
 const isPdfLinkItem = (item: PdfItem): item is PdfLinkItem => item.kind === 'link';
+const isPdfInternalLinkItem = (item: PdfItem): item is PdfInternalLinkItem => item.kind === 'internalLink';
 
 type VectorHostOpenDocument = OdgOpenDocument | OdpOpenDocument;
 
@@ -1277,6 +1279,19 @@ export function appReducer(state: AppState, action: Action): AppState {
 
     case 'SET_PDF_LINK_FRAME':
       return withPdfItemMatching(state, action.pageIndex, action.itemIndex, isPdfLinkItem, 'link', (item) => {
+        item.xPt = action.xPt;
+        item.yPt = action.yPt;
+        item.widthPt = action.widthPt;
+        item.heightPt = action.heightPt;
+      });
+
+    case 'SET_PDF_INTERNAL_LINK_DESTINATION':
+      return withPdfItemMatching(state, action.pageIndex, action.itemIndex, isPdfInternalLinkItem, 'internalLink', (item) => {
+        item.destination = action.destination;
+      });
+
+    case 'SET_PDF_INTERNAL_LINK_FRAME':
+      return withPdfItemMatching(state, action.pageIndex, action.itemIndex, isPdfInternalLinkItem, 'internalLink', (item) => {
         item.xPt = action.xPt;
         item.yPt = action.yPt;
         item.widthPt = action.widthPt;

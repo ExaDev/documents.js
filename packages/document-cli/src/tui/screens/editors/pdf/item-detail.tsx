@@ -1,4 +1,4 @@
-import type { ContentStroke, LayoutColor, LayoutItem, PdfEllipseItem, PdfImageItem, PdfItem, PdfLineItem, PdfLinkItem, PdfPathItem, PdfRectItem, PdfTextItem } from 'documents.js';
+import type { ContentStroke, LayoutColor, LayoutItem, PdfEllipseItem, PdfImageItem, PdfInternalLinkItem, PdfItem, PdfLineItem, PdfLinkItem, PdfPathItem, PdfRectItem, PdfTextItem } from 'documents.js';
 import { Box, Text, useInput } from 'ink';
 import { useState, type Dispatch, type ReactElement } from 'react';
 import { readInput } from '../../../../runtime/io.js';
@@ -98,13 +98,22 @@ function fieldsFor(item: LayoutItem): readonly Field[] {
       fields.push(['Position', formatPoint(item.xPt, item.yPt)]);
       fields.push(['Size', formatSize(item.widthPt, item.heightPt)]);
       break;
+    case 'internalLink':
+      fields.push(['Destination', item.destination]);
+      if (item.title !== undefined) {
+        fields.push(['Title', item.title]);
+      }
+      fields.push(['Position', formatPoint(item.xPt, item.yPt)]);
+      fields.push(['Size', formatSize(item.widthPt, item.heightPt)]);
+      break;
     default: {
       // Exhaustiveness check, not a runtime fallback: if `LayoutItem` ever grows a kind this switch does not handle, `item` stops narrowing to `never` here and the assignment below fails to compile.
       const exhaustive: never = item;
       return exhaustive;
     }
   }
-  if (item.sourcePath !== undefined) {
+  // internalLink carries no sourcePath (an annotation rectangle is never laid out from a ContentDocument item), so the trailing rows read it only for the kinds that have one.
+  if (item.kind !== 'internalLink' && item.sourcePath !== undefined) {
     fields.push(['Source path', item.sourcePath]);
   }
   return fields;
@@ -330,6 +339,14 @@ function buildLinkRows(item: PdfLinkItem, pageIndex: number, itemIndex: number, 
   ];
 }
 
+// An internal link's destination names a destinations-table entry, not a URI -- editable as the plain name it is, with the same frame rows every placed item gets.
+function buildInternalLinkRows(item: PdfInternalLinkItem, pageIndex: number, itemIndex: number, dispatch: Dispatch<Action>): EditableRow[] {
+  return [
+    { label: `Destination: ${item.destination}`, currentValue: item.destination, commit: (raw) => dispatch({ type: 'SET_PDF_INTERNAL_LINK_DESTINATION', pageIndex, itemIndex, destination: raw }) },
+    ...buildFrameRows(item, (frame) => dispatch({ type: 'SET_PDF_INTERNAL_LINK_FRAME', pageIndex, itemIndex, ...frame })),
+  ];
+}
+
 function buildRowsFor(item: PdfItem, pageIndex: number, itemIndex: number, dispatch: Dispatch<Action>, onReplaceImage: () => void): EditableRow[] {
   switch (item.kind) {
     case 'text':
@@ -346,6 +363,8 @@ function buildRowsFor(item: PdfItem, pageIndex: number, itemIndex: number, dispa
       return buildImageRows(item, pageIndex, itemIndex, dispatch, onReplaceImage);
     case 'link':
       return buildLinkRows(item, pageIndex, itemIndex, dispatch);
+    case 'internalLink':
+      return buildInternalLinkRows(item, pageIndex, itemIndex, dispatch);
   }
 }
 
