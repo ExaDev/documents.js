@@ -584,6 +584,41 @@ function cellText(block: ContentBlock | undefined, row: number, column: number):
   return asParagraph(block.rows[row]?.cells[column]?.blocks[0]).runs[0]?.text;
 }
 
+describe('readPptxContent: dynamic fields (a:fld)', () => {
+  function fieldFixturePackage(): Package {
+    const shape = el('p:sp', {}, [
+      el('p:nvSpPr', {}, [el('p:cNvPr', { id: '2', name: 'Footer' }), el('p:cNvSpPr'), el('p:nvPr')]),
+      el('p:spPr', {}, [el('a:xfrm', {}, [el('a:off', { x: '914400', y: '6400800' }), el('a:ext', { cx: '7315200', cy: '457200' })])]),
+      el('p:txBody', {}, [
+        el('a:p', {}, [
+          el('a:r', {}, [el('a:t', {}, [txt('Slide ')])]),
+          el('a:fld', { id: '{00000000-0000-0000-0000-000000000000}', type: 'slidenum' }, [el('a:t', {}, [txt('3')])]),
+          el('a:r', {}, [el('a:t', {}, [txt(' of many')])]),
+        ]),
+      ]),
+    ]);
+    const slide = el('p:sld', {}, [el('p:cSld', {}, [el('p:spTree', {}, [shape])])]);
+    const presentation = el('p:presentation', {}, [el('p:sldIdLst', {}, [el('p:sldId', { id: '256', 'r:id': 'rId1' })])]);
+    const presentationRels = rels([{ id: 'rId1', type: SLIDE_REL, target: 'slides/slide1.xml' }]);
+    return {
+      parts: {
+        'ppt/presentation.xml': { kind: 'xml', nodes: [presentation] },
+        'ppt/_rels/presentation.xml.rels': { kind: 'xml', nodes: [presentationRels] },
+        'ppt/slides/slide1.xml': { kind: 'xml', nodes: [slide] },
+      },
+    };
+  }
+
+  it('reads an a:fld as a field run construct covering its own run, with @type as the instruction and the cached a:t as the result', () => {
+    const doc = readPptxContent(fieldFixturePackage());
+    const paragraph = asParagraph(doc.slides[0]?.shapes[0]?.blocks[0]);
+    expect(paragraph.runs.map((run) => run.text)).toEqual(['Slide ', '3', ' of many']);
+    expect(paragraph.constructs).toEqual([
+      { descriptor: { kind: 'field', instruction: 'slidenum', cachedResult: '3' }, startRun: 1, endRun: 2 },
+    ]);
+  });
+});
+
 describe('readPptxContent: chart graphic frames', () => {
   it('reads the chart part\'s cached series/category model as a table block', () => {
     const doc = readPptxContent(chartFixturePackage());
