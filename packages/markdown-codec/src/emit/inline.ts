@@ -2,14 +2,13 @@
 //
 // Adjacent runs with DIFFERENT bold/italic/strike combinations are never wrapped independently and concatenated -- **bold** immediately followed by its own ___nested___ wrap would fuse into one ambiguous five-underscore delimiter run once written out, which is a real correctness bug, not a style nit. renderNestedStyles instead groups the run sequence hierarchically by bold, then by italic, then by strike, producing a properly NESTED wrap (`**bold *nested***`-shaped) whose closing delimiter run CommonMark's own algorithm resolves correctly (a closer consumes only as many delimiters as its innermost opener needs, leaving the rest for the next one out) -- exactly the well-known trick real markdown output already relies on for this exact shape.
 //
-// Escaping (escapeMarkdownText) is conservative: every ASCII punctuation character markdown itself gives meaning to is backslash-escaped, UNLESS it is the `<` of a tag src/html/html.ts's own matchHtmlTag would recognise as raw HTML -- exempting exactly that span (not "any `<`") is what lets a paragraph carrying preserved raw HTML (src/lower/inline.ts's own RAW_HTML_PRESERVED_AS_TEXT case) survive a write-then-read round trip AS HTML rather than as escaped literal text.
+// Escaping (escapeMarkdownText) is conservative: every ASCII punctuation character markdown itself gives meaning to is backslash-escaped, including a literal '<'. There is deliberately NO tag exemption any more: preserved raw HTML now rides the run's own markdown residue and re-emits verbatim beside this function (renderLeaf), so a pattern-match on tag-shaped text would only ever fire on LITERAL text that merely looks like a tag -- escaping that is exactly the correct behaviour, and leaving it bare was the RAW_TEXT_TAG_AMBIGUITY round-trip failure this retires.
 //
 // Preserved inline math (src/lower/inline.ts's own MATH_INLINE_PRESERVED_AS_TEXT case) is NOT given the same text-pattern-based exemption, deliberately: escapeMarkdownText already backslash-escapes every literal '(' and ')' it meets in ORDINARY text (both are in ESCAPE_CHARS below), so an ordinary escaped parenthetical remark -- "\(see below\)" -- is indistinguishable from a genuine preserved \( \) span once escaped, and a pattern-based exemption (tried and reverted) misrecognised the former as the latter on reparse. renderLeaf below instead keys off the run's own MATH_INLINE_FONT_MARKER fontFamily, the same non-pattern-based, opportunistic-reuse trick a code span's own Courier New marker already plays two paragraphs down.
 
 import type { ContentRun, RunConstructExtent } from 'document-schema.js';
 import type { MarkdownDiagnosticSink } from '../diagnostics/diagnostics';
 import { MarkdownDiagnosticCodes } from '../diagnostics/diagnostics';
-import { matchHtmlTag } from '../html/html';
 import { FOOTNOTE_REFERENCE_FONT_MARKER, MATH_INLINE_FONT_MARKER, MONOSPACE_FONT_FAMILY } from '../shared/style-constants';
 
 export interface InlineEmitContext {
@@ -25,14 +24,6 @@ export function escapeMarkdownText(text: string): string {
   let index = 0;
   while (index < text.length) {
     const char = text.charAt(index);
-    if (char === '<') {
-      const tag = matchHtmlTag(text, index);
-      if (tag !== undefined) {
-        out += tag;
-        index += tag.length;
-        continue;
-      }
-    }
     if (char === '\n') {
       // A hard line break's own literal '\n' (src/lower/inline.ts's own mapping) -- rendered as a backslash immediately before a real newline, CommonMark's own unambiguous hard-break spelling (as opposed to the whitespace-sensitive "two trailing spaces" form).
       out += '\\\n';
@@ -71,7 +62,12 @@ function renderCodeSpan(text: string): string {
 }
 
 // A run's own leaf text -- a code span for a monospace run, escaped literal text otherwise. Deliberately carries no bold/italic/strike wrapping of its own: renderNestedStyles applies that OUTSIDE this function, over a whole GROUP of runs at once, which is what keeps adjacent differently-styled runs from producing an ambiguous concatenated delimiter run (see this module's own top-of-file note).
+//
+// A run carrying this package's own markdown HTML residue (src/lower/inline.ts's rawHtml case) re-emits that residue verbatim: re-serialising opaque residue is the restorable tier's whole mechanism, and it is what distinguishes genuine preserved HTML from literal text that merely looks like a tag -- the pattern-matching exemption escapeMarkdownText used to carry (leave a recognised tag unescaped) could not tell those apart and is gone, so ordinary text now always escapes a literal '<' and a real HTML run never passes through escaping at all.
 function renderLeaf(run: ContentRun, context: InlineEmitContext): string {
+  if (run.source?.format === 'markdown') {
+    return run.source.xml;
+  }
   if (run.fontFamily === MONOSPACE_FONT_FAMILY) {
     context.sink({ code: MarkdownDiagnosticCodes.CODE_SPAN_AS_MONOSPACE_RUN, severity: 'info', message: 'a run styled with the Courier New font family is rendered as a code span; a genuinely monospace run from another format is indistinguishable from a real markdown code span on the way back out' });
     return renderCodeSpan(run.text);

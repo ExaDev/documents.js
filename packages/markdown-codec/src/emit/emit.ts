@@ -115,7 +115,8 @@ function renderParagraphBody(paragraph: ContentParagraph, context: EmitContext):
     return literal.length === 0 ? `${opening}\n${fence}` : `${opening}\n${literal}\n${fence}`;
   }
   if (paragraph.styleId === HTML_PREFORMATTED_STYLE_ID) {
-    return paragraph.runs.map((run) => run.text).join('');
+    // The quarantined original wins when present (src/lower/lower.ts's rawHtml carry): the runs hold the block-separator-trimmed literal, the residue the verbatim source, and a same-format writer re-emits its own residue as-is.
+    return paragraph.source?.format === 'markdown' ? paragraph.source.xml : paragraph.runs.map((run) => run.text).join('');
   }
   if (paragraph.styleId === MATH_BLOCK_STYLE_ID) {
     // A fresh $$ pair regenerated around the preserved literal -- src/lower/lower.ts's own lowerMathBlock never kept the original delimiter lines either, exactly mirroring how a fenced code block regenerates its own fence (codeFenceFor) rather than preserving the source fence's exact character/length.

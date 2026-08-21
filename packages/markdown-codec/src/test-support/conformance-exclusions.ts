@@ -142,7 +142,6 @@ export const COMMONMARK_EXCLUSIONS: ReadonlyMap<number, string> = new Map([
   [470, EMPHASIS_TORTURE],
   // Links
   [490, SOFT_BREAK],
-  [493, RAW_TEXT_TAG_AMBIGUITY],
   [494, RAW_TEXT_TAG_AMBIGUITY],
   [505, LINK_TITLE],
   [516, EMPHASIS_TORTURE],
