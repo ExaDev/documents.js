@@ -11,6 +11,7 @@ import type {
   ContentSheetImage,
   ContentTable,
   ContentVector,
+  DefinitionsTable,
   DocumentPackage,
   DrawPageChild,
   DrawPageGroupNode,
@@ -304,6 +305,20 @@ export interface PackageOptions {
   symbolTable?: SymbolTable;
   pages?: NonNullable<DocumentPackage['pages']>;
   styles?: StylesTable;
+  definitions?: DefinitionsTable;
+  layers?: DefinitionsTable;
+  attachments?: DefinitionsTable;
+  destinations?: DefinitionsTable;
+}
+
+// The four tenant-generic root tables every package builder spreads in when present, in the schema's own field order -- one helper so a fixture can prove any envelope field beside the tree without a bespoke builder per kind.
+function genericTableOptions(options: PackageOptions): Record<string, unknown> {
+  return {
+    ...(options.definitions !== undefined ? { definitions: options.definitions } : {}),
+    ...(options.layers !== undefined ? { layers: options.layers } : {}),
+    ...(options.attachments !== undefined ? { attachments: options.attachments } : {}),
+    ...(options.destinations !== undefined ? { destinations: options.destinations } : {}),
+  };
 }
 
 export function wordprocessingPackage(children: SectionGroupNode[], options: PackageOptions = {}): DocumentPackage {
@@ -313,6 +328,7 @@ export function wordprocessingPackage(children: SectionGroupNode[], options: Pac
     ...(options.symbolTable !== undefined ? { symbolTable: options.symbolTable } : {}),
     ...(options.pages !== undefined ? { pages: options.pages } : {}),
     ...(options.styles !== undefined ? { styles: options.styles } : {}),
+    ...genericTableOptions(options),
     children,
   };
 }
@@ -324,6 +340,7 @@ export function presentationPackage(children: SlideGroupNode[], options: Package
     ...(options.symbolTable !== undefined ? { symbolTable: options.symbolTable } : {}),
     ...(options.pages !== undefined ? { pages: options.pages } : {}),
     ...(options.styles !== undefined ? { styles: options.styles } : {}),
+    ...genericTableOptions(options),
     children,
   };
 }
@@ -335,6 +352,7 @@ export function spreadsheetPackage(children: SheetGroupNode[], options: PackageO
     ...(options.symbolTable !== undefined ? { symbolTable: options.symbolTable } : {}),
     ...(options.pages !== undefined ? { pages: options.pages } : {}),
     ...(options.styles !== undefined ? { styles: options.styles } : {}),
+    ...genericTableOptions(options),
     children,
   };
 }
@@ -346,6 +364,7 @@ export function drawingPackage(children: DrawPageGroupNode[], options: PackageOp
     ...(options.symbolTable !== undefined ? { symbolTable: options.symbolTable } : {}),
     ...(options.pages !== undefined ? { pages: options.pages } : {}),
     ...(options.styles !== undefined ? { styles: options.styles } : {}),
+    ...genericTableOptions(options),
     children,
   };
 }
