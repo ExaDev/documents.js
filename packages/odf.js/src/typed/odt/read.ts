@@ -1,4 +1,4 @@
-import type { Box, ContentBlock, ContentDocument, ContentParagraph, ContentSection, DefinitionsTable, DocumentPackage, LayoutMetadata, Margins, PageSize, ProvenanceDescriptor } from 'document-schema.js';
+import type { ContentBlock, ContentParagraph, ContentSection, DefinitionsTable, DocumentPackage, LayoutMetadata, Margins, PageSize, ProvenanceDescriptor } from 'document-schema.js';
 import { assemblePackage, PAGE_SIZE_A4 } from 'document-schema.js';
 import type { Package } from '../../model/package';
 import type { XmlElement, XmlNode } from '../../model/node';
@@ -27,16 +27,13 @@ import { readOdfMetadata } from '../shared/metadata';
 import { parsePageSize, parseMargins } from '../shared/geometry';
 import { parseOdfLength } from '../shared/units';
 import { readDrawFrame } from '../draw/shapes';
-import { readDrawObjectReference, readOdfChartContent, type EmbeddedDrawObject } from '../draw/embedded';
-import { readOdfFormulaContent } from '../formula/read';
-import { readOdgContent } from '../odg/read';
-import { readOdpContent } from '../odp/read';
+import { readDrawObjectReference, readEmbeddedObjectDocument } from '../draw/embedded';
 
 // Package -> OdtDocument: the first end-to-end ODF content reader, producing GENUINE ContentSection[] values (document-schema.js's own pivot type, the one documents.js's docx flow/pagination engine already consumes) from a real .odt package. This is the concrete proof of the whole odf.js architectural bet -- that odt and docx can share one pivot and one layout algorithm despite being completely unrelated XML formats -- so every mapping below is deliberately expressed in terms document-schema.js already defines, never a lookalike shape of its own.
 //
 // This reader is deliberately thin: paragraph/run reading (readOdfParagraph) and table reading (readOdfTable) already live in typed/shared/ -- built for reuse across odt/ods/odp/odg, not odt-specific -- so this module's own job is the odt-SPECIFIC structure those shared readers have no opinion on: walking office:text's actual block sequence (paragraphs interleaved with lists and tables, in document order), mapping text:h's own text:outline-level onto a docx-equivalent styleId alongside document-schema.js's own headingLevel field, and resolving the document's own page geometry from its first master page. readOdfParagraph is tag-agnostic (it never inspects which tag its own caller found it at) and reads text:h exactly as it reads text:p, so this reader calls straight through to it for both, then overrides ONLY the resulting heading identity (styleId plus headingLevel) for a heading -- see readParagraphOrHeading below.
 //
-// SCOPE -- the fidelity construct rows (ExaDev/documents.js#719) are read: fields as run-level constructs with their cached text, bookmarks and tracked changes at both run and block scope, notes and annotations as anchors with definitions-table bodies, text:section as a division, the index wrappers as index content controls with their cached bodies, office:forms as content controls, and anchored draw:frames lifted from text flow (images, text boxes, and embedded formula/drawing/presentation/chart objects). Still deliberately narrow, matching ooxml.js's own readDocx's established gaps: header/footer content (real block content keyed to master pages, riding the master-page work rather than a construct kind), explicit page breaks (fo:break-before/fo:break-after -- not modelled by styles/properties.ts's StyleProperties, so the cascade this reader relies on can't surface them; a genuinely separate, bounded follow-on), documents with more than one master page (only the first is read, in document order -- see readFirstMasterPageGeometry below), cross-references beyond their bookmark spines (text:reference-mark* and the *-ref display family), and a spreadsheet OLE-embedded in a Writer document (it degrades to the frame's ObjectReplacements preview -- reading it would import ods's reader into this one, the reader cycle typed/draw/embedded.ts's own note refuses to mint). A text:h or a nested text:list/text:table inside a table cell is also out of scope here, inherited directly from readOdfTable's own cell reading (table:table-cell content there is read as text:p only) -- not a gap introduced by this module. List marker GLYPHS (the exact bullet character or number format string) remain unread -- only the ordered-vs-bullet KIND is resolved (see typed/shared/list.ts's resolveOdfListKind), since that is what downstream consumers need to render <ol> vs <ul>.
+// SCOPE -- the fidelity construct rows (ExaDev/documents.js#719) are read: fields as run-level constructs with their cached text, bookmarks and tracked changes at both run and block scope, notes and annotations as anchors with definitions-table bodies, text:section as a division, the index wrappers as index content controls with their cached bodies, office:forms as content controls, and anchored draw:frames lifted from text flow (images, text boxes, and embedded formula/drawing/presentation/chart objects). Still deliberately narrow, matching ooxml.js's own readDocx's established gaps: header/footer content (real block content keyed to master pages, riding the master-page work rather than a construct kind), explicit page breaks (fo:break-before/fo:break-after -- not modelled by styles/properties.ts's StyleProperties, so the cascade this reader relies on can't surface them; a genuinely separate, bounded follow-on), documents with more than one master page (only the first is read, in document order -- see readFirstMasterPageGeometry below), and cross-references beyond their bookmark spines (text:reference-mark* and the *-ref display family). A text:h or a nested text:list/text:table inside a table cell is also out of scope here, inherited directly from readOdfTable's own cell reading (table:table-cell content there is read as text:p only) -- not a gap introduced by this module. List marker GLYPHS (the exact bullet character or number format string) remain unread -- only the ordered-vs-bullet KIND is resolved (see typed/shared/list.ts's resolveOdfListKind), since that is what downstream consumers need to render <ol> vs <ul>.
 //
 // LIST HANDLING: the numId minting convention (a monotonically increasing per-encounter counter, never text:style-name), the ordered:/bullet: kind prefix, and the text:list/text:list-item structural nesting walk itself all live in typed/shared/list.ts -- read that module's own top-of-file notes in full for the derivation -- because the odp reader meets the IDENTICAL text:list construct inside slide text frames and shares every line of it. This reader's own remaining list responsibility is the one genuinely odt-specific part: threading a single document-wide OdfListIdState through its office:text walk, so list identities are unique across the whole body exactly as they are across a whole presentation's slides.
 
@@ -102,31 +99,7 @@ interface ReadParagraph {
   readonly liftedSources: readonly LiftedFrameSource[];
 }
 
-// An embedded sub-document referenced from a Writer frame -> the ContentDocument its kind dispatches to. Every kind resolves EXCEPT 'spreadsheet': reading an embedded ods would import ods's reader, which imports this module -- the exact reader cycle typed/draw/embedded.ts's own top-of-file note refuses to mint -- so a Calc sheet OLE-embedded in a Writer document degrades to the frame's ObjectReplacements preview image instead of its live content, and the cycle-free split stays the family's stated architecture.
-function readOdtEmbeddedDocument(reference: EmbeddedDrawObject, frame: Box): ContentDocument | undefined {
-  switch (reference.objectKind) {
-    case 'wordprocessing': {
-      const { metadata, sections } = readOdtContent(reference.package);
-      return { kind: 'wordprocessing', metadata, sections };
-    }
-    case 'presentation': {
-      const { metadata, slides } = readOdpContent(reference.package);
-      return { kind: 'presentation', metadata, slides };
-    }
-    case 'drawing': {
-      const { metadata, pages } = readOdgContent(reference.package);
-      return { kind: 'drawing', metadata, pages };
-    }
-    case 'formula':
-      return readOdfFormulaContent(reference.package);
-    case 'chart':
-      return readOdfChartContent(reference.package, frame, 'odt').document;
-    case 'spreadsheet':
-      return undefined;
-  }
-}
-
-// One paragraph's own anchored draw:frame children (flattening any draw:g group exactly as ods's cell-anchored walker does) -> the blocks they contribute after the paragraph, grouped by the direct child they were lifted from. A frame resolving an embedded object becomes a ContentEmbeddedObjectBlock at the frame's own geometry (chart objects additionally quarantine the chart element in residue); any other frame contributes its own content blocks -- a text box's paragraphs, a table frame's table, an image frame's image -- spliced in frame document order, with the frame's own position recorded only where a target node carries geometry (the embedded object's frame and the image block's size); a text box's position is a real, documented narrowing.
+// One paragraph's own anchored draw:frame children (flattening any draw:g group exactly as ods's cell-anchored walker does) -> the blocks they contribute after the paragraph, grouped by the direct child they were lifted from. A frame resolving an embedded object becomes a ContentEmbeddedObjectBlock at the frame's own geometry, read through typed/draw/embedded.ts's own readEmbeddedObjectDocument -- the one shared kind -> reader table every frame-reading format hands its references to, so this module never imports a sibling format reader (see that module's top-of-file note for why the dispatch is inverted into it rather than living per-reader: this reader needs ods's reader for an embedded Calc sheet, and ods's needs this one for an embedded Writer document, so per-reader dispatch re-creates the reader cycle whichever direction is refused). Chart objects additionally quarantine the chart element in residue, carried by the same return. Any other frame contributes its own content blocks -- a text box's paragraphs, a table frame's table, an image frame's image -- spliced in frame document order, with the frame's own position recorded only where a target node carries geometry (the embedded object's frame and the image block's size); a text box's position is a real, documented narrowing.
 function readAnchoredFrameSources(paragraphElement: XmlElement, pkg: Package, state: OdtFlowState): LiftedFrameSource[] {
   if (!state.liftFrames) {
     return [];
@@ -138,21 +111,14 @@ function readAnchoredFrameSources(paragraphElement: XmlElement, pkg: Package, st
       return;
     }
     const reference = readDrawObjectReference(frameElement, pkg);
-    if (reference?.objectKind === 'chart') {
-      const { document, residue } = readOdfChartContent(reference.package, shape.frame, 'odt');
-      const embeddedBlock: ContentBlock = { kind: 'embeddedObject', objectKind: 'chart', document, frame: shape.frame };
+    if (reference !== undefined) {
+      const { document, residue } = readEmbeddedObjectDocument(reference, shape.frame, 'odt');
+      const embeddedBlock: ContentBlock = { kind: 'embeddedObject', objectKind: reference.objectKind, document, frame: shape.frame };
       if (residue !== undefined) {
         embeddedBlock.source = residue;
       }
       blocks.push(embeddedBlock);
       return;
-    }
-    if (reference !== undefined) {
-      const document = readOdtEmbeddedDocument(reference, shape.frame);
-      if (document !== undefined) {
-        blocks.push({ kind: 'embeddedObject', objectKind: reference.objectKind, document, frame: shape.frame });
-        return;
-      }
     }
     blocks.push(...shape.blocks);
   };

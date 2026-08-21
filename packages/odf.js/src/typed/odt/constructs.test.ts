@@ -487,6 +487,50 @@ describe('readOdtContent: anchored draw:frames in text flow', () => {
     expect(embedded.source?.format).toBe('odt');
     expect(embedded.source?.xml).toContain('<chart:chart chart:class="bar">');
   });
+
+  it('reads an embedded spreadsheet (a Calc OLE object) as a ContentEmbeddedObjectBlock carrying the live sheet, not the frame\'s ObjectReplacements preview', () => {
+    // Insert > Object > OLE Object > Spreadsheet in Writer: the frame carries BOTH a draw:object pointing at the sub-document directory and the usual ObjectReplacements preview draw:image beside it (typed/draw/embedded.ts's own confirmed real-output note), so the object must be checked first -- the block below is the sub-sheet read by ods's own reader, the odt->ods dispatch edge whose absence used to degrade this frame to its preview image.
+    const pkg = odtPackage([
+      el('text:p', {}, [
+        txt('Quarterly figures '),
+        el('draw:frame', { 'svg:x': '1cm', 'svg:y': '1cm', 'svg:width': '6cm', 'svg:height': '3cm' }, [
+          el('draw:object', { 'xlink:href': './Object 3' }),
+          el('draw:image', { 'xlink:href': 'ObjectReplacements/Object 3' }),
+        ]),
+      ]),
+    ]);
+    pkg.parts['Object 3/content.xml'] = {
+      kind: 'xml',
+      nodes: [
+        el('office:document-content', {}, [
+          el('office:body', {}, [
+            el('office:spreadsheet', {}, [
+              el('table:table', { 'table:name': 'Sheet1' }, [
+                el('table:table-row', {}, [
+                  el('table:table-cell', { 'office:value-type': 'float', 'office:value': '4' }, [el('text:p', {}, [txt('4')])]),
+                ]),
+              ]),
+            ]),
+          ]),
+        ]),
+      ],
+    };
+    pkg.parts['ObjectReplacements/Object 3'] = { kind: 'binary', base64: PNG_BASE64 };
+    const blocks = firstSectionBlocks(pkg);
+    expect(blocks.map((block) => block.kind)).toEqual(['paragraph', 'embeddedObject']);
+    if (blocks[1]?.kind !== 'embeddedObject') {
+      throw new Error('expected an embedded object block');
+    }
+    expect(blocks[1].objectKind).toBe('spreadsheet');
+    expect(blocks[1].document.kind).toBe('spreadsheet');
+    if (blocks[1].document.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet document');
+    }
+    expect(blocks[1].document.sheets).toHaveLength(1);
+    expect(blocks[1].document.sheets[0]?.name).toBe('Sheet1');
+    expect(blocks[1].document.sheets[0]?.cells[0]?.value).toEqual({ kind: 'number', value: 4 });
+    expect(blocks[1].frame.widthPt).toBeCloseTo(170.1, 0);
+  });
 });
 
 describe('readOdtContent: office:forms in an ordinary text document', () => {

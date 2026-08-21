@@ -1,9 +1,7 @@
 import type {
-  Box,
   ContentCellValue,
   DefinitionEntry,
   DefinitionsTable,
-  ContentDocument,
   ContentEmbeddedObject,
   ContentRun,
   ContentSheet,
@@ -33,13 +31,8 @@ import { readCellStyleDecoration } from '../shared/table';
 import type { OdfTransformFunction } from '../shared/transform';
 import { parseOdfTransform } from '../shared/transform';
 import { readDrawFrame } from '../draw/shapes';
-import type { EmbeddedDrawObject } from '../draw/embedded';
-import { readDrawObjectReference, readOdfChartContent } from '../draw/embedded';
+import { readDrawObjectReference, readEmbeddedObjectDocument } from '../draw/embedded';
 import { collectOdfNamedExpressions } from '../shared/constructs';
-import { readOdfFormulaContent } from '../formula/read';
-import { readOdgContent } from '../odg/read';
-import { readOdpContent } from '../odp/read';
-import { readOdtContent } from '../odt/read';
 
 // Package -> OdsDocument: a spreadsheet reader deliberately built GEOMETRY- and PRINT-SETTINGS-rich rather than a minimal cell-values-only reader (a real requirement from this reader's own design brief, not optional polish) -- real column widths/row heights, hidden rows/columns, merged ranges, every office:value-type variant with its own OpenFormula string carried verbatim, and a genuinely populated ContentSheetPrintSettings (page geometry, print range, scale/fit-to-page, repeat rows/columns, gridlines/headers, page order, manual breaks). Every ODF attribute name and structural shape below was confirmed against real LibreOffice 26.2 output (a headless UNO Basic macro building a real .ods with every one of these features actually configured through the same UNO calls the Calc UI itself uses -- Format > Columns > Width, Format > Rows > Height, Format > Print Areas, Format > Page Style's Sheet tab, a real merged range, a real cross-sheet SUM formula, every value-type including a GBP currency cell and a genuine #DIV/0! formula error -- then the resulting content.xml/styles.xml inspected directly), not assumed from memory or from xlsx's own different mechanisms. See this module's own inline notes at each surprising point (table:table-header-rows/columns as the REAL repeat-row/column mechanism, NOT a named range; style:master-page-name living on the table:table's own style:style[family="table"], NOT on table:table itself; the UNO API's own PageScale-vs-ScaleToPagesX/Y mutual-exclusivity quirk that shaped nothing in the READER but is worth knowing when re-deriving a fixture) for the exact evidence.
 //
@@ -50,7 +43,7 @@ import { readOdtContent } from '../odt/read';
 // 1. ANCHORED TO A CELL: the draw:frame is a DIRECT CHILD OF THE table:table-cell it is anchored to, and its svg:x/svg:y are offsets from THAT CELL'S own top-left corner (verified numerically: a shape positioned 0.5cm/0.3cm beyond its anchor cell's origin serialises as svg:x="0.5cm" svg:y="0.3cm", regardless of where that cell sits on the sheet). The anchor cell reference is therefore not read from any attribute at all -- ODF cells carry no address attribute (see the repeat-count note below) -- it IS the running TableCursor position this reader already computes for every cell, exactly the same way ContentSheetCell.row/column are resolved.
 // 2. ANCHORED TO THE PAGE: the draw:frame sits inside a table:shapes element, a child of table:table itself appearing BEFORE its column definitions, and its svg:x/svg:y are absolute from the sheet's own origin. ContentSheetImage has no "page-anchored" variant, so such an image is reported at anchorRow/anchorColumn 0 with its absolute offsets carried through unchanged -- not an approximation: cell (0,0)'s own top-left IS the sheet origin, so the two coordinate systems coincide exactly there.
 //
-// A draw:g group is walked through (its own draw:transform composed onto each child via readDrawFrame's existing groupFunctions parameter, exactly as walkDrawShapes does for a slide), so a grouped anchored image is still found. What a sheet CANNOT carry is anything ContentSheetSchema has nowhere to put: a floating text box or a table frame (ContentSheet has no `shapes` array at all, unlike ContentSlide/ContentDrawPage) and a bare vector primitive (no `vectors` array either -- the same scope boundary walkDrawShapes already documents for presentations). Each is skipped rather than mapped onto an approximation of a different kind. An embedded FORMULA object -- a real LibreOffice Math OLE object anchored to a cell -- is not in that skipped list: document-schema.js 2.2.0's ContentDocument union carries a genuine 'formula' variant, so readDrawObjectReference resolves one and readEmbeddedObjectDocument hands it to readOdfFormulaContent like any other embedded kind. An embedded CHART object is not either: ContentEmbeddedObjectKind's 'chart' member names it, and readEmbeddedObjectDocument hands it to readOdfChartContent (typed/draw/embedded.ts's own SCOPE note states the document it carries).
+// A draw:g group is walked through (its own draw:transform composed onto each child via readDrawFrame's existing groupFunctions parameter, exactly as walkDrawShapes does for a slide), so a grouped anchored image is still found. What a sheet CANNOT carry is anything ContentSheetSchema has nowhere to put: a floating text box or a table frame (ContentSheet has no `shapes` array at all, unlike ContentSlide/ContentDrawPage) and a bare vector primitive (no `vectors` array either -- the same scope boundary walkDrawShapes already documents for presentations). Each is skipped rather than mapped onto an approximation of a different kind. An embedded FORMULA object -- a real LibreOffice Math OLE object anchored to a cell -- is not in that skipped list: document-schema.js 2.2.0's ContentDocument union carries a genuine 'formula' variant, so readDrawObjectReference resolves one and the shared dispatch (typed/draw/embedded.ts's readEmbeddedObjectDocument) hands it to readOdfFormulaContent like any other embedded kind. An embedded CHART object is not either: ContentEmbeddedObjectKind's 'chart' member names it, and the same dispatch hands it to readOdfChartContent (typed/draw/embedded.ts's own SCOPE note states the document it carries).
 //
 // SCOPE: table:print-ranges is a space-separated list of cell-range-address strings per the OASIS spec, but ContentSheetPrintSettingsSchema's own `printRange` models only ONE range -- a document defining more than one non-contiguous print range has every range after the first silently ignored (a documented, narrow scope boundary, not a silent one).
 
@@ -227,35 +220,7 @@ interface TableWalkResult {
   manualBreakColumns: number[];
 }
 
-// An embedded sub-document -> the ContentDocument variant its own typed reader produces. This is the kind -> reader dispatch typed/draw/embedded.ts deliberately leaves to its caller (see that module's own note on the import cycle it would otherwise create): readOdsContent is one of the four readers dispatched to, so a spreadsheet embedded inside a spreadsheet is plain self-recursion here, needing no indirection at all.
-function readEmbeddedObjectDocument(reference: EmbeddedDrawObject, frame: Box): ContentDocument {
-  switch (reference.objectKind) {
-    case 'wordprocessing': {
-      const { metadata, sections } = readOdtContent(reference.package);
-      return { kind: 'wordprocessing', metadata, sections };
-    }
-    case 'presentation': {
-      const { metadata, slides } = readOdpContent(reference.package);
-      return { kind: 'presentation', metadata, slides };
-    }
-    case 'drawing': {
-      const { metadata, pages } = readOdgContent(reference.package);
-      return { kind: 'drawing', metadata, pages };
-    }
-    case 'spreadsheet': {
-      const { metadata, sheets } = readOdsContent(reference.package);
-      return { kind: 'spreadsheet', metadata, sheets };
-    }
-    case 'formula':
-      // The one embedded kind whose own reader already returns a finished ContentDocument (readOdfFormulaContent), because a formula document has no per-format {metadata, sections/slides/pages/sheets} shape to re-wrap -- its whole content IS the MathML.
-      return readOdfFormulaContent(reference.package);
-    case 'chart':
-      // A chart's document is the frame-sized drawing page carrying the chart's local data cache (see readOdfChartContent's own note); the chart element quarantines into the object's residue below.
-      return readOdfChartContent(reference.package, frame, 'ods').document;
-  }
-}
-
-// One anchored draw:frame -> whichever of `images`/`embeddedObjects` it belongs in, at the anchor position the caller resolved for it (the enclosing cell's own cursor row/column, or 0/0 for a page-anchored frame -- see this module's own top-of-file note on the two anchoring conventions). The frame itself is read by shapes.ts's readDrawFrame, so its resolved box already carries the group-composed offsets and the frame-sized ContentImageBlock this function only has to re-shape into a ContentSheetImage.
+// One anchored draw:frame -> whichever of `images`/`embeddedObjects` it belongs in, at the anchor position the caller resolved for it (the enclosing cell's own cursor row/column, or 0/0 for a page-anchored frame -- see this module's own top-of-file note on the two anchoring conventions). The frame itself is read by shapes.ts's readDrawFrame, so its resolved box already carries the group-composed offsets and the frame-sized ContentImageBlock this function only has to re-shape into a ContentSheetImage. An embedded sub-document dispatches through typed/draw/embedded.ts's own readEmbeddedObjectDocument -- the one shared kind -> reader table every frame-reading format hands its references to, so this module imports no sibling format reader (see that module's top-of-file note for why the dispatch is inverted into it).
 //
 // draw:object is checked BEFORE the frame's own image blocks, because a real embedded-object frame ALSO carries a draw:image preview of the object (an ObjectReplacements/ GDI metafile) that must not be mistaken for anchored picture content -- the same ordering, for the same reason, that readDrawFrameContent already applies to a table frame's own preview image.
 function collectAnchoredFrame(
@@ -273,26 +238,22 @@ function collectAnchoredFrame(
   }
 
   const reference = readDrawObjectReference(frameElement, pkg);
-  if (reference?.objectKind === 'chart') {
-    const { document, residue } = readOdfChartContent(reference.package, shape.frame, 'ods');
-    const chartObject: ContentEmbeddedObject = { objectKind: 'chart', document, frame: shape.frame, anchorRow, anchorColumn, offsetXPt: shape.frame.xPt, offsetYPt: shape.frame.yPt };
-    if (residue !== undefined) {
-      chartObject.source = residue;
-    }
-    embeddedObjects.push(chartObject);
-    return;
-  }
   if (reference !== undefined) {
-    // Anchor fields are set exactly as they are for an anchored image just below -- document-schema.js 2.2.0 gave ContentEmbeddedObject the same anchorRow/anchorColumn/offsetXPt/offsetYPt quartet ContentSheetImage already carried, so an embedded object's own anchor cell is now genuinely representable rather than lost. `frame` keeps the coordinates the format itself stated (cell-relative for a cell-anchored object, sheet-absolute for a page-anchored one) and the offsets restate that frame's own origin against the named anchor cell, mirroring ContentSheetImage's own convention rather than inventing a second one.
-    embeddedObjects.push({
+    // Anchor fields are set exactly as they are for an anchored image just below -- document-schema.js 2.2.0 gave ContentEmbeddedObject the same anchorRow/anchorColumn/offsetXPt/offsetYPt quartet ContentSheetImage already carried, so an embedded object's own anchor cell is now genuinely representable rather than lost. `frame` keeps the coordinates the format itself stated (cell-relative for a cell-anchored object, sheet-absolute for a page-anchored one) and the offsets restate that frame's own origin against the named anchor cell, mirroring ContentSheetImage's own convention rather than inventing a second one. A chart's residue (its whole chart:chart element, quarantined for a same-format restorer) rides the same return the document does.
+    const { document, residue } = readEmbeddedObjectDocument(reference, shape.frame, 'ods');
+    const object: ContentEmbeddedObject = {
       objectKind: reference.objectKind,
-      document: readEmbeddedObjectDocument(reference, shape.frame),
+      document,
       frame: shape.frame,
       anchorRow,
       anchorColumn,
       offsetXPt: shape.frame.xPt,
       offsetYPt: shape.frame.yPt,
-    });
+    };
+    if (residue !== undefined) {
+      object.source = residue;
+    }
+    embeddedObjects.push(object);
     return;
   }
 
