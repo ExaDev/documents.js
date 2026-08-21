@@ -22,6 +22,7 @@ export interface ExtractedTextRun {
   readonly layerName?: string; // the optional-content group in scope (innermost /OC BDC span, or the recursed form XObject's own)
   readonly actualText?: string; // a /ActualText marked-content property in scope: the producer's replacement reading for extraction
   readonly alt?: string; // a /Alt marked-content property in scope: the producer's alternate description
+  readonly mcid?: number; // the /MCID of the innermost marked-content span in scope -- tagged PDF's handle for the (page, MCID) structure association read.ts resolves through /ParentTree
 }
 
 // The paint a recovered shape carries, shared by every extracted item that can be filled and/or stroked. At least one of the two is always set: `n` (the clip-only, paints-nothing operator) never emits an item at all, and every other path-painting operator fills, strokes, or does both.
@@ -29,6 +30,7 @@ export interface ExtractedPaint {
   readonly fill: LayoutColor | undefined;
   readonly stroke: { readonly color: LayoutColor; readonly widthPt: number } | undefined;
   readonly layerName?: string; // the optional-content group in scope -- membership is a fact of every painted item, not only text
+  readonly mcid?: number; // the /MCID in scope -- ownership is as much a fact of a painted item as layer membership
 }
 
 // An axis-aligned rectangle, recovered from a single closed four-corner all-straight-line subpath under any CTM that leaves those corners axis-aligned -- so a bare `re` under a non-rotated CTM (by far the common case), a `re` under a 90-degree-multiple rotation (a rotated rectangle is still a rectangle), and a hand-constructed m/l/l/l/h rectangle all reach it, with any combination of fill and stroke. Anything else (a non-90-degree rotation, curves, multiple subpaths) falls through to ExtractedPath below instead.
@@ -59,6 +61,7 @@ export interface ExtractedLine {
   readonly color: LayoutColor;
   readonly widthPt: number;
   readonly layerName?: string; // the optional-content group in scope -- membership is a fact of every painted item, not only text
+  readonly mcid?: number; // the /MCID in scope -- ownership is as much a fact of a painted item as layer membership
 }
 
 // One line or cubic-Bezier segment of a subpath, device-space (CTM-applied, not yet page-matrix-applied -- matching ExtractedRect's own convention), mirroring document-schema.js's LayoutPathSegment shape exactly so read.ts's conversion is a pure per-point transform.
@@ -86,6 +89,7 @@ export interface ExtractedImage {
   readonly resources: PdfDict;
   readonly matrix: Matrix; // the CTM at the moment of Do -- placement is x=ctm[4], y=ctm[5], width=|ctm[0]|, height=|ctm[3]| for the axis-aligned case
   readonly layerName?: string; // the optional-content group in scope, or the image XObject dict's own /OC
+  readonly mcid?: number; // the /MCID in scope, or the image XObject dict's own -- ownership is as much a fact of an image as layer membership
 }
 
 export interface ExtractedInlineImage {
@@ -94,6 +98,7 @@ export interface ExtractedInlineImage {
   readonly data: Uint8Array<ArrayBuffer>;
   readonly matrix: Matrix;
   readonly layerName?: string;
+  readonly mcid?: number; // the /MCID in scope -- ownership is as much a fact of an inline image as layer membership
 }
 
 export type ExtractedItem = ExtractedTextRun | ExtractedRect | ExtractedEllipse | ExtractedLine | ExtractedPath | ExtractedImage | ExtractedInlineImage;
@@ -173,16 +178,18 @@ function markedContentProperties(operand: PdfObject | undefined, resources: PdfD
   return undefined;
 }
 
-// The string-valued accessibility properties a marked-content span puts in scope (/ActualText, /Alt) -- the tagged-PDF facts that ride marked content rather than structure elements, read here per #721's phase-6 subset.
-function markedContentStrings(props: PdfDict | undefined): { actualText?: string; alt?: string } {
+// The accessibility properties a marked-content span puts in scope (/ActualText, /Alt, /MCID) -- the tagged-PDF facts that ride marked content rather than structure elements. /ActualText and /Alt are the #721 phase-6 subset; /MCID is the span's own marked-content identifier, the handle read.ts resolves to an owning structure element through the parent tree (#760).
+function markedContentScopeProps(props: PdfDict | undefined): { actualText?: string; alt?: string; mcid?: number } {
   if (props === undefined) {
     return {};
   }
   const actualTextObj = dictGet(props, 'ActualText');
   const altObj = dictGet(props, 'Alt');
+  const mcid = asNumber(dictGet(props, 'MCID'));
   return {
     ...(actualTextObj?.kind === 'string' ? { actualText: decodePdfString(actualTextObj.bytes) } : {}),
     ...(altObj?.kind === 'string' ? { alt: decodePdfString(altObj.bytes) } : {}),
+    ...(mcid !== undefined && mcid >= 0 ? { mcid } : {}),
   };
 }
 
@@ -437,6 +444,7 @@ interface MarkedContentProps {
   readonly layerName?: string;
   readonly actualText?: string;
   readonly alt?: string;
+  readonly mcid?: number;
 }
 
 // A subpath still being accumulated within one runContentStream call -- `segments` is mutable (pushed to as l/c/v/y arrive) and `closed` flips true on `h` (or the implicit closepath s/b/b* perform); once finalized it is pushed as-is into pathSubpaths, which is exactly ExtractedSubpath's own shape (a mutable segments array satisfies the readonly array field type).
@@ -462,7 +470,7 @@ function runContentStream(bytes: Uint8Array<ArrayBuffer>, resources: PdfDict, in
   let currentSubpath: MutableSubpath | undefined;
 
   // The innermost value of one marked-content property still in scope, searching outward from the top of the stack.
-  const inScope = (key: keyof MarkedContentProps): string | undefined => {
+  const inScope = <K extends keyof MarkedContentProps>(key: K): MarkedContentProps[K] | undefined => {
     for (let i = markedContent.length - 1; i >= 0; i--) {
       const value = markedContent[i]?.[key];
       if (value !== undefined) {
@@ -478,16 +486,20 @@ function runContentStream(bytes: Uint8Array<ArrayBuffer>, resources: PdfDict, in
       const layer = item.layerName ?? inScope('layerName');
       const actualText = inScope('actualText');
       const alt = inScope('alt');
+      const mcid = inScope('mcid');
       items.push({
         ...item,
         ...(layer !== undefined ? { layerName: layer } : {}),
         ...(actualText !== undefined ? { actualText } : {}),
         ...(alt !== undefined ? { alt } : {}),
+        ...(mcid !== undefined ? { mcid } : {}),
       });
       return;
     }
     const layer = item.layerName ?? inScope('layerName');
-    items.push(layer === undefined ? item : { ...item, layerName: layer });
+    const layerStamped = layer === undefined ? item : { ...item, layerName: layer };
+    const mcid = inScope('mcid');
+    items.push(mcid === undefined ? layerStamped : { ...layerStamped, mcid });
   };
 
   // `m` starts a new subpath, finalizing whatever was previously open into pathSubpaths -- `re`'s own implicit leading `m` (see appendRectSubpath) reuses this too. Both a real paint operator and the very next `m` are the only two things that ever finalize a subpath.
@@ -826,7 +838,9 @@ function runContentStream(bytes: Uint8Array<ArrayBuffer>, resources: PdfDict, in
       case 'BDC': {
         const props = markedContentProperties(operands[1], resources, context.resolver);
         const layerName = context.layerNameOf?.(props === undefined ? undefined : dictGet(props, 'OC'));
-        markedContent.push({ ...(layerName !== undefined ? { layerName } : {}), ...markedContentStrings(props) });
+        const scopeProps = { ...(layerName !== undefined ? { layerName } : {}), ...markedContentScopeProps(props) };
+        // An MCID is a PAGE-scoped handle: the parent tree maps (page, MCID), so an MCID opened INSIDE a recursed form XObject's own stream (depth > 0) must not be looked up as though it were the enclosing page's -- the file addresses such content through MCRs with /Stm, outside this reader's association. The enclosing span's own MCID (seeded onto the nested stack below) is a genuine page MCID and keeps applying to everything the form paints.
+        markedContent.push(depth === 0 ? scopeProps : { ...scopeProps, mcid: undefined });
         break;
       }
       case 'BMC':
