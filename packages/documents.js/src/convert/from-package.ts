@@ -5,7 +5,8 @@ import { flipY } from '../model/geometry';
 import { convertVector } from '../layout/drawing';
 import { NOMINAL_CELL_TEXT_SIZE_PT } from '../layout/sheets';
 import { NOMINAL_TEXT_SIZE_PT, pushCellBorderLines, registerImage, runFont } from '../layout/shared';
-import { DOCUMENT_FORMAT_CODECS, requireArrayBufferBytes } from '../codecs/registry';
+import { DOCUMENT_FORMAT_CODECS } from '../codecs/registry';
+import { requireArrayBufferBytes } from '../model/bytes';
 import type { DocumentFormat } from './port';
 import type { LayoutDocument, LayoutImage, LayoutImageAsset, LayoutItem, LayoutLink, LayoutPage, LayoutText } from 'pdf-codec';
 
