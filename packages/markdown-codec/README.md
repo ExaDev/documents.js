@@ -69,7 +69,7 @@ pnpm add markdown-codec
 npm install markdown-codec
 ```
 
-Published to [npmjs.org](https://www.npmjs.com/package/markdown-codec) via OIDC trusted publishing. `dist/` is committed rather than gitignored — a holdover from a pre-publish period when a git-tarball install needed a working build; now a known cleanup.
+Published to [npmjs.org](https://www.npmjs.com/package/markdown-codec) via OIDC trusted publishing. `dist/` is gitignored like every other package's build output: the published tarball carries the release build, and a workspace consumer gets `dist/` from turbo's `^_build` ordering, never from the repository.
 
 ## Usage
 
