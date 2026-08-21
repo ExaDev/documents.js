@@ -4,11 +4,10 @@ import { latexToFormula } from '../latex/lower';
 import { extractSymbolDefinitionsFromProse } from '../latex/symbols';
 import { buildFormulaBlock } from '../model/formula';
 
-// The markdown read path's math-lowering pass: markdown-codec recognises math syntax ($$ display blocks and \( \) inline spans, its issue #53) but deliberately stops at carrying the raw LaTeX through as styled text -- a MathBlock-styled paragraph for display math, a Cambria-Math-marked run for inline math, with diagnostics saying "it is not parsed as LaTeX or converted to MathML by this package". This pass is that conversion, living here rather than inside markdown-codec because it is a documents.js question (the issue trail is explicit: markdown-codec#53 deferred to documents.js#563, which settled on model-level lowering in #572): every formula shape is lowered once into the two-layer ContentFormula every format in this family shares, so markdown math becomes typesettable (MathML), editable (OMML via the docx writer), and computable (the MathExpression content layer) without markdown-codec knowing any of that exists.
+// The markdown read path's math-lowering pass: markdown-codec recognises math syntax ($$ display blocks and \( \) inline spans, its issue #53) but deliberately stops short of lowering the LaTeX -- a $$ block becomes an embedded formula object carrying the verbatim presentation layer and nothing else, an inline span a Cambria-Math-marked run, with markdown-codec's own diagnostics saying "it is not parsed as LaTeX or converted to MathML by this package". This pass is that lowering, living here rather than inside markdown-codec because it is a documents.js question (the issue trail is explicit: markdown-codec#53 deferred to documents.js#563, which settled on model-level lowering in #572): every formula shape is lowered once into the two-layer ContentFormula every format in this family shares, so markdown math becomes typesettable (MathML), editable (OMML via the docx writer), and computable (the MathExpression content layer) without markdown-codec knowing any of that exists.
 //
-// The two marker strings markdown-codec's lowered runs/paragraphs carry are mirrored here as literals: markdown-codec re-exports its style-constant vocabulary for exactly this sibling-package use, but MATH_BLOCK_STYLE_ID ('MathBlock') and MATH_INLINE_FONT_MARKER ('Cambria Math') are not among the re-exported names. They are stable, documented conventions of markdown-codec's own lower/emit pair (the same "standard, not invented" naming its Courier New code-span marker plays), and this package's read pass (recognition) and write pass (src/markdown/write.ts's reconstruction) agree on them exactly as markdown-codec's own two halves do.
+// The inline marker string markdown-codec's lowered runs carry is mirrored here as a literal: markdown-codec re-exports its style-constant vocabulary for exactly this sibling-package use, but MATH_INLINE_FONT_MARKER ('Cambria Math') is not among the re-exported names. It is a stable, documented convention of markdown-codec's own lower/emit pair (the same "standard, not invented" naming its Courier New code-span marker plays), and this package's read pass (recognition) and write pass (src/markdown/write.ts's reconstruction) agree on it exactly as markdown-codec's own two halves do. Display math needs no marker: since markdown-codec's fidelity-constructs row landed, a $$ block arrives as the embedded formula object itself (presentation LaTeX, no content layer), and this pass recognises that block shape directly.
 
-const MATH_BLOCK_STYLE_ID = 'MathBlock';
 const MATH_INLINE_FONT_MARKER = 'Cambria Math';
 
 // The stand-in frame for a formula markdown never gave geometry: markdown records no page geometry at all (src/markdown/read.ts's own pageSize note), so there is no source box to carry. Mirrors the docx OMML recovery's own convention (src/ooxml/docx/formula.ts): width 0 tells the layout fit (formulaSizePtForFrame) that height alone drives the rendered size, and the height is twice the size a body-text formula renders at -- Word's own 11pt body default, since markdown states no size either.
@@ -75,14 +74,14 @@ export function lowerMarkdownMath(document: ContentDocument, options?: MarkdownM
         out.push({ ...block, rows: block.rows.map((row) => ({ ...row, cells: row.cells.map((cell) => ({ ...cell, blocks: lowerBlocks(cell.blocks) })) })) });
         continue;
       }
-      if (block.kind !== 'paragraph') {
-        out.push(block);
+      if (block.kind === 'embeddedObject' && block.objectKind === 'formula' && block.document.kind === 'formula' && block.document.formula.presentation !== undefined) {
+        // markdown-codec's own $$ carry (its fidelity-constructs row): an embedded formula block holding the verbatim presentation LaTeX and no content layer. This pass replaces it in place with the fully lowered formula -- same block kind, same position in the flow, now carrying content, MathML, and provenance -- so every format this package builds from markdown sees the same two-layer formula any other format's math arrives as. A blank presentation (an empty $$ block) lowers to nothing and keeps markdown-codec's own block, the empty formula it spelled.
+        const formulaBlock = lowerOne(block.document.formula.presentation.latex, MATH_BLOCK_SOURCE);
+        out.push(formulaBlock ?? block);
         continue;
       }
-      if (block.styleId === MATH_BLOCK_STYLE_ID) {
-        const latex = block.runs.map((run) => run.text).join('');
-        const formulaBlock = lowerOne(latex, MATH_BLOCK_SOURCE);
-        out.push(formulaBlock ?? block);
+      if (block.kind !== 'paragraph') {
+        out.push(block);
         continue;
       }
       const extraction = extractInlineMath(block.runs);
