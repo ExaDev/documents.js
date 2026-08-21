@@ -137,7 +137,7 @@ export { readOdp, readOdpContent } from './typed/odp/read';
 export type { OdpDocument } from './typed/odp/read';
 
 export { readOdt, readOdtContent } from './typed/odt/read';
-export type { OdtDocument, OdtReadOptions } from './typed/odt/read';
+export type { OdtDocument, OdtReadOptions, OdtHeaderFooterPart, OdtHeaderFooterVariant } from './typed/odt/read';
 
 export { readOdg, readOdgContent } from './typed/odg/read';
 export type { OdgDocument } from './typed/odg/read';
