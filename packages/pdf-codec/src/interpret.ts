@@ -89,7 +89,7 @@ export interface ExtractedImage {
   readonly resources: PdfDict;
   readonly matrix: Matrix; // the CTM at the moment of Do -- placement is x=ctm[4], y=ctm[5], width=|ctm[0]|, height=|ctm[3]| for the axis-aligned case
   readonly layerName?: string; // the optional-content group in scope, or the image XObject dict's own /OC
-  readonly mcid?: number; // the /MCID in scope, or the image XObject dict's own -- ownership is as much a fact of an image as layer membership
+  readonly mcid?: number; // the /MCID in scope -- ownership is as much a fact of an image as layer membership (unlike /OC, an XObject dict cannot carry /MCID itself)
 }
 
 export interface ExtractedInlineImage {
@@ -469,12 +469,12 @@ function runContentStream(bytes: Uint8Array<ArrayBuffer>, resources: PdfDict, in
   let pathSubpaths: MutableSubpath[] = [];
   let currentSubpath: MutableSubpath | undefined;
 
-  // The innermost value of one marked-content property still in scope, searching outward from the top of the stack.
+  // The innermost span that states the property: a frame carrying the key at all ends the search -- including one that explicitly voids it, like a form-stream MCID pushed as `mcid: undefined` below -- while a span that simply lacks the key falls through to the enclosing one (ISO 32000-1 14.10's nested-span model).
   const inScope = <K extends keyof MarkedContentProps>(key: K): MarkedContentProps[K] | undefined => {
     for (let i = markedContent.length - 1; i >= 0; i--) {
-      const value = markedContent[i]?.[key];
-      if (value !== undefined) {
-        return value;
+      const frame = markedContent[i];
+      if (frame !== undefined && key in frame) {
+        return frame[key];
       }
     }
     return undefined;
@@ -650,7 +650,11 @@ function runContentStream(bytes: Uint8Array<ArrayBuffer>, resources: PdfDict, in
       const decoded = decodeStream(xobj.raw, xobj.dict, context.sink);
       const formState: GraphicsState = { ...gs, ctm: multiplyMatrices(formMatrix, gs.ctm) };
       const formLayer = ownLayer ?? inScope('layerName');
-      runContentStream(decoded.bytes, formResources, formState, context, items, depth + 1, [formLayer !== undefined ? { layerName: formLayer } : {}]);
+      // The enclosing span's marked-content identity carries into an invoked form the same way its layer membership does: a form painted inside a span paints that span's content, so the page MCID in scope seeds the form's own span stack. One boundary stops it -- a form whose dict declares /StructParents numbers its own MCIDs in its own parent-tree key (14.7.4.4), so the page's MCID is not the form's and must not be stamped onto what it paints.
+      const formMcid = dictGet(xobj.dict, 'StructParents') !== undefined ? undefined : inScope('mcid');
+      runContentStream(decoded.bytes, formResources, formState, context, items, depth + 1, [
+        { ...(formLayer !== undefined ? { layerName: formLayer } : {}), ...(formMcid !== undefined ? { mcid: formMcid } : {}) },
+      ]);
     }
   };
 
@@ -839,7 +843,7 @@ function runContentStream(bytes: Uint8Array<ArrayBuffer>, resources: PdfDict, in
         const props = markedContentProperties(operands[1], resources, context.resolver);
         const layerName = context.layerNameOf?.(props === undefined ? undefined : dictGet(props, 'OC'));
         const scopeProps = { ...(layerName !== undefined ? { layerName } : {}), ...markedContentScopeProps(props) };
-        // An MCID is a PAGE-scoped handle: the parent tree maps (page, MCID), so an MCID opened INSIDE a recursed form XObject's own stream (depth > 0) must not be looked up as though it were the enclosing page's -- the file addresses such content through MCRs with /Stm, outside this reader's association. The enclosing span's own MCID (seeded onto the nested stack below) is a genuine page MCID and keeps applying to everything the form paints.
+        // An MCID is a PAGE-scoped handle: the parent tree maps (page, MCID), so an MCID opened INSIDE a recursed form XObject's own stream (depth > 0) must not be looked up as though it were the enclosing page's -- the file addresses such content through the form's own /StructParents key in the parent tree. Voiding it as an explicit `mcid: undefined` also closes the fall-through to the page MCID the form inherited at its invocation (seeded in handleDo), so content the form marks as its own resolves to no owner rather than to the invoking span's element.
         markedContent.push(depth === 0 ? scopeProps : { ...scopeProps, mcid: undefined });
         break;
       }
