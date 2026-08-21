@@ -1,3 +1,10 @@
+## [4.4.3](https://github.com/ExaDev/documents.js/compare/ooxml.js@4.4.2...ooxml.js@4.4.3) (2026-08-21)
+
+
+### Bug Fixes
+
+* **ooxml:** pin zip entry mtimes so encodePackage is byte-deterministic ([9ce5791](https://github.com/ExaDev/documents.js/commit/9ce579145cecce2141178ed9baaf39140af24fe6))
+
 ## [4.4.2](https://github.com/ExaDev/documents.js/compare/ooxml.js@4.4.1...ooxml.js@4.4.2) (2026-08-21)
 
 
