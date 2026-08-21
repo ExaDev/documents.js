@@ -1,16 +1,18 @@
-import type { ContentDocument, ContentEmbeddedObject, ContentSheetCell } from 'document-schema.js';
+import type { ContentDocument, ContentEmbeddedObject, ContentSheetCell, ContentSheetImage } from 'document-schema.js';
 import type { Package } from '../../model/package';
 import type { XmlElement } from '../../model/node';
 import { readChartTable } from '../pptx/chart';
 import { readCoreProperties } from '../shared/metadata';
+import { resolveBlipMedia } from '../shared/drawingml';
 import { emuToPt } from '../shared/units';
+import type { Relationship } from '../util';
 import { attr, childrenWithTag, elementsWithTag, resolveRelationships, rootElement } from '../util';
 import { readPrintSettings } from './print-settings';
 import { columnWidthCharsToPt, DEFAULT_COLUMN_WIDTH_CHARS, DEFAULT_ROW_HEIGHT_PT } from './units';
 
-// A worksheet's drawing layer (xl/drawings/drawingN.xml, reached through the worksheet's own relationships): the xlsx graphic-frame reader, the counterpart of pptx's chart/SmartArt/OLE readers. A chart graphic frame's cached series/category model is read through the SAME chart reader the pptx side uses (readChartTable), and lands as a ContentEmbeddedObject with objectKind 'chart' -- the one member that names what the frame held rather than a ContentDocument kind, carrying the cached model as a small spreadsheet document (one sheet whose cells are that table), because a sheet is the honest document-granularity spelling of tabular data and a xlsx sheet has no block flow to host a table block the way a pptx shape does.
+// A worksheet's drawing layer (xl/drawings/drawingN.xml, reached through the worksheet's own relationships): the xlsx counterpart of pptx's chart/SmartArt/OLE/picture readers. A chart graphic frame's cached series/category model is read through the SAME chart reader the pptx side uses (readChartTable), and lands as a ContentEmbeddedObject with objectKind 'chart' -- the one member that names what the frame held rather than a ContentDocument kind, carrying the cached model as a small spreadsheet document (one sheet whose cells are that table), because a sheet is the honest document-granularity spelling of tabular data and a xlsx sheet has no block flow to host a table block the way a pptx shape does. A drawing's pictures (xdr:pic) are blip-resolved through the SAME shared primitive the pptx picture reader uses (resolveBlipMedia) and land as ContentSheet.images -- the sheet-anchored image shape, since a spreadsheet anchors its pictures to cells rather than hosting an image block in a flow.
 //
-// Scope: charts only. A drawing's pictures (xdr:pic) and any other anchor content are not read -- ContentSheet.images stays empty and this module does not touch it -- and an xdr:absoluteAnchor (page-absolute placement, which a spreadsheet's cell grid cannot express anyway) is skipped. Real-producer verification is outstanding: the fixture this is built against is hand-built ECMA-376 markup, the corpus gate the construct inventory itself states.
+// Scope limits: an xdr:absoluteAnchor (page-absolute placement, which a spreadsheet's cell grid cannot express anyway) is skipped, as is any other anchor content this module does not name. Real-producer verification is outstanding: the fixtures this is built against are hand-built ECMA-376 markup, the corpus gate the construct inventory itself states.
 
 const CHART_GRAPHIC_URI = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
 const DRAWING_REL_SUFFIX = '/drawing';
@@ -130,21 +132,16 @@ function chartCells(chartRoot: XmlElement, frame: ContentEmbeddedObject['frame']
   return cells;
 }
 
-// Reads one worksheet's chart graphic frames into embedded chart objects -- undefined when the sheet references no drawing part or the drawing carries none, so the sheet's embeddedObjects field stays absent in the common case.
-export function readSheetEmbeddedObjects(pkg: Package, worksheetPath: string, worksheet: XmlElement): ContentEmbeddedObject[] | undefined {
-  let drawingPath: string | undefined;
-  for (const rel of resolveRelationships(pkg, worksheetPath).values()) {
-    if (rel.type.endsWith(DRAWING_REL_SUFFIX)) {
-      drawingPath = rel.target;
-      break;
-    }
-  }
-  const drawingRoot = drawingPath === undefined ? undefined : rootElement(pkg.parts[drawingPath]);
-  if (drawingRoot === undefined) {
+// Reads one worksheet's whole drawing layer -- its pictures and its chart graphic frames -- in one walk, since both anchor kinds resolve their geometry through the same anchor markers and the same SheetGridGeometry. Returns undefined when the sheet references no drawing part, so a drawing-less sheet's images stay empty and its embeddedObjects field absent.
+export function readSheetDrawing(pkg: Package, worksheetPath: string, worksheet: XmlElement): { images: ContentSheetImage[]; embeddedObjects: ContentEmbeddedObject[] } | undefined {
+  const drawingRel = [...resolveRelationships(pkg, worksheetPath).values()].find((rel) => rel.type.endsWith(DRAWING_REL_SUFFIX));
+  const drawingRoot = drawingRel === undefined ? undefined : rootElement(pkg.parts[drawingRel.target]);
+  if (drawingRel === undefined || drawingRoot === undefined) {
     return undefined;
   }
-  const drawingRels = drawingPath === undefined ? undefined : resolveRelationships(pkg, drawingPath);
+  const drawingRels = resolveRelationships(pkg, drawingRel.target);
   const geometry = new SheetGridGeometry(worksheet);
+  const images: ContentSheetImage[] = [];
   const objects: ContentEmbeddedObject[] = [];
   for (const anchor of childrenWithTag(drawingRoot, 'xdr:twoCellAnchor')) {
     const from = readAnchorMarker(anchor, 'xdr:from');
@@ -152,14 +149,22 @@ export function readSheetEmbeddedObjects(pkg: Package, worksheetPath: string, wo
     if (from === undefined || to === undefined) {
       continue;
     }
+    const xPt = geometry.xPt(from.column, from.colOffEmu);
+    const yPt = geometry.yPt(from.row, from.rowOffEmu);
+    const frameBox = { xPt, yPt, widthPt: geometry.xPt(to.column, to.colOffEmu) - xPt, heightPt: geometry.yPt(to.row, to.rowOffEmu) - yPt };
+    // The anchor's own anchored object is one of the anchor's direct children per CT_TwoCellAnchor's choice group; the descendant search mirrors the graphic-frame arm's own spelling and tolerates a producer wrapping the object one level deeper.
+    for (const pic of elementsWithTag([anchor], 'xdr:pic')) {
+      const media = resolveBlipMedia(pic, drawingRels, pkg);
+      if (media === undefined) {
+        continue;
+      }
+      images.push({ kind: 'image', format: media.format, base64: media.base64, widthPt: frameBox.widthPt, heightPt: frameBox.heightPt, anchorRow: from.row, anchorColumn: from.column, offsetXPt: emuToPt(from.colOffEmu), offsetYPt: emuToPt(from.rowOffEmu) });
+    }
     for (const frame of elementsWithTag([anchor], 'xdr:graphicFrame')) {
       const chart = readChartFrame(pkg, frame, drawingRels);
       if (chart === undefined) {
         continue;
       }
-      const xPt = geometry.xPt(from.column, from.colOffEmu);
-      const yPt = geometry.yPt(from.row, from.rowOffEmu);
-      const frameBox = { xPt, yPt, widthPt: geometry.xPt(to.column, to.colOffEmu) - xPt, heightPt: geometry.yPt(to.row, to.rowOffEmu) - yPt };
       objects.push({
         objectKind: 'chart',
         document: chartDocument(pkg, chart.root, frameBox, chart.name),
@@ -171,10 +176,10 @@ export function readSheetEmbeddedObjects(pkg: Package, worksheetPath: string, wo
       });
     }
   }
-  return objects.length === 0 ? undefined : objects;
+  return { images, embeddedObjects: objects };
 }
 
-function readChartFrame(pkg: Package, frame: XmlElement, drawingRels: ReadonlyMap<string, { readonly target: string }> | undefined): { root: XmlElement; name: string } | undefined {
+function readChartFrame(pkg: Package, frame: XmlElement, drawingRels: ReadonlyMap<string, Relationship>): { root: XmlElement; name: string } | undefined {
   const graphic = childrenWithTag(frame, 'a:graphic')[0];
   const graphicData = graphic === undefined ? undefined : childrenWithTag(graphic, 'a:graphicData')[0];
   if (graphicData === undefined || attr(graphicData, 'uri') !== CHART_GRAPHIC_URI) {

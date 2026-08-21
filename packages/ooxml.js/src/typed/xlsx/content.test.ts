@@ -6,6 +6,7 @@ import { ContentDocumentSchema, PAGE_SIZE_A4 } from 'document-schema.js';
 import type { Package } from '../../model/package';
 import { el, txt } from '../../xml/fragment';
 import { decodePackage, encodePackage } from '../../codec';
+import { bytesToBase64 } from '../../util/base64';
 import { parsePackage } from '../../package-io/read';
 import { buildXlsxPackageFromContent } from './build';
 import { columnWidthCharsToPt } from './units';
@@ -596,6 +597,101 @@ describe('readXlsxContent: chart graphic frames', () => {
       throw new Error('expected a spreadsheet ContentDocument');
     }
     expect(rewritten.sheets[0]?.embeddedObjects).toBeUndefined();
+  });
+});
+
+// Only the PNG magic-byte signature matters to sniffImageFormat -- the rest is arbitrary filler, not a real encoded image (the same convention the pptx picture-shape suite uses).
+function tinyPngBase64(): string {
+  return bytesToBase64(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]));
+}
+
+const IMAGE_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image';
+const DRAWING_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing';
+
+// A drawing picture reached the way a real workbook reaches one: the worksheet's <drawing r:id> names a drawing part through the worksheet's relationships, the drawing's xdr:twoCellAnchor carries an xdr:pic whose xdr:blipFill > a:blip/@r:embed names the media part through the DRAWING's relationships. Media bytes are sniffed from the part itself, never from the file extension, and the anchor geometry resolves through the sheet's own declared column widths and default row height exactly as the chart frame's does.
+function pictureDrawingPackage(picBlip: string, mediaPart: Package['parts'][string]): Package {
+  // CT_Picture's own shape: nvPicPr (the cNvPr name), blipFill (the a:blip that names the media), spPr (a prstGeom rect; no a:xfrm of its own, since the ANCHOR -- not the shape -- fixes a worksheet picture's placement).
+  const picture = el('xdr:pic', {}, [
+    el('xdr:nvPicPr', {}, [el('xdr:cNvPr', { id: '2', name: 'Picture 1' }), el('xdr:cNvPicPr')]),
+    el('xdr:blipFill', {}, [el('a:blip', { 'r:embed': picBlip }), el('a:stretch', {}, [el('a:fillRect')])]),
+    el('xdr:spPr', {}, [el('a:prstGeom', { prst: 'rect' }, [el('a:avLst')])]),
+  ]);
+  const drawing = el('xdr:wsDr', {}, [
+    el('xdr:twoCellAnchor', {}, [
+      el('xdr:from', {}, [el('xdr:col', {}, [txt('0')]), el('xdr:colOff', {}, [txt('19050')]), el('xdr:row', {}, [txt('1')]), el('xdr:rowOff', {}, [txt('0')])]),
+      el('xdr:to', {}, [el('xdr:col', {}, [txt('2')]), el('xdr:colOff', {}, [txt('0')]), el('xdr:row', {}, [txt('4')]), el('xdr:rowOff', {}, [txt('0')])]),
+      picture,
+      el('xdr:clientData'),
+    ]),
+  ]);
+  const worksheet = el('worksheet', {}, [
+    el('cols', {}, [el('col', { min: '1', max: '1', width: '10' }), el('col', { min: '2', max: '2', width: '20' })]),
+    el('sheetData', {}, [el('row', { r: '1' }, [el('c', { r: 'A1' }, [el('v', {}, [txt('1')])])])]),
+    el('drawing', { 'r:id': 'rIdDrawing' }),
+  ]);
+  const relationship = (id: string, type: string, target: string) => el('Relationship', { Id: id, Type: type, Target: target });
+  return {
+    parts: {
+      'xl/workbook.xml': { kind: 'xml', nodes: [el('workbook', {}, [el('sheets', {}, [el('sheet', { name: 'Data', sheetId: '1', 'r:id': 'rIdSheet' })])])] },
+      'xl/_rels/workbook.xml.rels': { kind: 'xml', nodes: [el('Relationships', {}, [relationship('rIdSheet', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet', 'worksheets/sheet1.xml')])] },
+      'xl/worksheets/sheet1.xml': { kind: 'xml', nodes: [worksheet] },
+      'xl/worksheets/_rels/sheet1.xml.rels': { kind: 'xml', nodes: [el('Relationships', {}, [relationship('rIdDrawing', DRAWING_REL, '../drawings/drawing1.xml')])] },
+      'xl/drawings/drawing1.xml': { kind: 'xml', nodes: [drawing] },
+      'xl/drawings/_rels/drawing1.xml.rels': { kind: 'xml', nodes: [el('Relationships', {}, [relationship('rIdImage', IMAGE_REL, '../media/image1.png')])] },
+      'xl/media/image1.png': mediaPart,
+    },
+  };
+}
+
+describe('readXlsxContent: drawing pictures (xdr:pic)', () => {
+  it("reads an anchored drawing picture into the sheet's images, blip-resolved through the drawing's own relationships", () => {
+    const document = readXlsxContent(pictureDrawingPackage('rIdImage', { kind: 'binary', base64: tinyPngBase64() }));
+    if (document.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    expect(document.sheets[0]?.images).toHaveLength(1);
+    const image = document.sheets[0]?.images[0];
+    expect(image?.kind).toBe('image');
+    expect(image?.format).toBe('png'); // sniffed from the media bytes, never the .png part name
+    expect(image?.base64).toBe(tinyPngBase64());
+    // The cell anchor: from-marker col 0 (+19050 EMU) / row 1, so 1.5pt into the first column and one default 15pt row down.
+    expect(image?.anchorColumn).toBe(0);
+    expect(image?.anchorRow).toBe(1);
+    expect(image?.offsetXPt).toBeCloseTo(1.5, 5);
+    expect(image?.offsetYPt).toBeCloseTo(0, 5);
+    // The frame: absolute position and size from the two anchor markers through the sheet's declared column widths and default row height -- the identical geometry the chart frame resolves.
+    const col0 = columnWidthCharsToPt(10);
+    const col1 = columnWidthCharsToPt(20);
+    expect(image?.widthPt).toBeCloseTo(col0 + col1 - 1.5, 5);
+    expect(image?.heightPt).toBeCloseTo(45, 5);
+  });
+
+  it('round-trips the whole document through ContentDocumentSchema, so the sheet image is schema-valid as read', () => {
+    expect(ContentDocumentSchema.safeParse(readXlsxContent(pictureDrawingPackage('rIdImage', { kind: 'binary', base64: tinyPngBase64() }))).success).toBe(true);
+  });
+
+  it('does not survive the write pair: buildXlsxPackageFromContent emits no drawing part, so the picture row is one-way (the established cell-comment and chart asymmetry)', () => {
+    const rewritten = readXlsxContent(decodePackage(encodePackage(buildXlsxPackageFromContent(readXlsxContent(pictureDrawingPackage('rIdImage', { kind: 'binary', base64: tinyPngBase64() }))))));
+    if (rewritten.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    expect(rewritten.sheets[0]?.images).toEqual([]);
+  });
+
+  it('skips a picture whose blip names no relationship, rather than failing the sheet read', () => {
+    const document = readXlsxContent(pictureDrawingPackage('rIdMissing', { kind: 'binary', base64: tinyPngBase64() }));
+    if (document.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    expect(document.sheets[0]?.images).toEqual([]);
+  });
+
+  it('skips a picture whose media part bytes do not sniff as PNG/JPEG, rather than failing the sheet read', () => {
+    const document = readXlsxContent(pictureDrawingPackage('rIdImage', { kind: 'binary', base64: bytesToBase64(new TextEncoder().encode('not image bytes')) }));
+    if (document.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    expect(document.sheets[0]?.images).toEqual([]);
   });
 });
 

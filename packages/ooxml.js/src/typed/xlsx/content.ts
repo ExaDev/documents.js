@@ -9,7 +9,7 @@ import type { SheetDefinedNames } from './defined-names';
 import { readDefinedNamesBySheet } from './defined-names';
 import type { NumberFormatClass } from './number-format';
 import { classifyNumberFormat } from './number-format';
-import { readSheetEmbeddedObjects } from './drawings';
+import { readSheetDrawing } from './drawings';
 import { readPrintSettings } from './print-settings';
 import { readDate1904, serialToIsoDate, serialToIsoDateTime, serialToIsoTime } from './serial';
 import { loadSharedStrings } from './shared-strings';
@@ -416,15 +416,15 @@ function readSheet(
   const cells = readCells(worksheet, sharedStrings, context);
   applyCellComments(readSheetCellComments(pkg, entry.path), cells);
   applyCellResidueRules(worksheet, cells);
-  // The drawing layer's chart graphic frames (typed/xlsx/drawings.ts) -- absent when the sheet references no drawing or carries no chart frame, which is the common case.
-  const embeddedObjects = readSheetEmbeddedObjects(pkg, entry.path, worksheet);
+  // The drawing layer's pictures and chart graphic frames (typed/xlsx/drawings.ts) -- absent when the sheet references no drawing, which is the common case; a drawing-less sheet has no images and keeps its embeddedObjects field absent.
+  const drawing = readSheetDrawing(pkg, entry.path, worksheet);
   return {
     name: entry.name,
     cells,
     columns: readColumns(worksheet),
     rows: readRows(worksheet),
-    images: [],
-    ...(embeddedObjects === undefined ? {} : { embeddedObjects }),
+    images: drawing?.images ?? [],
+    ...(drawing !== undefined && drawing.embeddedObjects.length > 0 ? { embeddedObjects: drawing.embeddedObjects } : {}),
     printSettings: readPrintSettings(worksheet, sheetIndex, definedNamesBySheet),
   };
 }
