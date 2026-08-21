@@ -275,5 +275,7 @@ export function readOdfParagraph(pElement: XmlElement, pkg: Package, context: Od
     lineSpacing: paragraphProperties.lineSpacing,
     indentLeftPt: paragraphProperties.indentLeftPt,
     indentFirstLinePt: paragraphProperties.indentFirstLinePt,
+    pageBreakBefore: paragraphProperties.pageBreakBefore,
+    pageBreakAfter: paragraphProperties.pageBreakAfter,
   };
 }

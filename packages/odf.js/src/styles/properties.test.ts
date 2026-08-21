@@ -207,6 +207,25 @@ describe('parseParagraphProperties', () => {
     expect(parseParagraphProperties(el('style:paragraph-properties', { 'fo:line-height': '12pt' })).hasUnknown).toBe(true);
     expect(parseParagraphProperties(el('style:paragraph-properties', { 'fo:line-height': 'normal' })).hasUnknown).toBe(true);
   });
+
+  // fo:break-before/fo:break-after are enumerated by the OASIS ODF 1.2 schema to exactly auto/column/page/even-page/odd-page (OpenDocument v1.3 part 3, section 20.185). "page" is the page break the boolean model carries; "auto" is its explicit absence (the same normal/false split fo:font-weight takes). "column" is not a page break at all, and "even-page"/"odd-page" carry a parity the boolean cannot hold -- each of those three stays hasUnknown so the element quarantines as residue rather than silently losing its extra meaning.
+  it('parses fo:break-before="page" to pageBreakBefore: true, and "auto" to false, cleanly', () => {
+    expect(parseParagraphProperties(el('style:paragraph-properties', { 'fo:break-before': 'page' }))).toEqual({ properties: { pageBreakBefore: true }, hasUnknown: false });
+    expect(parseParagraphProperties(el('style:paragraph-properties', { 'fo:break-before': 'auto' }))).toEqual({ properties: { pageBreakBefore: false }, hasUnknown: false });
+  });
+
+  it('parses fo:break-after to pageBreakAfter identically', () => {
+    expect(parseParagraphProperties(el('style:paragraph-properties', { 'fo:break-after': 'page' }))).toEqual({ properties: { pageBreakAfter: true }, hasUnknown: false });
+    expect(parseParagraphProperties(el('style:paragraph-properties', { 'fo:break-after': 'auto' }))).toEqual({ properties: { pageBreakAfter: false }, hasUnknown: false });
+  });
+
+  it('flags hasUnknown for fo:break-before values the boolean model cannot hold (column, even-page, odd-page)', () => {
+    for (const value of ['column', 'even-page', 'odd-page']) {
+      const result = parseParagraphProperties(el('style:paragraph-properties', { 'fo:break-before': value }));
+      expect(result.properties.pageBreakBefore).toBeUndefined();
+      expect(result.hasUnknown).toBe(true);
+    }
+  });
 });
 
 describe('parseStyleElementProperties', () => {
@@ -298,6 +317,8 @@ describe('textPropertiesToAttributes / paragraphPropertiesToAttributes: properti
       lineSpacing: 1.5,
       indentLeftPt: 36,
       indentFirstLinePt: 18,
+      pageBreakBefore: true,
+      pageBreakAfter: false,
     };
     expect(paragraphPropertiesToAttributes(properties)).toEqual([
       { name: 'fo:text-align', value: 'right' },
@@ -306,6 +327,8 @@ describe('textPropertiesToAttributes / paragraphPropertiesToAttributes: properti
       { name: 'fo:line-height', value: '150%' },
       { name: 'fo:margin-left', value: '36pt' },
       { name: 'fo:text-indent', value: '18pt' },
+      { name: 'fo:break-before', value: 'page' },
+      { name: 'fo:break-after', value: 'auto' },
     ]);
   });
 
@@ -336,6 +359,8 @@ describe('textPropertiesToAttributes / paragraphPropertiesToAttributes: properti
       lineSpacing: 2,
       indentLeftPt: -6,
       indentFirstLinePt: 24,
+      pageBreakBefore: true,
+      pageBreakAfter: true,
     };
     const textAttrs: Record<string, string> = {};
     for (const attribute of textPropertiesToAttributes(properties)) textAttrs[attribute.name] = attribute.value;

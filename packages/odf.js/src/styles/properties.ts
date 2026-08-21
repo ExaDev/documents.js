@@ -25,6 +25,8 @@ export const StylePropertiesSchema = z.object({
   lineSpacing: z.number().optional(),
   indentLeftPt: z.number().optional(),
   indentFirstLinePt: z.number().optional(),
+  pageBreakBefore: z.boolean().optional(),
+  pageBreakAfter: z.boolean().optional(),
 });
 export type StyleProperties = z.infer<typeof StylePropertiesSchema>;
 
@@ -51,6 +53,8 @@ const ATTR = {
   lineHeight: 'fo:line-height',
   marginLeft: 'fo:margin-left',
   textIndent: 'fo:text-indent',
+  breakBefore: 'fo:break-before',
+  breakAfter: 'fo:break-after',
 } as const;
 
 const TEXT_ATTR_NAMES: ReadonlySet<string> = new Set([
@@ -73,6 +77,8 @@ const PARAGRAPH_ATTR_NAMES: ReadonlySet<string> = new Set([
   ATTR.lineHeight,
   ATTR.marginLeft,
   ATTR.textIndent,
+  ATTR.breakBefore,
+  ATTR.breakAfter,
 ]);
 
 function attributeMap(element: XmlElement): Map<string, string> {
@@ -277,6 +283,25 @@ export function parseParagraphProperties(element: XmlElement): ParsedProperties 
     }
   }
 
+  // fo:break-before/fo:break-after are enumerated by the OASIS ODF 1.2 schema to exactly auto/column/page/even-page/odd-page (OpenDocument v1.3 part 3, section 20.185): "page" is the page break this boolean model carries, "auto" its explicit absence (the same normal/false split fo:font-weight takes), and "column"/"even-page"/"odd-page" each carry a meaning the boolean cannot hold -- a column break is not a page break at all, and the two parity variants name WHICH page the break lands on -- so those stay unknown and quarantine as residue rather than silently losing the extra fact.
+  const breakBefore = attrs.get(ATTR.breakBefore);
+  if (breakBefore === 'page') {
+    properties.pageBreakBefore = true;
+  } else if (breakBefore === 'auto') {
+    properties.pageBreakBefore = false;
+  } else if (breakBefore !== undefined) {
+    hasUnknown = true;
+  }
+
+  const breakAfter = attrs.get(ATTR.breakAfter);
+  if (breakAfter === 'page') {
+    properties.pageBreakAfter = true;
+  } else if (breakAfter === 'auto') {
+    properties.pageBreakAfter = false;
+  } else if (breakAfter !== undefined) {
+    hasUnknown = true;
+  }
+
   return { properties, hasUnknown };
 }
 
@@ -372,6 +397,12 @@ export function paragraphPropertiesToAttributes(properties: StyleProperties): At
   }
   if (properties.indentFirstLinePt !== undefined) {
     attributes.push({ name: ATTR.textIndent, value: formatPt(properties.indentFirstLinePt) });
+  }
+  if (properties.pageBreakBefore !== undefined) {
+    attributes.push({ name: ATTR.breakBefore, value: properties.pageBreakBefore ? 'page' : 'auto' });
+  }
+  if (properties.pageBreakAfter !== undefined) {
+    attributes.push({ name: ATTR.breakAfter, value: properties.pageBreakAfter ? 'page' : 'auto' });
   }
   return attributes;
 }

@@ -97,6 +97,24 @@ describe('readOdfParagraph: paragraph-level formatting', () => {
     expect(run?.bold).toBe(true);
     expect(run?.sizePt).toBe(14);
   });
+
+  it('resolves fo:break-before/fo:break-after="page" from the paragraph\'s own style onto the paragraph\'s page-break flags', () => {
+    const p1 = styleStyle('P1', 'paragraph', {}, [paragraphProps({ 'fo:break-before': 'page', 'fo:break-after': 'page' })]);
+    const pkg: Package = { parts: { 'content.xml': contentPackage([p1]) } };
+    const p = el('text:p', { 'text:style-name': 'P1' }, [txt('New page')]);
+    const result = readOdfParagraph(p, pkg);
+    expect(result.pageBreakBefore).toBe(true);
+    expect(result.pageBreakAfter).toBe(true);
+  });
+
+  it('carries no page-break flag when the style states none', () => {
+    const p1 = styleStyle('P1', 'paragraph', {}, [paragraphProps({ 'fo:break-before': 'auto' })]);
+    const pkg: Package = { parts: { 'content.xml': contentPackage([p1]) } };
+    const p = el('text:p', { 'text:style-name': 'P1' }, [txt('Body')]);
+    const result = readOdfParagraph(p, pkg);
+    expect(result.pageBreakBefore).toBe(false);
+    expect(result.pageBreakAfter).toBeUndefined();
+  });
 });
 
 describe('readOdfParagraph: text:span run formatting', () => {
