@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { documentPackageWithSchema, type StylesTable } from 'document-schema.js';
-import { effectivePackage, buildOutline, flattenOutline, isOutlineChild, leafContentHash, outlineLeafText } from '../../src';
+import { buildOutline, effectivePackage, flattenOutline, isOutlineChild, leafContentHash, outlineLeafText, projectDocumentGraph } from '../../src';
 import { stableContentHash } from '../../src/outline/hash';
 import {
   drawPageGroup,
@@ -51,6 +51,22 @@ describe('document-outline.js under the Cloudflare Workers runtime', () => {
     expect(leaves).toEqual([{ kind: 'paragraph', runs: [{ text: 'body' }], indentLeftPt: 24 }]);
     expect(leafContentHash(leaves[0]!)).toBe(leafContentHash({ kind: 'paragraph', runs: [{ text: 'body' }], indentLeftPt: 24 }));
     expect(outlineLeafText(leaves[0]!)).toBe('body');
+  });
+
+  it('projects packages into the content-addressed property graph inside the isolate', () => {
+    const styles: StylesTable = { 'body-text': { run: { bold: true } } };
+    const first = wordprocessingPackage([sectionGroup([headingGroup('Chapter', 1, [paragraph('body')], { style: 'body-text' })])], { styles });
+    const second = wordprocessingPackage([sectionGroup([paragraph('body')])]);
+    const graph = projectDocumentGraph([
+      { id: 'one', package: first },
+      { id: 'two', package: second },
+    ]);
+    // The shared body paragraph is one node with two containment edges, and the style entry node is reachable by its STYLED_BY edge -- all inside workerd, proving the projection is as Node-free as the hash it reuses.
+    const sharedBody = graph.nodes.filter((node) => node.kind === 'paragraph' && JSON.stringify(node).includes('body'));
+    expect(sharedBody).toHaveLength(1);
+    expect(graph.edges.filter((edge) => edge.kind === 'CONTAINS' && edge.to === sharedBody[0]!.id)).toHaveLength(2);
+    expect(graph.edges.filter((edge) => edge.kind === 'STYLED_BY')).toHaveLength(1);
+    expect(graph.nodes.filter((node) => node.kind === 'styleEntry')).toHaveLength(1);
   });
 
   it('hashes a serialised package identically with and without its $schema label inside the isolate', () => {
