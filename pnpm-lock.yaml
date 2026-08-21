@@ -947,7 +947,7 @@ importers:
         specifier: ^1.1.0
         version: link:../archive-codec
       document-schema.js:
-        specifier: ^4.7.0
+        specifier: ^4.8.0
         version: link:../document-schema.js
       fast-xml-parser:
         specifier: ^5.10.1
