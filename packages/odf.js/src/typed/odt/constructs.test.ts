@@ -720,16 +720,19 @@ describe('readOdtContent: residue rows', () => {
     expect(source?.['dde-links']?.xml).toContain('text:dde-source');
   });
 
-  it('quarantines text:ruby and text:meta inline elements on their own paragraph, beside the style-chain residue they may share it with', () => {
+  it('quarantines text:ruby and text:meta inline elements on their own paragraph, reading only the ruby-base as flow text', () => {
     const pkg = odtPackage([
-      el('text:p', {}, [txt('annotated '), el('text:ruby', {}, [el('text:ruby-base', {}, [txt('base')]), el('text:ruby-text', {}, [txt('text')])]), el('text:meta', { 'text:xml-id': 'meta1' }, [txt(' after')])]),
+      el('text:p', {}, [txt('annotated '), el('text:ruby', {}, [el('text:ruby-base', {}, [txt('base')]), el('text:ruby-text', {}, [txt('gloss')])]), el('text:meta', { 'text:xml-id': 'meta1' }, [txt(' after')])]),
     ]);
     const paragraphBlock = firstSectionBlocks(pkg)[0];
     if (paragraphBlock?.kind !== 'paragraph') {
       throw new Error('expected a paragraph block');
     }
+    // The ruby-BASE renders as flow text and the meta's wrapped content stays in the flow; the ruby-TEXT gloss is annotation, not body text, so it appears in the residue alone.
+    expect(paragraphBlock.runs.map((run) => run.text).join('')).toBe('annotated base after');
     expect(paragraphBlock.source?.format).toBe('odt');
     expect(paragraphBlock.source?.xml).toContain('<text:ruby>');
+    expect(paragraphBlock.source?.xml).toContain('<text:ruby-text');
     expect(paragraphBlock.source?.xml).toContain('<text:meta');
   });
 
