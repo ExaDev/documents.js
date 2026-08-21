@@ -1,6 +1,7 @@
 import { flattenPackage, type ContentDocument, type DocumentPackage } from 'document-schema.js';
 
-import { decodePackage as decodeOdfPackage } from 'odf.js';
+import { childrenWithTag, decodeOdfText, decodePackage as decodeOdfPackage, elementsWithTag } from 'odf.js';
+import { attr } from 'ooxml.js';
 import { buildXlsxPackageFromContent, decodePackage as decodeOoxmlPackage, encodePackage as encodeOoxmlPackage, readXlsxContent } from 'ooxml.js';
 import { describe, expect, it, vi } from 'vitest';
 import { createDocx } from '../edit/docx/editor';
@@ -736,6 +737,20 @@ describe('markdown <-> odt: markdown -> odt -> markdown', () => {
 
     const heading = content.sections[0]!.blocks[0];
     expect(heading?.kind === 'paragraph' ? heading.styleId : undefined).toBe('Heading1');
+  });
+
+  // The odt bytes themselves carry the heading as real ODF structure -- a text:h element with text:outline-level and the Heading_20_1 style spelling -- so a consumer outside this package (LibreOffice's outline, TOC fields, any ODF toolkit) sees a heading, not a plain paragraph styled with a name nothing resolves. The styleId-only assertions above pass even when the heading is written as a text:p carrying the synthetic "Heading1" string verbatim; this one cannot.
+  it('writes the markdown heading as a real text:h in the odt bytes, with outline level and the ODF style spelling', () => {
+    const odtBytes = markdownToOdt(encodeMarkdownText(richMarkdownText()));
+    const pkg = decodeOdfPackage(odtBytes);
+    const part = pkg.parts['content.xml'];
+    const officeText = part?.kind === 'xml' ? elementsWithTag(part.nodes, 'office:text')[0] : undefined;
+    expect(officeText).toBeDefined();
+    const headings = childrenWithTag(officeText!, 'text:h');
+    expect(headings).toHaveLength(1);
+    expect(attr(headings[0]!, 'text:outline-level')).toBe('1');
+    expect(attr(headings[0]!, 'text:style-name')).toBe('Heading_20_1');
+    expect(decodeOdfText(headings[0]!)).toBe('Report Title');
   });
 
   it('throws when the signal is already aborted, on both hops', () => {
