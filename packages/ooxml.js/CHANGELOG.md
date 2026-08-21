@@ -1,3 +1,27 @@
+# [4.4.0](https://github.com/ExaDev/documents.js/compare/ooxml.js@4.3.0...ooxml.js@4.4.0) (2026-08-21)
+
+
+### Bug Fixes
+
+* **xlsx:** read table columns through the CT_Table tableColumns wrapper ([c1e665f](https://github.com/ExaDev/documents.js/commit/c1e665f5750553d2b1273fa415b339db88bc2532))
+
+
+### Features
+
+* **docx:** read header/footer parts as block flow with per-section references ([ec2a633](https://github.com/ExaDev/documents.js/commit/ec2a633c57a1c25359ff29c0ff0beab642310eba))
+* **docx:** read the [#750](https://github.com/ExaDev/documents.js/issues/750) run-level construct rows plus w:ffData form fields ([47b737e](https://github.com/ExaDev/documents.js/commit/47b737ece262f87ef00b00aab205ad9015c2ec57))
+* **docx:** read w:sectPr/w:type onto ContentSection.breakType and write it back ([822e156](https://github.com/ExaDev/documents.js/commit/822e1561761d68bf80bbadb770d037cbdc51274a))
+* **pptx:** read a:fld dynamic fields as field run constructs ([8b2f4f1](https://github.com/ExaDev/documents.js/commit/8b2f4f13c2ce584f366a7f9e4e135edf2029f6fe))
+* **pptx:** read internal slide-jump links as link run constructs ([f337de9](https://github.com/ExaDev/documents.js/commit/f337de98da02da5c10fe9f46c1bd57241347a51f))
+* **xlsx:** quarantine dataValidation and conditionalFormatting as anchor-cell residue ([a8179e8](https://github.com/ExaDev/documents.js/commit/a8179e88f32a5f7225b429bfa3f1560ca06b663f))
+* **xlsx:** read chart graphic frames as embedded chart objects ([4d2a9ce](https://github.com/ExaDev/documents.js/commit/4d2a9ceaf9adb8ccc5e6f3e0f3c31d399f8e050d))
+* **xlsx:** read general defined names and table objects into the tree definitions table ([8d01e18](https://github.com/ExaDev/documents.js/commit/8d01e180fa498f1588e95b22f257b551c8ff255d))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^4.6.0
+
 # [4.3.0](https://github.com/ExaDev/documents.js/compare/ooxml.js@4.2.0...ooxml.js@4.3.0) (2026-08-21)
 
 
