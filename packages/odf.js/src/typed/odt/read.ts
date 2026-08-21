@@ -20,10 +20,12 @@ import {
   type OdfMarkerEvent,
   type OdfMarkerHalf,
 } from '../shared/constructs';
-import { readOdfParagraph } from '../shared/paragraph';
+import { readOdfParagraph, readOdfConstructBodyBlocks } from '../shared/paragraph';
+import { resolveStyleElementChain } from '../shared/cascade';
 import { readOdfFormControlConstructs } from '../shared/forms';
 import { readOdfTable } from '../shared/table';
 import { readOdfMetadata } from '../shared/metadata';
+import { readOdfMasterPageElements } from '../shared/masterpage';
 import { parsePageSize, parseMargins } from '../shared/geometry';
 import { parseOdfLength } from '../shared/units';
 import { readDrawFrame } from '../draw/shapes';
@@ -33,7 +35,7 @@ import { readDrawObjectReference, readEmbeddedObjectDocument } from '../draw/emb
 //
 // This reader is deliberately thin: paragraph/run reading (readOdfParagraph) and table reading (readOdfTable) already live in typed/shared/ -- built for reuse across odt/ods/odp/odg, not odt-specific -- so this module's own job is the odt-SPECIFIC structure those shared readers have no opinion on: walking office:text's actual block sequence (paragraphs interleaved with lists and tables, in document order), mapping text:h's own text:outline-level onto a docx-equivalent styleId alongside document-schema.js's own headingLevel field, and resolving the document's own page geometry from its first master page. readOdfParagraph is tag-agnostic (it never inspects which tag its own caller found it at) and reads text:h exactly as it reads text:p, so this reader calls straight through to it for both, then overrides ONLY the resulting heading identity (styleId plus headingLevel) for a heading -- see readParagraphOrHeading below.
 //
-// SCOPE -- the fidelity construct rows (ExaDev/documents.js#719) are read: fields as run-level constructs with their cached text, bookmarks and tracked changes at both run and block scope, notes and annotations as anchors with definitions-table bodies, text:section as a division, the index wrappers as index content controls with their cached bodies, office:forms as content controls, and anchored draw:frames lifted from text flow (images, text boxes, and embedded formula/drawing/presentation/chart objects). Still deliberately narrow, matching ooxml.js's own readDocx's established gaps: header/footer content (real block content keyed to master pages, riding the master-page work rather than a construct kind), documents with more than one master page (only the first is read, in document order -- see readFirstMasterPageGeometry below), and cross-references beyond their bookmark spines (text:reference-mark* and the *-ref display family). Explicit page breaks (fo:break-before/fo:break-after) are NO LONGER a gap: styles/properties.ts's StyleProperties models them, so the shared cascade this reader relies on surfaces them onto every paragraph as pageBreakBefore/pageBreakAfter. A text:h or a nested text:list/text:table inside a table cell is also out of scope here, inherited directly from readOdfTable's own cell reading (table:table-cell content there is read as text:p only) -- not a gap introduced by this module. List marker GLYPHS (the exact bullet character or number format string) remain unread -- only the ordered-vs-bullet KIND is resolved (see typed/shared/list.ts's resolveOdfListKind), since that is what downstream consumers need to render <ol> vs <ul>.
+// SCOPE -- the fidelity construct rows (ExaDev/documents.js#719) are read: fields as run-level constructs with their cached text, bookmarks and tracked changes at both run and block scope, notes and annotations as anchors with definitions-table bodies, text:section as a division, the index wrappers as index content controls with their cached bodies, office:forms as content controls, and anchored draw:frames lifted from text flow (images, text boxes, and embedded formula/drawing/presentation/chart objects). Master pages are read as a whole-page inventory, not just the first: a paragraph style's style:master-page-name switch splits a new ContentSection with that master page's geometry (see splitOdtSections below), and every master page's style:header/style:footer variants read as real block flow keyed to the master page (OdtDocument.headerFooterParts + the positional sectionMasterPages that name which master page each section came from). Still deliberately narrow, matching ooxml.js's own readDocx's established gaps: cross-references beyond their bookmark spines (text:reference-mark* and the *-ref display family). Explicit page breaks (fo:break-before/fo:break-after) are NO LONGER a gap either: styles/properties.ts's StyleProperties models them, so the shared cascade this reader relies on surfaces them onto every paragraph as pageBreakBefore/pageBreakAfter. A text:h or a nested text:list/text:table inside a table cell is also out of scope here, inherited directly from readOdfTable's own cell reading (table:table-cell content there is read as text:p only) -- not a gap introduced by this module. List marker GLYPHS (the exact bullet character or number format string) remain unread -- only the ordered-vs-bullet KIND is resolved (see typed/shared/list.ts's resolveOdfListKind), since that is what downstream consumers need to render <ol> vs <ul>.
 //
 // LIST HANDLING: the numId minting convention (a monotonically increasing per-encounter counter, never text:style-name), the ordered:/bullet: kind prefix, and the text:list/text:list-item structural nesting walk itself all live in typed/shared/list.ts -- read that module's own top-of-file notes in full for the derivation -- because the odp reader meets the IDENTICAL text:list construct inside slide text frames and shares every line of it. This reader's own remaining list responsibility is the one genuinely odt-specific part: threading a single document-wide OdfListIdState through its office:text walk, so list identities are unique across the whole body exactly as they are across a whole presentation's slides.
 
@@ -47,11 +49,39 @@ export interface OdtDocument {
   sections: ContentSection[];
   // The package-level definitions table this document's content references: field master declarations, note and comment bodies, the styles-side definition tenants. Present only when the document carries at least one entry -- the flat ContentDocument has no root to hold a definitions table, so this field is how the table reaches readOdt's assembled package root without changing the flat exchange shape.
   definitions?: DefinitionsTable;
+  // A master page's header/footer content, real block flow keyed to the master page it hangs off (style:header/style:footer and their -left/-first variants under style:master-page in styles.xml). Present only when at least one variant carries content -- the flat spelling of a layer ContentSection itself has no field for, mirroring ooxml.js's own DocxDocument.headerFooterParts, and like that shape it does not survive into readOdt's tree (readOdtContent is the reader that returns it).
+  headerFooterParts?: OdtHeaderFooterPart[];
+  // Which master page each section's page geometry came from, positional over `sections` -- the reference a consumer resolves headerFooterParts through. Present only when styles.xml declares at least one master page at all.
+  sectionMasterPages?: (string | undefined)[];
+}
+
+// One header/footer variant under one style:master-page. The variant names ODF's own three-per-kind split (the plain style:header/style:footer is the default -- right-page, in a mirrored layout -- with -left and -first beside it); a variant the master page spells style:display="false" contributes no part, since it renders nothing.
+export type OdtHeaderFooterVariant = 'default' | 'left' | 'first';
+
+export interface OdtHeaderFooterPart {
+  readonly masterPage: string;
+  readonly kind: 'header' | 'footer';
+  readonly variant: OdtHeaderFooterVariant;
+  readonly blocks: ContentBlock[];
+}
+
+const ODT_HEADER_FOOTER_TAGS: ReadonlyMap<string, { readonly kind: 'header' | 'footer'; readonly variant: OdtHeaderFooterVariant }> = new Map([
+  ['style:header', { kind: 'header', variant: 'default' }],
+  ['style:header-left', { kind: 'header', variant: 'left' }],
+  ['style:header-first', { kind: 'header', variant: 'first' }],
+  ['style:footer', { kind: 'footer', variant: 'default' }],
+  ['style:footer-left', { kind: 'footer', variant: 'left' }],
+  ['style:footer-first', { kind: 'footer', variant: 'first' }],
+]);
+
+// A mid-flow master-page switch recorded during the block walk: the flat block index where the new section opens, and the master page it switches to. `index` addresses the pre-marker-splice walked list, exactly like every OdfConstructExtent index.
+interface OdtSectionSplit {
+  readonly index: number;
+  readonly masterPage: string;
 }
 
 const CONTENT_PART = 'content.xml';
-const STYLES_PART = 'styles.xml';
-const AUTOMATIC_STYLE_PARTS = [CONTENT_PART, STYLES_PART] as const;
+const AUTOMATIC_STYLE_PARTS = [CONTENT_PART, 'styles.xml'] as const;
 
 // text:outline-level's ODF schema default when the attribute is absent is 1 (OASIS ODF 1.2 part 1); an unparseable or non-positive value degrades to the same default rather than throwing, matching this reader's general "malformed-but-salvageable input degrades gracefully" posture (readOdtContent itself has no diagnostics channel to report it through).
 function readOutlineLevel(headingElement: XmlElement): number {
@@ -74,7 +104,25 @@ function readParagraphOrHeading(element: XmlElement, paragraph: ContentParagraph
   return paragraph;
 }
 
-// The walk state one document's block flow threads: the list-identity counter, the tracked-change regions its markers resolve against, the wrapper extents (divisions, index controls) discovered so far, the marker events promoted from paragraph-edge halves, and the discovery-order counter that keeps extent resolution deterministic.
+// A paragraph's effective master page: the most specific style in its resolved "paragraph" chain whose own style:paragraph-properties carries style:master-page-name (the ODF attribute that switches the page style from the paragraph it is applied to -- OASIS OpenDocument part 3, section 19.501; it lives on style:paragraph-properties, never on the paragraph element itself, because ODF has no direct formatting). The chain is walked root-first so a nearer link's name overrides a further one's, exactly as cascade property resolution does. Memoised per style name in the walk state: the same style name repeats across a document's paragraphs, and each resolution is a full two-part style-container scan.
+function resolveParagraphMasterPageName(element: XmlElement, pkg: Package, state: OdtFlowState): string | undefined {
+  const styleName = attrValue(element, 'text:style-name');
+  if (state.masterPageByStyleName.has(styleName)) {
+    return state.masterPageByStyleName.get(styleName);
+  }
+  let resolved: string | undefined;
+  for (const style of resolveStyleElementChain(styleName, 'paragraph', pkg).elements) {
+    const properties = findChildElement(style.children, 'style:paragraph-properties');
+    const name = properties === undefined ? undefined : attrValue(properties, 'style:master-page-name');
+    if (name !== undefined) {
+      resolved = name;
+    }
+  }
+  state.masterPageByStyleName.set(styleName, resolved);
+  return resolved;
+}
+
+// The walk state one document's block flow threads: the list-identity counter, the tracked-change regions its markers resolve against, the wrapper extents (divisions, index controls) discovered so far, the marker events promoted from paragraph-edge halves, the discovery-order counter that keeps extent resolution deterministic, and the master-page section tracking -- the current section's own master page (the first master page in document order until a paragraph style switches it), the section splits recorded so far, and the per-style-name memo that keeps master-page resolution to one chain walk per distinct style rather than one per paragraph.
 interface OdtFlowState {
   readonly listIdState: OdfListIdState;
   readonly provenanceRegions: ReadonlyMap<string, ProvenanceDescriptor>;
@@ -82,6 +130,9 @@ interface OdtFlowState {
   readonly wrapperExtents: OdfConstructExtent[];
   readonly markerEvents: OdfMarkerEvent[];
   readonly liftFrames: boolean;
+  readonly sectionSplits: OdtSectionSplit[];
+  readonly masterPageByStyleName: Map<string | undefined, string | undefined>;
+  masterPage: string | undefined;
   order: number;
 }
 
@@ -97,6 +148,8 @@ interface ReadParagraph {
   readonly paragraph: ContentParagraph;
   readonly halves: OdfMarkerHalf[];
   readonly liftedSources: readonly LiftedFrameSource[];
+  // The master page this paragraph's own style chain names, when it names one at all -- the fact that decides whether this paragraph opens a new section.
+  readonly masterPageName: string | undefined;
 }
 
 // One paragraph's own anchored draw:frame children (flattening any draw:g group exactly as ods's cell-anchored walker does) -> the blocks they contribute after the paragraph, grouped by the direct child they were lifted from. A frame resolving an embedded object becomes a ContentEmbeddedObjectBlock at the frame's own geometry, read through typed/draw/embedded.ts's own readEmbeddedObjectDocument -- the one shared kind -> reader table every frame-reading format hands its references to, so this module never imports a sibling format reader (see that module's top-of-file note for why the dispatch is inverted into it rather than living per-reader: this reader needs ods's reader for an embedded Calc sheet, and ods's needs this one for an embedded Writer document, so per-reader dispatch re-creates the reader cycle whichever direction is refused). Chart objects additionally quarantine the chart element in residue, carried by the same return. Any other frame contributes its own content blocks -- a text box's paragraphs, a table frame's table, an image frame's image -- spliced in frame document order, with the frame's own position recorded only where a target node carries geometry (the embedded object's frame and the image block's size); a text box's position is a real, documented narrowing.
@@ -169,6 +222,11 @@ function readBlocks(nodes: readonly XmlNode[], pkg: Package, state: OdtFlowState
   const emitParagraphs = (reads: readonly ReadParagraph[]): void => {
     let cursor = baseIndex + blocks.length;
     for (const read of reads) {
+      // A paragraph whose own style chain names a DIFFERENT master page opens a new section at its own block index: ODF's page-style switch is defined to force a page break with the new master page, which is exactly ContentSection's own boundary. A paragraph naming the section's current master page (or naming none) changes nothing -- the switch is stated by the style that carries it, never inferred from style identity.
+      if (read.masterPageName !== undefined && read.masterPageName !== state.masterPage) {
+        state.sectionSplits.push({ index: cursor, masterPage: read.masterPageName });
+        state.masterPage = read.masterPageName;
+      }
       const lifted = read.liftedSources.flatMap((source) => source.blocks);
       for (const half of read.halves) {
         const eventIndex = odfMarkerHalfEventIndex(half, read.element, cursor, liftedBlocksBeforeHalf(read, half.element));
@@ -186,7 +244,7 @@ function readBlocks(nodes: readonly XmlNode[], pkg: Package, state: OdtFlowState
   const readOneParagraph = (element: XmlElement): ReadParagraph => {
     const halves: OdfMarkerHalf[] = [];
     const paragraph = readOdfParagraph(element, pkg, { provenanceRegions: state.provenanceRegions, markersOut: halves, definitions: state.definitions, listIdState: state.listIdState, format: 'odt' });
-    return { element, paragraph: readParagraphOrHeading(element, paragraph), halves, liftedSources: readAnchoredFrameSources(element, pkg, state) };
+    return { element, paragraph: readParagraphOrHeading(element, paragraph), halves, liftedSources: readAnchoredFrameSources(element, pkg, state), masterPageName: resolveParagraphMasterPageName(element, pkg, state) };
   };
   for (const node of nodes) {
     if (node.type !== 'element') {
@@ -260,15 +318,11 @@ function findPageLayoutElement(pkg: Package, pageLayoutName: string | undefined)
   return undefined;
 }
 
-// Reads the FIRST style:master-page (styles.xml's office:master-styles, in document order) and its associated style:page-layout into PageSize/Margins, via geometry.ts's own parsing helpers. A document with more than one master page (a mid-document page-style change, e.g. switching to a landscape layout partway through) has every master page AFTER the first silently ignored -- a deliberate, tracked scope gap, not an oversight: ODF's own multi-master-page mechanism doesn't correspond to anything ContentSection currently models (one ContentSection carries exactly one pageSize/margins pair for its own blocks), and building that mapping is genuinely separate, larger work from this reader's own current job of proving the single-section, single-page-layout path end to end.
+// One style:master-page's own geometry, through its style:page-layout-name -> style:page-layout -> style:page-layout-properties chain.
 //
-// ODF/LibreOffice's own out-of-the-box defaults for a freshly created, unmodified text document -- confirmed directly against a real Writer document's own style:page-layout-properties (21cm x 29.7cm page, 2cm margins on every side) -- used only when a package's styles.xml is missing, malformed, or has no master page/page layout this reader can resolve. Deliberately A4-based rather than reusing document-schema.js's own PAGE_SIZE_LETTER convention (which ooxml.js's docx reader falls back to): Word's real default is genuinely Letter-sized, but ODF/LibreOffice's real default is genuinely A4-sized, so each reader's own fallback should reflect the format it actually reads, not a single cross-format constant -- mirroring readOdpContent's own SLIDE_SIZE_WIDESCREEN fallback choice for the same reason.
-function readFirstMasterPageGeometry(pkg: Package): { pageSize: PageSize; margins: Margins } {
-  const stylesPart = pkg.parts[STYLES_PART];
-  const stylesRoot = stylesPart?.kind === 'xml' ? rootElement(stylesPart.nodes) : undefined;
-  const masterStyles = stylesRoot === undefined ? undefined : findChildElement(stylesRoot.children, 'office:master-styles');
-  const masterPage = masterStyles === undefined ? undefined : findChildElement(masterStyles.children, 'style:master-page');
-  const layoutName = masterPage === undefined ? undefined : attrValue(masterPage, 'style:page-layout-name');
+// ODF/LibreOffice's own out-of-the-box defaults for a freshly created, unmodified text document -- confirmed directly against a real Writer document's own style:page-layout-properties (21cm x 29.7cm page, 2cm margins on every side) -- used only when that chain does not resolve (no page-layout-name, no such page-layout, or a page-layout with no properties). Deliberately A4-based rather than reusing document-schema.js's own PAGE_SIZE_LETTER convention (which ooxml.js's docx reader falls back to): Word's real default is genuinely Letter-sized, but ODF/LibreOffice's real default is genuinely A4-sized, so each reader's own fallback should reflect the format it actually reads, not a single cross-format constant -- mirroring readOdpContent's own SLIDE_SIZE_WIDESCREEN fallback choice for the same reason.
+function resolveMasterPageGeometry(pkg: Package, masterPage: XmlElement): { pageSize: PageSize; margins: Margins } {
+  const layoutName = attrValue(masterPage, 'style:page-layout-name');
   const layout = findPageLayoutElement(pkg, layoutName);
   const properties = layout === undefined ? undefined : findChildElement(layout.children, 'style:page-layout-properties');
 
@@ -279,6 +333,39 @@ function readFirstMasterPageGeometry(pkg: Package): { pageSize: PageSize; margin
     pageSize: pageSize ?? PAGE_SIZE_A4,
     margins: margins ?? DEFAULT_MARGINS,
   };
+}
+
+// Cuts the walked flat block list into ContentSection values at the master-page switches the walk recorded, splicing each segment's own construct markers separately. An extent that spans a cut (a division whose blocks straddle the switch, a bookmark pair opened on one page style and closed on another) has no encoding -- a marker pair must close in the block list it opened in, the same ratified drop a pair split across a table-cell boundary already takes -- so it is dropped rather than re-paired into a nesting the source never had. A switch landing at index 0 is the document's own starting page style rather than a boundary: the first paragraph names which master page page 1 uses, and no empty leading section exists.
+function splitOdtSections(
+  walked: readonly ContentBlock[],
+  extents: readonly OdfConstructExtent[],
+  splits: readonly OdtSectionSplit[],
+  initialMasterPage: string | undefined,
+  geometryByMasterPage: ReadonlyMap<string, { pageSize: PageSize; margins: Margins }>,
+): { sections: ContentSection[]; masterPages: (string | undefined)[] } {
+  let initial = initialMasterPage;
+  let boundaries = splits;
+  const firstSplit = splits[0];
+  if (firstSplit?.index === 0) {
+    initial = firstSplit.masterPage;
+    boundaries = splits.slice(1);
+  }
+
+  const sections: ContentSection[] = [];
+  const masterPages: (string | undefined)[] = [];
+  for (let segment = 0; segment <= boundaries.length; segment += 1) {
+    const start = segment === 0 ? 0 : boundaries[segment - 1]!.index;
+    const end = segment === boundaries.length ? walked.length : boundaries[segment]!.index;
+    const masterPage = segment === 0 ? initial : boundaries[segment - 1]!.masterPage;
+    const geometry = masterPage === undefined ? undefined : geometryByMasterPage.get(masterPage);
+    const segmentExtents = extents
+      .filter((extent) => extent.startIndex >= start && extent.endIndex <= end)
+      .map((extent) => ({ ...extent, startIndex: extent.startIndex - start, endIndex: extent.endIndex - start }));
+    const blocks = insertOdfConstructMarkers(walked.slice(start, end), segmentExtents);
+    sections.push({ pageSize: geometry?.pageSize ?? PAGE_SIZE_A4, margins: geometry?.margins ?? DEFAULT_MARGINS, blocks, ...(segment > 0 ? { breakType: 'nextPage' as const } : {}) });
+    masterPages.push(masterPage);
+  }
+  return { sections, masterPages };
 }
 
 // Package -> OdtDocument. Throws only when content.xml itself, or its own office:body/office:text element, is missing -- a genuinely unusable package, mirroring exactly how ooxml.js's own readDocx throws when word/document.xml or its w:body is missing, rather than degrading gracefully the way a merely malformed or absent OPTIONAL part (meta.xml, styles.xml, an individual style reference) does throughout the rest of this reader.
@@ -295,7 +382,17 @@ export function readOdtContent(pkg: Package, options: OdtReadOptions = {}): OdtD
   }
 
   const metadata = readOdfMetadata(pkg);
-  const { pageSize, margins } = readFirstMasterPageGeometry(pkg);
+
+  // The master-page inventory: the first style:master-page in document order is the document's starting page style, and any paragraph style's style:master-page-name switch names another one. A master page element without style:name (malformed -- the ODF schema requires it) is skipped whole, both here and in the header/footer walk below.
+  const masterPageElements = readOdfMasterPageElements(pkg);
+  const geometryByMasterPage = new Map<string, { pageSize: PageSize; margins: Margins }>();
+  for (const masterPage of masterPageElements) {
+    const name = attrValue(masterPage, 'style:name');
+    if (name !== undefined) {
+      geometryByMasterPage.set(name, resolveMasterPageGeometry(pkg, masterPage));
+    }
+  }
+  const firstMasterPageName = masterPageElements.map((masterPage) => attrValue(masterPage, 'style:name')).find((name) => name !== undefined);
 
   // The document-level collections the block walk resolves against, gathered first because a marker anywhere in the body may reference a declaration or region stated anywhere else in it: tracked-change regions (id-keyed), the definitions sink note and annotation bodies mint into, and the field master declarations (keys namespaced per family).
   const provenanceRegions = new Map<string, ProvenanceDescriptor>();
@@ -312,7 +409,7 @@ export function readOdtContent(pkg: Package, options: OdtReadOptions = {}): OdtD
     collectOdfFontFaceDefinitions(part.nodes, definitions.entries);
   }
 
-  const state: OdtFlowState = { listIdState: { next: 1 }, provenanceRegions, definitions, wrapperExtents: [], markerEvents: [], liftFrames: options.frames !== 'none', order: 0 };
+  const state: OdtFlowState = { listIdState: { next: 1 }, provenanceRegions, definitions, wrapperExtents: [], markerEvents: [], liftFrames: options.frames !== 'none', sectionSplits: [], masterPageByStyleName: new Map(), masterPage: firstMasterPageName, order: 0 };
   const walked = readBlocks(textElement.children, pkg, state);
   const { extents: markerExtents, paired } = resolveOdfMarkerEvents(state.markerEvents);
   const extents: OdfConstructExtent[] = [...state.wrapperExtents, ...markerExtents];
@@ -325,12 +422,36 @@ export function readOdtContent(pkg: Package, options: OdtReadOptions = {}): OdtD
       }
     }
   }
-  const blocks = insertOdfConstructMarkers(walked, extents);
+  const { sections, masterPages } = splitOdtSections(walked, extents, state.sectionSplits, firstMasterPageName, geometryByMasterPage);
+
+  // A master page's header/footer bodies: real block flow through the same body walker note and annotation bodies use, read AFTER the main walk so the definitions sink is live (a page-number field inside a footer mints its definitions entries into the same document-wide table). A variant carrying no readable paragraph/list child contributes no part at all.
+  const headerFooterParts: OdtHeaderFooterPart[] = [];
+  for (const masterPage of masterPageElements) {
+    const masterPageName = attrValue(masterPage, 'style:name');
+    if (masterPageName === undefined) {
+      continue;
+    }
+    for (const child of masterPage.children) {
+      if (child.type !== 'element') {
+        continue;
+      }
+      const slot = ODT_HEADER_FOOTER_TAGS.get(child.tag);
+      if (slot === undefined || attrValue(child, 'style:display') === 'false') {
+        continue;
+      }
+      const blocks = readOdfConstructBodyBlocks(child, pkg, { provenanceRegions, definitions, listIdState: state.listIdState, format: 'odt' }, state.listIdState);
+      if (blocks.length > 0) {
+        headerFooterParts.push({ masterPage: masterPageName, kind: slot.kind, variant: slot.variant, blocks });
+      }
+    }
+  }
 
   return {
     metadata,
-    sections: [{ pageSize, margins, blocks }],
+    sections,
     ...(Object.keys(definitions.entries).length > 0 ? { definitions: definitions.entries } : {}),
+    ...(headerFooterParts.length > 0 ? { headerFooterParts } : {}),
+    ...(masterPageElements.length > 0 ? { sectionMasterPages: masterPages } : {}),
   };
 }
 
