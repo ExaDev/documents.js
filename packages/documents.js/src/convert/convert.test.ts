@@ -520,6 +520,15 @@ describe('pdfToOdt', () => {
     expect(runs.some((r) => r.color?.r === 1 && r.color.g === 0 && r.color.b === 0)).toBe(true);
     expect(runs.some((r) => r.sizePt === 24)).toBe(true);
   });
+
+  // The other heading-carrying source besides markdown: reconstructWordprocessing's font-size rank inference (each distinct size at least 2pt above the modal body size is a heading, ranked largest-first) sets headingLevel alongside the Heading{N} styleId, and buildOdtPackage writes both through as one real text:h -- markdownToPdf renders '# Report Title' at the heading 1 size, so the heading comes back ranked level 1.
+  it('round-trips an inferred heading through markdownToPdf then pdfToOdt as a real text:h', () => {
+    const pdfBytes = markdownToPdf(encodeMarkdownText(richMarkdownText()));
+    const odtBytes = pdfToOdt(pdfBytes);
+    const heading = openOdt(odtBytes).paragraphs().find((p) => p.headingLevel !== undefined);
+    expect(heading?.text).toBe('Report Title');
+    expect(heading?.headingLevel).toBe(1);
+  });
 });
 
 describe('pdfToOdp', () => {
