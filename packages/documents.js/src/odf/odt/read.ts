@@ -20,7 +20,8 @@ import { collectContainerVectors, isVectorElementTag } from '../vector/detect';
 //
 // Detection is skipped outright for a document odf.js reads into more than one ContentSection: ODF itself has no notion of a docx-style w:sectPr page-setup boundary, so the upstream reader should never actually produce more than one -- this is a defensive guard against that assumption changing under this module, not an expected real-world case.
 export function readOdtContent(pkg: Package): ContentDocument {
-  const odtDoc = readOdtFlat(pkg);
+  // frames: 'none' -- this adapter's own formula/image/vector detection passes below read the frames, with the richer placement semantics this module built before odf.js could read a frame at all (consumed formula-only paragraphs, deep walks into cells and groups). odf.js's native lift stays the default for every other consumer; opting out here keeps the two readers from reading each frame twice.
+  const odtDoc = readOdtFlat(pkg, { frames: 'none' });
 
   const contentPart = pkg.parts['content.xml'];
   if (contentPart?.kind === 'xml' && odtDoc.sections.length === 1) {

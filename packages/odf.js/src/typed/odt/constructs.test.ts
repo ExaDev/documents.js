@@ -324,6 +324,12 @@ describe('readOdtContent: anchored draw:frames in text flow', () => {
     expect(blocks[1].heightPt).toBeCloseTo(28.35, 0);
   });
 
+  it('contributes nothing for frames at all under frames: \'none\' -- the opt-out a consumer with its own frame-detection passes takes', () => {
+    const { sections } = readOdtContent(imagePackage(), { frames: 'none' });
+    expect(sections[0]?.blocks).toHaveLength(1);
+    expect(sections[0]?.blocks[0]?.kind).toBe('paragraph');
+  });
+
   it('splices a text-box frame\'s own blocks after its paragraph, in document order', () => {
     const pkg = odtPackage([
       el('text:p', {}, [
