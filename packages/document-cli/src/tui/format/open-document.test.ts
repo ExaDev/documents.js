@@ -135,7 +135,8 @@ describe('openDocumentAtPath / saveDocumentTo for .md', () => {
   it('reports every diagnostic openMarkdown emits while parsing, through the same onDiagnostic channel exportToPdf already uses', async () => {
     const path = join(workspace, 'fenced.md');
     // A fenced code block's own info string (the language tag after the opening fence) has no ContentParagraph field to survive on -- markdown-codec reports md/code-block-info-string-dropped for it, a real, reachable read-side diagnostic (see documents.js's own README Gotchas table).
-    await writeFile(path, '```js\nconst x = 1;\n```\n');
+    // A raw HTML block is the guaranteed-fire vehicle (md/raw-html-preserved-as-text); the info-string diagnostic this fixture used to lean on is retired, since a fence's language word now carries semantically on the code paragraph and nothing is dropped.
+    await writeFile(path, '<div>\nfoo\n</div>\n');
 
     const diagnostics: Diagnostic[] = [];
     const doc = await openDocumentAtPath(path, {
@@ -145,6 +146,6 @@ describe('openDocumentAtPath / saveDocumentTo for .md', () => {
     });
     expect(doc.format).toBe('markdown');
     expect(diagnostics.length).toBeGreaterThan(0);
-    expect(diagnostics.some((diagnostic) => diagnostic.message.toLowerCase().includes('info string'))).toBe(true);
+    expect(diagnostics.some((diagnostic) => diagnostic.message.toLowerCase().includes('raw html'))).toBe(true);
   });
 });
