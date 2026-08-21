@@ -292,5 +292,7 @@ export const LayoutDocumentSchema = z.object({
   attachments: z.array(LayoutAttachmentSchema).optional(),
   layers: z.array(LayoutLayerSchema).optional(),
   form: z.array(LayoutFormFieldSchema).optional(),
+  // The package-level half of the quarantined residue channel (document-schema.js's SourceResidue): whole-document PDF facts no content node owns -- the raw XMP packet, output intents, viewer/session behaviour, private application data, the trailer /ID. Keyed by the fact's own name, opaque to everything downstream exactly as the channel's contract states.
+  source: z.record(z.string(), SourceResidueSchema).optional(),
 });
 export type LayoutDocument = z.infer<typeof LayoutDocumentSchema>;
