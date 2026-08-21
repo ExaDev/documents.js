@@ -598,3 +598,70 @@ describe('readXlsxContent: chart graphic frames', () => {
     expect(rewritten.sheets[0]?.embeddedObjects).toBeUndefined();
   });
 });
+
+// The two worksheet rule families no fixture in this repo carries and no harmonised vocabulary yet names (the construct inventory's own corpus gate defers freezing their shape until a real producer file is verified against): synthesized per ECMA-376, and quarantined verbatim onto each rule's anchor cell through the residue channel -- carried, restorable by a same-format writer, never interpreted here.
+function worksheetOnlyPackage(worksheet: ReturnType<typeof el>): Package {
+  const workbook = el('workbook', {}, [el('sheets', {}, [el('sheet', { name: 'Data', sheetId: '1', 'r:id': 'rIdSheet' })])]);
+  const relsRoot = el('Relationships', {}, [el('Relationship', { Id: 'rIdSheet', Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet', Target: 'worksheets/sheet1.xml' })]);
+  return { parts: { 'xl/workbook.xml': { kind: 'xml', nodes: [workbook] }, 'xl/_rels/workbook.xml.rels': { kind: 'xml', nodes: [relsRoot] }, 'xl/worksheets/sheet1.xml': { kind: 'xml', nodes: [worksheet] } } };
+}
+
+describe('readXlsxContent: dataValidation and conditionalFormatting (anchor-cell residue)', () => {
+  function readFirstCellOf(worksheet: ReturnType<typeof el>) {
+    const read = readXlsxContent(worksheetOnlyPackage(worksheet));
+    if (read.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    return read.sheets[0]?.cells ?? [];
+  }
+
+  it('quarantines a dataValidation element verbatim on its range\'s anchor cell, materialising an empty cell to host it when none exists', () => {
+    const cells = readFirstCellOf(
+      el('worksheet', {}, [
+        el('sheetData', {}, [el('row', { r: '2' }, [el('c', { r: 'B2' }, [el('v', {}, [txt('42')])])])]),
+        el('dataValidations', { count: '1' }, [
+          el('dataValidation', { type: 'whole', operator: 'between', allowBlank: '1', sqref: 'B2:D4' }, [el('formula1', {}, [txt('1')]), el('formula2', {}, [txt('10')])]),
+        ]),
+      ]),
+    );
+    const anchor = cells.find((cell) => cell.row === 1 && cell.column === 1);
+    expect(anchor?.source).toEqual({
+      format: 'xlsx',
+      xml: '<dataValidation type="whole" operator="between" allowBlank="1" sqref="B2:D4"><formula1>1</formula1><formula2>10</formula2></dataValidation>',
+    });
+    // The covered-but-not-anchor cells stay untouched: the sqref inside the residue names the whole range, so one copy reconstructs it.
+    expect(cells.find((cell) => cell.row === 1 && cell.column === 2)?.source).toBeUndefined();
+  });
+
+  it('quarantines a conditionalFormatting element (with its cfRule children) on its own anchor cell, and materialises an empty cell for a rule over empty cells', () => {
+    const cells = readFirstCellOf(
+      el('worksheet', {}, [
+        el('sheetData', {}, [el('row', { r: '1' }, [el('c', { r: 'A1' }, [el('v', {}, [txt('5')])])])]),
+        el('conditionalFormatting', { sqref: 'A1 A5:A9' }, [el('cfRule', { type: 'cellIs', dxfId: '0', priority: '1', operator: 'greaterThan' }, [el('formula', {}, [txt('3')])])]),
+      ]),
+    );
+    const anchor = cells.find((cell) => cell.row === 0 && cell.column === 0);
+    expect(anchor?.source).toEqual({
+      format: 'xlsx',
+      xml: '<conditionalFormatting sqref="A1 A5:A9"><cfRule type="cellIs" dxfId="0" priority="1" operator="greaterThan"><formula>3</formula></cfRule></conditionalFormatting>',
+    });
+    // A1:AB5 -- the SECOND range of the sqref anchors nowhere here; the FIRST range's top-left (A1) is the anchor, matching the merge/comment anchoring convention.
+    expect(cells.find((cell) => cell.row === 4 && cell.column === 0)).toBeUndefined();
+  });
+
+  it('keeps the first rule when two anchor at the same cell -- one residue slot per cell -- and leaves a rule whose sqref does not parse unattached', () => {
+    const cells = readFirstCellOf(
+      el('worksheet', {}, [
+        el('sheetData', {}, []),
+        el('dataValidations', { count: '2' }, [
+          el('dataValidation', { type: 'list', sqref: 'C3' }, [el('formula1', {}, [txt('a,b,c')])]),
+          el('dataValidation', { type: 'list', sqref: 'C3:E5' }, [el('formula1', {}, [txt('x,y,z')])]),
+        ]),
+        el('dataValidations', { count: '1' }, [el('dataValidation', { type: 'list', sqref: 'not a ref' })]),
+      ]),
+    );
+    const anchor = cells.find((cell) => cell.row === 2 && cell.column === 2);
+    expect(anchor?.source?.xml).toContain('a,b,c');
+    expect(cells.filter((cell) => cell.source !== undefined)).toHaveLength(1);
+  });
+});
