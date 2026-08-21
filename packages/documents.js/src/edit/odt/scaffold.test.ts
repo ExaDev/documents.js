@@ -1,5 +1,8 @@
+import type { XmlElement } from 'odf.js';
 import { decodePackage, encodePackage, rootElement, validateManifest } from 'odf.js';
+import { attr } from 'ooxml.js';
 import { describe, expect, it } from 'vitest';
+import { HEADING_STYLES } from '../../layout/shared';
 import { createEmptyOdtPackage } from './scaffold';
 
 describe('createEmptyOdtPackage', () => {
@@ -38,5 +41,23 @@ describe('createEmptyOdtPackage', () => {
     const masterStyles = root?.children.find((c) => c.type === 'element' && c.tag === 'office:master-styles');
     const masterPage = masterStyles?.type === 'element' ? masterStyles.children.find((c) => c.type === 'element' && c.tag === 'style:master-page') : undefined;
     expect(masterPage).toBeDefined();
+  });
+
+  // Every level OdtParagraph's headingLevel setter can point at needs a real definition, or the reference resolves to nothing and the heading renders unstyled in every consumer that resolves names (LibreOffice; odf.js's own resolveStyle cascade). The visual convention is the PDF layout engine's own HEADING_STYLES table -- the single source of truth -- so an odt this scaffold builds renders its headings the same way odtToPdf renders the same document.
+  it('defines a Heading_20_N common style for every level of the heading convention in office:styles', () => {
+    const pkg = createEmptyOdtPackage();
+    const root = rootElement(pkg.parts['styles.xml']?.kind === 'xml' ? pkg.parts['styles.xml'].nodes : []);
+    const officeStyles = root?.children.find((c): c is XmlElement => c.type === 'element' && c.tag === 'office:styles');
+    const styleElements = (officeStyles?.children ?? []).filter((c): c is XmlElement => c.type === 'element' && c.tag === 'style:style');
+    expect(styleElements).toHaveLength(Object.keys(HEADING_STYLES).length);
+    for (const [level, style] of Object.entries(HEADING_STYLES)) {
+      const styleElement = styleElements.find((c) => attr(c, 'style:name') === `Heading_20_${level}`);
+      expect(styleElement, `Heading_20_${level}`).toBeDefined();
+      expect(attr(styleElement!, 'style:display-name')).toBe(`Heading ${level}`);
+      expect(attr(styleElement!, 'style:family')).toBe('paragraph');
+      const textProperties = styleElement!.children.find((c): c is XmlElement => c.type === 'element' && c.tag === 'style:text-properties');
+      expect(attr(textProperties!, 'fo:font-size')).toBe(`${String(style.sizePt)}pt`);
+      expect(attr(textProperties!, 'fo:font-weight')).toBe(style.bold ? 'bold' : 'normal');
+    }
   });
 });
