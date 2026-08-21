@@ -1,3 +1,31 @@
+# [5.1.0](https://github.com/ExaDev/documents.js/compare/odf.js@5.0.9...odf.js@5.1.0) (2026-08-21)
+
+
+### Bug Fixes
+
+* **odf:** assemble annotation bodies through the ordered body walk, not paragraphs-then-lists ([50c4e35](https://github.com/ExaDev/documents.js/commit/50c4e35fabf587621cf0148e6f8f8dc16cf13fdb))
+* **odf:** cover a trailing marker half's extent over the frames lifted before it ([1448a23](https://github.com/ExaDev/documents.js/commit/1448a2325bfb268bf924964060f596a4bff89aaa))
+* **odf:** index nested wrapper extents against the flat block list, not the recursive local array ([e85ba49](https://github.com/ExaDev/documents.js/commit/e85ba49a1d699d31f9afc2daaaac9183ec10efe4))
+* **odf:** mint note and annotation body list numIds from the document-wide counter ([2ca723f](https://github.com/ExaDev/documents.js/commit/2ca723f356c7304ceb402e3531a4ee5b0f61a985))
+
+
+### Features
+
+* **odf:** gate the odt frame lift behind a frames option, with documents.js opting out ([5194956](https://github.com/ExaDev/documents.js/commit/519495604343e1b529958155f23fdc92d714f764))
+* **odf:** quarantine unmodellable style properties and read data styles and font declarations ([469bca8](https://github.com/ExaDev/documents.js/commit/469bca89953ef63062637491014f3acf0cb8c023))
+* **odf:** read anchored frames in odt text flow and resolve embedded charts ([14dc7f4](https://github.com/ExaDev/documents.js/commit/14dc7f446e023e3665b86c50609999d325c34ae2))
+* **odf:** read footnotes, endnotes, and annotations as anchors with definitions ([ecf05cc](https://github.com/ExaDev/documents.js/commit/ecf05ccb42e8125b033d70b2d4654549204d9698))
+* **odf:** read inline fields and bookmarks as run-level construct extents ([91ae90b](https://github.com/ExaDev/documents.js/commit/91ae90b2bc53a9d4fe1bf11460f8272956f267a9))
+* **odf:** read ods named expressions into a definitions table ([58ddde0](https://github.com/ExaDev/documents.js/commit/58ddde02288f064c78f3e56bd3ebddf69cc8cfa9))
+* **odf:** read office:forms in ordinary text documents as content controls ([da2882c](https://github.com/ExaDev/documents.js/commit/da2882c11549562fb1f7796237ef49eb798731b5))
+* **odf:** read text:section as a division and index wrappers as content controls ([f3bb742](https://github.com/ExaDev/documents.js/commit/f3bb74234b47f6e16a841397df43d29a0b3b4bad)), closes [#743](https://github.com/ExaDev/documents.js/issues/743)
+* **odf:** read tracked changes as provenance and pair block-scope markers ([4e1b91f](https://github.com/ExaDev/documents.js/commit/4e1b91f4739151b5b3a266453e78db804f647e7f))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^4.7.0
+
 ## [5.0.9](https://github.com/ExaDev/documents.js/compare/odf.js@5.0.8...odf.js@5.0.9) (2026-08-21)
 
 
