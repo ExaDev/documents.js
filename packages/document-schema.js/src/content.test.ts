@@ -564,6 +564,18 @@ describe('ContentSheetColumn/ContentSheetRow sizes', () => {
   });
 });
 
+describe("an embedded 'chart' object", () => {
+  it('validates with a spreadsheet document carrying the chart\'s cached series/category model', () => {
+    const chart: ContentEmbeddedObject = {
+      objectKind: 'chart',
+      document: { kind: 'spreadsheet', metadata: {}, sheets: [{ name: 'Chart 1', cells: [], columns: [], rows: [], images: [], printSettings: { pageSize: { widthPt: 612, heightPt: 792 }, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 }, gridlines: true, headers: false, pageOrder: 'downThenOver' } }] },
+      frame: { xPt: 0, yPt: 0, widthPt: 200, heightPt: 100 },
+    };
+    expect(ContentEmbeddedObjectSchema.safeParse(chart).success).toBe(true);
+    expect(isContentBlock({ kind: 'embeddedObject', ...chart })).toBe(true);
+  });
+});
+
 describe('sourcePath', () => {
   it('survives a JSON round trip when set on every block kind that carries it', () => {
     const runWithSourcePath: ContentBlock = {
