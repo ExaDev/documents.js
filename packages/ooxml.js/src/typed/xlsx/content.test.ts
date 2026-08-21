@@ -5,7 +5,9 @@ import { describe, expect, it } from 'vitest';
 import { ContentDocumentSchema, PAGE_SIZE_A4 } from 'document-schema.js';
 import type { Package } from '../../model/package';
 import { el, txt } from '../../xml/fragment';
+import { decodePackage, encodePackage } from '../../codec';
 import { parsePackage } from '../../package-io/read';
+import { buildXlsxPackageFromContent } from './build';
 import { columnWidthCharsToPt } from './units';
 import { readXlsxContent } from './content';
 
@@ -509,5 +511,90 @@ describe('readXlsxContent: cell decoration (background/borders/alignment/vertica
       el('cellXfs', {}, [el('xf', { numFmtId: '0' }), el('xf', { numFmtId: '0', fillId: '1' })]),
     ]);
     expect(readDecoratedCell(themeSheet, el('c', { r: 'A1', s: '1' }, [el('v', {}, [txt('1')])]))?.background).toBeUndefined();
+  });
+});
+
+// A chart graphic frame reached the way a real workbook reaches one: the worksheet's own <drawing r:id> names a drawing part through the worksheet's relationships, the drawing's xdr:twoCellAnchor carries an xdr:graphicFrame whose a:graphicData names the chart part through the DRAWING's relationships. The anchor geometry resolves through the sheet's own declared column widths and row heights, exactly as a spreadsheet renderer would place it.
+function chartDrawingPackage(): Package {
+  const revenue = el('c:ser', {}, [
+    el('c:tx', {}, [el('c:strRef', {}, [el('c:f', {}, [txt('Sheet1!$B$1')]), el('c:strCache', {}, [el('c:ptCount', { val: '1' }), el('c:pt', { idx: '0' }, [el('c:v', {}, [txt('Revenue')])])])])]),
+    el('c:cat', {}, [el('c:strRef', {}, [el('c:strCache', {}, [el('c:ptCount', { val: '2' }), el('c:pt', { idx: '0' }, [el('c:v', {}, [txt('Q1')])]), el('c:pt', { idx: '1' }, [el('c:v', {}, [txt('Q2')])])])])]),
+    el('c:val', {}, [el('c:numRef', {}, [el('c:numCache', {}, [el('c:ptCount', { val: '2' }), el('c:pt', { idx: '0' }, [el('c:v', {}, [txt('8.5')])]), el('c:pt', { idx: '1' }, [el('c:v', {}, [txt('12')])])])])]),
+  ]);
+  const chartSpace = el('c:chartSpace', {}, [el('c:chart', {}, [el('c:plotArea', {}, [el('c:barChart', {}, [revenue])])])]);
+  // CT_TwoCellAnchor's own shape: the from/to markers are the ANCHOR's children, with the anchored object (the graphic frame) between them and xdr:clientData last.
+  const graphicFrame = el('xdr:graphicFrame', {}, [
+    el('xdr:nvGraphicFramePr', {}, [el('xdr:cNvPr', { id: '2', name: 'Chart 1' })]),
+    el('a:graphic', {}, [el('a:graphicData', { uri: 'http://schemas.openxmlformats.org/drawingml/2006/chart' }, [el('c:chart', { 'r:id': 'rIdChart' })])]),
+  ]);
+  const drawing = el('xdr:wsDr', {}, [
+    el('xdr:twoCellAnchor', {}, [
+      el('xdr:from', {}, [el('xdr:col', {}, [txt('0')]), el('xdr:colOff', {}, [txt('19050')]), el('xdr:row', {}, [txt('1')]), el('xdr:rowOff', {}, [txt('0')])]),
+      el('xdr:to', {}, [el('xdr:col', {}, [txt('2')]), el('xdr:colOff', {}, [txt('0')]), el('xdr:row', {}, [txt('4')]), el('xdr:rowOff', {}, [txt('0')])]),
+      graphicFrame,
+      el('xdr:clientData'),
+    ]),
+  ]);
+  const worksheet = el('worksheet', {}, [
+    el('cols', {}, [el('col', { min: '1', max: '1', width: '10' }), el('col', { min: '2', max: '2', width: '20' })]),
+    el('sheetData', {}, [el('row', { r: '1' }, [el('c', { r: 'A1' }, [el('v', {}, [txt('1')])])])]),
+    el('drawing', { 'r:id': 'rIdDrawing' }),
+  ]);
+  const relationship = (id: string, type: string, target: string) => el('Relationship', { Id: id, Type: type, Target: target });
+  return {
+    parts: {
+      'xl/workbook.xml': { kind: 'xml', nodes: [el('workbook', {}, [el('sheets', {}, [el('sheet', { name: 'Data', sheetId: '1', 'r:id': 'rIdSheet' })])])] },
+      'xl/_rels/workbook.xml.rels': { kind: 'xml', nodes: [el('Relationships', {}, [relationship('rIdSheet', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet', 'worksheets/sheet1.xml')])] },
+      'xl/worksheets/sheet1.xml': { kind: 'xml', nodes: [worksheet] },
+      'xl/worksheets/_rels/sheet1.xml.rels': { kind: 'xml', nodes: [el('Relationships', {}, [relationship('rIdDrawing', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing', '../drawings/drawing1.xml')])] },
+      'xl/drawings/drawing1.xml': { kind: 'xml', nodes: [drawing] },
+      'xl/drawings/_rels/drawing1.xml.rels': { kind: 'xml', nodes: [el('Relationships', {}, [relationship('rIdChart', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart', '../charts/chart1.xml')])] },
+      'xl/charts/chart1.xml': { kind: 'xml', nodes: [chartSpace] },
+    },
+  };
+}
+
+describe('readXlsxContent: chart graphic frames', () => {
+  it('reads a chart graphic frame as an embedded chart object carrying the chart part\'s cached series/category model as a one-sheet spreadsheet document', () => {
+    const document = readXlsxContent(chartDrawingPackage());
+    if (document.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    expect(document.sheets[0]?.embeddedObjects).toHaveLength(1);
+    const chart = document.sheets[0]?.embeddedObjects?.[0];
+    expect(chart?.objectKind).toBe('chart');
+    expect(chart?.anchorColumn).toBe(0);
+    expect(chart?.anchorRow).toBe(1);
+    // The frame: anchored at column 0 offset 19050 EMU, row 1, spanning to the start of column 2 and row 4 -- absolute position from the sheet's left edge through the declared column widths and default row height, size the difference of the two anchors.
+    const col0 = columnWidthCharsToPt(10);
+    const col1 = columnWidthCharsToPt(20);
+    const offsetX = (19050 / 914400) * 72;
+    expect(chart?.offsetXPt).toBeCloseTo(offsetX, 5);
+    expect(chart?.frame.xPt).toBeCloseTo(offsetX, 5);
+    expect(chart?.frame.yPt).toBeCloseTo(15, 5);
+    expect(chart?.frame.widthPt).toBeCloseTo(col0 + col1 - offsetX, 5);
+    expect(chart?.frame.heightPt).toBeCloseTo(45, 5);
+    // The payload is the cached model, verbatim c:v text, laid out the way the pptx chart reader spells its table: a header row of series names over a category column, one row per category.
+    expect(chart?.document.kind).toBe('spreadsheet');
+    const sheet = chart?.document.kind === 'spreadsheet' ? chart.document.sheets[0] : undefined;
+    expect(sheet?.cells).toEqual([
+      { row: 0, column: 1, value: { kind: 'string', value: 'Revenue' }, displayText: 'Revenue' },
+      { row: 1, column: 0, value: { kind: 'string', value: 'Q1' }, displayText: 'Q1' },
+      { row: 1, column: 1, value: { kind: 'string', value: '8.5' }, displayText: '8.5' },
+      { row: 2, column: 0, value: { kind: 'string', value: 'Q2' }, displayText: 'Q2' },
+      { row: 2, column: 1, value: { kind: 'string', value: '12' }, displayText: '12' },
+    ]);
+  });
+
+  it('round-trips the whole document through ContentDocumentSchema, so the embedded chart object is schema-valid as read', () => {
+    expect(ContentDocumentSchema.safeParse(readXlsxContent(chartDrawingPackage())).success).toBe(true);
+  });
+
+  it('does not survive the write pair: buildXlsxPackageFromContent emits no drawing part, so the read row is one-way (the established cell-comment asymmetry)', () => {
+    const rewritten = readXlsxContent(decodePackage(encodePackage(buildXlsxPackageFromContent(readXlsxContent(chartDrawingPackage())))));
+    if (rewritten.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    expect(rewritten.sheets[0]?.embeddedObjects).toBeUndefined();
   });
 });
