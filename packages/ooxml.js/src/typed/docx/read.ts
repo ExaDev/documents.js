@@ -75,7 +75,7 @@ export const DocxDocumentSchema = z.object({
   endnotes: z.array(FootnoteSchema),
   headers: z.array(z.string()),
   footers: z.array(z.string()),
-  // The structural view of the header/footer layer: each referenced part as block flow, and per-section references (positional, one entry per `sections` entry) naming those parts by path. The flat `headers`/`footers` text arrays above stay as the derived summary they always were -- collapsing them into this model wants a breaking change to a published shape, tracked rather than taken here.
+  // The structural view of the header/footer layer: each referenced part as block flow, and per-section references (positional, one entry per `sections` entry) naming those parts by path. The flat `headers`/`footers` text arrays above are the derived summary this model supersedes -- every in-repo consumer (documents.js's DocxExtras, document-cli's extras formatter) reads the structural model, and the flat arrays also catch parts no section references, which this model deliberately does not. Removing them is the one remaining step and wants a major (a published required field), so they stay populated until that break is taken; the flat-array removal is tracked in ExaDev/documents.js#756.
   headerFooterParts: z.array(HeaderFooterPartSchema),
   sectionHeaderFooters: z.array(SectionHeaderFooterReferencesSchema),
   // word/numbering.xml's own abstractNum/num definitions, keyed by w:numId -- see numbering.ts's own doc comment for why this sits as a separate top-level field rather than folded into ContentListMembership (the numId/level membership every list paragraph already carries via ContentParagraph.list, read unchanged by readListMembership below).
