@@ -589,10 +589,34 @@ describe('readOdsContent: residue rows', () => {
 
   it('quarantines a vendor-extension element at the spreadsheet level, keyed by its own tag', () => {
     const pkg = spreadsheetPackage([
-      el('calcext:conditional-formats', {}, [el('calcext:conditional-format', { 'calcext:target-range-address': 'Sheet1.A1:Sheet1.B2' })]),
       el('table:table', { 'table:name': 'Sheet1' }, [el('table:table-row')]),
+      el('loext:some-extension', {}, [el('loext:child')]),
     ]);
     const { source } = readOdsContent(pkg);
+    expect(source?.['loext:some-extension']?.format).toBe('ods');
+    expect(source?.['loext:some-extension']?.xml).toContain('<loext:child');
+  });
+
+  // Real LibreOffice Calc output writes calcext:conditional-formats as the last child of each table:table, never as a child of office:spreadsheet -- the placement the conditional-format.ods fixture below pins.
+  it('quarantines a vendor-extension element inside a table:table, keyed by its own tag, concatenating same-tag occurrences across tables', () => {
+    const pkg = spreadsheetPackage([
+      el('table:table', { 'table:name': 'Sheet1' }, [
+        el('table:table-row'),
+        el('calcext:conditional-formats', {}, [el('calcext:conditional-format', { 'calcext:target-range-address': 'Sheet1.A1:Sheet1.B2' })]),
+      ]),
+      el('table:table', { 'table:name': 'Sheet2' }, [
+        el('table:table-row'),
+        el('calcext:conditional-formats', {}, [el('calcext:conditional-format', { 'calcext:target-range-address': 'Sheet2.A1:Sheet2.A1' })]),
+      ]),
+    ]);
+    const { source } = readOdsContent(pkg);
+    expect(source?.['calcext:conditional-formats']?.format).toBe('ods');
+    expect(source?.['calcext:conditional-formats']?.xml).toContain('Sheet1.A1:Sheet1.B2');
+    expect(source?.['calcext:conditional-formats']?.xml).toContain('Sheet2.A1:Sheet2.A1');
+  });
+
+  it('quarantines the REAL conditional-format.ods fixture\'s calcext:conditional-formats written inside its table:table', () => {
+    const { source } = readOdsContent(loadFixture('conditional-format.ods'));
     expect(source?.['calcext:conditional-formats']?.format).toBe('ods');
     expect(source?.['calcext:conditional-formats']?.xml).toContain('<calcext:conditional-format');
   });
