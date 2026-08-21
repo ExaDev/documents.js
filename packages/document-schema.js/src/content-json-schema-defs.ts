@@ -117,6 +117,8 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     properties: {
       numId: { type: 'string' }, // optional in the Zod source -- depth-only list membership (OOXML drawing paragraphs) carries no numbering identity
       level: { type: 'integer', minimum: 0, maximum: MAX_SAFE_INTEGER },
+      checked: { type: 'boolean' }, // a GFM task-list item's checkbox state -- see src/content.ts's own field comment
+      itemId: { type: 'string' }, // the identity of ONE list item, distinguishing "one item, several blocks" from sibling items sharing a numId/level -- see src/content.ts's own field comment
     },
     required: ['level'],
     additionalProperties: false,
@@ -158,6 +160,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       runs: { type: 'array', items: { $ref: '#/$defs/ContentRun' } },
       constructs: { type: 'array', items: { $ref: '#/$defs/RunConstructExtent' } }, // the run-scoped construct extents this paragraph carries -- see src/content.ts's own field comment for the block-marker/run-extent scope split
       styleId: { type: 'string' }, // w:pStyle/@w:val, e.g. 'Heading1'
+      codeLanguage: { type: 'string' }, // the source-format language identifier of a code-styled block -- see src/content.ts's own field comment
       headingLevel: { type: 'integer', exclusiveMinimum: 0, maximum: MAX_SAFE_INTEGER }, // canonical, format-agnostic heading depth -- see src/content.ts's own field comment
       alignment: { $ref: '#/$defs/Alignment' },
       list: { $ref: '#/$defs/ContentListMembership' },
@@ -399,6 +402,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       runs: { type: 'array', items: { $ref: '#/$defs/ContentRun' } },
       constructs: { type: 'array', items: { $ref: '#/$defs/RunConstructExtent' } },
       styleId: { type: 'string' },
+      codeLanguage: { type: 'string' },
       headingLevel: { type: 'integer', exclusiveMinimum: 0, maximum: MAX_SAFE_INTEGER },
       alignment: { $ref: '#/$defs/Alignment' },
       list: { $ref: '#/$defs/ContentListMembership' },
@@ -422,6 +426,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       runs: { type: 'array', items: { $ref: '#/$defs/ContentRun' } },
       constructs: { type: 'array', items: { $ref: '#/$defs/RunConstructExtent' } },
       styleId: { type: 'string' },
+      codeLanguage: { type: 'string' },
       headingLevel: { type: 'integer', exclusiveMinimum: 0, maximum: MAX_SAFE_INTEGER },
       alignment: { $ref: '#/$defs/Alignment' },
       list: { $ref: '#/$defs/ContentListMembership' },

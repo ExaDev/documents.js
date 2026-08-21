@@ -825,6 +825,66 @@ describe('ContentListMembership numId', () => {
   });
 });
 
+describe('ContentListMembership checked and itemId', () => {
+  it("parses a checked membership, the GFM task-list-item state a markdown fence's checkbox carries", () => {
+    const parsed = ContentParagraphSchema.parse({
+      kind: 'paragraph',
+      runs: [{ text: 'done' }],
+      list: { numId: 'md1:bullet+task', level: 0, checked: true },
+    });
+    expect(parsed.list).toEqual({ numId: 'md1:bullet+task', level: 0, checked: true });
+  });
+
+  it('parses an itemId membership, the identity distinguishing one multi-block list item from several single-block siblings sharing a numId and level', () => {
+    const parsed = ContentParagraphSchema.parse({
+      kind: 'paragraph',
+      runs: [{ text: 'second block of one item' }],
+      list: { numId: 'md1:bullet', level: 0, itemId: 'md-i1' },
+    });
+    expect(parsed.list).toEqual({ numId: 'md1:bullet', level: 0, itemId: 'md-i1' });
+  });
+
+  it('keeps both fields optional, so a membership carrying neither parses exactly as before', () => {
+    const parsed = ContentParagraphSchema.parse({
+      kind: 'paragraph',
+      runs: [{ text: 'Item one' }],
+      list: { numId: '1', level: 0 },
+    });
+    expect(parsed.list).toEqual({ numId: '1', level: 0 });
+  });
+
+  it('refuses a checked that is not a boolean, so the checkbox state cannot silently degrade to a truthy string', () => {
+    expect(ContentParagraphSchema.safeParse({ kind: 'paragraph', runs: [], list: { level: 0, checked: 'yes' } }).success).toBe(false);
+  });
+
+  it('refuses an itemId that is not a string, keeping the item identity an opaque producer-minted key', () => {
+    expect(ContentParagraphSchema.safeParse({ kind: 'paragraph', runs: [], list: { level: 0, itemId: 1 } }).success).toBe(false);
+  });
+});
+
+describe('ContentParagraph codeLanguage', () => {
+  it("parses a code-styled paragraph carrying a source-format language identifier, the markdown fence's info word", () => {
+    const parsed = ContentParagraphSchema.parse({
+      kind: 'paragraph',
+      runs: [{ text: 'console.log(1);' }],
+      styleId: 'CodeBlock',
+      codeLanguage: 'js',
+    });
+    expect(parsed.codeLanguage).toBe('js');
+  });
+
+  it('leaves the field optional, so an ordinary paragraph and a language-less code block parse exactly as before', () => {
+    const plain = ContentParagraphSchema.parse({ kind: 'paragraph', runs: [{ text: 'text' }] });
+    expect('codeLanguage' in plain).toBe(false);
+    const bare = ContentParagraphSchema.parse({ kind: 'paragraph', runs: [], styleId: 'CodeBlock' });
+    expect('codeLanguage' in bare).toBe(false);
+  });
+
+  it('refuses a non-string, so the language word cannot arrive as a structured value this field never promised to hold', () => {
+    expect(ContentParagraphSchema.safeParse({ kind: 'paragraph', runs: [], codeLanguage: { name: 'js' } }).success).toBe(false);
+  });
+});
+
 describe('clampHeadingLevel', () => {
   it('leaves a level already within 1-6 untouched', () => {
     expect(clampHeadingLevel(1)).toBe(1);

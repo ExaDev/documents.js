@@ -38,6 +38,8 @@ export type ContentRun = z.infer<typeof ContentRunSchema>;
 export const ContentListMembershipSchema = z.object({
   numId: z.string().optional(), // identifies a shared numbering definition when the source format has one -- docx's w:numId, ODF's minted structural identity -- and is absent when the format carries only a depth (OOXML drawing paragraphs' a:pPr/@lvl), where fabricating one would invent numbering identity the source never had
   level: z.number().int().nonnegative(), // w:ilvl
+  checked: z.boolean().optional(), // a GFM task-list item's checkbox state -- absent when the source format's list items carry no checkbox at all, which is every format but markdown's task-list extension; deliberately on the membership (not the paragraph) because it is a fact about the ITEM, carried on each block that belongs to the item
+  itemId: z.string().optional(), // the identity of ONE list item, minted by the reader that produced the membership -- absent when the source format states each block as its own item or carries no item identity at all; it distinguishes "one item, several blocks" (same itemId) from "several items sharing this numId/level" (different itemIds), which numId+level alone cannot
 });
 export type ContentListMembership = z.infer<typeof ContentListMembershipSchema>;
 
@@ -54,6 +56,7 @@ export const ContentParagraphSchema = z.object({
   runs: z.array(ContentRunSchema),
   constructs: z.array(RunConstructExtentSchema).optional(), // the run-scoped constructs this paragraph carries (RunConstructExtent above) -- absent when it carries none, which is the overwhelming common case. Scope split, stated once: a construct bracketing whole BLOCKS is the constructStart/constructEnd marker pair below, never this field; a construct covering a sub-sequence of this paragraph's runs is this field, never a marker pair. One occurrence, one scope, one encoding.
   styleId: z.string().optional(), // w:pStyle/@w:val, e.g. 'Heading1' -- round-trip-only: a producer's own style name, meaningful only to a consumer that already knows that producer's naming convention
+  codeLanguage: z.string().optional(), // the source-format language identifier of a code-styled block -- a markdown fence's info word, the language a syntax-highlighting consumer keys on. Absent on ordinary paragraphs and on a code block whose source named no language. Deliberately a free string, not an enum: no format's language vocabulary is closed, and the field names what the source said, never what a renderer supports
   headingLevel: z.number().int().positive().optional(), // canonical, format-agnostic heading depth (1 = the outermost heading), independent of styleId's own producer-specific spelling -- e.g. docx's w:outlineLvl (0-based, so read as level + 1), odf's text:outline-level (already 1-based), markdown's '#' count. Deliberately unbounded here (ODF alone permits ten levels): a format whose own vocabulary tops out lower than what's present (six for HTML/Markdown) clamps on its own way out, via clampHeadingLevel below, rather than this canonical field silently losing information a richer source format actually carried.
   alignment: AlignmentSchema.optional(),
   list: ContentListMembershipSchema.optional(),
