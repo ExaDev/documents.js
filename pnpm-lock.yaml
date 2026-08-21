@@ -362,7 +362,7 @@ importers:
         specifier: ^17.3.0
         version: 17.3.0
       odf.js:
-        specifier: ^5.1.1
+        specifier: ^5.1.2
         version: link:../odf.js
       pdf-codec:
         specifier: ^3.2.0
