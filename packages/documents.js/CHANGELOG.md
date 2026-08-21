@@ -1,3 +1,25 @@
+# [4.2.0](https://github.com/ExaDev/documents.js/compare/documents.js@4.1.1...documents.js@4.2.0) (2026-08-21)
+
+
+### Bug Fixes
+
+* **edit:** write headingLevel into docx as w:outlineLvl ([143fb6b](https://github.com/ExaDev/documents.js/commit/143fb6b928e684ad78bd36cbc681f607f6bcc747))
+* **layout:** inferred headings carry headingLevel alongside the Heading styleId ([a4dc4f3](https://github.com/ExaDev/documents.js/commit/a4dc4f33eabdf5b2716f3bca868db09203b56e9f))
+* **layout:** omit absent bold/italic run keys instead of writing explicit undefined ([8f85275](https://github.com/ExaDev/documents.js/commit/8f852750ed8b4d0525bb96411f7b6ac650471b55))
+
+
+### Features
+
+* **layout:** infer heading levels from font size in wordprocessing reconstruction ([3644f61](https://github.com/ExaDev/documents.js/commit/3644f617e45e22d9c52fb4a90ab416fc4bf776b7))
+* **layout:** split reconstructed paragraphs at font-size discontinuities ([6842124](https://github.com/ExaDev/documents.js/commit/68421243f36302f333c4510d83d9198c6da6e2bf))
+* **markdown:** emit an HTML comment marker for pageBreak blocks in markdown output ([187bf3d](https://github.com/ExaDev/documents.js/commit/187bf3d2ce2cfe3cffe959ddfff956e04e845a4e))
+* **markdown:** read a page-break marker back as a pageBreak block ([d1fdbd5](https://github.com/ExaDev/documents.js/commit/d1fdbd50b857d64f155459391442940bfeb85714))
+
+
+### Dependencies
+
+- Updated pdf-codec to ^3.1.2
+
 ## [4.1.1](https://github.com/ExaDev/documents.js/compare/documents.js@4.1.0...documents.js@4.1.1) (2026-08-21)
 
 
