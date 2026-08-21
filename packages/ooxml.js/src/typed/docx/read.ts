@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { Package } from '../../model/package';
 import type { XmlElement, XmlNode } from '../../model/node';
-import type { Color, ContentBlock, ContentBorder, ContentCellBorders, ContentEmbeddedObjectBlock, ContentImageBlock, ContentListMembership, ContentParagraph, ContentRun, ContentSection, ContentStrokeStyle, ContentTable, ContentTableCell, Margins, PageSize, ProvenanceChange } from 'document-schema.js';
+import type { AnchorDescriptor, Color, ConstructDescriptor, ContentBlock, ContentBorder, ContentCellBorders, ContentControlDescriptor, ContentEmbeddedObjectBlock, ContentImageBlock, ContentListMembership, ContentParagraph, ContentRun, ContentSection, ContentStrokeStyle, ContentTable, ContentTableCell, Margins, PageSize, ProvenanceChange, RunConstructExtent } from 'document-schema.js';
 import { COLOR_BLACK, ContentSectionSchema, PAGE_SIZE_LETTER, clampHeadingLevel, rgbHexToColor } from 'document-schema.js';
 import { DocumentMetadataSchema, readCoreProperties } from '../shared/metadata';
 import { readEmbeddedPayloadPart } from '../embedded';
@@ -16,7 +16,7 @@ import { attr, childrenWithTag, decodeEntities, elementsWithTag, resolveRelation
 import type { DocxStyleContext } from './styles';
 import { resolveParagraphProperties, resolveRunProperties } from './styles';
 import { NumberingDefinitionSchema, readNumberingDefinitions } from './numbering';
-import type { ConstructExtent, ParagraphBookmarkHalf, ParagraphContentIndex } from './constructs';
+import type { ConstructExtent, ParagraphContentIndex, ParagraphRangeMarkerHalf, RangeMarkerFamily } from './constructs';
 import {
   PROVENANCE_CHANGE_BY_TAG,
   bookmarkAnchorDescriptor,
@@ -26,24 +26,27 @@ import {
   insertConstructMarkers,
   isDeletedChange,
   readContentControlDescriptor,
+  readFormControlDescriptor,
   readProvenanceDescriptor,
-  runBookmarkExtents,
   runInstructionText,
+  runRangeMarkerExtents,
 } from './constructs';
 
 // Package -> DocxDocument. Walks word/document.xml directly, resolving the full style cascade (docDefaults -> named-style basedOn chains -> paragraph-mark run properties -> character styles -> direct formatting) and DrawingML theme references for each run, so document order, styling, and geometry are all preserved -- unlike a naive reader that flattens paragraphs/tables into separate arrays with no shared ordering. Headers/footers keep their prior flat-text projection; live PAGE/NUMPAGES field substitution is not implemented -- fields resolve to their cached result text (Word already computed it), which is correct for every field except one whose value would change under a different pagination this reader doesn't perform. Ported from documents.js's src/ooxml/docx/read.ts (the section/style-cascade walk) merged with this package's own prior comment/footnote/header/footer reading.
 //
 // This is the flat, content-level half of the docx read pair: readDocx (typed/document-package.ts) wraps it into a tree-form DocumentPackage, which is the primary name and the shape a caller holding a whole document wants. Reach for this one when you need what the tree has no spelling for -- the comments, footnotes, header/footer text, and numbering definitions DocxDocument carries outside `sections` -- or when driving a pipeline that already works in flat ContentSection[].
 //
-// Block-scoped fidelity constructs (structured document tags, complex and simple fields, bookmarks, tracked insertions/deletions/moves) are read into document-schema.js's constructStart/constructEnd marker pairs bracketing the blocks they span, and a bookmark covering a sub-sequence of one paragraph's runs is read onto that paragraph's own run-level constructs field (ContentParagraph.constructs) -- see typed/docx/constructs.ts for the descriptor shapes and the scope rules that decide which real-world occurrences are representable and which are not.
+// Block-scoped fidelity constructs (structured document tags, complex and simple fields, bookmarks, tracked insertions/deletions/moves) are read into document-schema.js's constructStart/constructEnd marker pairs bracketing the blocks they span, and a construct covering a sub-sequence of one paragraph's runs is read onto that paragraph's own run-level constructs field (ContentParagraph.constructs): a mid-paragraph bookmark or comment extent (id-paired halves), a mid-paragraph complex or simple field (whose cached result still reaches the output as ordinary run text, exactly as before -- only the field-ness used to be lost), an internal @w:anchor hyperlink, and a footnote/endnote/comment reference mark. A legacy w:ffData form field reads as a contentControl at whichever scope its field sits at, with the whole w:ffData element quarantined verbatim in the descriptor's residue. See typed/docx/constructs.ts for the descriptor shapes and the scope rules that decide which real-world occurrences are representable and which are not.
 
 export const CommentSchema = z.object({
+  id: z.string().optional(), // w:comment/@w:id -- the key a comment extent's own name joins this body back through (see the run-level anchor extents)
   author: z.string().optional(),
   text: z.string(),
 });
 export type Comment = z.infer<typeof CommentSchema>;
 
 export const FootnoteSchema = z.object({
+  id: z.string().optional(), // w:footnote/@w:id (or w:endnote/@w:id) -- the key a note reference's own name joins this body back through
   type: z.string().optional(),
   text: z.string(),
 });
@@ -54,6 +57,7 @@ export const DocxDocumentSchema = z.object({
   sections: z.array(ContentSectionSchema),
   comments: z.array(CommentSchema),
   footnotes: z.array(FootnoteSchema),
+  endnotes: z.array(FootnoteSchema),
   headers: z.array(z.string()),
   footers: z.array(z.string()),
   // word/numbering.xml's own abstractNum/num definitions, keyed by w:numId -- see numbering.ts's own doc comment for why this sits as a separate top-level field rather than folded into ContentListMembership (the numId/level membership every list paragraph already carries via ContentParagraph.list, read unchanged by readListMembership below).
@@ -263,10 +267,84 @@ function readRun(run: XmlElement, paragraph: XmlElement, context: DocxStyleConte
   };
 }
 
-// Walks a paragraph's own children producing its runs, tracking two things across siblings: complex-field state (w:fldChar begin/separate/end -- only the cached result between separate and end is visible content) and the enclosing hyperlink target (w:hyperlink, resolved via the document's relationships), threaded through w:ins/w:moveTo/w:sdt/w:fldSimple recursion. w:del and w:moveFrom are recursed into only when the caller is carrying deletions -- i.e. when the whole paragraph is itself a tracked deletion or move-from, so that every run it yields is labelled as deleted by the enclosing provenance construct. A mid-paragraph deletion stays excluded, because lifting those runs into the paragraph's own text would render deleted words as live text, which is strictly worse than the existing omission. Bookmark halves are recorded into `halves` at the run position the walk had reached -- the run-level counterpart of the block-index events recordParagraphBookmarks collects, paired into run-level construct extents by runBookmarkExtents (typed/docx/constructs.ts).
-function readParagraphRuns(paragraph: XmlElement, ctx: DocxReadContext, carryDeletions: boolean, halves: ParagraphBookmarkHalf[]): ContentRun[] {
+// One complex field opened by a w:fldChar begin inside THIS paragraph's run walk and closed by an end the same walk reaches -- the mid-paragraph field shape. `beginElement`/`endElement` are kept so the extent assembly can ask the paragraph's content index whether the pair sits at block scope (the whole-paragraph shape the marker path already encodes, which must never gain a second encoding here). `formControl` holds the legacy w:ffData verdict when the begin run carries one -- a form field is a contentControl, not a field.
+interface RunFieldEvent {
+  readonly descriptor: ConstructDescriptor;
+  readonly startRun: number;
+  readonly endRun: number;
+  readonly beginElement: XmlElement;
+  readonly endElement: XmlElement;
+}
+
+// A w:fldSimple encountered mid-walk: the same shape as RunFieldEvent with one element playing both boundary roles.
+interface RunSimpleFieldEvent {
+  readonly descriptor: ConstructDescriptor;
+  readonly startRun: number;
+  readonly endRun: number;
+  readonly element: XmlElement;
+}
+
+// A point anchor at one run boundary -- a footnote, endnote, or comment reference mark, whose body lives in a definitions part (word/footnotes.xml, word/endnotes.xml, word/comments.xml) the flat model carries beside its sections.
+interface RunPointAnchorEvent {
+  readonly descriptor: AnchorDescriptor;
+  readonly runPosition: number;
+}
+
+// A link over a sub-sequence of this paragraph's runs whose target is a name inside this document (w:hyperlink/@w:anchor), which a flat run field cannot express.
+interface RunLinkEvent {
+  readonly anchor: string;
+  readonly startRun: number;
+  readonly endRun: number;
+}
+
+// Everything one paragraph's run walk collects beside its runs, assembled into ContentParagraph.constructs by assembleRunConstructs once the walk (and the paragraph's content index) exists.
+interface ParagraphRunEvents {
+  halves: ParagraphRangeMarkerHalf[];
+  fields: RunFieldEvent[];
+  simpleFields: RunSimpleFieldEvent[];
+  pointAnchors: RunPointAnchorEvent[];
+  links: RunLinkEvent[];
+}
+
+function newParagraphRunEvents(): ParagraphRunEvents {
+  return { halves: [], fields: [], simpleFields: [], pointAnchors: [], links: [] };
+}
+
+// Walks a paragraph's own children producing its runs, tracking two things across siblings: complex-field state (w:fldChar begin/separate/end -- only the cached result between separate and end is visible content) and the enclosing hyperlink target (w:hyperlink, resolved via the document's relationships), threaded through w:ins/w:moveTo/w:sdt/w:fldSimple recursion. w:del and w:moveFrom are recursed into only when the caller is carrying deletions -- i.e. when the whole paragraph is itself a tracked deletion or move-from, so that every run it yields is labelled as deleted by the enclosing provenance construct. A mid-paragraph deletion stays excluded, because lifting those runs into the paragraph's own text would render deleted words as live text, which is strictly worse than the existing omission. Range-marker halves (bookmarks, comment extents) are recorded into `events.halves` at the run position the walk had reached -- the run-level counterpart of the block-index events recordParagraphRangeMarkers collects, paired into run-level construct extents by runRangeMarkerExtents (typed/docx/constructs.ts). A complex field or w:fldSimple whose extent is a sub-sequence of this paragraph's runs, an internal @w:anchor hyperlink, and a footnote/endnote/comment reference run each record their own event for the same assembly.
+function readParagraphRuns(paragraph: XmlElement, ctx: DocxReadContext, carryDeletions: boolean, events: ParagraphRunEvents): ContentRun[] {
   const runs: ContentRun[] = [];
   let fieldState: 'none' | 'code' | 'result' = 'none';
+  const openFields: { startRun: number; instruction: string; beginElement: XmlElement; formControl: ContentControlDescriptor | undefined }[] = [];
+
+  const recordRangeMarkerHalf = (node: XmlElement, family: RangeMarkerFamily, start: boolean): void => {
+    const id = attr(node, 'w:id');
+    if (id === undefined) {
+      return;
+    }
+    const name = attr(node, 'w:name');
+    events.halves.push({
+      element: node,
+      family,
+      id,
+      name: start && family === 'bookmark' && name !== undefined ? decodeEntities(name) : undefined,
+      kind: start ? 'start' : 'end',
+      runPosition: runs.length,
+    });
+  };
+
+  // A reference-mark run (footnote/endnote/comment) renders nothing itself, so the point anchor sits at the boundary before that run -- exactly where the mark renders.
+  const recordReferenceAnchor = (run: XmlElement): void => {
+    for (const child of run.children) {
+      if (child.type !== 'element') {
+        continue;
+      }
+      const anchorType = child.tag === 'w:footnoteReference' ? 'footnote' : child.tag === 'w:endnoteReference' ? 'endnote' : child.tag === 'w:commentReference' ? 'comment' : undefined;
+      const id = anchorType === undefined ? undefined : attr(child, 'w:id');
+      if (anchorType !== undefined && id !== undefined) {
+        events.pointAnchors.push({ descriptor: { kind: 'anchor', anchorType, name: id }, runPosition: runs.length - 1 });
+      }
+    }
+  };
 
   function walk(nodes: readonly XmlNode[], hyperlinkTarget: string | undefined): void {
     for (const node of nodes) {
@@ -278,24 +356,53 @@ function readParagraphRuns(paragraph: XmlElement, ctx: DocxReadContext, carryDel
         if (type !== undefined) {
           if (type === 'begin') {
             fieldState = 'code';
+            openFields.push({ startRun: runs.length, instruction: '', beginElement: node, formControl: readFormControlDescriptor(node) });
           } else if (type === 'separate') {
             fieldState = 'result';
           } else if (type === 'end') {
             fieldState = 'none';
+            const open = openFields.pop();
+            if (open !== undefined) {
+              events.fields.push({
+                descriptor: open.formControl ?? { kind: 'field', instruction: open.instruction },
+                startRun: open.startRun,
+                endRun: runs.length,
+                beginElement: open.beginElement,
+                endElement: node,
+              });
+            }
           }
           continue;
         }
         if (fieldState === 'code') {
+          // The code runs belong to the field the walk is inside -- the innermost begin still open, exactly the field whose instruction this run spells.
+          const open = openFields[openFields.length - 1];
+          if (open !== undefined) {
+            open.instruction += runInstructionText(node);
+          }
           continue;
         }
         const run = readRun(node, paragraph, ctx.styles);
         runs.push(hyperlinkTarget === undefined ? run : { ...run, hyperlink: hyperlinkTarget });
+        recordReferenceAnchor(node);
       } else if (node.tag === 'w:fldSimple') {
+        const startRun = runs.length;
         walk(node.children, hyperlinkTarget);
+        events.simpleFields.push({ descriptor: { kind: 'field', instruction: decodeEntities(attr(node, 'w:instr') ?? '') }, startRun, endRun: runs.length, element: node });
       } else if (node.tag === 'w:hyperlink') {
         const rId = attr(node, 'r:id');
         const target = rId === undefined ? undefined : ctx.rels.get(rId)?.target;
-        walk(node.children, target ?? hyperlinkTarget);
+        if (target === undefined) {
+          // No resolvable external target: an @w:anchor names a target inside this document, which is a link run extent rather than a run field. An r:id that resolves wins over an @w:anchor spelled beside it -- one link, one encoding, the resolved external target's.
+          const anchor = attr(node, 'w:anchor');
+          const startRun = runs.length;
+          walk(node.children, hyperlinkTarget);
+          if (anchor !== undefined && runs.length > startRun) {
+            events.links.push({ anchor: decodeEntities(anchor), startRun, endRun: runs.length });
+          }
+          continue;
+        }
+        walk(node.children, target);
       } else if (node.tag === 'w:ins' || node.tag === 'w:moveTo') {
         walk(node.children, hyperlinkTarget);
       } else if (node.tag === 'w:del' || node.tag === 'w:moveFrom') {
@@ -309,17 +416,9 @@ function readParagraphRuns(paragraph: XmlElement, ctx: DocxReadContext, carryDel
           walk(sdtContent.children, hyperlinkTarget);
         }
       } else if (node.tag === 'w:bookmarkStart' || node.tag === 'w:bookmarkEnd') {
-        const id = attr(node, 'w:id');
-        if (id !== undefined) {
-          const name = attr(node, 'w:name');
-          halves.push({
-            element: node,
-            id,
-            name: node.tag === 'w:bookmarkStart' && name !== undefined ? decodeEntities(name) : undefined,
-            kind: node.tag === 'w:bookmarkStart' ? 'start' : 'end',
-            runPosition: runs.length,
-          });
-        }
+        recordRangeMarkerHalf(node, 'bookmark', node.tag === 'w:bookmarkStart');
+      } else if (node.tag === 'w:commentRangeStart' || node.tag === 'w:commentRangeEnd') {
+        recordRangeMarkerHalf(node, 'comment', node.tag === 'w:commentRangeStart');
       }
     }
   }
@@ -328,14 +427,49 @@ function readParagraphRuns(paragraph: XmlElement, ctx: DocxReadContext, carryDel
   return runs;
 }
 
+// A complex field is block-scoped exactly when its begin run is the paragraph's first content-bearing child and its end run the last -- the whole-paragraph shape scanParagraphFields brackets as a marker pair, which this assembly must therefore not also encode as a run extent. A begin or end nested inside a container (w:hyperlink, w:ins) is never a direct child, so it cannot be block-scoped -- and scanParagraphFields, which walks only direct children, never saw it either: the two paths partition the occurrences between them by construction.
+function isBlockScopedField(event: RunFieldEvent, index: ParagraphContentIndex): boolean {
+  const begin = index.elements.indexOf(event.beginElement);
+  const end = index.elements.indexOf(event.endElement);
+  return begin !== -1 && end !== -1 && begin === index.firstContentIndex && end === index.lastContentIndex;
+}
+
+// A w:fldSimple is block-scoped when it is its paragraph's only content-bearing child -- scanParagraphFields' own test for the simple spelling.
+function isBlockScopedSimpleField(event: RunSimpleFieldEvent, index: ParagraphContentIndex): boolean {
+  const position = index.elements.indexOf(event.element);
+  return position !== -1 && index.firstContentIndex === position && index.lastContentIndex === position;
+}
+
+// Assembles the run walk's collected events into the paragraph's constructs field: paired range markers (bookmarks, comment extents) first in discovery order, then the walk-order events (closed fields, simple fields, internal links, point anchors). Deterministic in the markup's own order, with the two families concatenated rather than interleaved -- ranges are data on the paragraph, never brackets, so no ordering between families is load-bearing.
+function assembleRunConstructs(events: ParagraphRunEvents, index: ParagraphContentIndex): RunConstructExtent[] {
+  const extents: RunConstructExtent[] = runRangeMarkerExtents(events.halves, index);
+  for (const field of events.fields) {
+    if (!isBlockScopedField(field, index)) {
+      extents.push({ descriptor: field.descriptor, startRun: field.startRun, endRun: field.endRun });
+    }
+  }
+  for (const simple of events.simpleFields) {
+    if (!isBlockScopedSimpleField(simple, index)) {
+      extents.push({ descriptor: simple.descriptor, startRun: simple.startRun, endRun: simple.endRun });
+    }
+  }
+  for (const link of events.links) {
+    extents.push({ descriptor: { kind: 'link', target: { kind: 'internal', anchor: link.anchor } }, startRun: link.startRun, endRun: link.endRun });
+  }
+  for (const anchor of events.pointAnchors) {
+    extents.push({ descriptor: anchor.descriptor, startRun: anchor.runPosition, endRun: anchor.runPosition });
+  }
+  return extents;
+}
+
 function readParagraph(paragraph: XmlElement, ctx: DocxReadContext, carryDeletions: boolean): ContentParagraph {
   const pPr = childrenWithTag(paragraph, 'w:pPr')[0];
   const pStyleEl = pPr === undefined ? undefined : childrenWithTag(pPr, 'w:pStyle')[0];
   const props = resolveParagraphProperties(paragraph, ctx.styles);
-  // The paragraph's own run-level construct extents: the run walk's bookmark halves, paired against the content index so a block-scoped pair stays on the marker path. Absent rather than empty when the paragraph carries none -- the common case costs nothing.
-  const halves: ParagraphBookmarkHalf[] = [];
-  const runs = readParagraphRuns(paragraph, ctx, carryDeletions, halves);
-  const constructs = runBookmarkExtents(halves, indexParagraphContent(paragraph));
+  // The paragraph's own run-level construct extents: the run walk's events, paired and scope-filtered against the content index so a block-scoped occurrence stays on the marker path. Absent rather than empty when the paragraph carries none -- the common case costs nothing.
+  const events = newParagraphRunEvents();
+  const runs = readParagraphRuns(paragraph, ctx, carryDeletions, events);
+  const constructs = assembleRunConstructs(events, indexParagraphContent(paragraph));
   return {
     kind: 'paragraph',
     runs,
@@ -514,8 +648,9 @@ interface SectionBreak {
   readonly sectPr: XmlElement;
 }
 
-// A bookmark's two halves are id-paired rather than nested, so neither half can be turned into a marker until both have been seen and both have been shown to sit at a block boundary: `index` is the block position the half sits at, and `qualified` records whether it sat outside every content-bearing child of its paragraph (or at block level, where it always does). See resolveBookmarkExtents for the pairing itself.
-interface BookmarkEvent {
+// A range marker's two halves (a bookmark's, a comment extent's) are id-paired rather than nested, so neither half can be turned into a marker until both have been seen and both have been shown to sit at a block boundary: `index` is the block position the half sits at, and `qualified` records whether it sat outside every content-bearing child of its paragraph (or at block level, where it always does). See resolveRangeMarkerExtents for the pairing itself.
+interface RangeMarkerEvent {
+  readonly family: RangeMarkerFamily;
   readonly id: string;
   readonly name: string | undefined;
   readonly kind: 'start' | 'end';
@@ -524,35 +659,37 @@ interface BookmarkEvent {
   readonly order: number;
 }
 
-// A complex field opened by a w:fldChar begin and still waiting for its matching end, which may be several paragraphs away (a TOC field's begin sits in its first entry's paragraph and its end in a paragraph of its own after the last).
+// A complex field opened by a w:fldChar begin and still waiting for its matching end, which may be several paragraphs away (a TOC field's begin sits in its first entry's paragraph and its end in a paragraph of its own after the last). `formControl` holds the legacy w:ffData verdict when the begin run carries one: a form field is ONE construct (a contentControl), so its block extent takes the control descriptor rather than a field descriptor beside it.
 interface OpenField {
   instruction: string;
   inCode: boolean;
   readonly startIndex: number;
   readonly qualifiedStart: boolean;
   readonly order: number;
+  readonly formControl: ContentControlDescriptor | undefined;
 }
 
 interface FlowState {
   readonly blocks: ContentBlock[];
   readonly extents: ConstructExtent[];
   readonly sectionBreaks: SectionBreak[];
-  readonly bookmarkEvents: BookmarkEvent[];
+  readonly rangeMarkerEvents: RangeMarkerEvent[];
   readonly openFields: OpenField[];
   order: number;
 }
 
 function newFlowState(): FlowState {
-  return { blocks: [], extents: [], sectionBreaks: [], bookmarkEvents: [], openFields: [], order: 0 };
+  return { blocks: [], extents: [], sectionBreaks: [], rangeMarkerEvents: [], openFields: [], order: 0 };
 }
 
-// Pairs the flow's bookmark halves by w:id into extents. A bookmark survives only when it has exactly one start and one end in this block list, both carry a name and sit at a block boundary, and the end does not precede the start. Everything else -- a half whose partner lies in a different block list (inside a table cell, or on the far side of a structured document tag), a duplicate id, a bookmark whose extent is a sub-sequence of one paragraph's runs -- has no block-scoped encoding and is not emitted as a marker pair; the run-level case lands on the paragraph's own constructs field instead (runBookmarkExtents, called from readParagraph), and the rest stay dropped.
-function resolveBookmarkExtents(events: readonly BookmarkEvent[]): ConstructExtent[] {
-  const byId = new Map<string, BookmarkEvent[]>();
+// Pairs the flow's range-marker halves (bookmarks, comment extents) by family+w:id into extents. A pair survives only when it has exactly one start and one end in this block list, both sit at a block boundary (and, for a bookmark, the start carries a name), and the end does not precede the start. Everything else -- a half whose partner lies in a different block list (inside a table cell, or on the far side of a structured document tag), a duplicate id, a pair whose extent is a sub-sequence of one paragraph's runs -- has no block-scoped encoding and is not emitted as a marker pair; the run-level case lands on the paragraph's own constructs field instead (runRangeMarkerExtents, called from readParagraph), and the rest stay dropped.
+function resolveRangeMarkerExtents(events: readonly RangeMarkerEvent[]): ConstructExtent[] {
+  const byId = new Map<string, RangeMarkerEvent[]>();
   for (const event of events) {
-    const existing = byId.get(event.id);
+    const key = `${event.family}:${event.id}`;
+    const existing = byId.get(key);
     if (existing === undefined) {
-      byId.set(event.id, [event]);
+      byId.set(key, [event]);
     } else {
       existing.push(event);
     }
@@ -566,10 +703,16 @@ function resolveBookmarkExtents(events: readonly BookmarkEvent[]): ConstructExte
     if (start.length !== 1 || end.length !== 1 || open === undefined || close === undefined) {
       continue;
     }
-    if (open.name === undefined || !open.qualified || !close.qualified || close.index < open.index) {
+    const descriptor: AnchorDescriptor | undefined =
+      open.family === 'comment'
+        ? { kind: 'anchor', anchorType: 'comment', name: open.id }
+        : open.name === undefined
+          ? undefined
+          : bookmarkAnchorDescriptor(open.name);
+    if (descriptor === undefined || !open.qualified || !close.qualified || close.index < open.index) {
       continue;
     }
-    extents.push({ startIndex: open.index, endIndex: close.index, order: open.order, descriptor: bookmarkAnchorDescriptor(open.name) });
+    extents.push({ startIndex: open.index, endIndex: close.index, order: open.order, descriptor });
   }
   return extents;
 }
@@ -588,23 +731,26 @@ function wholeParagraphTrackedChange(index: ParagraphContentIndex): { element: X
   return { element: first, change };
 }
 
-// A bookmark half inside a paragraph brackets whole blocks only when it sits outside every content-bearing child: a leading half opens (or closes) at the paragraph itself, a trailing one at the position after the paragraph's last block. A half between content children marks a sub-sequence of runs and is recorded as unqualified so resolveBookmarkExtents drops the whole pair rather than emitting a marker at the wrong place -- dropping it from the BLOCK stream is not losing it when both halves sit in one paragraph, because runBookmarkExtents picks the pair up onto that paragraph's constructs field.
-function recordParagraphBookmarks(index: ParagraphContentIndex, paragraphIndex: number, endIndex: number, state: FlowState): void {
+// A range-marker half inside a paragraph brackets whole blocks only when it sits outside every content-bearing child: a leading half opens (or closes) at the paragraph itself, a trailing one at the position after the paragraph's last block. A half between content children marks a sub-sequence of runs and is recorded as unqualified so resolveRangeMarkerExtents drops the whole pair rather than emitting a marker at the wrong place -- dropping it from the BLOCK stream is not losing it when both halves sit in one paragraph, because runRangeMarkerExtents picks the pair up onto that paragraph's constructs field.
+function recordParagraphRangeMarkers(index: ParagraphContentIndex, paragraphIndex: number, endIndex: number, state: FlowState): void {
   index.elements.forEach((element, position) => {
-    if (element.tag !== 'w:bookmarkStart' && element.tag !== 'w:bookmarkEnd') {
+    if (element.tag !== 'w:bookmarkStart' && element.tag !== 'w:bookmarkEnd' && element.tag !== 'w:commentRangeStart' && element.tag !== 'w:commentRangeEnd') {
       return;
     }
     const id = attr(element, 'w:id');
     if (id === undefined) {
       return;
     }
+    const family: RangeMarkerFamily = element.tag === 'w:bookmarkStart' || element.tag === 'w:bookmarkEnd' ? 'bookmark' : 'comment';
+    const start = element.tag === 'w:bookmarkStart' || element.tag === 'w:commentRangeStart';
     const leading = index.firstContentIndex === -1 || position < index.firstContentIndex;
     const trailing = index.lastContentIndex === -1 || position > index.lastContentIndex;
-    if (element.tag === 'w:bookmarkStart') {
+    if (start) {
       const name = attr(element, 'w:name');
-      state.bookmarkEvents.push({
+      state.rangeMarkerEvents.push({
+        family,
         id,
-        name: name === undefined ? undefined : decodeEntities(name),
+        name: family === 'bookmark' && name !== undefined ? decodeEntities(name) : undefined,
         kind: 'start',
         index: leading ? paragraphIndex : endIndex,
         qualified: leading || trailing,
@@ -612,7 +758,7 @@ function recordParagraphBookmarks(index: ParagraphContentIndex, paragraphIndex: 
       });
       return;
     }
-    state.bookmarkEvents.push({ id, name: undefined, kind: 'end', index: trailing ? endIndex : paragraphIndex, qualified: leading || trailing, order: state.order++ });
+    state.rangeMarkerEvents.push({ family, id, name: undefined, kind: 'end', index: trailing ? endIndex : paragraphIndex, qualified: leading || trailing, order: state.order++ });
   });
 }
 
@@ -633,7 +779,7 @@ function scanParagraphFields(index: ParagraphContentIndex, paragraphIndex: numbe
     }
     const type = fieldCharType(child);
     if (type === 'begin') {
-      state.openFields.push({ instruction: '', inCode: true, startIndex: paragraphIndex, qualifiedStart: position === 0, order: state.order++ });
+      state.openFields.push({ instruction: '', inCode: true, startIndex: paragraphIndex, qualifiedStart: position === 0, order: state.order++, formControl: readFormControlDescriptor(child) });
       return;
     }
     if (type === 'separate') {
@@ -646,7 +792,7 @@ function scanParagraphFields(index: ParagraphContentIndex, paragraphIndex: numbe
     if (type === 'end') {
       const open = state.openFields.pop();
       if (open !== undefined && open.qualifiedStart && position === content.length - 1) {
-        state.extents.push({ startIndex: open.startIndex, endIndex, order: open.order, descriptor: { kind: 'field', instruction: open.instruction } });
+        state.extents.push({ startIndex: open.startIndex, endIndex, order: open.order, descriptor: open.formControl ?? { kind: 'field', instruction: open.instruction } });
       }
       return;
     }
@@ -674,7 +820,7 @@ function collectParagraph(paragraph: XmlElement, ctx: DocxReadContext, state: Fl
   if (tracked !== undefined) {
     state.extents.push({ startIndex: paragraphIndex, endIndex, order: state.order++, descriptor: readProvenanceDescriptor(tracked.element, tracked.change) });
   }
-  recordParagraphBookmarks(index, paragraphIndex, endIndex, state);
+  recordParagraphRangeMarkers(index, paragraphIndex, endIndex, state);
   scanParagraphFields(index, paragraphIndex, endIndex, state);
 
   const pPr = childrenWithTag(paragraph, 'w:pPr')[0];
@@ -723,18 +869,26 @@ function collectFlowNodes(nodes: readonly XmlNode[], ctx: DocxReadContext, state
       }
       continue;
     }
-    if (node.tag === 'w:bookmarkStart') {
+    if (node.tag === 'w:bookmarkStart' || node.tag === 'w:commentRangeStart') {
       const id = attr(node, 'w:id');
       const name = attr(node, 'w:name');
       if (id !== undefined) {
-        state.bookmarkEvents.push({ id, name: name === undefined ? undefined : decodeEntities(name), kind: 'start', index: state.blocks.length, qualified: true, order: state.order++ });
+        state.rangeMarkerEvents.push({
+          family: node.tag === 'w:bookmarkStart' ? 'bookmark' : 'comment',
+          id,
+          name: node.tag === 'w:bookmarkStart' && name !== undefined ? decodeEntities(name) : undefined,
+          kind: 'start',
+          index: state.blocks.length,
+          qualified: true,
+          order: state.order++,
+        });
       }
       continue;
     }
-    if (node.tag === 'w:bookmarkEnd') {
+    if (node.tag === 'w:bookmarkEnd' || node.tag === 'w:commentRangeEnd') {
       const id = attr(node, 'w:id');
       if (id !== undefined) {
-        state.bookmarkEvents.push({ id, name: undefined, kind: 'end', index: state.blocks.length, qualified: true, order: state.order++ });
+        state.rangeMarkerEvents.push({ family: node.tag === 'w:bookmarkEnd' ? 'bookmark' : 'comment', id, name: undefined, kind: 'end', index: state.blocks.length, qualified: true, order: state.order++ });
       }
       continue;
     }
@@ -748,7 +902,7 @@ function collectFlowNodes(nodes: readonly XmlNode[], ctx: DocxReadContext, state
 function readBlockScope(nodes: readonly XmlNode[], ctx: DocxReadContext, carryDeletions: boolean): ContentBlock[] {
   const state = newFlowState();
   collectFlowNodes(nodes, ctx, state, carryDeletions);
-  return insertConstructMarkers(state.blocks, [...state.extents, ...resolveBookmarkExtents(state.bookmarkEvents)]);
+  return insertConstructMarkers(state.blocks, [...state.extents, ...resolveRangeMarkerExtents(state.rangeMarkerEvents)]);
 }
 
 // A mid-document section break is an otherwise-ordinary w:p whose w:pPr carries its own w:sectPr, describing the section that paragraph (and everything since the previous break) belongs to; the body's own trailing w:sectPr (a direct child, not nested in any paragraph) closes the final section. Multi-section support falls out of this directly: the body is walked once, and each break just cuts the resulting block list.
@@ -757,7 +911,7 @@ function readBlockScope(nodes: readonly XmlNode[], ctx: DocxReadContext, carryDe
 function readSections(body: XmlElement, ctx: DocxReadContext): ContentSection[] {
   const state = newFlowState();
   collectFlowNodes(body.children, ctx, state, false);
-  const extents = [...state.extents, ...resolveBookmarkExtents(state.bookmarkEvents)];
+  const extents = [...state.extents, ...resolveRangeMarkerExtents(state.rangeMarkerEvents)];
 
   function sliceSection(pageSize: PageSize, margins: Margins, breakType: ContentSection['breakType'], from: number, to: number): ContentSection {
     const contained = extents
@@ -792,9 +946,13 @@ function readDocumentTheme(pkg: Package, docRels: ReadonlyMap<string, Relationsh
 }
 
 function readComment(comment: XmlElement): Comment {
+  const id = attr(comment, 'w:id');
   const author = attr(comment, 'w:author');
   const text = elementsWithTag(comment.children, 'w:t').map(textContent).join('');
   const result: Comment = { text };
+  if (id !== undefined) {
+    result.id = id;
+  }
   if (author !== undefined) {
     result.author = author;
   }
@@ -802,9 +960,13 @@ function readComment(comment: XmlElement): Comment {
 }
 
 function readFootnote(footnote: XmlElement): Footnote {
+  const id = attr(footnote, 'w:id');
   const type = attr(footnote, 'w:type');
   const text = elementsWithTag(footnote.children, 'w:t').map(textContent).join('');
   const result: Footnote = { text };
+  if (id !== undefined) {
+    result.id = id;
+  }
   if (type !== undefined) {
     result.type = type;
   }
@@ -819,18 +981,19 @@ function readComments(pkg: Package): Comment[] {
   return childrenWithTag(root, 'w:comment').map(readComment);
 }
 
-function readFootnotes(pkg: Package): Footnote[] {
-  const root = rootElement(pkg.parts['word/footnotes.xml']);
+// One walk for both note flavours: word/footnotes.xml and word/endnotes.xml share the identical shape (a container of w:footnote/w:endnote elements, each with its own w:id and the separator/continuationSeparator machinery types skipped), so endnotes are the same read against their own part.
+function readNotesPart(pkg: Package, path: string, noteTag: 'w:footnote' | 'w:endnote'): Footnote[] {
+  const root = rootElement(pkg.parts[path]);
   if (root === undefined) {
     return [];
   }
   const out: Footnote[] = [];
-  for (const fn of childrenWithTag(root, 'w:footnote')) {
-    const type = attr(fn, 'w:type');
+  for (const note of childrenWithTag(root, noteTag)) {
+    const type = attr(note, 'w:type');
     if (type === 'separator' || type === 'continuationSeparator') {
       continue;
     }
-    out.push(readFootnote(fn));
+    out.push(readFootnote(note));
   }
   return out;
 }
@@ -875,7 +1038,8 @@ export function readDocxContent(pkg: Package): DocxDocument {
     metadata: readCoreProperties(pkg),
     sections: readSections(body, ctx),
     comments: readComments(pkg),
-    footnotes: readFootnotes(pkg),
+    footnotes: readNotesPart(pkg, 'word/footnotes.xml', 'w:footnote'),
+    endnotes: readNotesPart(pkg, 'word/endnotes.xml', 'w:endnote'),
     headers: readHeaderFooterText(pkg, 'word/header'),
     footers: readHeaderFooterText(pkg, 'word/footer'),
     numbering: readNumberingDefinitions(pkg),

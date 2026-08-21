@@ -504,8 +504,8 @@ describe('buildDocxPackageFromContent: construct round trip', () => {
     expect(writtenBookmarkOrder(paragraphElement)).toEqual(['run', 'start(first)', 'end(first)', 'start(second)', 'end(second)', 'run']);
   });
 
-  it('writes a non-bookmark run-level construct extent as its paragraph\'s own content, with no markers', () => {
-    // The kinds readDocxContent never produces at run level, which a ContentDocument from another codec still can: a run-scoped field or content control has no w:r-level spelling here, so its runs write as ordinary content and only the descriptor is lost -- the same content-preserving policy the block-level foreign constructs above follow.
+  it('writes a non-writable run-level construct extent as its paragraph\'s own content, with no markers', () => {
+    // The kinds readDocxContent produces at run level that this writer has no spelling for: a run-scoped content control (a legacy w:ffData form field) would need its control payload rebuilt from the descriptor, and a comment or note reference points into parts this writer does not emit. Its runs write as ordinary content and only the descriptor is lost -- the same content-preserving policy the block-level foreign constructs above follow.
     const written = buildDocxPackageFromContent({
       sections: [{
         pageSize: { widthPt: 612, heightPt: 792 },
@@ -513,17 +513,103 @@ describe('buildDocxPackageFromContent: construct round trip', () => {
         blocks: [
           {
             kind: 'paragraph',
-            runs: [{ text: 'plain ' }, { text: 'fielded' }],
-            constructs: [{ descriptor: { kind: 'field', instruction: 'DATE' }, startRun: 1, endRun: 2 }],
+            runs: [{ text: 'plain ' }, { text: 'controlled' }],
+            constructs: [{ descriptor: { kind: 'contentControl', controlType: 'checkbox', checked: true }, startRun: 1, endRun: 2 }],
           },
         ],
       }],
     });
     const document = rootElement(written.parts['word/document.xml']);
     expect(elementsWithTag(document === undefined ? [] : [document], 'w:bookmarkStart')).toHaveLength(0);
-    expect(elementsWithTag(document === undefined ? [] : [document], 'w:fldChar')).toHaveLength(0);
+    expect(elementsWithTag(document === undefined ? [] : [document], 'w:ffData')).toHaveLength(0);
     const roundTripped = readDocxContent(written).sections[0]?.blocks[0];
-    expect(roundTripped?.kind === 'paragraph' ? roundTripped.runs.map((run) => run.text).join('') : undefined).toBe('plain fielded');
+    expect(roundTripped?.kind === 'paragraph' ? roundTripped.runs.map((run) => run.text).join('') : undefined).toBe('plain controlled');
+  });
+
+  it('round-trips a mid-paragraph complex field as a field run extent, re-emitting its fldChar characters between the runs the range names', () => {
+    const source = docxPackage([
+      el('w:p', {}, [
+        el('w:r', {}, [el('w:t', {}, [txt('Page ')])]),
+        el('w:r', {}, [el('w:fldChar', { 'w:fldCharType': 'begin' })]),
+        el('w:r', {}, [el('w:instrText', { 'xml:space': 'preserve' }, [txt(' NUMPAGES ')])]),
+        el('w:r', {}, [el('w:fldChar', { 'w:fldCharType': 'separate' })]),
+        el('w:r', {}, [el('w:t', {}, [txt('10')])]),
+        el('w:r', {}, [el('w:fldChar', { 'w:fldCharType': 'end' })]),
+        el('w:r', {}, [el('w:t', {}, [txt(' of pages')])]),
+      ]),
+    ]);
+    const { before, after } = roundTrip(source);
+    expect(after).toEqual(before);
+    const paragraph = before[0]?.blocks[0];
+    expect(paragraph?.kind === 'paragraph' ? paragraph.constructs : undefined).toEqual([
+      { descriptor: { kind: 'field', instruction: ' NUMPAGES ' }, startRun: 1, endRun: 2 },
+    ]);
+  });
+
+  it('round-trips a mid-paragraph w:fldSimple\'s field extent through the writer\'s own fldChar spelling, which reads back as the same extent', () => {
+    const source = docxPackage([
+      el('w:p', {}, [
+        el('w:r', {}, [el('w:t', {}, [txt('Today is ')])]),
+        el('w:fldSimple', { 'w:instr': ' DATE ' }, [el('w:r', {}, [el('w:t', {}, [txt('2026-08-20')])])]),
+        el('w:r', {}, [el('w:t', {}, [txt('.')])]),
+      ]),
+    ]);
+    const { before, after } = roundTrip(source);
+    expect(after).toEqual(before);
+    const paragraph = before[0]?.blocks[0];
+    expect(paragraph?.kind === 'paragraph' ? paragraph.constructs : undefined).toEqual([
+      { descriptor: { kind: 'field', instruction: ' DATE ' }, startRun: 1, endRun: 2 },
+    ]);
+  });
+
+  it('round-trips an internal @w:anchor link extent, wrapping exactly the runs the range names in one w:hyperlink', () => {
+    const source = docxPackage([
+      el('w:p', {}, [
+        el('w:r', {}, [el('w:t', {}, [txt('See ')])]),
+        el('w:hyperlink', { 'w:anchor': 'target' }, [
+          el('w:r', {}, [el('w:t', {}, [txt('the section')])]),
+          el('w:r', {}, [el('w:t', {}, [txt(' below')])]),
+        ]),
+        el('w:r', {}, [el('w:t', {}, [txt(' for details')])]),
+      ]),
+    ]);
+    const { before, after, written } = roundTrip(source);
+    expect(after).toEqual(before);
+    const paragraph = before[0]?.blocks[0];
+    expect(paragraph?.kind === 'paragraph' ? paragraph.constructs : undefined).toEqual([
+      { descriptor: { kind: 'link', target: { kind: 'internal', anchor: 'target' } }, startRun: 1, endRun: 3 },
+    ]);
+    // The wrap covers exactly the link's own two runs, never the text either side.
+    const document = rootElement(written.parts['word/document.xml']);
+    const hyperlinks = elementsWithTag(document === undefined ? [] : [document], 'w:hyperlink');
+    expect(hyperlinks).toHaveLength(1);
+    expect(hyperlinks[0]?.type === 'element' ? hyperlinks[0].attributes.find((a) => a.name === 'w:anchor')?.value : undefined).toBe('target');
+    expect(hyperlinks[0]?.type === 'element' ? hyperlinks[0].children.filter((child) => child.type === 'element' && child.tag === 'w:r').length : 0).toBe(2);
+  });
+
+  it('writes a crossing internal link extent\'s runs as plain content rather than a mis-nested wrap', () => {
+    // Two internal links whose ranges cross cannot both wrap (nesting w:hyperlink inside w:hyperlink is not WordprocessingML), and Word itself cannot produce the shape -- only a hand-built ContentDocument can. The earlier link wraps; the crossing one's runs stay plain and only its descriptor is lost, the same content-preserving policy an unwritable construct kind follows.
+    const written = buildDocxPackageFromContent({
+      sections: [{
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 },
+        blocks: [
+          {
+            kind: 'paragraph',
+            runs: [{ text: 'a' }, { text: 'b' }, { text: 'c' }],
+            constructs: [
+              { descriptor: { kind: 'link', target: { kind: 'internal', anchor: 'first' } }, startRun: 0, endRun: 3 },
+              { descriptor: { kind: 'link', target: { kind: 'internal', anchor: 'second' } }, startRun: 1, endRun: 2 },
+            ],
+          },
+        ],
+      }],
+    });
+    const document = rootElement(written.parts['word/document.xml']);
+    const hyperlinks = elementsWithTag(document === undefined ? [] : [document], 'w:hyperlink');
+    expect(hyperlinks).toHaveLength(1);
+    const roundTripped = readDocxContent(written).sections[0]?.blocks[0];
+    expect(roundTripped?.kind === 'paragraph' ? roundTripped.runs.map((run) => run.text).join('') : undefined).toBe('abc');
   });
 
   it('refuses a run-level extent whose range does not name real runs, rather than writing markers at a made-up position', () => {
