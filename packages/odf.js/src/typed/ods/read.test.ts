@@ -586,6 +586,16 @@ describe('readOdsContent: residue rows', () => {
     const { source } = readOdsContent(loadFixture('sheet-formula.ods'));
     expect(Object.keys(source ?? {}).every((key) => key.startsWith('Object ') === false)).toBe(true);
   });
+
+  it('quarantines a vendor-extension element at the spreadsheet level, keyed by its own tag', () => {
+    const pkg = spreadsheetPackage([
+      el('calcext:conditional-formats', {}, [el('calcext:conditional-format', { 'calcext:target-range-address': 'Sheet1.A1:Sheet1.B2' })]),
+      el('table:table', { 'table:name': 'Sheet1' }, [el('table:table-row')]),
+    ]);
+    const { source } = readOdsContent(pkg);
+    expect(source?.['calcext:conditional-formats']?.format).toBe('ods');
+    expect(source?.['calcext:conditional-formats']?.xml).toContain('<calcext:conditional-format');
+  });
 });
 
 describe('readOdsContent: named expressions (synthetic packages -- the declarations real fixture output leaves empty)', () => {
