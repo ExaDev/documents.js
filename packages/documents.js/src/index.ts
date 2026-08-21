@@ -490,8 +490,8 @@ export { decodeDocumentPackage, decodeOdbPackage, encodeDocumentPackage, Unsuppo
 export { extractSourceFontsForFormat, UnsupportedFontSourceFormatError } from './convert/document-fonts';
 
 // --- Cross-format metadata read/write: a document's own title/author/subject/keywords/creator/producer/created/modified, resolved (and, for setDocumentMetadata, patched) by DocumentFormat across every format this package supports -- csv reads honestly empty (RFC 4180 text has no metadata container) and is rejected as a setDocumentMetadata source/target for exactly that reason; svg reads its root <title> and is rejected on the write side because <title> is its whole metadata surface, so any other override would be silently dropped. ---
-export type { ReadDocumentMetadataOptions } from './metadata/read';
-export { readDocumentMetadata } from './metadata/read';
+export type { ReadDocumentMetadataOptions } from './convert/from-pdf';
+export { readDocumentMetadata } from './convert/from-pdf';
 export type { MetadataOverrides, SetDocumentMetadataOptions } from './metadata/write';
 export { setDocumentMetadata } from './metadata/write';
 
