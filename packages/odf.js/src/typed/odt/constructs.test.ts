@@ -3,7 +3,17 @@ import type { Package } from '../../model/package';
 import type { XmlElement } from '../../model/node';
 import { el, txt } from '../../xml/fragment';
 import { flattenPackage } from 'document-schema.js';
+import type { ContentParagraph } from 'document-schema.js';
 import { readOdt, readOdtContent } from './read';
+
+// DefinitionEntry's body is deliberately tenant-open (document-schema.js's definitions.ts), so a test reading an entry's body as block content narrows it itself rather than asserting.
+function entryParagraphs(key: string, definitions: ReturnType<typeof readOdtContent>['definitions']): ContentParagraph[] {
+  const body = definitions?.[key]?.body;
+  if (!Array.isArray(body) || !body.every((block: unknown): block is ContentParagraph => typeof block === 'object' && block !== null && 'kind' in block && 'runs' in block && block.kind === 'paragraph')) {
+    throw new Error(`expected a paragraph-only definitions body for ${key}`);
+  }
+  return body;
+}
 
 // The block-scope construct rows of the fidelity vocabulary (ExaDev/documents.js#719): text:section as a division, the TOC/index wrappers as index content controls, tracked changes as provenance, and the definitions-table tenants. Every fixture here is a programmatic package built with el/txt -- the fixture gate the issue itself states: real-producer verification for these constructs is outstanding, and the shapes below follow the OASIS ODF 1.2 element/attribute grammar rather than any single producer's output.
 
@@ -566,5 +576,27 @@ describe('readOdtContent: field master declarations as a definitions table', () 
     const document = readOdtContent(pkg);
     expect(Object.keys(document.definitions ?? {}).sort()).toEqual(['comment:c1', 'note:ftn1', 'sequence:Table']);
     expect(readOdt(pkg).definitions).toEqual(document.definitions);
+  });
+
+  it('mints every note-body list\'s numId from one document-wide counter, so no two lists in the document share an identity', () => {
+    const noteWithList = (id: string, citation: string): XmlElement =>
+      el('text:note', { 'text:note-class': 'footnote', 'text:id': id }, [
+        el('text:note-citation', {}, [txt(citation)]),
+        el('text:note-body', {}, [el('text:list', {}, [el('text:list-item', {}, [el('text:p', {}, [txt('note list item')])])])]),
+      ]);
+    const pkg = odtPackage([
+      el('text:p', {}, [txt('one'), noteWithList('ftn1', '1')]),
+      el('text:p', {}, [txt('two'), noteWithList('ftn2', '2')]),
+      el('text:list', {}, [el('text:list-item', {}, [el('text:p', {}, [txt('body list item')])])]),
+    ]);
+    const { sections, definitions } = readOdtContent(pkg);
+    const noteBodyNumId = (key: string): string => entryParagraphs(key, definitions)[0]?.list?.numId ?? 'missing';
+    const bodyListNumId = sections[0]?.blocks.map((block) => (block.kind === 'paragraph' ? block.list?.numId : undefined)).find((numId) => numId !== undefined);
+    if (bodyListNumId === undefined) {
+      throw new Error('expected the body list item paragraph');
+    }
+    const numIds = [noteBodyNumId('note:ftn1'), noteBodyNumId('note:ftn2'), bodyListNumId];
+    // numId is an identity (list.ts's own header invariant: different text:list elements get different numIds), so all three must be pairwise distinct -- two notes' bodies are different lists exactly as a note body and the main body are.
+    expect(new Set(numIds).size).toBe(3);
   });
 });

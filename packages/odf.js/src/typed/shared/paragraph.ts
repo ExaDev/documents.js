@@ -17,7 +17,7 @@ import { parseParagraphProperties, parseTextProperties } from '../../styles/prop
 //
 // INLINE CONSTRUCTS: a field element reads as a run carrying its cached text plus a run-level field extent covering exactly that run; a text:bookmark reads as a point anchor extent; bookmark halves pairing inside one paragraph become run extents (typed/shared/constructs.ts owns the descriptor shapes and the scope rules). Every reader that uses this module gets the same treatment -- an odt paragraph, an ods cell, and an odp text frame all carry their fields as paragraph constructs.
 
-// The mutable walk state one paragraph's run collection threads: the run-level extents discovered so far, the paired-marker halves at their run positions, the document-order counter that keeps discovery order deterministic, the tracked-change region map, the definitions sink note and annotation bodies mint into, and the list-identity counter a note body's own text:list elements need (a fresh counter per document walk, threaded from the caller where one exists -- a note body's lists get identities independent of the enclosing body's, which is honest for a footnote's own private list numbering).
+// The mutable walk state one paragraph's run collection threads: the run-level extents discovered so far, the paired-marker halves at their run positions, the document-order counter that keeps discovery order deterministic, the tracked-change region map, the definitions sink note and annotation bodies mint into, and the list-identity counter note and annotation bodies mint their own text:list numIds from -- the document-wide state when the caller supplied one (every list in one document walk shares one identity space, the numId-as-identity contract list.ts's own header states), a fresh local counter otherwise.
 interface RunWalkState {
   readonly extents: RunConstructExtent[];
   readonly halves: OdfMarkerHalf[];
@@ -27,26 +27,28 @@ interface RunWalkState {
   readonly listIdState: OdfListIdState;
 }
 
-// What a caller reading a paragraph in a document-level context supplies: the tracked-change regions a text:change/text:change-start/text:change-end marker resolves its id against, the out-array every marker half is reported to for block-scope pairing by the reader that owns the block flow, and the definitions sink note and annotation bodies mint into. All absent when the caller has no document context -- a bare readOdfParagraph call reads runs and run-level extents; change markers with no region map contribute nothing (their id names a region the caller never collected), and notes read only their citation run, since an anchor naming a definition key no table holds would be malformed.
+// What a caller reading a paragraph in a document-level context supplies: the tracked-change regions a text:change/text:change-start/text:change-end marker resolves its id against, the out-array every marker half is reported to for block-scope pairing by the reader that owns the block flow, the definitions sink note and annotation bodies mint into, and the list-identity counter those bodies mint their own text:list numIds from -- one document-wide state so no two lists anywhere in one document share a numId. All absent when the caller has no document context -- a bare readOdfParagraph call reads runs and run-level extents; change markers with no region map contribute nothing (their id names a region the caller never collected), and notes read only their citation run, since an anchor naming a definition key no table holds would be malformed.
 export interface OdfParagraphContext {
   readonly provenanceRegions?: ReadonlyMap<string, ProvenanceDescriptor>;
   readonly markersOut?: OdfMarkerHalf[];
   readonly definitions?: OdfDefinitionsSink;
+  readonly listIdState?: OdfListIdState;
   readonly format?: OdfResidueFormat;
 }
 
-// One note/annotation body's own block flow: text:p paragraphs and text:list lists, read through the same shared walkers the main body uses. Anything else in a body contributes nothing, exactly as readBlocks treats unknown block-level elements.
+// One note/annotation body's own block flow: text:p paragraphs and text:list lists, read through the same shared walkers the main body uses. Anything else in a body contributes nothing, exactly as readBlocks treats unknown block-level elements. The listIdState is threaded into the recursive paragraph context as well, so a note nested inside a note body mints its own body's lists from the same document-wide counter.
 function readOdfNoteBodyBlocks(body: XmlElement, pkg: Package, context: OdfParagraphContext, listIdState: OdfListIdState): ContentBlock[] {
   const blocks: ContentBlock[] = [];
+  const bodyContext: OdfParagraphContext = { ...context, listIdState };
   for (const child of body.children) {
     if (child.type !== 'element') {
       continue;
     }
     if (child.tag === 'text:p' || child.tag === 'text:h') {
-      blocks.push(readOdfParagraph(child, pkg, context));
+      blocks.push(readOdfParagraph(child, pkg, bodyContext));
     } else if (child.tag === 'text:list') {
       const numId = mintOdfListNumId(pkg, child, listIdState);
-      blocks.push(...readOdfListParagraphs(child, { numId, level: 0 }, (element) => readOdfParagraph(element, pkg, context)));
+      blocks.push(...readOdfListParagraphs(child, { numId, level: 0 }, (element) => readOdfParagraph(element, pkg, bodyContext)));
     }
   }
   return blocks;
@@ -249,7 +251,7 @@ export function readOdfParagraph(pElement: XmlElement, pkg: Package, context: Od
   }
 
   const runs: ContentRun[] = [];
-  const walk: RunWalkState = { extents: [], halves: [], order: 0, provenanceRegions: context.provenanceRegions, definitions: context.definitions, listIdState: { next: 1 } };
+  const walk: RunWalkState = { extents: [], halves: [], order: 0, provenanceRegions: context.provenanceRegions, definitions: context.definitions, listIdState: context.listIdState ?? { next: 1 } };
   collectRuns(pElement, paragraphProperties, pkg, runs, walk);
   const { extents: pairedExtents, paired } = pairOdfMarkerHalves(walk.halves, pElement);
   walk.extents.push(...pairedExtents);
