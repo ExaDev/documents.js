@@ -263,7 +263,7 @@ export type {
   PdfRectInit,
   PdfTextInit,
 } from './edit/pdf/item';
-export { PdfEllipseItem, PdfImageItem, PdfLineItem, PdfLinkItem, PdfPathItem, PdfRectItem, PdfTextItem } from './edit/pdf/item';
+export { PdfEllipseItem, PdfImageItem, PdfInternalLinkItem, PdfLineItem, PdfLinkItem, PdfPathItem, PdfRectItem, PdfTextItem } from './edit/pdf/item';
 
 // --- The hand-written PDF codec, now an external dependency -- see pdf-codec's own README (https://github.com/ExaDev/pdf-codec) for its internals. ---
 export type { ReadPdfOptions } from 'pdf-codec';
