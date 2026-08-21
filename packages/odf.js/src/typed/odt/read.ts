@@ -19,6 +19,7 @@ import {
   type OdfMarkerHalf,
 } from '../shared/constructs';
 import { readOdfParagraph } from '../shared/paragraph';
+import { readOdfFormControlConstructs } from '../shared/forms';
 import { readOdfTable } from '../shared/table';
 import { readOdfMetadata } from '../shared/metadata';
 import { parsePageSize, parseMargins } from '../shared/geometry';
@@ -165,7 +166,7 @@ function readBlocks(nodes: readonly XmlNode[], pkg: Package, state: OdtFlowState
       for (const half of read.halves) {
         const eventIndex = odfMarkerHalfEventIndex(half, read.element, cursor);
         if (eventIndex !== undefined) {
-          state.markerEvents.push({ kind: half.kind, side: half.side, key: half.key, index: eventIndex, qualified: true, order: state.order++, descriptor: half.descriptor });
+          state.markerEvents.push({ kind: half.kind, side: half.side, key: half.key, index: eventIndex, qualified: true, order: state.order++, descriptor: half.descriptor, element: half.element });
         }
       }
       blocks.push(read.paragraph);
@@ -210,6 +211,9 @@ function readBlocks(nodes: readonly XmlNode[], pkg: Package, state: OdtFlowState
       state.wrapperExtents.push({ startIndex, endIndex: blocks.length, order, descriptor: odfIndexControlDescriptor(node) });
     } else if (node.tag === 'text:index-title') {
       blocks.push(...readBlocks(node.children, pkg, state, baseIndex + blocks.length));
+    } else if (node.tag === 'office:forms') {
+      // Form controls in an ordinary text document: point contentControl constructs in pre-order, through the same form-tree walker the odb reader uses (typed/shared/forms.ts). ODF form controls have no rendered block extent -- their geometry lives in the drawing layer's draw:control elements, which no reader resolves -- so these are point pairs, safe to emit directly: a marker sequence is transparent to the bracket-matching splice pass, which counts them as blocks at their own indices.
+      blocks.push(...readOdfFormControlConstructs(node, 'odt'));
     }
   }
   return blocks;
