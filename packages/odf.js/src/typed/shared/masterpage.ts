@@ -1,8 +1,10 @@
-import type { PageSize } from 'document-schema.js';
+import type { DefinitionEntry, PageSize } from 'document-schema.js';
 import type { XmlElement } from '../../model/node';
 import type { Package } from '../../model/package';
 import { attrValue, childrenWithTag, findChildElement, rootElement } from '../../xml/query';
-import { parsePageSize } from './geometry';
+import { parseMargins, parsePageSize } from './geometry';
+import type { OdfListIdState } from './list';
+import { readOdfConstructBodyBlocks, type OdfParagraphContext } from './paragraph';
 
 // The master-page -> page-layout resolution chain shared by every ODF format that references a style:master-page by NAME: style:master-page -> style:page-layout-name -> style:page-layout -> style:page-layout-properties. draw:page's own page-size resolution (draw:master-page-name -> ...) was verified structurally identical between office:presentation and office:drawing draw:page content against the OASIS ODF schema (draw:page's own attribute/content-model definition is a single, format-agnostic schema fragment reused by both office:body children, not two separate definitions): a drawing's own draw:page carries draw:master-page-name exactly like a presentation's does, resolving through the SAME style:master-page/style:page-layout machinery in styles.xml. resolveDrawPageSize below is now a thin wrapper over resolvePageLayoutProperties -- the master-page-name -> page-layout-properties HALF of the chain -- because a spreadsheet's own print-settings resolution (typed/ods/read.ts) needs the identical remaining chain but starts from a genuinely different attribute (style:master-page-name on the table:table's own style:style[family="table"], not draw:master-page-name on a draw:page) and needs more than just PageSize out of the resolved properties (scale, page order, print token list, ...). Sharing the master-page-name -> properties half here, while leaving "how do we get the master-page name in the first place" to each caller, is the correct cut: that first step is genuinely format-specific, the rest is byte-for-byte identical machinery.
 
@@ -62,4 +64,53 @@ export function resolveDrawPageSize(page: XmlElement, pkg: Package): PageSize | 
   const masterPageName = attrValue(page, 'draw:master-page-name');
   const properties = resolvePageLayoutProperties(pkg, masterPageName);
   return properties === undefined ? undefined : parsePageSize(properties);
+}
+
+// --- master pages as definitions entries (ExaDev/documents.js#769) -----------------------------------------------------------------
+
+// The six header/footer slots a style:master-page may carry, keyed as the definitions entry spells them. The keys deliberately mirror ODF's own element names (header/header-left/header-right) rather than translating them into an even/odd vocabulary: which slot a producer fills with which parity is a page-layout policy this reader does not model, and the entry's job is restorable fidelity, not interpretation.
+const MASTER_PAGE_SLOTS: ReadonlyMap<string, string> = new Map([
+  ['style:header', 'header'],
+  ['style:header-left', 'headerLeft'],
+  ['style:header-right', 'headerRight'],
+  ['style:footer', 'footer'],
+  ['style:footer-left', 'footerLeft'],
+  ['style:footer-right', 'footerRight'],
+]);
+
+// Reads EVERY style:master-page in styles.xml's office:master-styles (document order) into the definitions table as `masterPage:<name>` entries: the page geometry each one's own style:page-layout resolves to, plus its header/footer slots read as real block flow through the same paragraph walk the body uses (so a header's fields, bookmarks, and formatting survive exactly as body content does). This is the landing spot for the two master-page rows #769 carried over from the #764 report: master pages AFTER the first no longer vanish -- every one becomes an entry -- and style:header/style:footer content is read rather than dropped. What deliberately does NOT happen here: mapping a mid-document master-page change onto a new ContentSection. ODF spells that as a paragraph style carrying style:master-page-name, and one ContentSection's own single pageSize/margins pair cannot host a page-style sequence -- the inventory's own 'future multi-section mapping' scope line. The odt reader's section geometry still comes from the first master page in document order; the entry table is where every later one lives.
+export function readOdfMasterPageDefinitions(pkg: Package, out: Record<string, DefinitionEntry>, context: OdfParagraphContext, listIdState: OdfListIdState): void {
+  const stylesPart = pkg.parts[STYLES_PART];
+  const stylesRoot = stylesPart?.kind === 'xml' ? rootElement(stylesPart.nodes) : undefined;
+  const masterStyles = stylesRoot === undefined ? undefined : findChildElement(stylesRoot.children, 'office:master-styles');
+  if (masterStyles === undefined) {
+    return;
+  }
+  for (const masterPage of childrenWithTag(masterStyles, 'style:master-page')) {
+    const name = attrValue(masterPage, 'style:name');
+    if (name === undefined) {
+      continue;
+    }
+    const entry: DefinitionEntry = { kind: 'masterPage', name };
+    // The master-page element is already in hand, so the page-layout resolves directly by its own style:page-layout-name -- the same chain resolvePageLayoutProperties walks for a caller holding only the master page's NAME, minus the redundant name -> element re-lookup.
+    const pageLayout = findPageLayoutElement(pkg, attrValue(masterPage, 'style:page-layout-name'));
+    const properties = pageLayout === undefined ? undefined : childrenWithTag(pageLayout, 'style:page-layout-properties')[0];
+    if (properties !== undefined) {
+      const pageSize = parsePageSize(properties);
+      const margins = parseMargins(properties);
+      if (pageSize !== undefined) {
+        entry.pageSize = pageSize;
+      }
+      if (margins !== undefined) {
+        entry.margins = margins;
+      }
+    }
+    for (const [slotTag, slotKey] of MASTER_PAGE_SLOTS) {
+      const slot = childrenWithTag(masterPage, slotTag)[0];
+      if (slot !== undefined) {
+        entry[slotKey] = readOdfConstructBodyBlocks(slot, pkg, context, listIdState);
+      }
+    }
+    out[`masterPage:${name}`] = entry;
+  }
 }

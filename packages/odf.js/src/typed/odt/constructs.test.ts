@@ -638,6 +638,149 @@ describe('readOdtContent: cross-references (the odf slice of #750)', () => {
   });
 });
 
+describe('readOdtContent: master pages and header/footer content (#769)', () => {
+  function stylesPackage(stylesRootChildren: XmlElement[], textChildren: XmlElement[]): Package {
+    return {
+      parts: {
+        'content.xml': {
+          kind: 'xml',
+          nodes: [el('office:document-content', {}, [el('office:body', {}, [el('office:text', {}, textChildren)])])],
+        },
+        'styles.xml': {
+          kind: 'xml',
+          nodes: [el('office:document-styles', {}, stylesRootChildren)],
+        },
+      },
+    };
+  }
+
+  function readGeometry(entry: unknown): { pageSize: { widthPt: number; heightPt: number }; margins: { topPt: number } } {
+    if (
+      typeof entry !== 'object' || entry === null || !('pageSize' in entry) || !('margins' in entry) ||
+      typeof entry.pageSize !== 'object' || entry.pageSize === null || !('widthPt' in entry.pageSize) || !('heightPt' in entry.pageSize) ||
+      typeof entry.margins !== 'object' || entry.margins === null || !('topPt' in entry.margins) ||
+      typeof entry.pageSize.widthPt !== 'number' || typeof entry.pageSize.heightPt !== 'number' || typeof entry.margins.topPt !== 'number'
+    ) {
+      throw new Error('expected a masterPage entry carrying resolved geometry');
+    }
+    return { pageSize: entry.pageSize, margins: entry.margins };
+  }
+
+  function headerFooterParagraphs(entry: unknown, slot: string): ContentParagraph[] {
+    if (typeof entry !== 'object' || entry === null || !('kind' in entry)) {
+      throw new Error('expected a masterPage definitions entry');
+    }
+    const blocks = (entry as Record<string, unknown>)[slot];
+    if (!Array.isArray(blocks) || !blocks.every((block: unknown): block is ContentParagraph => typeof block === 'object' && block !== null && 'kind' in block && 'runs' in block && block.kind === 'paragraph')) {
+      throw new Error(`expected a paragraph-only ${slot} body`);
+    }
+    return blocks;
+  }
+
+  it('reads every style:master-page into a keyed masterPage definitions entry with its resolved page geometry', () => {
+    const pkg = stylesPackage(
+      [
+        el('office:automatic-styles', {}, [
+          el('style:page-layout', { 'style:name': 'PM-portrait' }, [el('style:page-layout-properties', { 'fo:page-width': '21cm', 'fo:page-height': '29.7cm', 'fo:margin-top': '2cm', 'fo:margin-bottom': '2cm', 'fo:margin-left': '2cm', 'fo:margin-right': '2cm' })]),
+          el('style:page-layout', { 'style:name': 'PM-landscape' }, [el('style:page-layout-properties', { 'fo:page-width': '29.7cm', 'fo:page-height': '21cm', 'fo:margin-top': '1cm', 'fo:margin-bottom': '1cm', 'fo:margin-left': '1cm', 'fo:margin-right': '1cm' })]),
+        ]),
+        el('office:master-styles', {}, [
+          el('style:master-page', { 'style:name': 'Standard', 'style:page-layout-name': 'PM-portrait' }),
+          el('style:master-page', { 'style:name': 'Landscape', 'style:page-layout-name': 'PM-landscape' }),
+        ]),
+      ],
+      [paragraph('body')],
+    );
+    const document = readOdtContent(pkg);
+    const standard = document.definitions?.['masterPage:Standard'];
+    const landscape = document.definitions?.['masterPage:Landscape'];
+    expect(standard).toMatchObject({ kind: 'masterPage', name: 'Standard' });
+    const standardPage = readGeometry(standard);
+    expect(standardPage.pageSize.widthPt).toBeCloseTo(595.3, 0);
+    expect(standardPage.pageSize.heightPt).toBeCloseTo(841.9, 0);
+    expect(standardPage.margins.topPt).toBeCloseTo(56.7, 0);
+    expect(landscape).toMatchObject({ kind: 'masterPage', name: 'Landscape' });
+    expect(readGeometry(landscape).pageSize.widthPt).toBeCloseTo(841.9, 0);
+    // The section's own geometry still comes from the FIRST master page in document order -- unchanged.
+    expect(document.sections[0]?.pageSize.widthPt).toBeCloseTo(595.3, 0);
+  });
+
+  it('reads style:header and style:footer content as block flow on the master-page entry', () => {
+    const pkg = stylesPackage(
+      [
+        el('office:master-styles', {}, [
+          el('style:master-page', { 'style:name': 'Standard' }, [
+            el('style:header', {}, [el('text:p', {}, [txt('Header text.')])]),
+            el('style:footer', {}, [el('text:p', {}, [txt('Footer text.')])]),
+          ]),
+        ]),
+      ],
+      [paragraph('body')],
+    );
+    const document = readOdtContent(pkg);
+    const entry = document.definitions?.['masterPage:Standard'];
+    expect(headerFooterParagraphs(entry, 'header')[0]?.runs[0]?.text).toBe('Header text.');
+    expect(headerFooterParagraphs(entry, 'footer')[0]?.runs[0]?.text).toBe('Footer text.');
+  });
+
+  it('reads the left/right header and footer slots under their own ODF slot keys', () => {
+    const pkg = stylesPackage(
+      [
+        el('office:master-styles', {}, [
+          el('style:master-page', { 'style:name': 'Standard' }, [
+            el('style:header-left', {}, [el('text:p', {}, [txt('Left header.')])]),
+            el('style:header-right', {}, [el('text:p', {}, [txt('Right header.')])]),
+            el('style:footer-left', {}, [el('text:p', {}, [txt('Left footer.')])]),
+          ]),
+        ]),
+      ],
+      [paragraph('body')],
+    );
+    const document = readOdtContent(pkg);
+    const entry = document.definitions?.['masterPage:Standard'];
+    expect(headerFooterParagraphs(entry, 'headerLeft')[0]?.runs[0]?.text).toBe('Left header.');
+    expect(headerFooterParagraphs(entry, 'headerRight')[0]?.runs[0]?.text).toBe('Right header.');
+    expect(headerFooterParagraphs(entry, 'footerLeft')[0]?.runs[0]?.text).toBe('Left footer.');
+    expect(entry).not.toHaveProperty('footer');
+    expect(entry).not.toHaveProperty('footerRight');
+    expect(entry).not.toHaveProperty('header');
+  });
+
+  it('reads a header paragraph\'s inline constructs (a field extent) through the same run walk as body paragraphs', () => {
+    const pkg = stylesPackage(
+      [
+        el('office:master-styles', {}, [
+          el('style:master-page', { 'style:name': 'Standard' }, [
+            el('style:header', {}, [el('text:p', {}, [txt('Page '), el('text:page-number', {}, [txt('4')])])]),
+          ]),
+        ]),
+      ],
+      [paragraph('body')],
+    );
+    const document = readOdtContent(pkg);
+    const header = headerFooterParagraphs(document.definitions?.['masterPage:Standard'], 'header');
+    expect(header[0]?.runs.map((run) => run.text)).toEqual(['Page ', '4']);
+    expect(header[0]?.constructs).toEqual([
+      { descriptor: { kind: 'field', instruction: '<text:page-number></text:page-number>', cachedResult: '4' }, startRun: 1, endRun: 2 },
+    ]);
+  });
+
+  it('omits a master-page entry whose own name is absent, and carries entries onto the assembled package root', () => {
+    const pkg = stylesPackage(
+      [
+        el('office:master-styles', {}, [
+          el('style:master-page', { 'style:name': 'Standard' }),
+          el('style:master-page', {}),
+        ]),
+      ],
+      [paragraph('body')],
+    );
+    const document = readOdtContent(pkg);
+    expect(Object.keys(document.definitions ?? {})).toEqual(['masterPage:Standard']);
+    expect(readOdt(pkg).definitions).toEqual({ 'masterPage:Standard': { kind: 'masterPage', name: 'Standard' } });
+  });
+});
+
 describe('readOdtContent: field master declarations as a definitions table', () => {
   it('reads variable, user-field, and sequence declarations into keyed definitions entries', () => {
     const pkg = odtPackage([

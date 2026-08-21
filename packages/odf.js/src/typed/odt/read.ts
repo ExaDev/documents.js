@@ -24,6 +24,7 @@ import { readOdfParagraph } from '../shared/paragraph';
 import { readOdfFormControlConstructs } from '../shared/forms';
 import { readOdfTable } from '../shared/table';
 import { readOdfMetadata } from '../shared/metadata';
+import { readOdfMasterPageDefinitions } from '../shared/masterpage';
 import { parsePageSize, parseMargins } from '../shared/geometry';
 import { parseOdfLength } from '../shared/units';
 import { readDrawFrame } from '../draw/shapes';
@@ -360,6 +361,9 @@ export function readOdtContent(pkg: Package, options: OdtReadOptions = {}): OdtD
     }
   }
   const blocks = insertOdfConstructMarkers(walked, extents);
+
+  // The master-page tenant of the definitions table: every style:master-page with its resolved page geometry and its header/footer slots read as block flow. Collected AFTER the body walk so a header/footer list's minted numIds follow the body's own, keeping every existing numId assignment stable -- master pages are styles-side facts, and the body's identities were already minted by the walk above.
+  readOdfMasterPageDefinitions(pkg, definitions.entries, { provenanceRegions, definitions, format: 'odt' }, state.listIdState);
 
   return {
     metadata,
