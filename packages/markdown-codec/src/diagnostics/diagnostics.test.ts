@@ -87,13 +87,6 @@ describe('every MarkdownDiagnosticCodes entry is reachable from real input', () 
     reached.add(MarkdownDiagnosticCodes.LIST_ITEM_BLOCK_UNLISTED);
   });
 
-  it('LIST_ITEM_MULTI_BLOCK_FLATTENED: a list item directly containing two blocks', () => {
-    const collector = createDiagnosticCollector();
-    lowerMarkdown('- one\n\n  two', { sink: collector.sink });
-    expect(collector.has(MarkdownDiagnosticCodes.LIST_ITEM_MULTI_BLOCK_FLATTENED)).toBe(true);
-    reached.add(MarkdownDiagnosticCodes.LIST_ITEM_MULTI_BLOCK_FLATTENED);
-  });
-
   it('IMAGE_UNRESOLVED: an image with no resolver available', () => {
     const collector = createDiagnosticCollector();
     lowerMarkdown('![a](http://example.com/x.png)', { sink: collector.sink });

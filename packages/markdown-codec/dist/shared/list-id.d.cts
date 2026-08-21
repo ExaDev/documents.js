@@ -18,5 +18,6 @@ declare function createNumIdMintState(): NumIdMintState;
 declare function mintListNumId(state: NumIdMintState, options: ListNumIdMintOptions): string;
 declare function parseListNumId(numId: string): ListNumIdInfo | undefined;
 declare function mintedListType(numId: string): 'bullet' | 'ordered' | undefined;
+declare function mintListItemId(state: NumIdMintState): string;
 //#endregion
-export { ListNumIdInfo, ListNumIdMintOptions, NumIdMintState, createNumIdMintState, mintListNumId, mintedListType, parseListNumId };
+export { ListNumIdInfo, ListNumIdMintOptions, NumIdMintState, createNumIdMintState, mintListItemId, mintListNumId, mintedListType, parseListNumId };

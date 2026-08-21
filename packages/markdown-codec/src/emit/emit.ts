@@ -189,33 +189,40 @@ function listInfoFor(numId: string | undefined, context: EmitContext): ListNumId
   return info;
 }
 
-function checkboxPrefixFor(item: ContentParagraph): string | undefined {
+// Strips the leading checkbox glyph run the pre-field lowering prepended, so renderParagraphBody does not ALSO print the raw glyph character in the item's own body text -- the marker rendered by renderListItemMarker below carries the equivalent `[x]`/`[ ]` text instead. Reached only for the legacy glyph spelling; the membership-field spelling has no glyph run to strip.
+function stripCheckboxRun(item: ContentParagraph): ContentParagraph {
   const first = item.runs[0];
-  if (first === undefined) {
-    return undefined;
-  }
-  if (first.text.startsWith(`${TASK_CHECKBOX_CHECKED} `)) {
-    return '[x] ';
-  }
-  if (first.text.startsWith(`${TASK_CHECKBOX_UNCHECKED} `)) {
-    return '[ ] ';
-  }
-  return undefined;
-}
-
-// Strips the leading checkbox glyph src/lower/lower.ts's own applyTaskCheckbox prepended, so renderParagraphBody does not ALSO print the raw glyph character in the item's own body text -- the marker rendered by renderListItemMarker below carries the equivalent `[x]`/`[ ]` text instead.
-function stripCheckboxRun(item: ContentParagraph, checkboxPrefix: string | undefined): ContentParagraph {
-  if (checkboxPrefix === undefined) {
-    return item;
-  }
-  const first = item.runs[0];
-  const glyphPrefix = checkboxPrefix === '[x] ' ? `${TASK_CHECKBOX_CHECKED} ` : `${TASK_CHECKBOX_UNCHECKED} `;
+  const checked = first?.text.startsWith(`${TASK_CHECKBOX_CHECKED} `);
+  const glyphPrefix = checked ? `${TASK_CHECKBOX_CHECKED} ` : `${TASK_CHECKBOX_UNCHECKED} `;
   if (!first?.text.startsWith(glyphPrefix)) {
     return item;
   }
   const strippedText = first.text.slice(glyphPrefix.length);
   const runs = strippedText.length === 0 ? item.runs.slice(1) : [{ ...first, text: strippedText }, ...item.runs.slice(1)];
   return { ...item, runs };
+}
+
+// One item's first-block preparation: the checkbox text its marker line carries, and whether that block's own leading run is a legacy checkbox glyph that must be stripped from the body. The membership's own checked field is the current spelling and needs no task-flagged numId behind it; the glyph sniff is gated on the numId's task flag exactly as it always was, so an ordinary item whose text happens to begin with a ballot-box glyph is never misread as a checkbox.
+interface FirstBlockCheckbox {
+  readonly checkboxText: string;
+  readonly stripGlyph: boolean;
+}
+
+function firstBlockCheckbox(first: ContentParagraph, taskNumId: boolean): FirstBlockCheckbox {
+  if (first.list?.checked !== undefined) {
+    return { checkboxText: first.list.checked ? '[x] ' : '[ ] ', stripGlyph: false };
+  }
+  if (!taskNumId) {
+    return { checkboxText: '', stripGlyph: false };
+  }
+  const leading = first.runs[0]?.text ?? '';
+  if (leading.startsWith(`${TASK_CHECKBOX_CHECKED} `)) {
+    return { checkboxText: '[x] ', stripGlyph: true };
+  }
+  if (leading.startsWith(`${TASK_CHECKBOX_UNCHECKED} `)) {
+    return { checkboxText: '[ ] ', stripGlyph: true };
+  }
+  return { checkboxText: '', stripGlyph: false };
 }
 
 interface RenderedListMarker {
@@ -225,9 +232,7 @@ interface RenderedListMarker {
   readonly bareLength: number;
 }
 
-function renderListItemMarker(numId: string | undefined, info: ListNumIdInfo | undefined, item: ContentParagraph, context: EmitContext): RenderedListMarker {
-  const checkboxPrefix = info?.task === true ? checkboxPrefixFor(item) : undefined;
-  const checkboxText = checkboxPrefix ?? '';
+function renderListItemMarker(numId: string | undefined, info: ListNumIdInfo | undefined, checkboxText: string, context: EmitContext): RenderedListMarker {
   // Only a parsed numId string can carry type 'ordered', so the ordered-counter key is present exactly when this branch is live.
   if (info?.type === 'ordered' && numId !== undefined) {
     const next = context.orderedCounters.get(numId) ?? (info.start ?? 1);
@@ -245,7 +250,7 @@ interface ListItemPart {
   readonly text: string;
 }
 
-// Renders one contiguous, flat run of .list-carrying paragraphs -- possibly spanning several sibling top-level lists back to back, and arbitrarily nested sub-lists (a paragraph whose own level is deeper than its predecessor's is that predecessor's own nested list content, recursed into here). Loose/tight spacing between two SIBLING items sharing the same numId is read from that numId's own `loose` flag; a boundary between two DIFFERENT numIds always gets a blank line, matching how two genuinely separate lists always render with visual separation.
+// Renders one contiguous, flat run of .list-carrying paragraphs -- possibly spanning several sibling top-level lists back to back, and arbitrarily nested sub-lists (a paragraph whose own level is deeper than its predecessor's is that predecessor's own nested list content, recursed into here). One ITEM is the run of same-level paragraphs sharing one itemId -- the write-side inverse of src/lower/lower.ts's minted item identity -- so a multi-block item renders one marker line with every later block continued on the continuation indent after a blank line (the only spacing a reparse reads back as separate blocks inside one item). A membership with no itemId at all is the cross-format shape: each paragraph is its own item, exactly as this writer always treated them. Loose/tight spacing between two SIBLING items sharing the same numId is read from that numId's own `loose` flag; a boundary between two DIFFERENT numIds always gets a blank line, matching how two genuinely separate lists always render with visual separation.
 function renderListRegion(items: readonly ContentParagraph[], context: EmitContext): string {
   const parts: ListItemPart[] = [];
   let index = 0;
@@ -254,21 +259,44 @@ function renderListRegion(items: readonly ContentParagraph[], context: EmitConte
     if (item?.list === undefined) {
       break;
     }
-    const { numId, level } = item.list;
+    const { numId, level, itemId } = item.list;
     const info = listInfoFor(numId, context);
 
-    let lookahead = index + 1;
+    let ownEnd = index + 1;
+    if (itemId !== undefined) {
+      while (ownEnd < items.length) {
+        const candidate = items[ownEnd];
+        if (candidate?.list?.level !== level || candidate.list?.itemId !== itemId) {
+          break;
+        }
+        ownEnd += 1;
+      }
+    }
+    const ownBlocks = items.slice(index, ownEnd);
+
+    let lookahead = ownEnd;
     while (lookahead < items.length && (items[lookahead]?.list?.level ?? -1) > level) {
       lookahead += 1;
     }
-    const nestedItems = items.slice(index + 1, lookahead);
+    const nestedItems = items.slice(ownEnd, lookahead);
 
-    const checkboxPrefix = info?.task === true ? checkboxPrefixFor(item) : undefined;
-    const marker = renderListItemMarker(numId, info, item, context);
-    const bodyLines = renderParagraphBody(stripCheckboxRun(item, checkboxPrefix), context).split('\n');
+    const first = ownBlocks[0];
+    if (first === undefined) {
+      break;
+    }
+    const { checkboxText, stripGlyph } = firstBlockCheckbox(first, info?.task === true);
+    const marker = renderListItemMarker(numId, info, checkboxText, context);
     const indent = ' '.repeat(marker.bareLength);
+    const bodyLines = renderParagraphBody(stripGlyph ? stripCheckboxRun(first) : first, context).split('\n');
     const [firstLine = '', ...restLines] = bodyLines;
     let text = [`${marker.full}${firstLine}`, ...restLines.map((line) => `${indent}${line}`)].join('\n');
+    for (const extra of ownBlocks.slice(1)) {
+      const rendered = renderParagraphBody(extra, context)
+        .split('\n')
+        .map((line) => (line.length === 0 ? line : `${indent}${line}`))
+        .join('\n');
+      text += `\n\n${rendered}`;
+    }
     if (nestedItems.length > 0) {
       const nested = renderListRegion(nestedItems, context)
         .split('\n')

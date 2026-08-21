@@ -38,7 +38,6 @@ export const MarkdownDiagnosticCodes = {
   LINK_TITLE_DROPPED: 'md/link-title-dropped',
   BLOCKQUOTE_NESTED_DEPTH: 'md/blockquote-nested-depth',
   LIST_ITEM_BLOCK_UNLISTED: 'md/list-item-block-unlisted',
-  LIST_ITEM_MULTI_BLOCK_FLATTENED: 'md/list-item-multi-block-flattened',
   IMAGE_UNRESOLVED: 'md/image-unresolved',
   RAW_HTML_PRESERVED_AS_TEXT: 'md/raw-html-preserved-as-text',
   RAW_HTML_DROPPED: 'md/raw-html-dropped',

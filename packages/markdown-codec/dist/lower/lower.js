@@ -1,7 +1,7 @@
 import { DEFAULT_MARGINS } from "../defaults/defaults.js";
 import { MarkdownDiagnosticCodes, MarkdownInputTooLargeError, NOOP_MARKDOWN_DIAGNOSTIC_SINK } from "../diagnostics/diagnostics.js";
 import { parseMarkdown } from "../block/block.js";
-import { createNumIdMintState, mintListNumId, mintedListType } from "../shared/list-id.js";
+import { createNumIdMintState, mintListItemId, mintListNumId, mintedListType } from "../shared/list-id.js";
 import { CODE_BLOCK_STYLE_ID, HORIZONTAL_RULE_STYLE_ID, HTML_PREFORMATTED_STYLE_ID, MATH_BLOCK_STYLE_ID, QUOTE_STYLE_ID, headingStyleId } from "../shared/style-constants.js";
 import { extractFrontMatter } from "./front-matter.js";
 import { resolveMarkdownImage } from "./image.js";
@@ -24,10 +24,7 @@ function decorateParagraph(paragraph, context) {
 	};
 	if (context.list !== void 0) result = {
 		...result,
-		list: {
-			numId: context.list.numId,
-			level: context.list.level
-		}
+		list: { ...context.list }
 	};
 	return result;
 }
@@ -204,31 +201,18 @@ function lowerBlockquote(node, context, contentWidthPt) {
 	}, nested)];
 	return blocks;
 }
-function applyTaskCheckbox(blocks, checked) {
-	const first = blocks[0];
-	if (first?.kind !== "paragraph") return false;
-	const checkboxRun = { text: `${checked ? "☒" : "☐"} ` };
-	blocks[0] = {
-		...first,
-		runs: [checkboxRun, ...first.runs]
-	};
-	return true;
-}
 function lowerListItem(item, numId, level, context, contentWidthPt) {
-	if (item.children.filter((child) => child.type !== "list").length > 1) context.sink({
-		code: MarkdownDiagnosticCodes.LIST_ITEM_MULTI_BLOCK_FLATTENED,
-		severity: "info",
-		message: "a list item directly containing more than one block loses its own item boundary once lowered -- ContentListMembership carries only numId/level, with no field distinguishing \"one item, several blocks\" from \"several items sharing this numId/level\""
-	});
+	const membership = {
+		numId,
+		level,
+		...item.checked !== void 0 ? { checked: item.checked } : {},
+		itemId: mintListItemId(context.numIdState)
+	};
 	const itemContext = {
 		...context,
-		list: {
-			numId,
-			level
-		}
+		list: membership
 	};
 	const blocks = [];
-	let checkboxApplied = item.checked === void 0;
 	let ownLevelBlockCount = 0;
 	for (const child of item.children) {
 		if (child.type === "list") {
@@ -237,17 +221,12 @@ function lowerListItem(item, numId, level, context, contentWidthPt) {
 		}
 		const childBlocks = lowerBlock(child, itemContext, contentWidthPt);
 		ownLevelBlockCount += childBlocks.length;
-		if (!checkboxApplied) checkboxApplied = applyTaskCheckbox(childBlocks, item.checked === true);
 		blocks.push(...childBlocks);
 	}
-	if (ownLevelBlockCount === 0) {
-		const placeholder = [decorateParagraph({
-			kind: "paragraph",
-			runs: []
-		}, itemContext)];
-		if (!checkboxApplied) applyTaskCheckbox(placeholder, item.checked === true);
-		blocks.unshift(...placeholder);
-	}
+	if (ownLevelBlockCount === 0) blocks.unshift(decorateParagraph({
+		kind: "paragraph",
+		runs: []
+	}, itemContext));
 	return blocks;
 }
 function lowerList(node, ancestorNumId, level, context, contentWidthPt) {
