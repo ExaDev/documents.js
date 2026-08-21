@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   documentPackageWithSchema,
   DocumentPackageSchema,
+  factorStyles,
   type ContentParagraph,
   type DefinitionEntry,
   type DocumentPackage,
   type StylesTable,
 } from 'document-schema.js';
+import { effectivePackage } from './effective';
 import { defaultExtractionPolicy, projectDocumentGraph, type ExtractionPolicy, type GraphNode, type PropertyGraph } from './graph';
 import {
   drawPageGroup,
@@ -330,6 +332,41 @@ describe('definitions tables', () => {
     expect(() => projectDocumentGraph([{ id: 'doc', package: mutual }])).toThrowError(
       /definitions table entry "n1" is reachable from its own body/,
     );
+  });
+});
+
+describe('factoring and node identity', () => {
+  // One document, two spellings: the unfactored tree carries the recurring tuple inline on every styled paragraph; factorStyles (the minting pass itself) hoists it onto a section wrapper's ref plus a styles-table entry. The projection deliberately hashes each node's own projected content, not style-resolved content, so the two spellings' node ids differ wherever the style rides while everything it does not touch is shared -- and effectivePackage first is the caller's route to factoring-invariant ids, exactly as it already is for leafContentHash.
+  const styled = (text: string): ContentParagraph => ({ kind: 'paragraph', runs: [{ text, bold: true }], alignment: 'center' });
+  const unfactored = (): DocumentPackage =>
+    wordprocessingPackage([sectionGroup([styled('Styled one.'), styled('Styled two.')]), sectionGroup([paragraph('Plain.')])]);
+
+  it('gives a factored and an unfactored spelling of one document different styled-node ids, sharing the untouched remainder', () => {
+    const factored = factorStyles(unfactored());
+    expectSchemaValid(unfactored(), 'unfactored');
+    expectSchemaValid(factored, 'factored');
+    // The minting pass really factored the recurring tuple: one entry, hoisted onto the first section's wrapper ref.
+    expect(factored.styles).toEqual({ s1: { paragraph: { alignment: 'center' }, run: { bold: true } } });
+
+    const factoredGraph = projectDocumentGraph([{ id: 'doc', package: factored }]);
+    const unfactoredGraph = projectDocumentGraph([{ id: 'doc', package: unfactored() }]);
+
+    // The plain paragraph, untouched by the style, is the same node in both spellings.
+    expect(nodeByText(factoredGraph, 'Plain.').id).toBe(nodeByText(unfactoredGraph, 'Plain.').id);
+    // The styled paragraphs are not: the factored hash folds in the style entry's hash, the unfactored hashes the properties inline.
+    expect(nodeByText(factoredGraph, 'Styled one.').id).not.toBe(nodeByText(unfactoredGraph, 'Styled one.').id);
+    // The extraction difference is visible as nodes and edges the unfactored spelling cannot have.
+    expect(factoredGraph.nodes.filter((node) => node.kind === 'styleEntry')).toHaveLength(1);
+    expect(unfactoredGraph.nodes.filter((node) => node.kind === 'styleEntry')).toHaveLength(0);
+    expect(factoredGraph.edges.filter((edge) => edge.kind === 'STYLED_BY')).toHaveLength(1);
+    expect(unfactoredGraph.edges.filter((edge) => edge.kind === 'STYLED_BY')).toHaveLength(0);
+  });
+
+  it('projects the two spellings to the identical graph once effectivePackage has resolved them', () => {
+    const factored = factorStyles(unfactored());
+    const resolvedFactored = projectDocumentGraph([{ id: 'doc', package: effectivePackage(factored) }]);
+    const resolvedUnfactored = projectDocumentGraph([{ id: 'doc', package: effectivePackage(unfactored()) }]);
+    expect(resolvedFactored).toEqual(resolvedUnfactored);
   });
 });
 
