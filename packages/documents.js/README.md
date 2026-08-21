@@ -303,7 +303,17 @@ const { comments, footnotes, headers, footers, numbering } = readDocxExtras(deco
 console.log(Object.values(numbering)[0]?.levels['0']?.format); // numbering is keyed by numId, each level by its own level index
 ```
 
-`openPptx`/`createPptx` and `PptxSlide`/`PptxShape` are the pptx equivalent. `openOdt`/`createOdt` and `OdtParagraph`/`OdtRun`/`OdtTable`/`OdtList` are the odt equivalent, built on ODF's style-name-referencing model. `openOdp`/`createOdp` and `OdpSlide`/`OdpShape` reuse `OdtParagraph`/`OdtRun`/`OdtList` directly (a `draw:frame`'s `draw:text-box` holds the identical `text:p`/`text:span` model):
+`openPptx`/`createPptx` and `PptxSlide`/`PptxShape` are the pptx equivalent. `embeddedPresentationSerialiser` is ooxml.js's embedded-presentation port wired from this package's own pptx builder. ooxml.js has no PresentationML writer and cannot depend on the one pptx writer in the ecosystem (`buildPptxPackage`, living here one layer above it), so its docx writer instead accepts an injected serialiser; pass this value as `BuildDocxContentOptions.serialiseEmbeddedPresentation` and a docx carrying an OLE-embedded presentation — which `readDocxContent` genuinely recovers as an `embeddedObject` block — round-trips through that writer, the nested deck re-serialised into a real `word/embeddings/oleObject<N>.pptx` payload rather than refused:
+
+```ts
+import { embeddedPresentationSerialiser } from 'documents.js';
+import { buildDocxPackageFromContent, decodePackage, encodePackage, readDocxContent } from 'ooxml.js';
+
+const content = readDocxContent(decodePackage(docxBytes)); // carries a presentation embed
+const rebuilt = encodePackage(buildDocxPackageFromContent(content, { serialiseEmbeddedPresentation: embeddedPresentationSerialiser }));
+```
+
+`openOdt`/`createOdt` and `OdtParagraph`/`OdtRun`/`OdtTable`/`OdtList` are the odt equivalent, built on ODF's style-name-referencing model. `openOdp`/`createOdp` and `OdpSlide`/`OdpShape` reuse `OdtParagraph`/`OdtRun`/`OdtList` directly (a `draw:frame`'s `draw:text-box` holds the identical `text:p`/`text:span` model):
 
 ```ts
 import { createOdp } from 'documents.js';
