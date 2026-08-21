@@ -104,6 +104,38 @@ describe('buildOdtPackage', () => {
     expect(paragraphTexts).toContain('Section two');
   });
 
+  it('writes a heading paragraph as a real text:h and recovers it back through readOdtContent', () => {
+    const content = wordDoc([
+      {
+        pageSize: { widthPt: 612, heightPt: 792 },
+        margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+        blocks: [
+          // Both spellings of the depth, exactly as markdown-codec's lowerHeading and the PDF reconstruction's heading inference produce them: styleId is the family's cross-format Heading{N} convention, headingLevel the canonical signal.
+          { kind: 'paragraph', styleId: 'Heading2', headingLevel: 2, runs: [{ text: 'A heading' }] },
+          { kind: 'paragraph', runs: [{ text: 'Body text' }] },
+        ],
+      },
+    ]);
+    const pkg = buildOdtPackage(content);
+    const [headingElement, bodyElement] = officeText(pkg).children.filter((child) => child.type === 'element');
+    expect(headingElement?.type === 'element' ? headingElement.tag : undefined).toBe('text:h');
+    expect(headingElement?.type === 'element' ? attr(headingElement, 'text:outline-level') : undefined).toBe('2');
+    expect(headingElement?.type === 'element' ? attr(headingElement, 'text:style-name') : undefined).toBe('Heading_20_2');
+    expect(bodyElement?.type === 'element' ? bodyElement.tag : undefined).toBe('text:p');
+    // The referenced style must exist as a real definition, or the emitted style-name is a name ODF cannot resolve -- the exact bug this replaces.
+    const stylesPart = pkg.parts['styles.xml'];
+    const stylesRoot = stylesPart?.kind === 'xml' ? rootElement(stylesPart.nodes) : undefined;
+    const officeStyles = stylesRoot === undefined ? undefined : findChildElement(stylesRoot.children, 'office:styles');
+    const headingStyle = officeStyles?.children.find((child) => child.type === 'element' && child.tag === 'style:style' && attr(child, 'style:name') === 'Heading_20_2');
+    expect(headingStyle).toBeDefined();
+    const roundTripped = readOdtContent(pkg);
+    if (roundTripped.kind !== 'wordprocessing') {
+      throw new Error('expected a wordprocessing ContentDocument');
+    }
+    expect(roundTripped.sections[0]!.blocks[0]).toMatchObject({ kind: 'paragraph', styleId: 'Heading2', headingLevel: 2, runs: [{ text: 'A heading' }] });
+    expect(roundTripped.sections[0]!.blocks[1]).toMatchObject({ kind: 'paragraph', runs: [{ text: 'Body text' }] });
+  });
+
   it('builds a table with the right row/column count and cell text', () => {
     const content = wordDoc([
       {

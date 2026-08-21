@@ -1,6 +1,7 @@
 import type { LayoutMetadata } from 'document-schema.js';
 import type { Package, XmlElement, XmlNode } from 'odf.js';
 import { ODF_MEDIA_TYPES, setDocumentMediaType, syncManifest, xmlnsAttributes } from 'odf.js';
+import { attr } from 'ooxml.js';
 import { PAGE_SIZE_LETTER } from 'document-schema.js';
 import { encodeXmlText } from '../../xml/entities';
 import { el, txt } from '../../xml/fragment';
@@ -55,6 +56,43 @@ function buildContentXml(): XmlElement {
     el('office:automatic-styles'),
     el('office:body', {}, [el('office:text')]),
   ]);
+}
+
+// The ODF spelling of a level-N heading's style name: LibreOffice and every ODF producer spell the space in "Heading N" as the style-name grammar's own _20_ escape (percent-style hex of the escaped character), with the human-readable form carried separately as style:display-name. This is the write-side inverse of odf.js's own reader, which IGNORES a text:h's real style-name and synthesises this family's cross-format "Heading{N}" styleId from the outline level alone -- so a heading's identity round-trips through the level, never through the style string.
+export function headingStyleName(level: number): string {
+  return `Heading_20_${String(level)}`;
+}
+
+// Finds or creates the common style definition a heading's text:style-name points at, returning the style name to reference. A heading style is a COMMON style (office:styles, usable from any part and definable in styles.xml or content.xml alike -- style:name uniqueness is document-wide, the same rule odf.js's own style cascade resolves by), not an automatic one minted per element, which is why this lives here rather than beside automatic-styles.ts's content.xml-scoped helpers. The definition is deliberately minimal -- family, class, display name, nothing else: the outline LEVEL rides the text:h element's own text:outline-level attribute (the canonical signal odf.js reads back), and a renderer recognising the well-known name applies its own built-in heading formatting, exactly as LibreOffice maps Heading_20_N onto its own outline styles on import. An empty style contributes no properties, so a renderer that does not know the name degrades to its defaults rather than to anything wrong.
+export function ensureHeadingStyle(pkg: Package, level: number): string {
+  const name = headingStyleName(level);
+  const part = pkg.parts['styles.xml']?.kind === 'xml' ? pkg.parts['styles.xml'] : pkg.parts['content.xml']?.kind === 'xml' ? pkg.parts['content.xml'] : undefined;
+  const root = part?.nodes.find((n): n is XmlElement => n.type === 'element');
+  if (root === undefined) {
+    throw new Error('ensureHeadingStyle: package has neither a styles.xml nor a content.xml xml part to hold a common heading style');
+  }
+  let officeStyles: XmlElement | undefined;
+  for (const child of root.children) {
+    if (child.type === 'element' && child.tag === 'office:styles') {
+      officeStyles = child;
+      break;
+    }
+  }
+  if (officeStyles === undefined) {
+    officeStyles = el('office:styles');
+    // office:styles precedes office:automatic-styles/office:body in both office:document-styles and office:document-content -- the identical insertion-order rule ensureAutomaticStyles applies for its own container (src/edit/odt/automatic-styles.ts).
+    const insertIndex = root.children.findIndex((n) => n.type === 'element' && (n.tag === 'office:automatic-styles' || n.tag === 'office:body' || n.tag === 'office:master-styles' || n.tag === 'office:settings'));
+    if (insertIndex === -1) {
+      root.children.push(officeStyles);
+    } else {
+      root.children.splice(insertIndex, 0, officeStyles);
+    }
+  }
+  const existing = officeStyles.children.find((child) => child.type === 'element' && child.tag === 'style:style' && attr(child, 'style:name') === name);
+  if (existing === undefined) {
+    officeStyles.children.push(el('style:style', { 'style:name': name, 'style:display-name': `Heading ${String(level)}`, 'style:family': 'paragraph', 'style:class': 'text' }));
+  }
+  return name;
 }
 
 // The office:meta children a LayoutMetadata value maps onto: dc:title, meta:initial-creator (the human AUTHOR -- NOT dc:creator, which in ODF means "last modified by", a concept LayoutMetadata has no field for), dc:subject, one meta:keyword element PER keyword (not comma-joined, unlike OOXML's own cp:keywords -- see src/opc/core-properties.ts), meta:generator (the originating application, LayoutMetadata's own `creator` field), meta:creation-date, and dc:date (last-modified). Element order is not significant (confirmed against real LibreOffice output); each child is pushed only when the corresponding field is present. Duplicated identically across odt/odp/ods/odg scaffold.ts, matching this directory's own existing convention of each format scaffold declaring its own small XML-building helpers rather than sharing them through an extra module.

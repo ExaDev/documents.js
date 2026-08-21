@@ -46,11 +46,11 @@ export class OdtListItem {
     this.pkg = pkg;
   }
 
-  // Direct text:p children of this item, as live views -- the read counterpart to appendParagraph, mirroring OdtTableCell.paragraphs (table.ts) and OdtBody.paragraphs (editor.ts) exactly, including their shared, documented text:h scope gap (a heading is a distinct ODF tag this editor surfaces nowhere yet; it stays byte-preserved either way). A paragraph belonging to a FURTHER-nested list is deliberately not reached here -- ODF nests lists structurally, so it belongs to that nested list's own item, reached through nestedLists() below.
+  // Direct text:p and text:h children of this item, as live views -- the read counterpart to appendParagraph, mirroring OdtTableCell.paragraphs (table.ts) and OdtBody.paragraphs (editor.ts) exactly, headings included (OdtParagraph covers both tags). A paragraph belonging to a FURTHER-nested list is deliberately not reached here -- ODF nests lists structurally, so it belongs to that nested list's own item, reached through nestedLists() below.
   paragraphs(): OdtParagraph[] {
     const out: OdtParagraph[] = [];
     for (const child of this.node.children) {
-      if (child.type === 'element' && child.tag === 'text:p') {
+      if (child.type === 'element' && (child.tag === 'text:p' || child.tag === 'text:h')) {
         out.push(new OdtParagraph(this.node.children, child, this.pkg));
       }
     }

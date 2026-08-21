@@ -156,7 +156,7 @@ export class OdtTableCell {
   paragraphs(): OdtParagraph[] {
     const out: OdtParagraph[] = [];
     for (const child of this.node.children) {
-      if (child.type === 'element' && child.tag === 'text:p') {
+      if (child.type === 'element' && (child.tag === 'text:p' || child.tag === 'text:h')) {
         out.push(new OdtParagraph(this.node.children, child, this.pkg));
       }
     }

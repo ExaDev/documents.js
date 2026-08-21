@@ -127,7 +127,10 @@ function appendListRun(body: OdtBody, paragraphs: readonly ContentParagraph[]): 
 
 // Exported so src/edit/odp/content.ts's own buildOdpPackage can reuse this exact resolve-alignment-then-append-styled-runs logic for a presentation shape's own paragraphs -- a draw:frame's draw:text-box holds the identical text:p/text:span content model office:text does, interned into the identical content.xml StyleRegistry (see src/edit/odt/props.ts), so there is no presentation-specific variant of this function to write.
 export function populateParagraph(paragraph: OdtParagraph, block: ContentParagraph): void {
-  if (block.styleId !== undefined) {
+  // A heading's style-name derives from its level, never from the incoming styleId: the two spellings always agree anyway (every producer in this family sets them from one parse -- markdown-codec's lowerHeading, the PDF reconstruction's font-size inference, odf.js's own text:h reader), and the styleId's "Heading{N}" form is exactly the cross-format spelling ODF cannot resolve, while the headingLevel setter writes the ODF-native Heading_20_N (plus its style definition) in its place. A non-heading paragraph keeps its styleId verbatim as before.
+  if (block.headingLevel !== undefined) {
+    paragraph.headingLevel = block.headingLevel;
+  } else if (block.styleId !== undefined) {
     paragraph.styleId = block.styleId;
   }
   if (block.alignment !== undefined) {

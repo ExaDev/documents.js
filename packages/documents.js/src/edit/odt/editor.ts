@@ -115,12 +115,12 @@ export class OdtEditor {
     this.body = new OdtBodyImpl(officeText, pkg);
   }
 
-  // Direct text:p children of office:text only -- a paragraph nested inside a text:list-item (see list.ts) is reached via OdtList/OdtListItem, and a paragraph inside a table:table-cell (see table.ts) via OdtTable, mirroring DocxEditor.paragraphs' own direct-children-only scope (src/edit/docx/editor.ts). A heading (text:h, a distinct ODF tag from text:p, unlike WordprocessingML where a heading is just a w:p with a pStyle) is deliberately not surfaced here -- a documented, bounded gap for whenever this editor grows heading support, not a silent one: the heading itself is untouched, byte-preserved XML either way, simply outside what this traversal method finds.
+  // Direct text:p and text:h children of office:text only -- a paragraph nested inside a text:list-item (see list.ts) is reached via OdtList/OdtListItem, and a paragraph inside a table:table-cell (see table.ts) via OdtTable, mirroring DocxEditor.paragraphs' own direct-children-only scope (src/edit/docx/editor.ts). A heading arrives as the same OdtParagraph live view a text:p does (OdtParagraph covers both tags; its headingLevel getter/setter is where the two differ), since unlike WordprocessingML -- where a heading is just a w:p with a pStyle -- ODF spells one as its own element.
   paragraphs(): OdtParagraph[] {
     const officeText = findOfficeText(findContentRoot(this.pkg));
     const out: OdtParagraph[] = [];
     for (const child of officeText.children) {
-      if (child.type === 'element' && child.tag === 'text:p') {
+      if (child.type === 'element' && (child.tag === 'text:p' || child.tag === 'text:h')) {
         out.push(new OdtParagraph(officeText.children, child, this.pkg));
       }
     }

@@ -736,6 +736,8 @@ describe('markdown <-> odt: markdown -> odt -> markdown', () => {
 
     const heading = content.sections[0]!.blocks[0];
     expect(heading?.kind === 'paragraph' ? heading.styleId : undefined).toBe('Heading1');
+    // The canonical signal too: the heading crosses the bridge as a real text:h (outline level 1), not merely a text:p whose copied style string happens to spell "Heading1" -- which odf.js's reader would not recognise as a heading at all.
+    expect(heading?.kind === 'paragraph' ? heading.headingLevel : undefined).toBe(1);
   });
 
   it('throws when the signal is already aborted, on both hops', () => {

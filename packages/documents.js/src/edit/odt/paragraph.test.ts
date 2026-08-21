@@ -100,6 +100,41 @@ describe('buildParagraph', () => {
   });
 });
 
+describe('OdtParagraph.headingLevel', () => {
+  it('setting a level retags the element to text:h, writes the outline level, and points the style-name at the defined Heading_20_N common style', () => {
+    const editor = createOdt();
+    const paragraph = editor.body.appendParagraph({ text: 'A title' });
+    paragraph.headingLevel = 3;
+    const pkg = editor.toPackage();
+    const [heading] = elementsWithTag([contentRoot(pkg)], 'text:h');
+    expect(heading).toBeDefined();
+    expect(attrValue(heading!, 'text:outline-level')).toBe('3');
+    expect(attrValue(heading!, 'text:style-name')).toBe('Heading_20_3');
+    const stylesPart = pkg.parts['styles.xml'];
+    const stylesRoot = stylesPart?.kind === 'xml' ? rootElement(stylesPart.nodes) : undefined;
+    const officeStyles = stylesRoot === undefined ? undefined : childrenWithTag(stylesRoot, 'office:styles')[0];
+    expect(officeStyles?.children.some((child) => child.type === 'element' && child.tag === 'style:style' && attrValue(child, 'style:name') === 'Heading_20_3')).toBe(true);
+    // Reading back through the same live view, including the ODF schema's outline-level default of 1 when the attribute is absent.
+    expect(paragraph.headingLevel).toBe(3);
+    const bare = editor.body.appendParagraph();
+    bare.headingLevel = 1;
+    const [bareHeading] = elementsWithTag([contentRoot(editor.toPackage())], 'text:h').filter((node) => node !== heading);
+    expect(bareHeading).toBeDefined();
+    expect(new OdtParagraph([], bareHeading!, editor.toPackage()).headingLevel).toBe(1);
+  });
+
+  it('clearing the level retags back to text:p and drops the outline level, leaving the style-name alone', () => {
+    const editor = createOdt();
+    const paragraph = editor.body.appendParagraph({ text: 'Demoted' });
+    paragraph.headingLevel = 2;
+    paragraph.headingLevel = undefined;
+    expect(elementsWithTag([contentRoot(editor.toPackage())], 'text:h')).toHaveLength(0);
+    expect(paragraph.headingLevel).toBeUndefined();
+    // The visual style survives the demotion: style-name is a separate fact from the heading signal.
+    expect(paragraph.styleId).toBe('Heading_20_2');
+  });
+});
+
 describe('OdtParagraph.insertImageAfter', () => {
   it('appends an as-char anchored draw:frame referencing the inserted media part, with no absolute position', () => {
     const editor = createOdt();

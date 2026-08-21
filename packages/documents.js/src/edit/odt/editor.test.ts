@@ -56,7 +56,8 @@ describe('live-view fidelity: mutating one run must not change any other part', 
   it('mutating a run in content.xml leaves every other part byte-for-byte unchanged, except appending the new automatic style', () => {
     const before = minimalOdtPackage();
     const editor = openOdt(minimalOdtBytes());
-    const run = editor.paragraphs()[0]?.runs()[0];
+    // The fixture's first element is a text:h heading (now surfaced by paragraphs() as a first-class OdtParagraph); the bold-span run lives in the SECOND paragraph.
+    const run = editor.paragraphs()[1]?.runs()[0];
     if (run === undefined) {
       throw new Error('expected at least one text:span run in the fixture');
     }
@@ -81,8 +82,8 @@ describe('full editor round trip: open a real odt, mutate an existing run, add a
     const before = minimalOdtPackage();
     const editor = openOdt(minimalOdtBytes());
 
-    // Mutate bold/colour/alignment on the existing "bold text" run (a real text:span already present in the fixture, referencing a pre-existing automatic style).
-    const paragraph = editor.paragraphs()[0];
+    // Mutate bold/colour/alignment on the existing "bold text" run (a real text:span already present in the fixture's SECOND paragraph -- the first is the text:h heading -- referencing a pre-existing automatic style).
+    const paragraph = editor.paragraphs()[1];
     if (paragraph === undefined) {
       throw new Error('expected at least one paragraph in the fixture');
     }

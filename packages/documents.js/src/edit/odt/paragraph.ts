@@ -10,14 +10,16 @@ import { insertImageFrameMedia } from './image';
 import { applyStyleChange, readCurrentStyleProperties } from './props';
 import type { RunInit } from './run';
 import { buildRun, OdtRun } from './run';
+import { ensureHeadingStyle } from './scaffold';
 
 export interface ParagraphInit {
   readonly text?: string;
   readonly styleId?: string;
   readonly alignment?: Alignment;
+  readonly headingLevel?: number;
 }
 
-// A live view over a text:p element -- see docx's paragraph.ts (src/edit/docx/paragraph.ts) for the same live-view rationale. List membership has no counterpart here: unlike DocxParagraph, which carries a w:numPr property naming which list/level it belongs to, ODF nests lists STRUCTURALLY (a text:list contains text:list-item elements, which directly contain the member text:p/text:h elements) -- a paragraph's list membership is a fact about where it sits in the tree, not a property on the paragraph itself. See list.ts's OdtList/OdtListItem for how list paragraphs are actually built.
+// A live view over a text:p element, or a text:h once headingLevel has been set (the two share one content model -- inline runs -- and one position in whatever container holds them, so one class covers both; see the headingLevel setter below). See docx's paragraph.ts (src/edit/docx/paragraph.ts) for the same live-view rationale. List membership has no counterpart here: unlike DocxParagraph, which carries a w:numPr property naming which list/level it belongs to, ODF nests lists STRUCTURALLY (a text:list contains text:list-item elements, which directly contain the member text:p/text:h elements) -- a paragraph's list membership is a fact about where it sits in the tree, not a property on the paragraph itself. See list.ts's OdtList/OdtListItem for how list paragraphs are actually built.
 export class OdtParagraph {
   private readonly container: XmlNode[];
   private readonly node: XmlElement;
@@ -104,6 +106,36 @@ export class OdtParagraph {
     setAttr(node, 'text:style-name', value);
   }
 
+  // The canonical heading depth (document-schema.js's headingLevel, 1-based) -- the odt counterpart of DocxParagraph.headingLevel (src/edit/docx/paragraph.ts), which stores it as w:outlineLvl. In ODF a heading is not a styled paragraph but its own ELEMENT: setting a level retags this node text:p -> text:h (same content model, same position in its container), writes the 1-based depth as text:outline-level, and points text:style-name at the Heading_20_N common style (scaffold.ts's ensureHeadingStyle defines it), because the family's cross-format "Heading{N}" styleId spelling is a name ODF itself cannot resolve. Clearing the level retags back to text:p and drops text:outline-level but leaves text:style-name alone -- the visual style is a separate fact from the heading signal, the identical split the docx counterpart documents. Setting styleId AFTER a level overrides the heading style-name deliberately; the reverse order leaves the custom name in place over a real text:h, which is valid ODF and reads back by outline level alone (odf.js's reader ignores a text:h's style-name when synthesising Heading{N}).
+  get headingLevel(): number | undefined {
+    const node = this.live();
+    if (node.tag !== 'text:h') {
+      return undefined;
+    }
+    const raw = attr(node, 'text:outline-level');
+    if (raw === undefined) {
+      // text:outline-level's ODF schema default when absent is 1 (OASIS ODF 1.2 part 1) -- the identical default odf.js's own reader applies.
+      return 1;
+    }
+    const parsed = Number.parseInt(raw, 10);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
+  }
+
+  set headingLevel(value: number | undefined) {
+    const node = this.live();
+    if (value === undefined) {
+      if (node.tag !== 'text:h') {
+        return;
+      }
+      node.tag = 'text:p';
+      removeAttr(node, 'text:outline-level');
+      return;
+    }
+    node.tag = 'text:h';
+    setAttr(node, 'text:outline-level', String(value));
+    setAttr(node, 'text:style-name', ensureHeadingStyle(this.pkg, value));
+  }
+
   get alignment(): Alignment | undefined {
     return readCurrentStyleProperties(this.pkg, this.live(), 'paragraph').alignment;
   }
@@ -166,7 +198,7 @@ export class OdtParagraph {
   }
 }
 
-// Builds a fresh text:p from scratch (not a live view -- for constructing new paragraphs to append or insert, whose properties are then read back through OdtParagraph once inserted into the tree). Mirrors run.ts's buildRun: applies init's properties by constructing a throwaway OdtParagraph over the new node and driving it through the exact same setters every later mutation uses.
+// Builds a fresh text:p (or text:h, when init carries a headingLevel) from scratch (not a live view -- for constructing new paragraphs to append or insert, whose properties are then read back through OdtParagraph once inserted into the tree). Mirrors run.ts's buildRun: applies init's properties by constructing a throwaway OdtParagraph over the new node and driving it through the exact same setters every later mutation uses. headingLevel is applied LAST so its Heading_20_N style-name wins over an init.styleId naming the family's "Heading{N}" spelling -- the same level-derives-the-style rule populateParagraph documents (src/edit/odt/content.ts).
 export function buildParagraph(pkg: Package, init: ParagraphInit = {}): XmlElement {
   const node = el('text:p');
   const paragraph = new OdtParagraph([], node, pkg);
@@ -175,6 +207,9 @@ export function buildParagraph(pkg: Package, init: ParagraphInit = {}): XmlEleme
   }
   if (init.alignment !== undefined) {
     paragraph.alignment = init.alignment;
+  }
+  if (init.headingLevel !== undefined) {
+    paragraph.headingLevel = init.headingLevel;
   }
   if (init.text !== undefined) {
     node.children.push(buildRun(pkg, { text: init.text }));
