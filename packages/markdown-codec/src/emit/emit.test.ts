@@ -64,6 +64,32 @@ describe('math (ExaDev/markdown-codec#53)', () => {
     expect(emitMarkdown(doc([{ kind: 'paragraph', runs: [{ text: 'x^2' }], styleId: 'MathBlock' }]))).toBe('$$\nx^2\n$$');
   });
 
+  it('emits an embedded formula object carrying presentation LaTeX as a $$ display math block', () => {
+    expect(emitMarkdown(doc([
+      { kind: 'embeddedObject', objectKind: 'formula', document: { kind: 'formula', metadata: {}, formula: { mathml: [], presentation: { latex: 'x^2' } } }, frame: { xPt: 0, yPt: 0, widthPt: 0, heightPt: 0 } },
+    ]))).toBe('$$\nx^2\n$$');
+  });
+
+  it('emits an empty-presentation formula as an empty $$ block', () => {
+    expect(emitMarkdown(doc([
+      { kind: 'embeddedObject', objectKind: 'formula', document: { kind: 'formula', metadata: {}, formula: { mathml: [], presentation: { latex: '' } } }, frame: { xPt: 0, yPt: 0, widthPt: 0, heightPt: 0 } },
+    ]))).toBe('$$\n$$');
+  });
+
+  it('still silently drops an embedded object of any other kind, and a formula with no presentation LaTeX, which have no markdown spelling', () => {
+    expect(emitMarkdown(doc([
+      { kind: 'embeddedObject', objectKind: 'wordprocessing', document: { kind: 'wordprocessing', metadata: {}, sections: [] }, frame: { xPt: 0, yPt: 0, widthPt: 1, heightPt: 1 } },
+      { kind: 'embeddedObject', objectKind: 'formula', document: { kind: 'formula', metadata: {}, formula: { mathml: [] } }, frame: { xPt: 0, yPt: 0, widthPt: 0, heightPt: 0 } },
+    ]))).toBe('');
+  });
+
+  it('round-trips a $$ block byte for byte through lower -> emit -> lower', () => {
+    const source = '$$\nx^2\n$$';
+    const first = lowerMarkdown(source);
+    expect(emitMarkdown(first)).toBe(source);
+    expect(lowerMarkdown(emitMarkdown(first))).toEqual(first);
+  });
+
   it('emits a Cambria-Math-marked run with \\( \\) delimiters, unescaped', () => {
     expect(emitMarkdown(doc([{ kind: 'paragraph', runs: [{ text: 'f(x) = x^2', fontFamily: 'Cambria Math' }] }]))).toBe('\\(f(x) = x^2\\)');
   });

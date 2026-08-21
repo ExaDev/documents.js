@@ -166,8 +166,14 @@ function renderTopLevelBlock(block: RenderableBlock, context: EmitContext): stri
       return emitTable(block, context);
     case 'image':
       return emitImage(block, context.embedImages);
-    case 'pageBreak':
     case 'embeddedObject':
+      // The inverse of src/lower/lower.ts's lowerMathBlock: an embedded FORMULA whose presentation layer carries LaTeX re-renders as a fresh $$ pair around that verbatim string (an empty LaTeX spelling an empty block, matching how the old MathBlock paragraph emitted one). Any other embedded object -- another document kind, or a formula with no presentation LaTeX (an ODF equation carrying only MathML) -- has no markdown spelling at all and is silently dropped, as it always was: this package never had a construct to lose fidelity from there.
+      if (block.objectKind === 'formula' && block.document.kind === 'formula' && block.document.formula.presentation !== undefined) {
+        const latex = block.document.formula.presentation.latex;
+        return latex.length === 0 ? '$$\n$$' : `$$\n${latex}\n$$`;
+      }
+      return '';
+    case 'pageBreak':
       return '';
   }
 }
