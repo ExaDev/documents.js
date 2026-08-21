@@ -170,7 +170,7 @@ function readAnchoredFrameBlocks(paragraphElement: XmlElement, pkg: Package, sta
 // Walks block-level content (text:p, text:h, text:list, table:table) in document order, at ONE nesting level -- office:text's own top-level children, or a construct wrapper's own children. text:section records a division extent over its own blocks (descriptor: name, protected flag, the column count its own style sets, and the external-chapter link of a text:section-source); the index wrappers (text:table-of-content and its six siblings) record index contentControl extents over their cached text:index-body blocks; text:index-title unwraps transparently -- the title is one of the cached blocks, not a wrapper of its own. Every extent -- wrapper or marker pair -- is spliced into markers by ONE pass at the end of the walk (insertOdfConstructMarkers, in readOdtContent below), so a pair crossing another extent is dropped by that pass rather than emitted as markers that would decode to a nesting the source never had. text:tracked-changes and the text:*-decls containers contribute no blocks: their regions and declarations were collected before the walk and live in the state and the definitions table. Anything else (an office:forms, an anchored draw:frame, text:soft-page-break, ...) is not walked here -- see the scope note at the top of this file for which of those are deliberate gaps. Table CELL content is not walked here at all -- readOdfTable owns that entirely (see this file's own top-of-file note on the scope it inherits from doing so).
 function readBlocks(nodes: readonly XmlNode[], pkg: Package, state: OdtFlowState, baseIndex = 0): ContentBlock[] {
   const blocks: ContentBlock[] = [];
-  // Paragraph-half events are recorded only once each paragraph's final block index is known -- an index in the ONE flat block list the caller will splice markers into, hence the baseIndex offset every recursive wrapper call threads in (a wrapper's own children build their blocks in this call's local array, but their marker events must name positions in the enclosing list). That is also why every paragraph path funnels through here rather than recording inside the reader callback: the list walker runs all its callbacks before a single block is pushed, so a callback-time index would be the same for every item of the list.
+  // Paragraph-half events are recorded only once each paragraph's final block index is known -- an index in the ONE flat block list the caller will splice markers into, hence the baseIndex offset every recursive wrapper call threads in (a wrapper's own children build their blocks in this call's local array, but their marker events must name positions in the enclosing list). The same offset applies to the wrapper branches' own extents: a nested wrapper's startIndex/endIndex are recorded against the enclosing flat list (baseIndex + the local array length), never the local array alone, or a wrapper nested after a preceding sibling would bracket blocks that precede it. That is also why every paragraph path funnels through here rather than recording inside the reader callback: the list walker runs all its callbacks before a single block is pushed, so a callback-time index would be the same for every item of the list.
   const emitParagraphs = (reads: readonly ReadParagraph[]): void => {
     let cursor = baseIndex + blocks.length;
     for (const read of reads) {
@@ -210,16 +210,16 @@ function readBlocks(nodes: readonly XmlNode[], pkg: Package, state: OdtFlowState
     } else if (node.tag === 'table:table') {
       blocks.push(readOdfTable(node, pkg));
     } else if (node.tag === 'text:section') {
-      const startIndex = blocks.length;
+      const startIndex = baseIndex + blocks.length;
       const order = state.order++;
-      blocks.push(...readBlocks(node.children, pkg, state, baseIndex + startIndex));
-      state.wrapperExtents.push({ startIndex, endIndex: blocks.length, order, descriptor: odfDivisionDescriptor(node, pkg) });
+      blocks.push(...readBlocks(node.children, pkg, state, startIndex));
+      state.wrapperExtents.push({ startIndex, endIndex: baseIndex + blocks.length, order, descriptor: odfDivisionDescriptor(node, pkg) });
     } else if (isOdfIndexWrapper(node)) {
-      const startIndex = blocks.length;
+      const startIndex = baseIndex + blocks.length;
       const order = state.order++;
       const body = node.children.find((child): child is XmlElement => child.type === 'element' && child.tag === 'text:index-body');
-      blocks.push(...(body === undefined ? [] : readBlocks(body.children, pkg, state, baseIndex + startIndex)));
-      state.wrapperExtents.push({ startIndex, endIndex: blocks.length, order, descriptor: odfIndexControlDescriptor(node) });
+      blocks.push(...(body === undefined ? [] : readBlocks(body.children, pkg, state, startIndex)));
+      state.wrapperExtents.push({ startIndex, endIndex: baseIndex + blocks.length, order, descriptor: odfIndexControlDescriptor(node) });
     } else if (node.tag === 'text:index-title') {
       blocks.push(...readBlocks(node.children, pkg, state, baseIndex + blocks.length));
     } else if (node.tag === 'office:forms') {
