@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { Package } from '../../model/package';
 import type { XmlElement, XmlNode } from '../../model/node';
-import type { Alignment, Box, ContentBlock, ContentEmbeddedObjectBlock, ContentImageBlock, ContentParagraph, ContentRun, ContentShape, ContentSlide, ContentTable, ContentTableCell, PageSize } from 'document-schema.js';
+import type { Alignment, Box, ContentBlock, ContentEmbeddedObjectBlock, ContentImageBlock, ContentParagraph, ContentRun, ContentShape, ContentSlide, ContentTable, ContentTableCell, PageSize, RunConstructExtent } from 'document-schema.js';
 import { ContentSlideSchema, SLIDE_SIZE_WIDESCREEN } from 'document-schema.js';
 import { drawingMlFontSizeToPt, emuToPt } from '../shared/units';
 import { sniffImageFormat } from '../../image/sniff';
@@ -176,12 +176,25 @@ function readParagraph(pEl: XmlElement, placeholderType: string | undefined, con
   const paragraphDefaults = pPrDefRPr === undefined ? masterDefaults : mergeRunProperties(masterDefaults, readRunPropertiesFromElement(pPrDefRPr, context));
 
   const runs: ContentRun[] = [];
+  // A dynamic field (a:fld) reads as an ordinary run AND records a field run construct covering exactly that run: the run's text is the rendered content, the construct's instruction is @type and its cachedResult the cached a:t -- the two-fact spelling document-schema.js's FieldDescriptor itself names pptx for. A fld with no @type carries no field-ness worth recording and stays an ordinary run.
+  const fieldExtents: RunConstructExtent[] = [];
   for (const child of pEl.children) {
     if (child.type !== 'element') {
       continue;
     }
-    if (child.tag === 'a:r' || child.tag === 'a:fld') {
+    if (child.tag === 'a:r') {
       runs.push(readRun(child, paragraphDefaults, context, slideRels));
+    } else if (child.tag === 'a:fld') {
+      runs.push(readRun(child, paragraphDefaults, context, slideRels));
+      const type = attr(child, 'type');
+      if (type !== undefined) {
+        const cached = childrenWithTag(child, 'a:t')[0];
+        fieldExtents.push({
+          descriptor: { kind: 'field', instruction: type, cachedResult: cached === undefined ? '' : textContent(cached) },
+          startRun: runs.length - 1,
+          endRun: runs.length,
+        });
+      }
     } else if (child.tag === 'a:br') {
       // A forced line break within the paragraph, modelled as a run containing a literal newline.
       runs.push({ text: '\n' });
@@ -194,6 +207,7 @@ function readParagraph(pEl: XmlElement, placeholderType: string | undefined, con
   return {
     kind: 'paragraph',
     runs,
+    ...(fieldExtents.length > 0 ? { constructs: fieldExtents } : {}),
     alignment: pPr === undefined ? undefined : readAlignment(attr(pPr, 'algn')),
     // DrawingML paragraphs carry only an outline depth, never a numbering identity (no numPr exists in a:pPr), so list is emitted with level alone -- numId optional since document-schema.js 3.3.0 -- and a fabricated numId would be a lie in the data. An absent (or malformed) @lvl emits no list rather than a redundant { level: 0 }: absent means the body placeholder's default level 0, and outline consumers already treat a missing list as level 0, so the zero would carry no information.
     list: outlineLevel === undefined ? undefined : { level: outlineLevel },
