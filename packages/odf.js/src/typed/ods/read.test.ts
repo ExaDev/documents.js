@@ -559,6 +559,52 @@ describe('readOdsContent: error and fallback paths (synthetic packages -- not so
   });
 });
 
+// The ods residue rows (ExaDev/documents.js#769): recalculation semantics are not content, so table:calculation-settings and the non-content parts quarantine at the package tier.
+describe('readOdsContent: residue rows', () => {
+  function spreadsheetPackage(children: XmlElement[], extraParts: Record<string, Package['parts'][string]> = {}): Package {
+    return {
+      parts: {
+        'content.xml': { kind: 'xml', nodes: [el('office:document-content', {}, [el('office:body', {}, [el('office:spreadsheet', {}, children)])])] },
+        ...extraParts,
+      },
+    };
+  }
+
+  it('quarantines table:calculation-settings at the package tier, keyed calculation-settings', () => {
+    const pkg = spreadsheetPackage([
+      el('table:calculation-settings', { 'table:case-sensitive': 'false', 'table:automatic-find-labels': 'false' }, [
+        el('table:null-date', { 'table:value-type': 'date', 'table:date-value': '1899-12-30' }),
+      ]),
+      el('table:table', { 'table:name': 'Sheet1' }, [el('table:table-row')]),
+    ]);
+    const { source } = readOdsContent(pkg);
+    expect(source?.['calculation-settings']?.format).toBe('ods');
+    expect(source?.['calculation-settings']?.xml).toContain('<table:calculation-settings');
+    expect(source?.['calculation-settings']?.xml).toContain('<table:null-date');
+  });
+
+  it('quarantines a non-content XML part at the package tier keyed by its part path, spliced onto readOds\'s root', () => {
+    const pkg = spreadsheetPackage(
+      [el('table:table', { 'table:name': 'Sheet1' }, [el('table:table-row')])],
+      { 'settings.xml': { kind: 'xml', nodes: [el('office:document-settings')] } },
+    );
+    const { source } = readOdsContent(pkg);
+    expect(source?.['settings.xml']?.format).toBe('ods');
+    expect(readOds(pkg).source?.['settings.xml']?.xml).toContain('<office:document-settings');
+  });
+
+  it('quarantines the REAL kitchen-sink fixture\'s own calculation-settings, settings.xml, and manifest.rdf', () => {
+    const { source } = readOdsContent(loadFixture('kitchen-sink.ods'));
+    expect(Object.keys(source ?? {}).sort()).toEqual(['calculation-settings', 'manifest.rdf', 'settings.xml']);
+    expect(source?.['calculation-settings']?.xml).toContain('table:calculation-settings');
+  });
+
+  it('never quarantines an embedded sub-document\'s own parts -- sheet-formula.ods\'s Math object rides the semantic channel alone', () => {
+    const { source } = readOdsContent(loadFixture('sheet-formula.ods'));
+    expect(Object.keys(source ?? {}).every((key) => key.startsWith('Object ') === false)).toBe(true);
+  });
+});
+
 describe('readOdsContent: named expressions (synthetic packages -- the declarations real fixture output leaves empty)', () => {
   function namedExpressionsPackage(named: XmlElement): Package {
     return {
@@ -762,7 +808,8 @@ describe('readOds: the package-native reader over the same real fixtures', () =>
     expect(documentPackage.kind).toBe('spreadsheet');
     expect(documentPackage.metadata).toEqual(content.metadata);
     expect(documentPackage.children).toHaveLength(content.sheets.length);
-    assertPackageRoundTrip(documentPackage, { kind: 'spreadsheet', ...content });
+    // The round trip compares against the flat projection (metadata + sheets): the definitions and package-tier residue tables are tree-only, so flattenPackage drops them off readOds's own root -- the fixture's own residue rows are pinned in the residue describe below.
+    assertPackageRoundTrip(documentPackage, { kind: 'spreadsheet', metadata: content.metadata, sheets: content.sheets });
   });
 
   it('keeps a sheet\'s grid and print settings on its group node, since a sheet holds addressable data rather than block flow', () => {
@@ -796,18 +843,18 @@ describe('readOds: the package-native reader over the same real fixtures', () =>
     expect(images.length + embedded.length).toBeGreaterThan(0);
     // Images first, then embedded objects -- the fixed order flatten's own partition reverses.
     expect(sheet.children).toEqual([...images, ...embedded]);
-    assertPackageRoundTrip(documentPackage, { kind: 'spreadsheet', ...content });
+    assertPackageRoundTrip(documentPackage, { kind: 'spreadsheet', metadata: content.metadata, sheets: content.sheets });
   });
 
   it('round-trips sheet-formula.ods, whose embedded Math object stays one intact leaf carrying its own formula document', () => {
     const pkg = loadFixture('sheet-formula.ods');
     const content = readOdsContent(pkg);
-    assertPackageRoundTrip(readOds(pkg), { kind: 'spreadsheet', ...content });
+    assertPackageRoundTrip(readOds(pkg), { kind: 'spreadsheet', metadata: content.metadata, sheets: content.sheets });
   });
 
   it('assembles minimal.ods into a package that round-trips identically', () => {
     const pkg = loadFixture('minimal.ods');
     const content = readOdsContent(pkg);
-    assertPackageRoundTrip(readOds(pkg), { kind: 'spreadsheet', ...content });
+    assertPackageRoundTrip(readOds(pkg), { kind: 'spreadsheet', metadata: content.metadata, sheets: content.sheets });
   });
 });
