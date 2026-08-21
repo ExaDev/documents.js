@@ -162,13 +162,17 @@ function lowerHtmlBlock(node, context) {
 	context.sink({
 		code: MarkdownDiagnosticCodes.RAW_HTML_PRESERVED_AS_TEXT,
 		severity: "info",
-		message: "block-level raw HTML was preserved as literal text (styleId \"HTMLPreformatted\"); it will not be rendered as HTML by any consumer of the resulting ContentDocument"
+		message: "block-level raw HTML was preserved as literal text (styleId \"HTMLPreformatted\"); it will not be rendered as HTML by any consumer of the resulting ContentDocument, and its verbatim original rides the paragraph's own markdown residue for this package's writer to re-emit as-is"
 	});
 	const literal = node.literal.replace(/\n+$/, "");
 	return [decorateParagraph({
 		kind: "paragraph",
 		runs: literal.length === 0 ? [] : [{ text: literal }],
-		styleId: HTML_PREFORMATTED_STYLE_ID
+		styleId: HTML_PREFORMATTED_STYLE_ID,
+		source: {
+			format: "markdown",
+			xml: node.literal
+		}
 	}, context)];
 }
 function lowerMathBlock(node, context) {

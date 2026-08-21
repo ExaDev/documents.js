@@ -72,8 +72,8 @@ function lowerInlineNodeInto(node: MarkdownInlineNode, style: RunStyle, context:
         context.sink({ code: MarkdownDiagnosticCodes.RAW_HTML_DROPPED, severity: 'info', message: 'inline raw HTML was dropped per the rawHtml: "drop" option' });
         return;
       }
-      context.sink({ code: MarkdownDiagnosticCodes.RAW_HTML_PRESERVED_AS_TEXT, severity: 'info', message: 'inline raw HTML was preserved as literal text; it will not be rendered as HTML by any consumer of the resulting ContentDocument' });
-      if (node.literal.length > 0) runs.push(buildRun(node.literal, style));
+      context.sink({ code: MarkdownDiagnosticCodes.RAW_HTML_PRESERVED_AS_TEXT, severity: 'info', message: "inline raw HTML was preserved as literal text; it will not be rendered as HTML by any consumer of the resulting ContentDocument, and its verbatim original rides the run's own markdown residue for this package's writer to re-emit as-is" });
+      if (node.literal.length > 0) runs.push({ ...buildRun(node.literal, style), source: { format: 'markdown', xml: node.literal } });
       return;
     case 'mathInline':
       // Marked with MATH_INLINE_FONT_MARKER, the same opportunistic-reuse trick a code span's own Courier New marker plays -- src/emit/inline.ts's renderLeaf reconstructs the \( \) delimiters around this run's own text (rather than escaping it as ordinary punctuation) specifically because it carries this marker, not because of anything about the text's own shape (see src/ast/ast.ts's own MarkdownMathInlineNode comment for why a text-pattern-based approach was tried and reverted).

@@ -163,10 +163,11 @@ function lowerHtmlBlock(node: Extract<MarkdownBlockNode, { type: 'htmlBlock' }>,
     context.sink({ code: MarkdownDiagnosticCodes.RAW_HTML_DROPPED, severity: 'info', message: 'block-level raw HTML was dropped per the rawHtml: "drop" option' });
     return [];
   }
-  context.sink({ code: MarkdownDiagnosticCodes.RAW_HTML_PRESERVED_AS_TEXT, severity: 'info', message: 'block-level raw HTML was preserved as literal text (styleId "HTMLPreformatted"); it will not be rendered as HTML by any consumer of the resulting ContentDocument' });
+  context.sink({ code: MarkdownDiagnosticCodes.RAW_HTML_PRESERVED_AS_TEXT, severity: 'info', message: 'block-level raw HTML was preserved as literal text (styleId "HTMLPreformatted"); it will not be rendered as HTML by any consumer of the resulting ContentDocument, and its verbatim original rides the paragraph\'s own markdown residue for this package\'s writer to re-emit as-is' });
   const literal = node.literal.replace(/\n+$/, '');
   const runs: ContentRun[] = literal.length === 0 ? [] : [{ text: literal }];
-  const paragraph: ContentParagraph = { kind: 'paragraph', runs, styleId: HTML_PREFORMATTED_STYLE_ID };
+  // The residue carries the UNTRIMMED literal: the runs strip trailing newlines because those are block separators, not content, but the restorable tier re-emits the block exactly as it stood.
+  const paragraph: ContentParagraph = { kind: 'paragraph', runs, styleId: HTML_PREFORMATTED_STYLE_ID, source: { format: 'markdown', xml: node.literal } };
   return [decorateParagraph(paragraph, context)];
 }
 

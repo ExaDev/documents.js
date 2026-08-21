@@ -1,5 +1,4 @@
 import { MarkdownDiagnosticCodes } from "../diagnostics/diagnostics.js";
-import { matchHtmlTag } from "../html/html.js";
 import "../shared/style-constants.js";
 //#region src/emit/inline.ts
 const ESCAPE_CHARS = /* @__PURE__ */ new Set([
@@ -39,14 +38,6 @@ function escapeMarkdownText(text) {
 	let index = 0;
 	while (index < text.length) {
 		const char = text.charAt(index);
-		if (char === "<") {
-			const tag = matchHtmlTag(text, index);
-			if (tag !== void 0) {
-				out += tag;
-				index += tag.length;
-				continue;
-			}
-		}
 		if (char === "\n") {
 			out += "\\\n";
 			index += 1;
@@ -76,6 +67,7 @@ function renderCodeSpan(text) {
 	return risksFenceCollision || wouldBeStrippedOnReparse ? `${fence} ${text} ${fence}` : `${fence}${text}${fence}`;
 }
 function renderLeaf(run, context) {
+	if (run.source?.format === "markdown") return run.source.xml;
 	if (run.fontFamily === "Courier New") {
 		context.sink({
 			code: MarkdownDiagnosticCodes.CODE_SPAN_AS_MONOSPACE_RUN,
