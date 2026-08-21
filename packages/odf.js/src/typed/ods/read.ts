@@ -1,6 +1,8 @@
 import type {
   Box,
   ContentCellValue,
+  DefinitionEntry,
+  DefinitionsTable,
   ContentDocument,
   ContentEmbeddedObject,
   ContentRun,
@@ -33,6 +35,7 @@ import { parseOdfTransform } from '../shared/transform';
 import { readDrawFrame } from '../draw/shapes';
 import type { EmbeddedDrawObject } from '../draw/embedded';
 import { readDrawObjectReference, readOdfChartContent } from '../draw/embedded';
+import { collectOdfNamedExpressions } from '../shared/constructs';
 import { readOdfFormulaContent } from '../formula/read';
 import { readOdgContent } from '../odg/read';
 import { readOdpContent } from '../odp/read';
@@ -68,6 +71,8 @@ const DEFAULT_MARGINS: Margins = { topPt: DEFAULT_MARGIN_PT, rightPt: DEFAULT_MA
 export interface OdsDocument {
   metadata: LayoutMetadata;
   sheets: ContentSheet[];
+  // The package-level definitions table this workbook's content references: named-range and named-expression declarations. Present only when the workbook declares at least one -- the flat ContentDocument has no root to hold a definitions table, so this field is how the table reaches readOds's assembled package root.
+  definitions?: DefinitionsTable;
 }
 
 function readRepeatCount(element: XmlElement, attrName: string): number {
@@ -552,11 +557,21 @@ export function readOdsContent(pkg: Package): OdsDocument {
     }
   }
 
-  return { metadata: readOdfMetadata(pkg), sheets };
+  const definitions: Record<string, DefinitionEntry> = {};
+  if (spreadsheet !== undefined) {
+    collectOdfNamedExpressions(spreadsheet.children, definitions);
+  }
+
+  return { metadata: readOdfMetadata(pkg), sheets, ...(Object.keys(definitions).length > 0 ? { definitions } : {}) };
 }
 
 // Package -> DocumentPackage: this module's PRIMARY entry point, the spreadsheet mirror of readOdtContent/readOdt (see src/typed/odt/read.ts's own note on why assemblePackage rather than bare decompose, and why no `pages` argument). readOdsContent above is unchanged and remains the flat, ContentDocument-level reader.
 export function readOds(pkg: Package): DocumentPackage {
-  const { metadata, sheets } = readOdsContent(pkg);
-  return assemblePackage({ kind: 'spreadsheet', metadata, sheets });
+  const { metadata, sheets, definitions } = readOdsContent(pkg);
+  const assembled = assemblePackage({ kind: 'spreadsheet', metadata, sheets });
+  // Tree-only table, attached to the assembled root for the same reason readOdt attaches its own (the flat exchange shape has no root to carry it through assemblePackage's envelope splice).
+  if (definitions !== undefined) {
+    assembled.definitions = definitions;
+  }
+  return assembled;
 }
