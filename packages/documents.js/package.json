@@ -105,7 +105,7 @@
     "fflate": "^0.8.3",
     "markdown-codec": "^4.0.14",
     "odf.js": "^5.0.9",
-    "ooxml.js": "^4.3.0",
+    "ooxml.js": "^4.4.0",
     "pdf-codec": "^3.1.2",
     "temml": "0.13.4",
     "zod": "^4.4.3"
