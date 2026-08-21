@@ -127,6 +127,9 @@ class DocumentProjection {
   }
 
   // A table entry's decided fate: extracted (node id minted, referencing nodes substitute the id) or inlined (referencing nodes fold the walked content). Memoised so the root walk and every tree ref see one decision per entry.
+
+  // The entry nodes this document's table walk minted, flushed in content-id order once the whole root walk has decided them -- two spellings of one table (different local keys, different insertion orders) then emit the same nodes in the same order, because content order is the only order a content-addressed projection can canonically have.
+  private pendingEntryNodes: GraphNode[] = [];
   private readonly tableDecisions = new Map<string, { status: 'extract'; id: string; walked: RecordWalked } | { status: 'inline'; walked: RecordWalked }>();
 
   private tableOf(field: TableField): TableValue | undefined {
@@ -148,7 +151,7 @@ class DocumentProjection {
       const id = stableContentHash(walked.hash);
       const decided = { status: 'extract' as const, id, walked };
       this.tableDecisions.set(memoKey, decided);
-      this.addNode({ id, kind: entryKindOf(field), ...walked.properties });
+      this.pendingEntryNodes.push({ id, kind: entryKindOf(field), ...walked.properties });
       return decided;
     }
     const decided = { status: 'inline' as const, walked };
@@ -276,6 +279,7 @@ class DocumentProjection {
       if (Object.keys(leftover).length > 0) leftoverTables[field] = leftover;
     }
 
+    // The root node lands first, then this document's entry nodes in content-id order, then the tree in pre-order.
     this.addNode({
       id: this.documentId,
       kind: 'documentPackage',
@@ -283,6 +287,9 @@ class DocumentProjection {
       ...envelopeWalk.properties,
       ...leftoverTables,
     });
+    for (const node of this.pendingEntryNodes.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))) {
+      this.addNode(node);
+    }
 
     // Children first (ids needed for the root's CONTAINS edges), edges assembled own-first so each parent's edges precede its descendants'.
     const childResults = this.pkg.children.map((child, index) => {

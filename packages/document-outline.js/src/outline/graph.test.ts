@@ -54,6 +54,55 @@ function edgesBetween(graph: PropertyGraph, from: string, kind: string): Propert
 }
 
 describe('projectDocumentGraph', () => {
+  it('is deterministic: the same input projects to the same graph, nodes and edges in the same order', () => {
+    const boilerplate = paragraph('Please see attached.');
+    const first = projectDocumentGraph([
+      { id: 'report-1', package: reportPackage(boilerplate) },
+      { id: 'memo-1', package: memoPackage(boilerplate) },
+    ]);
+    const second = projectDocumentGraph([
+      { id: 'report-1', package: reportPackage(boilerplate) },
+      { id: 'memo-1', package: memoPackage(boilerplate) },
+    ]);
+    expect(second).toEqual(first);
+  });
+
+  it('emits table-entry nodes in content order, so differently spelled key sets yield the same graph', () => {
+    const boldRun = { run: { bold: true } };
+    const italicRun = { run: { italic: true } };
+    // The same two entries and the same referencing tree, under two different key spellings and two different insertion orders.
+    const spelledA = wordprocessingPackage(
+      [sectionGroup([headingGroup('One', 1, [], { style: 'bold' }), headingGroup('Two', 2, [], { style: 'italic' })])],
+      { styles: { bold: boldRun, italic: italicRun } },
+    );
+    const spelledB = wordprocessingPackage(
+      [sectionGroup([headingGroup('One', 1, [], { style: 'weight' }), headingGroup('Two', 2, [], { style: 'slant' })])],
+      { styles: { slant: italicRun, weight: boldRun } },
+    );
+    expectSchemaValid(spelledA, 'spelledA');
+    expectSchemaValid(spelledB, 'spelledB');
+
+    const graphA = projectDocumentGraph([{ id: 'doc', package: spelledA }]);
+    const graphB = projectDocumentGraph([{ id: 'doc', package: spelledB }]);
+    // Root nodes identical (same id, same envelope); every content node identical and in the same order.
+    expect(graphB.nodes.filter((node) => node.kind !== 'documentPackage')).toEqual(
+      graphA.nodes.filter((node) => node.kind !== 'documentPackage'),
+    );
+    expect(graphB.edges).toEqual(graphA.edges);
+
+    // The deref-before-hash rule itself: two documents whose identical paragraphs reference identical entry content under different keys produce the identical referencing node -- the two spellings collapse onto one shared subgraph, distinct only at their roots.
+    const cross = projectDocumentGraph([
+      { id: 'a', package: spelledA },
+      { id: 'b', package: spelledB },
+    ]);
+    const styleNodes = cross.nodes.filter((node) => node.kind === 'styleEntry');
+    expect(styleNodes).toHaveLength(2);
+    const headingNodes = cross.nodes.filter((node) => node.kind === 'paragraph' && node.headingLevel !== undefined);
+    expect(headingNodes).toHaveLength(2); // 'One' and 'Two', each shared across a and b
+    expect(cross.nodes.filter((node) => node.kind === 'documentPackage').map((node) => node.id).sort()).toEqual(['a', 'b']);
+    expect(cross.edges.filter((edge) => edge.kind === 'CONTAINS' && (edge.from === 'a' || edge.from === 'b')).map((edge) => edge.from).sort()).toEqual(['a', 'b']);
+  });
+
   it('projects the worked example: containment edges, a shared style node, and a shared boilerplate leaf', () => {
     const boilerplate = paragraph('Please see attached.');
     const report = reportPackage(boilerplate);
