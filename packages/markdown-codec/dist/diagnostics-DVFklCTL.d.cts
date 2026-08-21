@@ -21,7 +21,6 @@ declare const MarkdownDiagnosticCodes: {
   readonly LINK_TITLE_DROPPED: "md/link-title-dropped";
   readonly BLOCKQUOTE_NESTED_DEPTH: "md/blockquote-nested-depth";
   readonly LIST_ITEM_BLOCK_UNLISTED: "md/list-item-block-unlisted";
-  readonly LIST_ITEM_MULTI_BLOCK_FLATTENED: "md/list-item-multi-block-flattened";
   readonly IMAGE_UNRESOLVED: "md/image-unresolved";
   readonly RAW_HTML_PRESERVED_AS_TEXT: "md/raw-html-preserved-as-text";
   readonly RAW_HTML_DROPPED: "md/raw-html-dropped";

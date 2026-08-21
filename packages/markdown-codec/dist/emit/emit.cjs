@@ -123,16 +123,9 @@ function listInfoFor(numId, context) {
 	}
 	return info;
 }
-function checkboxPrefixFor(item) {
+function stripCheckboxRun(item) {
 	const first = item.runs[0];
-	if (first === void 0) return;
-	if (first.text.startsWith(`☒ `)) return "[x] ";
-	if (first.text.startsWith(`☐ `)) return "[ ] ";
-}
-function stripCheckboxRun(item, checkboxPrefix) {
-	if (checkboxPrefix === void 0) return item;
-	const first = item.runs[0];
-	const glyphPrefix = checkboxPrefix === "[x] " ? `☒ ` : `☐ `;
+	const glyphPrefix = first?.text.startsWith(`☒ `) ? `☒ ` : `☐ `;
 	if (!first?.text.startsWith(glyphPrefix)) return item;
 	const strippedText = first.text.slice(glyphPrefix.length);
 	const runs = strippedText.length === 0 ? item.runs.slice(1) : [{
@@ -144,8 +137,30 @@ function stripCheckboxRun(item, checkboxPrefix) {
 		runs
 	};
 }
-function renderListItemMarker(numId, info, item, context) {
-	const checkboxText = (info?.task === true ? checkboxPrefixFor(item) : void 0) ?? "";
+function firstBlockCheckbox(first, taskNumId) {
+	if (first.list?.checked !== void 0) return {
+		checkboxText: first.list.checked ? "[x] " : "[ ] ",
+		stripGlyph: false
+	};
+	if (!taskNumId) return {
+		checkboxText: "",
+		stripGlyph: false
+	};
+	const leading = first.runs[0]?.text ?? "";
+	if (leading.startsWith(`☒ `)) return {
+		checkboxText: "[x] ",
+		stripGlyph: true
+	};
+	if (leading.startsWith(`☐ `)) return {
+		checkboxText: "[ ] ",
+		stripGlyph: true
+	};
+	return {
+		checkboxText: "",
+		stripGlyph: false
+	};
+}
+function renderListItemMarker(numId, info, checkboxText, context) {
 	if (info?.type === "ordered" && numId !== void 0) {
 		const next = context.orderedCounters.get(numId) ?? info.start ?? 1;
 		context.orderedCounters.set(numId, next + 1);
@@ -167,17 +182,29 @@ function renderListRegion(items, context) {
 	while (index < items.length) {
 		const item = items[index];
 		if (item?.list === void 0) break;
-		const { numId, level } = item.list;
+		const { numId, level, itemId } = item.list;
 		const info = listInfoFor(numId, context);
-		let lookahead = index + 1;
+		let ownEnd = index + 1;
+		if (itemId !== void 0) while (ownEnd < items.length) {
+			const candidate = items[ownEnd];
+			if (candidate?.list?.level !== level || candidate.list?.itemId !== itemId) break;
+			ownEnd += 1;
+		}
+		const ownBlocks = items.slice(index, ownEnd);
+		let lookahead = ownEnd;
 		while (lookahead < items.length && (items[lookahead]?.list?.level ?? -1) > level) lookahead += 1;
-		const nestedItems = items.slice(index + 1, lookahead);
-		const checkboxPrefix = info?.task === true ? checkboxPrefixFor(item) : void 0;
-		const marker = renderListItemMarker(numId, info, item, context);
-		const bodyLines = renderParagraphBody(stripCheckboxRun(item, checkboxPrefix), context).split("\n");
+		const nestedItems = items.slice(ownEnd, lookahead);
+		const first = ownBlocks[0];
+		if (first === void 0) break;
+		const { checkboxText, stripGlyph } = firstBlockCheckbox(first, info?.task === true);
+		const marker = renderListItemMarker(numId, info, checkboxText, context);
 		const indent = " ".repeat(marker.bareLength);
-		const [firstLine = "", ...restLines] = bodyLines;
+		const [firstLine = "", ...restLines] = renderParagraphBody(stripGlyph ? stripCheckboxRun(first) : first, context).split("\n");
 		let text = [`${marker.full}${firstLine}`, ...restLines.map((line) => `${indent}${line}`)].join("\n");
+		for (const extra of ownBlocks.slice(1)) {
+			const rendered = renderParagraphBody(extra, context).split("\n").map((line) => line.length === 0 ? line : `${indent}${line}`).join("\n");
+			text += `\n\n${rendered}`;
+		}
 		if (nestedItems.length > 0) {
 			const nested = renderListRegion(nestedItems, context).split("\n").map((line) => line.length === 0 ? line : `${indent}${line}`).join("\n");
 			text += `\n${nested}`;

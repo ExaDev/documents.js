@@ -112,6 +112,57 @@ describe('lists', () => {
     expect(markdown).toBe('- a\n  - b');
   });
 
+  it('renders membership.checked as the [x]/[ ] checkbox directly, no glyph run involved', () => {
+    const markdown = emitMarkdown(doc([
+      { kind: 'paragraph', runs: [{ text: 'done' }], list: { numId: 'md1:bullet+task', level: 0, checked: true, itemId: 'md-i1' } },
+      { kind: 'paragraph', runs: [{ text: 'todo' }], list: { numId: 'md1:bullet+task', level: 0, checked: false, itemId: 'md-i2' } },
+    ]));
+    expect(markdown).toBe('- [x] done\n- [ ] todo');
+  });
+
+  it('still recognises the pre-field checkbox-glyph spelling when membership.checked is absent', () => {
+    const markdown = emitMarkdown(doc([
+      { kind: 'paragraph', runs: [{ text: '☒ ' }, { text: 'done' }], list: { numId: 'md1:bullet+task', level: 0 } },
+    ]));
+    expect(markdown).toBe('- [x] done');
+  });
+
+  it('renders every block of one itemId as a single item -- a blank line and the continuation indent between blocks, one marker only', () => {
+    const markdown = emitMarkdown(doc([
+      { kind: 'paragraph', runs: [{ text: 'a' }], list: { numId: 'md1:bullet+loose', level: 0, itemId: 'md-i1' } },
+      { kind: 'paragraph', runs: [{ text: 'second block' }], list: { numId: 'md1:bullet+loose', level: 0, itemId: 'md-i1' } },
+    ]));
+    expect(markdown).toBe('- a\n\n  second block');
+  });
+
+  it('renders same-level paragraphs with DIFFERENT itemIds as separate items even when they share a numId', () => {
+    const markdown = emitMarkdown(doc([
+      { kind: 'paragraph', runs: [{ text: 'a' }], list: { numId: 'md1:bullet', level: 0, itemId: 'md-i1' } },
+      { kind: 'paragraph', runs: [{ text: 'b' }], list: { numId: 'md1:bullet', level: 0, itemId: 'md-i2' } },
+    ]));
+    expect(markdown).toBe('- a\n- b');
+  });
+
+  it('keeps one item per paragraph for memberships with no itemId at all -- the cross-format shape every foreign producer sends', () => {
+    const markdown = emitMarkdown(doc([
+      { kind: 'paragraph', runs: [{ text: 'a' }], list: { numId: 'md1:bullet', level: 0 } },
+      { kind: 'paragraph', runs: [{ text: 'b' }], list: { numId: 'md1:bullet', level: 0 } },
+    ]));
+    expect(markdown).toBe('- a\n- b');
+  });
+
+  it('round-trips a task list byte for byte, and a multi-block item semantically with a stable re-emission', () => {
+    const task = '- [x] done\n- [ ] todo';
+    expect(emitMarkdown(lowerMarkdown(task))).toBe(task);
+    expect(lowerMarkdown(emitMarkdown(lowerMarkdown(task)))).toEqual(lowerMarkdown(task));
+
+    // A loose multi-block item re-emits with the loose sibling spacing the numId itself records, so the text is not byte-identical to a source whose author ran the sibling tight -- but the reparse reproduces the identical document and a second pass is a fixed point.
+    const multi = lowerMarkdown('- a\n\n  continuation of a\n- b');
+    const written = emitMarkdown(multi);
+    expect(lowerMarkdown(written)).toEqual(multi);
+    expect(emitMarkdown(lowerMarkdown(written))).toBe(written);
+  });
+
   it('separates loose-list siblings with a blank line and tight-list siblings with none', () => {
     const tight = emitMarkdown(doc([
       { kind: 'paragraph', runs: [{ text: 'a' }], list: { numId: 'md1:bullet', level: 0 } },

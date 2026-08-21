@@ -28,5 +28,10 @@ function parseListNumId(numId) {
 function mintedListType(numId) {
 	return parseListNumId(numId)?.type;
 }
+function mintListItemId(state) {
+	const id = state.next;
+	state.next += 1;
+	return `md-i${String(id)}`;
+}
 //#endregion
-export { createNumIdMintState, mintListNumId, mintedListType, parseListNumId };
+export { createNumIdMintState, mintListItemId, mintListNumId, mintedListType, parseListNumId };

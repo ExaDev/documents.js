@@ -166,7 +166,7 @@ describe('lists', () => {
   it('mints one numId per top-level list and reuses it, level+1, for a nested list', () => {
     const [a, nested] = blocks('- a\n  - b');
     expect(paragraph(a).list?.level).toBe(0);
-    expect(paragraph(nested).list).toEqual({ numId: paragraph(a).list?.numId, level: 1 });
+    expect(paragraph(nested).list).toMatchObject({ numId: paragraph(a).list?.numId, level: 1 });
   });
 
   it('mints a fresh numId for a second, independent top-level list', () => {
@@ -174,11 +174,32 @@ describe('lists', () => {
     expect(paragraph(a).list?.numId).not.toBe(paragraph(b).list?.numId);
   });
 
-  it('applies a checkbox glyph to a task item\'s first run and none to an ordinary sibling item', () => {
+  it('carries a task item\'s checkbox state as membership.checked, with no glyph run prepended to the text', () => {
     const [checked, unchecked, plain] = blocks('- [x] done\n- [ ] todo\n- plain');
-    expect(paragraph(checked).runs[0]?.text).toBe('☒ ');
-    expect(paragraph(unchecked).runs[0]?.text).toBe('☐ ');
-    expect(paragraph(plain).runs[0]?.text).toBe('plain');
+    expect(paragraph(checked).list?.checked).toBe(true);
+    expect(paragraph(unchecked).list?.checked).toBe(false);
+    expect(paragraph(plain).list?.checked).toBeUndefined();
+    expect(paragraph(checked).runs[0]?.text).toBe('done');
+    expect(paragraph(unchecked).runs[0]?.text).toBe('todo');
+  });
+
+  it('mints a distinct itemId per item, shared by every block of one multi-block item and separating it from a sibling with the same numId and level', () => {
+    const [first, second, third] = blocks('- a\n\n  continuation of a\n- b');
+    const firstId = paragraph(first).list?.itemId;
+    const secondId = paragraph(second).list?.itemId;
+    const thirdId = paragraph(third).list?.itemId;
+    expect(firstId).toMatch(/^md-i\d+$/);
+    expect(secondId).toBe(firstId);
+    expect(thirdId).not.toBe(firstId);
+    expect(paragraph(third).list?.numId).toBe(paragraph(first).list?.numId);
+    expect(paragraph(third).list?.level).toBe(paragraph(first).list?.level);
+  });
+
+  it('carries itemId on the empty-item placeholder too, when the item\'s only content is a nested list', () => {
+    const [placeholder] = blocks('-\n  - nested');
+    const membership = paragraph(placeholder).list;
+    expect(membership?.itemId).toMatch(/^md-i\d+$/);
+    expect(paragraph(placeholder).runs).toEqual([]);
   });
 });
 
@@ -339,12 +360,6 @@ describe('gaps (MarkdownDiagnosticCodes)', () => {
     const result = blocks('- | a | b |\n  | - | - |\n  | 1 | 2 |', { sink: collector.sink });
     expect(collector.has(MarkdownDiagnosticCodes.LIST_ITEM_BLOCK_UNLISTED)).toBe(true);
     expect(result.some((block) => block.kind === 'table')).toBe(true);
-  });
-
-  it('LIST_ITEM_MULTI_BLOCK_FLATTENED fires for a list item directly containing more than one block', () => {
-    const collector = createDiagnosticCollector();
-    blocks('- one\n\n  two', { sink: collector.sink });
-    expect(collector.has(MarkdownDiagnosticCodes.LIST_ITEM_MULTI_BLOCK_FLATTENED)).toBe(true);
   });
 
   it('LIST_MARKER_TYPE_CONFLICT fires when a nested list disagrees with its enclosing list\'s own minted type', () => {

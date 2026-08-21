@@ -19,8 +19,6 @@ const MATH_DELIMITER_DIVERGENCE = 'a source-level \\( directly followed (eventua
 
 export const COMMONMARK_EXCLUSIONS: ReadonlyMap<number, string> = new Map([
   // Tabs
-  [4, MULTI_BLOCK],
-  [5, MULTI_BLOCK],
   // Backslash escapes
   [12, MATH_DELIMITER_DIVERGENCE],
   [14, SOFT_BREAK],
@@ -47,7 +45,6 @@ export const COMMONMARK_EXCLUSIONS: ReadonlyMap<number, string> = new Map([
   [105, SOFT_BREAK],
   [106, SOFT_BREAK],
   // Indented code blocks
-  [108, MULTI_BLOCK],
   [109, MARKER_TYPE_CONFLICT],
   [113, SOFT_BREAK],
   // Fenced code blocks
@@ -83,18 +80,9 @@ export const COMMONMARK_EXCLUSIONS: ReadonlyMap<number, string> = new Map([
   // List items
   [253, SOFT_BREAK],
   [254, MULTI_BLOCK],
-  [256, MULTI_BLOCK],
-  [258, MULTI_BLOCK],
   [259, MULTI_BLOCK],
   [260, MULTI_BLOCK],
-  [262, MULTI_BLOCK],
   [263, MULTI_BLOCK],
-  [264, MULTI_BLOCK],
-  [270, MULTI_BLOCK],
-  [271, MULTI_BLOCK],
-  [273, MULTI_BLOCK],
-  [274, MULTI_BLOCK],
-  [277, MULTI_BLOCK],
   [285, SOFT_BREAK],
   [286, SOFT_BREAK],
   [287, SOFT_BREAK],
@@ -110,14 +98,9 @@ export const COMMONMARK_EXCLUSIONS: ReadonlyMap<number, string> = new Map([
   [301, ADJACENT_SAME_DEPTH],
   [302, ADJACENT_SAME_DEPTH],
   [304, SOFT_BREAK],
-  [307, MULTI_BLOCK],
-  [309, MULTI_BLOCK],
   [312, SOFT_BREAK],
-  [316, MULTI_BLOCK],
-  [319, MULTI_BLOCK],
   [320, MULTI_BLOCK],
   [321, MULTI_BLOCK],
-  [324, MULTI_BLOCK],
   [325, MULTI_BLOCK],
   [326, MULTI_BLOCK],
   // Code spans
