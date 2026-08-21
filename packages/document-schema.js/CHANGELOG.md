@@ -1,3 +1,11 @@
+# [4.5.0](https://github.com/ExaDev/documents.js/compare/document-schema.js@4.4.0...document-schema.js@4.5.0) (2026-08-21)
+
+
+### Features
+
+* add run-level construct extents as an optional constructs field on ContentParagraph ([264edad](https://github.com/ExaDev/documents.js/commit/264edad6d0dfe2a8b451b88ac5ade354fe3c3aa6))
+* read and write mid-paragraph docx bookmarks through run-level construct extents ([9e2cb60](https://github.com/ExaDev/documents.js/commit/9e2cb60ef11bf61824eae6e423d6178e7db8dbd3))
+
 # [4.4.0](https://github.com/ExaDev/documents.js/compare/document-schema.js@4.3.7...document-schema.js@4.4.0) (2026-08-20)
 
 
