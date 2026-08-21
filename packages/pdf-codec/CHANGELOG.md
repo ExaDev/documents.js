@@ -1,3 +1,10 @@
+## [3.1.2](https://github.com/ExaDev/documents.js/compare/pdf-codec@3.1.1...pdf-codec@3.1.2) (2026-08-21)
+
+
+### Bug Fixes
+
+* **read:** honour an aborted signal before the document-open phase runs ([f8ee39c](https://github.com/ExaDev/documents.js/commit/f8ee39cfb895ae123dab2a5c190fd60559f2c6ae))
+
 ## [3.1.1](https://github.com/ExaDev/documents.js/compare/pdf-codec@3.1.0...pdf-codec@3.1.1) (2026-08-21)
 
 
