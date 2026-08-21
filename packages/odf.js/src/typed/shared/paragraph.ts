@@ -106,6 +106,28 @@ function collectRuns(container: XmlElement, baseProperties: StyleProperties, pkg
           descriptor: () => odfBookmarkAnchorDescriptor(decodeXmlText(name)),
         });
       }
+    } else if (node.tag === 'text:reference-mark') {
+      // A point reference mark: identical in shape to a point text:bookmark (a named, zero-width, addressable position), so it reads as a point bookmark anchor extent at its run position -- document-schema.js's own anchorType vocabulary names text:reference-mark* as a bookmark source, and ODF 1.2 part 1 section 6.2 makes text:name required.
+      const name = attrValue(node, 'text:name');
+      if (name !== undefined) {
+        const runPosition = out.length;
+        walk.extents.push({ descriptor: odfBookmarkAnchorDescriptor(decodeXmlText(name)), startRun: runPosition, endRun: runPosition });
+      }
+    } else if (node.tag === 'text:reference-mark-start' || node.tag === 'text:reference-mark-end') {
+      // A ranged reference mark's half: keyed and scoped exactly like a bookmark half, but under its own marker KIND -- reference-mark names and bookmark names are separate ODF uniqueness namespaces, so a reference-mark-start must never pair with a bookmark-end that happens to share its name (see constructs.ts's OdfMarkerKind note).
+      const name = attrValue(node, 'text:name');
+      if (name !== undefined) {
+        walk.halves.push({
+          kind: 'referenceMark',
+          side: node.tag === 'text:reference-mark-start' ? 'start' : 'end',
+          key: decodeXmlText(name),
+          element: node,
+          parent: container,
+          runPosition: out.length,
+          order: walk.order++,
+          descriptor: () => odfBookmarkAnchorDescriptor(decodeXmlText(name)),
+        });
+      }
     } else if (node.tag === 'text:change') {
       // A point tracked-change marker: its text:change-id names a text:changed-region the document-level context resolves into the provenance descriptor. With no region (or no region map at all) there is no change kind to report and the marker contributes nothing.
       const changeId = attrValue(node, 'text:change-id');

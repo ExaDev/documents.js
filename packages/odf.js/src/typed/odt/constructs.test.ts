@@ -532,6 +532,112 @@ describe('readOdtContent: office:forms in an ordinary text document', () => {
   });
 });
 
+describe('readOdtContent: cross-references (the odf slice of #750)', () => {
+  it('reads a point text:reference-mark as a bookmark anchor extent at its run position', () => {
+    const pkg = odtPackage([el('text:p', {}, [txt('see '), el('text:reference-mark', { 'text:name': 'target1' }), txt(' here')])]);
+    const blocks = firstSectionBlocks(pkg);
+    if (blocks[0]?.kind !== 'paragraph') {
+      throw new Error('expected a paragraph');
+    }
+    expect(blocks[0].constructs).toEqual([
+      { descriptor: { kind: 'anchor', anchorType: 'bookmark', name: 'target1' }, startRun: 1, endRun: 1 },
+    ]);
+  });
+
+  it('pairs interior text:reference-mark-start/-end into a run-level anchor extent', () => {
+    const pkg = odtPackage([
+      el('text:p', {}, [txt('the '), el('text:reference-mark-start', { 'text:name': 'span1' }), txt('marked words'), el('text:reference-mark-end', { 'text:name': 'span1' }), txt(' end')]),
+    ]);
+    const blocks = firstSectionBlocks(pkg);
+    if (blocks[0]?.kind !== 'paragraph') {
+      throw new Error('expected a paragraph');
+    }
+    expect(blocks[0].constructs).toEqual([
+      { descriptor: { kind: 'anchor', anchorType: 'bookmark', name: 'span1' }, startRun: 1, endRun: 2 },
+    ]);
+  });
+
+  it('pairs reference-mark halves at paragraph edges across blocks into constructStart/constructEnd markers', () => {
+    const pkg = odtPackage([
+      el('text:p', {}, [el('text:reference-mark-start', { 'text:name': 'across' }), txt('first')]),
+      paragraph('middle'),
+      el('text:p', {}, [txt('last'), el('text:reference-mark-end', { 'text:name': 'across' })]),
+    ]);
+    const blocks = firstSectionBlocks(pkg);
+    expect(blocks.map((block) => block.kind)).toEqual(['constructStart', 'paragraph', 'paragraph', 'paragraph', 'constructEnd']);
+    if (blocks[0]?.kind !== 'constructStart') {
+      throw new Error('expected a constructStart marker');
+    }
+    expect(blocks[0].descriptor).toEqual({ kind: 'anchor', anchorType: 'bookmark', name: 'across' });
+  });
+
+  it('does not pair a reference-mark half with a bookmark half sharing the same name', () => {
+    const pkg = odtPackage([
+      el('text:p', {}, [el('text:bookmark-start', { 'text:name': 'shared' }), txt('text'), el('text:reference-mark-end', { 'text:name': 'shared' })]),
+    ]);
+    const blocks = firstSectionBlocks(pkg);
+    if (blocks[0]?.kind !== 'paragraph') {
+      throw new Error('expected a paragraph');
+    }
+    expect(blocks[0].constructs).toBeUndefined();
+  });
+
+  it('reads a text:reference-ref display as a field extent over its cached text run', () => {
+    const pkg = odtPackage([
+      el('text:p', {}, [txt('on page '), el('text:reference-ref', { 'text:ref-name': 'target1', 'text:reference-format': 'page' }, [txt('12')])]),
+    ]);
+    const blocks = firstSectionBlocks(pkg);
+    if (blocks[0]?.kind !== 'paragraph') {
+      throw new Error('expected a paragraph');
+    }
+    expect(blocks[0].runs.map((run) => run.text)).toEqual(['on page ', '12']);
+    expect(blocks[0].constructs).toEqual([
+      {
+        descriptor: {
+          kind: 'field',
+          instruction: '<text:reference-ref text:ref-name="target1" text:reference-format="page"></text:reference-ref>',
+          cachedResult: '12',
+        },
+        startRun: 1,
+        endRun: 2,
+      },
+    ]);
+  });
+
+  it('reads a text:bookmark-ref display as a field extent over its cached text run', () => {
+    const pkg = odtPackage([
+      el('text:p', {}, [txt('see chapter '), el('text:bookmark-ref', { 'text:ref-name': 'span1', 'text:reference-format': 'chapter' }, [txt('3')])]),
+    ]);
+    const blocks = firstSectionBlocks(pkg);
+    if (blocks[0]?.kind !== 'paragraph') {
+      throw new Error('expected a paragraph');
+    }
+    expect(blocks[0].constructs).toEqual([
+      {
+        descriptor: {
+          kind: 'field',
+          instruction: '<text:bookmark-ref text:ref-name="span1" text:reference-format="chapter"></text:bookmark-ref>',
+          cachedResult: '3',
+        },
+        startRun: 1,
+        endRun: 2,
+      },
+    ]);
+  });
+
+  it('survives the package boundary with reference-mark marker pairs intact', () => {
+    const pkg = odtPackage([
+      el('text:p', {}, [el('text:reference-mark-start', { 'text:name': 'x' }), txt('first')]),
+      el('text:p', {}, [txt('last'), el('text:reference-mark-end', { 'text:name': 'x' })]),
+    ]);
+    const flat = flattenPackage(readOdt(pkg));
+    if (flat.kind !== 'wordprocessing') {
+      throw new Error('expected a wordprocessing document');
+    }
+    expect(flat.sections[0]?.blocks.map((block) => block.kind)).toEqual(['constructStart', 'paragraph', 'paragraph', 'constructEnd']);
+  });
+});
+
 describe('readOdtContent: field master declarations as a definitions table', () => {
   it('reads variable, user-field, and sequence declarations into keyed definitions entries', () => {
     const pkg = odtPackage([

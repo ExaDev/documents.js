@@ -151,7 +151,9 @@ export function odfIndexControlDescriptor(wrapper: XmlElement): ContentControlDe
 }
 
 // One half of a paired marker construct encountered during a paragraph's run walk: bookmark halves pair by text:name, tracked-change markers by text:change-id, annotations by office:name. `parent` is kept so the pairing can ask whether the half is a DIRECT child of the paragraph element (only a direct child can sit at a paragraph edge and qualify for block scope); a half nested inside a text:span or text:a is interior to the paragraph's run sequence by construction. `runPosition` is the count of runs the walk had emitted when it reached the half -- exactly what a RunConstructExtent's startRun/endRun names. `descriptor` is deferred so the payload is built only for a half that actually wins a pairing, and may resolve to undefined -- a tracked-change half whose text:change-id names no text:changed-region has no descriptor to carry, and both pairings below drop such a pair rather than emitting a marker shell with nothing inside it.
-export type OdfMarkerKind = 'bookmark' | 'change' | 'annotation';
+//
+// 'referenceMark' is its own kind, not a bookmark spelling, because ODF keeps reference-mark names and bookmark names in separate uniqueness namespaces -- a text:reference-mark-start and a text:bookmark-end may legally share one text:name, and pairing them would splice two different constructs into one extent. The DESCRIPTOR is the bookmark anchor either way: document-schema.js's own anchorType commentary names text:reference-mark* as a bookmark source, a named target other constructs address.
+export type OdfMarkerKind = 'bookmark' | 'change' | 'annotation' | 'referenceMark';
 
 export interface OdfMarkerHalf {
   readonly kind: OdfMarkerKind;

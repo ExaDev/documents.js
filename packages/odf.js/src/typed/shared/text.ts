@@ -59,6 +59,9 @@ export const ODF_FIELD_TAGS: ReadonlySet<string> = new Set([
   'text:user-field-input',
   'text:sequence',
   'text:sequence-ref',
+  // cross-reference displays (ODF 1.2 part 1 section 6.2): the displayed number/text of a reference to a bookmark, a reference-mark, or a sequence -- content-model members of the inline-text set exactly like the field families above, with their own text content as the cached display
+  'text:bookmark-ref',
+  'text:reference-ref',
   // database field instances
   'text:database-display',
   'text:database-name',
