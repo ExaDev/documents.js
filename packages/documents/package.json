@@ -57,7 +57,7 @@
     "document-schema.js": "^4.7.0",
     "documents.js": "^4.2.1",
     "markdown-codec": "^4.0.15",
-    "odf.js": "^5.0.9",
+    "odf.js": "^5.1.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "zod": "^4.4.3"
