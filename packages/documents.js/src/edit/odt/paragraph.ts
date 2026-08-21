@@ -14,6 +14,7 @@ import { buildRun, OdtRun } from './run';
 export interface ParagraphInit {
   readonly text?: string;
   readonly styleId?: string;
+  readonly headingLevel?: number;
   readonly alignment?: Alignment;
 }
 
@@ -104,6 +105,34 @@ export class OdtParagraph {
     setAttr(node, 'text:style-name', value);
   }
 
+  // The ODF heading identity, one element-state fact: a paragraph carrying it is a real text:h element with text:outline-level (the depth signal ODF's own outline and navigation read) and text:style-name pointed at the ODF heading-style spelling "Heading_20_N" (_20_ is ODF's escape for the space in "Heading N"; the levels this family gives a visual convention are defined in the scaffold's office:styles -- src/edit/odt/scaffold.ts). This is the write-side inverse of odf.js's own readParagraphOrHeading (typed/odt/read.ts), which derives BOTH the synthetic "Heading{N}" styleId and the canonical headingLevel from the one text:h element -- here the one setter writes both spellings of the same depth, so they can never disagree the way a verbatim cross-format styleId copy does. Promoting an element that already carries a style-name (e.g. a producer's unresolvable "Heading2") repoints it at the resolvable spelling; there is deliberately no way to carry a custom style name AND a heading level, because ODF's single text:style-name slot makes the heading's own style the only resolvable choice. Setting undefined demotes the element back to a plain text:p, removing the outline level and the style-name promote wrote -- the exact inverse, restoring the unstyled paragraph promote found.
+  get headingLevel(): number | undefined {
+    const node = this.live();
+    if (node.tag !== 'text:h') {
+      return undefined;
+    }
+    // text:outline-level's ODF schema default when the attribute is absent is 1 (OASIS ODF 1.2 part 1) -- the identical default odf.js's own readOutlineLevel applies reading one back, and the identical degrade for a non-positive or unparseable value.
+    const raw = attr(node, 'text:outline-level');
+    if (raw === undefined) {
+      return 1;
+    }
+    const parsed = Number.parseInt(raw, 10);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
+  }
+
+  set headingLevel(value: number | undefined) {
+    const node = this.live();
+    if (value === undefined) {
+      node.tag = 'text:p';
+      removeAttr(node, 'text:outline-level');
+      removeAttr(node, 'text:style-name');
+      return;
+    }
+    node.tag = 'text:h';
+    setAttr(node, 'text:outline-level', String(value));
+    setAttr(node, 'text:style-name', `Heading_20_${String(value)}`);
+  }
+
   get alignment(): Alignment | undefined {
     return readCurrentStyleProperties(this.pkg, this.live(), 'paragraph').alignment;
   }
@@ -166,11 +195,13 @@ export class OdtParagraph {
   }
 }
 
-// Builds a fresh text:p from scratch (not a live view -- for constructing new paragraphs to append or insert, whose properties are then read back through OdtParagraph once inserted into the tree). Mirrors run.ts's buildRun: applies init's properties by constructing a throwaway OdtParagraph over the new node and driving it through the exact same setters every later mutation uses.
+// Builds a fresh text:p (promoted to a text:h by the headingLevel setter when init carries one) from scratch (not a live view -- for constructing new paragraphs to append or insert, whose properties are then read back through OdtParagraph once inserted into the tree). Mirrors run.ts's buildRun: applies init's properties by constructing a throwaway OdtParagraph over the new node and driving it through the exact same setters every later mutation uses. A headingLevel subsumes an init styleId rather than sitting alongside it: the headingLevel setter writes the ODF-resolvable Heading_20_N spelling of the same depth, and a producer's verbatim "Heading{N}" spelling (the synthetic cross-format shape, never a style an odt defines) would only overwrite it.
 export function buildParagraph(pkg: Package, init: ParagraphInit = {}): XmlElement {
   const node = el('text:p');
   const paragraph = new OdtParagraph([], node, pkg);
-  if (init.styleId !== undefined) {
+  if (init.headingLevel !== undefined) {
+    paragraph.headingLevel = init.headingLevel;
+  } else if (init.styleId !== undefined) {
     paragraph.styleId = init.styleId;
   }
   if (init.alignment !== undefined) {

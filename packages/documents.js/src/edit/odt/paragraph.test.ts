@@ -98,6 +98,42 @@ describe('buildParagraph', () => {
     expect(paragraph.alignment).toBe('center');
     expect(paragraph.styleId).not.toBe('Standard');
   });
+
+  // A heading is a distinct ODF ELEMENT (text:h + text:outline-level), not a text:p with a heading-ish style name -- and the style spelling ODF resolves is Heading_20_2 (ODF's _20_ escape for the space in "Heading 2"), never the synthetic cross-format "Heading2" shape the flat ContentDocument carries in styleId. The paragraph's own init carries both spellings of the same depth for exactly the reason odf.js's own reader derives both from the one text:h element (typed/odt/read.ts's readParagraphOrHeading): one element state, two consumers (styleId-keyed and numeric), no way for them to disagree.
+  it('builds a real text:h with text:outline-level and the Heading_20_N style spelling for a headingLevel init', () => {
+    const editor = createOdt();
+    const paragraphElement = buildParagraph(editor.toPackage(), { text: 'Chapter', headingLevel: 2 });
+    expect(paragraphElement.tag).toBe('text:h');
+    expect(attrValue(paragraphElement, 'text:outline-level')).toBe('2');
+    expect(attrValue(paragraphElement, 'text:style-name')).toBe('Heading_20_2');
+    const paragraph = new OdtParagraph([paragraphElement], paragraphElement, editor.toPackage());
+    expect(paragraph.text).toBe('Chapter');
+    expect(paragraph.headingLevel).toBe(2);
+  });
+
+  it('builds a plain text:p with no outline level when headingLevel is absent', () => {
+    const editor = createOdt();
+    const paragraphElement = buildParagraph(editor.toPackage(), { text: 'Body' });
+    expect(paragraphElement.tag).toBe('text:p');
+    expect(attrValue(paragraphElement, 'text:outline-level')).toBeUndefined();
+  });
+});
+
+describe('OdtParagraph.headingLevel', () => {
+  it('promotes a live text:p to a text:h and demotes it back', () => {
+    const editor = createOdt();
+    const paragraph = editor.body.appendParagraph({ text: 'Chapter' });
+    expect(paragraph.headingLevel).toBeUndefined();
+    paragraph.headingLevel = 3;
+    // The promote is a tag rename on the SAME element, not a remove-and-reinsert -- the live view keeps working, and editor.paragraphs() (which finds only text:p children, see its own comment) no longer lists the promoted heading, surfacing it again once demoted.
+    expect(paragraph.headingLevel).toBe(3);
+    expect(paragraph.text).toBe('Chapter');
+    expect(editor.paragraphs()).toHaveLength(0);
+    paragraph.headingLevel = undefined;
+    expect(paragraph.headingLevel).toBeUndefined();
+    expect(editor.paragraphs()).toHaveLength(1);
+    expect(editor.paragraphs()[0]?.text).toBe('Chapter');
+  });
 });
 
 describe('OdtParagraph.insertImageAfter', () => {
