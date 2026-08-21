@@ -2,6 +2,7 @@ import { bytesToBase64 } from './util/base64';
 import { crc32 } from './bytes/crc32';
 import { concatBytes } from './bytes/writer';
 import { readPageAnnotations } from './annotations';
+import { readAcroForm } from './form';
 import { readAttachments } from './attachments';
 import { readOptionalContent } from './optional-content';
 import type { Color as LayoutColor, LayoutFont, LayoutMetadata } from 'document-schema.js';
@@ -73,6 +74,7 @@ export function readPdf(bytes: Uint8Array<ArrayBuffer>, options?: ReadPdfOptions
   const outline = readOutline(doc.catalog, destinationRegistry, doc, sink);
   const attachments = readAttachments(doc.catalog, pageDicts, doc, sink);
   const optionalContent = readOptionalContent(doc.catalog, doc, sink);
+  const form = readAcroForm(doc.catalog, doc, (obj) => doc.pageIndex(obj), sink);
 
   const pages = pageDicts.map((pageDict) => {
     throwIfAborted(signal);
@@ -88,6 +90,7 @@ export function readPdf(bytes: Uint8Array<ArrayBuffer>, options?: ReadPdfOptions
     ...(outline.length > 0 ? { outline } : {}),
     ...(attachments.length > 0 ? { attachments } : {}),
     ...(optionalContent.layers.length > 0 ? { layers: [...optionalContent.layers] } : {}),
+    ...(form.length > 0 ? { form } : {}),
   };
 }
 
