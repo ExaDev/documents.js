@@ -37,10 +37,16 @@ describe('measureOdfNodeLength / sumOdfNodeLength', () => {
     expect(measureOdfNodeLength(span)).toBe(4);
   });
 
-  it('measures a comment, CDATA, or unrecognised element as zero-width', () => {
+  it('measures an inline field recursively as the sum of its own children -- a field displays its cached text', () => {
+    const field = el('text:page-number', {}, [txt('12')]);
+    expect(measureOdfNodeLength(field)).toBe(2);
+  });
+
+  it('measures a comment, CDATA, bookmark, or other zero-width marker element as zero-width', () => {
     expect(measureOdfNodeLength({ type: 'comment', value: 'x' })).toBe(0);
     expect(measureOdfNodeLength({ type: 'cdata', value: 'x' })).toBe(0);
     expect(measureOdfNodeLength(el('text:bookmark'))).toBe(0);
+    expect(measureOdfNodeLength(el('text:title'))).toBe(0);
   });
 
   it('sums a flat node list', () => {
@@ -87,7 +93,12 @@ describe('decodeOdfText', () => {
     expect(decodeOdfText(paragraphOf(span))).toBe('a  \tb');
   });
 
-  it('contributes nothing for a bookmark, field, or other unrecognised inline element', () => {
+  it('decodes an inline field as its cached text content, exactly as the run model reads it', () => {
+    const paragraph = paragraphOf(txt('page '), el('text:page-number', {}, [txt('3')]), txt(' of 10'));
+    expect(decodeOdfText(paragraph)).toBe('page 3 of 10');
+  });
+
+  it('contributes nothing for a bookmark or other zero-width marker element', () => {
     const paragraph = paragraphOf(txt('a'), el('text:bookmark', { 'text:name': 'mark' }), txt('b'));
     expect(decodeOdfText(paragraph)).toBe('ab');
   });

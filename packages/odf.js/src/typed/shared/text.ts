@@ -4,7 +4,72 @@ import { attrValue } from '../../xml/query';
 
 // ODF paragraph/heading text content is not a plain string the way a docx run's w:t is: real whitespace collapses HTML-style in XML text-node content, so ODF represents a run of N literal space characters as <text:s text:c="N"/> (an ELEMENT, not text), a tab as <text:tab/>, and a hard line break as <text:line-break/> -- all three occupy real character positions in the paragraph's flat content model but carry no text-node value at all. A naive walk that only concatenates XmlText nodes silently drops every one of these, corrupting whitespace on read -- flagged during this package's own design work as the single most likely silent-corruption bug in the whole port.
 //
-// This module is the single, canonical implementation of "what does one unit of ODF inline text content mean", shared by two different consumers that must never be allowed to drift out of sync with each other: src/styles/span.ts (character-position splitting, to wrap a range in a text:span) and this file's own decodeOdfText (projecting that same content to a plain, human-readable string). Both dispatch on the exact same node shapes below -- text, text:s, text:tab, text:line-break, text:span (recurses into its own children), anything else (zero-width: a bookmark, a field, change-tracking markup, an anchored draw:frame) contributes nothing.
+// This module is the single, canonical implementation of "what does one unit of ODF inline text content mean", shared by two different consumers that must never be allowed to drift out of sync with each other: src/styles/span.ts (character-position splitting, to wrap a range in a text:span) and this file's own decodeOdfText (projecting that same content to a plain, human-readable string). Both dispatch on the exact same node shapes below -- text, text:s, text:tab, text:line-break, text:span (recurses into its own children), an inline field (recurses too: a field displays its cached text content, so it occupies exactly its children's width), anything else (zero-width: a bookmark, change-tracking markup, an anchored draw:frame) contributes nothing. typed/shared/paragraph.ts's run walk is a third consumer of the same content model and dispatches identically.
+
+// Every inline field element ODF defines: the everyday simple fields (text:date, text:page-number, text:file-name, ...), the field-master instance families (text:variable-set/-get, text:user-field-get/-input, text:sequence, text:database-*), and the conditional/display family. All are members of ODF's common inline-text content model and every one displays its own text content as its cached result. The master DECLARATION side (text:*-decls) is block-level, never inline, so it is not part of this set. Declared here -- the content-model module -- rather than in typed/shared/constructs.ts because the question it answers ("does this element contribute text") belongs to this module's vocabulary, while constructs.ts (which imports it) answers what the field MEANS.
+export const ODF_FIELD_TAGS: ReadonlySet<string> = new Set([
+  // date and time
+  'text:date',
+  'text:time',
+  // page geometry
+  'text:page-number',
+  'text:page-count',
+  'text:page-continuation',
+  // document facts
+  'text:file-name',
+  'text:sheet-name',
+  'text:title',
+  'text:subject',
+  'text:keywords',
+  'text:description',
+  // author and sender
+  'text:author-name',
+  'text:author-initials',
+  'text:sender-firstname',
+  'text:sender-lastname',
+  'text:sender-initials',
+  'text:sender-title',
+  'text:sender-position',
+  'text:sender-email',
+  'text:sender-phone-private',
+  'text:sender-phone-work',
+  'text:sender-fax',
+  'text:sender-company',
+  'text:sender-street',
+  'text:sender-postal-code',
+  'text:sender-city',
+  'text:sender-country',
+  'text:sender-state-or-province',
+  // expressions and measure
+  'text:expression',
+  'text:measure',
+  // input and placeholder shapes
+  'text:text-input',
+  'text:placeholder',
+  'text:drop-down',
+  // conditional display
+  'text:conditional-text',
+  'text:hidden-text',
+  'text:execute',
+  // variable master instances
+  'text:variable-set',
+  'text:variable-get',
+  'text:variable-input',
+  'text:user-field-get',
+  'text:user-field-input',
+  'text:sequence',
+  'text:sequence-ref',
+  // database field instances
+  'text:database-display',
+  'text:database-name',
+  'text:database-next',
+  'text:database-row-select',
+  'text:database-value',
+]);
+
+export function isOdfFieldElement(element: XmlElement): boolean {
+  return ODF_FIELD_TAGS.has(element.tag);
+}
 
 // text:s's own text:c attribute: the number of literal space characters this ONE element represents (default 1 when absent, per the ODF schema). Shared, not reimplemented per caller, so span.ts's splitting and this file's own measuring/decoding can never disagree about how many characters a text:s occupies.
 export function getOdfSpaceCount(element: XmlElement): number {
@@ -19,7 +84,7 @@ export function getOdfSpaceCount(element: XmlElement): number {
   return parsed;
 }
 
-// The character-position length one XML node contributes to its container's flat text-content model: a text node's own string length, a text:s's text:c count, exactly 1 for text:tab/text:line-break, the recursive sum of a text:span's own children (a text:span carries no length of its own beyond that), and 0 for anything else.
+// The character-position length one XML node contributes to its container's flat text-content model: a text node's own string length, a text:s's text:c count, exactly 1 for text:tab/text:line-break, the recursive sum of a text:span's or an inline field's own children (neither carries length of its own beyond that), and 0 for anything else.
 export function measureOdfNodeLength(node: XmlNode): number {
   if (node.type === 'text') {
     return node.value.length;
@@ -33,7 +98,7 @@ export function measureOdfNodeLength(node: XmlNode): number {
   if (node.tag === 'text:tab' || node.tag === 'text:line-break') {
     return 1;
   }
-  if (node.tag === 'text:span') {
+  if (node.tag === 'text:span' || isOdfFieldElement(node)) {
     return sumOdfNodeLength(node.children);
   }
   return 0;
@@ -64,13 +129,13 @@ function decodeOdfNode(node: XmlNode): string {
   if (node.tag === 'text:line-break') {
     return '\n';
   }
-  if (node.tag === 'text:span') {
+  if (node.tag === 'text:span' || isOdfFieldElement(node)) {
     return decodeOdfText(node);
   }
   return '';
 }
 
-// Decodes a paragraph's (or any other inline-text container's -- text:span, text:h, a table cell's text:p, ...) children into a plain, human-readable string: text nodes contribute their literal entity-decoded content, text:s expands to its text:c space count, text:tab becomes a literal tab, text:line-break becomes a literal newline, and a nested text:span recurses into its own children first -- exactly the whitespace-as-elements model real ODF paragraph content uses (see this file's own top-of-file note). Any other child (a bookmark, a field, change-tracking markup, an anchored draw:frame) contributes nothing to the decoded string, matching measureOdfNodeLength's own zero-length treatment of the same nodes.
+// Decodes a paragraph's (or any other inline-text container's -- text:span, text:h, a table cell's text:p, ...) children into a plain, human-readable string: text nodes contribute their literal entity-decoded content, text:s expands to its text:c space count, text:tab becomes a literal tab, text:line-break becomes a literal newline, and a nested text:span or inline field recurses into its own children first -- exactly the whitespace-as-elements model real ODF paragraph content uses (see this file's own top-of-file note). Any other child (a bookmark, change-tracking markup, an anchored draw:frame) contributes nothing to the decoded string, matching measureOdfNodeLength's own zero-length treatment of the same nodes.
 export function decodeOdfText(container: XmlElement): string {
   let text = '';
   for (const child of container.children) {
