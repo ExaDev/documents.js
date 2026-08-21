@@ -1,4 +1,8 @@
 {
+  "archive-codec": {
+    "githubPackages": "archive-codec",
+    "aliases": []
+  },
   "byte-codec": {
     "githubPackages": "byte-codec",
     "aliases": ["document-bytes"]
