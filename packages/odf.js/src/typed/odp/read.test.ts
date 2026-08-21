@@ -1,12 +1,23 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { ContentListMembership, ContentParagraph, ContentSlide } from 'document-schema.js';
 import type { Package } from '../../model/package';
 import { el, txt } from '../../xml/fragment';
 import { bytesToBase64 } from '../../util/base64';
+import { parsePackage } from '../../package-io/read';
 import { assertPackageRoundTrip, presentationPackage } from '../../test-support/document-package';
 import { readOdp, readOdpContent } from './read';
 
-// A full, real-shape .odp fixture assembled from XML shapes verified against genuine LibreOffice 26.2 output (soffice --headless --convert-to odp on hand-built .fodp source, and an odp -> odp round trip to confirm LibreOffice's OWN writer's exact serialization -- see this repository's own commit history for the verification method): multiple draw:page elements in native document order, a rotated text frame, a grouped pair of shapes, an image, a table, and speaker notes, matching this package's other typed-reader tests' established convention of building packages programmatically from ground-truth-verified shapes rather than loading a committed binary fixture (mirroring ooxml.js's own src/typed/pptx/read.test.ts).
+const FIXTURES_DIR = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');
+
+function loadFixture(name: string): Package {
+  const bytes = new Uint8Array(readFileSync(join(FIXTURES_DIR, name)));
+  return parsePackage(bytes);
+}
+
+// A full, real-shape .odp fixture assembled from XML shapes verified against genuine LibreOffice 26.2 output (soffice --headless --convert-to odp on hand-built .fodp source, and an odp -> odp round trip to confirm LibreOffice's OWN writer's exact serialization -- see this repository's own commit history for the verification method): multiple draw:page elements in native document order, a rotated text frame, a grouped pair of shapes, an image, a table, and speaker notes, matching this package's other typed-reader tests' established convention of building packages programmatically from ground-truth-verified shapes rather than loading a committed binary fixture (mirroring ooxml.js's own src/typed/pptx/read.test.ts). The residue-row suite below additionally loads one genuine committed Impress fixture (fixtures/transitions.odp, built through the same UNO properties the Impress slide-transition sidebar writes) -- the placement facts it pins (transitions on the slide's own drawing-page style) are exactly the kind a programmatic fixture got wrong before it, so real producer output holds them.
 
 function tinyPngBase64(): string {
   return bytesToBase64(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]));
@@ -261,36 +272,89 @@ describe('readOdp: the package-native reader over the same fixture', () => {
   });
 });
 
-// The odp residue rows (ExaDev/documents.js#769): presentation transitions/sound/animations and the unmapped shape kinds quarantine on their own slide's residue, and non-content parts quarantine at the package tier.
+// The odp residue rows (ExaDev/documents.js#769): presentation transitions/sound/animations and the unmapped shape kinds quarantine on their own slide's residue, and non-content parts quarantine at the package tier. Slide transitions sit on the page's OWN drawing-page style (style:drawing-page-properties, referenced by draw:style-name), never as attributes of draw:page itself -- no ODF schema version (1.1, 1.2) puts them there, and real LibreOffice output writes them in the style (the transitions.odp fixture below is genuine Impress output).
 describe('readOdpContent: residue rows', () => {
-  function slidePackage(page: ReturnType<typeof el>, extraParts: Record<string, Package['parts'][string]> = {}): Package {
+  function slidePackage(page: ReturnType<typeof el>, extraParts: Record<string, Package['parts'][string]> = {}, automaticStyles: ReturnType<typeof el> | undefined = undefined): Package {
+    const contentChildren = automaticStyles === undefined ? [] : [automaticStyles];
     return {
       parts: {
-        'content.xml': { kind: 'xml', nodes: [el('office:document-content', {}, [el('office:body', {}, [el('office:presentation', {}, [page])])])] },
+        'content.xml': { kind: 'xml', nodes: [el('office:document-content', {}, [...contentChildren, el('office:body', {}, [el('office:presentation', {}, [page])])])] },
         'styles.xml': stylesXml(),
         ...extraParts,
       },
     };
   }
 
-  it('quarantines a slide\'s transition attributes, presentation:sound, and animation trees in the slide\'s own residue', () => {
-    const page = el('draw:page', { 'draw:master-page-name': 'Default', 'presentation:transition-type': 'automatic', 'presentation:transition-style': 'fade', 'presentation:transition-speed': 'slow', 'presentation:duration': 'PT2S' }, [
+  it('quarantines a slide\'s transition attributes from its drawing-page style (both the legacy presentation: and the ODF 1.2 smil: spellings), its sound, and its animation trees in the slide\'s own residue', () => {
+    const automaticStyles = el('office:automatic-styles', {}, [
+      el('style:style', { 'style:name': 'dp1', 'style:family': 'drawing-page' }, [
+        el('style:drawing-page-properties', {
+          'presentation:transition-type': 'automatic',
+          'presentation:transition-style': 'fade',
+          'presentation:transition-speed': 'slow',
+          'presentation:duration': 'PT2S',
+          'smil:type': 'fade',
+          'smil:subtype': 'fadesmoothly',
+          'smil:direction': 'reverse',
+          'smil:fadeColor': '#00cc00',
+          'presentation:background-visible': 'true',
+        }),
+      ]),
+    ]);
+    const page = el('draw:page', { 'draw:master-page-name': 'Default', 'draw:style-name': 'dp1' }, [
       el('presentation:sound', { 'xlink:href': '../media/sound.wav' }),
       el('anim:par', { 'pres:node-type': 'timing-root' }, [el('anim:animate', { 'smil:attributeName': 'x' })]),
       el('draw:frame', { 'svg:x': '20pt', 'svg:y': '20pt', 'svg:width': '100pt', 'svg:height': '40pt' }, [el('draw:text-box', {}, [el('text:p', {}, [txt('Real content')])])]),
     ]);
-    const { slides } = readOdpContent(slidePackage(page));
+    const { slides } = readOdpContent(slidePackage(page, {}, automaticStyles));
     const slide = slides[0];
     if (slide === undefined) {
       throw new Error('expected a slide');
     }
     expect(slide.source?.format).toBe('odp');
-    // The transition attributes ride a children-stripped draw:page carrying only the four presentation attributes.
-    expect(slide.source?.xml).toContain('<draw:page presentation:transition-type="automatic"');
+    // The transition attributes ride a children-stripped style:drawing-page-properties carrying ONLY the transition attributes, from both spellings -- the style's non-transition decoration facts (background visibility) stay out.
+    expect(slide.source?.xml).toContain('<style:drawing-page-properties ');
+    expect(slide.source?.xml).toContain('presentation:transition-type="automatic"');
     expect(slide.source?.xml).toContain('presentation:transition-style="fade"');
+    expect(slide.source?.xml).toContain('smil:type="fade"');
+    expect(slide.source?.xml).toContain('smil:subtype="fadesmoothly"');
+    expect(slide.source?.xml).toContain('smil:direction="reverse"');
+    expect(slide.source?.xml).toContain('smil:fadeColor="#00cc00"');
+    expect(slide.source?.xml).not.toContain('presentation:background-visible');
     expect(slide.source?.xml).toContain('<presentation:sound');
     expect(slide.source?.xml).toContain('<anim:par');
     expect(slide.shapes).toHaveLength(1);
+  });
+
+  it('leaves a slide with a transition-free drawing-page style field-free, not an empty residue entry', () => {
+    const automaticStyles = el('office:automatic-styles', {}, [
+      el('style:style', { 'style:name': 'dp1', 'style:family': 'drawing-page' }, [
+        el('style:drawing-page-properties', { 'presentation:background-visible': 'true' }),
+      ]),
+    ]);
+    const page = el('draw:page', { 'draw:master-page-name': 'Default', 'draw:style-name': 'dp1' });
+    const { slides } = readOdpContent(slidePackage(page, {}, automaticStyles));
+    expect(slides[0]?.source).toBeUndefined();
+  });
+
+  it('quarantines the REAL transitions.odp fixture\'s Impress-written smil transitions on their own slides', () => {
+    const { slides } = readOdpContent(loadFixture('transitions.odp'));
+    expect(slides).toHaveLength(8);
+    // Genuine Impress output: the transition rides the slide's own drawing-page style as smil:type (with smil:direction where the transition has one, and the legacy presentation:transition-speed alongside), while the style's page-decoration attributes stay out of the residue.
+    expect(slides[0]?.source?.format).toBe('odp');
+    expect(slides[0]?.source?.xml).toContain('<style:drawing-page-properties smil:type="barWipe"');
+    expect(slides[1]?.source?.xml).toContain('smil:type="boxWipe"');
+    expect(slides[2]?.source?.xml).toContain('smil:type="fourBoxWipe"');
+    expect(slides[2]?.source?.xml).toContain('presentation:transition-speed="fast"');
+    expect(slides[3]?.source?.xml).toContain('smil:type="barnDoorWipe"');
+    expect(slides[3]?.source?.xml).toContain('smil:direction="reverse"');
+    expect(slides[4]?.source?.xml).toContain('smil:type="diagonalWipe"');
+    expect(slides[5]?.source?.xml).toContain('smil:type="bowTieWipe"');
+    expect(slides[6]?.source?.xml).toContain('smil:type="miscDiagonalWipe"');
+    expect(slides[7]?.source?.xml).toContain('smil:type="veeWipe"');
+    for (const slide of slides) {
+      expect(slide.source?.xml).not.toContain('presentation:background-visible');
+    }
   });
 
   it('quarantines the unmapped shape kinds (draw:connector, draw:measure, dr3d:scene, applet/plugin/floating-frame) on the slide they sit in, including inside a draw:g', () => {
