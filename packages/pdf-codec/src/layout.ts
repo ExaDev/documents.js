@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ColorSchema, ContentStrokeStyleSchema, LayoutFontSchema, LayoutMetadataSchema } from 'document-schema.js';
+import { ColorSchema, ContentStrokeStyleSchema, LayoutFontSchema, LayoutMetadataSchema, SourceResidueSchema } from 'document-schema.js';
 
 // pdf-codec's own native document model: LayoutDocument, the positioned item layer readPdf assembles from a PDF's bytes and writePdf draws into new ones. Ported verbatim from document-schema.js's own src/layout.ts (its home from the content pivot until that package's 4.0.0 promoted DocumentPackage and dropped it) because a codec's native model belongs in the codec -- the same family pattern as ooxml.js's Package/XmlElement and markdown-codec's AST; only PDF's native model was ever a public shared-schema export, an accident of this package predating the content pivot. The item layer remains the honest boundary between what the format says (positions) and what we think it means (structure): when documents.js's reconstruction misjudges a wrapped paragraph, these items stay inspectable as the PDF's actual testimony. Reconstruction heuristics are semantic policy and stay in documents.js, not here. The shared leaf shapes the family composes from (Color, ContentStrokeStyleSchema, LayoutFont, LayoutMetadata) stay in document-schema.js and are imported above, so content and layout keep one definition of each.
 
@@ -154,10 +154,34 @@ export const LayoutItemSchema = z.discriminatedUnion('kind', [
 ]);
 export type LayoutItem = z.infer<typeof LayoutItemSchema>;
 
+// One non-link, non-widget annotation on a page (#721): a sticky note (/Subtype /Text a third party authored), a FreeText, or a /QuadPoints markup annotation -- or an opaque kind (Stamp, Ink, ...) whose facts ride the quarantined residue channel. /QuadPoints transform through the same page matrix as the rect, so a consumer matches them against recovered items in one space.
+export const LayoutAnnotationQuadSchema = z.tuple([
+  z.object({ xPt: z.number(), yPt: z.number() }),
+  z.object({ xPt: z.number(), yPt: z.number() }),
+  z.object({ xPt: z.number(), yPt: z.number() }),
+  z.object({ xPt: z.number(), yPt: z.number() }),
+]);
+export type LayoutAnnotationQuad = z.infer<typeof LayoutAnnotationQuadSchema>;
+
+export const LayoutAnnotationSchema = z.object({
+  subtype: z.string(), // the annotation's own /Subtype, kept verbatim -- the semantic set is small and real-world producers emit more kinds than any closed enum here should claim
+  xPt: z.number(),
+  yPt: z.number(),
+  widthPt: z.number().nonnegative(),
+  heightPt: z.number().nonnegative(),
+  contents: z.string().optional(), // /Contents: the note body, typed remark, or annotation label
+  author: z.string().optional(), // /T
+  modifiedIso: z.string().optional(), // /M, parsed through the shared PDF date profile
+  quads: z.array(LayoutAnnotationQuadSchema).optional(), // /QuadPoints, page-space, four points per quad
+  source: SourceResidueSchema.optional(), // the raw annotation dictionary in PDF syntax, for kinds with no cross-format analogue
+});
+export type LayoutAnnotation = z.infer<typeof LayoutAnnotationSchema>;
+
 export const LayoutPageSchema = z.object({
   widthPt: z.number().positive(),
   heightPt: z.number().positive(),
   items: z.array(LayoutItemSchema), // paints in array order, like a PDF content stream
+  annotations: z.array(LayoutAnnotationSchema).optional(),
   // pptx speaker notes for the slide this page came from, if any -- carried as a private, non-visible entry on the PDF page's own dictionary, never painted into the page content. PDF has no native concept of hidden presenter notes, so this is a round-trip mechanism specific to a writer/reader pair that both honour it, not a real PDF feature -- a PDF produced by anything else will never have it, and a PDF consumer that doesn't specifically know this convention will never see it either.
   notes: z.string().optional(),
 });
