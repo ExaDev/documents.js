@@ -2,6 +2,7 @@ import type { LayoutMetadata } from 'document-schema.js';
 import type { Package, XmlElement, XmlNode } from 'odf.js';
 import { ODF_MEDIA_TYPES, setDocumentMediaType, syncManifest, xmlnsAttributes } from 'odf.js';
 import { PAGE_SIZE_LETTER } from 'document-schema.js';
+import { HEADING_STYLES } from '../../layout/shared';
 import { encodeXmlText } from '../../xml/entities';
 import { el, txt } from '../../xml/fragment';
 
@@ -42,9 +43,18 @@ function buildPageLayout(): XmlElement {
   ]);
 }
 
+// One Heading_20_N common style per level of the heading visual convention (layout/shared.ts's HEADING_STYLES -- the PDF layout engine's own table, so an odt this scaffold builds renders its headings the same way odtToPdf renders the same document). ODF has no built-in styles the way WordprocessingML has Heading1..6 built in: every style name a document references must be defined in its own office:styles or it resolves to nothing, so OdtParagraph's headingLevel setter (paragraph.ts), which points text:style-name at "Heading_20_N" (ODF's _20_ escape for the space in "Heading N"), needs these definitions present for the reference to carry the heading's size and weight in a real consumer. A headingLevel deeper than the table (nothing in this family produces one -- markdown and the PDF rank inference both cap at six) still writes a valid text:h whose outline level carries the depth; its style name simply resolves to nothing, the documented unresolvable-name tolerance.
+function buildHeadingStyles(): XmlElement[] {
+  return Object.entries(HEADING_STYLES).map(([level, style]) =>
+    el('style:style', { 'style:name': `Heading_20_${level}`, 'style:display-name': `Heading ${level}`, 'style:family': 'paragraph' }, [
+      el('style:text-properties', { 'fo:font-size': `${String(style.sizePt)}pt`, 'fo:font-weight': style.bold ? 'bold' : 'normal' }),
+    ]),
+  );
+}
+
 function buildStylesXml(): XmlElement {
   return el('office:document-styles', { ...xmlnsAttributes([...STYLES_NS_PREFIXES]), 'office:version': ODF_VERSION }, [
-    el('office:styles'),
+    el('office:styles', {}, buildHeadingStyles()),
     el('office:automatic-styles', {}, [buildPageLayout()]),
     el('office:master-styles', {}, [el('style:master-page', { 'style:name': MASTER_PAGE_NAME, 'style:page-layout-name': PAGE_LAYOUT_NAME })]),
   ]);
