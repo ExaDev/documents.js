@@ -4,6 +4,7 @@ import type { Package } from '../../model/package';
 import type { XmlElement, XmlNode } from '../../model/node';
 import { rootElement, findChildElement, childrenWithTag, attrValue } from '../../xml/query';
 import { mintOdfListNumId, readOdfListParagraphs, type OdfListIdState } from '../shared/list';
+import { isOdfIndexWrapper, odfDivisionDescriptor, odfIndexControlDescriptor } from '../shared/constructs';
 import { readOdfParagraph } from '../shared/paragraph';
 import { readOdfTable } from '../shared/table';
 import { readOdfMetadata } from '../shared/metadata';
@@ -49,7 +50,7 @@ function readParagraphOrHeading(element: XmlElement, pkg: Package): ContentParag
   return paragraph;
 }
 
-// Walks block-level content (text:p, text:h, text:list, table:table) in document order, at ONE nesting level -- office:text's own top-level children. text:section (ODF's generic grouping/columns wrapper) is unwrapped transparently, flattening its content into the caller's own block sequence -- it carries no semantic meaning ContentBlock has any vocabulary for. Anything else (text:sequence-decls, a bookmark, a field, change-tracking markup, an anchored draw:frame, text:soft-page-break, ...) is silently outside this reader's scope, matching the OUT OF SCOPE note at the top of this file. Table CELL content is not walked here at all -- readOdfTable owns that entirely (see this file's own top-of-file note on the scope it inherits from doing so).
+// Walks block-level content (text:p, text:h, text:list, table:table) in document order, at ONE nesting level -- office:text's own top-level children, or a construct wrapper's own children. text:section reads as a division construct: a constructStart marker carrying the DivisionDescriptor (name, protected flag, the column count its own style sets, and the external-chapter link of a text:section-source) around its own blocks, so the grouping survives as structure instead of being flattened away. The index wrappers (text:table-of-content and its six siblings) read as index content controls bracketing their cached text:index-body blocks, and text:index-title inside a body unwraps transparently -- the title is one of the cached blocks, not a wrapper of its own. Anything else (text:sequence-decls, text:tracked-changes, an office:forms, an anchored draw:frame, text:soft-page-break, ...) is not walked here -- see the scope note at the top of this file for which of those are deliberate gaps. Table CELL content is not walked here at all -- readOdfTable owns that entirely (see this file's own top-of-file note on the scope it inherits from doing so).
 function readBlocks(nodes: readonly XmlNode[], pkg: Package, listIdState: OdfListIdState): ContentBlock[] {
   const blocks: ContentBlock[] = [];
   for (const node of nodes) {
@@ -64,6 +65,18 @@ function readBlocks(nodes: readonly XmlNode[], pkg: Package, listIdState: OdfLis
     } else if (node.tag === 'table:table') {
       blocks.push(readOdfTable(node, pkg));
     } else if (node.tag === 'text:section') {
+      blocks.push({ kind: 'constructStart', descriptor: odfDivisionDescriptor(node, pkg) });
+      blocks.push(...readBlocks(node.children, pkg, listIdState));
+      blocks.push({ kind: 'constructEnd' });
+    } else if (isOdfIndexWrapper(node)) {
+      blocks.push({ kind: 'constructStart', descriptor: odfIndexControlDescriptor(node) });
+      for (const child of node.children) {
+        if (child.type === 'element' && child.tag === 'text:index-body') {
+          blocks.push(...readBlocks(child.children, pkg, listIdState));
+        }
+      }
+      blocks.push({ kind: 'constructEnd' });
+    } else if (node.tag === 'text:index-title') {
       blocks.push(...readBlocks(node.children, pkg, listIdState));
     }
   }
