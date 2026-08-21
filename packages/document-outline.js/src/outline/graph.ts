@@ -190,7 +190,7 @@ class DocumentProjection {
   }
 
   private addEdge(edge: GraphEdge): void {
-    const key = `${edge.from}\u0000${edge.to}\u0000${edge.kind}\u0000${edge.order}\u0000${edge.path === undefined ? '' : edge.path.join('/')}`;
+    const key = `${edge.from}\u0000${edge.to}\u0000${edge.kind}\u0000${edge.order}\u0000${edge.path === undefined ? '' : JSON.stringify(edge.path)}`;
     if (!this.edges.has(key)) this.edges.set(key, edge);
   }
 
@@ -217,6 +217,7 @@ class DocumentProjection {
     const properties: Record<string, unknown> = {};
     const edges: WalkEdge[] = [];
     for (const key of Object.keys(value)) {
+      if (key === '$schema') continue; // a serialised dump's release label is transport metadata, not content -- the hash recipe's own rule 1, kept true for the graph face too
       const child = value[key];
       if (key === 'definition' && typeof child === 'string') {
         const resolved = this.resolveDefinitionRef(child);
@@ -344,7 +345,7 @@ class DocumentProjection {
       order,
     }));
     if (styledBy !== undefined) edges.push({ from: id, to: styledBy.to, kind: 'STYLED_BY', order: 0 });
-    this.addNode({ ...face, id, kind: kindOf(group.node) });
+    this.addNode({ ...face, id, kind: kindOf(recordOf(group.node)) });
     this.emitWalkEdges(id, walked.edges);
     return { id, edges: [...edges, ...childResults.flatMap(({ result }) => result.edges)] };
   }
@@ -353,7 +354,7 @@ class DocumentProjection {
   private projectLeaf(leaf: AnyChild): { id: string; edges: GraphEdge[] } {
     const walked = this.walkRecord(recordOf(leaf), []);
     const id = stableContentHash(walked.hash);
-    this.addNode({ ...walked.properties, id, kind: kindOf(leaf) });
+    this.addNode({ ...walked.properties, id, kind: kindOf(recordOf(leaf)) });
     this.emitWalkEdges(id, walked.edges);
     return { id, edges: [] };
   }
@@ -367,8 +368,7 @@ function isGroupChild(child: AnyChild): child is PackageGroup {
 }
 
 // A projected node's graph kind: the payload's own kind tag when it carries one (paragraph, section, slide, sheet, drawPage, the construct kinds, the vector kinds, image, pageBreak, table, embeddedObject as a block leaf); the three kind-less payloads get structural names -- a sheet-anchored embedded object, a formula document's single leaf, and a shape group's frame descriptor.
-function kindOf(payload: unknown): string {
-  if (!isRecord(payload)) return 'value';
+function kindOf(payload: Record<string, unknown>): string {
   if (typeof payload.kind === 'string') return payload.kind;
   if ('objectKind' in payload) return 'embeddedObject';
   if ('mathml' in payload) return 'formula';
@@ -380,7 +380,13 @@ export function projectDocumentGraph(documents: readonly GraphDocument[], option
   const nodes = new Map<string, GraphNode>();
   const edges = new Map<string, GraphEdge>();
   const policy = options.policy ?? defaultExtractionPolicy;
+  const documentIds = new Set<string>();
   for (const document of documents) {
+    // A repeated document id would silently merge two roots (first write wins) and lose a document -- the root id is the one identity this projection trusts the caller to assign, so it refuses a collision loudly.
+    if (documentIds.has(document.id)) {
+      throw new Error(`projectDocumentGraph: document id "${document.id}" assigned to more than one document`);
+    }
+    documentIds.add(document.id);
     new DocumentProjection(document.id, document.package, policy, nodes, edges).project();
   }
   return { nodes: [...nodes.values()], edges: [...edges.values()] };

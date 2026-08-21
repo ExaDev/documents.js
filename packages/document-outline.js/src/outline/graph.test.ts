@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { DocumentPackageSchema, type DefinitionEntry, type DocumentPackage, type StylesTable } from 'document-schema.js';
+import {
+  documentPackageWithSchema,
+  DocumentPackageSchema,
+  type ContentParagraph,
+  type DefinitionEntry,
+  type DocumentPackage,
+  type StylesTable,
+} from 'document-schema.js';
 import { defaultExtractionPolicy, projectDocumentGraph, type ExtractionPolicy, type GraphNode, type PropertyGraph } from './graph';
 import {
   drawPageGroup,
@@ -490,5 +497,43 @@ describe('projectDocumentGraph', () => {
       expect(graph.nodes.some((node) => node.id === edge.from)).toBe(true);
       expect(graph.nodes.some((node) => node.id === edge.to)).toBe(true);
     }
+  });
+
+  it('treats a $schema-stamped dump exactly like its parsed original', () => {
+    const pkg = wordprocessingPackage([sectionGroup([paragraph('Body.')])], { metadata: { title: 'T' } });
+    const stamped = documentPackageWithSchema(pkg);
+    expect(projectDocumentGraph([{ id: 'doc', package: stamped }])).toEqual(projectDocumentGraph([{ id: 'doc', package: pkg }]));
+  });
+
+  it('dereferences a run-level anchor extent definition through the owning paragraph node', () => {
+    const carrier: ContentParagraph = {
+      kind: 'paragraph',
+      runs: [{ text: 'before ' }, { text: 'words' }, { text: ' after' }],
+      constructs: [{ descriptor: { kind: 'anchor', anchorType: 'footnote', name: '1', definition: 'n1' }, startRun: 1, endRun: 3 }],
+    };
+    const pkg = wordprocessingPackage([sectionGroup([carrier])], {
+      definitions: { n1: { kind: 'footnote', blocks: [{ kind: 'paragraph', runs: [{ text: 'The note body.' }] }] } },
+    });
+    expectSchemaValid(pkg, 'run-extent');
+    const graph = projectDocumentGraph([{ id: 'doc', package: pkg }]);
+    const entry = graph.nodes.find((node) => node.kind === 'definitionEntry')!;
+    const definedBy = graph.edges.filter((edge) => edge.kind === 'DEFINED_BY');
+    expect(definedBy).toHaveLength(1);
+    expect(definedBy[0]!.to).toBe(entry.id);
+    expect(definedBy[0]!.path).toEqual(['constructs', 0, 'descriptor', 'definition']);
+    const owner = graph.nodes.find((node) => node.id === definedBy[0]!.from)!;
+    expect(owner.kind).toBe('paragraph');
+    expect(JSON.stringify(owner).includes('"definition"')).toBe(false);
+  });
+
+  it('refuses a document id assigned to more than one document', () => {
+    const first = wordprocessingPackage([sectionGroup([paragraph('A.')])]);
+    const second = wordprocessingPackage([sectionGroup([paragraph('B.')])]);
+    expect(() =>
+      projectDocumentGraph([
+        { id: 'same', package: first },
+        { id: 'same', package: second },
+      ]),
+    ).toThrowError(/document id "same" assigned to more than one document/);
   });
 });
