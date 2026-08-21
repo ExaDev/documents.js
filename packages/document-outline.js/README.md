@@ -2,7 +2,7 @@
 
 [![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/ExaDev/documents.js/tree/main/packages/document-outline.js) [![npm](https://img.shields.io/badge/npm-CB3837?logo=npm&logoColor=white)](https://www.npmjs.com/package/document-outline.js) [![npm version](https://img.shields.io/npm/v/document-outline.js)](https://www.npmjs.com/package/document-outline.js) [![CI](https://img.shields.io/github/actions/workflow/status/ExaDev/documents.js/ci.yml?branch=main)](https://github.com/ExaDev/documents.js/actions)
 
-> Utilities for consumers holding a tree-form `DocumentPackage` (document-schema.js 4.0.0) — the table-of-contents projection, effective-property resolution, and the flatten-to-leaves / leaf-text / stable-hash helpers — without importing the producer that made it. The outline package for the [documents.js family](https://github.com/ExaDev). Worker-isomorphic: the same code runs under Node and inside a Cloudflare Workers isolate.
+> Utilities for consumers holding a tree-form `DocumentPackage` (document-schema.js 4.0.0) — the table-of-contents projection, effective-property resolution, the content-addressed property-graph projection, and the flatten-to-leaves / leaf-text / stable-hash helpers — without importing the producer that made it. The outline package for the [documents.js family](https://github.com/ExaDev). Worker-isomorphic: the same code runs under Node and inside a Cloudflare Workers isolate.
 
 Created for [document-schema.js#14](https://github.com/ExaDev/document-schema.js/issues/14): none of the content shapes groups content by heading or list level — a heading paragraph sits in a flat `blocks` array like any other — so every consumer needing a nested tree (chunking a document for retrieval, generating a table of contents, structural diffing) had to rebuild the same nesting transform for itself. This package is that transform, once. It depends only on `document-schema.js` (plus `zod`): it never touches a codec, because it only ever operates on an already-produced package, regardless of which producer made it.
 
@@ -30,6 +30,7 @@ To run a single test file, pass its path to vitest directly, e.g. `pnpm exec vit
 |---|---|
 | `outline/build` | `buildOutline` (per-kind TOC projection over a `DocumentPackage`) |
 | `outline/effective` | `effectivePackage` (effective-property resolution) |
+| `outline/graph` | `projectDocumentGraph` (content-addressed property-graph projection over one or several `DocumentPackage`s), `defaultExtractionPolicy`, the `PropertyGraph`/`GraphNode`/`GraphEdge`/`GraphDocument`/`ExtractionPolicy` types |
 | `outline/node` | `OutlineNode`, `OutlineChild`, `OutlineLeaf`, `OutlineNodeSchema`, `isOutlineNode`, `isOutlineChild`, `isOutlineLeaf` |
 | `outline/helpers` | `flattenOutline`, `outlineLeafText`, `leafContentHash` |
 
@@ -68,6 +69,31 @@ const resolved = effectivePackage(pkg); // same tree, properties inlined, no sty
 The semantics: a group's ref, plus every ancestor group's ref, overlays onto each paragraph in that group's subtree — group anchors (heading and list groups carry full `ContentParagraph` anchors) and bare paragraph leaves alike — with the chain ordered outermost-first so the nearest group's entry wins over further-out ones, and the paragraph's own direct properties win over everything (the schema's apply helpers fill gaps, never overwrite). The run half of a resolved entry applies to every run of each paragraph it resolved for. The walk's boundary is the block flow: a table leaf's cell paragraphs and an embedded document's own content are leaf-local payload this walk does not rewrite — an embedded document is its own whole document context.
 
 Two guarantees worth depending on. First, `effectivePackage(factored)` deep-equals `effectivePackage(unfactored)`: a serialisation that factored properties into style refs and one that inlined them everywhere resolve to the same effective tree, so consumers comparing or hashing content never see the producer's compression choices. To get that property for hashes, resolve first — `leafContentHash` over the leaves of `buildOutline(effectivePackage(pkg))` names the document, not the factoring. Second, resolution runs loudly: a ref the styles table does not carry is malformed, and `resolveStyleChain` throws rather than silently skipping. A styles-free package is returned as the same object — nothing anywhere needs rewriting.
+
+## Graph projection
+
+`projectDocumentGraph` ([ExaDev/documents.js#659](https://github.com/ExaDev/documents.js/issues/659)) exports one or several tree-form packages into a single property graph — nodes plus typed edges — with content-based deduplication and no `DocumentPackage` schema change:
+
+```ts
+import { projectDocumentGraph } from 'document-outline.js';
+
+const graph = projectDocumentGraph([
+  { id: 'report-1', package: reportPkg },   // id: your stable, external document id
+  { id: 'memo-1', package: memoPkg },
+]);
+// graph.nodes: { id, kind, ...own properties }
+// graph.edges: { from, to, kind, order } — kind is CONTAINS | STYLED_BY | DEFINED_BY | PROPERTY
+```
+
+**Node identity is computed, not stored.** Every content node's `id` is the `stableContentHash` of its own projected content — the same canonicalise-then-hash recipe as `leafContentHash`, applied bottom-up as a Merkle DAG: a leaf's hash covers its own content, a group's hash covers its own properties plus its children's hashes. A node may therefore have any number of parents — the git/IPFS object model, not a strict Merkle tree — which is what makes cross-document sharing possible at all. The document root is the one exception: content hashing it would change its id on every interior edit, so the root carries the caller-assigned stable id (a git ref pointing at a moving commit hash) with metadata/symbolTable/pages/source inline as per-document identity facts.
+
+**Refs are dereferenced before hashing.** A `style: 's1'` ref (or an anchor's `definition: 'n1'`) is a document-local label with no cross-document meaning — every assembled package mints its own `s1, s2, …` keys — so the referenced entry's content hash enters the referencing node's hash input and the bare key never does. The ref itself becomes an edge: `(group)-[:STYLED_BY {order: 0}]->(styleEntry)` and `(anchor node)-[:DEFINED_BY]->(definitionEntry)`. Two structurally identical paragraphs whose documents name an identical style entry differently therefore dedupe to one node.
+
+**Containment is an edge.** `(parent)-[:CONTAINS {order}]->(child)` with the child's index in document order, because a shared node has no single tree position and document order is semantically load-bearing. Edits fall out of the identity scheme rather than being implemented: inserting a sibling changes no sibling identity, only the local order values after the insertion point, and modifying a node mints a new node while the old one persists beside it — free version history if orphans are never pruned.
+
+**Extraction is a policy, not a rulebook.** One pluggable `(path, value) => 'extract' | 'inline'` decision is consulted uniformly at every level — root envelope fields, table entries, tree-node properties, individual scalars — with paths relative to the owning node. The default (`defaultExtractionPolicy`) extracts the definitions-table facility's entries (`styles`, `definitions`, `layers`, `attachments`, `destinations` — the reused content the tables exist to hold) and leaves everything else inline; a custom policy can promote any value at any path to a `kind: 'value'` node joined by a `PROPERTY` edge carrying the property path. An assembled package's recurring property tuples are already factored into its tables by minting's own recurrence rule, so the default needs no frequency survey of its own: sharing happens at the node level, exactly as the projection's worked example pins (recurring text stays inline on each paragraph node; the paragraphs themselves are shared).
+
+Dedup itself needs no merge logic: identical content yields an identical hash yields an identical id, so the projection keeps one node per id and one edge per `(from, to, kind, order, path)` tuple — exactly what a graph store's native upsert (Neo4j `MERGE`, an RDF store keyed by the hash) would do with this output. An identical whole subtree collapses to one shared subtree with only the seam edges from each document's own ancestors being document-specific; table entries nothing references are still emitted as nodes, reachable by kind queries.
 
 ## Helpers
 
