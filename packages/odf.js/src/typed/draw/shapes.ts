@@ -118,9 +118,9 @@ function readDrawFrameContent(frame: XmlElement, frameBox: Box, pkg: Package, li
   return [];
 }
 
-// Reads one draw:frame into a ContentShape, in the coordinate space `groupFunctions` maps FROM (its own immediate parent's local space) TO the page: composeOdfGroupTransform is the identity when groupFunctions is empty (the overwhelmingly common case -- a frame with no enclosing draw:g), so this is cheap for the non-grouped case. Returns undefined for a frame with no resolvable geometry of its own -- see transform.ts's resolveOdfShapeGeometry for the documented "inherited positioning" scope boundary this defers to. `listIdState` mints a text-box list's numId identity (see readDrawFrameContent's own ODP LIST MEMBERSHIP note) and defaults to a fresh counter so every pre-existing call site (ods's anchored-drawing reader, this file's own tests) keeps working unchanged -- a caller walking a WHOLE presentation (odp) threads one document-wide state so identities stay unique across every slide.
-export function readDrawFrame(frame: XmlElement, groupFunctions: readonly OdfTransformFunction[], pkg: Package, listIdState: OdfListIdState = { next: 1 }): ContentShape | undefined {
-  const ownGeometry = resolveOdfShapeGeometry(frame);
+// Reads one draw:frame into a ContentShape, in the coordinate space `groupFunctions` maps FROM (its own immediate parent's local space) TO the page: composeOdfGroupTransform is the identity when groupFunctions is empty (the overwhelmingly common case -- a frame with no enclosing draw:g), so this is cheap for the non-grouped case. Returns undefined for a frame with no resolvable geometry of its own -- see transform.ts's resolveOdfShapeGeometry for the documented "inherited positioning" scope boundary this defers to. `flowPositioning` admits the one geometry shape that boundary excludes on purpose for page-space readers but that TEXT FLOW genuinely has: an as-char anchored frame in odt text carries svg:width/svg:height and NO svg:x/svg:y, because its position is the character flow itself -- such a frame reads at the origin of its own box (the same "0/0 is the honest spelling of positioned-by-flow" convention ooxml.js's docx reader applies to inline flow objects), never a dropped frame. `listIdState` mints a text-box list's numId identity (see readDrawFrameContent's own ODP LIST MEMBERSHIP note) and defaults to a fresh counter so every pre-existing call site (ods's anchored-drawing reader, this file's own tests) keeps working unchanged -- a caller walking a WHOLE presentation (odp) threads one document-wide state so identities stay unique across every slide.
+export function readDrawFrame(frame: XmlElement, groupFunctions: readonly OdfTransformFunction[], pkg: Package, listIdState: OdfListIdState = { next: 1 }, flowPositioning = false): ContentShape | undefined {
+  const ownGeometry = resolveOdfShapeGeometry(frame) ?? (flowPositioning ? flowFrameGeometry(frame) : undefined);
   if (ownGeometry === undefined) {
     return undefined;
   }
@@ -132,6 +132,21 @@ export function readDrawFrame(frame: XmlElement, groupFunctions: readonly OdfTra
     ...readFrameInsets(frame, pkg),
     blocks: readDrawFrameContent(frame, geometry.frame, pkg, listIdState),
   };
+}
+
+// The flow-positioning fallback: a frame with parseable svg:width/svg:height and no svg:x/svg:y (or draw:transform) reads as a box at the origin of its own size.
+function flowFrameGeometry(frame: XmlElement): OdfShapeGeometry | undefined {
+  const widthValue = attrValue(frame, 'svg:width');
+  const heightValue = attrValue(frame, 'svg:height');
+  if (widthValue === undefined || heightValue === undefined) {
+    return undefined;
+  }
+  const widthPt = parseOdfLength(widthValue);
+  const heightPt = parseOdfLength(heightValue);
+  if (widthPt === undefined || heightPt === undefined) {
+    return undefined;
+  }
+  return { frame: { xPt: 0, yPt: 0, widthPt, heightPt }, rotationDeg: undefined };
 }
 
 // Shared by both walkDrawShapes (odp) and walkDrawPageContent (odg, further down this file) -- "read an element's own draw:transform into a function list" is identical for both, so this stays a single private helper reused within this module rather than being duplicated per walker.
