@@ -351,4 +351,55 @@ describe('readXlsx / buildXlsxPackage: the xlsx DocumentPackage boundary', () =>
 
     expect(() => buildXlsxPackage(wordprocessing)).toThrow('buildXlsxPackage: expected a DocumentPackage of kind "spreadsheet", got "wordprocessing"');
   });
+
+  // A workbook's named ranges and table/List-object definitions have no flat ContentDocument spelling -- the schema's own verdict is that they ride the tree's definitions table naming their range -- so readXlsx attaches them where the flat reader structurally cannot.
+  function workbookWithTablesAndNames(): ReturnType<typeof decodePackage> {
+    const worksheet = el('worksheet', {}, [
+      el('sheetData', {}, [el('row', { r: '1' }, [el('c', { r: 'A1' }, [el('v', {}, [txt('1')])])])]),
+      el('tableParts', {}, [el('tablePart', { 'r:id': 'rIdTable' })]),
+    ]);
+    const table = el('table', { id: '1', name: 'SalesTable', displayName: 'SalesTable', ref: 'A1:C4' }, [
+      el('tableColumn', { id: '1', name: 'Item' }),
+      el('tableColumn', { id: '2', name: 'Amount' }),
+    ]);
+    const workbook = el('workbook', {}, [
+      el('sheets', {}, [el('sheet', { name: 'Data', sheetId: '1', 'r:id': 'rIdSheet' })]),
+      el('definedNames', {}, [
+        el('definedName', { name: 'TaxRate' }, [txt('Summary!$B$1')]),
+        el('definedName', { name: 'ReportTitle', localSheetId: '0' }, [txt('Data!$A$1')]),
+        el('definedName', { name: '_xlnm.Print_Area', localSheetId: '0' }, [txt('Data!$A$1:$C$4')]),
+      ]),
+    ]);
+    const relationship = (id: string, type: string, target: string) => el('Relationship', { Id: id, Type: type, Target: target });
+    const sheetRel = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet';
+    const tableRel = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/table';
+    return {
+      parts: {
+        'xl/workbook.xml': { kind: 'xml', nodes: [workbook] },
+        'xl/_rels/workbook.xml.rels': { kind: 'xml', nodes: [el('Relationships', {}, [relationship('rIdSheet', sheetRel, 'worksheets/sheet1.xml')])] },
+        'xl/worksheets/sheet1.xml': { kind: 'xml', nodes: [worksheet] },
+        'xl/worksheets/_rels/sheet1.xml.rels': { kind: 'xml', nodes: [el('Relationships', {}, [relationship('rIdTable', tableRel, '../tables/table1.xml')])] },
+        'xl/tables/table1.xml': { kind: 'xml', nodes: [table] },
+      },
+    };
+  }
+
+  it('reads general defined names and table objects into the tree\'s definitions table, excluding the two _xlnm names print settings already carry', () => {
+    const tree = readXlsx(workbookWithTablesAndNames());
+    expect(tree.definitions).toEqual({
+      'namedRange:TaxRate': { kind: 'namedRange', name: 'TaxRate', refersTo: 'Summary!$B$1' },
+      'namedRange:ReportTitle': { kind: 'namedRange', name: 'ReportTitle', refersTo: 'Data!$A$1', localSheetId: 0 },
+      'table:SalesTable': { kind: 'table', name: 'SalesTable', ref: 'A1:C4', sheet: 'Data', columns: ['Item', 'Amount'] },
+    });
+  });
+
+  it('leaves the definitions field absent for a workbook carrying no general names and no tables (the kitchen-sink fixture carries only Print_Area/Print_Titles)', () => {
+    expect(readXlsx(decodePackage(fixtureBytes('kitchen-sink.xlsx'))).definitions).toBeUndefined();
+  });
+
+  it('keeps the tree path and the flat path the same WRITE even with definitions attached: flatten drops them, so both build the identical package', () => {
+    const pkg = workbookWithTablesAndNames();
+    expect(buildXlsxPackage(readXlsx(pkg))).toEqual(buildXlsxPackageFromContent(readXlsxContent(pkg)));
+    expect(flattenPackage(readXlsx(pkg))).toEqual(readXlsxContent(pkg));
+  });
 });

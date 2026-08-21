@@ -32,8 +32,8 @@ interface SheetEntry {
   path: string;
 }
 
-// Sheet order and part paths come from xl/workbook.xml's own <sheets> list, resolved through xl/_rels/workbook.xml.rels -- the same "never trust filename order" precedent readPptxContent already established for p:sldIdLst (worksheets, like slides, carry no ordering guarantee in their own part names).
-function resolveSheetEntries(pkg: Package): SheetEntry[] {
+// Sheet order and part paths come from xl/workbook.xml's own <sheets> list, resolved through xl/_rels/workbook.xml.rels -- the same "never trust filename order" precedent readPptxContent already established for p:sldIdLst (worksheets, like slides, carry no ordering guarantee in their own part names). Exported for typed/xlsx/definitions.ts, which needs the same order to resolve a table part's owning sheet name.
+export function resolveSheetEntries(pkg: Package): SheetEntry[] {
   const workbook = rootElement(pkg.parts[WORKBOOK_PATH]);
   if (workbook === undefined) {
     return [];
