@@ -1,3 +1,11 @@
+# [4.6.0](https://github.com/ExaDev/documents.js/compare/document-schema.js@4.5.0...document-schema.js@4.6.0) (2026-08-21)
+
+
+### Features
+
+* **schema:** add 'chart' to ContentEmbeddedObjectKind ([2527a9a](https://github.com/ExaDev/documents.js/commit/2527a9ac1a0dc083e8eb0360dc34d3daa741a803))
+* **schema:** add ContentSection.breakType for the section-break kind ([9d023b6](https://github.com/ExaDev/documents.js/commit/9d023b6c0da77dbd120ec59244c1196a25983f5b))
+
 # [4.5.0](https://github.com/ExaDev/documents.js/compare/document-schema.js@4.4.0...document-schema.js@4.5.0) (2026-08-21)
 
 
