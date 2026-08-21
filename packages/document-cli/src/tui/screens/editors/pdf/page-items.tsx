@@ -52,6 +52,8 @@ function previewFor(item: LayoutItem): string {
       return truncate(item.text, TEXT_PREVIEW_MAX_CHARS);
     case 'link':
       return item.uri;
+    case 'internalLink':
+      return `→ ${item.destination}`;
     case 'image':
     case 'rect':
     case 'ellipse':

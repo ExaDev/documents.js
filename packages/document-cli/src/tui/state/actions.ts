@@ -152,6 +152,8 @@ export type Action =
   // Re-embeds a fresh image, exactly like ADD_IMAGE/INSERT_PARAGRAPH_IMAGE: raw bytes across the action boundary, resolved into the document's own image registry inside the reducer (PdfImageItem.setImage), never base64.
   | { readonly type: 'SET_PDF_IMAGE_SOURCE'; readonly pageIndex: number; readonly itemIndex: number; readonly format: 'png' | 'jpeg'; readonly bytes: Uint8Array<ArrayBuffer> }
   | { readonly type: 'SET_PDF_LINK_URI'; readonly pageIndex: number; readonly itemIndex: number; readonly uri: string }
+  | { readonly type: 'SET_PDF_INTERNAL_LINK_DESTINATION'; readonly pageIndex: number; readonly itemIndex: number; readonly destination: string }
+  | { readonly type: 'SET_PDF_INTERNAL_LINK_FRAME'; readonly pageIndex: number; readonly itemIndex: number; readonly xPt: number; readonly yPt: number; readonly widthPt: number; readonly heightPt: number }
   | { readonly type: 'SET_PDF_LINK_FRAME'; readonly pageIndex: number; readonly itemIndex: number; readonly xPt: number; readonly yPt: number; readonly widthPt: number; readonly heightPt: number }
   | { readonly type: 'APPEND_DIAGNOSTIC'; readonly diagnostic: Diagnostic }
   | { readonly type: 'DISMISS_DIAGNOSTIC'; readonly index: number }
