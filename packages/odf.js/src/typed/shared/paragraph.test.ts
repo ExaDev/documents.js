@@ -58,7 +58,7 @@ describe('readOdfParagraph: plain text and whitespace-run elements', () => {
     expect(readOdfParagraph(p, { parts: {} }).runs).toEqual([]);
   });
 
-  it('a bookmark/field/other unmodelled child contributes no run, matching text.ts\'s own zero-length treatment', () => {
+  it('a bookmark or other zero-width marker child contributes no run, matching text.ts\'s own zero-length treatment (a field, by contrast, DOES contribute its cached text -- see the construct extents suite below)', () => {
     const p = el('text:p', {}, [txt('A'), el('text:bookmark', { 'text:name': 'x' }), txt('B')]);
     expect(readOdfParagraph(p, { parts: {} }).runs.map((r) => r.text)).toEqual(['A', 'B']);
   });
@@ -154,6 +154,122 @@ describe('readOdfParagraph: text:a hyperlink recovery', () => {
       { text: 'before ', bold: undefined, italic: undefined, underline: undefined, strike: undefined, fontFamily: undefined, sizePt: undefined, color: undefined },
       { text: 'link', bold: undefined, italic: undefined, underline: undefined, strike: undefined, fontFamily: undefined, sizePt: undefined, color: undefined, hyperlink: 'https://example.com' },
       { text: ' after', bold: undefined, italic: undefined, underline: undefined, strike: undefined, fontFamily: undefined, sizePt: undefined, color: undefined },
+    ]);
+  });
+});
+
+describe('readOdfParagraph: run-level construct extents (fields, bookmarks)', () => {
+  it('reads a simple field as a run carrying its cached text plus a field extent covering exactly that run', () => {
+    const p = el('text:p', {}, [txt('Page '), el('text:page-number', { 'style:num-format': 'arabic' }, [txt('3')]), txt(' of 10')]);
+    const paragraph = readOdfParagraph(p, { parts: {} });
+    expect(paragraph.runs.map((run) => run.text)).toEqual(['Page ', '3', ' of 10']);
+    expect(paragraph.constructs).toEqual([
+      {
+        descriptor: {
+          kind: 'field',
+          instruction: '<text:page-number style:num-format="arabic"></text:page-number>',
+          cachedResult: '3',
+        },
+        startRun: 1,
+        endRun: 2,
+      },
+    ]);
+  });
+
+  it('reads a variable-set field instance the same way as an everyday simple field', () => {
+    const p = el('text:p', {}, [
+      el('text:variable-set', { 'text:name': 'total', 'office:value-type': 'float', 'office:value': '42', 'text:formula': 'oooc:=6*7' }, [txt('42')]),
+    ]);
+    const paragraph = readOdfParagraph(p, { parts: {} });
+    expect(paragraph.runs.map((run) => run.text)).toEqual(['42']);
+    expect(paragraph.constructs?.[0]?.descriptor).toEqual({
+      kind: 'field',
+      instruction: '<text:variable-set text:name="total" office:value-type="float" office:value="42" text:formula="oooc:=6*7"></text:variable-set>',
+      cachedResult: '42',
+    });
+  });
+
+  it('reads a field with no cached text as a point extent and emits no run for it', () => {
+    const p = el('text:p', {}, [txt('A'), el('text:title'), txt('B')]);
+    const paragraph = readOdfParagraph(p, { parts: {} });
+    expect(paragraph.runs.map((run) => run.text)).toEqual(['A', 'B']);
+    expect(paragraph.constructs).toEqual([
+      { descriptor: { kind: 'field', instruction: '<text:title></text:title>' }, startRun: 1, endRun: 1 },
+    ]);
+  });
+
+  it('leaves constructs absent when the paragraph carries no field, bookmark, or marker at all', () => {
+    const p = el('text:p', {}, [txt('plain')]);
+    expect(readOdfParagraph(p, { parts: {} }).constructs).toBeUndefined();
+  });
+
+  it('reads a point text:bookmark as a zero-width bookmark anchor at its run position', () => {
+    const p = el('text:p', {}, [txt('before '), el('text:bookmark', { 'text:name': 'target' }), txt('after')]);
+    const paragraph = readOdfParagraph(p, { parts: {} });
+    expect(paragraph.constructs).toEqual([
+      { descriptor: { kind: 'anchor', anchorType: 'bookmark', name: 'target' }, startRun: 1, endRun: 1 },
+    ]);
+  });
+
+  it('pairs text:bookmark-start/-end inside one paragraph into a run extent over the runs between them', () => {
+    const p = el('text:p', {}, [
+      txt('outside '),
+      el('text:bookmark-start', { 'text:name': 'span' }),
+      txt('inside'),
+      el('text:bookmark-end', { 'text:name': 'span' }),
+    ]);
+    const paragraph = readOdfParagraph(p, { parts: {} });
+    expect(paragraph.constructs).toEqual([
+      { descriptor: { kind: 'anchor', anchorType: 'bookmark', name: 'span' }, startRun: 1, endRun: 2 },
+    ]);
+  });
+
+  it('keeps crossing in-paragraph bookmark extents as two entries, since run ranges are data rather than brackets', () => {
+    const p = el('text:p', {}, [
+      txt('a '),
+      el('text:bookmark-start', { 'text:name': 'outer' }),
+      txt('one '),
+      el('text:bookmark-start', { 'text:name': 'inner' }),
+      txt('two '),
+      el('text:bookmark-end', { 'text:name': 'outer' }),
+      txt('three'),
+      el('text:bookmark-end', { 'text:name': 'inner' }),
+      txt(' b'),
+    ]);
+    const paragraph = readOdfParagraph(p, { parts: {} });
+    expect(paragraph.constructs?.map((extent) => extent.descriptor)).toEqual([
+      { kind: 'anchor', anchorType: 'bookmark', name: 'outer' },
+      { kind: 'anchor', anchorType: 'bookmark', name: 'inner' },
+    ]);
+    expect(paragraph.constructs?.map((extent) => [extent.startRun, extent.endRun])).toEqual([
+      [1, 3],
+      [2, 4],
+    ]);
+  });
+
+  it('does not pair a bookmark whose halves both sit at paragraph edges -- that pair brackets whole blocks and belongs to the block-scope reader, never to both encodings', () => {
+    const p = el('text:p', {}, [el('text:bookmark-start', { 'text:name': 'whole' }), txt('whole paragraph is marked'), el('text:bookmark-end', { 'text:name': 'whole' })]);
+    const paragraph = readOdfParagraph(p, { parts: {} });
+    expect(paragraph.constructs).toBeUndefined();
+  });
+
+  it('does not emit a run extent for a bookmark half pair missing its partner or its name', () => {
+    const p = el('text:p', {}, [el('text:bookmark-start', { 'text:name': 'lonely' }), txt('text'), el('text:bookmark-end', { 'text:name': 'other' })]);
+    expect(readOdfParagraph(p, { parts: {} }).constructs).toBeUndefined();
+  });
+
+  it('resolves a field inside a text:span with the span formatting on its cached run, extent still indexed against the paragraph flat run list', () => {
+    const t1 = styleStyle('T1', 'text', {}, [textProps({ 'fo:font-weight': 'bold' })]);
+    const pkg: Package = { parts: { 'content.xml': contentPackage([t1]) } };
+    const p = el('text:p', {}, [el('text:span', { 'text:style-name': 'T1' }, [el('text:date', { 'style:data-style-name': 'N80' }, [txt('2026-08-21')])])]);
+    const paragraph = readOdfParagraph(p, pkg);
+    expect(paragraph.runs[0]).toMatchObject({ text: '2026-08-21', bold: true });
+    expect(paragraph.constructs).toEqual([
+      {
+        descriptor: { kind: 'field', instruction: '<text:date style:data-style-name="N80"></text:date>', cachedResult: '2026-08-21' },
+        startRun: 0,
+        endRun: 1,
+      },
     ]);
   });
 });
