@@ -113,6 +113,38 @@ describe('readMarkdown: markdown text -> DocumentPackage', () => {
   it('throws an already-aborted signal before parsing', () => {
     expect(() => readMarkdown(SAMPLE, { signal: AbortSignal.abort() })).toThrow();
   });
+
+  it('flattens back to exactly the flat document over every construct spelling this package now mints -- run-level title extents, the division pair, the embedded formula, codeLanguage, task and item-identity memberships, and HTML residue', () => {
+    const source = [
+      '# Heading with [a titled link](/u "the title")',
+      '',
+      '> quoted one',
+      '>',
+      '> quoted two with [another](/2 "t")',
+      '',
+      '- [x] done task',
+      '- a multi-block item',
+      '',
+      '  whose second paragraph survives',
+      '',
+      '``` js {.numberLines}',
+      'console.log(1);',
+      '```',
+      '',
+      '$$',
+      'x^2',
+      '$$',
+      '',
+      '<div>block html</div>',
+      '',
+      'inline <em>html</em> text',
+      '',
+    ].join('\n');
+    const { documentPackage } = readMarkdown(source);
+    const { document } = readMarkdownContent(source);
+    expect(DocumentPackageSchema.safeParse(documentPackage).success).toBe(true);
+    expect(flattenPackage(documentPackage)).toEqual(document);
+  });
 });
 
 describe('writeMarkdown: DocumentPackage -> markdown text', () => {
