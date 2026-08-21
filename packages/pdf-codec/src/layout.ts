@@ -239,6 +239,42 @@ export const LayoutAttachmentSchema = z.object({
 });
 export type LayoutAttachment = z.infer<typeof LayoutAttachmentSchema>;
 
+// One AcroForm widget placement: the page a widget annotation sits on plus its rectangle, in the same page space every other item carries.
+export const LayoutFormWidgetSchema = z.object({
+  pageIndex: z.number().int().nonnegative(),
+  xPt: z.number(),
+  yPt: z.number(),
+  widthPt: z.number().nonnegative(),
+  heightPt: z.number().nonnegative(),
+});
+export type LayoutFormWidget = z.infer<typeof LayoutFormWidgetSchema>;
+
+// One AcroForm field (#721 phase 5): terminal fields carry /FT (mapped to the harmonised control vocabulary), the scalar /V where one exists, /Opt choices, /TU alias, and the /Ff ReadOnly bit; non-terminal fields are groups whose children carry fully-qualified names (the /T chain joined with '.'). Signature fields read as facts only -- certification binds to bytes a semantic pivot never reproduces, so a consumer treats them as residue, never as a control.
+export interface LayoutFormField {
+  readonly name: string;
+  readonly fieldType: 'text' | 'checkbox' | 'radio' | 'button' | 'listbox' | 'combobox' | 'signature' | 'group';
+  readonly value?: string;
+  readonly checked?: boolean;
+  readonly options?: readonly string[];
+  readonly alias?: string;
+  readonly readOnly?: boolean;
+  readonly widgets: readonly LayoutFormWidget[];
+  readonly children: readonly LayoutFormField[];
+}
+export const LayoutFormFieldSchema: z.ZodType<LayoutFormField, LayoutFormField> = z.lazy(() =>
+  z.object({
+    name: z.string(),
+    fieldType: z.enum(['text', 'checkbox', 'radio', 'button', 'listbox', 'combobox', 'signature', 'group']),
+    value: z.string().optional(),
+    checked: z.boolean().optional(),
+    options: z.array(z.string()).optional(),
+    alias: z.string().optional(),
+    readOnly: z.boolean().optional(),
+    widgets: z.array(LayoutFormWidgetSchema),
+    children: z.array(LayoutFormFieldSchema),
+  }),
+);
+
 // One optional-content group with its visibility under the document's default configuration (/OCProperties /D): BaseState adjusted by the /ON and /OFF lists. `visible` is the DEFAULT VIEW's state, not a mandate -- a consumer decides what an invisible layer's content means for it.
 export const LayoutLayerSchema = z.object({
   name: z.string(), // the OCG's /Name, or a reader-minted layerN when the producer left it unnamed
@@ -255,5 +291,6 @@ export const LayoutDocumentSchema = z.object({
   outline: z.array(LayoutOutlineItemSchema).optional(),
   attachments: z.array(LayoutAttachmentSchema).optional(),
   layers: z.array(LayoutLayerSchema).optional(),
+  form: z.array(LayoutFormFieldSchema).optional(),
 });
 export type LayoutDocument = z.infer<typeof LayoutDocumentSchema>;

@@ -391,3 +391,23 @@ export function annotationsPdf(): Uint8Array<ArrayBuffer> {
   b.classicXrefAndTrailer(10, '/Root 1 0 R');
   return b.bytes();
 }
+
+// The AcroForm cluster (#721 phase 5): a merged text field (its own /Rect, no widget kids) with /V, /TU, and the ReadOnly /Ff bit; a non-terminal group field whose two children exercise the combo flag on /FT /Ch (with /Opt and a /V) and a checkbox whose /V names an export value other than Off; and a signature field. The widget kids appear in the page's /Annots too, pinning that the Widget walk is owned by the field tree rather than duplicating as an annotation record.
+export function acroFormPdf(): Uint8Array<ArrayBuffer> {
+  const b = new FixtureBuilder().header('1.7');
+  b.object(1, '<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [6 0 R 7 0 R 12 0 R] >> >>');
+  b.object(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+  b.object(3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R /Annots [6 0 R 10 0 R 11 0 R 13 0 R] >>');
+  b.object(4, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+  b.stream(5, '<< >>', enc(HELLO_CONTENT));
+  b.object(6, '<< /Type /Annot /Subtype /Widget /FT /Tx /T (fullname) /V (Jane Doe) /TU (Full name) /Ff 1 /Rect [10 80 110 96] /P 3 0 R >>');
+  b.object(7, '<< /T (contact) /Kids [8 0 R 9 0 R] >>');
+  b.object(8, '<< /FT /Ch /Ff 131072 /T (country) /Opt [(UK) (US)] /V (UK) /Kids [10 0 R] >>');
+  b.object(9, '<< /FT /Btn /T (subscribe) /V /Yes /Kids [11 0 R] >>');
+  b.object(10, '<< /Type /Annot /Subtype /Widget /Rect [10 60 110 74] /P 3 0 R /Parent 8 0 R >>');
+  b.object(11, '<< /Type /Annot /Subtype /Widget /Rect [10 40 22 52] /P 3 0 R /Parent 9 0 R >>');
+  b.object(12, '<< /FT /Sig /T (sig) /TU (Approver signature) /Kids [13 0 R] >>');
+  b.object(13, '<< /Type /Annot /Subtype /Widget /Rect [150 20 190 40] /P 3 0 R /Parent 12 0 R >>');
+  b.classicXrefAndTrailer(13, '/Root 1 0 R');
+  return b.bytes();
+}
