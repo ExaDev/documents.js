@@ -49,11 +49,12 @@ describe('docx_extras', () => {
 
     expect(result.isError).toBeFalsy();
     expect(result.structuredContent).toStrictEqual({
+      // Each comment and note carries its own w:id, the key a comment extent's or note reference's anchor name joins its body back through.
       comments: [
-        { author: DOCX_EXTRAS_FIXTURE.commentAuthor, text: DOCX_EXTRAS_FIXTURE.commentWithAuthorText },
-        { text: DOCX_EXTRAS_FIXTURE.commentWithoutAuthorText },
+        { id: '0', author: DOCX_EXTRAS_FIXTURE.commentAuthor, text: DOCX_EXTRAS_FIXTURE.commentWithAuthorText },
+        { id: '1', text: DOCX_EXTRAS_FIXTURE.commentWithoutAuthorText },
       ],
-      footnotes: [{ text: DOCX_EXTRAS_FIXTURE.footnoteText }],
+      footnotes: [{ id: '1', text: DOCX_EXTRAS_FIXTURE.footnoteText }],
       headers: [DOCX_EXTRAS_FIXTURE.headerText],
       footers: [DOCX_EXTRAS_FIXTURE.footerText],
       numbering: {

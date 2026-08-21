@@ -574,7 +574,7 @@ describe('readDocxContent: run-level construct extents (the #750 docx rows)', ()
   });
 
   it('reads the comment\'s own w:id beside its text, so an extent\'s name joins back to its body', () => {
-    const commentsPart = { kind: 'xml', nodes: [el('w:comments', {}, [el('w:comment', { 'w:id': '7', 'w:author': 'A Reviewer' }, [el('w:p', {}, [textRun('A remark')])])])] } as const;
+    const commentsPart = { kind: 'xml', nodes: [el('w:comments', {}, [el('w:comment', { 'w:id': '7', 'w:author': 'A Reviewer' }, [el('w:p', {}, [textRun('A remark')])])])] } satisfies Package['parts'][string];
     const paragraph = el('w:p', {}, [textRun('Text'), el('w:r', {}, [el('w:commentReference', { 'w:id': '7' })])]);
     const doc = readDocxContent(paragraphPackage(paragraph, { 'word/comments.xml': commentsPart }));
     expect(doc.comments).toEqual([{ id: '7', author: 'A Reviewer', text: 'A remark' }]);
@@ -582,7 +582,7 @@ describe('readDocxContent: run-level construct extents (the #750 docx rows)', ()
   });
 
   it('emits a point anchor at a footnote reference run, and reads the footnote\'s own w:id so the two join', () => {
-    const footnotesPart = { kind: 'xml', nodes: [el('w:footnotes', {}, [el('w:footnote', { 'w:id': '2' }, [el('w:p', {}, [textRun('The note body')])])])] } as const;
+    const footnotesPart = { kind: 'xml', nodes: [el('w:footnotes', {}, [el('w:footnote', { 'w:id': '2' }, [el('w:p', {}, [textRun('The note body')])])])] } satisfies Package['parts'][string];
     const paragraph = el('w:p', {}, [textRun('A claim'), el('w:r', {}, [el('w:footnoteReference', { 'w:id': '2' })])]);
     const doc = readDocxContent(paragraphPackage(paragraph, { 'word/footnotes.xml': footnotesPart }));
     expect(doc.footnotes).toEqual([{ id: '2', text: 'The note body' }]);
@@ -590,7 +590,7 @@ describe('readDocxContent: run-level construct extents (the #750 docx rows)', ()
   });
 
   it('emits a point anchor at an endnote reference run, and reads word/endnotes.xml with each note\'s own w:id', () => {
-    const endnotesPart = { kind: 'xml', nodes: [el('w:endnotes', {}, [el('w:endnote', { 'w:id': '1' }, [el('w:p', {}, [textRun('The endnote body')])])])] } as const;
+    const endnotesPart = { kind: 'xml', nodes: [el('w:endnotes', {}, [el('w:endnote', { 'w:id': '1' }, [el('w:p', {}, [textRun('The endnote body')])])])] } satisfies Package['parts'][string];
     const paragraph = el('w:p', {}, [textRun('A point'), el('w:r', {}, [el('w:endnoteReference', { 'w:id': '1' })])]);
     const doc = readDocxContent(paragraphPackage(paragraph, { 'word/endnotes.xml': endnotesPart }));
     expect(doc.endnotes).toEqual([{ id: '1', text: 'The endnote body' }]);
