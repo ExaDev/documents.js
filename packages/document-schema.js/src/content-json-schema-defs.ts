@@ -328,6 +328,7 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
     properties: {
       pageSize: { $ref: '#/$defs/PageSize' },
       margins: { $ref: '#/$defs/Margins' },
+      breakType: { type: 'string', enum: ['nextPage', 'continuous', 'evenPage', 'oddPage'] },
       source: { $ref: '#/$defs/SourceResidue' },
       kind: { type: 'string', const: 'section' },
     },
