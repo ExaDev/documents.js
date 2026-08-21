@@ -1,3 +1,10 @@
+## [5.1.2](https://github.com/ExaDev/documents.js/compare/odf.js@5.1.1...odf.js@5.1.2) (2026-08-21)
+
+
+### Bug Fixes
+
+* **odf:** pin zip entry mtimes so the byte layout is fully deterministic ([49d9e59](https://github.com/ExaDev/documents.js/commit/49d9e59aa0ff7ebb498c48a4209e164a438b88b6))
+
 ## [5.1.1](https://github.com/ExaDev/documents.js/compare/odf.js@5.1.0...odf.js@5.1.1) (2026-08-21)
 
 
