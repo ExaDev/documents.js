@@ -16,17 +16,27 @@ Requires Node.js `>=20` and pnpm `11.6.0`.
 
 ```sh
 pnpm install
-pnpm build          # tsdown -> dist/ (ESM + CJS + .d.ts)
+pnpm build          # tsdown -> dist/ (ESM + CJS + .d.ts, one file set per src module)
 pnpm typecheck      # tsc -p tsconfig.json && tsc -p tsconfig.node.json (dual tsconfig)
 pnpm lint           # eslint . --fix --cache --max-warnings 0
-pnpm test           # vitest run
-pnpm test:watch     # vitest
+pnpm test           # vitest run --project unit
+pnpm test:watch     # vitest --project unit
 pnpm test:workers   # vitest run --config vitest.workers.config.ts, inside a real Cloudflare Workers (workerd) isolate
+pnpm test:smoke     # builds dist/, then loads the built ESM and CJS barrels and every advertised deep import
 ```
 
 To run a single test file, pass its path to vitest directly, e.g. `pnpm exec vitest run src/zip/walk.test.ts`.
 
 ## What it provides
+
+Every module is importable by package-relative path as well as through the barrel — `tsdown` builds one dist file per src module (`root: 'src'`, the same layout ooxml.js ships), and `package.json`'s `./*` exports wildcard maps each subpath onto it:
+
+```ts
+import { readCompoundFile } from 'archive-codec/cfb/read';
+import { walkArchive } from 'archive-codec/zip/walk';
+```
+
+The smoke suite (`test/smoke.test.mjs`) is the guard on that advertisement: it loads each module below from the built `dist/` in both module systems, so a build config that stops serving an advertised subpath fails the suite — neither publint nor `attw` catches a wildcard whose targets are missing.
 
 | Module | Exports |
 |---|---|
