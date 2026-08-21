@@ -138,7 +138,7 @@ const content = readXlsxContent(decodePackage(bytes)); // ContentDocument, kind:
 const pkg = buildXlsxPackageFromContent(content); // a fresh Package built from scratch, not a write-back into `pkg`
 ```
 
-`readDocxContent` is the only reader in this package that returns a docx's comments, footnotes, endnotes, header/footer parts and text, section break kinds, and `word/numbering.xml` definitions: those sit on `DocxDocument` outside its `sections` (a section's `breakType` excepted — that rides `ContentSection` itself), which is exactly the part of it `ContentDocument` — and therefore the tree — has no place for. They do not survive `buildDocxPackageFromContent` either (it writes none of those parts), so this is about which reader returns them, not about which pair round-trips them.
+`readDocxContent` is the only reader in this package that returns a docx's comments, footnotes, endnotes, header/footer parts and text, section break kinds, and `word/numbering.xml` definitions: those sit on `DocxDocument` outside its `sections` (a section's `breakType` excepted — that rides `ContentSection` itself), which is exactly the part of it `ContentDocument` — and therefore the tree — has no place for. They do not survive `buildDocxPackageFromContent` either (it writes none of those parts), so this is about which reader returns them, not about which pair round-trips them. `endnotes`, `headerFooterParts`, and `sectionHeaderFooters` are required fields on the published `DocxDocument` shape — a reader always populates them (an empty array when the docx spells none), and code constructing a `DocxDocument` by hand rather than reading one must spell them too.
 
 #### Fidelity constructs
 
