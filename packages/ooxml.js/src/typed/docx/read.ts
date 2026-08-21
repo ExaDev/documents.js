@@ -100,6 +100,13 @@ function readMargins(sectPr: XmlElement): Margins {
   };
 }
 
+// w:sectPr/w:type names how the section it closes BEGINS relative to the one before it. An absent or unrecognised @w:val leaves the field absent rather than storing WordprocessingML's own default (nextPage): the default is what every consumer already assumes, so only a spelled break kind carries information worth recording.
+function readSectionBreakType(sectPr: XmlElement): ContentSection['breakType'] {
+  const type = childrenWithTag(sectPr, 'w:type')[0];
+  const val = type === undefined ? undefined : attr(type, 'w:val');
+  return val === 'nextPage' || val === 'continuous' || val === 'evenPage' || val === 'oddPage' ? val : undefined;
+}
+
 function readListMembership(pPr: XmlElement | undefined): ContentListMembership | undefined {
   const numPr = pPr === undefined ? undefined : childrenWithTag(pPr, 'w:numPr')[0];
   if (numPr === undefined) {
@@ -752,21 +759,21 @@ function readSections(body: XmlElement, ctx: DocxReadContext): ContentSection[] 
   collectFlowNodes(body.children, ctx, state, false);
   const extents = [...state.extents, ...resolveBookmarkExtents(state.bookmarkEvents)];
 
-  function sliceSection(pageSize: PageSize, margins: Margins, from: number, to: number): ContentSection {
+  function sliceSection(pageSize: PageSize, margins: Margins, breakType: ContentSection['breakType'], from: number, to: number): ContentSection {
     const contained = extents
       .filter((extent) => extent.startIndex >= from && extent.endIndex <= to)
       .map((extent) => ({ ...extent, startIndex: extent.startIndex - from, endIndex: extent.endIndex - from }));
-    return { pageSize, margins, blocks: insertConstructMarkers(state.blocks.slice(from, to), contained) };
+    return { pageSize, margins, ...(breakType === undefined ? {} : { breakType }), blocks: insertConstructMarkers(state.blocks.slice(from, to), contained) };
   }
 
   const sections: ContentSection[] = [];
   let from = 0;
   for (const sectionBreak of state.sectionBreaks) {
-    sections.push(sliceSection(readPageSize(sectionBreak.sectPr), readMargins(sectionBreak.sectPr), from, sectionBreak.index));
+    sections.push(sliceSection(readPageSize(sectionBreak.sectPr), readMargins(sectionBreak.sectPr), readSectionBreakType(sectionBreak.sectPr), from, sectionBreak.index));
     from = sectionBreak.index;
   }
   if (from < state.blocks.length || sections.length === 0) {
-    sections.push(sliceSection(PAGE_SIZE_LETTER, DEFAULT_MARGINS, from, state.blocks.length));
+    sections.push(sliceSection(PAGE_SIZE_LETTER, DEFAULT_MARGINS, undefined, from, state.blocks.length));
   }
   sections.forEach((section, sectionIndex) => assignSourcePaths(section.blocks, `sections[${sectionIndex}]`));
   return sections;
@@ -846,7 +853,7 @@ function readHeaderFooterText(pkg: Package, prefix: string): string[] {
 
 // Resolves a generic OOXML Package into DocxDocument: the WordprocessingML style cascade, DrawingML theme resolution (including w:themeColor run-colour references, resolved against the theme's own colour scheme), ordered sections of paragraphs/tables/page-breaks/images (document order preserved, including inside tables, with cell background AND border styling read from w:tcBorders), the block-scoped fidelity constructs (structured document tags, fields, bookmarks, tracked changes) as constructStart/constructEnd marker pairs, plus comments, footnotes, header/footer text, and word/numbering.xml's own abstractNum/num level definitions (numbering.ts's readNumberingDefinitions). An inline (wp:inline) or floating/anchored (wp:anchor) w:drawing is resolved to a real ContentImageBlock via the containing part's own relationships, sniffed from its actual media-part bytes rather than trusted from any extension/content-type -- but a floating image's own wp:anchor position (page/margin/paragraph-relative offset) is never read, since ContentImageBlock has no absolute positioning field to record it in; it lands in the block flow at the point its w:drawing was encountered, same as an inline image. A w:object/o:OLEObject whose payload part is itself a ZIP archive (a modern producer's embedded xlsx/docx/pptx) is decoded through the shared embedded-object helper (typed/embedded.ts) into a sibling ContentEmbeddedObjectBlock sized from w:dxaOrig/w:dyaOrig and lifted through the same convention as an image block; a payload that does not decode as one of the three OOXML flavours degrades to no embedded block rather than failing the read.
 //
-// Information not modelled here is still dropped: section break types other than plain w:sectPr (ContentSection itself has no field to record w:type's nextPage/continuous/evenPage/oddPage distinction); live PAGE/NUMPAGES field re-evaluation; w:themeShade/w:themeTint refinement of a resolved theme colour; a floating image's own anchored position; any image whose bytes don't sniff as PNG/JPEG; a w:object's VML preview picture (v:imagedata -- no VML reader exists here, and real producers ship WMF/EMF previews anyway); a w:object sitting inside a header, footer, or footnote (embedded-object recovery walks the document body's block flow only -- headers/footers keep their flat-text projection via readHeaderFooterText, and footnotes ride DocxDocument.footnotes as text, so neither has a block flow to lift an object into); the classic non-ZIP OLE compound-file payload (.bin -- opaque external-application data, left skipped exactly as unhandled markup) and a ZIP payload that does not decode as one of the three OOXML flavours (both degrade to no embedded block, never a failed read); and the run-level construct occurrences still without an encoding here -- a mid-paragraph field, inline SDT, or partial tracked change, and a bookmark whose two halves sit in different paragraphs (a same-paragraph bookmark pair, crossing included, lands on ContentParagraph.constructs; see typed/docx/constructs.ts for the scope rules, and typed/docx/write.ts for the write side of what does survive).
+// Information not modelled here is still dropped: live PAGE/NUMPAGES field re-evaluation; w:themeShade/w:themeTint refinement of a resolved theme colour; a floating image's own anchored position; any image whose bytes don't sniff as PNG/JPEG; a w:object's VML preview picture (v:imagedata -- no VML reader exists here, and real producers ship WMF/EMF previews anyway); a w:object sitting inside a header, footer, or footnote (embedded-object recovery walks the document body's block flow only -- headers/footers keep their flat-text projection via readHeaderFooterText, and footnotes ride DocxDocument.footnotes as text, so neither has a block flow to lift an object into); the classic non-ZIP OLE compound-file payload (.bin -- opaque external-application data, left skipped exactly as unhandled markup) and a ZIP payload that does not decode as one of the three OOXML flavours (both degrade to no embedded block, never a failed read); and the run-level construct occurrences still without an encoding here -- a mid-paragraph field, inline SDT, or partial tracked change, and a bookmark whose two halves sit in different paragraphs (a same-paragraph bookmark pair, crossing included, lands on ContentParagraph.constructs; see typed/docx/constructs.ts for the scope rules, and typed/docx/write.ts for the write side of what does survive).
 export function readDocxContent(pkg: Package): DocxDocument {
   const documentRoot = rootElement(pkg.parts[DOCUMENT_PART_PATH]);
   if (documentRoot === undefined) {
