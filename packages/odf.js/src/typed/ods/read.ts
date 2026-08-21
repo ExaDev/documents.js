@@ -34,7 +34,7 @@ import { parseOdfTransform } from '../shared/transform';
 import { readDrawFrame } from '../draw/shapes';
 import type { EmbeddedDrawObject } from '../draw/embedded';
 import { readDrawObjectReference, readEmbeddedObjectDocument, readOdfChartContent } from '../draw/embedded';
-import { addOdfPackageResidue, collectOdfNamedExpressions, collectOdfNonContentPartResidue } from '../shared/constructs';
+import { addOdfPackageResidue, collectOdfNamedExpressions, collectOdfNonContentPartResidue, isOdfExtensionElement } from '../shared/constructs';
 import { readOdfFormulaContent } from '../formula/read';
 import { readOdgContent } from '../odg/read';
 import { readOdpContent } from '../odp/read';
@@ -532,6 +532,12 @@ export function readOdsContent(pkg: Package): OdsDocument {
     collectOdfNamedExpressions(spreadsheet.children, definitions);
     // Recalculation semantics, not content: a workbook's table:calculation-settings (null-date epoch, wildcards-vs-regex, iteration limits) decides how the cached values were computed, and no sheet or cell node owns it -- the whole element quarantines at the package tier.
     addOdfPackageResidue(source, 'calculation-settings', 'ods', ...childrenWithTag(spreadsheet, 'table:calculation-settings'));
+    // Vendor-extension elements at the spreadsheet level (calcext: conditional formats and their kin), the ods spelling of the same quarantine-everywhere policy the odt block walk applies -- keyed by their own tag, same-tag occurrences concatenated.
+    for (const child of spreadsheet.children) {
+      if (child.type === 'element' && isOdfExtensionElement(child)) {
+        addOdfPackageResidue(source, child.tag, 'ods', child);
+      }
+    }
   }
   collectOdfNonContentPartResidue(pkg, 'ods', source);
 
