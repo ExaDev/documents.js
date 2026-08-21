@@ -152,8 +152,8 @@ describe('readPdf: non-zero-origin MediaBox', () => {
     const doc = readPdf(nonZeroOriginMediaBoxPdf());
     expect(doc.pages[0]).toMatchObject({ widthPt: 200, heightPt: 100 }); // [50 50 250 150] -> same size, shifted origin
     const [item] = textLayoutItems(doc.pages[0]!.items);
-    // The fixture's content places text at absolute (10, 50); MediaBox origin (50, 50) shifts that to (-40, 0).
-    expect(item).toMatchObject({ xPt: -40, yPt: 0 });
+    // The fixture's content places text at absolute (60, 60); MediaBox origin (50, 50) shifts that to (10, 10).
+    expect(item).toMatchObject({ xPt: 10, yPt: 10 });
   });
 });
 

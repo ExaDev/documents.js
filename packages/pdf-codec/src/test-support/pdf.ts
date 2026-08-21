@@ -223,11 +223,11 @@ export function rotatedPagePdf(): Uint8Array<ArrayBuffer> {
   return b.bytes();
 }
 
-// A /MediaBox whose origin isn't (0,0) -- our own writer never produces one (see write.ts's own module doc), but real producers occasionally do; placement must be computed relative to the MediaBox's own origin, not assumed to be (0,0).
+// A /MediaBox whose origin isn't (0,0) -- our own writer never produces one (see write.ts's own module doc), but real producers occasionally do; placement must be computed relative to the MediaBox's own origin, not assumed to be (0,0). The text sits at (60, 60), inside the box, so it survives the crop-box visibility filter (the box IS the visible region even without a declared /CropBox).
 export function nonZeroOriginMediaBoxPdf(): Uint8Array<ArrayBuffer> {
   const b = new FixtureBuilder().header('1.4');
   catalogPagesPageFontObjects(b, 5, '[50 50 250 150]');
-  b.stream(5, '<< >>', enc(HELLO_CONTENT));
+  b.stream(5, '<< >>', enc('BT /F1 12 Tf 60 60 Td (Hello) Tj ET'));
   b.classicXrefAndTrailer(5, '/Root 1 0 R');
   return b.bytes();
 }
@@ -439,5 +439,76 @@ export function metadataResiduePdf(): Uint8Array<ArrayBuffer> {
   b.object(7, '<< /Type /OutputIntent /S /GTS_PDFA1 /OutputConditionIdentifier (sRGB IEC61966-2.1) >>');
   b.object(8, '<< /Title (From Info) >>');
   b.classicXrefAndTrailer(8, '/Root 1 0 R /Info 8 0 R /ID [<0a1b2c3d4e5f60718293a4b5c6d7e8f9> <0a1b2c3d4e5f60718293a4b5c6d7e8f9>]');
+  return b.bytes();
+}
+
+// --- Page boundaries (#759): /CropBox as the visible region, and the print-production boxes with no model home. ---
+
+// MediaBox [0 0 200 100] with CropBox [100 0 200 50] -- the right half's lower band is the only visible region. Three paint operations: text wholly inside the crop, text wholly in the cropped-away left half, and a rect straddling the crop's right edge (x 190..210 against the boundary at 200). A viewer shows the inside text in full, the straddling rect clipped at x=200, and nothing of the outside text. A URI link annotation in the cropped-away half rides along: an annotation is an anchored construct, not painted stream content, so the visibility filter must not claim it.
+export function cropBoxPdf(): Uint8Array<ArrayBuffer> {
+  const b = new FixtureBuilder().header('1.7');
+  catalogPagesPageFontObjects(
+    b,
+    5,
+    '[0 0 200 100]',
+    '/CropBox [100 0 200 50] /Annots [6 0 R] ',
+  );
+  b.stream(5, '<< >>', enc('BT /F1 12 Tf 120 20 Td (inside) Tj ET BT /F1 12 Tf 10 80 Td (outside) Tj ET 190 20 20 10 re f'));
+  b.object(6, '<< /Type /Annot /Subtype /Link /Rect [10 70 60 84] /A << /S /URI /URI (https://example.com/marks) >> >>');
+  b.classicXrefAndTrailer(6, '/Root 1 0 R');
+  return b.bytes();
+}
+
+// The same geometry with /Rotate 90 -- the crop rect must land origin-normalised in the rotated frame too (the rotated crop spans x 0..50, y 0..100, so the page reports 50x100, the inside text at (120, 20) lands at (20, 80), and the straddling rect crosses the rotated boundary at y=0).
+export function rotatedCropBoxPdf(): Uint8Array<ArrayBuffer> {
+  const b = new FixtureBuilder().header('1.7');
+  catalogPagesPageFontObjects(
+    b,
+    5,
+    '[0 0 200 100]',
+    '/CropBox [100 0 200 50] /Rotate 90 ',
+  );
+  b.stream(5, '<< >>', enc('BT /F1 12 Tf 120 20 Td (inside) Tj ET BT /F1 12 Tf 10 80 Td (outside) Tj ET 190 20 20 10 re f'));
+  b.classicXrefAndTrailer(5, '/Root 1 0 R');
+  return b.bytes();
+}
+
+// CropBox declared on the PARENT Pages node -- it is one of the four page-tree-inheritable attributes (ISO 32000-1 7.7.3.4), so a page with no /CropBox of its own inherits the bottom band [0 0 200 50].
+export function inheritedCropBoxPdf(): Uint8Array<ArrayBuffer> {
+  const b = new FixtureBuilder().header('1.7');
+  b.object(1, '<< /Type /Catalog /Pages 2 0 R >>');
+  b.object(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 /CropBox [0 0 200 50] >>');
+  b.object(3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>');
+  b.object(4, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+  b.stream(5, '<< >>', enc('BT /F1 12 Tf 10 20 Td (inside) Tj ET BT /F1 12 Tf 10 80 Td (outside) Tj ET'));
+  b.classicXrefAndTrailer(5, '/Root 1 0 R');
+  return b.bytes();
+}
+
+// MediaBox with an EQUAL CropBox plus the three print-production boxes declared page-direct (ISO 32000-1 Table 30 lists /BleedBox /TrimBox /ArtBox as ordinary per-page entries, not inheritable ones): nothing is cropped away, but the declared boxes are facts beyond the visible box that the model has no field for.
+export function printBoxesPdf(): Uint8Array<ArrayBuffer> {
+  const b = new FixtureBuilder().header('1.7');
+  catalogPagesPageFontObjects(
+    b,
+    5,
+    '[0 0 200 100]',
+    '/CropBox [0 0 200 100] /BleedBox [0 0 210 110] /TrimBox [5 5 195 95] /ArtBox [10 10 190 90] ',
+  );
+  b.stream(5, '<< >>', enc(HELLO_CONTENT));
+  b.classicXrefAndTrailer(5, '/Root 1 0 R');
+  return b.bytes();
+}
+
+// MediaBox with an EQUAL CropBox and nothing else -- the degenerate declaration a producer sometimes writes. Nothing is cropped away, and a crop box that IS the media box carries no fact beyond the visible one, so this page contributes no residue row.
+export function equalCropBoxPdf(): Uint8Array<ArrayBuffer> {
+  const b = new FixtureBuilder().header('1.7');
+  catalogPagesPageFontObjects(
+    b,
+    5,
+    '[0 0 200 100]',
+    '/CropBox [0 0 200 100] ',
+  );
+  b.stream(5, '<< >>', enc(HELLO_CONTENT));
+  b.classicXrefAndTrailer(5, '/Root 1 0 R');
   return b.bytes();
 }

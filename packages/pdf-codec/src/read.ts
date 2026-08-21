@@ -21,11 +21,11 @@ import { readImageXObject } from './images-read';
 import type { ExtractedEllipse, ExtractedImage, ExtractedInlineImage, ExtractedItem, ExtractedLine, ExtractedPaint, ExtractedPath, ExtractedRect, ExtractedSubpath, ExtractedTextRun, PdfObjectResolver } from './interpret';
 import { interpretContentStream } from './interpret';
 import type { Matrix } from './matrix';
-import { applyMatrix, matrixRotationDegrees, matrixScaleX, matrixScaleY, multiplyMatrices, translationMatrix } from './matrix';
+import { applyMatrix, matrixRotationDegrees, matrixScaleX, matrixScaleY, multiplyMatrices, rotatePointAboutCenter, translationMatrix } from './matrix';
 import type { DestinationRegistry } from './navigation';
 import { createDestinationRegistry, readOutline } from './navigation';
 import type { PdfDict, PdfObject } from './objects';
-import { asArray, asName, asNumber, dictGet, pdfArray, pdfNull } from './objects';
+import { asArray, asName, asNumber, dictGet, pdfArray, pdfDict, pdfNull, pdfNum } from './objects';
 import { NOTES_ANNOTATION_AUTHOR } from './notes-annotation-author';
 import { serializeObjectToText } from './serialize';
 
@@ -79,11 +79,17 @@ export function readPdf(bytes: Uint8Array<ArrayBuffer>, options?: ReadPdfOptions
   const optionalContent = readOptionalContent(doc.catalog, doc, sink);
   const form = readAcroForm(doc.catalog, doc, (obj) => doc.pageIndex(obj), sink);
   const source = readDocumentResidue(doc, sink);
+  const pageBoxRows: PdfObject[] = [];
 
-  const pages = pageDicts.map((pageDict) => {
+  const pages = pageDicts.map((pageDict, index) => {
     throwIfAborted(signal);
-    return readPage(pageDict, doc, fontResolver, images, imageIdCache, destinationRegistry, optionalContent.layerNameOf, sink);
+    return readPage(index, pageDict, doc, fontResolver, images, imageIdCache, destinationRegistry, optionalContent.layerNameOf, pageBoxRows, sink);
   });
+
+  // The per-page boundary declarations a distinct crop box or a print-production box left behind, quarantined with the other package-level residue rows.
+  if (pageBoxRows.length > 0) {
+    source['page-boxes'] = { format: 'pdf', xml: serializeObjectToText(pdfArray(pageBoxRows)) };
+  }
 
   return {
     formatVersion: LAYOUT_FORMAT_VERSION,
@@ -101,23 +107,54 @@ export function readPdf(bytes: Uint8Array<ArrayBuffer>, options?: ReadPdfOptions
 
 // --- Page geometry: MediaBox origin shift + /Rotate, composed into one matrix applied to every extracted item on the page. ---
 
-interface MediaBoxRect {
+interface PageBoxRect {
   readonly llx: number;
   readonly lly: number;
   readonly urx: number;
   readonly ury: number;
 }
 
-function readMediaBox(page: PdfDict): MediaBoxRect {
-  const arr = asArray(dictGet(page, 'MediaBox'));
+// One of the five page-boundary rectangles (ISO 32000-1 14.11.2), normalised to lower-left/upper-right corners -- a producer may write either corner order. Undefined when the page does not declare the entry; only /MediaBox has a fallback (the malformed-file letter default below).
+function readDeclaredPageBox(page: PdfDict, key: string): PageBoxRect | undefined {
+  const arr = asArray(dictGet(page, key));
   if (arr === undefined) {
-    return { llx: 0, lly: 0, urx: DEFAULT_PAGE_WIDTH_PT, ury: DEFAULT_PAGE_HEIGHT_PT };
+    return undefined;
   }
   const a = asNumber(arr[0]) ?? 0;
   const b = asNumber(arr[1]) ?? 0;
-  const c = asNumber(arr[2]) ?? DEFAULT_PAGE_WIDTH_PT;
-  const d = asNumber(arr[3]) ?? DEFAULT_PAGE_HEIGHT_PT;
+  const c = asNumber(arr[2]) ?? 0;
+  const d = asNumber(arr[3]) ?? 0;
   return { llx: Math.min(a, c), lly: Math.min(b, d), urx: Math.max(a, c), ury: Math.max(b, d) };
+}
+
+function readMediaBox(page: PdfDict): PageBoxRect {
+  return readDeclaredPageBox(page, 'MediaBox') ?? { llx: 0, lly: 0, urx: DEFAULT_PAGE_WIDTH_PT, ury: DEFAULT_PAGE_HEIGHT_PT };
+}
+
+// The axis-aligned bounds of a page rectangle after a rotation transform -- all four corners transformed, then min/max, because a rotation that is not about the box's own corner does not preserve which corner is lower-left (and /Rotate's matrix is built for the media box's frame, not the crop box's).
+interface RotatedRectBounds {
+  readonly minX: number;
+  readonly minY: number;
+  readonly maxX: number;
+  readonly maxY: number;
+}
+
+function rotatedRectBounds(rect: PageBoxRect, matrix: Matrix): RotatedRectBounds {
+  const corners: readonly (readonly [number, number])[] = [
+    [rect.llx, rect.lly],
+    [rect.urx, rect.lly],
+    [rect.llx, rect.ury],
+    [rect.urx, rect.ury],
+  ];
+  const transformed = corners.map(([x, y]) => applyMatrix(matrix, { x, y }));
+  const xs = transformed.map((point) => point.x);
+  const ys = transformed.map((point) => point.y);
+  return {
+    minX: Math.min(...xs),
+    minY: Math.min(...ys),
+    maxX: Math.max(...xs),
+    maxY: Math.max(...ys),
+  };
 }
 
 type PageRotation = 0 | 90 | 180 | 270;
@@ -170,12 +207,122 @@ function readPageContentBytes(page: PdfDict, resolver: PdfObjectResolver, sink: 
   return new Uint8Array(0);
 }
 
-function readPage(page: PdfDict, resolver: PdfObjectResolver, fontResolver: FontResolverService, images: Record<string, LayoutImageAsset>, imageIdCache: Map<PdfDict, string | null>, destinationRegistry: DestinationRegistry, layerNameOf: (obj: PdfObject | undefined) => string | undefined, sink: PdfDiagnosticSink): LayoutPage {
+// A content item's axis-aligned bounds in output page space -- the crop-visibility filter's input. Link and internalLink kinds report undefined: an annotation is an anchored construct, not painted stream content, so the visibility filter must not claim it (the same line the optional-content filter draws, treating annotation kinds as not layer-governed content).
+function contentItemBounds(item: LayoutItem): RotatedRectBounds | undefined {
+  if (item.kind === 'link' || item.kind === 'internalLink') {
+    return undefined;
+  }
+  const frameBounds = (xPt: number, yPt: number, widthPt: number, heightPt: number): RotatedRectBounds => ({ minX: xPt, minY: yPt, maxX: xPt + widthPt, maxY: yPt + heightPt });
+  if (item.kind === 'text' || item.kind === 'image' || item.kind === 'rect' || item.kind === 'ellipse') {
+    if (item.kind !== 'text' || item.rotationDeg === undefined || item.rotationDeg % 180 === 0) {
+      // widthPt is optional on text (reported, not measured, on some paths) -- a missing width still bounds the run to its anchor plus size, never an unbounded extent.
+      return frameBounds(item.xPt, item.yPt, item.widthPt ?? 0, item.kind === 'text' ? item.sizePt : item.heightPt);
+    }
+    // An obliquely rotated run's frame no longer bounds it: rotate the (width x size) frame's corners about the run's own anchor, which the conversion places invariantly, and take the hull. Generous by construction (the glyph ink stays within the em box), which errs toward keeping an edge-straddling run -- the right direction for a visibility filter.
+    const rotationDeg = item.rotationDeg;
+    const anchorX = item.xPt;
+    const anchorY = item.yPt;
+    const corners: readonly (readonly [number, number])[] = [
+      [0, 0],
+      [item.widthPt ?? 0, 0],
+      [0, item.sizePt],
+      [item.widthPt ?? 0, item.sizePt],
+    ];
+    const rotated = corners.map(([dx, dy]) => rotatePointAboutCenter({ x: anchorX + dx, y: anchorY + dy }, { x: anchorX, y: anchorY }, rotationDeg));
+    const xs = rotated.map((point) => point.x);
+    const ys = rotated.map((point) => point.y);
+    return { minX: Math.min(...xs), minY: Math.min(...ys), maxX: Math.max(...xs), maxY: Math.max(...ys) };
+  }
+  if (item.kind === 'line') {
+    return {
+      minX: Math.min(item.x1Pt, item.x2Pt),
+      minY: Math.min(item.y1Pt, item.y2Pt),
+      maxX: Math.max(item.x1Pt, item.x2Pt),
+      maxY: Math.max(item.y1Pt, item.y2Pt),
+    };
+  }
+  // A path's bounds cover every subpath's start point, every segment endpoint, and every cubic control point -- a Bezier can extend beyond its endpoint hull, and a visibility filter errs towards keeping, never towards inventing a tighter box the geometry does not state.
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  const include = (x: number, y: number): void => {
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x);
+    maxY = Math.max(maxY, y);
+  };
+  for (const subpath of item.subpaths) {
+    include(subpath.startXPt, subpath.startYPt);
+    for (const segment of subpath.segments) {
+      include(segment.xPt, segment.yPt);
+      if (segment.kind === 'cubic') {
+        include(segment.c1xPt, segment.c1yPt);
+        include(segment.c2xPt, segment.c2yPt);
+      }
+    }
+  }
+  return { minX, minY, maxX, maxY };
+}
+
+// Whether an item's bounds touch the visible page rectangle at all -- touching the boundary counts as visible (a hairline rule exactly on the crop edge shows); only an item whose whole extent lies strictly beyond the edge is not visible.
+function itemIntersectsVisibleRegion(item: LayoutItem, widthPt: number, heightPt: number): boolean {
+  if (item.kind === 'link' || item.kind === 'internalLink') {
+    return true;
+  }
+  const bounds = contentItemBounds(item);
+  if (bounds === undefined) {
+    return true;
+  }
+  return bounds.maxX >= 0 && bounds.minX <= widthPt && bounds.maxY >= 0 && bounds.minY <= heightPt;
+}
+
+// One page's contribution to the package-level page-boxes residue row: the declared boundary rectangles that carry a fact beyond the visible one. A page contributes when a declared /CropBox differs from the media box (the outer region and the crop's own absolute position are both left behind by reading the visible box alone) or when any of /BleedBox /TrimBox /ArtBox is declared (print-production facts with no field in the layout model). Values are the parsed source arrays, serialised verbatim, so a same-format restorer re-emits exactly what the producer wrote. Undefined when the page's declarations carry nothing beyond the visible box.
+function pageBoxResidueEntry(pageIndex: number, page: PdfDict, mediaBox: PageBoxRect, cropBox: PageBoxRect): PdfObject | undefined {
+  const declaredBoxes: readonly (readonly [string, PdfObject | undefined])[] = [
+    ['MediaBox', dictGet(page, 'MediaBox')],
+    ['CropBox', dictGet(page, 'CropBox')],
+    ['BleedBox', dictGet(page, 'BleedBox')],
+    ['TrimBox', dictGet(page, 'TrimBox')],
+    ['ArtBox', dictGet(page, 'ArtBox')],
+  ];
+  const cropDeclared = dictGet(page, 'CropBox') !== undefined;
+  const productionBoxDeclared = declaredBoxes.slice(2).some(([, value]) => value !== undefined);
+  const cropDiffersFromMedia =
+    cropDeclared && (cropBox.llx !== mediaBox.llx || cropBox.lly !== mediaBox.lly || cropBox.urx !== mediaBox.urx || cropBox.ury !== mediaBox.ury);
+  if (!cropDiffersFromMedia && !productionBoxDeclared) {
+    return undefined;
+  }
+  const entries: Record<string, PdfObject> = { Page: pdfNum(pageIndex) };
+  for (const [key, value] of declaredBoxes) {
+    if (value !== undefined) {
+      entries[key] = value;
+    }
+  }
+  return pdfDict(entries);
+}
+
+function readPage(pageIndex: number, page: PdfDict, resolver: PdfObjectResolver, fontResolver: FontResolverService, images: Record<string, LayoutImageAsset>, imageIdCache: Map<PdfDict, string | null>, destinationRegistry: DestinationRegistry, layerNameOf: (obj: PdfObject | undefined) => string | undefined, pageBoxRows: PdfObject[], sink: PdfDiagnosticSink): LayoutPage {
   const resources = resolver.resolveDict(dictGet(page, 'Resources'));
   const mediaBox = readMediaBox(page);
+  // The crop box is the visible region (ISO 32000-1 14.11.2: a viewer displays and prints it, and it defaults to the media box), so it -- not the media box -- is the page geometry this package reports, and content outside it is not visible at all. Inherited through the page tree like /MediaBox (one of 7.7.3.4's four inheritable attributes); /BleedBox /TrimBox /ArtBox are ordinary page-direct entries and are quarantined as residue, never clipped to.
+  let cropBox = readDeclaredPageBox(page, 'CropBox') ?? mediaBox;
+  if (cropBox.urx - cropBox.llx <= 0 || cropBox.ury - cropBox.lly <= 0) {
+    sink({ code: 'pdf/invalid-crop-box', severity: 'warning', pageIndex, message: 'page /CropBox is degenerate (zero width or height); falling back to the /MediaBox as the visible region' });
+    cropBox = mediaBox;
+  }
   const rotation = normalizeRotation(asNumber(dictGet(page, 'Rotate')));
   const rotationResult = pageRotationTransform(rotation, mediaBox.urx - mediaBox.llx, mediaBox.ury - mediaBox.lly);
-  const pageMatrix = multiplyMatrices(translationMatrix(-mediaBox.llx, -mediaBox.lly), rotationResult.matrix);
+  // The crop rect rotated into output space, then used as the origin: every item position is relative to the visible region's own lower-left corner, exactly as a viewer presents it. With no declared /CropBox this reproduces the media-box pipeline bit for bit -- the rotation matrix's translation already maps the media box to the first quadrant, so the rotated media rect's min corner is the origin the old shift-by-(-llx, -lly) produced.
+  const visibleRect = rotatedRectBounds(cropBox, rotationResult.matrix);
+  const widthPt = visibleRect.maxX - visibleRect.minX;
+  const heightPt = visibleRect.maxY - visibleRect.minY;
+  const pageMatrix = multiplyMatrices(rotationResult.matrix, translationMatrix(-visibleRect.minX, -visibleRect.minY));
+
+  const boxRow = pageBoxResidueEntry(pageIndex, page, mediaBox, cropBox);
+  if (boxRow !== undefined) {
+    pageBoxRows.push(boxRow);
+  }
 
   const items: LayoutItem[] = [];
   if (resources !== undefined) {
@@ -183,7 +330,7 @@ function readPage(page: PdfDict, resolver: PdfObjectResolver, fontResolver: Font
     const extracted = interpretContentStream(contentBytes, resources, { fontMetrics: fontResolver.metrics, resolver, sink, layerNameOf });
     for (const item of extracted) {
       const converted = convertExtractedItem(item, pageMatrix, fontResolver, images, imageIdCache, resolver, sink);
-      if (converted !== undefined) {
+      if (converted !== undefined && itemIntersectsVisibleRegion(converted, widthPt, heightPt)) {
         items.push(converted);
       }
     }
@@ -196,8 +343,8 @@ function readPage(page: PdfDict, resolver: PdfObjectResolver, fontResolver: Font
   const annotations = readPageAnnotations(page, pageMatrix, resolver, sink);
 
   return {
-    widthPt: rotationResult.widthPt,
-    heightPt: rotationResult.heightPt,
+    widthPt,
+    heightPt,
     items,
     ...(notes !== undefined ? { notes } : {}),
     ...(annotations.length > 0 ? { annotations } : {}),
