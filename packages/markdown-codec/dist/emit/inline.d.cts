@@ -1,4 +1,4 @@
-import { i as MarkdownDiagnosticSink } from "../diagnostics-CwpvDXtH.cjs";
+import { i as MarkdownDiagnosticSink } from "../diagnostics-CUMLtGHJ.cjs";
 import { ContentRun, RunConstructExtent } from "document-schema.js";
 //#region src/emit/inline.d.ts
 interface InlineEmitContext {

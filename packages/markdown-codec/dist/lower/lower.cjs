@@ -173,17 +173,29 @@ function lowerHtmlBlock(node, context) {
 	}, context)];
 }
 function lowerMathBlock(node, context) {
-	context.sink({
-		code: require_diagnostics_diagnostics.MarkdownDiagnosticCodes.MATH_BLOCK_PRESERVED_AS_TEXT,
+	if (context.list !== void 0) context.sink({
+		code: require_diagnostics_diagnostics.MarkdownDiagnosticCodes.LIST_ITEM_BLOCK_UNLISTED,
 		severity: "info",
-		message: "block math ($$...$$) was preserved as literal raw LaTeX text (styleId \"MathBlock\"); it is not parsed as LaTeX or converted to MathML by this package"
+		message: "a display-math block directly inside a list item has no ContentListMembership field of its own -- only ContentParagraph carries .list -- so its association with the enclosing list item is lost"
 	});
-	const literal = node.literal.replace(/\n$/, "");
-	return [decorateParagraph({
-		kind: "paragraph",
-		runs: literal.length === 0 ? [] : [{ text: literal }],
-		styleId: require_shared_style_constants.MATH_BLOCK_STYLE_ID
-	}, context)];
+	return [{
+		kind: "embeddedObject",
+		objectKind: "formula",
+		document: {
+			kind: "formula",
+			metadata: {},
+			formula: {
+				mathml: [],
+				presentation: { latex: node.literal.replace(/\n$/, "") }
+			}
+		},
+		frame: {
+			xPt: 0,
+			yPt: 0,
+			widthPt: 0,
+			heightPt: 0
+		}
+	}];
 }
 function blockquoteSubtreeContainsHeading(node) {
 	const walk = (block) => {

@@ -24,7 +24,6 @@ declare const MarkdownDiagnosticCodes: {
   readonly IMAGE_UNRESOLVED: "md/image-unresolved";
   readonly RAW_HTML_PRESERVED_AS_TEXT: "md/raw-html-preserved-as-text";
   readonly RAW_HTML_DROPPED: "md/raw-html-dropped";
-  readonly MATH_BLOCK_PRESERVED_AS_TEXT: "md/math-block-preserved-as-text";
   readonly MATH_INLINE_PRESERVED_AS_TEXT: "md/math-inline-preserved-as-text";
   readonly FRONT_MATTER_KEY_UNMAPPED: "md/front-matter-key-unmapped";
   readonly FOOTNOTE_REFERENCE_PRESERVED_AS_TEXT: "md/footnote-reference-preserved-as-text";

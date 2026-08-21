@@ -108,13 +108,6 @@ describe('every MarkdownDiagnosticCodes entry is reachable from real input', () 
     reached.add(MarkdownDiagnosticCodes.RAW_HTML_DROPPED);
   });
 
-  it('MATH_BLOCK_PRESERVED_AS_TEXT: a $$ display math block', () => {
-    const collector = createDiagnosticCollector();
-    lowerMarkdown('$$\nx^2\n$$', { sink: collector.sink });
-    expect(collector.has(MarkdownDiagnosticCodes.MATH_BLOCK_PRESERVED_AS_TEXT)).toBe(true);
-    reached.add(MarkdownDiagnosticCodes.MATH_BLOCK_PRESERVED_AS_TEXT);
-  });
-
   it('MATH_INLINE_PRESERVED_AS_TEXT: an inline \\( \\) math span', () => {
     const collector = createDiagnosticCollector();
     lowerMarkdown('\\(x^2\\)', { sink: collector.sink });

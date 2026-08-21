@@ -10,7 +10,7 @@
 //  - GFM tables -> ContentTable, src/lower/table.ts.
 //  - images -> ContentImageBlock via a synchronous MarkdownImageResolver port (src/lower/image.ts) -- MarkdownDiagnosticCodes.IMAGE_UNRESOLVED when the resolver (or native data: URI decoding) cannot produce a real PNG/JPEG; the image degrades to a text run of alt text + hyperlink, NEVER an invalid ContentImageBlock. A top-level image (a direct child of a paragraph) splits that paragraph precisely at the point it occurs; a nested one (inside emphasis/a link) never resolves at all -- see src/lower/inline.ts's own top-of-file note.
 //  - raw HTML -> preserved as literal text by default (styleId 'HTMLPreformatted' for block-level HTML), a rawHtml: 'drop' option available -- MarkdownDiagnosticCodes.RAW_HTML_PRESERVED_AS_TEXT / RAW_HTML_DROPPED.
-//  - $$ display math / \( \) inline math (ExaDev/markdown-codec#53) -> preserved as literal raw LaTeX text (styleId 'MathBlock' for the block form; the inline form keeps its own \( \) delimiters in the run text so src/emit/inline.ts's escapeMarkdownText can recognise and pass it through unescaped -- see src/inline/math.ts) -- MarkdownDiagnosticCodes.MATH_BLOCK_PRESERVED_AS_TEXT / MATH_INLINE_PRESERVED_AS_TEXT. Never parsed as LaTeX or converted to MathML here -- that is a documents.js question (ExaDev/documents.js#563).
+//  - $$ display math (ExaDev/markdown-codec#53) -> one embedded FORMULA object whose presentation layer carries the LaTeX verbatim (lowerMathBlock below); \( \) inline math stays a Cambria-Math-marked run (src/lower/inline.ts, the run-level extent a formula is not) -- MarkdownDiagnosticCodes.MATH_INLINE_PRESERVED_AS_TEXT for the inline half. Neither is parsed as LaTeX or converted to MathML here -- that is a documents.js question (ExaDev/documents.js#563).
 //  - front matter (src/lower/front-matter.ts) -> a flat-scalar-only LayoutMetadata subset -- MarkdownDiagnosticCodes.FRONT_MATTER_KEY_UNMAPPED.
 //  - footnote definition (ExaDev/markdown-codec#66) -> an `anchor` construct's boundary-marker pair (document-schema.js 4.2.0) bracketing its own lowered body blocks; the reference site is a marked run instead (src/lower/inline.ts) -- MarkdownDiagnosticCodes.FOOTNOTE_REFERENCE_PRESERVED_AS_TEXT, FOOTNOTE_BODY_HEADING_FLATTENED. See lowerFootnoteDefinition below for why the body rides the construct's extent rather than AnchorDescriptor's own `definition` field.
 
@@ -25,7 +25,7 @@ import { MarkdownDiagnosticCodes, MarkdownInputTooLargeError, NOOP_MARKDOWN_DIAG
 import type { ReadMarkdownOptions } from '../options/options';
 import type { NumIdMintState } from '../shared/list-id';
 import { createNumIdMintState, mintListItemId, mintedListType, mintListNumId } from '../shared/list-id';
-import { CODE_BLOCK_STYLE_ID, HORIZONTAL_RULE_STYLE_ID, HTML_PREFORMATTED_STYLE_ID, MATH_BLOCK_STYLE_ID, QUOTE_INDENT_PT, QUOTE_STYLE_ID, headingStyleId } from '../shared/style-constants';
+import { CODE_BLOCK_STYLE_ID, HORIZONTAL_RULE_STYLE_ID, HTML_PREFORMATTED_STYLE_ID, QUOTE_INDENT_PT, QUOTE_STYLE_ID, headingStyleId } from '../shared/style-constants';
 import { extractFrontMatter } from './front-matter';
 import type { MarkdownImageResolver } from './image';
 import { resolveMarkdownImage } from './image';
@@ -170,13 +170,19 @@ function lowerHtmlBlock(node: Extract<MarkdownBlockNode, { type: 'htmlBlock' }>,
   return [decorateParagraph(paragraph, context)];
 }
 
-// $$...$$ display math (ExaDev/markdown-codec#53) preserved as literal raw LaTeX text, styleId 'MathBlock' -- see src/emit/emit.ts's own inverse. Not parsed as LaTeX or converted to MathML here: that is a documents.js question (ExaDev/documents.js#563), and this package's own scope stops at recognising and round-tripping the syntax.
+// $$...$$ display math (ExaDev/markdown-codec#53) becomes an embedded FORMULA object -- the one block-level carrier a wordprocessing ContentDocument has for a ContentFormula -- with the literal LaTeX verbatim in the formula's rendering-authoritative presentation layer, no MathML (markdown carried none to read), and no semantic content layer (nobody has lowered this LaTeX to semantics; that is a documents.js question, ExaDev/documents.js#563, not something this package does on the way past). The frame is the zero box: an in-flow markdown block has no page position or intrinsic size to record, and ContentEmbeddedObjectBlock's frame is required -- origin-and-zero is the same "positioned by the flow, no size fact" spelling ooxml.js's own inline OLE reader established for the identical constraint.
 function lowerMathBlock(node: Extract<MarkdownBlockNode, { type: 'mathBlock' }>, context: BlockLowerContext): ContentBlock[] {
-  context.sink({ code: MarkdownDiagnosticCodes.MATH_BLOCK_PRESERVED_AS_TEXT, severity: 'info', message: 'block math ($$...$$) was preserved as literal raw LaTeX text (styleId "MathBlock"); it is not parsed as LaTeX or converted to MathML by this package' });
-  const literal = node.literal.replace(/\n$/, '');
-  const runs: ContentRun[] = literal.length === 0 ? [] : [{ text: literal }];
-  const paragraph: ContentParagraph = { kind: 'paragraph', runs, styleId: MATH_BLOCK_STYLE_ID };
-  return [decorateParagraph(paragraph, context)];
+  if (context.list !== undefined) {
+    context.sink({ code: MarkdownDiagnosticCodes.LIST_ITEM_BLOCK_UNLISTED, severity: 'info', message: 'a display-math block directly inside a list item has no ContentListMembership field of its own -- only ContentParagraph carries .list -- so its association with the enclosing list item is lost' });
+  }
+  return [
+    {
+      kind: 'embeddedObject',
+      objectKind: 'formula',
+      document: { kind: 'formula', metadata: {}, formula: { mathml: [], presentation: { latex: node.literal.replace(/\n$/, '') } } },
+      frame: { xPt: 0, yPt: 0, widthPt: 0, heightPt: 0 },
+    },
+  ];
 }
 
 // Whether a blockquote's own subtree holds a heading anywhere (directly, or nested inside a further quote or a list item). A heading inside a construct extent ALWAYS leaves a heading scope standing at the extent's closing marker -- the last heading in the extent can never be closed by a shallower one also inside it -- and document-schema.js forbids a producer from emitting a pair whose extent opens or closes a heading scope (decompose is the enforcement point and rejects rather than repairs). A quote containing a heading therefore cannot carry the division pair at all; its structure stays approximated by the indent alone, exactly as every quote was before the division carry landed, and the heading itself keeps its heading fidelity.
