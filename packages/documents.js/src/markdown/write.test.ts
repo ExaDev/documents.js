@@ -2,9 +2,10 @@ import type { ContentBlock, ContentDocument } from 'document-schema.js';
 
 import { MarkdownUnsupportedDocumentKindError } from 'markdown-codec';
 import { describe, expect, it } from 'vitest';
+import { MarkdownUnbalancedConstructMarkersError } from 'markdown-codec';
 import { richMarkdownText } from '../test-support/markdown';
 import { readMarkdownContent } from './read';
-import { buildMarkdownText, MarkdownConstructUnsupportedError } from './write';
+import { buildMarkdownText } from './write';
 
 const CONSTRUCT_START: ContentBlock = { kind: 'constructStart', descriptor: { kind: 'anchor', anchorType: 'bookmark', name: 'b1' } };
 const CONSTRUCT_END: ContentBlock = { kind: 'constructEnd' };
@@ -56,26 +57,19 @@ describe('buildMarkdownText', () => {
     expect(() => buildMarkdownText(content, { signal: controller.signal })).toThrow();
   });
 
-  // Both marker kinds must refuse by name -- before this fix, either one crashed inside markdown-codec's own emit path with an undebuggable `TypeError: Cannot read properties of undefined (reading 'length')` (renderTopLevelBlock has no arm for either kind, so its caller dereferences the resulting `undefined`).
-  it('throws MarkdownConstructUnsupportedError for a constructStart marker, naming its descriptor kind', () => {
+  // Markers pass through to markdown-codec's own bracket-resolving writer: a construct with a markdown spelling renders as that syntax, one without renders its extent transparently, and only a genuinely unbalanced list is refused -- by markdown-codec's own MarkdownUnbalancedConstructMarkersError, the shared definition of that check.
+  it("renders a balanced marker pair through markdown-codec's writer, the wrapped extent surviving and the construct itself transparent when markdown has no spelling for it", () => {
     const document = markerDocument([CONSTRUCT_START, { kind: 'paragraph', runs: [{ text: 'inside' }] }, CONSTRUCT_END]);
-    expect(() => buildMarkdownText(document)).toThrow(MarkdownConstructUnsupportedError);
-    try {
-      buildMarkdownText(document);
-      expect.unreachable();
-    } catch (error) {
-      expect(error).toBeInstanceOf(MarkdownConstructUnsupportedError);
-      expect((error as MarkdownConstructUnsupportedError).descriptorKind).toBe('anchor');
-    }
+    expect(buildMarkdownText(document)).toBe('inside');
   });
 
-  it('throws MarkdownConstructUnsupportedError for a constructEnd marker', () => {
+  it('throws MarkdownUnbalancedConstructMarkersError for an unpaired constructEnd', () => {
     const document = markerDocument([{ kind: 'paragraph', runs: [{ text: 'before' }] }, CONSTRUCT_END]);
-    expect(() => buildMarkdownText(document)).toThrow(MarkdownConstructUnsupportedError);
+    expect(() => buildMarkdownText(document)).toThrow(MarkdownUnbalancedConstructMarkersError);
   });
 
-  it('throws MarkdownConstructUnsupportedError for a construct marker nested inside a table cell', () => {
+  it('renders a balanced marker pair nested inside a table cell', () => {
     const document = markerDocument([{ kind: 'table', rows: [{ cells: [{ blocks: [CONSTRUCT_START, { kind: 'paragraph', runs: [{ text: 'cell' }] }, CONSTRUCT_END] }] }], columnWidthsPt: [80] }]);
-    expect(() => buildMarkdownText(document)).toThrow(MarkdownConstructUnsupportedError);
+    expect(buildMarkdownText(document)).toContain('cell');
   });
 });
