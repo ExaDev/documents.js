@@ -11,6 +11,7 @@ import {
   ContentEmbeddedObjectSchema,
   ContentParagraphSchema,
   ContentRunSchema,
+  ContentSectionSchema,
   ContentShapeSchema,
   ContentSheetCellSchema,
   ContentSheetColumnSchema,
@@ -26,6 +27,8 @@ import {
   type RunConstructExtent,
 } from './content';
 import type { ConstructDescriptor } from './construct';
+import { assemblePackage } from './factor-styles';
+import { flattenPackage } from './flatten';
 import { LayoutFrameSchema } from './geometry';
 import type { SourceResidue } from './source';
 
@@ -1532,5 +1535,33 @@ describe('findRunConstructFault', () => {
         ],
       }),
     ).toStrictEqual({ kind: 'beyondRuns', index: 0 });
+  });
+});
+
+describe('ContentSection.breakType (the section-break kind)', () => {
+  it('accepts each break kind a section can begin with, and rejects anything else', () => {
+    for (const breakType of ['nextPage', 'continuous', 'evenPage', 'oddPage'] as const) {
+      expect(
+        ContentSectionSchema.parse({ pageSize: { widthPt: 612, heightPt: 792 }, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 }, blocks: [], breakType }),
+      ).toMatchObject({ breakType });
+    }
+    expect(() =>
+      ContentSectionSchema.parse({ pageSize: { widthPt: 612, heightPt: 792 }, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 }, blocks: [], breakType: 'column' }),
+    ).toThrow();
+  });
+
+  it('stays optional, so a section spelling no break kind parses exactly as before', () => {
+    const section = ContentSectionSchema.parse({ pageSize: { widthPt: 612, heightPt: 792 }, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 }, blocks: [] });
+    expect(section).not.toHaveProperty('breakType');
+  });
+
+  it('rides the package boundary untouched, since the section descriptor is built by omit+extend', () => {
+    const content: ContentDocument = {
+      kind: 'wordprocessing',
+      metadata: {},
+      sections: [{ pageSize: { widthPt: 612, heightPt: 792 }, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 }, blocks: [], breakType: 'continuous' }],
+    };
+    const flat = flattenPackage(assemblePackage(content));
+    expect(flat).toMatchObject({ kind: 'wordprocessing', sections: [{ breakType: 'continuous' }] });
   });
 });

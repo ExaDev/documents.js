@@ -397,6 +397,8 @@ export const ContentSectionSchema = z.object({
   pageSize: PageSizeSchema,
   margins: MarginsSchema,
   blocks: z.array(ContentBlockSchema),
+  // How this section begins relative to the one before it, in the producer's own four-word vocabulary (docx w:sectPr/w:type's nextPage/continuous/evenPage/oddPage; an ODF page style's break-before rule narrows onto the same members). Absent means the format's own default break -- nextPage in WordprocessingML -- rather than a stored default: an absent key and a key restating the default are one fact, and only the spelled members carry information.
+  breakType: z.enum(['nextPage', 'continuous', 'evenPage', 'oddPage']).optional(),
   source: SourceResidueSchema.optional(), // quarantined residue -- opaque text this format carries and no other format interprets (src/source.ts); rides the tree's section descriptor automatically (omit+extend, src/package-node.ts)
 });
 export type ContentSection = z.infer<typeof ContentSectionSchema>;
