@@ -1146,6 +1146,19 @@ describe('ContentEmbeddedObjectSchema deep recursion', () => {
     expect(ContentEmbeddedObjectSchema.safeParse(drawingEmbeddedObject).success).toBe(true);
   });
 
+  // 'chart' is the one kind whose payload is not a whole document of the same name -- a chart has no ContentDocument variant -- so its document is whatever data projection the producing codec could express and its chart-specific serialisation rides the residue channel. The schema's own job here is only to admit the member; what a chart's document holds is the producing codec's verdict, pinned in that codec's own suite rather than here.
+  it("accepts objectKind 'chart', the one member with no same-named ContentDocument variant", () => {
+    const chartEmbeddedObject: ContentEmbeddedObject = {
+      objectKind: 'chart',
+      document: { kind: 'wordprocessing', metadata: {}, sections: [] },
+      frame: { xPt: 0, yPt: 0, widthPt: 200, heightPt: 120 },
+      source: { format: 'ods', xml: '<chart:chart chart:class="bar"/>' },
+    };
+    expect(ContentEmbeddedObjectSchema.safeParse(chartEmbeddedObject).success).toBe(true);
+    const parsed = ContentEmbeddedObjectSchema.parse(chartEmbeddedObject);
+    expect(parsed.objectKind).toBe('chart');
+  });
+
   it('rejects a negative or non-integer anchorRow/anchorColumn', () => {
     expect(
       ContentEmbeddedObjectSchema.safeParse({ ...drawingEmbeddedObject, anchorRow: -1 }).success,
