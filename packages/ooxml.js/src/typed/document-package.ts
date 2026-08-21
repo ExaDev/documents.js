@@ -25,7 +25,7 @@ export function readDocx(pkg: Package): DocumentPackage {
   return assemblePackage({ kind: 'wordprocessing', metadata, sections });
 }
 
-// The inverse: a wordprocessing DocumentPackage -> a complete, freshly-built docx Package (never a write-back into a decoded one). Exactly buildDocxPackageFromContent's own fidelity, since that is what this delegates to once the tree is flattened -- see its module comment for what a docx round trip through the pair does and does not preserve. The options are that flat writer's own, threaded straight through: an embedded presentation block rides the tree exactly like a flat one, so the injected serialiser (BuildDocxContentOptions's own comment states why it is a port) has to reach the flat writer or the tree pair would refuse what the flat pair serialises.
+// The inverse: a wordprocessing DocumentPackage -> a complete, freshly-built docx Package (never a write-back into a decoded one). Exactly buildDocxPackageFromContent's own fidelity, since that is what this delegates to once the tree is flattened -- see its module comment for what a docx round trip through the pair does and does not preserve. The options are that flat writer's own, threaded straight through: an embedded presentation block rides the tree exactly like a flat one, so the injected serialiser (EmbeddedPresentationSerialiser's own comment states why it is a port) has to reach the flat writer or the tree pair would refuse what the flat pair serialises.
 export function buildDocxPackage(document: DocumentPackage, options?: BuildDocxContentOptions): Package {
   const content = flattenPackage(document);
   if (content.kind !== 'wordprocessing') {
