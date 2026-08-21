@@ -358,9 +358,14 @@ describe('readXlsx / buildXlsxPackage: the xlsx DocumentPackage boundary', () =>
       el('sheetData', {}, [el('row', { r: '1' }, [el('c', { r: 'A1' }, [el('v', {}, [txt('1')])])])]),
       el('tableParts', {}, [el('tablePart', { 'r:id': 'rIdTable' })]),
     ]);
+    // CT_Table's real grammar (ECMA-376): the tableColumn elements sit inside a tableColumns container beside autoFilter/sortState/tableStyleInfo, never as direct children of table itself.
     const table = el('table', { id: '1', name: 'SalesTable', displayName: 'SalesTable', ref: 'A1:C4' }, [
-      el('tableColumn', { id: '1', name: 'Item' }),
-      el('tableColumn', { id: '2', name: 'Amount' }),
+      el('autoFilter', { ref: 'A1:C4' }),
+      el('tableColumns', { count: '2' }, [
+        el('tableColumn', { id: '1', name: 'Item' }),
+        el('tableColumn', { id: '2', name: 'Amount' }),
+      ]),
+      el('tableStyleInfo', { name: 'TableStyleMedium2', showRowStripes: '1' }),
     ]);
     const workbook = el('workbook', {}, [
       el('sheets', {}, [el('sheet', { name: 'Data', sheetId: '1', 'r:id': 'rIdSheet' })]),
