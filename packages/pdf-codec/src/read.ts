@@ -2,6 +2,7 @@ import { bytesToBase64 } from './util/base64';
 import { crc32 } from './bytes/crc32';
 import { concatBytes } from './bytes/writer';
 import { readAttachments } from './attachments';
+import { readOptionalContent } from './optional-content';
 import type { Color as LayoutColor, LayoutFont, LayoutMetadata } from 'document-schema.js';
 import type { LayoutDocument, LayoutEllipse, LayoutImageAsset, LayoutInternalLink, LayoutItem, LayoutLine, LayoutLink, LayoutPage, LayoutPath, LayoutPathSegment, LayoutRect, LayoutSubpath, LayoutText } from './layout';
 import { LAYOUT_FORMAT_VERSION } from './layout';
@@ -70,10 +71,11 @@ export function readPdf(bytes: Uint8Array<ArrayBuffer>, options?: ReadPdfOptions
   const destinationRegistry = createDestinationRegistry(doc.catalog, doc, (obj) => doc.pageIndex(obj), sink);
   const outline = readOutline(doc.catalog, destinationRegistry, doc, sink);
   const attachments = readAttachments(doc.catalog, pageDicts, doc, sink);
+  const optionalContent = readOptionalContent(doc.catalog, doc, sink);
 
   const pages = pageDicts.map((pageDict) => {
     throwIfAborted(signal);
-    return readPage(pageDict, doc, fontResolver, images, imageIdCache, destinationRegistry, sink);
+    return readPage(pageDict, doc, fontResolver, images, imageIdCache, destinationRegistry, optionalContent.layerNameOf, sink);
   });
 
   return {
@@ -84,6 +86,7 @@ export function readPdf(bytes: Uint8Array<ArrayBuffer>, options?: ReadPdfOptions
     ...(destinationRegistry.entries.length > 0 ? { destinations: [...destinationRegistry.entries] } : {}),
     ...(outline.length > 0 ? { outline } : {}),
     ...(attachments.length > 0 ? { attachments } : {}),
+    ...(optionalContent.layers.length > 0 ? { layers: [...optionalContent.layers] } : {}),
   };
 }
 
@@ -158,7 +161,7 @@ function readPageContentBytes(page: PdfDict, resolver: PdfObjectResolver, sink: 
   return new Uint8Array(0);
 }
 
-function readPage(page: PdfDict, resolver: PdfObjectResolver, fontResolver: FontResolverService, images: Record<string, LayoutImageAsset>, imageIdCache: Map<PdfDict, string | null>, destinationRegistry: DestinationRegistry, sink: PdfDiagnosticSink): LayoutPage {
+function readPage(page: PdfDict, resolver: PdfObjectResolver, fontResolver: FontResolverService, images: Record<string, LayoutImageAsset>, imageIdCache: Map<PdfDict, string | null>, destinationRegistry: DestinationRegistry, layerNameOf: (obj: PdfObject | undefined) => string | undefined, sink: PdfDiagnosticSink): LayoutPage {
   const resources = resolver.resolveDict(dictGet(page, 'Resources'));
   const mediaBox = readMediaBox(page);
   const rotation = normalizeRotation(asNumber(dictGet(page, 'Rotate')));
@@ -168,7 +171,7 @@ function readPage(page: PdfDict, resolver: PdfObjectResolver, fontResolver: Font
   const items: LayoutItem[] = [];
   if (resources !== undefined) {
     const contentBytes = readPageContentBytes(page, resolver, sink);
-    const extracted = interpretContentStream(contentBytes, resources, { fontMetrics: fontResolver.metrics, resolver, sink });
+    const extracted = interpretContentStream(contentBytes, resources, { fontMetrics: fontResolver.metrics, resolver, sink, layerNameOf });
     for (const item of extracted) {
       const converted = convertExtractedItem(item, pageMatrix, fontResolver, images, imageIdCache, resolver, sink);
       if (converted !== undefined) {
@@ -234,6 +237,9 @@ function convertText(item: ExtractedTextRun, pageMatrix: Matrix, fontResolver: F
     color: item.color,
     widthPt,
     rotationDeg: rotationDeg !== 0 ? rotationDeg : undefined,
+    ...(item.layerName !== undefined ? { layer: item.layerName } : {}),
+    ...(item.actualText !== undefined ? { actualText: item.actualText } : {}),
+    ...(item.alt !== undefined ? { alt: item.alt } : {}),
   };
 }
 
@@ -258,18 +264,27 @@ function transformBox(item: { xPt: number; yPt: number; widthPt: number; heightP
 }
 
 function convertRect(item: ExtractedRect, pageMatrix: Matrix): LayoutRect {
-  return { kind: 'rect', ...transformBox(item, pageMatrix), ...paintFields(item) };
+  return { kind: 'rect', ...transformBox(item, pageMatrix), ...paintFields(item), ...(item.layerName !== undefined ? { layer: item.layerName } : {}) };
 }
 
 function convertEllipse(item: ExtractedEllipse, pageMatrix: Matrix): LayoutEllipse {
-  return { kind: 'ellipse', ...transformBox(item, pageMatrix), ...paintFields(item) };
+  return { kind: 'ellipse', ...transformBox(item, pageMatrix), ...paintFields(item), ...(item.layerName !== undefined ? { layer: item.layerName } : {}) };
 }
 
 // Both endpoints transform individually: unlike a box, a line has no axis-alignment to preserve, and its two ends are exactly the two points that define it.
 function convertLine(item: ExtractedLine, pageMatrix: Matrix): LayoutLine {
   const p1 = applyMatrix(pageMatrix, { x: item.x1Pt, y: item.y1Pt });
   const p2 = applyMatrix(pageMatrix, { x: item.x2Pt, y: item.y2Pt });
-  return { kind: 'line', x1Pt: p1.x, y1Pt: p1.y, x2Pt: p2.x, y2Pt: p2.y, color: item.color, widthPt: item.widthPt };
+  return {
+    kind: 'line',
+    x1Pt: p1.x,
+    y1Pt: p1.y,
+    x2Pt: p2.x,
+    y2Pt: p2.y,
+    color: item.color,
+    widthPt: item.widthPt,
+    ...(item.layerName !== undefined ? { layer: item.layerName } : {}),
+  };
 }
 
 // Unlike convertRect, a general path carries no axis-aligned-only assumption, so every point of every subpath (start point, and each segment's own endpoint plus, for a cubic, both control points) is transformed individually through pageMatrix -- correct under rotation because an affine transform distributes over a Bezier curve's control points exactly as it does over a straight line's endpoints.
@@ -296,6 +311,7 @@ function convertPath(item: ExtractedPath, pageMatrix: Matrix): LayoutPath {
     ...(item.fill !== undefined ? { fill: item.fill } : {}),
     ...(item.fill !== undefined && item.fillRule === 'evenodd' ? { fillRule: 'evenodd' as const } : {}),
     ...(item.stroke !== undefined ? { stroke: item.stroke } : {}),
+    ...(item.layerName !== undefined ? { layer: item.layerName } : {}),
   };
 }
 
@@ -338,7 +354,7 @@ function convertImage(item: ExtractedImage, pageMatrix: Matrix, images: Record<s
     return undefined;
   }
   const composed = multiplyMatrices(item.matrix, pageMatrix);
-  return { kind: 'image' as const, imageId, ...imagePlacementFrom(composed) };
+  return { kind: 'image' as const, imageId, ...imagePlacementFrom(composed), ...(item.layerName !== undefined ? { layer: item.layerName } : {}) };
 }
 
 function convertInlineImage(item: ExtractedInlineImage, pageMatrix: Matrix, images: Record<string, LayoutImageAsset>, resolver: PdfObjectResolver, sink: PdfDiagnosticSink) {
@@ -348,7 +364,7 @@ function convertInlineImage(item: ExtractedInlineImage, pageMatrix: Matrix, imag
   }
   const imageId = registerExtractedImage(decoded.format, decoded.bytes, decoded.widthPx, decoded.heightPx, images);
   const composed = multiplyMatrices(item.matrix, pageMatrix);
-  return { kind: 'image' as const, imageId, ...imagePlacementFrom(composed) };
+  return { kind: 'image' as const, imageId, ...imagePlacementFrom(composed), ...(item.layerName !== undefined ? { layer: item.layerName } : {}) };
 }
 
 // --- Link annotations: /Annots walk for /Subtype /Link -- external /A /S /URI actions as LayoutLink items, internal /Dest (direct or named) and /A /GoTo targets as internalLink items naming a destinations-table entry. ---

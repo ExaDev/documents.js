@@ -344,3 +344,33 @@ export function embeddedFilesPdf(): Uint8Array<ArrayBuffer> {
   b.classicXrefAndTrailer(15, '/Root 1 0 R');
   return b.bytes();
 }
+
+// The optional-content cluster (#721 phase 3): two OCGs with the default configuration switching one OFF, a /OC BDC span in the named-property-list form, one in the inline-dict form carrying /ActualText, and two form XObjects -- one inheriting the outer span's layer, one declaring its own /OC (which wins for its items).
+export function ocgPdf(): Uint8Array<ArrayBuffer> {
+  const b = new FixtureBuilder().header('1.7');
+  b.object(1, '<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [6 0 R 7 0 R] /D << /BaseState /ON /OFF [6 0 R] >> >> >>');
+  b.object(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+  b.object(3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << /Font << /F1 4 0 R >> /Properties << /L1 << /OC 6 0 R >> >> /XObject << /Fm1 8 0 R /Fm2 9 0 R >> >> /Contents 5 0 R >>');
+  b.object(4, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+  b.stream(
+    5,
+    '<< >>',
+    enc([
+      'BT /F1 12 Tf 10 180 Td (Visible text) Tj ET',
+      '/OC /L1 BDC',
+      'BT /F1 12 Tf 10 150 Td (Hidden layer text) Tj ET',
+      '/Fm1 Do',
+      'EMC',
+      '/Span << /OC 7 0 R /ActualText (Replacement reading) >> BDC',
+      'BT /F1 12 Tf 10 120 Td (Annotated text) Tj ET',
+      'EMC',
+      '/Fm2 Do',
+    ].join('\n')),
+  );
+  b.object(6, '<< /Type /OCG /Name (Background) >>');
+  b.object(7, '<< /Type /OCG /Name (Notes) >>');
+  b.stream(8, '<< /Type /XObject /Subtype /Form /BBox [0 0 200 40] /Resources << /Font << /F1 4 0 R >> >> >>', enc('BT /F1 12 Tf 10 20 Td (Form text) Tj ET'));
+  b.stream(9, '<< /Type /XObject /Subtype /Form /OC 7 0 R /BBox [0 0 200 40] /Resources << /Font << /F1 4 0 R >> >> >>', enc('BT /F1 12 Tf 10 20 Td (Owned form text) Tj ET'));
+  b.classicXrefAndTrailer(9, '/Root 1 0 R');
+  return b.bytes();
+}
