@@ -511,6 +511,15 @@ function readSheet(tableElement: XmlElement, pkg: Package): ContentSheet | undef
   return sheet;
 }
 
+// Vendor-extension elements of a spreadsheet body, the ods spelling of the same quarantine-everywhere policy the odt block walk applies -- keyed by their own tag, same-tag occurrences concatenated. readOdsContent walks BOTH containers real producer output splits across: LibreOffice Calc writes its calcext:conditional-formats as the last child of EACH table:table (verified against real Calc output), while office:spreadsheet's own direct children stay checked for any producer-private element sitting there.
+function collectOdsExtensionElementResidue(children: readonly XmlNode[], source: Record<string, SourceResidue>): void {
+  for (const child of children) {
+    if (child.type === 'element' && isOdfExtensionElement(child)) {
+      addOdfPackageResidue(source, child.tag, 'ods', child);
+    }
+  }
+}
+
 export function readOdsContent(pkg: Package): OdsDocument {
   const contentPart = pkg.parts[CONTENT_PART];
   const root = contentPart?.kind === 'xml' ? rootElement(contentPart.nodes) : undefined;
@@ -532,11 +541,9 @@ export function readOdsContent(pkg: Package): OdsDocument {
     collectOdfNamedExpressions(spreadsheet.children, definitions);
     // Recalculation semantics, not content: a workbook's table:calculation-settings (null-date epoch, wildcards-vs-regex, iteration limits) decides how the cached values were computed, and no sheet or cell node owns it -- the whole element quarantines at the package tier.
     addOdfPackageResidue(source, 'calculation-settings', 'ods', ...childrenWithTag(spreadsheet, 'table:calculation-settings'));
-    // Vendor-extension elements at the spreadsheet level (calcext: conditional formats and their kin), the ods spelling of the same quarantine-everywhere policy the odt block walk applies -- keyed by their own tag, same-tag occurrences concatenated.
-    for (const child of spreadsheet.children) {
-      if (child.type === 'element' && isOdfExtensionElement(child)) {
-        addOdfPackageResidue(source, child.tag, 'ods', child);
-      }
+    collectOdsExtensionElementResidue(spreadsheet.children, source);
+    for (const table of tables) {
+      collectOdsExtensionElementResidue(table.children, source);
     }
   }
   collectOdfNonContentPartResidue(pkg, 'ods', source);
