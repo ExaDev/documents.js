@@ -26,8 +26,8 @@ export function odfBookmarkAnchorDescriptor(name: string): AnchorDescriptor {
 // The residue spelling for every ODF construct reader that degrades format-specific specifics into the quarantine channel: the element subtree as this package's own builder serialises it, tagged with the format of the reader producing it. The format member names the READER'S format (an index source element in an odt reads as 'odt' residue even though text: is shared vocabulary), because restorability is decided by "can the same-format writer re-emit this", and the writer that would re-emit it is the one reading the document.
 export type OdfResidueFormat = 'odt' | 'ods' | 'odp' | 'odg' | 'odm' | 'odb' | 'odf';
 
-export function odfResidue(format: OdfResidueFormat, element: XmlElement): SourceResidue {
-  return { format, xml: buildXml([element]) };
+export function odfResidue(format: OdfResidueFormat, ...elements: XmlElement[]): SourceResidue {
+  return { format, xml: buildXml(elements) };
 }
 
 // --- divisions (text:section) ---------------------------------------------------------------------------------------
@@ -488,6 +488,52 @@ export function collectOdfFieldMasterDefinitions(nodes: readonly XmlNode[], out:
         }
       }
     }
+  }
+}
+
+// --- data styles and font declarations ------------------------------------------------------------------------------
+
+// The number:* data-style family ODF attaches to cell and field styles: number formats are styles in ODF (office:automatic-styles residents referenced by style:data-style-name), and no harmonised number-format vocabulary exists yet, so each declared style reads as a definitions entry carrying its name and its element VERBATIM -- consumable by name, restorable by a same-format writer, and honest about carrying no interpretation of the format code.
+const ODF_DATA_STYLE_TAGS: ReadonlySet<string> = new Set([
+  'number:boolean-style',
+  'number:currency-style',
+  'number:date-style',
+  'number:number-style',
+  'number:percentage-style',
+  'number:text-style',
+  'number:time-style',
+]);
+
+export function collectOdfDataStyleDefinitions(nodes: readonly XmlNode[], out: Record<string, DefinitionEntry>): void {
+  for (const tag of ODF_DATA_STYLE_TAGS) {
+    for (const element of elementsWithTag(nodes, tag)) {
+      const name = attrValue(element, 'style:name');
+      if (name === undefined) {
+        continue;
+      }
+      out[`dataStyle:${name}`] = { kind: 'dataStyle', name, xml: buildXml([element]) };
+    }
+  }
+}
+
+// office:font-face-decls/style:font-face -- font declarations are style definitions in ODF's own model, declared in EITHER part (content.xml and styles.xml each carry their own office:font-face-decls). The declaration's own name and family are structured; the generic and pitch classify for substitution and ride as plain strings.
+export function collectOdfFontFaceDefinitions(nodes: readonly XmlNode[], out: Record<string, DefinitionEntry>): void {
+  for (const face of elementsWithTag(nodes, 'style:font-face')) {
+    const name = attrValue(face, 'style:name');
+    const family = attrValue(face, 'svg:font-family');
+    if (name === undefined || family === undefined) {
+      continue;
+    }
+    const entry: DefinitionEntry = { kind: 'fontFace', name, fontFamily: family };
+    const generic = attrValue(face, 'style:font-family-generic');
+    if (generic !== undefined) {
+      entry.familyGeneric = generic;
+    }
+    const pitch = attrValue(face, 'style:font-pitch');
+    if (pitch !== undefined) {
+      entry.pitch = pitch;
+    }
+    out[`fontFace:${name}`] = entry;
   }
 }
 

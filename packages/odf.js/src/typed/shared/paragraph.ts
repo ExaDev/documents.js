@@ -7,7 +7,9 @@ import { decodeXmlText } from '../../xml/entities';
 import { getOdfSpaceCount, decodeOdfText, isOdfFieldElement } from './text';
 import { resolveStyle } from './cascade';
 import { mintOdfListNumId, readOdfListParagraphs, type OdfListIdState } from './list';
-import { isOdfBlockScopedHalf, odfBookmarkAnchorDescriptor, odfFieldDescriptor, pairOdfMarkerHalves, type OdfDefinitionsSink, type OdfMarkerHalf } from './constructs';
+import { isOdfBlockScopedHalf, odfBookmarkAnchorDescriptor, odfFieldDescriptor, odfResidue, pairOdfMarkerHalves, type OdfDefinitionsSink, type OdfMarkerHalf, type OdfResidueFormat } from './constructs';
+import { resolveStyleElementChain } from './cascade';
+import { parseParagraphProperties, parseTextProperties } from '../../styles/properties';
 
 // Reads a text:p (any inline-text container ODF shapes this document sits in -- odt is a later task, but a draw:text-box's own text:p is content-model-identical) into document-schema.js's ContentParagraph/ContentRun, the read-and-write counterpart to text.ts's own decodeOdfText: where that module projects a container's children to a plain string, this module projects the SAME node shapes (text, text:s, text:tab, text:line-break, text:span) to per-run objects carrying resolved formatting, dispatching on the identical node shapes text.ts's own top-of-file note establishes -- see that module for why text:s/text:tab/text:line-break must never be treated as zero-length whitespace.
 //
@@ -30,6 +32,7 @@ export interface OdfParagraphContext {
   readonly provenanceRegions?: ReadonlyMap<string, ProvenanceDescriptor>;
   readonly markersOut?: OdfMarkerHalf[];
   readonly definitions?: OdfDefinitionsSink;
+  readonly format?: OdfResidueFormat;
 }
 
 // One note/annotation body's own block flow: text:p paragraphs and text:list lists, read through the same shared walkers the main body uses. Anything else in a body contributes nothing, exactly as readBlocks treats unknown block-level elements.
@@ -231,6 +234,20 @@ export function readOdfParagraph(pElement: XmlElement, pkg: Package, context: Od
   const styleName = attrValue(pElement, 'text:style-name');
   const paragraphProperties = resolveStyle(styleName, 'paragraph', pkg).properties;
 
+  // The unmodellable half of the paragraph's own style chain quarantines as per-node residue: every style:paragraph-properties/style:text-properties element in the resolved chain that properties.ts cannot fully model (hasUnknown -- fo:keep-with-next, a style:map child, anything StyleProperties carries no field for) serialises into the paragraph's source, so a same-format writer can restore what the resolved fields could not hold. Only when the context names the reading format -- residue's format member states which reader produced it, and this shared reader serves seven of them. Span-run and table/graphic-style unknowns stay dropped (documented): the run- and table-level channels exist, but the resolved-styles fact this row lands is the paragraph's own chain.
+  let source: ContentParagraph['source'];
+  if (context.format !== undefined && styleName !== undefined) {
+    const unknownElements = resolveStyleElementChain(styleName, 'paragraph', pkg).elements.flatMap((style) =>
+      [
+        ...childrenWithTag(style, 'style:paragraph-properties').filter((properties) => parseParagraphProperties(properties).hasUnknown),
+        ...childrenWithTag(style, 'style:text-properties').filter((properties) => parseTextProperties(properties).hasUnknown),
+      ],
+    );
+    if (unknownElements.length > 0) {
+      source = odfResidue(context.format, ...unknownElements);
+    }
+  }
+
   const runs: ContentRun[] = [];
   const walk: RunWalkState = { extents: [], halves: [], order: 0, provenanceRegions: context.provenanceRegions, definitions: context.definitions, listIdState: { next: 1 } };
   collectRuns(pElement, paragraphProperties, pkg, runs, walk);
@@ -252,6 +269,7 @@ export function readOdfParagraph(pElement: XmlElement, pkg: Package, context: Od
   return {
     kind: 'paragraph',
     runs,
+    ...(source !== undefined ? { source } : {}),
     ...(walk.extents.length > 0 ? { constructs: walk.extents } : {}),
     styleId: styleName,
     alignment: paragraphProperties.alignment,
