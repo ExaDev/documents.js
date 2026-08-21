@@ -622,7 +622,7 @@ function markerEl(tag: string, marker: AnchorMarkerText): ReturnType<typeof el> 
   ]);
 }
 
-function pictureDrawingPackage(mediaBase64: string = TINY_PNG_BASE64, markers: { to?: AnchorMarkerText } = {}): Package {
+function pictureDrawingPackage(mediaBase64: string = TINY_PNG_BASE64, markers: { from?: AnchorMarkerText; to?: AnchorMarkerText } = {}): Package {
   const picture = el('xdr:pic', {}, [
     el('xdr:nvPicPr', {}, [el('xdr:cNvPr', { id: '2', name: 'Picture 1' })]),
     el('xdr:blipFill', {}, [el('a:blip', { 'r:embed': 'rIdImage' })]),
@@ -630,7 +630,7 @@ function pictureDrawingPackage(mediaBase64: string = TINY_PNG_BASE64, markers: {
   ]);
   const drawing = el('xdr:wsDr', {}, [
     el('xdr:twoCellAnchor', {}, [
-      markerEl('xdr:from', DEFAULT_FROM_MARKER),
+      markerEl('xdr:from', markers.from ?? DEFAULT_FROM_MARKER),
       markerEl('xdr:to', markers.to ?? DEFAULT_TO_MARKER),
       picture,
       el('xdr:clientData'),
@@ -695,6 +695,18 @@ describe('readXlsxContent: drawing pictures', () => {
     }
     // ContentSheetImage's widthPt/heightPt are positive by schema, so a to-marker closing on the from-marker (a zero-size frame) has no spelling here -- the same skip the unsniffable-media case takes.
     expect(document.sheets[0]?.images).toEqual([]);
+  });
+
+  it('degrades a from-marker index that is not a nonnegative integer to 0 rather than emitting an anchor the schema rejects', () => {
+    const negative = pictureDrawingPackage(TINY_PNG_BASE64, { from: { col: '-1', colOff: '19050', row: '1', rowOff: '0' } });
+    const document = readXlsxContent(negative);
+    if (document.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    // xdr:col/xdr:row are 0-based grid indices, so a value like -1 is malformed for them exactly as unparseable text is; anchorRow/anchorColumn are nonnegative integers by schema, so passing -1 through would emit a document failing its own ContentDocumentSchema.
+    expect(ContentDocumentSchema.safeParse(document).success).toBe(true);
+    expect(document.sheets[0]?.images).toHaveLength(1);
+    expect(document.sheets[0]?.images[0]?.anchorColumn).toBe(0);
   });
 
   it('round-trips the whole document through ContentDocumentSchema, so the sheet image is schema-valid as read', () => {

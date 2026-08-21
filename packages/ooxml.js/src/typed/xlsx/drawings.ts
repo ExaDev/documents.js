@@ -102,12 +102,18 @@ function readAnchorChild(marker: XmlElement, tag: string): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+// A marker's col/row name a 0-based grid index, so a value that is not a nonnegative integer is malformed for them exactly as unparseable text is and degrades to 0 identically -- keeping the emitted anchorRow/anchorColumn inside the nonnegative-integer domain the content schema's anchor fields require (ContentSheetImageSchema and the ContentEmbeddedObject guard alike). The offsets are distances rather than indices and stay as read, landing on unconstrained number fields.
+function readGridIndex(marker: XmlElement, tag: string): number {
+  const parsed = readAnchorChild(marker, tag);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : 0;
+}
+
 function readAnchorMarker(parent: XmlElement, tag: string): AnchorMarker | undefined {
   const marker = childrenWithTag(parent, tag)[0];
   if (marker === undefined) {
     return undefined;
   }
-  return { column: readAnchorChild(marker, 'xdr:col'), colOffEmu: readAnchorChild(marker, 'xdr:colOff'), row: readAnchorChild(marker, 'xdr:row'), rowOffEmu: readAnchorChild(marker, 'xdr:rowOff') };
+  return { column: readGridIndex(marker, 'xdr:col'), colOffEmu: readAnchorChild(marker, 'xdr:colOff'), row: readGridIndex(marker, 'xdr:row'), rowOffEmu: readAnchorChild(marker, 'xdr:rowOff') };
 }
 
 // A minimal, childless worksheet element for the payload sheet's own print settings -- the same all-defaults ContentSheetPrintSettings readPrintSettings produces for an empty worksheet, which is the honest spelling for a synthesized sheet that never had a page setup of its own.
