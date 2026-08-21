@@ -12,7 +12,7 @@
 //  - raw HTML -> preserved as literal text by default (styleId 'HTMLPreformatted' for block-level HTML), a rawHtml: 'drop' option available -- MarkdownDiagnosticCodes.RAW_HTML_PRESERVED_AS_TEXT / RAW_HTML_DROPPED.
 //  - $$ display math (ExaDev/markdown-codec#53) -> one embedded FORMULA object whose presentation layer carries the LaTeX verbatim (lowerMathBlock below); \( \) inline math stays a Cambria-Math-marked run (src/lower/inline.ts, the run-level extent a formula is not) -- MarkdownDiagnosticCodes.MATH_INLINE_PRESERVED_AS_TEXT for the inline half. Neither is parsed as LaTeX or converted to MathML here -- that is a documents.js question (ExaDev/documents.js#563).
 //  - front matter (src/lower/front-matter.ts) -> a flat-scalar-only LayoutMetadata subset -- MarkdownDiagnosticCodes.FRONT_MATTER_KEY_UNMAPPED.
-//  - footnote definition (ExaDev/markdown-codec#66) -> an `anchor` construct's boundary-marker pair (document-schema.js 4.2.0) bracketing its own lowered body blocks; the reference site is a marked run instead (src/lower/inline.ts) -- MarkdownDiagnosticCodes.FOOTNOTE_REFERENCE_PRESERVED_AS_TEXT, FOOTNOTE_BODY_HEADING_FLATTENED. See lowerFootnoteDefinition below for why the body rides the construct's extent rather than AnchorDescriptor's own `definition` field.
+//  - footnote definition (ExaDev/markdown-codec#66) -> an `anchor` construct's boundary-marker pair (document-schema.js 4.2.0) bracketing its own lowered body blocks; the reference site is a point run-level `anchor` extent on the paragraph it sits inside (src/lower/inline.ts) -- MarkdownDiagnosticCodes.FOOTNOTE_BODY_HEADING_FLATTENED. See lowerFootnoteDefinition below for why the body rides the construct's extent rather than AnchorDescriptor's own `definition` field.
 
 import type { AnchorDescriptor, ContentBlock, ContentDocument, ContentParagraph, ContentRun, LayoutMetadata, RunConstructExtent } from 'document-schema.js';
 import { PAGE_SIZE_A4 } from 'document-schema.js';
@@ -69,14 +69,14 @@ function decorateParagraph(paragraph: ContentParagraph, context: BlockLowerConte
   return result;
 }
 
-// Splices a lowered inline sequence's titled-link extents onto the paragraph being built, as that paragraph's own constructs field -- absent when the sequence opened none, which is the overwhelming common case.
-function paragraphWithConstructs(runs: ContentRun[], linkTitleExtents: readonly RunConstructExtent[]): Pick<ContentParagraph, 'runs' | 'constructs'> {
-  return { runs, ...(linkTitleExtents.length > 0 ? { constructs: [...linkTitleExtents] } : {}) };
+// Splices a lowered inline sequence's run-level construct extents (a titled link's annotation extent, a footnote reference's point anchor) onto the paragraph being built, as that paragraph's own constructs field -- absent when the sequence opened none, which is the overwhelming common case.
+function paragraphWithConstructs(runs: ContentRun[], runConstructExtents: readonly RunConstructExtent[]): Pick<ContentParagraph, 'runs' | 'constructs'> {
+  return { runs, ...(runConstructExtents.length > 0 ? { constructs: [...runConstructExtents] } : {}) };
 }
 
 function lowerHeading(node: MarkdownHeadingNode, context: BlockLowerContext): ContentBlock[] {
   const inline = lowerInlineNodes(node.children, inlineContext(context));
-  const paragraph: ContentParagraph = { kind: 'paragraph', ...paragraphWithConstructs(inline.runs, inline.linkTitleExtents), styleId: headingStyleId(node.level), headingLevel: node.level };
+  const paragraph: ContentParagraph = { kind: 'paragraph', ...paragraphWithConstructs(inline.runs, inline.runConstructExtents), styleId: headingStyleId(node.level), headingLevel: node.level };
   return [decorateParagraph(paragraph, context)];
 }
 
@@ -91,7 +91,7 @@ function lowerParagraph(node: MarkdownParagraphNode, context: BlockLowerContext)
       return;
     }
     const inline = lowerInlineNodes(segment, inlineCtx);
-    blocks.push(decorateParagraph({ kind: 'paragraph', ...paragraphWithConstructs(inline.runs, inline.linkTitleExtents) }, context));
+    blocks.push(decorateParagraph({ kind: 'paragraph', ...paragraphWithConstructs(inline.runs, inline.runConstructExtents) }, context));
     segment = [];
   };
 

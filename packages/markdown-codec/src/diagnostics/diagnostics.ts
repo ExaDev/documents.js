@@ -43,7 +43,6 @@ export const MarkdownDiagnosticCodes = {
   RAW_HTML_DROPPED: 'md/raw-html-dropped',
   MATH_INLINE_PRESERVED_AS_TEXT: 'md/math-inline-preserved-as-text',
   FRONT_MATTER_KEY_UNMAPPED: 'md/front-matter-key-unmapped',
-  FOOTNOTE_REFERENCE_PRESERVED_AS_TEXT: 'md/footnote-reference-preserved-as-text',
   FOOTNOTE_BODY_HEADING_FLATTENED: 'md/footnote-body-heading-flattened',
   // src/emit (write side: ContentDocument -> markdown)
   CONSTRUCT_UNREPRESENTED: 'md/construct-unrepresented',

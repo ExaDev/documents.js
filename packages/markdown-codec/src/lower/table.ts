@@ -19,7 +19,7 @@ function lowerTableCell(cell: MarkdownTableCellNode, alignment: MarkdownTableAli
       {
         kind: 'paragraph',
         runs: inline.runs,
-        ...(inline.linkTitleExtents.length > 0 ? { constructs: [...inline.linkTitleExtents] } : {}),
+        ...(inline.runConstructExtents.length > 0 ? { constructs: [...inline.runConstructExtents] } : {}),
         ...(paragraphAlignment === undefined ? {} : { alignment: paragraphAlignment }),
       },
     ],

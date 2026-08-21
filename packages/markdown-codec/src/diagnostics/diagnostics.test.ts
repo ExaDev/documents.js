@@ -191,13 +191,6 @@ describe('every MarkdownDiagnosticCodes entry is reachable from real input', () 
     reached.add(MarkdownDiagnosticCodes.DUPLICATE_FOOTNOTE_DEFINITION);
   });
 
-  it('FOOTNOTE_REFERENCE_PRESERVED_AS_TEXT: a reference resolving against a definition', () => {
-    const collector = createDiagnosticCollector();
-    lowerMarkdown('see[^1]\n\n[^1]: note', { sink: collector.sink });
-    expect(collector.has(MarkdownDiagnosticCodes.FOOTNOTE_REFERENCE_PRESERVED_AS_TEXT)).toBe(true);
-    reached.add(MarkdownDiagnosticCodes.FOOTNOTE_REFERENCE_PRESERVED_AS_TEXT);
-  });
-
   it('FOOTNOTE_BODY_HEADING_FLATTENED: a heading inside a definition body', () => {
     const collector = createDiagnosticCollector();
     lowerMarkdown('[^1]: intro\n\n    # inner', { sink: collector.sink });
