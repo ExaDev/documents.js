@@ -542,6 +542,45 @@ describe('readOdsContent: error and fallback paths (synthetic packages -- not so
   });
 });
 
+describe('readOdsContent: named expressions (synthetic packages -- the declarations real fixture output leaves empty)', () => {
+  function namedExpressionsPackage(named: XmlElement): Package {
+    return {
+      parts: {
+        'content.xml': {
+          kind: 'xml',
+          nodes: [el('office:document-content', {}, [el('office:body', {}, [el('office:spreadsheet', {}, [el('table:named-expressions', {}, [named])])])])],
+        },
+      },
+    };
+  }
+
+  it('reads a table:named-range into a definitions entry keyed by its name, carrying its range and base cell verbatim', () => {
+    const pkg = namedExpressionsPackage(el('table:named-range', { 'table:name': 'TotalSales', 'table:base-cell-address': "$'Q1 Sheet'.$A$1", 'table:cell-range-address': "$'Q1 Sheet'.$B$2:.$D$6" }));
+    const document = readOdsContent(pkg);
+    expect(document.definitions).toEqual({
+      'named-range:TotalSales': { kind: 'namedRange', name: 'TotalSales', cellRangeAddress: "$'Q1 Sheet'.$B$2:.$D$6", baseCellAddress: "$'Q1 Sheet'.$A$1" },
+    });
+  });
+
+  it('reads a table:named-expression into its own entry kind, carrying the expression verbatim', () => {
+    const pkg = namedExpressionsPackage(el('table:named-expression', { 'table:name': 'Growth', 'table:base-cell-address': '$Sheet2.$A$1', 'table:expression': 'of:=[.B2]/[.B1]' }));
+    const document = readOdsContent(pkg);
+    expect(document.definitions).toEqual({
+      'named-expression:Growth': { kind: 'namedExpression', name: 'Growth', expression: 'of:=[.B2]/[.B1]', baseCellAddress: '$Sheet2.$A$1' },
+    });
+  });
+
+  it('leaves definitions absent for the empty table:named-expressions element every real fixture carries', () => {
+    const pkg: Package = { parts: { 'content.xml': { kind: 'xml', nodes: [el('office:document-content', {}, [el('office:body', {}, [el('office:spreadsheet', {}, [el('table:named-expressions')])])])] } } };
+    expect(readOdsContent(pkg).definitions).toBeUndefined();
+  });
+
+  it('carries the definitions table onto the assembled package root', () => {
+    const pkg = namedExpressionsPackage(el('table:named-range', { 'table:name': 'R', 'table:cell-range-address': '.A1' }));
+    expect(readOds(pkg).definitions).toEqual(readOdsContent(pkg).definitions);
+  });
+});
+
 describe('readOdsContent: cell background/borders/alignment/verticalAlignment (synthetic packages -- the real cascade, including a genuine style:parent-style-name chain matching kitchen-sink.ods\'s own real ce1..ce5 -> "Default" -> table-cell family default-style shape)', () => {
   interface TableCellStyleOptions {
     cellProperties?: Record<string, string>;

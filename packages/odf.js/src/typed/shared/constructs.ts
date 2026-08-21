@@ -490,3 +490,42 @@ export function collectOdfFieldMasterDefinitions(nodes: readonly XmlNode[], out:
     }
   }
 }
+
+// --- named expressions (ods) ----------------------------------------------------------------------------------------
+
+// A spreadsheet's table:named-expressions declarations into the definitions table: the spreadsheet sibling of field masters, and the natural shared target with xlsx's defined names. table:named-range carries a cell-range-address; table:named-expression carries an OpenFormula expression string -- both verbatim, with the base cell each declaration also states. Keys are namespaced per kind because a range and an expression may legally share a bare name.
+export function collectOdfNamedExpressions(nodes: readonly XmlNode[], out: Record<string, DefinitionEntry>): void {
+  for (const container of elementsWithTag(nodes, 'table:named-expressions')) {
+    for (const child of container.children) {
+      if (child.type !== 'element') {
+        continue;
+      }
+      const name = attrValue(child, 'table:name');
+      if (name === undefined) {
+        continue;
+      }
+      const baseCellAddress = attrValue(child, 'table:base-cell-address');
+      if (child.tag === 'table:named-range') {
+        const cellRangeAddress = attrValue(child, 'table:cell-range-address');
+        if (cellRangeAddress === undefined) {
+          continue;
+        }
+        const entry: DefinitionEntry = { kind: 'namedRange', name, cellRangeAddress };
+        if (baseCellAddress !== undefined) {
+          entry.baseCellAddress = baseCellAddress;
+        }
+        out[`named-range:${name}`] = entry;
+      } else if (child.tag === 'table:named-expression') {
+        const expression = attrValue(child, 'table:expression');
+        if (expression === undefined) {
+          continue;
+        }
+        const entry: DefinitionEntry = { kind: 'namedExpression', name, expression };
+        if (baseCellAddress !== undefined) {
+          entry.baseCellAddress = baseCellAddress;
+        }
+        out[`named-expression:${name}`] = entry;
+      }
+    }
+  }
+}
