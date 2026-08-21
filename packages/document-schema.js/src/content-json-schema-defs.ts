@@ -169,6 +169,8 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       lineSpacing: { type: 'number', exclusiveMinimum: 0 }, // multiple of single line height
       indentLeftPt: { type: 'number' },
       indentFirstLinePt: { type: 'number' },
+      pageBreakBefore: { type: 'boolean' }, // explicit page boundaries a paragraph style forces around its own paragraph
+      pageBreakAfter: { type: 'boolean' },
       sourcePath: { type: 'string' },
       source: { $ref: '#/$defs/SourceResidue' },
       frames: { type: 'array', items: { $ref: '#/$defs/LayoutFrame' } },
@@ -411,6 +413,8 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       lineSpacing: { type: 'number', exclusiveMinimum: 0 },
       indentLeftPt: { type: 'number' },
       indentFirstLinePt: { type: 'number' },
+      pageBreakBefore: { type: 'boolean' }, // explicit page boundaries a paragraph style forces around its own paragraph
+      pageBreakAfter: { type: 'boolean' },
       sourcePath: { type: 'string' },
       source: { $ref: '#/$defs/SourceResidue' },
       frames: { type: 'array', items: { $ref: '#/$defs/LayoutFrame' } },
@@ -435,6 +439,8 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       lineSpacing: { type: 'number', exclusiveMinimum: 0 },
       indentLeftPt: { type: 'number' },
       indentFirstLinePt: { type: 'number' },
+      pageBreakBefore: { type: 'boolean' }, // explicit page boundaries a paragraph style forces around its own paragraph
+      pageBreakAfter: { type: 'boolean' },
       sourcePath: { type: 'string' },
       source: { $ref: '#/$defs/SourceResidue' },
       frames: { type: 'array', items: { $ref: '#/$defs/LayoutFrame' } },
@@ -1084,6 +1090,8 @@ export const CONTENT_DEFS: Record<string, JsonSchema> = {
       lineSpacing: { type: 'number', exclusiveMinimum: 0 },
       indentLeftPt: { type: 'number' },
       indentFirstLinePt: { type: 'number' },
+      pageBreakBefore: { type: 'boolean' }, // the page-boundary flags ContentParagraph carries -- the styles-table spelling of a paragraph style that forces a page break
+      pageBreakAfter: { type: 'boolean' },
     },
     additionalProperties: false,
   },
