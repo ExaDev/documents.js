@@ -6,7 +6,7 @@
 //
 // Preserved inline math (src/lower/inline.ts's own MATH_INLINE_PRESERVED_AS_TEXT case) is NOT given the same text-pattern-based exemption, deliberately: escapeMarkdownText already backslash-escapes every literal '(' and ')' it meets in ORDINARY text (both are in ESCAPE_CHARS below), so an ordinary escaped parenthetical remark -- "\(see below\)" -- is indistinguishable from a genuine preserved \( \) span once escaped, and a pattern-based exemption (tried and reverted) misrecognised the former as the latter on reparse. renderLeaf below instead keys off the run's own MATH_INLINE_FONT_MARKER fontFamily, the same non-pattern-based, opportunistic-reuse trick a code span's own Courier New marker already plays two paragraphs down.
 
-import type { ContentRun } from 'document-schema.js';
+import type { ContentRun, RunConstructExtent } from 'document-schema.js';
 import type { MarkdownDiagnosticSink } from '../diagnostics/diagnostics';
 import { MarkdownDiagnosticCodes } from '../diagnostics/diagnostics';
 import { matchHtmlTag } from '../html/html';
@@ -166,7 +166,7 @@ function isPlainAutolink(run: ContentRun): boolean {
   return run.text === run.hyperlink || run.hyperlink === `mailto:${run.text}`;
 }
 
-function escapeLinkDestination(destination: string): string {
+export function escapeLinkDestination(destination: string): string {
   const needsAngleBrackets = /[\s()]/.test(destination);
   if (!needsAngleBrackets) {
     return destination;
@@ -174,8 +174,31 @@ function escapeLinkDestination(destination: string): string {
   return `<${destination.replace(/[<>]/g, (char) => `\\${char}`)}>`;
 }
 
-// The top-level entry: groups the run sequence by hyperlink identity FIRST (adjacent same-hyperlink runs merge into one link, MarkdownDiagnosticCodes.ADJACENT_LINKS_MERGED), then renders each group's -- or each hyperlink-free stretch's -- own text via renderNestedStyles.
-export function emitRuns(runs: readonly ContentRun[], context: InlineEmitContext): string {
+// A link title rendered inside its double-quoted spelling: CommonMark's own title grammar escapes only the quote character and the backslash inside a `"..."` title, and a newline collapses to a single space -- a title that spanned source lines is still one title, and a raw newline inside a rendered title would break the one-physical-line shape a table cell's row demands even at block level it serves nothing.
+export function renderLinkTitle(title: string): string {
+  return title.replace(/[\n\r]+/g, ' ').replace(/["\\]/g, (char) => `\\${char}`);
+}
+
+// The title annotation a hyperlink-carrying run group picked up from a covering run-level extent (src/lower/inline.ts's titled-link carry): the tightest `link` descriptor with a title whose range covers the whole group. Ranges are data, so cover-with-overlap is unambiguous to resolve -- innermost wins by largest startRun, then smallest endRun, the same tie-break document-schema.js's crossing-extent note applies to nested block brackets.
+function linkTitleCovering(constructs: readonly RunConstructExtent[] | undefined, start: number, end: number): string | undefined {
+  let tightest: RunConstructExtent | undefined;
+  for (const extent of constructs ?? []) {
+    if (extent.descriptor.kind !== 'link' || extent.descriptor.title === undefined) {
+      continue;
+    }
+    if (extent.startRun > start || extent.endRun < end) {
+      continue;
+    }
+    const current = tightest;
+    if (current === undefined || extent.startRun > current.startRun || (extent.startRun === current.startRun && extent.endRun < current.endRun)) {
+      tightest = extent;
+    }
+  }
+  return tightest?.descriptor.kind === 'link' ? tightest.descriptor.title : undefined;
+}
+
+// The top-level entry: groups the run sequence by hyperlink identity FIRST (adjacent same-hyperlink runs merge into one link, MarkdownDiagnosticCodes.ADJACENT_LINKS_MERGED), then renders each group's -- or each hyperlink-free stretch's -- own text via renderNestedStyles. A group covered by a titled link extent renders `](dest "title")`, the write-side inverse of src/lower/inline.ts's titled-link carry -- the runs keep the destination (ContentRun.hyperlink, the standing reconciliation) and the extent supplies only what the run field cannot hold.
+export function emitRuns(runs: readonly ContentRun[], context: InlineEmitContext, constructs: readonly RunConstructExtent[] | undefined = undefined): string {
   let out = '';
   let index = 0;
   while (index < runs.length) {
@@ -201,11 +224,12 @@ export function emitRuns(runs: readonly ContentRun[], context: InlineEmitContext
     if (group.length > 1) {
       context.sink({ code: MarkdownDiagnosticCodes.ADJACENT_LINKS_MERGED, severity: 'info', message: `${String(group.length)} adjacent runs share the hyperlink "${hyperlink}"; markdown has no way to place two link boundaries back to back, so they render as one link spanning their combined text` });
     }
-    if (group.length === 1 && isPlainAutolink(group[0]!)) {
+    const title = linkTitleCovering(constructs, index, groupEnd);
+    if (title === undefined && group.length === 1 && isPlainAutolink(group[0]!)) {
       out += `<${group[0]!.text}>`;
     } else {
       const linkText = renderNestedStyles(group, 0, context);
-      out += `[${linkText}](${escapeLinkDestination(hyperlink)})`;
+      out += `[${linkText}](${escapeLinkDestination(hyperlink)}${title === undefined ? '' : ` "${renderLinkTitle(title)}"`})`;
     }
     index = groupEnd;
   }
@@ -213,6 +237,6 @@ export function emitRuns(runs: readonly ContentRun[], context: InlineEmitContext
 }
 
 // The table-cell-specific variant (src/emit/table.ts): a GFM table row is exactly one physical line, so an embedded hard-break newline (rendered by emitRuns as a backslash-newline pair, matching escapeMarkdownText's own convention) cannot survive as-is -- it collapses to a single space instead.
-export function emitRunsSingleLine(runs: readonly ContentRun[], context: InlineEmitContext): string {
-  return emitRuns(runs, context).replace(/\\\n/g, ' ');
+export function emitRunsSingleLine(runs: readonly ContentRun[], context: InlineEmitContext, constructs: readonly RunConstructExtent[] | undefined = undefined): string {
+  return emitRuns(runs, context, constructs).replace(/\\\n/g, ' ');
 }

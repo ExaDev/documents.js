@@ -14,7 +14,7 @@
 //  - front matter (src/lower/front-matter.ts) -> a flat-scalar-only LayoutMetadata subset -- MarkdownDiagnosticCodes.FRONT_MATTER_KEY_UNMAPPED.
 //  - footnote definition (ExaDev/markdown-codec#66) -> an `anchor` construct's boundary-marker pair (document-schema.js 4.2.0) bracketing its own lowered body blocks; the reference site is a marked run instead (src/lower/inline.ts) -- MarkdownDiagnosticCodes.FOOTNOTE_REFERENCE_PRESERVED_AS_TEXT, FOOTNOTE_BODY_HEADING_FLATTENED. See lowerFootnoteDefinition below for why the body rides the construct's extent rather than AnchorDescriptor's own `definition` field.
 
-import type { AnchorDescriptor, ContentBlock, ContentDocument, ContentParagraph, ContentRun, LayoutMetadata } from 'document-schema.js';
+import type { AnchorDescriptor, ContentBlock, ContentDocument, ContentParagraph, ContentRun, LayoutMetadata, RunConstructExtent } from 'document-schema.js';
 import { PAGE_SIZE_A4 } from 'document-schema.js';
 import type { MarkdownBlockNode, MarkdownFootnoteDefinitionNode, MarkdownHeadingNode, MarkdownListItemNode, MarkdownListNode, MarkdownParagraphNode } from '../ast/ast';
 import type { MarkdownParseOptions, ParsedMarkdown } from '../block/block';
@@ -65,8 +65,14 @@ function decorateParagraph(paragraph: ContentParagraph, context: BlockLowerConte
   return result;
 }
 
+// Splices a lowered inline sequence's titled-link extents onto the paragraph being built, as that paragraph's own constructs field -- absent when the sequence opened none, which is the overwhelming common case.
+function paragraphWithConstructs(runs: ContentRun[], linkTitleExtents: readonly RunConstructExtent[]): Pick<ContentParagraph, 'runs' | 'constructs'> {
+  return { runs, ...(linkTitleExtents.length > 0 ? { constructs: [...linkTitleExtents] } : {}) };
+}
+
 function lowerHeading(node: MarkdownHeadingNode, context: BlockLowerContext): ContentBlock[] {
-  const paragraph: ContentParagraph = { kind: 'paragraph', runs: lowerInlineNodes(node.children, inlineContext(context)), styleId: headingStyleId(node.level), headingLevel: node.level };
+  const inline = lowerInlineNodes(node.children, inlineContext(context));
+  const paragraph: ContentParagraph = { kind: 'paragraph', ...paragraphWithConstructs(inline.runs, inline.linkTitleExtents), styleId: headingStyleId(node.level), headingLevel: node.level };
   return [decorateParagraph(paragraph, context)];
 }
 
@@ -80,7 +86,8 @@ function lowerParagraph(node: MarkdownParagraphNode, context: BlockLowerContext)
     if (segment.length === 0 && !force) {
       return;
     }
-    blocks.push(decorateParagraph({ kind: 'paragraph', runs: lowerInlineNodes(segment, inlineCtx) }, context));
+    const inline = lowerInlineNodes(segment, inlineCtx);
+    blocks.push(decorateParagraph({ kind: 'paragraph', ...paragraphWithConstructs(inline.runs, inline.linkTitleExtents) }, context));
     segment = [];
   };
 
@@ -95,21 +102,24 @@ function lowerParagraph(node: MarkdownParagraphNode, context: BlockLowerContext)
       segment.push(child);
       continue;
     }
-    if (child.title !== undefined) {
-      context.sink({ code: MarkdownDiagnosticCodes.LINK_TITLE_DROPPED, severity: 'info', message: `image title "${child.title}" has no ContentImageBlock equivalent and was dropped` });
-    }
     flushSegment(false);
     if (context.list !== undefined) {
       context.sink({ code: MarkdownDiagnosticCodes.LIST_ITEM_BLOCK_UNLISTED, severity: 'info', message: 'a resolved image block directly inside a list item has no ContentListMembership field of its own -- only ContentParagraph carries .list -- so its association with the enclosing list item is lost' });
     }
-    blocks.push({
+    const image: ContentBlock = {
       kind: 'image',
       format: resolved.format,
       base64: resolved.base64,
       widthPt: resolved.widthPt,
       heightPt: resolved.heightPt,
       ...(child.alt.length > 0 ? { altText: child.alt } : {}),
-    });
+    };
+    // The resolved-image title is the block-scoped arm of the same `link`-construct annotation an inline title rides: ContentImageBlock has no title field and no constructs field, so the pair brackets the image itself, and the descriptor's target carries the ORIGINAL destination into the bargain -- a fact even a title-less resolved image loses today (its bytes re-embed as a data: URI on the way out), but scoped here to the titled case this row is about.
+    if (child.title === undefined) {
+      blocks.push(image);
+      continue;
+    }
+    blocks.push({ kind: 'constructStart', descriptor: { kind: 'link', target: { kind: 'external', uri: child.destination }, title: child.title } }, image, { kind: 'constructEnd' });
   }
   flushSegment(blocks.length === 0);
   return blocks;

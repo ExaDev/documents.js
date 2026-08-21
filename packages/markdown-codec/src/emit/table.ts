@@ -65,7 +65,7 @@ function renderCellText(cell: ContentTableCell, context: TableEmitContext): stri
       context.sink({ code: MarkdownDiagnosticCodes.TABLE_CELL_FORMATTING_DROPPED, severity: 'info', message: `a table cell containing a "${block.kind}" block has no GFM table equivalent; it is dropped entirely` });
       continue;
     }
-    const text = emitRunsSingleLine(block.runs, context);
+    const text = emitRunsSingleLine(block.runs, context, block.constructs);
     if (text.length > 0) {
       parts.push(text);
     }

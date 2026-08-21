@@ -12,7 +12,7 @@ function buildRun(text, style, fontFamily) {
 		...fontFamily !== void 0 ? { fontFamily } : {}
 	};
 }
-function lowerNestedEmphasisLike(kind, node, style, context) {
+function lowerNestedEmphasisLike(kind, node, style, context, runs, extents) {
 	if (style[kind] === true) context.sink({
 		code: require_diagnostics_diagnostics.MarkdownDiagnosticCodes.NESTED_EMPHASIS_FLATTENED,
 		severity: "info",
@@ -22,15 +22,25 @@ function lowerNestedEmphasisLike(kind, node, style, context) {
 		...style,
 		[kind]: true
 	};
-	return node.children.flatMap((child) => lowerInlineNode(child, childStyle, context));
+	lowerNodesInto(node.children, childStyle, context, runs, extents);
 }
-function lowerInlineNode(node, style, context) {
+function lowerInlineNodeInto(node, style, context, runs, extents) {
 	switch (node.type) {
-		case "text": return node.value.length === 0 ? [] : [buildRun(node.value, style)];
-		case "entity": return node.value.length === 0 ? [] : [buildRun(node.value, style)];
-		case "softBreak": return [buildRun(" ", style)];
-		case "hardBreak": return [buildRun("\n", style)];
-		case "codeSpan": return [buildRun(node.literal, style, require_shared_style_constants.MONOSPACE_FONT_FAMILY)];
+		case "text":
+			if (node.value.length > 0) runs.push(buildRun(node.value, style));
+			return;
+		case "entity":
+			if (node.value.length > 0) runs.push(buildRun(node.value, style));
+			return;
+		case "softBreak":
+			runs.push(buildRun(" ", style));
+			return;
+		case "hardBreak":
+			runs.push(buildRun("\n", style));
+			return;
+		case "codeSpan":
+			runs.push(buildRun(node.literal, style, require_shared_style_constants.MONOSPACE_FONT_FAMILY));
+			return;
 		case "rawHtml":
 			if (context.rawHtml === "drop") {
 				context.sink({
@@ -38,47 +48,60 @@ function lowerInlineNode(node, style, context) {
 					severity: "info",
 					message: "inline raw HTML was dropped per the rawHtml: \"drop\" option"
 				});
-				return [];
+				return;
 			}
 			context.sink({
 				code: require_diagnostics_diagnostics.MarkdownDiagnosticCodes.RAW_HTML_PRESERVED_AS_TEXT,
 				severity: "info",
 				message: "inline raw HTML was preserved as literal text; it will not be rendered as HTML by any consumer of the resulting ContentDocument"
 			});
-			return node.literal.length === 0 ? [] : [buildRun(node.literal, style)];
+			if (node.literal.length > 0) runs.push(buildRun(node.literal, style));
+			return;
 		case "mathInline":
 			context.sink({
 				code: require_diagnostics_diagnostics.MarkdownDiagnosticCodes.MATH_INLINE_PRESERVED_AS_TEXT,
 				severity: "info",
 				message: "inline math (\\( \\)) was preserved as literal raw LaTeX text; it is not parsed as LaTeX or converted to MathML by this package"
 			});
-			return [buildRun(node.literal, style, require_shared_style_constants.MATH_INLINE_FONT_MARKER)];
+			runs.push(buildRun(node.literal, style, require_shared_style_constants.MATH_INLINE_FONT_MARKER));
+			return;
 		case "footnoteReference":
 			context.sink({
 				code: require_diagnostics_diagnostics.MarkdownDiagnosticCodes.FOOTNOTE_REFERENCE_PRESERVED_AS_TEXT,
 				severity: "info",
 				message: `footnote reference "[^${node.label}]" is preserved as a marked text run rather than an anchor construct: a construct's extent is block-scoped, and a reference site sits between two runs inside a paragraph, which no block-level boundary marker can bracket`
 			});
-			return [buildRun(`[^${node.label}]`, style, require_shared_style_constants.FOOTNOTE_REFERENCE_FONT_MARKER)];
+			runs.push(buildRun(`[^${node.label}]`, style, require_shared_style_constants.FOOTNOTE_REFERENCE_FONT_MARKER));
+			return;
 		case "autolink": {
 			const destination = node.email ? `mailto:${node.destination}` : node.destination;
-			return [buildRun(node.destination, {
+			runs.push(buildRun(node.destination, {
 				...style,
 				hyperlink: destination
-			})];
+			}));
+			return;
 		}
 		case "link": {
-			if (node.title !== void 0) context.sink({
-				code: require_diagnostics_diagnostics.MarkdownDiagnosticCodes.LINK_TITLE_DROPPED,
-				severity: "info",
-				message: `link title "${node.title}" has no ContentRun equivalent and was dropped`
-			});
 			const childStyle = {
 				...style,
 				hyperlink: node.destination
 			};
-			const runs = node.children.flatMap((child) => lowerInlineNode(child, childStyle, context));
-			return runs.length > 0 ? runs : [buildRun("", childStyle)];
+			const startRun = runs.length;
+			lowerNodesInto(node.children, childStyle, context, runs, extents);
+			if (runs.length === startRun) runs.push(buildRun("", childStyle));
+			if (node.title !== void 0) extents.push({
+				descriptor: {
+					kind: "link",
+					target: {
+						kind: "external",
+						uri: node.destination
+					},
+					title: node.title
+				},
+				startRun,
+				endRun: runs.length
+			});
+			return;
 		}
 		case "image":
 			if (node.title !== void 0) context.sink({
@@ -86,17 +109,33 @@ function lowerInlineNode(node, style, context) {
 				severity: "info",
 				message: `image title "${node.title}" has no ContentRun equivalent and was dropped`
 			});
-			return [buildRun(node.alt, {
+			runs.push(buildRun(node.alt, {
 				...style,
 				hyperlink: node.destination
-			})];
-		case "emphasis": return lowerNestedEmphasisLike("italic", node, style, context);
-		case "strong": return lowerNestedEmphasisLike("bold", node, style, context);
-		case "strikethrough": return lowerNestedEmphasisLike("strike", node, style, context);
+			}));
+			return;
+		case "emphasis":
+			lowerNestedEmphasisLike("italic", node, style, context, runs, extents);
+			return;
+		case "strong":
+			lowerNestedEmphasisLike("bold", node, style, context, runs, extents);
+			return;
+		case "strikethrough":
+			lowerNestedEmphasisLike("strike", node, style, context, runs, extents);
+			return;
 	}
 }
+function lowerNodesInto(nodes, style, context, runs, extents) {
+	for (const node of nodes) lowerInlineNodeInto(node, style, context, runs, extents);
+}
 function lowerInlineNodes(nodes, context) {
-	return nodes.flatMap((node) => lowerInlineNode(node, {}, context));
+	const runs = [];
+	const extents = [];
+	lowerNodesInto(nodes, {}, context, runs, extents);
+	return {
+		runs,
+		linkTitleExtents: extents
+	};
 }
 function lowerCodeBlockRun(literal) {
 	return {
@@ -106,5 +145,4 @@ function lowerCodeBlockRun(literal) {
 }
 //#endregion
 exports.lowerCodeBlockRun = lowerCodeBlockRun;
-exports.lowerInlineNode = lowerInlineNode;
 exports.lowerInlineNodes = lowerInlineNodes;

@@ -32,10 +32,17 @@ function decorateParagraph(paragraph, context) {
 	};
 	return result;
 }
+function paragraphWithConstructs(runs, linkTitleExtents) {
+	return {
+		runs,
+		...linkTitleExtents.length > 0 ? { constructs: [...linkTitleExtents] } : {}
+	};
+}
 function lowerHeading(node, context) {
+	const inline = require_lower_inline.lowerInlineNodes(node.children, inlineContext(context));
 	return [decorateParagraph({
 		kind: "paragraph",
-		runs: require_lower_inline.lowerInlineNodes(node.children, inlineContext(context)),
+		...paragraphWithConstructs(inline.runs, inline.linkTitleExtents),
 		styleId: require_shared_style_constants.headingStyleId(node.level),
 		headingLevel: node.level
 	}, context)];
@@ -46,9 +53,10 @@ function lowerParagraph(node, context) {
 	let segment = [];
 	const flushSegment = (force) => {
 		if (segment.length === 0 && !force) return;
+		const inline = require_lower_inline.lowerInlineNodes(segment, inlineCtx);
 		blocks.push(decorateParagraph({
 			kind: "paragraph",
-			runs: require_lower_inline.lowerInlineNodes(segment, inlineCtx)
+			...paragraphWithConstructs(inline.runs, inline.linkTitleExtents)
 		}, context));
 		segment = [];
 	};
@@ -70,39 +78,73 @@ function lowerParagraph(node, context) {
 			segment.push(child);
 			continue;
 		}
-		if (child.title !== void 0) context.sink({
-			code: require_diagnostics_diagnostics.MarkdownDiagnosticCodes.LINK_TITLE_DROPPED,
-			severity: "info",
-			message: `image title "${child.title}" has no ContentImageBlock equivalent and was dropped`
-		});
 		flushSegment(false);
 		if (context.list !== void 0) context.sink({
 			code: require_diagnostics_diagnostics.MarkdownDiagnosticCodes.LIST_ITEM_BLOCK_UNLISTED,
 			severity: "info",
 			message: "a resolved image block directly inside a list item has no ContentListMembership field of its own -- only ContentParagraph carries .list -- so its association with the enclosing list item is lost"
 		});
-		blocks.push({
+		const image = {
 			kind: "image",
 			format: resolved.format,
 			base64: resolved.base64,
 			widthPt: resolved.widthPt,
 			heightPt: resolved.heightPt,
 			...child.alt.length > 0 ? { altText: child.alt } : {}
-		});
+		};
+		if (child.title === void 0) {
+			blocks.push(image);
+			continue;
+		}
+		blocks.push({
+			kind: "constructStart",
+			descriptor: {
+				kind: "link",
+				target: {
+					kind: "external",
+					uri: child.destination
+				},
+				title: child.title
+			}
+		}, image, { kind: "constructEnd" });
 	}
 	flushSegment(blocks.length === 0);
 	return blocks;
 }
+function splitInfoString(infoString) {
+	const firstWhitespace = infoString.search(/\s/);
+	if (firstWhitespace === -1) return infoString.startsWith("{") ? {
+		language: void 0,
+		remainder: infoString
+	} : {
+		language: infoString,
+		remainder: void 0
+	};
+	const firstWord = infoString.slice(0, firstWhitespace);
+	const remainder = infoString.slice(firstWhitespace).trim();
+	if (firstWord.startsWith("{")) return {
+		language: void 0,
+		remainder: infoString.trim()
+	};
+	return {
+		language: firstWord,
+		remainder: remainder.length > 0 ? remainder : void 0
+	};
+}
 function lowerCodeBlock(node, context) {
-	if (node.fenced && node.infoString !== void 0 && node.infoString.length > 0) context.sink({
-		code: require_diagnostics_diagnostics.MarkdownDiagnosticCodes.CODE_BLOCK_INFO_STRING_DROPPED,
-		severity: "info",
-		message: `fenced code block's own info string "${node.infoString}" has no ContentParagraph equivalent and was dropped`
-	});
+	const info = node.fenced && node.infoString !== void 0 && node.infoString.length > 0 ? splitInfoString(node.infoString) : {
+		language: void 0,
+		remainder: void 0
+	};
 	return [decorateParagraph({
 		kind: "paragraph",
 		runs: [require_lower_inline.lowerCodeBlockRun(node.literal.replace(/\n$/, ""))],
-		styleId: require_shared_style_constants.CODE_BLOCK_STYLE_ID
+		styleId: require_shared_style_constants.CODE_BLOCK_STYLE_ID,
+		...info.language !== void 0 ? { codeLanguage: info.language } : {},
+		...info.remainder !== void 0 ? { source: {
+			format: "markdown",
+			xml: info.remainder
+		} } : {}
 	}, context)];
 }
 function lowerThematicBreak(context) {

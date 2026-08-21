@@ -5,11 +5,12 @@ function toParagraphAlignment(alignment) {
 	return alignment === "none" ? void 0 : alignment;
 }
 function lowerTableCell(cell, alignment, context) {
-	const runs = lowerInlineNodes(cell.children, context);
+	const inline = lowerInlineNodes(cell.children, context);
 	const paragraphAlignment = toParagraphAlignment(alignment ?? "none");
 	return { blocks: [{
 		kind: "paragraph",
-		runs,
+		runs: inline.runs,
+		...inline.linkTitleExtents.length > 0 ? { constructs: [...inline.linkTitleExtents] } : {},
 		...paragraphAlignment === void 0 ? {} : { alignment: paragraphAlignment }
 	}] };
 }
