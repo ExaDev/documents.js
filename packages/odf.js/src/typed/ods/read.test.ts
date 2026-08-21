@@ -433,6 +433,23 @@ describe('readOdsContent: anchored drawings (synthetic packages -- the scope bou
     expect(sheets[0]?.images[0]).toMatchObject({ anchorRow: 0, anchorColumn: 0, offsetXPt: 15, offsetYPt: 27 });
   });
 
+  it('reads an embedded Writer document (a wordprocessing OLE object) through the shared dispatch, its sections intact -- the ods->odt half of the symmetric embedding edge', () => {
+    const objectFrame = el('draw:frame', frameBox, [el('draw:object', { 'xlink:href': './Object 1' })]);
+    const table = el('table:table', { 'table:name': 'Sheet1' }, [el('table:table-row', {}, [el('table:table-cell', {}, [objectFrame])])]);
+    const pkg = drawingPackage(table);
+    pkg.parts['Object 1/content.xml'] = {
+      kind: 'xml',
+      nodes: [el('office:document-content', {}, [el('office:body', {}, [el('office:text', {}, [el('text:p', {}, [txt('Embedded note.')])])])])],
+    };
+    const { sheets } = readOdsContent(pkg);
+    const embedded = sheets[0]?.embeddedObjects?.[0];
+    expect(embedded?.objectKind).toBe('wordprocessing');
+    if (embedded?.document.kind !== 'wordprocessing') {
+      throw new Error('expected a wordprocessing ContentDocument');
+    }
+    expect(embedded.document.sections[0]?.blocks[0]).toMatchObject({ kind: 'paragraph', runs: [{ text: 'Embedded note.' }] });
+  });
+
   it('skips a frame ContentSheet has nowhere to carry -- a floating text box (no `shapes` array) and a bare vector primitive (no `vectors` array)', () => {
     const textBox = el('draw:frame', frameBox, [el('draw:text-box', {}, [el('text:p', {}, [txt('floating')])])]);
     const rect = el('draw:rect', frameBox);
