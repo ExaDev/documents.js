@@ -40,6 +40,11 @@ import { readOdpContent } from '../odp/read';
 //
 // LIST HANDLING: the numId minting convention (a monotonically increasing per-encounter counter, never text:style-name), the ordered:/bullet: kind prefix, and the text:list/text:list-item structural nesting walk itself all live in typed/shared/list.ts -- read that module's own top-of-file notes in full for the derivation -- because the odp reader meets the IDENTICAL text:list construct inside slide text frames and shares every line of it. This reader's own remaining list responsibility is the one genuinely odt-specific part: threading a single document-wide OdfListIdState through its office:text walk, so list identities are unique across the whole body exactly as they are across a whole presentation's slides.
 
+// Options for both reader levels. `frames` decides who reads an anchored draw:frame in text flow: 'lift' (the default) is this reader's own native reading -- an image frame contributes its image block after its paragraph, an object frame its embedded-object block, a text-box frame its content blocks -- while 'none' contributes nothing for frames at all, for a CONSUMER that runs its own frame-detection passes over the same package and would otherwise read every frame twice. documents.js is that consumer today: its odt adapter's formula/image/vector passes carry the richer placement semantics (a formula-only paragraph consumed rather than followed, deep walks into table cells and nested groups, slide-index placement for odp), built when this reader did not read frames at all; opting out keeps those passes exact rather than forcing this reader to replicate every one of their placements before it can read a single frame.
+export interface OdtReadOptions {
+  frames?: 'lift' | 'none';
+}
+
 export interface OdtDocument {
   metadata: LayoutMetadata;
   sections: ContentSection[];
@@ -79,6 +84,7 @@ interface OdtFlowState {
   readonly definitions: OdfDefinitionsSink;
   readonly wrapperExtents: OdfConstructExtent[];
   readonly markerEvents: OdfMarkerEvent[];
+  readonly liftFrames: boolean;
   order: number;
 }
 
@@ -116,6 +122,9 @@ function readOdtEmbeddedDocument(reference: EmbeddedDrawObject, frame: Box): Con
 
 // One paragraph's own anchored draw:frame children (flattening any draw:g group exactly as ods's cell-anchored walker does) -> the blocks they contribute after the paragraph. A frame resolving an embedded object becomes a ContentEmbeddedObjectBlock at the frame's own geometry (chart objects additionally quarantine the chart element in residue); any other frame contributes its own content blocks -- a text box's paragraphs, a table frame's table, an image frame's image -- spliced in frame document order, with the frame's own position recorded only where a target node carries geometry (the embedded object's frame and the image block's size); a text box's position is a real, documented narrowing.
 function readAnchoredFrameBlocks(paragraphElement: XmlElement, pkg: Package, state: OdtFlowState): ContentBlock[] {
+  if (!state.liftFrames) {
+    return [];
+  }
   const lifted: ContentBlock[] = [];
   const readFrame = (frameElement: XmlElement): void => {
     const shape = readDrawFrame(frameElement, [], pkg, state.listIdState, true);
@@ -277,7 +286,7 @@ function readFirstMasterPageGeometry(pkg: Package): { pageSize: PageSize; margin
 }
 
 // Package -> OdtDocument. Throws only when content.xml itself, or its own office:body/office:text element, is missing -- a genuinely unusable package, mirroring exactly how ooxml.js's own readDocx throws when word/document.xml or its w:body is missing, rather than degrading gracefully the way a merely malformed or absent OPTIONAL part (meta.xml, styles.xml, an individual style reference) does throughout the rest of this reader.
-export function readOdtContent(pkg: Package): OdtDocument {
+export function readOdtContent(pkg: Package, options: OdtReadOptions = {}): OdtDocument {
   const contentPart = pkg.parts[CONTENT_PART];
   if (contentPart?.kind !== 'xml') {
     throw new Error(`readOdtContent: package has no ${CONTENT_PART} part`);
@@ -307,7 +316,7 @@ export function readOdtContent(pkg: Package): OdtDocument {
     collectOdfFontFaceDefinitions(part.nodes, definitions.entries);
   }
 
-  const state: OdtFlowState = { listIdState: { next: 1 }, provenanceRegions, definitions, wrapperExtents: [], markerEvents: [], order: 0 };
+  const state: OdtFlowState = { listIdState: { next: 1 }, provenanceRegions, definitions, wrapperExtents: [], markerEvents: [], liftFrames: options.frames !== 'none', order: 0 };
   const walked = readBlocks(textElement.children, pkg, state);
   const { extents: markerExtents, paired } = resolveOdfMarkerEvents(state.markerEvents);
   const extents: OdfConstructExtent[] = [...state.wrapperExtents, ...markerExtents];
@@ -334,8 +343,8 @@ export function readOdtContent(pkg: Package): OdtDocument {
 // assemblePackage rather than bare decompose, per that function's own doc comment ("the tree-form DocumentPackage every construction site reports"): decompose alone yields the `children` array for a caller composing its own package boundary, whereas a reader IS a construction site and owes its caller the whole package -- envelope spliced on, styles table minted over the result -- exactly as documents.js's own conversion pipeline already does at every package it builds. factorStyles is not called here either: assemblePackage already mints, and re-minting an already-minted package is a no-op by law (iii).
 //
 // No `pages` argument is passed, and none can be: `pages` carries each RENDERED page's own size, which only a layout pass can report. A reader runs strictly before any layout, so the package it returns is a content-only one -- its nodes carry no `frames` and its root carries no `pages`, which is the honest shape for a document nothing has laid out yet.
-export function readOdt(pkg: Package): DocumentPackage {
-  const { metadata, sections, definitions } = readOdtContent(pkg);
+export function readOdt(pkg: Package, options: OdtReadOptions = {}): DocumentPackage {
+  const { metadata, sections, definitions } = readOdtContent(pkg, options);
   const assembled = assemblePackage({ kind: 'wordprocessing', metadata, sections });
   // The definitions table has no flat-ContentDocument spelling to ride through assemblePackage's envelope splice (the flat form is the codec-exchange CONTENT shape; package-level tables are tree-only), so it attaches to the freshly assembled root here -- the same route factorStyles' re-entry uses to carry it, and minting never reads it either way.
   if (definitions !== undefined) {
