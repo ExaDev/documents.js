@@ -243,6 +243,9 @@ function readEmbeddedObjectDocument(reference: EmbeddedDrawObject): ContentDocum
     case 'formula':
       // The one embedded kind whose own reader already returns a finished ContentDocument (readOdfFormulaContent), because a formula document has no per-format {metadata, sections/slides/pages/sheets} shape to re-wrap -- its whole content IS the MathML.
       return readOdfFormulaContent(reference.package);
+    case 'chart':
+      // document-schema.js's 'chart' member names an OOXML chart graphic frame's cached series/category model -- a kind no ODF reader mints (an ODS chart is not recovered as an embedded object at all), so reaching this arm means a caller handed this dispatch a foreign value. Stated explicitly so the switch stays exhaustive against the union.
+      throw new Error('readEmbeddedObjectDocument: an embedded chart object names an OOXML chart frame and has no ODF reader to dispatch to');
   }
 }
 
