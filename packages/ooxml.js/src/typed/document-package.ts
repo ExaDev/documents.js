@@ -6,6 +6,7 @@ import { buildDocxPackageFromContent } from './docx/write';
 import { readPptxContent } from './pptx/read';
 import { buildXlsxPackageFromContent } from './xlsx/build';
 import { readXlsxContent } from './xlsx/content';
+import { readWorkbookDefinitions } from './xlsx/definitions';
 
 // This package's DocumentPackage-native surface: one reader per OOXML format producing document-schema.js's tree-form DocumentPackage, and one writer per format consuming it. These carry the primary names (readDocx, readPptx, readXlsx, buildDocxPackage, buildXlsxPackage) because the tree is the shape a caller holding a whole document wants -- containers grouped, headings and lists nested, constructs promoted to the region they span, repeated formatting factored into a styles table. The flat, content-level functions each of these wraps keep working unchanged under a `Content` name (readDocxContent, readPptxContent, readXlsxContent, buildDocxPackageFromContent, buildXlsxPackageFromContent), which is what a caller driving its own pipeline stage-by-stage -- documents.js's conversion engine, most of this repo's own tests -- reaches for.
 //
@@ -39,8 +40,12 @@ export function readPptx(pkg: Package): DocumentPackage {
 }
 
 // A decoded xlsx Package -> the tree-form DocumentPackage, via readXlsxContent (the geometry- and print-settings-rich reader), which already returns a full ContentDocument envelope and so needs no envelope wrap here. Not to be confused with readXlsxWorkbook (typed/xlsx.ts): that is a different reading view of the same bytes -- cell values only, no write side, no ContentDocument shape to decompose.
+//
+// The one thing this reader carries that its flat half cannot: the workbook's general defined names and table/List objects ride the tree root's definitions table (typed/xlsx/definitions.ts), the landing document-schema.js's own verdict gives a sheet-scoped named range -- no block-flow extent to wrap, so a definitions entry naming its range, and the definitions facility is tree-only. flattenPackage drops the table on the way back down, so buildXlsxPackage(readXlsx(pkg)) still builds exactly the package buildXlsxPackageFromContent(readXlsxContent(pkg)) does: the write pair gains nothing here (it emits no xl/tables part and only the two _xlnm print names), an asymmetry pinned in document-package.test.ts.
 export function readXlsx(pkg: Package): DocumentPackage {
-  return assemblePackage(readXlsxContent(pkg));
+  const definitions = readWorkbookDefinitions(pkg);
+  const tree = assemblePackage(readXlsxContent(pkg));
+  return definitions === undefined ? tree : { ...tree, definitions };
 }
 
 // The inverse: a spreadsheet DocumentPackage -> a complete, freshly-built xlsx Package. Exactly buildXlsxPackageFromContent's own fidelity (cell comments excepted, as that writer's own comment states).
