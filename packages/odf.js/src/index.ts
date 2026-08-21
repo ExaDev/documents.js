@@ -158,7 +158,9 @@ export { subDocumentPackage } from './typed/odb/subdocument';
 export type { SubDocumentPackageOptions } from './typed/odb/subdocument';
 
 export { readOdbForm } from './typed/odb/form';
-export type { OdbForm, OdbFormDefinition, OdbFormControl } from './typed/odb/form';
+export type { OdbForm } from './typed/odb/form';
+export { readOdfFormDefinitions, readOdfFormControlConstructs } from './typed/shared/forms';
+export type { OdbFormDefinition, OdbFormControl } from './typed/shared/forms';
 
 export { readOdbReport } from './typed/odb/report';
 export type { OdbReport, OdbReportBand, OdbReportElement, OdbReportGroup, OdbReportFunction } from './typed/odb/report';
