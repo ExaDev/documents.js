@@ -512,3 +512,66 @@ export function equalCropBoxPdf(): Uint8Array<ArrayBuffer> {
   b.classicXrefAndTrailer(5, '/Root 1 0 R');
   return b.bytes();
 }
+
+// The tagged-structure cluster (#760): a /StructTreeRoot whose /K walk covers a role-mapped heading (/S /Chapter that /RoleMap maps to /H1, set at the SAME 12pt as the body so a heading test can pin structure-over-geometry), a /P resolving its /Lang through /ClassMap, a Table/TR/TH/TD subtree, and a second page whose /Sect carries its own /T and /Lang. The parent tree keys MCIDs per page, so MCID 0 appears on BOTH pages owned by different elements -- pinning that association is keyed (page, mcid), never mcid alone. Page 2 also carries unmarked text, pinning that an item with no association simply omits the field.
+export function taggedStructurePdf(): Uint8Array<ArrayBuffer> {
+  const b = new FixtureBuilder().header('1.7');
+  b.object(1, '<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 8 0 R >>');
+  b.object(2, '<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>');
+  b.object(3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << /Font << /F1 5 0 R >> >> /Contents 6 0 R >>');
+  b.object(4, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << /Font << /F1 5 0 R >> >> /Contents 7 0 R >>');
+  b.object(5, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+  b.stream(
+    6,
+    '<< >>',
+    enc([
+      '/H1 << /MCID 0 >> BDC',
+      'BT /F1 12 Tf 10 180 Td (Chapter title) Tj ET',
+      'EMC',
+      '/P << /MCID 1 >> BDC',
+      'BT /F1 12 Tf 10 150 Td (Body paragraph) Tj ET',
+      'EMC',
+      '/TH << /MCID 2 >> BDC',
+      'BT /F1 12 Tf 10 120 Td (Name) Tj ET',
+      'EMC',
+      '/TH << /MCID 3 >> BDC',
+      'BT /F1 12 Tf 100 120 Td (Value) Tj ET',
+      'EMC',
+      '/TD << /MCID 4 >> BDC',
+      'BT /F1 12 Tf 10 90 Td (Alpha) Tj ET',
+      'EMC',
+      '/TD << /MCID 5 >> BDC',
+      'BT /F1 12 Tf 100 90 Td (One) Tj ET',
+      'EMC',
+    ].join('\n')),
+  );
+  b.stream(
+    7,
+    '<< >>',
+    enc([
+      '/P << /MCID 0 >> BDC',
+      'BT /F1 12 Tf 10 180 Td (Paragraphe francais) Tj ET',
+      'EMC',
+      'BT /F1 12 Tf 10 150 Td (Untagged) Tj ET',
+    ].join('\n')),
+  );
+  b.object(8, '<< /Type /StructTreeRoot /K [9 0 R 10 0 R 11 0 R 18 0 R 23 0 R] /RoleMap << /Chapter /H1 >> /ClassMap << /BodyText << /Lang (en) >> >> /ParentTree 20 0 R >>');
+  b.object(9, '<< /Type /StructElem /S /Chapter /P 8 0 R /T (Opening) /K [0] >>');
+  b.object(10, '<< /Type /StructElem /S /P /P 8 0 R /C [/BodyText] /K [1] >>');
+  b.object(11, '<< /Type /StructElem /S /Table /P 8 0 R /Alt (Quarterly figures) /K [12 0 R 13 0 R] >>');
+  b.object(12, '<< /Type /StructElem /S /TR /P 11 0 R /K [14 0 R 15 0 R] >>');
+  b.object(13, '<< /Type /StructElem /S /TR /P 11 0 R /K [16 0 R 17 0 R] >>');
+  b.object(14, '<< /Type /StructElem /S /TH /P 12 0 R /K [2] >>');
+  b.object(15, '<< /Type /StructElem /S /TH /P 12 0 R /K [3] >>');
+  b.object(16, '<< /Type /StructElem /S /TD /P 13 0 R /K [4] >>');
+  b.object(17, '<< /Type /StructElem /S /TD /P 13 0 R /ActualText (Quatre) /K [5] >>');
+  b.object(18, '<< /Type /StructElem /S /Sect /P 8 0 R /T (Section deux) /Lang (fr) /K [19 0 R] >>');
+  b.object(19, '<< /Type /StructElem /S /P /P 18 0 R /K [0] >>');
+  b.object(20, '<< /Nums [0 21 0 R 1 22 0 R] >>');
+  b.object(21, '<< /Nums [0 9 0 R 1 10 0 R 2 14 0 R 3 15 0 R 4 16 0 R 5 17 0 R] >>');
+  b.object(22, '<< /Nums [0 19 0 R] >>');
+  // /Aside names no /RoleMap entry, pinning that an unmapped custom type passes through verbatim rather than being forced onto the nearest standard name.
+  b.object(23, '<< /Type /StructElem /S /Aside /P 8 0 R >>');
+  b.classicXrefAndTrailer(23, '/Root 1 0 R');
+  return b.bytes();
+}

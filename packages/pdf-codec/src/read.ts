@@ -6,6 +6,7 @@ import { readAcroForm } from './form';
 import { readXmpMetadata } from './xmp';
 import { readAttachments } from './attachments';
 import { readOptionalContent } from './optional-content';
+import { readStructure } from './structure';
 import type { Color as LayoutColor, LayoutFont, LayoutMetadata, SourceResidue } from 'document-schema.js';
 import type { LayoutDocument, LayoutEllipse, LayoutImageAsset, LayoutInternalLink, LayoutItem, LayoutLine, LayoutLink, LayoutPage, LayoutPath, LayoutPathSegment, LayoutRect, LayoutSubpath, LayoutText } from './layout';
 import { LAYOUT_FORMAT_VERSION } from './layout';
@@ -78,12 +79,13 @@ export function readPdf(bytes: Uint8Array<ArrayBuffer>, options?: ReadPdfOptions
   const attachments = readAttachments(doc.catalog, pageDicts, doc, sink);
   const optionalContent = readOptionalContent(doc.catalog, doc, sink);
   const form = readAcroForm(doc.catalog, doc, (obj) => doc.pageIndex(obj), sink);
+  const structure = readStructure(doc.catalog, doc, sink);
   const source = readDocumentResidue(doc, sink);
   const pageBoxRows: PdfObject[] = [];
 
   const pages = pageDicts.map((pageDict, index) => {
     throwIfAborted(signal);
-    return readPage(index, pageDict, doc, fontResolver, images, imageIdCache, destinationRegistry, optionalContent.layerNameOf, pageBoxRows, sink);
+    return readPage(index, pageDict, doc, fontResolver, images, imageIdCache, destinationRegistry, optionalContent.layerNameOf, structure.ownerOf, pageBoxRows, sink);
   });
 
   // The per-page boundary declarations a distinct crop box or a print-production box left behind, quarantined with the other package-level residue rows.
@@ -101,6 +103,7 @@ export function readPdf(bytes: Uint8Array<ArrayBuffer>, options?: ReadPdfOptions
     ...(attachments.length > 0 ? { attachments } : {}),
     ...(optionalContent.layers.length > 0 ? { layers: [...optionalContent.layers] } : {}),
     ...(form.length > 0 ? { form } : {}),
+    ...(structure.tree.length > 0 ? { structure: [...structure.tree] } : {}),
     ...(Object.keys(source).length > 0 ? { source } : {}),
   };
 }
@@ -302,7 +305,7 @@ function pageBoxResidueEntry(pageIndex: number, page: PdfDict, mediaBox: PageBox
   return pdfDict(entries);
 }
 
-function readPage(pageIndex: number, page: PdfDict, resolver: PdfObjectResolver, fontResolver: FontResolverService, images: Record<string, LayoutImageAsset>, imageIdCache: Map<PdfDict, string | null>, destinationRegistry: DestinationRegistry, layerNameOf: (obj: PdfObject | undefined) => string | undefined, pageBoxRows: PdfObject[], sink: PdfDiagnosticSink): LayoutPage {
+function readPage(pageIndex: number, page: PdfDict, resolver: PdfObjectResolver, fontResolver: FontResolverService, images: Record<string, LayoutImageAsset>, imageIdCache: Map<PdfDict, string | null>, destinationRegistry: DestinationRegistry, layerNameOf: (obj: PdfObject | undefined) => string | undefined, structureOwnerOf: (pageIndex: number, mcid: number) => string | undefined, pageBoxRows: PdfObject[], sink: PdfDiagnosticSink): LayoutPage {
   const resources = resolver.resolveDict(dictGet(page, 'Resources'));
   const mediaBox = readMediaBox(page);
   // The crop box is the visible region (ISO 32000-1 14.11.2: a viewer displays and prints it, and it defaults to the media box), so it -- not the media box -- is the page geometry this package reports, and content outside it is not visible at all. Inherited through the page tree like /MediaBox (one of 7.7.3.4's four inheritable attributes); /BleedBox /TrimBox /ArtBox are ordinary page-direct entries and are quarantined as residue, never clipped to.
@@ -330,9 +333,12 @@ function readPage(pageIndex: number, page: PdfDict, resolver: PdfObjectResolver,
     const extracted = interpretContentStream(contentBytes, resources, { fontMetrics: fontResolver.metrics, resolver, sink, layerNameOf });
     for (const item of extracted) {
       const converted = convertExtractedItem(item, pageMatrix, fontResolver, images, imageIdCache, resolver, sink);
-      if (converted !== undefined && itemIntersectsVisibleRegion(converted, widthPt, heightPt)) {
-        items.push(converted);
+      if (converted === undefined || !itemIntersectsVisibleRegion(converted, widthPt, heightPt)) {
+        continue;
       }
+      // The (page, MCID) association: an item stamped with its span's MCID names the element the parent tree says owns that marked content -- the one place a PDF states semantics natively rather than leaving geometry to imply it.
+      const owner = item.mcid === undefined ? undefined : structureOwnerOf(pageIndex, item.mcid);
+      items.push(owner === undefined ? converted : withStructure(converted, owner));
     }
   } else {
     sink({ code: 'pdf/object-missing-value', severity: 'warning', message: 'page has no /Resources dict; its content stream cannot be interpreted' });
@@ -349,6 +355,14 @@ function readPage(pageIndex: number, page: PdfDict, resolver: PdfObjectResolver,
     ...(notes !== undefined ? { notes } : {}),
     ...(annotations.length > 0 ? { annotations } : {}),
   };
+}
+
+// Stamps the owning element id onto a converted item. The link kinds carry no structure field by the same line the layer filter draws -- an annotation is an anchored construct, not painted stream content -- and they never reach here with an owner anyway (they are not extracted from a content stream), so the guard is pure narrowing.
+function withStructure(item: LayoutItem, structure: string): LayoutItem {
+  if (item.kind === 'link' || item.kind === 'internalLink') {
+    return item;
+  }
+  return { ...item, structure };
 }
 
 function convertExtractedItem(item: ExtractedItem, pageMatrix: Matrix, fontResolver: FontResolverService, images: Record<string, LayoutImageAsset>, imageIdCache: Map<PdfDict, string | null>, resolver: PdfObjectResolver, sink: PdfDiagnosticSink): LayoutItem | undefined {
