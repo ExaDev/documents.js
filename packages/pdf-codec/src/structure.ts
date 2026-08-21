@@ -5,7 +5,7 @@ import type { PdfDict, PdfObject } from './objects';
 import { asArray, asName, asNumber, dictGet } from './objects';
 import { decodePdfString } from './pdf-text';
 
-// Tagged-structure reading (#760, ISO 32000-1 14.7): the /StructTreeRoot element tree and the (page, MCID) association that tells an extracted item which element owns it. Two channels in the file serve two different jobs and neither can do the other's: the /K recursion states the element tree itself (nesting, types, attributes), while /ParentTree states ownership -- a number tree keyed by page index whose value is that page's own number tree mapping each MCID to the element(s) that own it. The tree walk therefore ignores /K's integer and MCR content items entirely (they duplicate what the parent tree states, without the page context they need), and the association lookup never guesses a page from the tree.
+// Tagged-structure reading (#760, ISO 32000-1 14.7): the /StructTreeRoot element tree and the (page, MCID) association that tells an extracted item which element owns it. Two channels in the file serve two different jobs and neither can do the other's: the /K recursion states the element tree itself (nesting, types, attributes), while /ParentTree states ownership -- a number tree keyed by each page's own /StructParents value (a producer-chosen integer, not the page's position) whose entry is that page's array of owning elements indexed by MCID. The tree walk therefore ignores /K's integer and MCR content items entirely (they duplicate what the parent tree states, without the page context they need), and the association lookup never guesses a page from the tree.
 
 export interface StructureContext {
   readonly tree: readonly LayoutStructureElement[];
@@ -13,7 +13,7 @@ export interface StructureContext {
   readonly ownerOf: (pageIndex: number, mcid: number) => string | undefined;
 }
 
-export function readStructure(catalog: PdfDict, resolver: PdfObjectResolver, sink: PdfDiagnosticSink): StructureContext {
+export function readStructure(catalog: PdfDict, pages: readonly PdfDict[], resolver: PdfObjectResolver, sink: PdfDiagnosticSink): StructureContext {
   const root = resolver.resolveDict(dictGet(catalog, 'StructTreeRoot'));
   if (root === undefined) {
     return { tree: [], ownerOf: () => undefined };
@@ -73,7 +73,7 @@ export function readStructure(catalog: PdfDict, resolver: PdfObjectResolver, sin
     }
   }
 
-  return { tree, ownerOf: parentTreeOwners(root, resolver, idByDict, sink) };
+  return { tree, ownerOf: parentTreeOwners(root, pages, resolver, idByDict, sink) };
 }
 
 // The string-valued attributes an element or a class-attribute dict can carry.
@@ -179,19 +179,8 @@ function numberTreeEntries(node: PdfDict, resolver: PdfObjectResolver, visited: 
   return entries;
 }
 
-// The (page, MCID) -> element-id map built from /ParentTree (14.7.4.4). The document-level tree holds two entry kinds distinguished by their value's shape: a page-index key maps to a NUMBER TREE (a dict with /Nums or /Kids) whose own keys are that page's MCIDs, while an object-number key maps to the element owning a whole referenced object (the OBJR channel) -- that second channel is outside this phase's scope and recognised only to be skipped. A value naming more than one element (the spec permits an array) resolves to the first.
-function parentTreeOwners(root: PdfDict, resolver: PdfObjectResolver, idByDict: Map<PdfDict, string>, sink: PdfDiagnosticSink): (pageIndex: number, mcid: number) => string | undefined {
-  const owners = new Map<string, string>();
-  const isNumberTree = (dict: PdfDict): boolean => dictGet(dict, 'Nums') !== undefined || dictGet(dict, 'Kids') !== undefined;
-  const elementIdOf = (value: PdfObject): string | undefined => {
-    for (const entry of asArray(value) ?? [value]) {
-      const id = idByDict.get(resolver.resolveDict(entry) ?? NEVER_DICT);
-      if (id !== undefined) {
-        return id;
-      }
-    }
-    return undefined;
-  };
+// The (page, MCID) -> element-id map built from /ParentTree (14.7.4.4). A page's key in the document-level number tree is the value of that page's OWN /StructParents page-dictionary entry -- a producer-chosen integer with no required relation to the page's position in the page tree -- and the entry it names is an array of element references indexed by MCID (14.7.4.4: a sequence's marked-content identifier is a zero-based index into the array). Keys no page claims carry the OBJR channel instead -- a single element reference naming the owner of a whole referenced object, whose /StructParent lives on the object itself -- which this reader recognises by shape (a non-array value under a page's key can only be that) and skips, as it is outside the (page, MCID) channel's scope. Array entries that resolve to no element (the null a producer writes for an unused MCID, an unresolvable reference) stamp nothing.
+function parentTreeOwners(root: PdfDict, pages: readonly PdfDict[], resolver: PdfObjectResolver, idByDict: Map<PdfDict, string>, sink: PdfDiagnosticSink): (pageIndex: number, mcid: number) => string | undefined {
   const documentTree = resolver.resolveDict(dictGet(root, 'ParentTree'));
   if (documentTree === undefined) {
     if (dictGet(root, 'ParentTree') !== undefined) {
@@ -199,18 +188,29 @@ function parentTreeOwners(root: PdfDict, resolver: PdfObjectResolver, idByDict: 
     }
     return () => undefined;
   }
-  for (const [pageIndex, pageValue] of numberTreeEntries(documentTree, resolver, new Set())) {
-    const pageTree = resolver.resolveDict(pageValue);
-    if (pageIndex < 0 || pageTree === undefined || !isNumberTree(pageTree)) {
-      continue;
+  const entries = new Map(numberTreeEntries(documentTree, resolver, new Set()));
+  const owners = new Map<string, string>();
+  pages.forEach((page, pageIndex) => {
+    const structParents = asNumber(dictGet(page, 'StructParents'));
+    if (structParents === undefined) {
+      return; // a page declaring no /StructParents states no MCID numbering of its own: nothing it paints can be associated
     }
-    for (const [mcid, elementValue] of numberTreeEntries(pageTree, resolver, new Set())) {
-      const id = mcid >= 0 ? elementIdOf(elementValue) : undefined;
-      if (mcid >= 0 && id !== undefined) {
+    const entry = entries.get(structParents);
+    if (entry === undefined) {
+      sink({ code: 'pdf/parent-tree-missing-entry', severity: 'warning', pageIndex, message: `page ${pageIndex} declares /StructParents ${structParents} but the /ParentTree carries no entry for that key; its marked content resolves to no owner` });
+      return;
+    }
+    const mcidOwners = asArray(entry);
+    if (mcidOwners === undefined) {
+      return; // a non-array entry under a page's key is the OBJR channel's shape, not an MCID-indexed array
+    }
+    mcidOwners.forEach((element, mcid) => {
+      const id = idByDict.get(resolver.resolveDict(element) ?? NEVER_DICT);
+      if (id !== undefined) {
         owners.set(`${pageIndex}:${mcid}`, id);
       }
-    }
-  }
+    });
+  });
   return (pageIndex: number, mcid: number): string | undefined => owners.get(`${pageIndex}:${mcid}`);
 }
 
