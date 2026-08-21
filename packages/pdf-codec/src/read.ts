@@ -1,6 +1,7 @@
 import { bytesToBase64 } from './util/base64';
 import { crc32 } from './bytes/crc32';
 import { concatBytes } from './bytes/writer';
+import { readAttachments } from './attachments';
 import type { Color as LayoutColor, LayoutFont, LayoutMetadata } from 'document-schema.js';
 import type { LayoutDocument, LayoutEllipse, LayoutImageAsset, LayoutInternalLink, LayoutItem, LayoutLine, LayoutLink, LayoutPage, LayoutPath, LayoutPathSegment, LayoutRect, LayoutSubpath, LayoutText } from './layout';
 import { LAYOUT_FORMAT_VERSION } from './layout';
@@ -68,6 +69,7 @@ export function readPdf(bytes: Uint8Array<ArrayBuffer>, options?: ReadPdfOptions
   const pageDicts = doc.pages();
   const destinationRegistry = createDestinationRegistry(doc.catalog, doc, (obj) => doc.pageIndex(obj), sink);
   const outline = readOutline(doc.catalog, destinationRegistry, doc, sink);
+  const attachments = readAttachments(doc.catalog, pageDicts, doc, sink);
 
   const pages = pageDicts.map((pageDict) => {
     throwIfAborted(signal);
@@ -81,6 +83,7 @@ export function readPdf(bytes: Uint8Array<ArrayBuffer>, options?: ReadPdfOptions
     images,
     ...(destinationRegistry.entries.length > 0 ? { destinations: [...destinationRegistry.entries] } : {}),
     ...(outline.length > 0 ? { outline } : {}),
+    ...(attachments.length > 0 ? { attachments } : {}),
   };
 }
 
