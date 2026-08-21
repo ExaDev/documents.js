@@ -217,4 +217,29 @@ describe('writePdf -> readPdf: structural round trip', () => {
     expect(result.pages[0]!.items).toHaveLength(1);
     expect(result.pages[0]!.items[0]).toMatchObject({ kind: 'text', text: 'Visible' });
   });
+
+  // Internal links and the destinations table they resolve against (#721): the writer emits each internalLink as a /Dest direct destination array naming the target page object, so the link and its table entry both survive -- the reader re-mints a fresh destN name for the array on the way back, which is the documented round-trip shape (names are the reader's minting, positions are the file's facts).
+  it('round-trips an internal link item and its destinations-table entry', () => {
+    const doc = docWithPages([
+      { widthPt: 300, heightPt: 200, items: [{ kind: 'text', text: 'Page one', xPt: 20, yPt: 100, font: HELVETICA, sizePt: 12, color: BLACK }] },
+      { widthPt: 300, heightPt: 200, items: [{ kind: 'text', text: 'Page two', xPt: 20, yPt: 100, font: HELVETICA, sizePt: 12, color: BLACK }] },
+    ]);
+    doc.destinations = [{ name: 'page-two', pageIndex: 1, target: { kind: 'xyz', leftPt: 20, topPt: 100 } }];
+    doc.pages[0]!.items.push({ kind: 'internalLink', destination: 'page-two', xPt: 20, yPt: 120, widthPt: 60, heightPt: 14 });
+
+    const result = readPdf(writePdf(doc, { compress: false }));
+
+    const link = result.pages[0]!.items.find((i) => i.kind === 'internalLink');
+    if (link?.kind !== 'internalLink') {
+      throw new Error('expected an internalLink item');
+    }
+    expect(result.destinations).toEqual([{ name: 'dest1', pageIndex: 1, target: { kind: 'xyz', leftPt: 20, topPt: 100 } }]);
+    expect(link.destination).toBe('dest1');
+    expect(link).toMatchObject({ xPt: 20, yPt: 120, widthPt: 60, heightPt: 14 });
+  });
+
+  it('throws rather than guessing when an internal link names a destination the document does not carry', () => {
+    const doc = docWithItems([{ kind: 'internalLink', destination: 'nowhere', xPt: 20, yPt: 120, widthPt: 60, heightPt: 14 }]);
+    expect(() => writePdf(doc, { compress: false })).toThrow(/nowhere/);
+  });
 });

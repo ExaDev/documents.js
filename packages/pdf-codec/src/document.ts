@@ -15,9 +15,13 @@ import { readXref } from './xref';
 
 export interface PdfDocument {
   readonly trailer: PdfDict;
+  // The validated /Root catalog, exposed because every document-level reader (destinations, outline, embedded files, optional content, AcroForm) walks catalog keys -- re-resolving trailer /Root at each call site would re-narrow a fact openPdfDocument already established.
+  readonly catalog: PdfDict;
   resolve(obj: PdfObject | undefined): PdfObject | undefined;
   resolveDict(obj: PdfObject | undefined): PdfDict | undefined;
   pages(): PdfDict[];
+  // The 0-based position of a page object in pages()' own order -- identity-matched against the tree's resolved leaf objects (NOT the inheritance-merged copies pages() returns, which are fresh objects). This is what a destination array's page reference resolves against.
+  pageIndex(obj: PdfObject | undefined): number | undefined;
 }
 
 // Guards a reference cycle (object A pointing to B pointing back to A) -- a corrupt or adversarial file, not something a real producer emits.
@@ -166,12 +170,16 @@ export function openPdfDocument(bytes: Uint8Array<ArrayBuffer>, sink: PdfDiagnos
 
   const catalog = requireCatalog(resolveDict(dictGet(xref.trailer, 'Root')));
 
+  // The page tree's resolved leaf objects in walk order -- the identity map pageIndex answers from. Filled by the walk itself, so it can never disagree with pages()' own ordering.
+  const originalLeaves = new Map<PdfDict, number>();
+
   function pages(): PdfDict[] {
     const pagesRoot = resolveDict(dictGet(catalog, 'Pages'));
     if (pagesRoot === undefined) {
       return [];
     }
     const result: PdfDict[] = [];
+    originalLeaves.clear();
     walkPageTree(pagesRoot, {}, new Set(), result);
     return result;
   }
@@ -198,6 +206,7 @@ export function openPdfDocument(bytes: Uint8Array<ArrayBuffer>, sink: PdfDiagnos
           entries.set(key, merged[key]);
         }
       }
+      originalLeaves.set(node, result.length);
       result.push({ kind: 'dict', entries });
       return;
     }
@@ -209,5 +218,10 @@ export function openPdfDocument(bytes: Uint8Array<ArrayBuffer>, sink: PdfDiagnos
     }
   }
 
-  return { trailer: xref.trailer, resolve, resolveDict, pages };
+  function pageIndex(obj: PdfObject | undefined): number | undefined {
+    const dict = asDict(resolve(obj));
+    return dict !== undefined ? originalLeaves.get(dict) : undefined;
+  }
+
+  return { trailer: xref.trailer, catalog, resolve, resolveDict, pages, pageIndex };
 }

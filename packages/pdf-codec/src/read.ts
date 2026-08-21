@@ -2,7 +2,7 @@ import { bytesToBase64 } from './util/base64';
 import { crc32 } from './bytes/crc32';
 import { concatBytes } from './bytes/writer';
 import type { Color as LayoutColor, LayoutFont, LayoutMetadata } from 'document-schema.js';
-import type { LayoutDocument, LayoutEllipse, LayoutImageAsset, LayoutItem, LayoutLine, LayoutLink, LayoutPage, LayoutPath, LayoutPathSegment, LayoutRect, LayoutSubpath, LayoutText } from './layout';
+import type { LayoutDocument, LayoutEllipse, LayoutImageAsset, LayoutInternalLink, LayoutItem, LayoutLine, LayoutLink, LayoutPage, LayoutPath, LayoutPathSegment, LayoutRect, LayoutSubpath, LayoutText } from './layout';
 import { LAYOUT_FORMAT_VERSION } from './layout';
 import { openPdfDocument } from './document';
 import type { PdfDiagnosticSink } from './diagnostics';
@@ -16,6 +16,8 @@ import type { ExtractedEllipse, ExtractedImage, ExtractedInlineImage, ExtractedI
 import { interpretContentStream } from './interpret';
 import type { Matrix } from './matrix';
 import { applyMatrix, matrixRotationDegrees, matrixScaleX, matrixScaleY, multiplyMatrices, translationMatrix } from './matrix';
+import type { DestinationRegistry } from './navigation';
+import { createDestinationRegistry, readOutline } from './navigation';
 import type { PdfDict, PdfObject } from './objects';
 import { asArray, asName, asNumber, dictGet } from './objects';
 import { NOTES_ANNOTATION_AUTHOR } from './notes-annotation-author';
@@ -62,9 +64,14 @@ export function readPdf(bytes: Uint8Array<ArrayBuffer>, options?: ReadPdfOptions
   const images: Record<string, LayoutImageAsset> = {};
   const imageIdCache = new Map<PdfDict, string | null>();
 
-  const pages = doc.pages().map((pageDict) => {
+  // The page tree is walked first (materialising the page-index map a destination's page reference resolves against), then the navigation surfaces: page interpretation interns direct destination arrays into the registry as it meets them, so links on page N can name a destination minted by nothing but themselves.
+  const pageDicts = doc.pages();
+  const destinationRegistry = createDestinationRegistry(doc.catalog, doc, (obj) => doc.pageIndex(obj), sink);
+  const outline = readOutline(doc.catalog, destinationRegistry, doc, sink);
+
+  const pages = pageDicts.map((pageDict) => {
     throwIfAborted(signal);
-    return readPage(pageDict, doc, fontResolver, images, imageIdCache, sink);
+    return readPage(pageDict, doc, fontResolver, images, imageIdCache, destinationRegistry, sink);
   });
 
   return {
@@ -72,6 +79,8 @@ export function readPdf(bytes: Uint8Array<ArrayBuffer>, options?: ReadPdfOptions
     metadata: readMetadata(doc.trailer, doc),
     pages,
     images,
+    ...(destinationRegistry.entries.length > 0 ? { destinations: [...destinationRegistry.entries] } : {}),
+    ...(outline.length > 0 ? { outline } : {}),
   };
 }
 
@@ -146,7 +155,7 @@ function readPageContentBytes(page: PdfDict, resolver: PdfObjectResolver, sink: 
   return new Uint8Array(0);
 }
 
-function readPage(page: PdfDict, resolver: PdfObjectResolver, fontResolver: FontResolverService, images: Record<string, LayoutImageAsset>, imageIdCache: Map<PdfDict, string | null>, sink: PdfDiagnosticSink): LayoutPage {
+function readPage(page: PdfDict, resolver: PdfObjectResolver, fontResolver: FontResolverService, images: Record<string, LayoutImageAsset>, imageIdCache: Map<PdfDict, string | null>, destinationRegistry: DestinationRegistry, sink: PdfDiagnosticSink): LayoutPage {
   const resources = resolver.resolveDict(dictGet(page, 'Resources'));
   const mediaBox = readMediaBox(page);
   const rotation = normalizeRotation(asNumber(dictGet(page, 'Rotate')));
@@ -166,7 +175,7 @@ function readPage(page: PdfDict, resolver: PdfObjectResolver, fontResolver: Font
   } else {
     sink({ code: 'pdf/object-missing-value', severity: 'warning', message: 'page has no /Resources dict; its content stream cannot be interpreted' });
   }
-  items.push(...readLinkAnnotations(page, pageMatrix, resolver));
+  items.push(...readLinkAnnotations(page, pageMatrix, resolver, destinationRegistry));
 
   const notes = readPageNotes(page, resolver);
 
@@ -339,22 +348,27 @@ function convertInlineImage(item: ExtractedInlineImage, pageMatrix: Matrix, imag
   return { kind: 'image' as const, imageId, ...imagePlacementFrom(composed) };
 }
 
-// --- Link annotations: /Annots walk for /Subtype /Link with a /URI action -- the one annotation kind v1 recovers. ---
+// --- Link annotations: /Annots walk for /Subtype /Link -- external /A /S /URI actions as LayoutLink items, internal /Dest (direct or named) and /A /GoTo targets as internalLink items naming a destinations-table entry. ---
 
-function readLinkAnnotations(page: PdfDict, pageMatrix: Matrix, resolver: PdfObjectResolver): LayoutLink[] {
+function readLinkAnnotations(page: PdfDict, pageMatrix: Matrix, resolver: PdfObjectResolver, destinationRegistry: DestinationRegistry): (LayoutLink | LayoutInternalLink)[] {
   const annotsArr = asArray(dictGet(page, 'Annots'));
   if (annotsArr === undefined) {
     return [];
   }
-  const links: LayoutLink[] = [];
+  const links: (LayoutLink | LayoutInternalLink)[] = [];
   for (const annotRef of annotsArr) {
     const annot = resolver.resolveDict(annotRef);
     if (annot === undefined || asName(dictGet(annot, 'Subtype')) !== 'Link') {
       continue;
     }
-    const uri = readLinkUri(annot, resolver);
     const rectArr = asArray(dictGet(annot, 'Rect'));
-    if (uri === undefined || rectArr === undefined) {
+    if (rectArr === undefined) {
+      continue;
+    }
+    const uri = readLinkUri(annot, resolver);
+    // A link with no external action may still carry an internal destination: /Dest directly, or a /A /GoTo action's /D.
+    const destination = uri === undefined ? readInternalDestination(annot, resolver, destinationRegistry) : undefined;
+    if (uri === undefined && destination === undefined) {
       continue;
     }
     const x1 = asNumber(rectArr[0]) ?? 0;
@@ -363,14 +377,20 @@ function readLinkAnnotations(page: PdfDict, pageMatrix: Matrix, resolver: PdfObj
     const y2 = asNumber(rectArr[3]) ?? 0;
     const p1 = applyMatrix(pageMatrix, { x: Math.min(x1, x2), y: Math.min(y1, y2) });
     const p2 = applyMatrix(pageMatrix, { x: Math.max(x1, x2), y: Math.max(y1, y2) });
-    links.push({
-      kind: 'link',
-      uri,
+    const contentsObj = dictGet(annot, 'Contents');
+    const title = contentsObj?.kind === 'string' ? decodePdfString(contentsObj.bytes) : undefined;
+    const box = {
       xPt: Math.min(p1.x, p2.x),
       yPt: Math.min(p1.y, p2.y),
       widthPt: Math.abs(p2.x - p1.x),
       heightPt: Math.abs(p2.y - p1.y),
-    });
+      ...(title !== undefined ? { title } : {}),
+    };
+    if (uri !== undefined) {
+      links.push({ kind: 'link', uri, ...box });
+    } else if (destination !== undefined) {
+      links.push({ kind: 'internalLink', destination, ...box });
+    }
   }
   return links;
 }
@@ -382,6 +402,18 @@ function readLinkUri(annot: PdfDict, resolver: PdfObjectResolver): string | unde
   }
   const uriObj = dictGet(action, 'URI');
   return uriObj?.kind === 'string' ? decodePdfString(uriObj.bytes) : undefined;
+}
+
+function readInternalDestination(annot: PdfDict, resolver: PdfObjectResolver, destinationRegistry: DestinationRegistry): string | undefined {
+  const dest = dictGet(annot, 'Dest');
+  if (dest !== undefined) {
+    return destinationRegistry.intern(dest);
+  }
+  const action = resolver.resolveDict(dictGet(annot, 'A'));
+  if (action !== undefined && asName(dictGet(action, 'S')) === 'GoTo') {
+    return destinationRegistry.intern(dictGet(action, 'D'));
+  }
+  return undefined;
 }
 
 // pptx speaker notes carried as a hidden /Subtype /Text annotation (see write.ts's buildNotesAnnotDict) -- the /T marker distinguishes an annotation this package's own writer produced from a genuine sticky note a human or another tool left on the page, which would also be /Subtype /Text but authored by someone/something else. Returns undefined (not '') when no such annotation exists, so reconstructPresentation's own page.notes ?? '' fallback is the one place that decides what "no notes" means for a ContentSlide.

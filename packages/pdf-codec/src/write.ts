@@ -4,7 +4,7 @@ import { ByteWriter, concatBytes } from './bytes/writer';
 import { readJpegInfo } from './image/jpeg-info';
 import { decodePng } from './image/png-decode';
 import type { LayoutFont, PositionedFormula } from 'document-schema.js';
-import type { LayoutDocument, LayoutImageAsset, LayoutLink } from './layout';
+import type { LayoutDestinationTarget, LayoutDocument, LayoutImageAsset, LayoutInternalLink, LayoutLink } from './layout';
 import type { FontMetrics, StandardFontName } from './afm-widths';
 import { STANDARD_METRICS, widthOfCode } from './afm-widths';
 import type { ContentWriteContext } from './content-write';
@@ -21,7 +21,7 @@ import { loadMathFont } from './math-font';
 import { buildMathFontObjects } from './math-font-write';
 import { createFontMeasurer } from './measure';
 import type { PdfDict, PdfObject } from './objects';
-import { pdfArray, pdfDict, pdfHexString, pdfName, pdfNum, pdfRef, pdfStream } from './objects';
+import { pdfArray, pdfDict, pdfHexString, pdfName, pdfNull, pdfNum, pdfRef, pdfStream } from './objects';
 import { subsetSfnt } from './sfnt-subset';
 import { throwIfAborted } from './util/abort';
 import { writeObject } from './serialize';
@@ -237,8 +237,54 @@ function buildLinkAnnotDict(link: LayoutLink): PdfObject {
   });
 }
 
+// A display destination array's view half (ISO 32000-1 Table 151) -- the inverse of navigation.ts's parseDestination, spelling the target back as the direct array form so the written link needs no /Dests or /Names tree to resolve. Absent coordinates are null, exactly as a producer that omitted them would write.
+function destinationViewArray(target: LayoutDestinationTarget): PdfObject[] {
+  const n = (value: number | undefined): PdfObject => (value === undefined ? pdfNull() : pdfNum(value));
+  if (target.kind === 'xyz') {
+    return [pdfName('XYZ'), n(target.leftPt), n(target.topPt), n(target.zoom)];
+  }
+  if (target.kind === 'fitH') {
+    return [pdfName('FitH'), n(target.topPt)];
+  }
+  if (target.kind === 'fitV') {
+    return [pdfName('FitV'), n(target.leftPt)];
+  }
+  if (target.kind === 'fitR') {
+    return [pdfName('FitR'), n(target.leftPt), n(target.bottomPt), n(target.rightPt), n(target.topPt)];
+  }
+  if (target.kind === 'fitBH') {
+    return [pdfName('FitBH'), n(target.topPt)];
+  }
+  if (target.kind === 'fitBV') {
+    return [pdfName('FitBV'), n(target.leftPt)];
+  }
+  return [pdfName(target.kind === 'fitB' ? 'FitB' : 'Fit')];
+}
+
+function buildInternalLinkAnnotDict(link: LayoutInternalLink, doc: LayoutDocument, pageAllocs: readonly { pageNum: number }[]): PdfObject {
+  const destination = doc.destinations?.find((d) => d.name === link.destination);
+  if (destination === undefined) {
+    throw new Error(`internal link names destination "${link.destination}", which the document's destinations table does not carry -- this is a caller-invariant violation`);
+  }
+  const targetPage = pageAllocs[destination.pageIndex];
+  if (targetPage === undefined) {
+    throw new Error(`destination "${link.destination}" names page index ${destination.pageIndex}, which is beyond the document's own pages -- this is a caller-invariant violation`);
+  }
+  return pdfDict({
+    Type: pdfName('Annot'),
+    Subtype: pdfName('Link'),
+    Rect: pdfArray([link.xPt, link.yPt, link.xPt + link.widthPt, link.yPt + link.heightPt].map((v) => pdfNum(v))),
+    Border: pdfArray([0, 0, 0].map((v) => pdfNum(v))),
+    Dest: pdfArray([pdfRef(targetPage.pageNum, 0), ...destinationViewArray(destination.target)]),
+  });
+}
+
 function isLinkItem(item: { readonly kind: string }): item is LayoutLink {
   return item.kind === 'link';
+}
+
+function isInternalLinkItem(item: { readonly kind: string }): item is LayoutInternalLink {
+  return item.kind === 'internalLink';
 }
 
 // PDF has no native concept of hidden presenter notes, but it does have a standard construct for "a note attached to a page that isn't part of the page's visible content": a /Subtype /Text annotation (the same one Acrobat's own sticky-note tool creates), with the Hidden annotation flag (ISO 32000-1 Table 165, bit position 2, value 2 -- "do not display the annotation... regardless of its annotation flags... in any way") set so it never renders or prints. This is how pptx speaker notes survive pptxToPdf -> pdfToPptx: reusing a real, standard PDF construct that generic PDF tooling already knows to preserve in an Annots array, rather than a bespoke private dictionary key nothing else would recognise. /T marks authorship so read.ts's readPageNotes only ever treats an annotation genuinely written by this function as recovered notes, not a real sticky note a human or another tool happened to leave on the page.
@@ -481,7 +527,10 @@ export function writePdf(doc: LayoutDocument, options: WritePdfOptions = {}): Ui
     const contentsDict = pdfDict(compress ? { Filter: pdfName('FlateDecode') } : {});
     objects.push({ num: contentsNum, value: pdfStream(contentsDict, finalContentBytes) });
 
-    const annots = page.items.filter(isLinkItem).map((link) => buildLinkAnnotDict(link));
+    const annots = [
+      ...page.items.filter(isLinkItem).map((link) => buildLinkAnnotDict(link)),
+      ...page.items.filter(isInternalLinkItem).map((link) => buildInternalLinkAnnotDict(link, doc, pageAllocs)),
+    ];
     if (page.notes !== undefined && page.notes.length > 0) {
       annots.push(buildNotesAnnotDict(page.notes));
     }
