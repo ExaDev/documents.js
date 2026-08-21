@@ -265,7 +265,7 @@ export { readDocx, buildDocxPackage, readPptx, readXlsx, buildXlsxPackage } from
 export { readDocxContent, CommentSchema, DocxDocumentSchema, FootnoteSchema } from './typed/docx/read';
 export type { Comment, DocxDocument, Footnote } from './typed/docx/read';
 export { buildDocxPackageFromContent } from './typed/docx/write';
-export type { DocxContent } from './typed/docx/write';
+export type { BuildDocxContentOptions, DocxContent, EmbeddedPresentationSerialiser } from './typed/docx/write';
 
 // word/numbering.xml's own abstractNum/num level definitions (glyph format, start-at value, restart rule) -- a companion to, not a replacement for, ContentListMembership's existing per-paragraph numId/level tracking. See numbering.ts's own doc comment for why this is a separate keyed structure rather than a ContentListMembership field.
 export { NumberingDefinitionSchema, NumberingLevelSchema, readNumberingDefinitions } from './typed/docx/numbering';
