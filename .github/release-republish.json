@@ -1,0 +1,44 @@
+{
+  "byte-codec": {
+    "githubPackages": "byte-codec",
+    "aliases": ["document-bytes"]
+  },
+  "document-cli": {
+    "aliases": ["doculi"]
+  },
+  "document-mcp": {},
+  "document-outline.js": {
+    "githubPackages": "document-outline.js",
+    "aliases": []
+  },
+  "document-schema.js": {
+    "githubPackages": "document-content-model",
+    "aliases": [
+      "document-content-model",
+      "doc-model.js",
+      "doc-schema.js",
+      "document-schema",
+      "document-model.js"
+    ]
+  },
+  "documents.js": {
+    "githubPackages": "documents.js",
+    "aliases": ["js.documents"]
+  },
+  "markdown-codec": {
+    "githubPackages": "markdown-codec",
+    "aliases": ["mrkdwn.js"]
+  },
+  "odf.js": {
+    "githubPackages": "odf.js",
+    "aliases": []
+  },
+  "ooxml.js": {
+    "githubPackages": "ooxml.js",
+    "aliases": []
+  },
+  "pdf-codec": {
+    "githubPackages": "pdf-codec",
+    "aliases": ["pdf-codec.js", "pdf-parser.js"]
+  }
+}
