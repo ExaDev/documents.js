@@ -319,3 +319,28 @@ export function navigationClusterPdf(): Uint8Array<ArrayBuffer> {
   b.classicXrefAndTrailer(16, '/Root 1 0 R');
   return b.bytes();
 }
+
+// The embedded-files cluster (#721 phase 2): a /Names /EmbeddedFiles name-tree entry whose stream carries /Subtype and whose filespec carries /Desc; a /FileAttachment annotation on the page with its own filespec plus a SECOND annotation whose filespec duplicates the name-tree entry's name (the dedup case); and a catalog /AF associated-files entry (ISO 32000-2). One of the streams is Flate-compressed so decoding goes through the ordinary filter path, and one is raw binary bytes with no /Subtype, pinning that mimeType is absent rather than guessed.
+export function embeddedFilesPdf(): Uint8Array<ArrayBuffer> {
+  const b = new FixtureBuilder().header('1.7');
+  b.object(1, '<< /Type /Catalog /Pages 2 0 R /Names << /EmbeddedFiles 6 0 R >> /AF [13 0 R] >>');
+  b.object(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+  b.object(3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R /Annots [10 0 R 11 0 R] >>');
+  b.object(4, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+  b.stream(5, '<< >>', enc(HELLO_CONTENT));
+  // The name tree root, split through a /Kids node so the walker's recursion is exercised here too.
+  b.object(6, '<< /Kids [7 0 R] >>');
+  b.object(7, '<< /Names [(notes.txt) 8 0 R] >>');
+  b.object(8, '<< /Type /Filespec /F (notes.txt) /UF (notes.txt) /Desc (Meeting notes) /EF << /F 9 0 R >> >>');
+  b.stream(9, '<< /Type /EmbeddedFile /Subtype /text#2Fplain >>', enc('Attached file body'));
+  // A /FileAttachment annotation with a distinct filespec, and a second whose filespec repeats the name-tree entry's name -- the second must collapse into the first-Seen entry, not duplicate it.
+  b.object(10, '<< /Type /Annot /Subtype /FileAttachment /Rect [150 80 170 96] /FS 12 0 R >>');
+  b.object(11, '<< /Type /Annot /Subtype /FileAttachment /Rect [150 60 170 76] /FS 8 0 R >>');
+  b.object(12, '<< /Type /Filespec /F (logo.bin) /EF << /F 14 0 R >> >>');
+  b.object(13, '<< /Type /Filespec /F (manifest.json) /UF (manifest.json) /EF << /F 15 0 R >> >>');
+  b.stream(14, '<< /Type /EmbeddedFile /Params << /Size 3 >> >>', new Uint8Array([0, 1, 2]));
+  // Flate-compressed so the bytes recover through the ordinary filter path, not just raw passthrough.
+  b.stream(15, '<< /Type /EmbeddedFile /Filter /FlateDecode >>', zlibSync(enc('{}')));
+  b.classicXrefAndTrailer(15, '/Root 1 0 R');
+  return b.bytes();
+}

@@ -198,6 +198,15 @@ export interface LayoutOutlineItem {
   readonly children: readonly LayoutOutlineItem[];
 }
 
+// An embedded file (/Names /EmbeddedFiles entry, /FileAttachment annotation filespec, or /AF associated file): decoded bytes as base64, the filespec's own name and description, and the stream's MIME type where it declared one.
+export const LayoutAttachmentSchema = z.object({
+  name: z.string(),
+  description: z.string().optional(),
+  mimeType: z.string().optional(),
+  base64: z.string(),
+});
+export type LayoutAttachment = z.infer<typeof LayoutAttachmentSchema>;
+
 export const LayoutDocumentSchema = z.object({
   formatVersion: z.literal(LAYOUT_FORMAT_VERSION),
   metadata: LayoutMetadataSchema,
@@ -205,5 +214,6 @@ export const LayoutDocumentSchema = z.object({
   images: z.record(z.string(), LayoutImageAssetSchema),
   destinations: z.array(LayoutDestinationSchema).optional(),
   outline: z.array(LayoutOutlineItemSchema).optional(),
+  attachments: z.array(LayoutAttachmentSchema).optional(),
 });
 export type LayoutDocument = z.infer<typeof LayoutDocumentSchema>;
