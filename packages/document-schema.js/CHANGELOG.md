@@ -1,3 +1,11 @@
+# [4.8.0](https://github.com/ExaDev/documents.js/compare/document-schema.js@4.7.0...document-schema.js@4.8.0) (2026-08-21)
+
+
+### Features
+
+* **pdf:** read document language, mirror XMP Dublin Core, and quarantine package-level residue rows ([f4f0691](https://github.com/ExaDev/documents.js/commit/f4f0691d6ef45ac86c72cbae57f76317bba52888))
+* **schema:** task checked state, list-item identity, and code language as additive content fields ([a6aa10d](https://github.com/ExaDev/documents.js/commit/a6aa10d4164fb0b67990f62920a854611aed0aea))
+
 # [4.7.0](https://github.com/ExaDev/documents.js/compare/document-schema.js@4.6.0...document-schema.js@4.7.0) (2026-08-21)
 
 
