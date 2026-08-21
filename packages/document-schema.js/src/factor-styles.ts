@@ -33,7 +33,7 @@ import type {
 // The whole pass is a pure function of the MATERIALISED content: factorStyles flattens its input first (resolving any refs it already carries), so factoring a second time computes the identical plan over the identical values and mints the identical table -- law (iii), minting idempotence, holds by construction. Stripping copies only the paragraphs and runs whose keys moved to a table entry (never the caller's nodes in place -- decompose embedded those, and the layout pass's frames ride on them); every other node in the minted tree is the same object the flat content owns. Strips apply per chain, not per node object: the same paragraph or run object may legally sit at positions under two sibling wrappers (a caller-built document that pushes one node into two sections is a two-position tree once serialised), and each position is stripped only by a wrapper whose ref that position's own chain resolves -- flatten resolves per position, so minting strips per position too (see WrapperStrips).
 
 // The paragraph half's mintable keys, in the schema's own declaration order (StyleParagraphProperties minus `list`; see the module doc for why list never factors).
-const PARAGRAPH_STYLE_KEYS = ['alignment', 'spacingBeforePt', 'spacingAfterPt', 'lineSpacing', 'indentLeftPt', 'indentFirstLinePt'] as const;
+const PARAGRAPH_STYLE_KEYS = ['alignment', 'spacingBeforePt', 'spacingAfterPt', 'lineSpacing', 'indentLeftPt', 'indentFirstLinePt', 'pageBreakBefore', 'pageBreakAfter'] as const;
 
 // The run half's mintable keys -- StyleRunProperties' full field set, schema declaration order.
 const RUN_STYLE_KEYS = ['bold', 'italic', 'underline', 'strike', 'fontFamily', 'sizePt', 'color'] as const;
