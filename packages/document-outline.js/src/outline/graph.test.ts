@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { DocumentPackageSchema, type DocumentPackage, type StylesTable } from 'document-schema.js';
-import { projectDocumentGraph, type GraphNode, type PropertyGraph } from './graph';
+import { DocumentPackageSchema, type DefinitionEntry, type DocumentPackage, type StylesTable } from 'document-schema.js';
+import { defaultExtractionPolicy, projectDocumentGraph, type ExtractionPolicy, type GraphNode, type PropertyGraph } from './graph';
 import { headingGroup, paragraph, sectionGroup, wordprocessingPackage } from '../test-support/fixtures';
 
 // The worked example of ExaDev/documents.js#659: a report document whose heading paragraph carries a styles-table ref, plus a second document sharing the boilerplate line and the heading style content but nothing else -- the projection must share exactly those two things and nothing besides.
@@ -142,6 +142,154 @@ describe('Merkle-DAG edit behaviour', () => {
     const last = graph.nodes.filter((node) => node.kind === 'paragraph' && JSON.stringify(node).includes('Last.'));
     expect(last).toHaveLength(1);
     expect(graph.edges.filter((edge) => edge.kind === 'CONTAINS' && edge.to === last[0]!.id)).toHaveLength(2);
+  });
+});
+
+describe('definitions tables', () => {
+  const NOTE_BODY: DefinitionEntry = {
+    kind: 'footnote',
+    blocks: [{ kind: 'paragraph', runs: [{ text: 'The note body.' }] }],
+  };
+
+  function footnotePackage(styleOfKey: string): DocumentPackage {
+    return wordprocessingPackage(
+      [
+        sectionGroup([
+          { node: { kind: 'anchor', anchorType: 'footnote', name: '1', definition: 'n1' }, children: [] },
+          paragraph('Body text.'),
+        ]),
+      ],
+      { styles: { [styleOfKey]: { run: { bold: true } } }, definitions: { n1: NOTE_BODY } },
+    );
+  }
+
+  it('projects an anchor definition ref as a DEFINED_BY edge to a definitionEntry node', () => {
+    const pkg = footnotePackage('bold');
+    expectSchemaValid(pkg, 'footnote');
+    const graph = projectDocumentGraph([{ id: 'doc', package: pkg }]);
+
+    const entryNodes = graph.nodes.filter((node) => node.kind === 'definitionEntry');
+    // The entry's own tenant discriminator re-houses under tenantKind; the graph kind names the table.
+    expect(entryNodes).toEqual([{ id: entryNodes[0]!.id, kind: 'definitionEntry', tenantKind: 'footnote', blocks: NOTE_BODY.blocks }]);
+
+    const anchorNode = graph.nodes.find((node) => node.kind === 'anchor')!;
+    expect(anchorNode).toMatchObject({ kind: 'anchor', anchorType: 'footnote', name: '1' });
+    expect('definition' in anchorNode).toBe(false); // the local key never reaches the node face
+    expect(graph.edges.filter((edge) => edge.kind === 'DEFINED_BY')).toEqual([
+      { from: anchorNode.id, to: entryNodes[0]!.id, kind: 'DEFINED_BY', order: 0, path: ['definition'] },
+    ]);
+  });
+
+  it('deduplicates anchor refs across documents naming the same entry content differently', () => {
+    // Document b spells the identical entry under a different key and references it from an identically-shaped anchor.
+    const a = footnotePackage('bold');
+    const b: DocumentPackage = {
+      ...footnotePackage('bold'),
+      definitions: { noteOne: NOTE_BODY },
+      children: [
+        {
+          ...a.children[0]!,
+          children: [
+            { node: { kind: 'anchor', anchorType: 'footnote', name: '1', definition: 'noteOne' }, children: [] },
+            paragraph('Body text.'),
+          ],
+        },
+      ],
+    };
+    expectSchemaValid(b, 'footnote-b');
+    const graph = projectDocumentGraph([
+      { id: 'a', package: a },
+      { id: 'b', package: b },
+    ]);
+    expect(graph.nodes.filter((node) => node.kind === 'definitionEntry')).toHaveLength(1);
+    expect(graph.nodes.filter((node) => node.kind === 'anchor')).toHaveLength(1);
+    expect(graph.edges.filter((edge) => edge.kind === 'DEFINED_BY')).toHaveLength(1);
+  });
+
+  it('emits definitionEntry nodes for unreferenced entries in every generic table', () => {
+    const pkg = wordprocessingPackage([sectionGroup([paragraph('Body.')])], {
+      definitions: { n1: NOTE_BODY },
+      layers: { ocg1: { kind: 'layer', name: 'Background' } },
+      attachments: { file1: { kind: 'attachment', name: 'data.csv' } },
+      destinations: { top: { kind: 'destination', page: 1 } },
+    });
+    expectSchemaValid(pkg, 'tables');
+    const graph = projectDocumentGraph([{ id: 'doc', package: pkg }]);
+    const entries = graph.nodes.filter((node) => node.kind === 'definitionEntry');
+    expect(entries).toHaveLength(4); // all four exist whether or not anything references them
+    expect(entries.map((node) => node.tenantKind).sort()).toEqual(['attachment', 'destination', 'footnote', 'layer']);
+  });
+
+  it('refuses a ref the table does not carry, loudly', () => {
+    const danglingStyle = wordprocessingPackage([sectionGroup([headingGroup('H', 1, [], { style: 'missing' })])], {
+      styles: { s1: { run: { bold: true } } },
+    });
+    expect(() => projectDocumentGraph([{ id: 'doc', package: danglingStyle }])).toThrowError(
+      /style ref "missing" names no entry in the styles table/,
+    );
+
+    const danglingDefinition = wordprocessingPackage(
+      [sectionGroup([{ node: { kind: 'anchor', anchorType: 'footnote', name: '1', definition: 'gone' }, children: [] }])],
+      { definitions: { n1: NOTE_BODY } },
+    );
+    expect(() => projectDocumentGraph([{ id: 'doc', package: danglingDefinition }])).toThrowError(
+      /definition ref "gone" names no entry in the definitions table/,
+    );
+  });
+});
+
+describe('extraction policy', () => {
+  it('default: metadata stays inline on the root even when identical across documents, and nothing else is extracted', () => {
+    const docA = wordprocessingPackage([sectionGroup([paragraph('A body.')])], { metadata: { title: 'Same title' } });
+    const docB = wordprocessingPackage([sectionGroup([paragraph('B body.')])], { metadata: { title: 'Same title' } });
+    const graph = projectDocumentGraph([
+      { id: 'a', package: docA },
+      { id: 'b', package: docB },
+    ]);
+    expect(graph.nodes.filter((node) => node.kind === 'value')).toEqual([]);
+    expect(graph.edges.filter((edge) => edge.kind === 'PROPERTY')).toEqual([]);
+    const roots = graph.nodes.filter((node) => node.kind === 'documentPackage');
+    expect(roots).toHaveLength(2);
+    for (const root of roots) expect(root.metadata).toEqual({ title: 'Same title' });
+  });
+
+  it('custom: extracting a recurring scalar promotes it to a shared value node with a PROPERTY edge', () => {
+    const extractTitles: ExtractionPolicy = (path, value) =>
+      path.length === 2 && path[0] === 'metadata' && path[1] === 'title' && typeof value === 'string' ? 'extract' : 'inline';
+    const docA = wordprocessingPackage([sectionGroup([paragraph('A body.')])], { metadata: { title: 'Shared title' } });
+    const docB = wordprocessingPackage([sectionGroup([paragraph('B body.')])], { metadata: { title: 'Shared title' } });
+    const graph = projectDocumentGraph(
+      [
+        { id: 'a', package: docA },
+        { id: 'b', package: docB },
+      ],
+      { policy: extractTitles },
+    );
+    const valueNodes = graph.nodes.filter((node) => node.kind === 'value');
+    expect(valueNodes).toEqual([{ id: valueNodes[0]!.id, kind: 'value', value: 'Shared title' }]);
+    const roots = graph.nodes.filter((node) => node.kind === 'documentPackage');
+    expect(roots).toHaveLength(2);
+    for (const root of roots) expect('title' in (root.metadata as Record<string, unknown>)).toBe(false);
+    expect(graph.edges.filter((edge) => edge.kind === 'PROPERTY')).toHaveLength(2);
+    for (const edge of graph.edges.filter((edge) => edge.kind === 'PROPERTY')) {
+      expect(edge.path).toEqual(['metadata', 'title']);
+      expect(edge.to).toBe(valueNodes[0]!.id);
+      expect(edge.order).toBe(0);
+    }
+  });
+
+  it('custom: inlining style entries folds the dereferenced entry content into the referencing node', () => {
+    const inlineStyles: ExtractionPolicy = (path, value) =>
+      path.length === 2 && path[0] === 'styles' ? 'inline' : defaultExtractionPolicy(path, value);
+    const entry = { run: { bold: true } };
+    const doc = wordprocessingPackage([sectionGroup([headingGroup('H', 1, [], { style: 's1' })])], { styles: { s1: entry } });
+    const graph = projectDocumentGraph([{ id: 'doc', package: doc }], { policy: inlineStyles });
+    expect(graph.nodes.filter((node) => node.kind === 'styleEntry')).toEqual([]);
+    expect(graph.edges.filter((edge) => edge.kind === 'STYLED_BY')).toEqual([]);
+    const heading = graph.nodes.find((node) => node.kind === 'paragraph' && node.headingLevel === 1)!;
+    // The dereferenced ENTRY CONTENT rides on the node -- never the document-local key 's1'.
+    expect(heading.style).toEqual(entry);
+    expect(graph.nodes.filter((node) => node.kind === 'documentPackage')[0]!.styles).toEqual({ s1: entry });
   });
 });
 

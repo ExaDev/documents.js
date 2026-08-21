@@ -71,6 +71,14 @@ function entryKindOf(field: TableField): string {
   return field === 'styles' ? 'styleEntry' : 'definitionEntry';
 }
 
+// A table entry's node face. A generic entry's own `kind` discriminator (footnote, layer, attachment, destination...) is CONTENT -- it distinguishes tenants, and the hash covers it verbatim -- but `kind` is also the graph vocabulary's word for what a node IS, so the face re-houses the tenant discriminator under `tenantKind` and the graph kind wins. Content keys spread first everywhere so no entry field can clobber `id` or `kind`.
+function entryNodeFace(id: string, field: TableField, properties: Record<string, unknown>): GraphNode {
+  const face: Record<string, unknown> = { ...properties };
+  const tenantKind = face.kind;
+  delete face.kind;
+  return { ...face, ...(tenantKind === undefined ? {} : { tenantKind }), id, kind: entryKindOf(field) };
+}
+
 const TABLE_FIELD_NAMES = new Set<string>(TABLE_FIELDS);
 
 // The default policy: extract every table entry (the reused content the definitions facility exists to hold), inline everything else -- envelope facts, tree-node properties, scalars -- including table entries' own innards (an entry is a unit; its halves are not re-factored).
@@ -151,7 +159,7 @@ class DocumentProjection {
       const id = stableContentHash(walked.hash);
       const decided = { status: 'extract' as const, id, walked };
       this.tableDecisions.set(memoKey, decided);
-      this.pendingEntryNodes.push({ id, kind: entryKindOf(field), ...walked.properties });
+      this.pendingEntryNodes.push(entryNodeFace(id, field, walked.properties));
       return decided;
     }
     const decided = { status: 'inline' as const, walked };
@@ -241,7 +249,7 @@ class DocumentProjection {
     if (isRecord(value)) {
       const walked = this.walkRecord(value, path);
       const id = stableContentHash(walked.hash);
-      this.addNode({ id, kind: 'value', ...walked.properties });
+      this.addNode({ ...walked.properties, id, kind: 'value' });
       this.emitWalkEdges(id, walked.edges);
       return id;
     }
@@ -281,11 +289,11 @@ class DocumentProjection {
 
     // The root node lands first, then this document's entry nodes in content-id order, then the tree in pre-order.
     this.addNode({
+      ...envelopeWalk.properties,
+      ...leftoverTables,
       id: this.documentId,
       kind: 'documentPackage',
       documentKind: this.pkg.kind,
-      ...envelopeWalk.properties,
-      ...leftoverTables,
     });
     for (const node of this.pendingEntryNodes.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))) {
       this.addNode(node);
@@ -316,6 +324,7 @@ class DocumentProjection {
       ...walked.hash,
       children: childResults.map(({ result }) => result.id),
     };
+    const face: Record<string, unknown> = { ...walked.properties };
     let styledBy: { to: string } | undefined;
     if (group.style !== undefined) {
       const resolved = this.resolveStyleRef(group.style);
@@ -324,6 +333,7 @@ class DocumentProjection {
         styledBy = { to: resolved.id };
       } else {
         hashInput.style = resolved.walked.hash;
+        face.style = resolved.walked.properties;
       }
     }
     const id = stableContentHash(hashInput);
@@ -334,7 +344,7 @@ class DocumentProjection {
       order,
     }));
     if (styledBy !== undefined) edges.push({ from: id, to: styledBy.to, kind: 'STYLED_BY', order: 0 });
-    this.addNode({ id, kind: kindOf(group.node), ...walked.properties });
+    this.addNode({ ...face, id, kind: kindOf(group.node) });
     this.emitWalkEdges(id, walked.edges);
     return { id, edges: [...edges, ...childResults.flatMap(({ result }) => result.edges)] };
   }
@@ -343,7 +353,7 @@ class DocumentProjection {
   private projectLeaf(leaf: AnyChild): { id: string; edges: GraphEdge[] } {
     const walked = this.walkRecord(recordOf(leaf), []);
     const id = stableContentHash(walked.hash);
-    this.addNode({ id, kind: kindOf(leaf), ...walked.properties });
+    this.addNode({ ...walked.properties, id, kind: kindOf(leaf) });
     this.emitWalkEdges(id, walked.edges);
     return { id, edges: [] };
   }
