@@ -29,6 +29,7 @@ export const PptxDocumentSchema = z.object({
 export type PptxDocument = z.infer<typeof PptxDocumentSchema>;
 
 const PRESENTATION_PATH = 'ppt/presentation.xml';
+const SLIDE_REL_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide';
 const TABLE_GRAPHIC_URI = 'http://schemas.openxmlformats.org/drawingml/2006/table';
 const CHART_GRAPHIC_URI = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
 const DIAGRAM_GRAPHIC_URI = 'http://schemas.openxmlformats.org/drawingml/2006/diagram';
@@ -93,7 +94,7 @@ function isStrikethrough(rPr: XmlElement | undefined): boolean | undefined {
   return strike === undefined ? undefined : strike !== 'noStrike';
 }
 
-// a:hlinkClick/@r:id resolves through the SLIDE's own relationships (not the layout/master's) -- only external targets (TargetMode="External") have a meaningful URI; an internal slide-jump link has no useful string representation for ContentRun.hyperlink and is left unset.
+// a:hlinkClick/@r:id resolves through the SLIDE's own relationships (not the layout/master's). Two target families: an external one (TargetMode="External") is the run's own resolved URI on ContentRun.hyperlink, and an internal slide reference is a slide jump, which the flat run field cannot express and readInternalSlideJump records as the paragraph's own link construct instead (below).
 function readHyperlink(rPr: XmlElement | undefined, slideRels: ReadonlyMap<string, Relationship>): string | undefined {
   if (rPr === undefined) {
     return undefined;
@@ -102,6 +103,18 @@ function readHyperlink(rPr: XmlElement | undefined, slideRels: ReadonlyMap<strin
   const rId = hlink === undefined ? undefined : attr(hlink, 'r:id');
   const rel = rId === undefined ? undefined : slideRels.get(rId);
   return rel?.targetMode === 'External' ? rel.target : undefined;
+}
+
+// An a:hlinkClick whose relationship is an internal reference to another slide (relationship type .../slide, no TargetMode): PresentationML addresses slide jumps by part relationship, never by name, so the run-level `link` construct's internal anchor carries the target slide's package part path -- resolveRelationships' normalised spelling (e.g. 'ppt/slides/slide2.xml'), the document-unique string the file itself spells, which a resolver matches against the slides the presentation part orders. An action-only jump (ppaction://hlinkshowjump, no r:id) and a non-slide internal target (a custom show, an OLE action) name nothing this model carries and stay unrecorded.
+function readInternalSlideJump(runEl: XmlElement, slideRels: ReadonlyMap<string, Relationship>): string | undefined {
+  const rPr = childrenWithTag(runEl, 'a:rPr')[0];
+  if (rPr === undefined) {
+    return undefined;
+  }
+  const hlink = childrenWithTag(rPr, 'a:hlinkClick')[0];
+  const rId = hlink === undefined ? undefined : attr(hlink, 'r:id');
+  const rel = rId === undefined ? undefined : slideRels.get(rId);
+  return rel !== undefined && rel.targetMode !== 'External' && rel.type === SLIDE_REL_TYPE ? rel.target : undefined;
 }
 
 // Reads a single run's text/formatting, given the cascade base already resolved for its paragraph (master txStyles default, overridden by the paragraph's own a:pPr/a:defRPr if present). Shared by a:r and a:fld (a cached dynamic field, e.g. slide number/date) -- both carry the identical a:rPr + a:t shape.
@@ -176,21 +189,30 @@ function readParagraph(pEl: XmlElement, placeholderType: string | undefined, con
   const paragraphDefaults = pPrDefRPr === undefined ? masterDefaults : mergeRunProperties(masterDefaults, readRunPropertiesFromElement(pPrDefRPr, context));
 
   const runs: ContentRun[] = [];
-  // A dynamic field (a:fld) reads as an ordinary run AND records a field run construct covering exactly that run: the run's text is the rendered content, the construct's instruction is @type and its cachedResult the cached a:t -- the two-fact spelling document-schema.js's FieldDescriptor itself names pptx for. A fld with no @type carries no field-ness worth recording and stays an ordinary run.
+  // A dynamic field (a:fld) reads as an ordinary run AND records a field run construct covering exactly that run: the run's text is the rendered content, the construct's instruction is @type and its cachedResult the cached a:t -- the two-fact spelling document-schema.js's FieldDescriptor itself names pptx for. A fld with no @type carries no field-ness worth recording and stays an ordinary run. An internal slide-jump link records a `link` construct over the same single run (DrawingML hangs hyperlinks off each run's own rPr, so one link is always exactly one run); fields first, then links, both in walk order -- the two families concatenate rather than interleave for the same reason the docx walk's do: extents are data on the paragraph, never brackets, so no ordering between families is load-bearing.
   const fieldExtents: RunConstructExtent[] = [];
+  const linkExtents: RunConstructExtent[] = [];
   for (const child of pEl.children) {
     if (child.type !== 'element') {
       continue;
     }
-    if (child.tag === 'a:r') {
+    if (child.tag === 'a:r' || child.tag === 'a:fld') {
       runs.push(readRun(child, paragraphDefaults, context, slideRels));
-    } else if (child.tag === 'a:fld') {
-      runs.push(readRun(child, paragraphDefaults, context, slideRels));
-      const type = attr(child, 'type');
-      if (type !== undefined) {
-        const cached = childrenWithTag(child, 'a:t')[0];
-        fieldExtents.push({
-          descriptor: { kind: 'field', instruction: type, cachedResult: cached === undefined ? '' : textContent(cached) },
+      if (child.tag === 'a:fld') {
+        const type = attr(child, 'type');
+        if (type !== undefined) {
+          const cached = childrenWithTag(child, 'a:t')[0];
+          fieldExtents.push({
+            descriptor: { kind: 'field', instruction: type, cachedResult: cached === undefined ? '' : textContent(cached) },
+            startRun: runs.length - 1,
+            endRun: runs.length,
+          });
+        }
+      }
+      const jumpTarget = readInternalSlideJump(child, slideRels);
+      if (jumpTarget !== undefined) {
+        linkExtents.push({
+          descriptor: { kind: 'link', target: { kind: 'internal', anchor: jumpTarget } },
           startRun: runs.length - 1,
           endRun: runs.length,
         });
@@ -207,7 +229,7 @@ function readParagraph(pEl: XmlElement, placeholderType: string | undefined, con
   return {
     kind: 'paragraph',
     runs,
-    ...(fieldExtents.length > 0 ? { constructs: fieldExtents } : {}),
+    ...(fieldExtents.length + linkExtents.length > 0 ? { constructs: [...fieldExtents, ...linkExtents] } : {}),
     alignment: pPr === undefined ? undefined : readAlignment(attr(pPr, 'algn')),
     // DrawingML paragraphs carry only an outline depth, never a numbering identity (no numPr exists in a:pPr), so list is emitted with level alone -- numId optional since document-schema.js 3.3.0 -- and a fabricated numId would be a lie in the data. An absent (or malformed) @lvl emits no list rather than a redundant { level: 0 }: absent means the body placeholder's default level 0, and outline consumers already treat a missing list as level 0, so the zero would carry no information.
     list: outlineLevel === undefined ? undefined : { level: outlineLevel },
