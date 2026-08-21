@@ -17,6 +17,7 @@ import type {
   DocumentPackage,
   LayoutMetadata,
   Margins,
+  SourceResidue,
 } from 'document-schema.js';
 import { assemblePackage, PAGE_SIZE_A4 } from 'document-schema.js';
 import type { XmlElement, XmlNode } from '../../model/node';
@@ -35,7 +36,7 @@ import { parseOdfTransform } from '../shared/transform';
 import { readDrawFrame } from '../draw/shapes';
 import type { EmbeddedDrawObject } from '../draw/embedded';
 import { readDrawObjectReference, readOdfChartContent } from '../draw/embedded';
-import { collectOdfNamedExpressions } from '../shared/constructs';
+import { addOdfPackageResidue, collectOdfNamedExpressions, collectOdfNonContentPartResidue } from '../shared/constructs';
 import { readOdfFormulaContent } from '../formula/read';
 import { readOdgContent } from '../odg/read';
 import { readOdpContent } from '../odp/read';
@@ -73,6 +74,8 @@ export interface OdsDocument {
   sheets: ContentSheet[];
   // The package-level definitions table this workbook's content references: named-range and named-expression declarations. Present only when the workbook declares at least one -- the flat ContentDocument has no root to hold a definitions table, so this field is how the table reaches readOds's assembled package root.
   definitions?: DefinitionsTable;
+  // The package-tier residue table: table:calculation-settings (recalculation semantics, not content) plus the non-content XML parts keyed by their part path. Present only when at least one row quarantined, reaching readOds's assembled root the same route the definitions table takes.
+  source?: Record<string, SourceResidue>;
 }
 
 function readRepeatCount(element: XmlElement, attrName: string): number {
@@ -558,20 +561,32 @@ export function readOdsContent(pkg: Package): OdsDocument {
   }
 
   const definitions: Record<string, DefinitionEntry> = {};
+  const source: Record<string, SourceResidue> = {};
   if (spreadsheet !== undefined) {
     collectOdfNamedExpressions(spreadsheet.children, definitions);
+    // Recalculation semantics, not content: a workbook's table:calculation-settings (null-date epoch, wildcards-vs-regex, iteration limits) decides how the cached values were computed, and no sheet or cell node owns it -- the whole element quarantines at the package tier.
+    addOdfPackageResidue(source, 'calculation-settings', 'ods', ...childrenWithTag(spreadsheet, 'table:calculation-settings'));
   }
+  collectOdfNonContentPartResidue(pkg, 'ods', source);
 
-  return { metadata: readOdfMetadata(pkg), sheets, ...(Object.keys(definitions).length > 0 ? { definitions } : {}) };
+  return {
+    metadata: readOdfMetadata(pkg),
+    sheets,
+    ...(Object.keys(definitions).length > 0 ? { definitions } : {}),
+    ...(Object.keys(source).length > 0 ? { source } : {}),
+  };
 }
 
 // Package -> DocumentPackage: this module's PRIMARY entry point, the spreadsheet mirror of readOdtContent/readOdt (see src/typed/odt/read.ts's own note on why assemblePackage rather than bare decompose, and why no `pages` argument). readOdsContent above is unchanged and remains the flat, ContentDocument-level reader.
 export function readOds(pkg: Package): DocumentPackage {
-  const { metadata, sheets, definitions } = readOdsContent(pkg);
+  const { metadata, sheets, definitions, source } = readOdsContent(pkg);
   const assembled = assemblePackage({ kind: 'spreadsheet', metadata, sheets });
-  // Tree-only table, attached to the assembled root for the same reason readOdt attaches its own (the flat exchange shape has no root to carry it through assemblePackage's envelope splice).
+  // Tree-only tables, attached to the assembled root for the same reason readOdt attaches its own (the flat exchange shape has no root to carry them through assemblePackage's envelope splice).
   if (definitions !== undefined) {
     assembled.definitions = definitions;
+  }
+  if (source !== undefined) {
+    assembled.source = source;
   }
   return assembled;
 }

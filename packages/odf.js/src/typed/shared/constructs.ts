@@ -48,6 +48,23 @@ export function isOdfExtensionElement(element: XmlElement): boolean {
   return [...ODF_EXTENSION_NAMESPACE_PREFIXES].some((prefix) => element.tag.startsWith(prefix));
 }
 
+// The draw:page-level shape kinds no page reader maps today (the residue rows of ExaDev/documents.js#769): a 3D scene, the two line-with-semantics kinds a connector and a measure are, and the three embedded-foreign-content shapes. Each quarantines on the page it sits in rather than degrading to a generic shape it is not -- a connector is not a bare line (its endpoints glue to shapes), a measure is a line plus its dimension text, and applet/plugin/floating-frame are foreign-content containers.
+export const ODF_UNMAPPED_SHAPE_TAGS: ReadonlySet<string> = new Set(['dr3d:scene', 'draw:connector', 'draw:measure', 'draw:applet', 'draw:plugin', 'draw:floating-frame']);
+
+// Collects the unmapped shape kinds and vendor-extension elements from a shape container the page walkers themselves walk -- a draw:page's own children, recursing into draw:g exactly as the walkers do and no further (a draw:frame's own content is read content, not a sibling shape). This mirrors the walkers' own recursion boundary deliberately, so precisely the elements the walkers contribute nothing for are the elements collected here: no more (a frame's inner shapes belong to the frame's read) and no less (a connector inside a nested group is still collected).
+export function collectOdfUnmappedShapeResidue(children: readonly XmlNode[], out: XmlElement[]): void {
+  for (const node of children) {
+    if (node.type !== 'element') {
+      continue;
+    }
+    if (node.tag === 'draw:g') {
+      collectOdfUnmappedShapeResidue(node.children, out);
+    } else if (ODF_UNMAPPED_SHAPE_TAGS.has(node.tag) || isOdfExtensionElement(node)) {
+      out.push(node);
+    }
+  }
+}
+
 // The element a fact-carrying ATTRIBUTE quarantines onto: residue's shape is serialised elements, so an attribute no element owns rides a children-stripped copy of its own element carrying only the quarantined attributes -- the same children-stripped spell odfFieldDescriptor's instruction takes. A same-format writer re-emitting the fragment knows the element it re-serialises, so the tag needs no separate channel.
 export function odfAttributeElement(element: XmlElement, ...attributeNames: readonly string[]): XmlElement {
   return { ...element, children: [], attributes: element.attributes.filter((attribute) => attributeNames.includes(attribute.name)) };
@@ -66,10 +83,16 @@ export function addOdfPackageResidue(out: Record<string, SourceResidue>, key: st
 // The parts a document reader consumes itself -- everything else XML-typed is a non-content part. Binary parts (media, thumbnails, ObjectReplacements previews) never quarantine: the residue channel carries text, and the lossless package tier already preserves those bytes byte-for-byte, which is the fidelity tier that owns them.
 export const ODF_CONSUMED_PART_PATHS: ReadonlySet<string> = new Set(['content.xml', 'styles.xml', 'meta.xml', 'META-INF/manifest.xml']);
 
+// An embedded sub-document's own parts -- the "Object N" directory convention every real producer's draw:object href actually names (confirmed against real LibreOffice output: "Object 1/content.xml", "Object 1/styles.xml", "Object 1/settings.xml" under a draw:object xlink:href="./Object 1"). Those parts are consumed by the embedded-object readers into their own whole ContentDocuments, so quarantining them too would put one sub-document in two channels at once. This helper cannot see hrefs, so it excludes the whole convention-shaped range rather than ever double-carrying a sub-document; the cost of a false exclusion is only a residue row the semantic channel already carries, while the cost of a false inclusion is the double-carry itself.
+function isEmbeddedObjectPart(path: string): boolean {
+  const [firstSegment] = path.split('/');
+  return firstSegment !== undefined && /^Object \d+$/.test(firstSegment);
+}
+
 // Every non-content XML part of the package, quarantined at the package tier keyed by its own part path -- the producer's own identifier for what the entry reconstructs. A reader splices the result into its document-level residue table, so a package whose only extra part is a settings.xml yields exactly source['settings.xml'].
 export function collectOdfNonContentPartResidue(pkg: Package, format: OdfResidueFormat, out: Record<string, SourceResidue>): void {
   for (const [path, part] of Object.entries(pkg.parts)) {
-    if (part.kind !== 'xml' || ODF_CONSUMED_PART_PATHS.has(path)) {
+    if (part.kind !== 'xml' || ODF_CONSUMED_PART_PATHS.has(path) || isEmbeddedObjectPart(path)) {
       continue;
     }
     const elements = part.nodes.filter((node): node is XmlElement => node.type === 'element');
