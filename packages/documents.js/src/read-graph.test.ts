@@ -140,13 +140,17 @@ function chainTo(root: string, module: string, predecessors: ReadonlyMap<string,
   return chain.map(displayPath).join(' -> ');
 }
 
-// The modules whose reachability from the read entry is the defect #582 describes, all inside pdf-codec (the only package in the graph that vendors font assets): the write entry itself, the two modules that eagerly import the vendored fonts at module scope, and the asset modules those pull in. Everything else on the write side is caught transitively -- it reaches one of these, most often through pdf-codec's root barrel.
+// The modules whose reachability from the read entry is the defect #582 describes, all inside pdf-codec (the only package in the graph that vendors font assets): the write entry itself, the two modules that eagerly import the vendored fonts at module scope, and the asset modules those pull in. Everything else on the write side is caught transitively -- it reaches one of these, most often through pdf-codec's root barrel. Two documents.js-side modules are named too (#744): the both-directions codec registry (src/codecs/registry.ts, whose write halves import writePdf from the pdf-codec root barrel) and the composition engine's write half (src/convert/composition-to-pdf.ts, home of every X-to-PDF renderer binding), so a regression that pulls either in fails with the offending chain named directly rather than only through whatever pdf-codec module they drag along.
 function isForbidden(module: string): boolean {
-  const relative = module.startsWith(PDF_CODEC_ROOT) ? module.slice(PDF_CODEC_ROOT.length + 1) : undefined;
-  if (relative === undefined) {
-    return false;
+  const pdfRelative = module.startsWith(PDF_CODEC_ROOT) ? module.slice(PDF_CODEC_ROOT.length + 1) : undefined;
+  if (pdfRelative !== undefined) {
+    return pdfRelative === 'src/write.ts' || pdfRelative === 'src/math-font.ts' || pdfRelative === 'src/font-registry.ts' || pdfRelative.startsWith('src/assets/');
   }
-  return relative === 'src/write.ts' || relative === 'src/math-font.ts' || relative === 'src/font-registry.ts' || relative.startsWith('src/assets/');
+  const srcRelative = module.startsWith(SRC_DIR) ? `src/${module.slice(SRC_DIR.length)}` : undefined;
+  if (srcRelative !== undefined) {
+    return srcRelative === 'src/codecs/registry.ts' || srcRelative === 'src/convert/composition-to-pdf.ts';
+  }
+  return false;
 }
 
 describe('the documents.js/read entry module graph excludes every X-to-PDF renderer and font asset', () => {
@@ -159,6 +163,15 @@ describe('the documents.js/read entry module graph excludes every X-to-PDF rende
       forbidden.map((module) => chainTo(root, module, reachable)),
       `the documents.js/read entry's module graph must not reach the pdf-codec write path or the vendored font assets; offending chain(s):\n  ${forbidden.map((module) => chainTo(root, module, reachable)).join('\n  ')}`,
     ).toEqual([]);
+  });
+
+  it('exports readDocumentMetadata, the metadata read that joined the entry once its xlsx branch stopped rendering a PDF (#744)', async () => {
+    const { readDocumentMetadata } = await import('./convert/from-pdf');
+    expect(typeof readDocumentMetadata, 'the read entry must export readDocumentMetadata').toBe('function');
+    // Behavioural, not just structural: through the entry's own graph the function reads a real PDF's metadata (producer is writePdf's unconditional stamp, so it is the deterministic field to pin).
+    const { docxToPdf } = await import('./convert/convert');
+    const { minimalDocxBytes } = await import('./test-support/docx');
+    expect(readDocumentMetadata('pdf', docxToPdf(minimalDocxBytes())).producer).toBe('documents.js');
   });
 
   it('the package.json ./read export maps onto the read entry, pinning documents.js/read', () => {

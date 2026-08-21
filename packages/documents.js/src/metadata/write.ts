@@ -1,8 +1,9 @@
 import type { ContentDocument, LayoutMetadata } from 'document-schema.js';
 import type { MarkdownImageResolver } from 'markdown-codec';
 import { readPdf, writePdf } from 'pdf-codec';
-import { DOCUMENT_FORMAT_CODECS, requireArrayBufferBytes } from '../codecs/registry';
-import type { DocumentCodecOptions } from '../codecs/registry';
+import { DOCUMENT_FORMAT_CODECS } from '../codecs/registry';
+import type { DocumentCodecOptions } from '../codecs/read';
+import { requireArrayBufferBytes } from '../model/bytes';
 import type { DocumentFormat } from '../convert/port';
 import { throwIfAborted } from '../ports/abort';
 import type { LayoutDocument } from 'pdf-codec';

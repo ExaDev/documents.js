@@ -144,3 +144,15 @@ export const SvgBytesSchema = z.instanceof(Uint8Array).refine(
   },
   { message: 'not a valid SVG file: not well-formed UTF-8 text containing an <svg root element' },
 );
+
+// TypeScript's default Uint8Array generic admits a SharedArrayBuffer-backed view, one step broader than this package's own Uint8Array<ArrayBuffer> convention that decodeDocumentPackage/readPdf/every public entry point in src/index.ts requires. A real, narrow runtime check (not an assertion) proves the narrowing at each byte boundary that needs it, rather than casting past it. Lives here, in the bytes-boundary module, because both directions reach for it: the read-side codec dispatch (src/codecs/read.ts) narrows before decodeDocumentPackage/readPdf, and the write-side callers (src/metadata/write.ts, src/convert/from-package.ts) narrow their builders' returned bytes the same way.
+function isArrayBufferBacked(bytes: Uint8Array): bytes is Uint8Array<ArrayBuffer> {
+  return bytes.buffer instanceof ArrayBuffer;
+}
+
+export function requireArrayBufferBytes(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
+  if (!isArrayBufferBacked(bytes)) {
+    throw new TypeError('expected an ArrayBuffer-backed Uint8Array, received one backed by a SharedArrayBuffer');
+  }
+  return bytes;
+}

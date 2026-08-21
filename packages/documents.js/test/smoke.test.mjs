@@ -477,8 +477,8 @@ describe('dist/ end-to-end: markdownToPdf then pdfToMarkdown, and markdownToDocx
 
 // The read-only entry (package.json `./read` -> dist/convert/from-pdf.js/.cjs): loads in both builds and genuinely converts a PDF produced through the root barrel, proving the entry's own read pipeline (readPdf via pdf-codec's read module, reconstruction, the markdown build leg) reaches the built dist/ artifact working. The graph-width half of the guarantee (nothing reachable from this entry touches an X-to-PDF renderer or a vendored font asset) is held at the source level by src/read-graph.test.ts, which walks across the workspace boundary into pdf-codec's own source.
 describe('dist/ end-to-end: the documents.js/read entry, from both builds', () => {
-  it('exports the pdfTo* family in both builds', () => {
-    for (const name of ['pdfToDocx', 'pdfToPptx', 'pdfToOdt', 'pdfToOdp', 'pdfToOds', 'pdfToOdg', 'pdfToMarkdown', 'pdfToCsv', 'pdfToSvg', 'pdfToXlsx']) {
+  it('exports the pdfTo* family and readDocumentMetadata in both builds', () => {
+    for (const name of ['pdfToDocx', 'pdfToPptx', 'pdfToOdt', 'pdfToOdp', 'pdfToOds', 'pdfToOdg', 'pdfToMarkdown', 'pdfToCsv', 'pdfToSvg', 'pdfToXlsx', 'readDocumentMetadata']) {
       expect(typeof esmRead[name], `read entry must export ${name}`).toBe('function');
       expect(typeof cjsRead[name], `read entry must export ${name} (CJS)`).toBe('function');
     }
@@ -491,6 +491,13 @@ describe('dist/ end-to-end: the documents.js/read entry, from both builds', () =
     const markdown = new TextDecoder().decode(markdownBytes);
     expect(markdown).toContain('Hello from the odt smoke test');
     expect(cjsRead.pdfToMarkdown(pdfBytes).length).toBe(markdownBytes.length);
+  });
+
+  it('readDocumentMetadata reads a PDF produced through the root barrel', () => {
+    const pdfBytes = esm.odtToPdf(minimalOdtBytes());
+    // producer is writePdf's own unconditional stamp, so it is the deterministic field to pin: metadata reads through the entry reach the built dist/'s readPdf and report the document's own metadata, not a fabrication of the read itself.
+    expect(esmRead.readDocumentMetadata('pdf', pdfBytes).producer).toBe('documents.js');
+    expect(cjsRead.readDocumentMetadata('pdf', pdfBytes).producer).toBe('documents.js');
   });
 });
 
