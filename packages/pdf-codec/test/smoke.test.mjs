@@ -3,10 +3,12 @@ import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 import * as esm from '../dist/index.js';
 import * as esmRead from '../dist/read.js';
+import * as esmPdfText from '../dist/pdf-text.js';
 
 const require = createRequire(import.meta.url);
 const cjs = require('../dist/index.cjs');
 const cjsRead = require('../dist/read.cjs');
+const cjsPdfText = require('../dist/pdf-text.cjs');
 
 // A representative slice of the public surface, not an exhaustive list -- enough to catch a genuinely broken dual build without duplicating src/index.ts's own export list here. Classes (ByteReader, ByteWriter, PdfParseError, PdfEncryptedError) are real invocable functions at runtime (typeof === 'function'), so they're checked here alongside ordinary functions rather than in OBJECTS below.
 const FUNCTIONS = [
@@ -149,7 +151,7 @@ describe.each([
   ['CJS', cjsRead],
 ])('%s read entry', (_label, api) => {
   it('exports the read pipeline surface', () => {
-    for (const name of ['readPdf', 'normalizeRotation', 'pageRotationTransform', 'decodePdfString', 'parsePdfDate']) {
+    for (const name of ['readPdf', 'normalizeRotation', 'pageRotationTransform']) {
       expect(typeof api[name], `read entry must export ${name}`).toBe('function');
     }
   });
@@ -169,5 +171,17 @@ describe.each([
       .map((item) => item.text)
       .join(' ');
     expect(text).toContain('read entry smoke');
+  });
+});
+
+// The pdf-text deep module (package.json `./*` wildcard -> dist/pdf-text.js/.cjs): PDF string/date scalar decoding lives here, not on the read entry, per the README's entry-surface note -- the read entry carries only readPdf and the read pipeline's own helpers, while pdf-codec/pdf-text stays deep-importable and asset-free the same way. This block proves that advertised deep surface actually loads from the built artifact in both module formats.
+describe.each([
+  ['ESM', esmPdfText],
+  ['CJS', cjsPdfText],
+])('%s pdf-text deep module', (_label, api) => {
+  it('exports the string/date decoding surface', () => {
+    for (const name of ['decodePdfString', 'parsePdfDate']) {
+      expect(typeof api[name], `pdf-text deep module must export ${name}`).toBe('function');
+    }
   });
 });
