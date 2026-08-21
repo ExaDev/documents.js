@@ -96,8 +96,13 @@ function renderTopLevelBlock(block, context) {
 		case "paragraph": return renderParagraph(block, context);
 		case "table": return require_emit_table.emitTable(block, context);
 		case "image": return require_emit_image.emitImage(block, context.embedImages);
-		case "pageBreak":
-		case "embeddedObject": return "";
+		case "embeddedObject":
+			if (block.objectKind === "formula" && block.document.kind === "formula" && block.document.formula.presentation !== void 0) {
+				const latex = block.document.formula.presentation.latex;
+				return latex.length === 0 ? "$$\n$$" : `$$\n${latex}\n$$`;
+			}
+			return "";
+		case "pageBreak": return "";
 	}
 }
 function listInfoFor(numId, context) {

@@ -126,16 +126,24 @@ describe('math (ExaDev/markdown-codec#53)', () => {
     expect(paragraph(blocks('\\(x^2\\)')[0]).runs).toEqual([{ text: 'x^2', fontFamily: 'Cambria Math' }]);
   });
 
-  it('maps a $$ display math block to one MathBlock paragraph', () => {
-    const block = paragraph(blocks('$$\nx^2\n$$')[0]);
-    expect(block.styleId).toBe('MathBlock');
-    expect(block.runs).toEqual([{ text: 'x^2' }]);
+  it('maps a $$ display math block to one embedded formula object carrying the LaTeX verbatim in presentation, with no MathML and no semantic layer', () => {
+    const [block] = blocks('$$\nx^2\n$$');
+    if (block?.kind !== 'embeddedObject') throw new Error(`expected an embeddedObject block, got ${block?.kind}`);
+    expect(block.objectKind).toBe('formula');
+    expect(block.frame).toEqual({ xPt: 0, yPt: 0, widthPt: 0, heightPt: 0 });
+    expect(block.document.kind).toBe('formula');
+    if (block.document.kind !== 'formula') throw new Error('unreachable');
+    expect(block.document.formula.mathml).toEqual([]);
+    expect(block.document.formula.presentation).toEqual({ latex: 'x^2' });
+    expect(block.document.formula.content).toBeUndefined();
+    expect(ContentDocumentSchema.safeParse(lowerMarkdown('$$\nx^2\n$$')).success).toBe(true);
   });
 
-  it('produces an empty-runs paragraph for an empty math block', () => {
-    const block = paragraph(blocks('$$\n$$')[0]);
-    expect(block.styleId).toBe('MathBlock');
-    expect(block.runs).toEqual([]);
+  it('carries an empty math block as a formula with an empty presentation LaTeX', () => {
+    const [block] = blocks('$$\n$$');
+    if (block?.kind !== 'embeddedObject') throw new Error(`expected an embeddedObject block, got ${block?.kind}`);
+    if (block.document.kind !== 'formula') throw new Error('unreachable');
+    expect(block.document.formula.presentation).toEqual({ latex: '' });
   });
 });
 
@@ -369,12 +377,6 @@ describe('gaps (MarkdownDiagnosticCodes)', () => {
     const collector = createDiagnosticCollector();
     blocks('[![alt](/img.png "t")](/page)', { sink: collector.sink });
     expect(collector.has(MarkdownDiagnosticCodes.LINK_TITLE_DROPPED)).toBe(true);
-  });
-
-  it('MATH_BLOCK_PRESERVED_AS_TEXT fires for a $$ display math block', () => {
-    const collector = createDiagnosticCollector();
-    blocks('$$\nx^2\n$$', { sink: collector.sink });
-    expect(collector.has(MarkdownDiagnosticCodes.MATH_BLOCK_PRESERVED_AS_TEXT)).toBe(true);
   });
 
   it('MATH_INLINE_PRESERVED_AS_TEXT fires for an inline \\( \\) math span', () => {
