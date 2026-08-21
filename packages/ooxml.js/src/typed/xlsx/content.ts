@@ -1,6 +1,7 @@
 import type { ContentCellValue, ContentDocument, ContentSheet, ContentSheetCell, ContentSheetColumn, ContentSheetRow } from 'document-schema.js';
 import type { Package } from '../../model/package';
 import type { XmlElement } from '../../model/node';
+import { buildXml } from '../../xml/build';
 import { attr, childrenWithTag, elementsWithTag, resolveRelationships, rootElement, textContent } from '../util';
 import { readCoreProperties } from '../shared/metadata';
 import { parseCellReference, parseRangeReference } from 'document-schema.js';
@@ -367,6 +368,39 @@ function applyCellComments(comments: ReadonlyMap<string, SheetCellComment>, cell
   }
 }
 
+// The two worksheet rule families with no harmonised vocabulary yet -- dataValidation (a range's input constraint) and conditionalFormatting (a range's conditional display rule). The construct inventory's own corpus gate defers freezing a semantic shape for them until a real producer file is verified against one, so until then each governing element is quarantined VERBATIM on its range's anchor cell through the residue channel: carried, restorable by a same-format writer, never interpreted here. The anchor is the first range's top-left position -- the same anchoring convention merges and cell comments use -- and a cell carries one residue slot, so a second rule anchoring at the same cell is skipped (the sqref inside each residue names its full range, so one copy reconstructs it). A rule whose sqref parses to nothing is left unattached rather than parked on a made-up position.
+function applyCellResidueRules(worksheet: XmlElement, cells: ContentSheetCell[]): void {
+  const rules: XmlElement[] = [];
+  for (const container of childrenWithTag(worksheet, 'dataValidations')) {
+    rules.push(...childrenWithTag(container, 'dataValidation'));
+  }
+  rules.push(...childrenWithTag(worksheet, 'conditionalFormatting'));
+  if (rules.length === 0) {
+    return;
+  }
+  const byPosition = new Map<string, ContentSheetCell>();
+  for (const cell of cells) {
+    byPosition.set(`${cell.row}:${cell.column}`, cell);
+  }
+  for (const rule of rules) {
+    const sqref = attr(rule, 'sqref');
+    const firstToken = sqref === undefined ? undefined : sqref.split(/\s+/)[0];
+    const range = firstToken === undefined || firstToken === '' ? undefined : parseRangeReference(firstToken);
+    if (range === undefined) {
+      continue;
+    }
+    const key = `${range.startRow}:${range.startColumn}`;
+    const existing = byPosition.get(key);
+    if (existing === undefined) {
+      const materialised: ContentSheetCell = { row: range.startRow, column: range.startColumn, value: { kind: 'empty' }, displayText: '', source: { format: 'xlsx', xml: buildXml([rule]) } };
+      cells.push(materialised);
+      byPosition.set(key, materialised);
+      continue;
+    }
+    existing.source ??= { format: 'xlsx', xml: buildXml([rule]) };
+  }
+}
+
 function readSheet(
   pkg: Package,
   entry: SheetEntry,
@@ -381,6 +415,7 @@ function readSheet(
   }
   const cells = readCells(worksheet, sharedStrings, context);
   applyCellComments(readSheetCellComments(pkg, entry.path), cells);
+  applyCellResidueRules(worksheet, cells);
   // The drawing layer's chart graphic frames (typed/xlsx/drawings.ts) -- absent when the sheet references no drawing or carries no chart frame, which is the common case.
   const embeddedObjects = readSheetEmbeddedObjects(pkg, entry.path, worksheet);
   return {
