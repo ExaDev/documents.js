@@ -262,7 +262,7 @@ export interface MarkdownMathInlineNode {
 
 // A footnote REFERENCE site (`[^label]` in running text, ExaDev/markdown-codec#66). Produced only when the document also carries a definition under that exact label -- an unmatched `[^label]` is ordinary text, which is GitHub's own reading and the only one that keeps a bracketed aside from silently becoming a dangling note.
 //
-// Deliberately a leaf carrying its label and nothing else: unlike the definition above, a reference has no extent. That is also why it is the one half of the footnote pair src/lower/lower.ts CANNOT map onto an `anchor` construct: a construct's extent is block-scoped by document-schema.js's own definition, and a reference sits between two runs INSIDE a paragraph, which no block-level boundary marker can bracket without splitting the paragraph in two. See src/lower/inline.ts's own footnoteReference case for the degrade that carries it instead, and MarkdownDiagnosticCodes.FOOTNOTE_REFERENCE_PRESERVED_AS_TEXT for the gap it reports.
+// Deliberately a leaf carrying its label and nothing else: unlike the definition above, a reference has no extent -- it is a POINT, which is exactly what it lowers onto: a run-level point `anchor` extent on the paragraph it sits inside (RunConstructExtent, src/lower/inline.ts's own footnoteReference case), the mechanism document-schema.js 4.5.0 shipped for precisely this mid-paragraph shape.
 export interface MarkdownFootnoteReferenceNode {
   readonly type: 'footnoteReference';
   readonly label: string;

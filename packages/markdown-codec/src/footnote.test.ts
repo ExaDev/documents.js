@@ -9,7 +9,6 @@ import { parseMarkdown } from './block/block';
 import { MarkdownDiagnosticCodes, MarkdownUnbalancedConstructMarkersError } from './diagnostics/diagnostics';
 import { emitMarkdown } from './emit/emit';
 import { readMarkdownContent } from './read';
-import { FOOTNOTE_REFERENCE_FONT_MARKER } from './shared/style-constants';
 import { createDiagnosticCollector } from './test-support/diagnostics';
 import { writeMarkdownContent } from './write';
 
@@ -201,21 +200,32 @@ describe('lowering a footnote onto the schema', () => {
     ]);
   });
 
-  it('lowers a reference to a marked run keeping its own source spelling', () => {
-    const collector = createDiagnosticCollector();
-    const document = readMarkdownContent('see[^1]\n\n[^1]: note', { sink: collector.sink }).document;
+  it('lowers a reference to an ordinary run plus a point run-level anchor extent naming it', () => {
+    const document = readMarkdownContent('see[^1]\n\n[^1]: note').document;
     expect(blocksOf(document)[0]).toEqual({
       kind: 'paragraph',
-      runs: [{ text: 'see' }, { text: '[^1]', fontFamily: FOOTNOTE_REFERENCE_FONT_MARKER }],
+      runs: [{ text: 'see' }, { text: '[^1]' }],
+      constructs: [{ descriptor: { kind: 'anchor', anchorType: 'footnote', name: '1' }, startRun: 1, endRun: 1 }],
     });
-    expect(collector.has(MarkdownDiagnosticCodes.FOOTNOTE_REFERENCE_PRESERVED_AS_TEXT)).toBe(true);
   });
 
-  it('carries a reference inside a link as one run of that link', () => {
+  it('carries a reference inside a link as one run of that link, extent and all', () => {
     expect(blocksOf(readMarkdownContent('[text[^1]](/u)\n\n[^1]: note').document)[0]).toEqual({
       kind: 'paragraph',
-      runs: [{ text: 'text', hyperlink: '/u' }, { text: '[^1]', hyperlink: '/u', fontFamily: FOOTNOTE_REFERENCE_FONT_MARKER }],
+      runs: [{ text: 'text', hyperlink: '/u' }, { text: '[^1]', hyperlink: '/u' }],
+      constructs: [{ descriptor: { kind: 'anchor', anchorType: 'footnote', name: '1' }, startRun: 1, endRun: 1 }],
     });
+  });
+
+  it('counts footnote-reference extents among the paragraph\'s constructs in walk order, beside a titled link\'s own extent', () => {
+    const [first] = blocksOf(readMarkdownContent('a[^1] and [b](/u "t")\n\n[^1]: note').document);
+    if (first?.kind !== 'paragraph') {
+      throw new Error(`expected a paragraph block, got '${first?.kind ?? 'none'}'`);
+    }
+    expect(first.constructs).toEqual([
+      { descriptor: { kind: 'anchor', anchorType: 'footnote', name: '1' }, startRun: 1, endRun: 1 },
+      { descriptor: { kind: 'link', target: { kind: 'external', uri: '/u' }, title: 't' }, startRun: 3, endRun: 4 },
+    ]);
   });
 
   it('flattens a heading inside a definition body to literal ATX text, and says so', () => {
@@ -239,13 +249,19 @@ describe('lowering a footnote onto the schema', () => {
 });
 
 describe('writing footnotes back out', () => {
-  it('renders an anchor construct as a definition, and its marked run as a reference', () => {
+  it('renders an anchor construct as a definition, and a footnote-anchor extent as its reference', () => {
     expect(emitMarkdown(minimalDocument([
-      { kind: 'paragraph', runs: [{ text: 'see' }, { text: '[^1]', fontFamily: FOOTNOTE_REFERENCE_FONT_MARKER }] },
+      { kind: 'paragraph', runs: [{ text: 'see' }, { text: '[^1]' }], constructs: [{ descriptor: { kind: 'anchor', anchorType: 'footnote', name: '1' }, startRun: 1, endRun: 1 }] },
       { kind: 'constructStart', descriptor: { kind: 'anchor', anchorType: 'footnote', name: '1' } },
       { kind: 'paragraph', runs: [{ text: 'note' }] },
       { kind: 'constructEnd' },
     ]))).toBe('see[^1]\n\n[^1]: note');
+  });
+
+  it('spells the reference from the extent\'s own name, the same authority the definition marker takes its label from', () => {
+    expect(emitMarkdown(minimalDocument([
+      { kind: 'paragraph', runs: [{ text: 'see' }, { text: '' }], constructs: [{ descriptor: { kind: 'anchor', anchorType: 'footnote', name: '2' }, startRun: 1, endRun: 1 }] },
+    ]))).toBe('see[^2]');
   });
 
   it('indents a multi-block body to the continuation column a reader measures against', () => {
@@ -268,6 +284,31 @@ describe('writing footnotes back out', () => {
     const written = emitMarkdown(minimalDocument([{ kind: 'paragraph', runs: [{ text: 'literal [^1] here' }] }]));
     expect(written).toBe('literal \\[\\^1\\] here');
     expect(parseMarkdown(`${written}\n\n[^1]: real`).document.children[0]).toEqual({ type: 'paragraph', children: [{ type: 'text', value: 'literal [^1] here' }] });
+  });
+
+  it('degrades a footnote-anchor extent whose own name cannot be spelled as a "[^label]" marker, rather than emitting markdown its own reader cannot parse back', () => {
+    // The same gate the definition half applies (isValidFootnoteLabel, src/inline/footnote.ts) and for the same reason: AnchorDescriptorSchema.name is a bare z.string(), so a name arriving from another codec may carry whitespace or a "]" this package's own [^label] grammar cannot represent. Spelling it straight into running text would emit a marker that reparses as something else (a link, or literal prose), losing the construct with no diagnostic -- so the run's own materialised text renders escaped in the reference's place and the extent reports itself unrepresented.
+    const whitespaceCollector = createDiagnosticCollector();
+    const whitespaceWritten = emitMarkdown(minimalDocument([
+      { kind: 'paragraph', runs: [{ text: 'see' }, { text: '[^My Note]' }], constructs: [{ descriptor: { kind: 'anchor', anchorType: 'footnote', name: 'My Note' }, startRun: 1, endRun: 1 }] },
+    ]), { sink: whitespaceCollector.sink });
+    expect(whitespaceWritten).toBe('see\\[\\^My Note\\]');
+    expect(whitespaceCollector.has(MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED)).toBe(true);
+
+    const bracketCollector = createDiagnosticCollector();
+    const bracketWritten = emitMarkdown(minimalDocument([
+      { kind: 'paragraph', runs: [{ text: 'see' }, { text: '[^a]b]' }], constructs: [{ descriptor: { kind: 'anchor', anchorType: 'footnote', name: 'a]b' }, startRun: 1, endRun: 1 }] },
+    ]), { sink: bracketCollector.sink });
+    expect(bracketWritten).toBe('see\\[\\^a\\]b\\]');
+    expect(bracketCollector.has(MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED)).toBe(true);
+  });
+
+  it('leaves a run covered only by a RANGED footnote anchor to its own escaped text: a markdown reference is a point, and a range over several runs has no spelling', () => {
+    // A foreign producer may name a footnote anchor over a sub-sequence of runs rather than at a point (odf.js's reader spells its text:note reference that way); this package's own read side never does. Only the point form is a markdown reference site, so the range renders transparently -- its runs keep their own text, the same silent construct loss every other run-level extent markdown cannot spell already takes (a bookmark, a comment reference).
+    const written = emitMarkdown(minimalDocument([
+      { kind: 'paragraph', runs: [{ text: 'see ' }, { text: 'note ' }, { text: 'mark' }], constructs: [{ descriptor: { kind: 'anchor', anchorType: 'footnote', name: '1', definition: 'n1' }, startRun: 1, endRun: 3 }] },
+    ]));
+    expect(written).toBe('see note mark');
   });
 
   it('renders a construct markdown has no syntax for transparently, keeping its extent', () => {
@@ -330,6 +371,7 @@ describe('round trip', () => {
     'Escaped \\[^1\\] stays literal.\n\n[^1]: while this one is real.',
     'Unmatched [^nope] stays literal text.',
     'Body[^1].\n\n- a\n- b\n\n[^1]: note',
+    '| cell[^1] |\n| - |\n\n[^1]: a reference inside a table cell, whose extent rides the cell\'s own paragraph',
   ];
 
   it.each(sources)('reaches a fixed point for %j', (source) => {
