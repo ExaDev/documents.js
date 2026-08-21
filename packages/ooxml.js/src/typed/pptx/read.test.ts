@@ -619,6 +619,67 @@ describe('readPptxContent: dynamic fields (a:fld)', () => {
   });
 });
 
+describe('readPptxContent: internal slide-jump links (a:hlinkClick to a slide)', () => {
+  // A deck of two slides where slide1 jumps to slide2: one paragraph of three runs whose middle run carries the jump, and a second paragraph whose run carries an action-only jump (ppaction://hlinkshowjump names no target part, so it has nothing to resolve and stays unrecorded).
+  function slideJumpFixturePackage(): Package {
+    const jumpShape = el('p:sp', {}, [
+      el('p:nvSpPr', {}, [el('p:cNvPr', { id: '2', name: 'Jumper' }), el('p:cNvSpPr'), el('p:nvPr')]),
+      el('p:spPr', {}, [el('a:xfrm', {}, [el('a:off', { x: '914400', y: '914400' }), el('a:ext', { cx: '7315200', cy: '457200' })])]),
+      el('p:txBody', {}, [
+        el('a:p', {}, [
+          el('a:r', {}, [el('a:t', {}, [txt('See ')])]),
+          el('a:r', {}, [el('a:rPr', {}, [el('a:hlinkClick', { 'r:id': 'rIdJump', action: 'ppaction://hlinksldjump' })]), el('a:t', {}, [txt('the next slide')])]),
+          el('a:r', {}, [el('a:t', {}, [txt(' for details')])]),
+        ]),
+        el('a:p', {}, [
+          el('a:r', {}, [el('a:rPr', {}, [el('a:hlinkClick', { action: 'ppaction://hlinkshowjump?jump=nextslide' })]), el('a:t', {}, [txt('action only')])]),
+        ]),
+      ]),
+    ]);
+    const slide1 = el('p:sld', {}, [el('p:cSld', {}, [el('p:spTree', {}, [jumpShape])])]);
+    const slide2 = el('p:sld', {}, [el('p:cSld', {}, [el('p:spTree')])]);
+    const presentation = el('p:presentation', {}, [
+      el('p:sldIdLst', {}, [el('p:sldId', { id: '256', 'r:id': 'rId1' }), el('p:sldId', { id: '257', 'r:id': 'rId2' })]),
+    ]);
+    const presentationRels = rels([
+      { id: 'rId1', type: SLIDE_REL, target: 'slides/slide1.xml' },
+      { id: 'rId2', type: SLIDE_REL, target: 'slides/slide2.xml' },
+    ]);
+    // The slide-jump relationship lives in the SLIDE's own rels (a sibling part), exactly where PresentationML spells it -- not in the presentation's.
+    const slide1Rels = rels([{ id: 'rIdJump', type: SLIDE_REL, target: 'slide2.xml' }]);
+    return {
+      parts: {
+        'ppt/presentation.xml': { kind: 'xml', nodes: [presentation] },
+        'ppt/_rels/presentation.xml.rels': { kind: 'xml', nodes: [presentationRels] },
+        'ppt/slides/slide1.xml': { kind: 'xml', nodes: [slide1] },
+        'ppt/slides/_rels/slide1.xml.rels': { kind: 'xml', nodes: [slide1Rels] },
+        'ppt/slides/slide2.xml': { kind: 'xml', nodes: [slide2] },
+      },
+    };
+  }
+
+  it('reads a slide-jump hlinkClick as a link run construct whose internal anchor is the target slide\'s package part path', () => {
+    const doc = readPptxContent(slideJumpFixturePackage());
+    const paragraph = asParagraph(doc.slides[0]?.shapes[0]?.blocks[0]);
+    expect(paragraph.runs.map((run) => run.text)).toEqual(['See ', 'the next slide', ' for details']);
+    expect(paragraph.constructs).toEqual([
+      { descriptor: { kind: 'link', target: { kind: 'internal', anchor: 'ppt/slides/slide2.xml' } }, startRun: 1, endRun: 2 },
+    ]);
+  });
+
+  it('leaves the jumping run\'s own flat hyperlink field unset -- the internal target is the construct\'s, never a URI', () => {
+    const doc = readPptxContent(slideJumpFixturePackage());
+    const paragraph = asParagraph(doc.slides[0]?.shapes[0]?.blocks[0]);
+    expect(paragraph.runs[1]?.hyperlink).toBeUndefined();
+  });
+
+  it('records nothing for an action-only jump, whose hlinkClick names an action verb and no target part', () => {
+    const doc = readPptxContent(slideJumpFixturePackage());
+    const paragraph = asParagraph(doc.slides[0]?.shapes[0]?.blocks[1]);
+    expect(paragraph.constructs).toBeUndefined();
+  });
+});
+
 describe('readPptxContent: chart graphic frames', () => {
   it('reads the chart part\'s cached series/category model as a table block', () => {
     const doc = readPptxContent(chartFixturePackage());
