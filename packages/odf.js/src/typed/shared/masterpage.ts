@@ -63,3 +63,11 @@ export function resolveDrawPageSize(page: XmlElement, pkg: Package): PageSize | 
   const properties = resolvePageLayoutProperties(pkg, masterPageName);
   return properties === undefined ? undefined : parsePageSize(properties);
 }
+
+// Every style:master-page in styles.xml's office:master-styles, in document order -- the whole-page inventory a text-document reader walks when it maps master pages onto sections (the first is the document's starting page style; a paragraph style's style:master-page-name switch names any later one). Returned as elements rather than pre-resolved geometry so each caller applies its own format's fallbacks (an odt's A4/2cm default is not an odp's widescreen default), and so a reader that also reads a master page's header/footer content (style:header/style:footer and their -left/-first variants, children of the master page element itself) has the element to walk.
+export function readOdfMasterPageElements(pkg: Package): XmlElement[] {
+  const stylesPart = pkg.parts[STYLES_PART];
+  const stylesRoot = stylesPart?.kind === 'xml' ? rootElement(stylesPart.nodes) : undefined;
+  const masterStyles = stylesRoot === undefined ? undefined : findChildElement(stylesRoot.children, 'office:master-styles');
+  return masterStyles === undefined ? [] : childrenWithTag(masterStyles, 'style:master-page');
+}
