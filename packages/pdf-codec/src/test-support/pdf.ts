@@ -411,3 +411,33 @@ export function acroFormPdf(): Uint8Array<ArrayBuffer> {
   b.classicXrefAndTrailer(13, '/Root 1 0 R');
   return b.bytes();
 }
+
+// The metadata/residue cluster (#721 phase 6): catalog /Lang, an XMP /Metadata stream whose Dublin Core fields partially overlap an /Info dict (pinning that /Info wins and XMP fills only the gaps, the PDF/A shape), and the residue rows -- /ViewerPreferences, /PageMode, /OutputIntents, and the trailer /ID.
+export function metadataResiduePdf(): Uint8Array<ArrayBuffer> {
+  const xmp = [
+    '<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>',
+    '<x:xmpmeta xmlns:x="adobe:ns:meta/">',
+    '<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">',
+    '<rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:xmp="http://ns.adobe.com/xap/1.0/" xmlns:pdf="http://ns.adobe.com/pdf/1.3/">',
+    '<dc:title><rdf:Alt><rdf:li xml:lang="x-default">From XMP</rdf:li></rdf:Alt></dc:title>',
+    '<dc:description><rdf:Alt><rdf:li xml:lang="x-default">The XMP description</rdf:li></rdf:Alt></dc:description>',
+    '<dc:subject><rdf:Bag><rdf:li>xmp</rdf:li><rdf:li>metadata</rdf:li></rdf:Bag></dc:subject>',
+    '<dc:creator><rdf:Seq><rdf:li>XMP Author</rdf:li></rdf:Seq></dc:creator>',
+    '<pdf:Producer>XMP Producer 9.9</pdf:Producer>',
+    '</rdf:Description>',
+    '</rdf:RDF>',
+    '</x:xmpmeta>',
+    '<?xpacket end="w"?>',
+  ].join('\n');
+  const b = new FixtureBuilder().header('1.7');
+  b.object(1, '<< /Type /Catalog /Pages 2 0 R /Lang (en-GB) /Metadata 6 0 R /ViewerPreferences << /HideToolbar true >> /PageMode /UseOutlines /OutputIntents [7 0 R] >>');
+  b.object(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+  b.object(3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>');
+  b.object(4, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+  b.stream(5, '<< >>', enc(HELLO_CONTENT));
+  b.stream(6, '<< /Type /Metadata /Subtype /XML >>', enc(xmp));
+  b.object(7, '<< /Type /OutputIntent /S /GTS_PDFA1 /OutputConditionIdentifier (sRGB IEC61966-2.1) >>');
+  b.object(8, '<< /Title (From Info) >>');
+  b.classicXrefAndTrailer(8, '/Root 1 0 R /Info 8 0 R /ID [<0a1b2c3d4e5f60718293a4b5c6d7e8f9> <0a1b2c3d4e5f60718293a4b5c6d7e8f9>]');
+  return b.bytes();
+}
