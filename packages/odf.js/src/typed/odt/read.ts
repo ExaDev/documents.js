@@ -5,7 +5,9 @@ import type { XmlElement, XmlNode } from '../../model/node';
 import { rootElement, findChildElement, childrenWithTag, attrValue } from '../../xml/query';
 import { mintOdfListNumId, readOdfListParagraphs, type OdfListIdState } from '../shared/list';
 import {
+  collectOdfDataStyleDefinitions,
   collectOdfFieldMasterDefinitions,
+  collectOdfFontFaceDefinitions,
   collectOdfProvenanceRegions,
   insertOdfConstructMarkers,
   isOdfIndexWrapper,
@@ -178,7 +180,7 @@ function readBlocks(nodes: readonly XmlNode[], pkg: Package, state: OdtFlowState
   };
   const readOneParagraph = (element: XmlElement): ReadParagraph => {
     const halves: OdfMarkerHalf[] = [];
-    const paragraph = readOdfParagraph(element, pkg, { provenanceRegions: state.provenanceRegions, markersOut: halves, definitions: state.definitions });
+    const paragraph = readOdfParagraph(element, pkg, { provenanceRegions: state.provenanceRegions, markersOut: halves, definitions: state.definitions, format: 'odt' });
     return { element, paragraph: readParagraphOrHeading(element, paragraph), halves, lifted: readAnchoredFrameBlocks(element, pkg, state) };
   };
   for (const node of nodes) {
@@ -295,6 +297,15 @@ export function readOdtContent(pkg: Package): OdtDocument {
   collectOdfProvenanceRegions(textElement.children, provenanceRegions);
   const definitions: OdfDefinitionsSink = { entries: {}, nextNoteOrdinal: 1, nextAnnotationOrdinal: 1 };
   collectOdfFieldMasterDefinitions(textElement.children, definitions.entries);
+  // The styles-side definition tenants live in EITHER part: number:* data styles and font declarations are collected across both parts' whole node forests, since office:font-face-decls genuinely appears in each part and data styles are residents of whichever automatic-styles container references them.
+  for (const partPath of AUTOMATIC_STYLE_PARTS) {
+    const part = pkg.parts[partPath];
+    if (part?.kind !== 'xml') {
+      continue;
+    }
+    collectOdfDataStyleDefinitions(part.nodes, definitions.entries);
+    collectOdfFontFaceDefinitions(part.nodes, definitions.entries);
+  }
 
   const state: OdtFlowState = { listIdState: { next: 1 }, provenanceRegions, definitions, wrapperExtents: [], markerEvents: [], order: 0 };
   const walked = readBlocks(textElement.children, pkg, state);

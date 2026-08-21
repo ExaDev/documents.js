@@ -480,6 +480,42 @@ describe('readOdtContent: field master declarations as a definitions table', () 
     });
   });
 
+  it('reads number:* data styles and office:font-face-decls from both parts into the same definitions table', () => {
+    const pkg = odtPackage([paragraph('body')]);
+    // content.xml's own automatic styles gain a data style; styles.xml declares the font faces.
+    const contentRoot = pkg.parts['content.xml'];
+    if (contentRoot?.kind !== 'xml') {
+      throw new Error('expected an xml content part');
+    }
+    const documentContent = contentRoot.nodes[0];
+    if (documentContent?.type !== 'element') {
+      throw new Error('expected a document-content root');
+    }
+    documentContent.children.unshift(
+      el('office:automatic-styles', {}, [
+        el('number:currency-style', { 'style:name': 'GBP' }, [el('number:currency-symbol', { 'number:language': 'en', 'number:country': 'GB' }, [txt('\u00a3')]), el('number:number', { 'number:decimal-places': '2' })]),
+      ]),
+    );
+    pkg.parts['styles.xml'] = {
+      kind: 'xml',
+      nodes: [
+        el('office:document-styles', {}, [
+          el('office:font-face-decls', {}, [el('style:font-face', { 'style:name': 'Liberation Serif', 'svg:font-family': '\u201cLiberation Serif\u201d', 'style:font-family-generic': 'roman', 'style:font-pitch': 'variable' })]),
+        ]),
+      ],
+    };
+    const document = readOdtContent(pkg);
+    expect(document.definitions?.['dataStyle:GBP']).toMatchObject({ kind: 'dataStyle', name: 'GBP' });
+    expect((document.definitions?.['dataStyle:GBP'] as { xml?: string }).xml).toContain('<number:currency-style');
+    expect(document.definitions?.['fontFace:Liberation Serif']).toEqual({
+      kind: 'fontFace',
+      name: 'Liberation Serif',
+      fontFamily: '\u201cLiberation Serif\u201d',
+      familyGeneric: 'roman',
+      pitch: 'variable',
+    });
+  });
+
   it('mints note and annotation definitions alongside the field masters in one table, threaded from the block walk', () => {
     const pkg = odtPackage([
       el('text:p', {}, [

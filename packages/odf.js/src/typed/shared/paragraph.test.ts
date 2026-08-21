@@ -323,6 +323,29 @@ describe('readOdfParagraph: run-level construct extents (fields, bookmarks)', ()
     expect(sink.entries['comment:annotation1']).toMatchObject({ kind: 'comment', author: 'C. Reviewer', dateIso: '2026-08-20T14:00:00' });
   });
 
+  it('quarantines the unmodellable half of the paragraph\'s own style chain as per-node residue when the context names the reading format', () => {
+    const p1 = styleStyle('P1', 'paragraph', {}, [paragraphProps({ 'fo:text-align': 'center', 'fo:keep-with-next': 'always' })]);
+    const pkg: Package = { parts: { 'content.xml': contentPackage([p1]) } };
+    const p = el('text:p', { 'text:style-name': 'P1' }, [txt('Kept')]);
+    const paragraph = readOdfParagraph(p, pkg, { format: 'odt' });
+    expect(paragraph.alignment).toBe('center');
+    expect(paragraph.source).toEqual({
+      format: 'odt',
+      xml: '<style:paragraph-properties fo:text-align="center" fo:keep-with-next="always"></style:paragraph-properties>',
+    });
+  });
+
+  it('leaves source absent when every property in the chain models cleanly, and when no reading format was supplied', () => {
+    const p1 = styleStyle('P1', 'paragraph', {}, [paragraphProps({ 'fo:text-align': 'center' })]);
+    const pkg: Package = { parts: { 'content.xml': contentPackage([p1]) } };
+    const p = el('text:p', { 'text:style-name': 'P1' }, [txt('Kept')]);
+    expect(readOdfParagraph(p, pkg, { format: 'odt' }).source).toBeUndefined();
+    const unknown = styleStyle('P2', 'paragraph', {}, [paragraphProps({ 'fo:keep-with-next': 'always' })]);
+    const pkg2: Package = { parts: { 'content.xml': contentPackage([unknown]) } };
+    const p2 = el('text:p', { 'text:style-name': 'P2' }, [txt('Kept')]);
+    expect(readOdfParagraph(p2, pkg2).source).toBeUndefined();
+  });
+
   it('pairs a named office:annotation with its office:annotation-end over the runs between them', () => {
     const annotation = el('office:annotation', { 'office:name': 'c1' }, [el('text:p', {}, [txt('Range comment.')])]);
     const p = el('text:p', {}, [
