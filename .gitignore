@@ -9,4 +9,4 @@ coverage/
 playwright-report/
 test-results/
 
-# dist/ is deliberately absent: markdown-codec tracks its own dist/ on purpose (see that package's .gitignore), and every package that does ignore its build output already says so in its own .gitignore. Ignoring dist/ from here would make the workspace root disagree with both.
+# dist/ is deliberately absent: every package ignores its own build output in its own .gitignore, and an entry here would silently cover a package that hasn't stated the decision itself.
