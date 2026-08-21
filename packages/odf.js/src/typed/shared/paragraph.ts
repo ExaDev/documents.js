@@ -207,8 +207,14 @@ function collectRuns(container: XmlElement, baseProperties: StyleProperties, pkg
         });
       }
     } else if (node.tag === 'text:ruby' || node.tag === 'text:meta' || isOdfExtensionElement(node)) {
-      // Inline vocabulary with no cross-format analogue: a phonetic-annotation ruby pair, an RDF metadata anchor, a producer-private extension element. Their visible text (a ruby-base's runs) reads as ordinary runs through the recursion below while the element itself quarantines, so nothing is lost on either side -- the residue half carries what the construct WAS, the runs carry what it SAID.
-      collectRuns(node, baseProperties, pkg, out, walk, hyperlinkTarget);
+      // Inline vocabulary with no cross-format analogue: a phonetic-annotation ruby pair, an RDF metadata anchor, a producer-private extension element. What renders as flow text reads as ordinary runs while the element itself quarantines, so nothing is lost on either side -- the residue half carries what the construct WAS, the runs carry what it SAID. A ruby's rendered text is its ruby-base ALONE (the ruby-text is the small gloss above it, not flow content -- recursing into the whole ruby would inline the annotation as if it were body text); a text:meta wraps ordinary content, so the whole element recurses.
+      if (node.tag === 'text:ruby') {
+        for (const base of childrenWithTag(node, 'text:ruby-base')) {
+          collectRuns(base, baseProperties, pkg, out, walk, hyperlinkTarget);
+        }
+      } else {
+        collectRuns(node, baseProperties, pkg, out, walk, hyperlinkTarget);
+      }
       walk.residueElements.push(node);
     }
     // Any other child (change-tracking markup, an anchored draw:frame) contributes no run at all -- matching text.ts's own established zero-length treatment of the same node shapes, not a new gap introduced here.
