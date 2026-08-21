@@ -205,3 +205,53 @@ describe('readOdg: the package-native reader over the same fixture', () => {
     expect(shapeGroup.children.length).toBeGreaterThan(0);
   });
 });
+
+// The odg residue rows (ExaDev/documents.js#769): the unmapped shape kinds and vendor-extension elements quarantine on their own page's residue, and non-content parts quarantine at the package tier.
+describe('readOdgContent: residue rows', () => {
+  function drawingPackage(page: ReturnType<typeof el>, extraParts: Record<string, Package['parts'][string]> = {}): Package {
+    return {
+      parts: {
+        'content.xml': { kind: 'xml', nodes: [el('office:document-content', {}, [el('office:body', {}, [el('office:drawing', {}, [page])])])] },
+        'styles.xml': stylesXml(),
+        ...extraParts,
+      },
+    };
+  }
+
+  it('quarantines an unmapped shape kind (draw:connector, draw:measure) on the page it sits in, contributing no vector', () => {
+    const page = el('draw:page', {}, [
+      el('draw:connector', { 'svg:x1': '1cm', 'svg:y1': '1cm', 'svg:x2': '4cm', 'svg:y2': '4cm' }),
+      el('draw:measure', { 'svg:x1': '1cm', 'svg:y1': '5cm', 'svg:x2': '4cm', 'svg:y2': '5cm' }),
+    ]);
+    const { pages } = readOdgContent(drawingPackage(page));
+    const drawPage = pages[0];
+    if (drawPage === undefined) {
+      throw new Error('expected a draw page');
+    }
+    expect(drawPage.shapes).toEqual([]);
+    expect(drawPage.vectors).toEqual([]);
+    expect(drawPage.source?.format).toBe('odg');
+    expect(drawPage.source?.xml).toContain('<draw:connector');
+    expect(drawPage.source?.xml).toContain('<draw:measure');
+  });
+
+  it('quarantines a vendor-extension element on the page alongside the unmapped kinds', () => {
+    const page = el('draw:page', {}, [el('drawooo:header-footer', {}), el('draw:rect', { 'svg:x': '1cm', 'svg:y': '1cm', 'svg:width': '2cm', 'svg:height': '2cm' })]);
+    const { pages } = readOdgContent(drawingPackage(page));
+    const drawPage = pages[0];
+    if (drawPage === undefined) {
+      throw new Error('expected a draw page');
+    }
+    // The real vector still reads; only the extension element quarantines.
+    expect(drawPage.vectors).toHaveLength(1);
+    expect(drawPage.source?.xml).toContain('<drawooo:header-footer');
+  });
+
+  it('quarantines a non-content XML part at the package tier keyed by its part path, spliced onto readOdg\'s root', () => {
+    const page = el('draw:page', {});
+    const pkg = drawingPackage(page, { 'settings.xml': { kind: 'xml', nodes: [el('office:document-settings')] } });
+    const { source } = readOdgContent(pkg);
+    expect(source?.['settings.xml']?.format).toBe('odg');
+    expect(readOdg(pkg).source?.['settings.xml']?.xml).toContain('<office:document-settings');
+  });
+});

@@ -260,3 +260,72 @@ describe('readOdp: the package-native reader over the same fixture', () => {
     assertPackageRoundTrip(readOdp(pkg), { kind: 'presentation', ...content });
   });
 });
+
+// The odp residue rows (ExaDev/documents.js#769): presentation transitions/sound/animations and the unmapped shape kinds quarantine on their own slide's residue, and non-content parts quarantine at the package tier.
+describe('readOdpContent: residue rows', () => {
+  function slidePackage(page: ReturnType<typeof el>, extraParts: Record<string, Package['parts'][string]> = {}): Package {
+    return {
+      parts: {
+        'content.xml': { kind: 'xml', nodes: [el('office:document-content', {}, [el('office:body', {}, [el('office:presentation', {}, [page])])])] },
+        'styles.xml': stylesXml(),
+        ...extraParts,
+      },
+    };
+  }
+
+  it('quarantines a slide\'s transition attributes, presentation:sound, and animation trees in the slide\'s own residue', () => {
+    const page = el('draw:page', { 'draw:master-page-name': 'Default', 'presentation:transition-type': 'automatic', 'presentation:transition-style': 'fade', 'presentation:transition-speed': 'slow', 'presentation:duration': 'PT2S' }, [
+      el('presentation:sound', { 'xlink:href': '../media/sound.wav' }),
+      el('anim:par', { 'pres:node-type': 'timing-root' }, [el('anim:animate', { 'smil:attributeName': 'x' })]),
+      el('draw:frame', { 'svg:x': '20pt', 'svg:y': '20pt', 'svg:width': '100pt', 'svg:height': '40pt' }, [el('draw:text-box', {}, [el('text:p', {}, [txt('Real content')])])]),
+    ]);
+    const { slides } = readOdpContent(slidePackage(page));
+    const slide = slides[0];
+    if (slide === undefined) {
+      throw new Error('expected a slide');
+    }
+    expect(slide.source?.format).toBe('odp');
+    // The transition attributes ride a children-stripped draw:page carrying only the four presentation attributes.
+    expect(slide.source?.xml).toContain('<draw:page presentation:transition-type="automatic"');
+    expect(slide.source?.xml).toContain('presentation:transition-style="fade"');
+    expect(slide.source?.xml).toContain('<presentation:sound');
+    expect(slide.source?.xml).toContain('<anim:par');
+    expect(slide.shapes).toHaveLength(1);
+  });
+
+  it('quarantines the unmapped shape kinds (draw:connector, draw:measure, dr3d:scene, applet/plugin/floating-frame) on the slide they sit in, including inside a draw:g', () => {
+    const page = el('draw:page', { 'draw:master-page-name': 'Default' }, [
+      el('draw:connector', { 'svg:x1': '1cm', 'svg:y1': '1cm', 'svg:x2': '4cm', 'svg:y2': '4cm' }),
+      el('draw:g', {}, [el('dr3d:scene', {}, [el('dr3d:cube')])]),
+      el('draw:applet', { 'xlink:href': './Applet' }),
+      el('draw:plugin', { 'xlink:href': './Plugin' }),
+      el('draw:floating-frame', { 'xlink:href': './Frame' }),
+    ]);
+    const { slides } = readOdpContent(slidePackage(page));
+    const slide = slides[0];
+    if (slide === undefined) {
+      throw new Error('expected a slide');
+    }
+    expect(slide.shapes).toEqual([]);
+    expect(slide.source?.format).toBe('odp');
+    expect(slide.source?.xml).toContain('<draw:connector');
+    expect(slide.source?.xml).toContain('<dr3d:scene');
+    expect(slide.source?.xml).toContain('<draw:applet');
+    expect(slide.source?.xml).toContain('<draw:plugin');
+    expect(slide.source?.xml).toContain('<draw:floating-frame');
+  });
+
+  it('quarantines a vendor-extension element on the slide alongside the unmapped kinds', () => {
+    const page = el('draw:page', { 'draw:master-page-name': 'Default' }, [el('drawooo:enhanced-path', {}, [txt('')])]);
+    const { slides } = readOdpContent(slidePackage(page));
+    expect(slides[0]?.source?.xml).toContain('<drawooo:enhanced-path');
+  });
+
+  it('quarantines a non-content XML part at the package tier keyed by its part path, spliced onto readOdp\'s root', () => {
+    const page = el('draw:page', { 'draw:master-page-name': 'Default' });
+    const pkg = slidePackage(page, { 'settings.xml': { kind: 'xml', nodes: [el('office:document-settings')] } });
+    const { source } = readOdpContent(pkg);
+    expect(source?.['settings.xml']?.format).toBe('odp');
+    expect(readOdp(pkg).source?.['settings.xml']?.xml).toContain('<office:document-settings');
+  });
+});

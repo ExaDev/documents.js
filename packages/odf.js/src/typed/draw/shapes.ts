@@ -9,6 +9,7 @@ import { parseOdfColor } from '../shared/color';
 import { parseLinePoints } from '../shared/geometry';
 import { decodeOdfText } from '../shared/text';
 import { mintOdfListNumId, readOdfListParagraphs, type OdfListIdState } from '../shared/list';
+import { odfResidue } from '../shared/constructs';
 import { readOdfParagraph } from '../shared/paragraph';
 import { readOdfTable } from '../shared/table';
 import { parseOdfLength } from '../shared/units';
@@ -337,7 +338,7 @@ function readCustomShapeVector(element: XmlElement, groupFunctions: readonly Odf
   return { kind: type === 'ellipse' ? 'ellipse' : 'rect', frame: geometry.frame, rotationDeg: geometry.rotationDeg, fill, stroke };
 }
 
-// The fallback for an UNRECOGNISED draw:custom-shape preset (or one with no draw:enhanced-geometry/draw:type at all): produce text-only content -- a plain ContentShape carrying whatever real text:p runs the shape has, read through the same readOdfParagraph call readDrawFrameContent's own draw:text-box case uses (though without its list-membership walk -- an odg path, where a text:list's own text:p children are still FOUND by this deep search and read as plain paragraphs) -- rather than a vector primitive this reader cannot correctly derive without evaluating draw:enhanced-path's own formula language (see RECOGNIZED_CUSTOM_SHAPE_PRESETS' own note). A custom-shape's text:p children sit DIRECTLY under draw:custom-shape itself (confirmed against real LibreOffice output -- unlike draw:frame's own draw:text-box wrapper), so elementsWithTag is used here as a deep search that also finds a text:list's own text:p children should a custom shape carry one, reading them as plain paragraphs. An unrecognised preset with NO real text content at all (every run empty, matching this reader's own hand-built fixtures, which never populate a placeholder shape's own text) has nothing worth preserving and is skipped entirely -- this IS the "diagnostic-worthy note" this task's brief asks for: this comment IS that note, since neither this reader nor readOdgContent below has a diagnostics sink to report it through (matching readOdpContent/readOdtContent's own established "no diagnostics channel" posture elsewhere in this package).
+// The fallback for an UNRECOGNISED draw:custom-shape preset (or one with no draw:enhanced-geometry/draw:type at all): produce text-only content -- a plain ContentShape carrying whatever real text:p runs the shape has, read through the same readOdfParagraph call readDrawFrameContent's own draw:text-box case uses (though without its list-membership walk -- an odg path, where a text:list's own text:p children are still FOUND by this deep search and read as plain paragraphs) -- rather than a vector primitive this reader cannot correctly derive without evaluating draw:enhanced-path's own formula language (see RECOGNIZED_CUSTOM_SHAPE_PRESETS' own note). The whole draw:enhanced-geometry element quarantines in the salvaged shape's residue, so the preset definition survives beside its approximation and a same-format writer can restore it. A custom-shape's text:p children sit DIRECTLY under draw:custom-shape itself (confirmed against real LibreOffice output -- unlike draw:frame's own draw:text-box wrapper), so elementsWithTag is used here as a deep search that also finds a text:list's own text:p children should a custom shape carry one, reading them as plain paragraphs. An unrecognised preset with NO real text content at all (every run empty, matching this reader's own hand-built fixtures, which never populate a placeholder shape's own text) has nothing worth preserving and is skipped entirely, residue with it (the row quarantines the geometry "beside whatever generic shape it degrades to" -- no degraded shape, nothing to hang it on). The residue format is 'odg': this salvage path is reached only through walkDrawPageContent, the odg-facing walk.
 function readCustomShapeAsTextShape(element: XmlElement, groupFunctions: readonly OdfTransformFunction[], pkg: Package): ContentShape | undefined {
   const paragraphs = elementsWithTag(element.children, 'text:p').map((p) => readOdfParagraph(p, pkg));
   const hasText = paragraphs.some((paragraph) => paragraph.runs.some((run) => run.text.length > 0));
@@ -349,12 +350,14 @@ function readCustomShapeAsTextShape(element: XmlElement, groupFunctions: readonl
     return undefined;
   }
   const geometry = composeOdfGroupTransform(groupFunctions, ownGeometry);
+  const enhancedGeometry = childrenWithTag(element, 'draw:enhanced-geometry')[0];
   return {
     name: attrValue(element, 'draw:name'),
     frame: geometry.frame,
     rotationDeg: geometry.rotationDeg,
     ...readFrameInsets(element, pkg),
     blocks: paragraphs,
+    ...(enhancedGeometry !== undefined ? { source: odfResidue('odg', enhancedGeometry) } : {}),
   };
 }
 

@@ -1,10 +1,11 @@
-import type { ContentDrawPage, DocumentPackage, LayoutMetadata } from 'document-schema.js';
+import type { ContentDrawPage, DocumentPackage, LayoutMetadata, SourceResidue } from 'document-schema.js';
 import { assemblePackage, PAGE_SIZE_A4 } from 'document-schema.js';
 import type { XmlElement } from '../../model/node';
 import type { Package } from '../../model/package';
 import { childrenWithTag, findChildElement, rootElement } from '../../xml/query';
 import { readOdfMetadata } from '../shared/metadata';
 import { resolveDrawPageSize } from '../shared/masterpage';
+import { collectOdfNonContentPartResidue, collectOdfUnmappedShapeResidue, odfResidue } from '../shared/constructs';
 import { readDrawPageContent } from '../draw/shapes';
 
 // Resolves a Package into { metadata, pages }: office:drawing's own draw:page content model was verified structurally IDENTICAL to office:presentation's, against both the OASIS ODF schema (draw:page's own attribute/content-model definition is a single, format-agnostic schema fragment shared by both office:body children, not two separate definitions) and a real .odg file built via the LibreOffice UNO API -- document order is native here exactly like odp (a draw:page's own position among its office:drawing siblings IS page order, with nothing resolution-worthy above it), and the SAME draw:frame/draw:g/vector-primitive content-walking logic (readDrawPageContent, typed/draw/shapes.ts) and the SAME master-page -> page-layout size-resolution chain (resolveDrawPageSize, typed/shared/masterpage.ts) apply unchanged.
@@ -17,12 +18,18 @@ function readPage(page: XmlElement, pkg: Package): ContentDrawPage {
   // LibreOffice Draw's own out-of-the-box default page size for a freshly created, unmodified .odg (confirmed directly against a real Draw document's own style:page-layout-properties: 21cm x 29.7cm portrait, i.e. A4) -- used only when a page's own master-page/page-layout chain doesn't resolve. Deliberately A4-based, matching readOdtContent's own fallback choice and reasoning (each reader's own fallback should reflect the format it actually reads) rather than reusing readOdpContent's own SLIDE_SIZE_WIDESCREEN, which is Impress's default, not Draw's.
   const size = resolveDrawPageSize(page, pkg) ?? PAGE_SIZE_A4;
   const { shapes, vectors } = readDrawPageContent(page.children, pkg);
-  return { size, shapes, vectors };
+  // The page's own residue: the unmapped shape kinds and vendor-extension elements, collected over the same draw:g-only recursion boundary readDrawPageContent itself walks.
+  const unmapped: XmlElement[] = [];
+  collectOdfUnmappedShapeResidue(page.children, unmapped);
+  const source = unmapped.length > 0 ? odfResidue('odg', ...unmapped) : undefined;
+  return { size, shapes, vectors, ...(source !== undefined ? { source } : {}) };
 }
 
 export interface OdgDocument {
   metadata: LayoutMetadata;
   pages: ContentDrawPage[];
+  // The package-tier residue table: non-content XML parts keyed by their part path. Present only when at least one quarantined -- the flat ContentDocument has no root source table, so this field is how the table reaches readOdg's assembled package root.
+  source?: Record<string, SourceResidue>;
 }
 
 export function readOdgContent(pkg: Package): OdgDocument {
@@ -32,14 +39,21 @@ export function readOdgContent(pkg: Package): OdgDocument {
   const drawing = body === undefined ? undefined : findChildElement(body.children, 'office:drawing');
   const pages = drawing === undefined ? [] : childrenWithTag(drawing, 'draw:page');
 
+  const source: Record<string, SourceResidue> = {};
+  collectOdfNonContentPartResidue(pkg, 'odg', source);
   return {
     metadata: readOdfMetadata(pkg),
     pages: pages.map((page) => readPage(page, pkg)),
+    ...(Object.keys(source).length > 0 ? { source } : {}),
   };
 }
 
 // Package -> DocumentPackage: this module's PRIMARY entry point, the drawing mirror of readOdtContent/readOdt (see src/typed/odt/read.ts's own note on why assemblePackage rather than bare decompose, and why no `pages` argument -- ContentDrawPage's own `pages` here are the DOCUMENT's authored draw pages, an entirely different thing from the package envelope's rendered-page-size array). readOdgContent above is unchanged and remains the flat, ContentDocument-level reader.
 export function readOdg(pkg: Package): DocumentPackage {
-  const { metadata, pages } = readOdgContent(pkg);
-  return assemblePackage({ kind: 'drawing', metadata, pages });
+  const { metadata, pages, source } = readOdgContent(pkg);
+  const assembled = assemblePackage({ kind: 'drawing', metadata, pages });
+  if (source !== undefined) {
+    assembled.source = source;
+  }
+  return assembled;
 }
