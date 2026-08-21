@@ -24,6 +24,22 @@ describe('readDocxExtras', () => {
     expect(extras.footers).toEqual(['Footer text']);
   });
 
+  it('exposes the structural header/footer model: each referenced part as block flow in package-key order, plus the section-slot references naming them', () => {
+    const extras = readDocxExtras(docxWithExtrasPackage());
+    expect(extras.sectionHeaderFooters).toEqual([{ header: { default: 'word/header1.xml' }, footer: { default: 'word/footer1.xml' } }]);
+    expect(extras.headerFooterParts.map((part) => [part.path, part.kind])).toEqual([
+      ['word/footer1.xml', 'footer'],
+      ['word/header1.xml', 'header'],
+    ]);
+    // A referenced part's content is walked as real block flow, not concatenated text: the header's one paragraph comes through as a paragraph block with its run, resolved through the document's own style cascade (docDefaults Calibri 11pt) exactly as a body paragraph would be.
+    const headerBlocks = extras.headerFooterParts[1]?.blocks ?? [];
+    expect(headerBlocks).toHaveLength(1);
+    const headerParagraph = headerBlocks[0]?.kind === 'paragraph' ? headerBlocks[0] : undefined;
+    expect(headerParagraph?.runs.map((run) => run.text)).toEqual(['Header text']);
+    expect(headerParagraph?.runs[0]?.fontFamily).toBe('Calibri');
+    expect(headerParagraph?.runs[0]?.sizePt).toBe(11);
+  });
+
   it('reads a numbering definition, keyed by numId, with its abstractNum-derived level resolved', () => {
     const extras = readDocxExtras(docxWithExtrasPackage());
     expect(extras.numbering).toEqual({
@@ -41,6 +57,8 @@ describe('readDocxExtras', () => {
     expect(extras.footnotes).toEqual([]);
     expect(extras.headers).toEqual([]);
     expect(extras.footers).toEqual([]);
+    expect(extras.headerFooterParts).toEqual([]);
+    expect(extras.sectionHeaderFooters).toEqual([{}]);
     expect(extras.numbering).toEqual({});
   });
 

@@ -1,6 +1,6 @@
 // documents.js's public surface: bidirectional conversion among docx/pptx/xlsx/odt/odp/ods/odg/markdown/csv/svg and PDF (every content format's own PDF round trip plus the cross-format bridges), a read+write live-view editor for docx/pptx/odt/odp/ods/odg, and a hand-written PDF codec, built on ooxml.js's lossless OOXML core, odf.js's lossless ODF core, and markdown-codec.
 
-// --- ooxml.js's lossless OOXML core, re-exported so consumers need only this one dependency. Its own tree-form typed readers readDocx/readPptx/readXlsx (DocumentPackage readers since ooxml.js 4.0.0) and the separate lossy cell-values-only readXlsxWorkbook are deliberately NOT re-exported here: readDocxContent/readPptxContent (below) already wrap the flat readers into ContentDocument, so exposing both the wrapper and the thing it wraps would be a trap -- two overlapping entry points to the same underlying read. readXlsxContent/buildXlsxPackage are the one exception -- re-exported directly further below, in the Format <-> ContentDocument readers section, rather than from here or behind a documents.js-local wrapper: unlike the docx/pptx pair, readXlsxContent already reads (and the aliased buildXlsxPackage already builds) a real spreadsheet ContentDocument on its own, so there is no wrapper to write and no second, overlapping entry point to trap a caller into picking the wrong one. The flat reader's own comments/footnotes/headers/footers/numbering, which ContentDocument doesn't model at all, are not lost, though -- see readDocxExtras below, which exposes that data as its own real return type rather than by re-exporting the reader itself. Comment/Footnote/NumberingDefinitions (ooxml.js's own types, reused by readDocxExtras' own return shape) are re-exported here since they're genuinely just data types, not a second entry point to the same read. ---
+// --- ooxml.js's lossless OOXML core, re-exported so consumers need only this one dependency. Its own tree-form typed readers readDocx/readPptx/readXlsx (DocumentPackage readers since ooxml.js 4.0.0) and the separate lossy cell-values-only readXlsxWorkbook are deliberately NOT re-exported here: readDocxContent/readPptxContent (below) already wrap the flat readers into ContentDocument, so exposing both the wrapper and the thing it wraps would be a trap -- two overlapping entry points to the same underlying read. readXlsxContent/buildXlsxPackage are the one exception -- re-exported directly further below, in the Format <-> ContentDocument readers section, rather than from here or behind a documents.js-local wrapper: unlike the docx/pptx pair, readXlsxContent already reads (and the aliased buildXlsxPackage already builds) a real spreadsheet ContentDocument on its own, so there is no wrapper to write and no second, overlapping entry point to trap a caller into picking the wrong one. The flat reader's own comments/footnotes/headers/footers/numbering, which ContentDocument doesn't model at all, are not lost, though -- see readDocxExtras below, which exposes that data as its own real return type rather than by re-exporting the reader itself. Comment/Footnote/HeaderFooterPart/SectionHeaderFooterReferences/NumberingDefinitions (ooxml.js's own types, reused by readDocxExtras' own return shape) are re-exported here since they're genuinely just data types, not a second entry point to the same read. ---
 export {
   type Attribute,
   AttributeSchema,
@@ -19,6 +19,7 @@ export {
   DefinedNameSchema,
   type Footnote,
   FootnoteSchema,
+  type HeaderFooterPart,
   type NumberingDefinition,
   NumberingDefinitionSchema,
   type NumberingDefinitions,
@@ -29,6 +30,7 @@ export {
   type Part,
   PartSchema,
   type Relationship,
+  type SectionHeaderFooterReferences,
   type XmlCdata,
   XmlCdataSchema,
   type XmlComment,

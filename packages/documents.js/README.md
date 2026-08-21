@@ -293,13 +293,14 @@ const fresh = createDocx();
 fresh.body.appendParagraph().appendRun({ text: 'New document' });
 ```
 
-A docx's comments, footnotes, headers/footers, and numbering definitions never fit `ContentDocument`'s section/block shape — `readDocxExtras` is a second, independent read returning exactly that data:
+A docx's comments, footnotes, headers/footers, and numbering definitions never fit `ContentDocument`'s section/block shape — `readDocxExtras` is a second, independent read returning exactly that data. Headers and footers come through structurally: `headerFooterParts` carries each section-referenced part as real block flow, `sectionHeaderFooters` names which section references which part at which default/first/even slot, and the deprecated flat `headers`/`footers` string arrays (a per-part concatenated-text summary that also catches parts no section references) remain populated until their tracked upstream removal:
 
 ```ts
 import { readDocxExtras } from 'documents.js';
 import { decodePackage } from 'ooxml.js';
 
-const { comments, footnotes, headers, footers, numbering } = readDocxExtras(decodePackage(docxBytes));
+const { comments, footnotes, headerFooterParts, sectionHeaderFooters, numbering } = readDocxExtras(decodePackage(docxBytes));
+console.log(sectionHeaderFooters[0]?.header?.default); // the part path section 1's default header resolves to, e.g. 'word/header1.xml'
 console.log(Object.values(numbering)[0]?.levels['0']?.format); // numbering is keyed by numId, each level by its own level index
 ```
 
