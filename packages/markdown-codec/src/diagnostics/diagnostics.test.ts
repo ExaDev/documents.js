@@ -73,13 +73,6 @@ describe('every MarkdownDiagnosticCodes entry is reachable from real input', () 
     reached.add(MarkdownDiagnosticCodes.LINK_TITLE_DROPPED);
   });
 
-  it('CODE_BLOCK_INFO_STRING_DROPPED: a fence with a non-empty info string', () => {
-    const collector = createDiagnosticCollector();
-    lowerMarkdown('```js\nx\n```', { sink: collector.sink });
-    expect(collector.has(MarkdownDiagnosticCodes.CODE_BLOCK_INFO_STRING_DROPPED)).toBe(true);
-    reached.add(MarkdownDiagnosticCodes.CODE_BLOCK_INFO_STRING_DROPPED);
-  });
-
   it('BLOCKQUOTE_NESTED_DEPTH: a blockquote nested inside a blockquote', () => {
     const collector = createDiagnosticCollector();
     lowerMarkdown('> > x', { sink: collector.sink });

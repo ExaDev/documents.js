@@ -33,6 +33,23 @@ describe('code blocks, thematic breaks, preformatted HTML', () => {
     expect(emitMarkdown(doc([{ kind: 'paragraph', runs: [{ text: 'foo\nbar' }], styleId: 'CodeBlock' }]), { codeFenceChar: '~' })).toBe('~~~\nfoo\nbar\n~~~');
   });
 
+  it("re-emits the paragraph's codeLanguage as the fence's info word", () => {
+    expect(emitMarkdown(doc([{ kind: 'paragraph', runs: [{ text: 'foo' }], styleId: 'CodeBlock', codeLanguage: 'js' }]))).toBe('``` js\nfoo\n```');
+  });
+
+  it('re-emits the quarantined info-string remainder after the language word, a single space between them', () => {
+    expect(emitMarkdown(doc([{ kind: 'paragraph', runs: [{ text: 'foo' }], styleId: 'CodeBlock', codeLanguage: 'js', source: { format: 'markdown', xml: '{.numberLines}' } }]))).toBe('``` js {.numberLines}\nfoo\n```');
+  });
+
+  it('re-emits a residue-only info string (no language word) as the whole info line', () => {
+    expect(emitMarkdown(doc([{ kind: 'paragraph', runs: [{ text: 'foo' }], styleId: 'CodeBlock', source: { format: 'markdown', xml: '{.haskell}' } }]))).toBe('``` {.haskell}\nfoo\n```');
+  });
+
+  it('round-trips a language word through read -> emit unchanged', () => {
+    const roundTrip = emitMarkdown(lowerMarkdown('``` ruby\ndef x; end\n```'));
+    expect(roundTrip).toBe('``` ruby\ndef x; end\n```');
+  });
+
   it('emits a HorizontalRule paragraph as a thematic break using the configured character', () => {
     expect(emitMarkdown(doc([{ kind: 'paragraph', runs: [], styleId: 'HorizontalRule' }]), { thematicBreakChar: '*' })).toBe('***');
   });
