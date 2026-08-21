@@ -1,7 +1,25 @@
 import { describe, expect, it } from 'vitest';
 import { DocumentPackageSchema, type DefinitionEntry, type DocumentPackage, type StylesTable } from 'document-schema.js';
 import { defaultExtractionPolicy, projectDocumentGraph, type ExtractionPolicy, type GraphNode, type PropertyGraph } from './graph';
-import { headingGroup, paragraph, sectionGroup, wordprocessingPackage } from '../test-support/fixtures';
+import {
+  drawPageGroup,
+  drawingPackage,
+  embeddedObject,
+  formulaPackage,
+  headingGroup,
+  listGroup,
+  paragraph,
+  presentationPackage,
+  sectionGroup,
+  shapeGroup,
+  sheetGroup,
+  sheetImage,
+  slideGroup,
+  spreadsheetPackage,
+  vectorLine,
+  vectorRect,
+  wordprocessingPackage,
+} from '../test-support/fixtures';
 
 // The worked example of ExaDev/documents.js#659: a report document whose heading paragraph carries a styles-table ref, plus a second document sharing the boilerplate line and the heading style content but nothing else -- the projection must share exactly those two things and nothing besides.
 const H1_BOLD_RUN = { bold: true, fontFamily: 'Times New Roman' };
@@ -290,6 +308,67 @@ describe('extraction policy', () => {
     // The dereferenced ENTRY CONTENT rides on the node -- never the document-local key 's1'.
     expect(heading.style).toEqual(entry);
     expect(graph.nodes.filter((node) => node.kind === 'documentPackage')[0]!.styles).toEqual({ s1: entry });
+  });
+});
+
+describe('every document kind projects', () => {
+  it('presentation: slide and shape groups with list nesting', () => {
+    const pkg = presentationPackage([slideGroup([shapeGroup([listGroup('Top', 0, [listGroup('Nested', 1, [])])])])]);
+    expectSchemaValid(pkg, 'presentation');
+    const graph = projectDocumentGraph([{ id: 'deck', package: pkg }]);
+    // Both list anchors are paragraphs in the tree vocabulary, so the projected kinds name payloads, not wrappers.
+    expect(graph.nodes.map((node) => node.kind).sort()).toEqual(['documentPackage', 'paragraph', 'paragraph', 'shape', 'slide']);
+    const slide = graph.nodes.find((node) => node.kind === 'slide')!;
+    const shape = graph.nodes.find((node) => node.kind === 'shape')!;
+    const top = nodeByText(graph, 'Top');
+    expect(graph.edges).toEqual([
+      { from: 'deck', to: slide.id, kind: 'CONTAINS', order: 0 },
+      { from: slide.id, to: shape.id, kind: 'CONTAINS', order: 0 },
+      { from: shape.id, to: top.id, kind: 'CONTAINS', order: 0 },
+      { from: top.id, to: nodeByText(graph, 'Nested').id, kind: 'CONTAINS', order: 0 },
+    ]);
+  });
+
+  it('spreadsheet: sheet node with image and embedded-object children, envelope facts inline', () => {
+    const pkg = spreadsheetPackage([sheetGroup({ name: 'Revenue', images: [sheetImage('chart')], embeddedObjects: [embeddedObject()] })], {
+      pages: [{ widthPt: 842, heightPt: 595 }],
+    });
+    expectSchemaValid(pkg, 'spreadsheet');
+    const graph = projectDocumentGraph([{ id: 'book', package: pkg }]);
+    expect(graph.nodes.map((node) => node.kind).sort()).toEqual(['documentPackage', 'embeddedObject', 'image', 'sheet']);
+    const root = graph.nodes.find((node) => node.kind === 'documentPackage')!;
+    expect(root.pages).toEqual([{ widthPt: 842, heightPt: 595 }]);
+    const sheet = graph.nodes.find((node) => node.kind === 'sheet')!;
+    expect(sheet).toMatchObject({ kind: 'sheet', name: 'Revenue' });
+    const contains = graph.edges.filter((edge) => edge.from === sheet.id && edge.kind === 'CONTAINS');
+    expect(contains.map((edge) => [edge.order, graph.nodes.find((node) => node.id === edge.to)!.kind])).toEqual([
+      [0, 'image'],
+      [1, 'embeddedObject'],
+    ]);
+  });
+
+  it('drawing: draw page with shapes and vector leaves', () => {
+    const pkg = drawingPackage([drawPageGroup([shapeGroup([paragraph('Caption.')]), vectorLine(), vectorRect()])]);
+    expectSchemaValid(pkg, 'drawing');
+    const graph = projectDocumentGraph([{ id: 'poster', package: pkg }]);
+    expect(graph.nodes.map((node) => node.kind).sort()).toEqual(['documentPackage', 'drawPage', 'line', 'paragraph', 'rect', 'shape']);
+    const page = graph.nodes.find((node) => node.kind === 'drawPage')!;
+    const contains = graph.edges.filter((edge) => edge.from === page.id && edge.kind === 'CONTAINS');
+    expect(contains.map((edge) => [edge.order, graph.nodes.find((node) => node.id === edge.to)!.kind])).toEqual([
+      [0, 'shape'],
+      [1, 'line'],
+      [2, 'rect'],
+    ]);
+  });
+
+  it('formula: the single leaf is the whole tree', () => {
+    const pkg = formulaPackage('x^2');
+    expectSchemaValid(pkg, 'formula');
+    const graph = projectDocumentGraph([{ id: 'eq', package: pkg }]);
+    expect(graph.nodes.map((node) => node.kind).sort()).toEqual(['documentPackage', 'formula']);
+    expect(graph.edges).toEqual([
+      { from: 'eq', to: graph.nodes.find((node) => node.kind === 'formula')!.id, kind: 'CONTAINS', order: 0 },
+    ]);
   });
 });
 
