@@ -713,7 +713,7 @@ importers:
         specifier: ^5.1.2
         version: link:../odf.js
       ooxml.js:
-        specifier: ^4.4.3
+        specifier: ^4.4.4
         version: link:../ooxml.js
       pdf-codec:
         specifier: ^3.2.0
