@@ -1,3 +1,10 @@
+## [1.1.1](https://github.com/ExaDev/documents.js/compare/archive-codec@1.1.0...archive-codec@1.1.1) (2026-08-21)
+
+
+### Bug Fixes
+
+* **build:** build one dist file per src module so the advertised deep imports resolve ([bbaae2d](https://github.com/ExaDev/documents.js/commit/bbaae2d603eb0b5890bd682dbf9b1d480a8aa3b1)), closes [#745](https://github.com/ExaDev/documents.js/issues/745)
+
 # [1.1.0](https://github.com/ExaDev/documents.js/compare/archive-codec@1.0.2...archive-codec@1.1.0) (2026-08-20)
 
 
