@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import type { ContentDocument } from 'document-schema.js';
+import type { ContentDocument, ContentEmbeddedObjectBlock } from 'document-schema.js';
 import type { Package, XmlElement } from 'ooxml.js';
-import { attr, bytesToBase64, decodePackage, encodePackage, rootElement } from 'ooxml.js';
+import { attr, base64ToBytes, buildDocxPackageFromContent, bytesToBase64, decodePackage, encodePackage, readDocxContent, rootElement } from 'ooxml.js';
 import { readPptxContent } from '../../ooxml/pptx/read';
 import { collectDrawingMlVectors } from '../../test-support/drawingml-vector';
 import { VECTOR_FIXTURE, vectorDrawingBlock } from '../../test-support/vectors';
 import { walkElements } from '../../xml/query';
-import { buildPptxPackage } from './content';
+import { buildPptxPackage, embeddedPresentationSerialiser } from './content';
 import { PptxEditor } from './editor';
 
 function presentationDoc(slides: Extract<ContentDocument, { kind: 'presentation' }>['slides']): ContentDocument {
@@ -170,5 +170,30 @@ describe('buildPptxPackage', () => {
     const lineXfrm = [...walkElements(firstSlideRoot(pkg).children)].filter((cursor) => cursor.node.tag === 'a:xfrm')[2]!.node;
     expect(attr(lineXfrm, 'flipH')).toBe('1');
     expect(attr(lineXfrm, 'flipV')).toBe('1');
+  });
+});
+
+describe('embeddedPresentationSerialiser', () => {
+  it('round-trips a docx embedded presentation through ooxml.js\'s docx writer, the nested deck re-serialised by buildPptxPackage', () => {
+    // The wiring half of #742's port: ooxml.js's docx writer accepts an injected presentation serialiser because it cannot depend on the one pptx builder in the ecosystem -- this package's own buildPptxPackage -- without inverting the family's layering. This value IS that wiring, so the proof has to be the whole loop: a presentation embed built into a docx through ooxml.js's writer with the serialiser injected, then re-read, with the deck's own content surviving.
+    const deck = presentationDoc([
+      { size: SLIDE_SIZE, notes: '', shapes: [{ frame: { xPt: 10, yPt: 10, widthPt: 200, heightPt: 100 }, ...ZERO_INSETS, blocks: [{ kind: 'paragraph', runs: [{ text: 'Embedded deck' }] }] }] },
+    ]);
+    const block: ContentEmbeddedObjectBlock = { kind: 'embeddedObject', objectKind: 'presentation', document: deck, frame: { xPt: 0, yPt: 0, widthPt: 96, heightPt: 60 } };
+    const pkg = buildDocxPackageFromContent({ sections: [{ pageSize: { widthPt: 612, heightPt: 792 }, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 }, blocks: [block] }] }, { serialiseEmbeddedPresentation: embeddedPresentationSerialiser });
+
+    const after = readDocxContent(pkg);
+    // The w:object rides a run inside its own paragraph, so the reader lifts the embed as the sibling after that paragraph's own (run-text-empty) block.
+    const embedded = after.sections[0]?.blocks[1];
+    expect(embedded?.kind).toBe('embeddedObject');
+    expect(embedded?.kind === 'embeddedObject' ? embedded.objectKind : undefined).toBe('presentation');
+    // The nested document is the genuinely decoded pptx the serialiser built, not an envelope: the deck's one slide and its text both survive.
+    const slide = embedded?.kind === 'embeddedObject' && embedded.document.kind === 'presentation' ? embedded.document.slides[0] : undefined;
+    expect(slide?.shapes[0]?.blocks[0]).toMatchObject({ kind: 'paragraph', runs: [{ text: 'Embedded deck' }] });
+    // The payload really is a pptx built by this package's own builder: it re-reads through this package's own pptx reader too.
+    const payloadPart = pkg.parts['word/embeddings/oleObject1.pptx'];
+    expect(payloadPart?.kind).toBe('binary');
+    const reread = payloadPart?.kind === 'binary' ? readPptxContent(decodePackage(base64ToBytes(payloadPart.base64))) : undefined;
+    expect(reread?.kind).toBe('presentation');
   });
 });

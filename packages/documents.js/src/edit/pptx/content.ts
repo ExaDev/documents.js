@@ -1,6 +1,7 @@
 import type { ContentBlock, ContentDocument, ContentParagraph, ContentShape, ContentTable } from 'document-schema.js';
 import type { Package } from 'ooxml.js';
-import { base64ToBytes } from 'ooxml.js';
+import type { EmbeddedPresentationSerialiser } from 'ooxml.js';
+import { base64ToBytes, encodePackage } from 'ooxml.js';
 import { drawingOfBlock, embeddedDrawingVectors } from '../../model/embedded-drawing';
 import { formulaOfBlock, formulaPlaceholderText } from '../../model/formula';
 import { resolveMetadataTimestamps } from '../../model/metadata';
@@ -44,6 +45,9 @@ export function buildPptxPackage(content: ContentDocument, options?: BuildPptxPa
   }
   return editor.toPackage();
 }
+
+// The wiring half of #742's port: ooxml.js's docx writer (buildDocxPackageFromContent/buildDocxPackage) accepts an injected presentation serialiser because the only pptx writer in the ecosystem -- this buildPptxPackage -- sits one layer above it, where a dependency would invert the family's layering. This value is that serialiser: pass it as BuildDocxContentOptions.serialiseEmbeddedPresentation and a docx whose embedded OLE object carries a presentation document (readDocxContent genuinely recovers one) round-trips through the pair instead of being refused, the nested deck re-serialised into a real word/embeddings/oleObjectN.pptx payload by the identical builder the pptx write path uses.
+export const embeddedPresentationSerialiser: EmbeddedPresentationSerialiser = (document) => encodePackage(buildPptxPackage(document));
 
 function appendShape(slide: PptxSlide, shape: ContentShape, options?: BuildPptxPackageOptions): void {
   const [onlyBlock] = shape.blocks;

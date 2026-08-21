@@ -192,7 +192,7 @@ export { PptxShape } from './edit/pptx/shape';
 export type { PptxTableInit } from './edit/pptx/table';
 export { PptxTable, PptxTableCell, PptxTableRow } from './edit/pptx/table';
 export type { BuildPptxPackageOptions } from './edit/pptx/content';
-export { buildPptxPackage } from './edit/pptx/content';
+export { buildPptxPackage, embeddedPresentationSerialiser } from './edit/pptx/content';
 
 export type { CreateEmptyOdtPackageOptions } from './edit/odt/scaffold';
 export type { OdtBody } from './edit/odt/editor';
