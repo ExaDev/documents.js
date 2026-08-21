@@ -1,5 +1,9 @@
 node_modules/
-# dist/ is deliberately tracked, not ignored, as a temporary measure pending this package's own npm trusted-publisher setup -- see the "Getting started" section of the README for why.
+# dist/ is a build artefact like every sibling package's: built by turbo, rebuilt fresh by
+# prepublishOnly before every npm publish, and never committed. It was tracked only as a
+# pre-publish holdover (a git-tarball install needed a working build); untracked once OIDC
+# trusted publishing landed (ExaDev/documents.js#755).
+dist/
 *.tsbuildinfo
 .DS_Store
 coverage/

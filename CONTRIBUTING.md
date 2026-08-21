@@ -2,6 +2,8 @@
 
 Conventional commits, enforced by commitlint through a `commit-msg` hook; the same hook also rejects a commit message carrying a `Claude-Session:` trailer, since that line is agent bookkeeping rather than project history. `pre-commit` additionally rejects a merge commit on `main` and a squash merge (detected via a lingering `SQUASH_MSG`) — history stays linear by rebasing, never merging or squashing — before running ESLint over staged files in the package that owns them. `pre-push` runs typecheck and unit tests across the workspace, both through turbo, so the cost is proportional to what actually changed. Work in whichever package's directory the change belongs to; each package's own README documents its architecture and the format-specific decisions behind it.
 
+No package's `dist/` is committed, in this branch's working tree or in a release: every package's `.gitignore` excludes its own `dist/`, and each package's `prepublishOnly` rebuilds it immediately before `npm publish` packs the tarball. A local `pnpm build` therefore never owes the repository anything — a rewritten `dist/` after a fresh build is untracked output, not a pending change, and a lockfile-touching release cascade never needs a dist rebuild to ride along with it.
+
 See the [root README](README.md) for how the workspace, task pipeline, and release orchestration fit together before making a structural change.
 
 ## Adding a package to the workspace
