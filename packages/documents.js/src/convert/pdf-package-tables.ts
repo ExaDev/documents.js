@@ -1,7 +1,7 @@
 import type { DefinitionEntry, DocumentPackage } from 'document-schema.js';
-import type { LayoutAnnotation, LayoutDocument, LayoutOutlineItem } from 'pdf-codec';
+import type { LayoutAnnotation, LayoutDocument, LayoutOutlineItem, LayoutStructureElement } from 'pdf-codec';
 
-// The package-table half of PDF-side construct surfacing (#721): stamping the LayoutDocument's document-level surfaces onto the tree the fromPdf executor assembles. The flat ContentDocument a reconstructor returns has no root for these tables (they are tree-only by design), so this runs immediately after assemblePackage -- the one place both the layout (the facts) and the package (the home) are in hand. Entry vocabularies are this package's own tenants inside the generic definitions-table facility: a destinations entry names a page and a view, an outline entry names its title/destination and parent, an attachment carries decoded bytes, a layer its visibility.
+// The package-table half of PDF-side construct surfacing (#721): stamping the LayoutDocument's document-level surfaces onto the tree the fromPdf executor assembles. The flat ContentDocument a reconstructor returns has no root for these tables (they are tree-only by design), so this runs immediately after assemblePackage -- the one place both the layout (the facts) and the package (the home) are in hand. Entry vocabularies are this package's own tenants inside the generic definitions-table facility: a destinations entry names a page and a view, an outline entry names its title/destination and parent, an attachment carries decoded bytes, a layer its visibility, and (#760) a structure entry states one tagged-PDF element's type and attributes, parent stated as a reference.
 
 export function stampPdfPackageTables(pkg: DocumentPackage, layout: LayoutDocument): void {
   if (layout.destinations !== undefined || layout.outline !== undefined) {
@@ -79,7 +79,26 @@ export function stampPdfPackageTables(pkg: DocumentPackage, layout: LayoutDocume
       };
     });
   });
+  if (layout.structure !== undefined) {
+    walkStructureElements(layout.structure, undefined, definitions);
+  }
   if (Object.keys(definitions).length > 0) {
     pkg.definitions = { ...pkg.definitions, ...definitions };
+  }
+}
+
+// The structure tree flattened depth-first into structure entries keyed by each element's own reader-minted id, the parent stated as a reference the same way outline entries state theirs. This is where a per-element /Lang override stays reachable from the package -- the flat ContentDocument has no run-level or block-level language field to spell one in, so the definitions table is the honest home for the fact the reader recovered.
+function walkStructureElements(elements: readonly LayoutStructureElement[], parentKey: string | undefined, definitions: Record<string, DefinitionEntry>): void {
+  for (const element of elements) {
+    definitions[element.id] = {
+      kind: 'structure',
+      type: element.type,
+      ...(element.title !== undefined ? { title: element.title } : {}),
+      ...(element.language !== undefined ? { language: element.language } : {}),
+      ...(element.alt !== undefined ? { alt: element.alt } : {}),
+      ...(element.actualText !== undefined ? { actualText: element.actualText } : {}),
+      ...(parentKey !== undefined ? { parent: parentKey } : {}),
+    };
+    walkStructureElements(element.children, element.id, definitions);
   }
 }

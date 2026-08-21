@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { assemblePackage, type ContentDocument, type DocumentPackage, type SourceResidue } from 'document-schema.js';
-import type { LayoutAttachment, LayoutDestination, LayoutDocument, LayoutLayer, LayoutOutlineItem, LayoutPage } from 'pdf-codec';
+import type { LayoutAttachment, LayoutDestination, LayoutDocument, LayoutLayer, LayoutOutlineItem, LayoutPage, LayoutStructureElement } from 'pdf-codec';
 import { stampPdfPackageTables } from './pdf-package-tables';
 
 // The package-table half of the PDF-side construct surfacing (#721): destinations (named plus the outline flattened depth-first with parent keys), attachments, layers, the residue table, and comment definition bodies minted under the same deterministic keys reconstruct.ts's anchor constructs reference. Everything lands on the tree the fromPdf executor assembles, because the flat ContentDocument has no root for any of it.
@@ -18,6 +18,7 @@ function layoutOf(extra: {
   outline?: readonly LayoutOutlineItem[];
   attachments?: readonly LayoutAttachment[];
   layers?: readonly LayoutLayer[];
+  structure?: readonly LayoutStructureElement[];
   source?: Record<string, SourceResidue>;
   pages?: readonly LayoutPage[];
 }): LayoutDocument {
@@ -30,6 +31,7 @@ function layoutOf(extra: {
     ...(extra.outline !== undefined ? { outline: cloneOutline(extra.outline) } : {}),
     ...(extra.attachments !== undefined ? { attachments: [...extra.attachments] } : {}),
     ...(extra.layers !== undefined ? { layers: [...extra.layers] } : {}),
+    ...(extra.structure !== undefined ? { structure: cloneStructure(extra.structure) } : {}),
     ...(extra.source !== undefined ? { source: extra.source } : {}),
   };
 }
@@ -37,6 +39,18 @@ function layoutOf(extra: {
 // The outline type is recursive with readonly children; rebuilding it keeps the helper's input and the LayoutDocument's own mutable-arrays shape in agreement without an assertion.
 function cloneOutline(items: readonly LayoutOutlineItem[]): LayoutOutlineItem[] {
   return items.map((item) => ({ title: item.title, ...(item.destination !== undefined ? { destination: item.destination } : {}), children: cloneOutline(item.children) }));
+}
+
+function cloneStructure(elements: readonly LayoutStructureElement[]): LayoutStructureElement[] {
+  return elements.map((element) => ({
+    id: element.id,
+    type: element.type,
+    ...(element.title !== undefined ? { title: element.title } : {}),
+    ...(element.language !== undefined ? { language: element.language } : {}),
+    ...(element.alt !== undefined ? { alt: element.alt } : {}),
+    ...(element.actualText !== undefined ? { actualText: element.actualText } : {}),
+    children: cloneStructure(element.children),
+  }));
 }
 
 describe('stampPdfPackageTables', () => {
@@ -87,6 +101,19 @@ describe('stampPdfPackageTables', () => {
     ];
     stampPdfPackageTables(pkg, layoutOf({ pages }));
     expect(pkg.definitions?.['pdf-annot-1-0']).toEqual({ kind: 'comment', body: 'Second page note', author: 'R', dateIso: '2026-08-19T14:03:00Z' });
+  });
+
+  it('lands the structure tree in the definitions table keyed by element id, parent stated as a reference (#760)', () => {
+    const pkg = packageOf(wordprocessing());
+    stampPdfPackageTables(pkg, layoutOf({
+      structure: [
+        { id: 'struct1', type: 'H1', title: 'Opening', children: [] },
+        { id: 'struct2', type: 'Sect', language: 'fr', children: [{ id: 'struct3', type: 'P', alt: 'Body description', children: [] }] },
+      ],
+    }));
+    expect(pkg.definitions?.struct1).toEqual({ kind: 'structure', type: 'H1', title: 'Opening' });
+    expect(pkg.definitions?.struct2).toEqual({ kind: 'structure', type: 'Sect', language: 'fr' });
+    expect(pkg.definitions?.struct3).toEqual({ kind: 'structure', type: 'P', alt: 'Body description', parent: 'struct2' });
   });
 
   it('stamps nothing when the layout carries none of the surfaces', () => {
