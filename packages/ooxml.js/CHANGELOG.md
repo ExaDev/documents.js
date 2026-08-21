@@ -1,3 +1,10 @@
+# [4.5.0](https://github.com/ExaDev/documents.js/compare/ooxml.js@4.4.4...ooxml.js@4.5.0) (2026-08-21)
+
+
+### Features
+
+* **ooxml:** read a worksheet drawing's pictures into ContentSheet.images ([30406d3](https://github.com/ExaDev/documents.js/commit/30406d336f533e10334571172a95faad3b42719e))
+
 ## [4.4.4](https://github.com/ExaDev/documents.js/compare/ooxml.js@4.4.3...ooxml.js@4.4.4) (2026-08-21)
 
 
