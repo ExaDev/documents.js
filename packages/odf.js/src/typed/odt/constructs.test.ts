@@ -311,4 +311,21 @@ describe('readOdtContent: field master declarations as a definitions table', () 
       'sequence:Table': { kind: 'fieldMaster', family: 'sequence', name: 'Table' },
     });
   });
+
+  it('mints note and annotation definitions alongside the field masters in one table, threaded from the block walk', () => {
+    const pkg = odtPackage([
+      el('text:p', {}, [
+        txt('Claim'),
+        el('text:note', { 'text:note-class': 'footnote', 'text:id': 'ftn1' }, [
+          el('text:note-citation', {}, [txt('1')]),
+          el('text:note-body', {}, [el('text:p', {}, [txt('The body.')])]),
+        ]),
+        el('office:annotation', { 'office:name': 'c1' }, [el('dc:creator', {}, [txt('R.')])]),
+      ]),
+      el('text:sequence-decls', {}, [el('text:sequence-decl', { 'text:name': 'Table' })]),
+    ]);
+    const document = readOdtContent(pkg);
+    expect(Object.keys(document.definitions ?? {}).sort()).toEqual(['comment:c1', 'note:ftn1', 'sequence:Table']);
+    expect(readOdt(pkg).definitions).toEqual(document.definitions);
+  });
 });
