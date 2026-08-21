@@ -1,10 +1,22 @@
-import type { ContentBlock, ContentParagraph, ContentSection, DocumentPackage, LayoutMetadata, Margins, PageSize } from 'document-schema.js';
+import type { ContentBlock, ContentParagraph, ContentSection, DefinitionEntry, DefinitionsTable, DocumentPackage, LayoutMetadata, Margins, PageSize, ProvenanceDescriptor } from 'document-schema.js';
 import { assemblePackage, PAGE_SIZE_A4 } from 'document-schema.js';
 import type { Package } from '../../model/package';
 import type { XmlElement, XmlNode } from '../../model/node';
 import { rootElement, findChildElement, childrenWithTag, attrValue } from '../../xml/query';
 import { mintOdfListNumId, readOdfListParagraphs, type OdfListIdState } from '../shared/list';
-import { isOdfIndexWrapper, odfDivisionDescriptor, odfIndexControlDescriptor } from '../shared/constructs';
+import {
+  collectOdfFieldMasterDefinitions,
+  collectOdfProvenanceRegions,
+  insertOdfConstructMarkers,
+  isOdfIndexWrapper,
+  odfDivisionDescriptor,
+  odfIndexControlDescriptor,
+  odfMarkerHalfEventIndex,
+  resolveOdfMarkerEvents,
+  type OdfConstructExtent,
+  type OdfMarkerEvent,
+  type OdfMarkerHalf,
+} from '../shared/constructs';
 import { readOdfParagraph } from '../shared/paragraph';
 import { readOdfTable } from '../shared/table';
 import { readOdfMetadata } from '../shared/metadata';
@@ -22,6 +34,8 @@ import { parseOdfLength } from '../shared/units';
 export interface OdtDocument {
   metadata: LayoutMetadata;
   sections: ContentSection[];
+  // The package-level definitions table this document's content references: field master declarations, note and comment bodies, the styles-side definition tenants. Present only when the document carries at least one entry -- the flat ContentDocument has no root to hold a definitions table, so this field is how the table reaches readOdt's assembled package root without changing the flat exchange shape.
+  definitions?: DefinitionsTable;
 }
 
 const CONTENT_PART = 'content.xml';
@@ -38,9 +52,8 @@ function readOutlineLevel(headingElement: XmlElement): number {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
 }
 
-// text:h/text:p -> ContentParagraph, via readOdfParagraph (typed/shared/paragraph.ts) -- tag-agnostic itself, so calling it on a text:h reads its style/run content exactly as it would a text:p. The one thing it can't know is odt's own heading convention: a heading's real @text:style-name (e.g. "Heading_20_1") is a producer-chosen ODF string with no cross-format meaning, so this function overrides ONLY the heading identity for a text:h, synthesising the same "Heading1"/"Heading2" shape docx's own real w:pStyle values already use for its built-in heading styles -- giving downstream consumers (documents.js's layout engine, or anything else keying off styleId) one consistent heading convention across both formats -- while the parsed text:outline-level number itself is kept as headingLevel, document-schema.js's canonical numeric heading field, so numeric consumers never have to parse it back out of the styleId string. List membership is never set here: the shared walker (typed/shared/list.ts's readOdfListParagraphs) attaches it for paragraphs it reads inside a text:list, since ODF list membership is purely structural (which text:list/text:list-item this element is nested inside), never an attribute on the paragraph element itself the way docx's w:numPr is.
-function readParagraphOrHeading(element: XmlElement, pkg: Package): ContentParagraph {
-  const paragraph = readOdfParagraph(element, pkg);
+// text:h/text:p -> ContentParagraph identity: the shared reader (typed/shared/paragraph.ts) is tag-agnostic, so it reads a text:h's style/run content exactly as it would a text:p's. The one thing it can't know is odt's own heading convention: a heading's real @text:style-name (e.g. "Heading_20_1") is a producer-chosen ODF string with no cross-format meaning, so this function overrides ONLY the heading identity for a text:h, synthesising the same "Heading1"/"Heading2" shape docx's own real w:pStyle values already use for its built-in heading styles -- giving downstream consumers (documents.js's layout engine, or anything else keying off styleId) one consistent heading convention across both formats -- while the parsed text:outline-level number itself is kept as headingLevel, document-schema.js's canonical numeric heading field, so numeric consumers never have to parse it back out of the styleId string. List membership is never set here: the shared walker (typed/shared/list.ts's readOdfListParagraphs) attaches it for paragraphs it reads inside a text:list, since ODF list membership is purely structural (which text:list/text:list-item this element is nested inside), never an attribute on the paragraph element itself the way docx's w:numPr is.
+function readParagraphOrHeading(element: XmlElement, paragraph: ContentParagraph): ContentParagraph {
   if (element.tag === 'text:h') {
     const outlineLevel = readOutlineLevel(element);
     paragraph.styleId = `Heading${outlineLevel}`;
@@ -50,34 +63,75 @@ function readParagraphOrHeading(element: XmlElement, pkg: Package): ContentParag
   return paragraph;
 }
 
-// Walks block-level content (text:p, text:h, text:list, table:table) in document order, at ONE nesting level -- office:text's own top-level children, or a construct wrapper's own children. text:section reads as a division construct: a constructStart marker carrying the DivisionDescriptor (name, protected flag, the column count its own style sets, and the external-chapter link of a text:section-source) around its own blocks, so the grouping survives as structure instead of being flattened away. The index wrappers (text:table-of-content and its six siblings) read as index content controls bracketing their cached text:index-body blocks, and text:index-title inside a body unwraps transparently -- the title is one of the cached blocks, not a wrapper of its own. Anything else (text:sequence-decls, text:tracked-changes, an office:forms, an anchored draw:frame, text:soft-page-break, ...) is not walked here -- see the scope note at the top of this file for which of those are deliberate gaps. Table CELL content is not walked here at all -- readOdfTable owns that entirely (see this file's own top-of-file note on the scope it inherits from doing so).
-function readBlocks(nodes: readonly XmlNode[], pkg: Package, listIdState: OdfListIdState): ContentBlock[] {
+// The walk state one document's block flow threads: the list-identity counter, the tracked-change regions its markers resolve against, the wrapper extents (divisions, index controls) discovered so far, the marker events promoted from paragraph-edge halves, and the discovery-order counter that keeps extent resolution deterministic.
+interface OdtFlowState {
+  readonly listIdState: OdfListIdState;
+  readonly provenanceRegions: ReadonlyMap<string, ProvenanceDescriptor>;
+  readonly wrapperExtents: OdfConstructExtent[];
+  readonly markerEvents: OdfMarkerEvent[];
+  order: number;
+}
+
+// One read paragraph plus the element it came from and the marker halves its run walk reported -- the triple the block flow needs to place each paragraph's edge-half events at the paragraph's own block index.
+interface ReadParagraph {
+  readonly element: XmlElement;
+  readonly paragraph: ContentParagraph;
+  readonly halves: OdfMarkerHalf[];
+}
+
+// Walks block-level content (text:p, text:h, text:list, table:table) in document order, at ONE nesting level -- office:text's own top-level children, or a construct wrapper's own children. text:section records a division extent over its own blocks (descriptor: name, protected flag, the column count its own style sets, and the external-chapter link of a text:section-source); the index wrappers (text:table-of-content and its six siblings) record index contentControl extents over their cached text:index-body blocks; text:index-title unwraps transparently -- the title is one of the cached blocks, not a wrapper of its own. Every extent -- wrapper or marker pair -- is spliced into markers by ONE pass at the end of the walk (insertOdfConstructMarkers, in readOdtContent below), so a pair crossing another extent is dropped by that pass rather than emitted as markers that would decode to a nesting the source never had. text:tracked-changes and the text:*-decls containers contribute no blocks: their regions and declarations were collected before the walk and live in the state and the definitions table. Anything else (an office:forms, an anchored draw:frame, text:soft-page-break, ...) is not walked here -- see the scope note at the top of this file for which of those are deliberate gaps. Table CELL content is not walked here at all -- readOdfTable owns that entirely (see this file's own top-of-file note on the scope it inherits from doing so).
+function readBlocks(nodes: readonly XmlNode[], pkg: Package, state: OdtFlowState, baseIndex = 0): ContentBlock[] {
   const blocks: ContentBlock[] = [];
+  // Paragraph-half events are recorded only once each paragraph's final block index is known -- an index in the ONE flat block list the caller will splice markers into, hence the baseIndex offset every recursive wrapper call threads in (a wrapper's own children build their blocks in this call's local array, but their marker events must name positions in the enclosing list). That is also why every paragraph path funnels through here rather than recording inside the reader callback: the list walker runs all its callbacks before a single block is pushed, so a callback-time index would be the same for every item of the list.
+  const emitParagraphs = (reads: readonly ReadParagraph[]): void => {
+    reads.forEach((read, offset) => {
+      const blockIndex = baseIndex + blocks.length + offset;
+      for (const half of read.halves) {
+        const eventIndex = odfMarkerHalfEventIndex(half, read.element, blockIndex);
+        if (eventIndex !== undefined) {
+          state.markerEvents.push({ kind: half.kind, side: half.side, key: half.key, index: eventIndex, qualified: true, order: state.order++, descriptor: half.descriptor });
+        }
+      }
+    });
+    for (const read of reads) {
+      blocks.push(read.paragraph);
+    }
+  };
+  const readOneParagraph = (element: XmlElement): ReadParagraph => {
+    const halves: OdfMarkerHalf[] = [];
+    const paragraph = readOdfParagraph(element, pkg, { provenanceRegions: state.provenanceRegions, markersOut: halves });
+    return { element, paragraph: readParagraphOrHeading(element, paragraph), halves };
+  };
   for (const node of nodes) {
     if (node.type !== 'element') {
       continue;
     }
     if (node.tag === 'text:p' || node.tag === 'text:h') {
-      blocks.push(readParagraphOrHeading(node, pkg));
+      emitParagraphs([readOneParagraph(node)]);
     } else if (node.tag === 'text:list') {
-      const numId = mintOdfListNumId(pkg, node, listIdState);
-      blocks.push(...readOdfListParagraphs(node, { numId, level: 0 }, (element) => readParagraphOrHeading(element, pkg)));
+      const numId = mintOdfListNumId(pkg, node, state.listIdState);
+      const reads: ReadParagraph[] = [];
+      readOdfListParagraphs(node, { numId, level: 0 }, (element) => {
+        const read = readOneParagraph(element);
+        reads.push(read);
+        return read.paragraph;
+      });
+      emitParagraphs(reads);
     } else if (node.tag === 'table:table') {
       blocks.push(readOdfTable(node, pkg));
     } else if (node.tag === 'text:section') {
-      blocks.push({ kind: 'constructStart', descriptor: odfDivisionDescriptor(node, pkg) });
-      blocks.push(...readBlocks(node.children, pkg, listIdState));
-      blocks.push({ kind: 'constructEnd' });
+      const startIndex = blocks.length;
+      const order = state.order++;
+      blocks.push(...readBlocks(node.children, pkg, state, baseIndex + startIndex));
+      state.wrapperExtents.push({ startIndex, endIndex: blocks.length, order, descriptor: odfDivisionDescriptor(node, pkg) });
     } else if (isOdfIndexWrapper(node)) {
-      blocks.push({ kind: 'constructStart', descriptor: odfIndexControlDescriptor(node) });
-      for (const child of node.children) {
-        if (child.type === 'element' && child.tag === 'text:index-body') {
-          blocks.push(...readBlocks(child.children, pkg, listIdState));
-        }
-      }
-      blocks.push({ kind: 'constructEnd' });
+      const startIndex = blocks.length;
+      const order = state.order++;
+      const body = node.children.find((child): child is XmlElement => child.type === 'element' && child.tag === 'text:index-body');
+      blocks.push(...(body === undefined ? [] : readBlocks(body.children, pkg, state, baseIndex + startIndex)));
+      state.wrapperExtents.push({ startIndex, endIndex: blocks.length, order, descriptor: odfIndexControlDescriptor(node) });
     } else if (node.tag === 'text:index-title') {
-      blocks.push(...readBlocks(node.children, pkg, listIdState));
+      blocks.push(...readBlocks(node.children, pkg, state, baseIndex + blocks.length));
     }
   }
   return blocks;
@@ -153,10 +207,22 @@ export function readOdtContent(pkg: Package): OdtDocument {
 
   const metadata = readOdfMetadata(pkg);
   const { pageSize, margins } = readFirstMasterPageGeometry(pkg);
-  const listIdState: OdfListIdState = { next: 1 };
-  const blocks = readBlocks(textElement.children, pkg, listIdState);
 
-  return { metadata, sections: [{ pageSize, margins, blocks }] };
+  // The document-level collections the block walk resolves against, gathered first because a marker anywhere in the body may reference a declaration or region stated anywhere else in it: tracked-change regions (id-keyed) and the definitions-table tenants (field master declarations, keys namespaced per family).
+  const provenanceRegions = new Map<string, ProvenanceDescriptor>();
+  collectOdfProvenanceRegions(textElement.children, provenanceRegions);
+  const definitions: Record<string, DefinitionEntry> = {};
+  collectOdfFieldMasterDefinitions(textElement.children, definitions);
+
+  const state: OdtFlowState = { listIdState: { next: 1 }, provenanceRegions, wrapperExtents: [], markerEvents: [], order: 0 };
+  const walked = readBlocks(textElement.children, pkg, state);
+  const blocks = insertOdfConstructMarkers(walked, [...state.wrapperExtents, ...resolveOdfMarkerEvents(state.markerEvents)]);
+
+  return {
+    metadata,
+    sections: [{ pageSize, margins, blocks }],
+    ...(Object.keys(definitions).length > 0 ? { definitions } : {}),
+  };
 }
 
 // Package -> DocumentPackage: this module's PRIMARY entry point, and the one a caller reaching for "read a .odt" should use. readOdtContent above stays exactly what it always was -- the flat, ContentDocument-level reader -- and this function is nothing more than its result spliced into the 'wordprocessing' ContentDocument envelope and handed to document-schema.js's own assemblePackage.
@@ -165,6 +231,11 @@ export function readOdtContent(pkg: Package): OdtDocument {
 //
 // No `pages` argument is passed, and none can be: `pages` carries each RENDERED page's own size, which only a layout pass can report. A reader runs strictly before any layout, so the package it returns is a content-only one -- its nodes carry no `frames` and its root carries no `pages`, which is the honest shape for a document nothing has laid out yet.
 export function readOdt(pkg: Package): DocumentPackage {
-  const { metadata, sections } = readOdtContent(pkg);
-  return assemblePackage({ kind: 'wordprocessing', metadata, sections });
+  const { metadata, sections, definitions } = readOdtContent(pkg);
+  const assembled = assemblePackage({ kind: 'wordprocessing', metadata, sections });
+  // The definitions table has no flat-ContentDocument spelling to ride through assemblePackage's envelope splice (the flat form is the codec-exchange CONTENT shape; package-level tables are tree-only), so it attaches to the freshly assembled root here -- the same route factorStyles' re-entry uses to carry it, and minting never reads it either way.
+  if (definitions !== undefined) {
+    assembled.definitions = definitions;
+  }
+  return assembled;
 }

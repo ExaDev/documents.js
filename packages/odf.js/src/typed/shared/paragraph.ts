@@ -1,4 +1,4 @@
-import type { ContentParagraph, ContentRun, RunConstructExtent } from 'document-schema.js';
+import type { ContentParagraph, ContentRun, ProvenanceDescriptor, RunConstructExtent } from 'document-schema.js';
 import type { XmlElement } from '../../model/node';
 import type { Package } from '../../model/package';
 import type { StyleProperties } from '../../styles/properties';
@@ -19,6 +19,13 @@ interface RunWalkState {
   readonly extents: RunConstructExtent[];
   readonly halves: OdfMarkerHalf[];
   order: number;
+  readonly provenanceRegions: ReadonlyMap<string, ProvenanceDescriptor> | undefined;
+}
+
+// What a caller reading a paragraph in a document-level context supplies: the tracked-change regions a text:change/text:change-start/text:change-end marker resolves its id against, and the out-array every marker half is reported to for block-scope pairing by the reader that owns the block flow. Both absent when the caller has no document context -- a bare readOdfParagraph call reads runs and run-level extents, and change markers with no region map to resolve against contribute nothing (their id names a region the caller never collected).
+export interface OdfParagraphContext {
+  readonly provenanceRegions?: ReadonlyMap<string, ProvenanceDescriptor>;
+  readonly markersOut?: OdfMarkerHalf[];
 }
 
 function collectRuns(container: XmlElement, baseProperties: StyleProperties, pkg: Package, out: ContentRun[], walk: RunWalkState, hyperlinkTarget: string | undefined = undefined): void {
@@ -73,6 +80,29 @@ function collectRuns(container: XmlElement, baseProperties: StyleProperties, pkg
           descriptor: () => odfBookmarkAnchorDescriptor(decodeXmlText(name)),
         });
       }
+    } else if (node.tag === 'text:change') {
+      // A point tracked-change marker: its text:change-id names a text:changed-region the document-level context resolves into the provenance descriptor. With no region (or no region map at all) there is no change kind to report and the marker contributes nothing.
+      const changeId = attrValue(node, 'text:change-id');
+      const descriptor = changeId === undefined ? undefined : walk.provenanceRegions?.get(decodeXmlText(changeId));
+      if (descriptor !== undefined) {
+        const runPosition = out.length;
+        walk.extents.push({ descriptor, startRun: runPosition, endRun: runPosition });
+      }
+    } else if (node.tag === 'text:change-start' || node.tag === 'text:change-end') {
+      // A tracked-change range half, paired exactly the way a bookmark half pairs: in-paragraph into a run-level provenance extent, at paragraph edges into a block-scope pair. The descriptor is deferred because it resolves through the region map, which may hold no entry for this id.
+      const changeId = attrValue(node, 'text:change-id');
+      if (changeId !== undefined) {
+        walk.halves.push({
+          kind: 'change',
+          side: node.tag === 'text:change-start' ? 'start' : 'end',
+          key: decodeXmlText(changeId),
+          element: node,
+          parent: container,
+          runPosition: out.length,
+          order: walk.order++,
+          descriptor: () => walk.provenanceRegions?.get(decodeXmlText(changeId)),
+        });
+      }
     }
     // Any other child (change-tracking markup, an anchored draw:frame, a text:meta) contributes no run at all -- matching text.ts's own established zero-length treatment of the same node shapes, not a new gap introduced here.
   }
@@ -95,15 +125,18 @@ function runFromText(text: string, properties: StyleProperties): ContentRun {
   };
 }
 
-// Reads one text:p element (the caller is responsible for confirming it IS a text:p before calling -- this module has no opinion on where in a document's tree that element sits). Paragraph-level fields (alignment, spacing, indents) come only from the paragraph's OWN resolved 'paragraph'-family properties, never from a span: a text:span's style-name always resolves against the 'text' family, which style.ts/registry.ts's own STYLE_FAMILIES never lets carry paragraph-level properties in practice.
-export function readOdfParagraph(pElement: XmlElement, pkg: Package): ContentParagraph {
+// Reads one text:p element (the caller is responsible for confirming it IS a text:p before calling -- this module has no opinion on where in a document's tree that element sits). Paragraph-level fields (alignment, spacing, indents) come only from the paragraph's OWN resolved 'paragraph'-family properties, never from a span: a text:span's style-name always resolves against the 'text' family, which style.ts/registry.ts's own STYLE_FAMILIES never lets carry paragraph-level properties in practice. The optional context supplies the document-level facts a paragraph cannot know on its own -- the tracked-change regions its change markers resolve against, and the out-array its block-edge marker halves are reported to for the reader that owns the block flow to pair.
+export function readOdfParagraph(pElement: XmlElement, pkg: Package, context: OdfParagraphContext = {}): ContentParagraph {
   const styleName = attrValue(pElement, 'text:style-name');
   const paragraphProperties = resolveStyle(styleName, 'paragraph', pkg).properties;
 
   const runs: ContentRun[] = [];
-  const walk: RunWalkState = { extents: [], halves: [], order: 0 };
+  const walk: RunWalkState = { extents: [], halves: [], order: 0, provenanceRegions: context.provenanceRegions };
   collectRuns(pElement, paragraphProperties, pkg, runs, walk);
   walk.extents.push(...pairOdfMarkerHalves(walk.halves, pElement));
+  if (context.markersOut !== undefined) {
+    context.markersOut.push(...walk.halves);
+  }
 
   return {
     kind: 'paragraph',
