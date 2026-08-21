@@ -4,15 +4,13 @@ import type { XmlElement, XmlNode } from '../../model/node';
 import type { Alignment, Box, ContentBlock, ContentEmbeddedObjectBlock, ContentImageBlock, ContentParagraph, ContentRun, ContentShape, ContentSlide, ContentTable, ContentTableCell, PageSize, RunConstructExtent } from 'document-schema.js';
 import { ContentSlideSchema, SLIDE_SIZE_WIDESCREEN } from 'document-schema.js';
 import { drawingMlFontSizeToPt, emuToPt } from '../shared/units';
-import { sniffImageFormat } from '../../image/sniff';
 import { readEmbeddedPayloadPart } from '../embedded';
 import type { GroupChildTransform } from '../shared/drawingml';
-import { applyGroupTransform, composeGroupTransform, composeShapeRotationDeg, readGroupXfrm, readSolidFillColor, readXfrm } from '../shared/drawingml';
+import { applyGroupTransform, composeGroupTransform, composeShapeRotationDeg, readGroupXfrm, readSolidFillColor, resolveBlipMedia, readXfrm } from '../shared/drawingml';
 import { DocumentMetadataSchema, readCoreProperties } from '../shared/metadata';
 import { assignSourcePaths } from '../shared/source-path';
 import type { Relationship } from '../util';
 import { attr, childrenWithTag, elementsWithTag, resolveRelationships, rootElement, textContent } from '../util';
-import { base64ToBytes } from '../../util/base64';
 import type { DefaultRunProperties, SlideInheritanceContext } from './inherit';
 import { readPlaceholderKey, readRunPropertiesFromElement, resolveDefaultRunProperties, resolvePlaceholderXfrm, resolveSlideInheritance } from './inherit';
 import { readChartTable } from './chart';
@@ -313,17 +311,10 @@ function readSpShape(sp: XmlElement, context: SlideInheritanceContext, slideRels
   return { name: shapeName(sp), frame: resolved.frame, rotationDeg: resolved.rotationDeg, ...extras, blocks };
 }
 
-// Resolves the first a:blip/@r:embed anywhere under parent (a p:pic's own p:blipFill, or an OLE object's fallback p:pic nested inside a:graphicData's mc:AlternateContent) through the slide's relationships to a sniffed ContentImageBlock sized to the given frame -- undefined when the id, relationship, part, or magic bytes don't line up, leaving the shape with no image content.
+// A blip-named media part (resolved through the slide's own relationships, src/typed/shared/drawingml.ts's resolveBlipMedia) sized to the given frame as a ContentImageBlock -- undefined when the id, relationship, part, or magic bytes don't line up, leaving the shape with no image content.
 function readBlipImage(parent: XmlElement, slideRels: ReadonlyMap<string, Relationship>, pkg: Package, frame: Box): ContentImageBlock | undefined {
-  const blip = elementsWithTag([parent], 'a:blip')[0];
-  const rId = blip === undefined ? undefined : attr(blip, 'r:embed');
-  const rel = rId === undefined ? undefined : slideRels.get(rId);
-  const mediaPart = rel === undefined ? undefined : pkg.parts[rel.target];
-  if (mediaPart?.kind !== 'binary') {
-    return undefined;
-  }
-  const format = sniffImageFormat(base64ToBytes(mediaPart.base64));
-  return format === undefined ? undefined : { kind: 'image', format, base64: mediaPart.base64, widthPt: frame.widthPt, heightPt: frame.heightPt };
+  const media = resolveBlipMedia(parent, slideRels, pkg);
+  return media === undefined ? undefined : { kind: 'image', format: media.format, base64: media.base64, widthPt: frame.widthPt, heightPt: frame.heightPt };
 }
 
 function readPicShape(pic: XmlElement, context: SlideInheritanceContext, slideRels: ReadonlyMap<string, Relationship>, pkg: Package, parentTransform: GroupChildTransform | undefined): ContentShape | undefined {

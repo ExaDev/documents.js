@@ -1,12 +1,16 @@
+import type { Package } from '../../model/package';
 import type { XmlElement } from '../../model/node';
 import type { Box, Color } from 'document-schema.js';
 import { rgbHexToColor } from 'document-schema.js';
+import { sniffImageFormat, type ImageFormat } from '../../image/sniff';
+import { base64ToBytes } from '../../util/base64';
 import type { ColorTransform } from './color';
 import { applyColorTransforms } from './color';
 import { emuToPt } from './units';
+import type { Relationship } from '../util';
 import { attr, childrenWithTag, elementsWithTag } from '../util';
 
-// Shared DrawingML (the `a:` namespace) primitives -- xfrm geometry, colour/theme resolution -- used by both the pptx shape tree (src/typed/pptx/*) and docx (src/typed/docx/*, for theme font/colour resolution in the style cascade). Nothing here knows about WordprocessingML or PresentationML structure specifically. Ported from documents.js's src/ooxml/drawingml.ts.
+// Shared DrawingML (the `a:` namespace) primitives -- xfrm geometry, colour/theme resolution, blip media resolution -- used by the pptx shape tree (src/typed/pptx/*), the xlsx drawing layer (src/typed/xlsx/drawings.ts), and docx (src/typed/docx/*, for theme font/colour resolution in the style cascade). Nothing here knows about WordprocessingML, PresentationML, or SpreadsheetML structure specifically. Ported from documents.js's src/ooxml/drawingml.ts.
 
 export interface DrawingXfrm {
   readonly xPt: number;
@@ -49,6 +53,25 @@ export function readXfrm(xfrm: XmlElement | undefined): DrawingXfrm | undefined 
     flipH: attr(xfrm, 'flipH') === '1',
     flipV: attr(xfrm, 'flipV') === '1',
   };
+}
+
+// The media bytes a blip names: the sniffed container format plus the part's own base64, ready to become a ContentImageBlock/ContentSheetImage's format/base64 pair.
+export interface BlipMedia {
+  readonly format: ImageFormat;
+  readonly base64: string;
+}
+
+// Resolves the first a:blip/@r:embed anywhere under parent (a p:pic's own p:blipFill, an xdr:pic's xdr:blipFill, an OLE object's fallback p:pic nested inside mc:AlternateContent) through the OWNING part's relationships to the sniffed media part -- undefined when the id, relationship, part, or magic bytes don't line up, leaving the caller with no image content. The format always comes from the bytes themselves, never from the media part's file extension.
+export function resolveBlipMedia(parent: XmlElement, rels: ReadonlyMap<string, Relationship>, pkg: Package): BlipMedia | undefined {
+  const blip = elementsWithTag([parent], 'a:blip')[0];
+  const rId = blip === undefined ? undefined : attr(blip, 'r:embed');
+  const rel = rId === undefined ? undefined : rels.get(rId);
+  const mediaPart = rel === undefined ? undefined : pkg.parts[rel.target];
+  if (mediaPart?.kind !== 'binary') {
+    return undefined;
+  }
+  const format = sniffImageFormat(base64ToBytes(mediaPart.base64));
+  return format === undefined ? undefined : { format, base64: mediaPart.base64 };
 }
 
 // The twelve named slots of an a:clrScheme, in the exact tag names ECMA-376 defines (each is its own element, e.g. <a:dk1>, wrapping a single a:srgbClr or a:sysClr child).
