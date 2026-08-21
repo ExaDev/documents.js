@@ -84,11 +84,12 @@ describe('docx-extras', () => {
     // Asserted as one plain-object equality rather than by narrowing the parsed `unknown` field by field: JSON.parse succeeding above already proves the payload is well-formed JSON, matching commands/odb.test.ts's own --json convention.
     const parsed: unknown = JSON.parse(stdout);
     expect(parsed).toStrictEqual({
+      // Each comment and note carries its own w:id, the key a comment extent's or note reference's anchor name joins its body back through.
       comments: [
-        { author: DOCX_EXTRAS_FIXTURE.commentAuthor, text: DOCX_EXTRAS_FIXTURE.commentWithAuthorText },
-        { text: DOCX_EXTRAS_FIXTURE.commentWithoutAuthorText },
+        { id: '0', author: DOCX_EXTRAS_FIXTURE.commentAuthor, text: DOCX_EXTRAS_FIXTURE.commentWithAuthorText },
+        { id: '1', text: DOCX_EXTRAS_FIXTURE.commentWithoutAuthorText },
       ],
-      footnotes: [{ text: DOCX_EXTRAS_FIXTURE.footnoteText }],
+      footnotes: [{ id: '1', text: DOCX_EXTRAS_FIXTURE.footnoteText }],
       headers: [DOCX_EXTRAS_FIXTURE.headerText],
       footers: [DOCX_EXTRAS_FIXTURE.footerText],
       numbering: {

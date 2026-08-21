@@ -8,13 +8,14 @@ describe('readDocxExtras', () => {
   it('reads a comment, its author, and its text from word/comments.xml', () => {
     const extras = readDocxExtras(docxWithExtrasPackage());
     expect(extras.comments).toHaveLength(1);
-    expect(extras.comments[0]).toEqual({ author: 'Jane Doe', text: 'This needs a citation.' });
+    // The id is the key a comment extent's anchor name joins this body back through.
+    expect(extras.comments[0]).toEqual({ id: '0', author: 'Jane Doe', text: 'This needs a citation.' });
   });
 
   it('reads a real footnote from word/footnotes.xml, excluding the separator/continuationSeparator pair', () => {
     const extras = readDocxExtras(docxWithExtrasPackage());
     expect(extras.footnotes).toHaveLength(1);
-    expect(extras.footnotes[0]).toEqual({ text: 'See appendix A for details.' });
+    expect(extras.footnotes[0]).toEqual({ id: '1', text: 'See appendix A for details.' });
   });
 
   it('reads header and footer text', () => {
