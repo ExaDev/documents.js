@@ -1,3 +1,15 @@
+## [5.0.9](https://github.com/ExaDev/documents.js/compare/odf.js@5.0.8...odf.js@5.0.9) (2026-08-21)
+
+
+### Bug Fixes
+
+* **odf:** state the unreachable chart arm in the embedded-object dispatch ([168809e](https://github.com/ExaDev/documents.js/commit/168809eba52203e4c8887f62107402d08e3a4113))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^4.6.0
+
 ## [5.0.8](https://github.com/ExaDev/documents.js/compare/odf.js@5.0.7...odf.js@5.0.8) (2026-08-21)
 
 
