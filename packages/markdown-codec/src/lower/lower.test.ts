@@ -91,6 +91,34 @@ describe('code spans and code blocks', () => {
     expect(block.styleId).toBe('CodeBlock');
     expect(block.runs).toEqual([{ text: 'foo\nbar', fontFamily: 'Courier New' }]);
   });
+
+  it("carries a fence's language word as the paragraph's codeLanguage", () => {
+    const block = paragraph(blocks('```js\nfoo\n```')[0]);
+    expect(block.styleId).toBe('CodeBlock');
+    expect(block.codeLanguage).toBe('js');
+    expect(block.source).toBeUndefined();
+  });
+
+  it('quarantines everything after the language word as markdown residue on the paragraph', () => {
+    const block = paragraph(blocks('```js {.numberLines #demo}\nfoo\n```')[0]);
+    expect(block.codeLanguage).toBe('js');
+    expect(block.source).toEqual({ format: 'markdown', xml: '{.numberLines #demo}' });
+  });
+
+  it('treats an info string that opens with a pandoc attribute block as pure residue, no language word', () => {
+    const block = paragraph(blocks('```{.haskell .numberLines}\nfoo\n```')[0]);
+    expect(block.codeLanguage).toBeUndefined();
+    expect(block.source).toEqual({ format: 'markdown', xml: '{.haskell .numberLines}' });
+  });
+
+  it('carries neither field for a bare fence or an indented code block, which have no info string at all', () => {
+    const fenced = paragraph(blocks('```\nfoo\n```')[0]);
+    expect(fenced.codeLanguage).toBeUndefined();
+    expect(fenced.source).toBeUndefined();
+    const indented = paragraph(blocks('    foo')[0]);
+    expect(indented.codeLanguage).toBeUndefined();
+    expect(indented.source).toBeUndefined();
+  });
 });
 
 describe('math (ExaDev/markdown-codec#53)', () => {
@@ -220,12 +248,6 @@ describe('gaps (MarkdownDiagnosticCodes)', () => {
     const collector = createDiagnosticCollector();
     blocks('[text](http://example.com "a title")', { sink: collector.sink });
     expect(collector.has(MarkdownDiagnosticCodes.LINK_TITLE_DROPPED)).toBe(true);
-  });
-
-  it('CODE_BLOCK_INFO_STRING_DROPPED fires for a fence with a non-empty info string', () => {
-    const collector = createDiagnosticCollector();
-    blocks('```js\ncode\n```', { sink: collector.sink });
-    expect(collector.has(MarkdownDiagnosticCodes.CODE_BLOCK_INFO_STRING_DROPPED)).toBe(true);
   });
 
   it('MATH_BLOCK_PRESERVED_AS_TEXT fires for a $$ display math block', () => {

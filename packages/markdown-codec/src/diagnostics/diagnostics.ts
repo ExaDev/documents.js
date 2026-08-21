@@ -36,7 +36,6 @@ export const MarkdownDiagnosticCodes = {
   INVENTED_PAGE_GEOMETRY: 'md/invented-page-geometry',
   NESTED_EMPHASIS_FLATTENED: 'md/nested-emphasis-flattened',
   LINK_TITLE_DROPPED: 'md/link-title-dropped',
-  CODE_BLOCK_INFO_STRING_DROPPED: 'md/code-block-info-string-dropped',
   BLOCKQUOTE_NESTED_DEPTH: 'md/blockquote-nested-depth',
   LIST_ITEM_BLOCK_UNLISTED: 'md/list-item-block-unlisted',
   LIST_ITEM_MULTI_BLOCK_FLATTENED: 'md/list-item-multi-block-flattened',

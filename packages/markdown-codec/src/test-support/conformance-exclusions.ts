@@ -26,13 +26,11 @@ export const COMMONMARK_EXCLUSIONS: ReadonlyMap<number, string> = new Map([
   [14, SOFT_BREAK],
   [22, LINK_TITLE],
   [23, LINK_TITLE],
-  [24, INFO_STRING],
   // Entity and numeric character references
   [25, SOFT_BREAK],
   [28, SOFT_BREAK],
   [32, LINK_TITLE],
   [33, LINK_TITLE],
-  [34, INFO_STRING],
   [37, SOFT_BREAK],
   [39, 'a numeric character reference decoding to a literal newline (&#10;) is indistinguishable, once lowered, from a genuine hard line break -- both are just a literal \'\\n\' character inside ContentRun.text, so escapeMarkdownText\'s own hard-break spelling fires on it too'],
   [40, 'a numeric character reference decoding to a literal tab (&#9;) at the very start of a paragraph re-renders as literal leading whitespace, which a reparse reads as 4-column indented-code-block indentation instead of paragraph content -- there is no way to backslash-escape a literal space/tab character under CommonMark\'s own escape grammar'],
@@ -58,9 +56,6 @@ export const COMMONMARK_EXCLUSIONS: ReadonlyMap<number, string> = new Map([
   [113, SOFT_BREAK],
   // Fenced code blocks
   [138, SOFT_BREAK],
-  [142, INFO_STRING],
-  [143, INFO_STRING],
-  [144, INFO_STRING],
   [145, SOFT_BREAK],
   [146, INFO_STRING],
   // HTML blocks
