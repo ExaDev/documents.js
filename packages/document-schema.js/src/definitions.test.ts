@@ -49,6 +49,12 @@ describe('StyleEntrySchema enforces the entry shape', () => {
   it('rejects a basedOn-style graph edge inside the table', () => {
     expect(StyleEntrySchema.safeParse({ basedOn: 'other' }).success).toBe(false);
   });
+
+  it('accepts the page-break properties on the paragraph half, matching the node field set', () => {
+    expect(StyleEntrySchema.safeParse({ paragraph: { pageBreakBefore: true } }).success).toBe(true);
+    expect(StyleEntrySchema.safeParse({ paragraph: { pageBreakAfter: true } }).success).toBe(true);
+    expect(StyleEntrySchema.safeParse({ run: { pageBreakBefore: true } }).success).toBe(false);
+  });
 });
 
 describe('StylesTableSchema', () => {
@@ -141,6 +147,13 @@ describe('applyParagraphStyleProperties and applyRunStyleProperties', () => {
     expect(applyParagraphStyleProperties(undefined, paragraph)).toBe(paragraph);
     const run: ContentRun = { text: 'x' };
     expect(applyRunStyleProperties(undefined, run)).toBe(run);
+  });
+
+  it('fills a page-break gap from the entry without overwriting the node\'s own flag', () => {
+    const paragraph: ContentParagraph = { kind: 'paragraph', runs: [], pageBreakBefore: false };
+    const effective = applyParagraphStyleProperties({ pageBreakBefore: true, pageBreakAfter: true }, paragraph);
+    expect(effective.pageBreakBefore).toBe(false);
+    expect(effective.pageBreakAfter).toBe(true);
   });
 
   it('applies run defaults under the run\'s own properties -- the chain\'s one extra level down', () => {
