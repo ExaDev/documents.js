@@ -18,6 +18,7 @@ import type { AnchorDescriptor, ContentBlock, ContentDocument, ContentParagraph,
 import { PAGE_SIZE_A4 } from 'document-schema.js';
 import type { MarkdownBlockNode, MarkdownFootnoteDefinitionNode, MarkdownHeadingNode, MarkdownListItemNode, MarkdownListNode, MarkdownParagraphNode } from '../ast/ast';
 import type { MarkdownParseOptions, ParsedMarkdown } from '../block/block';
+import type { LinkReferenceMap } from '../inline/link';
 import { parseMarkdown } from '../block/block';
 import { DEFAULT_FRONT_MATTER, DEFAULT_MARGINS, DEFAULT_RAW_HTML_MODE } from '../defaults/defaults';
 import type { MarkdownDiagnosticSink } from '../diagnostics/diagnostics';
@@ -26,6 +27,7 @@ import type { ReadMarkdownOptions } from '../options/options';
 import type { NumIdMintState } from '../shared/list-id';
 import { createNumIdMintState, mintListItemId, mintedListType, mintListNumId } from '../shared/list-id';
 import { CODE_BLOCK_STYLE_ID, HORIZONTAL_RULE_STYLE_ID, HTML_PREFORMATTED_STYLE_ID, QUOTE_INDENT_PT, QUOTE_STYLE_ID, headingStyleId } from '../shared/style-constants';
+import type { FrontMatterResult } from './front-matter';
 import { extractFrontMatter } from './front-matter';
 import type { MarkdownImageResolver } from './image';
 import { resolveMarkdownImage } from './image';
@@ -357,7 +359,15 @@ export function lowerParsedMarkdown(parsed: ParsedMarkdown, options: ReadMarkdow
 }
 
 // The convenience, read.ts-independent entry point this package's own test suite (and src/read.ts's real readMarkdown) drives: input-size enforcement, front matter extraction (when requested), block parsing, and lowering, composed in one call over raw markdown TEXT rather than an already-parsed AST.
-export function lowerMarkdown(source: string, options: ReadMarkdownOptions = {}): ContentDocument {
+// What one full text -> ContentDocument lowering run produced BESIDES the document itself: the document-global link reference definition table src/block/definitions.ts built (a fact the flat ContentDocument has no root to carry -- the tree-level readMarkdown splices it into the package's own definitions table), and the verbatim front-matter block when one was extracted (the same story for the package-level source residue table).
+export interface LoweredMarkdownDetail {
+  readonly document: ContentDocument;
+  readonly references: LinkReferenceMap;
+  readonly frontMatterSource: string | undefined;
+}
+
+// The convenience, read.ts-independent entry point this package's own test suite (and src/read.ts's real readMarkdown) drives: input-size enforcement, front matter extraction (when requested), block parsing, and lowering, composed in one call over raw markdown TEXT rather than an already-parsed AST. The detailed variant additionally surfaces the reference table and the raw front-matter block for the tree-level read to carry; lowerMarkdown itself returns the document alone, exactly as it always has.
+export function lowerMarkdownDetailed(source: string, options: ReadMarkdownOptions = {}): LoweredMarkdownDetail {
   if (options.maxInputBytes !== undefined) {
     const actualBytes = new TextEncoder().encode(source).length;
     if (actualBytes > options.maxInputBytes) {
@@ -366,7 +376,9 @@ export function lowerMarkdown(source: string, options: ReadMarkdownOptions = {})
   }
 
   const sink = options.sink ?? NOOP_MARKDOWN_DIAGNOSTIC_SINK;
-  const { metadata, rest } = (options.frontMatter ?? DEFAULT_FRONT_MATTER) ? extractFrontMatter(source, sink) : { metadata: {}, rest: source };
+  const frontMatter = options.frontMatter ?? DEFAULT_FRONT_MATTER;
+  const untouched: FrontMatterResult = { metadata: {}, rest: source, source: undefined };
+  const extracted = frontMatter ? extractFrontMatter(source, sink) : untouched;
   const parseOptions: MarkdownParseOptions = {
     gfmTables: options.gfmTables,
     gfmAutolinks: options.gfmAutolinks,
@@ -376,6 +388,10 @@ export function lowerMarkdown(source: string, options: ReadMarkdownOptions = {})
     maxNesting: options.maxBlockNesting,
     sink,
   };
-  const parsed = parseMarkdown(rest, parseOptions);
-  return lowerParsedMarkdown(parsed, options, metadata);
+  const parsed = parseMarkdown(extracted.rest, parseOptions);
+  return { document: lowerParsedMarkdown(parsed, options, extracted.metadata), references: parsed.references, frontMatterSource: extracted.source };
+}
+
+export function lowerMarkdown(source: string, options: ReadMarkdownOptions = {}): ContentDocument {
+  return lowerMarkdownDetailed(source, options).document;
 }

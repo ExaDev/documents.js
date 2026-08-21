@@ -389,15 +389,16 @@ function lowerParsedMarkdown(parsed, options = {}, metadata = {}) {
 		}]
 	};
 }
-function lowerMarkdown(source, options = {}) {
+function lowerMarkdownDetailed(source, options = {}) {
 	if (options.maxInputBytes !== void 0) {
 		const actualBytes = new TextEncoder().encode(source).length;
 		if (actualBytes > options.maxInputBytes) throw new MarkdownInputTooLargeError(options.maxInputBytes, actualBytes);
 	}
 	const sink = options.sink ?? NOOP_MARKDOWN_DIAGNOSTIC_SINK;
-	const { metadata, rest } = options.frontMatter ?? false ? extractFrontMatter(source, sink) : {
+	const extracted = options.frontMatter ?? false ? extractFrontMatter(source, sink) : {
 		metadata: {},
-		rest: source
+		rest: source,
+		source: void 0
 	};
 	const parseOptions = {
 		gfmTables: options.gfmTables,
@@ -408,7 +409,15 @@ function lowerMarkdown(source, options = {}) {
 		maxNesting: options.maxBlockNesting,
 		sink
 	};
-	return lowerParsedMarkdown(parseMarkdown(rest, parseOptions), options, metadata);
+	const parsed = parseMarkdown(extracted.rest, parseOptions);
+	return {
+		document: lowerParsedMarkdown(parsed, options, extracted.metadata),
+		references: parsed.references,
+		frontMatterSource: extracted.source
+	};
+}
+function lowerMarkdown(source, options = {}) {
+	return lowerMarkdownDetailed(source, options).document;
 }
 //#endregion
-export { lowerMarkdown, lowerParsedMarkdown };
+export { lowerMarkdown, lowerMarkdownDetailed, lowerParsedMarkdown };

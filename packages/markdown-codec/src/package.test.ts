@@ -8,6 +8,7 @@ import { assemblePackage, DocumentPackageSchema, flattenPackage, isPackageGroup,
 import { z } from 'zod';
 import { describe, expect, it } from 'vitest';
 import { markdownCodec, markdownContentCodec } from './codec';
+import { createDiagnosticCollector } from './test-support/diagnostics';
 import { MarkdownDiagnosticCodes, MarkdownPackageFlattenError, MarkdownUnsupportedDocumentKindError } from './diagnostics/diagnostics';
 import { readMarkdown, readMarkdownContent } from './read';
 import { writeMarkdown, writeMarkdownContent } from './write';
@@ -234,6 +235,72 @@ describe('the construct-group path over footnote shapes beyond SAMPLE\'s single 
     const [group] = readMarkdown(FOOTNOTE_SHAPES.bodyless).documentPackage.children.flatMap(collectFootnoteGroups);
 
     expect(group?.children).toEqual([]);
+  });
+});
+
+describe('tree-only carries: reference definitions and front-matter residue', () => {
+  it('splices the reference definition table into the package\'s definitions root, keyed by the definition\'s own normalised label (this parser folds to upper case), link tenant', () => {
+    const { documentPackage } = readMarkdown('[foo]: /url "the title"\n\n[foo]');
+    expect(documentPackage.definitions).toEqual({ FOO: { kind: 'link', destination: '/url', title: 'the title' } });
+  });
+
+  it('leaves definitions and the package source table absent for a document with neither, so the package is exactly assemblePackage of the flat document', () => {
+    const { documentPackage } = readMarkdown('plain body');
+    expect(documentPackage.definitions).toBeUndefined();
+    expect(documentPackage.source).toBeUndefined();
+    expect(documentPackage).toEqual(assemblePackage(readMarkdownContent('plain body').document));
+  });
+
+  it('renders this package\'s own link definitions back out after the body, and reports no PACKAGE_TABLE_DROPPED for them', () => {
+    const collector = createDiagnosticCollector();
+    const written = writeMarkdown(readMarkdown('[foo]: /url "the title"\n\n[foo]').documentPackage, { sink: collector.sink });
+    expect(written).toBe('[foo](/url "the title")\n\n[FOO]: /url "the title"');
+    expect(collector.codes()).not.toContain(MarkdownDiagnosticCodes.PACKAGE_TABLE_DROPPED);
+  });
+
+  it('round-trips text -> package -> text -> package to the identical package and text, definitions included', () => {
+    const source = '[foo]: /url "the title"\n\nuse [foo] here.';
+    const first = readMarkdown(source).documentPackage;
+    const written = writeMarkdown(first);
+    expect(readMarkdown(written).documentPackage).toEqual(first);
+    expect(writeMarkdown(readMarkdown(written).documentPackage)).toBe(written);
+  });
+
+  it('still reports PACKAGE_TABLE_DROPPED for a definitions table holding only foreign-tenant entries, and renders nothing for them', () => {
+    const collector = createDiagnosticCollector();
+    const base = readMarkdown('body').documentPackage;
+    const written = writeMarkdown({ ...base, definitions: { n1: { kind: 'bookmark' } } }, { sink: collector.sink });
+    expect(written).toBe('body');
+    expect(collector.codes()).toContain(MarkdownDiagnosticCodes.PACKAGE_TABLE_DROPPED);
+  });
+
+  it('splices the verbatim front-matter block into the package-level source residue table under the frontmatter key', () => {
+    const { documentPackage } = readMarkdown('---\ntitle: Hello\nunknown: value\n---\n\nbody', { frontMatter: true });
+    expect(documentPackage.source).toEqual({ frontmatter: { format: 'markdown', xml: '---\ntitle: Hello\nunknown: value\n---' } });
+    expect(documentPackage.metadata.title).toBe('Hello');
+  });
+
+  it('re-emits the front-matter residue verbatim in place of the regenerated block when frontMatter: true, so unmapped keys and original spellings survive', () => {
+    const source = '---\ntitle: "Quoted Spelling"\nrating: 5\n---\n\nbody';
+    const { documentPackage } = readMarkdown(source, { frontMatter: true });
+    expect(writeMarkdown(documentPackage, { frontMatter: true })).toBe(source);
+  });
+
+  it('regenerates front matter from metadata for a package carrying no residue, exactly as before', () => {
+    const base = readMarkdown('body').documentPackage;
+    expect(writeMarkdown({ ...base, metadata: { ...base.metadata, title: 'Generated' } }, { frontMatter: true })).toBe('---\ntitle: Generated\n---\n\nbody');
+  });
+
+  it('emits no front matter at all without the option, residue or not', () => {
+    const { documentPackage } = readMarkdown('---\ntitle: x\n---\n\nbody', { frontMatter: true });
+    expect(writeMarkdown(documentPackage)).toBe('body');
+  });
+
+  it('keeps the flat pair free of both carries: readMarkdownContent\'s document differs from the tree only through the transform, and writeMarkdownContent renders neither definitions nor residue front matter', () => {
+    const source = '[foo]: /url "t"\n\n[foo]';
+    const flat = readMarkdownContent(source).document;
+    expect(flat.kind).toBe('wordprocessing');
+    expect(writeMarkdownContent(flat)).toBe('[foo](/url "t")');
   });
 });
 

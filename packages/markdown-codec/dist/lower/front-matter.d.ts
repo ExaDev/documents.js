@@ -4,6 +4,7 @@ import { LayoutMetadata } from "document-schema.js";
 interface FrontMatterResult {
   readonly metadata: LayoutMetadata;
   readonly rest: string;
+  readonly source: string | undefined;
 }
 declare function extractFrontMatter(source: string, sink?: MarkdownDiagnosticSink): FrontMatterResult;
 //#endregion

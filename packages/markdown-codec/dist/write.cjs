@@ -1,11 +1,29 @@
 Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
 const require_diagnostics_diagnostics = require("./diagnostics/diagnostics.cjs");
+const require_emit_front_matter = require("./emit/front-matter.cjs");
+const require_emit_inline = require("./emit/inline.cjs");
 const require_emit_emit = require("./emit/emit.cjs");
 let document_schema_js = require("document-schema.js");
 //#region src/write.ts
-function reportDroppedPackageTables(documentPackage, sink) {
+function renderLinkDefinition(label, entry) {
+	const destination = entry.destination;
+	const title = entry.title;
+	if (typeof destination !== "string") return;
+	if (title !== void 0 && typeof title !== "string") return;
+	return `[${label}]: ${require_emit_inline.escapeLinkDestination(destination)}${title === void 0 ? "" : ` "${require_emit_inline.renderLinkTitle(title)}"`}`;
+}
+function renderLinkDefinitions(definitions) {
+	const lines = [];
+	for (const [label, entry] of Object.entries(definitions)) {
+		const line = renderLinkDefinition(label, entry);
+		if (line !== void 0) lines.push(line);
+	}
+	return lines.length > 0 ? lines.join("\n") : void 0;
+}
+function reportDroppedPackageTables(documentPackage, definitionsRendered, sink) {
+	const definitions = documentPackage.definitions;
 	const tables = [
-		["definitions", documentPackage.definitions !== void 0 && Object.keys(documentPackage.definitions).length > 0],
+		["definitions", definitions !== void 0 && !definitionsRendered && Object.keys(definitions).length > 0],
 		["layers", documentPackage.layers !== void 0 && Object.keys(documentPackage.layers).length > 0],
 		["attachments", documentPackage.attachments !== void 0 && Object.keys(documentPackage.attachments).length > 0],
 		["destinations", documentPackage.destinations !== void 0 && Object.keys(documentPackage.destinations).length > 0],
@@ -23,14 +41,23 @@ function reportDroppedPackageTables(documentPackage, sink) {
 function writeMarkdown(documentPackage, options = {}) {
 	options.signal?.throwIfAborted();
 	if (documentPackage.kind !== "wordprocessing") throw new require_diagnostics_diagnostics.MarkdownUnsupportedDocumentKindError(documentPackage.kind);
-	reportDroppedPackageTables(documentPackage, options.sink ?? require_diagnostics_diagnostics.NOOP_MARKDOWN_DIAGNOSTIC_SINK);
+	const sink = options.sink ?? require_diagnostics_diagnostics.NOOP_MARKDOWN_DIAGNOSTIC_SINK;
+	const definitionsBlock = documentPackage.definitions === void 0 ? void 0 : renderLinkDefinitions(documentPackage.definitions);
+	reportDroppedPackageTables(documentPackage, definitionsBlock !== void 0, sink);
 	let flattened;
 	try {
 		flattened = (0, document_schema_js.flattenPackage)(documentPackage);
 	} catch (error) {
 		throw new require_diagnostics_diagnostics.MarkdownPackageFlattenError(error);
 	}
-	return writeMarkdownContent(flattened, options);
+	const body = writeMarkdownContent(flattened, {
+		...options,
+		frontMatter: false
+	});
+	const frontMatterResidue = documentPackage.source?.frontmatter;
+	const frontMatter = options.frontMatter === true ? frontMatterResidue?.format === "markdown" ? frontMatterResidue.xml : require_emit_front_matter.emitFrontMatter(flattened.metadata) : void 0;
+	const withFrontMatter = frontMatter === void 0 ? body : `${frontMatter}\n\n${body}`;
+	return definitionsBlock === void 0 ? withFrontMatter : withFrontMatter.length > 0 ? `${withFrontMatter}\n\n${definitionsBlock}` : definitionsBlock;
 }
 function writeMarkdownContent(document, options = {}) {
 	options.signal?.throwIfAborted();
