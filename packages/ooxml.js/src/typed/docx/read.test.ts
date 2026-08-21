@@ -129,7 +129,7 @@ function buildFixturePackage(): Package {
   ]);
 
   const sectionBreakPara = el('w:p', {}, [
-    el('w:pPr', {}, [el('w:sectPr', {}, [el('w:pgSz', { 'w:w': '11906', 'w:h': '16838' }), el('w:pgMar', { 'w:top': '1440', 'w:right': '1440', 'w:bottom': '1440', 'w:left': '1440' })])]),
+    el('w:pPr', {}, [el('w:sectPr', {}, [el('w:type', { 'w:val': 'continuous' }), el('w:pgSz', { 'w:w': '11906', 'w:h': '16838' }), el('w:pgMar', { 'w:top': '1440', 'w:right': '1440', 'w:bottom': '1440', 'w:left': '1440' })])]),
   ]);
   const secondSectionPara = el('w:p', {}, [el('w:r', {}, [el('w:t', {}, [txt('Second section')])])]);
   const inlineImagePara = el('w:p', {}, [el('w:r', {}, [drawingElement('wp:inline', 'rIdInlineImage', 'Inline alt text')])]);
@@ -461,6 +461,13 @@ describe('readDocxContent: multi-section support', () => {
     expect(doc.sections[1]?.pageSize).toEqual({ widthPt: 612, heightPt: 792 }); // US Letter, twips->pt
     expect(doc.sections[1]?.margins).toEqual({ topPt: 36, rightPt: 36, bottomPt: 36, leftPt: 36 });
     expect(asParagraph(doc.sections[1]?.blocks[0]).runs[0]?.text).toBe('Second section');
+  });
+
+  it('reads a section\'s own w:sectPr/w:type onto ContentSection.breakType, leaving it absent when the sectPr spells none', () => {
+    const doc = readDocxContent(buildFixturePackage());
+    expect(doc.sections[0]?.breakType).toBe('continuous');
+    // The final section's body-level sectPr carries no w:type, and an absent w:type IS WordprocessingML's own default (nextPage), so the field stays absent rather than storing the default.
+    expect(doc.sections[1]?.breakType).toBeUndefined();
   });
 });
 
