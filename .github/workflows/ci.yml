@@ -138,6 +138,11 @@ jobs:
       issues: write # to comment on released issues
       pull-requests: write # to comment on released pull requests
       id-token: write # OIDC identity for npm trusted publishing (no NPM_TOKEN)
+    outputs:
+      # JSON matrices for the three post-release jobs below, listing exactly what this run released. Each is [] when nothing released, which leaves the consuming job's matrix empty and the job skipped.
+      github-packages-matrix: ${{ steps.released.outputs.github-packages-matrix }}
+      npm-alias-matrix: ${{ steps.released.outputs.npm-alias-matrix }}
+      attest-matrix: ${{ steps.released.outputs.attest-matrix }}
     steps:
       # main requires status checks to merge, and the default GITHUB_TOKEN has no bypass for that -- the orchestrator's release commits, dependency-bump commits, and tags are direct pushes to main, so they need a token from an actor the branch ruleset explicitly allows to bypass (see ExaDev/.github and this repo's own ruleset). Everything else in this job (release notes, GitHub Release creation, issue/PR comments, OIDC npm publish) keeps using secrets.GITHUB_TOKEN below, unaffected -- only checkout's own git credentials need the elevated token, since that's what the later pushes inherit.
       - name: Generate a token for the release pushes
@@ -160,6 +165,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Upgrade npm for OIDC trusted publishing (needs npm CLI >=11.5.1)
         run: npm install -g npm@latest
+      - name: Record the tags present before the orchestrator runs
+        # The orchestrator creates each package's `name@version` tag in this same checkout as it releases, so diffing `git tag` across the release step is the exact record of what this run released -- the same source of truth the post-release jobs below consume.
+        run: git tag | sort > release-tags-before.txt
       - name: Release every package that changed, in dependency order
         # One orchestrator run replaces the per-package release jobs: it discovers the workspace from pnpm-workspace.yaml, orders packages topologically, and runs semantic-release per package with commits path-filtered to that package's own directory and tags in `name@version` form. A package whose only change is a sibling's release still gets a patch release, because its published dependency range changed. HUSKY=0 so local git hooks never fire against the automated commits.
         run: HUSKY=0 pnpm release
@@ -170,6 +178,212 @@ jobs:
           # Blanked, not omitted -- an inherited NPM_TOKEN/NODE_AUTH_TOKEN from a workflow-level env block, reusable workflow, or composite action would otherwise be used in preference to the OIDC exchange.
           NPM_TOKEN: ""
           NODE_AUTH_TOKEN: ""
+      - name: Collect the packages this run released
+        id: released
+        # Builds the three matrices the post-release jobs fan out over: one attestation leg per released published package, one GitHub Packages leg per released package the map mirrors there, and one npm-alias leg per (released package, alias) pair. The version comes from each package's own package.json in this working tree -- the orchestrator has already committed the released version by the time this step runs, so it is the same version the tag names. The web UI is private and publishes nothing, so it is filtered out.
+        run: |
+          git tag | sort > release-tags-after.txt
+          comm -13 release-tags-before.txt release-tags-after.txt > release-tags-new.txt
+          GITHUB_PACKAGES='[]'
+          NPM_ALIASES='[]'
+          ATTEST='[]'
+          while read -r TAG; do
+            [ -n "$TAG" ] || continue
+            NAME=${TAG%@*}
+            PKG=packages/$NAME
+            if [ ! -f "$PKG/package.json" ]; then
+              echo "::warning::tag $TAG has no package at $PKG; skipping every post-release step for it"
+              continue
+            fi
+            PRIVATE=$(jq -r '.private // false' "$PKG/package.json")
+            [ "$PRIVATE" = "true" ] && continue
+            VERSION=$(jq -r '.version' "$PKG/package.json")
+            ATTEST=$(echo "$ATTEST" | jq -c --arg name "$NAME" --arg version "$VERSION" --arg tag "$TAG" \
+              '. + [{name: $name, version: $version, tag: $tag}]')
+            GHP_NAME=$(jq -r --arg name "$NAME" '.[$name].githubPackages // empty' .github/release-republish.json)
+            if [ -n "$GHP_NAME" ]; then
+              GITHUB_PACKAGES=$(echo "$GITHUB_PACKAGES" | jq -c --arg name "$NAME" --arg version "$VERSION" --arg tag "$TAG" --arg scoped "@exadev/$GHP_NAME" \
+                '. + [{name: $name, version: $version, tag: $tag, scoped: $scoped}]')
+            fi
+            while read -r ALIAS; do
+              [ -n "$ALIAS" ] || continue
+              NPM_ALIASES=$(echo "$NPM_ALIASES" | jq -c --arg name "$NAME" --arg version "$VERSION" --arg tag "$TAG" --arg alias "$ALIAS" \
+                '. + [{name: $name, version: $version, tag: $tag, alias: $alias}]')
+            done < <(jq -r --arg name "$NAME" '.[$name].aliases // [] | .[]' .github/release-republish.json)
+          done < release-tags-new.txt
+          {
+            echo "github-packages-matrix=$GITHUB_PACKAGES"
+            echo "npm-alias-matrix=$NPM_ALIASES"
+            echo "attest-matrix=$ATTEST"
+          } >> "$GITHUB_OUTPUT"
+
+  # The three jobs below restore what the monorepo migration lost (ExaDev/documents.js#732): each standalone repository's own pipeline republished its package under alternate npm names and a @exadev/<name> scope on GitHub Packages, and signed an SPDX SBOM plus build-provenance attestation against the packed release tarball. They run after the release job, keyed off the tags it created, and nothing depends on them -- a failure here can never block or fail the release itself or the Pages deploy.
+
+  publish-github-packages:
+    name: Mirror to GitHub Packages (${{ matrix.scoped }})
+    needs: release
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+      # Deliberately no id-token: write here -- see publish-npm-aliases' own comment for why this job is kept separate rather than folded into that matrix: GitHub Packages has no OIDC trusted-publishing exchange, and holding id-token: write makes pnpm attempt (and fail) that exchange anyway, which then breaks its fallback to the GITHUB_TOKEN this job actually authenticates with.
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.release.outputs.github-packages-matrix) }}
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The tag, not main: a queued release run could have pushed further commits and tags to main between this run's release job finishing and this job starting, and each tag points at the exact release commit whose packages/<name> is the released state.
+          ref: ${{ matrix.tag }}
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          # Deliberately NOT setup-node's own registry-url/scope inputs (see ExaDev/documents.js#309): those write an @exadev:registry=https://npm.pkg.github.com/ *install-time* scope-to-registry mapping into .npmrc, and per setup-node's own docs an empty/omitted `scope` still falls back to the repository owner (ExaDev) when the target is GitHub Packages -- there is no way to get just the auth-token line out of that mechanism without also redirecting every @exadev-scoped *install* through it, which breaks `pnpm install` below: @exadev/eslint-config is a real devDependency published only to the default registry, never mirrored to GitHub Packages.
+      - run: pnpm install --frozen-lockfile
+      - name: Configure the GitHub Packages auth token for view and publish only
+        # Added after install so install never sees any @exadev scope mapping at all; the host-scoped credential alone determines auth, and publishConfig.registry (set explicitly below) determines the publish target.
+        run: echo "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}" >> ~/.npmrc
+      - name: Check whether this version is already mirrored
+        id: mirrored
+        # Re-running a completed release run re-runs these jobs for the same tags; republishing an existing version is rejected by GitHub Packages, so an already-present mirror is a skip, not a failure.
+        run: |
+          if npm view "${{ matrix.scoped }}@${{ matrix.version }}" version --registry https://npm.pkg.github.com 2>/dev/null | grep -qx "${{ matrix.version }}"; then
+            echo "already=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::${{ matrix.scoped }}@${{ matrix.version }} is already mirrored on GitHub Packages; nothing to do."
+          fi
+      - name: Build the released package
+        if: steps.mirrored.outputs.already != 'true'
+        run: pnpm --dir "packages/${{ matrix.name }}" build
+      - name: Rewrite package name and registry for the GitHub Packages scope
+        # GitHub Packages requires the npm package name to be scoped to the repo owner. Rewriting the fields rather than keeping a second package.json means this mirror cannot drift away from the real package's metadata. publishConfig.registry has to be overridden too: it takes precedence over any registry the .npmrc sets, so without this the publish silently targets registry.npmjs.org instead -- confirmed failure mode in the standalone repositories this restores, not a hypothetical (404 on the npmjs.org registry, since GITHUB_TOKEN isn't a credential it recognises).
+        if: steps.mirrored.outputs.already != 'true'
+        working-directory: packages/${{ matrix.name }}
+        run: |
+          npm pkg set name="${{ matrix.scoped }}"
+          npm pkg set publishConfig.registry="https://npm.pkg.github.com"
+      - name: Publish the mirror
+        if: steps.mirrored.outputs.already != 'true'
+        working-directory: packages/${{ matrix.name }}
+        run: pnpm publish --access public --no-git-checks
+
+  publish-npm-aliases:
+    name: Publish npm alias (${{ matrix.alias }})
+    needs: release
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write # OIDC identity for npm trusted publishing -- every leg in this job targets npmjs.org. The GitHub Packages mirror is a separate job above specifically so it never holds this permission: pnpm attempts an OIDC exchange whenever id-token: write is available regardless of target registry, and GitHub Packages has no such exchange to attempt -- confirmed the hard way in a sibling repo when this leg used to share that job and failed with "401 Unauthorized - authentication token not provided" even with GITHUB_TOKEN correctly set, because the failed OIDC attempt never fell through to it.
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.release.outputs.npm-alias-matrix) }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ matrix.tag }} # the release commit the orchestrator tagged, not whatever main has moved on to by now
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          # registry-url is deliberately absent. Setting it makes setup-node write an .npmrc containing an _authToken line, and that line wins over the OIDC exchange -- so the setting that looks like it configures the registry is exactly the one that would break trusted publishing.
+      - run: pnpm install --frozen-lockfile
+      - name: Check whether this alias version is already published
+        id: published
+        # Re-run idempotency, matching publish-github-packages above: republishing an existing version is rejected by npm, so an already-present version is a skip.
+        run: |
+          if npm view "${{ matrix.alias }}@${{ matrix.version }}" version 2>/dev/null | grep -qx "${{ matrix.version }}"; then
+            echo "already=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::${{ matrix.alias }}@${{ matrix.version }} is already published; nothing to do."
+          fi
+      - name: Build the released package
+        if: steps.published.outputs.already != 'true'
+        run: pnpm --dir "packages/${{ matrix.name }}" build
+      - name: Rewrite package name for this alias
+        # Rewriting the checked-out package.json rather than keeping a package.json per alias means no alias can drift away from the real package's metadata -- each matrix leg gets its own fresh runner and checkout, so there is no cross-contamination between legs.
+        if: steps.published.outputs.already != 'true'
+        working-directory: packages/${{ matrix.name }}
+        run: npm pkg set name="${{ matrix.alias }}"
+      - name: Publish the alias
+        # Trusted publishing is registered per package name, so each alias needs its own one-time registration on npmjs.com against this repository and workflow file. Until that registration exists, npm's OIDC exchange 404s (`/-/npm/v1/oidc/token` appears in the failure output) -- that exact signature is the skip-with-instructions case below; every other failure is real and fails the leg.
+        if: steps.published.outputs.already != 'true'
+        working-directory: packages/${{ matrix.name }}
+        run: |
+          set +e
+          OUTPUT=$(pnpm publish --access public --no-git-checks 2>&1)
+          STATUS=$?
+          set -e
+          echo "$OUTPUT"
+          [ "$STATUS" -eq 0 ] && exit 0
+          if printf '%s' "$OUTPUT" | grep -q 'oidc/token'; then
+            echo "::notice::Skipped ${{ matrix.alias }}@${{ matrix.version }}: no npm trusted publisher is registered for that package name against this repository and workflow yet. Register it once (a user with access to the package's npm settings): npmjs.com -> Packages -> ${{ matrix.alias }} -> Settings -> Trusted publisher -> GitHub Actions, with Organization \"ExaDev\", Repository \"documents.js\", Workflow filename \"ci.yml\", environment left empty, allowed action \"npm publish\". The first release after that publishes under the alias automatically; see the Releases section of the root README."
+            exit 0
+          fi
+          exit "$STATUS"
+        env:
+          # Blanked, not omitted -- an inherited NODE_AUTH_TOKEN would otherwise be used in preference to the OIDC exchange, matching the release job's own convention above.
+          NODE_AUTH_TOKEN: ""
+
+  attest-release-artifacts:
+    name: Attest SBOM and build provenance (${{ matrix.name }})
+    needs: release
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # to attach the SBOM to the package's GitHub Release
+      id-token: write # signing identity for the attestations
+      attestations: write # to store the signed attestations against this repository
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.release.outputs.attest-matrix) }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ matrix.tag }} # the release commit the orchestrator tagged, not whatever main has moved on to by now
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build the released package
+        run: pnpm --dir "packages/${{ matrix.name }}" build
+      # Pack into a directory of its own, separate from dist/ (tsdown's raw build output). The attestation subject has to be the artefact that actually ships -- attesting dist/ itself would mix in files that never leave the repo, producing digests that match nothing a consumer can download.
+      - name: Pack the release tarball
+        working-directory: packages/${{ matrix.name }}
+        run: pnpm pack --pack-destination release-artifact
+      - name: Generate the SPDX SBOM
+        working-directory: packages/${{ matrix.name }}
+        run: pnpm sbom --sbom-format spdx --prod > release-artifact/sbom.spdx.json
+      # Two steps (sbom-path present vs. absent) rather than one, since actions/attest's docs don't clearly state whether passing both together attests SBOM and provenance in a single call or SBOM only -- two steps is the unambiguous form.
+      - name: Attest SBOM
+        uses: actions/attest@v4
+        with:
+          subject-path: packages/${{ matrix.name }}/release-artifact/*.tgz
+          sbom-path: packages/${{ matrix.name }}/release-artifact/sbom.spdx.json
+      - name: Attest build provenance
+        uses: actions/attest@v4
+        with:
+          subject-path: packages/${{ matrix.name }}/release-artifact/*.tgz
+      - name: Attach the SBOM to the GitHub Release
+        # The signed attestations live in the repository's attestation store, queryable by tarball digest; the raw SBOM additionally rides on the release itself so it is downloadable without tooling. --clobber so a re-run replaces rather than duplicates the asset.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ matrix.tag }}" --clobber "packages/${{ matrix.name }}/release-artifact/sbom.spdx.json"
 
   deploy-site:
     name: Build and deploy the web UI to Pages
