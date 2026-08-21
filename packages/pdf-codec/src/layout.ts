@@ -117,9 +117,22 @@ export const LayoutLinkSchema = z.object({
   yPt: z.number(),
   widthPt: z.number().nonnegative(),
   heightPt: z.number().nonnegative(),
+  title: z.string().optional(), // the link annotation's own /Contents, where the producer wrote one
   sourcePath: z.string().optional(), // deterministic, document-order-derived path copied from the ContentDocument item this was laid out from
 });
 export type LayoutLink = z.infer<typeof LayoutLinkSchema>;
+
+// An internal navigation annotation rectangle: a /Dest (direct or named) or /A /GoTo link whose target is a destination in THIS document rather than a URI. Its own item kind rather than a `destination` field on LayoutLink because LayoutLink.uri is required by every existing producer and consumer -- widening it to optional would be a breaking type change for all of them, while a new discriminated-union member is additive (TS-breaking only for a consumer switching exhaustively over item kinds, the same caveat every additive union member carries).
+export const LayoutInternalLinkSchema = z.object({
+  kind: z.literal('internalLink'),
+  destination: z.string(), // a key into LayoutDocument.destinations -- a named destination's own name, or a reader-minted name for a direct destination array
+  xPt: z.number(),
+  yPt: z.number(),
+  widthPt: z.number().nonnegative(),
+  heightPt: z.number().nonnegative(),
+  title: z.string().optional(), // the link annotation's own /Contents, where the producer wrote one
+});
+export type LayoutInternalLink = z.infer<typeof LayoutInternalLinkSchema>;
 
 export const LayoutItemSchema = z.discriminatedUnion('kind', [
   LayoutTextSchema,
@@ -129,6 +142,7 @@ export const LayoutItemSchema = z.discriminatedUnion('kind', [
   LayoutEllipseSchema,
   LayoutPathSchema,
   LayoutLinkSchema,
+  LayoutInternalLinkSchema,
 ]);
 export type LayoutItem = z.infer<typeof LayoutItemSchema>;
 
@@ -150,10 +164,46 @@ export const LayoutImageAssetSchema = z.object({
 });
 export type LayoutImageAsset = z.infer<typeof LayoutImageAssetSchema>;
 
+// --- Document-level navigation surfaces (#721): destinations and the outline, read from /Dests, /Names /Dests, and /Outlines. ---
+
+// What a destination says about its target page's view (ISO 32000-1 12.3.6): the display destination type plus whichever coordinates that type actually carries. Absent coordinates were null (or the type does not define them) in the source -- never 0, which would assert a position the file did not state.
+export const LayoutDestinationTargetSchema = z.object({
+  kind: z.enum(['xyz', 'fit', 'fitH', 'fitV', 'fitR', 'fitB', 'fitBH', 'fitBV']),
+  leftPt: z.number().optional(),
+  topPt: z.number().optional(),
+  bottomPt: z.number().optional(),
+  rightPt: z.number().optional(),
+  zoom: z.number().optional(),
+});
+export type LayoutDestinationTarget = z.infer<typeof LayoutDestinationTargetSchema>;
+
+export const LayoutDestinationSchema = z.object({
+  name: z.string(), // the named destination's own name, or a reader-minted `destN` for a direct destination array (minted names never collide with real ones -- the minter skips taken names)
+  pageIndex: z.number().int().nonnegative(),
+  target: LayoutDestinationTargetSchema,
+});
+export type LayoutDestination = z.infer<typeof LayoutDestinationSchema>;
+
+// One /Outlines bookmark: its target is always a destinations-table name, so an outline entry and an internal link targeting the same place name the same destination.
+export const LayoutOutlineItemSchema: z.ZodType<LayoutOutlineItem, LayoutOutlineItem> = z.lazy(() =>
+  z.object({
+    title: z.string(),
+    destination: z.string().optional(),
+    children: z.array(LayoutOutlineItemSchema),
+  }),
+);
+export interface LayoutOutlineItem {
+  readonly title: string;
+  readonly destination?: string;
+  readonly children: readonly LayoutOutlineItem[];
+}
+
 export const LayoutDocumentSchema = z.object({
   formatVersion: z.literal(LAYOUT_FORMAT_VERSION),
   metadata: LayoutMetadataSchema,
   pages: z.array(LayoutPageSchema),
   images: z.record(z.string(), LayoutImageAssetSchema),
+  destinations: z.array(LayoutDestinationSchema).optional(),
+  outline: z.array(LayoutOutlineItemSchema).optional(),
 });
 export type LayoutDocument = z.infer<typeof LayoutDocumentSchema>;

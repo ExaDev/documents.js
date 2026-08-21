@@ -296,3 +296,26 @@ export function withInfoDictPdf(): Uint8Array<ArrayBuffer> {
   b.classicXrefAndTrailer(6, '/Root 1 0 R /Info 6 0 R');
   return b.bytes();
 }
+
+// A two-page document exercising the whole navigation cluster (#721's core): named destinations from BOTH the old-style catalog /Dests dictionary and a /Names /Dests name tree with a real /Kids split, a two-level document outline, and all three internal-link spellings on page 1 -- a /Dest naming a name-tree destination, a /Dest carrying a direct destination array, and a /A /GoTo action naming an old-style /Dests entry. Page 2 exists so pageIndex resolution is real, not a constant 0.
+export function navigationClusterPdf(): Uint8Array<ArrayBuffer> {
+  const b = new FixtureBuilder().header('1.7');
+  b.object(1, '<< /Type /Catalog /Pages 2 0 R /Dests 9 0 R /Names << /Dests 10 0 R >> /Outlines 11 0 R >>');
+  b.object(2, '<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>');
+  b.object(3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /Font << /F1 5 0 R >> >> /Contents 6 0 R /Annots [7 0 R 8 0 R 16 0 R] >>');
+  b.object(4, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /Font << /F1 5 0 R >> >> /Contents 6 0 R >>');
+  b.object(5, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+  b.stream(6, '<< >>', enc(HELLO_CONTENT));
+  b.object(7, '<< /Type /Annot /Subtype /Link /Rect [10 10 60 24] /Dest (second) >>');
+  b.object(8, '<< /Type /Annot /Subtype /Link /Rect [70 10 120 24] /Dest [4 0 R /XYZ 20 60 null] >>');
+  b.object(9, '<< /firstpage [3 0 R /XYZ 10 80 1.5] >>');
+  b.object(10, '<< /Kids [12 0 R] >>');
+  b.object(11, '<< /Type /Outlines /First 13 0 R /Last 14 0 R /Count 2 >>');
+  b.object(12, '<< /Names [(second) [4 0 R /Fit]] >>');
+  b.object(13, '<< /Title (First heading) /Parent 11 0 R /Dest (firstpage) /Next 14 0 R >>');
+  b.object(14, '<< /Title (Second page) /Parent 11 0 R /Dest [4 0 R /XYZ null null null] /Prev 13 0 R /First 15 0 R /Last 15 0 R /Count 1 >>');
+  b.object(15, '<< /Title (Nested child) /Parent 14 0 R /Dest (second) >>');
+  b.object(16, '<< /Type /Annot /Subtype /Link /Rect [10 30 60 44] /Contents (Internal note) /A << /S /GoTo /D (firstpage) >> >>');
+  b.classicXrefAndTrailer(16, '/Root 1 0 R');
+  return b.bytes();
+}

@@ -151,7 +151,9 @@ describe('LayoutItemSchema sourcePath', () => {
   it('parses correctly when sourcePath is omitted, matching every other optional field', () => {
     for (const item of [text, imageItem, rect, line, ellipse, path, link]) {
       const parsed = LayoutItemSchema.parse(item);
-      expect(parsed.sourcePath).toBeUndefined();
+      if (parsed.kind !== 'internalLink') {
+        expect(parsed.sourcePath).toBeUndefined();
+      }
     }
   });
 });

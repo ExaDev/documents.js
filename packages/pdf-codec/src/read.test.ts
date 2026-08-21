@@ -30,7 +30,8 @@ import {
 } from './test-support/encrypted-pdfs';
 import type { PdfDiagnostic } from './diagnostics';
 import { PdfEncryptedError, PdfParseError, PdfPasswordRequiredError } from './diagnostics';
-import { decodePdfString, normalizeRotation, pageRotationTransform, readPdf } from './read';
+import { normalizeRotation, pageRotationTransform, readPdf } from './read';
+import { decodePdfString } from './pdf-text';
 
 function textLayoutItems(items: readonly { kind: string }[]): { kind: string }[] {
   return items.filter((i) => i.kind === 'text');
