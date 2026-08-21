@@ -1,3 +1,10 @@
+# [3.3.0](https://github.com/ExaDev/documents.js/compare/pdf-codec@3.2.0...pdf-codec@3.3.0) (2026-08-21)
+
+
+### Features
+
+* **pdf:** read the crop box as the visible page region ([800e7ef](https://github.com/ExaDev/documents.js/commit/800e7ef4f4204269e60897b3b5e6176e186b9f9f)), closes [#759](https://github.com/ExaDev/documents.js/issues/759)
+
 # [3.2.0](https://github.com/ExaDev/documents.js/compare/pdf-codec@3.1.4...pdf-codec@3.2.0) (2026-08-21)
 
 
