@@ -1,3 +1,26 @@
+# [4.4.0](https://github.com/ExaDev/documents.js/compare/documents.js@4.3.0...documents.js@4.4.0) (2026-08-21)
+
+
+### Bug Fixes
+
+* **documents.js:** lower markdown display math from the embedded formula carry ([2fd5586](https://github.com/ExaDev/documents.js/commit/2fd55861208e5f6ce1f2b7b258e1e7b5029a01d5))
+* **documents.js:** pass construct markers through to markdown-codec's writer ([ea4c625](https://github.com/ExaDev/documents.js/commit/ea4c625c621fca63d82b37aa9527647bc99852ca))
+
+
+### Features
+
+* **cli:** handle internalLink items in the pdf editor screens ([7a2cb32](https://github.com/ExaDev/documents.js/commit/7a2cb32d1aa59c51b43a5fa3327b2fa14ee3431d))
+* **documents:** surface PDF links, layers, annotations, and form fields through reconstruction ([e5e29fa](https://github.com/ExaDev/documents.js/commit/e5e29fa8e7627c66285dc67942110efc745f0aa2))
+
+
+### Dependencies
+
+- Updated pdf-codec to ^3.2.0
+- Updated ooxml.js to ^4.4.2
+- Updated odf.js to ^5.1.1
+- Updated markdown-codec to ^4.1.0
+- Updated document-schema.js to ^4.8.0
+
 # [4.3.0](https://github.com/ExaDev/documents.js/compare/documents.js@4.2.1...documents.js@4.3.0) (2026-08-21)
 
 
