@@ -23,6 +23,7 @@ export const LayoutTextSchema = z.object({
   layer: z.string().optional(), // the optional-content group this item belongs to (a /OC BDC span or XObject dict), naming an entry in LayoutDocument.layers
   actualText: z.string().optional(), // a /ActualText marked-content span over this run: the producer's own replacement reading for extraction
   alt: z.string().optional(), // a /Alt marked-content span over this run: the producer's alternate description
+  structure: z.string().optional(), // the id of the owning element in LayoutDocument.structure -- tagged PDF's (page, MCID) association through /ParentTree
   sourcePath: z.string().optional(), // deterministic, document-order-derived path copied from the ContentDocument item this was laid out from
 });
 export type LayoutText = z.infer<typeof LayoutTextSchema>;
@@ -36,6 +37,7 @@ export const LayoutImageSchema = z.object({
   heightPt: z.number().positive(),
   rotationDeg: z.number().optional(),
   layer: z.string().optional(), // the optional-content group this item belongs to, naming an entry in LayoutDocument.layers
+  structure: z.string().optional(), // the id of the owning element in LayoutDocument.structure -- tagged PDF's (page, MCID) association through /ParentTree
   sourcePath: z.string().optional(), // deterministic, document-order-derived path copied from the ContentDocument item this was laid out from
 });
 export type LayoutImage = z.infer<typeof LayoutImageSchema>;
@@ -49,6 +51,7 @@ export const LayoutRectSchema = z.object({
   fill: ColorSchema.optional(),
   stroke: z.object({ color: ColorSchema, widthPt: z.number().positive() }).optional(),
   layer: z.string().optional(), // the optional-content group this item belongs to, naming an entry in LayoutDocument.layers
+  structure: z.string().optional(), // the id of the owning element in LayoutDocument.structure -- tagged PDF's (page, MCID) association through /ParentTree
   sourcePath: z.string().optional(), // deterministic, document-order-derived path copied from the ContentDocument item this was laid out from
 });
 export type LayoutRect = z.infer<typeof LayoutRectSchema>;
@@ -63,6 +66,7 @@ export const LayoutLineSchema = z.object({
   widthPt: z.number().positive(),
   style: ContentStrokeStyleSchema.optional(), // stroke dash pattern hint; absent means 'solid', matching ContentStrokeSchema's own documented default
   layer: z.string().optional(), // the optional-content group this item belongs to, naming an entry in LayoutDocument.layers
+  structure: z.string().optional(), // the id of the owning element in LayoutDocument.structure -- tagged PDF's (page, MCID) association through /ParentTree
   sourcePath: z.string().optional(), // deterministic, document-order-derived path copied from the ContentDocument item this was laid out from
 });
 export type LayoutLine = z.infer<typeof LayoutLineSchema>;
@@ -76,6 +80,7 @@ export const LayoutEllipseSchema = z.object({
   fill: ColorSchema.optional(),
   stroke: z.object({ color: ColorSchema, widthPt: z.number().positive() }).optional(),
   layer: z.string().optional(), // the optional-content group this item belongs to, naming an entry in LayoutDocument.layers
+  structure: z.string().optional(), // the id of the owning element in LayoutDocument.structure -- tagged PDF's (page, MCID) association through /ParentTree
   sourcePath: z.string().optional(), // deterministic, document-order-derived path copied from the ContentDocument item this was laid out from
 });
 export type LayoutEllipse = z.infer<typeof LayoutEllipseSchema>;
@@ -113,6 +118,7 @@ export const LayoutPathSchema = z.object({
   stroke: z.object({ color: ColorSchema, widthPt: z.number().positive() }).optional(),
   style: ContentStrokeStyleSchema.optional(), // stroke dash pattern hint; absent means 'solid', matching ContentStrokeSchema's own documented default
   layer: z.string().optional(), // the optional-content group this item belongs to, naming an entry in LayoutDocument.layers
+  structure: z.string().optional(), // the id of the owning element in LayoutDocument.structure -- tagged PDF's (page, MCID) association through /ParentTree
   sourcePath: z.string().optional(), // deterministic, document-order-derived path copied from the ContentDocument item this was laid out from
 });
 export type LayoutPath = z.infer<typeof LayoutPathSchema>;
@@ -282,6 +288,28 @@ export const LayoutLayerSchema = z.object({
 });
 export type LayoutLayer = z.infer<typeof LayoutLayerSchema>;
 
+// One tagged-PDF structure element (#760, ISO 32000-1 14.7.2): a node of the /StructTreeRoot tree. `type` is the element's /S with /RoleMap applied -- a custom name the role map maps lands here as its standard target, and an unmapped custom name stays verbatim (the honest spelling when no standard mapping exists). `title` is /T, `language` a per-element /Lang override (own, or resolved from a /ClassMap entry's attributes), `alt`/`actualText` the element-level accessibility attributes. `id` is reader-minted in document order -- the key an extracted item's own `structure` field names, exactly as a layer name names a row of `layers`.
+export const LayoutStructureElementSchema: z.ZodType<LayoutStructureElement, LayoutStructureElement> = z.lazy(() =>
+  z.object({
+    id: z.string(),
+    type: z.string(),
+    title: z.string().optional(),
+    language: z.string().optional(),
+    alt: z.string().optional(),
+    actualText: z.string().optional(),
+    children: z.array(LayoutStructureElementSchema),
+  }),
+);
+export interface LayoutStructureElement {
+  readonly id: string;
+  readonly type: string;
+  readonly title?: string;
+  readonly language?: string;
+  readonly alt?: string;
+  readonly actualText?: string;
+  readonly children: readonly LayoutStructureElement[];
+}
+
 export const LayoutDocumentSchema = z.object({
   formatVersion: z.literal(LAYOUT_FORMAT_VERSION),
   metadata: LayoutMetadataSchema,
@@ -291,6 +319,7 @@ export const LayoutDocumentSchema = z.object({
   outline: z.array(LayoutOutlineItemSchema).optional(),
   attachments: z.array(LayoutAttachmentSchema).optional(),
   layers: z.array(LayoutLayerSchema).optional(),
+  structure: z.array(LayoutStructureElementSchema).optional(), // the tagged-PDF /StructTreeRoot element tree, present only in a tagged document
   form: z.array(LayoutFormFieldSchema).optional(),
   // The package-level half of the quarantined residue channel (document-schema.js's SourceResidue): whole-document PDF facts no content node owns -- the raw XMP packet, output intents, viewer/session behaviour, private application data, the trailer /ID. Keyed by the fact's own name, opaque to everything downstream exactly as the channel's contract states.
   source: z.record(z.string(), SourceResidueSchema).optional(),
