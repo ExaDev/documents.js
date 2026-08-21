@@ -2,8 +2,9 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import type { DocumentPackage, SectionGroupNode, SlideGroupNode } from 'document-schema.js';
-import { flattenPackage, isHeadingGroupNode, isListGroupNode, isSectionConstructGroupNode, isShapeGroupNode } from 'document-schema.js';
+import type { ContentEmbeddedObjectBlock, DocumentPackage, SectionGroupNode, SlideGroupNode } from 'document-schema.js';
+import { assemblePackage, flattenPackage, isHeadingGroupNode, isListGroupNode, isSectionConstructGroupNode, isShapeGroupNode } from 'document-schema.js';
+import { minimalPptxBytes } from '../test-support/embedded';
 import { decodePackage, encodePackage } from '../codec';
 import type { XmlElement, XmlNode } from '../model/node';
 import { el, txt } from '../xml/fragment';
@@ -237,6 +238,19 @@ describe('buildDocxPackage: DocumentPackage -> docx bytes', () => {
     const spreadsheet = readXlsx(decodePackage(new Uint8Array(readFileSync(join(FIXTURES_DIR, 'minimal.xlsx')))));
 
     expect(() => buildDocxPackage(spreadsheet)).toThrow('buildDocxPackage: expected a DocumentPackage of kind "wordprocessing", got "spreadsheet"');
+  });
+
+  it('threads the embedded-presentation serialiser option to the flat writer, so a tree carrying a presentation embed builds rather than throwing', () => {
+    // #742's port, at the tree boundary: an embedded presentation block sits in the tree exactly as a flat block does (decompose keeps it a leaf, flattenPackage materialises it back), so the option has to reach buildDocxPackageFromContent or a tree round trip still hits the no-serialiser throw the flat pair names.
+    const embed: ContentEmbeddedObjectBlock = { kind: 'embeddedObject', objectKind: 'presentation', document: { kind: 'presentation', metadata: {}, slides: [] }, frame: { xPt: 0, yPt: 0, widthPt: 96, heightPt: 60 } };
+    const tree = assemblePackage({ kind: 'wordprocessing', metadata: {}, sections: [{ pageSize: { widthPt: 612, heightPt: 792 }, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 }, blocks: [embed] }] });
+
+    const built = buildDocxPackage(tree, { serialiseEmbeddedPresentation: () => minimalPptxBytes() });
+    const after = readDocxContent(built);
+    // The written w:object rides a run inside its own paragraph, so the reader lifts the embed as the sibling after that paragraph's own (run-text-empty) block -- the same convention an inline image follows.
+    const recovered = after.sections[0]?.blocks[1];
+    expect(recovered?.kind).toBe('embeddedObject');
+    expect(recovered?.kind === 'embeddedObject' ? recovered.objectKind : undefined).toBe('presentation');
   });
 });
 

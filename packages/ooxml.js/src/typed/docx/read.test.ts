@@ -6,7 +6,7 @@ import { el, txt } from '../../xml/fragment';
 import { bytesToBase64 } from '../../util/base64';
 import { zipPackage } from '../../zip';
 import { oleObjectBin } from '../../test-support/cfb';
-import { minimalDocxBytes, minimalXlsxBytes } from '../../test-support/embedded';
+import { minimalDocxBytes, minimalPptxBytes, minimalXlsxBytes } from '../../test-support/embedded';
 import { attr, childrenWithTag, elementsWithTag, rootElement } from '../util';
 import { readDocxContent } from './read';
 import { buildDocxPackageFromContent } from './write';
@@ -907,8 +907,44 @@ describe('embedded OLE objects: write-side round trip', () => {
     expect(asImage(after.sections[0]?.blocks[2]).altText).toBe('Drawing after the object');
   });
 
+  it('round-trips a recovered presentation embed through an injected embedded-presentation serialiser', () => {
+    // The port (#742): ooxml.js has no PresentationML writer, but a caller one layer up does -- documents.js's buildPptxPackage -- and this package cannot depend on its own consumer. options.serialiseEmbeddedPresentation is the seam: the caller injects presentation-document -> pptx-bytes, and the writer serialises the embed exactly like an embedded workbook, into a real word/embeddings/oleObjectN.pptx part.
+    const pkg = oleObjectFixturePackage({ target: 'embeddings/oleObject1.pptx' });
+    pkg.parts['word/embeddings/oleObject1.pptx'] = { kind: 'binary', base64: bytesToBase64(minimalPptxBytes()) };
+    const before = readDocxContent(pkg);
+    let serialised: Extract<ContentEmbeddedObjectBlock['document'], { kind: 'presentation' }> | undefined;
+    const written = buildDocxPackageFromContent(before, {
+      serialiseEmbeddedPresentation: (document) => {
+        serialised = document;
+        return minimalPptxBytes();
+      },
+    });
+    // The serialiser received the genuinely recovered presentation document, not an envelope or a copy of the host.
+    expect(serialised?.kind).toBe('presentation');
+
+    const after = readDocxContent(written);
+    const embedded = asEmbeddedObject(after.sections[0]?.blocks[1]);
+    expect(embedded.objectKind).toBe('presentation');
+    expect(embedded.frame).toEqual({ xPt: 0, yPt: 0, widthPt: 96, heightPt: 60 });
+    // The nested document is the genuinely decoded payload the serialiser produced -- minimalPptxBytes' one slide, its paragraph block intact.
+    const slide = embedded.document.kind === 'presentation' ? embedded.document.slides[0] : undefined;
+    expect(slide?.shapes[0]?.blocks[0]?.kind).toBe('paragraph');
+
+    // The payload part carries the pptx extension, ProgID, relationship, and presentationml content-type override an embedded deck needs.
+    expect(written.parts['word/embeddings/oleObject1.pptx']?.kind).toBe('binary');
+    const documentRoot = rootElement(written.parts['word/document.xml']);
+    const oleObject = findAllElements(documentRoot === undefined ? [] : [documentRoot], 'o:OLEObject')[0];
+    expect(attr(oleObject!, 'ProgID')).toBe('PowerPoint.Show.12');
+    const relsRoot = rootElement(written.parts['word/_rels/document.xml.rels']);
+    const oleRel = elementsWithTag(relsRoot === undefined ? [] : [relsRoot], 'Relationship').find((relationship) => attr(relationship, 'Type') === OLE_OBJECT_REL);
+    expect(attr(oleRel!, 'Target')).toBe('embeddings/oleObject1.pptx');
+    const typesRoot = rootElement(written.parts['[Content_Types].xml']);
+    const embeddingOverride = elementsWithTag(typesRoot === undefined ? [] : [typesRoot], 'Override').find((candidate) => attr(candidate, 'PartName') === '/word/embeddings/oleObject1.pptx');
+    expect(attr(embeddingOverride!, 'ContentType')).toBe('application/vnd.openxmlformats-officedocument.presentationml.presentation');
+  });
+
   it('refuses an embedded presentation document loudly rather than silently dropping the recovered sub-document', () => {
-    // ooxml.js has no pptx writer (PresentationML is read-only in this package), so a presentation embed -- which readDocxContent genuinely recovers -- has no bytes this writer can produce. The reader's degrade-tier rule inverts at the write boundary: a builder asked for a document it cannot faithfully produce throws instead of writing a file that silently lost the embed.
+    // ooxml.js has no pptx writer (PresentationML is read-only in this package), so a presentation embed -- which readDocxContent genuinely recovers -- has no bytes this writer can produce on its own. The reader's degrade-tier rule inverts at the write boundary: a builder asked for a document it cannot faithfully produce throws instead of writing a file that silently lost the embed. The injected serialiser is the remedy, and the previous test proves it; with none injected this throw is the documented boundary.
     const block: ContentEmbeddedObjectBlock = { kind: 'embeddedObject', objectKind: 'presentation', document: { kind: 'presentation', metadata: {}, slides: [] }, frame: { xPt: 0, yPt: 0, widthPt: 96, heightPt: 60 } };
     expect(() => buildDocxPackageFromContent({ sections: [{ pageSize: { widthPt: 612, heightPt: 792 }, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 }, blocks: [block] }] })).toThrow(/presentation/);
   });
