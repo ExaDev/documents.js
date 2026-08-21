@@ -92,6 +92,12 @@ describe('docx-extras', () => {
       footnotes: [{ id: '1', text: DOCX_EXTRAS_FIXTURE.footnoteText }],
       headers: [DOCX_EXTRAS_FIXTURE.headerText],
       footers: [DOCX_EXTRAS_FIXTURE.footerText],
+      // The structural half of the header/footer model: each section-referenced part as block flow (package-key order, footer1 before header1), plus the one section's default-slot references naming them.
+      headerFooterParts: [
+        { path: DOCX_EXTRAS_FIXTURE.footerPath, kind: 'footer', blocks: [{ kind: 'paragraph', runs: [{ text: DOCX_EXTRAS_FIXTURE.footerText }] }] },
+        { path: DOCX_EXTRAS_FIXTURE.headerPath, kind: 'header', blocks: [{ kind: 'paragraph', runs: [{ text: DOCX_EXTRAS_FIXTURE.headerText }] }] },
+      ],
+      sectionHeaderFooters: [{ header: { default: DOCX_EXTRAS_FIXTURE.headerPath }, footer: { default: DOCX_EXTRAS_FIXTURE.footerPath } }],
       numbering: {
         [DOCX_EXTRAS_FIXTURE.numId]: {
           levels: { '0': { format: DOCX_EXTRAS_FIXTURE.numberingLevel.format, text: DOCX_EXTRAS_FIXTURE.numberingLevel.text, startAt: 1 } },

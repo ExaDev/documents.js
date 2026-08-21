@@ -1,4 +1,4 @@
-import type { Comment, DocxExtras, Footnote, NumberingDefinitions, NumberingLevel } from 'documents.js';
+import type { Comment, DocxExtras, Footnote, HeaderFooterPart, NumberingDefinitions, NumberingLevel, SectionHeaderFooterReferences } from 'documents.js';
 
 // The one place a docx's own comments/footnotes/headers/footers/numbering definitions turn into text, shared by the `docx-extras` command and the TUI's own `docxExtras` screen -- the same relationship `odb-structure.ts` has to `odb-forms`/`odb-reports` and to the TUI's own form/report detail screens, and for the same reason: the CLI renders these lines joined by newlines while the TUI renders one per `ListView` row, so a flat `readonly string[]` of already-indented lines is the shape that genuinely serves both without either owning the other's rendering.
 //
@@ -35,12 +35,39 @@ function footnotesSection(footnotes: readonly Footnote[]): readonly string[] {
   return ['footnotes', ...footnotes.map((footnote, index) => footnoteLine(footnote, index + 1))];
 }
 
-// Headers and footers share the identical shape once read (`readonly string[]`, each entry one part's own concatenated text) -- one function renders either, labelled by the caller.
-function headerOrFooterSection(label: string, values: readonly string[]): readonly string[] {
-  if (values.length === 0) {
+// The reference slots a w:sectPr spells, in the fixed order they are enumerated per part -- the same default/first/even vocabulary SectionHeaderFooterReferences keys.
+const HEADER_FOOTER_SLOTS = ['default', 'first', 'even'] as const;
+
+// Every (section, slot) pair naming this part path, in section order then slot order -- the reference spelling that placed the part in headerFooterParts, so it is never empty for a part that reached the list. Sections are addressed 1-based, matching the positional convention comments and footnotes render under.
+function partReferences(path: string, kind: 'header' | 'footer', sectionHeaderFooters: readonly SectionHeaderFooterReferences[]): string {
+  const references: string[] = [];
+  sectionHeaderFooters.forEach((sectionReferences, sectionIndex) => {
+    const slots = kind === 'header' ? sectionReferences.header : sectionReferences.footer;
+    for (const slot of HEADER_FOOTER_SLOTS) {
+      if (slots?.[slot] === path) {
+        references.push(`section ${sectionIndex + 1} ${slot}`);
+      }
+    }
+  });
+  return references.join(', ');
+}
+
+// Headers and footers render from the STRUCTURAL model -- each referenced part's own path, the sections and slots that reference it, and the part's paragraphs one indented line each -- rather than the deprecated flat per-part text arrays, so the rendering needs no change when those arrays leave the upstream shape.
+function headerOrFooterSection(label: string, kind: 'header' | 'footer', parts: readonly HeaderFooterPart[], sectionHeaderFooters: readonly SectionHeaderFooterReferences[]): readonly string[] {
+  const ofKind = parts.filter((part) => part.kind === kind);
+  if (ofKind.length === 0) {
     return [];
   }
-  return [label, ...values.map((text, index) => `${indent(1)}[${index + 1}] ${text}`)];
+  const lines: string[] = [label];
+  for (const part of ofKind) {
+    lines.push(`${indent(1)}${part.path} (${partReferences(part.path, kind, sectionHeaderFooters)})`);
+    for (const block of part.blocks) {
+      if (block.kind === 'paragraph') {
+        lines.push(`${indent(2)}${block.runs.map((run) => run.text).join('')}`);
+      }
+    }
+  }
+  return lines;
 }
 
 function numberingLevelLine(ilvl: string, level: NumberingLevel): string {
@@ -77,8 +104,8 @@ export function formatDocxExtrasLines(extras: DocxExtras): readonly string[] {
   const sections: readonly (readonly string[])[] = [
     commentsSection(extras.comments),
     footnotesSection(extras.footnotes),
-    headerOrFooterSection('headers', extras.headers),
-    headerOrFooterSection('footers', extras.footers),
+    headerOrFooterSection('headers', 'header', extras.headerFooterParts, extras.sectionHeaderFooters),
+    headerOrFooterSection('footers', 'footer', extras.headerFooterParts, extras.sectionHeaderFooters),
     numberingSection(extras.numbering),
   ];
   const nonEmptySections = sections.filter((section) => section.length > 0);
