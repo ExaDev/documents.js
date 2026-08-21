@@ -1,3 +1,14 @@
+## [4.1.1](https://github.com/ExaDev/documents.js/compare/documents.js@4.1.0...documents.js@4.1.1) (2026-08-21)
+
+
+### Dependencies
+
+- Updated pdf-codec to ^3.1.1
+- Updated ooxml.js to ^4.3.0
+- Updated odf.js to ^5.0.8
+- Updated markdown-codec to ^4.0.13
+- Updated document-schema.js to ^4.5.0
+
 # [4.1.0](https://github.com/ExaDev/documents.js/compare/documents.js@4.0.26...documents.js@4.1.0) (2026-08-20)
 
 
