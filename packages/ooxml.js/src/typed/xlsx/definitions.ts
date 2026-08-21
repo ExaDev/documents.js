@@ -43,8 +43,10 @@ function readTableEntries(pkg: Package, out: DefinitionsTable): void {
       if (table === undefined || name === undefined || ref === undefined) {
         continue;
       }
+      // CT_Table's columns sit inside a tableColumns container (beside autoFilter/sortState/tableStyleInfo), never as direct children of table itself -- read through the wrapper the grammar every real producer emits.
       const columns: string[] = [];
-      for (const column of childrenWithTag(table, 'tableColumn')) {
+      const tableColumns = childrenWithTag(table, 'tableColumns')[0];
+      for (const column of tableColumns === undefined ? [] : childrenWithTag(tableColumns, 'tableColumn')) {
         const columnName = attr(column, 'name');
         if (columnName !== undefined) {
           columns.push(columnName);
