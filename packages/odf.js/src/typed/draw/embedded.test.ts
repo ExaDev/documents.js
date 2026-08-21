@@ -54,8 +54,10 @@ describe('readDrawObjectReference', () => {
     expect(readDrawObjectReference(objectFrame('Object 1'), packageWithObject('Object 1', el('office:database')))).toBeUndefined();
   });
 
-  it('returns undefined for an office:chart sub-document -- ContentEmbeddedObjectKind has no chart member to map one onto', () => {
-    expect(readDrawObjectReference(objectFrame('Object 1'), packageWithObject('Object 1', el('office:chart')))).toBeUndefined();
+  it('resolves an office:chart sub-document to objectKind "chart" -- the member whose document is the frame-sized data projection readOdfChartContent builds, not a same-named ContentDocument', () => {
+    const reference = readDrawObjectReference(objectFrame('Object 1'), packageWithObject('Object 1', el('office:chart')));
+    expect(reference?.objectKind).toBe('chart');
+    expect(reference?.href).toBe('Object 1');
   });
 
   it('resolves an embedded FORMULA sub-document, whose content.xml root is a bare <math> element with no office:body at all, to objectKind "formula"', () => {

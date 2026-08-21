@@ -279,6 +279,131 @@ describe('readOdtContent: cross-paragraph bookmark pairing at block scope', () =
   });
 });
 
+describe('readOdtContent: anchored draw:frames in text flow', () => {
+  // A 1x1 transparent PNG -- the smallest bytes sniffImageFormat accepts as a real image part.
+  const PNG_BASE64 =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+
+  function imagePackage(): Package {
+    return {
+      parts: {
+        'content.xml': {
+          kind: 'xml',
+          nodes: [
+            el('office:document-content', {}, [
+              el('office:body', {}, [
+                el('office:text', {}, [
+                  el('text:p', {}, [
+                    txt('Text before the frame '),
+                    el('draw:frame', { 'text:anchor-type': 'as-char', 'svg:width': '2cm', 'svg:height': '1cm' }, [
+                      el('draw:image', { 'xlink:href': 'Pictures/image1.png' }),
+                    ]),
+                  ]),
+                ]),
+              ]),
+            ]),
+          ],
+        },
+        'Pictures/image1.png': { kind: 'binary', base64: PNG_BASE64 },
+      },
+    };
+  }
+
+  it('lifts an as-char image frame to a ContentImageBlock following its paragraph, sized by the frame', () => {
+    const blocks = firstSectionBlocks(imagePackage());
+    expect(blocks).toHaveLength(2);
+    if (blocks[0]?.kind !== 'paragraph' || blocks[1]?.kind !== 'image') {
+      throw new Error('expected a paragraph followed by a lifted image block');
+    }
+    expect(blocks[1].format).toBe('png');
+    expect(blocks[1].widthPt).toBeCloseTo(56.7, 0);
+    expect(blocks[1].heightPt).toBeCloseTo(28.35, 0);
+  });
+
+  it('splices a text-box frame\'s own blocks after its paragraph, in document order', () => {
+    const pkg = odtPackage([
+      el('text:p', {}, [
+        txt('Body '),
+        el('draw:frame', { 'svg:x': '1cm', 'svg:y': '2cm', 'svg:width': '4cm', 'svg:height': '2cm' }, [
+          el('draw:text-box', {}, [el('text:p', {}, [txt('Box paragraph.')])]),
+        ]),
+      ]),
+    ]);
+    const blocks = firstSectionBlocks(pkg);
+    expect(blocks.map((block) => block.kind)).toEqual(['paragraph', 'paragraph']);
+    if (blocks[1]?.kind !== 'paragraph') {
+      throw new Error('expected the text-box paragraph spliced after its anchor');
+    }
+    expect(blocks[1].runs[0]?.text).toBe('Box paragraph.');
+  });
+
+  it('reads an embedded formula frame as a ContentEmbeddedObjectBlock carrying the formula document', () => {
+    const mathml = el('math', {}, [el('mrow', {}, [el('mi', {}, [txt('x')])])]);
+    const pkg = odtPackage([
+      el('text:p', {}, [
+        el('draw:frame', { 'svg:x': '1cm', 'svg:y': '1cm', 'svg:width': '3cm', 'svg:height': '1cm' }, [
+          el('draw:object', { 'xlink:href': './Object 1' }),
+        ]),
+      ]),
+    ]);
+    pkg.parts['Object 1/content.xml'] = { kind: 'xml', nodes: [mathml] };
+    const blocks = firstSectionBlocks(pkg);
+    expect(blocks.map((block) => block.kind)).toEqual(['paragraph', 'embeddedObject']);
+    if (blocks[1]?.kind !== 'embeddedObject') {
+      throw new Error('expected an embedded object block');
+    }
+    expect(blocks[1].objectKind).toBe('formula');
+    expect(blocks[1].document.kind).toBe('formula');
+  });
+
+  it('reads an embedded chart as a chart-kind object whose document is a frame-sized drawing page carrying the chart\'s cached data table, with the chart element quarantined in residue', () => {
+    const pkg = odtPackage([
+      el('text:p', {}, [
+        el('draw:frame', { 'svg:x': '1cm', 'svg:y': '1cm', 'svg:width': '8cm', 'svg:height': '5cm' }, [
+          el('draw:object', { 'xlink:href': './Object 2' }),
+        ]),
+      ]),
+    ]);
+    pkg.parts['Object 2/content.xml'] = {
+      kind: 'xml',
+      nodes: [
+        el('office:document-content', {}, [
+          el('office:body', {}, [
+            el('office:chart', {}, [
+              el('chart:chart', { 'chart:class': 'bar' }, [
+                el('chart:plot-area', {}, [
+                  el('table:table', { 'table:name': 'local-table' }, [
+                    el('table:table-row', {}, [
+                      el('table:table-cell', { 'office:value-type': 'string' }, [el('text:p', {}, [txt('Q1')])]),
+                      el('table:table-cell', { 'office:value-type': 'float', 'office:value': '3' }, [el('text:p', {}, [txt('3')])]),
+                    ]),
+                  ]),
+                ]),
+              ]),
+            ]),
+          ]),
+        ]),
+      ],
+    };
+    const blocks = firstSectionBlocks(pkg);
+    if (blocks[1]?.kind !== 'embeddedObject') {
+      throw new Error('expected an embedded object block');
+    }
+    const embedded = blocks[1];
+    expect(embedded.objectKind).toBe('chart');
+    expect(embedded.document.kind).toBe('drawing');
+    if (embedded.document.kind !== 'drawing') {
+      throw new Error('expected a drawing document');
+    }
+    const page = embedded.document.pages[0];
+    expect(page?.size.widthPt).toBeCloseTo(226.8, 0);
+    expect(page?.size.heightPt).toBeCloseTo(141.75, 0);
+    expect(page?.shapes[0]?.blocks[0]?.kind).toBe('table');
+    expect(embedded.source?.format).toBe('odt');
+    expect(embedded.source?.xml).toContain('<chart:chart chart:class="bar">');
+  });
+});
+
 describe('readOdtContent: field master declarations as a definitions table', () => {
   it('reads variable, user-field, and sequence declarations into keyed definitions entries', () => {
     const pkg = odtPackage([

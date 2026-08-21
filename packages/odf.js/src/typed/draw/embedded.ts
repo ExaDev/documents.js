@@ -1,9 +1,11 @@
-import type { ContentEmbeddedObjectKind } from 'document-schema.js';
+import type { Box, ContentDocument, ContentEmbeddedObjectKind, SourceResidue } from 'document-schema.js';
 import type { XmlElement, XmlNode } from '../../model/node';
 import type { Package } from '../../model/package';
-import { attrValue, childrenWithTag, findChildElement, rootElement } from '../../xml/query';
+import { attrValue, childrenWithTag, elementsWithTag, findChildElement, rootElement } from '../../xml/query';
 import { findMathRoot } from '../formula/read';
 import { subDocumentPackage } from '../odb/subdocument';
+import { readOdfTable } from '../shared/table';
+import { odfResidue, type OdfResidueFormat } from '../shared/constructs';
 
 // A draw:frame's own EMBEDDED OBJECT reference (draw:object) resolved into the sub-Package it points at, plus the ContentEmbeddedObjectKind that sub-document actually is -- the draw: counterpart to shapes.ts's readDrawImageBlock (draw:image), kept in its own module because the two answer genuinely different questions: an image resolves to a binary part this package decodes itself, while an object resolves to a whole nested ODF DOCUMENT only a typed reader (readOdtContent/readOdsContent/readOdpContent/readOdgContent) can turn into content.
 //
@@ -16,9 +18,9 @@ import { subDocumentPackage } from '../odb/subdocument';
 //
 // KIND is resolved from the sub-document's OWN content.xml, NOT from the manifest's declared media type for the directory, even though the manifest genuinely declares one. One signal, not two: the caller must pick a typed reader anyway, and deriving both the reported kind and the reader that produced the content from the same element makes them consistent by construction -- where a manifest entry can be absent (a sub-package that ships no manifest of its own is still perfectly readable) or disagree with what content.xml actually holds, in which case the manifest would be describing a document nobody read. There are two structurally different shapes to resolve it from, and content.xml itself says which applies: an ordinary embedded document has an office:body whose single content child names the kind (office:text/office:spreadsheet/office:presentation/office:drawing), while an embedded FORMULA has no office:body at all -- its content.xml root IS the MathML root, per typed/formula/read.ts's own confirmed-against-real-LibreOffice finding. The math-root check is therefore reached only when the office:body path finds nothing to read, and it reuses formula/read.ts's own findMathRoot rather than restating which tags count as a MathML root (bare "math" is what real LibreOffice writes; "math:math" is that reader's own defensive prefixed alternative).
 //
-// SCOPE: a formula sub-document (a real, common embedded object -- LibreOffice Math) IS resolvable here, as of document-schema.js 2.2.0: ContentDocument's own discriminated union has a genuine 'formula' variant carrying MathML, so ContentEmbeddedObject.document has something real to hold and the kind ContentEmbeddedObjectKind already listed is no longer a member nothing could be put in. A CHART remains unresolvable -- ContentEmbeddedObjectKind has no 'chart' member at all, so an office:chart sub-document resolves to undefined rather than to a fabricated document of some other kind. A LINKED (as opposed to embedded) object -- xlink:href pointing outside the package, at a separate file or a URL -- likewise resolves to undefined: its content genuinely is not in this package to read.
+// SCOPE: a formula sub-document (a real, common embedded object -- LibreOffice Math) IS resolvable here, as of document-schema.js 2.2.0: ContentDocument's own discriminated union has a genuine 'formula' variant carrying MathML, so ContentEmbeddedObject.document has something real to hold and the kind ContentEmbeddedObjectKind already listed is no longer a member nothing could be put in. A CHART is resolvable too, since document-schema.js's chart member landed: office:chart resolves to kind 'chart', and readOdfChartContent below states the document it carries -- the chart's own local data cache on a frame-sized drawing page, with the chart element quarantined whole in the object's residue. A LINKED (as opposed to embedded) object -- xlink:href pointing outside the package, at a separate file or a URL -- likewise resolves to undefined: its content genuinely is not in this package to read.
 
-// Every ContentEmbeddedObjectKind an embedded sub-document can actually resolve to. Every member of the schema's own union is now genuinely reachable -- the four office:body kinds below plus 'formula' from a bare MathML root -- so this is a straight alias rather than an Extract narrowing, kept as its own exported name because callers dispatch a typed reader on it. Anything the schema does not name (an office:chart or office:database sub-document) still resolves to undefined; see this module's own SCOPE note.
+// Every ContentEmbeddedObjectKind an embedded sub-document can actually resolve to. Every member of the schema's own union is genuinely reachable -- the four office:body kinds below, 'formula' from a bare MathML root, and 'chart' from an office:chart body child -- so this is a straight alias rather than an Extract narrowing, kept as its own exported name because callers dispatch a typed reader on it. Anything the schema does not name (an office:database sub-document) still resolves to undefined; see this module's own SCOPE note.
 export type EmbeddedDocumentKind = ContentEmbeddedObjectKind;
 
 export interface EmbeddedDrawObject {
@@ -43,10 +45,43 @@ function embeddedKindFor(bodyChildTag: string): EmbeddedDocumentKind | undefined
       return 'presentation';
     case 'office:drawing':
       return 'drawing';
+    case 'office:chart':
+      return 'chart';
     default:
-      // office:database is a .odb front-end (readOdbInventory's job, not a ContentDocument at all), and office:chart has no ContentEmbeddedObjectKind member to map onto. Both, and anything else, are unrepresentable -- see this module's own SCOPE note.
+      // office:database is a .odb front-end (readOdbInventory's job, not a ContentDocument at all) and stays unrepresentable -- see this module's own SCOPE note. office:chart resolves since document-schema.js's chart member landed: readOdfChartContent below states what its document carries.
       return undefined;
   }
+}
+
+// An office:chart sub-document -> the ContentDocument its ContentEmbeddedObject carries, plus the chart-specific serialisation quarantined as the object's residue. A chart has no ContentDocument variant of its own (the schema states 'chart' as the one kind whose payload is not a same-named document), so the projection mirrors the family's pptx precedent -- "a chart reaches consumers as the series/category data it carries": the chart's own local table:table cache (the data block ODF charts embed inside chart:plot-area) reads through the ordinary shared table reader, and it rides a ONE-PAGE drawing document whose page is the anchor frame's own real size and whose single shape spans that page -- geometry the format genuinely stated, never invented page metrics. The chart's presentation specifics (chart:class, series layout, axes) have no cross-format home and quarantine whole in residue for a same-format restorer.
+export function readOdfChartContent(chartPackage: Package, frame: Box, format: OdfResidueFormat): { document: ContentDocument; residue: SourceResidue | undefined } {
+  const contentPart = chartPackage.parts[CONTENT_PART];
+  const contentRoot = contentPart?.kind === 'xml' ? rootElement(contentPart.nodes) : undefined;
+  const chartElement = contentRoot === undefined ? undefined : elementsWithTag(contentRoot.children, 'chart:chart')[0];
+  const localTable = chartElement === undefined ? undefined : elementsWithTag(chartElement.children, 'table:table')[0];
+  const blocks = localTable === undefined ? [] : [readOdfTable(localTable, chartPackage)];
+  const document: ContentDocument = {
+    kind: 'drawing',
+    metadata: {},
+    pages: [
+      {
+        size: { widthPt: frame.widthPt, heightPt: frame.heightPt },
+        shapes: [
+          {
+            frame: { xPt: 0, yPt: 0, widthPt: frame.widthPt, heightPt: frame.heightPt },
+            insetLeftPt: 0,
+            insetTopPt: 0,
+            insetRightPt: 0,
+            insetBottomPt: 0,
+            blocks,
+          },
+        ],
+        vectors: [],
+      },
+    ],
+  };
+  // No residue when the package resolves no chart:chart element at all (the reference resolved on the office:chart body child, so a missing inner element is malformed-missing): the object still reads with its empty content rather than quarantining a fabricated element the source never had.
+  return { document, residue: chartElement === undefined ? undefined : odfResidue(format, chartElement) };
 }
 
 // A sub-document's own content.xml -> the kind it is, across BOTH structural shapes: office:body's content child for an ordinary embedded document, and a bare MathML root for an embedded formula. The office:body path is tried first and the math-root path only when it yields nothing, so a document that genuinely has an office:body is never re-examined as a formula.

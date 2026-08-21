@@ -1,4 +1,4 @@
-import type { ContentBlock, ContentParagraph, ContentSection, DefinitionsTable, DocumentPackage, LayoutMetadata, Margins, PageSize, ProvenanceDescriptor } from 'document-schema.js';
+import type { Box, ContentBlock, ContentDocument, ContentParagraph, ContentSection, DefinitionsTable, DocumentPackage, LayoutMetadata, Margins, PageSize, ProvenanceDescriptor } from 'document-schema.js';
 import { assemblePackage, PAGE_SIZE_A4 } from 'document-schema.js';
 import type { Package } from '../../model/package';
 import type { XmlElement, XmlNode } from '../../model/node';
@@ -23,6 +23,11 @@ import { readOdfTable } from '../shared/table';
 import { readOdfMetadata } from '../shared/metadata';
 import { parsePageSize, parseMargins } from '../shared/geometry';
 import { parseOdfLength } from '../shared/units';
+import { readDrawFrame } from '../draw/shapes';
+import { readDrawObjectReference, readOdfChartContent, type EmbeddedDrawObject } from '../draw/embedded';
+import { readOdfFormulaContent } from '../formula/read';
+import { readOdgContent } from '../odg/read';
+import { readOdpContent } from '../odp/read';
 
 // Package -> OdtDocument: the first end-to-end ODF content reader, producing GENUINE ContentSection[] values (document-schema.js's own pivot type, the one documents.js's docx flow/pagination engine already consumes) from a real .odt package. This is the concrete proof of the whole odf.js architectural bet -- that odt and docx can share one pivot and one layout algorithm despite being completely unrelated XML formats -- so every mapping below is deliberately expressed in terms document-schema.js already defines, never a lookalike shape of its own.
 //
@@ -74,11 +79,80 @@ interface OdtFlowState {
   order: number;
 }
 
-// One read paragraph plus the element it came from and the marker halves its run walk reported -- the triple the block flow needs to place each paragraph's edge-half events at the paragraph's own block index.
+// One read paragraph plus the element it came from and the marker halves its run walk reported -- the triple the block flow needs to place each paragraph's edge-half events at the paragraph's own block index. `lifted` carries the blocks the paragraph's own anchored draw:frames contribute, emitted after the paragraph the way ooxml.js's docx reader lifts a paragraph's w:drawing/w:object media as sibling blocks -- ContentRun has no field for in-flow frames, so block-level document order is preserved at the cost of each frame's exact character position.
 interface ReadParagraph {
   readonly element: XmlElement;
   readonly paragraph: ContentParagraph;
   readonly halves: OdfMarkerHalf[];
+  readonly lifted: ContentBlock[];
+}
+
+// An embedded sub-document referenced from a Writer frame -> the ContentDocument its kind dispatches to. Every kind resolves EXCEPT 'spreadsheet': reading an embedded ods would import ods's reader, which imports this module -- the exact reader cycle typed/draw/embedded.ts's own top-of-file note refuses to mint -- so a Calc sheet OLE-embedded in a Writer document degrades to the frame's ObjectReplacements preview image instead of its live content, and the cycle-free split stays the family's stated architecture.
+function readOdtEmbeddedDocument(reference: EmbeddedDrawObject, frame: Box): ContentDocument | undefined {
+  switch (reference.objectKind) {
+    case 'wordprocessing': {
+      const { metadata, sections } = readOdtContent(reference.package);
+      return { kind: 'wordprocessing', metadata, sections };
+    }
+    case 'presentation': {
+      const { metadata, slides } = readOdpContent(reference.package);
+      return { kind: 'presentation', metadata, slides };
+    }
+    case 'drawing': {
+      const { metadata, pages } = readOdgContent(reference.package);
+      return { kind: 'drawing', metadata, pages };
+    }
+    case 'formula':
+      return readOdfFormulaContent(reference.package);
+    case 'chart':
+      return readOdfChartContent(reference.package, frame, 'odt').document;
+    case 'spreadsheet':
+      return undefined;
+  }
+}
+
+// One paragraph's own anchored draw:frame children (flattening any draw:g group exactly as ods's cell-anchored walker does) -> the blocks they contribute after the paragraph. A frame resolving an embedded object becomes a ContentEmbeddedObjectBlock at the frame's own geometry (chart objects additionally quarantine the chart element in residue); any other frame contributes its own content blocks -- a text box's paragraphs, a table frame's table, an image frame's image -- spliced in frame document order, with the frame's own position recorded only where a target node carries geometry (the embedded object's frame and the image block's size); a text box's position is a real, documented narrowing.
+function readAnchoredFrameBlocks(paragraphElement: XmlElement, pkg: Package, state: OdtFlowState): ContentBlock[] {
+  const lifted: ContentBlock[] = [];
+  const readFrame = (frameElement: XmlElement): void => {
+    const shape = readDrawFrame(frameElement, [], pkg, state.listIdState, true);
+    if (shape === undefined) {
+      return;
+    }
+    const reference = readDrawObjectReference(frameElement, pkg);
+    if (reference?.objectKind === 'chart') {
+      const { document, residue } = readOdfChartContent(reference.package, shape.frame, 'odt');
+      const embeddedBlock: ContentBlock = { kind: 'embeddedObject', objectKind: 'chart', document, frame: shape.frame };
+      if (residue !== undefined) {
+        embeddedBlock.source = residue;
+      }
+      lifted.push(embeddedBlock);
+      return;
+    }
+    if (reference !== undefined) {
+      const document = readOdtEmbeddedDocument(reference, shape.frame);
+      if (document !== undefined) {
+        lifted.push({ kind: 'embeddedObject', objectKind: reference.objectKind, document, frame: shape.frame });
+        return;
+      }
+    }
+    lifted.push(...shape.blocks);
+  };
+  for (const child of paragraphElement.children) {
+    if (child.type !== 'element') {
+      continue;
+    }
+    if (child.tag === 'draw:frame') {
+      readFrame(child);
+    } else if (child.tag === 'draw:g') {
+      for (const grandChild of child.children) {
+        if (grandChild.type === 'element' && grandChild.tag === 'draw:frame') {
+          readFrame(grandChild);
+        }
+      }
+    }
+  }
+  return lifted;
 }
 
 // Walks block-level content (text:p, text:h, text:list, table:table) in document order, at ONE nesting level -- office:text's own top-level children, or a construct wrapper's own children. text:section records a division extent over its own blocks (descriptor: name, protected flag, the column count its own style sets, and the external-chapter link of a text:section-source); the index wrappers (text:table-of-content and its six siblings) record index contentControl extents over their cached text:index-body blocks; text:index-title unwraps transparently -- the title is one of the cached blocks, not a wrapper of its own. Every extent -- wrapper or marker pair -- is spliced into markers by ONE pass at the end of the walk (insertOdfConstructMarkers, in readOdtContent below), so a pair crossing another extent is dropped by that pass rather than emitted as markers that would decode to a nesting the source never had. text:tracked-changes and the text:*-decls containers contribute no blocks: their regions and declarations were collected before the walk and live in the state and the definitions table. Anything else (an office:forms, an anchored draw:frame, text:soft-page-break, ...) is not walked here -- see the scope note at the top of this file for which of those are deliberate gaps. Table CELL content is not walked here at all -- readOdfTable owns that entirely (see this file's own top-of-file note on the scope it inherits from doing so).
@@ -86,23 +160,25 @@ function readBlocks(nodes: readonly XmlNode[], pkg: Package, state: OdtFlowState
   const blocks: ContentBlock[] = [];
   // Paragraph-half events are recorded only once each paragraph's final block index is known -- an index in the ONE flat block list the caller will splice markers into, hence the baseIndex offset every recursive wrapper call threads in (a wrapper's own children build their blocks in this call's local array, but their marker events must name positions in the enclosing list). That is also why every paragraph path funnels through here rather than recording inside the reader callback: the list walker runs all its callbacks before a single block is pushed, so a callback-time index would be the same for every item of the list.
   const emitParagraphs = (reads: readonly ReadParagraph[]): void => {
-    reads.forEach((read, offset) => {
-      const blockIndex = baseIndex + blocks.length + offset;
+    let cursor = baseIndex + blocks.length;
+    for (const read of reads) {
       for (const half of read.halves) {
-        const eventIndex = odfMarkerHalfEventIndex(half, read.element, blockIndex);
+        const eventIndex = odfMarkerHalfEventIndex(half, read.element, cursor);
         if (eventIndex !== undefined) {
           state.markerEvents.push({ kind: half.kind, side: half.side, key: half.key, index: eventIndex, qualified: true, order: state.order++, descriptor: half.descriptor });
         }
       }
-    });
-    for (const read of reads) {
       blocks.push(read.paragraph);
+      for (const block of read.lifted) {
+        blocks.push(block);
+      }
+      cursor += 1 + read.lifted.length;
     }
   };
   const readOneParagraph = (element: XmlElement): ReadParagraph => {
     const halves: OdfMarkerHalf[] = [];
     const paragraph = readOdfParagraph(element, pkg, { provenanceRegions: state.provenanceRegions, markersOut: halves, definitions: state.definitions });
-    return { element, paragraph: readParagraphOrHeading(element, paragraph), halves };
+    return { element, paragraph: readParagraphOrHeading(element, paragraph), halves, lifted: readAnchoredFrameBlocks(element, pkg, state) };
   };
   for (const node of nodes) {
     if (node.type !== 'element') {
