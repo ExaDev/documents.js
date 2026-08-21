@@ -1,3 +1,10 @@
+## [4.0.15](https://github.com/ExaDev/documents.js/compare/markdown-codec@4.0.14...markdown-codec@4.0.15) (2026-08-21)
+
+
+### Dependencies
+
+- Updated document-schema.js to ^4.7.0
+
 ## [4.0.14](https://github.com/ExaDev/documents.js/compare/markdown-codec@4.0.13...markdown-codec@4.0.14) (2026-08-21)
 
 
