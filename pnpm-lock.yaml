@@ -207,7 +207,7 @@ importers:
         specifier: ^15.0.0
         version: 15.0.0
       document-outline.js:
-        specifier: ^1.0.5
+        specifier: ^1.0.6
         version: link:../document-outline.js
       document-schema.js:
         specifier: ^4.5.0
