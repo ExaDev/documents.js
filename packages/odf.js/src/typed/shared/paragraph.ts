@@ -235,6 +235,33 @@ function pushRun(out: ContentRun[], run: ContentRun, hyperlinkTarget: string | u
   out.push(hyperlinkTarget === undefined ? run : { ...run, hyperlink: hyperlinkTarget });
 }
 
+// The fo:break-before/fo:break-after page-forcing values: any of the three means "this paragraph starts/ends on a fresh page", and the pageBreak block the reader emits carries no parity of its own -- so even-page/odd-page degrade to the same break spelling, with the parity recorded in the style residue this module still quarantines. 'column' and 'auto' force nothing.
+function isPageForcingBreak(value: string | undefined): boolean {
+  return value === 'page' || value === 'even-page' || value === 'odd-page';
+}
+
+// A paragraph's own explicit page breaks (ODF's break-before/break-after live on style:paragraph-properties of the paragraph's style chain, never on the paragraph element itself -- ODF has no direct formatting): resolved through the SAME root-first parent-chain walk readFrameInsets applies to graphic properties, with the NEAREST declaration winning exactly as a cascade override should -- a parent's fo:break-before="page" is cancelled by a child redeclaring it "auto". This is the odf spelling of the row ooxml.js reads as w:pageBreakBefore: a forcing value on the paragraph's resolved style becomes a { kind: 'pageBreak' } block beside the paragraph (before it for break-before, after it for break-after), the family's established encoding for an explicit page break.
+export function readOdfParagraphPageBreaks(pElement: XmlElement, pkg: Package): { before: boolean; after: boolean } {  const styleName = attrValue(pElement, 'text:style-name');
+  const { elements } = resolveStyleElementChain(styleName, 'paragraph', pkg);
+  let before = false;
+  let after = false;
+  for (const style of elements) {
+    const properties = childrenWithTag(style, 'style:paragraph-properties')[0];
+    if (properties === undefined) {
+      continue;
+    }
+    const breakBefore = attrValue(properties, 'fo:break-before');
+    if (breakBefore !== undefined) {
+      before = isPageForcingBreak(breakBefore);
+    }
+    const breakAfter = attrValue(properties, 'fo:break-after');
+    if (breakAfter !== undefined) {
+      after = isPageForcingBreak(breakAfter);
+    }
+  }
+  return { before, after };
+}
+
 function runFromText(text: string, properties: StyleProperties): ContentRun {
   return {
     text,
@@ -248,19 +275,24 @@ function runFromText(text: string, properties: StyleProperties): ContentRun {
   };
 }
 
+// The residue-serialisation copy of one style:paragraph-properties/style:text-properties element with the two break attributes removed -- the copy the paragraph's source residue carries (see readOdfParagraph's own note for why they are stripped there and only there).
+function stripPageBreakAttributes(element: XmlElement): XmlElement {
+  return { ...element, attributes: element.attributes.filter((attribute) => attribute.name !== 'fo:break-before' && attribute.name !== 'fo:break-after') };
+}
+
 // Reads one text:p element (the caller is responsible for confirming it IS a text:p before calling -- this module has no opinion on where in a document's tree that element sits). Paragraph-level fields (alignment, spacing, indents) come only from the paragraph's OWN resolved 'paragraph'-family properties, never from a span: a text:span's style-name always resolves against the 'text' family, which style.ts/registry.ts's own STYLE_FAMILIES never lets carry paragraph-level properties in practice. The optional context supplies the document-level facts a paragraph cannot know on its own -- the tracked-change regions its change markers resolve against, and the out-array its block-edge marker halves are reported to for the reader that owns the block flow to pair.
 export function readOdfParagraph(pElement: XmlElement, pkg: Package, context: OdfParagraphContext = {}): ContentParagraph {
   const styleName = attrValue(pElement, 'text:style-name');
   const paragraphProperties = resolveStyle(styleName, 'paragraph', pkg).properties;
 
-  // The unmodellable half of the paragraph's own style chain quarantines as per-node residue: every style:paragraph-properties/style:text-properties element in the resolved chain that properties.ts cannot fully model (hasUnknown -- fo:keep-with-next, a style:map child, anything StyleProperties carries no field for) serialises into the paragraph's source, so a same-format writer can restore what the resolved fields could not hold. Only when the context names the reading format -- residue's format member states which reader produced it, and this shared reader serves seven of them. Span-run and table/graphic-style unknowns stay dropped (documented): the run- and table-level channels exist, but the resolved-styles fact this row lands is the paragraph's own chain.
+  // The unmodellable half of the paragraph's own style chain quarantines as per-node residue: every style:paragraph-properties/style:text-properties element in the resolved chain that properties.ts cannot fully model (hasUnknown -- fo:keep-with-next, a style:map child, anything StyleProperties carries no field for) serialises into the paragraph's source, so a same-format writer can restore what the resolved fields could not hold. Only when the context names the reading format -- residue's format member states which reader produced it, and this shared reader serves seven of them. Span-run and table/graphic-style unknowns stay dropped (documented): the run- and table-level channels exist, but the resolved-styles fact this row lands is the paragraph's own chain. The one deliberate exception to "the whole element, verbatim": fo:break-before/fo:break-after attributes are STRIPPED from the serialised copy, because readOdfParagraphPageBreaks reads them into the pageBreak blocks the block flow emits -- restating them in residue would put one fact in two places inside one paragraph's output (the same discipline odfFieldDescriptor applies to a field's cached children).
   let source: ContentParagraph['source'];
   if (context.format !== undefined && styleName !== undefined) {
     const unknownElements = resolveStyleElementChain(styleName, 'paragraph', pkg).elements.flatMap((style) =>
       [
         ...childrenWithTag(style, 'style:paragraph-properties').filter((properties) => parseParagraphProperties(properties).hasUnknown),
         ...childrenWithTag(style, 'style:text-properties').filter((properties) => parseTextProperties(properties).hasUnknown),
-      ],
+      ].map(stripPageBreakAttributes),
     );
     if (unknownElements.length > 0) {
       source = odfResidue(context.format, ...unknownElements);

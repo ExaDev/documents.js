@@ -20,7 +20,7 @@ import {
   type OdfMarkerEvent,
   type OdfMarkerHalf,
 } from '../shared/constructs';
-import { readOdfParagraph } from '../shared/paragraph';
+import { readOdfParagraph, readOdfParagraphPageBreaks } from '../shared/paragraph';
 import { readOdfFormControlConstructs } from '../shared/forms';
 import { readOdfTable } from '../shared/table';
 import { readOdfMetadata } from '../shared/metadata';
@@ -205,17 +205,26 @@ function readBlocks(nodes: readonly XmlNode[], pkg: Package, state: OdtFlowState
     let cursor = baseIndex + blocks.length;
     for (const read of reads) {
       const lifted = read.liftedSources.flatMap((source) => source.blocks);
+      // The paragraph's own explicit page breaks, resolved from its style chain -- emitted as pageBreak blocks immediately beside the paragraph (before for break-before, after the paragraph AND its lifted frames for break-after, since a break-after means "after this paragraph's content" and the lifted frames are that content). The leading block shifts the paragraph's own index, so the marker-half events below are indexed from the post-break position.
+      const breaks = readOdfParagraphPageBreaks(read.element, pkg);
+      const paragraphIndex = cursor + (breaks.before ? 1 : 0);
       for (const half of read.halves) {
-        const eventIndex = odfMarkerHalfEventIndex(half, read.element, cursor, liftedBlocksBeforeHalf(read, half.element));
+        const eventIndex = odfMarkerHalfEventIndex(half, read.element, paragraphIndex, liftedBlocksBeforeHalf(read, half.element));
         if (eventIndex !== undefined) {
           state.markerEvents.push({ kind: half.kind, side: half.side, key: half.key, index: eventIndex, qualified: true, order: state.order++, descriptor: half.descriptor, element: half.element });
         }
+      }
+      if (breaks.before) {
+        blocks.push({ kind: 'pageBreak' });
       }
       blocks.push(read.paragraph);
       for (const block of lifted) {
         blocks.push(block);
       }
-      cursor += 1 + lifted.length;
+      if (breaks.after) {
+        blocks.push({ kind: 'pageBreak' });
+      }
+      cursor += (breaks.before ? 1 : 0) + 1 + lifted.length + (breaks.after ? 1 : 0);
     }
   };
   const readOneParagraph = (element: XmlElement): ReadParagraph => {

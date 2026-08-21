@@ -781,6 +781,85 @@ describe('readOdtContent: master pages and header/footer content (#769)', () => 
   });
 });
 
+describe('readOdtContent: fo:break-before and fo:break-after as pageBreak blocks (#769)', () => {
+  const BREAK_STYLES: XmlElement[] = [
+    el('style:style', { 'style:name': 'BreakBefore', 'style:family': 'paragraph' }, [el('style:paragraph-properties', { 'fo:break-before': 'page' })]),
+    el('style:style', { 'style:name': 'BreakAfter', 'style:family': 'paragraph' }, [el('style:paragraph-properties', { 'fo:break-after': 'page' })]),
+    el('style:style', { 'style:name': 'BreakParent', 'style:family': 'paragraph' }, [el('style:paragraph-properties', { 'fo:break-before': 'page' })]),
+    el('style:style', { 'style:name': 'BreakChild', 'style:family': 'paragraph', 'style:parent-style-name': 'BreakParent' }, [el('style:paragraph-properties', { 'fo:break-before': 'auto' })]),
+    el('style:style', { 'style:name': 'NoBreak', 'style:family': 'paragraph' }, [el('style:paragraph-properties', { 'fo:break-before': 'auto', 'fo:break-after': 'auto' })]),
+    el('style:style', { 'style:name': 'BreakEvenPage', 'style:family': 'paragraph' }, [el('style:paragraph-properties', { 'fo:break-before': 'odd-page' })]),
+  ];
+
+  it('emits a pageBreak block before a paragraph whose resolved paragraph style carries fo:break-before="page"', () => {
+    const pkg = odtPackage([paragraph('first'), el('text:p', { 'text:style-name': 'BreakBefore' }, [txt('chapter start')])], BREAK_STYLES);
+    const blocks = firstSectionBlocks(pkg);
+    expect(blocks.map((block) => block.kind)).toEqual(['paragraph', 'pageBreak', 'paragraph']);
+    if (blocks[2]?.kind !== 'paragraph') {
+      throw new Error('expected the break-before paragraph');
+    }
+    expect(blocks[2].runs[0]?.text).toBe('chapter start');
+  });
+
+  it('emits a pageBreak block after a paragraph whose resolved paragraph style carries fo:break-after="page"', () => {
+    const pkg = odtPackage([el('text:p', { 'text:style-name': 'BreakAfter' }, [txt('chapter end')]), paragraph('next')], BREAK_STYLES);
+    const blocks = firstSectionBlocks(pkg);
+    expect(blocks.map((block) => block.kind)).toEqual(['paragraph', 'pageBreak', 'paragraph']);
+  });
+
+  it('resolves the break through the style parent chain, with the nearest declaration winning', () => {
+    const pkg = odtPackage([el('text:p', { 'text:style-name': 'BreakChild' }, [txt('inherited auto wins')])], BREAK_STYLES);
+    expect(firstSectionBlocks(pkg).map((block) => block.kind)).toEqual(['paragraph']);
+  });
+
+  it('reads an odd-page or even-page break as a page break', () => {
+    const pkg = odtPackage([el('text:p', { 'text:style-name': 'BreakEvenPage' }, [txt('right-hand start')])], BREAK_STYLES);
+    expect(firstSectionBlocks(pkg).map((block) => block.kind)).toEqual(['pageBreak', 'paragraph']);
+  });
+
+  it('emits no pageBreak block for a style that declares only fo:break-before="auto"', () => {
+    const pkg = odtPackage([el('text:p', { 'text:style-name': 'NoBreak' }, [txt('plain')])], BREAK_STYLES);
+    expect(firstSectionBlocks(pkg).map((block) => block.kind)).toEqual(['paragraph']);
+  });
+
+  it('keeps a block-scoped bookmark extent indexed past the leading pageBreak block its paragraph also produces', () => {
+    const pkg = odtPackage(
+      [
+        el('text:p', {}, [el('text:bookmark-start', { 'text:name': 'chapter' }), txt('cover')]),
+        el('text:p', { 'text:style-name': 'BreakBefore' }, [txt('chapter start'), el('text:bookmark-end', { 'text:name': 'chapter' })]),
+      ],
+      BREAK_STYLES,
+    );
+    const blocks = firstSectionBlocks(pkg);
+    expect(blocks.map((block) => block.kind)).toEqual(['constructStart', 'paragraph', 'pageBreak', 'paragraph', 'constructEnd']);
+  });
+
+  it('survives the package boundary with the pageBreak blocks intact', () => {
+    const pkg = odtPackage([el('text:p', { 'text:style-name': 'BreakBefore' }, [txt('chapter start')])], BREAK_STYLES);
+    const flat = flattenPackage(readOdt(pkg));
+    if (flat.kind !== 'wordprocessing') {
+      throw new Error('expected a wordprocessing document');
+    }
+    expect(flat.sections[0]?.blocks.map((block) => block.kind)).toEqual(['pageBreak', 'paragraph']);
+  });
+
+  it('strips the break attributes from the paragraph\'s style residue, so the break fact lives in one place', () => {
+    // A style carrying BOTH a modelled unknown (fo:keep-with-next) and the break: the element still quarantines for the unknown, but its serialised copy no longer restates the break the pageBreak block already encodes.
+    const styles: XmlElement[] = [
+      el('style:style', { 'style:name': 'BreakAndKeep', 'style:family': 'paragraph' }, [el('style:paragraph-properties', { 'fo:break-before': 'page', 'fo:keep-with-next': 'always' })]),
+    ];
+    const pkg = odtPackage([el('text:p', { 'text:style-name': 'BreakAndKeep' }, [txt('kept with next')])], styles);
+    const blocks = firstSectionBlocks(pkg);
+    expect(blocks.map((block) => block.kind)).toEqual(['pageBreak', 'paragraph']);
+    if (blocks[1]?.kind !== 'paragraph') {
+      throw new Error('expected a paragraph');
+    }
+    expect(blocks[1].source?.format).toBe('odt');
+    expect(blocks[1].source?.xml).toContain('fo:keep-with-next');
+    expect(blocks[1].source?.xml).not.toContain('fo:break-before');
+  });
+});
+
 describe('readOdtContent: field master declarations as a definitions table', () => {
   it('reads variable, user-field, and sequence declarations into keyed definitions entries', () => {
     const pkg = odtPackage([
