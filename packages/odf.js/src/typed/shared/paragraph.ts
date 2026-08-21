@@ -36,8 +36,8 @@ export interface OdfParagraphContext {
   readonly format?: OdfResidueFormat;
 }
 
-// One note/annotation body's own block flow: text:p paragraphs and text:list lists, read through the same shared walkers the main body uses. Anything else in a body contributes nothing, exactly as readBlocks treats unknown block-level elements. The listIdState is threaded into the recursive paragraph context as well, so a note nested inside a note body mints its own body's lists from the same document-wide counter.
-function readOdfNoteBodyBlocks(body: XmlElement, pkg: Package, context: OdfParagraphContext, listIdState: OdfListIdState): ContentBlock[] {
+// One note or annotation body's own block flow: text:p paragraphs and text:list lists, read through the same shared walkers the main body uses, in the body's own document order. Anything else in a body contributes nothing, exactly as readBlocks treats unknown block-level elements -- an annotation's dc:creator/dc:date children land here and are skipped, having already been read into the entry's own fields. The listIdState is threaded into the recursive paragraph context as well, so a note nested inside a note body mints its own body's lists from the same document-wide counter.
+function readOdfConstructBodyBlocks(body: XmlElement, pkg: Package, context: OdfParagraphContext, listIdState: OdfListIdState): ContentBlock[] {
   const blocks: ContentBlock[] = [];
   const bodyContext: OdfParagraphContext = { ...context, listIdState };
   for (const child of body.children) {
@@ -149,7 +149,7 @@ function collectRuns(container: XmlElement, baseProperties: StyleProperties, pkg
             }
             const bodyElement = findChildElement(node.children, 'text:note-body');
             if (bodyElement !== undefined) {
-              entry.body = readOdfNoteBodyBlocks(bodyElement, pkg, { provenanceRegions: walk.provenanceRegions, definitions: walk.definitions }, walk.listIdState);
+              entry.body = readOdfConstructBodyBlocks(bodyElement, pkg, { provenanceRegions: walk.provenanceRegions, definitions: walk.definitions }, walk.listIdState);
             }
             walk.definitions.entries[`note:${name}`] = entry;
           }
@@ -176,12 +176,7 @@ function collectRuns(container: XmlElement, baseProperties: StyleProperties, pkg
             entry.dateIso = decodeOdfText(child);
           }
         }
-        const paragraphs = childrenWithTag(node, 'text:p').map((paragraph) => readOdfParagraph(paragraph, pkg, { provenanceRegions: walk.provenanceRegions, definitions: walk.definitions }));
-        const lists = childrenWithTag(node, 'text:list').map((list) => {
-          const numId = mintOdfListNumId(pkg, list, walk.listIdState);
-          return readOdfListParagraphs(list, { numId, level: 0 }, (element) => readOdfParagraph(element, pkg, { provenanceRegions: walk.provenanceRegions, definitions: walk.definitions }));
-        });
-        entry.body = [...paragraphs, ...lists];
+        entry.body = readOdfConstructBodyBlocks(node, pkg, { provenanceRegions: walk.provenanceRegions, definitions: walk.definitions }, walk.listIdState);
         walk.definitions.entries[`comment:${name}`] = entry;
         walk.halves.push({
           kind: 'annotation',
