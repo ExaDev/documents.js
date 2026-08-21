@@ -599,6 +599,87 @@ describe('readXlsxContent: chart graphic frames', () => {
   });
 });
 
+// A drawing picture reached through the same cascade as the chart fixture above: the worksheet's <drawing r:id> names a drawing part, whose xdr:twoCellAnchor this time carries an xdr:pic whose a:blip names a media part through the DRAWING's relationships. Anchor fields and frame come from the from/to markers through the same grid geometry the chart row resolves against.
+const TINY_PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+
+function pictureDrawingPackage(mediaBase64: string = TINY_PNG_BASE64): Package {
+  const picture = el('xdr:pic', {}, [
+    el('xdr:nvPicPr', {}, [el('xdr:cNvPr', { id: '2', name: 'Picture 1' })]),
+    el('xdr:blipFill', {}, [el('a:blip', { 'r:embed': 'rIdImage' })]),
+    el('xdr:spPr', {}, [el('a:xfrm', {}, [el('a:off', { x: '0', y: '0' }), el('a:ext', { cx: '4781525', cy: '2765425' })]), el('a:prstGeom', { prst: 'rect' }, [el('a:avLst')])]),
+  ]);
+  const drawing = el('xdr:wsDr', {}, [
+    el('xdr:twoCellAnchor', {}, [
+      el('xdr:from', {}, [el('xdr:col', {}, [txt('0')]), el('xdr:colOff', {}, [txt('19050')]), el('xdr:row', {}, [txt('1')]), el('xdr:rowOff', {}, [txt('0')])]),
+      el('xdr:to', {}, [el('xdr:col', {}, [txt('2')]), el('xdr:colOff', {}, [txt('0')]), el('xdr:row', {}, [txt('4')]), el('xdr:rowOff', {}, [txt('0')])]),
+      picture,
+      el('xdr:clientData'),
+    ]),
+  ]);
+  const worksheet = el('worksheet', {}, [
+    el('cols', {}, [el('col', { min: '1', max: '1', width: '10' }), el('col', { min: '2', max: '2', width: '20' })]),
+    el('sheetData', {}, [el('row', { r: '1' }, [el('c', { r: 'A1' }, [el('v', {}, [txt('1')])])])]),
+    el('drawing', { 'r:id': 'rIdDrawing' }),
+  ]);
+  const relationship = (id: string, type: string, target: string) => el('Relationship', { Id: id, Type: type, Target: target });
+  return {
+    parts: {
+      'xl/workbook.xml': { kind: 'xml', nodes: [el('workbook', {}, [el('sheets', {}, [el('sheet', { name: 'Data', sheetId: '1', 'r:id': 'rIdSheet' })])])] },
+      'xl/_rels/workbook.xml.rels': { kind: 'xml', nodes: [el('Relationships', {}, [relationship('rIdSheet', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet', 'worksheets/sheet1.xml')])] },
+      'xl/worksheets/sheet1.xml': { kind: 'xml', nodes: [worksheet] },
+      'xl/worksheets/_rels/sheet1.xml.rels': { kind: 'xml', nodes: [el('Relationships', {}, [relationship('rIdDrawing', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing', '../drawings/drawing1.xml')])] },
+      'xl/drawings/drawing1.xml': { kind: 'xml', nodes: [drawing] },
+      'xl/drawings/_rels/drawing1.xml.rels': { kind: 'xml', nodes: [el('Relationships', {}, [relationship('rIdImage', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image', '../media/image1.png')])] },
+      'xl/media/image1.png': { kind: 'binary', base64: mediaBase64 },
+    },
+  };
+}
+
+describe('readXlsxContent: drawing pictures', () => {
+  it('reads an xdr:pic into ContentSheet.images, media bytes sniffed and anchor fields plus frame resolved from the from/to markers', () => {
+    const document = readXlsxContent(pictureDrawingPackage());
+    if (document.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    expect(document.sheets[0]?.images).toHaveLength(1);
+    const image = document.sheets[0]?.images[0];
+    expect(image?.kind).toBe('image');
+    // The media part's own bytes decide the format, never the part's .png name -- the same contract as the pptx picture reader.
+    expect(image?.format).toBe('png');
+    expect(image?.base64).toBe(TINY_PNG_BASE64);
+    expect(image?.anchorColumn).toBe(0);
+    expect(image?.anchorRow).toBe(1);
+    // Same anchor geometry as the chart row: anchored at column 0 offset 19050 EMU, row 1, spanning to the start of column 2 and row 4, size the difference of the two anchors.
+    const col0 = columnWidthCharsToPt(10);
+    const col1 = columnWidthCharsToPt(20);
+    const offsetX = (19050 / 914400) * 72;
+    expect(image?.offsetXPt).toBeCloseTo(offsetX, 5);
+    expect(image?.offsetYPt).toBe(0);
+    expect(image?.widthPt).toBeCloseTo(col0 + col1 - offsetX, 5);
+    expect(image?.heightPt).toBeCloseTo(45, 5);
+  });
+
+  it('leaves a picture whose media bytes do not sniff as PNG/JPEG unread rather than emitting an unsniffable image', () => {
+    const document = readXlsxContent(pictureDrawingPackage('aGVsbG8gd29ybGQ='));
+    if (document.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    expect(document.sheets[0]?.images).toEqual([]);
+  });
+
+  it('round-trips the whole document through ContentDocumentSchema, so the sheet image is schema-valid as read', () => {
+    expect(ContentDocumentSchema.safeParse(readXlsxContent(pictureDrawingPackage())).success).toBe(true);
+  });
+
+  it('does not survive the write pair: buildXlsxPackageFromContent emits no drawing part, so the read row is one-way (the established cell-comment asymmetry)', () => {
+    const rewritten = readXlsxContent(decodePackage(encodePackage(buildXlsxPackageFromContent(readXlsxContent(pictureDrawingPackage())))));
+    if (rewritten.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    expect(rewritten.sheets[0]?.images).toEqual([]);
+  });
+});
+
 // The two worksheet rule families no fixture in this repo carries and no harmonised vocabulary yet names (the construct inventory's own corpus gate defers freezing their shape until a real producer file is verified against): synthesized per ECMA-376, and quarantined verbatim onto each rule's anchor cell through the residue channel -- carried, restorable by a same-format writer, never interpreted here.
 function worksheetOnlyPackage(worksheet: ReturnType<typeof el>): Package {
   const workbook = el('workbook', {}, [el('sheets', {}, [el('sheet', { name: 'Data', sheetId: '1', 'r:id': 'rIdSheet' })])]);
