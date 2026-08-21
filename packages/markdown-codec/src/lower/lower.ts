@@ -24,8 +24,8 @@ import type { MarkdownDiagnosticSink } from '../diagnostics/diagnostics';
 import { MarkdownDiagnosticCodes, MarkdownInputTooLargeError, NOOP_MARKDOWN_DIAGNOSTIC_SINK } from '../diagnostics/diagnostics';
 import type { ReadMarkdownOptions } from '../options/options';
 import type { NumIdMintState } from '../shared/list-id';
-import { createNumIdMintState, mintedListType, mintListNumId } from '../shared/list-id';
-import { CODE_BLOCK_STYLE_ID, HORIZONTAL_RULE_STYLE_ID, HTML_PREFORMATTED_STYLE_ID, MATH_BLOCK_STYLE_ID, QUOTE_INDENT_PT, QUOTE_STYLE_ID, TASK_CHECKBOX_CHECKED, TASK_CHECKBOX_UNCHECKED, headingStyleId } from '../shared/style-constants';
+import { createNumIdMintState, mintListItemId, mintedListType, mintListNumId } from '../shared/list-id';
+import { CODE_BLOCK_STYLE_ID, HORIZONTAL_RULE_STYLE_ID, HTML_PREFORMATTED_STYLE_ID, MATH_BLOCK_STYLE_ID, QUOTE_INDENT_PT, QUOTE_STYLE_ID, headingStyleId } from '../shared/style-constants';
 import { extractFrontMatter } from './front-matter';
 import type { MarkdownImageResolver } from './image';
 import { resolveMarkdownImage } from './image';
@@ -38,6 +38,8 @@ import { lowerTable } from './table';
 interface ListMembership {
   readonly numId: string;
   readonly level: number;
+  readonly checked?: boolean;
+  readonly itemId?: string;
 }
 
 interface BlockLowerContext {
@@ -60,7 +62,7 @@ function decorateParagraph(paragraph: ContentParagraph, context: BlockLowerConte
     result = { ...result, indentLeftPt: context.quoteDepth * QUOTE_INDENT_PT, ...(result.styleId === undefined ? { styleId: QUOTE_STYLE_ID } : {}) };
   }
   if (context.list !== undefined) {
-    result = { ...result, list: { numId: context.list.numId, level: context.list.level } };
+    result = { ...result, list: { ...context.list } };
   }
   return result;
 }
@@ -190,27 +192,16 @@ function lowerBlockquote(node: Extract<MarkdownBlockNode, { type: 'blockquote' }
   return blocks;
 }
 
-// Prepends a GFM task-list checkbox glyph to the first block among `blocks` that is a ContentParagraph -- the item's own leading task-list-item marker was already stripped from the source text by src/block/block.ts's own extractTaskListMarker, so this is the only place that state (MarkdownListItemNode.checked) still needs to be represented. Returns whether a paragraph was found to apply it to; a `false` result (the item's own first block is a table or a resolved image, neither of which can carry a leading run at all) leaves the checkbox state unrepresented entirely -- a narrower, more severe version of the same LIST_ITEM_BLOCK_UNLISTED gap already reported for that block.
-function applyTaskCheckbox(blocks: ContentBlock[], checked: boolean): boolean {
-  const first = blocks[0];
-  if (first?.kind !== 'paragraph') {
-    return false;
-  }
-  const glyph = checked ? TASK_CHECKBOX_CHECKED : TASK_CHECKBOX_UNCHECKED;
-  const checkboxRun: ContentRun = { text: `${glyph} ` };
-  blocks[0] = { ...first, runs: [checkboxRun, ...first.runs] };
-  return true;
-}
-
+// Lowering one list item: every block the item directly contains carries the SAME membership -- numId, level, a minted itemId identifying this one item across those blocks, and the GFM checkbox state when the item is a task item (document-schema.js's ContentListMembership.checked, the field that retired this package's old checkbox-glyph prepend: the state now rides the membership instead of a text run, so it survives even when the item's first block is one the glyph could never be prepended to). A table or resolved image directly inside the item still carries no membership of its own -- only ContentParagraph has the field -- which remains LIST_ITEM_BLOCK_UNLISTED's gap.
 function lowerListItem(item: MarkdownListItemNode, numId: string, level: number, context: BlockLowerContext, contentWidthPt: number): ContentBlock[] {
-  const nonListChildCount = item.children.filter((child) => child.type !== 'list').length;
-  if (nonListChildCount > 1) {
-    context.sink({ code: MarkdownDiagnosticCodes.LIST_ITEM_MULTI_BLOCK_FLATTENED, severity: 'info', message: 'a list item directly containing more than one block loses its own item boundary once lowered -- ContentListMembership carries only numId/level, with no field distinguishing "one item, several blocks" from "several items sharing this numId/level"' });
-  }
-
-  const itemContext: BlockLowerContext = { ...context, list: { numId, level } };
+  const membership: ListMembership = {
+    numId,
+    level,
+    ...(item.checked !== undefined ? { checked: item.checked } : {}),
+    itemId: mintListItemId(context.numIdState),
+  };
+  const itemContext: BlockLowerContext = { ...context, list: membership };
   const blocks: ContentBlock[] = [];
-  let checkboxApplied = item.checked === undefined;
   let ownLevelBlockCount = 0;
   for (const child of item.children) {
     if (child.type === 'list') {
@@ -219,18 +210,11 @@ function lowerListItem(item: MarkdownListItemNode, numId: string, level: number,
     }
     const childBlocks = lowerBlock(child, itemContext, contentWidthPt);
     ownLevelBlockCount += childBlocks.length;
-    if (!checkboxApplied) {
-      checkboxApplied = applyTaskCheckbox(childBlocks, item.checked === true);
-    }
     blocks.push(...childBlocks);
   }
   if (ownLevelBlockCount === 0) {
-    // A truly empty item (no children at all), or one whose sole content is a nested list, has nothing of its own to carry ContentListMembership(numId, level) on -- without a placeholder paragraph here, the item's own existence (and, when a nested list follows, that list's own nesting anchor) is lost entirely rather than degraded.
-    const placeholder: ContentBlock[] = [decorateParagraph({ kind: 'paragraph', runs: [] }, itemContext)];
-    if (!checkboxApplied) {
-      applyTaskCheckbox(placeholder, item.checked === true);
-    }
-    blocks.unshift(...placeholder);
+    // A truly empty item (no children at all), or one whose sole content is a nested list, has nothing of its own to carry ContentListMembership(numId, level) on -- without a placeholder paragraph here, the item's own existence (and, when a nested list follows, that list's own nesting anchor) is lost entirely rather than degraded. The placeholder carries the full membership, checked state included, so a task item wrapping only a nested list keeps its checkbox.
+    blocks.unshift(decorateParagraph({ kind: 'paragraph', runs: [] }, itemContext));
   }
   return blocks;
 }

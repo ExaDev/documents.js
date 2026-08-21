@@ -59,3 +59,10 @@ export function parseListNumId(numId: string): ListNumIdInfo | undefined {
 export function mintedListType(numId: string): 'bullet' | 'ordered' | undefined {
   return parseListNumId(numId)?.type;
 }
+
+// The opaque itemId string src/lower (mint) and src/emit (compare) share for list-item IDENTITY (document-schema.js's ContentListMembership.itemId): one id per item, shared by every block of that item, distinguishing "one item, several blocks" from "several items sharing this numId/level". Drawn from the same monotonic per-document counter as numIds (never reused, never colliding -- the `md-i` prefix is outside the numId grammar), threaded through the same NumIdMintState so one lowering mints both families without a second state object.
+export function mintListItemId(state: NumIdMintState): string {
+  const id = state.next;
+  state.next += 1;
+  return `md-i${String(id)}`;
+}
