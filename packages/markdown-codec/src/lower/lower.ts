@@ -3,7 +3,7 @@
 //  - document envelope -> one ContentSection, A4 + 1in default page geometry, overridable via ReadMarkdownOptions.pageSize/margins -- MarkdownDiagnosticCodes.INVENTED_PAGE_GEOMETRY (markdown has no page concept of its own; this ALWAYS fires, once per lowered document).
 //  - ATX/setext heading -> styleId "Heading1".."Heading6", mirroring odf.js's readOdt convention exactly (src/shared/style-constants.ts's headingStyleId), plus the canonical ContentParagraph.headingLevel document-schema.js defines -- the level number itself (always 1-6 here: ATX/setext cap at six), so a consumer that never learned this package's own styleId spelling still knows the heading's depth.
 //  - emphasis/strong/strikethrough -> italic/bold/strike ContentRun fields; links/autolinks -> ContentRun.hyperlink; code spans -> a Courier New run; hard/soft breaks -> literal '\n'/' ' -- all in src/lower/inline.ts, alongside MarkdownDiagnosticCodes.NESTED_EMPHASIS_FLATTENED and LINK_TITLE_DROPPED.
-//  - fenced/indented code block -> one paragraph, styleId 'CodeBlock', '\n'-joined literal, monospace -- MarkdownDiagnosticCodes.CODE_BLOCK_INFO_STRING_DROPPED when a fence's own info string is non-empty.
+//  - fenced/indented code block -> one paragraph, styleId 'CodeBlock', '\n'-joined literal, monospace. A fence's info string splits at its first word (splitInfoString below): the language word rides ContentParagraph.codeLanguage semantically, and any pandoc-style attribute remainder quarantines as markdown residue on the same paragraph for this package's own writer to re-emit verbatim -- nothing is dropped, so the row carries no diagnostic code of its own any more.
 //  - blockquote -> styleId 'Quote' (a real Word built-in style name) plus indentLeftPt per nesting level; a heading inside a quote keeps its own Heading{N} styleId (decorateParagraph below only applies 'Quote' when nothing more specific already set a styleId) -- MarkdownDiagnosticCodes.BLOCKQUOTE_NESTED_DEPTH beyond level 1.
 //  - thematic break -> an empty paragraph, styleId 'HorizontalRule' -- deliberately NOT ContentPageBreak (would inject a spurious page break into every generated PDF/docx this ContentDocument later feeds). Whether a consumer that does not resolve styleId at all renders this invisibly is a property of THAT consumer, not something this package's own read pipeline can detect or diagnose, so it carries no code of its own.
 //  - lists (bullet/ordered/task) -> flat ContentListMembership numId/level, encoding ordered-vs-unordered/task/tight-loose into the numId string itself (src/shared/list-id.ts) -- MarkdownDiagnosticCodes.LIST_MARKER_TYPE_CONFLICT (a nested list's own marker type disagrees with its numId's minted type), LIST_ITEM_BLOCK_UNLISTED (a table or a resolved image directly inside an item -- ContentListMembership lives only on ContentParagraph), LIST_ITEM_MULTI_BLOCK_FLATTENED (more than one non-nested-list block directly inside one item loses its own item-boundary identity).
@@ -115,11 +115,29 @@ function lowerParagraph(node: MarkdownParagraphNode, context: BlockLowerContext)
   return blocks;
 }
 
-function lowerCodeBlock(node: Extract<MarkdownBlockNode, { type: 'codeBlock' }>, context: BlockLowerContext): ContentBlock[] {
-  if (node.fenced && node.infoString !== undefined && node.infoString.length > 0) {
-    context.sink({ code: MarkdownDiagnosticCodes.CODE_BLOCK_INFO_STRING_DROPPED, severity: 'info', message: `fenced code block's own info string "${node.infoString}" has no ContentParagraph equivalent and was dropped` });
+// A fence's info string splits at its first word: that word is the language (CommonMark's own "the first word of the info string is typically used to specify the language") and lands semantically on ContentParagraph.codeLanguage; everything after it is pandoc-style attribute syntax with no cross-format meaning and quarantines as markdown residue on the same paragraph, restorable verbatim by this package's own writer. One carve-out: an info string opening with `{` is an attribute block with no language word at all, so the whole string rides the residue and codeLanguage stays absent -- a language vocabulary never starts with an attribute opener. The AST's own info string is already unescaped and trimmed, so the split works on cleaned text and the writer re-emits the two halves joined by one space (a run of whitespace between them normalises to that single space -- the only reconstruction choice this makes).
+function splitInfoString(infoString: string): { readonly language: string | undefined; readonly remainder: string | undefined } {
+  const firstWhitespace = infoString.search(/\s/);
+  if (firstWhitespace === -1) {
+    return infoString.startsWith('{') ? { language: undefined, remainder: infoString } : { language: infoString, remainder: undefined };
   }
-  const paragraph: ContentParagraph = { kind: 'paragraph', runs: [lowerCodeBlockRun(node.literal.replace(/\n$/, ''))], styleId: CODE_BLOCK_STYLE_ID };
+  const firstWord = infoString.slice(0, firstWhitespace);
+  const remainder = infoString.slice(firstWhitespace).trim();
+  if (firstWord.startsWith('{')) {
+    return { language: undefined, remainder: infoString.trim() };
+  }
+  return { language: firstWord, remainder: remainder.length > 0 ? remainder : undefined };
+}
+
+function lowerCodeBlock(node: Extract<MarkdownBlockNode, { type: 'codeBlock' }>, context: BlockLowerContext): ContentBlock[] {
+  const info = node.fenced && node.infoString !== undefined && node.infoString.length > 0 ? splitInfoString(node.infoString) : { language: undefined, remainder: undefined };
+  const paragraph: ContentParagraph = {
+    kind: 'paragraph',
+    runs: [lowerCodeBlockRun(node.literal.replace(/\n$/, ''))],
+    styleId: CODE_BLOCK_STYLE_ID,
+    ...(info.language !== undefined ? { codeLanguage: info.language } : {}),
+    ...(info.remainder !== undefined ? { source: { format: 'markdown', xml: info.remainder } } : {}),
+  };
   return [decorateParagraph(paragraph, context)];
 }
 

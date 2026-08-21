@@ -1,7 +1,7 @@
 // ContentDocument -> markdown text: writeMarkdown's own build-side half, the structural inverse of src/lower/lower.ts. Every mapping mirrors that module's own top-of-file table in reverse:
 //
 //  - "Heading{1..6}" styleId -> ATX heading, "#" repeated to the level, clamped through document-schema.js's own shared clampHeadingLevel (one heading-range clamp across the ecosystem instead of a private copy here) -- MarkdownDiagnosticCodes.HEADING_LEVEL_CLAMPED when the level exceeds 6 (a markdown-produced document never carries one, but ContentDocument is a shared cross-format pivot; a paragraph from, say, odt's own unbounded readOutlineLevel can).
-//  - 'CodeBlock'/'HorizontalRule'/'HTMLPreformatted' styleId -> a fenced code block / a thematic break / literal, unescaped text.
+//  - 'CodeBlock'/'HorizontalRule'/'HTMLPreformatted' styleId -> a fenced code block / a thematic break / literal, unescaped text. A CodeBlock paragraph's own codeLanguage re-emits as the fence's info word, with any markdown-residue remainder (src/lower/lower.ts's splitInfoString) re-emitted verbatim after it -- one space between fence and info line, the spec's own canonical spacing, which also keeps an info word that begins with the fence character from fusing into the fence itself.
 //  - 'Quote' styleId, or ANY of the four styleIds above while indentLeftPt is also set (a heading/code-block/rule/preformatted-HTML block that sat inside a blockquote when this package's own src/lower produced it) -> '> ' repeated per recovered nesting level (Math.round(indentLeftPt / QUOTE_INDENT_PT)) prefixed to every line of the block's own rendering. A paragraph with indentLeftPt set but none of these five styleIds is a genuine cross-format ambiguity this package cannot resolve (is it a quote, or just some other format's own paragraph indentation?) -- MarkdownDiagnosticCodes.PARAGRAPH_INDENT_DROPPED; the indent is dropped, the paragraph still renders.
 //  - ContentListMembership -> a bullet/ordered/task-list item, decoded from its own numId string (src/shared/list-id.ts) -- MarkdownDiagnosticCodes.LIST_NUMID_FALLBACK for a numId this package never minted itself, or a depth-only membership carrying no numId at all (both fall back to a plain, tight, non-task bullet, per that module's own documented cross-format contract).
 //  - ContentTable -> a GFM table, src/emit/table.ts.
@@ -100,8 +100,12 @@ function renderParagraphBody(paragraph: ContentParagraph, context: EmitContext):
   if (paragraph.styleId === CODE_BLOCK_STYLE_ID) {
     const literal = paragraph.runs.map((run) => run.text).join('');
     const fence = codeFenceFor(literal, context.codeFenceChar);
+    // The inverse of src/lower/lower.ts's splitInfoString: the language word and the quarantined remainder rejoin as the fence's info line, one space between them. Both halves re-emit verbatim -- the language is a source-format identifier, not something to re-spell, and the remainder is this package's own markdown residue, which a same-format writer re-emits as-is (the residue channel's restorable tier).
+    const remainder = paragraph.source?.format === 'markdown' ? paragraph.source.xml : undefined;
+    const info = [paragraph.codeLanguage, remainder].filter((part) => part !== undefined && part.length > 0).join(' ');
+    const opening = info.length > 0 ? `${fence} ${info}` : fence;
     // An empty code block ("```\n```\n", zero content lines) must not gain a spurious blank content line here -- the middle `\n${literal}\n` template below would otherwise insert one, which a reparse reads back as ONE literal blank line of content rather than none at all.
-    return literal.length === 0 ? `${fence}\n${fence}` : `${fence}\n${literal}\n${fence}`;
+    return literal.length === 0 ? `${opening}\n${fence}` : `${opening}\n${literal}\n${fence}`;
   }
   if (paragraph.styleId === HTML_PREFORMATTED_STYLE_ID) {
     return paragraph.runs.map((run) => run.text).join('');
