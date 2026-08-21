@@ -55,7 +55,7 @@
     "dexie": "^4.4.4",
     "dexie-react-hooks": "^4.4.0",
     "document-schema.js": "^4.6.0",
-    "documents.js": "^4.2.0",
+    "documents.js": "^4.2.1",
     "markdown-codec": "^4.0.14",
     "odf.js": "^5.0.9",
     "react": "^19.2.8",
