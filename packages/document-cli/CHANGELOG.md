@@ -1,3 +1,24 @@
+# [3.2.0](https://github.com/ExaDev/documents.js/compare/document-cli@3.1.19...document-cli@3.2.0) (2026-08-21)
+
+
+### Bug Fixes
+
+* **documents.js:** lower markdown display math from the embedded formula carry ([f60f36e](https://github.com/ExaDev/documents.js/commit/f60f36ef308f1a235092a03282acd7061289b050))
+
+
+### Features
+
+* **cli:** handle internalLink items in the pdf editor screens ([c3c1271](https://github.com/ExaDev/documents.js/commit/c3c1271c9f8dd976ed0629d8f44fefb1544da2d2))
+
+
+### Dependencies
+
+- Updated documents.js to ^4.4.0
+- Updated pdf-codec to ^3.2.0
+- Updated odf.js to ^5.1.1
+- Updated document-outline.js to ^1.0.9
+- Updated document-schema.js to ^4.8.0
+
 ## [3.1.19](https://github.com/ExaDev/documents.js/compare/document-cli@3.1.18...document-cli@3.1.19) (2026-08-21)
 
 
