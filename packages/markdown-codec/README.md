@@ -93,7 +93,7 @@ const markdown = writeMarkdown(documentPackage, {
 
 `documentPackage` is a `DocumentPackage` — document-schema.js's tree form, with a minted styles table (see [Two encodings](#two-encodings-documentpackage-and-contentdocument)). The field is named `documentPackage` rather than `package` because `package` is a reserved word in strict mode, so `const { package } = readMarkdown(src)` would not parse.
 
-Both accept an optional `signal` (`AbortSignal`) and `sink` (`MarkdownDiagnosticSink`, called once per recoverable issue or construct-mapping gap — see [Gotchas](#gotchas-and-quirks)). `writeMarkdown` throws `MarkdownUnsupportedDocumentKindError` for a package whose `kind` is not `'wordprocessing'`, checked before flattening so every non-`'wordprocessing'` package reaches it the same way regardless of what else about that package would have failed document-schema.js's own `flattenPackage`. A `'wordprocessing'` package can still fail to flatten — a group carrying a style reference the package's own `styles` table has no entry for — and that failure surfaces as `MarkdownPackageFlattenError`, not a bare `Error` from the dependency. A `DocumentPackage`'s own `definitions`/`layers`/`attachments`/`destinations`/`pages` tables have no flat-`ContentDocument` home to land in; `writeMarkdown` reports one `PACKAGE_TABLE_DROPPED` diagnostic per non-empty table it finds rather than dropping them without a trace.
+Both accept an optional `signal` (`AbortSignal`) and `sink` (`MarkdownDiagnosticSink`, called once per recoverable issue or construct-mapping gap — see [Gotchas](#gotchas-and-quirks)). `writeMarkdown` throws `MarkdownUnsupportedDocumentKindError` for a package whose `kind` is not `'wordprocessing'`, checked before flattening so every non-`'wordprocessing'` package reaches it the same way regardless of what else about that package would have failed document-schema.js's own `flattenPackage`. A `'wordprocessing'` package can still fail to flatten — a group carrying a style reference the package's own `styles` table has no entry for — and that failure surfaces as `MarkdownPackageFlattenError`, not a bare `Error` from the dependency. A `DocumentPackage`'s own `layers`/`attachments`/`destinations`/`pages` tables have no flat-`ContentDocument` home to land in; `writeMarkdown` reports one `PACKAGE_TABLE_DROPPED` diagnostic per non-empty table it finds rather than dropping them without a trace. The `definitions` table is the one exemption: this package's own link-tenant entries (what `readMarkdown` splices there from the source's reference definitions) render back out as `[label]: destination "title"` lines, so only a table holding foreign tenants reports.
 
 The same round trip as a schema-validated [`z.codec()`](https://zod.dev) pair, mirroring `pdf-codec`'s `pdfCodec`:
 
@@ -118,7 +118,7 @@ This package exposes a read/write pair and a codec at each level. The unsuffixed
 | Tree (default) | `readMarkdown` | `writeMarkdown` | `markdownCodec` | `DocumentPackage` |
 | Flat | `readMarkdownContent` | `writeMarkdownContent` | `markdownContentCodec` | `ContentDocument` |
 
-The tree pair is exactly the flat pair with the transform composed on — `readMarkdown` is `assemblePackage` over `readMarkdownContent`, `writeMarkdown` is `flattenPackage` before `writeMarkdownContent` — so both render identical markdown from the same source, pinned in `src/package.test.ts`. Options, diagnostics, and error behaviour are identical at both levels.
+The tree pair is the flat pair with the transform composed on — `readMarkdown` is `assemblePackage` over `readMarkdownContent`, `writeMarkdown` is `flattenPackage` before `writeMarkdownContent` — plus the two tree-only carries the flat form has no root for: the source's reference definitions splice into `documentPackage.definitions` (link tenant, keyed by normalised label) and the verbatim front-matter block into `documentPackage.source.frontmatter`, both rendered back out by `writeMarkdown` (`[label]: dest "title"` lines after the body; the original front matter verbatim in place of the regenerated block). Sources carrying neither render identically to the flat pair, pinned in `src/package.test.ts`; a source carrying either renders its extra block, which is the point of reaching for the tree. Options, diagnostics, and error behaviour are identical at both levels.
 
 Reach for the flat pair when composing a package boundary by hand (`decompose`/`flattenPackage` directly, or `factorStyles` with your own minting policy), when feeding a `ContentDocument`-consuming builder such as `documents.js`'s conversion pipeline, or when a layout stage needs to stamp frames onto content before it is decomposed. Everything else wants the tree.
 
@@ -185,18 +185,19 @@ Every construct `src/lower`/`src/emit` cannot represent losslessly is a document
 
 - **`md/invented-page-geometry`** — no page concept in markdown; one `ContentSection` with A4 + 1in defaults (overridable). Fires once.
 - **`md/nested-emphasis-flattened`** — same-kind nested emphasis flattens to one run.
-- **`md/link-title-dropped`** — link/image title has no `ContentRun`/`ContentImageBlock` field.
-- **`md/code-block-info-string-dropped`** — fenced code info string has no `ContentParagraph` field.
-- **`md/blockquote-nested-depth`** — nesting beyond one level is indent depth only; same-depth blockquotes are indistinguishable.
-- **`md/list-item-block-unlisted`** — a table/image in a list item cannot carry `ContentListMembership` (paragraphs only).
-- **`md/list-item-multi-block-flattened`** — multi-block list items lose item-boundary identity.
+- **`md/link-title-dropped`** — the one titled shape still dropping: a nested image (inside a link or emphasis) or an unresolved image. Every other title rides a `link` construct's `title` field — a run-level extent for an inline or reference link, a block-scoped marker pair around a resolved image (which also restores the image's original destination on the way out).
+- **`md/blockquote-container-skipped`** — a blockquote containing a heading anywhere in its subtree cannot carry its division construct (a marker extent may not open a heading scope), so that quote degrades to indent-only structure while the heading keeps its fidelity. Every other quote carries a `division` construct pair — exact container boundary and exact nesting depth, with the indent and `Quote` styleId kept as the materialised formatting.
+- **`md/list-item-block-unlisted`** — a table, resolved image, or display-math block in a list item cannot carry `ContentListMembership` (paragraphs only).
+- **`md/list-marker-type-conflict`** — a nested list whose marker type disagrees with its enclosing list's minted numId keeps the enclosing type (first-wins).
+- **`md/math-inline-preserved-as-text`** — inline `\( \)` math stays a Cambria-Math-marked raw-LaTeX run; display `$$` math is a real embedded formula carrying the presentation layer.
 - **`md/image-unresolved`** — no resolver, `undefined` return, or non-PNG/JPEG bytes degrades to alt-text run.
-- **`md/raw-html-preserved-as-text` / `md/raw-html-dropped`** — raw HTML kept as literal text (default) or dropped; never interpreted.
-- **`md/front-matter-key-unmapped`** — no YAML/TOML engine; only five known `LayoutMetadata` keys recognised.
+- **`md/raw-html-preserved-as-text` / `md/raw-html-dropped`** — raw HTML kept as literal text (default) or dropped; never interpreted. The preserved text's verbatim original quarantines as markdown residue on its node, and this package's own writer re-emits that residue as-is.
+- **`md/front-matter-key-unmapped`** — no YAML/TOML engine; only five known `LayoutMetadata` keys recognised. The verbatim original block rides the package-level residue table (`readMarkdown`'s `documentPackage.source.frontmatter`), which `writeMarkdown` re-emits as-is.
 - **`md/heading-level-clamped`** — styleId beyond `Heading6` (from another format) clamps to level 6 via document-schema.js's shared `clampHeadingLevel()`.
 - **`md/adjacent-links-merged`** / **`md/code-span-as-monospace-run`** — same-destination adjacent links merge; monospace runs emit as code spans.
 - **`md/paragraph-indent-dropped`** — `indentLeftPt` without a recognised styleId; indent dropped, paragraph renders.
 - **`md/list-numid-fallback`** — a foreign or absent `numId` (depth-only `ContentListMembership`) falls back to a plain bullet list.
+- **`md/raw-html-preserved-as-text`** — see the raw-HTML entry above.
 - **`md/table-cell-formatting-dropped`** / **`md/table-cell-multi-paragraph-joined`** — GFM cells have no rich-formatting or multi-paragraph representation.
 - **`md/duplicate-footnote-definition`** — two definitions share a label; every reference resolves to the first, both are kept as written.
 - **`md/footnote-reference-preserved-as-text`** — a reference site is a marked run, not an `anchor` construct; see [Footnotes](#footnotes).
@@ -225,11 +226,11 @@ Emission is the inverse and validates first: a section's markers must pair as ba
 
 | Corpus | Examples | Passing round trip | Rate |
 | --- | --- | --- | --- |
-| CommonMark 0.31.2 (`assets/commonmark/spec.json`) | 652 | 461 | 70.7% |
+| CommonMark 0.31.2 (`assets/commonmark/spec.json`) | 652 | 511 | 78.4% |
 | GFM tagged extensions (table/strikethrough/autolink/task-list, `assets/gfm/spec.txt`) | 23 | 22 | 95.7% |
-| Combined | 675 | 483 | 71.6% |
+| Combined | 675 | 533 | 79.0% |
 
-Every non-passing example is named individually in `src/test-support/conformance-exclusions.ts`, attributed to a closed set of causes (shrink-only — see [Conventions](#conventions)): most commonly a soft line break collapsing to a space, a dropped title/info string, a flattened list item/blockquote, or touching emphasis spans.
+Every non-passing example is named individually in `src/test-support/conformance-exclusions.ts`, attributed to a closed set of causes (shrink-only — see [Conventions](#conventions)): most commonly a soft line break collapsing to a space, a nested/unresolved image title, an emphasis-span collision, or a blockquote whose heading content skips its container pair.
 
 **Optional real-world corpus.** `test/corpus/` (gitignored) holds a `pnpm test:corpus` project for a manual sanity check against sibling READMEs on disk — asserts no throw and real content on reparse, not byte fidelity. Not part of `pnpm test`; run locally before significant parser/lower/emit changes.
 
