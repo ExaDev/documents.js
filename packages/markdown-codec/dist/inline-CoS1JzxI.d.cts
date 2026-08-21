@@ -1,6 +1,6 @@
 import { v as MarkdownInlineNode } from "./ast-8XCbjRQT.cjs";
 import { r as FootnoteLabelSet } from "./footnote-CKk4JbLk.cjs";
-import { n as LinkReferenceMap } from "./link-Dv4kxVjk.cjs";
+import { LinkReferenceMap } from "./inline/link.cjs";
 //#region src/inline/inline.d.ts
 interface InlineParseOptions {
   readonly gfmAutolinks?: boolean;

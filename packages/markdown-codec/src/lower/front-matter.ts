@@ -12,6 +12,8 @@ const LINE_ENDING_PATTERN = /\r\n|\n|\r/;
 export interface FrontMatterResult {
   readonly metadata: LayoutMetadata;
   readonly rest: string;
+  // The original front-matter block verbatim, delimiters included, present exactly when one was found and extracted -- what a same-format writer re-emits as-is (the restorable tier) so original spellings a flat-scalar metadata mapping cannot hold (unmapped keys, quote styles, ordering) survive the round trip.
+  readonly source: string | undefined;
 }
 
 function parseScalar(raw: string): string {
@@ -36,7 +38,7 @@ export function extractFrontMatter(source: string, sink: MarkdownDiagnosticSink 
   const lines = source.split(LINE_ENDING_PATTERN);
   const firstLine = lines[0];
   if (firstLine === undefined || !LEADING_DELIMITER_PATTERN.test(firstLine)) {
-    return { metadata: {}, rest: source };
+    return { metadata: {}, rest: source, source: undefined };
   }
 
   let closingIndex = -1;
@@ -47,7 +49,7 @@ export function extractFrontMatter(source: string, sink: MarkdownDiagnosticSink 
     }
   }
   if (closingIndex === -1) {
-    return { metadata: {}, rest: source };
+    return { metadata: {}, rest: source, source: undefined };
   }
 
   const metadata: { title?: string; author?: string; subject?: string; keywords?: string[]; creator?: string; createdIso?: string } = {};
@@ -82,9 +84,9 @@ export function extractFrontMatter(source: string, sink: MarkdownDiagnosticSink 
         metadata.keywords = [...parseKeywordList(value)];
         break;
       default:
-        sink({ code: MarkdownDiagnosticCodes.FRONT_MATTER_KEY_UNMAPPED, severity: 'info', message: `front matter key "${key}" has no LayoutMetadata equivalent and was dropped`, line: index + 1 });
+        sink({ code: MarkdownDiagnosticCodes.FRONT_MATTER_KEY_UNMAPPED, severity: 'info', message: `front matter key "${key}" has no LayoutMetadata equivalent and was dropped from the metadata; its original spelling survives in the verbatim front-matter block this package's own writer can re-emit`, line: index + 1 });
     }
   }
 
-  return { metadata, rest: lines.slice(closingIndex + 1).join('\n') };
+  return { metadata, rest: lines.slice(closingIndex + 1).join('\n'), source: lines.slice(0, closingIndex + 1).join('\n') };
 }

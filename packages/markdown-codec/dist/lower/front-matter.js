@@ -19,7 +19,8 @@ function extractFrontMatter(source, sink = NOOP_MARKDOWN_DIAGNOSTIC_SINK) {
 	const firstLine = lines[0];
 	if (firstLine === void 0 || !LEADING_DELIMITER_PATTERN.test(firstLine)) return {
 		metadata: {},
-		rest: source
+		rest: source,
+		source: void 0
 	};
 	let closingIndex = -1;
 	for (let index = 1; index < lines.length; index += 1) if (CLOSING_DELIMITER_PATTERN.test(lines[index] ?? "")) {
@@ -28,7 +29,8 @@ function extractFrontMatter(source, sink = NOOP_MARKDOWN_DIAGNOSTIC_SINK) {
 	}
 	if (closingIndex === -1) return {
 		metadata: {},
-		rest: source
+		rest: source,
+		source: void 0
 	};
 	const metadata = {};
 	for (let index = 1; index < closingIndex; index += 1) {
@@ -60,14 +62,15 @@ function extractFrontMatter(source, sink = NOOP_MARKDOWN_DIAGNOSTIC_SINK) {
 			default: sink({
 				code: MarkdownDiagnosticCodes.FRONT_MATTER_KEY_UNMAPPED,
 				severity: "info",
-				message: `front matter key "${key}" has no LayoutMetadata equivalent and was dropped`,
+				message: `front matter key "${key}" has no LayoutMetadata equivalent and was dropped from the metadata; its original spelling survives in the verbatim front-matter block this package's own writer can re-emit`,
 				line: index + 1
 			});
 		}
 	}
 	return {
 		metadata,
-		rest: lines.slice(closingIndex + 1).join("\n")
+		rest: lines.slice(closingIndex + 1).join("\n"),
+		source: lines.slice(0, closingIndex + 1).join("\n")
 	};
 }
 //#endregion
