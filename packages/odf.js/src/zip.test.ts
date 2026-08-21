@@ -60,3 +60,24 @@ describe('zipPackage / unzipPackage round trip', () => {
     expect(readUint32LE(bytes, 18)).toBeLessThan(original.length);
   });
 });
+
+// fflate's default entry mtime is the wall clock, whose 2-second DOS granularity would make identical input zip to different bytes across a boundary tick. The timestamp is pinned instead, so these two serialisations five seconds apart must agree byte for byte.
+describe('zipPackage: deterministic bytes regardless of wall-clock time', () => {
+  it('zips the same entries to identical bytes across a time boundary', async () => {
+    const { vi } = await import('vitest');
+    const entries: [string, { bytes: Uint8Array<ArrayBuffer>; stored?: boolean }][] = [
+      ['mimetype', { bytes: enc('application/vnd.oasis.opendocument.text'), stored: true }],
+      ['content.xml', { bytes: enc('<office:document-content/>') }],
+    ];
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-01-01T00:00:01Z'));
+      const beforeBoundary = zipPackage(entries);
+      vi.setSystemTime(new Date('2026-01-01T00:00:06Z'));
+      const afterBoundary = zipPackage(entries);
+      expect(afterBoundary).toEqual(beforeBoundary);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
