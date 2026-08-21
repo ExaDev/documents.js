@@ -270,9 +270,21 @@ jobs:
           npm pkg set name="${{ matrix.scoped }}"
           npm pkg set publishConfig.registry="https://npm.pkg.github.com"
       - name: Publish the mirror
+        # A legacy mirror package's "Manage Actions access" list on github.com still names only the archived standalone repository that created it, so this repository's GITHUB_TOKEN is denied write_package (403 "Permission permission_denied: write_package") until a user adds ExaDev/documents.js to that package's access list once. That exact signature is the skip-with-instructions case below; every other failure is real and fails the leg.
         if: steps.mirrored.outputs.already != 'true'
         working-directory: packages/${{ matrix.name }}
-        run: pnpm publish --access public --no-git-checks
+        run: |
+          set +e
+          OUTPUT=$(pnpm publish --access public --no-git-checks 2>&1)
+          STATUS=$?
+          set -e
+          echo "$OUTPUT"
+          [ "$STATUS" -eq 0 ] && exit 0
+          if printf '%s' "$OUTPUT" | grep -q 'permission_denied: write_package'; then
+            echo "::notice::Skipped ${{ matrix.scoped }}@${{ matrix.version }}: this repository is not on that GitHub package's Actions access list yet. Grant it once (a user with package admin): github.com -> Organization ExaDev -> Packages -> ${{ matrix.scoped }} -> Package settings -> Manage Actions access -> add Repository \"documents.js\" with Role \"Write\". The first release after that mirrors automatically; see the Releases section of the root README."
+            exit 0
+          fi
+          exit "$STATUS"
 
   publish-npm-aliases:
     name: Publish npm alias (${{ matrix.alias }})
@@ -316,7 +328,7 @@ jobs:
         working-directory: packages/${{ matrix.name }}
         run: npm pkg set name="${{ matrix.alias }}"
       - name: Publish the alias
-        # Trusted publishing is registered per package name, so each alias needs its own one-time registration on npmjs.com against this repository and workflow file. Until that registration exists, npm's OIDC exchange 404s (`/-/npm/v1/oidc/token` appears in the failure output) -- that exact signature is the skip-with-instructions case below; every other failure is real and fails the leg.
+        # Trusted publishing is registered per package name, so each alias needs its own one-time registration on npmjs.com against this repository and workflow file. Until that registration exists the publish fails two ways depending on where pnpm gives up: the OIDC exchange itself 404s (`oidc/token` or pnpm's `ERR_PNPM_AUTH_TOKEN_EXCHANGE` in the output), or the exchange is skipped and the bare PUT 404s on the unregistered name (`404 Not Found - PUT ... registry.npmjs.org/<alias>`). Both exact signatures are the skip-with-instructions case below; every other failure is real and fails the leg.
         if: steps.published.outputs.already != 'true'
         working-directory: packages/${{ matrix.name }}
         run: |
@@ -326,7 +338,7 @@ jobs:
           set -e
           echo "$OUTPUT"
           [ "$STATUS" -eq 0 ] && exit 0
-          if printf '%s' "$OUTPUT" | grep -q 'oidc/token'; then
+          if printf '%s' "$OUTPUT" | grep -qE 'oidc/token|ERR_PNPM_AUTH_TOKEN_EXCHANGE|404 Not Found - PUT .*registry\.npmjs\.org'; then
             echo "::notice::Skipped ${{ matrix.alias }}@${{ matrix.version }}: no npm trusted publisher is registered for that package name against this repository and workflow yet. Register it once (a user with access to the package's npm settings): npmjs.com -> Packages -> ${{ matrix.alias }} -> Settings -> Trusted publisher -> GitHub Actions, with Organization \"ExaDev\", Repository \"documents.js\", Workflow filename \"ci.yml\", environment left empty, allowed action \"npm publish\". The first release after that publishes under the alias automatically; see the Releases section of the root README."
             exit 0
           fi
