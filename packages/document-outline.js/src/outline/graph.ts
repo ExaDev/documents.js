@@ -11,7 +11,7 @@ import { stableContentHash } from './hash';
 //
 // Containment is an EDGE, not tree position, because a shared node has no single position: (parent)-[:CONTAINS {order}]->(child), order being the child's index in the parent's document order (graph edges are unordered by default and document order is semantically load-bearing). A style ref becomes (group)-[:STYLED_BY {order: 0}]->(entry) and an anchor descriptor's definitions ref becomes (node)-[:DEFINED_BY]->(entry); policy-extracted property values become (node)-[:PROPERTY {path}]->(value). Every edge carries an order so #660's ordered style chains and fractional ordering keys extend the vocabulary without reshaping it.
 //
-// DEREFFING BEFORE HASHING is the load-bearing rule for cross-document dedup: a `style: 's1'` ref (or an anchor's `definition: 'n1'`) is a document-local label with no cross-document meaning -- every assembled package mints its own s1, s2, ... keys -- so the projector substitutes the referenced ENTRY'S content hash into the referencing node's hash input and never hashes the bare key. Two structurally identical paragraphs whose documents name an identical style entry differently therefore dedupe to one node. Hashing runs in dependency order for the same reason: table entries first (they reference nothing further), tree nodes second (using the already-computed entry hashes).
+// DEREFFING BEFORE HASHING is the load-bearing rule for cross-document dedup: a `style: 's1'` ref (or an anchor's `definition: 'n1'`) is a document-local label with no cross-document meaning -- every assembled package mints its own s1, s2, ... keys -- so the projector substitutes the referenced ENTRY'S content hash into the referencing node's hash input and never hashes the bare key. Two structurally identical paragraphs whose documents name an identical style entry differently therefore dedupe to one node. Hashing runs in dependency order for the same reason: table entries first, tree nodes second (using the already-computed entry hashes) -- and an entry's own body may reference further entries (a footnote body carrying an anchor marker naming a note of its own), so an entry's walk recurses through the same deref while a cycle of entries, which no content hash can cover, is refused loudly.
 //
 // The document ROOT is the one node whose id is not computed: content hashing the root would change its id on every edit (any interior edit cascades up the DAG), which is the wrong identity scheme for "this document" as a persistently addressed thing. The caller assigns a stable external id -- a git ref pointing at a moving commit hash -- and the projection uses it verbatim. Package-level metadata/symbolTable/pages/source stay direct properties of the root even when two documents' values coincide: they are per-document identity facts, not reused content.
 //
@@ -140,6 +140,9 @@ class DocumentProjection {
   // A table entry's decided fate: extracted (node id minted, referencing nodes substitute the id) or inlined (referencing nodes fold the walked content). Memoised so the root walk and every tree ref see one decision per entry.
   private readonly tableDecisions = new Map<string, { status: 'extract'; id: string; walked: RecordWalked } | { status: 'inline'; walked: RecordWalked }>();
 
+  // Entries whose decision walk is currently on the stack. An entry's body may itself carry an anchor descriptor naming another entry (a footnote body referencing a note of its own), so an entry's walk recurses through the same deref -- same-key re-entry means an entry is reachable from its own body, a cycle no content hash can cover (the hash would have to include itself), refused here by name rather than walked to a stack overflow.
+  private readonly decidingEntries = new Set<string>();
+
   private tableOf(field: TableField): TableValue | undefined {
     return this.pkg[field];
   }
@@ -149,12 +152,17 @@ class DocumentProjection {
     const memoKey = `${field}\u0000${key}`;
     const memo = this.tableDecisions.get(memoKey);
     if (memo !== undefined) return memo;
+    if (this.decidingEntries.has(memoKey)) {
+      throw new Error(`projectDocumentGraph: ${field} table entry "${key}" is reachable from its own body (a cycle of definition refs)`);
+    }
     const table = this.tableOf(field);
     const entry = table?.[key];
     if (entry === undefined) {
       throw new Error(`projectDocumentGraph: ${field} table entry "${key}" referenced but not present`);
     }
+    this.decidingEntries.add(memoKey);
     const walked = this.walkRecord(recordOf(entry), [field, key]);
+    this.decidingEntries.delete(memoKey);
     if (this.policy([field, key], entry) === 'extract') {
       const id = stableContentHash(walked.hash);
       const decided = { status: 'extract' as const, id, walked };
@@ -194,7 +202,7 @@ class DocumentProjection {
     if (!this.edges.has(key)) this.edges.set(key, edge);
   }
 
-  // The generic own-content walk: records rebuild key by key (asking the policy at every property, array elements are never extraction candidates -- a whole element cannot move to a node without breaking its position, while its properties stay addressable), arrays walk their elements, scalars pass through. The one typed ref inside content is an anchor descriptor's `definition` key -- the only string-valued key of that name the content model defines -- dereferenced per the module's rule: the referenced entry's hash for the hash input, never the bare local key.
+  // The generic own-content walk: records rebuild key by key (asking the policy at every property, array elements are never extraction candidates -- a whole element cannot move to a node without breaking its position, while its properties stay addressable), arrays walk their elements, scalars pass through. The one typed ref inside content is an anchor descriptor's `definition` key, recognised by the containing record's own `kind: 'anchor'` discriminator -- the discriminator, not the key name alone, because the walk reads definitions-table bodies too and those bodies are tenant vocabulary where a same-named key is content (a glossary entry's `definition` is the term's meaning, and one that coincidentally names a real key must stay content rather than silently enter a hash as a ref id). Dereferenced per the module's rule: the referenced entry's hash for the hash input, never the bare local key.
   private walk(value: unknown, path: PropertyPath): Walked {
     if (Array.isArray(value)) {
       const hashes: unknown[] = [];
@@ -219,7 +227,7 @@ class DocumentProjection {
     for (const key of Object.keys(value)) {
       if (key === '$schema') continue; // a serialised dump's release label is transport metadata, not content -- the hash recipe's own rule 1, kept true for the graph face too
       const child = value[key];
-      if (key === 'definition' && typeof child === 'string') {
+      if (key === 'definition' && typeof child === 'string' && value.kind === 'anchor') {
         const resolved = this.resolveDefinitionRef(child);
         if (resolved.id !== undefined) {
           hash.definition = resolved.id;
@@ -275,7 +283,7 @@ class DocumentProjection {
     if (this.pkg.source !== undefined) envelope.source = this.pkg.source;
     const envelopeWalk = this.walkRecord(envelope, []);
 
-    // Decide every present table's entries first: dependency order (entries reference nothing further), and the tree's ref substitutions then read memoised decisions. Inlined entries fold back into a root table property; a table whose every entry extracted leaves no property behind.
+    // Decide every present table's entries first: dependency order, so the tree's ref substitutions read memoised decisions (an entry's own body may reference further entries through its anchor markers -- decideEntry recurses through the deref and refuses a cycle among entries loudly). Inlined entries fold back into a root table property; a table whose every entry extracted leaves no property behind.
     const leftoverTables: Record<string, Record<string, unknown>> = {};
     for (const field of TABLE_FIELDS) {
       const table = this.tableOf(field);

@@ -249,6 +249,88 @@ describe('definitions tables', () => {
       /definition ref "gone" names no entry in the definitions table/,
     );
   });
+
+  it('treats a definitions-entry body key spelled "definition" as tenant content, never a table ref', () => {
+    // DefinitionEntry bodies are tenant vocabulary, loose by design (src/definitions.ts): a glossary entry legitimately spells `definition` for a term's meaning, so the deref is gated on the containing record being an anchor descriptor, not on the key name. A value that coincidentally names a real key must stay content too -- hashed verbatim, never silently swapped for a ref id.
+    const pkg = wordprocessingPackage(
+      [sectionGroup([{ node: { kind: 'anchor', anchorType: 'footnote', name: '1', definition: 'n1' }, children: [] }])],
+      {
+        definitions: {
+          g1: { kind: 'glossary', term: 'quorum', definition: 'the minimum number of members needed' },
+          g2: { kind: 'glossary', term: 'proxy', definition: 'n1' }, // coincidentally names a real key
+          n1: NOTE_BODY,
+        },
+      },
+    );
+    expectSchemaValid(pkg, 'glossary');
+    const graph = projectDocumentGraph([{ id: 'doc', package: pkg }]);
+    const glossary = graph.nodes.filter((node) => node.kind === 'definitionEntry' && node.tenantKind === 'glossary');
+    expect(glossary.map((node) => node.definition).sort()).toEqual(['n1', 'the minimum number of members needed']);
+    // The one DEFINED_BY edge is the tree anchor's own ref; neither glossary body produced one.
+    expect(graph.edges.filter((edge) => edge.kind === 'DEFINED_BY')).toHaveLength(1);
+  });
+
+  it('extends deref-before-hash into entry bodies: an entry referencing another entry hashes its content', () => {
+    const chain = (secondBody: string): DocumentPackage =>
+      wordprocessingPackage(
+        [sectionGroup([{ node: { kind: 'anchor', anchorType: 'footnote', name: '1', definition: 'n1' }, children: [] }])],
+        {
+          definitions: {
+            n1: {
+              kind: 'footnote',
+              blocks: [
+                {
+                  kind: 'paragraph',
+                  runs: [{ text: 'See also.' }],
+                  constructs: [{ descriptor: { kind: 'anchor', anchorType: 'footnote', name: '2', definition: 'n2' }, startRun: 0, endRun: 0 }],
+                },
+              ],
+            },
+            n2: { kind: 'footnote', blocks: [{ kind: 'paragraph', runs: [{ text: secondBody }] }] },
+          },
+        },
+      );
+    expectSchemaValid(chain('Second body.'), 'chain');
+    const graphA = projectDocumentGraph([{ id: 'doc', package: chain('Second body.') }]);
+    const graphB = projectDocumentGraph([{ id: 'doc', package: chain('Second body, revised.') }]);
+    const entryByBody = (graph: PropertyGraph, text: string) =>
+      graph.nodes.find((node) => node.kind === 'definitionEntry' && JSON.stringify(node).includes(JSON.stringify(text)))!;
+    // n2's content feeds n1's hash through the body's anchor deref, so editing n2 mints a new n1 beside it.
+    expect(entryByBody(graphA, 'See also.').id).not.toBe(entryByBody(graphB, 'See also.').id);
+    expect(entryByBody(graphA, 'Second body.').id).not.toBe(entryByBody(graphB, 'Second body, revised.').id);
+  });
+
+  it('refuses a cycle of definition refs among entries by name, not with a stack overflow', () => {
+    // Two footnotes whose bodies reference each other -- the mutual-reference case the graph hardenings name as legitimate-looking input. No content hash can cover it (the hash would have to include itself), so the projection refuses it loudly.
+    const mutual: DocumentPackage = wordprocessingPackage([sectionGroup([paragraph('Body.')])], {
+      definitions: {
+        n1: {
+          kind: 'footnote',
+          blocks: [
+            {
+              kind: 'paragraph',
+              runs: [{ text: 'See n2.' }],
+              constructs: [{ descriptor: { kind: 'anchor', anchorType: 'footnote', name: '2', definition: 'n2' }, startRun: 0, endRun: 0 }],
+            },
+          ],
+        },
+        n2: {
+          kind: 'footnote',
+          blocks: [
+            {
+              kind: 'paragraph',
+              runs: [{ text: 'See n1.' }],
+              constructs: [{ descriptor: { kind: 'anchor', anchorType: 'footnote', name: '1', definition: 'n1' }, startRun: 0, endRun: 0 }],
+            },
+          ],
+        },
+      },
+    });
+    expectSchemaValid(mutual, 'mutual');
+    expect(() => projectDocumentGraph([{ id: 'doc', package: mutual }])).toThrowError(
+      /definitions table entry "n1" is reachable from its own body/,
+    );
+  });
 });
 
 describe('extraction policy', () => {
