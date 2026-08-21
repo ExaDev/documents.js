@@ -12,7 +12,7 @@ const MarkdownDiagnosticCodes = {
 	INVENTED_PAGE_GEOMETRY: "md/invented-page-geometry",
 	NESTED_EMPHASIS_FLATTENED: "md/nested-emphasis-flattened",
 	LINK_TITLE_DROPPED: "md/link-title-dropped",
-	BLOCKQUOTE_NESTED_DEPTH: "md/blockquote-nested-depth",
+	BLOCKQUOTE_CONTAINER_SKIPPED: "md/blockquote-container-skipped",
 	LIST_ITEM_BLOCK_UNLISTED: "md/list-item-block-unlisted",
 	IMAGE_UNRESOLVED: "md/image-unresolved",
 	RAW_HTML_PRESERVED_AS_TEXT: "md/raw-html-preserved-as-text",

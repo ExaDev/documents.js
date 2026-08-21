@@ -2,7 +2,7 @@
 //
 //  - "Heading{1..6}" styleId -> ATX heading, "#" repeated to the level, clamped through document-schema.js's own shared clampHeadingLevel (one heading-range clamp across the ecosystem instead of a private copy here) -- MarkdownDiagnosticCodes.HEADING_LEVEL_CLAMPED when the level exceeds 6 (a markdown-produced document never carries one, but ContentDocument is a shared cross-format pivot; a paragraph from, say, odt's own unbounded readOutlineLevel can).
 //  - 'CodeBlock'/'HorizontalRule'/'HTMLPreformatted' styleId -> a fenced code block / a thematic break / literal, unescaped text. A CodeBlock paragraph's own codeLanguage re-emits as the fence's info word, with any markdown-residue remainder (src/lower/lower.ts's splitInfoString) re-emitted verbatim after it -- one space between fence and info line, the spec's own canonical spacing, which also keeps an info word that begins with the fence character from fusing into the fence itself.
-//  - 'Quote' styleId, or ANY of the four styleIds above while indentLeftPt is also set (a heading/code-block/rule/preformatted-HTML block that sat inside a blockquote when this package's own src/lower produced it) -> '> ' repeated per recovered nesting level (Math.round(indentLeftPt / QUOTE_INDENT_PT)) prefixed to every line of the block's own rendering. A paragraph with indentLeftPt set but none of these five styleIds is a genuine cross-format ambiguity this package cannot resolve (is it a quote, or just some other format's own paragraph indentation?) -- MarkdownDiagnosticCodes.PARAGRAPH_INDENT_DROPPED; the indent is dropped, the paragraph still renders.
+//  - a division construct pair whose wrapped paragraphs carry the quote indent (this package's own dual carry) -> one '> ' blockquote wrapper per nesting level, with the blocks' own indentLeftPt suppressed so the fact is counted once. A paragraph outside any division still recovers its quote depth from indentLeftPt alone: 'Quote' styleId, or ANY of the four styleIds below while indentLeftPt is also set, -> '> ' repeated per recovered nesting level (Math.round(indentLeftPt / QUOTE_INDENT_PT)) prefixed to every line -- the cross-format path for a document this package never produced. A paragraph with indentLeftPt set but none of these five styleIds is a genuine cross-format ambiguity this package cannot resolve (is it a quote, or just some other format's own paragraph indentation?) -- MarkdownDiagnosticCodes.PARAGRAPH_INDENT_DROPPED; the indent is dropped, the paragraph still renders.
 //  - ContentListMembership -> a bullet/ordered/task-list item, decoded from its own numId string (src/shared/list-id.ts) -- MarkdownDiagnosticCodes.LIST_NUMID_FALLBACK for a numId this package never minted itself, or a depth-only membership carrying no numId at all (both fall back to a plain, tight, non-task bullet, per that module's own documented cross-format contract).
 //  - ContentTable -> a GFM table, src/emit/table.ts.
 //  - ContentImageBlock -> a markdown image, src/emit/image.ts.
@@ -44,6 +44,8 @@ interface EmitContext extends TableEmitContext {
   readonly reportedFallbackNumIds: Set<string>;
   // One-shot latch for the no-numId-at-all fallback diagnostic -- reportedFallbackNumIds cannot key an absent numId without inventing a sentinel string, so this is a mutable flag where its sibling is a mutable-by-reference collection.
   reportedAbsentNumIdFallback: boolean;
+  // How many blockquote-rendered division constructs currently enclose the block being rendered. Inside one, the '> ' prefixes come from the divisions themselves and a paragraph's own indentLeftPt is NOT also read back as quote depth -- the indent is the division's materialised formatting, counted once, not twice. Mutable for the same reason the counters are: it is render position, not configuration.
+  divisionDepth: number;
 }
 
 // setext's own grammar (spec 0.31.2, "Setext headings") only distinguishes two levels (a run of '=' for level 1, of '-' for level 2) -- there is no setext spelling for level 3 and deeper, so headingStyle: 'setext' still falls back to ATX there.
@@ -135,10 +137,10 @@ function renderParagraphBody(paragraph: ContentParagraph, context: EmitContext):
   return emitRuns(paragraph.runs, context, paragraph.constructs);
 }
 
-// Applies blockquote wrapping ('> ' repeated per recovered nesting level, on every line of the body) on top of renderParagraphBody's own construct-specific rendering -- see this module's own top-of-file note for exactly which styleIds this applies to, and MarkdownDiagnosticCodes.PARAGRAPH_INDENT_DROPPED for the ones it does not.
+// Applies blockquote wrapping ('> ' repeated per recovered nesting level, on every line of the body) on top of renderParagraphBody's own construct-specific rendering -- see this module's own top-of-file note for exactly which styleIds this applies to, and MarkdownDiagnosticCodes.PARAGRAPH_INDENT_DROPPED for the ones it does not. A paragraph already inside a blockquote-rendered division construct does NOT re-enter here: the division's own rendering prefixes '> ' per level, and reading the indent back as depth on top of that would double-count the same fact.
 function renderParagraph(paragraph: ContentParagraph, context: EmitContext): string {
   const body = renderParagraphBody(paragraph, context);
-  const depth = quoteDepthOf(paragraph);
+  const depth = context.divisionDepth > 0 ? 0 : quoteDepthOf(paragraph);
   if (depth === 0) {
     return body;
   }
@@ -387,6 +389,24 @@ function renderConstruct(item: ConstructItem, context: EmitContext): string {
     context.sink({ code: MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED, severity: 'info', message: `a footnote anchor's own name "${descriptor.name}" cannot be spelled as a "[^label]:" marker (whitespace or "]" would reparse as something else); its own extent still renders in place, but the construct itself is not represented` });
     return body;
   }
+  if (descriptor.kind === 'division') {
+    // The blockquote spelling is gated on this package's own dual carry, not on the descriptor alone: a division whose wrapped paragraphs carry the quote indent is a blockquote this package's own read side minted (pair for the boundary, indent for the materialised formatting -- see src/lower/lower.ts's lowerBlockquote), and it renders as '> ' on every line with a bare '>' holding blank lines open. A division whose paragraphs carry no such indent is a FOREIGN one -- an ODF text:section, a tagged-PDF /Sect -- and renders transparently below: a named section is not a markdown blockquote, and rendering it as one would invent a construct the source never had. Non-paragraph children (a table, an image) carry no indent either way and do not vote; nested construct children defer to their own gate.
+    const materialised = item.children.every((child) => {
+      if (isConstructItem(child)) {
+        return true;
+      }
+      return child.block.kind !== 'paragraph' || (child.block.indentLeftPt !== undefined && child.block.indentLeftPt >= QUOTE_INDENT_PT);
+    });
+    if (materialised) {
+      context.divisionDepth += 1;
+      const body = renderItems(item.children, context);
+      context.divisionDepth -= 1;
+      return body
+        .split('\n')
+        .map((line) => (line.length === 0 ? '>' : `> ${line}`))
+        .join('\n');
+    }
+  }
   if (descriptor.kind === 'link' && descriptor.target.kind === 'external') {
     // The mint condition is exact -- a pair around precisely one image block, the shape this package's own read side mints. A link construct of any other shape (an annotated block extent from another codec, a run-level pair flattened into a block list) renders transparently below rather than being guessed at.
     const onlyChild = item.children.length === 1 && !isConstructItem(item.children[0]!) ? item.children[0]!.block : undefined;
@@ -488,6 +508,7 @@ export function emitMarkdown(document: ContentDocument, options: WriteMarkdownOp
     orderedCounters: new Map(),
     reportedFallbackNumIds: new Set(),
     reportedAbsentNumIdFallback: false,
+    divisionDepth: 0,
   };
 
   const sections = document.sections.map((section) => emitBlocks(section.blocks, context));

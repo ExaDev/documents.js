@@ -141,16 +141,50 @@ describe('math (ExaDev/markdown-codec#53)', () => {
 
 describe('blockquotes', () => {
   it('maps a blockquote paragraph to styleId Quote plus indentLeftPt', () => {
-    const block = paragraph(blocks('> foo')[0]);
+    const block = paragraph(blocks('> foo')[1]);
     expect(block.styleId).toBe('Quote');
     expect(block.indentLeftPt).toBe(36);
   });
 
-  it('keeps a heading inside a quote styled as Heading{N}, not Quote', () => {
-    const block = paragraph(blocks('> # foo')[0]);
-    expect(block.styleId).toBe('Heading1');
-    expect(block.headingLevel).toBe(1);
-    expect(block.indentLeftPt).toBe(36);
+  it('wraps a blockquote\'s blocks in a division construct pair, keeping the indent and Quote styleId as the materialised formatting', () => {
+    const [start, inner, end] = blocks('> foo');
+    expect(start?.kind).toBe('constructStart');
+    if (start?.kind !== 'constructStart') throw new Error('expected a constructStart');
+    expect(start.descriptor).toEqual({ kind: 'division' });
+    expect(inner?.kind).toBe('paragraph');
+    expect(end?.kind).toBe('constructEnd');
+  });
+
+  it('wraps one quote containing several blocks in ONE pair -- the container boundary the indent alone never carried', () => {
+    const kinds = blocks('> a\n>\n> b').map((block) => block.kind);
+    expect(kinds).toEqual(['constructStart', 'paragraph', 'paragraph', 'constructEnd']);
+  });
+
+  it('nests one pair per nesting level for a quoted quote', () => {
+    const kinds = blocks('> > deep').map((block) => block.kind);
+    expect(kinds).toEqual(['constructStart', 'constructStart', 'paragraph', 'constructEnd', 'constructEnd']);
+  });
+
+  it('keeps a heading inside a quote styled as Heading{N}, not Quote, and skips the division pair for that quote -- a marker extent may not open a heading scope', () => {
+    const collector = createDiagnosticCollector();
+    const [block] = blocks('> # foo', { sink: collector.sink });
+    expect(block?.kind).toBe('paragraph');
+    expect(paragraph(block).styleId).toBe('Heading1');
+    expect(paragraph(block).headingLevel).toBe(1);
+    expect(paragraph(block).indentLeftPt).toBe(36);
+    expect(collector.has(MarkdownDiagnosticCodes.BLOCKQUOTE_CONTAINER_SKIPPED)).toBe(true);
+  });
+
+  it('skips the pair for a quote containing a heading anywhere in its subtree, including inside a nested list', () => {
+    const collector = createDiagnosticCollector();
+    const kinds = blocks('> - item\n>\n>   # heading in item', { sink: collector.sink }).map((block) => block.kind);
+    expect(kinds).not.toContain('constructStart');
+    expect(collector.has(MarkdownDiagnosticCodes.BLOCKQUOTE_CONTAINER_SKIPPED)).toBe(true);
+  });
+
+  it('wraps a quote inside a list item, the pair sitting among the item\'s own membership-carrying blocks', () => {
+    const result = blocks('- item\n\n  > quoted');
+    expect(result.map((block) => block.kind)).toEqual(['paragraph', 'constructStart', 'paragraph', 'constructEnd']);
   });
 });
 
@@ -349,10 +383,10 @@ describe('gaps (MarkdownDiagnosticCodes)', () => {
     expect(collector.has(MarkdownDiagnosticCodes.MATH_INLINE_PRESERVED_AS_TEXT)).toBe(true);
   });
 
-  it('BLOCKQUOTE_NESTED_DEPTH fires beyond level 1', () => {
+  it('BLOCKQUOTE_NESTED_DEPTH is retired: nesting beyond level 1 is now exact through nested division pairs, firing nothing beyond the always-on page-geometry note', () => {
     const collector = createDiagnosticCollector();
     blocks('> > nested', { sink: collector.sink });
-    expect(collector.has(MarkdownDiagnosticCodes.BLOCKQUOTE_NESTED_DEPTH)).toBe(true);
+    expect(collector.codes().filter((code) => code !== MarkdownDiagnosticCodes.INVENTED_PAGE_GEOMETRY)).toEqual([]);
   });
 
   it('LIST_ITEM_BLOCK_UNLISTED fires for a table directly inside a list item', () => {

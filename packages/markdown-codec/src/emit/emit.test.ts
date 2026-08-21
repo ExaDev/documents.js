@@ -78,6 +78,58 @@ describe('blockquotes', () => {
   it('keeps a Heading{N} styleId while quoted, applying indent on top', () => {
     expect(emitMarkdown(doc([{ kind: 'paragraph', runs: [{ text: 'foo' }], styleId: 'Heading2', indentLeftPt: 36 }]))).toBe('> ## foo');
   });
+
+  it('renders a division construct pair as a blockquote wrapper, prefixing "> " on every line and ">" alone on blank lines -- without double-prefixing from the blocks\' own indentLeftPt', () => {
+    const markdown = emitMarkdown(doc([
+      { kind: 'constructStart', descriptor: { kind: 'division' } },
+      { kind: 'paragraph', runs: [{ text: 'a' }], styleId: 'Quote', indentLeftPt: 36 },
+      { kind: 'paragraph', runs: [{ text: 'b' }], styleId: 'Quote', indentLeftPt: 36 },
+      { kind: 'constructEnd' },
+    ]));
+    expect(markdown).toBe('> a\n>\n> b');
+  });
+
+  it('renders nested division pairs one "> " per level', () => {
+    const markdown = emitMarkdown(doc([
+      { kind: 'constructStart', descriptor: { kind: 'division' } },
+      { kind: 'constructStart', descriptor: { kind: 'division' } },
+      { kind: 'paragraph', runs: [{ text: 'deep' }], styleId: 'Quote', indentLeftPt: 72 },
+      { kind: 'constructEnd' },
+      { kind: 'constructEnd' },
+    ]));
+    expect(markdown).toBe('> > deep');
+  });
+
+  it('renders two adjacent division pairs as two independent quotes separated by a blank line', () => {
+    const markdown = emitMarkdown(doc([
+      { kind: 'constructStart', descriptor: { kind: 'division' } },
+      { kind: 'paragraph', runs: [{ text: 'a' }], styleId: 'Quote', indentLeftPt: 36 },
+      { kind: 'constructEnd' },
+      { kind: 'constructStart', descriptor: { kind: 'division' } },
+      { kind: 'paragraph', runs: [{ text: 'b' }], styleId: 'Quote', indentLeftPt: 36 },
+      { kind: 'constructEnd' },
+    ]));
+    expect(markdown).toBe('> a\n\n> b');
+  });
+
+  it('renders a foreign division whose blocks carry no quote indent transparently, reporting CONSTRUCT_UNREPRESENTED -- a named section from another format is not a markdown blockquote', () => {
+    const collector = createDiagnosticCollector();
+    const markdown = emitMarkdown(doc([
+      { kind: 'constructStart', descriptor: { kind: 'division', name: 'chapter-one' } },
+      { kind: 'paragraph', runs: [{ text: 'body' }] },
+      { kind: 'constructEnd' },
+    ]), { sink: collector.sink });
+    expect(markdown).toBe('body');
+    expect(collector.has(MarkdownDiagnosticCodes.CONSTRUCT_UNREPRESENTED)).toBe(true);
+  });
+
+  it('round-trips blockquote shapes byte for byte through lower -> emit -> lower, including nesting and adjacency', () => {
+    for (const source of ['> a\n>\n> b', '> > deep', '> a\n\n> b', '> first para\n>\n> second para']) {
+      const first = lowerMarkdown(source);
+      expect(emitMarkdown(first)).toBe(source);
+      expect(lowerMarkdown(emitMarkdown(first))).toEqual(first);
+    }
+  });
 });
 
 describe('lists', () => {

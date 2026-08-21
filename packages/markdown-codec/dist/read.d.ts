@@ -1,4 +1,4 @@
-import { t as MarkdownDiagnostic } from "./diagnostics-DVFklCTL.js";
+import { t as MarkdownDiagnostic } from "./diagnostics-CwpvDXtH.js";
 import { ReadMarkdownOptions } from "./options/options.js";
 import { ContentDocument, DocumentPackage } from "document-schema.js";
 //#region src/read.d.ts

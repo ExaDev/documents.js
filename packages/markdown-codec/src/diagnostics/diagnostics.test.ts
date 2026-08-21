@@ -73,11 +73,11 @@ describe('every MarkdownDiagnosticCodes entry is reachable from real input', () 
     reached.add(MarkdownDiagnosticCodes.LINK_TITLE_DROPPED);
   });
 
-  it('BLOCKQUOTE_NESTED_DEPTH: a blockquote nested inside a blockquote', () => {
+  it('BLOCKQUOTE_CONTAINER_SKIPPED: a blockquote containing a heading', () => {
     const collector = createDiagnosticCollector();
-    lowerMarkdown('> > x', { sink: collector.sink });
-    expect(collector.has(MarkdownDiagnosticCodes.BLOCKQUOTE_NESTED_DEPTH)).toBe(true);
-    reached.add(MarkdownDiagnosticCodes.BLOCKQUOTE_NESTED_DEPTH);
+    lowerMarkdown('> # heading', { sink: collector.sink });
+    expect(collector.has(MarkdownDiagnosticCodes.BLOCKQUOTE_CONTAINER_SKIPPED)).toBe(true);
+    reached.add(MarkdownDiagnosticCodes.BLOCKQUOTE_CONTAINER_SKIPPED);
   });
 
   it('LIST_ITEM_BLOCK_UNLISTED: a table directly inside a list item', () => {

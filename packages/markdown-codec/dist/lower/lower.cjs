@@ -185,22 +185,44 @@ function lowerMathBlock(node, context) {
 		styleId: require_shared_style_constants.MATH_BLOCK_STYLE_ID
 	}, context)];
 }
+function blockquoteSubtreeContainsHeading(node) {
+	const walk = (block) => {
+		switch (block.type) {
+			case "heading": return true;
+			case "blockquote":
+			case "list":
+			case "listItem": return block.children.some(walk);
+			default: return false;
+		}
+	};
+	return node.children.some(walk);
+}
 function lowerBlockquote(node, context, contentWidthPt) {
-	if (context.quoteDepth >= 1) context.sink({
-		code: require_diagnostics_diagnostics.MarkdownDiagnosticCodes.BLOCKQUOTE_NESTED_DEPTH,
-		severity: "info",
-		message: `blockquote nesting beyond level 1 is represented only as a larger indentLeftPt (${String((context.quoteDepth + 1) * 36)}pt); recovering the exact nesting depth back out is an approximation, not an exact inverse`
-	});
 	const nested = {
 		...context,
 		quoteDepth: context.quoteDepth + 1
 	};
 	const blocks = node.children.flatMap((child) => lowerBlock(child, nested, contentWidthPt));
-	if (blocks.length === 0) return [decorateParagraph({
+	const inner = blocks.length === 0 ? [decorateParagraph({
 		kind: "paragraph",
 		runs: []
-	}, nested)];
-	return blocks;
+	}, nested)] : blocks;
+	if (blockquoteSubtreeContainsHeading(node)) {
+		context.sink({
+			code: require_diagnostics_diagnostics.MarkdownDiagnosticCodes.BLOCKQUOTE_CONTAINER_SKIPPED,
+			severity: "info",
+			message: "a blockquote containing a heading cannot carry its division construct -- a marker extent may not open a heading scope, and the last heading inside an extent always leaves one standing -- so this quote degrades to indent-only structure while the heading keeps its heading fidelity"
+		});
+		return inner;
+	}
+	return [
+		{
+			kind: "constructStart",
+			descriptor: { kind: "division" }
+		},
+		...inner,
+		{ kind: "constructEnd" }
+	];
 }
 function lowerListItem(item, numId, level, context, contentWidthPt) {
 	const membership = {
