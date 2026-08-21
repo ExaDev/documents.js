@@ -1,3 +1,20 @@
+# [4.3.0](https://github.com/ExaDev/documents.js/compare/ooxml.js@4.2.0...ooxml.js@4.3.0) (2026-08-21)
+
+
+### Bug Fixes
+
+* emit a point bookmark extent's halves as a start-then-end pair, not an inverted one ([55b9b2d](https://github.com/ExaDev/documents.js/commit/55b9b2d8e977271478802783223ce42e22a2bffd))
+
+
+### Features
+
+* read and write mid-paragraph docx bookmarks through run-level construct extents ([1d2079b](https://github.com/ExaDev/documents.js/commit/1d2079b0ecd0ad36ad011c1d5c295ec6bf01d38e))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^4.5.0
+
 # [4.2.0](https://github.com/ExaDev/documents.js/compare/ooxml.js@4.1.1...ooxml.js@4.2.0) (2026-08-20)
 
 
