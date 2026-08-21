@@ -51,11 +51,15 @@ const FOOTNOTE_SHAPES = {
   afterHeading: '# Heading\n\nBody[^1].\n\n[^1]: note\n',
 } as const;
 
-// Construct groups sit wherever their marker pair sat in the block flow, which for a footnote definition following a heading is inside that heading's own group rather than at the section's top level -- so this walks the whole subtree rather than filtering one children array.
+// Construct groups sit wherever their marker pair sat in the block flow, which for a footnote definition following a heading is inside that heading's own group rather than at the section's top level -- so this walks the whole subtree rather than filtering one children array. Filtered to ANCHOR groups where the tests count footnote definitions specifically: since blockquotes became divisions, a fixture's quotes promote construct groups of their own beside the anchors.
 function collectConstructGroups(node: unknown): SectionConstructGroupNode[] {
   if (!isPackageGroup(node)) return [];
   const here = isSectionConstructGroupNode(node) ? [node] : [];
   return [...here, ...node.children.flatMap(collectConstructGroups)];
+}
+
+function collectFootnoteGroups(node: unknown): SectionConstructGroupNode[] {
+  return collectConstructGroups(node).filter((group) => group.node.kind === 'anchor' && group.node.anchorType === 'footnote');
 }
 
 describe('readMarkdown: markdown text -> DocumentPackage', () => {
@@ -71,7 +75,7 @@ describe('readMarkdown: markdown text -> DocumentPackage', () => {
 
   it('promotes the footnote definition to a construct group carrying its own anchor descriptor', () => {
     const { documentPackage } = readMarkdown(SAMPLE);
-    const constructGroups = documentPackage.children.flatMap(collectConstructGroups);
+    const constructGroups = documentPackage.children.flatMap(collectFootnoteGroups);
 
     expect(constructGroups).toHaveLength(1);
     expect(constructGroups[0]?.node).toMatchObject({ kind: 'anchor', anchorType: 'footnote', name: '1' });
@@ -218,16 +222,16 @@ describe('the construct-group path over footnote shapes beyond SAMPLE\'s single 
   }
 
   it('promotes exactly one construct group per definition, including both definitions sharing a duplicated label', () => {
-    expect(readMarkdown(FOOTNOTE_SHAPES.bodyless).documentPackage.children.flatMap(collectConstructGroups)).toHaveLength(1);
-    expect(readMarkdown(FOOTNOTE_SHAPES.multiParagraphBody).documentPackage.children.flatMap(collectConstructGroups)).toHaveLength(1);
-    expect(readMarkdown(FOOTNOTE_SHAPES.afterList).documentPackage.children.flatMap(collectConstructGroups)).toHaveLength(1);
-    expect(readMarkdown(FOOTNOTE_SHAPES.afterBlockquote).documentPackage.children.flatMap(collectConstructGroups)).toHaveLength(1);
-    expect(readMarkdown(FOOTNOTE_SHAPES.afterHeading).documentPackage.children.flatMap(collectConstructGroups)).toHaveLength(1);
-    expect(readMarkdown(FOOTNOTE_SHAPES.duplicateLabel).documentPackage.children.flatMap(collectConstructGroups)).toHaveLength(2);
+    expect(readMarkdown(FOOTNOTE_SHAPES.bodyless).documentPackage.children.flatMap(collectFootnoteGroups)).toHaveLength(1);
+    expect(readMarkdown(FOOTNOTE_SHAPES.multiParagraphBody).documentPackage.children.flatMap(collectFootnoteGroups)).toHaveLength(1);
+    expect(readMarkdown(FOOTNOTE_SHAPES.afterList).documentPackage.children.flatMap(collectFootnoteGroups)).toHaveLength(1);
+    expect(readMarkdown(FOOTNOTE_SHAPES.afterBlockquote).documentPackage.children.flatMap(collectFootnoteGroups)).toHaveLength(1);
+    expect(readMarkdown(FOOTNOTE_SHAPES.afterHeading).documentPackage.children.flatMap(collectFootnoteGroups)).toHaveLength(1);
+    expect(readMarkdown(FOOTNOTE_SHAPES.duplicateLabel).documentPackage.children.flatMap(collectFootnoteGroups)).toHaveLength(2);
   });
 
   it('lowers a bodyless definition to a construct group with no body blocks between its start and end', () => {
-    const [group] = readMarkdown(FOOTNOTE_SHAPES.bodyless).documentPackage.children.flatMap(collectConstructGroups);
+    const [group] = readMarkdown(FOOTNOTE_SHAPES.bodyless).documentPackage.children.flatMap(collectFootnoteGroups);
 
     expect(group?.children).toEqual([]);
   });

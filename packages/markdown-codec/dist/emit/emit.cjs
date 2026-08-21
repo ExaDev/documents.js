@@ -78,7 +78,7 @@ function renderParagraphBody(paragraph, context) {
 }
 function renderParagraph(paragraph, context) {
 	const body = renderParagraphBody(paragraph, context);
-	const depth = quoteDepthOf(paragraph);
+	const depth = context.divisionDepth > 0 ? 0 : quoteDepthOf(paragraph);
 	if (depth === 0) return body;
 	if (!isQuotableStyle(paragraph.styleId)) {
 		context.sink({
@@ -277,6 +277,17 @@ function renderConstruct(item, context) {
 		});
 		return body;
 	}
+	if (descriptor.kind === "division") {
+		if (item.children.every((child) => {
+			if (isConstructItem(child)) return true;
+			return child.block.kind !== "paragraph" || child.block.indentLeftPt !== void 0 && child.block.indentLeftPt >= 36;
+		})) {
+			context.divisionDepth += 1;
+			const body = renderItems(item.children, context);
+			context.divisionDepth -= 1;
+			return body.split("\n").map((line) => line.length === 0 ? ">" : `> ${line}`).join("\n");
+		}
+	}
 	if (descriptor.kind === "link" && descriptor.target.kind === "external") {
 		const onlyChild = item.children.length === 1 && !isConstructItem(item.children[0]) ? item.children[0].block : void 0;
 		if (onlyChild?.kind === "image" && !isDataUri(descriptor.target.uri)) return `![${require_emit_inline.escapeMarkdownText(onlyChild.altText ?? "")}](${require_emit_inline.escapeLinkDestination(descriptor.target.uri)}${descriptor.title === void 0 ? "" : ` "${require_emit_inline.renderLinkTitle(descriptor.title)}"`})`;
@@ -348,7 +359,8 @@ function emitMarkdown(document, options = {}) {
 		embedImages: options.images ?? true,
 		orderedCounters: /* @__PURE__ */ new Map(),
 		reportedFallbackNumIds: /* @__PURE__ */ new Set(),
-		reportedAbsentNumIdFallback: false
+		reportedAbsentNumIdFallback: false,
+		divisionDepth: 0
 	};
 	const body = document.sections.map((section) => emitBlocks(section.blocks, context)).join("\n\n");
 	const frontMatter = options.frontMatter === true ? require_emit_front_matter.emitFrontMatter(document.metadata) : void 0;
