@@ -1,6 +1,6 @@
 {
   "name": "document-outline.js",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Utilities for consumers holding a tree-form DocumentPackage - the TOC outline projection, effective-property resolution, and flatten/leaf-text/stable-hash helpers, the outline package for the documents.js family.",
   "type": "module",
   "repository": {
