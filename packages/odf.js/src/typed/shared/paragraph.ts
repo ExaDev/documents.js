@@ -7,7 +7,7 @@ import { decodeXmlText } from '../../xml/entities';
 import { getOdfSpaceCount, decodeOdfText, isOdfFieldElement } from './text';
 import { resolveStyle } from './cascade';
 import { mintOdfListNumId, readOdfListParagraphs, type OdfListIdState } from './list';
-import { isOdfBlockScopedHalf, odfBookmarkAnchorDescriptor, odfFieldDescriptor, odfResidue, pairOdfMarkerHalves, type OdfDefinitionsSink, type OdfMarkerHalf, type OdfResidueFormat } from './constructs';
+import { isOdfBlockScopedHalf, isOdfExtensionElement, odfAttributeElement, odfBookmarkAnchorDescriptor, odfFieldDescriptor, odfResidue, pairOdfMarkerHalves, type OdfDefinitionsSink, type OdfMarkerHalf, type OdfResidueFormat } from './constructs';
 import { resolveStyleElementChain } from './cascade';
 import { parseParagraphProperties, parseTextProperties } from '../../styles/properties';
 
@@ -21,6 +21,8 @@ import { parseParagraphProperties, parseTextProperties } from '../../styles/prop
 interface RunWalkState {
   readonly extents: RunConstructExtent[];
   readonly halves: OdfMarkerHalf[];
+  // The inline elements this walk met that no run vocabulary models (text:ruby, text:meta, a vendor-extension element): quarantined as the paragraph's own residue, in discovery order, alongside whatever the style chain's unmodellable half contributed.
+  readonly residueElements: XmlElement[];
   order: number;
   readonly provenanceRegions: ReadonlyMap<string, ProvenanceDescriptor> | undefined;
   readonly definitions: OdfDefinitionsSink | undefined;
@@ -204,8 +206,12 @@ function collectRuns(container: XmlElement, baseProperties: StyleProperties, pkg
           descriptor: () => undefined,
         });
       }
+    } else if (node.tag === 'text:ruby' || node.tag === 'text:meta' || isOdfExtensionElement(node)) {
+      // Inline vocabulary with no cross-format analogue: a phonetic-annotation ruby pair, an RDF metadata anchor, a producer-private extension element. Their visible text (a ruby-base's runs) reads as ordinary runs through the recursion below while the element itself quarantines, so nothing is lost on either side -- the residue half carries what the construct WAS, the runs carry what it SAID.
+      collectRuns(node, baseProperties, pkg, out, walk, hyperlinkTarget);
+      walk.residueElements.push(node);
     }
-    // Any other child (change-tracking markup, an anchored draw:frame, a text:meta) contributes no run at all -- matching text.ts's own established zero-length treatment of the same node shapes, not a new gap introduced here.
+    // Any other child (change-tracking markup, an anchored draw:frame) contributes no run at all -- matching text.ts's own established zero-length treatment of the same node shapes, not a new gap introduced here.
   }
 }
 
@@ -231,23 +237,33 @@ export function readOdfParagraph(pElement: XmlElement, pkg: Package, context: Od
   const styleName = attrValue(pElement, 'text:style-name');
   const paragraphProperties = resolveStyle(styleName, 'paragraph', pkg).properties;
 
-  // The unmodellable half of the paragraph's own style chain quarantines as per-node residue: every style:paragraph-properties/style:text-properties element in the resolved chain that properties.ts cannot fully model (hasUnknown -- fo:keep-with-next, a style:map child, anything StyleProperties carries no field for) serialises into the paragraph's source, so a same-format writer can restore what the resolved fields could not hold. Only when the context names the reading format -- residue's format member states which reader produced it, and this shared reader serves seven of them. Span-run and table/graphic-style unknowns stay dropped (documented): the run- and table-level channels exist, but the resolved-styles fact this row lands is the paragraph's own chain.
+  const runs: ContentRun[] = [];
+  const walk: RunWalkState = { extents: [], halves: [], residueElements: [], order: 0, provenanceRegions: context.provenanceRegions, definitions: context.definitions, listIdState: context.listIdState ?? { next: 1 } };
+  collectRuns(pElement, paragraphProperties, pkg, runs, walk);
+
+  // The paragraph's own residue, one value for everything this format carries that the run/paragraph vocabulary does not model: the unmodellable half of its own style chain (every style:paragraph-properties/style:text-properties element in the resolved chain that properties.ts cannot fully model -- hasUnknown -- fo:keep-with-next, a style:map child, anything StyleProperties carries no field for), the inline no-analogue elements the run walk quarantined (text:ruby, text:meta, vendor extensions), and the element's own text:is-list-header flag (a heading-is-a-list-header marker with no cross-format analogue, carried as a children-stripped element spelling its own tag). Only when the context names the reading format -- residue's format member states which reader produced it, and this shared reader serves seven of them. Span-run and table/graphic-style unknowns stay dropped (documented): the run- and table-level channels exist, but the resolved-styles fact this row lands is the paragraph's own chain.
   let source: ContentParagraph['source'];
-  if (context.format !== undefined && styleName !== undefined) {
-    const unknownElements = resolveStyleElementChain(styleName, 'paragraph', pkg).elements.flatMap((style) =>
-      [
-        ...childrenWithTag(style, 'style:paragraph-properties').filter((properties) => parseParagraphProperties(properties).hasUnknown),
-        ...childrenWithTag(style, 'style:text-properties').filter((properties) => parseTextProperties(properties).hasUnknown),
-      ],
-    );
-    if (unknownElements.length > 0) {
-      source = odfResidue(context.format, ...unknownElements);
+  if (context.format !== undefined) {
+    const residueElements: XmlElement[] = [];
+    if (styleName !== undefined) {
+      residueElements.push(
+        ...resolveStyleElementChain(styleName, 'paragraph', pkg).elements.flatMap((style) =>
+          [
+            ...childrenWithTag(style, 'style:paragraph-properties').filter((properties) => parseParagraphProperties(properties).hasUnknown),
+            ...childrenWithTag(style, 'style:text-properties').filter((properties) => parseTextProperties(properties).hasUnknown),
+          ],
+        ),
+      );
+    }
+    if (attrValue(pElement, 'text:is-list-header') !== undefined) {
+      residueElements.push(odfAttributeElement(pElement, 'text:is-list-header'));
+    }
+    residueElements.push(...walk.residueElements);
+    if (residueElements.length > 0) {
+      source = odfResidue(context.format, ...residueElements);
     }
   }
 
-  const runs: ContentRun[] = [];
-  const walk: RunWalkState = { extents: [], halves: [], order: 0, provenanceRegions: context.provenanceRegions, definitions: context.definitions, listIdState: context.listIdState ?? { next: 1 } };
-  collectRuns(pElement, paragraphProperties, pkg, runs, walk);
   const { extents: pairedExtents, paired } = pairOdfMarkerHalves(walk.halves, pElement);
   walk.extents.push(...pairedExtents);
   // An annotation whose office:annotation-end never arrived (the end element is optional -- a single-position comment needs none) falls back to the point anchor at its run position, unless it sat at a paragraph edge -- an edge half is the block-scope reader's, and that reader makes the same fallback itself against the whole flow.

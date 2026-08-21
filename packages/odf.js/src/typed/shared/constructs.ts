@@ -30,6 +30,55 @@ export function odfResidue(format: OdfResidueFormat, ...elements: XmlElement[]):
   return { format, xml: buildXml(elements) };
 }
 
+// The vendor-extension namespace prefixes this family's stated policy never chases (LibreOffice's loext:/calcext:/officeooo:/ooo:/oooc:/ooow:/formx:/field:/drawooo:/tableooo: and their kin): an element in one of them is producer-private vocabulary, quarantined as residue wherever a walk meets it rather than interpreted. Membership is by prefix, not full namespace URI, because the parser preserves prefixes verbatim and every one of these is prefix-stable across real producers; the list is the inventory's own, not a claim that it is closed -- an unknown prefix is simply not extension residue by this test and stays subject to each reader's own unknown-element handling.
+const ODF_EXTENSION_NAMESPACE_PREFIXES: ReadonlySet<string> = new Set([
+  'loext:',
+  'calcext:',
+  'officeooo:',
+  'ooo:',
+  'oooc:',
+  'ooow:',
+  'formx:',
+  'field:',
+  'drawooo:',
+  'tableooo:',
+]);
+
+export function isOdfExtensionElement(element: XmlElement): boolean {
+  return [...ODF_EXTENSION_NAMESPACE_PREFIXES].some((prefix) => element.tag.startsWith(prefix));
+}
+
+// The element a fact-carrying ATTRIBUTE quarantines onto: residue's shape is serialised elements, so an attribute no element owns rides a children-stripped copy of its own element carrying only the quarantined attributes -- the same children-stripped spell odfFieldDescriptor's instruction takes. A same-format writer re-emitting the fragment knows the element it re-serialises, so the tag needs no separate channel.
+export function odfAttributeElement(element: XmlElement, ...attributeNames: readonly string[]): XmlElement {
+  return { ...element, children: [], attributes: element.attributes.filter((attribute) => attributeNames.includes(attribute.name)) };
+}
+
+// Appends serialised elements to one key of a package-tier residue table, concatenating onto whatever the key already holds -- several occurrences of one tenant (two xforms models, a run of same-tagged extension elements) are one entry, exactly as odfResidue itself concatenates several elements into one value.
+export function addOdfPackageResidue(out: Record<string, SourceResidue>, key: string, format: OdfResidueFormat, ...elements: XmlElement[]): void {
+  if (elements.length === 0) {
+    return;
+  }
+  const addition = buildXml(elements);
+  const existing = out[key];
+  out[key] = existing === undefined ? { format, xml: addition } : { format, xml: `${existing.xml}${addition}` };
+}
+
+// The parts a document reader consumes itself -- everything else XML-typed is a non-content part. Binary parts (media, thumbnails, ObjectReplacements previews) never quarantine: the residue channel carries text, and the lossless package tier already preserves those bytes byte-for-byte, which is the fidelity tier that owns them.
+export const ODF_CONSUMED_PART_PATHS: ReadonlySet<string> = new Set(['content.xml', 'styles.xml', 'meta.xml', 'META-INF/manifest.xml']);
+
+// Every non-content XML part of the package, quarantined at the package tier keyed by its own part path -- the producer's own identifier for what the entry reconstructs. A reader splices the result into its document-level residue table, so a package whose only extra part is a settings.xml yields exactly source['settings.xml'].
+export function collectOdfNonContentPartResidue(pkg: Package, format: OdfResidueFormat, out: Record<string, SourceResidue>): void {
+  for (const [path, part] of Object.entries(pkg.parts)) {
+    if (part.kind !== 'xml' || ODF_CONSUMED_PART_PATHS.has(path)) {
+      continue;
+    }
+    const elements = part.nodes.filter((node): node is XmlElement => node.type === 'element');
+    if (elements.length > 0) {
+      out[path] = odfResidue(format, ...elements);
+    }
+  }
+}
+
 // --- divisions (text:section) ---------------------------------------------------------------------------------------
 
 // text:protected is a plain boolean attribute ("true"/"false", false when absent per the ODF schema default).
