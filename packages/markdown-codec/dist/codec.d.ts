@@ -649,6 +649,12 @@ declare const markdownContentCodec: z.ZodCodec<z.ZodCustom<Uint8Array<ArrayBuffe
       leftPt: z.ZodNumber;
     }, z.core.$strip>;
     blocks: z.ZodArray<z.ZodCustom<import("document-schema.js").ContentBlock, import("document-schema.js").ContentBlock>>;
+    breakType: z.ZodOptional<z.ZodEnum<{
+      nextPage: "nextPage";
+      continuous: "continuous";
+      evenPage: "evenPage";
+      oddPage: "oddPage";
+    }>>;
     source: z.ZodOptional<z.ZodObject<{
       format: z.ZodEnum<{
         docx: "docx";
