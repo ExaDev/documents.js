@@ -8,6 +8,7 @@ import type { SheetDefinedNames } from './defined-names';
 import { readDefinedNamesBySheet } from './defined-names';
 import type { NumberFormatClass } from './number-format';
 import { classifyNumberFormat } from './number-format';
+import { readSheetEmbeddedObjects } from './drawings';
 import { readPrintSettings } from './print-settings';
 import { readDate1904, serialToIsoDate, serialToIsoDateTime, serialToIsoTime } from './serial';
 import { loadSharedStrings } from './shared-strings';
@@ -380,12 +381,15 @@ function readSheet(
   }
   const cells = readCells(worksheet, sharedStrings, context);
   applyCellComments(readSheetCellComments(pkg, entry.path), cells);
+  // The drawing layer's chart graphic frames (typed/xlsx/drawings.ts) -- absent when the sheet references no drawing or carries no chart frame, which is the common case.
+  const embeddedObjects = readSheetEmbeddedObjects(pkg, entry.path, worksheet);
   return {
     name: entry.name,
     cells,
     columns: readColumns(worksheet),
     rows: readRows(worksheet),
     images: [],
+    ...(embeddedObjects === undefined ? {} : { embeddedObjects }),
     printSettings: readPrintSettings(worksheet, sheetIndex, definedNamesBySheet),
   };
 }
