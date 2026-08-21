@@ -79,7 +79,7 @@ export function readPdf(bytes: Uint8Array<ArrayBuffer>, options?: ReadPdfOptions
   const attachments = readAttachments(doc.catalog, pageDicts, doc, sink);
   const optionalContent = readOptionalContent(doc.catalog, doc, sink);
   const form = readAcroForm(doc.catalog, doc, (obj) => doc.pageIndex(obj), sink);
-  const structure = readStructure(doc.catalog, doc, sink);
+  const structure = readStructure(doc.catalog, pageDicts, doc, sink);
   const source = readDocumentResidue(doc, sink);
   const pageBoxRows: PdfObject[] = [];
 
