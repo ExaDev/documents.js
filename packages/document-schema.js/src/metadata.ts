@@ -10,5 +10,6 @@ export const LayoutMetadataSchema = z.object({
   producer: z.string().optional(),
   createdIso: z.string().optional(), // ISO-8601
   modifiedIso: z.string().optional(),
+  language: z.string().optional(), // the document's own declared language: PDF's catalog /Lang, an IETF BCP 47 tag. One field, not a per-node fact -- a document that mixes languages states the exceptions per content, which is a producer-specific concern no shared shape here models.
 });
 export type LayoutMetadata = z.infer<typeof LayoutMetadataSchema>;

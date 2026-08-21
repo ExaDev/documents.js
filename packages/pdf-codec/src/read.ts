@@ -3,12 +3,14 @@ import { crc32 } from './bytes/crc32';
 import { concatBytes } from './bytes/writer';
 import { readPageAnnotations } from './annotations';
 import { readAcroForm } from './form';
+import { readXmpMetadata } from './xmp';
 import { readAttachments } from './attachments';
 import { readOptionalContent } from './optional-content';
-import type { Color as LayoutColor, LayoutFont, LayoutMetadata } from 'document-schema.js';
+import type { Color as LayoutColor, LayoutFont, LayoutMetadata, SourceResidue } from 'document-schema.js';
 import type { LayoutDocument, LayoutEllipse, LayoutImageAsset, LayoutInternalLink, LayoutItem, LayoutLine, LayoutLink, LayoutPage, LayoutPath, LayoutPathSegment, LayoutRect, LayoutSubpath, LayoutText } from './layout';
 import { LAYOUT_FORMAT_VERSION } from './layout';
 import { openPdfDocument } from './document';
+import type { PdfDocument } from './document';
 import type { PdfDiagnosticSink } from './diagnostics';
 import { NOOP_DIAGNOSTIC_SINK, PdfParseError } from './diagnostics';
 import { decodeStream } from './filters';
@@ -23,8 +25,9 @@ import { applyMatrix, matrixRotationDegrees, matrixScaleX, matrixScaleY, multipl
 import type { DestinationRegistry } from './navigation';
 import { createDestinationRegistry, readOutline } from './navigation';
 import type { PdfDict, PdfObject } from './objects';
-import { asArray, asName, asNumber, dictGet } from './objects';
+import { asArray, asName, asNumber, dictGet, pdfArray, pdfNull } from './objects';
 import { NOTES_ANNOTATION_AUTHOR } from './notes-annotation-author';
+import { serializeObjectToText } from './serialize';
 
 // readPdf(bytes, options?) -> LayoutDocument: the top of the read pipeline, assembling every other src/pdf/* read module (document.ts's object store and page tree, interpret.ts's graphics/text extraction, font-read.ts's width/decode, images-read.ts's PNG/JPEG recovery) into the same pivot model src/pdf/write.ts consumes on the way out, so a document round-trips through readPdf -> writePdf structurally even though neither claims byte- or content-fidelity.
 //
@@ -75,6 +78,7 @@ export function readPdf(bytes: Uint8Array<ArrayBuffer>, options?: ReadPdfOptions
   const attachments = readAttachments(doc.catalog, pageDicts, doc, sink);
   const optionalContent = readOptionalContent(doc.catalog, doc, sink);
   const form = readAcroForm(doc.catalog, doc, (obj) => doc.pageIndex(obj), sink);
+  const source = readDocumentResidue(doc, sink);
 
   const pages = pageDicts.map((pageDict) => {
     throwIfAborted(signal);
@@ -83,7 +87,7 @@ export function readPdf(bytes: Uint8Array<ArrayBuffer>, options?: ReadPdfOptions
 
   return {
     formatVersion: LAYOUT_FORMAT_VERSION,
-    metadata: readMetadata(doc.trailer, doc),
+    metadata: readMetadata(doc.trailer, doc, doc.catalog, sink),
     pages,
     images,
     ...(destinationRegistry.entries.length > 0 ? { destinations: [...destinationRegistry.entries] } : {}),
@@ -91,6 +95,7 @@ export function readPdf(bytes: Uint8Array<ArrayBuffer>, options?: ReadPdfOptions
     ...(attachments.length > 0 ? { attachments } : {}),
     ...(optionalContent.layers.length > 0 ? { layers: [...optionalContent.layers] } : {}),
     ...(form.length > 0 ? { form } : {}),
+    ...(Object.keys(source).length > 0 ? { source } : {}),
   };
 }
 
@@ -474,7 +479,7 @@ function readPageNotes(page: PdfDict, resolver: PdfObjectResolver): string | und
 
 import { decodePdfString, parsePdfDate } from './pdf-text';
 
-function readMetadata(trailer: PdfDict, resolver: PdfObjectResolver): LayoutMetadata {
+function readMetadata(trailer: PdfDict, resolver: PdfObjectResolver, catalog: PdfDict, sink: PdfDiagnosticSink): LayoutMetadata {
   const info = resolver.resolveDict(dictGet(trailer, 'Info'));
   if (info === undefined) {
     return {};
@@ -488,14 +493,57 @@ function readMetadata(trailer: PdfDict, resolver: PdfObjectResolver): LayoutMeta
     ?.split(',')
     .map((k) => k.trim())
     .filter((k) => k.length > 0);
+  const langObj = dictGet(catalog, 'Lang');
+  // The XMP mirror fills ONLY the fields /Info does not carry: in an ordinary file the two agree, and in a PDF/A file the fields live only in XMP -- either way /Info, the structured original, wins where it speaks.
+  const xmp = xmpPacket(catalog, resolver, sink);
+  const mirrored = readXmpMetadata(xmp ?? '');
   return {
-    title: stringField('Title'),
-    author: stringField('Author'),
-    subject: stringField('Subject'),
-    keywords: keywords !== undefined && keywords.length > 0 ? keywords : undefined,
-    creator: stringField('Creator'),
-    producer: stringField('Producer'),
-    createdIso: parsePdfDate(stringField('CreationDate')),
-    modifiedIso: parsePdfDate(stringField('ModDate')),
+    title: stringField('Title') ?? mirrored.title,
+    author: stringField('Author') ?? mirrored.author,
+    subject: stringField('Subject') ?? mirrored.subject,
+    keywords: (keywords !== undefined && keywords.length > 0 ? keywords : undefined) ?? mirrored.keywords,
+    creator: stringField('Creator') ?? mirrored.creator,
+    producer: stringField('Producer') ?? mirrored.producer,
+    createdIso: parsePdfDate(stringField('CreationDate')) ?? mirrored.createdIso,
+    modifiedIso: parsePdfDate(stringField('ModDate')) ?? mirrored.modifiedIso,
+    ...(langObj?.kind === 'string' ? { language: decodePdfString(langObj.bytes) } : {}),
   };
+}
+
+function xmpPacket(catalog: PdfDict, resolver: PdfObjectResolver, sink: PdfDiagnosticSink): string | undefined {
+  const metadataObj = resolver.resolve(dictGet(catalog, 'Metadata'));
+  if (metadataObj?.kind !== 'stream') {
+    return undefined;
+  }
+  const decoded = decodeStream(metadataObj.raw, metadataObj.dict, sink);
+  return new TextDecoder().decode(decoded.bytes);
+}
+
+// The package-level residue rows: whole-document PDF facts no content node owns, serialised in their own syntax and quarantined per the channel's contract -- a consumer never derives semantics from them, and only a same-format writer may re-emit them.
+function readDocumentResidue(doc: PdfDocument, sink: PdfDiagnosticSink): Record<string, SourceResidue> {
+  const source: Record<string, SourceResidue> = {};
+  const residue = (key: string, obj: PdfObject | undefined): void => {
+    if (obj !== undefined) {
+      source[key] = { format: 'pdf', xml: serializeObjectToText(obj) };
+    }
+  };
+  const catalog = doc.catalog;
+  const packet = xmpPacket(catalog, doc, sink);
+  if (packet !== undefined) {
+    source.xmp = { format: 'pdf', xml: packet };
+  }
+  residue('viewer-preferences', dictGet(catalog, 'ViewerPreferences'));
+  residue('page-mode', dictGet(catalog, 'PageMode'));
+  residue('page-layout', dictGet(catalog, 'PageLayout'));
+  residue('open-action', dictGet(catalog, 'OpenAction'));
+  // /OutputIntents is an array of references -- the residue that is worth quarantining is the intent dictionaries themselves, so each element resolves before serialising.
+  const outputIntents = asArray(dictGet(catalog, 'OutputIntents'));
+  if (outputIntents !== undefined) {
+    residue('output-intents', pdfArray(outputIntents.map((intent) => doc.resolve(intent) ?? pdfNull())));
+  }
+  residue('piece-info', dictGet(catalog, 'PieceInfo'));
+  residue('legal', dictGet(catalog, 'Legal'));
+  residue('collection', dictGet(catalog, 'Collection'));
+  residue('trailer-id', dictGet(doc.trailer, 'ID'));
+  return source;
 }
