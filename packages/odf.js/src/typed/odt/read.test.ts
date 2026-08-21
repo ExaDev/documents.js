@@ -270,10 +270,11 @@ describe('readOdt: the package-native reader over the same real fixtures', () =>
     const documentPackage = readOdt(pkg);
 
     expect(documentPackage.kind).toBe('wordprocessing');
+    // The definitions table is tree-only by design (the flat ContentDocument is the codec-exchange content shape and has no root to hold one), so the round-trip harness below compares against the flat projection -- readOdt's own root carries the fixture's sequence declarations, pinned in the constructs suite.
     expect(documentPackage.metadata).toEqual(content.metadata);
     // One section group per ContentSection -- the tree's mandatory top-level grouping, not a flattening of the section's own blocks.
     expect(documentPackage.children).toHaveLength(content.sections.length);
-    assertPackageRoundTrip(documentPackage, { kind: 'wordprocessing', ...content });
+    assertPackageRoundTrip(documentPackage, { kind: 'wordprocessing', metadata: content.metadata, sections: content.sections });
   });
 
   it('groups this fixture\'s headings into real heading groups carrying their following blocks, rather than a flat block list', () => {
@@ -311,7 +312,7 @@ describe('readOdt: the package-native reader over the same real fixtures', () =>
   it('assembles minimal.odt into a package that round-trips identically', () => {
     const pkg = loadFixture('minimal.odt');
     const content = readOdtContent(pkg);
-    assertPackageRoundTrip(readOdt(pkg), { kind: 'wordprocessing', ...content });
+    assertPackageRoundTrip(readOdt(pkg), { kind: 'wordprocessing', metadata: content.metadata, sections: content.sections });
   });
 
   it('throws from the package-native reader exactly as the content reader does, on a package with no content.xml', () => {
