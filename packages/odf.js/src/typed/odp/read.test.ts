@@ -7,7 +7,7 @@ import type { Package } from '../../model/package';
 import { el, txt } from '../../xml/fragment';
 import { bytesToBase64 } from '../../util/base64';
 import { parsePackage } from '../../package-io/read';
-import { assertPackageRoundTrip, presentationPackage } from '../../test-support/document-package';
+import { assertPackageRoundTrip, presentationPackage } from '../../test-support/document-tree';
 import { readOdp, readOdpContent } from './read';
 
 const FIXTURES_DIR = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');

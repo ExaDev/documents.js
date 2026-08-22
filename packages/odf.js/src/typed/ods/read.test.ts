@@ -9,7 +9,7 @@ import { el, txt } from '../../xml/fragment';
 import { bytesToBase64 } from '../../util/base64';
 import { parsePackage } from '../../package-io/read';
 import { parseOdfLength } from '../shared/units';
-import { assertPackageRoundTrip, spreadsheetPackage } from '../../test-support/document-package';
+import { assertPackageRoundTrip, spreadsheetPackage } from '../../test-support/document-tree';
 import { readOds, readOdsContent } from './read';
 
 // This suite reads real, unmodified LibreOffice 26.2-generated .ods fixtures (src/typed/ods/fixtures/*.ods, built via a headless UNO Basic macro driving the SAME UNO calls the Calc UI itself uses -- Format > Columns > Width, Format > Rows > Height, Format > Print Areas, Format > Page Style's Sheet tab -- never hand-edited afterwards) rather than programmatically reconstructing the expected XML shapes, mirroring readOdtContent's own established convention: this reader's own design brief is explicit that print-settings attribute names and the repeat-row/repeat-column mechanism must each be proven against genuine producer output, not just this package's own idea of what that output looks like. A handful of narrow scope-boundary/hazard-proof tests at the end use small, synthetic, hand-built packages instead (via el/txt), since a genuinely million-row repeat isn't something worth shipping as a binary fixture when the exact real repeat count is already established (typed/shared/a1.test.ts, citing a real LibreOffice-shipped .ots template).
@@ -842,7 +842,7 @@ describe('readOds: the package-native reader over the same real fixtures', () =>
     expect(documentPackage.kind).toBe('spreadsheet');
     expect(documentPackage.metadata).toEqual(content.metadata);
     expect(documentPackage.children).toHaveLength(content.sheets.length);
-    // The round trip compares against the flat projection (metadata + sheets): the definitions and package-tier residue tables are tree-only, so flattenPackage drops them off readOds's own root -- the fixture's own residue rows are pinned in the residue describe below.
+    // The round trip compares against the flat projection (metadata + sheets): the definitions and package-tier residue tables are tree-only, so flattenTree drops them off readOds's own root -- the fixture's own residue rows are pinned in the residue describe below.
     assertPackageRoundTrip(documentPackage, { kind: 'spreadsheet', metadata: content.metadata, sheets: content.sheets });
   });
 

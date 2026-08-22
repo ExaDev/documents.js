@@ -159,7 +159,7 @@ function readDivisionColumnCount(sectionElement: XmlElement, pkg: Package): numb
   return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
 }
 
-// One text:section element -> its DivisionDescriptor: name (text:name), protected (text:protected), the column count its own style sets over its flow, and the external-chapter link when the section carries a text:section-source. text:filter-name on that source deliberately rides nowhere: DivisionDescriptor's own source field already names the external-chapter link, so the filter name -- an importer instruction with no cross-format meaning -- would have to ride division residue, and the schema's residue refusal on this one descriptor (one name cannot mean two facts) leaves the row waiting on the #743 rename of the landed field.
+// One text:section element -> its DivisionDescriptor: name (text:name), protected (text:protected), the column count its own style sets over its flow, the external-chapter link when the section carries a text:section-source (`linked`), and that source's own text:filter-name -- an importer instruction with no cross-format meaning -- as residue (`source`), now that #743's rename of the landed `linked` field frees `source` for it.
 export function odfDivisionDescriptor(sectionElement: XmlElement, pkg: Package): DivisionDescriptor {
   const descriptor: DivisionDescriptor = { kind: 'division' };
   const name = attrValue(sectionElement, 'text:name');
@@ -178,12 +178,15 @@ export function odfDivisionDescriptor(sectionElement: XmlElement, pkg: Package):
   if (sourceElement !== undefined) {
     const href = attrValue(sourceElement, 'xlink:href');
     if (href !== undefined) {
-      const source: DivisionDescriptor['source'] = { href };
+      const linked: DivisionDescriptor['linked'] = { href };
       const sectionName = attrValue(sourceElement, 'text:section-name');
       if (sectionName !== undefined) {
-        source.sectionName = sectionName;
+        linked.sectionName = sectionName;
       }
-      descriptor.source = source;
+      descriptor.linked = linked;
+    }
+    if (attrValue(sourceElement, 'text:filter-name') !== undefined) {
+      descriptor.source = odfResidue('odt', odfAttributeElement(sourceElement, 'text:filter-name'));
     }
   }
   return descriptor;

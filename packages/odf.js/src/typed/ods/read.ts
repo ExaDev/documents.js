@@ -12,12 +12,12 @@ import type {
   ContentSheetPrintSettings,
   ContentSheetRepeatRange,
   ContentSheetRow,
-  DocumentPackage,
+  DocumentTree,
   LayoutMetadata,
   Margins,
   SourceResidue,
 } from 'document-schema.js';
-import { assemblePackage, PAGE_SIZE_A4 } from 'document-schema.js';
+import { assembleTree, PAGE_SIZE_A4 } from 'document-schema.js';
 import type { XmlElement, XmlNode } from '../../model/node';
 import type { Package } from '../../model/package';
 import { attrValue, childrenWithTag, findChildElement, rootElement } from '../../xml/query';
@@ -551,11 +551,11 @@ export function readOdsContent(pkg: Package): OdsDocument {
   };
 }
 
-// Package -> DocumentPackage: this module's PRIMARY entry point, the spreadsheet mirror of readOdtContent/readOdt (see src/typed/odt/read.ts's own note on why assemblePackage rather than bare decompose, and why no `pages` argument). readOdsContent above is unchanged and remains the flat, ContentDocument-level reader.
-export function readOds(pkg: Package): DocumentPackage {
+// Package -> DocumentTree: this module's PRIMARY entry point, the spreadsheet mirror of readOdtContent/readOdt (see src/typed/odt/read.ts's own note on why assembleTree rather than bare decompose, and why no `pages` argument). readOdsContent above is unchanged and remains the flat, ContentDocument-level reader.
+export function readOds(pkg: Package): DocumentTree {
   const { metadata, sheets, definitions, source } = readOdsContent(pkg);
-  const assembled = assemblePackage({ kind: 'spreadsheet', metadata, sheets });
-  // Tree-only tables, attached to the assembled root for the same reason readOdt attaches its own (the flat exchange shape has no root to carry them through assemblePackage's envelope splice).
+  const assembled = assembleTree({ kind: 'spreadsheet', metadata, sheets });
+  // Tree-only tables, attached to the assembled root for the same reason readOdt attaches its own (the flat exchange shape has no root to carry them through assembleTree's envelope splice).
   if (definitions !== undefined) {
     assembled.definitions = definitions;
   }
