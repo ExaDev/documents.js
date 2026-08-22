@@ -1,3 +1,24 @@
+# [3.0.0](https://github.com/ExaDev/documents.js/compare/document-mcp@2.1.47...document-mcp@3.0.0) (2026-08-22)
+
+
+* refactor(docx)!: drop the flat headers/footers arrays from DocxExtras ([4789cf6](https://github.com/ExaDev/documents.js/commit/4789cf64997a62cfaeb784e6050c690b63b064fe))
+
+
+### Features
+
+* **docx:** carry the structural header/footer model in DocxExtras ([72eb1b3](https://github.com/ExaDev/documents.js/commit/72eb1b350ab8fbc97f271def315921913ea1c51b))
+
+
+### BREAKING CHANGES
+
+* DocxExtras drops its headers/footers string-array
+fields; headerFooterParts and sectionHeaderFooters replace them.
+
+
+### Dependencies
+
+- Updated documents.js to ^5.0.0
+
 ## [2.1.47](https://github.com/ExaDev/documents.js/compare/document-mcp@2.1.46...document-mcp@2.1.47) (2026-08-22)
 
 
