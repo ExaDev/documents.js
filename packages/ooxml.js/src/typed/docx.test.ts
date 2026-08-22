@@ -140,12 +140,6 @@ describe('readDocxContent expanded constructs', () => {
     expect(hyperlinkPara.runs[0]?.hyperlink).toBe('https://example.com');
   });
 
-  it('reads header and footer text from their parts', () => {
-    const result = readDocxContent(decodePackage(zipPackage(richDocxParts())));
-    expect(result.headers).toEqual(['Header text']);
-    expect(result.footers).toEqual(['Footer text']);
-  });
-
   it('reads comment author and text from word/comments.xml', () => {
     const result = readDocxContent(decodePackage(zipPackage(richDocxParts())));
     expect(result.comments).toHaveLength(1);

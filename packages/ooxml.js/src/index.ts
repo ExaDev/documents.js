@@ -171,9 +171,9 @@ export type {
   ContentSheetPrintSettings,
 } from 'document-schema.js';
 
-// --- The DocumentPackage tree: the shape readDocx/readPptx/readXlsx return and buildDocxPackage/buildXlsxPackage accept, plus the node vocabulary a caller walks it with (one group per top-level container, headings and lists nested, constructs promoted to the region they span) and the four transforms between it and the flat ContentDocument. Sourced from document-schema.js and re-exported here for the same reason the content model above is: a caller of this package's own readers should be able to name, validate, and traverse what those readers hand back without taking a second dependency to do it. assemblePackage is what every reader here calls (decompose then the styles-minting pass); flattenPackage is what every writer here calls; decompose and factorStyles are for a caller composing its own boundary. ---
+// --- The DocumentTree tree: the shape readDocx/readPptx/readXlsx return and buildDocxPackage/buildXlsxPackage accept, plus the node vocabulary a caller walks it with (one group per top-level container, headings and lists nested, constructs promoted to the region they span) and the four transforms between it and the flat ContentDocument. Sourced from document-schema.js and re-exported here for the same reason the content model above is: a caller of this package's own readers should be able to name, validate, and traverse what those readers hand back without taking a second dependency to do it. assembleTree is what every reader here calls (decompose then the styles-minting pass); flattenTree is what every writer here calls; decompose and factorStyles are for a caller composing its own boundary. ---
 export {
-  DocumentPackageSchema,
+  DocumentTreeSchema,
   SectionGroupSchema,
   SlideGroupSchema,
   SheetGroupSchema,
@@ -183,10 +183,10 @@ export {
   ListGroupSchema,
   SectionConstructGroupSchema,
   ShapeConstructGroupSchema,
-  PackageGroupSchema,
-  PackageLeafSchema,
-  PackageNodeSchema,
-  PackageBlockLeafSchema,
+  TreeGroupSchema,
+  TreeLeafSchema,
+  TreeNodeSchema,
+  TreeBlockLeafSchema,
   isSectionGroupNode,
   isSlideGroupNode,
   isSheetGroupNode,
@@ -196,18 +196,18 @@ export {
   isListGroupNode,
   isSectionConstructGroupNode,
   isShapeConstructGroupNode,
-  isPackageGroup,
-  isPackageLeaf,
-  isPackageNode,
-  isPackageBlockLeaf,
-  assemblePackage,
+  isTreeGroup,
+  isTreeLeaf,
+  isTreeNode,
+  isTreeBlockLeaf,
+  assembleTree,
   factorStyles,
   decompose,
-  flattenPackage,
+  flattenTree,
   ConstructMarkerImbalanceError,
 } from 'document-schema.js';
 export type {
-  DocumentPackage,
+  DocumentTree,
   PackageChildren,
   SectionGroupNode,
   SlideGroupNode,
@@ -218,10 +218,10 @@ export type {
   ListGroupNode,
   SectionConstructGroupNode,
   ShapeConstructGroupNode,
-  PackageGroup,
-  PackageLeaf,
-  PackageNode,
-  PackageBlockLeaf,
+  TreeGroup,
+  TreeLeaf,
+  TreeNode,
+  TreeBlockLeaf,
   SectionChild,
   ShapeChild,
   ListChild,
@@ -236,7 +236,7 @@ export type {
   ListParagraph,
 } from 'document-schema.js';
 
-// --- Style resolution: the pure helpers that turn a group's `style` ref plus a leaf's own direct properties into the properties that actually render, and the styles-table shapes those refs and the styles-minting pass above name. A tree reader's paragraphs and runs are NOT self-describing -- readDocx/readPptx/readXlsx factor repeated formatting into `styles` entries and leave only a `style: 's1'` ref on the enclosing group, stripping the matching keys off every paragraph/run that ref covers (see typed/document-package.ts's own module comment for why every reader mints rather than calling bare decompose). Reading a run or paragraph's real formatting out of a tree therefore means walking its ancestor groups' `style` refs and resolving them, which is exactly what these four functions do: resolveStyleChain collects the chain of entries from root to a given node, overlayStyleEntries merges that chain outermost-first (nearest wins), and applyParagraphStyleProperties/applyRunStyleProperties gap-fill a resolved entry onto a paragraph/run that already carries some direct properties of its own (a key the node already has always wins over the entry, never the reverse). Re-exported here for the same reason the tree vocabulary above is: a caller holding what readDocx/readPptx/readXlsx return should not need a second dependency just to read a run's own bold/colour back out of it. ---
+// --- Style resolution: the pure helpers that turn a group's `style` ref plus a leaf's own direct properties into the properties that actually render, and the styles-table shapes those refs and the styles-minting pass above name. A tree reader's paragraphs and runs are NOT self-describing -- readDocx/readPptx/readXlsx factor repeated formatting into `styles` entries and leave only a `style: 's1'` ref on the enclosing group, stripping the matching keys off every paragraph/run that ref covers (see typed/document-tree.ts's own module comment for why every reader mints rather than calling bare decompose). Reading a run or paragraph's real formatting out of a tree therefore means walking its ancestor groups' `style` refs and resolving them, which is exactly what these four functions do: resolveStyleChain collects the chain of entries from root to a given node, overlayStyleEntries merges that chain outermost-first (nearest wins), and applyParagraphStyleProperties/applyRunStyleProperties gap-fill a resolved entry onto a paragraph/run that already carries some direct properties of its own (a key the node already has always wins over the entry, never the reverse). Re-exported here for the same reason the tree vocabulary above is: a caller holding what readDocx/readPptx/readXlsx return should not need a second dependency just to read a run's own bold/colour back out of it. ---
 export {
   StylesTableSchema,
   StyleEntrySchema,
@@ -258,8 +258,8 @@ export type { DocumentMetadata } from './typed/shared/metadata';
 export { sniffImageFormat } from './image/sniff';
 export type { ImageFormat } from './image/sniff';
 
-// --- The DocumentPackage-native surface: one reader per format producing document-schema.js's tree-form DocumentPackage, one writer per format consuming it. These carry the primary names because the tree is what a caller holding a whole document wants; each wraps the flat, content-level function of the same format (readDocxContent/readPptxContent/readXlsxContent, buildDocxPackageFromContent/buildXlsxPackageFromContent, all still exported below) through assemblePackage on the way out and flattenPackage on the way in. See typed/document-package.ts for why every reader mints styles rather than calling bare decompose, and for what a docx's comments/footnotes/headers/footers/numbering do instead of riding the tree. ---
-export { readDocx, buildDocxPackage, readPptx, readXlsx, buildXlsxPackage } from './typed/document-package';
+// --- The DocumentTree-native surface: one reader per format producing document-schema.js's tree-form DocumentTree, one writer per format consuming it. These carry the primary names because the tree is what a caller holding a whole document wants; each wraps the flat, content-level function of the same format (readDocxContent/readPptxContent/readXlsxContent, buildDocxPackageFromContent/buildXlsxPackageFromContent, all still exported below) through assembleTree on the way out and flattenTree on the way in. See typed/document-tree.ts for why every reader mints styles rather than calling bare decompose, and for what a docx's comments/footnotes/headers/footers/numbering do instead of riding the tree. ---
+export { readDocx, buildDocxPackage, readPptx, readXlsx, buildXlsxPackage } from './typed/document-tree';
 
 // --- docx: a WordprocessingML reader resolving the full style cascade (docDefaults -> named-style basedOn chains -> paragraph-mark run properties -> character styles -> direct formatting) and DrawingML theme references (including w:themeColor run colours) into ordered sections of paragraphs/tables/page-breaks, with every block-scoped fidelity construct (structured document tags, fields, bookmarks, tracked changes) bracketed by construct-boundary markers -- paired with buildDocxPackageFromContent, its write-side inverse over those same sections. This is the flat pair readDocx/buildDocxPackage above wrap, exported in its own right: DocxDocument's comments, footnotes, headers, footers, and numbering definitions have no ContentDocument spelling and therefore no tree spelling, so readDocxContent is the only reader in this package that returns them at all. ---
 export { readDocxContent, CommentSchema, DocxDocumentSchema, FootnoteSchema } from './typed/docx/read';
