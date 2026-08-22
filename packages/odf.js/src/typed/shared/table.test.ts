@@ -79,6 +79,24 @@ describe('readOdfTable: cell content, spans, and covered cells', () => {
     expect(blocks?.[0]).toMatchObject({ kind: 'paragraph', runs: [{ text: 'Hello' }] });
   });
 
+  it('reads a text:h cell child as a heading paragraph, deriving headingLevel and the synthetic styleId from its text:outline-level', () => {
+    const heading = el('text:h', { 'text:outline-level': '2', 'text:style-name': 'Heading_20_2' }, [txt('Cell heading')]);
+    const table = el('table:table', {}, [el('table:table-row', {}, [el('table:table-cell', {}, [heading])])]);
+    const blocks = readOdfTable(table, { parts: {} }).rows[0]?.cells[0]?.blocks;
+    expect(blocks?.[0]).toMatchObject({ kind: 'paragraph', styleId: 'Heading2', headingLevel: 2, runs: [{ text: 'Cell heading' }] });
+  });
+
+  it('keeps document order across a cell\'s mixed text:p and text:h children', () => {
+    const cellElement = el('table:table-cell', {}, [
+      el('text:p', {}, [txt('first')]),
+      el('text:h', { 'text:outline-level': '1' }, [txt('middle')]),
+      el('text:p', {}, [txt('last')]),
+    ]);
+    const table = el('table:table', {}, [el('table:table-row', {}, [cellElement])]);
+    const texts = readOdfTable(table, { parts: {} }).rows[0]?.cells[0]?.blocks.map((block) => (block.kind === 'paragraph' ? block.runs[0]?.text : undefined));
+    expect(texts).toEqual(['first', 'middle', 'last']);
+  });
+
   it('reads table:number-columns-spanned/table:number-rows-spanned onto the anchor cell', () => {
     const table = el('table:table', {}, [el('table:table-row', {}, [cell('Header', { 'table:number-columns-spanned': '2', 'table:number-rows-spanned': '3' }), el('table:covered-table-cell')])]);
     const row = readOdfTable(table, { parts: {} }).rows[0];
