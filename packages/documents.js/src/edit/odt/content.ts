@@ -11,6 +11,7 @@ import { OdtEditor } from './editor';
 import { createEmptyOdtPackage } from './scaffold';
 import type { OdtList, OdtListItem } from './list';
 import type { OdtParagraph } from './paragraph';
+import { headingStyleName } from './paragraph';
 import type { OdtTable, OdtTableCell } from './table';
 
 // clock resolves content.metadata's own createdIso/modifiedIso the same way createOdt does (src/model/metadata.ts's resolveMetadataTimestamps) -- systemClock by default, never overwriting a createdIso/modifiedIso the source content already carried.
@@ -130,14 +131,17 @@ function appendListRun(body: OdtBody, paragraphs: readonly ContentParagraph[]): 
 
 // Exported so src/edit/odp/content.ts's own buildOdpPackage can reuse this exact resolve-alignment-then-append-styled-runs logic for a presentation shape's own paragraphs -- a draw:frame's draw:text-box holds the identical text:p/text:span content model office:text does, interned into the identical content.xml StyleRegistry (see src/edit/odt/props.ts), so there is no presentation-specific variant of this function to write.
 export interface PopulateParagraphOptions {
-  // How the paragraph's container's content model carries a heading. 'element': the container takes a real text:h (office:text, its text:list-item children, and table:table-cell -- odf.js's own readers read one back from all three), so a headingLevel promotes the element. 'none': the call site's paragraph is never a heading (a stand-in literal, an ods cell's runs-only text:p), so a headingLevel would have nowhere to land and is dropped with the producer's styleId still written verbatim.
-  readonly headings: 'element' | 'none';
+  // How the paragraph's container's content model carries a heading. 'element': the container takes a real text:h (office:text, its text:list-item children, and table:table-cell -- odf.js's own readers read one back from all three), so a headingLevel promotes the element. 'style-name': the container takes no text:h at all (a draw:text-box is (text:p | text:list)*), so the paragraph stays a text:p and its text:style-name is pointed at the scaffold's Heading_20_N definition instead -- the depth itself is still lost as a format-boundary loss, but the heading keeps its visual weight and a reference that resolves. 'none': the call site's paragraph is never a heading (a stand-in literal, an ods cell's runs-only text:p), so a headingLevel would have nowhere to land and is dropped with the producer's styleId still written verbatim.
+  readonly headings: 'element' | 'style-name' | 'none';
 }
 
 export function populateParagraph(paragraph: OdtParagraph, block: ContentParagraph, options: PopulateParagraphOptions): void {
   if (options.headings === 'element' && block.headingLevel !== undefined) {
     // Promoted FIRST, before every applyStyleChange-based setter below: each of those resolves the paragraph's CURRENT style-name cascade and repoints text:style-name at an interned automatic style, so the Heading_20_N reference must already be in place for alignment/spacing/indent to layer on top of the heading style's own properties. The producer's styleId is deliberately not written for a heading: every heading source's styleId is the synthetic family-wide "Heading{N}" spelling (the exact shape odf.js's own readParagraphOrHeading synthesises back from a text:h), a name no odt defines -- the headingLevel setter writes the ODF-resolvable Heading_20_N spelling of the same depth instead.
     paragraph.headingLevel = block.headingLevel;
+  } else if (options.headings === 'style-name' && block.headingLevel !== undefined) {
+    // The same first-set ordering and the same not-the-producer's-styleId reasoning as the promote branch above, for the one container shape that cannot take a text:h: the style reference must land before the applyStyleChange-based setters so they layer on top of the heading style's own properties, and Heading_20_N (the resolvable spelling the scaffold defines) is written rather than the synthetic "Heading{N}" one.
+    paragraph.styleId = headingStyleName(block.headingLevel);
   } else if (block.styleId !== undefined) {
     paragraph.styleId = block.styleId;
   }
