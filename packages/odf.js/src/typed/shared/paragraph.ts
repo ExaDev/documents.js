@@ -15,7 +15,7 @@ import { parseParagraphProperties, parseTextProperties } from '../../styles/prop
 //
 // A single text:span's own resolved properties (via the 'text' family cascade) are layered ON TOP of the enclosing paragraph's own resolved properties (via the 'paragraph' family cascade, which itself may carry style:text-properties as the paragraph's own default run formatting) as a base -- mirroring how ooxml.js's own pptx paragraph reader merges a paragraph-level cascade base with each run's own explicit override (see readParagraph/mergeRunProperties in ooxml.js's src/typed/pptx/read.ts). This merge is NOT something cascade.ts's own resolveStyle does for you: resolveStyle only ever resolves ONE style-name reference within ONE family's own default-style + parent-chain (ODF's genuinely two-layer cascade, per cascade.ts's own top-of-file note) -- how a SPAN's resolved properties compose with its ENCLOSING PARAGRAPH's own resolved properties is a separate, consuming-layer concern this module owns.
 //
-// INLINE CONSTRUCTS: a field element reads as a run carrying its cached text plus a run-level field extent covering exactly that run; a text:bookmark reads as a point anchor extent; bookmark halves pairing inside one paragraph become run extents (typed/shared/constructs.ts owns the descriptor shapes and the scope rules). Every reader that uses this module gets the same treatment -- an odt paragraph, an ods cell, and an odp text frame all carry their fields as paragraph constructs.
+// INLINE CONSTRUCTS: a field element reads as a run carrying its cached text plus a run-level field extent covering exactly that run (the *-ref cross-reference displays are fields, per the tag set in text.ts); a text:bookmark or text:reference-mark reads as a point anchor extent; bookmark and reference-mark range halves pairing inside one paragraph become run extents, each within its own pairing family (typed/shared/constructs.ts owns the descriptor shapes and the scope rules). Every reader that uses this module gets the same treatment -- an odt paragraph, an ods cell, and an odp text frame all carry their fields as paragraph constructs.
 
 // The mutable walk state one paragraph's run collection threads: the run-level extents discovered so far, the paired-marker halves at their run positions, the document-order counter that keeps discovery order deterministic, the tracked-change region map, the definitions sink note and annotation bodies mint into, and the list-identity counter note and annotation bodies mint their own text:list numIds from -- the document-wide state when the caller supplied one (every list in one document walk shares one identity space, the numId-as-identity contract list.ts's own header states), a fresh local counter otherwise.
 interface RunWalkState {
@@ -86,12 +86,27 @@ function collectRuns(container: XmlElement, baseProperties: StyleProperties, pkg
       const startRun = out.length;
       collectRuns(node, baseProperties, pkg, out, walk, hyperlinkTarget);
       walk.extents.push({ descriptor: odfFieldDescriptor(node), startRun, endRun: out.length });
-    } else if (node.tag === 'text:bookmark') {
-      // A point bookmark: zero-width, named, addressed -- a point anchor extent at its run position. text:name is required by the ODF schema; a bookmark without one is malformed and skipped, matching this reader's general salvage posture.
+    } else if (node.tag === 'text:bookmark' || node.tag === 'text:reference-mark') {
+      // A point bookmark: zero-width, named, addressed -- a point anchor extent at its run position. text:reference-mark is ODF's second point-target spelling (the target a text:reference-ref display names) and reads identically: the harmonised anchor vocabulary has one bookmark anchorType for both (document-schema.js's AnchorTypeSchema names them together). text:name is required by the ODF schema; a mark without one is malformed and skipped, matching this reader's general salvage posture.
       const name = attrValue(node, 'text:name');
       if (name !== undefined) {
         const runPosition = out.length;
         walk.extents.push({ descriptor: odfBookmarkAnchorDescriptor(decodeXmlText(name)), startRun: runPosition, endRun: runPosition });
+      }
+    } else if (node.tag === 'text:reference-mark-start' || node.tag === 'text:reference-mark-end') {
+      // A reference-mark range half: the target half of ODF's cross-reference system, paired by text:name exactly the way a bookmark half pairs -- in-paragraph into a run-level anchor extent, at paragraph edges into the block-scope pair -- but as its OWN pairing family, since ODF keeps reference-mark names and bookmark names in separate namespaces and a same-named bookmark and reference-mark must each pair with their own spelling.
+      const name = attrValue(node, 'text:name');
+      if (name !== undefined) {
+        walk.halves.push({
+          kind: 'referenceMark',
+          side: node.tag === 'text:reference-mark-start' ? 'start' : 'end',
+          key: decodeXmlText(name),
+          element: node,
+          parent: container,
+          runPosition: out.length,
+          order: walk.order++,
+          descriptor: () => odfBookmarkAnchorDescriptor(decodeXmlText(name)),
+        });
       }
     } else if (node.tag === 'text:bookmark-start' || node.tag === 'text:bookmark-end') {
       // A ranged bookmark's half, recorded for pairing once the walk finishes: paired in-paragraph into a run extent, at paragraph edges into the block-scope marker pair the odt reader emits. The element and its parent are kept so that scope test can be made after the fact.

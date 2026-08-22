@@ -58,7 +58,11 @@ export const ODF_FIELD_TAGS: ReadonlySet<string> = new Set([
   'text:user-field-get',
   'text:user-field-input',
   'text:sequence',
+  // cross-reference displays: the *-ref display family (ODF 1.2 part 1, section 7.7). Each names its target by text:ref-name (a bookmark, a text:reference-mark, a note's text:id, a sequence) and states what to display of it through text:reference-format, carrying the last-computed display as its own text content -- grammatically a field. text:sequence-ref is the family's sequence-targeting member.
   'text:sequence-ref',
+  'text:bookmark-ref',
+  'text:note-ref',
+  'text:reference-ref',
   // database field instances
   'text:database-display',
   'text:database-name',

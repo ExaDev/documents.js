@@ -227,6 +227,42 @@ describe('readOdfParagraph: run-level construct extents (fields, bookmarks)', ()
     ]);
   });
 
+  it('reads a text:reference-ref cross-reference display as a field extent: a run with its cached text, instruction naming the referenced mark and the display format', () => {
+    const p = el('text:p', {}, [
+      txt('see figure on page '),
+      el('text:reference-ref', { 'text:ref-name': 'figure', 'text:reference-format': 'page' }, [txt('12')]),
+      txt('.'),
+    ]);
+    const paragraph = readOdfParagraph(p, { parts: {} });
+    expect(paragraph.runs.map((run) => run.text)).toEqual(['see figure on page ', '12', '.']);
+    expect(paragraph.constructs).toEqual([
+      {
+        descriptor: {
+          kind: 'field',
+          instruction: '<text:reference-ref text:ref-name="figure" text:reference-format="page"></text:reference-ref>',
+          cachedResult: '12',
+        },
+        startRun: 1,
+        endRun: 2,
+      },
+    ]);
+  });
+
+  it('reads text:bookmark-ref and text:note-ref displays the same way -- one *-ref display family, every member a field', () => {
+    const p = el('text:p', {}, [
+      el('text:bookmark-ref', { 'text:ref-name': 'target', 'text:reference-format': 'chapter' }, [txt('2.3')]),
+      txt(' and note '),
+      el('text:note-ref', { 'text:ref-name': 'ftn1', 'text:reference-format': 'page' }, [txt('4')]),
+    ]);
+    const paragraph = readOdfParagraph(p, { parts: {} });
+    expect(paragraph.runs.map((run) => run.text)).toEqual(['2.3', ' and note ', '4']);
+    expect(paragraph.constructs?.map((extent) => (extent.descriptor.kind === 'field' ? extent.descriptor.instruction : undefined))).toEqual([
+      '<text:bookmark-ref text:ref-name="target" text:reference-format="chapter"></text:bookmark-ref>',
+      '<text:note-ref text:ref-name="ftn1" text:reference-format="page"></text:note-ref>',
+    ]);
+    expect(paragraph.constructs?.map((extent) => [extent.startRun, extent.endRun])).toEqual([[0, 1], [2, 3]]);
+  });
+
   it('leaves constructs absent when the paragraph carries no field, bookmark, or marker at all', () => {
     const p = el('text:p', {}, [txt('plain')]);
     expect(readOdfParagraph(p, { parts: {} }).constructs).toBeUndefined();
@@ -235,6 +271,15 @@ describe('readOdfParagraph: run-level construct extents (fields, bookmarks)', ()
   it('reads a point text:bookmark as a zero-width bookmark anchor at its run position', () => {
     const p = el('text:p', {}, [txt('before '), el('text:bookmark', { 'text:name': 'target' }), txt('after')]);
     const paragraph = readOdfParagraph(p, { parts: {} });
+    expect(paragraph.constructs).toEqual([
+      { descriptor: { kind: 'anchor', anchorType: 'bookmark', name: 'target' }, startRun: 1, endRun: 1 },
+    ]);
+  });
+
+  it('reads a point text:reference-mark as a zero-width bookmark anchor at its run position, exactly as a text:bookmark', () => {
+    const p = el('text:p', {}, [txt('see '), el('text:reference-mark', { 'text:name': 'target' }), txt('below')]);
+    const paragraph = readOdfParagraph(p, { parts: {} });
+    expect(paragraph.runs.map((run) => run.text)).toEqual(['see ', 'below']);
     expect(paragraph.constructs).toEqual([
       { descriptor: { kind: 'anchor', anchorType: 'bookmark', name: 'target' }, startRun: 1, endRun: 1 },
     ]);
@@ -250,6 +295,40 @@ describe('readOdfParagraph: run-level construct extents (fields, bookmarks)', ()
     const paragraph = readOdfParagraph(p, { parts: {} });
     expect(paragraph.constructs).toEqual([
       { descriptor: { kind: 'anchor', anchorType: 'bookmark', name: 'span' }, startRun: 1, endRun: 2 },
+    ]);
+  });
+
+  it('pairs text:reference-mark-start/-end inside one paragraph into a run extent, as a family distinct from bookmarks', () => {
+    const p = el('text:p', {}, [
+      txt('growth of '),
+      el('text:reference-mark-start', { 'text:name': 'figure' }),
+      txt('figure 3'),
+      el('text:reference-mark-end', { 'text:name': 'figure' }),
+      txt(' over time'),
+    ]);
+    const paragraph = readOdfParagraph(p, { parts: {} });
+    expect(paragraph.runs.map((run) => run.text)).toEqual(['growth of ', 'figure 3', ' over time']);
+    expect(paragraph.constructs).toEqual([
+      { descriptor: { kind: 'anchor', anchorType: 'bookmark', name: 'figure' }, startRun: 1, endRun: 2 },
+    ]);
+  });
+
+  it('pairs a same-named bookmark and reference-mark independently, since ODF keeps the two name spaces separate', () => {
+    // A bookmark 'x' and a reference-mark 'x' in one paragraph are two legal constructs that must never pair across families -- grouping halves by key alone would see four halves and drop both. Both pairs sit interior (text on both sides) so this pins family discrimination, not the edge scope split.
+    const p = el('text:p', {}, [
+      txt('a '),
+      el('text:bookmark-start', { 'text:name': 'x' }),
+      txt('marked '),
+      el('text:reference-mark-start', { 'text:name': 'x' }),
+      txt('referenced'),
+      el('text:bookmark-end', { 'text:name': 'x' }),
+      el('text:reference-mark-end', { 'text:name': 'x' }),
+      txt(' b'),
+    ]);
+    const paragraph = readOdfParagraph(p, { parts: {} });
+    expect(paragraph.constructs?.map((extent) => [extent.descriptor, extent.startRun, extent.endRun])).toEqual([
+      [{ kind: 'anchor', anchorType: 'bookmark', name: 'x' }, 1, 3],
+      [{ kind: 'anchor', anchorType: 'bookmark', name: 'x' }, 2, 3],
     ]);
   });
 
