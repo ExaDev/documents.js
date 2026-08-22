@@ -21,6 +21,14 @@ function digitValue(char: string): number {
   return parseInt(char, BASE);
 }
 
+// Thrown when the key space is exhausted and the only honest move is a full rebalance -- orderKeyBetween finding no room left between its two neighbours within the width cap. A named class in the family's ConstructMarkerImbalanceError/UnsupportedConversionError convention so a caller branches on instanceof and reaches for renumberedOrderKeys rather than string-matching a message; the boundary keys carry no payload of their own because the caller supplied them -- unlike an imbalance index, there is nothing here the thrower knows that the caller does not.
+export class OrderKeyBudgetExhaustedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'OrderKeyBudgetExhaustedError';
+  }
+}
+
 // Mints the WIDE key for a freshly projected sibling at `index`: `index * ORDER_KEY_GAP` in base 36, left-padded to ORDER_KEY_WIDTH. The gap is what leaves room for `orderKeyBetween` to bisect later without ever needing to touch this key or its neighbours.
 export function orderKeyForIndex(index: number): string {
   const scaled = index * ORDER_KEY_GAP;
@@ -46,7 +54,7 @@ export function orderKeyBetween(low: string, high: string): string {
   let highExhausted = false;
   for (;;) {
     if (prefix.length >= ORDER_KEY_MAX_LENGTH) {
-      throw new Error('orderKeyBetween: no room left between these keys; rebalance with renumberedOrderKeys');
+      throw new OrderKeyBudgetExhaustedError('orderKeyBetween: no room left between these keys; rebalance with renumberedOrderKeys');
     }
     const lowDigit = position < low.length ? digitValue(low[position]!) : 0;
     const highDigit = !highExhausted && position < high.length ? digitValue(high[position]!) : BASE;
