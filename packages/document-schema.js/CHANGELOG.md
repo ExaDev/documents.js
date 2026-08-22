@@ -1,3 +1,10 @@
+# [4.9.0](https://github.com/ExaDev/documents.js/compare/document-schema.js@4.8.0...document-schema.js@4.9.0) (2026-08-22)
+
+
+### Features
+
+* **schema:** page-break paragraph properties on the node and styles-table halves ([390058e](https://github.com/ExaDev/documents.js/commit/390058ee87907e8cdab667fe8b05e4f65fdc9705))
+
 # [4.8.0](https://github.com/ExaDev/documents.js/compare/document-schema.js@4.7.0...document-schema.js@4.8.0) (2026-08-21)
 
 
