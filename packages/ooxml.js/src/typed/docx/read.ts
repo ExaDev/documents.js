@@ -75,7 +75,7 @@ export const DocxDocumentSchema = z.object({
   endnotes: z.array(FootnoteSchema),
   headers: z.array(z.string()),
   footers: z.array(z.string()),
-  // The structural view of the header/footer layer: each referenced part as block flow, and per-section references (positional, one entry per `sections` entry) naming those parts by path. The flat `headers`/`footers` text arrays above stay as the derived summary they always were -- collapsing them into this model wants a breaking change to a published shape, tracked rather than taken here.
+  // The structural view of the header/footer layer: each part as block flow (referenced or not), and per-section references (positional, one entry per `sections` entry) naming those parts by path. The flat `headers`/`footers` text arrays above stay as the derived summary they always were -- collapsing them into this model wants a breaking change to a published shape, tracked rather than taken here.
   headerFooterParts: z.array(HeaderFooterPartSchema),
   sectionHeaderFooters: z.array(SectionHeaderFooterReferencesSchema),
   // word/numbering.xml's own abstractNum/num definitions, keyed by w:numId -- see numbering.ts's own doc comment for why this sits as a separate top-level field rather than folded into ContentListMembership (the numId/level membership every list paragraph already carries via ContentParagraph.list, read unchanged by readListMembership below).
@@ -946,10 +946,13 @@ function readSectionHeaderFooters(sectPr: XmlElement, ctx: DocxReadContext): Sec
   return references;
 }
 
-// Each referenced header/footer part as block flow: the part's own body walked by the same collectFlowNodes machinery the document body uses, against the part's OWN relationships (an image inside a header resolves through the header part's rels, not the document's) while sharing the document's style/theme cascade. Parts are listed in package-key order, the same deterministic order the flat text arrays use; a part no section references stays out -- the flat arrays remain the catch-all for those.
-function readHeaderFooterParts(pkg: Package, ctx: DocxReadContext, referencedPaths: ReadonlySet<string>): HeaderFooterPart[] {
+// Each header/footer part as block flow: the part's own body walked by the same collectFlowNodes machinery the document body uses, against the part's OWN relationships (an image inside a header resolves through the header part's rels, not the document's) while sharing the document's style/theme cascade. Every part matching the word/header*/word/footer* path shape is walked, referenced or not -- sectionHeaderFooters carries the reference side, so an orphaned part still surfaces here rather than nowhere. Parts are listed in sorted package-key order, one entry per part.
+function readHeaderFooterParts(pkg: Package, ctx: DocxReadContext): HeaderFooterPart[] {
   const parts: HeaderFooterPart[] = [];
-  for (const path of [...referencedPaths].sort()) {
+  const paths = Object.keys(pkg.parts)
+    .filter((path) => (path.startsWith('word/header') || path.startsWith('word/footer')) && path.endsWith('.xml'))
+    .sort();
+  for (const path of paths) {
     const root = rootElement(pkg.parts[path]);
     if (root === undefined) {
       continue;
@@ -1091,14 +1094,6 @@ export function readDocxContent(pkg: Package): DocxDocument {
   };
 
   const { sections, headerFooters } = readSections(body, ctx);
-  const referencedPaths = new Set<string>();
-  for (const references of headerFooters) {
-    for (const slot of [references.header, references.footer]) {
-      for (const path of Object.values(slot ?? {})) {
-        referencedPaths.add(path);
-      }
-    }
-  }
   return {
     metadata: readCoreProperties(pkg),
     sections,
@@ -1107,7 +1102,7 @@ export function readDocxContent(pkg: Package): DocxDocument {
     endnotes: readNotesPart(pkg, 'word/endnotes.xml', 'w:endnote'),
     headers: readHeaderFooterText(pkg, 'word/header'),
     footers: readHeaderFooterText(pkg, 'word/footer'),
-    headerFooterParts: readHeaderFooterParts(pkg, ctx, referencedPaths),
+    headerFooterParts: readHeaderFooterParts(pkg, ctx),
     sectionHeaderFooters: headerFooters,
     numbering: readNumberingDefinitions(pkg),
   };
