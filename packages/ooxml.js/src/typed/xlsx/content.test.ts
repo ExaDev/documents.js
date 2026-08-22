@@ -831,6 +831,203 @@ describe('readXlsxContent: drawing pictures (oneCellAnchor)', () => {
   });
 });
 
+// The absoluteAnchor spelling: xdr:pos (x/y EMU, page-absolute) plus xdr:ext sizing, no markers at all. ContentSheetImage's anchor vocabulary is cell-relative, so the landing #776 decides on is the nearest-cell re-basing -- the grid geometry's own inverse maps the absolute position onto a containing column/row plus the offset within it, exactly the fields a from-marker spells directly. The fixture grid: column 0 is 10 chars (52.5 pt), column 1 is 20 chars (105 pt), rows default 15 pt; pos 762000 x 190500 EMU is 60 x 15 pt, so column 1 offset 7.5 pt (52.5 + 7.5 = 60) and row 1 offset 0 (15 sits exactly on the row-1 boundary).
+function absolutePicturePackage(extCx = '1828800', extCy = '914400'): Package {
+  const picture = el('xdr:pic', {}, [
+    el('xdr:nvPicPr', {}, [el('xdr:cNvPr', { id: '2', name: 'Picture 1' })]),
+    el('xdr:blipFill', {}, [el('a:blip', { 'r:embed': 'rIdImage' })]),
+    el('xdr:spPr', {}, [el('a:xfrm', {}, [el('a:off', { x: '0', y: '0' }), el('a:ext', { cx: '0', cy: '0' })]), el('a:prstGeom', { prst: 'rect' }, [el('a:avLst')])]),
+  ]);
+  const drawing = el('xdr:wsDr', {}, [
+    el('xdr:absoluteAnchor', {}, [
+      el('xdr:pos', { x: '762000', y: '190500' }),
+      el('xdr:ext', { cx: extCx, cy: extCy }),
+      picture,
+      el('xdr:clientData'),
+    ]),
+  ]);
+  const worksheet = el('worksheet', {}, [
+    el('cols', {}, [el('col', { min: '1', max: '1', width: '10' }), el('col', { min: '2', max: '2', width: '20' })]),
+    el('sheetData', {}, [el('row', { r: '1' }, [el('c', { r: 'A1' }, [el('v', {}, [txt('1')])])])]),
+    el('drawing', { 'r:id': 'rIdDrawing' }),
+  ]);
+  const relationship = (id: string, type: string, target: string) => el('Relationship', { Id: id, Type: type, Target: target });
+  return {
+    parts: {
+      'xl/workbook.xml': { kind: 'xml', nodes: [el('workbook', {}, [el('sheets', {}, [el('sheet', { name: 'Data', sheetId: '1', 'r:id': 'rIdSheet' })])])] },
+      'xl/_rels/workbook.xml.rels': { kind: 'xml', nodes: [el('Relationships', {}, [relationship('rIdSheet', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet', 'worksheets/sheet1.xml')])] },
+      'xl/worksheets/sheet1.xml': { kind: 'xml', nodes: [worksheet] },
+      'xl/worksheets/_rels/sheet1.xml.rels': { kind: 'xml', nodes: [el('Relationships', {}, [relationship('rIdDrawing', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing', '../drawings/drawing1.xml')])] },
+      'xl/drawings/drawing1.xml': { kind: 'xml', nodes: [drawing] },
+      'xl/drawings/_rels/drawing1.xml.rels': { kind: 'xml', nodes: [el('Relationships', {}, [relationship('rIdImage', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image', '../media/image1.png')])] },
+      'xl/media/image1.png': { kind: 'binary', base64: TINY_PNG_BASE64 },
+    },
+  };
+}
+
+describe('readXlsxContent: drawing pictures (absoluteAnchor)', () => {
+  it("reads an xdr:absoluteAnchor xdr:pic, its page-absolute position re-based into the cell anchor vocabulary through the grid geometry's own inverse", () => {
+    const document = readXlsxContent(absolutePicturePackage());
+    if (document.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    expect(document.sheets[0]?.images).toHaveLength(1);
+    const image = document.sheets[0]?.images[0];
+    expect(image?.kind).toBe('image');
+    expect(image?.format).toBe('png');
+    // pos 60 pt sits 7.5 pt into column 1 (52.5 pt wide column 0 first); pos 15 pt sits exactly on the row-1 boundary, the same cell a from-marker row=1 rowOff=0 names.
+    expect(image?.anchorColumn).toBe(1);
+    expect(image?.anchorRow).toBe(1);
+    expect(image?.offsetXPt).toBeCloseTo(7.5, 5);
+    expect(image?.offsetYPt).toBe(0);
+    // Size verbatim from xdr:ext: 1828800 x 914400 EMU is 144 x 72 pt.
+    expect(image?.widthPt).toBeCloseTo(144, 5);
+    expect(image?.heightPt).toBeCloseTo(72, 5);
+  });
+
+  it('skips an absolute picture whose ext size is not positive, the same degenerate-anchor guard the marker spellings have', () => {
+    const document = readXlsxContent(absolutePicturePackage('1828800', '0'));
+    if (document.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    expect(document.sheets[0]?.images).toEqual([]);
+  });
+
+  it('round-trips the whole document through ContentDocumentSchema, so the absolute-anchored sheet image is schema-valid as read', () => {
+    expect(ContentDocumentSchema.safeParse(readXlsxContent(absolutePicturePackage())).success).toBe(true);
+  });
+
+  it('does not survive the write pair: buildXlsxPackageFromContent emits no drawing part, so the read row is one-way (the established cell-comment asymmetry)', () => {
+    const rewritten = readXlsxContent(decodePackage(encodePackage(buildXlsxPackageFromContent(readXlsxContent(absolutePicturePackage())))));
+    if (rewritten.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    expect(rewritten.sheets[0]?.images).toEqual([]);
+  });
+});
+
+// The same absoluteAnchor carrying a chart graphic frame: the embedded object's frame keeps the page-absolute position verbatim (60 x 15 pt) while its anchor fields carry the same re-based cell the picture row lands on.
+function absoluteChartPackage(): Package {
+  const revenue = el('c:ser', {}, [
+    el('c:tx', {}, [el('c:strRef', {}, [el('c:f', {}, [txt('Sheet1!$B$1')]), el('c:strCache', {}, [el('c:ptCount', { val: '1' }), el('c:pt', { idx: '0' }, [el('c:v', {}, [txt('Revenue')])])])])]),
+    el('c:cat', {}, [el('c:strRef', {}, [el('c:strCache', {}, [el('c:ptCount', { val: '2' }), el('c:pt', { idx: '0' }, [el('c:v', {}, [txt('Q1')])]), el('c:pt', { idx: '1' }, [el('c:v', {}, [txt('Q2')])])])])]),
+    el('c:val', {}, [el('c:numRef', {}, [el('c:numCache', {}, [el('c:ptCount', { val: '2' }), el('c:pt', { idx: '0' }, [el('c:v', {}, [txt('8.5')])]), el('c:pt', { idx: '1' }, [el('c:v', {}, [txt('12')])])])])]),
+  ]);
+  const chartSpace = el('c:chartSpace', {}, [el('c:chart', {}, [el('c:plotArea', {}, [el('c:barChart', {}, [revenue])])])]);
+  const graphicFrame = el('xdr:graphicFrame', {}, [
+    el('xdr:nvGraphicFramePr', {}, [el('xdr:cNvPr', { id: '2', name: 'Chart 1' })]),
+    el('a:graphic', {}, [el('a:graphicData', { uri: 'http://schemas.openxmlformats.org/drawingml/2006/chart' }, [el('c:chart', { 'r:id': 'rIdChart' })])]),
+  ]);
+  const drawing = el('xdr:wsDr', {}, [
+    el('xdr:absoluteAnchor', {}, [
+      el('xdr:pos', { x: '762000', y: '190500' }),
+      el('xdr:ext', { cx: '1828800', cy: '914400' }),
+      graphicFrame,
+      el('xdr:clientData'),
+    ]),
+  ]);
+  const worksheet = el('worksheet', {}, [
+    el('cols', {}, [el('col', { min: '1', max: '1', width: '10' }), el('col', { min: '2', max: '2', width: '20' })]),
+    el('sheetData', {}, [el('row', { r: '1' }, [el('c', { r: 'A1' }, [el('v', {}, [txt('1')])])])]),
+    el('drawing', { 'r:id': 'rIdDrawing' }),
+  ]);
+  const relationship = (id: string, type: string, target: string) => el('Relationship', { Id: id, Type: type, Target: target });
+  return {
+    parts: {
+      'xl/workbook.xml': { kind: 'xml', nodes: [el('workbook', {}, [el('sheets', {}, [el('sheet', { name: 'Data', sheetId: '1', 'r:id': 'rIdSheet' })])])] },
+      'xl/_rels/workbook.xml.rels': { kind: 'xml', nodes: [el('Relationships', {}, [relationship('rIdSheet', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet', 'worksheets/sheet1.xml')])] },
+      'xl/worksheets/sheet1.xml': { kind: 'xml', nodes: [worksheet] },
+      'xl/worksheets/_rels/sheet1.xml.rels': { kind: 'xml', nodes: [el('Relationships', {}, [relationship('rIdDrawing', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing', '../drawings/drawing1.xml')])] },
+      'xl/drawings/drawing1.xml': { kind: 'xml', nodes: [drawing] },
+      'xl/drawings/_rels/drawing1.xml.rels': { kind: 'xml', nodes: [el('Relationships', {}, [relationship('rIdChart', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart', '../charts/chart1.xml')])] },
+      'xl/charts/chart1.xml': { kind: 'xml', nodes: [chartSpace] },
+    },
+  };
+}
+
+describe('readXlsxContent: chart graphic frames (absoluteAnchor)', () => {
+  it("reads an xdr:absoluteAnchor graphic frame, its frame at the pos verbatim and its anchor fields on the re-based cell", () => {
+    const document = readXlsxContent(absoluteChartPackage());
+    if (document.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    expect(document.sheets[0]?.embeddedObjects).toHaveLength(1);
+    const chart = document.sheets[0]?.embeddedObjects?.[0];
+    expect(chart?.objectKind).toBe('chart');
+    // The frame keeps the page-absolute position verbatim (762000 x 190500 EMU = 60 x 15 pt); the anchor fields name the same re-based cell the picture row lands on: column 1 offset 7.5 pt, row 1 offset 0.
+    expect(chart?.frame.xPt).toBeCloseTo(60, 5);
+    expect(chart?.frame.yPt).toBeCloseTo(15, 5);
+    expect(chart?.frame.widthPt).toBeCloseTo(144, 5);
+    expect(chart?.frame.heightPt).toBeCloseTo(72, 5);
+    expect(chart?.anchorColumn).toBe(1);
+    expect(chart?.anchorRow).toBe(1);
+    expect(chart?.offsetXPt).toBeCloseTo(7.5, 5);
+    expect(chart?.offsetYPt).toBe(0);
+    expect(chart?.document.kind).toBe('spreadsheet');
+  });
+
+  it('round-trips the whole document through ContentDocumentSchema, so the absolute-anchored chart object is schema-valid as read', () => {
+    expect(ContentDocumentSchema.safeParse(readXlsxContent(absoluteChartPackage())).success).toBe(true);
+  });
+});
+
+// One drawing part mixing all three anchor spellings over pictures (each resolving the same media part): the rows land in the part's own document order, not grouped by spelling -- the walk iterates the drawing's children once.
+function mixedAnchorsPicturePackage(): Package {
+  const picture = el('xdr:pic', {}, [
+    el('xdr:nvPicPr', {}, [el('xdr:cNvPr', { id: '2', name: 'Picture 1' })]),
+    el('xdr:blipFill', {}, [el('a:blip', { 'r:embed': 'rIdImage' })]),
+    el('xdr:spPr', {}, [el('a:xfrm', {}, [el('a:off', { x: '0', y: '0' }), el('a:ext', { cx: '0', cy: '0' })]), el('a:prstGeom', { prst: 'rect' }, [el('a:avLst')])]),
+  ]);
+  const drawing = el('xdr:wsDr', {}, [
+    el('xdr:oneCellAnchor', {}, [
+      el('xdr:from', {}, [el('xdr:col', {}, [txt('0')]), el('xdr:colOff', {}, [txt('0')]), el('xdr:row', {}, [txt('2')]), el('xdr:rowOff', {}, [txt('0')])]),
+      el('xdr:ext', { cx: '1828800', cy: '914400' }),
+      picture,
+      el('xdr:clientData'),
+    ]),
+    el('xdr:absoluteAnchor', {}, [
+      el('xdr:pos', { x: '762000', y: '190500' }),
+      el('xdr:ext', { cx: '1828800', cy: '914400' }),
+      picture,
+      el('xdr:clientData'),
+    ]),
+    el('xdr:twoCellAnchor', {}, [
+      el('xdr:from', {}, [el('xdr:col', {}, [txt('0')]), el('xdr:colOff', {}, [txt('0')]), el('xdr:row', {}, [txt('3')]), el('xdr:rowOff', {}, [txt('0')])]),
+      el('xdr:to', {}, [el('xdr:col', {}, [txt('1')]), el('xdr:colOff', {}, [txt('0')]), el('xdr:row', {}, [txt('4')]), el('xdr:rowOff', {}, [txt('0')])]),
+      picture,
+      el('xdr:clientData'),
+    ]),
+  ]);
+  const worksheet = el('worksheet', {}, [
+    el('cols', {}, [el('col', { min: '1', max: '1', width: '10' }), el('col', { min: '2', max: '2', width: '20' })]),
+    el('sheetData', {}, [el('row', { r: '1' }, [el('c', { r: 'A1' }, [el('v', {}, [txt('1')])])])]),
+    el('drawing', { 'r:id': 'rIdDrawing' }),
+  ]);
+  const relationship = (id: string, type: string, target: string) => el('Relationship', { Id: id, Type: type, Target: target });
+  return {
+    parts: {
+      'xl/workbook.xml': { kind: 'xml', nodes: [el('workbook', {}, [el('sheets', {}, [el('sheet', { name: 'Data', sheetId: '1', 'r:id': 'rIdSheet' })])])] },
+      'xl/_rels/workbook.xml.rels': { kind: 'xml', nodes: [el('Relationships', {}, [relationship('rIdSheet', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet', 'worksheets/sheet1.xml')])] },
+      'xl/worksheets/sheet1.xml': { kind: 'xml', nodes: [worksheet] },
+      'xl/worksheets/_rels/sheet1.xml.rels': { kind: 'xml', nodes: [el('Relationships', {}, [relationship('rIdDrawing', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing', '../drawings/drawing1.xml')])] },
+      'xl/drawings/drawing1.xml': { kind: 'xml', nodes: [drawing] },
+      'xl/drawings/_rels/drawing1.xml.rels': { kind: 'xml', nodes: [el('Relationships', {}, [relationship('rIdImage', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image', '../media/image1.png')])] },
+      'xl/media/image1.png': { kind: 'binary', base64: TINY_PNG_BASE64 },
+    },
+  };
+}
+
+describe('readXlsxContent: drawing pictures (mixed anchor spellings)', () => {
+  it('lands pictures from all three spellings in the drawing part\'s own document order, not grouped by spelling', () => {
+    const document = readXlsxContent(mixedAnchorsPicturePackage());
+    if (document.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    expect(document.sheets[0]?.images.map((image) => image.anchorRow)).toEqual([2, 1, 3]);
+    expect(document.sheets[0]?.images.map((image) => image.anchorColumn)).toEqual([0, 1, 0]);
+  });
+});
+
 // The two worksheet rule families no fixture in this repo carries and no harmonised vocabulary yet names (the construct inventory's own corpus gate defers freezing their shape until a real producer file is verified against): synthesized per ECMA-376, and quarantined verbatim onto each rule's anchor cell through the residue channel -- carried, restorable by a same-format writer, never interpreted here.
 function worksheetOnlyPackage(worksheet: ReturnType<typeof el>): Package {
   const workbook = el('workbook', {}, [el('sheets', {}, [el('sheet', { name: 'Data', sheetId: '1', 'r:id': 'rIdSheet' })])]);
