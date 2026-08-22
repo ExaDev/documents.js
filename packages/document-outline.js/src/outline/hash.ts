@@ -10,6 +10,9 @@ export function stableContentHash(value: unknown): string {
   return sha256Hex(new TextEncoder().encode(JSON.stringify(canonicalise(stripSchemaKeys(value)))));
 }
 
+// A versioned name for the exact recipe above (ExaDev/documents.js#660's refinement 2), minted for the graph projection: a projection's node ids are a persistence contract of their own (a shared/dedup content-hash id is meant to be stable across runs, processes, and -- per the regression test below -- additively-compatible document-schema.js releases), so the graph projector names its hash function explicitly rather than calling the published stableContentHash by that name directly. contentHashV1 IS stableContentHash, byte for byte -- not a second implementation, just this name for it -- so that a genuine future change to the recipe ships as a new contentHashV2 export, leaving every id ever computed under this name exactly as it was, rather than silently changing what "contentHashV1" produces for data that already exists.
+export const contentHashV1 = stableContentHash;
+
 // Same narrow-to-record guard node.ts uses for its OutlineNode check (and document-schema.js's content guards before it): after the typeof/null/array checks this narrows the value to Record<string, unknown> without an `as` assertion.
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

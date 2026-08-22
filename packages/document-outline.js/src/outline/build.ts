@@ -6,7 +6,7 @@ import {
   isShapeGroupNode,
   type ContentFormula,
   type ContentParagraph,
-  type DocumentPackage,
+  type DocumentTree,
   type DrawPageGroupNode,
   type ListChild,
   type SectionChild,
@@ -18,7 +18,7 @@ import {
 } from 'document-schema.js';
 import type { OutlineChild, OutlineLeaf, OutlineNode } from './node';
 
-// Builds the hierarchical outline over a tree-form DocumentPackage (document-schema.js 4.0.0's promoted shape, ExaDev/document-schema.js#20), dispatching on pkg.kind and projecting pkg.children. This is the TOC PROJECTION, not a decomposition: it deliberately re-groups across container boundaries -- a wordprocessing package's sections flow into one tree, a slide's paragraphs are taken across its shapes in shape order -- which is exactly the lossiness a table of contents wants, and exactly why the lossless decompose/flatten pair lives in documents.js's package boundary instead (ExaDev/document-outline.js#2 phase 2: one implementation, one authority; this package keeps no second copy of the grouping semantics). Returns the root scope's children, OutlineChild[]: the root is not itself a node (no synthetic "document" root group), so a wordprocessing document's pre-heading content -- or a document with no grouping signal at all -- appears as leaves directly in the returned array alongside (or instead of) group nodes. Document order is preserved everywhere: a child always appears in the position its source node occupied.
+// Builds the hierarchical outline over a tree-form DocumentTree (document-schema.js 4.0.0's promoted shape, ExaDev/document-schema.js#20), dispatching on pkg.kind and projecting pkg.children. This is the TOC PROJECTION, not a decomposition: it deliberately re-groups across container boundaries -- a wordprocessing package's sections flow into one tree, a slide's paragraphs are taken across its shapes in shape order -- which is exactly the lossiness a table of contents wants, and exactly why the lossless decompose/flatten pair lives in documents.js's package boundary instead (ExaDev/document-outline.js#2 phase 2: one implementation, one authority; this package keeps no second copy of the grouping semantics). Returns the root scope's children, OutlineChild[]: the root is not itself a node (no synthetic "document" root group), so a wordprocessing document's pre-heading content -- or a document with no grouping signal at all -- appears as leaves directly in the returned array alongside (or instead of) group nodes. Document order is preserved everywhere: a child always appears in the position its source node occupied.
 //
 // The tree already carries each container's internal grouping (heading groups nest by headingLevel, list groups by list.level), so within one container the projection is a plain structural walk. The stack machinery below exists for the cross-container merge: the heading/list stacks stay open across section boundaries (wordprocessing) and across shape boundaries within a slide (presentation), so a package whose section ends mid-nesting continues that nesting when the next section opens -- pre-order walk of the tree, stack semantics applied to each group anchor exactly as they were applied to each paragraph before the tree form existed. A paragraph at a leaf position sits flat at its scope and closes the list nesting; a group's own text is always its projected label, never duplicated as a leaf.
 //
@@ -28,7 +28,7 @@ import type { OutlineChild, OutlineLeaf, OutlineNode } from './node';
 // - spreadsheet: one group per sheet labelled with the sheet's own name; children are the sheet group's own children -- its images then its embedded objects, the fixed order the tree already carries. Cells are addressable data, not outline content -- they ride the sheet node and never appear.
 // - drawing: one group per page labelled "Page N" (1-based, again matching the Markdown renderer); children are the page's shape-group contents flattened to leaves in shape order (a drawing outline is flat under its page -- list structure inside a text box is not TOC hierarchy), then the page's vector leaves. Vectors carry no text but stay as leaves so structural diffing still sees them.
 // - formula: a single group whose one leaf child is the ContentFormula itself -- a standalone equation has no hierarchy to build, but chunking consumers still get it as one retrievable unit. The group's label is the formula's LaTeX linearisation when present, else the empty string.
-export function buildOutline(pkg: DocumentPackage): OutlineChild[] {
+export function buildOutline(pkg: DocumentTree): OutlineChild[] {
   switch (pkg.kind) {
     case 'wordprocessing':
       return wordprocessingOutline(pkg.children);

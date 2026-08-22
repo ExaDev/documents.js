@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { documentPackageWithSchema } from 'document-schema.js';
+import { documentTreeWithSchema } from 'document-schema.js';
 import { paragraph, sectionGroup, wordprocessingPackage } from '../test-support/fixtures';
-import { canonicalise, sha256, stableContentHash } from './hash';
+import { canonicalise, contentHashV1, sha256, stableContentHash } from './hash';
 
 // The SHA-256 implementation is pinned against the specification's own published digests (FIPS 180-4 example vectors): the empty string exercises the single-block padding, 'abc' a short message, and the 55-character string forces exactly two padded blocks with the length word in the second -- the padding edge a hand-rolled implementation most easily gets wrong.
 describe('sha256', () => {
@@ -34,15 +34,35 @@ describe('stableContentHash', () => {
   });
 
   it('hashes a serialised package identically with and without its $schema envelope label', () => {
-    // documentPackageWithSchema is the schema's own serialisation helper: it stamps the release-pinned $schema URI onto a package. The same package, serialised against two different schema releases, must hash equal -- the exact reserialisation case the strip exists for.
+    // documentTreeWithSchema is the schema's own serialisation helper: it stamps the release-pinned $schema URI onto a package. The same package, serialised against two different schema releases, must hash equal -- the exact reserialisation case the strip exists for.
     const pkg = wordprocessingPackage([sectionGroup([paragraph('body')])]);
-    expect(stableContentHash(documentPackageWithSchema(pkg))).toBe(stableContentHash(pkg));
+    expect(stableContentHash(documentTreeWithSchema(pkg))).toBe(stableContentHash(pkg));
   });
 
   it('never mutates its input, $schema keys included', () => {
     const value = { $schema: 'https://example.test/package-4.0.0.json', a: { $schema: 'x', b: 1 } };
     stableContentHash(value);
     expect(value).toEqual({ $schema: 'https://example.test/package-4.0.0.json', a: { $schema: 'x', b: 1 } });
+  });
+});
+
+// ExaDev/documents.js#660's refinement 2: an explicitly versioned name for the same recipe, so a future change to the recipe ships as contentHashV2 rather than a silent change to what this name produces.
+describe('contentHashV1', () => {
+  it('is exactly stableContentHash, not a second implementation', () => {
+    expect(contentHashV1({ a: 1, b: [2, 3] })).toBe(stableContentHash({ a: 1, b: [2, 3] }));
+    expect(contentHashV1).toBe(stableContentHash);
+  });
+
+  it('regression: hashes semantically identical content the same across additively-compatible shapes, simulating two document-schema.js releases that agree on meaning but differ at the margins', () => {
+    // An optional field explicitly set to undefined and the same field omitted entirely both mean "absent" to every content schema in this family (JSON.stringify drops undefined-valued properties either way) -- exactly the kind of additive, non-breaking difference a minor document-schema.js release could introduce (a new optional field older data simply never set) without the hash changing for pre-existing content.
+    const withExplicitUndefined = { kind: 'paragraph', runs: [{ text: 'Hello.' }], styleId: undefined };
+    const withOmittedField = { kind: 'paragraph', runs: [{ text: 'Hello.' }] };
+    expect(contentHashV1(withExplicitUndefined)).toBe(contentHashV1(withOmittedField));
+
+    // The same equivalence nested inside a tree-shaped value, matching how a real DocumentTree carries these fields several levels deep.
+    const nestedA = { section: { pageSize: { widthPt: 595, heightPt: 842 }, style: undefined }, children: [] };
+    const nestedB = { section: { pageSize: { widthPt: 595, heightPt: 842 } }, children: [] };
+    expect(contentHashV1(nestedA)).toBe(contentHashV1(nestedB));
   });
 });
 

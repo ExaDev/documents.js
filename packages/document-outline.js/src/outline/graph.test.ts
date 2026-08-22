@@ -1,15 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import {
-  documentPackageWithSchema,
-  DocumentPackageSchema,
+  documentTreeWithSchema,
+  DocumentTreeSchema,
   factorStyles,
   type ContentParagraph,
   type DefinitionEntry,
-  type DocumentPackage,
+  type DocumentTree,
   type StylesTable,
 } from 'document-schema.js';
 import { effectivePackage } from './effective';
 import { defaultExtractionPolicy, projectDocumentGraph, type ExtractionPolicy, type GraphNode, type PropertyGraph } from './graph';
+import { initialOrderKeys, keyBetween } from './order';
+
+// The fixed order key every DEFINED_BY/PROPERTY edge shares (there is never more than one such edge per (from, path), so there is nothing to distinguish it from) -- computed the identical way graph.ts's own internal SOLE_ORDER_KEY is, rather than duplicating its literal value.
+const SOLE_ORDER = keyBetween(undefined, undefined);
 import {
   drawPageGroup,
   drawingPackage,
@@ -35,7 +39,7 @@ const H1_BOLD_RUN = { bold: true, fontFamily: 'Times New Roman' };
 const REPORT_STYLES: StylesTable = { 'h1-bold': { run: H1_BOLD_RUN } };
 const MEMO_STYLES: StylesTable = { 'heading-1': { run: H1_BOLD_RUN } }; // same entry content, different local key
 
-function reportPackage(boilerplate: ReturnType<typeof paragraph>): DocumentPackage {
+function reportPackage(boilerplate: ReturnType<typeof paragraph>): DocumentTree {
   return wordprocessingPackage(
     [
       sectionGroup([
@@ -54,15 +58,15 @@ function reportPackage(boilerplate: ReturnType<typeof paragraph>): DocumentPacka
   );
 }
 
-function memoPackage(boilerplate: ReturnType<typeof paragraph>): DocumentPackage {
+function memoPackage(boilerplate: ReturnType<typeof paragraph>): DocumentTree {
   return wordprocessingPackage([sectionGroup([headingGroup('Memo', 1, [boilerplate], { style: 'heading-1' })])], {
     metadata: { title: 'Staff Memo' },
     styles: MEMO_STYLES,
   });
 }
 
-function expectSchemaValid(pkg: DocumentPackage, label: string): void {
-  const result = DocumentPackageSchema.safeParse(pkg);
+function expectSchemaValid(pkg: DocumentTree, label: string): void {
+  const result = DocumentTreeSchema.safeParse(pkg);
   expect(result.success ? 'valid' : `invalid (${label}): ${JSON.stringify(result.error.issues[0])}`).toBe('valid');
 }
 
@@ -111,12 +115,13 @@ describe('content-addressed deduplication', () => {
     expectSchemaValid(docB, 'docB');
     const sections = graph.nodes.filter((node) => node.kind === 'section');
     expect(sections).toHaveLength(3); // the shared one plus each document's own final section
-    const shared = sections.find((section) => graph.edges.some((edge) => edge.kind === 'CONTAINS' && edge.from === section.id && edge.order === 0 && graph.edges.some((rootEdge) => rootEdge.kind === 'CONTAINS' && rootEdge.from === 'a' && rootEdge.to === section.id)))!;
-    // One shared section node, referenced by each document's own root at its own local order.
+    const shared = sections.find((section) => graph.edges.some((edge) => edge.kind === 'CONTAINS' && edge.from === section.id && edge.order === initialOrderKeys(2)[0] && graph.edges.some((rootEdge) => rootEdge.kind === 'CONTAINS' && rootEdge.from === 'a' && rootEdge.to === section.id)))!;
+    // One shared section node, referenced by each document's own root at its own local order: first in root 'a''s own two-child list, second in root 'b''s.
     const seams = graph.edges.filter((edge) => edge.kind === 'CONTAINS' && edge.to === shared.id);
+    const [rootOrderFirst, rootOrderSecond] = initialOrderKeys(2);
     expect(seams.map((edge) => ({ from: edge.from, order: edge.order })).sort((x, y) => x.from.localeCompare(y.from))).toEqual([
-      { from: 'a', order: 0 },
-      { from: 'b', order: 1 },
+      { from: 'a', order: rootOrderFirst },
+      { from: 'b', order: rootOrderSecond },
     ]);
     // Every descendant of the shared section is also emitted exactly once: the heading anchor, two paragraphs, and each document's own leaf.
     expect(graph.nodes.filter((node) => node.kind === 'paragraph')).toHaveLength(5);
@@ -129,7 +134,8 @@ describe('content-addressed deduplication', () => {
     const matches = graph.nodes.filter((node) => node.kind === 'paragraph' && JSON.stringify(node).includes('Standard disclaimer.'));
     expect(matches).toHaveLength(1);
     const contains = graph.edges.filter((edge) => edge.to === matches[0]!.id && edge.kind === 'CONTAINS');
-    expect(contains.map((edge) => edge.order)).toEqual([0, 2]);
+    const [orderAt0, , orderAt2] = initialOrderKeys(3); // repeated/Body./repeated -- positions 0 and 2 of a 3-child section
+    expect(contains.map((edge) => edge.order)).toEqual([orderAt0, orderAt2]);
   });
 });
 
@@ -137,20 +143,26 @@ describe('Merkle-DAG edit behaviour', () => {
   const before = () => wordprocessingPackage([sectionGroup([paragraph('First.'), paragraph('Last.')])]);
   const after = () => wordprocessingPackage([sectionGroup([paragraph('First.'), paragraph('Inserted.'), paragraph('Last.')])]);
 
-  it('insertion between siblings changes no sibling identity, only local order values', () => {
+  it('insertion between siblings changes no sibling identity, and the after graph orders its edges correctly', () => {
+    // projectDocumentGraph is a stateless full projection with nothing to diff against between calls, so it mints a fresh evenly-spaced key batch (initialOrderKeys) for a group's children on every run -- it cannot itself exhibit "touches only the new edge", which is a property of a PERSISTENT, incremental consumer built on top of this projection (a live graph store that keeps each existing sibling's already-minted key and calls keyBetween -- see order.test.ts -- only for the newly inserted one). What this projection DOES guarantee, and what this test checks, is the more fundamental half: node IDENTITY is unaffected by where in the tree a node sits, so inserting a sibling mints no new ancestor nodes and the unaffected siblings keep their ids -- only the freshly (re)computed CONTAINS edges change, and they still name the correct document order.
     const beforeGraph = projectDocumentGraph([{ id: 'doc', package: before() }]);
     const afterGraph = projectDocumentGraph([{ id: 'doc', package: after() }]);
     const idOf = (graph: PropertyGraph, text: string) => nodeByText(graph, text).id;
     expect(idOf(afterGraph, 'First.')).toBe(idOf(beforeGraph, 'First.'));
     expect(idOf(afterGraph, 'Last.')).toBe(idOf(beforeGraph, 'Last.'));
+    // The section itself is a NEW node in the after graph too: it is a group, and a group's hash covers its children's ids, so gaining a child mints a new ancestor -- exactly the Merkle-DAG cascade the next test in this describe block exercises directly for a content edit. Insertion (not just edit) still cascades for the same reason: the parent's hash input changed shape.
+    expect(afterGraph.nodes.find((node) => node.kind === 'section')!.id).not.toBe(
+      beforeGraph.nodes.find((node) => node.kind === 'section')!.id,
+    );
     const afterSection = afterGraph.nodes.find((node) => node.kind === 'section')!;
     const orders = afterGraph.edges
       .filter((edge) => edge.from === afterSection.id && edge.kind === 'CONTAINS')
       .map((edge) => ({ order: edge.order, to: edge.to }));
+    const [orderFirst, orderInserted, orderLast] = initialOrderKeys(3);
     expect(orders).toEqual([
-      { order: 0, to: idOf(afterGraph, 'First.') },
-      { order: 1, to: idOf(afterGraph, 'Inserted.') },
-      { order: 2, to: idOf(afterGraph, 'Last.') },
+      { order: orderFirst, to: idOf(afterGraph, 'First.') },
+      { order: orderInserted, to: idOf(afterGraph, 'Inserted.') },
+      { order: orderLast, to: idOf(afterGraph, 'Last.') },
     ]);
   });
 
@@ -178,7 +190,7 @@ describe('definitions tables', () => {
     blocks: [{ kind: 'paragraph', runs: [{ text: 'The note body.' }] }],
   };
 
-  function footnotePackage(styleKey: string, definitionKey = 'n1'): DocumentPackage {
+  function footnotePackage(styleKey: string, definitionKey = 'n1'): DocumentTree {
     return wordprocessingPackage(
       [
         sectionGroup([
@@ -203,7 +215,7 @@ describe('definitions tables', () => {
     expect(anchorNode).toMatchObject({ kind: 'anchor', anchorType: 'footnote', name: '1' });
     expect('definition' in anchorNode).toBe(false); // the local key never reaches the node face
     expect(graph.edges.filter((edge) => edge.kind === 'DEFINED_BY')).toEqual([
-      { from: anchorNode.id, to: entryNodes[0]!.id, kind: 'DEFINED_BY', order: 0, path: ['definition'] },
+      { from: anchorNode.id, to: entryNodes[0]!.id, kind: 'DEFINED_BY', order: SOLE_ORDER, path: ['definition'] },
     ]);
   });
 
@@ -273,7 +285,7 @@ describe('definitions tables', () => {
   });
 
   it('extends deref-before-hash into entry bodies: an entry referencing another entry hashes its content', () => {
-    const chain = (secondBody: string): DocumentPackage =>
+    const chain = (secondBody: string): DocumentTree =>
       wordprocessingPackage(
         [sectionGroup([{ node: { kind: 'anchor', anchorType: 'footnote', name: '1', definition: 'n1' }, children: [] }])],
         {
@@ -304,7 +316,7 @@ describe('definitions tables', () => {
 
   it('refuses a cycle of definition refs among entries by name, not with a stack overflow', () => {
     // Two footnotes whose bodies reference each other -- the mutual-reference case the graph hardenings name as legitimate-looking input. No content hash can cover it (the hash would have to include itself), so the projection refuses it loudly.
-    const mutual: DocumentPackage = wordprocessingPackage([sectionGroup([paragraph('Body.')])], {
+    const mutual: DocumentTree = wordprocessingPackage([sectionGroup([paragraph('Body.')])], {
       definitions: {
         n1: {
           kind: 'footnote',
@@ -338,7 +350,7 @@ describe('definitions tables', () => {
 describe('factoring and node identity', () => {
   // One document, two spellings: the unfactored tree carries the recurring tuple inline on every styled paragraph; factorStyles (the minting pass itself) hoists it onto a section wrapper's ref plus a styles-table entry. The projection deliberately hashes each node's own projected content, not style-resolved content, so the two spellings' node ids differ wherever the style rides while everything it does not touch is shared -- and effectivePackage first is the caller's route to factoring-invariant ids, exactly as it already is for leafContentHash.
   const styled = (text: string): ContentParagraph => ({ kind: 'paragraph', runs: [{ text, bold: true }], alignment: 'center' });
-  const unfactored = (): DocumentPackage =>
+  const unfactored = (): DocumentTree =>
     wordprocessingPackage([sectionGroup([styled('Styled one.'), styled('Styled two.')]), sectionGroup([paragraph('Plain.')])]);
 
   it('gives a factored and an unfactored spelling of one document different styled-node ids, sharing the untouched remainder', () => {
@@ -367,6 +379,92 @@ describe('factoring and node identity', () => {
     const resolvedFactored = projectDocumentGraph([{ id: 'doc', package: effectivePackage(factored) }]);
     const resolvedUnfactored = projectDocumentGraph([{ id: 'doc', package: effectivePackage(unfactored()) }]);
     expect(resolvedFactored).toEqual(resolvedUnfactored);
+  });
+
+  // ExaDev/documents.js#660's refinement 3: a content node's id is always DERIVED by the projector from its own content, never accepted as a caller-supplied value -- there is no parameter anywhere in this module's public surface (GraphDocument, ExtractionPolicy, GraphProjectionOptions) through which a caller could hand the projector a mismatched id for a node being inserted. The dedup tests above already show ONE side of this (shared content collapses to one id); this test states both directions explicitly and independently of any sharing.
+  it('derives every content node id purely from its own content: two independently built identical contents always share one id, and two different contents can never collide', () => {
+    const identicalPayload = () => paragraph('Exactly the same content, built independently each time.');
+    // Each section also carries its OWN unique paragraph, so the two sections themselves stay distinct nodes -- otherwise an all-shared section would itself dedupe too, leaving only one CONTAINS edge to inspect instead of the two this test means to compare.
+    const docA = wordprocessingPackage([sectionGroup([identicalPayload(), paragraph('Unique to A.')])], { metadata: { title: 'A' } });
+    const docB = wordprocessingPackage([sectionGroup([identicalPayload(), paragraph('Unique to B.')])], { metadata: { title: 'B' } }); // a fresh object, same shared content, different document entirely
+    const docC = wordprocessingPackage([sectionGroup([paragraph('A different content string.')])], { metadata: { title: 'C' } });
+    const graph = projectDocumentGraph([
+      { id: 'a', package: docA },
+      { id: 'b', package: docB },
+      { id: 'c', package: docC },
+    ]);
+    const paragraphs = graph.nodes.filter((node) => node.kind === 'paragraph');
+    // Same content (independently constructed) -> exactly one shared node, not two.
+    expect(paragraphs.filter((node) => JSON.stringify(node).includes('Exactly the same content'))).toHaveLength(1);
+    // Different content -> a distinct id, never colliding with the shared one.
+    const shared = paragraphs.find((node) => JSON.stringify(node).includes('Exactly the same content'))!;
+    const distinct = paragraphs.find((node) => JSON.stringify(node).includes('A different content string.'))!;
+    expect(distinct.id).not.toBe(shared.id);
+    // The shared node is reachable from both a's and b's own section -- proof the identity is content-derived rather than tied to whichever document happened to insert it first.
+    const containsToShared = graph.edges.filter((edge) => edge.kind === 'CONTAINS' && edge.to === shared.id);
+    const sections = graph.nodes.filter((node) => node.kind === 'section');
+    const sectionOf = (docId: string) => sections.find((section) => graph.edges.some((edge) => edge.kind === 'CONTAINS' && edge.from === docId && edge.to === section.id))!;
+    expect(containsToShared.map((edge) => edge.from).sort()).toEqual([sectionOf('a').id, sectionOf('b').id].sort());
+  });
+});
+
+// ExaDev/documents.js#660's refinement 4: STYLED_BY is one edge per entry in a node's full style-resolution chain (ancestor refs plus this group's own, outermost first -- the exact order document-schema.js's resolveStyleChain folds, "nearest wins"), not one edge for a group's own ref alone.
+describe('ordered STYLED_BY chains', () => {
+  it('emits one STYLED_BY edge per ancestor-chain entry, outermost first, each targeting the correct styles-table entry -- reproducing resolveStyleChain order', () => {
+    const pkg = wordprocessingPackage(
+      [sectionGroup([headingGroup('Title', 1, [], { style: 'headingStyle' })], { style: 'sectionStyle' })],
+      { styles: { sectionStyle: { run: { italic: true } }, headingStyle: { run: { bold: true } } } },
+    );
+    expectSchemaValid(pkg, 'chained styles');
+    const graph = projectDocumentGraph([{ id: 'doc', package: pkg }]);
+
+    const sectionEntry = graph.nodes.find((node) => node.kind === 'styleEntry' && JSON.stringify(node).includes('italic'))!;
+    const headingEntry = graph.nodes.find((node) => node.kind === 'styleEntry' && JSON.stringify(node).includes('bold'))!;
+    expect(sectionEntry.id).not.toBe(headingEntry.id);
+
+    // The heading group is resolved through TWO ancestor levels: the section's own ref (outermost, so it applies first / is overridden by anything nearer) and the heading's own ref (nearest, so it wins on any overlapping property).
+    const heading = graph.nodes.find((node) => node.kind === 'paragraph' && node.headingLevel === 1)!;
+    const headingStyledBy = graph.edges.filter((edge) => edge.kind === 'STYLED_BY' && edge.from === heading.id);
+    expect(headingStyledBy).toHaveLength(2);
+    expect(headingStyledBy[0]).toMatchObject({ to: sectionEntry.id });
+    expect(headingStyledBy[1]).toMatchObject({ to: headingEntry.id });
+    expect(headingStyledBy[0]!.order < headingStyledBy[1]!.order).toBe(true); // outermost-first: the section's edge sorts before the heading's own
+    expect([...headingStyledBy].sort((a, b) => (a.order < b.order ? -1 : a.order > b.order ? 1 : 0))).toEqual(headingStyledBy);
+
+    // The section node's own (single-entry, no ancestors above it) chain still gets exactly one STYLED_BY edge -- the N=1 case this generalises from.
+    const section = graph.nodes.find((node) => node.kind === 'section')!;
+    const sectionStyledBy = graph.edges.filter((edge) => edge.kind === 'STYLED_BY' && edge.from === section.id);
+    expect(sectionStyledBy).toEqual([{ from: section.id, to: sectionEntry.id, kind: 'STYLED_BY', order: initialOrderKeys(1)[0]! }]);
+  });
+
+  it('reflects three ancestor levels in outermost-first order when a list group nests inside a styled heading inside a styled section', () => {
+    const pkg = wordprocessingPackage(
+      [
+        sectionGroup(
+          [headingGroup('Title', 1, [listGroup('Item', 0, [], { style: 'listStyle' })], { style: 'headingStyle' })],
+          { style: 'sectionStyle' },
+        ),
+      ],
+      {
+        styles: {
+          sectionStyle: { run: { italic: true } },
+          headingStyle: { run: { bold: true } },
+          listStyle: { run: { underline: true } },
+        },
+      },
+    );
+    expectSchemaValid(pkg, 'three-level chain');
+    const graph = projectDocumentGraph([{ id: 'doc', package: pkg }]);
+    const entryFor = (needle: string) => graph.nodes.find((node) => node.kind === 'styleEntry' && JSON.stringify(node).includes(needle))!;
+    const sectionEntry = entryFor('italic');
+    const headingEntry = entryFor('bold');
+    const listEntry = entryFor('underline');
+
+    const listNode = nodeByText(graph, 'Item');
+    const listStyledBy = graph.edges.filter((edge) => edge.kind === 'STYLED_BY' && edge.from === listNode.id);
+    expect(listStyledBy).toHaveLength(3);
+    expect(listStyledBy.map((edge) => edge.to)).toEqual([sectionEntry.id, headingEntry.id, listEntry.id]);
+    for (let i = 1; i < listStyledBy.length; i++) expect(listStyledBy[i - 1]!.order < listStyledBy[i]!.order).toBe(true);
   });
 });
 
@@ -406,7 +504,7 @@ describe('extraction policy', () => {
     for (const edge of graph.edges.filter((edge) => edge.kind === 'PROPERTY')) {
       expect(edge.path).toEqual(['metadata', 'title']);
       expect(edge.to).toBe(valueNodes[0]!.id);
-      expect(edge.order).toBe(0);
+      expect(edge.order).toBe(SOLE_ORDER);
     }
   });
 
@@ -435,11 +533,12 @@ describe('every document kind projects', () => {
     const slide = graph.nodes.find((node) => node.kind === 'slide')!;
     const shape = graph.nodes.find((node) => node.kind === 'shape')!;
     const top = nodeByText(graph, 'Top');
+    const soleContains = initialOrderKeys(1)[0]!; // every CONTAINS edge here is the only child of its parent
     expect(graph.edges).toEqual([
-      { from: 'deck', to: slide.id, kind: 'CONTAINS', order: 0 },
-      { from: slide.id, to: shape.id, kind: 'CONTAINS', order: 0 },
-      { from: shape.id, to: top.id, kind: 'CONTAINS', order: 0 },
-      { from: top.id, to: nodeByText(graph, 'Nested').id, kind: 'CONTAINS', order: 0 },
+      { from: 'deck', to: slide.id, kind: 'CONTAINS', order: soleContains },
+      { from: slide.id, to: shape.id, kind: 'CONTAINS', order: soleContains },
+      { from: shape.id, to: top.id, kind: 'CONTAINS', order: soleContains },
+      { from: top.id, to: nodeByText(graph, 'Nested').id, kind: 'CONTAINS', order: soleContains },
     ]);
   });
 
@@ -455,9 +554,10 @@ describe('every document kind projects', () => {
     const sheet = graph.nodes.find((node) => node.kind === 'sheet')!;
     expect(sheet).toMatchObject({ kind: 'sheet', name: 'Revenue' });
     const contains = graph.edges.filter((edge) => edge.from === sheet.id && edge.kind === 'CONTAINS');
+    const [orderImage, orderEmbedded] = initialOrderKeys(2);
     expect(contains.map((edge) => [edge.order, graph.nodes.find((node) => node.id === edge.to)!.kind])).toEqual([
-      [0, 'image'],
-      [1, 'embeddedObject'],
+      [orderImage, 'image'],
+      [orderEmbedded, 'embeddedObject'],
     ]);
   });
 
@@ -468,10 +568,11 @@ describe('every document kind projects', () => {
     expect(graph.nodes.map((node) => node.kind).sort()).toEqual(['documentPackage', 'drawPage', 'line', 'paragraph', 'rect', 'shape']);
     const page = graph.nodes.find((node) => node.kind === 'drawPage')!;
     const contains = graph.edges.filter((edge) => edge.from === page.id && edge.kind === 'CONTAINS');
+    const [orderShape, orderLine, orderRect] = initialOrderKeys(3);
     expect(contains.map((edge) => [edge.order, graph.nodes.find((node) => node.id === edge.to)!.kind])).toEqual([
-      [0, 'shape'],
-      [1, 'line'],
-      [2, 'rect'],
+      [orderShape, 'shape'],
+      [orderLine, 'line'],
+      [orderRect, 'rect'],
     ]);
   });
 
@@ -481,7 +582,7 @@ describe('every document kind projects', () => {
     const graph = projectDocumentGraph([{ id: 'eq', package: pkg }]);
     expect(graph.nodes.map((node) => node.kind).sort()).toEqual(['documentPackage', 'formula']);
     expect(graph.edges).toEqual([
-      { from: 'eq', to: graph.nodes.find((node) => node.kind === 'formula')!.id, kind: 'CONTAINS', order: 0 },
+      { from: 'eq', to: graph.nodes.find((node) => node.kind === 'formula')!.id, kind: 'CONTAINS', order: initialOrderKeys(1)[0]! },
     ]);
   });
 });
@@ -578,22 +679,24 @@ describe('projectDocumentGraph', () => {
 
     // Containment edges are stamped with document order.
     const reportSection = sections.find((section) => graph.edges.some((edge) => edge.kind === 'CONTAINS' && edge.from === section.id && edge.to === summary.id))!;
+    const soleContains = initialOrderKeys(1)[0]!; // report-1 and its section each have exactly one relevant child here
     const rootContains = edgesBetween(graph, 'report-1', 'CONTAINS');
-    expect(rootContains).toEqual([{ from: 'report-1', to: reportSection.id, kind: 'CONTAINS', order: 0 }]);
+    expect(rootContains).toEqual([{ from: 'report-1', to: reportSection.id, kind: 'CONTAINS', order: soleContains }]);
     const sectionContains = edgesBetween(graph, reportSection.id, 'CONTAINS');
-    expect(sectionContains).toEqual([{ from: reportSection.id, to: summary.id, kind: 'CONTAINS', order: 0 }]);
+    expect(sectionContains).toEqual([{ from: reportSection.id, to: summary.id, kind: 'CONTAINS', order: soleContains }]);
     const summaryContains = edgesBetween(graph, summary.id, 'CONTAINS');
-    expect(summaryContains.map((edge) => edge.order)).toEqual([0, 1]);
+    const [orderShared, orderRevenue] = initialOrderKeys(2);
+    expect(summaryContains.map((edge) => edge.order)).toEqual([orderShared, orderRevenue]);
     expect(summaryContains.map((edge) => edge.to)).toEqual([
       shared.id,
       nodeByText(graph, 'Revenue grew 12% quarter over quarter.').id,
     ]);
 
-    // Both heading paragraphs point at the one shared style node, from their own document's ref.
+    // Both heading paragraphs point at the one shared style node, from their own document's ref -- each heading's own chain is exactly its own single ref (no ancestor group in either fixture carries a style), so each gets exactly one STYLED_BY edge stamped with the one-entry chain's single order key.
     const styledBy = graph.edges.filter((edge) => edge.kind === 'STYLED_BY');
     expect(styledBy.map((edge) => edge.to)).toEqual([styleNodes[0]!.id, styleNodes[0]!.id]);
     expect(styledBy.map((edge) => edge.from).sort()).toEqual(headings.map((node) => node.id).sort());
-    expect(styledBy.every((edge) => edge.order === 0)).toBe(true);
+    expect(styledBy.every((edge) => edge.order === initialOrderKeys(1)[0]!)).toBe(true);
 
     // Every node id is unique, and content ids are lowercase hex content hashes.
     expect(new Set(graph.nodes.map((node) => node.id)).size).toBe(graph.nodes.length);
@@ -608,7 +711,7 @@ describe('projectDocumentGraph', () => {
 
   it('treats a $schema-stamped dump exactly like its parsed original', () => {
     const pkg = wordprocessingPackage([sectionGroup([paragraph('Body.')])], { metadata: { title: 'T' } });
-    const stamped = documentPackageWithSchema(pkg);
+    const stamped = documentTreeWithSchema(pkg);
     expect(projectDocumentGraph([{ id: 'doc', package: stamped }])).toEqual(projectDocumentGraph([{ id: 'doc', package: pkg }]));
   });
 

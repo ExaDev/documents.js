@@ -1,4 +1,4 @@
-// Fixture builders for every tree-form DocumentPackage kind, shaped against the real document-schema.js 4.0.0 field requirements -- every builder's output is asserted to pass DocumentPackageSchema.parse in the tests that use it, so a schema change in document-schema.js breaks these fixtures loudly instead of silently testing against a shape that no longer exists. Two layers: the leaf builders (paragraphs, tables, images, vectors, ...) and the group/package builders (headingGroup/sectionGroup/wordprocessingPackage/...), mirroring the tree's own two vocabularies. Never imported by src/index.ts and never reaching dist/ -- test-only, mirroring the family's test-support convention.
+// Fixture builders for every tree-form DocumentTree kind, shaped against the real document-schema.js 4.0.0 field requirements -- every builder's output is asserted to pass DocumentTreeSchema.parse in the tests that use it, so a schema change in document-schema.js breaks these fixtures loudly instead of silently testing against a shape that no longer exists. Two layers: the leaf builders (paragraphs, tables, images, vectors, ...) and the group/package builders (headingGroup/sectionGroup/wordprocessingPackage/...), mirroring the tree's own two vocabularies. Never imported by src/index.ts and never reaching dist/ -- test-only, mirroring the family's test-support convention.
 import type {
   ContentCellValue,
   ContentEmbeddedObject,
@@ -12,7 +12,7 @@ import type {
   ContentTable,
   ContentVector,
   DefinitionsTable,
-  DocumentPackage,
+  DocumentTree,
   DrawPageChild,
   DrawPageGroupNode,
   HeadingGroupNode,
@@ -111,7 +111,7 @@ export function sheetImage(altText?: string): ContentSheetImage {
   };
 }
 
-// An embedded whole wordprocessing document, block-flow-shaped via embeddedObjectBlock below or sheet-anchored as-is -- the recursive arm stays one intact leaf whichever container holds it. The payload is a flat ContentDocument, not a DocumentPackage: schema 4 promotes the TOP-LEVEL package to tree form, but an embedded document stays the flat codec-exchange shape it always was.
+// An embedded whole wordprocessing document, block-flow-shaped via embeddedObjectBlock below or sheet-anchored as-is -- the recursive arm stays one intact leaf whichever container holds it. The payload is a flat ContentDocument, not a DocumentTree: schema 4 promotes the TOP-LEVEL package to tree form, but an embedded document stays the flat codec-exchange shape it always was.
 export function embeddedObject(): ContentEmbeddedObject {
   return {
     objectKind: 'wordprocessing',
@@ -299,11 +299,11 @@ export function drawPageGroup(children: DrawPageChild[], options: GroupOptions =
   };
 }
 
-// The envelope options every package builder shares -- exactly the DocumentPackage fields outside `kind` and `children`, so a fixture can prove any envelope field survives alongside the tree without a second bespoke builder per kind.
+// The envelope options every package builder shares -- exactly the DocumentTree fields outside `kind` and `children`, so a fixture can prove any envelope field survives alongside the tree without a second bespoke builder per kind.
 export interface PackageOptions {
   metadata?: LayoutMetadata;
   symbolTable?: SymbolTable;
-  pages?: NonNullable<DocumentPackage['pages']>;
+  pages?: NonNullable<DocumentTree['pages']>;
   styles?: StylesTable;
   definitions?: DefinitionsTable;
   layers?: DefinitionsTable;
@@ -321,7 +321,7 @@ function genericTableOptions(options: PackageOptions): Record<string, unknown> {
   };
 }
 
-export function wordprocessingPackage(children: SectionGroupNode[], options: PackageOptions = {}): DocumentPackage {
+export function wordprocessingPackage(children: SectionGroupNode[], options: PackageOptions = {}): DocumentTree {
   return {
     kind: 'wordprocessing',
     metadata: options.metadata ?? {},
@@ -333,7 +333,7 @@ export function wordprocessingPackage(children: SectionGroupNode[], options: Pac
   };
 }
 
-export function presentationPackage(children: SlideGroupNode[], options: PackageOptions = {}): DocumentPackage {
+export function presentationPackage(children: SlideGroupNode[], options: PackageOptions = {}): DocumentTree {
   return {
     kind: 'presentation',
     metadata: options.metadata ?? {},
@@ -345,7 +345,7 @@ export function presentationPackage(children: SlideGroupNode[], options: Package
   };
 }
 
-export function spreadsheetPackage(children: SheetGroupNode[], options: PackageOptions = {}): DocumentPackage {
+export function spreadsheetPackage(children: SheetGroupNode[], options: PackageOptions = {}): DocumentTree {
   return {
     kind: 'spreadsheet',
     metadata: options.metadata ?? {},
@@ -357,7 +357,7 @@ export function spreadsheetPackage(children: SheetGroupNode[], options: PackageO
   };
 }
 
-export function drawingPackage(children: DrawPageGroupNode[], options: PackageOptions = {}): DocumentPackage {
+export function drawingPackage(children: DrawPageGroupNode[], options: PackageOptions = {}): DocumentTree {
   return {
     kind: 'drawing',
     metadata: options.metadata ?? {},
@@ -369,7 +369,7 @@ export function drawingPackage(children: DrawPageGroupNode[], options: PackageOp
   };
 }
 
-export function formulaPackage(latex?: string): DocumentPackage {
+export function formulaPackage(latex?: string): DocumentTree {
   return {
     kind: 'formula',
     metadata: {},
