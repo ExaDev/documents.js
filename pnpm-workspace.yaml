@@ -19,6 +19,7 @@ minimumReleaseAgeExclude:
   - archive-codec
   - byte-codec
   - document-cli
+  - document-compute.js
   - document-mcp
   - document-outline.js
   - document-schema.js
