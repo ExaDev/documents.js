@@ -318,6 +318,38 @@ describe('readOdtContent: cross-paragraph bookmark pairing at block scope', () =
   });
 });
 
+describe('readOdtContent: cross-paragraph reference-mark pairing at block scope', () => {
+  it('brackets the blocks a leading reference-mark-start and a trailing reference-mark-end span', () => {
+    const pkg = odtPackage([
+      el('text:p', {}, [el('text:reference-mark-start', { 'text:name': 'range' }), txt('first')]),
+      paragraph('middle'),
+      el('text:p', {}, [txt('last'), el('text:reference-mark-end', { 'text:name': 'range' })]),
+    ]);
+    const blocks = firstSectionBlocks(pkg);
+    expect(blocks.map((block) => block.kind)).toEqual(['constructStart', 'paragraph', 'paragraph', 'paragraph', 'constructEnd']);
+    if (blocks[0]?.kind !== 'constructStart') {
+      throw new Error('expected a constructStart marker');
+    }
+    expect(blocks[0].descriptor).toEqual({ kind: 'anchor', anchorType: 'bookmark', name: 'range' });
+  });
+
+  it('pairs a reference-mark across paragraphs independently of a same-named bookmark spanning the same blocks', () => {
+    // Two families under one name, both block-scoped over the same range: each pairs with its own spelling, producing two marker pairs rather than one -- the same-name separation the paragraph-level pairing applies, at block scope.
+    const pkg = odtPackage([
+      el('text:p', {}, [el('text:bookmark-start', { 'text:name': 'shared' }), el('text:reference-mark-start', { 'text:name': 'shared' }), txt('first')]),
+      paragraph('middle'),
+      el('text:p', {}, [txt('last'), el('text:reference-mark-end', { 'text:name': 'shared' }), el('text:bookmark-end', { 'text:name': 'shared' })]),
+    ]);
+    const blocks = firstSectionBlocks(pkg);
+    expect(blocks.map((block) => block.kind)).toEqual(['constructStart', 'constructStart', 'paragraph', 'paragraph', 'paragraph', 'constructEnd', 'constructEnd']);
+    const descriptors = blocks.filter((block) => block.kind === 'constructStart').map((block) => (block.kind === 'constructStart' ? block.descriptor : undefined));
+    expect(descriptors).toEqual([
+      { kind: 'anchor', anchorType: 'bookmark', name: 'shared' },
+      { kind: 'anchor', anchorType: 'bookmark', name: 'shared' },
+    ]);
+  });
+});
+
 describe('readOdtContent: anchored draw:frames in text flow', () => {
   // A 1x1 transparent PNG -- the smallest bytes sniffImageFormat accepts as a real image part.
   const PNG_BASE64 =
