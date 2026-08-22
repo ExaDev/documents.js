@@ -1,7 +1,7 @@
 {
   "name": "documents",
   "private": true,
-  "version": "1.26.46",
+  "version": "1.26.47",
   "type": "module",
   "description": "A client-only, statically-built web UI for every conversion and editing tool in the documents.js ecosystem.",
   "repository": {
