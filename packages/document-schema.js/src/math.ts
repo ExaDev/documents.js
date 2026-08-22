@@ -285,3 +285,34 @@ export const MathMatrixSchema = z.object({
 }).refine((matrix) => new Set(matrix.rows.map((row) => row.length)).size <= 1, {
   message: 'matrix rows must all have the same number of columns',
 });
+
+// -- Evaluation runtime values --
+//
+// The typed contracts an evaluator of MathExpression consumes and produces, so evaluation inputs are schemas like everything else in this module rather than ad-hoc shapes each consumer reinvents. This package defines and validates them only; the arithmetic over them (dimension-checked add/subtract, interval endpoint rules, pow/sqrt domain checks, trigonometry) lives in the packages that evaluate, since this package never evaluates anything.
+
+// The runtime result of evaluating a MathExpression, and the point-valued half of what a caller may bind to a symbol: a plain JS magnitude already resolved into the SI-coherent base units for its dimension, alongside that dimension as a DimensionVector. Deliberately not the same shape as MathQty: MathQty is a document-authored expression-tree leaf (an exact value plus a unit-registry id, meaningless until resolved against a SymbolTable), while Quantity is the resolved value itself, so an evaluator can compare and combine two Quantities by their dimension vectors directly with no registry lookup in the loop.
+export const QuantitySchema = z.object({
+  kind: z.literal('quantity'),
+  magnitude: z.number(), // a plain float, not an ExactRational: trig/sqrt results and numeric solve-for roots have no exact rational representation in general, so exactness is spent where it buys something (unit-conversion factors, resolved before this value exists) rather than held here as false precision
+  dimension: DimensionVectorSchema,
+});
+export type Quantity = z.infer<typeof QuantitySchema>;
+
+// The bounded-value counterpart to Quantity over the identical dimension model, for a formula whose stated fact is a compliance region rather than a point (e.g. 0.87 <= cos(phi) <= 1). min/max are both inclusive; the refinement below is the schema-level half of that invariant, an assembling function is the code-path half for values built outside z.parse.
+export const IntervalSchema = z
+  .object({
+    kind: z.literal('interval'),
+    min: z.number(),
+    max: z.number(),
+    dimension: DimensionVectorSchema,
+  })
+  .refine((value) => value.min <= value.max, { message: 'interval min must not exceed max' });
+export type Interval = z.infer<typeof IntervalSchema>;
+
+// One bindable value: a point Quantity or a bounded Interval, so a single binding shape serves both evaluation modes without the caller having to know in advance which mode a given formula needs.
+export const EvaluationValueSchema = z.union([QuantitySchema, IntervalSchema]);
+export type EvaluationValue = z.infer<typeof EvaluationValueSchema>;
+
+// The concrete values a MathExpression's 'sym' nodes reference: keyed by symbol-table id (MathSym.id / MathSymbolEntry.id above), each entry being one EvaluationValue.
+export const FormulaBindingsSchema = z.record(z.string(), EvaluationValueSchema);
+export type FormulaBindings = z.infer<typeof FormulaBindingsSchema>;
