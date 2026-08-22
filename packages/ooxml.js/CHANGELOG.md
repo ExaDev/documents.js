@@ -1,3 +1,11 @@
+# [4.7.0](https://github.com/ExaDev/documents.js/compare/ooxml.js@4.6.0...ooxml.js@4.7.0) (2026-08-22)
+
+
+### Features
+
+* **ooxml:** read xdr:absoluteAnchor worksheet drawings ([fee220d](https://github.com/ExaDev/documents.js/commit/fee220d2378053f2cb6f01b8d90e7d32a79f79e2))
+* **ooxml:** read xdr:oneCellAnchor worksheet drawings ([3d2c698](https://github.com/ExaDev/documents.js/commit/3d2c6981a59a3466ed0fda7f9ec074006f020cfb))
+
 # [4.6.0](https://github.com/ExaDev/documents.js/compare/ooxml.js@4.5.2...ooxml.js@4.6.0) (2026-08-22)
 
 
