@@ -63,7 +63,7 @@ function appendShape(page: OdgPage, shape: ContentShape): void {
     if (block.kind !== 'paragraph') {
       continue; // a table or nested image inside a text shape is out of scope for this bridge, mirroring buildOdpPackage's own identical comment.
     }
-    // headings: 'none' -- a draw:text-box's content model is (text:p | text:list)* with no text:h anywhere in it (see PopulateParagraphOptions).
-    populateParagraph(textShape.appendParagraph(), block, { headings: 'none' });
+    // headings: 'style-name' -- a draw:text-box's content model is (text:p | text:list)* with no text:h anywhere in it, so a heading paragraph stays the text:p this call has always written, but its text:style-name now points at the scaffold's Heading_20_N definition: the depth itself remains a format-boundary loss on this target, while the heading at least keeps its visual weight and a reference that resolves (see PopulateParagraphOptions).
+    populateParagraph(textShape.appendParagraph(), block, { headings: 'style-name' });
   }
 }

@@ -73,8 +73,8 @@ describe('buildOdpPackage', () => {
     expect(secondRun?.color).toEqual({ r: 0, g: 0, b: 1 });
   });
 
-  // A shape text box is not office:text: draw:text-box's content model is (text:p | text:list)* with no text:h anywhere in it, so a paragraph carrying the canonical headingLevel stays the text:p populateParagraph has always written here -- its heading depth is dropped as a format-boundary loss on this target (the same class as odtToOdp's own heading-becomes-slide-boundary heuristic), never written as markup the model forbids and odf.js's own frame reader (typed/draw/shapes.ts) would silently skip.
-  it('keeps a heading paragraph in a text box a text:p, since draw:text-box has no text:h', () => {
+  // A shape text box is not office:text: draw:text-box's content model is (text:p | text:list)* with no text:h anywhere in it, so the heading's DEPTH can never cross into a slide as markup. The one carryable fact is its visual weight: the text:p populateParagraph writes here points text:style-name at the scaffold's own Heading_20_N definition, so the heading keeps its size and bold -- proven resolvable by the round trip, which reads the style back through the cascade onto the runs -- rather than degrading to an unstyled paragraph that loses weight as well as depth.
+  it('points a heading paragraph in a text box at the scaffold\'s Heading_20_N style, keeping its visual weight without text:h', () => {
     const content = presentationDoc([
       {
         size: { widthPt: 960, heightPt: 540 },
@@ -91,10 +91,19 @@ describe('buildOdpPackage', () => {
     const pkg = buildOdpPackage(content);
     const part = pkg.parts['content.xml'];
     expect(elementsWithTag(part?.kind === 'xml' ? part.nodes : [], 'text:h')).toHaveLength(0);
-    const editor = new OdpEditor(pkg);
-    const [slide] = editor.slides();
-    const [shape] = slide!.shapes();
-    expect(shape?.text).toBe('Slide heading');
+    const paragraph = elementsWithTag(part?.kind === 'xml' ? part.nodes : [], 'text:p')[0];
+    expect(paragraph?.attributes).toContainEqual({ name: 'text:style-name', value: 'Heading_20_2' });
+    const roundTripped = readOdpContent(pkg);
+    if (roundTripped.kind !== 'presentation') {
+      throw new Error('expected a presentation ContentDocument');
+    }
+    const block = roundTripped.slides[0]!.shapes[0]!.blocks[0];
+    if (block?.kind !== 'paragraph') {
+      throw new Error('expected a paragraph block');
+    }
+    // styleId carries the verbatim reference; the resolved run properties are the proof the reference actually resolves to the scaffold's definition (HEADING_STYLES[2]: bold, 22pt) rather than naming a style nothing defines.
+    expect(block.styleId).toBe('Heading_20_2');
+    expect(block.runs[0]).toMatchObject({ text: 'Slide heading', bold: true, sizePt: 22 });
   });
 
   it('writes a shape rotation back as a real draw:transform, unlike buildPptxPackage which has no rotation setter yet', () => {
