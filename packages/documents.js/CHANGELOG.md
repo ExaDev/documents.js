@@ -1,3 +1,16 @@
+# [4.7.0](https://github.com/ExaDev/documents.js/compare/documents.js@4.6.3...documents.js@4.7.0) (2026-08-22)
+
+
+### Features
+
+* **documents:** keep odp/odg text-box heading weight through Heading_20_N ([efe473c](https://github.com/ExaDev/documents.js/commit/efe473c0e1c2b2694d7e970720dee8799a22394f))
+* **documents:** promote odt table-cell headings to text:h on write and read ([e29403c](https://github.com/ExaDev/documents.js/commit/e29403c79c7d8245c3a5c3928b7f902ec7ebd781))
+
+
+### Dependencies
+
+- Updated odf.js to ^5.5.0
+
 ## [4.6.3](https://github.com/ExaDev/documents.js/compare/documents.js@4.6.2...documents.js@4.6.3) (2026-08-22)
 
 
