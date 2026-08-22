@@ -1,3 +1,10 @@
+# [5.2.0](https://github.com/ExaDev/documents.js/compare/odf.js@5.1.2...odf.js@5.2.0) (2026-08-22)
+
+
+### Features
+
+* **odf:** read a spreadsheet embedded in an odt through a shared embedded-document dispatch ([f2233b1](https://github.com/ExaDev/documents.js/commit/f2233b10033c2721e367eeb49350139e7eb09a71))
+
 ## [5.1.2](https://github.com/ExaDev/documents.js/compare/odf.js@5.1.1...odf.js@5.1.2) (2026-08-21)
 
 
