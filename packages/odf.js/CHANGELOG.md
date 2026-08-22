@@ -1,3 +1,10 @@
+# [5.4.0](https://github.com/ExaDev/documents.js/compare/odf.js@5.3.0...odf.js@5.4.0) (2026-08-22)
+
+
+### Features
+
+* **odf:** read cross-reference marks and displays as run-level constructs ([008d4d8](https://github.com/ExaDev/documents.js/commit/008d4d8f1744e75bdade70ad8fcc52dd23defef5))
+
 # [5.3.0](https://github.com/ExaDev/documents.js/compare/odf.js@5.2.0...odf.js@5.3.0) (2026-08-22)
 
 
