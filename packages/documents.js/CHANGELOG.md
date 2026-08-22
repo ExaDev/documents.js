@@ -1,3 +1,18 @@
+# [4.5.0](https://github.com/ExaDev/documents.js/compare/documents.js@4.4.8...documents.js@4.5.0) (2026-08-22)
+
+
+### Features
+
+* **documents:** define Heading_20_N common styles in the odt scaffold ([47d0340](https://github.com/ExaDev/documents.js/commit/47d03407fb140801d49411106d65773966180275))
+* **documents:** emit real text:h headings from the odt paragraph editor ([b74afa3](https://github.com/ExaDev/documents.js/commit/b74afa3362352585450fc71c33723187e2ed1d15))
+* **documents:** write headingLevel paragraphs through buildOdtPackage as real odt headings ([162b48a](https://github.com/ExaDev/documents.js/commit/162b48afa7d3542f51028f7024e9bfdba8206135))
+* **pptx:** wire embeddedPresentationSerialiser for ooxml.js's docx writer ([dd3d22f](https://github.com/ExaDev/documents.js/commit/dd3d22f3ec997b2321103d09e4faffd6f2a5f713))
+
+
+### Dependencies
+
+- Updated ooxml.js to ^4.6.0
+
 ## [4.4.8](https://github.com/ExaDev/documents.js/compare/documents.js@4.4.7...documents.js@4.4.8) (2026-08-22)
 
 
