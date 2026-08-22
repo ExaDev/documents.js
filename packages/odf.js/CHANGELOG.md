@@ -1,3 +1,27 @@
+# [5.3.0](https://github.com/ExaDev/documents.js/compare/odf.js@5.2.0...odf.js@5.3.0) (2026-08-22)
+
+
+### Bug Fixes
+
+* **odf:** quarantine ods vendor extensions inside each table:table where Calc writes them ([5fcbdf1](https://github.com/ExaDev/documents.js/commit/5fcbdf1ba081c8e713fdfa9fe5c5ffb8412105ca))
+* **odf:** read odp slide transitions off the drawing-page style, both odf spellings ([2765aa7](https://github.com/ExaDev/documents.js/commit/2765aa71c554ff18c3934a71b70b9857a46ce534))
+* **odf:** read only a ruby's base text as flow content, never its gloss ([0b70189](https://github.com/ExaDev/documents.js/commit/0b70189d86f08363bee6bc70ee0049356b7a7df1))
+* **odf:** resolve the construct-rows rebase against the embedded dispatch ([76377cd](https://github.com/ExaDev/documents.js/commit/76377cd6caba01b02743bd4a15d1d065fe76bbba))
+
+
+### Features
+
+* **odf:** map every master page, split sections at page-style switches ([45b3a16](https://github.com/ExaDev/documents.js/commit/45b3a167121424a69c5c52c384be357a40b7341f))
+* **odf:** quarantine the ods/odp/odg residue rows ([31624d0](https://github.com/ExaDev/documents.js/commit/31624d0a5867a7162e519fa16060238cc89562f1))
+* **odf:** quarantine the odt residue rows through the package-tier channel ([3cfd7af](https://github.com/ExaDev/documents.js/commit/3cfd7af3c640f3d8f0eecf53413079c6f697ef90))
+* **odf:** quarantine vendor-extension elements at the ods spreadsheet level ([470ba98](https://github.com/ExaDev/documents.js/commit/470ba98121d4c0ee7e972833e728a24eec031505))
+* **odf:** read fo:break-before/after through the cascade onto paragraph page-break flags ([0e495a1](https://github.com/ExaDev/documents.js/commit/0e495a1bd94edae479cb79cfe6b8d008455e8831))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^4.9.0
+
 # [5.2.0](https://github.com/ExaDev/documents.js/compare/odf.js@5.1.2...odf.js@5.2.0) (2026-08-22)
 
 
