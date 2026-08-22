@@ -148,8 +148,8 @@ describe('buildOdtPackage', () => {
     expect(roundTripped.sections[0]!.blocks[0]).toMatchObject({ kind: 'paragraph', headingLevel: 2, list: { level: 0 }, runs: [{ text: 'Item heading' }] });
   });
 
-  // odf.js's own reader reads table:table-cell content as text:p only (typed/shared/table.ts), so promoting a cell paragraph to text:h would write text its own reader cannot read back. The write side mirrors that scope: a cell heading stays a text:p carrying its text and the style reference, the heading level degrading exactly as the reader's own documented cell-scope gap does.
-  it('keeps a heading paragraph inside a table cell a text:p, mirroring odf.js\'s own cell reading scope', () => {
+  // A table cell is one of the three ODF containers whose content model carries text:h, and odf.js's own cell reader reads one back with full heading identity (typed/shared/table.ts), so the writer promotes a cell heading exactly as a body paragraph -- the write/read pair this round trip proves. This closes the last container where headingLevel used to degrade to a plain styled text:p on the odt side.
+  it('writes a heading paragraph inside a table cell as the text:h the reader reads back', () => {
     const content = wordDoc([
       {
         pageSize: { widthPt: 612, heightPt: 792 },
@@ -164,7 +164,10 @@ describe('buildOdtPackage', () => {
       },
     ]);
     const pkg = buildOdtPackage(content);
-    expect(elementsWithTag([contentRoot(pkg)], 'text:h')).toHaveLength(0);
+    const heading = elementsWithTag([contentRoot(pkg)], 'text:h')[0];
+    expect(heading).toBeDefined();
+    expect(attr(heading!, 'text:outline-level')).toBe('3');
+    expect(attr(heading!, 'text:style-name')).toBe('Heading_20_3');
     const roundTripped = readOdtContent(pkg);
     if (roundTripped.kind !== 'wordprocessing') {
       throw new Error('expected a wordprocessing ContentDocument');
@@ -173,7 +176,7 @@ describe('buildOdtPackage', () => {
     if (table?.kind !== 'table') {
       throw new Error('expected a table block');
     }
-    expect(table.rows[0]!.cells[0]!.blocks[0]).toMatchObject({ kind: 'paragraph', styleId: 'Heading3', runs: [{ text: 'Cell heading' }] });
+    expect(table.rows[0]!.cells[0]!.blocks[0]).toMatchObject({ kind: 'paragraph', styleId: 'Heading3', headingLevel: 3, runs: [{ text: 'Cell heading' }] });
   });
 
   it('inserts a page break between sections', () => {

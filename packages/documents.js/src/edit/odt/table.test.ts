@@ -46,6 +46,19 @@ describe('OdtTable', () => {
     expect(cell.rowSpan).toBeUndefined();
   });
 
+  it('paragraphs() surfaces a text:h cell child as a paragraph with its headingLevel readable, matching OdtBody.paragraphs\'s own both-tag walk', () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 1, columns: 1 });
+    const cell = table.cell(0, 0);
+    cell.paragraphs()[0]!.appendRun({ text: 'Cell heading' });
+    cell.paragraphs()[0]!.headingLevel = 2;
+    // The headingLevel setter retagged the cell's own first paragraph element to text:h in place -- the cell read view must still see it, or a heading written into a cell (buildOdtPackage's own populateCellBlocks now does exactly that) would be invisible to the editor surface and cell.text would silently drop its words.
+    expect(cell.paragraphs()).toHaveLength(1);
+    expect(cell.paragraphs()[0]!.headingLevel).toBe(2);
+    expect(cell.paragraphs()[0]!.text).toBe('Cell heading');
+    expect(cell.text).toBe('Cell heading');
+  });
+
   it('appendEmptyRow + appendCell/appendCoveredCell build a row cell by cell, matching appendRow\'s own uniform-grid cell count', () => {
     const editor = createOdt();
     const table = editor.body.appendTable({ rows: 0, columns: 2 });
