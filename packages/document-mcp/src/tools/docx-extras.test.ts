@@ -44,7 +44,7 @@ describe('docx_extras', () => {
     await pair.close();
   });
 
-  it("reads the fixture's own comments, footnotes, headers, footers, and numbering via a filesystem path", async () => {
+  it("reads the fixture's own comments, footnotes, header/footer parts, and numbering via a filesystem path", async () => {
     const result = await pair.client.callTool({ name: 'docx_extras', arguments: { source: { path: join(workspace, 'extras.docx') } } });
 
     expect(result.isError).toBeFalsy();
@@ -56,8 +56,6 @@ describe('docx_extras', () => {
         { id: '1', text: DOCX_EXTRAS_FIXTURE.commentWithoutAuthorText },
       ],
       footnotes: [{ id: '1', text: DOCX_EXTRAS_FIXTURE.footnoteText }],
-      headers: [DOCX_EXTRAS_FIXTURE.headerText],
-      footers: [DOCX_EXTRAS_FIXTURE.footerText],
       // The fixture writes word/header1.xml/word/footer1.xml with no relationships at all, so these parts surface through the unreferenced-part walk; its scaffold styles.xml has no docDefaults, so the part runs resolve bare. sectionHeaderFooters is positional -- createDocx's single sectPr spells no references, hence [{}].
       headerFooterParts: [
         { path: 'word/footer1.xml', kind: 'footer', blocks: [{ kind: 'paragraph', runs: [{ text: DOCX_EXTRAS_FIXTURE.footerText }] }] },
@@ -84,6 +82,6 @@ describe('docx_extras', () => {
     const result = await pair.client.callTool({ name: 'docx_extras', arguments: { source: { bytesBase64: bytesToBase64(plain.toBytes()), format: 'docx' } } });
 
     expect(result.isError).toBeFalsy();
-    expect(result.structuredContent).toStrictEqual({ comments: [], footnotes: [], headers: [], footers: [], headerFooterParts: [], sectionHeaderFooters: [{}], numbering: {} });
+    expect(result.structuredContent).toStrictEqual({ comments: [], footnotes: [], headerFooterParts: [], sectionHeaderFooters: [{}], numbering: {} });
   });
 });

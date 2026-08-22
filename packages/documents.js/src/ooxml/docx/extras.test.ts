@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { docxWithExtrasPackage, minimalDocxPackage } from '../../test-support/docx';
 import { readDocxExtras } from './extras';
 
-// readDocxExtras is a thin re-projection of ooxml.js's own readDocx, exposing exactly the fields readDocxContent (./read.ts) cannot carry through ContentDocument: comments, footnotes, headers/footers (flat text and structural parts/references alike), and numbering definitions. These tests confirm real content in each of those parts survives the round trip, and that a package with none of them reports empty collections rather than throwing.
+// readDocxExtras is a thin re-projection of ooxml.js's own readDocx, exposing exactly the fields readDocxContent (./read.ts) cannot carry through ContentDocument: comments, footnotes, header/footer parts with their per-section references, and numbering definitions. These tests confirm real content in each of those parts survives the round trip, and that a package with none of them reports empty collections rather than throwing.
 
 describe('readDocxExtras', () => {
   it('reads a comment, its author, and its text from word/comments.xml', () => {
@@ -18,11 +18,9 @@ describe('readDocxExtras', () => {
     expect(extras.footnotes[0]).toEqual({ id: '1', text: 'See appendix A for details.' });
   });
 
-  it('reads header and footer text and structure', () => {
+  it('reads each header/footer part as block flow and the section references naming them', () => {
     const extras = readDocxExtras(docxWithExtrasPackage());
-    expect(extras.headers).toEqual(['Header text']);
-    expect(extras.footers).toEqual(['Footer text']);
-    // The fixture's docDefaults ask for Calibri at 22 half-points, so the structural blocks' runs carry the resolved cascade.
+    // The fixture's docDefaults ask for Calibri at 22 half-points, so the part blocks' runs carry the resolved cascade.
     expect(extras.headerFooterParts).toEqual([
       { path: 'word/footer1.xml', kind: 'footer', blocks: [{ kind: 'paragraph', runs: [{ text: 'Footer text', fontFamily: 'Calibri', sizePt: 11 }] }] },
       { path: 'word/header1.xml', kind: 'header', blocks: [{ kind: 'paragraph', runs: [{ text: 'Header text', fontFamily: 'Calibri', sizePt: 11 }] }] },
@@ -41,12 +39,10 @@ describe('readDocxExtras', () => {
     });
   });
 
-  it('reports empty comments/footnotes/headers/footers/numbering for a package with none of those parts', () => {
+  it('reports empty comments/footnotes/header-footer parts/numbering for a package with none of those parts', () => {
     const extras = readDocxExtras(minimalDocxPackage());
     expect(extras.comments).toEqual([]);
     expect(extras.footnotes).toEqual([]);
-    expect(extras.headers).toEqual([]);
-    expect(extras.footers).toEqual([]);
     expect(extras.headerFooterParts).toEqual([]);
     // Positional by section: one entry per section, {} when that section spells no references -- the fixture's single sectPr spells none.
     expect(extras.sectionHeaderFooters).toEqual([{}]);
