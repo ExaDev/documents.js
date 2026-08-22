@@ -48,7 +48,8 @@ describe('docx_extras', () => {
     const result = await pair.client.callTool({ name: 'docx_extras', arguments: { source: { path: join(workspace, 'extras.docx') } } });
 
     expect(result.isError).toBeFalsy();
-    expect(result.structuredContent).toStrictEqual({
+    // toEqual, not toStrictEqual: the reader materialises every schema-optional paragraph/run property as an explicit undefined key, and structuredContent carries that object across the in-memory transport without a JSON boundary -- a strict comparison would demand every optional key be spelled undefined here, which the JSON mirror below (where JSON.stringify has already dropped them) could never satisfy.
+    expect(result.structuredContent).toEqual({
       // Each comment and note carries its own w:id, the key a comment extent's or note reference's anchor name joins its body back through.
       comments: [
         { id: '0', author: DOCX_EXTRAS_FIXTURE.commentAuthor, text: DOCX_EXTRAS_FIXTURE.commentWithAuthorText },
@@ -57,6 +58,12 @@ describe('docx_extras', () => {
       footnotes: [{ id: '1', text: DOCX_EXTRAS_FIXTURE.footnoteText }],
       headers: [DOCX_EXTRAS_FIXTURE.headerText],
       footers: [DOCX_EXTRAS_FIXTURE.footerText],
+      // The fixture writes word/header1.xml/word/footer1.xml with no relationships at all, so these parts surface through the unreferenced-part walk; its scaffold styles.xml has no docDefaults, so the part runs resolve bare. sectionHeaderFooters is positional -- createDocx's single sectPr spells no references, hence [{}].
+      headerFooterParts: [
+        { path: 'word/footer1.xml', kind: 'footer', blocks: [{ kind: 'paragraph', runs: [{ text: DOCX_EXTRAS_FIXTURE.footerText }] }] },
+        { path: 'word/header1.xml', kind: 'header', blocks: [{ kind: 'paragraph', runs: [{ text: DOCX_EXTRAS_FIXTURE.headerText }] }] },
+      ],
+      sectionHeaderFooters: [{}],
       numbering: {
         [DOCX_EXTRAS_FIXTURE.numId]: {
           levels: { '0': { format: DOCX_EXTRAS_FIXTURE.numberingLevel.format, text: DOCX_EXTRAS_FIXTURE.numberingLevel.text, startAt: 1 } },
@@ -64,10 +71,10 @@ describe('docx_extras', () => {
       },
     });
 
-    // content mirrors structuredContent as JSON text -- the same "content is JSON.stringify(structuredContent)" convention every other tool in this package follows.
+    // content mirrors structuredContent as JSON text -- the same "content is JSON.stringify(structuredContent)" convention every other tool in this package follows. Same toEqual reasoning as above: JSON.stringify drops the undefined-valued optional keys structuredContent still carries.
     const [block] = result.content;
     expect(block?.type).toBe('text');
-    expect(block?.type === 'text' ? JSON.parse(block.text) : undefined).toStrictEqual(result.structuredContent);
+    expect(block?.type === 'text' ? JSON.parse(block.text) : undefined).toEqual(result.structuredContent);
   });
 
   it('reads a plain docx with none of the five kinds of extra data, via inline base64 bytes', async () => {
@@ -77,6 +84,6 @@ describe('docx_extras', () => {
     const result = await pair.client.callTool({ name: 'docx_extras', arguments: { source: { bytesBase64: bytesToBase64(plain.toBytes()), format: 'docx' } } });
 
     expect(result.isError).toBeFalsy();
-    expect(result.structuredContent).toStrictEqual({ comments: [], footnotes: [], headers: [], footers: [], numbering: {} });
+    expect(result.structuredContent).toStrictEqual({ comments: [], footnotes: [], headers: [], footers: [], headerFooterParts: [], sectionHeaderFooters: [{}], numbering: {} });
   });
 });
