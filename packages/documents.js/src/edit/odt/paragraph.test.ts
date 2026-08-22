@@ -99,7 +99,7 @@ describe('buildParagraph', () => {
     expect(paragraph.styleId).not.toBe('Standard');
   });
 
-  // A heading is a distinct ODF ELEMENT (text:h + text:outline-level), not a text:p with a heading-ish style name -- and the style spelling ODF resolves is Heading_20_2 (ODF's _20_ escape for the space in "Heading 2"), never the synthetic cross-format "Heading2" shape the flat ContentDocument carries in styleId. The paragraph's own init carries both spellings of the same depth for exactly the reason odf.js's own reader derives both from the one text:h element (typed/odt/read.ts's readParagraphOrHeading): one element state, two consumers (styleId-keyed and numeric), no way for them to disagree.
+  // A heading is a distinct ODF ELEMENT (text:h + text:outline-level), not a text:p with a heading-ish style name -- and the style spelling ODF resolves is Heading_20_2 (ODF's _20_ escape for the space in "Heading 2"), never the synthetic cross-format "Heading2" shape the flat ContentDocument carries in styleId. The paragraph's own init carries both spellings of the same depth for exactly the reason odf.js's own reader derives both from the one text:h element (typed/shared/paragraph.ts's readParagraphOrHeading): one element state, two consumers (styleId-keyed and numeric), no way for them to disagree.
   it('builds a real text:h with text:outline-level and the Heading_20_N style spelling for a headingLevel init', () => {
     const editor = createOdt();
     const paragraphElement = buildParagraph(editor.toPackage(), { text: 'Chapter', headingLevel: 2 });

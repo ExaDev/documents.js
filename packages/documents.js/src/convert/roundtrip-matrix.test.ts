@@ -7,7 +7,7 @@ import { parseCsvRecords } from '../csv/records';
 import { CsvSheetNotSpecifiedError } from '../csv/write';
 import { createDocx, openDocx } from '../edit/docx/editor';
 import { openOdp } from '../edit/odp/editor';
-import { openOdt } from '../edit/odt/editor';
+import { createOdt, openOdt } from '../edit/odt/editor';
 import { openPptx } from '../edit/pptx/editor';
 import { decodeMarkdownText, encodeMarkdownText } from '../markdown/text';
 import { readOdgContent } from '../odf/odg/read';
@@ -430,6 +430,16 @@ const MATRIX_ENTRIES: readonly MatrixEntry[] = [
       expect(odpBytes.length).toBeGreaterThan(0);
       const odtBack = odpToOdt(odpBytes);
       expect(odtBack.length).toBeGreaterThan(0);
+      // The bridge's named heading edge: a heading carried straight into a slide's text box cannot keep its depth (a draw:text-box's content model carries no text:h) but keeps its weight -- the text:p lands on the scaffold's Heading_20_N reference, which resolves through the cascade back to the heading's own bold and size.
+      const editor = createOdt();
+      editor.body.appendParagraph({ headingLevel: 2 }).appendRun({ text: 'Slide heading' });
+      const headingOdpBytes = odtToOdp(editor.toBytes());
+      const [slide] = openOdp(headingOdpBytes).slides();
+      const [shape] = slide!.shapes();
+      const [paragraph] = shape!.paragraphs();
+      expect(paragraph?.styleId).toBe('Heading_20_2');
+      expect(paragraph?.runs()[0]?.bold).toBe(true);
+      expect(paragraph?.runs()[0]?.sizePt).toBe(22);
     },
   },
 ];
