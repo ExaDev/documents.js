@@ -1,4 +1,4 @@
-import type { Box, ContentBlock, ContentDocument, ContentParagraph, ContentSection, DefinitionsTable, DocumentPackage, LayoutMetadata, Margins, PageSize, ProvenanceDescriptor, SourceResidue } from 'document-schema.js';
+import type { ContentBlock, ContentParagraph, ContentSection, DefinitionsTable, DocumentPackage, LayoutMetadata, Margins, PageSize, ProvenanceDescriptor, SourceResidue } from 'document-schema.js';
 import { assemblePackage, PAGE_SIZE_A4 } from 'document-schema.js';
 import type { Package } from '../../model/package';
 import type { XmlElement, XmlNode } from '../../model/node';
