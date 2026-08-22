@@ -39,6 +39,24 @@ describe('formatDocxExtrasLines', () => {
     expect(lines).toContain(`  [1] ${DOCX_EXTRAS_FIXTURE.footerText}`);
   });
 
+  it("derives one line per part from that part's own runs, concatenated with no separator", () => {
+    // The fixture's parts arrive through the unreferenced-part walk (they carry no relationships), and this pins the derivation itself: two paragraphs in one header render as one line, every run joined with nothing between.
+    const extras: DocxExtras = {
+      ...EMPTY_EXTRAS,
+      headerFooterParts: [
+        {
+          path: 'word/header1.xml',
+          kind: 'header',
+          blocks: [
+            { kind: 'paragraph', runs: [{ text: 'Running header' }] },
+            { kind: 'paragraph', runs: [{ text: 'Second line' }] },
+          ],
+        },
+      ],
+    };
+    expect(formatDocxExtrasLines(extras)).toEqual(['headers', '  [1] Running headerSecond line']);
+  });
+
   it('renders a numbering definition keyed by numId, its own level keyed by ilvl in ascending numeric order', () => {
     const lines = formatDocxExtrasLines(fixtureExtras());
     expect(lines).toContain('numbering');
