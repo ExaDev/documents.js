@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { orderKeyBetween, orderKeyForIndex, renumberedOrderKeys } from './order-keys';
+import { OrderKeyBudgetExhaustedError, orderKeyBetween, orderKeyForIndex, renumberedOrderKeys } from './order-keys';
 
 // Unit-level coverage of the #660 fractional order-key primitive, independent of graph.test.ts's own single integration-style property test: every branch of orderKeyBetween's digit walk (a direct single-step midpoint, a step that needs one extra digit of precision because its neighbours are adjacent, repeated bisection into an already-narrow interval until the width cap refuses, and the different-length/implicit-zero-pad case), plus the two minting functions' own guarantees.
 describe('orderKeyForIndex', () => {
@@ -49,7 +49,7 @@ describe('orderKeyBetween', () => {
     expect(low < mid && mid < high).toBe(true);
   });
 
-  it('bisects repeatedly into the same shrinking interval until the width cap refuses, rather than silently duplicating a key', () => {
+  it('bisects repeatedly into the same shrinking interval until the width cap refuses with the named rebalance signal, rather than silently duplicating a key', () => {
     const low = orderKeyForIndex(0);
     let high = orderKeyForIndex(1);
     let iterations = 0;
@@ -61,7 +61,7 @@ describe('orderKeyBetween', () => {
         iterations += 1;
         if (iterations > 1000) throw new Error('orderKeyBetween never refused -- unbounded growth');
       }
-    }).toThrowError(/no room left between these keys; rebalance with renumberedOrderKeys/);
+    }).toThrowError(OrderKeyBudgetExhaustedError);
   });
 
   it('refuses when low does not sort strictly before high', () => {
