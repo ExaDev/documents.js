@@ -1,8 +1,8 @@
-// The read side of this package's public surface, in both of the two encodings document-schema.js states for one document: readMarkdown produces the tree-form DocumentPackage (the primary entry point), readMarkdownContent produces the flat ContentDocument the whole lower pipeline actually builds.
+// The read side of this package's public surface, in both of the two encodings document-schema.js states for one document: readMarkdown produces the tree-form DocumentTree (the primary entry point), readMarkdownContent produces the flat ContentDocument the whole lower pipeline actually builds.
 //
-// Why two: document-schema.js owns both encodings and the structural transform between them (decompose/assemblePackage in that direction, flattenPackage back), and its own barrel names assemblePackage "the one helper a construction site calls". A codec IS a construction site -- it is where a document first comes into existence from bytes -- so the tree is what this package hands a caller by default, and the flat form is what the pipeline internally produces on the way there. Naming follows ooxml.js's readXlsx/readXlsxContent pair: the unsuffixed name is the one a caller should reach for, the `Content` suffix names the flat constituent underneath it.
+// Why two: document-schema.js owns both encodings and the structural transform between them (decompose/assembleTree in that direction, flattenTree back), and its own barrel names assembleTree "the one helper a construction site calls". A codec IS a construction site -- it is where a document first comes into existence from bytes -- so the tree is what this package hands a caller by default, and the flat form is what the pipeline internally produces on the way there. Naming follows ooxml.js's readXlsx/readXlsxContent pair: the unsuffixed name is the one a caller should reach for, the `Content` suffix names the flat constituent underneath it.
 //
-// Which composition the tree side uses: assemblePackage, not bare decompose. decompose alone returns only the children array (PackageChildren), leaving the envelope splice and the styles-minting pass to the caller; assemblePackage is decompose + envelope + factorStyles in one, and is what documents.js's own conversion sites call for every onDocument payload. There is no `pages` argument here because markdown has no layout stage at all -- no page geometry is ever rendered, matching the layoutless bridge conversions in documents.js that likewise call assemblePackage with content only.
+// Which composition the tree side uses: assembleTree, not bare decompose. decompose alone returns only the children array (PackageChildren), leaving the envelope splice and the styles-minting pass to the caller; assembleTree is decompose + envelope + factorStyles in one, and is what documents.js's own conversion sites call for every onDocument payload. There is no `pages` argument here because markdown has no layout stage at all -- no page geometry is ever rendered, matching the layoutless bridge conversions in documents.js that likewise call assembleTree with content only.
 //
 // RECONCILIATION DECISION (recorded here per the scaffolding task that created this file): readMarkdownContent/writeMarkdownContent operate on document-schema.js's full ContentDocument directly (kind/metadata/sections), not a bare {metadata, sections} shape wrapped by a documents.js-side adapter. The envelope this decision was recorded against carried a formatVersion field per arm; document-schema.js 4.0.0 retired it, and the full-envelope-vs-bare-shape fork the decision documents is unchanged by that.
 //
@@ -15,7 +15,7 @@
 //
 // Wiring: readMarkdownContent is a thin wrapper over src/lower/lower.ts's lowerMarkdown (front matter extraction, block parsing, and lowering, already composed there over raw text) -- the pipeline src/lower/lower.ts's own top-of-file table documents in full: src/scan (tokenize) -> src/block (block structure) -> src/inline (inline content, deferred per block) -> src/lower (AST -> ContentDocument), with src/html and src/image consulted by src/block/src/inline respectively. What this module itself adds: collecting every diagnostic lowerMarkdown reports into the returned `diagnostics` array (in addition to forwarding each one to a caller-supplied sink, exactly like it would see them calling lowerMarkdown directly), and a single AbortSignal check up front -- the parser is synchronous and single-pass, so there is no natural mid-parse checkpoint to check again later, matching this package's own "identity, clock, and observability are first-class ports" convention without overclaiming incremental cancellation it cannot actually provide.
 
-import { assemblePackage, type ContentDocument, type DefinitionEntry, type DocumentPackage, type SourceResidue } from 'document-schema.js';
+import { assembleTree, type ContentDocument, type DefinitionEntry, type DocumentTree, type SourceResidue } from 'document-schema.js';
 import type { LinkReferenceMap } from './inline/link';
 import type { MarkdownDiagnostic } from './diagnostics/diagnostics';
 import { lowerMarkdownDetailed } from './lower/lower';
@@ -23,7 +23,7 @@ import type { ReadMarkdownOptions } from './options/options';
 
 // The field is `documentPackage` rather than the bare noun `package`: `package` is a reserved word in strict mode, so `const { package } = readMarkdown(src)` -- the idiom every caller reaches for first -- is a syntax error, and the only spellings that work are an alias or a property access. A name whose obvious use is illegal is the wrong name.
 export interface ReadMarkdownResult {
-  readonly documentPackage: DocumentPackage;
+  readonly documentPackage: DocumentTree;
   readonly diagnostics: readonly MarkdownDiagnostic[];
 }
 
@@ -68,13 +68,13 @@ function linkDefinitionEntries(references: LinkReferenceMap): Record<string, Def
   return entries;
 }
 
-// Markdown source text -> the tree-form DocumentPackage. The diagnostics are the identical set readMarkdownContent collects -- the tree transform reports none of its own, since decomposition and minting are pure structure over content the lower pipeline has already finished producing. Two facts the flat form has no home for splice onto the assembled tree: the reference definition table (pkg.definitions, the link tenant) and the verbatim front-matter block (pkg.source.frontmatter, the package-level residue table) -- both tree-only by document-schema.js's own design, which is exactly why the tree is the form to reach for when those facts must survive.
+// Markdown source text -> the tree-form DocumentTree. The diagnostics are the identical set readMarkdownContent collects -- the tree transform reports none of its own, since decomposition and minting are pure structure over content the lower pipeline has already finished producing. Two facts the flat form has no home for splice onto the assembled tree: the reference definition table (pkg.definitions, the link tenant) and the verbatim front-matter block (pkg.source.frontmatter, the package-level residue table) -- both tree-only by document-schema.js's own design, which is exactly why the tree is the form to reach for when those facts must survive.
 export function readMarkdown(text: string, options: ReadMarkdownOptions = {}): ReadMarkdownResult {
   const detail = readMarkdownDetail(text, options);
-  const assembled = assemblePackage(detail.document);
+  const assembled = assembleTree(detail.document);
   const definitions = linkDefinitionEntries(detail.references);
   const frontMatterResidue: SourceResidue | undefined = detail.frontMatterSource === undefined ? undefined : { format: 'markdown', xml: detail.frontMatterSource };
-  const documentPackage: DocumentPackage =
+  const documentPackage: DocumentTree =
     definitions === undefined && frontMatterResidue === undefined
       ? assembled
       : {
@@ -85,7 +85,7 @@ export function readMarkdown(text: string, options: ReadMarkdownOptions = {}): R
   return { documentPackage, diagnostics: detail.diagnostics };
 }
 
-// Markdown source text -> the flat ContentDocument, without the tree transform. The form documents.js's own conversion pipeline consumes, and the level to work at when composing a package boundary by hand (decompose/flattenPackage rather than assemblePackage) or feeding a ContentDocument-consuming builder directly. The reference definition table and the raw front-matter block have no flat home and are not carried here -- reference USE sites already resolved to hyperlink-carrying runs at parse time, so only re-emission fidelity (the tree pair's job) ever needed them.
+// Markdown source text -> the flat ContentDocument, without the tree transform. The form documents.js's own conversion pipeline consumes, and the level to work at when composing a package boundary by hand (decompose/flattenTree rather than assembleTree) or feeding a ContentDocument-consuming builder directly. The reference definition table and the raw front-matter block have no flat home and are not carried here -- reference USE sites already resolved to hyperlink-carrying runs at parse time, so only re-emission fidelity (the tree pair's job) ever needed them.
 export function readMarkdownContent(text: string, options: ReadMarkdownOptions = {}): ReadMarkdownContentResult {
   const detail = readMarkdownDetail(text, options);
   return { document: detail.document, diagnostics: detail.diagnostics };
