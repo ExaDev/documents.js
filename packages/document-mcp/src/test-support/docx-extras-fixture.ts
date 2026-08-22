@@ -1,8 +1,10 @@
-// A real docx that carries every field `readDocxExtras` (documents.js) reads and `readDocxContent`'s own `ContentDocument` cannot: comments, footnotes, headers, footers, and a numbering definition. `DocxEditor` has no write side for any of these -- comments/footnotes/headers/footers/numbering are none of them addressable through `DocxBody`/`DocxParagraph` -- so this builder starts from a real editor-built package and writes the four extra parts directly, at the exact conventional paths (`word/comments.xml`, `word/footnotes.xml`, `word/header1.xml`/`word/footer1.xml`, `word/numbering.xml`) documents.js's own reader resolves them from with no relationship indirection at all. Ported from document-cli's own src/test-support/docx-extras-fixture.ts.
-import { createDocx, encodePackage, type XmlElement } from 'documents.js';
+// A real docx that carries every field `readDocxExtras` (documents.js) reads and `readDocxContent`'s own `ContentDocument` cannot: comments, footnotes, headers, footers, and a numbering definition. `DocxEditor` has no write side for any of these -- comments/footnotes/headers/footers/numbering are none of them addressable through `DocxBody`/`DocxParagraph` -- so this builder starts from a real editor-built package and writes the extra parts directly. Comments/footnotes/numbering resolve from conventional paths with no relationship indirection (`word/comments.xml`, `word/footnotes.xml`, `word/numbering.xml`); the header/footer parts do not -- `readHeaderFooterParts`/`readSectionHeaderFooters` (ooxml.js) resolve `word/header1.xml`/`word/footer1.xml` only through a real `w:headerReference`/`w:footerReference` on the document's own trailing `w:sectPr` and the relationship each names, so this builder also wires those in. Ported from document-cli's own src/test-support/docx-extras-fixture.ts.
+import { childrenWithTag, createDocx, encodePackage, rootElement, type XmlElement } from 'documents.js';
 import { el, txt, xmlDeclaration } from './ooxml-fixture';
 
 const WORDML_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+const HEADER_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/header';
+const FOOTER_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer';
 
 function paragraphWithText(text: string): XmlElement {
   return el('w:p', {}, [el('w:r', {}, [el('w:t', {}, [txt(text)])])]);
@@ -19,6 +21,15 @@ export const DOCX_EXTRAS_FIXTURE = {
   numId: '1',
   numberingLevel: { format: 'decimal', text: '%1.' },
 } as const;
+
+// The one child of `parent` tagged `tag` -- thrown rather than returned as undefined, since every call site below names a structural element `createEmptyDocxPackage` (documents.js) is known to always produce, and a silently-absent element here would misbuild the fixture rather than signal a real inconsistency.
+function requireChild(parent: XmlElement, tag: string): XmlElement {
+  const [child] = childrenWithTag(parent, tag);
+  if (child === undefined) {
+    throw new Error(`fixture invariant violated: ${parent.tag} has no ${tag} child`);
+  }
+  return child;
+}
 
 // A real docx, comments/footnotes/headers/footers/numbering included. The footnotes part also declares a `w:type="separator"` footnote -- the horizontal rule Word always writes alongside real footnotes -- deliberately, since `readDocxExtras`'s own `readFootnotes` (ooxml.js) skips exactly that type; a fixture that omitted it would never exercise the skip at all.
 export function buildDocxWithExtras(): Uint8Array<ArrayBuffer> {
@@ -67,6 +78,26 @@ export function buildDocxWithExtras(): Uint8Array<ArrayBuffer> {
       ]),
     ],
   };
+
+  // Reference both parts from the document's own trailing section (createDocx's single, final w:sectPr -- see documents.js's DocxEditor) through a real w:headerReference/w:footerReference pair and the relationship each names -- an unreferenced word/header1.xml/word/footer1.xml part is otherwise invisible to readDocxExtras, which resolves parts by reference alone, never by a catch-all word/header*.xml scan.
+  const documentRoot = rootElement(pkg.parts['word/document.xml']);
+  if (documentRoot === undefined) {
+    throw new Error('createDocx did not produce a word/document.xml root element');
+  }
+  const sectPr = requireChild(requireChild(documentRoot, 'w:body'), 'w:sectPr');
+  sectPr.children.unshift(
+    el('w:headerReference', { 'w:type': 'default', 'r:id': 'rIdHeader1' }),
+    el('w:footerReference', { 'w:type': 'default', 'r:id': 'rIdFooter1' }),
+  );
+
+  const documentRels = rootElement(pkg.parts['word/_rels/document.xml.rels']);
+  if (documentRels === undefined) {
+    throw new Error('createDocx did not produce a word/_rels/document.xml.rels root element');
+  }
+  documentRels.children.push(
+    el('Relationship', { Id: 'rIdHeader1', Type: HEADER_REL, Target: 'header1.xml' }),
+    el('Relationship', { Id: 'rIdFooter1', Type: FOOTER_REL, Target: 'footer1.xml' }),
+  );
 
   return encodePackage(pkg);
 }

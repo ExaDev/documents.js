@@ -48,15 +48,20 @@ describe('docx_extras', () => {
     const result = await pair.client.callTool({ name: 'docx_extras', arguments: { source: { path: join(workspace, 'extras.docx') } } });
 
     expect(result.isError).toBeFalsy();
-    expect(result.structuredContent).toStrictEqual({
+    // toEqual, not toStrictEqual: headerFooterParts' own ContentParagraph/ContentRun objects carry their full optional-field shape with unset fields explicitly undefined rather than omitted (document-schema.js's own construction convention), which toStrictEqual treats as a real difference from a literal that simply omits them -- exactly the gap ooxml.js's own read tests sidestep the same way for the identical ContentBlock shape.
+    expect(result.structuredContent).toEqual({
       // Each comment and note carries its own w:id, the key a comment extent's or note reference's anchor name joins its body back through.
       comments: [
         { id: '0', author: DOCX_EXTRAS_FIXTURE.commentAuthor, text: DOCX_EXTRAS_FIXTURE.commentWithAuthorText },
         { id: '1', text: DOCX_EXTRAS_FIXTURE.commentWithoutAuthorText },
       ],
       footnotes: [{ id: '1', text: DOCX_EXTRAS_FIXTURE.footnoteText }],
-      headers: [DOCX_EXTRAS_FIXTURE.headerText],
-      footers: [DOCX_EXTRAS_FIXTURE.footerText],
+      // Path order, not reference order: readHeaderFooterParts (ooxml.js) lists referenced parts sorted by their own package-key path, so word/footer1.xml sorts ahead of word/header1.xml.
+      headerFooterParts: [
+        { path: 'word/footer1.xml', kind: 'footer', blocks: [{ kind: 'paragraph', runs: [{ text: DOCX_EXTRAS_FIXTURE.footerText }] }] },
+        { path: 'word/header1.xml', kind: 'header', blocks: [{ kind: 'paragraph', runs: [{ text: DOCX_EXTRAS_FIXTURE.headerText }] }] },
+      ],
+      sectionHeaderFooters: [{ header: { default: 'word/header1.xml' }, footer: { default: 'word/footer1.xml' } }],
       numbering: {
         [DOCX_EXTRAS_FIXTURE.numId]: {
           levels: { '0': { format: DOCX_EXTRAS_FIXTURE.numberingLevel.format, text: DOCX_EXTRAS_FIXTURE.numberingLevel.text, startAt: 1 } },
@@ -67,7 +72,7 @@ describe('docx_extras', () => {
     // content mirrors structuredContent as JSON text -- the same "content is JSON.stringify(structuredContent)" convention every other tool in this package follows.
     const [block] = result.content;
     expect(block?.type).toBe('text');
-    expect(block?.type === 'text' ? JSON.parse(block.text) : undefined).toStrictEqual(result.structuredContent);
+    expect(block?.type === 'text' ? JSON.parse(block.text) : undefined).toEqual(result.structuredContent);
   });
 
   it('reads a plain docx with none of the five kinds of extra data, via inline base64 bytes', async () => {
@@ -77,6 +82,7 @@ describe('docx_extras', () => {
     const result = await pair.client.callTool({ name: 'docx_extras', arguments: { source: { bytesBase64: bytesToBase64(plain.toBytes()), format: 'docx' } } });
 
     expect(result.isError).toBeFalsy();
-    expect(result.structuredContent).toStrictEqual({ comments: [], footnotes: [], headers: [], footers: [], numbering: {} });
+    // sectionHeaderFooters carries one entry per section, not one per document that has any references at all -- a single-section plain docx still has that one section, with no header/footer references on it, hence [{}] rather than [].
+    expect(result.structuredContent).toStrictEqual({ comments: [], footnotes: [], headerFooterParts: [], sectionHeaderFooters: [{}], numbering: {} });
   });
 });

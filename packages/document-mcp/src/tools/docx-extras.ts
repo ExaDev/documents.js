@@ -9,7 +9,7 @@ export function registerDocxExtrasTools(server: McpServer): void {
     {
       title: 'Docx extras',
       description:
-        "Reads a docx's own comments, footnotes, headers, footers, and numbering definitions -- data documents.js's ContentDocument pivot cannot carry, so ordinary document-reading tools never see it. Returns the real DocxExtras object (comments/footnotes/headers/footers/numbering) as structured data.",
+        "Reads a docx's own comments, footnotes, headers, footers, and numbering definitions -- data documents.js's ContentDocument pivot cannot carry, so ordinary document-reading tools never see it. Returns the real DocxExtras object (comments/footnotes/headerFooterParts/sectionHeaderFooters/numbering) as structured data.",
       inputSchema: z.object({ source: DocumentInputSchema.describe('The docx document to read.') }),
     },
     async ({ source }) => {
