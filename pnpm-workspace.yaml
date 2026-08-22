@@ -18,6 +18,7 @@ minimumReleaseAge: 60
 minimumReleaseAgeExclude:
   - archive-codec
   - byte-codec
+  - compute.js
   - document-cli
   - document-mcp
   - document-outline.js
