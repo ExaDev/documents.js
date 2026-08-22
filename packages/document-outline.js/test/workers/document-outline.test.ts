@@ -61,11 +61,11 @@ describe('document-outline.js under the Cloudflare Workers runtime', () => {
       { id: 'one', package: first },
       { id: 'two', package: second },
     ]);
-    // The shared body paragraph is one node with two containment edges, and the style entry node is reachable by its STYLED_BY edge -- all inside workerd, proving the projection is as Node-free as the hash it reuses.
+    // The shared body paragraph is one node with two containment edges, and the style entry node is reachable by its STYLED_BY edge -- all inside workerd, proving the projection is as Node-free as the hash it reuses. Two STYLED_BY edges reach it (#660): the heading's own ref, and the shared bare paragraph leaf's inherited-chain edge (the second document's own occurrence carries no style scope, so it contributes none).
     const sharedBody = graph.nodes.filter((node) => node.kind === 'paragraph' && JSON.stringify(node).includes('body'));
     expect(sharedBody).toHaveLength(1);
     expect(graph.edges.filter((edge) => edge.kind === 'CONTAINS' && edge.to === sharedBody[0]!.id)).toHaveLength(2);
-    expect(graph.edges.filter((edge) => edge.kind === 'STYLED_BY')).toHaveLength(1);
+    expect(graph.edges.filter((edge) => edge.kind === 'STYLED_BY')).toHaveLength(2);
     expect(graph.nodes.filter((node) => node.kind === 'styleEntry')).toHaveLength(1);
   });
 
