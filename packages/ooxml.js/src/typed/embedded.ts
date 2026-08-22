@@ -103,7 +103,7 @@ export function readEmbeddedPayloadPart(part: BinaryPart): EmbeddedOoxmlPayload 
   return payload;
 }
 
-// The wordprocessing and presentation arms rebuild the ContentDocument envelope the same way readDocx/readPptx (typed/document-package.ts) do: readDocxContent/readPptxContent return their own per-format shapes whose extras (comments, footnotes, headers, footers, numbering on DocxDocument) have no ContentDocument spelling and so do not ride the embedded document. The spreadsheet arm needs no wrap -- readXlsxContent already returns a full ContentDocument.
+// The wordprocessing and presentation arms rebuild the ContentDocument envelope the same way readDocx/readPptx (typed/document-package.ts) do: readDocxContent/readPptxContent return their own per-format shapes whose extras (comments, footnotes, header/footer parts, numbering on DocxDocument) have no ContentDocument spelling and so do not ride the embedded document. The spreadsheet arm needs no wrap -- readXlsxContent already returns a full ContentDocument.
 function readNestedDocument(objectKind: EmbeddedOoxmlKind, nested: Package): ContentDocument {
   switch (objectKind) {
     case 'wordprocessing': {
