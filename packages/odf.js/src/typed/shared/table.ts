@@ -1,11 +1,11 @@
-import type { Alignment, Color, ContentBorder, ContentCellBorders, ContentStrokeStyle, ContentTable, ContentTableCell, ContentTableRow } from 'document-schema.js';
+import type { Alignment, Color, ContentBlock, ContentBorder, ContentCellBorders, ContentStrokeStyle, ContentTable, ContentTableCell, ContentTableRow } from 'document-schema.js';
 import type { XmlElement } from '../../model/node';
 import type { Package } from '../../model/package';
 import { attrValue, childrenWithTag } from '../../xml/query';
 import { parseOdfLength } from './units';
 import { parseOdfColor } from './color';
 import { findStyleElement } from './cascade';
-import { readOdfParagraph } from './paragraph';
+import { readParagraphOrHeading, readOdfParagraph } from './paragraph';
 
 // Reads a table:table element into document-schema.js's ContentTable -- the same table:table/table:table-row/table:table-cell/table:covered-table-cell markup ODF uses identically across odt/ods/odp (verified against real LibreOffice output: a presentation's own draw:frame-wrapped table uses the exact grammar below, including table:number-columns-spanned/table:covered-table-cell for merged cells), so this module is written to be reusable by a future odt/ods reader rather than living inside typed/draw/shapes.ts, even though odp is this module's only caller today.
 //
@@ -162,7 +162,18 @@ export function readCellStyleDecoration(elements: readonly XmlElement[]): CellSt
 }
 
 function readTableCell(cellElement: XmlElement, pkg: Package): ContentTableCell {
-  const blocks = childrenWithTag(cellElement, 'text:p').map((p) => readOdfParagraph(p, pkg));
+  // A cell's block content is its text:p AND text:h children (a heading paragraph set in a cell is a real text:h under the same convention office:text uses -- typed/shared/paragraph.ts's readParagraphOrHeading derives its identity), walked in document order rather than tag-filtered so a heading between two paragraphs stays between them. A nested text:list or table:table inside a cell remains outside this walk's scope, mirroring the block walks every other shared reader here makes.
+  const blocks: ContentBlock[] = [];
+  for (const child of cellElement.children) {
+    if (child.type !== 'element') {
+      continue;
+    }
+    if (child.tag === 'text:p') {
+      blocks.push(readOdfParagraph(child, pkg));
+    } else if (child.tag === 'text:h') {
+      blocks.push(readParagraphOrHeading(child, readOdfParagraph(child, pkg)));
+    }
+  }
   const colSpanRaw = attrValue(cellElement, 'table:number-columns-spanned');
   const rowSpanRaw = attrValue(cellElement, 'table:number-rows-spanned');
   const styleName = attrValue(cellElement, 'table:style-name');
