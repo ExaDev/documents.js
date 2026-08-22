@@ -316,3 +316,24 @@ export function readOdfParagraph(pElement: XmlElement, pkg: Package, context: Od
     pageBreakAfter: paragraphProperties.pageBreakAfter,
   };
 }
+
+// text:outline-level's ODF schema default when the attribute is absent is 1 (OASIS ODF 1.2 part 1); an unparseable or non-positive value degrades to the same default rather than throwing, matching this reader family's general "malformed-but-salvageable input degrades gracefully" posture (none of these readers has a diagnostics channel to report it through).
+function readOutlineLevel(headingElement: XmlElement): number {
+  const raw = attrValue(headingElement, 'text:outline-level');
+  if (raw === undefined) {
+    return 1;
+  }
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
+}
+
+// The heading-identity step every text:h-reading walk applies over the tag-agnostic readOdfParagraph: the shared reader reads a text:h's style/run content exactly as it would a text:p's, but a heading's real @text:style-name (e.g. "Heading_20_1") is a producer-chosen ODF string with no cross-format meaning, so this function overrides ONLY the heading identity for a text:h, synthesising the same "Heading1"/"Heading2" shape docx's own real w:pStyle values already use for its built-in heading styles -- giving downstream consumers one consistent heading convention across both formats -- while the parsed text:outline-level number itself is kept as headingLevel, document-schema.js's canonical numeric heading field, so numeric consumers never have to parse it back out of the styleId string. Lives here in typed/shared rather than in the odt reader (its original home) because a table:table-cell carries text:h under the identical convention (typed/shared/table.ts's cell walk is this function's second caller): office:text's body, a text:list-item, and a table cell are the three ODF containers whose content models carry text:h at all.
+export function readParagraphOrHeading(element: XmlElement, paragraph: ContentParagraph): ContentParagraph {
+  if (element.tag === 'text:h') {
+    const outlineLevel = readOutlineLevel(element);
+    paragraph.styleId = `Heading${outlineLevel}`;
+    // The parsed text:outline-level number itself is the schema's canonical headingLevel (schema #13): styleId encodes it for styleId-keyed consumers, headingLevel carries it verbatim for numeric consumers, and both always agree because they derive from this one parse.
+    paragraph.headingLevel = outlineLevel;
+  }
+  return paragraph;
+}
