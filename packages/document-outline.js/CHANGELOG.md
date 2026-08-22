@@ -1,3 +1,19 @@
+# [1.1.0](https://github.com/ExaDev/documents.js/compare/document-outline.js@1.0.10...document-outline.js@1.1.0) (2026-08-22)
+
+
+### Bug Fixes
+
+* **outline:** build the cross-document footnote fixture through its builder ([8f326ed](https://github.com/ExaDev/documents.js/commit/8f326ed984b7b838e3958cb4e186565753c7703f))
+* **outline:** emit graph table-entry nodes in content-id order ([5319e51](https://github.com/ExaDev/documents.js/commit/5319e51d8922f0cbaad0563645b095cf25c43506))
+* **outline:** harden the graph projection's identity edges and input refusal ([3b5a3a5](https://github.com/ExaDev/documents.js/commit/3b5a3a5550619d5ea7e33303d8160944b39187df))
+* **outline:** read definition refs only on anchor descriptors and refuse entry cycles ([cb371bb](https://github.com/ExaDev/documents.js/commit/cb371bbb42522f0adf374389dd00b7fa2028ea10))
+
+
+### Features
+
+* **outline:** project definitions tables with DEFINED_BY edges and a pluggable extraction policy ([7de4817](https://github.com/ExaDev/documents.js/commit/7de4817c58265abf1a1c92f192a0d474339dc34e))
+* **outline:** project DocumentPackage into a content-addressed property graph ([659b4eb](https://github.com/ExaDev/documents.js/commit/659b4eb38809088ef46f0bfa6aaf499b61ca2521))
+
 ## [1.0.10](https://github.com/ExaDev/documents.js/compare/document-outline.js@1.0.9...document-outline.js@1.0.10) (2026-08-22)
 
 
