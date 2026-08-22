@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   DimensionVectorSchema,
   ExactRationalSchema,
+  FormulaBindingsSchema,
+  IntervalSchema,
   isMathExpression,
   MathExpressionSchema,
   MathMatrixSchema,
@@ -17,6 +19,7 @@ import {
   MathUnitSchema,
   MathUnparsedSchema,
   type MathExpression,
+  QuantitySchema,
   SymbolTableSchema,
   type SymbolTable,
 } from './math';
@@ -298,5 +301,42 @@ describe('the MathExpression grammar', () => {
   it('survives a JSON round trip unchanged, exact rationals included', () => {
     const roundTripped: unknown = JSON.parse(JSON.stringify(pythagoras));
     expect(MathExpressionSchema.parse(roundTripped)).toEqual(pythagoras);
+  });
+});
+
+describe('QuantitySchema', () => {
+  it('validates a magnitude plus dimension vector', () => {
+    expect(QuantitySchema.safeParse({ kind: 'quantity', magnitude: 5, dimension: { length: 1 } }).success).toBe(true);
+    expect(QuantitySchema.safeParse({ kind: 'quantity', magnitude: 2, dimension: {} }).success).toBe(true);
+  });
+
+  it('rejects a non-numeric magnitude, a missing dimension, and a non-quantity discriminant', () => {
+    expect(QuantitySchema.safeParse({ kind: 'quantity', magnitude: 'five', dimension: {} }).success).toBe(false);
+    expect(QuantitySchema.safeParse({ kind: 'quantity', magnitude: 1 }).success).toBe(false);
+    expect(QuantitySchema.safeParse({ kind: 'nonsense', magnitude: 1, dimension: {} }).success).toBe(false);
+  });
+});
+
+describe('IntervalSchema', () => {
+  it('validates inclusive bounds plus dimension vector', () => {
+    expect(IntervalSchema.safeParse({ kind: 'interval', min: 0.87, max: 1, dimension: {} }).success).toBe(true);
+  });
+
+  it('rejects a min that exceeds its max', () => {
+    expect(IntervalSchema.safeParse({ kind: 'interval', min: 2, max: 1, dimension: {} }).success).toBe(false);
+  });
+});
+
+describe('FormulaBindingsSchema', () => {
+  it('accepts a record of symbol ids to Quantity or Interval values', () => {
+    const bindings = {
+      m: { kind: 'quantity', magnitude: 2, dimension: { mass: 1 } },
+      phi: { kind: 'interval', min: 0.87, max: 1, dimension: {} },
+    };
+    expect(FormulaBindingsSchema.safeParse(bindings).success).toBe(true);
+  });
+
+  it('rejects a value that is neither a Quantity nor an Interval', () => {
+    expect(FormulaBindingsSchema.safeParse({ m: { kind: 'nonsense', magnitude: 1 } }).success).toBe(false);
   });
 });
