@@ -88,7 +88,7 @@
   "dependencies": {
     "@modelcontextprotocol/server": "^2.0.0",
     "document-outline.js": "^1.0.9",
-    "documents.js": "^4.4.5",
+    "documents.js": "^4.4.6",
     "zod": "^4.2.0"
   },
   "devDependencies": {
