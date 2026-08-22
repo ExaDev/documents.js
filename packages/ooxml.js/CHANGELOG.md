@@ -1,3 +1,20 @@
+# [5.0.0](https://github.com/ExaDev/documents.js/compare/ooxml.js@4.7.0...ooxml.js@5.0.0) (2026-08-22)
+
+
+* refactor(ooxml)!: drop the flat headers/footers text arrays from DocxDocument ([3cb1377](https://github.com/ExaDev/documents.js/commit/3cb137776699a1b85afeeee40b6e62f7de203e96))
+
+
+### Features
+
+* **ooxml:** read unreferenced header/footer parts into headerFooterParts ([4355b02](https://github.com/ExaDev/documents.js/commit/4355b02c4a8df35f36b041597648173db8d9b6b2))
+
+
+### BREAKING CHANGES
+
+* DocxDocument no longer carries headers/footers string
+arrays -- the structural headerFooterParts/sectionHeaderFooters model
+(which also carries unreferenced parts) replaces them.
+
 # [4.7.0](https://github.com/ExaDev/documents.js/compare/ooxml.js@4.6.0...ooxml.js@4.7.0) (2026-08-22)
 
 
