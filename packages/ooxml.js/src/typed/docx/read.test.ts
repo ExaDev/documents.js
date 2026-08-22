@@ -1055,6 +1055,18 @@ describe('readDocxContent: header/footer structure', () => {
     ]);
   });
 
+  it('reads an unreferenced header/footer part too, not only parts a section names', () => {
+    const pkg = headerFooterPackage();
+    pkg.parts['word/header9.xml'] = { kind: 'xml', nodes: [el('w:hdr', {}, [el('w:p', {}, [textRun('Orphan header')])])] };
+    const doc = readDocxContent(pkg);
+    expect(doc.headerFooterParts.map((part) => part.path)).toEqual(['word/footer1.xml', 'word/header1.xml', 'word/header2.xml', 'word/header9.xml']);
+    // The orphan joins no section's references -- sectionHeaderFooters keeps spelling exactly what the sections spell.
+    expect(doc.sectionHeaderFooters).toEqual([
+      { header: { default: 'word/header1.xml' }, footer: { even: 'word/footer1.xml' } },
+      { header: { default: 'word/header1.xml', first: 'word/header2.xml' } },
+    ]);
+  });
+
   it('records which section references which part at which slot, keeping the odd/even/first distinction, with a shared part named once by both sections', () => {
     const doc = readDocxContent(headerFooterPackage());
     expect(doc.sectionHeaderFooters).toEqual([
