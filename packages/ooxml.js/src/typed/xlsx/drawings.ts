@@ -13,7 +13,7 @@ import { columnWidthCharsToPt, DEFAULT_COLUMN_WIDTH_CHARS, DEFAULT_ROW_HEIGHT_PT
 
 // A worksheet's drawing layer (xl/drawings/drawingN.xml, reached through the worksheet's own relationships): the xlsx counterpart of pptx's chart/SmartArt/OLE readers. A chart graphic frame's cached series/category model is read through the SAME chart reader the pptx side uses (readChartTable), and lands as a ContentEmbeddedObject with objectKind 'chart' -- the one member that names what the frame held rather than a ContentDocument kind, carrying the cached model as a small spreadsheet document (one sheet whose cells are that table), because a sheet is the honest document-granularity spelling of tabular data and a xlsx sheet has no block flow to host a table block the way a pptx shape does. A picture (xdr:pic) resolves its a:blip through the drawing part's own relationships to the sniffed media bytes and lands as a ContentSheetImage -- the same blip-resolution contract as the pptx picture reader, anchor fields and frame resolved through the same grid geometry the chart row uses.
 //
-// Scope: twoCellAnchor and oneCellAnchor content (charts and pictures), every anchor spelling resolving to one placement shape -- a from-marker positions both through the same grid geometry, and the frame's size is the to-marker difference (two-cell) or the anchor's own xdr:ext (one-cell, Excel's "Move, but don't size with cells" spelling for inserted pictures). An xdr:absoluteAnchor (page-absolute placement) is skipped. Real-producer verification is outstanding: the fixtures this is built against are hand-built ECMA-376 markup, the corpus gate the construct inventory itself states.
+// Scope: all three anchor spellings a drawing part carries (charts and pictures), every spelling resolving to one placement shape -- a from-marker positions a two-cell or one-cell anchor through the same grid geometry, with the frame's size the to-marker difference (two-cell) or the anchor's own xdr:ext (one-cell, Excel's "Move, but don't size with cells" spelling for inserted pictures); an absoluteAnchor's page-absolute xdr:pos is re-based into the cell-relative anchor vocabulary through that same geometry's inverse (the nearest-cell landing #776 decides on, rather than a schema extension -- the geometry is a bijection between cell-plus-offset and absolute position, and the frame keeps the absolute position verbatim, so the re-basing loses nothing). Real-producer verification is outstanding: the fixtures this is built against are hand-built ECMA-376 markup, the corpus gate the construct inventory itself states.
 
 const CHART_GRAPHIC_URI = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
 const DRAWING_REL_SUFFIX = '/drawing';
@@ -85,6 +85,31 @@ class SheetGridGeometry {
     }
     return yPt;
   }
+
+  // The inverse of xPt: the containing column plus the offset within it, for a page-absolute position an xdr:absoluteAnchor carries directly (its xdr:pos) and the cell-relative anchor vocabulary must re-base. Widths the grid resolves are positive -- a declared zero-width span ends where the next default-width column begins -- so the walk terminates, and because it accumulates in the same order xPt does, xPt(locateColumn(x).index, 0) + locateColumn(x).offsetPt lands back on x exactly: the re-basing loses nothing.
+  locateColumn(xPt: number): { index: number; offsetPt: number } {
+    let index = 0;
+    let boundaryPt = 0;
+    let widthPt = this.columnWidthPt(index);
+    while (boundaryPt + widthPt <= xPt) {
+      boundaryPt += widthPt;
+      index += 1;
+      widthPt = this.columnWidthPt(index);
+    }
+    return { index, offsetPt: xPt - boundaryPt };
+  }
+
+  locateRow(yPt: number): { index: number; offsetPt: number } {
+    let index = 0;
+    let boundaryPt = 0;
+    let heightPt = this.rowHeightPt(index);
+    while (boundaryPt + heightPt <= yPt) {
+      boundaryPt += heightPt;
+      index += 1;
+      heightPt = this.rowHeightPt(index);
+    }
+    return { index, offsetPt: yPt - boundaryPt };
+  }
 }
 
 interface AnchorMarker {
@@ -138,7 +163,7 @@ function readAnchorExtEmu(anchor: XmlElement): { readonly cxEmu: number; readonl
   return { cxEmu: numericAttr(ext, 'cx'), cyEmu: numericAttr(ext, 'cy') };
 }
 
-// One anchor's placement: a two-cell anchor is positioned by its from-marker and sized by the to-marker difference, a one-cell anchor by its from-marker and its own xdr:ext. Undefined when the anchor's own geometry is malformed (a missing marker or ext), which skips the anchor the way the walk always has.
+// One anchor's placement: a two-cell anchor is positioned by its from-marker and sized by the to-marker difference, a one-cell anchor by its from-marker and its own xdr:ext, an absolute anchor by its page-absolute xdr:pos (re-based into the cell anchor vocabulary through the grid geometry's own inverse, since ContentSheetImage and ContentEmbeddedObject anchor cell-relatively) and its own xdr:ext. Undefined when the anchor's own geometry is malformed (a missing marker, pos, or ext), which skips the anchor the way the walk always has.
 function readAnchorPlacement(anchor: XmlElement, geometry: SheetGridGeometry): AnchorPlacement | undefined {
   if (anchor.tag === 'xdr:twoCellAnchor') {
     const from = readAnchorMarker(anchor, 'xdr:from');
@@ -150,13 +175,25 @@ function readAnchorPlacement(anchor: XmlElement, geometry: SheetGridGeometry): A
     const yPt = geometry.yPt(from.row, from.rowOffEmu);
     return { xPt, yPt, widthPt: geometry.xPt(to.column, to.colOffEmu) - xPt, heightPt: geometry.yPt(to.row, to.rowOffEmu) - yPt, anchorRow: from.row, anchorColumn: from.column, offsetXPt: emuToPt(from.colOffEmu), offsetYPt: emuToPt(from.rowOffEmu) };
   }
-  // xdr:oneCellAnchor, the one other spelling the walk admits.
-  const from = readAnchorMarker(anchor, 'xdr:from');
+  if (anchor.tag === 'xdr:oneCellAnchor') {
+    const from = readAnchorMarker(anchor, 'xdr:from');
+    const ext = readAnchorExtEmu(anchor);
+    if (from === undefined || ext === undefined) {
+      return undefined;
+    }
+    return { xPt: geometry.xPt(from.column, from.colOffEmu), yPt: geometry.yPt(from.row, from.rowOffEmu), widthPt: emuToPt(ext.cxEmu), heightPt: emuToPt(ext.cyEmu), anchorRow: from.row, anchorColumn: from.column, offsetXPt: emuToPt(from.colOffEmu), offsetYPt: emuToPt(from.rowOffEmu) };
+  }
+  // xdr:absoluteAnchor, the one other spelling the walk admits.
+  const pos = childrenWithTag(anchor, 'xdr:pos')[0];
   const ext = readAnchorExtEmu(anchor);
-  if (from === undefined || ext === undefined) {
+  if (pos === undefined || ext === undefined) {
     return undefined;
   }
-  return { xPt: geometry.xPt(from.column, from.colOffEmu), yPt: geometry.yPt(from.row, from.rowOffEmu), widthPt: emuToPt(ext.cxEmu), heightPt: emuToPt(ext.cyEmu), anchorRow: from.row, anchorColumn: from.column, offsetXPt: emuToPt(from.colOffEmu), offsetYPt: emuToPt(from.rowOffEmu) };
+  const xPt = emuToPt(numericAttr(pos, 'x'));
+  const yPt = emuToPt(numericAttr(pos, 'y'));
+  const column = geometry.locateColumn(xPt);
+  const row = geometry.locateRow(yPt);
+  return { xPt, yPt, widthPt: emuToPt(ext.cxEmu), heightPt: emuToPt(ext.cyEmu), anchorRow: row.index, anchorColumn: column.index, offsetXPt: column.offsetPt, offsetYPt: row.offsetPt };
 }
 
 // A minimal, childless worksheet element for the payload sheet's own print settings -- the same all-defaults ContentSheetPrintSettings readPrintSettings produces for an empty worksheet, which is the honest spelling for a synthesized sheet that never had a page setup of its own.
@@ -189,7 +226,7 @@ export interface SheetDrawing {
 }
 
 // The anchor spellings a drawing part carries that this reader walks, in the drawing's own document order -- a real drawing mixes spellings (a twoCellAnchor chart beside oneCellAnchor pictures), and each row lands in the order the part spells them.
-const ANCHOR_TAGS = ['xdr:twoCellAnchor', 'xdr:oneCellAnchor'];
+const ANCHOR_TAGS = ['xdr:twoCellAnchor', 'xdr:oneCellAnchor', 'xdr:absoluteAnchor'];
 
 // Reads one worksheet's drawing anchors in a single walk -- the drawing part is resolved, its relationships parsed, and the grid geometry built once for both rows, each anchor's placement computed once for whatever content it carries.
 export function readSheetDrawing(pkg: Package, worksheetPath: string, worksheet: XmlElement): SheetDrawing {
