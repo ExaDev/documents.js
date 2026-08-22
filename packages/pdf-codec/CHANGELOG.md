@@ -1,3 +1,16 @@
+# [3.4.0](https://github.com/ExaDev/documents.js/compare/pdf-codec@3.3.1...pdf-codec@3.4.0) (2026-08-22)
+
+
+### Bug Fixes
+
+* **pdf:** carry an enclosing page MCID into form XObject content that numbers none of its own ([1d4c576](https://github.com/ExaDev/documents.js/commit/1d4c5760b6ac0d704d9a4a7ddd6e4e1a180eb7a1))
+* **pdf:** key marked-content ownership by each page's /StructParents, not its index ([fd2001d](https://github.com/ExaDev/documents.js/commit/fd2001d0094bd002764045805b766319c55daf55))
+
+
+### Features
+
+* **pdf:** read the tagged-PDF structure tree and its marked-content ownership ([0986a12](https://github.com/ExaDev/documents.js/commit/0986a12c1ff7d5b5faf43b9cd52b091e7fbfdd67))
+
 ## [3.3.1](https://github.com/ExaDev/documents.js/compare/pdf-codec@3.3.0...pdf-codec@3.3.1) (2026-08-22)
 
 
