@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { formatDocxExtrasLines } from './docx-extras-format';
 import { buildDocxWithExtras, DOCX_EXTRAS_FIXTURE } from './test-support/docx-extras-fixture';
 
-const EMPTY_EXTRAS: DocxExtras = { comments: [], footnotes: [], headers: [], footers: [], numbering: {} };
+const EMPTY_EXTRAS: DocxExtras = { comments: [], footnotes: [], headerFooterParts: [], sectionHeaderFooters: [], numbering: {} };
 
 function fixtureExtras(): DocxExtras {
   return readDocxExtras(decodePackage(buildDocxWithExtras()));
@@ -30,12 +30,15 @@ describe('formatDocxExtrasLines', () => {
     expect(formatDocxExtrasLines(extras)).toContain(`  [1] ${DOCX_EXTRAS_FIXTURE.footnoteText}`);
   });
 
-  it('renders headers and footers as their own labelled, 1-based-position sections', () => {
-    const lines = formatDocxExtrasLines(fixtureExtras());
+  it('renders headers and footers as their own labelled, 1-based-position sections, each line naming its part path', () => {
+    const extras = fixtureExtras();
+    const lines = formatDocxExtrasLines(extras);
+    const [headerPart] = extras.headerFooterParts.filter((part) => part.kind === 'header');
+    const [footerPart] = extras.headerFooterParts.filter((part) => part.kind === 'footer');
     expect(lines).toContain('headers');
-    expect(lines).toContain(`  [1] ${DOCX_EXTRAS_FIXTURE.headerText}`);
+    expect(lines).toContain(`  [1] ${headerPart?.path}: ${DOCX_EXTRAS_FIXTURE.headerText}`);
     expect(lines).toContain('footers');
-    expect(lines).toContain(`  [1] ${DOCX_EXTRAS_FIXTURE.footerText}`);
+    expect(lines).toContain(`  [1] ${footerPart?.path}: ${DOCX_EXTRAS_FIXTURE.footerText}`);
   });
 
   it('renders a numbering definition keyed by numId, its own level keyed by ilvl in ascending numeric order', () => {

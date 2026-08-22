@@ -90,8 +90,12 @@ describe('docx-extras', () => {
         { id: '1', text: DOCX_EXTRAS_FIXTURE.commentWithoutAuthorText },
       ],
       footnotes: [{ id: '1', text: DOCX_EXTRAS_FIXTURE.footnoteText }],
-      headers: [DOCX_EXTRAS_FIXTURE.headerText],
-      footers: [DOCX_EXTRAS_FIXTURE.footerText],
+      // Path order, not reference order: readHeaderFooterParts (ooxml.js) lists referenced parts sorted by their own package-key path, so word/footer1.xml sorts ahead of word/header1.xml.
+      headerFooterParts: [
+        { path: 'word/footer1.xml', kind: 'footer', blocks: [{ kind: 'paragraph', runs: [{ text: DOCX_EXTRAS_FIXTURE.footerText }] }] },
+        { path: 'word/header1.xml', kind: 'header', blocks: [{ kind: 'paragraph', runs: [{ text: DOCX_EXTRAS_FIXTURE.headerText }] }] },
+      ],
+      sectionHeaderFooters: [{ header: { default: 'word/header1.xml' }, footer: { default: 'word/footer1.xml' } }],
       numbering: {
         [DOCX_EXTRAS_FIXTURE.numId]: {
           levels: { '0': { format: DOCX_EXTRAS_FIXTURE.numberingLevel.format, text: DOCX_EXTRAS_FIXTURE.numberingLevel.text, startAt: 1 } },

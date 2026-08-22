@@ -1,4 +1,7 @@
-import type { Comment, DocxExtras, Footnote, NumberingDefinitions, NumberingLevel } from 'documents.js';
+import type { Comment, ContentBlock, DocxExtras, Footnote, NumberingDefinitions, NumberingLevel } from 'documents.js';
+
+// documents.js doesn't re-export HeaderFooterPart by name (ooxml.js's own barrel doesn't either -- only DocxDocument, which already carries its shape on this field), so it's named here by indexing DocxExtras itself rather than imported directly. extras.sectionHeaderFooters (which section's default/first/even slots reference which part, by path) is real data DocxExtras carries but this formatter does not render -- it is a per-section mapping onto the parts headers/footers already list by position, not new textual content, and the position-based numbering below already tells a reader which part is which without it.
+type HeaderFooterPart = DocxExtras['headerFooterParts'][number];
 
 // The one place a docx's own comments/footnotes/headers/footers/numbering definitions turn into text, shared by the `docx-extras` command and the TUI's own `docxExtras` screen -- the same relationship `odb-structure.ts` has to `odb-forms`/`odb-reports` and to the TUI's own form/report detail screens, and for the same reason: the CLI renders these lines joined by newlines while the TUI renders one per `ListView` row, so a flat `readonly string[]` of already-indented lines is the shape that genuinely serves both without either owning the other's rendering.
 //
@@ -35,12 +38,39 @@ function footnotesSection(footnotes: readonly Footnote[]): readonly string[] {
   return ['footnotes', ...footnotes.map((footnote, index) => footnoteLine(footnote, index + 1))];
 }
 
-// Headers and footers share the identical shape once read (`readonly string[]`, each entry one part's own concatenated text) -- one function renders either, labelled by the caller.
-function headerOrFooterSection(label: string, values: readonly string[]): readonly string[] {
-  if (values.length === 0) {
+// A header/footer part's own text: its block flow joined the same way a paragraph's runs are (no separator between blocks would run words together, so a single space joins block boundaries), skipping the two construct-marker kinds entirely (they render nothing) and naming a textless block's kind in brackets rather than contributing nothing to the line -- document-outline.js's own outlineLeafText/blockTexts convention, reimplemented locally rather than imported: this module's own doc comment requires it stay a pure, dependency-free function, and ContentBlock (unlike OutlineLeaf) includes the marker kinds that convention never has to handle.
+function blockText(block: ContentBlock): string {
+  switch (block.kind) {
+    case 'paragraph':
+      return block.runs.map((run) => run.text).join('');
+    case 'table':
+      return block.rows.map((row) => row.cells.map((cell) => cell.blocks.map(blockText).join(' ')).join(' ')).join('\n');
+    case 'image':
+      return block.altText ?? '[image]';
+    case 'pageBreak':
+      return '[page-break]';
+    case 'embeddedObject':
+      return '[embeddedObject]';
+    case 'constructStart':
+    case 'constructEnd':
+      return '';
+  }
+}
+
+function partText(part: HeaderFooterPart): string {
+  return part.blocks
+    .map(blockText)
+    .filter((text) => text !== '')
+    .join(' ');
+}
+
+// Headers and footers share the identical rendering once read (kind-filtered from headerFooterParts, in the reader's own path-sorted order) -- one function renders either, labelled by the caller. Each line names the part's own path alongside its 1-based position -- a fact the old flat `readonly string[]` shape had no room for, and free once the part carries it.
+function headerOrFooterSection(label: string, parts: readonly HeaderFooterPart[], kind: HeaderFooterPart['kind']): readonly string[] {
+  const matching = parts.filter((part) => part.kind === kind);
+  if (matching.length === 0) {
     return [];
   }
-  return [label, ...values.map((text, index) => `${indent(1)}[${index + 1}] ${text}`)];
+  return [label, ...matching.map((part, index) => `${indent(1)}[${index + 1}] ${part.path}: ${partText(part)}`)];
 }
 
 function numberingLevelLine(ilvl: string, level: NumberingLevel): string {
@@ -77,8 +107,8 @@ export function formatDocxExtrasLines(extras: DocxExtras): readonly string[] {
   const sections: readonly (readonly string[])[] = [
     commentsSection(extras.comments),
     footnotesSection(extras.footnotes),
-    headerOrFooterSection('headers', extras.headers),
-    headerOrFooterSection('footers', extras.footers),
+    headerOrFooterSection('headers', extras.headerFooterParts, 'header'),
+    headerOrFooterSection('footers', extras.headerFooterParts, 'footer'),
     numberingSection(extras.numbering),
   ];
   const nonEmptySections = sections.filter((section) => section.length > 0);
