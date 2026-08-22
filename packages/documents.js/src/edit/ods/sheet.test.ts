@@ -123,7 +123,8 @@ describe('OdsSheet.mergeCells', () => {
     const start = performance.now();
     sheet.mergeCells(0, 0, 100, 100); // 10,000 covered positions, each stamped individually -- see mergeCells' own doc comment on why this is O(area), not O(1).
     const elapsedMs = performance.now() - start;
-    expect(elapsedMs).toBeLessThan(5000);
+    // The bound exists to catch accidental super-linearity (an O(area^2) or distance-proportional regression blows far past it), not to pin a wall-clock figure: nominal runtime is well under a second, and a CI runner contended by a concurrent release cascade has measured this same linear work at over five seconds -- ten gives an order of magnitude of headroom over that observed contention without losing any regression-detection power.
+    expect(elapsedMs).toBeLessThan(10000);
   });
 });
 
