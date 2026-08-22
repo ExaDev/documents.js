@@ -93,7 +93,7 @@ function appendShape(slide: OdpSlide, shape: ContentShape): void {
     if (block.kind !== 'paragraph') {
       continue; // a nested table or image mixed alongside other blocks inside a single text shape is out of scope -- neither PDF-reconstructed shapes nor a real odp/pptx slide shape mix kinds this way, mirroring buildPptxPackage's own identical comment.
     }
-    // headings: 'none' -- a draw:text-box's content model is (text:p | text:list)* with no text:h anywhere in it, so a heading paragraph stays the text:p this call has always written and its headingLevel is dropped as a format-boundary loss on this target (see PopulateParagraphOptions).
-    populateParagraph(textShape.appendParagraph(), block, { headings: 'none' });
+    // headings: 'style-name' -- a draw:text-box's content model is (text:p | text:list)* with no text:h anywhere in it, so a heading paragraph stays the text:p this call has always written, but its text:style-name now points at the scaffold's Heading_20_N definition: the depth itself remains a format-boundary loss on this target, while the heading at least keeps its visual weight and a reference that resolves (see PopulateParagraphOptions).
+    populateParagraph(textShape.appendParagraph(), block, { headings: 'style-name' });
   }
 }

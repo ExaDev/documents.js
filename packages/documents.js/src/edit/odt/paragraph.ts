@@ -18,6 +18,11 @@ export interface ParagraphInit {
   readonly alignment?: Alignment;
 }
 
+// The ODF heading-style spelling of a heading depth: "Heading_20_N" (_20_ is ODF's escape for the space in "Heading N"), the name every scaffold's office:styles defines (see src/edit/odt|odp|odg/scaffold.ts). Exported because two write paths need the one spelling: the headingLevel setter below (promoting a paragraph to a real text:h), and populateParagraph's style-name mode (a draw:text-box, whose content model carries no text:h at all, pointing a heading text:p at the same definition so the depth at least keeps its visual weight).
+export function headingStyleName(level: number): string {
+  return `Heading_20_${String(level)}`;
+}
+
 // A live view over a text:p element -- see docx's paragraph.ts (src/edit/docx/paragraph.ts) for the same live-view rationale. List membership has no counterpart here: unlike DocxParagraph, which carries a w:numPr property naming which list/level it belongs to, ODF nests lists STRUCTURALLY (a text:list contains text:list-item elements, which directly contain the member text:p/text:h elements) -- a paragraph's list membership is a fact about where it sits in the tree, not a property on the paragraph itself. See list.ts's OdtList/OdtListItem for how list paragraphs are actually built.
 export class OdtParagraph {
   private readonly container: XmlNode[];
@@ -130,7 +135,7 @@ export class OdtParagraph {
     }
     node.tag = 'text:h';
     setAttr(node, 'text:outline-level', String(value));
-    setAttr(node, 'text:style-name', `Heading_20_${String(value)}`);
+    setAttr(node, 'text:style-name', headingStyleName(value));
   }
 
   get alignment(): Alignment | undefined {

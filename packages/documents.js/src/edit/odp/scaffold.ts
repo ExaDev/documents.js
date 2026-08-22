@@ -4,6 +4,7 @@ import { ODF_MEDIA_TYPES, setDocumentMediaType, syncManifest, xmlnsAttributes } 
 import { SLIDE_SIZE_WIDESCREEN } from 'document-schema.js';
 import { encodeXmlText } from '../../xml/entities';
 import { el, txt } from '../../xml/fragment';
+import { HEADING_STYLES } from '../../layout/shared';
 
 // The namespace prefixes odp's own content.xml/styles.xml actually use: office/style/text/table for the document structure and text/table content odt's own scaffold already needed; draw/svg for draw:page/draw:frame geometry and draw:image/draw:text-box content; presentation for presentation:notes; fo for style:page-layout-properties' fo:page-width/height; xlink for draw:image's own xlink:href. Mirrors odt/scaffold.ts's own CONTENT_NS_PREFIXES/STYLES_NS_PREFIXES reasoning exactly -- declared once at the root rather than piecemeal.
 const CONTENT_NS_PREFIXES = ['office', 'style', 'text', 'table', 'draw', 'presentation', 'fo', 'svg', 'xlink'] as const;
@@ -34,9 +35,18 @@ function buildPageLayout(): XmlElement {
   ]);
 }
 
+// One Heading_20_N common style per level of the heading visual convention (layout/shared.ts's HEADING_STYLES -- the same family-wide table odt's own scaffold defines these from). A draw:text-box's content model is (text:p | text:list)* with no text:h anywhere in it, so a heading paragraph crossing into a slide text box (odtToOdp's variant bridge carries them straight in) can never carry its depth as markup -- buildOdpPackage instead points the text:p's text:style-name at these definitions, the one carryable fact left: ODF has no built-in styles, so without a definition in this package's own office:styles the reference would resolve to nothing and the heading would lose its visual weight as well as its depth.
+function buildHeadingStyles(): XmlElement[] {
+  return Object.entries(HEADING_STYLES).map(([level, style]) =>
+    el('style:style', { 'style:name': `Heading_20_${level}`, 'style:display-name': `Heading ${level}`, 'style:family': 'paragraph' }, [
+      el('style:text-properties', { 'fo:font-size': `${String(style.sizePt)}pt`, 'fo:font-weight': style.bold ? 'bold' : 'normal' }),
+    ]),
+  );
+}
+
 function buildStylesXml(): XmlElement {
   return el('office:document-styles', { ...xmlnsAttributes([...STYLES_NS_PREFIXES]), 'office:version': ODF_VERSION }, [
-    el('office:styles'),
+    el('office:styles', {}, buildHeadingStyles()),
     el('office:automatic-styles', {}, [buildPageLayout()]),
     el('office:master-styles', {}, [el('style:master-page', { 'style:name': MASTER_PAGE_NAME, 'style:page-layout-name': PAGE_LAYOUT_NAME })]),
   ]);

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { ContentDocument } from 'document-schema.js';
 import type { Package, XmlElement } from 'odf.js';
-import { bytesToBase64, childrenWithTag, decodePackage, encodePackage, findChildElement, rootElement } from 'odf.js';
+import { bytesToBase64, childrenWithTag, decodePackage, elementsWithTag, encodePackage, findChildElement, rootElement } from 'odf.js';
 import { readOdgContent } from '../../odf/odg/read';
 import { buildOdgPackage } from './content';
 import { OdgEditor } from './editor';
@@ -49,6 +49,39 @@ describe('buildOdgPackage', () => {
     ]);
     const editor = new OdgEditor(buildOdgPackage(content));
     expect(editor.pages()).toHaveLength(2);
+  });
+
+  // The odp text-box contract, one variant over: draw:text-box's content model is (text:p | text:list)* with no text:h anywhere in it, so a heading's depth can never cross into a drawing as markup -- its text:p instead points text:style-name at the scaffold's own Heading_20_N definition (asserted present in styles.xml here, since odg has no scaffold suite of its own), keeping the heading's visual weight through a reference that resolves, as the round-tripped run properties prove.
+  it('points a heading paragraph in a text box at the scaffold\'s Heading_20_N style, keeping its visual weight without text:h', () => {
+    const content = drawingDoc([
+      {
+        size: { widthPt: 400, heightPt: 300 },
+        vectors: [],
+        shapes: [{ frame: { xPt: 10, yPt: 10, widthPt: 300, heightPt: 40 }, ...ZERO_INSETS, blocks: [{ kind: 'paragraph', styleId: 'Heading1', headingLevel: 1, runs: [{ text: 'Page heading' }] }] }],
+      },
+    ]);
+    const pkg = buildOdgPackage(content);
+    const contentPart = pkg.parts['content.xml'];
+    expect(elementsWithTag(contentPart?.kind === 'xml' ? contentPart.nodes : [], 'text:h')).toHaveLength(0);
+    const paragraph = elementsWithTag(contentPart?.kind === 'xml' ? contentPart.nodes : [], 'text:p')[0];
+    expect(paragraph?.attributes).toContainEqual({ name: 'text:style-name', value: 'Heading_20_1' });
+    const stylesRoot = rootElement(pkg.parts['styles.xml']?.kind === 'xml' ? pkg.parts['styles.xml'].nodes : []);
+    const officeStyles = stylesRoot?.children.find((c) => c.type === 'element' && c.tag === 'office:styles');
+    const heading1 = officeStyles?.type === 'element'
+      ? officeStyles.children.find((c) => c.type === 'element' && c.tag === 'style:style' && c.attributes.some((a) => a.name === 'style:name' && a.value === 'Heading_20_1'))
+      : undefined;
+    expect(heading1).toBeDefined();
+    const roundTripped = readOdgContent(pkg);
+    if (roundTripped.kind !== 'drawing') {
+      throw new Error('expected a drawing ContentDocument');
+    }
+    const block = roundTripped.pages[0]!.shapes[0]!.blocks[0];
+    if (block?.kind !== 'paragraph') {
+      throw new Error('expected a paragraph block');
+    }
+    // styleId carries the verbatim reference; the resolved run properties are the proof the reference actually resolves to the scaffold's definition (HEADING_STYLES[1]: bold, 28pt) rather than naming a style nothing defines.
+    expect(block.styleId).toBe('Heading_20_1');
+    expect(block.runs[0]).toMatchObject({ text: 'Page heading', bold: true, sizePt: 28 });
   });
 
   it('writes rect/ellipse/line/path vectors alongside a shape', () => {
