@@ -1,3 +1,11 @@
+# [4.6.0](https://github.com/ExaDev/documents.js/compare/documents.js@4.5.0...documents.js@4.6.0) (2026-08-22)
+
+
+### Features
+
+* **documents:** drive headings, tables, and divisions from tagged structure ([8d0b6f7](https://github.com/ExaDev/documents.js/commit/8d0b6f71573287bf420cc771fe972216dae097ba))
+* **documents:** stamp the structure tree as a package definitions tenant ([1924261](https://github.com/ExaDev/documents.js/commit/19242614e7898ff0c1c64ab96edf70172a93a3ac))
+
 # [4.5.0](https://github.com/ExaDev/documents.js/compare/documents.js@4.4.8...documents.js@4.5.0) (2026-08-22)
 
 
