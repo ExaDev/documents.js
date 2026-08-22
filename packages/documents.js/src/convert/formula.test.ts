@@ -4,13 +4,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 const mathMetricsAt = (sizePt: number) => loadMathFont().metricsAt(sizePt);
 import { unzlibSync } from 'fflate';
-import { flattenPackage, PAGE_SIZE_A4 } from 'document-schema.js';
+import { flattenTree, PAGE_SIZE_A4 } from 'document-schema.js';
 import { buildXml as buildOdfXml, zipPackage } from 'odf.js';
 import { describe, expect, it } from 'vitest';
 import { FRACTION_FORMULA, MATRIX_FORMULA, odfFormulaBytes, SQRT_FORMULA, STRETCHY_FENCE_FORMULA, SUBSUP_FORMULA } from '../test-support/odf';
 import { minimalOdpBytes } from '../test-support/odp';
 import { minimalOdtBytes } from '../test-support/odt';
-import type { ContentBlock, ContentDocument, DocumentPackage, MathMlNode } from 'document-schema.js';
+import type { ContentBlock, ContentDocument, DocumentTree, MathMlNode } from 'document-schema.js';
 import { decodePackage } from 'odf.js';
 import type { XmlElement } from 'ooxml.js';
 import { attr, buildXml, childrenWithTag, decodePackage as decodeOoxmlPackage, elementsWithTag, encodePackage as encodeOoxmlPackage, rootElement, textContent } from 'ooxml.js';
@@ -316,12 +316,12 @@ describe('a formula as a real ContentDocument, not a side-channel map', () => {
   });
 
   it('odfToPdf now invokes onDocument with a real, non-undefined formula ContentDocument', () => {
-    let captured: DocumentPackage | undefined;
+    let captured: DocumentTree | undefined;
     const bytes = odfToPdf(odfFormulaBytes(FRACTION_FORMULA, { starMath: '{a} over {b}' }), { onDocument: (pkg) => { captured = pkg; } });
     expect(new TextDecoder().decode(bytes.subarray(0, 5))).toBe('%PDF-');
 
     expect(captured).toBeDefined();
-    const capturedContent = captured === undefined ? undefined : flattenPackage(captured);
+    const capturedContent = captured === undefined ? undefined : flattenTree(captured);
     expect(capturedContent?.kind).toBe('formula');
     if (capturedContent?.kind !== 'formula') {
       throw new Error('expected a formula ContentDocument');
@@ -334,9 +334,9 @@ describe('a formula as a real ContentDocument, not a side-channel map', () => {
   });
 
   it('carries an odt formula through onDocument as part of the ContentDocument the conversion built', () => {
-    let captured: DocumentPackage | undefined;
+    let captured: DocumentTree | undefined;
     odtToPdf(odtWithEmbeddedFormulaBytes(), { onDocument: (pkg) => { captured = pkg; } });
-    const capturedContent = captured === undefined ? undefined : flattenPackage(captured);
+    const capturedContent = captured === undefined ? undefined : flattenTree(captured);
     if (capturedContent?.kind !== 'wordprocessing') {
       throw new Error('expected a wordprocessing ContentDocument');
     }

@@ -1,5 +1,5 @@
-import type { ContentBlock, ContentImageBlock, ContentParagraph, ContentRun, ContentSheet, ContentSheetCell, ContentTableCell, ContentTable, ContentVector, DocumentPackage, LayoutFrame } from 'document-schema.js';
-import { COLOR_BLACK, DEFAULT_LAYOUT_FONT, flattenPackage } from 'document-schema.js';
+import type { ContentBlock, ContentImageBlock, ContentParagraph, ContentRun, ContentSheet, ContentSheetCell, ContentTableCell, ContentTable, ContentVector, DocumentTree, LayoutFrame } from 'document-schema.js';
+import { COLOR_BLACK, DEFAULT_LAYOUT_FONT, flattenTree } from 'document-schema.js';
 import { LAYOUT_FORMAT_VERSION, writePdf } from 'pdf-codec';
 import { flipY } from '../model/geometry';
 import { convertVector } from '../layout/drawing';
@@ -10,32 +10,32 @@ import { requireArrayBufferBytes } from '../model/bytes';
 import type { DocumentFormat } from './port';
 import type { LayoutDocument, LayoutImage, LayoutImageAsset, LayoutItem, LayoutLink, LayoutPage, LayoutText } from 'pdf-codec';
 
-// Builds any DocumentFormat's own bytes from an already-assembled tree-form DocumentPackage -- the reverse of what every ergonomic X-to-PDF/PDF-to-X conversion's own onDocument callback hands back. The tree is flattened once at this boundary (flattenPackage, which also materialises any styles-table refs away): the builders' public signatures already take the flat ContentDocument, so nothing downstream of this point knows the tree exists -- the boundary design in one sentence. Every target except 'pdf' dispatches through DOCUMENT_FORMAT_CODECS (src/codecs/registry.ts), building a fresh package through the identical buildXPackage function the matching pdf-to-X/bridge conversion already uses, then encoding it with that format's own codec -- xlsx goes through this exact same dispatch (DOCUMENT_FORMAT_CODECS.xlsx.content.write wraps ooxml.js's buildXlsxPackageFromContent), no longer a named exception. 'odf' still has no builder at all -- a standalone formula document has no write path from ContentDocument to begin with -- so it alone is rejected outright ahead of the registry lookup.
-export function buildDocumentBytes(pkg: DocumentPackage, target: DocumentFormat): Uint8Array<ArrayBuffer> {
+// Builds any DocumentFormat's own bytes from an already-assembled tree-form DocumentTree -- the reverse of what every ergonomic X-to-PDF/PDF-to-X conversion's own onDocument callback hands back. The tree is flattened once at this boundary (flattenTree, which also materialises any styles-table refs away): the builders' public signatures already take the flat ContentDocument, so nothing downstream of this point knows the tree exists -- the boundary design in one sentence. Every target except 'pdf' dispatches through DOCUMENT_FORMAT_CODECS (src/codecs/registry.ts), building a fresh package through the identical buildXPackage function the matching pdf-to-X/bridge conversion already uses, then encoding it with that format's own codec -- xlsx goes through this exact same dispatch (DOCUMENT_FORMAT_CODECS.xlsx.content.write wraps ooxml.js's buildXlsxPackageFromContent), no longer a named exception. 'odf' still has no builder at all -- a standalone formula document has no write path from ContentDocument to begin with -- so it alone is rejected outright ahead of the registry lookup.
+export function buildDocumentBytes(pkg: DocumentTree, target: DocumentFormat): Uint8Array<ArrayBuffer> {
   if (target === 'pdf') {
     if (pkg.pages === undefined) {
-      throw new Error("this DocumentPackage has no pages -- only a package dumped from a <format>-to-pdf or pdf-to-<format> conversion carries them; a bridge conversion's own dump (e.g. odt-to-docx) never does, so 'pdf' is not a reachable target from it");
+      throw new Error("this DocumentTree has no pages -- only a package dumped from a <format>-to-pdf or pdf-to-<format> conversion carries them; a bridge conversion's own dump (e.g. odt-to-docx) never does, so 'pdf' is not a reachable target from it");
     }
     return writePdf(layoutDocumentFromPackage(pkg));
   }
   if (target === 'odf') {
-    throw new Error("'odf' (a standalone formula document) cannot be built from a DocumentPackage -- there is no ContentDocument-to-odf builder");
+    throw new Error("'odf' (a standalone formula document) cannot be built from a DocumentTree -- there is no ContentDocument-to-odf builder");
   }
   const content = DOCUMENT_FORMAT_CODECS[target].content;
   if (!content?.write) {
     throw new Error(`DocumentFormat '${target}' has no content.write codec in DOCUMENT_FORMAT_CODECS, and is not 'pdf'/'odf' -- this is an internal invariant violation, not a caller error`);
   }
-  return requireArrayBufferBytes(content.write(flattenPackage(pkg)));
+  return requireArrayBufferBytes(content.write(flattenTree(pkg)));
 }
 
 // --- The frames-to-layout inverse ----------------------------------------------------------------
 //
-// Rebuilds the pdf-codec LayoutDocument a package's own frames + pages describe: a mechanical inverse that walks the content tree and emits LayoutItems from each node's own recorded placements. This is the fusion-faithful direction -- the package now CARRIES the positions (a layout pass stamped them onto content's own nodes), so from-package reconstructs the pdf-codec view from them rather than needing a parallel layout side-channel, which is exactly the second-tree coupling the fused DocumentPackage design removed.
+// Rebuilds the pdf-codec LayoutDocument a package's own frames + pages describe: a mechanical inverse that walks the content tree and emits LayoutItems from each node's own recorded placements. This is the fusion-faithful direction -- the package now CARRIES the positions (a layout pass stamped them onto content's own nodes), so from-package reconstructs the pdf-codec view from them rather than needing a parallel layout side-channel, which is exactly the second-tree coupling the fused DocumentTree design removed.
 //
 // Two honest limits, both structural properties of what a package records, not gaps in this walk:
 //
 // 1. A run's frames record POSITIONS, not the wrap decisions that distributed its text across them. Re-splitting the text would need the font metrics the original layout pass had; guessing a split would garble words. So a run's full text renders once, at its first recorded placement, and its further frames carry no additional text -- a single-frame run (the common case: an unwrapped line, a spreadsheet cell) round-trips exactly; a wrapped run re-renders as one long overflowing line. A spreadsheet cell is exempt by construction: sheets.ts lays cell text out as a single line, so a cell's own displayText at its own frame is an exact re-render.
-// 2. No font registry and no positioned formulas survive a bare DocumentPackage, exactly as before the fusion: a formula block's frame records where it sat while its glyphs render as nothing, and text draws through the standard 14 or a caller-configured default face.
+// 2. No font registry and no positioned formulas survive a bare DocumentTree, exactly as before the fusion: a formula block's frame records where it sat while its glyphs render as nothing, and text draws through the standard 14 or a caller-configured default face.
 
 interface FrameWalkState {
   readonly pages: LayoutPage[];
@@ -191,15 +191,15 @@ function emitBlocks(state: FrameWalkState, blocks: readonly ContentBlock[]): voi
     } else if (block.kind === 'table') {
       emitTable(state, block);
     }
-    // 'embeddedObject' and 'pageBreak' emit nothing: an embedded formula's glyphs rendered through writePdf's positioned-formulas channel (CID-font glyph runs with no LayoutItem kind, which never travelled in a DocumentPackage even before the fusion -- its frame is honoured as a position record on the node, and nothing renders from it), and a page break is structural, with no placement of its own.
+    // 'embeddedObject' and 'pageBreak' emit nothing: an embedded formula's glyphs rendered through writePdf's positioned-formulas channel (CID-font glyph runs with no LayoutItem kind, which never travelled in a DocumentTree even before the fusion -- its frame is honoured as a position record on the node, and nothing renders from it), and a page break is structural, with no placement of its own.
   }
 }
 
 // The public inverse. Flattens the tree once (materialising any styles refs away) and walks the flat content's own structure in document order, so the items land on each page in the same order the original layout pass emitted them (paint order is array order); a package whose content carries no frames at all (a bridge dump, or fresh reader output) still rebuilds the pages themselves, empty. Walking the flattened form rather than the tree directly is a deliberate one-implementation choice: flatten is the single tree-to-flat authority (bijection-tested), the walk below stays the flat document walk it always was, and every other consumer (buildDocumentBytes, lintMathCoherence) shares the same flattened view.
-export function layoutDocumentFromPackage(pkg: DocumentPackage): LayoutDocument {
+export function layoutDocumentFromPackage(pkg: DocumentTree): LayoutDocument {
   const pages: LayoutPage[] = (pkg.pages ?? []).map((page) => ({ widthPt: page.widthPt, heightPt: page.heightPt, items: [] }));
   const state: FrameWalkState = { pages, images: {} };
-  const content = flattenPackage(pkg);
+  const content = flattenTree(pkg);
   if (content.kind === 'wordprocessing') {
     for (const section of content.sections) {
       emitBlocks(state, section.blocks);

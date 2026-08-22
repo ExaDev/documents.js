@@ -1,4 +1,4 @@
-import { flattenPackage, type ContentBlock, type ContentFormula, type DocumentPackage, type MathExpression, type MathSymbolEntry } from 'document-schema.js';
+import { flattenTree, type ContentBlock, type ContentFormula, type DocumentTree, type MathExpression, type MathSymbolEntry } from 'document-schema.js';
 import type { MathLintDiagnostic } from './diagnostics';
 import { lowerLatex } from './lower';
 import { reduceRational } from './rational';
@@ -73,10 +73,10 @@ function collectBlockFormulas(blocks: readonly ContentBlock[], locate: string, f
   }
 }
 
-// Lint every formula carrying both layers in a package. The tree-form package is flattened once at entry (the same single tree-to-flat authority every package consumer uses); the walk below covers every arm formulas actually travel through in the flat form: the wordprocessing sections' block flow, presentation slides and drawing pages (both via their shapes' own block flows), the spreadsheet arm's own embeddedObjects array, and the formula arm itself (a standalone formula document). The exported signature keeps DocumentPackage -- callers hand back exactly what onDocument gave them.
-export function lintMathCoherence(pkg: DocumentPackage): readonly MathLintDiagnostic[] {
+// Lint every formula carrying both layers in a package. The tree-form package is flattened once at entry (the same single tree-to-flat authority every package consumer uses); the walk below covers every arm formulas actually travel through in the flat form: the wordprocessing sections' block flow, presentation slides and drawing pages (both via their shapes' own block flows), the spreadsheet arm's own embeddedObjects array, and the formula arm itself (a standalone formula document). The exported signature keeps DocumentTree -- callers hand back exactly what onDocument gave them.
+export function lintMathCoherence(pkg: DocumentTree): readonly MathLintDiagnostic[] {
   const warnings: MathLintDiagnostic[] = [];
-  const content = flattenPackage(pkg);
+  const content = flattenTree(pkg);
   const symbolEntries = content.symbolTable?.symbols;
   const found: { formula: ContentFormula; locate: string }[] = [];
   if (content.kind === 'formula') {

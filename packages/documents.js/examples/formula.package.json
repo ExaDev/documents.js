@@ -1,5 +1,5 @@
 {
-  "$schema": "https://cdn.jsdelivr.net/npm/document-schema.js@4.0.0/schemas/document-package.schema.json",
+  "$schema": "https://cdn.jsdelivr.net/npm/document-schema.js@4.9.0/schemas/document-tree.schema.json",
   "kind": "formula",
   "metadata": {},
   "pages": [

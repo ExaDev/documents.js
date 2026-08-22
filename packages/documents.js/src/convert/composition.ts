@@ -4,7 +4,7 @@
 //
 // odf (a standalone formula document) and odm (an ODF master document) are deliberately NOT part of this engine: odfToPdf renders through src/mathml's own formula-positioning path rather than a ContentDocument -> LayoutDocument layout engine, and odmToPdf needs a caller-supplied resolveSubDocument callback that a fixed bytes-in/bytes-out contract cannot express. Both stay as the dedicated functions in convert.ts.
 
-import { assemblePackage, type ContentDocument, type DocumentPackage, type FontSubstitution, type ProvidedFont } from 'document-schema.js';
+import { assembleTree, type ContentDocument, type DocumentTree, type FontSubstitution, type ProvidedFont } from 'document-schema.js';
 import { buildXlsxPackageFromContent, decodePackage as decodeOoxmlPackage, encodePackage as encodeOoxmlPackage, readXlsxContent, type Package as OoxmlPackage } from 'ooxml.js';
 import { decodePackage as decodeOdfPackage, encodePackage as encodeOdfPackage } from 'odf.js';
 import { readPdf } from 'pdf-codec/read';
@@ -49,7 +49,7 @@ type SourcePackage = OoxmlPackage;
 // The union of every option field any conversion in this package accepts, all optional: the ComposedDocumentOptions shape (convert.ts:283) promoted to cover the X-to-PDF and PDF-to-X-only fields too, so a single options object threads through every hop of a composed path. Each hop's executor reads only the fields relevant to its stage: the toPdf hop consumes fonts/onFontSubstitution/onSubstitution/clock, the fromPdf hop consumes sink, bridges consume onMathDiagnostic/images, and signal/onDocument are shared.
 export interface UnifiedConversionOptions {
   readonly signal?: AbortSignal;
-  readonly onDocument?: (pkg: DocumentPackage) => void;
+  readonly onDocument?: (pkg: DocumentTree) => void;
   readonly fonts?: readonly ProvidedFont[];
   readonly onFontSubstitution?: (substitution: FontSubstitution) => void;
   readonly onSubstitution?: (substitution: WinAnsiSubstitution, context: { readonly pageIndex: number }) => void;
@@ -273,7 +273,7 @@ export function executeBridge(source: ContentFormat, target: ContentFormat, byte
 
   throwIfAborted(options?.signal);
 
-  // Build + encode the target first, then report the package: onDocument fires after the output bytes exist (the ownership rule every construction site follows -- a callback that inspects the tree cannot observe a half-built conversion; this executor historically fired before the build and was reordered with the tree promotion). A bridge never runs a layout engine, so the reported DocumentPackage is content-only -- assemblePackage decomposes it into its tree with no pages array and no node frames, the identical layoutless shape convert.ts's own bridges report.
+  // Build + encode the target first, then report the package: onDocument fires after the output bytes exist (the ownership rule every construction site follows -- a callback that inspects the tree cannot observe a half-built conversion; this executor historically fired before the build and was reordered with the tree promotion). A bridge never runs a layout engine, so the reported DocumentTree is content-only -- assembleTree decomposes it into its tree with no pages array and no node frames, the identical layoutless shape convert.ts's own bridges report.
   let out: Uint8Array<ArrayBuffer>;
   if (isTextFormatNode(targetNode)) {
     const text = targetNode.build(buildContent, options);
@@ -282,7 +282,7 @@ export function executeBridge(source: ContentFormat, target: ContentFormat, byte
     const pkg = targetNode.build(buildContent, options);
     out = targetNode.encode(pkg);
   }
-  options?.onDocument?.(assemblePackage(buildContent));
+  options?.onDocument?.(assembleTree(buildContent));
   return out;
 }
 
@@ -294,7 +294,7 @@ export function executeFromPdf(target: ContentFormat, bytes: Uint8Array<ArrayBuf
   // The pages half derives from the read LayoutDocument's own pages -- every rendered page's size, indexed to match the frames the reconstructor attached to the content it built.
   const pages = layout.pages.map((page) => ({ widthPt: page.widthPt, heightPt: page.heightPt }));
 
-  // Build + encode the target first, then report the package (the ownership rule every construction site follows), with assemblePackage decomposing the reconstructed content + page sizes into the tree-form DocumentPackage. stampPdfPackageTables then lands the layout's document-level surfaces (destinations, outline, attachments, layers, residue, comment bodies) on the tree -- the tables the flat ContentDocument has no root for.
+  // Build + encode the target first, then report the package (the ownership rule every construction site follows), with assembleTree decomposing the reconstructed content + page sizes into the tree-form DocumentTree. stampPdfPackageTables then lands the layout's document-level surfaces (destinations, outline, attachments, layers, residue, comment bodies) on the tree -- the tables the flat ContentDocument has no root for.
   let out: Uint8Array<ArrayBuffer>;
   if (isTextFormatNode(node)) {
     const text = node.build(content, options);
@@ -303,7 +303,7 @@ export function executeFromPdf(target: ContentFormat, bytes: Uint8Array<ArrayBuf
     const pkg = node.build(content);
     out = node.encode(pkg);
   }
-  const reported = assemblePackage(content, pages);
+  const reported = assembleTree(content, pages);
   stampPdfPackageTables(reported, layout);
   options?.onDocument?.(reported);
   return out;

@@ -191,7 +191,7 @@ describe('the edge extractor recognises every runtime import form', () => {
       "import { convertDocumentFromPdf } from './composition';",
       "export { pdfToDocx } from './from-pdf';",
       "const codec = await import('pdf-codec/read');",
-      "import type { DocumentPackage } from 'document-schema.js';",
+      "import type { DocumentTree } from 'document-schema.js';",
       "// import './commented-side-effect';",
       "/* import './block-commented-side-effect' */",
     ].join('\n'));
