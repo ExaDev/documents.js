@@ -1,6 +1,6 @@
 // Fractional/lexicographic sibling order keys for ExaDev/documents.js#660: a graph-native alternative to the dense integer `order` the projection minted before this module existed. A dense integer forces a renumber of every later sibling on every insertion (insert at index 1 of [0,1,2] and the old 1,2 must become 2,3, touching edges that never actually moved); a string that sorts lexicographically exactly as its intended sequence sorts numerically lets an insertion mint one new key strictly between its neighbours and touch nothing else. Base-36 (digits 0-9a-z) keeps the alphabet compact while staying a plain, sortable ASCII string -- no separate numeric parse step is needed anywhere a key is compared, only String comparison.
 //
-// Two operations, two lifecycles: `orderKeyForIndex`/`renumberedOrderKeys` mint the WIDE, evenly spaced keys a fresh projection (or a full rebalance) wants, and `orderKeyBetween` mints the NARROW, bisected keys a later single insertion wants without disturbing any sibling already minted. A projection never calls `orderKeyBetween` itself -- it always projects from a whole DocumentPackage and always mints via index -- but the graph's own consumers (an editor inserting one sibling into an already-projected graph) need it, which is why it is published from here rather than kept as this module's own private implementation detail.
+// Two operations, two lifecycles: `orderKeyForIndex`/`renumberedOrderKeys` mint the WIDE, evenly spaced keys a fresh projection (or a full rebalance) wants, and `orderKeyBetween` mints the NARROW, bisected keys a later single insertion wants without disturbing any sibling already minted. `orderKeyBefore`/`orderKeyAfter` cover the two ends a between-insert cannot express -- inserting a new first sibling below the current minimum, or appending past the current maximum once bisection has drifted it away from `orderKeyForIndex(n-1)`. A projection never calls `orderKeyBetween` or the end pair itself -- it always projects from a whole DocumentPackage and always mints via index -- but the graph's own consumers (an editor inserting one sibling into an already-projected graph) need all three, which is why they are published from here rather than kept as this module's own private implementation detail.
 
 // 36^8 ~= 2.8x10^12 addressable slots -- enough headroom that no real sibling list ever needs a wider initial encoding.
 const ORDER_KEY_WIDTH = 8;
@@ -21,7 +21,7 @@ function digitValue(char: string): number {
   return parseInt(char, BASE);
 }
 
-// Thrown when the key space is exhausted and the only honest move is a full rebalance -- orderKeyBetween finding no room left between its two neighbours within the width cap. A named class in the family's ConstructMarkerImbalanceError/UnsupportedConversionError convention so a caller branches on instanceof and reaches for renumberedOrderKeys rather than string-matching a message; the boundary keys carry no payload of their own because the caller supplied them -- unlike an imbalance index, there is nothing here the thrower knows that the caller does not.
+// Thrown when the key space is exhausted and the only honest move is a full rebalance -- orderKeyBetween finding no room left between its two neighbours within the width cap, orderKeyBefore reaching the all-'0' floor below which no key exists, or orderKeyAfter filling every digit to 'z' out to that same cap. A named class in the family's ConstructMarkerImbalanceError/UnsupportedConversionError convention so a caller branches on instanceof and reaches for renumberedOrderKeys rather than string-matching a message; the boundary keys carry no payload of their own because the caller supplied them -- unlike an imbalance index, there is nothing here the thrower knows that the caller does not.
 export class OrderKeyBudgetExhaustedError extends Error {
   constructor(message: string) {
     super(message);
@@ -71,5 +71,42 @@ export function orderKeyBetween(low: string, high: string): string {
     prefix += toBase36(lowDigit);
     position += 1;
     highExhausted = true;
+  }
+}
+
+// The mid digit of the base (value 18): the digit with maximal headroom on both sides, appended when orderKeyAfter runs off the end of a key whose every digit is already 'z' -- the same half-the-room rule applied to a fresh position instead of an existing one.
+const MID_DIGIT = toBase36(Math.floor(BASE / 2));
+
+// Mints the shortest key strictly greater than `high` -- the append-a-sibling-at-the-end operation, for a max key bisection has already drifted away from orderKeyForIndex(n-1) so that "the next index-minted key" no longer sorts after it. Walks high's digits left to right and returns at the FIRST digit with room, stepping it up by half the remaining headroom (max(1, ceil((BASE - 1 - digit) / 2))): taking half the room rather than the minimal +1 leaves the other half for later appends on the same side, so the walk converges geometrically instead of a digit at a time. A high whose every digit is 'z' has no room anywhere, so the walk appends the mid digit; the result is shortest because returning at the first roomy digit truncates there, and still strictly greater than high because the stepped digit already exceeds high's own at that position, whatever follows it.
+export function orderKeyAfter(high: string): string {
+  let prefix = '';
+  for (let position = 0; ; position += 1) {
+    if (prefix.length >= ORDER_KEY_MAX_LENGTH) {
+      throw new OrderKeyBudgetExhaustedError('orderKeyAfter: no key sorts above this one within the width cap; rebalance with renumberedOrderKeys');
+    }
+    if (position === high.length) return prefix + MID_DIGIT;
+    const digit = digitValue(high[position]!);
+    if (digit < BASE - 1) {
+      return prefix + toBase36(digit + Math.max(1, Math.ceil((BASE - 1 - digit) / 2)));
+    }
+    prefix += high[position]!;
+  }
+}
+
+// Mints the shortest key strictly less than `low`, the front-insert mirror of orderKeyAfter: the first digit with room steps DOWN by half its own value (max(1, ceil(digit / 2))), leaving the other half below the result for later front inserts. A low that is all '0' digits to its end has NO key before it in this scheme, and the refusal is the honest one: the module's implicit right-padding by '0' reads every all-zero string of any length as the same floor key, orderKeyForIndex(0)'s '00000000', so a "shorter all-zero key" that plain string comparison would sort below the floor is the floor itself -- the caller rebalances the whole sibling list with renumberedOrderKeys instead.
+export function orderKeyBefore(low: string): string {
+  let prefix = '';
+  for (let position = 0; ; position += 1) {
+    if (position === low.length) {
+      throw new OrderKeyBudgetExhaustedError('orderKeyBefore: an all-zero key is the floor of the key space; rebalance with renumberedOrderKeys');
+    }
+    if (prefix.length >= ORDER_KEY_MAX_LENGTH) {
+      throw new OrderKeyBudgetExhaustedError('orderKeyBefore: no key sorts below this one within the width cap; rebalance with renumberedOrderKeys');
+    }
+    const digit = digitValue(low[position]!);
+    if (digit > 0) {
+      return prefix + toBase36(digit - Math.max(1, Math.ceil(digit / 2)));
+    }
+    prefix += low[position]!;
   }
 }
