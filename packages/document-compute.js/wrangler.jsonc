@@ -1,0 +1,6 @@
+{
+  // A no-op Worker whose only purpose is to host document-compute.js's source as the module graph the workers test suite (test/workers/**) imports against under the real workerd runtime -- there is no fetch handler to exercise, only the evaluator, its unit/interval arithmetic, and solveFor running inside a Cloudflare Workers isolate to prove the package carries zero Node-only API usage.
+  "name": "document-compute-js-workers-test",
+  "main": "src/index.ts",
+  "compatibility_date": "2024-09-23"
+}
