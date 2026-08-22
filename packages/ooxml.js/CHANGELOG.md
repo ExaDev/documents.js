@@ -1,3 +1,15 @@
+# [4.6.0](https://github.com/ExaDev/documents.js/compare/ooxml.js@4.5.2...ooxml.js@4.6.0) (2026-08-22)
+
+
+### Bug Fixes
+
+* **docx:** type the embedded-presentation port's bytes as Uint8Array<ArrayBuffer> ([d9ebc73](https://github.com/ExaDev/documents.js/commit/d9ebc73d6d422bccb522ee2939e912284c060ecb))
+
+
+### Features
+
+* **docx:** serialise an embedded presentation through an injected port ([9b68a02](https://github.com/ExaDev/documents.js/commit/9b68a02fe19283b8953f69acf2ba0097e26ee8ff)), closes [#742](https://github.com/ExaDev/documents.js/issues/742)
+
 ## [4.5.2](https://github.com/ExaDev/documents.js/compare/ooxml.js@4.5.1...ooxml.js@4.5.2) (2026-08-22)
 
 
