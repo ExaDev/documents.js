@@ -90,8 +90,6 @@ describe('docx-extras', () => {
         { id: '1', text: DOCX_EXTRAS_FIXTURE.commentWithoutAuthorText },
       ],
       footnotes: [{ id: '1', text: DOCX_EXTRAS_FIXTURE.footnoteText }],
-      headers: [DOCX_EXTRAS_FIXTURE.headerText],
-      footers: [DOCX_EXTRAS_FIXTURE.footerText],
       // The fixture writes word/header1.xml/word/footer1.xml with no relationships at all, so these parts surface through the unreferenced-part walk; its scaffold styles.xml has no docDefaults, so the part runs resolve bare. sectionHeaderFooters is positional -- createDocx's single sectPr spells no references, hence [{}].
       headerFooterParts: [
         { path: 'word/footer1.xml', kind: 'footer', blocks: [{ kind: 'paragraph', runs: [{ text: DOCX_EXTRAS_FIXTURE.footerText }] }] },

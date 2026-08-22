@@ -5,7 +5,7 @@ import { formatDocxExtrasLines } from './docx-extras-format';
 import { buildDocxWithExtras, DOCX_EXTRAS_FIXTURE } from './test-support/docx-extras-fixture';
 
 // sectionHeaderFooters is positional (one entry per section, {} when that section spells no references) -- a one-section document with none spells exactly [{}].
-const EMPTY_EXTRAS: DocxExtras = { comments: [], footnotes: [], headers: [], footers: [], headerFooterParts: [], sectionHeaderFooters: [{}], numbering: {} };
+const EMPTY_EXTRAS: DocxExtras = { comments: [], footnotes: [], headerFooterParts: [], sectionHeaderFooters: [{}], numbering: {} };
 
 function fixtureExtras(): DocxExtras {
   return readDocxExtras(decodePackage(buildDocxWithExtras()));
