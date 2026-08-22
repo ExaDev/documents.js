@@ -1,3 +1,28 @@
+# [4.0.0](https://github.com/ExaDev/documents.js/compare/document-cli@3.2.15...document-cli@4.0.0) (2026-08-22)
+
+
+* refactor(docx-extras)!: derive header/footer lines from the structural parts ([2f54846](https://github.com/ExaDev/documents.js/commit/2f5484681a6568e82249727cff5b7d35c51ad8af))
+* refactor(docx)!: drop the flat headers/footers arrays from DocxExtras ([c162d52](https://github.com/ExaDev/documents.js/commit/c162d521cc970aca0bc817bd595254db70900591))
+
+
+### Features
+
+* **docx:** carry the structural header/footer model in DocxExtras ([c3e664d](https://github.com/ExaDev/documents.js/commit/c3e664d28b5dfe73a101af2826217d8c05726baf))
+
+
+### BREAKING CHANGES
+
+* DocxExtras drops its headers/footers string-array
+fields; headerFooterParts and sectionHeaderFooters replace them.
+* the docx-extras/TUI header and footer lines are
+rendered from DocxExtras.headerFooterParts rather than the flat
+headers/footers text arrays.
+
+
+### Dependencies
+
+- Updated documents.js to ^5.0.0
+
 ## [3.2.15](https://github.com/ExaDev/documents.js/compare/document-cli@3.2.14...document-cli@3.2.15) (2026-08-22)
 
 
