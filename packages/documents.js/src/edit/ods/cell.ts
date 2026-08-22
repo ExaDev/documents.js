@@ -167,7 +167,7 @@ export class OdsCell {
     const textParagraph = el('text:p');
     this.node.children = [textParagraph];
     const paragraph = new OdtParagraph(this.node.children, textParagraph, this.pkg);
-    // headings: false -- this is a table:table-cell's text:p, the same cell-scope container whose heading promote populateParagraph itself refuses (see PopulateParagraphOptions).
-    populateParagraph(paragraph, { kind: 'paragraph', runs: [...runs] }, { headings: false });
+    // headings: 'none' -- this runs-only paragraph is never a heading by construction (ContentSheetCell has no headingLevel concept at all), so the mode documents that no promote could ever fire here.
+    populateParagraph(paragraph, { kind: 'paragraph', runs: [...runs] }, { headings: 'none' });
   }
 }

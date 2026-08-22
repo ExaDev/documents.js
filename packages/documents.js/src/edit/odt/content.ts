@@ -123,19 +123,19 @@ function appendListRun(body: OdtBody, paragraphs: readonly ContentParagraph[]): 
     }
     const item = currentList.addItem();
     // A text:list-item directly contains its member text:p/text:h elements, so a heading inside a list (a numbered heading in docx terms) promotes exactly as a body paragraph does -- the one container below office:text whose model carries text:h.
-    populateParagraph(item.appendParagraph(), para, { headings: true });
+    populateParagraph(item.appendParagraph(), para, { headings: 'element' });
     lastItem = item;
   }
 }
 
 // Exported so src/edit/odp/content.ts's own buildOdpPackage can reuse this exact resolve-alignment-then-append-styled-runs logic for a presentation shape's own paragraphs -- a draw:frame's draw:text-box holds the identical text:p/text:span content model office:text does, interned into the identical content.xml StyleRegistry (see src/edit/odt/props.ts), so there is no presentation-specific variant of this function to write.
 export interface PopulateParagraphOptions {
-  // Whether the paragraph's container's content model carries headings at all. text:h promotion is legal only in office:text and its text:list-item children; a draw:text-box is (text:p | text:list)* with no text:h anywhere in it, and a table:table-cell is read as text:p only by odf.js's own reader (typed/shared/table.ts) -- both of those callers pass false and keep this function's long-standing behaviour there: the paragraph stays a text:p, headingLevel is dropped as a format-boundary loss on that container, and the producer's styleId is still written verbatim.
-  readonly headings: boolean;
+  // How the paragraph's container's content model carries a heading. 'element': the container takes a real text:h (office:text, its text:list-item children, and table:table-cell -- odf.js's own readers read one back from all three), so a headingLevel promotes the element. 'none': the call site's paragraph is never a heading (a stand-in literal, an ods cell's runs-only text:p), so a headingLevel would have nowhere to land and is dropped with the producer's styleId still written verbatim.
+  readonly headings: 'element' | 'none';
 }
 
 export function populateParagraph(paragraph: OdtParagraph, block: ContentParagraph, options: PopulateParagraphOptions): void {
-  if (options.headings && block.headingLevel !== undefined) {
+  if (options.headings === 'element' && block.headingLevel !== undefined) {
     // Promoted FIRST, before every applyStyleChange-based setter below: each of those resolves the paragraph's CURRENT style-name cascade and repoints text:style-name at an interned automatic style, so the Heading_20_N reference must already be in place for alignment/spacing/indent to layer on top of the heading style's own properties. The producer's styleId is deliberately not written for a heading: every heading source's styleId is the synthetic family-wide "Heading{N}" spelling (the exact shape odf.js's own readParagraphOrHeading synthesises back from a text:h), a name no odt defines -- the headingLevel setter writes the ODF-resolvable Heading_20_N spelling of the same depth instead.
     paragraph.headingLevel = block.headingLevel;
   } else if (block.styleId !== undefined) {
@@ -196,7 +196,8 @@ function populateCellBlocks(cell: OdtTableCell, blocks: readonly ContentBlock[])
   const [firstBlock, ...restBlocks] = blocks;
   const firstParagraph = cell.paragraphs()[0];
   if (firstBlock?.kind === 'paragraph' && firstParagraph !== undefined) {
-    populateParagraph(firstParagraph, firstBlock, { headings: false });
+    // headings: 'element' -- a table:table-cell is one of the three containers whose content model carries text:h, and odf.js's own cell reader reads one back (typed/shared/table.ts walks text:p and text:h), so a cell heading promotes exactly as a body paragraph does.
+    populateParagraph(firstParagraph, firstBlock, { headings: 'element' });
   } else if (firstBlock?.kind === 'image' && firstParagraph !== undefined) {
     // Reuses buildCell's own pre-built empty first paragraph for the image, rather than appending a fresh one via appendCellBlock -- avoiding a stray blank paragraph ahead of the image when it is the cell's only content. OdtTableCell.appendParagraph already threads this.pkg through (see table.ts), so insertImageAfter works inside a cell with zero extra plumbing -- a genuine odt advantage over docx's own documented table-cell image limitation.
     firstParagraph.insertImageAfter({ format: firstBlock.format, bytes: base64ToBytes(firstBlock.base64), widthPt: firstBlock.widthPt, heightPt: firstBlock.heightPt, altText: firstBlock.altText });
@@ -264,7 +265,8 @@ function appendTable(body: OdtBody, block: ContentTable): void {
 
 function appendCellBlock(cell: OdtTableCell, block: ContentBlock): void {
   if (block.kind === 'paragraph') {
-    populateParagraph(cell.appendParagraph(), block, { headings: false });
+    // headings: 'element' -- see populateCellBlocks: the cell's content model carries text:h and odf.js reads it back, so every paragraph block in a cell promotes, not only the first.
+    populateParagraph(cell.appendParagraph(), block, { headings: 'element' });
   } else if (block.kind === 'image') {
     const paragraph = cell.appendParagraph();
     paragraph.insertImageAfter({ format: block.format, bytes: base64ToBytes(block.base64), widthPt: block.widthPt, heightPt: block.heightPt, altText: block.altText });
@@ -275,7 +277,7 @@ function appendCellBlock(cell: OdtTableCell, block: ContentBlock): void {
 // A bare image block reaching here (i.e. not already consumed by appendBlocks' own merge-back check above) gets a fresh paragraph of its own -- mirrors buildDocxPackage's own appendBlock 'image' case exactly.
 function appendBlock(body: OdtBody, block: ContentBlock): void {
   if (block.kind === 'paragraph') {
-    populateParagraph(body.appendParagraph(), block, { headings: true });
+    populateParagraph(body.appendParagraph(), block, { headings: 'element' });
   } else if (block.kind === 'image') {
     const paragraph = body.appendParagraph();
     paragraph.insertImageAfter({ format: block.format, bytes: base64ToBytes(block.base64), widthPt: block.widthPt, heightPt: block.heightPt, altText: block.altText });
@@ -305,8 +307,8 @@ function appendEmbeddedObject(body: OdtBody, block: ContentEmbeddedObjectBlock):
     return;
   }
   if (formula.mathml.length === 0) {
-    // headings: false -- a stand-in paragraph is never a heading; the literal block here carries no headingLevel.
-    populateParagraph(body.appendParagraph(), { kind: 'paragraph', runs: [{ text: formulaPlaceholderText(formula) }] }, { headings: false });
+    // headings: 'none' -- a stand-in paragraph is never a heading; the literal block here carries no headingLevel.
+    populateParagraph(body.appendParagraph(), { kind: 'paragraph', runs: [{ text: formulaPlaceholderText(formula) }] }, { headings: 'none' });
     return;
   }
   body.appendFormula(formula, block.frame);
