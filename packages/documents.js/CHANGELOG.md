@@ -1,3 +1,5 @@
+## [4.6.1](https://github.com/ExaDev/documents.js/compare/documents.js@4.6.0...documents.js@4.6.1) (2026-08-22)
+
 # [4.6.0](https://github.com/ExaDev/documents.js/compare/documents.js@4.5.0...documents.js@4.6.0) (2026-08-22)
 
 
