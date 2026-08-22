@@ -960,7 +960,7 @@ describe('readDocxContent: malformed image geometry', () => {
   });
 });
 
-describe('readDocxContent: comments, footnotes, headers, footers', () => {
+describe('readDocxContent: comments, footnotes, header and footer parts', () => {
   it('reads comment author and text from word/comments.xml', () => {
     const pkg = buildFixturePackage();
     pkg.parts['word/comments.xml'] = { kind: 'xml', nodes: [el('w:comments', {}, [el('w:comment', { 'w:author': 'Ann' }, [el('w:p', {}, [el('w:r', {}, [el('w:t', {}, [txt('comment text')])])])])])] };
@@ -987,22 +987,24 @@ describe('readDocxContent: comments, footnotes, headers, footers', () => {
     expect(doc.footnotes[0]?.type).toBeUndefined();
   });
 
-  it('reads header and footer text from their parts', () => {
+  it('reads each header and footer part as block flow', () => {
     const pkg = buildFixturePackage();
     pkg.parts['word/header1.xml'] = { kind: 'xml', nodes: [el('w:hdr', {}, [el('w:p', {}, [el('w:r', {}, [el('w:t', {}, [txt('Header text')])])])])] };
     pkg.parts['word/footer1.xml'] = { kind: 'xml', nodes: [el('w:ftr', {}, [el('w:p', {}, [el('w:r', {}, [el('w:t', {}, [txt('Footer text')])])])])] };
     const doc = readDocxContent(pkg);
-    expect(doc.headers).toEqual(['Header text']);
-    expect(doc.footers).toEqual(['Footer text']);
+    // buildFixturePackage's docDefaults ask for 20 half-points and its Normal style resolves minorHAnsi against the empty theme's own minor-font name, so the part blocks' runs carry the resolved cascade.
+    expect(doc.headerFooterParts).toEqual([
+      { path: 'word/footer1.xml', kind: 'footer', blocks: [{ kind: 'paragraph', runs: [{ text: 'Footer text', fontFamily: 'Minor Font', sizePt: 10 }] }] },
+      { path: 'word/header1.xml', kind: 'header', blocks: [{ kind: 'paragraph', runs: [{ text: 'Header text', fontFamily: 'Minor Font', sizePt: 10 }] }] },
+    ]);
   });
 
-  it('leaves comments/footnotes/headers/footers empty when their parts are absent', () => {
+  it('leaves comments/footnotes/header-footer parts empty when their parts are absent', () => {
     const doc = readDocxContent(buildFixturePackage());
     expect(doc.comments).toEqual([]);
     expect(doc.footnotes).toEqual([]);
     expect(doc.endnotes).toEqual([]);
-    expect(doc.headers).toEqual([]);
-    expect(doc.footers).toEqual([]);
+    expect(doc.headerFooterParts).toEqual([]);
   });
 });
 
@@ -1073,11 +1075,5 @@ describe('readDocxContent: header/footer structure', () => {
       { header: { default: 'word/header1.xml' }, footer: { even: 'word/footer1.xml' } },
       { header: { default: 'word/header1.xml', first: 'word/header2.xml' } },
     ]);
-  });
-
-  it('keeps the flat header/footer text arrays unchanged (one entry per part, package-key order), as the derived summary they have always been', () => {
-    const doc = readDocxContent(headerFooterPackage());
-    expect(doc.headers).toEqual(['Running headerSecond line', 'First-page header']);
-    expect(doc.footers).toEqual(['Even-page footer']);
   });
 });
