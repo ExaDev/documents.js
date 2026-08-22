@@ -6,7 +6,7 @@ import type {
   StylesTable,
 } from 'document-schema.js';
 import { stableContentHash } from './hash';
-import { orderKeyBetween, orderKeyForIndex, renumberedOrderKeys } from './order-keys';
+import { OrderKeyBudgetExhaustedError, orderKeyBetween, orderKeyForIndex, renumberedOrderKeys } from './order-keys';
 
 // The content-addressed graph projection of ExaDev/documents.js#659: one or several tree-form DocumentPackages exported as a property graph (nodes + typed edges) with content-based deduplication, no DocumentPackage schema change. Node identity is COMPUTED, not stored: every content node's id is the stableContentHash of its own projected content -- the canonicalise-then-hash recipe this package already publishes (src/outline/hash.ts), applied bottom-up as a Merkle DAG. A leaf's hash covers its own content; a group's hash covers its own properties plus its children's hashes (and the hash of whatever table entry its refs point at), so a node can be shared by any number of parents -- arbitrary fan-out, data-bearing internal nodes, multi-parent sharing, exactly git's and IPFS's object model rather than a strict binary Merkle tree.
 //
@@ -55,6 +55,9 @@ export interface PropertyGraph {
 
 // The fractional/lexicographic order-key primitive (src/outline/order-keys.ts), re-exported under one namespace so a caller minting edges of their own (an editor inserting a sibling into an already-projected graph) reaches every operation through `orderKeys.*` rather than a second subpath import -- the projection itself only ever calls `orderKeyForIndex`, but `orderKeyBetween`/`renumberedOrderKeys` are this module's published answer to "how do I add one more" and "how do I rebalance" for exactly that consumer.
 export const orderKeys = { orderKeyForIndex, orderKeyBetween, renumberedOrderKeys };
+
+// The order-key module's named rebalance signal, lifted to this package's root surface alongside the `orderKeys` namespace so a caller catching exhaustion from any of the operations branches on instanceof rather than parsing a message.
+export { OrderKeyBudgetExhaustedError };
 
 // This projection's own named, VERSIONED node-identity contract, pinned to whatever recipe stableContentHash implements as of this release (ExaDev/documents.js#660). It is deliberately a separate binding from hash.ts's own stableContentHash/leafContentHash contract, which happens to share this implementation today but is free to evolve on its own schedule for leafContentHash's callers -- graph node identity and leaf-hash identity are two different published contracts that happen to coincide, not one contract wearing two names. If hash.ts's recipe ever needs to change for leafContentHash's sake, contentHashV1 must be forked into its own frozen implementation rather than silently inheriting the change; and any deliberate change to how THIS module hashes graph node content must ship as a newly named contentHashV2 used only by callers that opt into it, never a silent change to contentHashV1's own output -- every id already computed by contentHashV1 must keep meaning what it always meant.
 export const contentHashV1 = stableContentHash;
