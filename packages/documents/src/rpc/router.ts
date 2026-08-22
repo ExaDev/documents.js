@@ -1,13 +1,13 @@
 import { os } from '@orpc/server';
-import { assemblePackage, flattenPackage } from 'document-schema.js';
+import { assembleTree, flattenTree } from 'document-schema.js';
 import {
   ContentDocumentSchema,
   createLocalDocumentConverter,
   decodeDocumentPackage,
   describeFontFace,
   DocumentFormatSchema,
-  DocumentPackageSchema,
-  documentPackageWithSchema,
+  DocumentTreeSchema,
+  documentTreeWithSchema,
   DOCUMENT_FORMATS,
   extractSourceFontsForFormat,
   LayoutDocumentSchema,
@@ -47,15 +47,15 @@ const DiagnosticSchema = z.object({
   pageIndex: z.number().int().nonnegative().optional(),
 });
 
-// `content` carries the conversion's own intermediate document, flattened from the tree at this boundary: documents.js 3 surfaces ConversionResult.package as the tree-form DocumentPackage (structure, layout, and content fused, document-schema.js 4), and flattenPackage materialises the flat codec-exchange ContentDocument the preview components consume -- one walk, refs resolved, user-visible behaviour identical to the old pkg.content read. createLocalDocumentConverter().convert() already computes the package on every call via its internal onDocument callback, so surfacing it here costs nothing extra.
+// `content` carries the conversion's own intermediate document, flattened from the tree at this boundary: documents.js 3 surfaces ConversionResult.package as the tree-form DocumentTree (structure, layout, and content fused, document-schema.js 4), and flattenTree materialises the flat codec-exchange ContentDocument the preview components consume -- one walk, refs resolved, user-visible behaviour identical to the old pkg.content read. createLocalDocumentConverter().convert() already computes the package on every call via its internal onDocument callback, so surfacing it here costs nothing extra.
 const ConversionResultSchema = z.object({
   document: DocumentPayloadSchema,
   diagnostics: z.array(DiagnosticSchema),
   content: ContentDocumentSchema.optional(),
 });
 
-// The tree-form DocumentPackage in the shape a dump carries it: stamped with its release-pinned $schema URI, which since document-schema.js 4 IS the artefact's version (the hand-kept formatVersion integer is gone). DocumentPackageSchema is a discriminated union and has no .extend, so the stamp rides in as an intersection -- the union validates the tree, the object validates the envelope's one extra key.
-const DocumentPackageJsonSchema = DocumentPackageSchema.and(z.object({ $schema: z.string() }));
+// The tree-form DocumentTree in the shape a dump carries it: stamped with its release-pinned $schema URI, which since document-schema.js 4 IS the artefact's version (the hand-kept formatVersion integer is gone). DocumentTreeSchema is a discriminated union and has no .extend, so the stamp rides in as an intersection -- the union validates the tree, the object validates the envelope's one extra key.
+const DocumentTreeJsonSchema = DocumentTreeSchema.and(z.object({ $schema: z.string() }));
 
 // markdown-codec carries a heading paragraph's level in the schema's own ContentParagraph.headingLevel field, so headings need no vocabulary rewrite -- only the residual private conventions are translated here: quote/code-block/horizontal-rule styleIds and a list paragraph's ordered-vs-bullet distinction encoded inside its numId string ("md{n}:bullet|ordered@start", via parseListNumId). Rewritten worker-side (the only place allowed to import markdown-codec) into a small convention this app documents and owns itself, so MarkdownPreview.tsx never needs to depend on markdown-codec's internal string formats -- only on what this router promises to hand it. Only ever applied to a markdown-sourced ContentDocument (see the convert handler's own call site below).
 function normalizeMarkdownStyling(document: ContentDocument): ContentDocument {
@@ -246,7 +246,7 @@ export const router = {
         { signal: signal ?? new AbortController().signal },
       );
       const pkg = result.package;
-      const content = pkg !== undefined ? flattenPackage(pkg) : undefined;
+      const content = pkg !== undefined ? flattenTree(pkg) : undefined;
       return {
         document: result.document,
         diagnostics: result.diagnostics.map((diagnostic) => ({ ...diagnostic })),
@@ -255,20 +255,20 @@ export const router = {
     }),
 
   content: {
-    // Both encodings of the one document cross together: `content` is the flat codec-exchange ContentDocument the preview components render (readContentForFormat's own output, still the form every reader produces), `package` the same document in its artefact form -- assemblePackage decomposes it into the tree and documentPackageWithSchema stamps the $schema URI that names its version. The tree is built from the raw read, not the normalised content below: normalizeContentForSource rewrites styleIds into this app's own preview-rendering conventions, and a dumped artefact must show the document as the reader actually produced it.
+    // Both encodings of the one document cross together: `content` is the flat codec-exchange ContentDocument the preview components render (readContentForFormat's own output, still the form every reader produces), `package` the same document in its artefact form -- assembleTree decomposes it into the tree and documentTreeWithSchema stamps the $schema URI that names its version. The tree is built from the raw read, not the normalised content below: normalizeContentForSource rewrites styleIds into this app's own preview-rendering conventions, and a dumped artefact must show the document as the reader actually produced it.
     read: os
       .input(z.object({ format: DocumentFormatSchema, bytes: BytesSchema }))
       .output(
         z.object({
           content: ContentDocumentSchema,
-          package: DocumentPackageJsonSchema,
+          package: DocumentTreeJsonSchema,
         }),
       )
       .handler(({ input }) => {
         const content = readContentForFormat(input.format, input.bytes);
         return {
           content: normalizeContentForSource(content, input.format, input.bytes),
-          package: documentPackageWithSchema(assemblePackage(content)),
+          package: documentTreeWithSchema(assembleTree(content)),
         };
       }),
   },
