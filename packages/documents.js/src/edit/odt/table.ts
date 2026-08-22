@@ -153,10 +153,11 @@ export class OdtTableCell {
     this.pkg = pkg;
   }
 
+  // A cell's direct paragraph-level children -- text:p and text:h both, exactly the two tags odf.js's own cell reader walks (typed/shared/table.ts) and the same both-tag scope OdtBody.paragraphs gives office:text, so a heading promoted into a cell (by OdtParagraph's headingLevel setter or buildOdtPackage's cell population) stays visible here with its headingLevel readable rather than vanishing from the editor surface.
   paragraphs(): OdtParagraph[] {
     const out: OdtParagraph[] = [];
     for (const child of this.node.children) {
-      if (child.type === 'element' && child.tag === 'text:p') {
+      if (child.type === 'element' && (child.tag === 'text:p' || child.tag === 'text:h')) {
         out.push(new OdtParagraph(this.node.children, child, this.pkg));
       }
     }
