@@ -140,10 +140,13 @@ describe('readDocxContent expanded constructs', () => {
     expect(hyperlinkPara.runs[0]?.hyperlink).toBe('https://example.com');
   });
 
-  it('reads header and footer text from their parts', () => {
+  it('reads header and footer parts as block flow, unreferenced ones included', () => {
+    // This fixture's header/footer parts carry no relationships at all (RICH_DOCUMENT_RELS holds only the hyperlink) -- the part walk still surfaces them.
     const result = readDocxContent(decodePackage(zipPackage(richDocxParts())));
-    expect(result.headers).toEqual(['Header text']);
-    expect(result.footers).toEqual(['Footer text']);
+    expect(result.headerFooterParts).toEqual([
+      { path: 'word/footer1.xml', kind: 'footer', blocks: [{ kind: 'paragraph', runs: [{ text: 'Footer text' }] }] },
+      { path: 'word/header1.xml', kind: 'header', blocks: [{ kind: 'paragraph', runs: [{ text: 'Header text' }] }] },
+    ]);
   });
 
   it('reads comment author and text from word/comments.xml', () => {
