@@ -1,3 +1,21 @@
+# [2.0.0](https://github.com/ExaDev/documents.js/compare/document-outline.js@1.1.0...document-outline.js@2.0.0) (2026-08-22)
+
+
+* feat(outline)!: harden the property graph for use as a persistent store ([cc4566a](https://github.com/ExaDev/documents.js/commit/cc4566ad53cb4b3b2cb59dc615db8951dd49642f)), closes [ExaDev/documents.js#660](https://github.com/ExaDev/documents.js/issues/660)
+
+
+### Features
+
+* **outline:** add fractional order keys for graph edges ([19dc62a](https://github.com/ExaDev/documents.js/commit/19dc62a9b5ab55062bbcc2ec24d1494e5d38c7bd))
+
+
+### BREAKING CHANGES
+
+* GraphEdge.order (number) is replaced by
+GraphEdge.orderKey (string). A consumer sorting or comparing edges by
+the old dense integer must switch to lexicographic string comparison
+on orderKey.
+
 # [1.1.0](https://github.com/ExaDev/documents.js/compare/document-outline.js@1.0.10...document-outline.js@1.1.0) (2026-08-22)
 
 
