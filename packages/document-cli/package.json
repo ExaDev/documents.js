@@ -1,6 +1,6 @@
 {
   "name": "document-cli",
-  "version": "3.2.7",
+  "version": "3.2.8",
   "description": "CLI and interactive Ink TUI for documents.js: every docx/pptx/odt/odp/ods/odg/odf/pdf/odm/odb/xlsx/csv/svg/markdown conversion, bridge, and editor as a scriptable command or a terminal app.",
   "type": "module",
   "repository": {
