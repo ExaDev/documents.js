@@ -1,3 +1,10 @@
+# [5.5.0](https://github.com/ExaDev/documents.js/compare/odf.js@5.4.0...odf.js@5.5.0) (2026-08-22)
+
+
+### Features
+
+* **odf:** read text:h table-cell children with full heading identity ([eefc4e2](https://github.com/ExaDev/documents.js/commit/eefc4e25d2c409ba68360b32762a5782827df0a5))
+
 # [5.4.0](https://github.com/ExaDev/documents.js/compare/odf.js@5.3.0...odf.js@5.4.0) (2026-08-22)
 
 
