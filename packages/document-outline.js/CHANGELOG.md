@@ -1,3 +1,10 @@
+# [2.1.0](https://github.com/ExaDev/documents.js/compare/document-outline.js@2.0.0...document-outline.js@2.1.0) (2026-08-22)
+
+
+### Features
+
+* **outline:** mint order keys beyond either end of a sibling list ([253213b](https://github.com/ExaDev/documents.js/commit/253213bd62afa092281c818c1fb2e307d61cd7ad))
+
 # [2.0.0](https://github.com/ExaDev/documents.js/compare/document-outline.js@1.1.0...document-outline.js@2.0.0) (2026-08-22)
 
 
