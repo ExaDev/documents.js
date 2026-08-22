@@ -589,7 +589,7 @@ importers:
         specifier: ^5.0.0
         version: link:../markdown-codec
       odf.js:
-        specifier: ^5.1.2
+        specifier: ^5.2.0
         version: link:../odf.js
       react:
         specifier: ^19.2.8
