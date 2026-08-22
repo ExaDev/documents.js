@@ -13,7 +13,7 @@ import { columnWidthCharsToPt, DEFAULT_COLUMN_WIDTH_CHARS, DEFAULT_ROW_HEIGHT_PT
 
 // A worksheet's drawing layer (xl/drawings/drawingN.xml, reached through the worksheet's own relationships): the xlsx counterpart of pptx's chart/SmartArt/OLE readers. A chart graphic frame's cached series/category model is read through the SAME chart reader the pptx side uses (readChartTable), and lands as a ContentEmbeddedObject with objectKind 'chart' -- the one member that names what the frame held rather than a ContentDocument kind, carrying the cached model as a small spreadsheet document (one sheet whose cells are that table), because a sheet is the honest document-granularity spelling of tabular data and a xlsx sheet has no block flow to host a table block the way a pptx shape does. A picture (xdr:pic) resolves its a:blip through the drawing part's own relationships to the sniffed media bytes and lands as a ContentSheetImage -- the same blip-resolution contract as the pptx picture reader, anchor fields and frame resolved through the same grid geometry the chart row uses.
 //
-// Scope: twoCellAnchor content only (charts and pictures). An xdr:absoluteAnchor (page-absolute placement, which a spreadsheet's cell grid cannot express anyway) and an xdr:oneCellAnchor (from-marker plus a:ext sizing, which the chart row never needed) are skipped. Real-producer verification is outstanding: the fixtures this is built against are hand-built ECMA-376 markup, the corpus gate the construct inventory itself states.
+// Scope: twoCellAnchor and oneCellAnchor content (charts and pictures), every anchor spelling resolving to one placement shape -- a from-marker positions both through the same grid geometry, and the frame's size is the to-marker difference (two-cell) or the anchor's own xdr:ext (one-cell, Excel's "Move, but don't size with cells" spelling for inserted pictures). An xdr:absoluteAnchor (page-absolute placement) is skipped. Real-producer verification is outstanding: the fixtures this is built against are hand-built ECMA-376 markup, the corpus gate the construct inventory itself states.
 
 const CHART_GRAPHIC_URI = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
 const DRAWING_REL_SUFFIX = '/drawing';
@@ -94,11 +94,30 @@ interface AnchorMarker {
   readonly rowOffEmu: number;
 }
 
+// The placement vocabulary every anchor spelling resolves to: a frame in absolute points plus the cell-relative anchor fields ContentSheetImage and ContentEmbeddedObject carry, so the content walk below (graphic frames, pictures) is shared across spellings.
+interface AnchorPlacement {
+  readonly xPt: number;
+  readonly yPt: number;
+  readonly widthPt: number;
+  readonly heightPt: number;
+  readonly anchorRow: number;
+  readonly anchorColumn: number;
+  readonly offsetXPt: number;
+  readonly offsetYPt: number;
+}
+
 // A marker's own child values: xdr:col/xdr:colOff/xdr:row/xdr:rowOff carry their numbers as TEXT content, not attributes, unlike most of the numeric vocabulary this package reads. A malformed value degrades to 0 the way this family's other numeric readers degrade, never to a NaN frame; a marker's col/row are 0-based grid indices.
 function readAnchorChild(marker: XmlElement, tag: string): number {
   const child = childrenWithTag(marker, tag)[0];
   const text = child === undefined ? undefined : child.children.map((node) => (node.type === 'text' ? node.value : '')).join('');
   const parsed = text === undefined || text === '' ? Number.NaN : Number(text);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+// An anchor-level numeric attribute (xdr:ext's cx/cy): the same degrade-to-0 contract readAnchorChild gives a marker's child-text values, never a NaN frame.
+function numericAttr(element: XmlElement, name: string): number {
+  const raw = attr(element, name);
+  const parsed = raw === undefined ? Number.NaN : Number(raw);
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
@@ -108,6 +127,36 @@ function readAnchorMarker(parent: XmlElement, tag: string): AnchorMarker | undef
     return undefined;
   }
   return { column: readAnchorChild(marker, 'xdr:col'), colOffEmu: readAnchorChild(marker, 'xdr:colOff'), row: readAnchorChild(marker, 'xdr:row'), rowOffEmu: readAnchorChild(marker, 'xdr:rowOff') };
+}
+
+// The anchor's own xdr:ext sizing (cx/cy EMU) -- the to-marker's job in the one-cell and absolute spellings, where the frame's size rides the anchor rather than a second marker.
+function readAnchorExtEmu(anchor: XmlElement): { readonly cxEmu: number; readonly cyEmu: number } | undefined {
+  const ext = childrenWithTag(anchor, 'xdr:ext')[0];
+  if (ext === undefined) {
+    return undefined;
+  }
+  return { cxEmu: numericAttr(ext, 'cx'), cyEmu: numericAttr(ext, 'cy') };
+}
+
+// One anchor's placement: a two-cell anchor is positioned by its from-marker and sized by the to-marker difference, a one-cell anchor by its from-marker and its own xdr:ext. Undefined when the anchor's own geometry is malformed (a missing marker or ext), which skips the anchor the way the walk always has.
+function readAnchorPlacement(anchor: XmlElement, geometry: SheetGridGeometry): AnchorPlacement | undefined {
+  if (anchor.tag === 'xdr:twoCellAnchor') {
+    const from = readAnchorMarker(anchor, 'xdr:from');
+    const to = readAnchorMarker(anchor, 'xdr:to');
+    if (from === undefined || to === undefined) {
+      return undefined;
+    }
+    const xPt = geometry.xPt(from.column, from.colOffEmu);
+    const yPt = geometry.yPt(from.row, from.rowOffEmu);
+    return { xPt, yPt, widthPt: geometry.xPt(to.column, to.colOffEmu) - xPt, heightPt: geometry.yPt(to.row, to.rowOffEmu) - yPt, anchorRow: from.row, anchorColumn: from.column, offsetXPt: emuToPt(from.colOffEmu), offsetYPt: emuToPt(from.rowOffEmu) };
+  }
+  // xdr:oneCellAnchor, the one other spelling the walk admits.
+  const from = readAnchorMarker(anchor, 'xdr:from');
+  const ext = readAnchorExtEmu(anchor);
+  if (from === undefined || ext === undefined) {
+    return undefined;
+  }
+  return { xPt: geometry.xPt(from.column, from.colOffEmu), yPt: geometry.yPt(from.row, from.rowOffEmu), widthPt: emuToPt(ext.cxEmu), heightPt: emuToPt(ext.cyEmu), anchorRow: from.row, anchorColumn: from.column, offsetXPt: emuToPt(from.colOffEmu), offsetYPt: emuToPt(from.rowOffEmu) };
 }
 
 // A minimal, childless worksheet element for the payload sheet's own print settings -- the same all-defaults ContentSheetPrintSettings readPrintSettings produces for an empty worksheet, which is the honest spelling for a synthesized sheet that never had a page setup of its own.
@@ -139,7 +188,10 @@ export interface SheetDrawing {
   readonly images: ContentSheetImage[];
 }
 
-// Reads one worksheet's drawing anchors in a single walk -- the drawing part is resolved, its relationships parsed, and the grid geometry built once for both rows, each anchor's from/to frame computed once for whatever content it carries.
+// The anchor spellings a drawing part carries that this reader walks, in the drawing's own document order -- a real drawing mixes spellings (a twoCellAnchor chart beside oneCellAnchor pictures), and each row lands in the order the part spells them.
+const ANCHOR_TAGS = ['xdr:twoCellAnchor', 'xdr:oneCellAnchor'];
+
+// Reads one worksheet's drawing anchors in a single walk -- the drawing part is resolved, its relationships parsed, and the grid geometry built once for both rows, each anchor's placement computed once for whatever content it carries.
 export function readSheetDrawing(pkg: Package, worksheetPath: string, worksheet: XmlElement): SheetDrawing {
   let drawingPath: string | undefined;
   for (const rel of resolveRelationships(pkg, worksheetPath).values()) {
@@ -159,16 +211,16 @@ export function readSheetDrawing(pkg: Package, worksheetPath: string, worksheet:
   const geometry = new SheetGridGeometry(worksheet);
   const objects: ContentEmbeddedObject[] = [];
   const images: ContentSheetImage[] = [];
-  for (const anchor of childrenWithTag(drawingRoot, 'xdr:twoCellAnchor')) {
-    const from = readAnchorMarker(anchor, 'xdr:from');
-    const to = readAnchorMarker(anchor, 'xdr:to');
-    if (from === undefined || to === undefined) {
+  for (const node of drawingRoot.children) {
+    if (node.type !== 'element' || !ANCHOR_TAGS.includes(node.tag)) {
       continue;
     }
-    const xPt = geometry.xPt(from.column, from.colOffEmu);
-    const yPt = geometry.yPt(from.row, from.rowOffEmu);
-    const frameBox = { xPt, yPt, widthPt: geometry.xPt(to.column, to.colOffEmu) - xPt, heightPt: geometry.yPt(to.row, to.rowOffEmu) - yPt };
-    for (const frame of elementsWithTag([anchor], 'xdr:graphicFrame')) {
+    const placement = readAnchorPlacement(node, geometry);
+    if (placement === undefined) {
+      continue;
+    }
+    const frameBox = { xPt: placement.xPt, yPt: placement.yPt, widthPt: placement.widthPt, heightPt: placement.heightPt };
+    for (const frame of elementsWithTag([node], 'xdr:graphicFrame')) {
       const chart = readChartFrame(pkg, frame, drawingRels);
       if (chart === undefined) {
         continue;
@@ -177,31 +229,31 @@ export function readSheetDrawing(pkg: Package, worksheetPath: string, worksheet:
         objectKind: 'chart',
         document: chartDocument(pkg, chart.root, frameBox, chart.name),
         frame: frameBox,
-        anchorRow: from.row,
-        anchorColumn: from.column,
-        offsetXPt: emuToPt(from.colOffEmu),
-        offsetYPt: emuToPt(from.rowOffEmu),
+        anchorRow: placement.anchorRow,
+        anchorColumn: placement.anchorColumn,
+        offsetXPt: placement.offsetXPt,
+        offsetYPt: placement.offsetYPt,
       });
     }
-    for (const pic of elementsWithTag([anchor], 'xdr:pic')) {
+    for (const pic of elementsWithTag([node], 'xdr:pic')) {
       const media = readPictureMedia(pkg, pic, drawingRels);
       if (media === undefined) {
         continue;
       }
-      // ContentSheetImage's widthPt/heightPt are positive by schema, so a degenerate anchor whose to-marker sits at or before its from-marker has no spelling here and is skipped rather than emitted invalid.
-      if (frameBox.widthPt <= 0 || frameBox.heightPt <= 0) {
+      // ContentSheetImage's widthPt/heightPt are positive by schema, so a degenerate anchor -- a to-marker sitting at or before its from-marker, or a non-positive ext size -- has no spelling here and is skipped rather than emitted invalid.
+      if (placement.widthPt <= 0 || placement.heightPt <= 0) {
         continue;
       }
       images.push({
         kind: 'image',
         format: media.format,
         base64: media.base64,
-        widthPt: frameBox.widthPt,
-        heightPt: frameBox.heightPt,
-        anchorRow: from.row,
-        anchorColumn: from.column,
-        offsetXPt: emuToPt(from.colOffEmu),
-        offsetYPt: emuToPt(from.rowOffEmu),
+        widthPt: placement.widthPt,
+        heightPt: placement.heightPt,
+        anchorRow: placement.anchorRow,
+        anchorColumn: placement.anchorColumn,
+        offsetXPt: placement.offsetXPt,
+        offsetYPt: placement.offsetYPt,
       });
     }
   }
