@@ -1,4 +1,4 @@
-import type { Comment, DocxExtras, Footnote, NumberingDefinitions, NumberingLevel } from 'documents.js';
+import type { Comment, ContentBlock, DocxExtras, Footnote, HeaderFooterPart, NumberingDefinitions, NumberingLevel } from 'documents.js';
 
 // The one place a docx's own comments/footnotes/headers/footers/numbering definitions turn into text, shared by the `docx-extras` command and the TUI's own `docxExtras` screen -- the same relationship `odb-structure.ts` has to `odb-forms`/`odb-reports` and to the TUI's own form/report detail screens, and for the same reason: the CLI renders these lines joined by newlines while the TUI renders one per `ListView` row, so a flat `readonly string[]` of already-indented lines is the shape that genuinely serves both without either owning the other's rendering.
 //
@@ -35,12 +35,29 @@ function footnotesSection(footnotes: readonly Footnote[]): readonly string[] {
   return ['footnotes', ...footnotes.map((footnote, index) => footnoteLine(footnote, index + 1))];
 }
 
-// Headers and footers share the identical shape once read (`readonly string[]`, each entry one part's own concatenated text) -- one function renders either, labelled by the caller.
-function headerOrFooterSection(label: string, values: readonly string[]): readonly string[] {
-  if (values.length === 0) {
+// One part's own text: every paragraph's run text concatenated with no separator, recursing into table cells. Run text is ooxml.js's readRunText fold of the run's XML children (w:t and w:delText alike, w:tab as '\t', w:br/w:cr as '\n'), so tabs and line breaks survive as literal characters and tracked-deletion text is included, while content with no block-flow spelling -- a header textbox's text -- contributes nothing.
+function partText(blocks: readonly ContentBlock[]): string {
+  let text = '';
+  for (const block of blocks) {
+    if (block.kind === 'paragraph') {
+      text += block.runs.map((run) => run.text).join('');
+    } else if (block.kind === 'table') {
+      for (const row of block.rows) {
+        for (const cell of row.cells) {
+          text += partText(cell.blocks);
+        }
+      }
+    }
+  }
+  return text;
+}
+
+// Headers and footers share the identical shape once read (each part its own block flow, listed in package-key order) -- one function renders either kind, labelled by the caller; filtering by kind upstream preserves that order within a kind.
+function headerOrFooterSection(label: string, parts: readonly HeaderFooterPart[]): readonly string[] {
+  if (parts.length === 0) {
     return [];
   }
-  return [label, ...values.map((text, index) => `${indent(1)}[${index + 1}] ${text}`)];
+  return [label, ...parts.map((part, index) => `${indent(1)}[${index + 1}] ${partText(part.blocks)}`)];
 }
 
 function numberingLevelLine(ilvl: string, level: NumberingLevel): string {
@@ -77,8 +94,8 @@ export function formatDocxExtrasLines(extras: DocxExtras): readonly string[] {
   const sections: readonly (readonly string[])[] = [
     commentsSection(extras.comments),
     footnotesSection(extras.footnotes),
-    headerOrFooterSection('headers', extras.headers),
-    headerOrFooterSection('footers', extras.footers),
+    headerOrFooterSection('headers', extras.headerFooterParts.filter((part) => part.kind === 'header')),
+    headerOrFooterSection('footers', extras.headerFooterParts.filter((part) => part.kind === 'footer')),
     numberingSection(extras.numbering),
   ];
   const nonEmptySections = sections.filter((section) => section.length > 0);
