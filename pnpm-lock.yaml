@@ -586,7 +586,7 @@ importers:
         specifier: ^4.4.7
         version: link:../documents.js
       markdown-codec:
-        specifier: ^5.0.0
+        specifier: ^5.0.1
         version: link:../markdown-codec
       odf.js:
         specifier: ^5.2.0
