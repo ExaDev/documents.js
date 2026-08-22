@@ -599,6 +599,80 @@ describe('readXlsxContent: chart graphic frames', () => {
   });
 });
 
+// The same chart graphic frame as chartDrawingPackage carries, under a oneCellAnchor instead: both rows share the drawing walk, so the one-cell spelling extends charts exactly as it extends pictures (#776's own "both rows" note). Position from the from-marker, size from the anchor's own xdr:ext.
+function oneCellChartPackage(): Package {
+  const revenue = el('c:ser', {}, [
+    el('c:tx', {}, [el('c:strRef', {}, [el('c:f', {}, [txt('Sheet1!$B$1')]), el('c:strCache', {}, [el('c:ptCount', { val: '1' }), el('c:pt', { idx: '0' }, [el('c:v', {}, [txt('Revenue')])])])])]),
+    el('c:cat', {}, [el('c:strRef', {}, [el('c:strCache', {}, [el('c:ptCount', { val: '2' }), el('c:pt', { idx: '0' }, [el('c:v', {}, [txt('Q1')])]), el('c:pt', { idx: '1' }, [el('c:v', {}, [txt('Q2')])])])])]),
+    el('c:val', {}, [el('c:numRef', {}, [el('c:numCache', {}, [el('c:ptCount', { val: '2' }), el('c:pt', { idx: '0' }, [el('c:v', {}, [txt('8.5')])]), el('c:pt', { idx: '1' }, [el('c:v', {}, [txt('12')])])])])]),
+  ]);
+  const chartSpace = el('c:chartSpace', {}, [el('c:chart', {}, [el('c:plotArea', {}, [el('c:barChart', {}, [revenue])])])]);
+  const graphicFrame = el('xdr:graphicFrame', {}, [
+    el('xdr:nvGraphicFramePr', {}, [el('xdr:cNvPr', { id: '2', name: 'Chart 1' })]),
+    el('a:graphic', {}, [el('a:graphicData', { uri: 'http://schemas.openxmlformats.org/drawingml/2006/chart' }, [el('c:chart', { 'r:id': 'rIdChart' })])]),
+  ]);
+  const drawing = el('xdr:wsDr', {}, [
+    el('xdr:oneCellAnchor', {}, [
+      el('xdr:from', {}, [el('xdr:col', {}, [txt('0')]), el('xdr:colOff', {}, [txt('19050')]), el('xdr:row', {}, [txt('1')]), el('xdr:rowOff', {}, [txt('0')])]),
+      el('xdr:ext', { cx: '1828800', cy: '914400' }),
+      graphicFrame,
+      el('xdr:clientData'),
+    ]),
+  ]);
+  const worksheet = el('worksheet', {}, [
+    el('cols', {}, [el('col', { min: '1', max: '1', width: '10' }), el('col', { min: '2', max: '2', width: '20' })]),
+    el('sheetData', {}, [el('row', { r: '1' }, [el('c', { r: 'A1' }, [el('v', {}, [txt('1')])])])]),
+    el('drawing', { 'r:id': 'rIdDrawing' }),
+  ]);
+  const relationship = (id: string, type: string, target: string) => el('Relationship', { Id: id, Type: type, Target: target });
+  return {
+    parts: {
+      'xl/workbook.xml': { kind: 'xml', nodes: [el('workbook', {}, [el('sheets', {}, [el('sheet', { name: 'Data', sheetId: '1', 'r:id': 'rIdSheet' })])])] },
+      'xl/_rels/workbook.xml.rels': { kind: 'xml', nodes: [el('Relationships', {}, [relationship('rIdSheet', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet', 'worksheets/sheet1.xml')])] },
+      'xl/worksheets/sheet1.xml': { kind: 'xml', nodes: [worksheet] },
+      'xl/worksheets/_rels/sheet1.xml.rels': { kind: 'xml', nodes: [el('Relationships', {}, [relationship('rIdDrawing', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing', '../drawings/drawing1.xml')])] },
+      'xl/drawings/drawing1.xml': { kind: 'xml', nodes: [drawing] },
+      'xl/drawings/_rels/drawing1.xml.rels': { kind: 'xml', nodes: [el('Relationships', {}, [relationship('rIdChart', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart', '../charts/chart1.xml')])] },
+      'xl/charts/chart1.xml': { kind: 'xml', nodes: [chartSpace] },
+    },
+  };
+}
+
+describe('readXlsxContent: chart graphic frames (oneCellAnchor)', () => {
+  it("reads an xdr:oneCellAnchor graphic frame with its frame sized from the anchor's own xdr:ext and its cached model intact", () => {
+    const document = readXlsxContent(oneCellChartPackage());
+    if (document.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    expect(document.sheets[0]?.embeddedObjects).toHaveLength(1);
+    const chart = document.sheets[0]?.embeddedObjects?.[0];
+    expect(chart?.objectKind).toBe('chart');
+    expect(chart?.anchorColumn).toBe(0);
+    expect(chart?.anchorRow).toBe(1);
+    // Position from the from-marker through the same grid geometry the two-cell spelling uses; size verbatim from xdr:ext (1828800 x 914400 EMU = 144 x 72 pt).
+    const offsetX = (19050 / 914400) * 72;
+    expect(chart?.offsetXPt).toBeCloseTo(offsetX, 5);
+    expect(chart?.offsetYPt).toBe(0);
+    expect(chart?.frame.xPt).toBeCloseTo(offsetX, 5);
+    expect(chart?.frame.yPt).toBeCloseTo(15, 5);
+    expect(chart?.frame.widthPt).toBeCloseTo(144, 5);
+    expect(chart?.frame.heightPt).toBeCloseTo(72, 5);
+    expect(chart?.document.kind).toBe('spreadsheet');
+    const sheet = chart?.document.kind === 'spreadsheet' ? chart.document.sheets[0] : undefined;
+    expect(sheet?.cells).toEqual([
+      { row: 0, column: 1, value: { kind: 'string', value: 'Revenue' }, displayText: 'Revenue' },
+      { row: 1, column: 0, value: { kind: 'string', value: 'Q1' }, displayText: 'Q1' },
+      { row: 1, column: 1, value: { kind: 'string', value: '8.5' }, displayText: '8.5' },
+      { row: 2, column: 0, value: { kind: 'string', value: 'Q2' }, displayText: 'Q2' },
+      { row: 2, column: 1, value: { kind: 'string', value: '12' }, displayText: '12' },
+    ]);
+  });
+
+  it('round-trips the whole document through ContentDocumentSchema, so the one-cell-anchored chart object is schema-valid as read', () => {
+    expect(ContentDocumentSchema.safeParse(readXlsxContent(oneCellChartPackage())).success).toBe(true);
+  });
+});
+
 // A drawing picture reached through the same cascade as the chart fixture above: the worksheet's <drawing r:id> names a drawing part, whose xdr:twoCellAnchor this time carries an xdr:pic whose a:blip names a media part through the DRAWING's relationships. Anchor fields and frame come from the from/to markers through the same grid geometry the chart row resolves against.
 const TINY_PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 
@@ -673,6 +747,83 @@ describe('readXlsxContent: drawing pictures', () => {
 
   it('does not survive the write pair: buildXlsxPackageFromContent emits no drawing part, so the read row is one-way (the established cell-comment asymmetry)', () => {
     const rewritten = readXlsxContent(decodePackage(encodePackage(buildXlsxPackageFromContent(readXlsxContent(pictureDrawingPackage())))));
+    if (rewritten.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    expect(rewritten.sheets[0]?.images).toEqual([]);
+  });
+});
+
+// The oneCellAnchor spelling -- Excel's own "Move, but don't size with cells" anchoring for an inserted picture (the common real-producer spelling, per #776): a from-marker positions the frame through the grid geometry exactly as a two-cell anchor's from-marker does, and the anchor's own xdr:ext sizes it, which is the to-marker's job in the two-cell spelling.
+function oneCellPicturePackage(extCx = '1828800', extCy = '914400'): Package {
+  const picture = el('xdr:pic', {}, [
+    el('xdr:nvPicPr', {}, [el('xdr:cNvPr', { id: '2', name: 'Picture 1' })]),
+    el('xdr:blipFill', {}, [el('a:blip', { 'r:embed': 'rIdImage' })]),
+    el('xdr:spPr', {}, [el('a:xfrm', {}, [el('a:off', { x: '0', y: '0' }), el('a:ext', { cx: '0', cy: '0' })]), el('a:prstGeom', { prst: 'rect' }, [el('a:avLst')])]),
+  ]);
+  const drawing = el('xdr:wsDr', {}, [
+    el('xdr:oneCellAnchor', {}, [
+      el('xdr:from', {}, [el('xdr:col', {}, [txt('0')]), el('xdr:colOff', {}, [txt('19050')]), el('xdr:row', {}, [txt('1')]), el('xdr:rowOff', {}, [txt('0')])]),
+      el('xdr:ext', { cx: extCx, cy: extCy }),
+      picture,
+      el('xdr:clientData'),
+    ]),
+  ]);
+  const worksheet = el('worksheet', {}, [
+    el('cols', {}, [el('col', { min: '1', max: '1', width: '10' }), el('col', { min: '2', max: '2', width: '20' })]),
+    el('sheetData', {}, [el('row', { r: '1' }, [el('c', { r: 'A1' }, [el('v', {}, [txt('1')])])])]),
+    el('drawing', { 'r:id': 'rIdDrawing' }),
+  ]);
+  const relationship = (id: string, type: string, target: string) => el('Relationship', { Id: id, Type: type, Target: target });
+  return {
+    parts: {
+      'xl/workbook.xml': { kind: 'xml', nodes: [el('workbook', {}, [el('sheets', {}, [el('sheet', { name: 'Data', sheetId: '1', 'r:id': 'rIdSheet' })])])] },
+      'xl/_rels/workbook.xml.rels': { kind: 'xml', nodes: [el('Relationships', {}, [relationship('rIdSheet', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet', 'worksheets/sheet1.xml')])] },
+      'xl/worksheets/sheet1.xml': { kind: 'xml', nodes: [worksheet] },
+      'xl/worksheets/_rels/sheet1.xml.rels': { kind: 'xml', nodes: [el('Relationships', {}, [relationship('rIdDrawing', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing', '../drawings/drawing1.xml')])] },
+      'xl/drawings/drawing1.xml': { kind: 'xml', nodes: [drawing] },
+      'xl/drawings/_rels/drawing1.xml.rels': { kind: 'xml', nodes: [el('Relationships', {}, [relationship('rIdImage', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image', '../media/image1.png')])] },
+      'xl/media/image1.png': { kind: 'binary', base64: TINY_PNG_BASE64 },
+    },
+  };
+}
+
+describe('readXlsxContent: drawing pictures (oneCellAnchor)', () => {
+  it("reads an xdr:oneCellAnchor xdr:pic with its size from the anchor's own xdr:ext rather than a to-marker difference", () => {
+    const document = readXlsxContent(oneCellPicturePackage());
+    if (document.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    expect(document.sheets[0]?.images).toHaveLength(1);
+    const image = document.sheets[0]?.images[0];
+    expect(image?.kind).toBe('image');
+    expect(image?.format).toBe('png');
+    expect(image?.base64).toBe(TINY_PNG_BASE64);
+    // Position and anchor fields come from the from-marker exactly as in the two-cell spelling: column 0 offset 19050 EMU, row 1, no offset.
+    expect(image?.anchorColumn).toBe(0);
+    expect(image?.anchorRow).toBe(1);
+    const offsetX = (19050 / 914400) * 72;
+    expect(image?.offsetXPt).toBeCloseTo(offsetX, 5);
+    expect(image?.offsetYPt).toBe(0);
+    // The size is the anchor's own xdr:ext verbatim: 1828800 x 914400 EMU is 2 x 1 inches, 144 x 72 pt.
+    expect(image?.widthPt).toBeCloseTo(144, 5);
+    expect(image?.heightPt).toBeCloseTo(72, 5);
+  });
+
+  it('skips a one-cell picture whose ext size is not positive, the same degenerate-anchor guard the two-cell spelling has', () => {
+    const document = readXlsxContent(oneCellPicturePackage('0', '914400'));
+    if (document.kind !== 'spreadsheet') {
+      throw new Error('expected a spreadsheet ContentDocument');
+    }
+    expect(document.sheets[0]?.images).toEqual([]);
+  });
+
+  it('round-trips the whole document through ContentDocumentSchema, so the one-cell-anchored sheet image is schema-valid as read', () => {
+    expect(ContentDocumentSchema.safeParse(readXlsxContent(oneCellPicturePackage())).success).toBe(true);
+  });
+
+  it('does not survive the write pair: buildXlsxPackageFromContent emits no drawing part, so the read row is one-way (the established cell-comment asymmetry)', () => {
+    const rewritten = readXlsxContent(decodePackage(encodePackage(buildXlsxPackageFromContent(readXlsxContent(oneCellPicturePackage())))));
     if (rewritten.kind !== 'spreadsheet') {
       throw new Error('expected a spreadsheet ContentDocument');
     }
