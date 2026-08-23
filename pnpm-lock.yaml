@@ -371,8 +371,8 @@ importers:
         specifier: ^2.0.0
         version: 2.0.0
       document-outline.js:
-        specifier: ^2.1.2
-        version: 2.1.2
+        specifier: ^3.0.0
+        version: link:../document-outline.js
       documents.js:
         specifier: ^5.0.3
         version: link:../documents.js
@@ -4133,14 +4133,6 @@ packages:
   dir-glob@3.0.1:
     resolution: {integrity: sha512-WkrWp9GR4KXfKGYzOLmTuGVi1UWFfws377n9cc55/tb6DuqyF6pcQ5AbiHEshaDpY9v6oaSr2XCDidGmMwdzIA==}
     engines: {node: '>=8'}
-
-  document-outline.js@2.1.2:
-    resolution: {integrity: sha512-ZBzIo4xzKQwuSwUp5znXGav8B8IFVJmeCU0reEcXwlk1EHVT8TFv8SU6vm33Wv69dTWxVpc4uxsLYUsQQDR6SA==}
-    engines: {node: '>=20'}
-
-  document-schema.js@4.10.0:
-    resolution: {integrity: sha512-Ng6prPqandODGy6Gxa47Xop+CH0u9rBXzI5ucIgu1a5sOftjSYuby4fvff/vopmG52Wgz/B2qcb/nE1JvNf8kQ==}
-    engines: {node: '>=20'}
 
   dom-helpers@5.2.1:
     resolution: {integrity: sha512-nRCa7CK3VTrM2NmGkIy4cbK7IZlgBE/PYMn55rrXefr5xXDP0LdtfPnblFDoVdcAfslJ7or6iqAUnx0CCGIWQA==}
@@ -9866,15 +9858,6 @@ snapshots:
   dir-glob@3.0.1:
     dependencies:
       path-type: 4.0.0
-
-  document-outline.js@2.1.2:
-    dependencies:
-      document-schema.js: 4.10.0
-      zod: 4.4.3
-
-  document-schema.js@4.10.0:
-    dependencies:
-      zod: 4.4.3
 
   dom-helpers@5.2.1:
     dependencies:
