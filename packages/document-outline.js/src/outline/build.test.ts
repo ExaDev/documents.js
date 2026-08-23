@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DocumentPackageSchema, type DocumentPackage } from 'document-schema.js';
+import { DocumentTreeSchema, type DocumentTree } from 'document-schema.js';
 import { buildOutline } from './build';
 import {
   drawPageGroup,
@@ -26,9 +26,9 @@ import {
   wordprocessingPackage,
 } from '../test-support/fixtures';
 
-// Every per-kind fixture is asserted valid against the canonical schema before its outline is checked, so these tests exercise the builder against real DocumentPackage shapes -- the actual field requirements of document-schema.js 4.0.0 -- not approximations that merely happen to type-check.
-function expectSchemaValid(pkg: DocumentPackage): void {
-  const result = DocumentPackageSchema.safeParse(pkg);
+// Every per-kind fixture is asserted valid against the canonical schema before its outline is checked, so these tests exercise the builder against real DocumentTree shapes -- the actual field requirements of document-schema.js 4.0.0 -- not approximations that merely happen to type-check.
+function expectSchemaValid(pkg: DocumentTree): void {
+  const result = DocumentTreeSchema.safeParse(pkg);
   expect(result.success ? 'valid' : `invalid: ${JSON.stringify(result.error.issues[0])}`).toBe('valid');
 }
 
