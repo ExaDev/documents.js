@@ -707,7 +707,7 @@ importers:
         specifier: ^0.8.3
         version: 0.8.3
       markdown-codec:
-        specifier: ^5.0.1
+        specifier: ^5.0.2
         version: link:../markdown-codec
       odf.js:
         specifier: ^5.5.0
