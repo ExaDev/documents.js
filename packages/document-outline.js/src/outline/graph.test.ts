@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
-  documentPackageWithSchema,
-  DocumentPackageSchema,
+  documentTreeWithSchema,
+  DocumentTreeSchema,
   factorStyles,
   type ContentParagraph,
   type DefinitionEntry,
-  type DocumentPackage,
-  type DocumentPackageJson,
+  type DocumentTree,
+  type DocumentTreeJson,
   type LayoutMetadata,
   type StylesTable,
 } from 'document-schema.js';
@@ -38,7 +38,7 @@ const H1_BOLD_RUN = { bold: true, fontFamily: 'Times New Roman' };
 const REPORT_STYLES: StylesTable = { 'h1-bold': { run: H1_BOLD_RUN } };
 const MEMO_STYLES: StylesTable = { 'heading-1': { run: H1_BOLD_RUN } }; // same entry content, different local key
 
-function reportPackage(boilerplate: ReturnType<typeof paragraph>): DocumentPackage {
+function reportPackage(boilerplate: ReturnType<typeof paragraph>): DocumentTree {
   return wordprocessingPackage(
     [
       sectionGroup([
@@ -57,15 +57,15 @@ function reportPackage(boilerplate: ReturnType<typeof paragraph>): DocumentPacka
   );
 }
 
-function memoPackage(boilerplate: ReturnType<typeof paragraph>): DocumentPackage {
+function memoPackage(boilerplate: ReturnType<typeof paragraph>): DocumentTree {
   return wordprocessingPackage([sectionGroup([headingGroup('Memo', 1, [boilerplate], { style: 'heading-1' })])], {
     metadata: { title: 'Staff Memo' },
     styles: MEMO_STYLES,
   });
 }
 
-function expectSchemaValid(pkg: DocumentPackage, label: string): void {
-  const result = DocumentPackageSchema.safeParse(pkg);
+function expectSchemaValid(pkg: DocumentTree, label: string): void {
+  const result = DocumentTreeSchema.safeParse(pkg);
   expect(result.success ? 'valid' : `invalid (${label}): ${JSON.stringify(result.error.issues[0])}`).toBe('valid');
 }
 
@@ -181,7 +181,7 @@ describe('definitions tables', () => {
     blocks: [{ kind: 'paragraph', runs: [{ text: 'The note body.' }] }],
   };
 
-  function footnotePackage(styleKey: string, definitionKey = 'n1'): DocumentPackage {
+  function footnotePackage(styleKey: string, definitionKey = 'n1'): DocumentTree {
     return wordprocessingPackage(
       [
         sectionGroup([
@@ -276,7 +276,7 @@ describe('definitions tables', () => {
   });
 
   it('extends deref-before-hash into entry bodies: an entry referencing another entry hashes its content', () => {
-    const chain = (secondBody: string): DocumentPackage =>
+    const chain = (secondBody: string): DocumentTree =>
       wordprocessingPackage(
         [sectionGroup([{ node: { kind: 'anchor', anchorType: 'footnote', name: '1', definition: 'n1' }, children: [] }])],
         {
@@ -307,7 +307,7 @@ describe('definitions tables', () => {
 
   it('refuses a cycle of definition refs among entries by name, not with a stack overflow', () => {
     // Two footnotes whose bodies reference each other -- the mutual-reference case the graph hardenings name as legitimate-looking input. No content hash can cover it (the hash would have to include itself), so the projection refuses it loudly.
-    const mutual: DocumentPackage = wordprocessingPackage([sectionGroup([paragraph('Body.')])], {
+    const mutual: DocumentTree = wordprocessingPackage([sectionGroup([paragraph('Body.')])], {
       definitions: {
         n1: {
           kind: 'footnote',
@@ -341,7 +341,7 @@ describe('definitions tables', () => {
 describe('factoring and node identity', () => {
   // One document, two spellings: the unfactored tree carries the recurring tuple inline on every styled paragraph; factorStyles (the minting pass itself) hoists it onto a section wrapper's ref plus a styles-table entry. The projection deliberately hashes each node's own projected content, not style-resolved content, so the two spellings' node ids differ wherever the style rides while everything it does not touch is shared -- and effectivePackage first is the caller's route to factoring-invariant ids, exactly as it already is for leafContentHash.
   const styled = (text: string): ContentParagraph => ({ kind: 'paragraph', runs: [{ text, bold: true }], alignment: 'center' });
-  const unfactored = (): DocumentPackage =>
+  const unfactored = (): DocumentTree =>
     wordprocessingPackage([sectionGroup([styled('Styled one.'), styled('Styled two.')]), sectionGroup([paragraph('Plain.')])]);
 
   it('gives a factored and an unfactored spelling of one document different styled-node ids, sharing the untouched remainder', () => {
@@ -615,7 +615,7 @@ describe('projectDocumentGraph', () => {
 
   it('treats a $schema-stamped dump exactly like its parsed original', () => {
     const pkg = wordprocessingPackage([sectionGroup([paragraph('Body.')])], { metadata: { title: 'T' } });
-    const stamped = documentPackageWithSchema(pkg);
+    const stamped = documentTreeWithSchema(pkg);
     expect(projectDocumentGraph([{ id: 'doc', package: stamped }])).toEqual(projectDocumentGraph([{ id: 'doc', package: pkg }]));
   });
 
@@ -705,8 +705,8 @@ describe('contentHashV1 (#660)', () => {
     const docA = wordprocessingPackage([sectionGroup([paragraph('Same.')])]);
     const docB = wordprocessingPackage([sectionGroup([paragraph('Same.')])]);
     // Two serialisation labels naming two different schema releases -- additive-compatible releases stamp different URIs on the same semantics, and the recipe strips the label before hashing.
-    const taggedA: DocumentPackageJson = { ...documentPackageWithSchema(docA), $schema: 'https://exadev.dev/schemas/document-package@4.1.0/schema.json' };
-    const taggedB: DocumentPackageJson = { ...documentPackageWithSchema(docB), $schema: 'https://exadev.dev/schemas/document-package@4.9.0/schema.json' };
+    const taggedA: DocumentTreeJson = { ...documentTreeWithSchema(docA), $schema: 'https://exadev.dev/schemas/document-tree@4.1.0/schema.json' };
+    const taggedB: DocumentTreeJson = { ...documentTreeWithSchema(docB), $schema: 'https://exadev.dev/schemas/document-tree@4.9.0/schema.json' };
     const a = projectDocumentGraph([{ id: 'a', package: taggedA }]);
     const b = projectDocumentGraph([{ id: 'b', package: taggedB }]);
     const idA = nodeByText(a, 'Same.').id;

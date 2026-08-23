@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DocumentPackageSchema, type DocumentPackage, type StylesTable } from 'document-schema.js';
+import { DocumentTreeSchema, type DocumentTree, type StylesTable } from 'document-schema.js';
 import { effectivePackage } from './effective';
 import {
   drawPageGroup,
@@ -28,8 +28,8 @@ const styles: StylesTable = {
   inner: { paragraph: { indentLeftPt: 48 } },
 };
 
-function expectSchemaValid(pkg: DocumentPackage, label: string): void {
-  const result = DocumentPackageSchema.safeParse(pkg);
+function expectSchemaValid(pkg: DocumentTree, label: string): void {
+  const result = DocumentTreeSchema.safeParse(pkg);
   expect(result.success ? 'valid' : `invalid (${label}): ${JSON.stringify(result.error.issues[0])}`).toBe('valid');
 }
 
@@ -192,7 +192,7 @@ describe('effectivePackage', () => {
 
   it('drops a formula package styles table, the ContentFormula child untouched', () => {
     const bare = formulaPackage('x^2');
-    const pkg: DocumentPackage = { ...bare, styles: {} };
+    const pkg: DocumentTree = { ...bare, styles: {} };
     expect(effectivePackage(pkg)).toEqual(bare);
   });
 

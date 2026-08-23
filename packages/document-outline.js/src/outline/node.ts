@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import { isPackageLeaf, type PackageLeaf } from 'document-schema.js';
+import { isTreeLeaf, type TreeLeaf } from 'document-schema.js';
 
-// Every payload that can sit at an outline leaf position, across all five document kinds. Since document-schema.js 4.0.0 this is exactly that package's own PackageLeaf union (ExaDev/document-schema.js#20 promoted DocumentPackage to the tree form and moved the node vocabulary into the schema) -- aliased here rather than re-declared, because two hand copies of one union would drift the first time a payload type changed. The outline projects over these payloads for its TOC view while consumers walk them as structure.
-export type OutlineLeaf = PackageLeaf;
+// Every payload that can sit at an outline leaf position, across all five document kinds. Since document-schema.js 4.0.0 this is exactly that package's own TreeLeaf union (ExaDev/document-schema.js#20 promoted DocumentTree to the tree form and moved the node vocabulary into the schema) -- aliased here rather than re-declared, because two hand copies of one union would drift the first time a payload type changed. The outline projects over these payloads for its TOC view while consumers walk them as structure.
+export type OutlineLeaf = TreeLeaf;
 
 // A non-leaf outline position: either a nested group or one of the leaf payloads above. Distinguishable structurally without a discriminator field because no leaf type carries a top-level `children` array (or `text`/`level`), while every group carries all three.
 export type OutlineChild = OutlineNode | OutlineLeaf;
@@ -14,9 +14,9 @@ export interface OutlineNode {
   children: OutlineChild[];
 }
 
-// Leaf validation is document-schema.js's own guard -- the payloads are its PackageLeaf union, so its isPackageLeaf is the single authority on what a valid leaf is. This alias exists so the outline's guard set keeps a leaf-side member symmetrical with isOutlineNode/isOutlineChild.
+// Leaf validation is document-schema.js's own guard -- the payloads are its TreeLeaf union, so its isTreeLeaf is the single authority on what a valid leaf is. This alias exists so the outline's guard set keeps a leaf-side member symmetrical with isOutlineNode/isOutlineChild.
 export function isOutlineLeaf(value: unknown): value is OutlineLeaf {
-  return isPackageLeaf(value);
+  return isTreeLeaf(value);
 }
 
 // The child-position guard: one predicate covering both classes of outline child, so a whole tree (or the root array buildOutline returns) validates with a single every() call.

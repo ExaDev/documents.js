@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { documentPackageWithSchema, type StylesTable } from 'document-schema.js';
+import { documentTreeWithSchema, type StylesTable } from 'document-schema.js';
 import { buildOutline, effectivePackage, flattenOutline, isOutlineChild, leafContentHash, outlineLeafText, projectDocumentGraph } from '../../src';
 import { stableContentHash } from '../../src/outline/hash';
 import {
@@ -74,6 +74,6 @@ describe('document-outline.js under the Cloudflare Workers runtime', () => {
     expect(leafContentHash(flattenOutline(buildOutline(pkg))[0]!)).toBe(
       leafContentHash({ kind: 'paragraph', runs: [{ text: 'before' }] }),
     );
-    expect(stableContentHash(documentPackageWithSchema(pkg))).toBe(stableContentHash(pkg));
+    expect(stableContentHash(documentTreeWithSchema(pkg))).toBe(stableContentHash(pkg));
   });
 });
