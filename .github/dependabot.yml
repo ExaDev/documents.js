@@ -19,3 +19,22 @@ updates:
       minor-and-patch:
         patterns: ["*"]
         update-types: ["minor", "patch"]
+
+  # The npm entry above never covered the actions themselves, so every `uses:` in ci.yml and dependabot-auto-merge.yml -- checkout, setup-node, pnpm/action-setup, cache, attest, the Pages actions -- was pinned to a major and then left to drift, including the ones that hold `id-token: write` and sign release attestations. `/` covers the workflow files; `/.github/actions/*` covers the composite action's own `uses:` steps, which live in a separate manifest Dependabot does not reach from the root.
+  - package-ecosystem: "github-actions"
+    directories:
+      - "/"
+      - "/.github/actions/*"
+    schedule:
+      # Weekly rather than the npm entry's daily: action releases are far less frequent, and a daily poll would only add noise.
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    commit-message:
+      # `ci` rather than the npm entry's `build`: these updates change the CI definition, and commitlint accepts both types. The scope Dependabot appends makes it `ci(deps)`.
+      prefix: "ci"
+      include: "scope"
+    groups:
+      # One catch-all group, majors included. Unlike an npm major, an action major bump is a one-line change that either passes CI or does not, so there is nothing gained by isolating it into its own pull request.
+      actions:
+        patterns: ["*"]
