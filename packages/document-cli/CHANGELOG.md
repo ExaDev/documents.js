@@ -1,3 +1,11 @@
+## [4.0.4](https://github.com/ExaDev/documents.js/compare/document-cli@4.0.3...document-cli@4.0.4) (2026-08-23)
+
+
+### Dependencies
+
+- Updated documents.js to ^5.0.3
+- Updated pdf-codec to ^3.4.3
+
 ## [4.0.3](https://github.com/ExaDev/documents.js/compare/document-cli@4.0.2...document-cli@4.0.3) (2026-08-23)
 
 
