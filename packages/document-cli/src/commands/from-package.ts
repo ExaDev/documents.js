@@ -1,5 +1,5 @@
 import { type Command } from 'commander';
-import { flattenPackage } from 'document-schema.js';
+import { flattenTree } from 'document-schema.js';
 import { UnrecognizedDocumentSchemaError, buildCsvText, buildDocumentBytes, buildSvgText, documentFromJson, encodeCsvText, encodeSvgText } from 'documents.js';
 import { createRuntimeSignal } from '../runtime/abort';
 import { createDiagnosticReporter } from '../runtime/diagnostics';
@@ -27,6 +27,11 @@ function isSchemaVersionMismatchError(error: unknown): error is DumpVersionMisma
 
 function isLayoutSchemaDemotedError(error: unknown): boolean {
   return error instanceof Error && error.name === 'LayoutSchemaDemotedError';
+}
+
+// The rename tombstone: a document-package dump -- any version, since the filename alone (not the major) is what changed in ExaDev/documents.js#661 -- is refused outright rather than routed through the version-mismatch gate above, which is why this needs its own guard distinct from isSchemaVersionMismatchError.
+function isDocumentPackageRenamedError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'DocumentPackageRenamedError';
 }
 
 async function runFromPackage(input: string, output: string | undefined, options: FromPackageCliOptions): Promise<number> {
@@ -58,15 +63,15 @@ async function runFromPackage(input: string, output: string | undefined, options
       return EXIT_INPUT_ERROR;
     }
 
-    // No version intercept ahead of this call any more: documentFromJson's own version gate refuses every pre-4.0.0 dump (its $schema URI pins a document-schema.js release whose major is not the installed one) with SchemaVersionMismatchError, handled readably in the catch below -- the CLI-level formatVersion-1 intercept this command used to carry existed only because the old dispatch had no gate at all and died in DocumentPackageSchema.parse with a raw ZodError wall instead.
+    // No version intercept ahead of this call any more: documentFromJson's own version gate refuses every pre-4.0.0 dump (its $schema URI pins a document-schema.js release whose major is not the installed one) with SchemaVersionMismatchError, handled readably in the catch below -- the CLI-level formatVersion-1 intercept this command used to carry existed only because the old dispatch had no gate at all and died in DocumentTreeSchema.parse with a raw ZodError wall instead.
     const result = documentFromJson(parsed);
-    if (result.kind !== 'DocumentPackage') {
-      process.stderr.write(`[${command}] '${input}' is a ${result.kind}, not a DocumentPackage -- only a file written by --dump-package can be read back by this command\n`);
+    if (result.kind !== 'DocumentTree') {
+      process.stderr.write(`[${command}] '${input}' is a ${result.kind}, not a DocumentTree -- only a file written by --dump-package can be read back by this command\n`);
       return EXIT_USAGE_ERROR;
     }
 
-    // csv and svg are the two targets whose codecs take selection options buildDocumentBytes cannot pass (its content.write contract is options-free, so a multi-sheet package would fail CsvSheetNotSpecifiedError with no flag to answer it), so they are built through the identical buildCsvText/buildSvgText functions the codec registry's own write wrappers call, carrying this command's --delimiter/--sheet/--page straight through. Both take the flat ContentDocument, so the tree is flattened once here -- flattenPackage also materialises any minted styles-table refs away, which is exactly what a text builder consuming fully-materialised content needs; every other target hands the tree itself to buildDocumentBytes, which runs the same flatten at its own boundary.
-    const content = flattenPackage(result.value);
+    // csv and svg are the two targets whose codecs take selection options buildDocumentBytes cannot pass (its content.write contract is options-free, so a multi-sheet package would fail CsvSheetNotSpecifiedError with no flag to answer it), so they are built through the identical buildCsvText/buildSvgText functions the codec registry's own write wrappers call, carrying this command's --delimiter/--sheet/--page straight through. Both take the flat ContentDocument, so the tree is flattened once here -- flattenTree also materialises any minted styles-table refs away, which is exactly what a text builder consuming fully-materialised content needs; every other target hands the tree itself to buildDocumentBytes, which runs the same flatten at its own boundary.
+    const content = flattenTree(result.value);
     const bytes =
       target.format === 'csv'
         ? encodeCsvText(buildCsvText(content, { delimiter: options.delimiter, sheet: options.sheet }))
@@ -86,7 +91,7 @@ async function runFromPackage(input: string, output: string | undefined, options
     // The version gate's refusal, readably: a pre-4.0.0 dump (any of them now, not just formatVersion 1 -- the flat formatVersion-2 { formatVersion, content, pages } envelope documents.js 2.x wrote is just as unreadable here) names the release it pins, the tree change, and the CLI's own remedy.
     if (isSchemaVersionMismatchError(error)) {
       process.stderr.write(
-        `[${command}] '${input}' is a DocumentPackage dump from document-schema.js@${error.dumpVersion}, but this CLI's documents.js reads only @${error.installedVersion}-major dumps -- 4.0.0 replaced the flat { formatVersion, content, pages } shape with the tree-form DocumentPackage (ExaDev/document-schema.js#20); re-run the source conversion with --dump-package to write a current dump\n`,
+        `[${command}] '${input}' is a DocumentTree dump from document-schema.js@${error.dumpVersion}, but this CLI's documents.js reads only @${error.installedVersion}-major dumps -- 4.0.0 replaced the flat { formatVersion, content, pages } shape with the tree-form DocumentTree (ExaDev/document-schema.js#20); re-run the source conversion with --dump-package to write a current dump\n`,
       );
       return EXIT_INPUT_ERROR;
     }
@@ -95,16 +100,21 @@ async function runFromPackage(input: string, output: string | undefined, options
       process.stderr.write(`[${command}] '${input}' is a LayoutDocument dump -- LayoutDocument moved to pdf-codec in document-schema.js 4.0.0 and is no longer a schema-stamped input; re-run the source conversion with --dump-package and read that package back instead\n`);
       return EXIT_INPUT_ERROR;
     }
+    // The rename tombstone: a document-package dump, from any release -- 1.x's formatVersion-1 shape included, since the filename document-package.schema.json was the name every release before this one used -- is not readable as a DocumentTree by name alone, before this CLI's documents.js has even checked which major wrote it.
+    if (isDocumentPackageRenamedError(error)) {
+      process.stderr.write(`[${command}] '${input}' is a document-package dump -- DocumentPackage was renamed to DocumentTree in document-schema.js 5.0.0 (ExaDev/documents.js#661); re-run the source conversion with --dump-package to write a current tree-form DocumentTree dump\n`);
+      return EXIT_INPUT_ERROR;
+    }
     process.stderr.write(`${formatError(error, options.verbose)}\n`);
     return mapErrorToExit(error, getAbortReason());
   }
 }
 
-// Closes the round trip --dump-package otherwise has no return path for: reads a DocumentPackage JSON file back in via documentFromJson, then exports it to a real target format exactly like an ordinary source-file conversion command would -- --to or the output path's own extension picks the target, matching the generic `convert` command's own resolution order.
+// Closes the round trip --dump-package otherwise has no return path for: reads a DocumentTree JSON file back in via documentFromJson, then exports it to a real target format exactly like an ordinary source-file conversion command would -- --to or the output path's own extension picks the target, matching the generic `convert` command's own resolution order.
 export function registerFromPackageCommand(program: Command): void {
   const command = program
     .command('from-package <input> [output]')
-    .description('read a DocumentPackage previously written by --dump-package and export it to a real target format');
+    .description('read a DocumentTree previously written by --dump-package and export it to a real target format');
   addOutOption(command);
   addTimeoutOption(command);
   addJsonOption(command);
