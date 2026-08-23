@@ -1,5 +1,7 @@
 # Typecheck and unit tests across the workspace before push, to catch breakage early. Both run
 # through turbo, so an unchanged package is a cache hit rather than a re-run: the cost is
 # proportional to what actually changed, not to the size of the workspace.
+#
+# These are two separate statements rather than `pnpm typecheck && pnpm test` because husky's dispatcher (.husky/_/h) invokes this file as `sh -e`, which exits on the first command to return non-zero and propagates that status as the hook's own. An explicit `&&` would be redundant, and the plain sequence must not be read as unguarded: a typecheck failure already aborts the push without ever reaching the test run.
 pnpm typecheck
 pnpm test
