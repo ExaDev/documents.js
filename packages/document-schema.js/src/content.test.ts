@@ -27,8 +27,8 @@ import {
   type RunConstructExtent,
 } from './content';
 import type { ConstructDescriptor } from './construct';
-import { assemblePackage } from './factor-styles';
-import { flattenPackage } from './flatten';
+import { assembleTree } from './factor-styles';
+import { flattenTree } from './flatten';
 import { LayoutFrameSchema } from './geometry';
 import type { SourceResidue } from './source';
 
@@ -1354,7 +1354,7 @@ describe('construct boundary markers', () => {
       { kind: 'anchor', anchorType: 'bookmark', name: 'intro' },
       { kind: 'link', target: { kind: 'internal', anchor: 'intro' }, title: 'Back to the introduction' },
       { kind: 'provenance', change: 'deletion', author: 'A. Reviewer' },
-      { kind: 'division', name: 'Chapter 1', columnCount: 2, source: { href: 'chapter-1.odt' } },
+      { kind: 'division', name: 'Chapter 1', columnCount: 2, linked: { href: 'chapter-1.odt' } },
     ];
     for (const descriptor of descriptors) {
       const marker = constructStart(descriptor);
@@ -1429,7 +1429,7 @@ describe('construct boundary markers', () => {
     expect(ContentBlockSchema.safeParse(cellTable).success).toBe(true);
   });
 
-  // Pins a deliberate schema-level gap: an unmatched constructEnd is malformed input by the bracket-matching contract above, but ContentDocumentSchema carries no refinement that rejects it. findConstructMarkerImbalance (tested below) is the one place balance is actually checked -- decompose calls it and throws on what this schema accepts. A Zod-only refinement here would validate against a rule the published content-document.schema.json fragment cannot express (JSON Schema has no way to state "these array members pair up"), so adding one would silently diverge from that published face -- the exact guard-versus-published-face misalignment the PackageBlockLeaf JSON Schema fragment exists to avoid on the tree side. This test exists so a future change reintroducing balance as a Zod refinement fails it rather than sliding in unnoticed.
+  // Pins a deliberate schema-level gap: an unmatched constructEnd is malformed input by the bracket-matching contract above, but ContentDocumentSchema carries no refinement that rejects it. findConstructMarkerImbalance (tested below) is the one place balance is actually checked -- decompose calls it and throws on what this schema accepts. A Zod-only refinement here would validate against a rule the published content-document.schema.json fragment cannot express (JSON Schema has no way to state "these array members pair up"), so adding one would silently diverge from that published face -- the exact guard-versus-published-face misalignment the TreeBlockLeaf JSON Schema fragment exists to avoid on the tree side. This test exists so a future change reintroducing balance as a Zod refinement fails it rather than sliding in unnoticed.
   it('parses a section whose blocks carry an unmatched constructEnd -- balance belongs to findConstructMarkerImbalance, not the schema', () => {
     const blocks: ContentBlock[] = [
       { kind: 'paragraph', runs: [{ text: 'No open marker precedes this close.' }] },
@@ -1670,7 +1670,7 @@ describe('ContentSection.breakType (the section-break kind)', () => {
       metadata: {},
       sections: [{ pageSize: { widthPt: 612, heightPt: 792 }, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 }, blocks: [], breakType: 'continuous' }],
     };
-    const flat = flattenPackage(assemblePackage(content));
+    const flat = flattenTree(assembleTree(content));
     expect(flat).toMatchObject({ kind: 'wordprocessing', sections: [{ breakType: 'continuous' }] });
   });
 });

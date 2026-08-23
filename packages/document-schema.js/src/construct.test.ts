@@ -190,7 +190,7 @@ describe('division is the ODF text:section shape, decided first-class rather tha
       DivisionDescriptorSchema.safeParse({
         kind: 'division',
         name: 'Chapter1',
-        source: { href: '../chapters/one.odt', sectionName: 'Body' },
+        linked: { href: '../chapters/one.odt', sectionName: 'Body' },
       }).success,
     ).toBe(true);
   });
@@ -199,14 +199,30 @@ describe('division is the ODF text:section shape, decided first-class rather tha
     expect(DivisionDescriptorSchema.safeParse({ kind: 'division' }).success).toBe(true);
   });
 
-  it('rejects a fractional or zero column count, a source with no href, and text:filter-name smuggled onto the source', () => {
+  it('rejects a fractional or zero column count, and a linked link with no href', () => {
     expect(DivisionDescriptorSchema.safeParse({ kind: 'division', columnCount: 1.5 }).success).toBe(false);
     expect(DivisionDescriptorSchema.safeParse({ kind: 'division', columnCount: 0 }).success).toBe(false);
-    expect(DivisionDescriptorSchema.safeParse({ kind: 'division', source: { sectionName: 'Body' } }).success).toBe(false);
+    expect(DivisionDescriptorSchema.safeParse({ kind: 'division', linked: { sectionName: 'Body' } }).success).toBe(false);
+  });
+
+  it('rejects text:filter-name smuggled onto the linked DivisionSource, a DivisionSource smuggled onto source, and a bad-format residue on source', () => {
+    // `linked` is a strict DivisionSource (href/sectionName only -- ODF's own text:filter-name has no home there), `source` is a strict SourceResidue (format/xml only), and neither accepts the other's shape: one name, one fact, on both fields.
     expect(
       DivisionDescriptorSchema.safeParse({
         kind: 'division',
-        source: { href: '../one.odt', filterName: 'writer8' },
+        linked: { href: '../one.odt', filterName: 'writer8' },
+      }).success,
+    ).toBe(false);
+    expect(
+      DivisionDescriptorSchema.safeParse({
+        kind: 'division',
+        source: { href: '../one.odt', sectionName: 'Body' },
+      }).success,
+    ).toBe(false);
+    expect(
+      DivisionDescriptorSchema.safeParse({
+        kind: 'division',
+        source: { format: 'not-a-format', xml: '<text:filter-name>writer8</text:filter-name>' },
       }).success,
     ).toBe(false);
   });
@@ -254,7 +270,7 @@ describe('the construct descriptor union', () => {
 describe('the quarantined residue field on construct descriptors', () => {
   // A construct with no cross-format analogue degrades to the nearest semantic kind with its format-specific specifics quarantined in residue -- the descriptor IS the construct's node payload, so the descriptor carries the same per-node `source` field every content node carries, and a matched marker pair moves it across the flat/tree boundary untouched (the descriptor object is embedded, never copied). This is the channel reaching the descriptor's node position, not the descriptor-only escape hatch the module header warns against: the field, its shape, and its opacity contract are src/source.ts's, spelt identically everywhere.
 
-  it('rides on every descriptor kind except division, riding the flat form inside the constructStart marker\'s own descriptor payload', () => {
+  it('rides on every descriptor kind, including division, riding the flat form inside the constructStart marker\'s own descriptor payload', () => {
     const residue = { format: 'docx', xml: '<w:docPartObj><w:docPartGallery w:val="Cover Pages"/></w:docPartObj>' };
     const carriers = [
       { kind: 'contentControl', controlType: 'richText', source: residue },
@@ -262,6 +278,7 @@ describe('the quarantined residue field on construct descriptors', () => {
       { kind: 'anchor', anchorType: 'bookmark', name: 'b1', source: residue },
       { kind: 'link', target: { kind: 'external', uri: 'https://example.com' }, source: residue },
       { kind: 'provenance', change: 'insertion', source: residue },
+      { kind: 'division', source: residue },
     ];
     for (const descriptor of carriers) {
       expect(ConstructDescriptorSchema.safeParse(descriptor).success).toBe(true);
@@ -270,12 +287,18 @@ describe('the quarantined residue field on construct descriptors', () => {
     }
   });
 
-  it('refuses residue on division -- the field name is already taken by the external-chapter link (DivisionSource, landed 4.1.0)', () => {
-    // division.source IS text:section-source's { href, sectionName? }; one name cannot mean two facts, and renaming the landed field is a major this additive release does not get to make. Division's own residue rows (ODF text:filter-name) wait on that rename.
+  it('carries residue on division alongside its own linked external-chapter link, now that #743 freed `source` from that field', () => {
     expect(
       DivisionDescriptorSchema.safeParse({ kind: 'division', name: 'Ch1', source: { format: 'odt', xml: '<text:filter-name>x</text:filter-name>' } })
         .success,
-    ).toBe(false);
-    expect(DivisionDescriptorSchema.safeParse({ kind: 'division', name: 'Ch1', source: { href: 'chapter2.odt' } }).success).toBe(true);
+    ).toBe(true);
+    expect(
+      DivisionDescriptorSchema.safeParse({
+        kind: 'division',
+        name: 'Ch1',
+        linked: { href: 'chapter2.odt' },
+        source: { format: 'odt', xml: '<text:filter-name>writer8</text:filter-name>' },
+      }).success,
+    ).toBe(true);
   });
 });

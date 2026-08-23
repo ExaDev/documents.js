@@ -19,7 +19,7 @@ import {
   type StyleEntry,
   type StylesTable,
 } from './definitions';
-import type { DocumentPackage } from './package';
+import type { DocumentTree } from './package';
 import type {
   HeadingGroupNode,
   ListChild,
@@ -32,7 +32,7 @@ import type {
 
 // The tree-to-flat half of the package boundary, ported from document-outline.js's phase-1 reference (pre-re-charter history) onto the 4.x tree types, with the styles resolution the reference left as a separate effective/effectiveTree seam fused directly into the walk: the flat codec-exchange form is ALWAYS fully materialised (no table, no refs -- #21's own rule), so materialising and restructuring are one pass here. Resolution semantics are the reviewed reference's: a group's ref plus every ancestor group's ref overlays onto each paragraph in that group's subtree -- group anchors (heading and list groups carry ContentParagraph anchors) and bare paragraph leaves alike -- with the chain ordered outermost first so the nearest group's entry wins over further-out ones and the paragraph's own direct properties win over everything (applyParagraphStyleProperties / applyRunStyleProperties fill gaps, never overwrite). The run half of a resolved entry applies to every run of each paragraph it resolved for. The walk's boundary is the block flow: a table leaf's cell paragraphs and an embedded document's own content are leaf-local payload this walk does not rewrite, exactly as resolution does not.
 //
-// For a styles-free package the walk emits the SAME node objects the tree embeds (no copies -- the ownership discipline decompose.ts states), so flattenPackage(assemblePackage(c)) shares every content node with c unless minting factored a property tuple onto a wrapper ref (those paragraphs come back as resolved copies carrying identical values). The one node with no object to share is a construct boundary: PackageBlockLeaf excludes both marker kinds, so a construct group's constructStart/constructEnd pair is rebuilt here from the group's own ConstructDescriptor (that descriptor object IS the one decompose embedded, handed straight back on the rebuilt marker) rather than carried through as the marker object the flat form arrived with.
+// For a styles-free package the walk emits the SAME node objects the tree embeds (no copies -- the ownership discipline decompose.ts states), so flattenTree(assembleTree(c)) shares every content node with c unless minting factored a property tuple onto a wrapper ref (those paragraphs come back as resolved copies carrying identical values). The one node with no object to share is a construct boundary: TreeBlockLeaf excludes both marker kinds, so a construct group's constructStart/constructEnd pair is rebuilt here from the group's own ConstructDescriptor (that descriptor object IS the one decompose embedded, handed straight back on the rebuilt marker) rather than carried through as the marker object the flat form arrived with.
 //
 // A construct group's style chain is CUMULATIVE, not reset: the recursion extends the incoming chain with the group's own ref exactly as a heading or list group does, never starts a fresh one the way a section/slide/sheet/draw-page root does. A construct is a semantic wrapper nested inside ambient content -- a field, a content control, a tracked-change span -- so a paragraph inside it must still inherit the enclosing heading's or section's factored properties, as though the construct were not there. That is a different axis from the heading/list STACK reset decompose performs when it walks a construct's interior: that reset is about which markers group structurally, this is about which refs resolve, and the two are deliberately independent.
 
@@ -45,7 +45,7 @@ function chainWithRef(chain: readonly string[], group: { readonly style?: string
 function entryOf(styles: StylesTable | undefined, chain: readonly string[]): StyleEntry | undefined {
   if (chain.length === 0) return undefined;
   if (styles === undefined) {
-    throw new Error('flattenPackage: a group carries a style ref but the package has no styles table');
+    throw new Error('flattenTree: a group carries a style ref but the package has no styles table');
   }
   return resolveStyleChain(styles, chain);
 }
@@ -58,8 +58,8 @@ function applyEntry(entry: StyleEntry, paragraph: ContentParagraph): ContentPara
   return { ...withParagraph, runs: withParagraph.runs.map((run) => applyRunStyleProperties(runProperties, run)) };
 }
 
-// The exact inverse of decompose: a pre-order walk over the tree reconstituting sections, slides, sheets, and pages in document order, re-emitting every group-represented paragraph as an ordinary block (a heading or list group's anchor paragraph IS the block; it was never copied, only wrapped) and every construct group as the constructStart/constructEnd marker pair that delimited it, with every style ref resolved away into materialised direct properties. Leaf nodes pass through as the same objects. The result is schema-valid against ContentDocumentSchema and structurally identical to the source document the tree was assembled from -- the bijection law flattenPackage(assemblePackage(c)) reproduces c exactly, pinned in bijection.test.ts.
-export function flattenPackage(pkg: DocumentPackage): ContentDocument {
+// The exact inverse of decompose: a pre-order walk over the tree reconstituting sections, slides, sheets, and pages in document order, re-emitting every group-represented paragraph as an ordinary block (a heading or list group's anchor paragraph IS the block; it was never copied, only wrapped) and every construct group as the constructStart/constructEnd marker pair that delimited it, with every style ref resolved away into materialised direct properties. Leaf nodes pass through as the same objects. The result is schema-valid against ContentDocumentSchema and structurally identical to the source document the tree was assembled from -- the bijection law flattenTree(assembleTree(c)) reproduces c exactly, pinned in bijection.test.ts.
+export function flattenTree(pkg: DocumentTree): ContentDocument {
   const styles = pkg.styles;
   const envelope = {
     metadata: pkg.metadata,
@@ -91,7 +91,7 @@ export function flattenPackage(pkg: DocumentPackage): ContentDocument {
         sheets: pkg.children.map((group): ContentSheet => {
           // The schema allows a style ref on every group node, but a sheet group holds no block flow, so a chain built here has nothing to resolve onto -- refuse rather than pass the ref by silently, the same all-or-nothing rule as entryOf's missing-table refusal below. Minting never stamps a ref on a sheet (its extent is always empty); the guard is for hand-built trees.
           if (group.style !== undefined) {
-            throw new Error('flattenPackage: a sheet group carries a style ref but a sheet holds no block flow to resolve it onto');
+            throw new Error('flattenTree: a sheet group carries a style ref but a sheet holds no block flow to resolve it onto');
           }
           const images: ContentSheetImage[] = [];
           const embedded: ContentEmbeddedObject[] = [];
@@ -124,7 +124,7 @@ export function flattenPackage(pkg: DocumentPackage): ContentDocument {
       // A formula document is the one tree shape with no container: exactly one node, the ContentFormula leaf itself.
       const first = pkg.children[0];
       if (pkg.children.length !== 1 || first === undefined || !ContentFormulaSchema.safeParse(first).success) {
-        throw new Error('flattenPackage: a formula package takes exactly one ContentFormula node');
+        throw new Error('flattenTree: a formula package takes exactly one ContentFormula node');
       }
       return { kind: 'formula', ...envelope, formula: first };
     }

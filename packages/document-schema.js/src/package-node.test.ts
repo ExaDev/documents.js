@@ -3,15 +3,15 @@ import type { ContentDocument, ContentEmbeddedObject, ContentFormula, ContentRun
 import {
   DrawPageGroupSchema,
   HeadingGroupSchema,
-  isPackageBlockLeaf,
-  isPackageGroup,
-  isPackageLeaf,
-  isPackageNode,
+  isTreeBlockLeaf,
+  isTreeGroup,
+  isTreeLeaf,
+  isTreeNode,
   ListGroupSchema,
-  PackageBlockLeafSchema,
-  PackageGroupSchema,
-  PackageLeafSchema,
-  PackageNodeSchema,
+  TreeBlockLeafSchema,
+  TreeGroupSchema,
+  TreeLeafSchema,
+  TreeNodeSchema,
   SectionConstructGroupSchema,
   SectionGroupSchema,
   ShapeConstructGroupSchema,
@@ -21,7 +21,7 @@ import {
   type DrawPageGroupNode,
   type HeadingGroupNode,
   type ListGroupNode,
-  type PackageNode,
+  type TreeNode,
   type SectionConstructGroupNode,
   type SectionGroupNode,
   type ShapeConstructGroupNode,
@@ -192,10 +192,10 @@ describe('the package tree accepts a real tree of every kind', () => {
   it('validates the individual group schemas against the same trees (HeadingGroup/ListGroup/ShapeGroup)', () => {
     const section = sectionGroup();
     const heading = section.children[0];
-    if (!isPackageGroup(heading) || !('headingLevel' in heading.node)) throw new Error('fixture shape');
+    if (!isTreeGroup(heading) || !('headingLevel' in heading.node)) throw new Error('fixture shape');
     expect(HeadingGroupSchema.safeParse(heading).success).toBe(true);
     const list = section.children[1];
-    if (!isPackageGroup(list)) throw new Error('fixture shape');
+    if (!isTreeGroup(list)) throw new Error('fixture shape');
     expect(ListGroupSchema.safeParse(list).success).toBe(true);
     const slide = slideGroup();
     expect(ShapeGroupSchema.safeParse(slide.children[0]).success).toBe(true);
@@ -213,16 +213,16 @@ describe('the package tree accepts a real tree of every kind', () => {
   });
 
   it('keeps an embedded document intact as one leaf, recursively through its own ContentDocument', () => {
-    expect(PackageLeafSchema.safeParse(embeddedObject()).success).toBe(true);
-    expect(isPackageLeaf(embeddedObject())).toBe(true);
-    expect(isPackageNode(embeddedObject())).toBe(true);
+    expect(TreeLeafSchema.safeParse(embeddedObject()).success).toBe(true);
+    expect(isTreeLeaf(embeddedObject())).toBe(true);
+    expect(isTreeNode(embeddedObject())).toBe(true);
   });
 
   it('round-trips every kind of tree through JSON and revalidates identically', () => {
     for (const group of [sectionGroup(), slideGroup(), sheetGroup(), drawPageGroup()]) {
       const roundTripped: unknown = JSON.parse(JSON.stringify(group));
-      expect(PackageGroupSchema.safeParse(roundTripped).success).toBe(true);
-      expect(PackageNodeSchema.safeParse(roundTripped).success).toBe(true);
+      expect(TreeGroupSchema.safeParse(roundTripped).success).toBe(true);
+      expect(TreeNodeSchema.safeParse(roundTripped).success).toBe(true);
     }
   });
 });
@@ -288,8 +288,8 @@ describe('construct groups wrap block extents wherever block flow runs', () => {
       ],
     };
     expect(SectionConstructGroupSchema.safeParse(division).success).toBe(true);
-    expect(isPackageGroup(division)).toBe(true);
-    expect(isPackageNode(division)).toBe(true);
+    expect(isTreeGroup(division)).toBe(true);
+    expect(isTreeNode(division)).toBe(true);
   });
 
   it("accepts a pptx a:fld and an internal slide-jump link inside a shape's flow", () => {
@@ -349,7 +349,7 @@ describe('construct groups wrap block extents wherever block flow runs', () => {
     };
     const roundTripped: unknown = JSON.parse(JSON.stringify(section));
     expect(SectionGroupSchema.parse(roundTripped)).toEqual(section);
-    expect(PackageGroupSchema.safeParse(roundTripped).success).toBe(true);
+    expect(TreeGroupSchema.safeParse(roundTripped).success).toBe(true);
   });
 });
 
@@ -400,7 +400,7 @@ describe('construct groups reject the positions and shapes they are not legal in
   it('rejects a malformed descriptor at the node position -- an unknown control type does not become a bare wrapper', () => {
     const broken = { node: { kind: 'contentControl', controlType: 'w:sdt' }, children: [] };
     expect(SectionConstructGroupSchema.safeParse(broken).success).toBe(false);
-    expect(isPackageGroup(broken)).toBe(false);
+    expect(isTreeGroup(broken)).toBe(false);
   });
 
   it('rejects a construct group carrying a key outside { node, style, children }', () => {
@@ -413,7 +413,7 @@ describe('construct groups reject the positions and shapes they are not legal in
   });
 
   it('rejects a construct descriptor posed as a bare leaf -- a descriptor is a node payload, never a block', () => {
-    expect(isPackageLeaf({ kind: 'anchor', anchorType: 'bookmark', name: 'b1' })).toBe(false);
+    expect(isTreeLeaf({ kind: 'anchor', anchorType: 'bookmark', name: 'b1' })).toBe(false);
     const section = sectionGroup();
     const withDescriptorLeaf = {
       ...section,
@@ -438,10 +438,10 @@ describe('construct boundary markers are not tree leaves', () => {
 
   it('rejects either marker at a block-leaf position, whichever flow it sits in', () => {
     for (const marker of [openMarker, closeMarker]) {
-      expect(isPackageBlockLeaf(marker)).toBe(false);
-      expect(PackageBlockLeafSchema.safeParse(marker).success).toBe(false);
-      expect(isPackageLeaf(marker)).toBe(false);
-      expect(isPackageNode(marker)).toBe(false);
+      expect(isTreeBlockLeaf(marker)).toBe(false);
+      expect(TreeBlockLeafSchema.safeParse(marker).success).toBe(false);
+      expect(isTreeLeaf(marker)).toBe(false);
+      expect(isTreeNode(marker)).toBe(false);
       expect(
         SectionGroupSchema.safeParse({ node: { kind: 'section', pageSize: PAGE, margins: MARGINS }, children: [marker] })
           .success,
@@ -488,8 +488,8 @@ describe('construct boundary markers are not tree leaves', () => {
       { kind: 'pageBreak' },
       { kind: 'image', format: 'png', base64: 'aGk=', widthPt: 50, heightPt: 50 },
     ]) {
-      expect(isPackageBlockLeaf(leaf)).toBe(true);
-      expect(isPackageLeaf(leaf)).toBe(true);
+      expect(isTreeBlockLeaf(leaf)).toBe(true);
+      expect(isTreeLeaf(leaf)).toBe(true);
     }
   });
 
@@ -507,7 +507,7 @@ describe('construct boundary markers are not tree leaves', () => {
       ],
       columnWidthsPt: [200],
     };
-    expect(isPackageBlockLeaf(tableLeaf)).toBe(true);
+    expect(isTreeBlockLeaf(tableLeaf)).toBe(true);
     expect(
       SectionGroupSchema.safeParse({
         node: { kind: 'section', pageSize: PAGE, margins: MARGINS },
@@ -625,17 +625,17 @@ describe('the package tree rejects near-misses', () => {
 
   it('never confuses the two classes: a group does not validate as a leaf, a leaf does not validate as a group', () => {
     const section = sectionGroup();
-    expect(isPackageLeaf(section)).toBe(false);
+    expect(isTreeLeaf(section)).toBe(false);
     const paragraph = { kind: 'paragraph', runs: [run('leaf')] } as const;
-    expect(isPackageGroup(paragraph)).toBe(false);
-    expect(isPackageLeaf(paragraph)).toBe(true);
+    expect(isTreeGroup(paragraph)).toBe(false);
+    expect(isTreeLeaf(paragraph)).toBe(true);
   });
 
   it('a heading paragraph is also a legal bare leaf (a valid ContentBlock), while its group wrapper is not a leaf', () => {
     const headingParagraph = { kind: 'paragraph', headingLevel: 1, runs: [run('H')] } as const;
-    expect(isPackageLeaf(headingParagraph)).toBe(true);
-    const wrapper: PackageNode = { node: { kind: 'paragraph', headingLevel: 1, runs: [run('H')] }, children: [] };
-    expect(isPackageGroup(wrapper)).toBe(true);
-    expect(isPackageLeaf(wrapper)).toBe(false);
+    expect(isTreeLeaf(headingParagraph)).toBe(true);
+    const wrapper: TreeNode = { node: { kind: 'paragraph', headingLevel: 1, runs: [run('H')] }, children: [] };
+    expect(isTreeGroup(wrapper)).toBe(true);
+    expect(isTreeLeaf(wrapper)).toBe(false);
   });
 });
