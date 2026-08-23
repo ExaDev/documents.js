@@ -1,3 +1,23 @@
+# [3.0.0](https://github.com/ExaDev/documents.js/compare/document-outline.js@2.1.2...document-outline.js@3.0.0) (2026-08-23)
+
+
+* refactor(document-outline)!: rename DocumentPackage to DocumentTree ([f9df759](https://github.com/ExaDev/documents.js/commit/f9df759da4ffe7b60db3a534f2c055a823c8d5dd))
+* refactor(document-outline)!: rename the graph projection's root-node kind to documentTree ([300ab39](https://github.com/ExaDev/documents.js/commit/300ab3939d5eb79536df6b9c89ad911ff472306e))
+
+
+### BREAKING CHANGES
+
+* a GraphNode's root document-node kind discriminant is
+now 'documentTree', was 'documentPackage'.
+* every DocumentPackage-rooted export this package
+re-exports or types against (DocumentTree, TreeGroup, TreeLeaf) tracks
+document-schema.js 5.0.0's rename.
+
+
+### Dependencies
+
+- Updated document-schema.js to ^5.0.0
+
 ## [2.1.2](https://github.com/ExaDev/documents.js/compare/document-outline.js@2.1.1...document-outline.js@2.1.2) (2026-08-23)
 
 
