@@ -1,3 +1,25 @@
+# [5.0.0](https://github.com/ExaDev/documents.js/compare/document-cli@4.0.4...document-cli@5.0.0) (2026-08-23)
+
+
+* refactor(document-cli)!: rename DocumentPackage to DocumentTree ([4fe5d02](https://github.com/ExaDev/documents.js/commit/4fe5d02ae6d04cafd1bfcc533634276e85d17164)), closes [#661](https://github.com/ExaDev/documents.js/issues/661)
+
+
+### BREAKING CHANGES
+
+* from-package.ts and outline.ts's error messages and
+options.ts's help text now name DocumentTree; a document-package dump
+from any release now surfaces a dedicated rename-tombstone message
+instead of the previous generic error text.
+
+
+### Dependencies
+
+- Updated documents.js to ^6.0.0
+- Updated pdf-codec to ^3.4.4
+- Updated odf.js to ^6.0.0
+- Updated document-outline.js to ^3.0.0
+- Updated document-schema.js to ^5.0.0
+
 ## [4.0.4](https://github.com/ExaDev/documents.js/compare/document-cli@4.0.3...document-cli@4.0.4) (2026-08-23)
 
 
