@@ -1,3 +1,22 @@
+# [6.0.0](https://github.com/ExaDev/documents.js/compare/ooxml.js@5.0.2...ooxml.js@6.0.0) (2026-08-23)
+
+
+* refactor(ooxml)!: rename DocumentPackage to DocumentTree ([7455cf5](https://github.com/ExaDev/documents.js/commit/7455cf5d637ce4eec948e45503ccf6d074335683)), closes [#661](https://github.com/ExaDev/documents.js/issues/661)
+
+
+### BREAKING CHANGES
+
+* every DocumentPackage-rooted export this package
+re-exports or returns (DocumentTree, TreeNode/Group/Leaf/BlockLeaf and
+siblings, assembleTree, flattenTree) tracks document-schema.js 5.0.0's
+rename. The deep-import path typed/document-package moves to
+typed/document-tree.
+
+
+### Dependencies
+
+- Updated document-schema.js to ^5.0.0
+
 ## [5.0.2](https://github.com/ExaDev/documents.js/compare/ooxml.js@5.0.1...ooxml.js@5.0.2) (2026-08-23)
 
 
