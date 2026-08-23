@@ -14,5 +14,5 @@
     "forceConsistentCasingInFileNames": true,
     "esModuleInterop": true
   },
-  "include": ["eslint.config.ts", "commitlint.config.ts", "lint-staged.config.ts"]
+  "include": ["eslint.config.ts", "eslint.shared.ts", "commitlint.config.ts", "lint-staged.config.ts"]
 }
