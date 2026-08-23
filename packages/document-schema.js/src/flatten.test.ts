@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { ContentParagraph, ContentSection } from './content';
 import { decomposeSection } from './decompose';
-import { flattenPackage } from './flatten';
+import { flattenTree } from './flatten';
 import type { StylesTable } from './definitions';
-import type { DocumentPackage } from './package';
+import type { DocumentTree } from './package';
 import type { HeadingGroupNode, SectionGroupNode, ShapeGroupNode, SlideGroupNode } from './package-node';
 
-// flattenPackage entered directly, on trees a caller hands in rather than ones assemblePackage just built. The bijection suite already pins the round trip over a styles-free-or-freshly-minted tree; what only a direct entry can reach is the resolver's own semantics (which chain a position resolves against, and that gap-fill never overwrites) and the two refusals a hand-built tree can trigger. decompose.test.ts covers the third refusal, a style ref on a sheet group.
+// flattenTree entered directly, on trees a caller hands in rather than ones assembleTree just built. The bijection suite already pins the round trip over a styles-free-or-freshly-minted tree; what only a direct entry can reach is the resolver's own semantics (which chain a position resolves against, and that gap-fill never overwrites) and the two refusals a hand-built tree can trigger. decompose.test.ts covers the third refusal, a style ref on a sheet group.
 
 const SECTION = { pageSize: { widthPt: 595, heightPt: 842 }, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 } };
 
@@ -14,19 +14,19 @@ function paragraph(text: string, properties: Partial<ContentParagraph> = {}): Co
   return { kind: 'paragraph', runs: [{ text }], ...properties };
 }
 
-function wordprocessingPackage(children: SectionGroupNode[], styles?: StylesTable): DocumentPackage {
+function wordprocessingPackage(children: SectionGroupNode[], styles?: StylesTable): DocumentTree {
   return { kind: 'wordprocessing', metadata: {}, ...(styles !== undefined ? { styles } : {}), children };
 }
 
-function sectionBlocks(pkg: DocumentPackage): ContentSection['blocks'] {
-  const flat = flattenPackage(pkg);
+function sectionBlocks(pkg: DocumentTree): ContentSection['blocks'] {
+  const flat = flattenTree(pkg);
   if (flat.kind !== 'wordprocessing') throw new Error('expected a wordprocessing document back');
   const section = flat.sections[0];
   if (section === undefined) throw new Error('expected one section back');
   return section.blocks;
 }
 
-describe('flattenPackage style resolution', () => {
+describe('flattenTree style resolution', () => {
   it('overlays the chain outermost-first, so the nearest group wins over a further-out one', () => {
     const body = paragraph('body');
     const headingGroup: HeadingGroupNode = { node: { kind: 'paragraph', headingLevel: 1, runs: [{ text: 'Chapter' }] }, style: 'inner', children: [body] };
@@ -73,7 +73,7 @@ describe('flattenPackage style resolution', () => {
       children: [paragraph('in the shape')],
     };
     const slide: SlideGroupNode = { node: { kind: 'slide', size: { widthPt: 960, heightPt: 540 }, notes: '' }, style: 'slide', children: [shape] };
-    const flat = flattenPackage({
+    const flat = flattenTree({
       kind: 'presentation',
       metadata: {},
       styles: { slide: { run: { fontFamily: 'Inter' } }, shape: { paragraph: { alignment: 'center' } } },
@@ -85,29 +85,29 @@ describe('flattenPackage style resolution', () => {
 
   it('refuses a ref it cannot resolve loudly, rather than skipping that level of the chain', () => {
     const pkg = wordprocessingPackage([{ node: { kind: 'section', ...SECTION }, style: 'missing', children: [paragraph('x')] }], { s1: { paragraph: { alignment: 'left' } } });
-    expect(() => flattenPackage(pkg)).toThrow(/names no entry in the styles table/);
+    expect(() => flattenTree(pkg)).toThrow(/names no entry in the styles table/);
   });
 
   it('refuses a ref on a package that carries no styles table at all', () => {
     // Resolution runs completely or not at all: a tree stating a ref against no table is malformed, and passing the ref by silently would drop the styling it names with no signal.
     const pkg = wordprocessingPackage([{ node: { kind: 'section', ...SECTION }, style: 's1', children: [paragraph('x')] }]);
-    expect(() => flattenPackage(pkg)).toThrow(/no styles table/);
+    expect(() => flattenTree(pkg)).toThrow(/no styles table/);
   });
 });
 
-describe('flattenPackage cardinality guards', () => {
+describe('flattenTree cardinality guards', () => {
   it('refuses a formula package holding anything other than exactly one ContentFormula', () => {
     const formula = { mathml: [] };
-    expect(() => flattenPackage({ kind: 'formula', metadata: {}, children: [] })).toThrow(/exactly one ContentFormula/);
-    expect(() => flattenPackage({ kind: 'formula', metadata: {}, children: [formula, formula] })).toThrow(/exactly one ContentFormula/);
-    expect(flattenPackage({ kind: 'formula', metadata: {}, children: [formula] })).toEqual({ kind: 'formula', metadata: {}, formula });
+    expect(() => flattenTree({ kind: 'formula', metadata: {}, children: [] })).toThrow(/exactly one ContentFormula/);
+    expect(() => flattenTree({ kind: 'formula', metadata: {}, children: [formula, formula] })).toThrow(/exactly one ContentFormula/);
+    expect(flattenTree({ kind: 'formula', metadata: {}, children: [formula] })).toEqual({ kind: 'formula', metadata: {}, formula });
   });
 });
 
-describe('flattenPackage envelope handling', () => {
+describe('flattenTree envelope handling', () => {
   it('carries metadata and symbolTable back onto the flat document, and drops the tree-only pages array', () => {
     // `pages` and the package tables have no spelling on a flat ContentDocument, so flatten states the envelope it can carry and nothing else -- factorStyles is what rides pages and definitions across a re-factoring.
-    const flat = flattenPackage({
+    const flat = flattenTree({
       kind: 'wordprocessing',
       metadata: { title: 'Envelope' },
       symbolTable: { symbols: [], units: [] },
@@ -120,7 +120,7 @@ describe('flattenPackage envelope handling', () => {
 
   it('rebuilds a draw page\'s shapes-then-vectors partition and a sheet\'s images-then-embedded-objects one', () => {
     const vector = { kind: 'rect', frame: { xPt: 1, yPt: 2, widthPt: 3, heightPt: 4 } } as const;
-    const drawing = flattenPackage({
+    const drawing = flattenTree({
       kind: 'drawing',
       metadata: {},
       children: [{

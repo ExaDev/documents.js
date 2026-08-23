@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assemblePackage, ContentDocumentSchema, decompose, DocumentPackageSchema, factorStyles, findConstructMarkerImbalance, flattenPackage, resolveStyleChain } from '../../src';
+import { assembleTree, ContentDocumentSchema, decompose, DocumentTreeSchema, factorStyles, findConstructMarkerImbalance, flattenTree, resolveStyleChain } from '../../src';
 
 // Proves document-schema.js's Zod schemas and helpers parse inside a Cloudflare Workers isolate (workerd, via @cloudflare/vitest-pool-workers) with no Node-only APIs. The package is pure Zod by design -- no node:fs, no Buffer, no process -- and zod is isomorphic, so if any schema (or its zod dependency) touched a Node-only API the workerd isolate would throw rather than these passing. This is the runtime complement to the static node test suite.
 describe('document-schema.js under the Cloudflare Workers runtime', () => {
@@ -30,8 +30,8 @@ describe('document-schema.js under the Cloudflare Workers runtime', () => {
     ).toThrow();
   });
 
-  it('DocumentPackageSchema parses a tree-form package and its styles table, and resolveStyleChain resolves inside the isolate', () => {
-    const parsed = DocumentPackageSchema.parse({
+  it('DocumentTreeSchema parses a tree-form package and its styles table, and resolveStyleChain resolves inside the isolate', () => {
+    const parsed = DocumentTreeSchema.parse({
       kind: 'wordprocessing',
       metadata: {},
       styles: { s1: { paragraph: { alignment: 'justify' }, run: { sizePt: 11 } } },
@@ -58,8 +58,8 @@ describe('document-schema.js under the Cloudflare Workers runtime', () => {
     expect(resolved.paragraph).toEqual({ alignment: 'justify' });
   });
 
-  it('DocumentPackageSchema parses a construct-bearing tree and the construct tables at the root', () => {
-    const parsed = DocumentPackageSchema.parse({
+  it('DocumentTreeSchema parses a construct-bearing tree and the construct tables at the root', () => {
+    const parsed = DocumentTreeSchema.parse({
       kind: 'wordprocessing',
       metadata: {},
       definitions: { n1: { kind: 'footnote', blocks: [] } },
@@ -132,11 +132,11 @@ describe('document-schema.js under the Cloudflare Workers runtime', () => {
     } as const;
     const parsed = ContentDocumentSchema.parse(content);
     expect(decompose(parsed)).toHaveLength(1);
-    const tree = assemblePackage(parsed);
-    expect(DocumentPackageSchema.safeParse(tree).success).toBe(true);
+    const tree = assembleTree(parsed);
+    expect(DocumentTreeSchema.safeParse(tree).success).toBe(true);
     // Repeated indentLeftPt across the section's whole extent, so minting genuinely runs rather than short-circuiting on a styles-free tree.
     expect(tree.styles).toEqual({ s1: { paragraph: { indentLeftPt: 20 } } });
     expect(factorStyles(tree).styles).toEqual(tree.styles);
-    expect(flattenPackage(tree)).toStrictEqual(parsed);
+    expect(flattenTree(tree)).toStrictEqual(parsed);
   });
 });

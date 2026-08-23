@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { type DocumentPackage, DocumentPackageSchema } from './package';
+import { type DocumentTree, DocumentTreeSchema } from './package';
 
 const PAGE = { widthPt: 612, heightPt: 792 };
 const MARGINS = { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 };
 
 // A wordprocessing package in the tree form: the root carries kind/metadata/pages, and one section group per section with the section's own blocks grouped inside it -- a heading group wrapping a leaf paragraph, plus the section's own trailing leaf.
-function wordprocessingPackage(): DocumentPackage {
+function wordprocessingPackage(): DocumentTree {
   return {
     kind: 'wordprocessing',
     metadata: { title: 'Package round trip', author: 'document-schema.js' },
@@ -36,7 +36,7 @@ function wordprocessingPackage(): DocumentPackage {
 }
 
 // A spreadsheet package whose sheet group carries its grid on the node and an anchored image child -- the other end of the per-kind children typing.
-function spreadsheetPackage(): DocumentPackage {
+function spreadsheetPackage(): DocumentTree {
   return {
     kind: 'spreadsheet',
     metadata: {},
@@ -75,7 +75,7 @@ function spreadsheetPackage(): DocumentPackage {
 }
 
 // A formula package: the one kind whose single child is a leaf, not a group.
-function formulaPackage(): DocumentPackage {
+function formulaPackage(): DocumentTree {
   return {
     kind: 'formula',
     metadata: {},
@@ -83,29 +83,29 @@ function formulaPackage(): DocumentPackage {
   };
 }
 
-describe('DocumentPackageSchema round trips (tree form)', () => {
+describe('DocumentTreeSchema round trips (tree form)', () => {
   it('deep-equals the original package after a JSON round trip when pages/frames are present', () => {
     const original = wordprocessingPackage();
-    const parsed = DocumentPackageSchema.parse(original);
+    const parsed = DocumentTreeSchema.parse(original);
     const roundTripped: unknown = JSON.parse(JSON.stringify(parsed));
-    expect(DocumentPackageSchema.parse(roundTripped)).toEqual(original);
+    expect(DocumentTreeSchema.parse(roundTripped)).toEqual(original);
   });
 
   it('deep-equals a content-only package (no pages, no styles, no definitions) after a JSON round trip', () => {
     const original = wordprocessingPackage();
     delete original.pages;
-    const parsed = DocumentPackageSchema.parse(original);
+    const parsed = DocumentTreeSchema.parse(original);
     expect(parsed.pages).toBeUndefined();
     const serialized: unknown = JSON.parse(JSON.stringify(parsed));
     expect(serialized).not.toHaveProperty('pages');
-    expect(DocumentPackageSchema.parse(serialized)).toEqual(original);
+    expect(DocumentTreeSchema.parse(serialized)).toEqual(original);
   });
 
   it('round trips a spreadsheet package and a formula package', () => {
     for (const original of [spreadsheetPackage(), formulaPackage()]) {
-      const parsed = DocumentPackageSchema.parse(original);
+      const parsed = DocumentTreeSchema.parse(original);
       const roundTripped: unknown = JSON.parse(JSON.stringify(parsed));
-      expect(DocumentPackageSchema.parse(roundTripped)).toEqual(original);
+      expect(DocumentTreeSchema.parse(roundTripped)).toEqual(original);
     }
   });
 
@@ -117,7 +117,7 @@ describe('DocumentPackageSchema round trips (tree form)', () => {
       styles: { s1: { paragraph: { alignment: 'justify' }, run: { sizePt: 11 } } },
       definitions: { l1: { kind: 'link', url: 'https://example.com' } },
     };
-    const parsed = DocumentPackageSchema.parse(withTables);
+    const parsed = DocumentTreeSchema.parse(withTables);
     expect(parsed.styles).toEqual({ s1: { paragraph: { alignment: 'justify' }, run: { sizePt: 11 } } });
     expect(parsed.definitions).toEqual({ l1: { kind: 'link', url: 'https://example.com' } });
     expect('$schema' in parsed).toBe(false);
@@ -129,7 +129,7 @@ describe('DocumentPackageSchema round trips (tree form)', () => {
       content: { kind: 'wordprocessing', metadata: {}, sections: [{ pageSize: PAGE, margins: MARGINS, blocks: [] }] },
       pages: [PAGE],
     };
-    expect(DocumentPackageSchema.safeParse(oldShape).success).toBe(false);
+    expect(DocumentTreeSchema.safeParse(oldShape).success).toBe(false);
   });
 
   it('rejects a root child of the wrong group kind for the package kind', () => {
@@ -138,7 +138,7 @@ describe('DocumentPackageSchema round trips (tree form)', () => {
       metadata: {},
       children: [{ node: { kind: 'section', pageSize: PAGE, margins: MARGINS }, children: [] }],
     };
-    expect(DocumentPackageSchema.safeParse(mixed).success).toBe(false);
+    expect(DocumentTreeSchema.safeParse(mixed).success).toBe(false);
   });
 
   it('rejects a malformed leaf deep in the tree (a style entry carrying the banned frames key, and a non-group slide child)', () => {
@@ -146,7 +146,7 @@ describe('DocumentPackageSchema round trips (tree form)', () => {
       ...wordprocessingPackage(),
       styles: { s1: { frames: [] } },
     };
-    expect(DocumentPackageSchema.safeParse(withBannedStyle).success).toBe(false);
+    expect(DocumentTreeSchema.safeParse(withBannedStyle).success).toBe(false);
 
     const slideWithStrayParagraph = {
       kind: 'presentation',
@@ -158,7 +158,7 @@ describe('DocumentPackageSchema round trips (tree form)', () => {
         },
       ],
     };
-    expect(DocumentPackageSchema.safeParse(slideWithStrayParagraph).success).toBe(false);
+    expect(DocumentTreeSchema.safeParse(slideWithStrayParagraph).success).toBe(false);
   });
 
   it('rejects an unknown key on a group wrapper and a style ref on a bare leaf -- the runtime guard matches the published JSON Schema fragments key for key', () => {
@@ -167,7 +167,7 @@ describe('DocumentPackageSchema round trips (tree form)', () => {
       metadata: {},
       children: [{ node: { kind: 'section', pageSize: PAGE, margins: MARGINS }, junkKey: 'x', children: [] }],
     };
-    expect(DocumentPackageSchema.safeParse(withJunkWrapperKey).success).toBe(false);
+    expect(DocumentTreeSchema.safeParse(withJunkWrapperKey).success).toBe(false);
 
     const withLeafStyleRef = {
       kind: 'wordprocessing',
@@ -179,20 +179,20 @@ describe('DocumentPackageSchema round trips (tree form)', () => {
         },
       ],
     };
-    expect(DocumentPackageSchema.safeParse(withLeafStyleRef).success).toBe(false);
+    expect(DocumentTreeSchema.safeParse(withLeafStyleRef).success).toBe(false);
   });
 
   it('pins the formula package to exactly one child -- decompose emits one ContentFormula and flatten requires one', () => {
     const empty = { kind: 'formula', metadata: {}, children: [] };
-    expect(DocumentPackageSchema.safeParse(empty).success).toBe(false);
+    expect(DocumentTreeSchema.safeParse(empty).success).toBe(false);
     const two = { kind: 'formula', metadata: {}, children: [{ mathml: [] }, { mathml: [] }] };
-    expect(DocumentPackageSchema.safeParse(two).success).toBe(false);
+    expect(DocumentTreeSchema.safeParse(two).success).toBe(false);
   });
 
   it('keeps the document-level symbolTable on the package root, spliced from the same declaration the content arms use', () => {
     const original = wordprocessingPackage();
     const withSymbols = { ...original, symbolTable: { symbols: [], units: [] } };
-    const parsed = DocumentPackageSchema.parse(withSymbols);
+    const parsed = DocumentTreeSchema.parse(withSymbols);
     expect(parsed.symbolTable).toEqual({ symbols: [], units: [] });
   });
 });
@@ -212,7 +212,7 @@ describe('the construct tables at the package root', () => {
         o1: { kind: 'outline', title: 'Chapter 1', destination: 'ch1' },
       },
     };
-    const parsed = DocumentPackageSchema.parse(withTables);
+    const parsed = DocumentTreeSchema.parse(withTables);
     expect(parsed.layers?.ocg1).toEqual({ kind: 'layer', name: 'Watermark', defaultVisible: false });
     expect(parsed.attachments?.a1).toEqual({ kind: 'attachment', fileName: 'source.csv', description: 'The source data' });
     expect(parsed.destinations?.o1).toEqual({ kind: 'outline', title: 'Chapter 1', destination: 'ch1' });
@@ -224,7 +224,7 @@ describe('the construct tables at the package root', () => {
       layers: { x: { kind: 'layer', name: 'Layer x' } },
       destinations: { x: { kind: 'destination', pageIndex: 3 } },
     };
-    const parsed = DocumentPackageSchema.parse(withTables);
+    const parsed = DocumentTreeSchema.parse(withTables);
     expect(parsed.layers?.x).toEqual({ kind: 'layer', name: 'Layer x' });
     expect(parsed.destinations?.x).toEqual({ kind: 'destination', pageIndex: 3 });
   });
@@ -232,7 +232,7 @@ describe('the construct tables at the package root', () => {
   it('requires the kind discriminator on every entry, exactly as the definitions table does', () => {
     for (const field of ['layers', 'attachments', 'destinations']) {
       const broken = { ...wordprocessingPackage(), [field]: { e1: { name: 'no kind here' } } };
-      expect(DocumentPackageSchema.safeParse(broken).success).toBe(false);
+      expect(DocumentTreeSchema.safeParse(broken).success).toBe(false);
     }
   });
 
@@ -241,8 +241,8 @@ describe('the construct tables at the package root', () => {
       ...wordprocessingPackage(),
       attachments: { a1: { kind: 'attachment', fileName: 'source.csv', bytesBase64: 'aGk=' } },
     };
-    const roundTripped: unknown = JSON.parse(JSON.stringify(DocumentPackageSchema.parse(original)));
-    expect(DocumentPackageSchema.parse(roundTripped)).toEqual(original);
+    const roundTripped: unknown = JSON.parse(JSON.stringify(DocumentTreeSchema.parse(original)));
+    expect(DocumentTreeSchema.parse(roundTripped)).toEqual(original);
   });
 });
 
@@ -255,20 +255,20 @@ describe('the package-level source residue table at the root', () => {
         frontmatter: { format: 'markdown', xml: '<dc:custom>unmapped half</dc:custom>' },
       },
     };
-    const parsed = DocumentPackageSchema.parse(withResidue);
+    const parsed = DocumentTreeSchema.parse(withResidue);
     expect(parsed.source?.['word/settings.xml']).toEqual({ format: 'docx', xml: '<w:settings/>' });
     expect(parsed.source?.frontmatter).toEqual({ format: 'markdown', xml: '<dc:custom>unmapped half</dc:custom>' });
   });
 
   it('rejects a malformed residue value -- the table validates the channel\'s shape, it does not tenant it', () => {
     const broken = { ...wordprocessingPackage(), source: { s: { format: 'rtf', xml: '<x/>' } } };
-    expect(DocumentPackageSchema.safeParse(broken).success).toBe(false);
+    expect(DocumentTreeSchema.safeParse(broken).success).toBe(false);
     const shapeless = { ...wordprocessingPackage(), source: { s: { kind: 'source', xml: '<x/>' } } };
-    expect(DocumentPackageSchema.safeParse(shapeless).success).toBe(false);
+    expect(DocumentTreeSchema.safeParse(shapeless).success).toBe(false);
   });
 
   it('is its own root field, not a definitions tenant -- a residue key and a definitions key never collide because they are separate namespaces', () => {
-    const parsed = DocumentPackageSchema.parse({
+    const parsed = DocumentTreeSchema.parse({
       ...wordprocessingPackage(),
       definitions: { frontmatter: { kind: 'some-tenant', note: 'an unrelated entry under the same name' } },
       source: { frontmatter: { format: 'markdown', xml: '<x/>' } },
@@ -282,15 +282,15 @@ describe('the package-level source residue table at the root', () => {
       ...wordprocessingPackage(),
       source: { 'meta/custom.xml': { format: 'docx', xml: '<ds:customXML/>' } },
     };
-    const roundTripped: unknown = JSON.parse(JSON.stringify(DocumentPackageSchema.parse(original)));
-    expect(DocumentPackageSchema.parse(roundTripped)).toEqual(original);
+    const roundTripped: unknown = JSON.parse(JSON.stringify(DocumentTreeSchema.parse(original)));
+    expect(DocumentTreeSchema.parse(roundTripped)).toEqual(original);
   });
 });
 
 describe('the construct kinds are additive over 4.0.0', () => {
   it('parses a 4.0.0 tree carrying none of the new kinds or tables, unchanged and field for field', () => {
     for (const original of [wordprocessingPackage(), spreadsheetPackage(), formulaPackage()]) {
-      const parsed = DocumentPackageSchema.parse(original);
+      const parsed = DocumentTreeSchema.parse(original);
       expect(parsed).toEqual(original);
       expect(parsed).not.toHaveProperty('layers');
       expect(parsed).not.toHaveProperty('attachments');
@@ -299,7 +299,7 @@ describe('the construct kinds are additive over 4.0.0', () => {
   });
 
   it('parses a package whose tree carries construct groups, at the root children position it belongs under', () => {
-    const withConstructs: DocumentPackage = {
+    const withConstructs: DocumentTree = {
       kind: 'wordprocessing',
       metadata: {},
       definitions: { n1: { kind: 'footnote', blocks: [] } },
@@ -321,8 +321,8 @@ describe('the construct kinds are additive over 4.0.0', () => {
         },
       ],
     };
-    const roundTripped: unknown = JSON.parse(JSON.stringify(DocumentPackageSchema.parse(withConstructs)));
-    expect(DocumentPackageSchema.parse(roundTripped)).toEqual(withConstructs);
+    const roundTripped: unknown = JSON.parse(JSON.stringify(DocumentTreeSchema.parse(withConstructs)));
+    expect(DocumentTreeSchema.parse(roundTripped)).toEqual(withConstructs);
   });
 
   it('still rejects a construct group at the root children position -- a package holds containers, not extents', () => {
@@ -331,6 +331,6 @@ describe('the construct kinds are additive over 4.0.0', () => {
       metadata: {},
       children: [{ node: { kind: 'division', name: 'Chapter1' }, children: [] }],
     };
-    expect(DocumentPackageSchema.safeParse(broken).success).toBe(false);
+    expect(DocumentTreeSchema.safeParse(broken).success).toBe(false);
   });
 });
