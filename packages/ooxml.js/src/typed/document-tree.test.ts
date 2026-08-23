@@ -2,20 +2,20 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import type { ContentEmbeddedObjectBlock, DocumentPackage, SectionGroupNode, SlideGroupNode } from 'document-schema.js';
-import { assemblePackage, flattenPackage, isHeadingGroupNode, isListGroupNode, isSectionConstructGroupNode, isShapeGroupNode } from 'document-schema.js';
+import type { ContentEmbeddedObjectBlock, DocumentTree, SectionGroupNode, SlideGroupNode } from 'document-schema.js';
+import { assembleTree, flattenTree, isHeadingGroupNode, isListGroupNode, isSectionConstructGroupNode, isShapeGroupNode } from 'document-schema.js';
 import { minimalPptxBytes } from '../test-support/embedded';
 import { decodePackage, encodePackage } from '../codec';
 import type { XmlElement, XmlNode } from '../model/node';
 import { el, txt } from '../xml/fragment';
-import { buildDocxPackage, buildXlsxPackage, readDocx, readPptx, readXlsx } from './document-package';
+import { buildDocxPackage, buildXlsxPackage, readDocx, readPptx, readXlsx } from './document-tree';
 import { readDocxContent } from './docx/read';
 import { buildDocxPackageFromContent } from './docx/write';
 import { readPptxContent } from './pptx/read';
 import { buildXlsxPackageFromContent } from './xlsx/build';
 import { readXlsxContent } from './xlsx/content';
 
-// The DocumentPackage-native surface, exercised end to end over real bytes rather than over an in-memory Package: every round trip below starts by zipping a package to bytes and decoding it back, so what these assert is the whole bytes -> DocumentPackage -> bytes path a consumer actually drives, not just the tree adapter in isolation. Three separate properties are worth pinning per format, and each has its own test: the tree's SHAPE (that decomposition really happened -- one group per container, headings and lists nested inside their section group -- rather than a flat block list wearing a package envelope), the FLATTEN INVERSE (that the tree materialises back to exactly the flat content the content-level reader produces, which is what makes the two APIs interchangeable rather than merely adjacent), and the BYTE ROUND TRIP (that a package written back out and read again reproduces the same tree).
+// The DocumentTree-native surface, exercised end to end over real bytes rather than over an in-memory Package: every round trip below starts by zipping a package to bytes and decoding it back, so what these assert is the whole bytes -> DocumentTree -> bytes path a consumer actually drives, not just the tree adapter in isolation. Three separate properties are worth pinning per format, and each has its own test: the tree's SHAPE (that decomposition really happened -- one group per container, headings and lists nested inside their section group -- rather than a flat block list wearing a package envelope), the FLATTEN INVERSE (that the tree materialises back to exactly the flat content the content-level reader produces, which is what makes the two APIs interchangeable rather than merely adjacent), and the BYTE ROUND TRIP (that a package written back out and read again reproduces the same tree).
 
 const FIXTURES_DIR = join(dirname(fileURLToPath(import.meta.url)), 'xlsx', 'fixtures');
 
@@ -91,7 +91,7 @@ function docxBytesWithConstruct(): Uint8Array<ArrayBuffer> {
   });
 }
 
-// A section carrying three paragraphs whose one run each shares identical bold+red formatting -- the other thing docxBody() above never exercises: factorStyles must mint a shared styles-table entry over the three runs (bestGroup's own >= 2 positions threshold) and strip the matching run properties off all three, and buildDocxPackageFromContent must re-materialise them identically via flattenPackage before writing.
+// A section carrying three paragraphs whose one run each shares identical bold+red formatting -- the other thing docxBody() above never exercises: factorStyles must mint a shared styles-table entry over the three runs (bestGroup's own >= 2 positions threshold) and strip the matching run properties off all three, and buildDocxPackageFromContent must re-materialise them identically via flattenTree before writing.
 function boldRedRun(text: string): XmlNode {
   return el('w:r', {}, [el('w:rPr', {}, [el('w:b'), el('w:color', { 'w:val': 'FF0000' })]), el('w:t', {}, [txt(text)])]);
 }
@@ -112,14 +112,14 @@ function docxBytesWithRepeatedFormatting(): Uint8Array<ArrayBuffer> {
   });
 }
 
-function sectionGroups(document: DocumentPackage): SectionGroupNode[] {
+function sectionGroups(document: DocumentTree): SectionGroupNode[] {
   if (document.kind !== 'wordprocessing') {
     throw new Error(`expected a wordprocessing package, got "${document.kind}"`);
   }
   return document.children;
 }
 
-describe('readDocx: docx bytes -> DocumentPackage', () => {
+describe('readDocx: docx bytes -> DocumentTree', () => {
   it('reads a wordprocessing package with one section group per section, the section geometry riding the group node', () => {
     const document = readDocx(decodePackage(docxBytes()));
 
@@ -149,7 +149,7 @@ describe('readDocx: docx bytes -> DocumentPackage', () => {
 
   it('flattens back to exactly the sections and metadata readDocxContent reads', () => {
     const pkg = decodePackage(docxBytes());
-    const flattened = flattenPackage(readDocx(pkg));
+    const flattened = flattenTree(readDocx(pkg));
     const content = readDocxContent(pkg);
 
     expect(flattened.kind).toBe('wordprocessing');
@@ -165,7 +165,7 @@ describe('readDocx: docx bytes -> DocumentPackage', () => {
     expect(construct?.node).toMatchObject({ kind: 'contentControl', tag: 'approval', alias: 'Approval block' });
     expect(construct?.children.map((child) => ('kind' in child && child.kind === 'paragraph' ? child.runs[0]?.text : undefined))).toEqual(['Controlled paragraph one', 'Controlled paragraph two']);
 
-    const flattened = flattenPackage(document);
+    const flattened = flattenTree(document);
     const content = readDocxContent(pkg);
     expect(flattened.kind === 'wordprocessing' ? flattened.sections : undefined).toEqual(content.sections);
   });
@@ -181,14 +181,14 @@ describe('readDocx: docx bytes -> DocumentPackage', () => {
     const runs = document.kind === 'wordprocessing' ? paragraphs?.children.flatMap((child) => ('kind' in child && child.kind === 'paragraph' ? child.runs : [])) : [];
     expect(runs?.every((run) => run.bold === undefined && run.color === undefined)).toBe(true);
 
-    const flattened = flattenPackage(document);
+    const flattened = flattenTree(document);
     const content = readDocxContent(pkg);
     expect(flattened.kind === 'wordprocessing' ? flattened.sections : undefined).toEqual(content.sections);
   });
 });
 
-describe('buildDocxPackage: DocumentPackage -> docx bytes', () => {
-  it('round-trips bytes -> DocumentPackage -> bytes -> DocumentPackage unchanged', () => {
+describe('buildDocxPackage: DocumentTree -> docx bytes', () => {
+  it('round-trips bytes -> DocumentTree -> bytes -> DocumentTree unchanged', () => {
     const first = readDocx(decodePackage(docxBytes()));
     const written = encodePackage(buildDocxPackage(first));
     const second = readDocx(decodePackage(written));
@@ -237,13 +237,13 @@ describe('buildDocxPackage: DocumentPackage -> docx bytes', () => {
   it('refuses a package whose kind is not wordprocessing', () => {
     const spreadsheet = readXlsx(decodePackage(new Uint8Array(readFileSync(join(FIXTURES_DIR, 'minimal.xlsx')))));
 
-    expect(() => buildDocxPackage(spreadsheet)).toThrow('buildDocxPackage: expected a DocumentPackage of kind "wordprocessing", got "spreadsheet"');
+    expect(() => buildDocxPackage(spreadsheet)).toThrow('buildDocxPackage: expected a DocumentTree of kind "wordprocessing", got "spreadsheet"');
   });
 
   it('threads the embedded-presentation serialiser option to the flat writer, so a tree carrying a presentation embed builds rather than throwing', () => {
-    // #742's port, at the tree boundary: an embedded presentation block sits in the tree exactly as a flat block does (decompose keeps it a leaf, flattenPackage materialises it back), so the option has to reach buildDocxPackageFromContent or a tree round trip still hits the no-serialiser throw the flat pair names.
+    // #742's port, at the tree boundary: an embedded presentation block sits in the tree exactly as a flat block does (decompose keeps it a leaf, flattenTree materialises it back), so the option has to reach buildDocxPackageFromContent or a tree round trip still hits the no-serialiser throw the flat pair names.
     const embed: ContentEmbeddedObjectBlock = { kind: 'embeddedObject', objectKind: 'presentation', document: { kind: 'presentation', metadata: {}, slides: [] }, frame: { xPt: 0, yPt: 0, widthPt: 96, heightPt: 60 } };
-    const tree = assemblePackage({ kind: 'wordprocessing', metadata: {}, sections: [{ pageSize: { widthPt: 612, heightPt: 792 }, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 }, blocks: [embed] }] });
+    const tree = assembleTree({ kind: 'wordprocessing', metadata: {}, sections: [{ pageSize: { widthPt: 612, heightPt: 792 }, margins: { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 }, blocks: [embed] }] });
 
     const built = buildDocxPackage(tree, { serialiseEmbeddedPresentation: () => minimalPptxBytes() });
     const after = readDocxContent(built);
@@ -286,14 +286,14 @@ function pptxBytes(): Uint8Array<ArrayBuffer> {
   });
 }
 
-function slideGroups(document: DocumentPackage): SlideGroupNode[] {
+function slideGroups(document: DocumentTree): SlideGroupNode[] {
   if (document.kind !== 'presentation') {
     throw new Error(`expected a presentation package, got "${document.kind}"`);
   }
   return document.children;
 }
 
-describe('readPptx: pptx bytes -> DocumentPackage', () => {
+describe('readPptx: pptx bytes -> DocumentTree', () => {
   it('reads a presentation package with one slide group per slide, each shape its own group inside it', () => {
     const document = readPptx(decodePackage(pptxBytes()));
 
@@ -311,7 +311,7 @@ describe('readPptx: pptx bytes -> DocumentPackage', () => {
 
   it('flattens back to exactly the slides and metadata readPptxContent reads', () => {
     const pkg = decodePackage(pptxBytes());
-    const flattened = flattenPackage(readPptx(pkg));
+    const flattened = flattenTree(readPptx(pkg));
     const content = readPptxContent(pkg);
 
     expect(flattened.kind).toBe('presentation');
@@ -326,7 +326,7 @@ function fixtureBytes(name: string): Uint8Array<ArrayBuffer> {
   return new Uint8Array(readFileSync(join(FIXTURES_DIR, name)));
 }
 
-describe('readXlsx / buildXlsxPackage: the xlsx DocumentPackage boundary', () => {
+describe('readXlsx / buildXlsxPackage: the xlsx DocumentTree boundary', () => {
   it('reads a real LibreOffice-authored workbook into a spreadsheet package with one sheet group per sheet', () => {
     const document = readXlsx(decodePackage(fixtureBytes('kitchen-sink.xlsx')));
 
@@ -340,10 +340,10 @@ describe('readXlsx / buildXlsxPackage: the xlsx DocumentPackage boundary', () =>
   it('flattens back to exactly the ContentDocument readXlsxContent reads', () => {
     const pkg = decodePackage(fixtureBytes('kitchen-sink.xlsx'));
 
-    expect(flattenPackage(readXlsx(pkg))).toEqual(readXlsxContent(pkg));
+    expect(flattenTree(readXlsx(pkg))).toEqual(readXlsxContent(pkg));
   });
 
-  it('round-trips real workbook bytes -> DocumentPackage -> bytes with the cell values intact', () => {
+  it('round-trips real workbook bytes -> DocumentTree -> bytes with the cell values intact', () => {
     const first = readXlsx(decodePackage(fixtureBytes('kitchen-sink.xlsx')));
     const second = readXlsx(decodePackage(encodePackage(buildXlsxPackage(first))));
 
@@ -363,7 +363,7 @@ describe('readXlsx / buildXlsxPackage: the xlsx DocumentPackage boundary', () =>
   it('refuses a package whose kind is not spreadsheet', () => {
     const wordprocessing = readDocx(decodePackage(docxBytes()));
 
-    expect(() => buildXlsxPackage(wordprocessing)).toThrow('buildXlsxPackage: expected a DocumentPackage of kind "spreadsheet", got "wordprocessing"');
+    expect(() => buildXlsxPackage(wordprocessing)).toThrow('buildXlsxPackage: expected a DocumentTree of kind "spreadsheet", got "wordprocessing"');
   });
 
   // A workbook's named ranges and table/List-object definitions have no flat ContentDocument spelling -- the schema's own verdict is that they ride the tree's definitions table naming their range -- so readXlsx attaches them where the flat reader structurally cannot.
@@ -419,6 +419,6 @@ describe('readXlsx / buildXlsxPackage: the xlsx DocumentPackage boundary', () =>
   it('keeps the tree path and the flat path the same WRITE even with definitions attached: flatten drops them, so both build the identical package', () => {
     const pkg = workbookWithTablesAndNames();
     expect(buildXlsxPackage(readXlsx(pkg))).toEqual(buildXlsxPackageFromContent(readXlsxContent(pkg)));
-    expect(flattenPackage(readXlsx(pkg))).toEqual(readXlsxContent(pkg));
+    expect(flattenTree(readXlsx(pkg))).toEqual(readXlsxContent(pkg));
   });
 });
