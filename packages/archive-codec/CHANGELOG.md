@@ -1,3 +1,5 @@
+## [1.1.2](https://github.com/ExaDev/documents.js/compare/archive-codec@1.1.1...archive-codec@1.1.2) (2026-08-23)
+
 ## [1.1.1](https://github.com/ExaDev/documents.js/compare/archive-codec@1.1.0...archive-codec@1.1.1) (2026-08-21)
 
 
