@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { ConstructDescriptor } from './construct';
 import type { ContentBlock, ContentDocument, ContentEmbeddedObject, ContentFormula, ContentSection, ContentShape, ContentSheetCell, ContentSheetImage, ContentSheetPrintSettings, ContentVector } from './content';
 import { ConstructMarkerImbalanceError, decompose, decomposeSection, decomposeSheet, isHeadingParagraph } from './decompose';
-import { flattenPackage } from './flatten';
-import type { DocumentPackage } from './package';
+import { flattenTree } from './flatten';
+import type { DocumentTree } from './package';
 import { isHeadingGroupNode, isListGroupNode, isSectionConstructGroupNode, type SheetGroupNode } from './package-node';
 
 // The bijection laws (bijection.test.ts) pin round-trip fidelity, not grouping semantics -- a degenerate decompose whose section groups carried flat, ungrouped children would satisfy every law just as well. These tests pin the TREE SHAPE itself: mandatory section groups, per-container stacks, the never-cross-a-shape-boundary rule, and the ownership discipline. Ported from document-outline.js's phase-1 decompose tests, adapted to schema 4 (decompose takes the flat ContentDocument; the envelope rides the package root).
@@ -98,7 +98,7 @@ describe('wordprocessing decomposition', () => {
 
   it('decomposes an empty document to an empty root array (the envelope carries the kind)', () => {
     expect(decompose({ kind: 'wordprocessing', metadata: {}, sections: [] })).toEqual([]);
-    expect(flattenPackage({ kind: 'wordprocessing', metadata: {}, children: [] })).toEqual({ kind: 'wordprocessing', metadata: {}, sections: [] });
+    expect(flattenTree({ kind: 'wordprocessing', metadata: {}, children: [] })).toEqual({ kind: 'wordprocessing', metadata: {}, sections: [] });
   });
 });
 
@@ -153,7 +153,7 @@ describe('spreadsheet decomposition', () => {
       { node: { kind: 'sheet', name: 'Declared empty', cells: [], columns: [], rows: [], printSettings }, children: [] },
     ]);
     // A present-but-empty embeddedObjects array round-trips to the field ABSENT: decompose concatenated images and embedded objects into one children array, so a declared-empty field is indistinguishable from an absent one -- the bijection's one declared normalisation, pinned here in its stripping direction. (images rebuilds as the always-present empty array because the flat form requires it.)
-    const flat = flattenPackage({ kind: 'spreadsheet', metadata: {}, children: doc.sheets.map(decomposeSheet) });
+    const flat = flattenTree({ kind: 'spreadsheet', metadata: {}, children: doc.sheets.map(decomposeSheet) });
     expect(flat.kind).toBe('spreadsheet');
     if (flat.kind !== 'spreadsheet') throw new Error('expected a spreadsheet document');
     expect(flat.sheets[2]).not.toHaveProperty('embeddedObjects');
@@ -164,7 +164,7 @@ describe('spreadsheet decomposition', () => {
   it('refuses a style ref on a sheet group loudly -- a sheet holds no block flow to resolve it onto', () => {
     // The schema permits style on every group node, but the spreadsheet arm builds no resolution chain (a sheet's children are images and embedded objects, not paragraphs), so a ref there could only be passed by silently -- losing the styled content with no signal. The refusal mirrors entryOf's missing-table rule: resolution runs completely or not at all. Minting never stamps such a ref (a sheet group's extent is always empty); this guard is for hand-built trees.
     const sheet: SheetGroupNode = { node: { kind: 'sheet', name: 'Data', cells: [], columns: [], rows: [], printSettings: { pageSize: { widthPt: 595, heightPt: 842 }, margins: { topPt: 20, rightPt: 20, bottomPt: 20, leftPt: 20 }, gridlines: true, headers: true, pageOrder: 'downThenOver' } }, children: [], style: 's1' };
-    expect(() => flattenPackage({ kind: 'spreadsheet', metadata: {}, children: [sheet] })).toThrow(/no block flow/);
+    expect(() => flattenTree({ kind: 'spreadsheet', metadata: {}, children: [sheet] })).toThrow(/no block flow/);
   });
 });
 
@@ -268,7 +268,7 @@ describe('construct-boundary promotion', () => {
   });
 
   it('embeds the source descriptor object itself, and rebuilds the marker pair around it on the way back', () => {
-    // The ownership discipline, at the one node it cannot hold verbatim: PackageBlockLeaf excludes both marker kinds, so the tree keeps the descriptor (the same object, by identity) while the marker wrapper is reconstructed by flatten. A consumer holding both views still sees one descriptor.
+    // The ownership discipline, at the one node it cannot hold verbatim: TreeBlockLeaf excludes both marker kinds, so the tree keeps the descriptor (the same object, by identity) while the marker wrapper is reconstructed by flatten. A consumer holding both views still sees one descriptor.
     const descriptor: ConstructDescriptor = { kind: 'field', instruction: 'PAGE' };
     const start: ContentBlock = { kind: 'constructStart', descriptor };
     const source: ContentSection = { ...SECTION_GEOMETRY, blocks: [start, paragraph('inside'), CONSTRUCT_END] };
@@ -278,7 +278,7 @@ describe('construct-boundary promotion', () => {
       throw new Error('expected the marker pair to promote to a construct group');
     }
     expect(constructGroup.node).toBe(descriptor);
-    const flat = flattenPackage({ kind: 'wordprocessing', metadata: {}, children: [group] });
+    const flat = flattenTree({ kind: 'wordprocessing', metadata: {}, children: [group] });
     if (flat.kind !== 'wordprocessing') throw new Error('expected a wordprocessing document back');
     const section = flat.sections[0];
     if (section === undefined) throw new Error('expected one section back');
@@ -357,8 +357,8 @@ describe('ownership', () => {
     }
     expect(headingGroup.node).toBe(heading);
     expect(isHeadingParagraph(headingGroup.node)).toBe(true);
-    const pkg: DocumentPackage = { kind: 'wordprocessing', metadata: {}, children: [sectionGroup] };
-    const flat = flattenPackage(pkg);
+    const pkg: DocumentTree = { kind: 'wordprocessing', metadata: {}, children: [sectionGroup] };
+    const flat = flattenTree(pkg);
     if (flat.kind !== 'wordprocessing') throw new Error('expected a wordprocessing document back');
     const [section] = flat.sections;
     if (section === undefined) throw new Error('expected one section back');

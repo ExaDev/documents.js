@@ -2,9 +2,9 @@ import { canonicalKey } from './canonicalise';
 import type { ContentDocument, ContentParagraph, ContentRun } from './content';
 import { decomposeDrawPage, decomposeSection, decomposeSheet, decomposeSlide } from './decompose';
 import type { StyleEntry, StyleParagraphProperties, StyleRunProperties, StylesTable } from './definitions';
-import { flattenPackage } from './flatten';
+import { flattenTree } from './flatten';
 import type { PageSize } from './geometry';
-import type { DocumentPackage } from './package';
+import type { DocumentTree } from './package';
 import type {
   DrawPageGroupNode,
   HeadingGroupNode,
@@ -19,7 +19,7 @@ import type {
   SlideGroupNode,
 } from './package-node';
 
-// The styles minting half of the package boundary (#21's factoring pass): assemblePackage = decompose then factorStyles, and the two are separate passes so minting idempotence stays independently testable. Minting walks the freshly decomposed tree, finds property tuples that repeat, and hoists each onto a wrapper ref + styles-table entry -- pure compression over the one tree a conversion just built, never a second authority for content.
+// The styles minting half of the package boundary (#21's factoring pass): assembleTree = decompose then factorStyles, and the two are separate passes so minting idempotence stays independently testable. Minting walks the freshly decomposed tree, finds property tuples that repeat, and hoists each onto a wrapper ref + styles-table entry -- pure compression over the one tree a conversion just built, never a second authority for content.
 //
 // The mintable property sets are exactly the schema's own style halves (StyleParagraphProperties / StyleRunProperties) minus `list`: frames, sourcePath, and styleId are per-node facts the schema's strict entry objects already refuse outright (the ban list), and `list` is additionally excluded here because it is a grouping signal -- decompose's own stack semantics and the anchor schema (ListParagraphSchema requires list on a list group's node) read it off the node object, so a membership factored into the table would move structure the tree itself must keep stating. headingLevel is not a StyleParagraphProperties field at all, so heading anchors are equally safe by construction.
 //
@@ -44,7 +44,7 @@ type RunKey = (typeof RUN_STYLE_KEYS)[number];
 // The wrapper kinds that can carry a ref and hold block-flow paragraphs. SheetGroupNode fits the wrapper shape but its children are images and embedded objects -- no paragraphs, an always-empty extent -- so it never mints and is excluded from the walk's type. SectionConstructGroupNode/ShapeConstructGroupNode (4.1.0) join the set on equal footing: each carries the same `{ node, style?, children }` shape as every other wrapper here, and neither needs a dedicated dispatch arm below -- their node is never the 'paragraph'/'slide'/'drawPage' discriminant any other wrapper matches on, so both fall straight through to extentOf/childWrappers' shared "no anchor of its own" default, the same default a plain SectionGroupNode already relies on.
 type MintWrapper = SectionGroupNode | SlideGroupNode | DrawPageGroupNode | ShapeGroupNode | HeadingGroupNode | ListGroupNode | SectionConstructGroupNode | ShapeConstructGroupNode;
 
-// One child position of any block flow: the union of the section, list, and shape flows' child vocabularies. ListChild and ShapeChild are the identical type (ListGroupNode | ShapeConstructGroupNode | PackageBlockLeaf) since 4.1.0, no longer a sub-range of SectionChild (which carries SectionConstructGroupNode instead) -- so the extent walk needs both halves explicitly to serve all three flows with one function.
+// One child position of any block flow: the union of the section, list, and shape flows' child vocabularies. ListChild and ShapeChild are the identical type (ListGroupNode | ShapeConstructGroupNode | TreeBlockLeaf) since 4.1.0, no longer a sub-range of SectionChild (which carries SectionConstructGroupNode instead) -- so the extent walk needs both halves explicitly to serve all three flows with one function.
 type FlowChild = SectionChild | ListChild;
 
 // Per-kind narrowers over MintWrapper. These exist because TypeScript does not narrow a union from a comparison against a NESTED discriminant (`wrapper.node.kind === 'section'` narrows wrapper.node at best, never `wrapper`) -- the identical reason src/package-node.ts writes per-kind predicates, and an explicit guard is what narrows the wrapper itself. A shape group is the no-kind arm (ContentShape carries no kind field); heading and list groups share the 'paragraph' node discriminant and stay one arm because the minting walk treats every anchor alike. SectionGroupNode, SectionConstructGroupNode, and ShapeConstructGroupNode get no guard of their own: none of their node kinds ('section', or one of the six construct kinds) matches any check below, so all three fall through to the shared "no anchor" default at the foot of extentOf/childWrappers.
@@ -74,8 +74,8 @@ function isConstructGroup(child: SectionChild | ListChild): child is SectionCons
   return 'node' in child && 'children' in child && child.node.kind !== 'paragraph';
 }
 
-// Assembles the tree-form DocumentPackage every construction site reports: decompose the flat content into its children, splice the envelope fields (kind, metadata, symbolTable) out of the content onto the root, carry `pages` when a layout pass produced rendered page sizes, then mint the styles table over the result. `pages` is spread-copied because the schema's array field is mutable while callers hand us readonly views of the layout engine's own array.
-export function assemblePackage(content: ContentDocument, pages?: readonly PageSize[]): DocumentPackage {
+// Assembles the tree-form DocumentTree every construction site reports: decompose the flat content into its children, splice the envelope fields (kind, metadata, symbolTable) out of the content onto the root, carry `pages` when a layout pass produced rendered page sizes, then mint the styles table over the result. `pages` is spread-copied because the schema's array field is mutable while callers hand us readonly views of the layout engine's own array.
+export function assembleTree(content: ContentDocument, pages?: readonly PageSize[]): DocumentTree {
   const envelope = {
     metadata: content.metadata,
     ...(content.symbolTable !== undefined ? { symbolTable: content.symbolTable } : {}),
@@ -97,8 +97,8 @@ export function assemblePackage(content: ContentDocument, pages?: readonly PageS
 }
 
 // Re-factors an already-assembled package. The input is flattened first (materialising its refs), so this both re-mints a minted package to the identical table (law iii) and factors any hand-built or round-tripped tree a caller hands in. `pages`, `definitions`, and the package-level `source` residue table ride the input through: none has a spelling on the flat ContentDocument, so the flatten step cannot carry them and the reassembled tree would otherwise drop them silently. Minting never reads `definitions` or `source` -- both are per-document caller data, not style content the pass has any business rewriting (and rewriting residue would breach the channel's own opacity contract, src/source.ts).
-export function factorStyles(pkg: DocumentPackage): DocumentPackage {
-  const reassembled = assemblePackage(flattenPackage(pkg), pkg.pages);
+export function factorStyles(pkg: DocumentTree): DocumentTree {
+  const reassembled = assembleTree(flattenTree(pkg), pkg.pages);
   const carried = { ...(pkg.definitions !== undefined ? { definitions: pkg.definitions } : {}), ...(pkg.source !== undefined ? { source: pkg.source } : {}) };
   if (pkg.definitions === undefined && pkg.source === undefined) return reassembled;
   return { ...reassembled, ...carried };
@@ -331,8 +331,8 @@ function childWrappers(wrapper: MintWrapper): MintWrapper[] {
   return wrappers;
 }
 
-// The entry point over a whole tree: plan (outermost-first, freezing keys and factoring positions down each chain), order the entries, then rebuild the tree stamping refs and stripping keys per chain. Exported beyond assemblePackage's own internal use so a caller holding an already-tree-form package can mint over it directly without a flatten/decompose round trip first.
-export function mint(pkg: DocumentPackage): DocumentPackage {
+// The entry point over a whole tree: plan (outermost-first, freezing keys and factoring positions down each chain), order the entries, then rebuild the tree stamping refs and stripping keys per chain. Exported beyond assembleTree's own internal use so a caller holding an already-tree-form package can mint over it directly without a flatten/decompose round trip first.
+export function mint(pkg: DocumentTree): DocumentTree {
   const state: MintState = {
     wrapperRefs: new Map(),
     wrapperStrips: new Map(),
@@ -366,7 +366,7 @@ export function mint(pkg: DocumentPackage): DocumentPackage {
     styles[id] = entry.content;
     for (const wrapper of entry.wrappers) state.wrapperRefs.set(wrapper, id);
   });
-  // Per-arm spreads rather than one spread of the union: a literal containing a union spread widens its discriminant-narrowed properties and stops assigning to DocumentPackageSchema's inferred type, so each arm rebuilds itself with its own children type.
+  // Per-arm spreads rather than one spread of the union: a literal containing a union spread widens its discriminant-narrowed properties and stops assigning to DocumentTreeSchema's inferred type, so each arm rebuilds itself with its own children type.
   switch (pkg.kind) {
     case 'wordprocessing':
       return { ...pkg, styles, children: pkg.children.map((group) => rebuildSectionGroup(group, [], state)) };

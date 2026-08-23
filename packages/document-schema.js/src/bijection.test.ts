@@ -12,10 +12,10 @@ import {
   type ContentShape,
   type ContentVector,
 } from './content';
-import { assemblePackage, factorStyles } from './factor-styles';
-import { flattenPackage } from './flatten';
+import { assembleTree, factorStyles } from './factor-styles';
+import { flattenTree } from './flatten';
 import type { PageSize } from './geometry';
-import { DocumentPackageSchema, type DocumentPackage } from './package';
+import { DocumentTreeSchema, type DocumentTree } from './package';
 import type { SourceResidue } from './source';
 
 // THE PACKAGE BOUNDARY'S MERGE GATE: the three bijection laws run over a corpus spanning every document kind, every leaf the tree vocabulary admits, and every grouping signal decompose reads. document-outline.js proved the laws property-wise over its local corpus in phase 1, and documents.js runs this same law harness over its own REAL corpus -- reader outputs for every format, editors per kind, onDocument captures carrying the layout pass's real frames and pages. That corpus cannot live here: every reader in it belongs to a package that depends on this one (ooxml.js, odf.js, markdown-codec, pdf-codec), so importing it would invert the dependency the schema layer exists to keep one-way. What lives here instead is the same harness over hand-built content covering the same structural ground, and documents.js's own suite stays the gate over real format output -- the two are complementary, not redundant: this one pins the transform against the schema's whole vocabulary, that one pins it against what codecs actually emit.
@@ -510,12 +510,12 @@ function runExtentCorpus(): readonly CorpusEntry[] {
 
 describe('decompose/flatten bijection laws over the schema-vocabulary corpus', () => {
   describe.each(corpus())('$name', ({ content, pages }) => {
-    it('law (i): flattenPackage(assemblePackage(c)) reproduces c exactly', () => {
+    it('law (i): flattenTree(assembleTree(c)) reproduces c exactly', () => {
       expect(ContentDocumentSchema.safeParse(content).success).toBe(true);
       const snapshot = structuredClone(content);
-      const tree = assemblePackage(content, pages);
-      expect(DocumentPackageSchema.safeParse(tree).success).toBe(true);
-      const flat = flattenPackage(tree);
+      const tree = assembleTree(content, pages);
+      expect(DocumentTreeSchema.safeParse(tree).success).toBe(true);
+      const flat = flattenTree(tree);
       expect(ContentDocumentSchema.safeParse(flat).success).toBe(true);
       expectStructurallyEqual(flat, snapshot);
       // decompose embeds the source's own nodes, so re-comparing the source against its snapshot also pins that neither direction of the round trip mutated the input in place.
@@ -524,8 +524,8 @@ describe('decompose/flatten bijection laws over the schema-vocabulary corpus', (
 
     it('law (ii): the flat encoding is fully materialised and effective-equal to the original', () => {
       const snapshot = structuredClone(content);
-      const tree = assemblePackage(content, pages);
-      const flat = flattenPackage(tree);
+      const tree = assembleTree(content, pages);
+      const flat = flattenTree(tree);
       expect(containsGroupWrapper(flat)).toBe(false);
       // Resolve-then-compare in the flatten-as-resolver form: materialising every ref away and comparing structurally IS the effective-property comparison, because gap-fill restoration is exactly what resolution does.
       expectStructurallyEqual(flat, snapshot);
@@ -533,21 +533,21 @@ describe('decompose/flatten bijection laws over the schema-vocabulary corpus', (
     });
 
     it('law (iii): assembling the flattened tree again mints the identical table and tree', () => {
-      const first = assemblePackage(content, pages);
-      const second = assemblePackage(flattenPackage(first), first.pages);
+      const first = assembleTree(content, pages);
+      const second = assembleTree(flattenTree(first), first.pages);
       expectStructurallyEqual(second, first);
       // Factoring an already-factored package is the same law through the public re-mint entry point.
       expectStructurallyEqual(factorStyles(first), first);
     });
 
     it('mints deterministically', () => {
-      expectStructurallyEqual(assemblePackage(content, pages), assemblePackage(content, pages));
+      expectStructurallyEqual(assembleTree(content, pages), assembleTree(content, pages));
     });
   });
 
   // The gate must not pass vacuously: minting has to actually run over corpus documents, so at least one entry's tree carries a non-empty styles table and at least one wrapper ref. If this ever fails because no entry mints, the corpus has stopped exercising laws (ii) and (iii) and needs a real formatting-repetition fixture, not a weakened assertion.
   it('the corpus exercises real minting (at least one entry carries a styles table)', () => {
-    const minting = corpus().filter((entry) => Object.keys(assemblePackage(entry.content, entry.pages).styles ?? {}).length > 0);
+    const minting = corpus().filter((entry) => Object.keys(assembleTree(entry.content, entry.pages).styles ?? {}).length > 0);
     expect(minting.length).toBeGreaterThan(0);
   });
 
@@ -555,13 +555,13 @@ describe('decompose/flatten bijection laws over the schema-vocabulary corpus', (
   it('the construct corpus mints refs onto the construct groups themselves', () => {
     const runExtentNames = new Set(runExtentCorpus().map((entry) => entry.name));
     const blockConstructEntries = constructCorpus().filter((entry) => !runExtentNames.has(entry.name));
-    const withConstructRefs = blockConstructEntries.filter((entry) => constructGroupRefsOf(assemblePackage(entry.content, entry.pages)).length > 0);
+    const withConstructRefs = blockConstructEntries.filter((entry) => constructGroupRefsOf(assembleTree(entry.content, entry.pages)).length > 0);
     expect(withConstructRefs.map((entry) => entry.name)).toEqual(blockConstructEntries.filter((entry) => entry.name !== 'construct with no children (an open marker immediately closed)').map((entry) => entry.name));
   });
 
   // The run-level extent corpus's own anti-vacuity guard: laws say nothing about minting unless it actually runs over a paragraph carrying constructs, and an entry where every extent paragraph was left unstripped would pass all three laws while proving only that untouched objects survive an embed. At least one entry must mint a styles table, which is what makes rebuildParagraph's strip-copy the path the constructs field rides through.
   it('the run-level extent corpus exercises real minting over paragraphs carrying constructs', () => {
-    const minting = runExtentCorpus().filter((entry) => Object.keys(assemblePackage(entry.content, entry.pages).styles ?? {}).length > 0);
+    const minting = runExtentCorpus().filter((entry) => Object.keys(assembleTree(entry.content, entry.pages).styles ?? {}).length > 0);
     expect(minting.length).toBeGreaterThan(0);
   });
 
@@ -572,7 +572,7 @@ describe('decompose/flatten bijection laws over the schema-vocabulary corpus', (
 });
 
 // Every style ref sitting on a construct-descriptor wrapper anywhere in a minted tree: a group node carrying a `kind` that is neither 'paragraph' nor a container discriminant is a ConstructDescriptor, which is exactly what construct groups (and nothing else) hold.
-function constructGroupRefsOf(pkg: DocumentPackage): string[] {
+function constructGroupRefsOf(pkg: DocumentTree): string[] {
   const refs: string[] = [];
   function walk(value: unknown): void {
     if (Array.isArray(value)) {

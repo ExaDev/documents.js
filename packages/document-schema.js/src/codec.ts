@@ -1,6 +1,6 @@
 import type { ContentDocument } from './content';
 
-// This contract describes what an individual format's own codec naturally provides -- not what DocumentPackage requires. A codec's read() never returns a DocumentPackage directly; the package is the *assembled* tree produced by decomposing the flat ContentDocument a reader returns (src/package.ts's three laws). Nothing here constructs a DocumentPackage; that composition happens one level up, in whatever code owns both a ContentCodec and a layout engine for the same format.
+// This contract describes what an individual format's own codec naturally provides -- not what DocumentTree requires. A codec's read() never returns a DocumentTree directly; the package is the *assembled* tree produced by decomposing the flat ContentDocument a reader returns (src/package.ts's three laws). Nothing here constructs a DocumentTree; that composition happens one level up, in whatever code owns both a ContentCodec and a layout engine for the same format.
 
 // There is deliberately no LayoutCodec alongside this any more. Releases 1.x-3.x exported one -- read() to a LayoutDocument, write() back -- modelling the single format that produces layout cheaply on read: PDF. The whole LayoutDocument family moved to pdf-codec in this major (ExaDev/pdf-codec#65), where it is that codec's own private model, so the interface that described it belongs there too, alongside it. Callers that held a LayoutCodec over a PDF codec hold pdf-codec's own read/write signatures directly once they migrate.
 
