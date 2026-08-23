@@ -1,6 +1,6 @@
 {
   "name": "archive-codec",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "ZIP-in-ZIP recursive walking with depth and cumulative decompressed-size guards, plus bounded classic OLE compound-file ([MS-CFB]) reading - zero document-format knowledge, the archive and container utility package for the documents.js family.",
   "type": "module",
   "repository": {
