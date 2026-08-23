@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assemblePackage } from 'document-schema.js';
+import { assembleTree } from 'document-schema.js';
 import type { LatexDiagnostic } from '../latex/diagnostics';
 import { lintMathCoherence } from '../latex/lint';
 import { buildMarkdownText } from './write';
@@ -153,7 +153,7 @@ describe('buildMarkdownText math reconstruction', () => {
     expect(text).toContain('$$\n2x\n$$');
     // The re-read document lowers the identical presentation strings again -- the two-layer model round-trips through markdown without touching the semantic layer.
     const reread = readMarkdownContent(text);
-    expect(lintMathCoherence(assemblePackage(reread))).toEqual([]);
+    expect(lintMathCoherence(assembleTree(reread))).toEqual([]);
   });
 
   it('a formula with no presentation layer still flattens to its plain-text stand-in', () => {

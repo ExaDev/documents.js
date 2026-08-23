@@ -1,6 +1,6 @@
 // The write half of the composition engine: executeToPdf (the X-to-PDF renderer executor), the LAYOUT_ENGINES registry it dispatches through, and the full convertDocument that binds bridge + fromPdf + toPdf into one plan runner. Everything here is split out of composition.ts so that module can stay the read half -- a consumer that only ever converts FROM pdf (the documents.js/read entry, src/convert/from-pdf.ts) reaches composition.ts's registry, pathfinder, and read executors without ever reaching this module, and therefore without statically importing writePdf, a font registry, a font measurer, or the vendored font assets those pull in. The package's read-graph guard test (src/read-graph.test.ts) holds that boundary; the executors themselves are unchanged -- only their module moved.
 
-import { assemblePackage, type ContentDocument, type MathFontMetrics, type PageSize, type PositionedFormula } from 'document-schema.js';
+import { assembleTree, type ContentDocument, type MathFontMetrics, type PageSize, type PositionedFormula } from 'document-schema.js';
 import { createFontMeasurer, createFontRegistry, loadMathFont, writePdf, type FontRegistry } from 'pdf-codec';
 import type { LayoutDocument } from 'pdf-codec';
 
@@ -87,14 +87,14 @@ export function executeToPdf(format: ContentFormat, bytes: Uint8Array<ArrayBuffe
     }
   }
 
-  // The output bytes are built first and the package reported after them (the ownership rule every construction site follows), with assemblePackage decomposing the framed content + rendered page sizes into the tree-form DocumentPackage onDocument's contract now states.
+  // The output bytes are built first and the package reported after them (the ownership rule every construction site follows), with assembleTree decomposing the framed content + rendered page sizes into the tree-form DocumentTree onDocument's contract now states.
   if (formulas === undefined) {
     const out = writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution, fonts });
-    options?.onDocument?.(assemblePackage(content, pages));
+    options?.onDocument?.(assembleTree(content, pages));
     return out;
   }
   const out = writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution, formulas, fonts });
-  options?.onDocument?.(assemblePackage(content, pages));
+  options?.onDocument?.(assembleTree(content, pages));
   return out;
 }
 

@@ -1,4 +1,4 @@
-import type { DocumentPackage } from 'document-schema.js';
+import type { DocumentTree } from 'document-schema.js';
 import type { MarkdownImageResolver } from 'markdown-codec';
 import type { FontSubstitution, ProvidedFont } from 'document-schema.js';
 import type { ClockPort } from '../ports/clock';
@@ -35,8 +35,8 @@ export interface ConversionResult {
   readonly document: DocumentPayload;
   // Diagnostics are for expected, scoped-out-of-v1 degradations (a font substitution, an unsupported PDF filter) -- anything that would actually corrupt output throws instead of becoming a silently-swallowed diagnostic.
   readonly diagnostics: readonly Diagnostic[];
-  // The intermediate tree-form DocumentPackage (structure, layout, and content fused in one tree, document-schema.js 4.0.0) the underlying conversion function built while producing `document`, when that function supports building one (see convert.ts's own onDocument option) and the DocumentConverter implementation chooses to wire it through. Not every implementation is obligated to populate this -- a hypothetical remote adapter might not want to serialize a full DocumentPackage over the wire by default.
-  readonly package?: DocumentPackage;
+  // The intermediate tree-form DocumentTree (structure, layout, and content fused in one tree, document-schema.js 4.0.0) the underlying conversion function built while producing `document`, when that function supports building one (see convert.ts's own onDocument option) and the DocumentConverter implementation chooses to wire it through. Not every implementation is obligated to populate this -- a hypothetical remote adapter might not want to serialize a full DocumentTree over the wire by default.
+  readonly package?: DocumentTree;
 }
 
 // The per-call options every DocumentConverter implementation must accept. `signal` is mandatory (see this module's own top comment on why the contract is async and cancellable regardless of the local implementation's synchronicity); the two font options are optional and serialisable-adjacent rather than freely so -- `fonts` carries raw font bytes, which a remote adapter would have to ship over the wire, and `onFontSubstitution` is a live callback a remote adapter would instead surface through ConversionResult.diagnostics (which the local implementation ALSO populates, so a caller that supplies no callback still learns every face that fell back).

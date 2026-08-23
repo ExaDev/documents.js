@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { DocumentPackage } from 'document-schema.js';
+import type { DocumentTree } from 'document-schema.js';
 import { odsToPdf, odsToXlsx, xlsxToMarkdown, xlsxToPdf } from './convert';
 import { pdfToXlsx } from './from-pdf';
 import { gridOdsBytes } from '../test-support/ods';
@@ -8,7 +8,7 @@ import { gridOdsBytes } from '../test-support/ods';
 describe('onDocument fires on the last hop of a composed path', () => {
   it('xlsxToPdf reports a package with pages (the odsToPdf hop), not a content-only bridge package', () => {
     const xlsxBytes = odsToXlsx(gridOdsBytes());
-    let captured: DocumentPackage | undefined;
+    let captured: DocumentTree | undefined;
     xlsxToPdf(xlsxBytes, { onDocument: (pkg) => { captured = pkg; } });
     if (captured === undefined) throw new Error('onDocument was not called');
     // The toPdf hop runs a layout engine, so its package carries pages and frame-stamped content; a bridge hop carries neither. The original xlsxToPdf forwarded onDocument to odsToPdf (the last hop), so pages must be defined.
@@ -18,7 +18,7 @@ describe('onDocument fires on the last hop of a composed path', () => {
 
   it('pdfToXlsx reports a package with content only (the odsToXlsx bridge hop), pages undefined', () => {
     const pdfBytes = odsToPdf(gridOdsBytes());
-    let captured: DocumentPackage | undefined;
+    let captured: DocumentTree | undefined;
     pdfToXlsx(pdfBytes, { onDocument: (pkg) => { captured = pkg; } });
     if (captured === undefined) throw new Error('onDocument was not called');
     // The last hop is odsToXlsx (a bridge), which reports content only.
@@ -28,7 +28,7 @@ describe('onDocument fires on the last hop of a composed path', () => {
 
   it('xlsxToMarkdown reports a package from the pdfToMarkdown hop (wordprocessing content + pages)', () => {
     const xlsxBytes = odsToXlsx(gridOdsBytes());
-    let captured: DocumentPackage | undefined;
+    let captured: DocumentTree | undefined;
     xlsxToMarkdown(xlsxBytes, { onDocument: (pkg) => { captured = pkg; } });
     if (captured === undefined) throw new Error('onDocument was not called');
     // The last hop is pdfToMarkdown (fromPdf), which reconstructs wordprocessing content with frames attached and carries the read pages.

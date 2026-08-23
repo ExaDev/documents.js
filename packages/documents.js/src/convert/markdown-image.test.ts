@@ -1,4 +1,4 @@
-import { flattenPackage, type DocumentPackage } from 'document-schema.js';
+import { flattenTree, type DocumentTree } from 'document-schema.js';
 import { describe, expect, it } from 'vitest';
 import { markdownToDocx, markdownToOdt, markdownToPdf } from './convert';
 
@@ -6,11 +6,11 @@ import { markdownToDocx, markdownToOdt, markdownToPdf } from './convert';
 const ONE_PIXEL_PNG = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='), (char) => char.codePointAt(0)!);
 const LOCAL_IMAGE_MD = new TextEncoder().encode('![a local image](./local.png)');
 
-function firstImageBlockKind(captured: DocumentPackage | undefined): string | undefined {
+function firstImageBlockKind(captured: DocumentTree | undefined): string | undefined {
   if (captured === undefined) {
     return undefined;
   }
-  const pkg = flattenPackage(captured);
+  const pkg = flattenTree(captured);
   if (pkg.kind !== 'wordprocessing') {
     return undefined;
   }
@@ -26,7 +26,7 @@ function firstImageBlockKind(captured: DocumentPackage | undefined): string | un
 
 describe('markdown image resolution through options.images', () => {
   it('markdownToPdf resolves a relative-path image into a real ContentImageBlock, not alt-text', () => {
-    let captured: DocumentPackage | undefined;
+    let captured: DocumentTree | undefined;
     markdownToPdf(LOCAL_IMAGE_MD, {
       onDocument: (pkg) => {
         captured = pkg;
@@ -37,7 +37,7 @@ describe('markdown image resolution through options.images', () => {
   });
 
   it('markdownToDocx resolves a relative-path image into a real ContentImageBlock, not alt-text', () => {
-    let captured: DocumentPackage | undefined;
+    let captured: DocumentTree | undefined;
     markdownToDocx(LOCAL_IMAGE_MD, {
       onDocument: (pkg) => {
         captured = pkg;
@@ -48,7 +48,7 @@ describe('markdown image resolution through options.images', () => {
   });
 
   it('markdownToOdt resolves a relative-path image into a real ContentImageBlock, not alt-text', () => {
-    let captured: DocumentPackage | undefined;
+    let captured: DocumentTree | undefined;
     markdownToOdt(LOCAL_IMAGE_MD, {
       onDocument: (pkg) => {
         captured = pkg;
@@ -59,7 +59,7 @@ describe('markdown image resolution through options.images', () => {
   });
 
   it('without a resolver the image still degrades to alt-text (no ContentImageBlock) -- the resolver is opt-in', () => {
-    let captured: DocumentPackage | undefined;
+    let captured: DocumentTree | undefined;
     markdownToPdf(LOCAL_IMAGE_MD, {
       onDocument: (pkg) => {
         captured = pkg;

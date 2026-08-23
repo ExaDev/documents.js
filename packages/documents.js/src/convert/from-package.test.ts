@@ -1,4 +1,4 @@
-import { assemblePackage, flattenPackage, type DocumentPackage } from 'document-schema.js';
+import { assembleTree, flattenTree, type DocumentTree } from 'document-schema.js';
 
 import { decodePackage as decodeOdfPackage } from 'odf.js';
 import { decodePackage as decodeOoxmlPackage, readXlsxContent } from 'ooxml.js';
@@ -24,20 +24,20 @@ import { docxToPdf, odtToDocx } from './convert';
 import { buildDocumentBytes } from './from-package';
 import type { LayoutItem } from 'pdf-codec';
 
-function wordprocessingPackage(): DocumentPackage {
-  return assemblePackage(readOdtContent(decodeOdfPackage(minimalOdtBytes())));
+function wordprocessingPackage(): DocumentTree {
+  return assembleTree(readOdtContent(decodeOdfPackage(minimalOdtBytes())));
 }
 
-function presentationPackage(): DocumentPackage {
-  return assemblePackage(readOdpContent(decodeOdfPackage(minimalOdpBytes())));
+function presentationPackage(): DocumentTree {
+  return assembleTree(readOdpContent(decodeOdfPackage(minimalOdpBytes())));
 }
 
-function spreadsheetPackage(): DocumentPackage {
-  return assemblePackage(readOdsContent(decodeOdfPackage(minimalOdsBytes())));
+function spreadsheetPackage(): DocumentTree {
+  return assembleTree(readOdsContent(decodeOdfPackage(minimalOdsBytes())));
 }
 
-function drawingPackage(): DocumentPackage {
-  return assemblePackage(readOdgContent(decodeOdfPackage(minimalOdgBytes())));
+function drawingPackage(): DocumentTree {
+  return assembleTree(readOdgContent(decodeOdfPackage(minimalOdgBytes())));
 }
 
 describe('buildDocumentBytes', () => {
@@ -84,7 +84,7 @@ describe('buildDocumentBytes', () => {
 
   // The pdf target rebuilds the pdf-codec view from the package's own fused positions (layoutDocumentFromPackage, the frames-to-layout inverse) and writes it -- the package carries no LayoutDocument any more, only each node's own frames plus the pages array.
   it('writes PDF bytes rebuilt from a frame-stamped package', () => {
-    let captured: DocumentPackage | undefined;
+    let captured: DocumentTree | undefined;
     docxToPdf(minimalDocxBytes(), { onDocument: (pkg) => { captured = pkg; } });
     if (captured === undefined) {
       throw new Error('expected docxToPdf to report a package via onDocument');
@@ -93,7 +93,7 @@ describe('buildDocumentBytes', () => {
     const layout = readPdf(bytes);
     expect(layout.pages.length).toBe(captured.pages?.length);
     // The rebuilt page carries the stamped text back as real positioned text: each run renders once, whole, at its first recorded frame, so every run's own text survives the package -> pdf round trip verbatim.
-    const capturedContent = flattenPackage(captured);
+    const capturedContent = flattenTree(captured);
     if (capturedContent.kind !== 'wordprocessing') {
       throw new Error('expected a wordprocessing ContentDocument');
     }
@@ -105,7 +105,7 @@ describe('buildDocumentBytes', () => {
   });
 
   it('throws when asked for pdf from a package with no pages (a bridge conversion dump)', () => {
-    let captured: DocumentPackage | undefined;
+    let captured: DocumentTree | undefined;
     odtToDocx(minimalOdtBytes(), { onDocument: (pkg) => { captured = pkg; } });
     if (captured === undefined) {
       throw new Error('expected odtToDocx to report a package via onDocument');

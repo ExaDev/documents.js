@@ -1,4 +1,4 @@
-import { flattenPackage, type ContentVector, type DocumentPackage } from 'document-schema.js';
+import { flattenTree, type ContentVector, type DocumentTree } from 'document-schema.js';
 
 import { decodePackage, el, txt } from 'odf.js';
 import { decodePackage as decodeOdfPackage } from 'odf.js';
@@ -77,12 +77,12 @@ describe('docxToPdf', () => {
     docxEditor.body.appendParagraph().insertImageAfter({ format: 'png', bytes: pngBytes, widthPt: 96, heightPt: 48 });
     docxEditor.body.appendParagraph().appendRun({ text: 'After the image.' });
 
-    let captured: DocumentPackage | undefined;
+    let captured: DocumentTree | undefined;
     const pdfBytes = docxToPdf(docxEditor.toBytes(), { onDocument: (pkg) => { captured = pkg; } });
     expect(pdfHeader(pdfBytes)).toBe('%PDF-');
 
     // The ContentDocument this conversion built internally really did read the image as a ContentImageBlock, not drop it.
-    const capturedContent = captured === undefined ? undefined : flattenPackage(captured);
+    const capturedContent = captured === undefined ? undefined : flattenTree(captured);
     expect(capturedContent?.kind).toBe('wordprocessing');
     if (capturedContent?.kind !== 'wordprocessing') {
       throw new Error('expected a wordprocessing ContentDocument');
@@ -109,8 +109,8 @@ describe('docxToPdf', () => {
     expect(() => docxToPdf(buildSampleDocx('X'), { signal: controller.signal })).toThrow();
   });
 
-  it('calls onDocument exactly once with a DocumentPackage whose content carries its own rendered positions as frames', () => {
-    let captured: DocumentPackage | undefined;
+  it('calls onDocument exactly once with a DocumentTree whose content carries its own rendered positions as frames', () => {
+    let captured: DocumentTree | undefined;
     const pdfBytes = docxToPdf(buildSampleDocx('Hello from docx'), { onDocument: (pkg) => { captured = pkg; } });
     expect(pdfHeader(pdfBytes)).toBe('%PDF-');
 
@@ -118,7 +118,7 @@ describe('docxToPdf', () => {
     const pkg = captured!;
     // The tree-form package states its document kind at the root and carries the content as section-group children; flattening once recovers the flat ContentDocument whose nodes carry their own rendered positions as frames.
     expect(pkg.kind).toBe('wordprocessing');
-    const content = flattenPackage(pkg);
+    const content = flattenTree(pkg);
     expect(content.kind).toBe('wordprocessing');
     if (content.kind !== 'wordprocessing') {
       throw new Error('expected a wordprocessing ContentDocument');
@@ -241,7 +241,7 @@ describe('odsToPdf', () => {
     expect(text).toContain('1'); // row-number header label
   });
 
-  // End-to-end proof for the per-cell decoration wiring, all the way from real ODF style XML: decoratedOdsBytes declares fo:background-color / fo:border / fo:text-align / style:vertical-align on real table-cell styles, odf.js's readOdsContent resolves all four onto ContentSheetCell, and src/layout/sheets.ts turns them into genuine LayoutRect/LayoutLine items and a genuinely different text position. Asserted against convertSpreadsheetToLayout's own output (the exact LayoutDocument odsToPdf builds internally) rather than a readPdf round trip, so the assertions pin what src/layout/sheets.ts itself emitted rather than what survived a second, independently-tested encode/decode hop -- a DocumentPackage no longer carries the items themselves, only each node's fused frames.
+  // End-to-end proof for the per-cell decoration wiring, all the way from real ODF style XML: decoratedOdsBytes declares fo:background-color / fo:border / fo:text-align / style:vertical-align on real table-cell styles, odf.js's readOdsContent resolves all four onto ContentSheetCell, and src/layout/sheets.ts turns them into genuine LayoutRect/LayoutLine items and a genuinely different text position. Asserted against convertSpreadsheetToLayout's own output (the exact LayoutDocument odsToPdf builds internally) rather than a readPdf round trip, so the assertions pin what src/layout/sheets.ts itself emitted rather than what survived a second, independently-tested encode/decode hop -- a DocumentTree no longer carries the items themselves, only each node's fused frames.
   it('renders a decorated cell\'s own background, borders, alignment, and vertical alignment into the resulting layout', () => {
     const content = readOdsContent(decodeOdfPackage(decoratedOdsBytes()));
     if (content.kind !== 'spreadsheet') {

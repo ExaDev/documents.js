@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { assemblePackage, type ContentDocument, type DocumentPackage, type SourceResidue } from 'document-schema.js';
+import { assembleTree, type ContentDocument, type DocumentTree, type SourceResidue } from 'document-schema.js';
 import type { LayoutAttachment, LayoutDestination, LayoutDocument, LayoutLayer, LayoutOutlineItem, LayoutPage, LayoutStructureElement } from 'pdf-codec';
 import { stampPdfPackageTables } from './pdf-package-tables';
 
 // The package-table half of the PDF-side construct surfacing (#721): destinations (named plus the outline flattened depth-first with parent keys), attachments, layers, the residue table, and comment definition bodies minted under the same deterministic keys reconstruct.ts's anchor constructs reference. Everything lands on the tree the fromPdf executor assembles, because the flat ContentDocument has no root for any of it.
 
-function packageOf(content: ContentDocument): DocumentPackage {
-  return assemblePackage(content, [{ widthPt: 612, heightPt: 792 }]);
+function packageOf(content: ContentDocument): DocumentTree {
+  return assembleTree(content, [{ widthPt: 612, heightPt: 792 }]);
 }
 
 function wordprocessing(): ContentDocument {

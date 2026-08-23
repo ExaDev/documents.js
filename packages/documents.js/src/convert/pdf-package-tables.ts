@@ -1,9 +1,9 @@
-import type { DefinitionEntry, DocumentPackage } from 'document-schema.js';
+import type { DefinitionEntry, DocumentTree } from 'document-schema.js';
 import type { LayoutAnnotation, LayoutDocument, LayoutOutlineItem, LayoutStructureElement } from 'pdf-codec';
 
-// The package-table half of PDF-side construct surfacing (#721): stamping the LayoutDocument's document-level surfaces onto the tree the fromPdf executor assembles. The flat ContentDocument a reconstructor returns has no root for these tables (they are tree-only by design), so this runs immediately after assemblePackage -- the one place both the layout (the facts) and the package (the home) are in hand. Entry vocabularies are this package's own tenants inside the generic definitions-table facility: a destinations entry names a page and a view, an outline entry names its title/destination and parent, an attachment carries decoded bytes, a layer its visibility, and (#760) a structure entry states one tagged-PDF element's type and attributes, parent stated as a reference.
+// The package-table half of PDF-side construct surfacing (#721): stamping the LayoutDocument's document-level surfaces onto the tree the fromPdf executor assembles. The flat ContentDocument a reconstructor returns has no root for these tables (they are tree-only by design), so this runs immediately after assembleTree -- the one place both the layout (the facts) and the package (the home) are in hand. Entry vocabularies are this package's own tenants inside the generic definitions-table facility: a destinations entry names a page and a view, an outline entry names its title/destination and parent, an attachment carries decoded bytes, a layer its visibility, and (#760) a structure entry states one tagged-PDF element's type and attributes, parent stated as a reference.
 
-export function stampPdfPackageTables(pkg: DocumentPackage, layout: LayoutDocument): void {
+export function stampPdfPackageTables(pkg: DocumentTree, layout: LayoutDocument): void {
   if (layout.destinations !== undefined || layout.outline !== undefined) {
     const destinations: Record<string, DefinitionEntry> = {};
     for (const destination of layout.destinations ?? []) {

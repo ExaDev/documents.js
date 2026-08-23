@@ -1,4 +1,4 @@
-import { assemblePackage, type ContentBlock, type DocumentPackage } from 'document-schema.js';
+import { assembleTree, type ContentBlock, type DocumentTree } from 'document-schema.js';
 
 import { describe, expect, it } from 'vitest';
 import { latexToFormula } from './lower';
@@ -7,8 +7,8 @@ import { buildFormulaBlock } from '../model/formula';
 
 // The coherence lint's contract: re-parse, re-lower, compare -- and report divergence as a warning carrying the stored provenance, never as an automatic re-derivation (the schema's atomic pair-edit rule: the layers stay exactly as stored). These tests also pin that the lint WRITES nothing: every assertion re-reads the same package object after linting.
 
-function packageOf(blocks: readonly ContentBlock[]): DocumentPackage {
-  return assemblePackage({
+function packageOf(blocks: readonly ContentBlock[]): DocumentTree {
+  return assembleTree({
     kind: 'wordprocessing',
     metadata: {},
     sections: [{ pageSize: { widthPt: 595, heightPt: 842 }, margins: { topPt: 20, rightPt: 20, bottomPt: 20, leftPt: 20 }, blocks: [...blocks] }],
