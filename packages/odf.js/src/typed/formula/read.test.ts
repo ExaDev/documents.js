@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Package } from '../../model/package';
 import type { XmlElement } from '../../model/node';
 import { el, txt } from '../../xml/fragment';
-import { assertPackageRoundTrip, formulaPackage } from '../../test-support/document-package';
+import { assertPackageRoundTrip, formulaPackage } from '../../test-support/document-tree';
 import { readOdfFormula, readOdfFormulaContent, readOdfFormulaMathMl } from './read';
 
 // The math root below is copied, element-for-element, from a GENUINE LibreOffice 26.2 .odf's own content.xml -- built via a headless UNO Basic macro (private:factory/smath, Formula set to "f(x) = {x^2} over {2} + sqrt {x}", saved with the "math8" filter) and inspected directly after unzipping the result. It is deliberately NOT hand-simplified: the real fence/stretchy/form attributes on the parenthesis <mo> elements, the nested <mrow> wrapping, and the exact <semantics>/<annotation> shape are all real LibreOffice output, confirming both (a) a bare "math" root tag with a DEFAULT xmlns (not a "math:" prefix -- see read.ts's own top-of-file note) and (b) a real StarMath annotation nested two levels down (<math><semantics><annotation>).
@@ -161,7 +161,7 @@ describe('readOdfFormulaContent', () => {
 });
 
 describe('readOdfFormula: the package-native reader over the same fixture', () => {
-  it('assembles the real LibreOffice formula package into a formula-kind DocumentPackage that flattens back exactly', () => {
+  it('assembles the real LibreOffice formula package into a formula-kind DocumentTree that flattens back exactly', () => {
     const pkg = realFormulaPackage();
     const content = readOdfFormulaContent(pkg);
     const documentPackage = readOdfFormula(pkg);

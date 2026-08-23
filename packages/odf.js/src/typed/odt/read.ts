@@ -1,5 +1,5 @@
-import type { ContentBlock, ContentParagraph, ContentSection, DefinitionsTable, DocumentPackage, LayoutMetadata, Margins, PageSize, ProvenanceDescriptor, SourceResidue } from 'document-schema.js';
-import { assemblePackage, PAGE_SIZE_A4 } from 'document-schema.js';
+import type { ContentBlock, ContentParagraph, ContentSection, DefinitionsTable, DocumentTree, LayoutMetadata, Margins, PageSize, ProvenanceDescriptor, SourceResidue } from 'document-schema.js';
+import { assembleTree, PAGE_SIZE_A4 } from 'document-schema.js';
 import type { Package } from '../../model/package';
 import type { XmlElement, XmlNode } from '../../model/node';
 import { rootElement, findChildElement, childrenWithTag, attrValue } from '../../xml/query';
@@ -256,7 +256,7 @@ function readBlocks(nodes: readonly XmlNode[], pkg: Package, state: OdtFlowState
       const order = state.order++;
       blocks.push(...readBlocks(node.children, pkg, state, startIndex));
       state.wrapperExtents.push({ startIndex, endIndex: baseIndex + blocks.length, order, descriptor: odfDivisionDescriptor(node, pkg) });
-      // A DDE-linked section's text:dde-source (the live-link statement itself, beside the cached blocks the walk just read): DivisionDescriptor's source field names the external-chapter link and its residue spelling is blocked by the field-name collision, so the link quarantines at the package tier.
+      // A DDE-linked section's text:dde-source (the live-link statement itself, beside the cached blocks the walk just read): quarantined at the package tier under the 'dde-links' key rather than on the division descriptor's own residue.
       addOdfPackageResidue(state.packageResidue, 'dde-links', 'odt', ...childrenWithTag(node, 'text:dde-source'));
     } else if (isOdfIndexWrapper(node)) {
       const startIndex = baseIndex + blocks.length;
@@ -458,15 +458,15 @@ export function readOdtContent(pkg: Package, options: OdtReadOptions = {}): OdtD
   };
 }
 
-// Package -> DocumentPackage: this module's PRIMARY entry point, and the one a caller reaching for "read a .odt" should use. readOdtContent above stays exactly what it always was -- the flat, ContentDocument-level reader -- and this function is nothing more than its result spliced into the 'wordprocessing' ContentDocument envelope and handed to document-schema.js's own assemblePackage.
+// Package -> DocumentTree: this module's PRIMARY entry point, and the one a caller reaching for "read a .odt" should use. readOdtContent above stays exactly what it always was -- the flat, ContentDocument-level reader -- and this function is nothing more than its result spliced into the 'wordprocessing' ContentDocument envelope and handed to document-schema.js's own assembleTree.
 //
-// assemblePackage rather than bare decompose, per that function's own doc comment ("the tree-form DocumentPackage every construction site reports"): decompose alone yields the `children` array for a caller composing its own package boundary, whereas a reader IS a construction site and owes its caller the whole package -- envelope spliced on, styles table minted over the result -- exactly as documents.js's own conversion pipeline already does at every package it builds. factorStyles is not called here either: assemblePackage already mints, and re-minting an already-minted package is a no-op by law (iii).
+// assembleTree rather than bare decompose, per that function's own doc comment ("the tree-form DocumentTree every construction site reports"): decompose alone yields the `children` array for a caller composing its own package boundary, whereas a reader IS a construction site and owes its caller the whole package -- envelope spliced on, styles table minted over the result -- exactly as documents.js's own conversion pipeline already does at every package it builds. factorStyles is not called here either: assembleTree already mints, and re-minting an already-minted package is a no-op by law (iii).
 //
 // No `pages` argument is passed, and none can be: `pages` carries each RENDERED page's own size, which only a layout pass can report. A reader runs strictly before any layout, so the package it returns is a content-only one -- its nodes carry no `frames` and its root carries no `pages`, which is the honest shape for a document nothing has laid out yet.
-export function readOdt(pkg: Package, options: OdtReadOptions = {}): DocumentPackage {
+export function readOdt(pkg: Package, options: OdtReadOptions = {}): DocumentTree {
   const { metadata, sections, definitions, source } = readOdtContent(pkg, options);
-  const assembled = assemblePackage({ kind: 'wordprocessing', metadata, sections });
-  // The definitions table has no flat-ContentDocument spelling to ride through assemblePackage's envelope splice (the flat form is the codec-exchange CONTENT shape; package-level tables are tree-only), so it attaches to the freshly assembled root here -- the same route factorStyles' re-entry uses to carry it, and minting never reads it either way. The package-tier residue table rides the identical route, per that channel's own contract.
+  const assembled = assembleTree({ kind: 'wordprocessing', metadata, sections });
+  // The definitions table has no flat-ContentDocument spelling to ride through assembleTree's envelope splice (the flat form is the codec-exchange CONTENT shape; package-level tables are tree-only), so it attaches to the freshly assembled root here -- the same route factorStyles' re-entry uses to carry it, and minting never reads it either way. The package-tier residue table rides the identical route, per that channel's own contract.
   if (definitions !== undefined) {
     assembled.definitions = definitions;
   }

@@ -1,5 +1,5 @@
-import type { ContentShape, ContentSlide, DocumentPackage, LayoutMetadata, PageSize, SourceResidue } from 'document-schema.js';
-import { assemblePackage, SLIDE_SIZE_WIDESCREEN } from 'document-schema.js';
+import type { ContentShape, ContentSlide, DocumentTree, LayoutMetadata, PageSize, SourceResidue } from 'document-schema.js';
+import { assembleTree, SLIDE_SIZE_WIDESCREEN } from 'document-schema.js';
 import type { XmlElement } from '../../model/node';
 import type { Package } from '../../model/package';
 import { attrValue, childrenWithTag, elementsWithTag, findChildElement, rootElement } from '../../xml/query';
@@ -112,10 +112,10 @@ export function readOdpContent(pkg: Package): OdpDocument {
   };
 }
 
-// Package -> DocumentPackage: this module's PRIMARY entry point, the presentation mirror of readOdtContent/readOdt (see src/typed/odt/read.ts's own note on why assemblePackage rather than bare decompose, and why no `pages` argument). readOdpContent above is unchanged and remains the flat, ContentDocument-level reader.
-export function readOdp(pkg: Package): DocumentPackage {
+// Package -> DocumentTree: this module's PRIMARY entry point, the presentation mirror of readOdtContent/readOdt (see src/typed/odt/read.ts's own note on why assembleTree rather than bare decompose, and why no `pages` argument). readOdpContent above is unchanged and remains the flat, ContentDocument-level reader.
+export function readOdp(pkg: Package): DocumentTree {
   const { metadata, slides, source } = readOdpContent(pkg);
-  const assembled = assemblePackage({ kind: 'presentation', metadata, slides });
+  const assembled = assembleTree({ kind: 'presentation', metadata, slides });
   if (source !== undefined) {
     assembled.source = source;
   }
