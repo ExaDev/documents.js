@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { documentPackageWithSchema } from 'document-schema.js';
+import { documentTreeWithSchema } from 'document-schema.js';
 import { paragraph, sectionGroup, wordprocessingPackage } from '../test-support/fixtures';
 import { canonicalise, sha256, stableContentHash } from './hash';
 
@@ -34,9 +34,9 @@ describe('stableContentHash', () => {
   });
 
   it('hashes a serialised package identically with and without its $schema envelope label', () => {
-    // documentPackageWithSchema is the schema's own serialisation helper: it stamps the release-pinned $schema URI onto a package. The same package, serialised against two different schema releases, must hash equal -- the exact reserialisation case the strip exists for.
+    // documentTreeWithSchema is the schema's own serialisation helper: it stamps the release-pinned $schema URI onto a package. The same package, serialised against two different schema releases, must hash equal -- the exact reserialisation case the strip exists for.
     const pkg = wordprocessingPackage([sectionGroup([paragraph('body')])]);
-    expect(stableContentHash(documentPackageWithSchema(pkg))).toBe(stableContentHash(pkg));
+    expect(stableContentHash(documentTreeWithSchema(pkg))).toBe(stableContentHash(pkg));
   });
 
   it('never mutates its input, $schema keys included', () => {

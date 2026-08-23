@@ -8,12 +8,11 @@ import {
   resolveStyleChain,
   type ContentParagraph,
   type ContentVector,
-  type DocumentPackage,
+  type DocumentTree,
   type DrawPageGroupNode,
   type HeadingGroupNode,
   type ListChild,
   type ListGroupNode,
-  type PackageGroup,
   type SectionChild,
   type SectionConstructGroupNode,
   type SectionGroupNode,
@@ -23,14 +22,15 @@ import {
   type SlideGroupNode,
   type StyleEntry,
   type StylesTable,
+  type TreeGroup,
 } from 'document-schema.js';
 
 // Effective-property resolution: the route every consumer that must not care how a package was serialised -- resolve-then-compare (the promotion's law ii: a factored and an unfactored serialisation of one document resolve to the same effective tree) and content hashing (hashes ride over resolved properties, so a hash names the document, not the producer's compression choices) -- goes through before touching content. A tree group may carry a `style` ref into the package's styles table (ExaDev/document-schema.js#21); this module resolves those refs away using document-schema.js's own overlay helpers (resolveStyleChain / applyParagraphStyleProperties / applyRunStyleProperties -- the mechanics are the schema's to own, the same single-authority rule that moved the tree vocabulary there) and returns the package with every ref consumed and the styles table dropped: effectivePackage(factored) deep-equals effectivePackage(unfactored), which is the whole point.
 //
 // Resolution semantics: a group's ref, plus every ancestor group's ref, overlays onto each PARAGRAPH in that group's subtree -- group anchors (heading and list groups carry ContentParagraph anchors) and bare paragraph leaves alike -- with the chain ordered outermost first so the nearest group's entry wins over further-out ones and the paragraph's own direct properties win over everything (applyParagraphStyleProperties / applyRunStyleProperties fill gaps, never overwrite). The run half of a resolved entry applies to every run of each paragraph it resolved for. The walk's boundary is the block flow: a table leaf's cell paragraphs and an embedded document's own content are leaf-local payload this walk does not rewrite (style entries carry paragraph/run properties for block flow; an embedded document is its own whole package context).
 //
-// A tree that references an id the styles table does not carry is malformed, and resolution runs loudly: resolveStyleChain throws on the unknown ref. Consistency between refs and the table is the producer's responsibility (the same deliberate non-enforcement DocumentPackageSchema applies to pages-versus-frames); once resolution runs, it runs completely or not at all.
-export function effectivePackage(pkg: DocumentPackage): DocumentPackage {
+// A tree that references an id the styles table does not carry is malformed, and resolution runs loudly: resolveStyleChain throws on the unknown ref. Consistency between refs and the table is the producer's responsibility (the same deliberate non-enforcement DocumentTreeSchema applies to pages-versus-frames); once resolution runs, it runs completely or not at all.
+export function effectivePackage(pkg: DocumentTree): DocumentTree {
   const styles = pkg.styles;
   // The common case is a styles-free package: no table means no group can legally carry a ref, so the package already IS its effective form. Returned as the same object, not a copy -- nothing anywhere needs rewriting, and embedding unchanged values is the family's ownership discipline.
   if (styles === undefined) return pkg;
@@ -50,15 +50,15 @@ export function effectivePackage(pkg: DocumentPackage): DocumentPackage {
   }
 }
 
-// Copy-then-delete rather than destructuring `styles` out of the union: the arms' object types are what make the spread assignable to DocumentPackage, and a destructured-away field would also be an unused binding the repo's lint rejects.
-function withoutStyles(pkg: DocumentPackage): DocumentPackage {
-  const copy: { styles?: StylesTable } & DocumentPackage = { ...pkg };
+// Copy-then-delete rather than destructuring `styles` out of the union: the arms' object types are what make the spread assignable to DocumentTree, and a destructured-away field would also be an unused binding the repo's lint rejects.
+function withoutStyles(pkg: DocumentTree): DocumentTree {
+  const copy: { styles?: StylesTable } & DocumentTree = { ...pkg };
   delete copy.styles;
   return copy;
 }
 
 // A group's chain extended by its own ref when it carries one: the array passed to everything inside the group, which is how a group's style applies to its whole subtree. Outermost-first order, so resolveStyleChain's overlay fold makes the nearest entry win over further-out ones.
-function chainWithRef(chain: readonly string[], group: PackageGroup): readonly string[] {
+function chainWithRef(chain: readonly string[], group: TreeGroup): readonly string[] {
   return group.style === undefined ? chain : [...chain, group.style];
 }
 

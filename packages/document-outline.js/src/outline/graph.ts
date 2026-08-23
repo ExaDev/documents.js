@@ -1,14 +1,14 @@
 import type {
   DefinitionsTable,
-  DocumentPackage,
-  PackageGroup,
-  PackageLeaf,
+  DocumentTree,
   StylesTable,
+  TreeGroup,
+  TreeLeaf,
 } from 'document-schema.js';
 import { stableContentHash } from './hash';
 import { OrderKeyBudgetExhaustedError, orderKeyAfter, orderKeyBefore, orderKeyBetween, orderKeyForIndex, renumberedOrderKeys } from './order-keys';
 
-// The content-addressed graph projection of ExaDev/documents.js#659: one or several tree-form DocumentPackages exported as a property graph (nodes + typed edges) with content-based deduplication, no DocumentPackage schema change. Node identity is COMPUTED, not stored: every content node's id is the stableContentHash of its own projected content -- the canonicalise-then-hash recipe this package already publishes (src/outline/hash.ts), applied bottom-up as a Merkle DAG. A leaf's hash covers its own content; a group's hash covers its own properties plus its children's hashes (and the hash of whatever table entry its refs point at), so a node can be shared by any number of parents -- arbitrary fan-out, data-bearing internal nodes, multi-parent sharing, exactly git's and IPFS's object model rather than a strict binary Merkle tree.
+// The content-addressed graph projection of ExaDev/documents.js#659: one or several tree-form DocumentTrees exported as a property graph (nodes + typed edges) with content-based deduplication, no DocumentTree schema change. Node identity is COMPUTED, not stored: every content node's id is the stableContentHash of its own projected content -- the canonicalise-then-hash recipe this package already publishes (src/outline/hash.ts), applied bottom-up as a Merkle DAG. A leaf's hash covers its own content; a group's hash covers its own properties plus its children's hashes (and the hash of whatever table entry its refs point at), so a node can be shared by any number of parents -- arbitrary fan-out, data-bearing internal nodes, multi-parent sharing, exactly git's and IPFS's object model rather than a strict binary Merkle tree.
 //
 // Containment is an EDGE, not tree position, because a shared node has no single position: (parent)-[:CONTAINS {orderKey}]->(child), orderKey being a fractional/lexicographic string derived from the child's index in the parent's document order (graph edges are unordered by default and document order is semantically load-bearing). A style ref becomes one or more (group|leaf)-[:STYLED_BY {orderKey}]->(entry) edges -- one per entry in the resolved ancestor chain, outermost first (ExaDev/documents.js#660) -- and an anchor descriptor's definitions ref becomes (node)-[:DEFINED_BY {orderKey}]->(entry); policy-extracted property values become (node)-[:PROPERTY {orderKey, path}]->(value). Every edge carries an orderKey rather than a dense integer so a later single insertion (an editor building on this projection) can mint one new key strictly between its neighbours without renumbering any edge that did not move -- see src/outline/order-keys.ts, re-exported here as `orderKeys`.
 //
@@ -65,7 +65,7 @@ export const contentHashV1 = stableContentHash;
 // One document to project: the caller-assigned stable id (used verbatim as the root node's id) and the package itself.
 export interface GraphDocument {
   readonly id: string;
-  readonly package: DocumentPackage;
+  readonly package: DocumentTree;
 }
 
 export interface GraphProjectionOptions {
@@ -131,14 +131,14 @@ function recordOf(value: object): Record<string, unknown> {
 
 // One document's projection state: the node/edge accumulators (shared across the whole run), the policy, and the memoised per-table entry decisions that keep the root's table walk and every tree ref in agreement.
 //
-// NO CONTENT NODE'S ID IS EVER CALLER-SUPPLIED (ExaDev/documents.js#660): every mint site below -- entryNodeFace, projectLeaf, projectGroup, mintValueNode, and the root in project() -- computes `id` via contentHashV1 and spreads it into the node face AFTER the content (`{ ...content, id, kind }`), so a content field that happens to be named `id` or `kind` is shadowed by the real computed value at every single mint site, unconditionally, the same discipline git applies to a blob's hash. This module currently exposes no write/insert API of its own -- projectDocumentGraph only ever projects an existing DocumentPackage, it never accepts a node to insert -- so there is no path today for a caller to assert a content node's id at all. If a write API is ever added, it must preserve this property STRUCTURALLY (derive every content node's id server-side from its content at write time), never by accepting a caller-supplied id and merely validating it against a recomputed one: a write path that accepts an id at all reopens the two failure modes this guards against (two different contents sharing an id, or one content split across two ids), even with a check bolted on.
+// NO CONTENT NODE'S ID IS EVER CALLER-SUPPLIED (ExaDev/documents.js#660): every mint site below -- entryNodeFace, projectLeaf, projectGroup, mintValueNode, and the root in project() -- computes `id` via contentHashV1 and spreads it into the node face AFTER the content (`{ ...content, id, kind }`), so a content field that happens to be named `id` or `kind` is shadowed by the real computed value at every single mint site, unconditionally, the same discipline git applies to a blob's hash. This module currently exposes no write/insert API of its own -- projectDocumentGraph only ever projects an existing DocumentTree, it never accepts a node to insert -- so there is no path today for a caller to assert a content node's id at all. If a write API is ever added, it must preserve this property STRUCTURALLY (derive every content node's id server-side from its content at write time), never by accepting a caller-supplied id and merely validating it against a recomputed one: a write path that accepts an id at all reopens the two failure modes this guards against (two different contents sharing an id, or one content split across two ids), even with a check bolted on.
 class DocumentProjection {
   private readonly styles: StylesTable | undefined;
   private readonly definitions: DefinitionsTable | undefined;
 
   constructor(
     private readonly documentId: string,
-    private readonly pkg: DocumentPackage,
+    private readonly pkg: DocumentTree,
     private readonly policy: ExtractionPolicy,
     private readonly nodes: Map<string, GraphNode>,
     private readonly edges: Map<string, GraphEdge>,
@@ -352,7 +352,7 @@ class DocumentProjection {
   }
 
   // One tree group: own payload walked generically (refs dereferenced, extractions substituted), children projected recursively, hash input = walked payload + child ids + the style entry's id -- the Merkle-DAG rule. The wrapper's style key never reaches the node's properties: extracted, it is a STYLED_BY edge; inlined by a custom policy, the dereferenced ENTRY CONTENT is spelled in place (never the local key). `chain` is the ancestor style refs resolved so far (outermost first, ExaDev/documents.js#660); `own` extends it by this group's own ref exactly as effective.ts's chainWithRef does, and is what descendants receive -- but only a heading/list ANCHOR (isAnchor, the same paragraph-node discriminant effective.ts resolves against) actually emits edges for the inherited portion: every other wrapper kind is not a resolution target in effective.ts either, so its behaviour is unchanged from pre-#660 (at most its own single ref, never the inherited chain).
-  private projectGroup(group: PackageGroup, chain: readonly string[]): { id: string; edges: GraphEdge[] } {
+  private projectGroup(group: TreeGroup, chain: readonly string[]): { id: string; edges: GraphEdge[] } {
     const walked = this.walkRecord(recordOf(group.node), []);
     const own = group.style === undefined ? chain : [...chain, group.style];
     const childResults = group.children.map((child, index) => ({ result: this.projectChild(child, own), index }));
@@ -403,9 +403,9 @@ class DocumentProjection {
 }
 
 // Everything that can sit at a child position of any container, root groups included: the schema's own group and leaf unions, so every per-kind children array assigns into one walk.
-type AnyChild = PackageGroup | PackageLeaf;
+type AnyChild = TreeGroup | TreeLeaf;
 
-function isGroupChild(child: AnyChild): child is PackageGroup {
+function isGroupChild(child: AnyChild): child is TreeGroup {
   return 'node' in child && 'children' in child;
 }
 
@@ -417,7 +417,7 @@ function kindOf(payload: Record<string, unknown>): string {
   return 'shape';
 }
 
-// Projects one or several DocumentPackages into a single deduplicated property graph. Documents project in input order; content nodes are deduplicated by content-hash id across the whole run, so a value shared by any two positions -- within one document or across several -- is one node with one edge per referencing position.
+// Projects one or several DocumentTrees into a single deduplicated property graph. Documents project in input order; content nodes are deduplicated by content-hash id across the whole run, so a value shared by any two positions -- within one document or across several -- is one node with one edge per referencing position.
 export function projectDocumentGraph(documents: readonly GraphDocument[], options: GraphProjectionOptions = {}): PropertyGraph {
   const nodes = new Map<string, GraphNode>();
   const edges = new Map<string, GraphEdge>();
