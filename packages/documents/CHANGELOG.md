@@ -1,3 +1,24 @@
+# [2.0.0](https://github.com/ExaDev/documents.js/compare/documents@1.26.56...documents@2.0.0) (2026-08-23)
+
+
+* refactor(documents)!: rename DocumentPackage to DocumentTree ([f853708](https://github.com/ExaDev/documents.js/commit/f8537085302cfc1f37189d8dffc1640531e52b57)), closes [#661](https://github.com/ExaDev/documents.js/issues/661)
+
+
+### BREAKING CHANGES
+
+* this app is never published (private, GitHub Pages
+only), but its RPC contract types (DocumentTreeJson, DocumentTreeJsonSchema)
+carry the rename for anyone building against this repo's worker RPC
+surface directly.
+
+
+### Dependencies
+
+- Updated documents.js to ^6.0.0
+- Updated odf.js to ^6.0.0
+- Updated markdown-codec to ^6.0.0
+- Updated document-schema.js to ^5.0.0
+
 ## [1.26.56](https://github.com/ExaDev/documents.js/compare/documents@1.26.55...documents@1.26.56) (2026-08-23)
 
 
