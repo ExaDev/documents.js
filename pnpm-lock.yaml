@@ -456,7 +456,7 @@ importers:
   packages/document-outline.js:
     dependencies:
       document-schema.js:
-        specifier: ^4.9.1
+        specifier: ^4.10.0
         version: link:../document-schema.js
       zod:
         specifier: ^4.4.3
