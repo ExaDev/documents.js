@@ -46,7 +46,7 @@ export interface WordprocessingLayoutResult {
   readonly document: LayoutDocument;
   // Every embedded formula actually rendered via src/mathml, already positioned in PDF page space (bottom-left origin, y-up) -- pdf-codec's write.ts's own WritePdfOptions.formulas consumes this directly. See that module's own comment for why a formula's CID-font glyph runs can't travel through LayoutDocument.pages[].items itself.
   readonly formulas: readonly PositionedFormula[];
-  // The DocumentPackage's own pages array (each rendered page's size, indexed to match every content node's own frames[].pageIndex) -- the input `doc` argument itself comes back with frames stamped in place, which together with this array is the fused unified package a conversion reports through onDocument.
+  // The DocumentTree's own pages array (each rendered page's size, indexed to match every content node's own frames[].pageIndex) -- the input `doc` argument itself comes back with frames stamped in place, which together with this array is the fused unified package a conversion reports through onDocument.
   readonly pages: readonly PageSize[];
 }
 
@@ -339,6 +339,6 @@ export function convertWordprocessingToLayout(doc: WordprocessingContentDocument
   for (const section of doc.sections) {
     paginateSection(section, options.measurer, images, pages, options, formulas, listCounters);
   }
-  // `doc` itself now carries every placement this pass computed, stamped in place on its own nodes (frames); the returned pages array plus that mutated content is the fused unified DocumentPackage a conversion reports through onDocument.
+  // `doc` itself now carries every placement this pass computed, stamped in place on its own nodes (frames); the returned pages array plus that mutated content is the fused unified DocumentTree a conversion reports through onDocument.
   return { document: layoutDocumentOf(doc.metadata, pages, images), formulas, pages: packagePagesOf(pages) };
 }

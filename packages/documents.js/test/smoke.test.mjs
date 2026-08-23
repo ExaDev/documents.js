@@ -56,7 +56,7 @@ const FUNCTIONS = [
   'markdownToDocx',
   'docxToMarkdown',
   'createLocalDocumentConverter',
-  'documentPackageWithSchema',
+  'documentTreeWithSchema',
   'contentDocumentWithSchema',
   'documentSchemaKindOf',
   'documentFromJson',
@@ -263,9 +263,9 @@ describe('dist/ end-to-end: odsToPdf then pdfToOds, from the CJS build', () => {
   });
 });
 
-// documentPackageWithSchema/documentFromJson are re-exported from document-schema.js (not defined in this package's own src/) -- this proves the re-export actually resolves through the built dist/ artifact and that the stamped $schema is a real, correctly-versioned document-schema.js URL, not just that the identifier exists.
-describe('dist/ end-to-end: documentPackageWithSchema/documentFromJson, from the CJS build', () => {
-  it('stamps a real DocumentPackage built by docxToPdf with $schema, and round-trips it back through documentFromJson', () => {
+// documentTreeWithSchema/documentFromJson are re-exported from document-schema.js (not defined in this package's own src/) -- this proves the re-export actually resolves through the built dist/ artifact and that the stamped $schema is a real, correctly-versioned document-schema.js URL, not just that the identifier exists.
+describe('dist/ end-to-end: documentTreeWithSchema/documentFromJson, from the CJS build', () => {
+  it('stamps a real DocumentTree built by docxToPdf with $schema, and round-trips it back through documentFromJson', () => {
     const docxEditor = cjs.createDocx();
     docxEditor.body.appendParagraph().appendRun({ text: 'Hello from the schema smoke test' });
     const docxBytes = docxEditor.toBytes();
@@ -274,13 +274,13 @@ describe('dist/ end-to-end: documentPackageWithSchema/documentFromJson, from the
     cjs.docxToPdf(docxBytes, { onDocument: (pkg) => (documentPackage = pkg) });
     expect(documentPackage).toBeDefined();
 
-    const tagged = cjs.documentPackageWithSchema(documentPackage);
+    const tagged = cjs.documentTreeWithSchema(documentPackage);
     expect(tagged.$schema).toMatch(
-      /^https:\/\/cdn\.jsdelivr\.net\/npm\/document-schema\.js@\d+\.\d+\.\d+\/schemas\/document-package\.schema\.json$/,
+      /^https:\/\/cdn\.jsdelivr\.net\/npm\/document-schema\.js@\d+\.\d+\.\d+\/schemas\/document-tree\.schema\.json$/,
     );
 
     const result = cjs.documentFromJson(JSON.parse(JSON.stringify(tagged)));
-    expect(result.kind).toBe('DocumentPackage');
+    expect(result.kind).toBe('DocumentTree');
     expect(result.value).toEqual(documentPackage);
   });
 });

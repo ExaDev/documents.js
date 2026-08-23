@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { flattenPackage } from 'document-schema.js';
+import { flattenTree } from 'document-schema.js';
 import type { FontSubstitution } from 'pdf-codec';
 import { createDocx } from '../edit/docx/editor';
 import { createPptx } from '../edit/pptx/editor';
@@ -34,7 +34,7 @@ function buildSamplePptx(text: string): Uint8Array<ArrayBuffer> {
 describe('createLocalDocumentConverter: shape', () => {
   it('reports contractVersion and the supported conversion pairs', () => {
     const converter = createLocalDocumentConverter();
-    // 7, not 6: ConversionResult.package changed TYPE to the tree-form DocumentPackage of document-schema.js 4.0.0 (children carry the decomposed group tree plus the minted styles table, where it previously carried the flat { content, pages } envelope) -- see port.ts's own contractVersion comment on what does and does not warrant a bump.
+    // 7, not 6: ConversionResult.package changed TYPE to the tree-form DocumentTree of document-schema.js 4.0.0 (children carry the decomposed group tree plus the minted styles table, where it previously carried the flat { content, pages } envelope) -- see port.ts's own contractVersion comment on what does and does not warrant a bump.
     expect(converter.contractVersion).toBe(7);
     // SUPPORTED_CONVERSIONS is now derived from the composition pathfinder (resolveCompositionPlan) rather than a hand-maintained DIRECT_EDGES list. The pathfinder routes every pair of non-odf formats (each reaches all 10 others within the 3-hop cap), plus the special-case odf -> pdf pair -- 111 pairs total, sorted by source then target for determinism. csv joins as a full spreadsheet-variant member: same-variant bridges to ods/xlsx directly, everything else composed through the identical ods pivot xlsx uses. svg joins as the drawing family's plain-text member the same way: a same-variant bridge to odg directly plus its own pdf layout pair, everything else composed through those two edges.
     expect(converter.conversions).toEqual([
@@ -358,7 +358,7 @@ describe('createLocalDocumentConverter: convert', () => {
     const pkg = result.package!;
     expect(pkg.kind).toBe('wordprocessing');
     expect(pkg.pages).toBeDefined();
-    const content = flattenPackage(pkg);
+    const content = flattenTree(pkg);
     if (content.kind !== 'wordprocessing') {
       throw new Error('expected a wordprocessing ContentDocument');
     }
@@ -431,7 +431,7 @@ describe('createLocalDocumentConverter: markdown image resolution', () => {
       { source: { format: 'markdown', bytes: new TextEncoder().encode('![a local image](./local.png)') }, targetFormat: 'pdf' },
       { signal: new AbortController().signal, images: (destination) => (destination === './local.png' ? { bytes: onePixelPng } : undefined) },
     );
-    const content = result.package === undefined ? undefined : flattenPackage(result.package);
+    const content = result.package === undefined ? undefined : flattenTree(result.package);
     expect(content?.kind).toBe('wordprocessing');
     if (content?.kind === 'wordprocessing') {
       const hasImage = content.sections.some((section) => section.blocks.some((block) => block.kind === 'image'));

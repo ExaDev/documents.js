@@ -12,7 +12,7 @@ import { LAYOUT_FORMAT_VERSION } from 'pdf-codec/layout';
 
 // Layout logic genuinely shared between src/layout/slides.ts (pptx, direct placement) and src/layout/engine.ts (docx, flow/pagination): run styling, line-height measurement, alignment, and image-asset registration have no format-specific knowledge of their own -- duplicating them between the two engines would just be two copies to keep in sync.
 
-// Records one rendered placement onto a content node's own frames array, in place -- the single mechanism every layout engine and reconstructor in this package uses to fuse positions into the content tree (the schema's DocumentPackage design: a node's frames ARE its rendered page positions, in PDF user space, so no second LayoutDocument needs to be correlated back by sourcePath). Mutating the caller's own content tree here is the deliberate design, not an oversight: the correspondence between a node and its position is in hand at exactly this moment and would otherwise be thrown away (see ExaDev/documents.js#569).
+// Records one rendered placement onto a content node's own frames array, in place -- the single mechanism every layout engine and reconstructor in this package uses to fuse positions into the content tree (the schema's DocumentTree design: a node's frames ARE its rendered page positions, in PDF user space, so no second LayoutDocument needs to be correlated back by sourcePath). Mutating the caller's own content tree here is the deliberate design, not an oversight: the correspondence between a node and its position is in hand at exactly this moment and would otherwise be thrown away (see ExaDev/documents.js#569).
 export function stampFrame(node: { frames?: LayoutFrame[] }, pageIndex: number, box: Box): void {
   const frame: LayoutFrame = { pageIndex, xPt: box.xPt, yPt: box.yPt, widthPt: box.widthPt, heightPt: box.heightPt };
   if (node.frames === undefined) {
@@ -39,7 +39,7 @@ export function stampFragmentFrame(runs: readonly ContentRun[], fragment: Source
   stampFrame(run, pageIndex, textBoxForFragment(item, measurer.widthOfTextAtSize(fragment.text, fragment.font, fragment.sizePt), line.ascentPt, line.descentPt));
 }
 
-// Every LayoutDocument this package's own engines produce carries the package's pages array directly derivable from its own pages -- each rendered page's own size, indexed to match every node's own frames[].pageIndex (document-schema.js's DocumentPackageSchema contract). One helper rather than four per-engine copies of the same map.
+// Every LayoutDocument this package's own engines produce carries the package's pages array directly derivable from its own pages -- each rendered page's own size, indexed to match every node's own frames[].pageIndex (document-schema.js's DocumentTreeSchema contract). One helper rather than four per-engine copies of the same map.
 export function packagePagesOf(pages: readonly LayoutPage[]): PageSize[] {
   return pages.map((page) => ({ widthPt: page.widthPt, heightPt: page.heightPt }));
 }

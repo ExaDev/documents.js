@@ -1,5 +1,5 @@
-import type { ContentBlock, ContentDocument, ContentSection, DocumentPackage } from 'document-schema.js';
-import { assemblePackage, COLOR_BLACK } from 'document-schema.js';
+import type { ContentBlock, ContentDocument, ContentSection, DocumentTree } from 'document-schema.js';
+import { assembleTree, COLOR_BLACK } from 'document-schema.js';
 import type { OdmSection, Package } from 'odf.js';
 import { decodePackage, encodePackage as encodeOdfPackage, readOdfMetadata, readOdfParagraph, readOdfTable, readOdm } from 'odf.js';
 import { buildXlsxPackageFromContent, encodePackage } from 'ooxml.js';
@@ -40,8 +40,8 @@ export interface DocumentToPdfOptions extends DocumentFontRegistryOptions {
   readonly signal?: AbortSignal;
   // Called once per WinAnsi character substitution made while emitting text (see pdf-codec's winansi.ts) -- writePdf's own hook, passed straight through. Distinct from onFontSubstitution above, which reports a whole FACE falling back rather than a single character: a run rendered through a real embedded face never reaches WinAnsi encoding at all.
   readonly onSubstitution?: (substitution: WinAnsiSubstitution, context: { readonly pageIndex: number }) => void;
-  // Called exactly once, synchronously, with the DocumentPackage (content + layout) this conversion built internally, before the function returns its bytes -- a side channel for a caller that wants the intermediate pivot value, not just the target bytes, mirroring onSubstitution's own callback shape. Every conversion sharing this options type invokes it, odfToPdf included: a standalone formula document reports a genuine 'formula'-kind ContentDocument (see that function's own comment for what its LayoutDocument half does and does not carry).
-  readonly onDocument?: (pkg: DocumentPackage) => void;
+  // Called exactly once, synchronously, with the DocumentTree (content + layout) this conversion built internally, before the function returns its bytes -- a side channel for a caller that wants the intermediate pivot value, not just the target bytes, mirroring onSubstitution's own callback shape. Every conversion sharing this options type invokes it, odfToPdf included: a standalone formula document reports a genuine 'formula'-kind ContentDocument (see that function's own comment for what its LayoutDocument half does and does not carry).
+  readonly onDocument?: (pkg: DocumentTree) => void;
   // Called once per OMML construct that degraded or was approximated while a docx's own equations were recovered as MathML (src/omml/read.ts). Only docxToPdf ever invokes it, and deliberately so rather than being declared on a docx-specific options type of its own: OOXML math is the one source vocabulary in this package whose READ direction involves a translation that can degrade at all -- every ODF-sourced conversion reads real MathML straight out of the source package with nothing to translate.
   readonly onMathDiagnostic?: (diagnostic: OmmlDiagnostic, context: { readonly sourcePath?: string }) => void;
   // A synchronous resolver for markdown images with a non-data: destination (a relative path, a bare URL), threaded straight through to markdown-codec's own MarkdownImageResolver port. Only the markdown-sourced conversions (markdownToPdf) consult it; every other conversion sharing this options type ignores it -- the same precedent onMathDiagnostic already establishes for a docx-only option living on the shared type. documents.js itself performs no I/O (matching markdown-codec's own platform-neutral convention); a caller wanting local-file resolution supplies a resolver, and the Node entry points (document-cli, document-mcp) supply a filesystem resolver against the input file's own directory.
@@ -154,15 +154,15 @@ export function odfToPdf(bytes: Uint8Array<ArrayBuffer>, options?: DocumentToPdf
   throwIfAborted(options?.signal);
   const out = writePdf(layout, { signal: options?.signal, formulas: [{ pageIndex: 0, xPt: flipped.xPt, yPt: flipped.yPt, box }] });
   // The reported tree-form package carries the one real A4 page it renders (pages) and no node frames -- a formula document's content has no renderable-item placements at all, since the formula's glyphs travel through writePdf's own formulas side channel rather than as page content -- and is assembled only after the output bytes exist, like every construction site.
-  options?.onDocument?.(assemblePackage(content, [{ widthPt: PAGE_SIZE_A4.widthPt, heightPt: PAGE_SIZE_A4.heightPt }]));
+  options?.onDocument?.(assembleTree(content, [{ widthPt: PAGE_SIZE_A4.widthPt, heightPt: PAGE_SIZE_A4.heightPt }]));
   return out;
 }
 
 // The same-variant cross-format bridges (odt<->docx, odp<->pptx, ods<->xlsx, csv<->ods, csv<->xlsx, svg<->odg, and -- further down this section -- markdown<->docx, markdown<->odt), each bypassing PDF entirely. Every conversion above this point pivots through a LayoutDocument; these pairs don't have that problem: both formats in each pair already read into and build from the identical ContentDocument variant, so the bridge is nothing more than reader -> writer, with no layout engine, no font measurement, and no geometry-based reconstruction in between. Each forwarder below hands the pair to convertDocument (src/convert/composition.ts), whose pathfinder resolves it as a single same-variant bridge hop and runs the identical decode/read/build/encode sequence.
 export interface DocumentBridgeOptions {
   readonly signal?: AbortSignal;
-  // Called exactly once, synchronously, with the DocumentPackage this bridge built internally, before the function returns its bytes -- mirroring DocumentToPdfOptions/PdfToDocumentOptions's own onDocument. A bridge never runs a layout engine (see this section's own top-of-block comment), so the reported package carries content only, with no pages array and no node frames -- running a layout conversion purely to populate positions no caller asked for would be wasted work.
-  readonly onDocument?: (pkg: DocumentPackage) => void;
+  // Called exactly once, synchronously, with the DocumentTree this bridge built internally, before the function returns its bytes -- mirroring DocumentToPdfOptions/PdfToDocumentOptions's own onDocument. A bridge never runs a layout engine (see this section's own top-of-block comment), so the reported package carries content only, with no pages array and no node frames -- running a layout conversion purely to populate positions no caller asked for would be wasted work.
+  readonly onDocument?: (pkg: DocumentTree) => void;
   // Called once per formula construct that degraded or was approximated while an embedded formula crossed this bridge, in whichever direction the bridge translates: a MathML construct with no OMML counterpart when BUILDING a docx (src/omml/write.ts -- odtToDocx genuinely produces these; markdownToDocx threads the option for consistency but has no formula construct in its own source format to produce one from), and an OMML construct with no MathML counterpart when READING one (src/omml/read.ts -- docxToOdt and docxToMarkdown). pdfToDocx deliberately has no equivalent option -- reconstructWordprocessing recovers positioned glyphs, never a formula block, so there is nothing there to report.
   readonly onMathDiagnostic?: (diagnostic: OmmlDiagnostic, context: { readonly sourcePath?: string }) => void;
   // A synchronous resolver for markdown images with a non-data: destination (a relative path, a bare URL), threaded straight through to markdown-codec's own MarkdownImageResolver port. Only the markdown-sourced bridges (markdownToDocx, markdownToOdt) consult it; the other eight bridges ignore it -- the same precedent onMathDiagnostic already establishes for a format-specific option living on the shared type. See DocumentToPdfOptions.images for the full rationale (no I/O in documents.js itself; the Node entry points supply a filesystem resolver).
@@ -176,7 +176,7 @@ export interface ComposedDocumentOptions extends DocumentFontRegistryOptions {
   readonly clock?: ClockPort;
   readonly images?: MarkdownImageResolver;
   readonly sink?: PdfDiagnosticSink;
-  readonly onDocument?: (pkg: DocumentPackage) => void;
+  readonly onDocument?: (pkg: DocumentTree) => void;
 }
 
 // Forwards to convertDocument (src/convert/composition.ts).
@@ -428,9 +428,9 @@ export function odbToXlsx(bytes: Uint8Array<ArrayBuffer>, options?: OdbConversio
   const tables = readOdbTables(pkg, { timeZone: options?.timeZone });
   throwIfAborted(options?.signal);
   const content = odbTablesToSpreadsheetDocument(tables);
-  const out = encodePackage(buildXlsxPackageFromContent(content)); // ooxml.js's own encodePackage -- buildXlsxPackageFromContent (the flat ContentDocument builder; ooxml.js 4.0.0 gives the bare buildXlsxPackage name to the tree-form DocumentPackage counterpart) produces an OOXML package.
+  const out = encodePackage(buildXlsxPackageFromContent(content)); // ooxml.js's own encodePackage -- buildXlsxPackageFromContent (the flat ContentDocument builder; ooxml.js 4.0.0 gives the bare buildXlsxPackage name to the tree-form DocumentTree counterpart) produces an OOXML package.
   // Fires the content-only tree package OdbConversionOptions has always accepted via DocumentBridgeOptions but these two odb functions never delivered -- no layout pass runs here, so there are no pages and no node frames, exactly like every other bridge's package. Fired after the output bytes exist so a callback that inspects the tree cannot observe a half-built conversion.
-  options?.onDocument?.(assemblePackage(content));
+  options?.onDocument?.(assembleTree(content));
   return out;
 }
 
@@ -447,7 +447,7 @@ export function odbToCsv(bytes: Uint8Array<ArrayBuffer>, options?: OdbToCsvOptio
   const csv = buildOdbTableCsv(tables, options?.table);
   // The CSV writer pivots through HsqldbTable rows rather than a ContentDocument, so the reported package is built only when a callback asks for it -- the .odb's whole spreadsheet content (every table), since that is the document this conversion read, with the selected table carried by the CSV itself.
   if (options?.onDocument !== undefined) {
-    options.onDocument(assemblePackage(odbTablesToSpreadsheetDocument(tables)));
+    options.onDocument(assembleTree(odbTablesToSpreadsheetDocument(tables)));
   }
   return csv;
 }
@@ -485,6 +485,6 @@ export function odbReportToPdf(content: ContentDocument, options?: DocumentToPdf
   const { document: layout, formulas, pages } = convertWordprocessingToLayout(content, { measurer: createFontMeasurer(fonts), mathMetricsAt });
   const out = writePdf(layout, { signal: options?.signal, onSubstitution: options?.onSubstitution, formulas, fonts });
   // Assembled and reported after the output bytes exist, matching every other construction site's ownership rule.
-  options?.onDocument?.(assemblePackage(content, pages));
+  options?.onDocument?.(assembleTree(content, pages));
   return out;
 }

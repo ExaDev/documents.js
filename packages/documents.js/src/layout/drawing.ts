@@ -9,7 +9,7 @@ import type { LayoutDocument, LayoutImageAsset, LayoutItem, LayoutPage, LayoutPa
 
 export interface DrawingLayoutResult {
   readonly document: LayoutDocument;
-  // The DocumentPackage's own pages array (each rendered page's size, indexed to match every content node's own frames[].pageIndex) -- the input `doc` argument itself comes back with frames stamped in place, which together with this array is the fused unified DocumentPackage a conversion reports through onDocument.
+  // The DocumentTree's own pages array (each rendered page's size, indexed to match every content node's own frames[].pageIndex) -- the input `doc` argument itself comes back with frames stamped in place, which together with this array is the fused unified DocumentTree a conversion reports through onDocument.
   readonly pages: readonly PageSize[];
 }
 
@@ -234,10 +234,10 @@ function convertPage(page: ContentDrawPage, pageIndex: number, measurer: TextMea
   return { widthPt: page.size.widthPt, heightPt: page.size.heightPt, items };
 }
 
-// BREAKING (documents.js 2.0.0): returns a DrawingLayoutResult ({ document, pages }) rather than a bare LayoutDocument, matching the shape the other three engines already return -- the pages half of the fused DocumentPackage, alongside the frames stamped in place on `doc`'s own nodes.
+// BREAKING (documents.js 2.0.0): returns a DrawingLayoutResult ({ document, pages }) rather than a bare LayoutDocument, matching the shape the other three engines already return -- the pages half of the fused DocumentTree, alongside the frames stamped in place on `doc`'s own nodes.
 export function convertDrawingToLayout(doc: DrawingContentDocument, options: DrawingLayoutOptions): DrawingLayoutResult {
   const images: Record<string, LayoutImageAsset> = {};
   const pages = doc.pages.map((page, pageIndex) => convertPage(page, pageIndex, options.measurer, images));
-  // `doc` itself now carries every placement this pass computed, stamped in place on its own nodes (frames); the returned pages array plus that mutated content is the fused unified DocumentPackage a conversion reports through onDocument.
+  // `doc` itself now carries every placement this pass computed, stamped in place on its own nodes (frames); the returned pages array plus that mutated content is the fused unified DocumentTree a conversion reports through onDocument.
   return { document: layoutDocumentOf(doc.metadata, pages, images), pages: packagePagesOf(pages) };
 }

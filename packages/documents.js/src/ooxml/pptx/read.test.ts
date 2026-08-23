@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { minimalPptxPackage } from '../../test-support/pptx';
 import { readPptxContent } from './read';
 
-// readPptxContent is now a thin adapter over ooxml.js's own readPptxContent (the flat reader; the bare readPptx name reads the tree-form DocumentPackage since ooxml.js 4.0.0): placeholder -> layout -> master -> theme inheritance, the run-property cascade, and group-transform flattening all live upstream in ooxml.js now, with their own test coverage there. These tests exercise only the wrapping this file is actually responsible for -- ContentDocument's discriminant/formatVersion, the metadata/slides passthrough -- not the OOXML semantics readPptx itself resolves.
+// readPptxContent is now a thin adapter over ooxml.js's own readPptxContent (the flat reader; the bare readPptx name reads the tree-form DocumentTree since ooxml.js 4.0.0): placeholder -> layout -> master -> theme inheritance, the run-property cascade, and group-transform flattening all live upstream in ooxml.js now, with their own test coverage there. These tests exercise only the wrapping this file is actually responsible for -- ContentDocument's discriminant/formatVersion, the metadata/slides passthrough -- not the OOXML semantics readPptx itself resolves.
 
 describe('readPptxContent', () => {
   it('wraps ooxml.js\'s readPptxContent into a presentation ContentDocument', () => {

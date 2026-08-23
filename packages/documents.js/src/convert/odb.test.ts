@@ -1,4 +1,4 @@
-import { DocumentPackageSchema, flattenPackage } from 'document-schema.js';
+import { DocumentTreeSchema, flattenTree } from 'document-schema.js';
 import { decodePackage as decodeOoxmlPackage, readXlsxContent } from 'ooxml.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { embeddedHsqldbCachedOdbBytes, embeddedHsqldbOdbBytes } from '../test-support/odb';
@@ -80,8 +80,8 @@ describe('odbToXlsx / odbToCsv onDocument', () => {
     const out = odbToXlsx(embeddedHsqldbOdbBytes(), { onDocument: (pkg) => packages.push(pkg) });
     expect(out.byteLength).toBeGreaterThan(0);
     expect(packages).toHaveLength(1);
-    const pkg = DocumentPackageSchema.parse(packages[0]);
-    const content = flattenPackage(pkg);
+    const pkg = DocumentTreeSchema.parse(packages[0]);
+    const content = flattenTree(pkg);
     if (content.kind !== 'spreadsheet') {
       throw new Error('expected a spreadsheet ContentDocument');
     }
@@ -95,9 +95,9 @@ describe('odbToXlsx / odbToCsv onDocument', () => {
     expect(new TextDecoder().decode(out)).toContain('first order');
     expect(packages).toHaveLength(1);
     // The captured unknown narrows through the schema's own parse -- the repo's untrusted-value boundary pattern -- before the tree is flattened.
-    const pkg = DocumentPackageSchema.parse(packages[0]);
+    const pkg = DocumentTreeSchema.parse(packages[0]);
     // The selected ORDERS table is what the CSV carries; the reported package is the whole .odb -- CUSTOMERS and ORDERS both.
-    const content = flattenPackage(pkg);
+    const content = flattenTree(pkg);
     if (content.kind !== 'spreadsheet') {
       throw new Error('expected a spreadsheet ContentDocument');
     }
