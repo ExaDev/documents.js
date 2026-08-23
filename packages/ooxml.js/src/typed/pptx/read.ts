@@ -20,7 +20,7 @@ import { readDiagramText } from './diagram';
 
 // Package -> PptxDocument. Walks PresentationML directly: document order, placeholder inheritance, and theme resolution all matter for conversion fidelity in a way a flat text/shape-list projection doesn't preserve. Ported from documents.js's src/ooxml/pptx/read.ts.
 //
-// This is the flat, content-level half of the pptx read pair: readPptx (typed/document-package.ts) wraps it into a tree-form DocumentPackage, which is the primary name. Both are read-only -- this package has no PresentationML writer, so neither has an inverse.
+// This is the flat, content-level half of the pptx read pair: readPptx (typed/document-tree.ts) wraps it into a tree-form DocumentTree, which is the primary name. Both are read-only -- this package has no PresentationML writer, so neither has an inverse.
 
 export const PptxDocumentSchema = z.object({
   metadata: DocumentMetadataSchema,

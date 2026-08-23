@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { Package } from '../../src';
-import { buildDocxPackageFromContent, buildXlsxPackage, bytesToBase64, decodePackage, el, encodePackage, flattenPackage, readDocxContent, readPptxContent, readXlsx, readXlsxContent, zipPackage } from '../../src';
+import { buildDocxPackageFromContent, buildXlsxPackage, bytesToBase64, decodePackage, el, encodePackage, flattenTree, readDocxContent, readPptxContent, readXlsx, readXlsxContent, zipPackage } from '../../src';
 import { oleObjectBin } from '../../src/test-support/cfb';
 import { minimalXlsxBytes } from '../../src/test-support/embedded';
 
-// Proves ooxml.js's xlsx decode path executes inside a Cloudflare Workers isolate (workerd, via @cloudflare/vitest-pool-workers) with no Node-only APIs. The path under test -- zipPackage (fflate, pure JS) -> decodePackage -> readXlsxContent (fast-xml-parser, pure JS) -- is deliberately Node-free; if any step touched node:fs/Buffer/process the workerd isolate would throw rather than these passing. The minimal xlsx parts are built inline as a Record<string, Uint8Array> (no node:fs/readFileSync -- workerd has no fs) and round-trip through the same zip/decode path src/typed/xlsx.test.ts already exercises under node. This is the runtime proof for ooxml.js issue #17. The second test extends the same proof to the DocumentPackage boundary readXlsx/buildXlsxPackage sit on, since a structural transform is exactly the sort of pure-object code that could quietly acquire a Node dependency without any test noticing under node.
+// Proves ooxml.js's xlsx decode path executes inside a Cloudflare Workers isolate (workerd, via @cloudflare/vitest-pool-workers) with no Node-only APIs. The path under test -- zipPackage (fflate, pure JS) -> decodePackage -> readXlsxContent (fast-xml-parser, pure JS) -- is deliberately Node-free; if any step touched node:fs/Buffer/process the workerd isolate would throw rather than these passing. The minimal xlsx parts are built inline as a Record<string, Uint8Array> (no node:fs/readFileSync -- workerd has no fs) and round-trip through the same zip/decode path src/typed/xlsx.test.ts already exercises under node. This is the runtime proof for ooxml.js issue #17. The second test extends the same proof to the DocumentTree boundary readXlsx/buildXlsxPackage sit on, since a structural transform is exactly the sort of pure-object code that could quietly acquire a Node dependency without any test noticing under node.
 const enc = (s: string): Uint8Array => new TextEncoder().encode(s);
 
 // A complete minimal xlsx package: the parts every spreadsheet reader needs (root content-types, root rels, workbook, workbook rels, one worksheet). The worksheet carries a single row with a single inline-string cell (t="inlineStr") so no shared-strings part is required -- the cell's own <is><t> holds its value directly.
@@ -45,17 +45,17 @@ describe('ooxml.js xlsx decode and package assembly under the Cloudflare Workers
     expect(cell?.value).toEqual({ kind: 'string', value: 'Hello from workerd' });
   });
 
-  it('assembles and writes the tree-form DocumentPackage inside the isolate too', () => {
-    // The DocumentPackage boundary (document-schema.js's decompose/factorStyles on the way out, flattenPackage on the way back in) is pure structural transformation over plain objects, so it belongs on the Worker-isomorphic side of this package exactly as the codecs do -- asserted rather than assumed, since the whole point of this suite is that nothing in the published path quietly reaches for a Node API.
+  it('assembles and writes the tree-form DocumentTree inside the isolate too', () => {
+    // The DocumentTree boundary (document-schema.js's decompose/factorStyles on the way out, flattenTree on the way back in) is pure structural transformation over plain objects, so it belongs on the Worker-isomorphic side of this package exactly as the codecs do -- asserted rather than assumed, since the whole point of this suite is that nothing in the published path quietly reaches for a Node API.
     const pkg = decodePackage(zipPackage(minimalXlsxParts()));
     const document = readXlsx(pkg);
 
     expect(document.kind).toBe('spreadsheet');
     expect(document.kind === 'spreadsheet' ? document.children[0]?.node.name : undefined).toBe('Sheet1');
     // The tree's inverse, run in the isolate: flattening it back reproduces exactly what the content-level reader returns.
-    expect(flattenPackage(document)).toEqual(readXlsxContent(pkg));
+    expect(flattenTree(document)).toEqual(readXlsxContent(pkg));
 
-    // And the write side, all the way back out to bytes. What survives the pair is src/typed/document-package.test.ts's business, not this suite's -- here the point is only that every step of it executes under workerd, so this asserts the cell rather than the whole package.
+    // And the write side, all the way back out to bytes. What survives the pair is src/typed/document-tree.test.ts's business, not this suite's -- here the point is only that every step of it executes under workerd, so this asserts the cell rather than the whole package.
     const rewritten = readXlsx(decodePackage(encodePackage(buildXlsxPackage(document))));
     expect(rewritten.kind === 'spreadsheet' ? rewritten.children[0]?.node.cells[0]?.value : undefined).toEqual({ kind: 'string', value: 'Hello from workerd' });
   });
