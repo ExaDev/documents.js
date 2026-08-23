@@ -1,3 +1,5 @@
+## [4.9.1](https://github.com/ExaDev/documents.js/compare/document-schema.js@4.9.0...document-schema.js@4.9.1) (2026-08-23)
+
 # [4.9.0](https://github.com/ExaDev/documents.js/compare/document-schema.js@4.8.0...document-schema.js@4.9.0) (2026-08-22)
 
 
