@@ -1,4 +1,4 @@
-// Golden-file guard and regenerator for the committed example JSON in examples/. Each example is a real, populated instance of one of this package's pivot models (a ContentDocument per variant, plus a LayoutDocument and a full DocumentPackage), produced by reading a real minimal test fixture through the same reader or conversion the public API uses. They exist as documentation: open one and you can see the pivot shape for that format without reverse-engineering it from a schema.
+// Golden-file guard and regenerator for the committed example JSON in examples/. Each example is a real, populated instance of one of this package's pivot models (a ContentDocument per variant, plus a LayoutDocument and a full DocumentTree), produced by reading a real minimal test fixture through the same reader or conversion the public API uses. They exist as documentation: open one and you can see the pivot shape for that format without reverse-engineering it from a schema.
 //
 // Two modes:
 //  - default (`pnpm test`): reads each committed examples/*.json and asserts it
@@ -10,8 +10,8 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import type { ContentDocument, DocumentPackage } from 'document-schema.js';
-import { contentDocumentWithSchema, documentFromJson, documentPackageWithSchema } from 'document-schema.js';
+import type { ContentDocument, DocumentTree } from 'document-schema.js';
+import { contentDocumentWithSchema, documentFromJson, documentTreeWithSchema } from 'document-schema.js';
 import { decodePackage as decodeOoxmlPackage } from 'ooxml.js';
 import { decodePackage as decodeOdfPackage } from 'odf.js';
 import { docxToPdf, odgToPdf, odfToPdf, odsToPdf, pptxToPdf } from './convert/convert';
@@ -53,17 +53,17 @@ function assertContentExample(name: string, document: ContentDocument): void {
   expect(result.value.kind, `${name}: variant`).toBe(document.kind);
 }
 
-function assertPackageExample(name: string, pkg: DocumentPackage): void {
+function assertPackageExample(name: string, pkg: DocumentTree): void {
   if (REGEN) {
-    writeJson(name, documentPackageWithSchema(pkg));
+    writeJson(name, documentTreeWithSchema(pkg));
   }
   const result = documentFromJson(readJson(name));
-  expect(result.kind, `${name}: schema`).toBe('DocumentPackage');
+  expect(result.kind, `${name}: schema`).toBe('DocumentTree');
 }
 
-// The package examples come from real conversion runs: each variant's onDocument callback hands back the tree-form DocumentPackage (decomposed content with the layout pass's frames stamped onto its own nodes, plus the pages array and the minted styles table) the conversion built, which is the README's own recommended way to obtain the intermediate pivot model. The pdf-codec LayoutDocument no longer has a committed example: it stopped being a schema-serialised pivot when the item family demoted to pdf-codec (a LayoutDocument is that codec's own read/write artefact now, with no $schema-stamped JSON envelope to validate a golden against).
-function capturePackage(convert: (onDocument: (pkg: DocumentPackage) => void) => Uint8Array<ArrayBuffer>): DocumentPackage {
-  let captured: DocumentPackage | undefined;
+// The package examples come from real conversion runs: each variant's onDocument callback hands back the tree-form DocumentTree (decomposed content with the layout pass's frames stamped onto its own nodes, plus the pages array and the minted styles table) the conversion built, which is the README's own recommended way to obtain the intermediate pivot model. The pdf-codec LayoutDocument no longer has a committed example: it stopped being a schema-serialised pivot when the item family demoted to pdf-codec (a LayoutDocument is that codec's own read/write artefact now, with no $schema-stamped JSON envelope to validate a golden against).
+function capturePackage(convert: (onDocument: (pkg: DocumentTree) => void) => Uint8Array<ArrayBuffer>): DocumentTree {
+  let captured: DocumentTree | undefined;
   convert((pkg) => {
     captured = pkg;
   });

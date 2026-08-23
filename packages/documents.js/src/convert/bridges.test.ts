@@ -1,4 +1,4 @@
-import { flattenPackage, type ContentDocument, type DocumentPackage } from 'document-schema.js';
+import { flattenTree, type ContentDocument, type DocumentTree } from 'document-schema.js';
 
 import { childrenWithTag, decodeOdfText, decodePackage as decodeOdfPackage, elementsWithTag } from 'odf.js';
 import { attr } from 'ooxml.js';
@@ -149,17 +149,17 @@ function paragraphTexts(content: ReturnType<typeof docxContentOf>): string[] {
   return content.sections[0]!.blocks.filter((b) => b.kind === 'paragraph').map((b) => b.runs.map((r) => r.text).join(''));
 }
 
-describe('onDocument (DocumentPackage side channel)', () => {
-  // A bridge never runs a layout engine (see convert.ts's own DocumentBridgeOptions comment), so its DocumentPackage always carries content only, with no pages array and no node frames -- unlike the PDF-pivot conversions, which populate both (see convert.test.ts's own docxToPdf onDocument test).
+describe('onDocument (DocumentTree side channel)', () => {
+  // A bridge never runs a layout engine (see convert.ts's own DocumentBridgeOptions comment), so its DocumentTree always carries content only, with no pages array and no node frames -- unlike the PDF-pivot conversions, which populate both (see convert.test.ts's own docxToPdf onDocument test).
   it('calls onDocument with content populated and pages left undefined', () => {
-    let captured: DocumentPackage | undefined;
+    let captured: DocumentTree | undefined;
     const docxBytes = odtToDocx(minimalOdtBytes(), { onDocument: (pkg) => { captured = pkg; } });
     expect(docxBytes.length).toBeGreaterThan(0);
 
     expect(captured).toBeDefined();
     const pkg = captured!;
     expect(pkg.kind).toBe('wordprocessing');
-    expect(flattenPackage(pkg).kind).toBe('wordprocessing');
+    expect(flattenTree(pkg).kind).toBe('wordprocessing');
     expect(pkg.pages).toBeUndefined();
   });
 });
@@ -673,13 +673,13 @@ describe('markdownToDocx/docxToMarkdown and markdownToOdt/odtToMarkdown never in
   });
 });
 
-describe('onDocument (DocumentPackage side channel): markdown bridges', () => {
+describe('onDocument (DocumentTree side channel): markdown bridges', () => {
   it('markdownToDocx calls onDocument with content populated and pages left undefined', () => {
-    let captured: DocumentPackage | undefined;
+    let captured: DocumentTree | undefined;
     const docxBytes = markdownToDocx(encodeMarkdownText(richMarkdownText()), { onDocument: (pkg) => { captured = pkg; } });
     expect(docxBytes.length).toBeGreaterThan(0);
     expect(captured).toBeDefined();
-    expect(flattenPackage(captured!).kind).toBe('wordprocessing');
+    expect(flattenTree(captured!).kind).toBe('wordprocessing');
     expect(captured!.pages).toBeUndefined();
   });
 });

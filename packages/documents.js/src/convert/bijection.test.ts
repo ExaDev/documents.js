@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { ConstructDescriptor, ContentBlock, ContentDocument, ContentShape, DocumentPackage, PageSize } from 'document-schema.js';
-import { assemblePackage, ContentDocumentSchema, DocumentPackageSchema, factorStyles, flattenPackage } from 'document-schema.js';
+import type { ConstructDescriptor, ContentBlock, ContentDocument, ContentShape, DocumentTree, PageSize } from 'document-schema.js';
+import { assembleTree, ContentDocumentSchema, DocumentTreeSchema, factorStyles, flattenTree } from 'document-schema.js';
 // The canonicaliser is deliberately absent from document-schema.js's index barrel (it exists to give the minting pass one tuple-identity recipe, not to publish a sort order as an API guarantee), so it comes in by subpath -- the same one recipe the transform itself uses, never a second one restated here.
 import { canonicalise } from 'document-schema.js/canonicalise';
 import { decodePackage as decodeOdfPackage } from 'odf.js';
@@ -79,15 +79,15 @@ interface CorpusEntry {
   readonly pages?: readonly PageSize[];
 }
 
-function captured(convert: (onDocument: (pkg: DocumentPackage) => void) => Uint8Array<ArrayBuffer>): { content: ContentDocument; pages: PageSize[] } {
-  let capturedPkg: DocumentPackage | undefined;
+function captured(convert: (onDocument: (pkg: DocumentTree) => void) => Uint8Array<ArrayBuffer>): { content: ContentDocument; pages: PageSize[] } {
+  let capturedPkg: DocumentTree | undefined;
   convert((pkg) => {
     capturedPkg = pkg;
   });
   if (capturedPkg === undefined) {
     throw new Error('conversion did not invoke onDocument');
   }
-  return { content: flattenPackage(capturedPkg), pages: capturedPkg.pages ?? [] };
+  return { content: flattenTree(capturedPkg), pages: capturedPkg.pages ?? [] };
 }
 
 const SVG_TEXT = '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><title>Corpus drawing</title><rect x="1" y="1" width="20" height="10" fill="black"/><ellipse cx="30" cy="6" rx="4" ry="2"/><line x1="1" y1="20" x2="10" y2="20"/><path d="M 0 30 L 10 30 C 20 30 20 40 10 40 Z"/></svg>';
@@ -274,12 +274,12 @@ function editorOdgBytes(): Uint8Array<ArrayBuffer> {
 
 describe('decompose/flatten bijection laws over the real corpus', () => {
   describe.each(corpus())('$name', ({ content, pages }) => {
-    it('law (i): flattenPackage(assemblePackage(c)) reproduces c exactly', () => {
+    it('law (i): flattenTree(assembleTree(c)) reproduces c exactly', () => {
       expect(ContentDocumentSchema.safeParse(content).success).toBe(true);
       const snapshot = structuredClone(content);
-      const tree = assemblePackage(content, pages);
-      expect(DocumentPackageSchema.safeParse(tree).success).toBe(true);
-      const flat = flattenPackage(tree);
+      const tree = assembleTree(content, pages);
+      expect(DocumentTreeSchema.safeParse(tree).success).toBe(true);
+      const flat = flattenTree(tree);
       expect(ContentDocumentSchema.safeParse(flat).success).toBe(true);
       expectStructurallyEqual(flat, snapshot);
       // decompose embeds the source's own nodes, so re-comparing the source against its snapshot also pins that neither direction of the round trip mutated the input in place.
@@ -288,8 +288,8 @@ describe('decompose/flatten bijection laws over the real corpus', () => {
 
     it('law (ii): the flat encoding is fully materialised and effective-equal to the original', () => {
       const snapshot = structuredClone(content);
-      const tree = assemblePackage(content, pages);
-      const flat = flattenPackage(tree);
+      const tree = assembleTree(content, pages);
+      const flat = flattenTree(tree);
       expect(containsStyleRef(flat)).toBe(false);
       // Resolve-then-compare in the flatten-as-resolver form: materialising every ref away and comparing structurally IS the effective-property comparison, because gap-fill restoration is exactly what resolution does.
       expectStructurallyEqual(flat, snapshot);
@@ -297,27 +297,27 @@ describe('decompose/flatten bijection laws over the real corpus', () => {
     });
 
     it('law (iii): assembling the flattened tree again mints the identical table and tree', () => {
-      const first = assemblePackage(content, pages);
-      const second = assemblePackage(flattenPackage(first), first.pages);
+      const first = assembleTree(content, pages);
+      const second = assembleTree(flattenTree(first), first.pages);
       expectStructurallyEqual(second, first);
       // Factoring an already-factored package is the same law through the public re-mint entry point.
       expectStructurallyEqual(factorStyles(first), first);
     });
 
     it('mints deterministically', () => {
-      expectStructurallyEqual(assemblePackage(content, pages), assemblePackage(content, pages));
+      expectStructurallyEqual(assembleTree(content, pages), assembleTree(content, pages));
     });
   });
 
   // The gate must not pass vacuously: minting has to actually run over real corpus documents (repeated direct formatting is common reader output -- the docx extras and editor builds carry it), so at least one entry's tree carries a non-empty styles table and at least one wrapper ref. If this ever fails because no entry mints, the corpus has stopped exercising laws (ii) and (iii) and needs a real formatting-repetition fixture, not a weakened assertion.
   it('the corpus exercises real minting (at least one entry carries a styles table)', () => {
-    const minting = corpus().filter((entry) => Object.keys(assemblePackage(entry.content, entry.pages).styles ?? {}).length > 0);
+    const minting = corpus().filter((entry) => Object.keys(assembleTree(entry.content, entry.pages).styles ?? {}).length > 0);
     expect(minting.length).toBeGreaterThan(0);
   });
 
   // The same anti-vacuity guard, narrowed to the construct entries: laws (ii) and (iii) say nothing about construct groups unless a construct group actually carries a ref, and a construct entry that minted nothing would pass all three laws while proving only that its leaves round-trip. Every construct entry except the deliberately empty one is built to mint on its own construct wrapper, so this pins that the promotion and minting really do compose over the corpus rather than only over the hand-built fixture document-schema.js's own minting tests use.
   it('the construct corpus mints refs onto the construct groups themselves', () => {
-    const withConstructRefs = constructCorpus().filter((entry) => constructGroupRefsOf(assemblePackage(entry.content, entry.pages)).length > 0);
+    const withConstructRefs = constructCorpus().filter((entry) => constructGroupRefsOf(assembleTree(entry.content, entry.pages)).length > 0);
     expect(withConstructRefs.map((entry) => entry.name)).toEqual(constructCorpus().filter((entry) => entry.name !== 'construct with no children (an open marker immediately closed)').map((entry) => entry.name));
   });
 
@@ -347,7 +347,7 @@ describe('decompose/flatten bijection laws over the real corpus', () => {
 });
 
 // Every style ref sitting on a construct-descriptor wrapper anywhere in a minted tree: a group node carrying a `kind` that is neither 'paragraph' nor a container discriminant is a ConstructDescriptor, which is exactly what construct groups (and nothing else) hold.
-function constructGroupRefsOf(pkg: DocumentPackage): string[] {
+function constructGroupRefsOf(pkg: DocumentTree): string[] {
   const refs: string[] = [];
   function walk(value: unknown): void {
     if (Array.isArray(value)) {

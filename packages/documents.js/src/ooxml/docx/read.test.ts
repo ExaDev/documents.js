@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { docxWithTableCellEquationPackage, minimalDocxPackage } from '../../test-support/docx';
 import { readDocxContent } from './read';
 
-// readDocxContent is now a thin adapter over ooxml.js's own readDocxContent (the flat reader; the bare readDocx name reads the tree-form DocumentPackage since ooxml.js 4.0.0): the WordprocessingML style cascade, theme resolution, and document-order section/block walking all live upstream in ooxml.js now, with their own test coverage there. These tests exercise only the wrapping this file is actually responsible for -- ContentDocument's discriminant/formatVersion, the metadata/sections passthrough -- not the OOXML semantics readDocx itself resolves.
+// readDocxContent is now a thin adapter over ooxml.js's own readDocxContent (the flat reader; the bare readDocx name reads the tree-form DocumentTree since ooxml.js 4.0.0): the WordprocessingML style cascade, theme resolution, and document-order section/block walking all live upstream in ooxml.js now, with their own test coverage there. These tests exercise only the wrapping this file is actually responsible for -- ContentDocument's discriminant/formatVersion, the metadata/sections passthrough -- not the OOXML semantics readDocx itself resolves.
 
 describe('readDocxContent', () => {
   it('wraps ooxml.js\'s readDocxContent into a wordprocessing ContentDocument', () => {
