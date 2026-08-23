@@ -647,8 +647,8 @@ importers:
         specifier: ^5.0.0
         version: link:../document-schema.js
       documents.js:
-        specifier: ^5.0.3
-        version: 5.0.3
+        specifier: ^6.0.0
+        version: link:../documents.js
       markdown-codec:
         specifier: ^6.0.0
         version: link:../markdown-codec
@@ -3667,10 +3667,6 @@ packages:
   anynum@1.0.1:
     resolution: {integrity: sha512-N6//FLET/tXYNM/F6ABca1oH6fWB+KlTt909Le28WMDBk8oaT4vY17DCrwg2MvmuqUKt3Ni4N5dGJ/EoBgcO6A==}
 
-  archive-codec@1.1.2:
-    resolution: {integrity: sha512-ZKgDeITjFuTtMGBpIFnIWzaYs3SprLoTz8WquZj3b8/9s+GFb78qBnM9sBSFT1tFWztuVB51314ai4G71Nq7Dg==}
-    engines: {node: '>=20'}
-
   argparse@2.0.1:
     resolution: {integrity: sha512-8+9WqebbFzpX9OR+Wa6O29asIogeRMzcGtAINdpMHHyAg10f05aSFVBbcEqGf/PXw1EjAZ+q2/bEBg3DvurK3Q==}
 
@@ -3812,10 +3808,6 @@ packages:
 
   buffer-from@1.1.2:
     resolution: {integrity: sha512-E+XQCRwSbaaiChtv6k6Dwgc+bx+Bs6vuKJHHl5kox/BaKbhiXzqQOwK4cO22yElGp2OCmjwVhT3HmxgyPGnJfQ==}
-
-  byte-codec@1.1.13:
-    resolution: {integrity: sha512-xTmuWdFgGsMULhB+3e7AKcibeVuMOO2Ahglpal40EZDVTpKXLFmXnXrEwLOz5o/cyps8KU6k9MdCwg7MJ5UHDA==}
-    engines: {node: '>=20'}
 
   cac@7.0.0:
     resolution: {integrity: sha512-tixWYgm5ZoOD+3g6UTea91eow5z6AAHaho3g0V9CNSNb45gM8SmflpAc+GRd1InC4AqN/07Unrgp56Y94N9hJQ==}
@@ -4141,19 +4133,6 @@ packages:
   dir-glob@3.0.1:
     resolution: {integrity: sha512-WkrWp9GR4KXfKGYzOLmTuGVi1UWFfws377n9cc55/tb6DuqyF6pcQ5AbiHEshaDpY9v6oaSr2XCDidGmMwdzIA==}
     engines: {node: '>=8'}
-
-  document-schema.js@4.10.0:
-    resolution: {integrity: sha512-Ng6prPqandODGy6Gxa47Xop+CH0u9rBXzI5ucIgu1a5sOftjSYuby4fvff/vopmG52Wgz/B2qcb/nE1JvNf8kQ==}
-    engines: {node: '>=20'}
-
-  document-schema.js@5.0.0:
-    resolution: {integrity: sha512-IIt0MtyBXTvC+U0J8ptPEzuUzBz3Espf7qqpzfPESO2r7JaUVMCo0i/j5QiPdjGcT2p1p0Ha3YYNWo4sHVh2mA==}
-    engines: {node: '>=20'}
-
-  documents.js@5.0.3:
-    resolution: {integrity: sha512-qPaBOG6Wf551L0Zie3CfpWwWfcqHhIWtCFZTInwETmrmVPVLmmh56wFeUMitNd6K6xpyIUUHO8gaE+BCoX+1Ig==}
-    engines: {node: '>=20'}
-    hasBin: true
 
   dom-helpers@5.2.1:
     resolution: {integrity: sha512-nRCa7CK3VTrM2NmGkIy4cbK7IZlgBE/PYMn55rrXefr5xXDP0LdtfPnblFDoVdcAfslJ7or6iqAUnx0CCGIWQA==}
@@ -5242,10 +5221,6 @@ packages:
     resolution: {integrity: sha512-hXdUTZYIVOt1Ex//jAQi+wTZZpUpwBj/0QsOzqegb3rGMMeJiSEu5xLHnYfBrRV4RH2+OCSOO95Is/7x1WJ4bw==}
     engines: {node: '>=10'}
 
-  markdown-codec@5.0.3:
-    resolution: {integrity: sha512-jeofmljNeEF6EJYFaX+RoS5GSek61GgC7+Qq6BBK3t4c7Pk8emOzSNZh6jctsxhSZQnxG9GhTlJzNN13Tss7QQ==}
-    engines: {node: '>=20'}
-
   marked-terminal@7.3.0:
     resolution: {integrity: sha512-t4rBvPsHc57uE/2nJOLmMbZCQ4tgAccAED3ngXQqW6g+TxA488JzJ+FK3lQkzBQOI1mRV/r/Kq+1ZlJ4D0owQw==}
     engines: {node: '>=16.0.0'}
@@ -5479,10 +5454,6 @@ packages:
     resolution: {integrity: sha512-4a+OsYv9UktOJKE+l1A4OufDgdRF9PifWj+tJnHURo/P+WOxpG4GzUFL9qCalmWauao6ogiG+QvnCovwPoyAWA==}
     engines: {node: '>=12.20.0'}
 
-  odf.js@5.5.2:
-    resolution: {integrity: sha512-T7QJVtnX5M6cFQTrKI5LCEuigx4CbpnEY8FFG/Ami/Z8/2Keih8PNwR7DCqOfST+wGa63DBIuPxeWZekcwUQrg==}
-    engines: {node: '>=20'}
-
   onetime@5.1.2:
     resolution: {integrity: sha512-kbpaSSGJTWdAY5KPVeMOKXSrPtr8C8C7wodJbcsd51jRnmD+GZu8Y0VoU6Dm5Z4vWr0Ig/1NKuWRKf7j5aaYSg==}
     engines: {node: '>=6'}
@@ -5490,10 +5461,6 @@ packages:
   onetime@6.0.0:
     resolution: {integrity: sha512-1FlR+gjXK7X+AsAHso35MnyN5KqGwJRi/31ft6x0M194ht7S+rWAvd7PHss9xSKMzE0asv1pyIHaJYq+BbacAQ==}
     engines: {node: '>=12'}
-
-  ooxml.js@5.0.2:
-    resolution: {integrity: sha512-zHK3pS1Q9/TUflTR7z+ZlJDt7HmP5IHY8bYuX4aQMvCW/oluNuQsNARbe/FxCH8mylGx3xyNBSFtxyK+k/1UFA==}
-    engines: {node: '>=20'}
 
   openapi-types@12.1.3:
     resolution: {integrity: sha512-N4YtSYJqghVu4iek2ZUvcN/0aqH1kRDuNqzcycDxhOUpg7GdvLa2F3DgS6yBNhInhv2r/6I0Flkn7CqL8+nIcw==}
@@ -5628,10 +5595,6 @@ packages:
 
   pathe@2.0.3:
     resolution: {integrity: sha512-WUjGcAqP1gQacoQe+OBJsFA7Ld4DyXuUIjZ5cc75cLHvJ7dtNsTugphxIADwspS+AraAUePCKrSVtPLFj/F88w==}
-
-  pdf-codec@3.4.4:
-    resolution: {integrity: sha512-I+W5qXhTs2C/wfZ/AWeJ9J3O++j+K18hpjIBHbADuJNaP6uVN/mvJxa1skUzNbUadlzL5Lg5c71glfFs7u1ufQ==}
-    engines: {node: '>=20'}
 
   picocolors@1.1.1:
     resolution: {integrity: sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==}
@@ -9449,10 +9412,6 @@ snapshots:
 
   anynum@1.0.1: {}
 
-  archive-codec@1.1.2:
-    dependencies:
-      fflate: 0.8.3
-
   argparse@2.0.1: {}
 
   argue-cli@3.1.0: {}
@@ -9606,10 +9565,6 @@ snapshots:
       update-browserslist-db: 1.3.1(browserslist@4.28.8)
 
   buffer-from@1.1.2: {}
-
-  byte-codec@1.1.13:
-    dependencies:
-      fflate: 0.8.3
 
   cac@7.0.0: {}
 
@@ -9903,26 +9858,6 @@ snapshots:
   dir-glob@3.0.1:
     dependencies:
       path-type: 4.0.0
-
-  document-schema.js@4.10.0:
-    dependencies:
-      zod: 4.4.3
-
-  document-schema.js@5.0.0:
-    dependencies:
-      zod: 4.4.3
-
-  documents.js@5.0.3:
-    dependencies:
-      byte-codec: 1.1.13
-      document-schema.js: 4.10.0
-      fflate: 0.8.3
-      markdown-codec: 5.0.3
-      odf.js: 5.5.2
-      ooxml.js: 5.0.2
-      pdf-codec: 3.4.4
-      temml: 0.13.4
-      zod: 4.4.3
 
   dom-helpers@5.2.1:
     dependencies:
@@ -11146,11 +11081,6 @@ snapshots:
     dependencies:
       semver: 7.8.5
 
-  markdown-codec@5.0.3:
-    dependencies:
-      document-schema.js: 4.10.0
-      zod: 4.4.3
-
   marked-terminal@7.3.0(marked@15.0.12):
     dependencies:
       ansi-escapes: 7.3.0
@@ -11332,13 +11262,6 @@ snapshots:
 
   obug@2.1.4: {}
 
-  odf.js@5.5.2:
-    dependencies:
-      document-schema.js: 4.10.0
-      fast-xml-parser: 5.11.0
-      fflate: 0.8.3
-      zod: 4.4.3
-
   onetime@5.1.2:
     dependencies:
       mimic-fn: 2.1.0
@@ -11346,14 +11269,6 @@ snapshots:
   onetime@6.0.0:
     dependencies:
       mimic-fn: 4.0.0
-
-  ooxml.js@5.0.2:
-    dependencies:
-      archive-codec: 1.1.2
-      document-schema.js: 4.10.0
-      fast-xml-parser: 5.11.0
-      fflate: 0.8.3
-      zod: 4.4.3
 
   openapi-types@12.1.3: {}
 
@@ -11471,13 +11386,6 @@ snapshots:
   path-type@4.0.0: {}
 
   pathe@2.0.3: {}
-
-  pdf-codec@3.4.4:
-    dependencies:
-      byte-codec: 1.1.13
-      document-schema.js: 5.0.0
-      fflate: 0.8.3
-      zod: 4.4.3
 
   picocolors@1.1.1: {}
 
