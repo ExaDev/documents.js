@@ -1,0 +1,71 @@
+name: Bug report
+description: A package does something wrong -- a parse fails, a conversion loses something it should keep, or an API misbehaves.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Fidelity issues are welcome here. If a conversion drops or mangles something, attach the source document if you can share it -- a real file that reproduces the problem is worth more than a description of it.
+
+        If the bug has security impact (a hostile document causing traversal, unbounded allocation, or code execution), please report it privately instead: see [SECURITY.md](https://github.com/ExaDev/documents.js/blob/main/SECURITY.md).
+
+  - type: dropdown
+    id: package
+    attributes:
+      label: Package
+      description: Which package is at fault. Pick the one the bug is actually in, not the one you called -- if you are not sure, pick the one you called and say so below.
+      options:
+        - archive-codec
+        - byte-codec
+        - document-cli
+        - document-compute.js
+        - document-mcp
+        - document-outline.js
+        - document-schema.js
+        - documents
+        - documents.js
+        - markdown-codec
+        - odf.js
+        - ooxml.js
+        - pdf-codec
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Package version
+      description: The version you are actually running (`pnpm list <package>`), not the range in your manifest.
+      placeholder: "6.0.0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you got, and what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: The smallest code or CLI invocation that shows the problem. Attach the input document if you can share it.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Node version, package manager, OS, and the runtime if it is not Node (a browser, a Worker, workerd).
+      placeholder: |
+        Node: 22.18.0
+        pnpm: 11.6.0
+        OS: macOS 15.1
+        Runtime: Node (also fails in Cloudflare Workers)
+    validations:
+      required: false

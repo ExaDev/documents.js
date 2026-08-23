@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/ExaDev/documents.js/security/advisories/new
+    about: Report privately through a draft advisory instead of a public issue. See SECURITY.md for what is in scope.
+  - name: Contributing guide
+    url: https://github.com/ExaDev/documents.js/blob/main/CONTRIBUTING.md
+    about: Git hooks, commit conventions, and the checklist for adding a package to the workspace.
