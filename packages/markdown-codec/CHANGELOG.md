@@ -1,3 +1,21 @@
+# [6.0.0](https://github.com/ExaDev/documents.js/compare/markdown-codec@5.0.3...markdown-codec@6.0.0) (2026-08-23)
+
+
+* refactor(markdown-codec)!: rename DocumentPackage to DocumentTree ([2d583f3](https://github.com/ExaDev/documents.js/commit/2d583f3031fd21fb86e5d8967619fce9a1508921)), closes [#661](https://github.com/ExaDev/documents.js/issues/661)
+
+
+### BREAKING CHANGES
+
+* every DocumentPackage-rooted export this package
+consumes or re-exports (DocumentTree, TreeNode/Group/Leaf and their
+*Schema/isTreeX siblings, assembleTree, flattenTree) tracks
+document-schema.js 5.0.0's rename.
+
+
+### Dependencies
+
+- Updated document-schema.js to ^5.0.0
+
 ## [5.0.3](https://github.com/ExaDev/documents.js/compare/markdown-codec@5.0.2...markdown-codec@5.0.3) (2026-08-23)
 
 
