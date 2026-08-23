@@ -27,12 +27,17 @@ runs:
     - run: pnpm install --frozen-lockfile
       shell: bash
 
-    # turbo's local filesystem cache, keyed per task. This is what makes one root job per task cheaper than the per-package workflows it replaces: a package whose inputs are unchanged since the last run on this branch replays its cached result instead of re-running tsdown/tsc/vitest. restore-keys falls back to the newest cache for the same task when no exact commit match exists, which is the normal case on a new commit.
+    # turbo's local filesystem cache, keyed per task. This is what makes one root job per task cheaper than the per-package workflows it replaces: a package whose inputs are unchanged since the last run on this branch replays its cached result instead of re-running tsdown/tsc/vitest.
+    #
+    # The key was previously `...-${{ github.sha }}`, which is wrong in both directions. actions/cache treats a key as immutable, so the first run for a commit wrote the cache and every re-run of that same commit found its exact key already present and skipped the save -- meaning a re-run could never repair or extend a cache written by a partially failed run. More importantly the key said nothing about the lockfile or the pipeline definition, so `restore-keys` would happily restore a cache built under a different pnpm-lock.yaml or a different turbo.json into a run whose task graph had changed underneath it.
+    #
+    # hashFiles puts the lockfile and turbo.json into the key itself, so changing either starts a fresh cache lineage rather than inheriting a stale one; github.run_id keeps every run's key unique, so each run genuinely saves what it computed. The two-level restore-keys then prefers a cache from the same lockfile/turbo.json generation and falls back to the newest cache for the task only when that generation has no entry yet.
     - uses: actions/cache@v4
       with:
         path: .turbo
-        key: turbo-${{ inputs.task }}-${{ runner.os }}-${{ github.sha }}
+        key: turbo-${{ inputs.task }}-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'turbo.json') }}-${{ github.run_id }}
         restore-keys: |
+          turbo-${{ inputs.task }}-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'turbo.json') }}-
           turbo-${{ inputs.task }}-${{ runner.os }}-
 
     - name: Run ${{ inputs.task }}
