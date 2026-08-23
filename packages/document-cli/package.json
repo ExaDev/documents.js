@@ -91,7 +91,7 @@
   "dependencies": {
     "commander": "^15.0.0",
     "document-outline.js": "^2.1.0",
-    "document-schema.js": "^4.9.0",
+    "document-schema.js": "^4.9.1",
     "documents.js": "^5.0.0",
     "ink": "^7.1.1",
     "ink-text-input": "^6.0.0",
