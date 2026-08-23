@@ -792,7 +792,7 @@ importers:
   packages/markdown-codec:
     dependencies:
       document-schema.js:
-        specifier: ^4.9.0
+        specifier: ^4.9.1
         version: link:../document-schema.js
       zod:
         specifier: ^4.4.3
