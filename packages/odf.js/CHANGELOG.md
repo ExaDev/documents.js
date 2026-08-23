@@ -1,3 +1,22 @@
+# [6.0.0](https://github.com/ExaDev/documents.js/compare/odf.js@5.5.2...odf.js@6.0.0) (2026-08-23)
+
+
+* refactor(odf)!: rename DocumentPackage to DocumentTree, land division's text:filter-name residue ([8c5e0b0](https://github.com/ExaDev/documents.js/commit/8c5e0b0cec3bbde2066a3042381d8a12b56603bc)), closes [#719](https://github.com/ExaDev/documents.js/issues/719) [#661](https://github.com/ExaDev/documents.js/issues/661) [#743](https://github.com/ExaDev/documents.js/issues/743)
+
+
+### BREAKING CHANGES
+
+* every DocumentPackage-rooted export this package
+re-exports or returns (DocumentTree, TreeNode/Group/Leaf/BlockLeaf and
+siblings) tracks document-schema.js 5.0.0's rename. A division
+construct's external-chapter link is read from `linked`, not `source`;
+`source` now carries text:filter-name residue when present.
+
+
+### Dependencies
+
+- Updated document-schema.js to ^5.0.0
+
 ## [5.5.2](https://github.com/ExaDev/documents.js/compare/odf.js@5.5.1...odf.js@5.5.2) (2026-08-23)
 
 
