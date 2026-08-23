@@ -1,0 +1,9 @@
+# Commits that changed formatting only, and should not be blamed for the lines they touched.
+#
+# `git blame` does not read this file on its own. Point git at it once per clone:
+#
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+#
+# GitHub's blame view reads it automatically, with no configuration.
+#
+# Only whole-tree reformats belong here -- a commit that changed behaviour must stay blameable even if it also reformatted.

@@ -1,0 +1,54 @@
+name: Feature request
+description: A format construct, API, or tool that should exist and does not.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The most useful requests here name a specific document construct that does not survive a conversion, and say which direction matters. Each package's README documents what it deliberately does not do -- worth a look first, since some gaps are decisions rather than omissions.
+
+  - type: dropdown
+    id: package
+    attributes:
+      label: Package
+      description: Where the work would land. Pick "not sure" territory by choosing the package you would call and explaining below.
+      options:
+        - archive-codec
+        - byte-codec
+        - document-cli
+        - document-compute.js
+        - document-mcp
+        - document-outline.js
+        - document-schema.js
+        - documents
+        - documents.js
+        - markdown-codec
+        - odf.js
+        - ooxml.js
+        - pdf-codec
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you are trying to do
+      description: The actual task, not the API you think would solve it. What document, what conversion, what output.
+    validations:
+      required: true
+
+  - type: textarea
+    id: blocker
+    attributes:
+      label: Why the current API cannot do it
+      description: What you tried and where it stopped -- a construct that comes back empty, a format pair that is not offered, a type that will not express what you need.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you have in mind
+      description: Optional. A signature, a schema field, a CLI flag -- whatever shape you were expecting.
+    validations:
+      required: false
