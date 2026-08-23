@@ -81,7 +81,7 @@
   "license": "MIT",
   "packageManager": "pnpm@11.6.0",
   "dependencies": {
-    "document-schema.js": "^4.9.1",
+    "document-schema.js": "^4.10.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
