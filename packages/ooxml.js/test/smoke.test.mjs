@@ -21,8 +21,8 @@ const FUNCTIONS = [
   'readXlsxContent',
   'buildDocxPackageFromContent',
   'buildXlsxPackageFromContent',
-  'assemblePackage',
-  'flattenPackage',
+  'assembleTree',
+  'flattenTree',
   'toCompact',
   'fromCompact',
   'decodeCompactPackage',
@@ -76,7 +76,7 @@ describe.each([
     expect(firstBlock?.kind === 'paragraph' ? firstBlock.runs[0]?.text : undefined).toBe('Smoke & test');
   });
 
-  it('readDocx returns the tree-form DocumentPackage, and buildDocxPackage writes it back', () => {
+  it('readDocx returns the tree-form DocumentTree, and buildDocxPackage writes it back', () => {
     const document = api.readDocx(pkg1);
     expect(document.kind).toBe('wordprocessing');
     expect(api.readDocx(api.decodePackage(api.encodePackage(api.buildDocxPackage(document))))).toEqual(document);
