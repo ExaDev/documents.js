@@ -384,7 +384,7 @@ describe('extraction policy', () => {
     ]);
     expect(graph.nodes.filter((node) => node.kind === 'value')).toEqual([]);
     expect(graph.edges.filter((edge) => edge.kind === 'PROPERTY')).toEqual([]);
-    const roots = graph.nodes.filter((node) => node.kind === 'documentPackage');
+    const roots = graph.nodes.filter((node) => node.kind === 'documentTree');
     expect(roots).toHaveLength(2);
     for (const root of roots) expect(root.metadata).toEqual({ title: 'Same title' });
   });
@@ -403,7 +403,7 @@ describe('extraction policy', () => {
     );
     const valueNodes = graph.nodes.filter((node) => node.kind === 'value');
     expect(valueNodes).toEqual([{ id: valueNodes[0]!.id, kind: 'value', value: 'Shared title' }]);
-    const roots = graph.nodes.filter((node) => node.kind === 'documentPackage');
+    const roots = graph.nodes.filter((node) => node.kind === 'documentTree');
     expect(roots).toHaveLength(2);
     for (const root of roots) expect('title' in (root.metadata as Record<string, unknown>)).toBe(false);
     expect(graph.edges.filter((edge) => edge.kind === 'PROPERTY')).toHaveLength(2);
@@ -425,7 +425,7 @@ describe('extraction policy', () => {
     const heading = graph.nodes.find((node) => node.kind === 'paragraph' && node.headingLevel === 1)!;
     // The dereferenced ENTRY CONTENT rides on the node -- never the document-local key 's1'.
     expect(heading.style).toEqual(entry);
-    expect(graph.nodes.filter((node) => node.kind === 'documentPackage')[0]!.styles).toEqual({ s1: entry });
+    expect(graph.nodes.filter((node) => node.kind === 'documentTree')[0]!.styles).toEqual({ s1: entry });
   });
 });
 
@@ -435,7 +435,7 @@ describe('every document kind projects', () => {
     expectSchemaValid(pkg, 'presentation');
     const graph = projectDocumentGraph([{ id: 'deck', package: pkg }]);
     // Both list anchors are paragraphs in the tree vocabulary, so the projected kinds name payloads, not wrappers.
-    expect(graph.nodes.map((node) => node.kind).sort()).toEqual(['documentPackage', 'paragraph', 'paragraph', 'shape', 'slide']);
+    expect(graph.nodes.map((node) => node.kind).sort()).toEqual(['documentTree', 'paragraph', 'paragraph', 'shape', 'slide']);
     const slide = graph.nodes.find((node) => node.kind === 'slide')!;
     const shape = graph.nodes.find((node) => node.kind === 'shape')!;
     const top = nodeByText(graph, 'Top');
@@ -453,8 +453,8 @@ describe('every document kind projects', () => {
     });
     expectSchemaValid(pkg, 'spreadsheet');
     const graph = projectDocumentGraph([{ id: 'book', package: pkg }]);
-    expect(graph.nodes.map((node) => node.kind).sort()).toEqual(['documentPackage', 'embeddedObject', 'image', 'sheet']);
-    const root = graph.nodes.find((node) => node.kind === 'documentPackage')!;
+    expect(graph.nodes.map((node) => node.kind).sort()).toEqual(['documentTree', 'embeddedObject', 'image', 'sheet']);
+    const root = graph.nodes.find((node) => node.kind === 'documentTree')!;
     expect(root.pages).toEqual([{ widthPt: 842, heightPt: 595 }]);
     const sheet = graph.nodes.find((node) => node.kind === 'sheet')!;
     expect(sheet).toMatchObject({ kind: 'sheet', name: 'Revenue' });
@@ -469,7 +469,7 @@ describe('every document kind projects', () => {
     const pkg = drawingPackage([drawPageGroup([shapeGroup([paragraph('Caption.')]), vectorLine(), vectorRect()])]);
     expectSchemaValid(pkg, 'drawing');
     const graph = projectDocumentGraph([{ id: 'poster', package: pkg }]);
-    expect(graph.nodes.map((node) => node.kind).sort()).toEqual(['documentPackage', 'drawPage', 'line', 'paragraph', 'rect', 'shape']);
+    expect(graph.nodes.map((node) => node.kind).sort()).toEqual(['documentTree', 'drawPage', 'line', 'paragraph', 'rect', 'shape']);
     const page = graph.nodes.find((node) => node.kind === 'drawPage')!;
     const contains = graph.edges.filter((edge) => edge.from === page.id && edge.kind === 'CONTAINS');
     expect(contains.map((edge) => [edge.orderKey, graph.nodes.find((node) => node.id === edge.to)!.kind])).toEqual([
@@ -483,7 +483,7 @@ describe('every document kind projects', () => {
     const pkg = formulaPackage('x^2');
     expectSchemaValid(pkg, 'formula');
     const graph = projectDocumentGraph([{ id: 'eq', package: pkg }]);
-    expect(graph.nodes.map((node) => node.kind).sort()).toEqual(['documentPackage', 'formula']);
+    expect(graph.nodes.map((node) => node.kind).sort()).toEqual(['documentTree', 'formula']);
     expect(graph.edges).toEqual([
       { from: 'eq', to: graph.nodes.find((node) => node.kind === 'formula')!.id, kind: 'CONTAINS', orderKey: orderKeys.orderKeyForIndex(0) },
     ]);
@@ -522,8 +522,8 @@ describe('projectDocumentGraph', () => {
     const graphA = projectDocumentGraph([{ id: 'doc', package: spelledA }]);
     const graphB = projectDocumentGraph([{ id: 'doc', package: spelledB }]);
     // Root nodes identical (same id, same envelope); every content node identical and in the same order.
-    expect(graphB.nodes.filter((node) => node.kind !== 'documentPackage')).toEqual(
-      graphA.nodes.filter((node) => node.kind !== 'documentPackage'),
+    expect(graphB.nodes.filter((node) => node.kind !== 'documentTree')).toEqual(
+      graphA.nodes.filter((node) => node.kind !== 'documentTree'),
     );
     expect(graphB.edges).toEqual(graphA.edges);
 
@@ -536,7 +536,7 @@ describe('projectDocumentGraph', () => {
     expect(styleNodes).toHaveLength(2);
     const headingNodes = cross.nodes.filter((node) => node.kind === 'paragraph' && node.headingLevel !== undefined);
     expect(headingNodes).toHaveLength(2); // 'One' and 'Two', each shared across a and b
-    expect(cross.nodes.filter((node) => node.kind === 'documentPackage').map((node) => node.id).sort()).toEqual(['a', 'b']);
+    expect(cross.nodes.filter((node) => node.kind === 'documentTree').map((node) => node.id).sort()).toEqual(['a', 'b']);
     expect(cross.edges.filter((edge) => edge.kind === 'CONTAINS' && (edge.from === 'a' || edge.from === 'b')).map((edge) => edge.from).sort()).toEqual(['a', 'b']);
   });
 
@@ -553,10 +553,10 @@ describe('projectDocumentGraph', () => {
     ]);
 
     // The two document roots carry their own caller-assigned ids and their metadata inline.
-    const roots = nodesOf(graph, 'documentPackage');
+    const roots = nodesOf(graph, 'documentTree');
     expect(roots).toEqual([
-      { id: 'report-1', kind: 'documentPackage', documentKind: 'wordprocessing', metadata: { title: 'Q3 Report', author: 'Alice' } },
-      { id: 'memo-1', kind: 'documentPackage', documentKind: 'wordprocessing', metadata: { title: 'Staff Memo' } },
+      { id: 'report-1', kind: 'documentTree', documentKind: 'wordprocessing', metadata: { title: 'Q3 Report', author: 'Alice' } },
+      { id: 'memo-1', kind: 'documentTree', documentKind: 'wordprocessing', metadata: { title: 'Staff Memo' } },
     ]);
 
     // One style entry node shared by both documents (identical entry content, different local keys).
@@ -605,7 +605,7 @@ describe('projectDocumentGraph', () => {
     // Every node id is unique, and content ids are lowercase hex content hashes.
     expect(new Set(graph.nodes.map((node) => node.id)).size).toBe(graph.nodes.length);
     for (const node of graph.nodes) {
-      if (node.kind !== 'documentPackage') expect(node.id).toMatch(/^[0-9a-f]{64}$/);
+      if (node.kind !== 'documentTree') expect(node.id).toMatch(/^[0-9a-f]{64}$/);
     }
     for (const edge of graph.edges) {
       expect(graph.nodes.some((node) => node.id === edge.from)).toBe(true);
