@@ -1093,8 +1093,8 @@ importers:
         specifier: ^1.1.13
         version: link:../byte-codec
       document-schema.js:
-        specifier: ^4.10.0
-        version: 4.10.0
+        specifier: ^5.0.0
+        version: link:../document-schema.js
       fflate:
         specifier: ^0.8.3
         version: 0.8.3
@@ -4133,10 +4133,6 @@ packages:
   dir-glob@3.0.1:
     resolution: {integrity: sha512-WkrWp9GR4KXfKGYzOLmTuGVi1UWFfws377n9cc55/tb6DuqyF6pcQ5AbiHEshaDpY9v6oaSr2XCDidGmMwdzIA==}
     engines: {node: '>=8'}
-
-  document-schema.js@4.10.0:
-    resolution: {integrity: sha512-Ng6prPqandODGy6Gxa47Xop+CH0u9rBXzI5ucIgu1a5sOftjSYuby4fvff/vopmG52Wgz/B2qcb/nE1JvNf8kQ==}
-    engines: {node: '>=20'}
 
   dom-helpers@5.2.1:
     resolution: {integrity: sha512-nRCa7CK3VTrM2NmGkIy4cbK7IZlgBE/PYMn55rrXefr5xXDP0LdtfPnblFDoVdcAfslJ7or6iqAUnx0CCGIWQA==}
@@ -9862,10 +9858,6 @@ snapshots:
   dir-glob@3.0.1:
     dependencies:
       path-type: 4.0.0
-
-  document-schema.js@4.10.0:
-    dependencies:
-      zod: 4.4.3
 
   dom-helpers@5.2.1:
     dependencies:
