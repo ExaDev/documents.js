@@ -1,3 +1,23 @@
+# [5.0.0](https://github.com/ExaDev/documents.js/compare/document-schema.js@4.10.0...document-schema.js@5.0.0) (2026-08-23)
+
+
+* feat(document-schema.js)!: rename DocumentPackage to DocumentTree, land division's residue field ([d4e1a5a](https://github.com/ExaDev/documents.js/commit/d4e1a5ae816570060f22d2fec225b8f847016761)), closes [#743](https://github.com/ExaDev/documents.js/issues/743) [#661](https://github.com/ExaDev/documents.js/issues/661) [#743](https://github.com/ExaDev/documents.js/issues/743)
+
+
+### BREAKING CHANGES
+
+* DocumentPackage and the whole Package-rooted type
+family (PackageNode/Group/Leaf/BlockLeaf, their *Schema and isPackageX
+siblings, PackageChildren, assemblePackage, flattenPackage,
+documentPackageWithSchema, the 'DocumentPackage' DocumentSchemaKind
+literal) are renamed to their Tree-rooted equivalents. The published
+document-package.schema.json file is renamed to document-tree.schema.json;
+a dump stamped with the old $schema URI now throws
+DocumentPackageRenamedError instead of parsing. DivisionDescriptor's
+`source` field (the ODF text:section-source external-chapter link) is
+renamed to `linked`; `source` now carries division's own quarantined
+residue instead.
+
 # [4.10.0](https://github.com/ExaDev/documents.js/compare/document-schema.js@4.9.1...document-schema.js@4.10.0) (2026-08-23)
 
 
