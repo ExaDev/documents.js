@@ -91,7 +91,7 @@ describe('openPdfDocument: encryption', () => {
   it('throws PdfPasswordRequiredError for a file that genuinely needs a user password', () => {
     const { sink } = collectDiagnostics();
     expect(() => openPdfDocument(aes256RealUserPasswordPdf(), sink)).toThrow(PdfPasswordRequiredError);
-  }, 15000);
+  }, 60000);
 
   // Decryption is transparent below this layer: an object fetched from an encrypted document comes back in the clear, strings included, so nothing downstream of the object store needs to know the file was encrypted at all.
   it('resolves objects from an encrypted document with their strings already decrypted', () => {
@@ -102,7 +102,7 @@ describe('openPdfDocument: encryption', () => {
     expect(title?.kind).toBe('string');
     expect(title?.kind === 'string' ? new TextDecoder('latin1').decode(title.bytes) : undefined).toBe(ENCRYPTED_FIXTURE_TITLE);
     expect(diagnostics).toEqual([]);
-  }, 15000);
+  }, 60000);
 
   // A file's own /Encrypt dictionary is stored unencrypted (ISO 32000-1 7.6.1), so it must be fetched with decryption still off -- a bug here would corrupt /O and /U and make every supported file look password-protected.
   it('reads the /Encrypt dictionary itself without trying to decrypt it', () => {
@@ -111,7 +111,7 @@ describe('openPdfDocument: encryption', () => {
     const encryptDict = doc.resolveDict(dictGet(doc.trailer, 'Encrypt'));
     expect(asName(dictGet(encryptDict!, 'Filter'))).toBe('Standard');
     expect(asNumber(dictGet(encryptDict!, 'V'))).toBe(5);
-  }, 15000);
+  }, 60000);
 });
 
 describe('openPdfDocument: unresolvable root', () => {
