@@ -304,8 +304,8 @@ importers:
   packages/document-compute.js:
     dependencies:
       document-schema.js:
-        specifier: ^4.10.0
-        version: 4.10.0
+        specifier: ^5.0.0
+        version: link:../document-schema.js
     devDependencies:
       '@arethetypeswrong/cli':
         specifier: ^0.18.5
