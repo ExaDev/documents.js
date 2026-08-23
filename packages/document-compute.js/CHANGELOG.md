@@ -1,3 +1,10 @@
+## [1.0.1](https://github.com/ExaDev/documents.js/compare/document-compute.js@1.0.0...document-compute.js@1.0.1) (2026-08-23)
+
+
+### Dependencies
+
+- Updated document-schema.js to ^5.0.0
+
 # 1.0.0 (2026-08-23)
 
 
