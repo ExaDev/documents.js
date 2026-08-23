@@ -315,7 +315,7 @@ class DocumentProjection {
       ...envelopeWalk.properties,
       ...leftoverTables,
       id: this.documentId,
-      kind: 'documentPackage',
+      kind: 'documentTree',
       documentKind: this.pkg.kind,
     });
     for (const node of this.pendingEntryNodes.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))) {
