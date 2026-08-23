@@ -1,3 +1,24 @@
+# [6.0.0](https://github.com/ExaDev/documents.js/compare/documents.js@5.0.3...documents.js@6.0.0) (2026-08-23)
+
+
+* refactor(documents.js)!: rename DocumentPackage to DocumentTree ([499d212](https://github.com/ExaDev/documents.js/commit/499d212337a67d118691cf72c99284f9b72bffdf))
+
+
+### BREAKING CHANGES
+
+* every DocumentPackage-rooted export this package
+consumes or re-exports tracks document-schema.js 5.0.0's rename to
+DocumentTree.
+
+
+### Dependencies
+
+- Updated pdf-codec to ^3.4.4
+- Updated ooxml.js to ^6.0.0
+- Updated odf.js to ^6.0.0
+- Updated markdown-codec to ^6.0.0
+- Updated document-schema.js to ^5.0.0
+
 ## [5.0.3](https://github.com/ExaDev/documents.js/compare/documents.js@5.0.2...documents.js@5.0.3) (2026-08-23)
 
 
