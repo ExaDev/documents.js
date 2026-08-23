@@ -1,6 +1,7 @@
 {
   "$schema": "https://turborepo.com/schema.json",
-  "globalDependencies": ["pnpm-lock.yaml", ".node-version"],
+  // eslint.shared.ts is every package's lint configuration, imported by each package's own eslint.config.ts. It has to be a global dependency rather than a per-task input: `_lint`'s inputs are resolved relative to the package being linted, so a root file one directory up is invisible to them, and editing a rule there would otherwise leave all thirteen packages reporting a cache hit against results computed under the previous rule set.
+  "globalDependencies": ["pnpm-lock.yaml", ".node-version", "eslint.shared.ts"],
 
   // Every task name is the underscore-prefixed one each package already used for its real command (`_build` runs tsdown; the package's own `build` script was `turbo run _build`). Running the public names from here instead would make turbo invoke those wrapper scripts, which invoke turbo again -- the recursive-call case Turborepo's own docs warn against ("You should only define these commands in the root package.json"). The wrapper scripts stay in place and stay usable for a single package, but the root pipeline reaches straight past them to the leaf commands.
   //
@@ -103,11 +104,11 @@
 
     // The workspace root's own tooling files (eslint.config.ts, commitlint.config.ts, lint-staged.config.ts) are held to the same lint and typecheck gates as package code. Registered as root tasks so `turbo run _lint` and `turbo run _typecheck` cover them without a separate command.
     "//#_lint": {
-      "inputs": ["eslint.config.ts", "commitlint.config.ts", "lint-staged.config.ts", "tsconfig.json"],
+      "inputs": ["eslint.config.ts", "eslint.shared.ts", "commitlint.config.ts", "lint-staged.config.ts", "tsconfig.json"],
       "outputs": [".eslintcache"]
     },
     "//#_typecheck": {
-      "inputs": ["eslint.config.ts", "commitlint.config.ts", "lint-staged.config.ts", "tsconfig.json", "release-workspace.config.json"],
+      "inputs": ["eslint.config.ts", "eslint.shared.ts", "commitlint.config.ts", "lint-staged.config.ts", "tsconfig.json", "release-workspace.config.json"],
       "outputs": []
     }
   }
