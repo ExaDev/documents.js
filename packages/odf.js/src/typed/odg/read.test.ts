@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { PAGE_SIZE_A4 } from 'document-schema.js';
 import type { Package } from '../../model/package';
 import { el, txt } from '../../xml/fragment';
-import { assertPackageRoundTrip, drawingPackage } from '../../test-support/document-package';
+import { assertPackageRoundTrip, drawingPackage } from '../../test-support/document-tree';
 import { readOdg, readOdgContent } from './read';
 
 // A full, real-shape .odg fixture assembled from XML shapes verified against genuine LibreOffice 26.2 output (a StarBasic macro run headlessly against the LibreOffice UNO API to construct actual draw:rect/ellipse/line/path/custom-shape geometry, then the resulting content.xml inspected directly -- NOT hand-authored guesses; see typed/shared/path.ts's own top-of-file note for the full verification method), matching this package's other typed-reader tests' established convention of building packages programmatically from ground-truth-verified shapes rather than loading a committed binary fixture (mirroring readOdpContent's own read.test.ts).

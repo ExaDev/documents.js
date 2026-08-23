@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Package } from '../../model/package';
 import type { XmlElement } from '../../model/node';
 import { el, txt } from '../../xml/fragment';
-import { flattenPackage } from 'document-schema.js';
+import { flattenTree } from 'document-schema.js';
 import type { ContentParagraph } from 'document-schema.js';
 import { readOdt, readOdtContent } from './read';
 
@@ -57,7 +57,7 @@ describe('readOdtContent: text:section as a division construct', () => {
     ]);
   });
 
-  it('carries a text:section-source as division.source with its href and section-name', () => {
+  it('carries a text:section-source as division.linked with its href and section-name, and its text:filter-name as division.source residue', () => {
     const pkg = odtPackage([
       el('text:section', { 'text:name': 'LinkedChapter' }, [
         el('text:section-source', { 'xlink:href': '../chapter1.odt', 'text:section-name': 'InnerSection', 'text:filter-name': 'writer8' }),
@@ -67,7 +67,12 @@ describe('readOdtContent: text:section as a division construct', () => {
     const blocks = firstSectionBlocks(pkg);
     expect(blocks[0]).toEqual({
       kind: 'constructStart',
-      descriptor: { kind: 'division', name: 'LinkedChapter', source: { href: '../chapter1.odt', sectionName: 'InnerSection' } },
+      descriptor: {
+        kind: 'division',
+        name: 'LinkedChapter',
+        linked: { href: '../chapter1.odt', sectionName: 'InnerSection' },
+        source: { format: 'odt', xml: '<text:section-source text:filter-name="writer8"></text:section-source>' },
+      },
     });
   });
 
@@ -113,14 +118,14 @@ describe('readOdtContent: text:section as a division construct', () => {
     expect(descriptors).toEqual([{ kind: 'division', name: 'S' }, { kind: 'contentControl', controlType: 'index', tag: 'TOC' }]);
   });
 
-  it('survives the package boundary: flattenPackage(readOdt(pkg)) reproduces the flat reader\'s blocks with markers intact', () => {
+  it('survives the package boundary: flattenTree(readOdt(pkg)) reproduces the flat reader\'s blocks with markers intact', () => {
     const pkg = odtPackage([
       el('text:section', { 'text:name': 'S1' }, [
         paragraph('first'),
         el('text:section', { 'text:name': 'S2' }, [paragraph('second')]),
       ]),
     ]);
-    const flat = flattenPackage(readOdt(pkg));
+    const flat = flattenTree(readOdt(pkg));
     if (flat.kind !== 'wordprocessing') {
       throw new Error('expected a wordprocessing document');
     }
@@ -276,7 +281,7 @@ describe('readOdtContent: tracked changes as provenance constructs', () => {
       el('text:p', {}, [el('text:change-start', { 'text:change-id': 'del1' }), txt('gone')]),
       el('text:p', {}, [txt('also gone'), el('text:change-end', { 'text:change-id': 'del1' })]),
     ]);
-    const flat = flattenPackage(readOdt(pkg));
+    const flat = flattenTree(readOdt(pkg));
     if (flat.kind !== 'wordprocessing') {
       throw new Error('expected a wordprocessing document');
     }

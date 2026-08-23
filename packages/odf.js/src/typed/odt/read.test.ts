@@ -5,11 +5,11 @@ import { describe, expect, it } from 'vitest';
 import type { Package } from '../../model/package';
 import type { XmlElement } from '../../model/node';
 import type { ContentBlock, ContentParagraph, ContentTable } from 'document-schema.js';
-import { flattenPackage, PAGE_SIZE_A4 } from 'document-schema.js';
+import { flattenTree, PAGE_SIZE_A4 } from 'document-schema.js';
 import { el, txt } from '../../xml/fragment';
 import { parsePackage } from '../../package-io/read';
 import { parseOdfLength } from '../shared/units';
-import { assertPackageRoundTrip, wordprocessingPackage } from '../../test-support/document-package';
+import { assertPackageRoundTrip, wordprocessingPackage } from '../../test-support/document-tree';
 import { readOdt, readOdtContent } from './read';
 
 // This suite reads real, unmodified LibreOffice 26.2-generated .odt fixtures (src/typed/odt/fixtures/*.odt, built via a headless UNO Basic macro -- see this repository's own commit history for the exact macro -- never hand-edited afterwards) rather than programmatically reconstructing the expected XML shapes: the task this reader was built against is explicit that whitespace preservation, list nesting, and merged-cell handling must each be proven against genuine producer output, not just this package's own idea of what that output looks like. A handful of narrow error/fallback-path tests at the end use small, synthetic, hand-built packages instead (via el/txt, matching this package's other typed-reader tests), since those specific paths -- a missing content.xml, a missing office:text -- are not something any real LibreOffice document can ever actually produce.
@@ -304,7 +304,7 @@ describe('readOdtContent: master pages after the first, and header/footer conten
       [el('text:p', {}, [txt('portrait')]), el('text:p', { 'text:style-name': 'LandscapePara' }, [txt('landscape')])],
       [switchStyle],
     );
-    const flat = flattenPackage(readOdt(pkg));
+    const flat = flattenTree(readOdt(pkg));
     if (flat.kind !== 'wordprocessing') {
       throw new Error('expected a wordprocessing document');
     }
