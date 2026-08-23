@@ -1011,7 +1011,7 @@ importers:
         specifier: ^1.1.2
         version: link:../archive-codec
       document-schema.js:
-        specifier: ^4.9.1
+        specifier: ^4.10.0
         version: link:../document-schema.js
       fast-xml-parser:
         specifier: ^5.10.1
