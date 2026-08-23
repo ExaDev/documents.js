@@ -10,7 +10,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-// Walks the dumped DocumentPackage's tree for any image block -- a narrowing guard rather than a typed parse, so this test never needs a type assertion over the raw JSON shape. The tree's own rule does the work: every node is either a group ({ node, children }) or a bare leaf carrying kind, so recursing over children from the package root reaches every block wherever the grouping nested it.
+// Walks the dumped DocumentTree's tree for any image block -- a narrowing guard rather than a typed parse, so this test never needs a type assertion over the raw JSON shape. The tree's own rule does the work: every node is either a group ({ node, children }) or a bare leaf carrying kind, so recursing over children from the package root reaches every block wherever the grouping nested it.
 function dumpHasImageBlock(node: unknown): boolean {
   if (!isRecord(node)) {
     return false;

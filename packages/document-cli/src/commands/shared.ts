@@ -1,6 +1,6 @@
 import { writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
-import { type DocumentFormat, createLocalDocumentConverter, documentPackageWithSchema } from 'documents.js';
+import { type DocumentFormat, createLocalDocumentConverter, documentTreeWithSchema } from 'documents.js';
 import { inferFormatFromExtension, isDocumentFormat } from '../format';
 import { createRuntimeSignal } from '../runtime/abort';
 import { createDiagnosticReporter, createFontSubstitutionReporter } from '../runtime/diagnostics';
@@ -102,10 +102,10 @@ export function buildConversionAction(
       if (options.dumpPackage !== undefined) {
         // Checked generically by presence, never by which (source, target) pair this action was built for -- the port declares `package` optional, so this branch guards the declared contract rather than any particular pair (in practice the local converter reports one for every conversion, bridges included, content-only with no pages where no layout engine ran).
         if (result.package === undefined) {
-          process.stderr.write(`[${command}] this conversion does not produce an intermediate DocumentPackage\n`);
+          process.stderr.write(`[${command}] this conversion does not produce an intermediate DocumentTree\n`);
         } else {
           // Tagged with its own $schema before serialising, not written raw -- documentFromJson (the read side `from-package` uses to read this file back in) identifies a value's kind and version purely from that URI, so an untagged dump would be unreadable by its own round trip.
-          await writeFile(options.dumpPackage, JSON.stringify(documentPackageWithSchema(result.package), undefined, 2));
+          await writeFile(options.dumpPackage, JSON.stringify(documentTreeWithSchema(result.package), undefined, 2));
         }
       }
 

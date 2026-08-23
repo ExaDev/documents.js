@@ -11,7 +11,7 @@ import { createFilesystemMarkdownImageResolver } from '../runtime/markdown-image
 import { addQuietOption, addTimeoutOption, addVerboseOption } from './options';
 import { KNOWN_DOCUMENT_FORMATS, formatError } from './shared';
 
-// The conversion this command runs exists only for ConversionResult.package -- its output bytes are discarded, since the outline projects over the tree-form DocumentPackage, not over any rendered target. A PDF-bypassing bridge is the cheapest conversion that still populates a package (no layout engine runs), so each of the ten content formats bridges to a sibling it shares a registry entry with; the two formats outside that set each take the one conversion they actually have -- pdf reconstructs through pdf-to-docx (a PDF carries no content tree of its own to read), and odf renders through odf-to-pdf (its only conversion; the outline reads the formula package that conversion builds, not the rendered pages). The target is otherwise incidental: the package a bridge leaves behind is built from the source document's own content, so the outline it feeds is the source document's outline.
+// The conversion this command runs exists only for ConversionResult.package -- its output bytes are discarded, since the outline projects over the tree-form DocumentTree, not over any rendered target. A PDF-bypassing bridge is the cheapest conversion that still populates a package (no layout engine runs), so each of the ten content formats bridges to a sibling it shares a registry entry with; the two formats outside that set each take the one conversion they actually have -- pdf reconstructs through pdf-to-docx (a PDF carries no content tree of its own to read), and odf renders through odf-to-pdf (its only conversion; the outline reads the formula package that conversion builds, not the rendered pages). The target is otherwise incidental: the package a bridge leaves behind is built from the source document's own content, so the outline it feeds is the source document's outline.
 const OUTLINE_CONVERSION_TARGET: Readonly<Record<DocumentFormat, DocumentFormat>> = {
   docx: 'odt',
   odt: 'docx',
@@ -35,7 +35,7 @@ function singleLineText(text: string): string {
   return text.replaceAll(/\s+/g, ' ').trim();
 }
 
-// The label for a textless leaf's bracket placeholder, discriminated structurally the same way outlineLeafText itself discriminates ('runs' in leaf, 'rows' in leaf, ...): every PackageLeaf arm carries a `kind` literal except the two that do not -- a sheet-anchored embedded object names its discriminator `objectKind`, and a ContentFormula carries no discriminator at all (its mathml payload is its identifying field), so the fall-through arm is exactly the formula leaf and labels itself as such.
+// The label for a textless leaf's bracket placeholder, discriminated structurally the same way outlineLeafText itself discriminates ('runs' in leaf, 'rows' in leaf, ...): every TreeLeaf arm carries a `kind` literal except the two that do not -- a sheet-anchored embedded object names its discriminator `objectKind`, and a ContentFormula carries no discriminator at all (its mathml payload is its identifying field), so the fall-through arm is exactly the formula leaf and labels itself as such.
 function leafKindLabel(leaf: OutlineLeaf): string {
   if ('kind' in leaf) return leaf.kind;
   if ('objectKind' in leaf) return leaf.objectKind;
@@ -112,7 +112,7 @@ async function runOutline(input: string, options: OutlineCliOptions): Promise<nu
 
     // The port declares `package` optional (a remote adapter is free to report none), while the local converter this command uses populates one on every conversion -- so an absent package is a broken contract, not a document with an empty outline, and fails loudly instead of printing nothing.
     if (result.package === undefined) {
-      throw new Error(`the ${source.format}-to-${target} conversion produced no intermediate DocumentPackage`);
+      throw new Error(`the ${source.format}-to-${target} conversion produced no intermediate DocumentTree`);
     }
 
     const outline = buildOutline(result.package);

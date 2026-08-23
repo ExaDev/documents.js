@@ -22,7 +22,7 @@ export function addVerboseOption(command: Command): Command {
 }
 
 export function addDumpPackageOption(command: Command): Command {
-  return command.option('--dump-package <file>', 'write the intermediate DocumentPackage (the tree form: container-grouped content carrying per-node rendered frames, plus page sizes) this conversion built to a JSON file');
+  return command.option('--dump-package <file>', 'write the intermediate DocumentTree (the tree form: container-grouped content carrying per-node rendered frames, plus page sizes) this conversion built to a JSON file');
 }
 
 // Accumulates repeated --font-file <path> flags into a list, in the order given -- which is also the order documents.js's own FontRegistry resolves them in, so an earlier --font-file wins a family+weight+slope tie against a later one.
