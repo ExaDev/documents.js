@@ -1,3 +1,10 @@
+# [4.10.0](https://github.com/ExaDev/documents.js/compare/document-schema.js@4.9.1...document-schema.js@4.10.0) (2026-08-23)
+
+
+### Features
+
+* **schema:** add Quantity and FormulaBindings math schemas ([5ed62e0](https://github.com/ExaDev/documents.js/commit/5ed62e0dfe541e4798e54b6e0fc44e9a106707f4))
+
 ## [4.9.1](https://github.com/ExaDev/documents.js/compare/document-schema.js@4.9.0...document-schema.js@4.9.1) (2026-08-23)
 
 # [4.9.0](https://github.com/ExaDev/documents.js/compare/document-schema.js@4.8.0...document-schema.js@4.9.0) (2026-08-22)
