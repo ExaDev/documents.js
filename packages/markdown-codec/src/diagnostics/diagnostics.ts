@@ -46,7 +46,7 @@ export const MarkdownDiagnosticCodes = {
   FOOTNOTE_BODY_HEADING_FLATTENED: 'md/footnote-body-heading-flattened',
   // src/emit (write side: ContentDocument -> markdown)
   CONSTRUCT_UNREPRESENTED: 'md/construct-unrepresented',
-  // src/write.ts (tree write side: DocumentPackage -> markdown, ahead of flattening)
+  // src/write.ts (tree write side: DocumentTree -> markdown, ahead of flattening)
   PACKAGE_TABLE_DROPPED: 'md/package-table-dropped',
   HEADING_LEVEL_CLAMPED: 'md/heading-level-clamped',
   ADJACENT_LINKS_MERGED: 'md/adjacent-links-merged',
@@ -152,7 +152,7 @@ export class MarkdownUnsupportedDocumentKindError extends MarkdownWriteError {
   }
 }
 
-// Thrown by writeMarkdown when document-schema.js's own flattenPackage rejects the package it was handed -- a group carrying a style ref with no top-level styles table to resolve it against is the one case reachable for a 'wordprocessing' package (writeMarkdown's own kind check above rules out the formula/spreadsheet-specific cases flattenPackage also guards). flattenPackage itself throws a bare Error for this, which is not part of this package's own documented error hierarchy -- wrapped here so a caller catching MarkdownWriteError catches it too, rather than needing to know about a dependency's own internal exception type.
+// Thrown by writeMarkdown when document-schema.js's own flattenTree rejects the package it was handed -- a group carrying a style ref with no top-level styles table to resolve it against is the one case reachable for a 'wordprocessing' package (writeMarkdown's own kind check above rules out the formula/spreadsheet-specific cases flattenTree also guards). flattenTree itself throws a bare Error for this, which is not part of this package's own documented error hierarchy -- wrapped here so a caller catching MarkdownWriteError catches it too, rather than needing to know about a dependency's own internal exception type.
 export class MarkdownPackageFlattenError extends MarkdownWriteError {
   constructor(cause: unknown) {
     const detail = cause instanceof Error ? cause.message : String(cause);

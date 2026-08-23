@@ -1,6 +1,6 @@
 // Smoke test: the built dist/ artifact loads and works under both ESM and CJS. Run only via `pnpm test:smoke` (tsdown, then vitest scoped to this file by vitest.config.ts's "smoke" project) -- never part of the default `pnpm test` file set, since it requires a fresh build to mean anything.
 //
-// This follows pdf-codec's own smoke.test.mjs shape: a representative slice of the public surface checked for presence in both builds, then real read -> write -> reparse assertions run against each build independently, proving the built artifact itself (not just the source under vitest's own transform) round-trips real markdown. Both encodings are exercised -- the tree-form readMarkdown/writeMarkdown/markdownCodec trio over document-schema.js's DocumentPackage, and the flat readMarkdownContent/writeMarkdownContent/markdownContentCodec trio over its ContentDocument -- because the tree pair pulls document-schema.js's own decompose/factorStyles/flattenPackage into the bundle, and a dual-build failure confined to that dependency would be invisible to a flat-only check.
+// This follows pdf-codec's own smoke.test.mjs shape: a representative slice of the public surface checked for presence in both builds, then real read -> write -> reparse assertions run against each build independently, proving the built artifact itself (not just the source under vitest's own transform) round-trips real markdown. Both encodings are exercised -- the tree-form readMarkdown/writeMarkdown/markdownCodec trio over document-schema.js's DocumentTree, and the flat readMarkdownContent/writeMarkdownContent/markdownContentCodec trio over its ContentDocument -- because the tree pair pulls document-schema.js's own decompose/factorStyles/flattenTree into the bundle, and a dual-build failure confined to that dependency would be invisible to a flat-only check.
 import { createRequire } from 'node:module';
 import { z } from 'zod';
 import { describe, expect, it } from 'vitest';
@@ -36,7 +36,7 @@ describe.each([
   ['CJS', cjs],
 ])('%s artifact behaviour', (_label, api) => {
   describe('readMarkdown then writeMarkdown', () => {
-    it('lowers real markdown to a wordprocessing DocumentPackage and renders it back to markdown', () => {
+    it('lowers real markdown to a wordprocessing DocumentTree and renders it back to markdown', () => {
       const { documentPackage, diagnostics } = api.readMarkdown(SAMPLE_MARKDOWN);
       expect(documentPackage.kind).toBe('wordprocessing');
       expect(documentPackage.children.length).toBeGreaterThan(0);
@@ -50,7 +50,7 @@ describe.each([
       expect(api.readMarkdown(rewritten).documentPackage).toEqual(documentPackage);
     });
 
-    it('throws MarkdownUnsupportedDocumentKindError for a non-wordprocessing DocumentPackage', () => {
+    it('throws MarkdownUnsupportedDocumentKindError for a non-wordprocessing DocumentTree', () => {
       const spreadsheet = { kind: 'spreadsheet', metadata: {}, children: [] };
       expect(() => api.writeMarkdown(spreadsheet)).toThrow(api.MarkdownUnsupportedDocumentKindError);
     });
@@ -79,7 +79,7 @@ describe.each([
   });
 
   describe('markdownCodec', () => {
-    it('decodes real UTF-8 bytes to a DocumentPackage and encodes back to bytes', () => {
+    it('decodes real UTF-8 bytes to a DocumentTree and encodes back to bytes', () => {
       const bytes = new TextEncoder().encode(SAMPLE_MARKDOWN);
       expect(api.MarkdownBytesSchema.safeParse(bytes).success).toBe(true);
       expect(api.MarkdownBytesSchema.safeParse(new Uint8Array([0xff, 0xfe, 0xfd])).success).toBe(false);
