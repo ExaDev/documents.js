@@ -6,7 +6,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { createProgram } from '../program';
 import { EXIT_SUCCESS } from '../runtime/exit-codes';
 
-// Drives the real assembled commander program end to end, closing the round trip --dump-package otherwise has no return path for: a real docx-to-pdf conversion dumps its own intermediate DocumentPackage to a JSON file, from-package reads that exact file back in via documentFromJson, and the docx it rebuilds from the package's own ContentDocument is opened again and checked for the original paragraph text -- proving the JSON this CLI writes is genuinely the JSON this CLI can read back, not just two independently-plausible-looking halves that happen to share a name.
+// Drives the real assembled commander program end to end, closing the round trip --dump-package otherwise has no return path for: a real docx-to-pdf conversion dumps its own intermediate DocumentTree to a JSON file, from-package reads that exact file back in via documentFromJson, and the docx it rebuilds from the package's own ContentDocument is opened again and checked for the original paragraph text -- proving the JSON this CLI writes is genuinely the JSON this CLI can read back, not just two independently-plausible-looking halves that happen to share a name.
 
 let workspace: string;
 
@@ -32,8 +32,8 @@ async function runCli(args: readonly string[]): Promise<CapturedRun> {
   return { exitCode: process.exitCode, stderr: stderrChunks.join('') };
 }
 
-const PARAGRAPH_TEXT = 'A paragraph dumped to a DocumentPackage and read back again';
-const SHEET_CELL_TEXT = 'A cell dumped to a DocumentPackage and rebuilt as xlsx';
+const PARAGRAPH_TEXT = 'A paragraph dumped to a DocumentTree and read back again';
+const SHEET_CELL_TEXT = 'A cell dumped to a DocumentTree and rebuilt as xlsx';
 
 function docxWithParagraph(): Uint8Array<ArrayBuffer> {
   const editor = createDocx();
@@ -66,10 +66,10 @@ describe('from-package', () => {
     const dumpRun = await runCli(['docx-to-pdf', join(workspace, 'source.docx'), join(workspace, 'source.pdf'), '--dump-package', packagePath]);
     expect(dumpRun.exitCode).toBe(EXIT_SUCCESS);
 
-    // The dumped file is tagged with a $schema documentFromJson can identify -- not merely well-formed JSON matching DocumentPackage's own shape.
+    // The dumped file is tagged with a $schema documentFromJson can identify -- not merely well-formed JSON matching DocumentTree's own shape.
     const dumpedText = await readFile(packagePath, 'utf-8');
     expect(dumpedText).toContain('"$schema"');
-    expect(dumpedText).toContain('document-package.schema.json');
+    expect(dumpedText).toContain('document-tree.schema.json');
     // The dump carries the tree form -- container groups under children, content nodes with their own rendered frames, page sizes at the root -- and neither the retired formatVersion integer nor the old separate layout half.
     expect(dumpedText).toContain('"children"');
     expect(dumpedText).toContain('"pages"');
@@ -129,7 +129,7 @@ describe('from-package', () => {
     expect(stderr).toContain('requires a');
   });
 
-  it('builds a real xlsx from a spreadsheet-kind DocumentPackage now that documents.js wires a real xlsx content codec', async () => {
+  it('builds a real xlsx from a spreadsheet-kind DocumentTree now that documents.js wires a real xlsx content codec', async () => {
     // xlsx used to be rejected outright here -- documents.js's own DOCUMENT_FORMAT_CODECS registry gained a real xlsx content codec (wrapping ooxml.js's readXlsxContent/buildXlsxPackage) this session, and buildDocumentBytes was simplified to dispatch through it like every other format instead of naming xlsx as a special exception.
     const sheetPath = join(workspace, 'source-for-xlsx.ods');
     const editor = createOds();
@@ -139,7 +139,7 @@ describe('from-package', () => {
       throw new Error('createOds() did not produce a default sheet');
     }
     sheet.cell(0, 0).value = { kind: 'string', value: SHEET_CELL_TEXT };
-    // A cell()-materialized column/row otherwise reads back with no width/height style at all (widthPt/heightPt 0), which fails DocumentPackage's own schema validation once the dumped package round-trips through JSON below.
+    // A cell()-materialized column/row otherwise reads back with no width/height style at all (widthPt/heightPt 0), which fails DocumentTree's own schema validation once the dumped package round-trips through JSON below.
     sheet.setColumnWidth(0, 72);
     sheet.setRowHeight(0, 14);
     await writeFile(sheetPath, editor.toBytes());
@@ -181,12 +181,12 @@ describe('from-package', () => {
     const { exitCode, stderr } = await runCli(['from-package', packagePath, join(workspace, 'never-written4.pdf')]);
 
     expect(exitCode).not.toBe(EXIT_SUCCESS);
-    expect(stderr).toContain('this DocumentPackage has no pages');
+    expect(stderr).toContain('this DocumentTree has no pages');
   });
 
-  it('rejects a pre-4.0.0 flat-shape dump (a documents.js 2.x --dump-package file) with an error naming the tree change and the remedy', async () => {
+  it('rejects a pre-4.0.0 flat-shape dump (a documents.js 2.x --dump-package file) through the rename tombstone, naming DocumentTree and the remedy', async () => {
     const oldDumpPath = join(workspace, 'old-flat.package.json');
-    // A user-provided old dump: the exact shape documents.js 2.x wrote via --dump-package -- $schema-tagged by a document-schema.js 3.x release, the flat { formatVersion, content, pages } envelope. Hand-built here rather than generated, since nothing in this tree can still produce that shape; documentFromJson's version gate refuses it on the URI's major alone (a dump only parses under the major that wrote it), so the body's own fields never even reach schema validation.
+    // A user-provided old dump: the exact shape documents.js 2.x wrote via --dump-package -- $schema-tagged by a document-schema.js 3.x release, the flat { formatVersion, content, pages } envelope under the document-package.schema.json name every release before ExaDev/documents.js#661's rename used. Hand-built here rather than generated, since nothing in this tree can still produce that shape; documentFromJson's rename tombstone refuses any document-package-stemmed URI outright, by name alone -- it never even reaches the version-major gate, so the body's own fields never reach schema validation either.
     const oldDump = {
       $schema: 'https://cdn.jsdelivr.net/npm/document-schema.js@3.9.9/schemas/document-package.schema.json',
       formatVersion: 2,
@@ -203,15 +203,14 @@ describe('from-package', () => {
     const { exitCode, stderr } = await runCli(['from-package', oldDumpPath, join(workspace, 'never-written5.docx')]);
 
     expect(exitCode).not.toBe(EXIT_SUCCESS);
-    // The readable surfacing of SchemaVersionMismatchError: the pinned release, the installed major, the flat-to-tree change, and the CLI's own remedy.
-    expect(stderr).toContain('document-schema.js@3.9.9');
-    expect(stderr).toContain('tree-form DocumentPackage');
+    // The readable surfacing of DocumentPackageRenamedError: the rename itself and the CLI's own remedy -- no specific pinned version, since the tombstone fires identically for every document-package-stemmed release.
+    expect(stderr).toContain('DocumentPackage was renamed to DocumentTree');
     expect(stderr).toContain('--dump-package');
   });
 
-  it('rejects a formatVersion 1 dump (a documents.js 1.x --dump-package file) through the same version gate, naming the pinned release', async () => {
+  it('rejects a formatVersion 1 dump (a documents.js 1.x --dump-package file) through the same rename tombstone', async () => {
     const v1DumpPath = join(workspace, 'old-v1.package.json');
-    // The one wrong-version case a real user hits after upgrading, kept as its own test because its dump is the oldest shape out there: formatVersion 1, content plus a separate layout half, tagged by a document-schema.js 1.x release. The same version gate refuses it -- the CLI-level intercept this command used to carry existed only because the old dispatch had no gate at all.
+    // The oldest shape out there: formatVersion 1, content plus a separate layout half, tagged by a document-schema.js 1.x release -- also under the document-package.schema.json name, so it hits the identical rename tombstone the 2.x dump above does, regardless of how much further back its own shape sits.
     const v1Dump = {
       $schema: 'https://cdn.jsdelivr.net/npm/document-schema.js@1.9.9/schemas/document-package.schema.json',
       formatVersion: 1,
@@ -223,7 +222,7 @@ describe('from-package', () => {
     const { exitCode, stderr } = await runCli(['from-package', v1DumpPath, join(workspace, 'never-written6.docx')]);
 
     expect(exitCode).not.toBe(EXIT_SUCCESS);
-    expect(stderr).toContain('document-schema.js@1.9.9');
+    expect(stderr).toContain('DocumentPackage was renamed to DocumentTree');
     expect(stderr).toContain('--dump-package');
   });
 
