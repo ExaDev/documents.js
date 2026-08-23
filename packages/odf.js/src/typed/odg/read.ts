@@ -1,5 +1,5 @@
-import type { ContentDrawPage, DocumentPackage, LayoutMetadata, SourceResidue } from 'document-schema.js';
-import { assemblePackage, PAGE_SIZE_A4 } from 'document-schema.js';
+import type { ContentDrawPage, DocumentTree, LayoutMetadata, SourceResidue } from 'document-schema.js';
+import { assembleTree, PAGE_SIZE_A4 } from 'document-schema.js';
 import type { XmlElement } from '../../model/node';
 import type { Package } from '../../model/package';
 import { childrenWithTag, findChildElement, rootElement } from '../../xml/query';
@@ -48,10 +48,10 @@ export function readOdgContent(pkg: Package): OdgDocument {
   };
 }
 
-// Package -> DocumentPackage: this module's PRIMARY entry point, the drawing mirror of readOdtContent/readOdt (see src/typed/odt/read.ts's own note on why assemblePackage rather than bare decompose, and why no `pages` argument -- ContentDrawPage's own `pages` here are the DOCUMENT's authored draw pages, an entirely different thing from the package envelope's rendered-page-size array). readOdgContent above is unchanged and remains the flat, ContentDocument-level reader.
-export function readOdg(pkg: Package): DocumentPackage {
+// Package -> DocumentTree: this module's PRIMARY entry point, the drawing mirror of readOdtContent/readOdt (see src/typed/odt/read.ts's own note on why assembleTree rather than bare decompose, and why no `pages` argument -- ContentDrawPage's own `pages` here are the DOCUMENT's authored draw pages, an entirely different thing from the package envelope's rendered-page-size array). readOdgContent above is unchanged and remains the flat, ContentDocument-level reader.
+export function readOdg(pkg: Package): DocumentTree {
   const { metadata, pages, source } = readOdgContent(pkg);
-  const assembled = assemblePackage({ kind: 'drawing', metadata, pages });
+  const assembled = assembleTree({ kind: 'drawing', metadata, pages });
   if (source !== undefined) {
     assembled.source = source;
   }

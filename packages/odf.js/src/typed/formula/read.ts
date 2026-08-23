@@ -1,5 +1,5 @@
-import type { ContentDocument, DocumentPackage, LayoutMetadata } from 'document-schema.js';
-import { assemblePackage } from 'document-schema.js';
+import type { ContentDocument, DocumentTree, LayoutMetadata } from 'document-schema.js';
+import { assembleTree } from 'document-schema.js';
 import type { XmlElement, XmlNode } from '../../model/node';
 import type { Package } from '../../model/package';
 import { attrValue, elementsWithTag, rootElement } from '../../xml/query';
@@ -105,9 +105,9 @@ export function readOdfFormulaContent(pkg: Package): ContentDocument {
   };
 }
 
-// Package -> DocumentPackage: this module's PRIMARY entry point, the formula mirror of readOdtContent/readOdt (see src/typed/odt/read.ts's own note on why assemblePackage rather than bare decompose, and why no `pages` argument). A formula package's single child is the ContentFormula leaf itself -- there is no container structure to group and therefore nothing for the minting pass to factor, so assemblePackage's styles table is necessarily absent here; the call still routes through it rather than hand-building the envelope, so every reader in this package constructs its package exactly one way.
+// Package -> DocumentTree: this module's PRIMARY entry point, the formula mirror of readOdtContent/readOdt (see src/typed/odt/read.ts's own note on why assembleTree rather than bare decompose, and why no `pages` argument). A formula package's single child is the ContentFormula leaf itself -- there is no container structure to group and therefore nothing for the minting pass to factor, so assembleTree's styles table is necessarily absent here; the call still routes through it rather than hand-building the envelope, so every reader in this package constructs its package exactly one way.
 //
 // readOdfFormula is this module's bare, primary entry point. The ladder beneath it matches every other format's: readOdfFormulaContent for the flat ContentDocument pivot, readOdfFormulaMathMl for the raw MathML nodes plus StarMath annotation with no pivot shaping at all -- a caller reaches for the level it actually needs rather than assuming the bare name is the only one on offer.
-export function readOdfFormula(pkg: Package): DocumentPackage {
-  return assemblePackage(readOdfFormulaContent(pkg));
+export function readOdfFormula(pkg: Package): DocumentTree {
+  return assembleTree(readOdfFormulaContent(pkg));
 }
