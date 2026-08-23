@@ -765,7 +765,7 @@ importers:
         specifier: ^1.1.13
         version: link:../byte-codec
       document-schema.js:
-        specifier: ^4.9.1
+        specifier: ^4.10.0
         version: link:../document-schema.js
       fflate:
         specifier: ^0.8.3
