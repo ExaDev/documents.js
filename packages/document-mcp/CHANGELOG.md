@@ -1,3 +1,24 @@
+# [4.0.0](https://github.com/ExaDev/documents.js/compare/document-mcp@3.0.4...document-mcp@4.0.0) (2026-08-23)
+
+
+* refactor(document-mcp)!: rename DocumentPackage to DocumentTree ([c226392](https://github.com/ExaDev/documents.js/commit/c2263925b01536da660c1d2a8052bc15adaadb61)), closes [#661](https://github.com/ExaDev/documents.js/issues/661)
+
+
+### BREAKING CHANGES
+
+* from_package's tool description and error messages
+now name DocumentTree; a document-package dump from any release now
+surfaces a dedicated rename-tombstone message instead of falling
+through to the version-mismatch error.
+
+
+### Dependencies
+
+- Updated documents.js to ^6.0.0
+- Updated pdf-codec to ^3.4.4
+- Updated odf.js to ^6.0.0
+- Updated document-outline.js to ^3.0.0
+
 ## [3.0.4](https://github.com/ExaDev/documents.js/compare/document-mcp@3.0.3...document-mcp@3.0.4) (2026-08-23)
 
 
