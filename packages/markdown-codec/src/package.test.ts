@@ -1,10 +1,10 @@
-// The tree-form half of the public surface: readMarkdown/writeMarkdown/markdownCodec over document-schema.js's DocumentPackage, and the three properties that make them trustworthy as the primary entry points.
+// The tree-form half of the public surface: readMarkdown/writeMarkdown/markdownCodec over document-schema.js's DocumentTree, and the three properties that make them trustworthy as the primary entry points.
 //
-// (i) They are exactly assemblePackage/flattenPackage composed onto the flat pair -- pinned by constructing the same value both ways, so a future edit that swapped assemblePackage for bare decompose (dropping the styles-minting pass) or forgot to flatten before emitting would fail here rather than silently changing what callers get. (ii) The transform is transparent to the markdown itself: the tree pair renders byte-identical text to the flat pair over real multi-construct content, which is what lets src/conformance.test.ts keep measuring the flat pair alone and still speak for both. (iii) Bytes survive a full round trip through the tree: decode -> encode -> decode reproduces the identical package, and the re-encoded bytes still carry the document's real content rather than an empty-but-valid shell.
+// (i) They are exactly assembleTree/flattenTree composed onto the flat pair -- pinned by constructing the same value both ways, so a future edit that swapped assembleTree for bare decompose (dropping the styles-minting pass) or forgot to flatten before emitting would fail here rather than silently changing what callers get. (ii) The transform is transparent to the markdown itself: the tree pair renders byte-identical text to the flat pair over real multi-construct content, which is what lets src/conformance.test.ts keep measuring the flat pair alone and still speak for both. (iii) Bytes survive a full round trip through the tree: decode -> encode -> decode reproduces the identical package, and the re-encoded bytes still carry the document's real content rather than an empty-but-valid shell.
 //
-// The blockquote fixture below is not decorative: two blockquote paragraphs share an indentLeftPt tuple, which is the one construct this package's lowering produces that assemblePackage's minting actually hoists onto a styles-table entry. It is the case where "assemblePackage" and "decompose plus an envelope" produce genuinely different values, so it is the case that proves which one readMarkdown calls.
+// The blockquote fixture below is not decorative: two blockquote paragraphs share an indentLeftPt tuple, which is the one construct this package's lowering produces that assembleTree's minting actually hoists onto a styles-table entry. It is the case where "assembleTree" and "decompose plus an envelope" produce genuinely different values, so it is the case that proves which one readMarkdown calls.
 
-import { assemblePackage, DocumentPackageSchema, flattenPackage, isPackageGroup, isSectionConstructGroupNode, type DocumentPackage, type SectionConstructGroupNode } from 'document-schema.js';
+import { assembleTree, DocumentTreeSchema, flattenTree, isTreeGroup, isSectionConstructGroupNode, type DocumentTree, type SectionConstructGroupNode } from 'document-schema.js';
 import { z } from 'zod';
 import { describe, expect, it } from 'vitest';
 import { markdownCodec, markdownContentCodec } from './codec';
@@ -54,7 +54,7 @@ const FOOTNOTE_SHAPES = {
 
 // Construct groups sit wherever their marker pair sat in the block flow, which for a footnote definition following a heading is inside that heading's own group rather than at the section's top level -- so this walks the whole subtree rather than filtering one children array. Filtered to ANCHOR groups where the tests count footnote definitions specifically: since blockquotes became divisions, a fixture's quotes promote construct groups of their own beside the anchors.
 function collectConstructGroups(node: unknown): SectionConstructGroupNode[] {
-  if (!isPackageGroup(node)) return [];
+  if (!isTreeGroup(node)) return [];
   const here = isSectionConstructGroupNode(node) ? [node] : [];
   return [...here, ...node.children.flatMap(collectConstructGroups)];
 }
@@ -63,13 +63,13 @@ function collectFootnoteGroups(node: unknown): SectionConstructGroupNode[] {
   return collectConstructGroups(node).filter((group) => group.node.kind === 'anchor' && group.node.anchorType === 'footnote');
 }
 
-describe('readMarkdown: markdown text -> DocumentPackage', () => {
+describe('readMarkdown: markdown text -> DocumentTree', () => {
   it('produces a schema-valid wordprocessing package with one section group per lowered section', () => {
     const { documentPackage } = readMarkdown(SAMPLE);
     const { document } = readMarkdownContent(SAMPLE);
     if (document.kind !== 'wordprocessing') throw new Error('markdown lowers to wordprocessing content');
 
-    expect(DocumentPackageSchema.safeParse(documentPackage).success).toBe(true);
+    expect(DocumentTreeSchema.safeParse(documentPackage).success).toBe(true);
     expect(documentPackage.kind).toBe('wordprocessing');
     expect(documentPackage.children).toHaveLength(document.sections.length);
   });
@@ -82,9 +82,9 @@ describe('readMarkdown: markdown text -> DocumentPackage', () => {
     expect(constructGroups[0]?.node).toMatchObject({ kind: 'anchor', anchorType: 'footnote', name: '1' });
   });
 
-  it('is assemblePackage composed onto readMarkdownContent, minting included', () => {
+  it('is assembleTree composed onto readMarkdownContent, minting included', () => {
     for (const source of [SAMPLE, BLOCKQUOTED]) {
-      expect(readMarkdown(source).documentPackage).toEqual(assemblePackage(readMarkdownContent(source).document));
+      expect(readMarkdown(source).documentPackage).toEqual(assembleTree(readMarkdownContent(source).document));
     }
   });
 
@@ -97,7 +97,7 @@ describe('readMarkdown: markdown text -> DocumentPackage', () => {
 
   it('flattens back to exactly the document readMarkdownContent produces', () => {
     for (const source of [SAMPLE, BLOCKQUOTED]) {
-      expect(flattenPackage(readMarkdown(source).documentPackage)).toEqual(readMarkdownContent(source).document);
+      expect(flattenTree(readMarkdown(source).documentPackage)).toEqual(readMarkdownContent(source).document);
     }
   });
 
@@ -142,12 +142,12 @@ describe('readMarkdown: markdown text -> DocumentPackage', () => {
     ].join('\n');
     const { documentPackage } = readMarkdown(source);
     const { document } = readMarkdownContent(source);
-    expect(DocumentPackageSchema.safeParse(documentPackage).success).toBe(true);
-    expect(flattenPackage(documentPackage)).toEqual(document);
+    expect(DocumentTreeSchema.safeParse(documentPackage).success).toBe(true);
+    expect(flattenTree(documentPackage)).toEqual(document);
   });
 });
 
-describe('writeMarkdown: DocumentPackage -> markdown text', () => {
+describe('writeMarkdown: DocumentTree -> markdown text', () => {
   it('renders byte-identical text to writeMarkdownContent over the flat document', () => {
     for (const source of [SAMPLE, BLOCKQUOTED]) {
       expect(writeMarkdown(readMarkdown(source).documentPackage)).toBe(writeMarkdownContent(readMarkdownContent(source).document));
@@ -181,14 +181,14 @@ describe('writeMarkdown: DocumentPackage -> markdown text', () => {
   });
 
   it('throws MarkdownUnsupportedDocumentKindError for a package whose kind markdown cannot represent', () => {
-    const spreadsheet = assemblePackage({ kind: 'spreadsheet', metadata: {}, sheets: [] });
+    const spreadsheet = assembleTree({ kind: 'spreadsheet', metadata: {}, sheets: [] });
 
     expect(() => writeMarkdown(spreadsheet)).toThrow(MarkdownUnsupportedDocumentKindError);
   });
 
-  it('throws MarkdownUnsupportedDocumentKindError, not a bare Error, for a formula package with no formula node -- flattenPackage has its own single-ContentFormula-node constraint for this kind that this check pre-empts entirely', () => {
-    // Hand-built rather than routed through assemblePackage: assemblePackage(ContentDocument) always produces exactly one formula node for a 'formula' document, so this empty-children shape (the one flattenPackage itself rejects) can only arise from a caller constructing a DocumentPackage directly.
-    const formula: DocumentPackage = { kind: 'formula', metadata: {}, children: [] };
+  it('throws MarkdownUnsupportedDocumentKindError, not a bare Error, for a formula package with no formula node -- flattenTree has its own single-ContentFormula-node constraint for this kind that this check pre-empts entirely', () => {
+    // Hand-built rather than routed through assembleTree: assembleTree(ContentDocument) always produces exactly one formula node for a 'formula' document, so this empty-children shape (the one flattenTree itself rejects) can only arise from a caller constructing a DocumentTree directly.
+    const formula: DocumentTree = { kind: 'formula', metadata: {}, children: [] };
 
     expect(() => writeMarkdown(formula)).toThrow(MarkdownUnsupportedDocumentKindError);
   });
@@ -199,8 +199,8 @@ describe('writeMarkdown: DocumentPackage -> markdown text', () => {
     expect(() => writeMarkdown(documentPackage, { signal: AbortSignal.abort() })).toThrow();
   });
 
-  it('wraps flattenPackage\'s own bare Error as MarkdownPackageFlattenError when a group carries a style ref the package has no styles table to resolve', () => {
-    // A minimal, hand-built reproduction of the one flattenPackage failure reachable for a 'wordprocessing' package: the section group below still references its minted style, but the package's own top-level styles table has been stripped out from under it.
+  it('wraps flattenTree\'s own bare Error as MarkdownPackageFlattenError when a group carries a style ref the package has no styles table to resolve', () => {
+    // A minimal, hand-built reproduction of the one flattenTree failure reachable for a 'wordprocessing' package: the section group below still references its minted style, but the package's own top-level styles table has been stripped out from under it.
     const { styles, ...packageWithoutStyles } = readMarkdown(BLOCKQUOTED).documentPackage;
     expect(styles).toBeDefined();
 
@@ -208,7 +208,7 @@ describe('writeMarkdown: DocumentPackage -> markdown text', () => {
     expect(() => writeMarkdown(packageWithoutStyles)).toThrow(/style ref/);
   });
 
-  it('reports a PACKAGE_TABLE_DROPPED diagnostic per non-empty package-level table flattenPackage cannot carry into markdown', () => {
+  it('reports a PACKAGE_TABLE_DROPPED diagnostic per non-empty package-level table flattenTree cannot carry into markdown', () => {
     const base = readMarkdown(SAMPLE).documentPackage;
     const withExtraTables = {
       ...base,
@@ -238,12 +238,12 @@ describe('writeMarkdown: DocumentPackage -> markdown text', () => {
 
 describe('the construct-group path over footnote shapes beyond SAMPLE\'s single case', () => {
   for (const [name, source] of Object.entries(FOOTNOTE_SHAPES)) {
-    it(`${name}: readMarkdown is assemblePackage(readMarkdownContent(...).document), and flattens back to it exactly`, () => {
+    it(`${name}: readMarkdown is assembleTree(readMarkdownContent(...).document), and flattens back to it exactly`, () => {
       const { documentPackage } = readMarkdown(source);
       const { document } = readMarkdownContent(source);
 
-      expect(documentPackage).toEqual(assemblePackage(document));
-      expect(flattenPackage(documentPackage)).toEqual(document);
+      expect(documentPackage).toEqual(assembleTree(document));
+      expect(flattenTree(documentPackage)).toEqual(document);
     });
 
     it(`${name}: writeMarkdown renders byte-identical text to writeMarkdownContent`, () => {
@@ -276,11 +276,11 @@ describe('tree-only carries: reference definitions and front-matter residue', ()
     expect(documentPackage.definitions).toEqual({ FOO: { kind: 'link', destination: '/url', title: 'the title' } });
   });
 
-  it('leaves definitions and the package source table absent for a document with neither, so the package is exactly assemblePackage of the flat document', () => {
+  it('leaves definitions and the package source table absent for a document with neither, so the package is exactly assembleTree of the flat document', () => {
     const { documentPackage } = readMarkdown('plain body');
     expect(documentPackage.definitions).toBeUndefined();
     expect(documentPackage.source).toBeUndefined();
-    expect(documentPackage).toEqual(assemblePackage(readMarkdownContent('plain body').document));
+    expect(documentPackage).toEqual(assembleTree(readMarkdownContent('plain body').document));
   });
 
   it('renders this package\'s own link definitions back out after the body, and reports no PACKAGE_TABLE_DROPPED for them', () => {
@@ -336,7 +336,7 @@ describe('tree-only carries: reference definitions and front-matter residue', ()
   });
 });
 
-describe('markdownCodec: bytes <-> DocumentPackage', () => {
+describe('markdownCodec: bytes <-> DocumentTree', () => {
   it('decodes real bytes to a package and encodes it back to bytes carrying the same content', () => {
     const documentPackage = z.decode(markdownCodec, SAMPLE_BYTES);
     expect(documentPackage.kind).toBe('wordprocessing');
@@ -366,7 +366,7 @@ describe('markdownCodec: bytes <-> DocumentPackage', () => {
     const documentPackage = z.decode(markdownCodec, SAMPLE_BYTES);
     const document = z.decode(markdownContentCodec, SAMPLE_BYTES);
 
-    expect(flattenPackage(documentPackage)).toEqual(document);
+    expect(flattenTree(documentPackage)).toEqual(document);
     expect(z.encode(markdownCodec, documentPackage)).toEqual(z.encode(markdownContentCodec, document));
   });
 });

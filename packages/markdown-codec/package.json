@@ -1,7 +1,7 @@
 {
   "name": "markdown-codec",
   "version": "5.0.3",
-  "description": "Hand-written CommonMark+GFM <-> DocumentPackage codec, built on document-schema.js",
+  "description": "Hand-written CommonMark+GFM <-> DocumentTree codec, built on document-schema.js",
   "type": "module",
   "repository": {
     "type": "git",
