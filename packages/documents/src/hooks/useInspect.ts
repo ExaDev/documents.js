@@ -1,5 +1,5 @@
 import { useMutation } from '@tanstack/react-query';
-import type { ContentDocument, DocumentFormat, DocumentPackageJson, LayoutDocument } from 'documents.js';
+import type { ContentDocument, DocumentFormat, DocumentTreeJson, LayoutDocument } from 'documents.js';
 
 import { getRpcClient } from '../rpc/client';
 import type { Diagnostic } from '../shared/diagnostics';
@@ -11,10 +11,10 @@ export interface ReadContentInput {
   bytes: Uint8Array<ArrayBuffer>;
 }
 
-// What content.read returns across the worker boundary: the flat ContentDocument the preview components render, plus the same document in its artefact form -- the tree-form DocumentPackage stamped with its release-pinned $schema URI (the artefact's version since document-schema.js 4), which the structure tree shows.
+// What content.read returns across the worker boundary: the flat ContentDocument the preview components render, plus the same document in its artefact form -- the tree-form DocumentTree stamped with its release-pinned $schema URI (the artefact's version since document-schema.js 4), which the structure tree shows.
 export interface ContentReadResult {
   content: ContentDocument;
-  package: DocumentPackageJson;
+  package: DocumentTreeJson;
 }
 
 export function useReadContent() {
@@ -55,11 +55,11 @@ export interface PdfInspectResult extends InspectDiagnostics {
   layout: SanitizedLayoutDocument;
 }
 
-// Structure derived directly from a read document (variant-aware summary + the $schema-stamped tree-form DocumentPackage), produced client-side from content already on hand -- no PDF layout pass, no second RPC. Used by formats that preview their native representation rather than a PDF rendition.
+// Structure derived directly from a read document (variant-aware summary + the $schema-stamped tree-form DocumentTree), produced client-side from content already on hand -- no PDF layout pass, no second RPC. Used by formats that preview their native representation rather than a PDF rendition.
 export interface ContentInspectResult extends InspectDiagnostics {
   backing: 'content';
   summary: readonly string[];
-  package: DocumentPackageJson;
+  package: DocumentTreeJson;
 }
 
 export type InspectResult = PdfInspectResult | ContentInspectResult;
