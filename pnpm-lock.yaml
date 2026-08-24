@@ -751,7 +751,7 @@ importers:
   packages/ooxml.js:
     dependencies:
       archive-codec:
-        specifier: ^1.1.2
+        specifier: ^1.2.0
         version: link:../archive-codec
       document-schema.js:
         specifier: ^5.0.0
