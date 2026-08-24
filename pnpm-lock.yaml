@@ -809,7 +809,7 @@ importers:
   packages/pdf-codec:
     dependencies:
       byte-codec:
-        specifier: ^1.1.13
+        specifier: ^1.2.0
         version: link:../byte-codec
       document-schema.js:
         specifier: ^5.0.0
