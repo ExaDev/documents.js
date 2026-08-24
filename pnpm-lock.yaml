@@ -601,7 +601,7 @@ importers:
         specifier: ^6.1.0
         version: link:../ooxml.js
       pdf-codec:
-        specifier: ^3.4.4
+        specifier: ^3.5.0
         version: link:../pdf-codec
       temml:
         specifier: 0.13.4
