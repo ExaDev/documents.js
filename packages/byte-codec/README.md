@@ -42,16 +42,16 @@ To run a single test file, pass its path to vitest directly, e.g. `pnpm exec vit
 
 ## What it provides
 
-| Module | Exports |
-|---|---|
-| `bytes/writer` | `ByteWriter` (chunked growable byte-output builder), `concatBytes` |
-| `bytes/reader` | `ByteReader` (sequential big/little-endian byte reader), `isAsciiWhitespace` |
-| `bytes/crc32` | `crc32` (IEEE 802.3 / ZIP / PNG polynomial table-driven CRC-32) |
-| `bytes/flate` | `deflate`, `inflate`, `inflateTolerant` (fflate-backed DEFLATE compression/decompression with a safety cap) |
-| `image/png-encode` | `encodePng` (raw RGB/RGBA pixels → PNG bytes) |
-| `image/png-decode` | `decodePng` (PNG bytes → raw pixels), `RawImage` |
-| `image/png-filter` | `filterScanlines`, `unfilterScanlines` (the five PNG scanline filters) |
-| `image/jpeg-info` | `readJpegInfo` (JPEG header reader: dimensions, components, progressive flag — no sample decoding) |
+| Module             | Exports                                                                                                     |
+| ------------------ | ----------------------------------------------------------------------------------------------------------- |
+| `bytes/writer`     | `ByteWriter` (chunked growable byte-output builder), `concatBytes`                                          |
+| `bytes/reader`     | `ByteReader` (sequential big/little-endian byte reader), `isAsciiWhitespace`                                |
+| `bytes/crc32`      | `crc32` (IEEE 802.3 / ZIP / PNG polynomial table-driven CRC-32)                                             |
+| `bytes/flate`      | `deflate`, `inflate`, `inflateTolerant` (fflate-backed DEFLATE compression/decompression with a safety cap) |
+| `image/png-encode` | `encodePng` (raw RGB/RGBA pixels → PNG bytes)                                                               |
+| `image/png-decode` | `decodePng` (PNG bytes → raw pixels), `RawImage`                                                            |
+| `image/png-filter` | `filterScanlines`, `unfilterScanlines` (the five PNG scanline filters)                                      |
+| `image/jpeg-info`  | `readJpegInfo` (JPEG header reader: dimensions, components, progressive flag — no sample decoding)          |
 
 ## Conventions
 

@@ -8,7 +8,7 @@
 
 This is a genuinely large undertaking with an honest trade-off spelled out in [Fidelity](#fidelity): this is not, and does not attempt to be, as robust against adversarial or badly malformed real-world PDFs as a library with 15+ years of hardening. What it buys instead is a dependency-free, fully auditable PDF implementation with no supply-chain surface beyond `document-schema.js`, `fflate`, and `zod`.
 
-`documents.js` uses this package to convert docx/pptx/odt/odp/ods/odg to and from PDF, and to render MathML formulas (typeset by its own `src/mathml/` engine) through the embedded math font this package parses and writes. That MathML *layout* engine deliberately stays in `documents.js` — see [Architecture](#architecture) for exactly where the boundary sits and why a real `MathBox` value crosses it with zero cast or wrapper.
+`documents.js` uses this package to convert docx/pptx/odt/odp/ods/odg to and from PDF, and to render MathML formulas (typeset by its own `src/mathml/` engine) through the embedded math font this package parses and writes. That MathML _layout_ engine deliberately stays in `documents.js` — see [Architecture](#architecture) for exactly where the boundary sits and why a real `MathBox` value crosses it with zero cast or wrapper.
 
 ```mermaid
 graph TD
@@ -73,7 +73,7 @@ npm install pdf-codec
 Reading and writing PDF bytes:
 
 ```ts
-import { readPdf, writePdf } from 'pdf-codec';
+import { readPdf, writePdf } from "pdf-codec";
 
 const layout = readPdf(pdfBytes); // -> LayoutDocument: pages of positioned text/image/rect/line/ellipse/path/link items
 const bytes = writePdf(layout);
@@ -81,7 +81,7 @@ const bytes = writePdf(layout);
 
 `LayoutDocument` and its whole item family — every item/page/image-asset type and schema, plus `LAYOUT_FORMAT_VERSION` — are this package's own exports, ported from `document-schema.js` (which dropped them) so a codec's native model lives in the codec, the same family pattern as `ooxml.js`'s `Package`/`XmlElement` and `markdown-codec`'s AST. `readPdf`/`writePdf` keep their signatures; callers see the same names from a new home. `documents.js` re-exports the family onward from its own barrel — those re-exports now source from `pdf-codec` rather than `document-schema.js`, same names, new source.
 
-There is deliberately **no `DocumentTree`-returning read or `DocumentTree`-accepting write here**, and `readPdf`/`writePdf` are this package's primary API precisely because of that. Only `markdown-codec`'s own read entry point returns `document-schema.js`'s flat `ContentDocument` directly — `ooxml.js`'s `readDocx`/`readPptx` return `DocxDocument`/`PptxDocument` and `odf.js`'s `readOdt`/`readOds` return `OdtDocument`/`OdsDocument`, each codec's own native model, with only `ooxml.js`'s separate `readXlsxContent` producing a `ContentDocument` outright. What lets `documents.js` offer one tree-native entry point uniformly across those formats (`decompose`/`assembleTree` outward, `flattenTree` back) is its own `readXContent` wrapper layer (`readDocxContent`, `readOdtContent`, and siblings), projecting each codec's native model into the flat `ContentDocument` — a step the codecs themselves don't take. PDF has no such wrapper to project through: `readPdf` yields *layout* cheaply, because positioned glyphs and paths are all the format actually states, and semantic content only through a separate, expensive, lossy reconstruction pass that infers paragraphs, headings, tables, and shapes back out of geometry. That inference is semantic policy rather than codec business, so it lives in `documents.js` — a caller wanting a PDF as a `DocumentTree` passes `onDocument` to a named conversion function or to `convertDocument` itself and reads the tree off that callback (`convertDocument` on its own returns only bytes), or uses `createLocalDocumentConverter()`'s `DocumentConverter` port, whose `ConversionResult.package` is populated by wiring that same callback internally. The write direction is asymmetric for a different reason than it might look: turning a `DocumentTree` into PDF bytes is not itself a layout pass — `documents.js`'s `layoutDocumentFromPackage` is a mechanical inverse that walks the positions a *prior* layout pass already stamped onto the package's own content nodes as `frames`, and it only works at all when those frames exist (a bridge conversion's own dump, e.g. `odt-to-docx`, carries no `pages` and cannot reach PDF this way). The actual font-measuring, line-breaking engine runs earlier, wherever the package first passed through an X-to-PDF or PDF-to-X conversion — both the frame-stamping and the frame-walking are `documents.js`'s. Keeping both edges out of this package is still what makes the item layer an honest record of what a file says, separate from what any consumer thinks it means.
+There is deliberately **no `DocumentTree`-returning read or `DocumentTree`-accepting write here**, and `readPdf`/`writePdf` are this package's primary API precisely because of that. Only `markdown-codec`'s own read entry point returns `document-schema.js`'s flat `ContentDocument` directly — `ooxml.js`'s `readDocx`/`readPptx` return `DocxDocument`/`PptxDocument` and `odf.js`'s `readOdt`/`readOds` return `OdtDocument`/`OdsDocument`, each codec's own native model, with only `ooxml.js`'s separate `readXlsxContent` producing a `ContentDocument` outright. What lets `documents.js` offer one tree-native entry point uniformly across those formats (`decompose`/`assembleTree` outward, `flattenTree` back) is its own `readXContent` wrapper layer (`readDocxContent`, `readOdtContent`, and siblings), projecting each codec's native model into the flat `ContentDocument` — a step the codecs themselves don't take. PDF has no such wrapper to project through: `readPdf` yields _layout_ cheaply, because positioned glyphs and paths are all the format actually states, and semantic content only through a separate, expensive, lossy reconstruction pass that infers paragraphs, headings, tables, and shapes back out of geometry. That inference is semantic policy rather than codec business, so it lives in `documents.js` — a caller wanting a PDF as a `DocumentTree` passes `onDocument` to a named conversion function or to `convertDocument` itself and reads the tree off that callback (`convertDocument` on its own returns only bytes), or uses `createLocalDocumentConverter()`'s `DocumentConverter` port, whose `ConversionResult.package` is populated by wiring that same callback internally. The write direction is asymmetric for a different reason than it might look: turning a `DocumentTree` into PDF bytes is not itself a layout pass — `documents.js`'s `layoutDocumentFromPackage` is a mechanical inverse that walks the positions a _prior_ layout pass already stamped onto the package's own content nodes as `frames`, and it only works at all when those frames exist (a bridge conversion's own dump, e.g. `odt-to-docx`, carries no `pages` and cannot reach PDF this way). The actual font-measuring, line-breaking engine runs earlier, wherever the package first passed through an X-to-PDF or PDF-to-X conversion — both the frame-stamping and the frame-walking are `documents.js`'s. Keeping both edges out of this package is still what makes the item layer an honest record of what a file says, separate from what any consumer thinks it means.
 
 An encrypted PDF that opens without a password decrypts transparently — no extra option, no password parameter; one that genuinely needs a user password throws `PdfPasswordRequiredError`. See [Gotchas](#gotchas-and-quirks) for exactly which encryption is supported.
 
@@ -94,8 +94,8 @@ Both accept an optional `signal` (`AbortSignal`); `readPdf` additionally takes a
 The same round trip is also available as a schema-validated [`z.codec()`](https://zod.dev) pair:
 
 ```ts
-import { z } from 'zod';
-import { pdfCodec } from 'pdf-codec';
+import { z } from "zod";
+import { pdfCodec } from "pdf-codec";
 
 const layout = z.decode(pdfCodec, pdfBytes); // throws a ZodError if pdfBytes has no %PDF- header
 const pdfBytes2 = z.encode(pdfCodec, layout);
@@ -106,13 +106,19 @@ This is the no-extra-options form only — `readPdf`/`writePdf` remain the entry
 Embedding a real math formula: `writePdf`'s own `formulas` option takes an array of `PositionedFormula` — an already-laid-out `MathBox` (positioned glyph runs, fraction/radical rules, radical hook strokes) placed at a page position. This package supplies the font — `loadMathFont()` parses and caches the vendored STIX Two Math font once per process — but it does not lay MathML out itself; that is a separate concern this package deliberately doesn't own (see [Architecture](#architecture)).
 
 ```ts
-import { loadMathFont, writePdf } from 'pdf-codec';
-import { layoutFormula } from 'documents.js'; // or any other producer of a structurally-compatible MathBox
+import { loadMathFont, writePdf } from "pdf-codec";
+import { layoutFormula } from "documents.js"; // or any other producer of a structurally-compatible MathBox
 
 const { metricsAt } = loadMathFont();
-const { box } = layoutFormula(mathml, { metrics: metricsAt(12), sizePt: 12, color: { r: 0, g: 0, b: 0 } });
+const { box } = layoutFormula(mathml, {
+  metrics: metricsAt(12),
+  sizePt: 12,
+  color: { r: 0, g: 0, b: 0 },
+});
 
-const pdfBytes = writePdf(doc, { formulas: [{ pageIndex: 0, xPt: 50, yPt: 700, box }] });
+const pdfBytes = writePdf(doc, {
+  formulas: [{ pageIndex: 0, xPt: 50, yPt: 700, box }],
+});
 ```
 
 Because `MathBox` and its own constituent types (`MathGlyphRun`/`MathRule`/`MathStroke`/`MathAssembledGlyphs`/`MathColor`) are plain, structurally-typed data — not a class, not branded — any producer whose output matches the shape works here with no cast, no wrapper, and no transformation.
@@ -120,10 +126,10 @@ Because `MathBox` and its own constituent types (`MathGlyphRun`/`MathRule`/`Math
 Sizing a stretchy glyph — a parenthesis tall enough to wrap a big fraction, a radical sign sized to its radicand, an over-brace as wide as the content under it — is the OpenType `MATH` table's `MathVariants` job, and `loadMathFont()` exposes it directly:
 
 ```ts
-import { loadMathFont } from 'pdf-codec';
+import { loadMathFont } from "pdf-codec";
 
 const { stretchGlyph } = loadMathFont();
-const paren = stretchGlyph(0x28, 'vertical', 40, 12); // a '(' stretched to 40pt, set at 12pt
+const paren = stretchGlyph(0x28, "vertical", 40, 12); // a '(' stretched to 40pt, set at 12pt
 // paren.kind      -> 'assembly' (no single pre-built variant reaches 40pt)
 // paren.size      -> the extent actually achieved, >= 40 whenever the font can reach it
 // paren.placements -> [{ glyphId, offset, advance }, ...], bottom to top, seams already overlapped
@@ -140,7 +146,7 @@ Building a layout engine on top of this codec (this is what `documents.js`'s own
 Embedding real fonts instead of substituting standard-14 faces, via a `FontRegistry` (see `src/font-registry.ts` for the source-document → caller-supplied → vendored-substitute → standard-14 resolution order). Pass the same registry to both the measurer and `writePdf` so what was measured and what gets drawn come from one font:
 
 ```ts
-import { createFontMeasurer, createFontRegistry, writePdf } from 'pdf-codec';
+import { createFontMeasurer, createFontRegistry, writePdf } from "pdf-codec";
 
 // With no `fonts`/`sourceFonts` of its own, the registry still maps Calibri onto the vendored,
 // metric-compatible Carlito face this package embeds (and Cambria onto Caladea).
@@ -148,7 +154,10 @@ const fonts = createFontRegistry();
 
 const measurer = createFontMeasurer(fonts);
 // ... wrap text + build a LayoutDocument using the measurer (documents.js owns wrapRunsToWidth) ...
-const pdfBytes = writePdf(doc, { fonts, onMissingGlyph: (m) => console.warn('no glyph for', m.from) });
+const pdfBytes = writePdf(doc, {
+  fonts,
+  onMissingGlyph: (m) => console.warn("no glyph for", m.from),
+});
 ```
 
 Every text run whose family resolves to a real face is subsetted to the glyphs the document actually uses and embedded as its own `/Type0` + `/CIDFontType2` + `/FontFile2` group. **Omit `fonts` and nothing changes at all** — output is byte-identical to a build with no embedded-font support (asserted against golden digests in `src/write-embedded-font.test.ts`).
@@ -156,10 +165,15 @@ Every text run whose family resolves to a real face is subsetted to the glyphs t
 Inspecting a standalone font file before handing it to a `FontRegistry` as a `ProvidedFont`: `readFontFace` reads family/bold/italic straight off the font's own `name`/`OS/2`/`head` tables — exactly the triple `ProvidedFont` needs:
 
 ```ts
-import { createFontRegistry, readFontFace } from 'pdf-codec';
+import { createFontRegistry, readFontFace } from "pdf-codec";
 
-const { family, bold, italic } = readFontFace(brandSansTtfBytes, 'BrandSans-Bold.ttf'); // throws FontFaceParseError, naming the source, for a .ttc/.woff file or one with no family name
-const fonts = createFontRegistry({ fonts: [{ family, bold, italic, bytes: brandSansTtfBytes }] });
+const { family, bold, italic } = readFontFace(
+  brandSansTtfBytes,
+  "BrandSans-Bold.ttf",
+); // throws FontFaceParseError, naming the source, for a .ttc/.woff file or one with no family name
+const fonts = createFontRegistry({
+  fonts: [{ family, bold, italic, bytes: brandSansTtfBytes }],
+});
 ```
 
 `createFontMeasurer`'s second argument carries `verticalMetrics`, a `VerticalMetricPolicy` of `'hhea'` (default) / `'os2Typo'` / `'os2Win'`, deciding which of the three competing ascent/descent/line-gap sets an sfnt declares should drive line height for an embedded face.
@@ -167,11 +181,18 @@ const fonts = createFontRegistry({ fonts: [{ family, bold, italic, bytes: brandS
 Reading a JPEG 2000 image directly, either as pixels or as metadata alone:
 
 ```ts
-import { decodeJpeg2000, readJpeg2000Metadata } from 'pdf-codec';
+import { decodeJpeg2000, readJpeg2000Metadata } from "pdf-codec";
 
 // Works on any conforming codestream -- including one whose pixels this decoder refuses, which is what `decodable`/`undecodableReason` are for.
 const metadata = readJpeg2000Metadata(jp2OrCodestreamBytes);
-console.log(metadata.width, metadata.height, metadata.transform, metadata.layers, metadata.decodable, metadata.undecodableReason);
+console.log(
+  metadata.width,
+  metadata.height,
+  metadata.transform,
+  metadata.layers,
+  metadata.decodable,
+  metadata.undecodableReason,
+);
 
 const image = decodeJpeg2000(jp2OrCodestreamBytes); // -> { width, height, bitDepth, components: Int32Array[] }, one plane per component
 ```
@@ -183,8 +204,8 @@ The generic byte- and image-container primitives (`crc32`, `deflate`/`inflate`/`
 Every module under `src/` is also deep-importable directly by its own subpath:
 
 ```ts
-import { crc32 } from 'pdf-codec/bytes/crc32';
-import { readJpegInfo } from 'pdf-codec/image/jpeg-info';
+import { crc32 } from "pdf-codec/bytes/crc32";
+import { readJpegInfo } from "pdf-codec/image/jpeg-info";
 ```
 
 This works via package.json's `"./*"` wildcard export, resolving any `pdf-codec/<path>` subpath to the correspondingly-named file under `dist/` — both ESM `import` and CJS `require` resolve the same way.
@@ -192,7 +213,7 @@ This works via package.json's `"./*"` wildcard export, resolving any `pdf-codec/
 One subpath is a declared entry point in its own right: **`pdf-codec/read`** (an explicit `exports` entry onto `src/read.ts`, the read pipeline's own module). A consumer that only ever reads PDFs and imports the root barrel statically reaches `write.ts`'s module-scope imports — `math-font.ts` (the vendored STIX Two Math font) and `font-registry.ts` (the four Carlito/Caladea faces), together ~2.9 MB of font binaries it can never execute, which on Cloudflare Workers' free plan (3 MB gzipped for an entire Worker) is most of the budget. The read entry's module graph provably excludes them:
 
 ```ts
-import { readPdf } from 'pdf-codec/read';
+import { readPdf } from "pdf-codec/read";
 ```
 
 `src/read-graph.test.ts` walks the entry's static import graph and fails the build if `write.ts`, `math-font.ts`, `font-registry.ts`, or any asset module becomes reachable (type-only imports are exempt — they erase at compile time — so a read-side module can keep typing against the root barrel's types while its runtime graph stays narrow). The entry carries `readPdf` and the read pipeline's own helpers (`normalizeRotation`, `pageRotationTransform`); the other read-adjacent surfaces it does not itself own stay deep-importable through the wildcard and are asset-free the same way — the diagnostics vocabulary (`pdf-codec/diagnostics`), the `LayoutDocument` item family (`pdf-codec/layout`), PDF string/date scalar decoding (`pdf-codec/pdf-text`), and standard-14 resolution/AFM metrics (`pdf-codec/fonts`, `pdf-codec/afm-widths`).
@@ -241,7 +262,7 @@ Dependency direction is strictly downward and checkable: `layout` imports only `
 - **STIX Two Math is a CFF-flavoured OpenType font, not TrueType/glyf** — the **entire** `CFF ` table is embedded verbatim as a single `/FontFile3` `/Subtype /CIDFontType0C` stream (a real, correct, working embedded font, just not glyph-subsetted). Everything else genuinely IS built from a targeted parse of only what's used: `cmap` resolves exactly the Unicode code points a document's formulas reference, and the emitted `/W` widths array covers only drawn glyph IDs. A CID-keyed composite font built this way needs no `/CIDToGIDMap` — per ISO 32000-1 9.7.4.2, a `/CIDFontType0` whose `/FontFile3` is a non-CID-keyed CFF program is read with CID directly indexing `CharStrings` by glyph order (CID == GID).
 - **The OpenType `MATH` table's `MathVariants` is parsed, stretchy-glyph assembly implemented, and the result genuinely drawable** via `MathAssembledGlyphs` (glyph-ID-addressed placements, since most construction glyphs have no Unicode code point — they draw directly because CID == GID here). An unencoded glyph gets no ToUnicode entry; the construction is wrapped in an `/ActualText` span carrying the operator's own text so it still extracts as `(`. `MathConstants` and `MathGlyphInfo` (italics correction, top-accent attachment) are parsed in full.
 - **What this package draws for a stretchy glyph is decided entirely by its caller.** Which operators a document actually stretches is a layout-engine decision — `documents.js`'s own `src/mathml/layout.ts` currently stretches vertical fences in an `mrow` and nothing else.
-- **Real per-glyph ink bounds are measured from the outline (`inkAscentPt`/`inkDescentPt`), computed by walking each glyph's Type 2 charstring.** `ascentPerEm`/`descentPerEm` remain alongside them as the uniform face-wide figure, still the right measure for anything sized against the font rather than particular characters, and the fallback for a glyph with no outline to measure. An ink box is genuinely tight, which for a math font is often *larger* than the nominal metrics (over a tenth of STIX Two Math's repertoire draws above its nominal ascent). `inkDescentPt` is negative where the glyph's lowest ink sits above the baseline.
+- **Real per-glyph ink bounds are measured from the outline (`inkAscentPt`/`inkDescentPt`), computed by walking each glyph's Type 2 charstring.** `ascentPerEm`/`descentPerEm` remain alongside them as the uniform face-wide figure, still the right measure for anything sized against the font rather than particular characters, and the fallback for a glyph with no outline to measure. An ink box is genuinely tight, which for a math font is often _larger_ than the nominal metrics (over a tenth of STIX Two Math's repertoire draws above its nominal ascent). `inkDescentPt` is negative where the glyph's lowest ink sits above the baseline.
 - **A `LayoutLine`/`LayoutPath` `style` of `dashed`/`dotted` becomes a real dash-array (`d`) operator scaled to the stroke's own width; `double` becomes two genuinely separate offset strokes.** Dash lengths are stroke-width multiples so a hairline and a thick rule both read as recognisably dashed: `dashed` emits `[3w 3w] 0 d`, `dotted` emits `[0 2w] 0 d` with a `1 J` round cap (the zero on-length under a round cap paints a filled circle — exactly a dot; under PDF's default butt cap it paints nothing). Both are reset immediately after the paint operator (`[] 0 d`, `0 J`) since the graphics state persists for the whole content stream. `double` has no PDF operator and is drawn as geometry: width `w` splits into three equal bands, each rule `w/3` wide with centreline `w/3` offset, outer edges matching the single stroke's. Nothing on the read side recovers a stroke style — a dashed line read back comes back solid.
 - **An embedded `CIDFontType2` program needs no `cmap` table of its own**, and `sfnt-subset.ts`'s output doesn't carry one — character code → CID goes through the `Type0` font's `/Encoding` (Identity-H, so CID == character code), and CID → GID through `/CIDToGIDMap /Identity` (matching the GID-preserving design). Both happen inside the PDF's object graph, before the embedded font program is consulted (ISO 32000-1 9.7.4.2).
 - **`GPOS` pair kerning is read and applied for an embedded face; no other OpenType layout feature is.** `GSUB` (ligatures, contextual alternates, small caps) is never applied — a face's `fi` ligature is drawn as two separate glyphs. The legacy `kern` table is not read either (neither Carlito nor Caladea ships one). A kerned run is shown with `TJ`, and the sign of a `TJ` number is the opposite of the adjustment it expresses (ISO 32000-1 9.4.3: a positive number moves the next glyph closer). A run with no kerning pairs stays as one unsplit hex string with `Tj`.
@@ -259,7 +280,7 @@ Dependency direction is strictly downward and checkable: `layout` imports only `
 
 **Verification.** `src/test-support/jbig2.ts` holds real streams from three independent producers: jbig2enc (the encoder behind essentially every JBIG2-in-PDF in the wild), libtiff (MMR payloads), and a hand-written T.88 Annex E arithmetic encoder for templates jbig2enc will not emit. Every stream — hand-encoded ones included — is decoded by jbig2dec (Ghostscript's independent implementation) before being written out, and the bitmap recorded as each fixture's expected output is jbig2dec's, not this package's. The symbol-mode fixtures exist in six variants with only `REFCORNER`/`TRANSPOSED` bits rewritten, turning jbig2dec's output into a real differential test of the placement rules jbig2enc never exercises.
 
-A differential test pins the *set* of template positions and offsets but not their *order* — a context index is only a label for a neighbourhood pattern, so any consistent permutation cancels between encoder and decoder. TPGRON is refused rather than shipped unverified: jbig2enc's refinement support is disabled upstream, so the only available stream is one this package encoded itself, which cannot pin the pseudo-context constant even in principle (brute-forcing all 1024 candidates confirmed different unrelated bands of constants pass depending on the test image).
+A differential test pins the _set_ of template positions and offsets but not their _order_ — a context index is only a label for a neighbourhood pattern, so any consistent permutation cancels between encoder and decoder. TPGRON is refused rather than shipped unverified: jbig2enc's refinement support is disabled upstream, so the only available stream is one this package encoded itself, which cannot pin the pseudo-context constant even in principle (brute-forcing all 1024 candidates confirmed different unrelated bands of constants pass depending on the test image).
 
 ## JPEG 2000 scope
 
@@ -281,7 +302,7 @@ A differential test pins the *set* of template positions and offsets but not the
 
 **The one exception is math-formula rendering (`WritePdfOptions.formulas`): this genuinely embeds a real, hand-parsed font.** Real box-model glyph runs through the embedded STIX Two Math font with genuine per-glyph metrics and font-wide layout constants parsed directly from the `MATH` table. Stretchy constructions are real: a `MathVariants` variant or assembly resolved, measured against actual outlines, and drawn by glyph ID.
 
-**`readPdf(writePdf(doc))` is not guaranteed to reproduce `doc` exactly, and `writePdf(readPdf(bytes))` is not guaranteed to reproduce `bytes` exactly.** A PDF page is fundamentally positioned drawing operators, not a structured document — a shape drawn any way other than the recognised characteristic patterns, or rotated off-axis, collapses to a generic `LayoutPath`. This is a deliberate, permanent contrast with format-preserving codecs like `ooxml.js`'s `packageCodec`. `pdfCodec` shares `z.codec()`'s *mechanism* (schema-validated both ways) but not that *guarantee*.
+**`readPdf(writePdf(doc))` is not guaranteed to reproduce `doc` exactly, and `writePdf(readPdf(bytes))` is not guaranteed to reproduce `bytes` exactly.** A PDF page is fundamentally positioned drawing operators, not a structured document — a shape drawn any way other than the recognised characteristic patterns, or rotated off-axis, collapses to a generic `LayoutPath`. This is a deliberate, permanent contrast with format-preserving codecs like `ooxml.js`'s `packageCodec`. `pdfCodec` shares `z.codec()`'s _mechanism_ (schema-validated both ways) but not that _guarantee_.
 
 **Optional real-world corpus.** `test/corpus/` (gitignored) holds a `pnpm test:corpus` vitest project for manual conformance checking against real PDFs — Word/PowerPoint/Chrome/LibreOffice exports. Not part of `pnpm test` and does not gate CI; drop files in locally before a significant parser change.
 

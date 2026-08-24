@@ -2,7 +2,12 @@
   "$schema": "https://turborepo.com/schema.json",
   // eslint.shared.ts is every package's lint configuration, imported by each package's own eslint.config.ts. It has to be a global dependency rather than a per-task input: `_lint`'s inputs are resolved relative to the package being linted, so a root file one directory up is invisible to them, and editing a rule there would otherwise leave all thirteen packages reporting a cache hit against results computed under the previous rule set.
   // prettier.config.ts joins them for the same reason: eslint-plugin-prettier reads it at lint time, so changing a formatting option changes every package's lint result, and a per-package input one directory down cannot see it.
-  "globalDependencies": ["pnpm-lock.yaml", ".node-version", "eslint.shared.ts", "prettier.config.ts"],
+  "globalDependencies": [
+    "pnpm-lock.yaml",
+    ".node-version",
+    "eslint.shared.ts",
+    "prettier.config.ts"
+  ],
 
   // Every task name is the underscore-prefixed one each package already used for its real command (`_build` runs tsdown; the package's own `build` script was `turbo run _build`). Running the public names from here instead would make turbo invoke those wrapper scripts, which invoke turbo again -- the recursive-call case Turborepo's own docs warn against ("You should only define these commands in the root package.json"). The wrapper scripts stay in place and stay usable for a single package, but the root pipeline reaches straight past them to the leaf commands.
   //
@@ -41,20 +46,36 @@
     "_test": {
       "dependsOn": ["^_build"],
       // Unit tests are co-located as src/**/*.test.ts, so src/** covers them; test/ holds only the smoke and workerd suites, which have their own tasks below.
-      "inputs": ["src/**", "vitest.config.ts", "vitest.unit.config.ts", "package.json"],
+      "inputs": [
+        "src/**",
+        "vitest.config.ts",
+        "vitest.unit.config.ts",
+        "package.json"
+      ],
       // documents.js's examples suite regenerates its fixtures when this is set, which makes it a real input to the task rather than ambient state: turbo's strict env mode would otherwise strip it, and the switch would silently never take effect.
       "env": ["GENERATE_EXAMPLES"],
       "outputs": []
     },
     "_test:coverage": {
       "dependsOn": ["^_build"],
-      "inputs": ["src/**", "vitest.config.ts", "vitest.unit.config.ts", "package.json"],
+      "inputs": [
+        "src/**",
+        "vitest.config.ts",
+        "vitest.unit.config.ts",
+        "package.json"
+      ],
       "env": ["GENERATE_EXAMPLES"],
       "outputs": ["coverage/**"]
     },
     "_test:workers": {
       "dependsOn": ["^_build"],
-      "inputs": ["src/**", "test/workers/**", "vitest.workers.config.ts", "wrangler.jsonc", "package.json"],
+      "inputs": [
+        "src/**",
+        "test/workers/**",
+        "vitest.workers.config.ts",
+        "wrangler.jsonc",
+        "package.json"
+      ],
       "outputs": []
     },
     "_test:smoke": {
@@ -62,20 +83,41 @@
       //
       // `^_test:smoke` is what keeps the run correct, and it is not obvious. Those in-script rebuilds run tsdown with `clean: true`, so a smoke task empties its own dist/ before repopulating it. That was harmless while every sibling arrived pre-built from the npm registry, but here a dependent resolves a sibling through a workspace symlink into that very directory -- so two smoke tasks running concurrently let one observe the other mid-clean. Reproduced directly: document-mcp's smoke suite failed with "Failed to resolve entry for package documents.js" in a parallel run and passed both alone and at --concurrency=1. Ordering the smoke tasks topologically means no package resolves through a dist/ that a dependency is still rewriting.
       "dependsOn": ["_build", "^_build", "^_test:smoke"],
-      "inputs": ["src/**", "test/smoke.test.mjs", "vitest.config.ts", "vitest.smoke.config.ts", "tsdown.config.ts", "scripts/**", "package.json"],
+      "inputs": [
+        "src/**",
+        "test/smoke.test.mjs",
+        "vitest.config.ts",
+        "vitest.smoke.config.ts",
+        "tsdown.config.ts",
+        "scripts/**",
+        "package.json"
+      ],
       // Deliberately empty, where three packages previously declared dist/** here: dist/ is `_build`'s output, and two tasks claiming the same output directory means a cache replay of one can overwrite the other's. The smoke run itself produces nothing worth caching.
       "outputs": []
     },
     "_test:corpus": {
       "dependsOn": ["^_build"],
       // markdown-codec's and pdf-codec's real-world conformance layers. Their corpora are gitignored, so this is a local-only task and CI does not run it -- as was true in those packages' own workflows.
-      "inputs": ["src/**", "test/corpus/**", "vitest.config.ts", "package.json"],
+      "inputs": [
+        "src/**",
+        "test/corpus/**",
+        "vitest.config.ts",
+        "package.json"
+      ],
       "outputs": []
     },
 
     "documents#_build": {
       "dependsOn": ["^_build"],
-      "inputs": ["src/**", "public/**", "index.html", "vite.config.ts", "tsconfig.json", "tsconfig.worker.json", "package.json"],
+      "inputs": [
+        "src/**",
+        "public/**",
+        "index.html",
+        "vite.config.ts",
+        "tsconfig.json",
+        "tsconfig.worker.json",
+        "package.json"
+      ],
       // CI switches the app's base path to /documents/ for Pages; strict env mode would strip it and silently produce a build with root-relative asset paths that 404 once deployed.
       "env": ["CI"],
       // Uncacheable on purpose. vite.config.ts embeds the HEAD commit SHA, its exact release tag, and its commit timestamp into the bundle by shelling out to git at config-load time. None of that is a declared input and none of it can be -- so on a commit that leaves packages/documents/** untouched, a cache replay would deploy a bundle stamped with the previous commit's identity. A vite build per deploy is cheaper than shipping wrong version metadata.
@@ -89,7 +131,12 @@
     },
     "documents#_typecheck": {
       "dependsOn": ["^_build"],
-      "inputs": ["$TURBO_DEFAULT$", "tsconfig.json", "tsconfig.worker.json", "tsconfig.node.json"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "tsconfig.json",
+        "tsconfig.worker.json",
+        "tsconfig.node.json"
+      ],
       "outputs": []
     },
     "documents#_test": {
@@ -105,11 +152,26 @@
 
     // The workspace root's own tooling files (eslint.config.ts, commitlint.config.ts, lint-staged.config.ts) are held to the same lint and typecheck gates as package code. Registered as root tasks so `turbo run _lint` and `turbo run _typecheck` cover them without a separate command.
     "//#_lint": {
-      "inputs": ["eslint.config.ts", "eslint.shared.ts", "prettier.config.ts", "commitlint.config.ts", "lint-staged.config.ts", "tsconfig.json"],
+      "inputs": [
+        "eslint.config.ts",
+        "eslint.shared.ts",
+        "prettier.config.ts",
+        "commitlint.config.ts",
+        "lint-staged.config.ts",
+        "tsconfig.json"
+      ],
       "outputs": [".eslintcache"]
     },
     "//#_typecheck": {
-      "inputs": ["eslint.config.ts", "eslint.shared.ts", "prettier.config.ts", "commitlint.config.ts", "lint-staged.config.ts", "tsconfig.json", "release-workspace.config.json"],
+      "inputs": [
+        "eslint.config.ts",
+        "eslint.shared.ts",
+        "prettier.config.ts",
+        "commitlint.config.ts",
+        "lint-staged.config.ts",
+        "tsconfig.json",
+        "release-workspace.config.json"
+      ],
       "outputs": []
     }
   }

@@ -26,13 +26,13 @@ To run a single test file, pass its path to vitest directly, e.g. `pnpm exec vit
 
 ## What it provides
 
-| Module | Exports |
-|---|---|
-| `outline/build` | `buildOutline` (per-kind TOC projection over a `DocumentTree`) |
-| `outline/effective` | `effectivePackage` (effective-property resolution) |
-| `outline/graph` | `projectDocumentGraph` (content-addressed property-graph projection over one or several `DocumentTree`s), `defaultExtractionPolicy`, `contentHashV1` (the projection's named, versioned node-identity contract), `orderKeys` (the fractional/lexicographic sibling-order-key operations — `orderKeyForIndex`/`orderKeyBetween`/`orderKeyBefore`/`orderKeyAfter`/`renumberedOrderKeys`) and `OrderKeyBudgetExhaustedError` (the named error every order-key exhaustion throws), `walkPropertyGraph` (the shared cycle-guarded traversal), and the `PropertyGraph`/`GraphNode`/`GraphEdge`/`GraphDocument`/`ExtractionPolicy`/`GraphEdgeLike`/`GraphLike`/`WalkedNode`/`WalkPropertyGraphOptions` types |
-| `outline/node` | `OutlineNode`, `OutlineChild`, `OutlineLeaf`, `OutlineNodeSchema`, `isOutlineNode`, `isOutlineChild`, `isOutlineLeaf` |
-| `outline/helpers` | `flattenOutline`, `outlineLeafText`, `leafContentHash` |
+| Module              | Exports                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `outline/build`     | `buildOutline` (per-kind TOC projection over a `DocumentTree`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `outline/effective` | `effectivePackage` (effective-property resolution)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `outline/graph`     | `projectDocumentGraph` (content-addressed property-graph projection over one or several `DocumentTree`s), `defaultExtractionPolicy`, `contentHashV1` (the projection's named, versioned node-identity contract), `orderKeys` (the fractional/lexicographic sibling-order-key operations — `orderKeyForIndex`/`orderKeyBetween`/`orderKeyBefore`/`orderKeyAfter`/`renumberedOrderKeys`) and `OrderKeyBudgetExhaustedError` (the named error every order-key exhaustion throws), `walkPropertyGraph` (the shared cycle-guarded traversal), and the `PropertyGraph`/`GraphNode`/`GraphEdge`/`GraphDocument`/`ExtractionPolicy`/`GraphEdgeLike`/`GraphLike`/`WalkedNode`/`WalkPropertyGraphOptions` types |
+| `outline/node`      | `OutlineNode`, `OutlineChild`, `OutlineLeaf`, `OutlineNodeSchema`, `isOutlineNode`, `isOutlineChild`, `isOutlineLeaf`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `outline/helpers`   | `flattenOutline`, `outlineLeafText`, `leafContentHash`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 
 Every module in the table is re-exported from the package root, so its exports import from `'document-outline.js'` directly. `outline/hash` (the `stableContentHash`/`canonicalise`/`sha256` primitives behind `leafContentHash`'s published recipe) is deliberately not on the root entry — it stays reachable via the `document-outline.js/outline/hash` subpath, keeping the root surface small.
 
@@ -44,13 +44,13 @@ An `OutlineNode` carries `text` (the group's own label), `level` (its source lev
 
 ### Per-kind hierarchy
 
-| Kind | Groups | Nesting | Leaves |
-|---|---|---|---|
-| wordprocessing | one per heading group, by `headingLevel` | stack semantics; list groups nest inside by `list.level` | non-list blocks, at the current depth |
-| presentation | one per slide group, `Slide N` | slide paragraphs nest by `list.level`, across its shapes | non-paragraph blocks, at the current depth |
-| spreadsheet | one per sheet group, the sheet's name | — | the sheet's images, then its embedded objects |
-| drawing | one per page group, `Page N` | — | the page's shape contents flattened, then its vectors |
-| formula | a single node | — | the `ContentFormula` itself |
+| Kind           | Groups                                   | Nesting                                                  | Leaves                                                |
+| -------------- | ---------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------- |
+| wordprocessing | one per heading group, by `headingLevel` | stack semantics; list groups nest inside by `list.level` | non-list blocks, at the current depth                 |
+| presentation   | one per slide group, `Slide N`           | slide paragraphs nest by `list.level`, across its shapes | non-paragraph blocks, at the current depth            |
+| spreadsheet    | one per sheet group, the sheet's name    | —                                                        | the sheet's images, then its embedded objects         |
+| drawing        | one per page group, `Page N`             | —                                                        | the page's shape contents flattened, then its vectors |
+| formula        | a single node                            | —                                                        | the `ContentFormula` itself                           |
 
 Both nesting scales follow the same stack semantics, modelled on how Word's navigation pane and PowerPoint's outline view present structure: each new group nests under the deepest open group with a strictly shallower level and pops equal-or-deeper groups closed, so an H4 following an H2 becomes its direct child (no synthetic intermediates) and an H1 after an H3 pops to the root; list groups behave identically on `list.level`'s 0-based scale (a jump from level 0 to level 2 nests directly under the 0). Within a group the two compose: heading groups open scopes, list groups nest inside them, and non-paragraph blocks (tables, images, page breaks, embedded objects) attach as leaves at the current depth without changing it. A paragraph at a leaf position carries neither grouping signal in a well-formed tree, sits flat at its scope, and closes the list nesting — which is what keeps the flattened leaf order identical to document order. `headingLevel` is the only heading signal read — a Heading `styleId` without `headingLevel` does not group — and in presentations it is not read at all: slides have no heading hierarchy of their own, so `list.level` is the only depth signal they carry.
 
@@ -61,7 +61,7 @@ Slide and page labels (`Slide 1`, `Page 1`, …) are 1-based, matching the Markd
 A tree group may carry a `style` ref into the package's `styles` table ([document-schema.js#21](https://github.com/ExaDev/document-schema.js/issues/21)). `effectivePackage(pkg)` resolves those refs away using document-schema.js's own overlay helpers (`resolveStyleChain`, `applyParagraphStyleProperties`, `applyRunStyleProperties` — the mechanics are the schema's to own, the same single-authority rule that moved the tree vocabulary there) and returns the package with every ref consumed and the styles table dropped:
 
 ```ts
-import { effectivePackage } from 'document-outline.js';
+import { effectivePackage } from "document-outline.js";
 
 const resolved = effectivePackage(pkg); // same tree, properties inlined, no styles table
 ```
@@ -75,11 +75,11 @@ Two guarantees worth depending on. First, `effectivePackage(factored)` deep-equa
 `projectDocumentGraph` ([ExaDev/documents.js#659](https://github.com/ExaDev/documents.js/issues/659)) exports one or several tree-form packages into a single property graph — nodes plus typed edges — with content-based deduplication and no `DocumentTree` schema change:
 
 ```ts
-import { projectDocumentGraph } from 'document-outline.js';
+import { projectDocumentGraph } from "document-outline.js";
 
 const graph = projectDocumentGraph([
-  { id: 'report-1', package: reportPkg },   // id: your stable, external document id
-  { id: 'memo-1', package: memoPkg },
+  { id: "report-1", package: reportPkg }, // id: your stable, external document id
+  { id: "memo-1", package: memoPkg },
 ]);
 // graph.nodes: { id, kind, ...own properties }
 // graph.edges: { from, to, kind, orderKey, path? } — kind is CONTAINS | STYLED_BY | DEFINED_BY | PROPERTY
@@ -104,9 +104,9 @@ Dedup itself needs no merge logic: identical content yields an identical hash yi
 `walkPropertyGraph(graph, startId, options?)` is a shared pre-order depth-first traversal over any `{ nodes, edges }` value shaped like a `PropertyGraph`, so every consumer — an outline renderer walking `CONTAINS`, a style-chain reader walking `STYLED_BY`, a generic graph browser walking everything — shares one traversal and one cycle policy instead of each hand-rolling its own:
 
 ```ts
-import { walkPropertyGraph } from 'document-outline.js';
+import { walkPropertyGraph } from "document-outline.js";
 
-const contains = walkPropertyGraph(graph, 'report-1', { kinds: ['CONTAINS'] });
+const contains = walkPropertyGraph(graph, "report-1", { kinds: ["CONTAINS"] });
 // readonly { node: GraphNode, edge: GraphEdgeLike | undefined }[], in document order
 ```
 
@@ -115,14 +115,20 @@ At each node, outgoing edges are restricted to `options.kinds` when given (else 
 ## Helpers
 
 ```ts
-import { buildOutline, effectivePackage, flattenOutline, leafContentHash, outlineLeafText } from 'document-outline.js';
+import {
+  buildOutline,
+  effectivePackage,
+  flattenOutline,
+  leafContentHash,
+  outlineLeafText,
+} from "document-outline.js";
 
-const outline = buildOutline(pkg);      // OutlineChild[] — the TOC projection
+const outline = buildOutline(pkg); // OutlineChild[] — the TOC projection
 const resolved = effectivePackage(pkg); // style refs consumed, table dropped
-flattenOutline(outline);                // every leaf payload, in document order
-outlineLeafText(aLeaf);                 // the leaf's own text (paragraph runs, table cells,
-                                        // image altText, formula LaTeX; '' for textless leaves)
-leafContentHash(aLeaf);                 // stable content hash — see the recipe below
+flattenOutline(outline); // every leaf payload, in document order
+outlineLeafText(aLeaf); // the leaf's own text (paragraph runs, table cells,
+// image altText, formula LaTeX; '' for textless leaves)
+leafContentHash(aLeaf); // stable content hash — see the recipe below
 ```
 
 Heading and list paragraphs are represented by their group nodes and are not duplicated as leaves, so a tree of groups flattens to the non-paragraph content plus every unlevelled paragraph; a group's own text is always its `text` field. `leafContentHash` hashes the leaf as given and deliberately does not fold style resolution in — a leaf alone does not know its ancestor group refs, so effective-property resolution can only happen with the whole package in hand. The resolve-then-hash route is `effectivePackage(pkg)` first, then hash the resolved leaves; hash the raw leaf only when you truly mean the literal object.

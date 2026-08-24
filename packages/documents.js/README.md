@@ -75,14 +75,16 @@ npm install documents.js document-schema.js
 A single function, `convertDocument`, sits behind every named conversion and reaches every pair the composition engine can route — all 111 supported (source, target) combinations. The named functions below are thin one-line forwarders to it; they remain the ergonomic layer for a caller who wants a fixed pair and autocomplete discovery, while `convertDocument` is the first-class entry point for a caller working from a runtime format pair (CLI, MCP tool, matrix enumeration).
 
 ```ts
-import { convertDocument } from 'documents.js';
+import { convertDocument } from "documents.js";
 
 // markdown -> pptx has no named function of its own: the composition engine routes it
 // as one cross-variant transform hop (read wordprocessing, wordprocessingToPresentation, build pptx).
-const pptxBytes = convertDocument('markdown', 'pptx', markdownBytes);
+const pptxBytes = convertDocument("markdown", "pptx", markdownBytes);
 
 // Every option a named function accepts is accepted here too, threaded to whichever hop consumes it.
-const odtBytes = convertDocument('docx', 'odt', docxBytes, { onMathDiagnostic: (d) => console.warn(d) });
+const odtBytes = convertDocument("docx", "odt", docxBytes, {
+  onMathDiagnostic: (d) => console.warn(d),
+});
 ```
 
 `convertDocument` throws `UnsupportedConversionError` (a named class, so a caller can branch on it) for any pair the composition engine cannot route — there is no silent fallback. `resolveCompositionPlan(source, target)` is exported too, for surfacing the resolved hop plan without running it.
@@ -92,7 +94,28 @@ const odtBytes = convertDocument('docx', 'odt', docxBytes, { onMathDiagnostic: (
 The sixteen round-trip ergonomic conversions between the formats with their own layout engine and PDF (docx/pptx/odt/odp/ods/odg/markdown/svg ⇄ PDF, all round-tripping both ways), plus `xlsxToPdf`/`pdfToXlsx` and `csvToPdf`/`pdfToCsv` (each composing its ods bridge with the ods⇄pdf layout pair internally — neither xlsx nor csv has a layout engine of its own):
 
 ```ts
-import { csvToPdf, docxToPdf, markdownToPdf, odgToPdf, odpToPdf, odsToPdf, odtToPdf, pdfToCsv, pdfToDocx, pdfToMarkdown, pdfToOdg, pdfToOdp, pdfToOds, pdfToOdt, pdfToPptx, pdfToSvg, pdfToXlsx, pptxToPdf, svgToPdf, xlsxToPdf } from 'documents.js';
+import {
+  csvToPdf,
+  docxToPdf,
+  markdownToPdf,
+  odgToPdf,
+  odpToPdf,
+  odsToPdf,
+  odtToPdf,
+  pdfToCsv,
+  pdfToDocx,
+  pdfToMarkdown,
+  pdfToOdg,
+  pdfToOdp,
+  pdfToOds,
+  pdfToOdt,
+  pdfToPptx,
+  pdfToSvg,
+  pdfToXlsx,
+  pptxToPdf,
+  svgToPdf,
+  xlsxToPdf,
+} from "documents.js";
 
 const pdfBytes = docxToPdf(docxBytes);
 const docxBytes2 = pdfToDocx(pdfBytes);
@@ -134,7 +157,12 @@ Each accepts an optional `signal` (`AbortSignal`) and either `onSubstitution` (X
 Twenty-four bridge functions across twelve pairs bypass the PDF pivot where a direct path exists. Eight same-variant direct-copy pairs (`odtToDocx`/`docxToOdt`, `odpToPptx`/`pptxToOdp`, `odsToXlsx`/`xlsxToOds`, `csvToOds`/`odsToCsv`, `csvToXlsx`/`xlsxToCsv`, `svgToOdg`/`odgToSvg`, `markdownToDocx`/`docxToMarkdown`, `markdownToOdt`/`odtToMarkdown`) compose a direct `readXContent` → `buildYPackage` pivot copy — the csv pairs are one hop to its spreadsheet siblings, so csv never needs PDF to reach ods or xlsx, and `svgToOdg`/`odgToSvg` bridge svg to its drawing sibling odg the same way. Two cross-variant semantic-transform pairs (`docxToPptx`/`pptxToDocx`, `odtToOdp`/`odpToOdt`) go through `src/convert/variant-bridges.ts`. Two PDF-composed pairs (`xlsxToMarkdown`/`markdownToXlsx`, `csvToMarkdown`/`markdownToCsv`) route through PDF internally — the lossiest conversions in the package.
 
 ```ts
-import { odtToDocx, docxToOdt, markdownToDocx, docxToMarkdown } from 'documents.js';
+import {
+  odtToDocx,
+  docxToOdt,
+  markdownToDocx,
+  docxToMarkdown,
+} from "documents.js";
 
 const docxBytes = odtToDocx(odtBytes);
 const odtBytes2 = docxToOdt(docxBytes);
@@ -150,11 +178,11 @@ Each takes an optional `{ signal }` — no `onSubstitution`/`sink`, since there 
 The same conversions behind a swappable port, for a caller that wants to inject a different implementation without changing call sites:
 
 ```ts
-import { createLocalDocumentConverter } from 'documents.js';
+import { createLocalDocumentConverter } from "documents.js";
 
 const converter = createLocalDocumentConverter();
 const { document, diagnostics } = await converter.convert(
-  { source: { format: 'docx', bytes: docxBytes }, targetFormat: 'pdf' },
+  { source: { format: "docx", bytes: docxBytes }, targetFormat: "pdf" },
   { signal: new AbortController().signal },
 );
 ```
@@ -164,7 +192,7 @@ const { document, diagnostics } = await converter.convert(
 The port also exposes `contractVersion: number`, bumped only when `DocumentConverter`'s own contract shape changes — a new field on `ConversionResult` a caller might need to branch on, or a new `ConversionOptions` field an implementation is now expected to honour — never when the `conversions` table simply grows with more supported source/target pairs (that's discoverable at runtime via `conversions` itself). It is currently `7`: the bump from `6` reflects `ConversionResult.package` changing type to the tree-form `DocumentTree` described below, which a caller reading that field must now flatten rather than read directly.
 
 ```ts
-import { DOCUMENT_FORMATS, DocumentFormatSchema } from 'documents.js';
+import { DOCUMENT_FORMATS, DocumentFormatSchema } from "documents.js";
 
 console.log(DOCUMENT_FORMATS); // ['docx', 'pptx', 'xlsx', 'odt', 'odp', 'ods', 'odg', 'svg', 'odf', 'csv', 'markdown', 'pdf']
 DocumentFormatSchema.parse(userSuppliedFormat); // throws a ZodError for anything outside that list
@@ -175,16 +203,21 @@ DocumentFormatSchema.parse(userSuppliedFormat); // throws a ZodError for anythin
 Every conversion function accepts an `onDocument` callback receiving the intermediate `DocumentTree` — since document-schema.js 4, the single hierarchical tree: `children` carry the decomposed group tree (one group per container — a section, slide, sheet, or draw page — with heading and list paragraphs anchoring nested groups inside their container's flow), and the content nodes embedded in that tree carry `frames`, the rendered page positions the layout pass stamped onto them, in PDF user-space. `pages` (each rendered page's size, indexed to match every `frames[].pageIndex`) and the minted `styles` table ride the root. The port surfaces the same value as `package` on `ConversionResult`. For PDF-bypassing bridges, `pkg.pages` is always `undefined` and no node carries frames — no layout pass ran.
 
 ```ts
-import { flattenTree } from 'document-schema.js';
-import { docxToPdf } from 'documents.js';
+import { flattenTree } from "document-schema.js";
+import { docxToPdf } from "documents.js";
 
 const pdfBytes = docxToPdf(docxBytes, {
   onDocument: (pkg) => {
     console.log(pkg.kind); // 'wordprocessing' -- the document kind rides the tree's root
     console.log(pkg.pages?.length); // populated for every X-to-PDF/PDF-to-X conversion
     const content = flattenTree(pkg); // the flat ContentDocument, fully materialised
-    const block = content.kind === 'wordprocessing' ? content.sections[0]?.blocks[0] : undefined;
-    console.log(block?.kind === 'paragraph' ? block.runs[0]?.frames : 'no paragraph'); // that run's rendered placements
+    const block =
+      content.kind === "wordprocessing"
+        ? content.sections[0]?.blocks[0]
+        : undefined;
+    console.log(
+      block?.kind === "paragraph" ? block.runs[0]?.frames : "no paragraph",
+    ); // that run's rendered placements
   },
 });
 ```
@@ -196,7 +229,12 @@ Three flat-form signals drive the grouping, and all three are reproduced exactly
 `assembleTree` is the one constructor behind every construction site — decompose, then `factorStyles`, the minting pass that hoists property tuples occurring two or more times onto a group-wrapper ref plus a `styles` table entry (deterministic order; `frames`/`sourcePath`/`styleId` are per-node facts and never factor). The transform belongs to `document-schema.js`, which owns both encodings and publishes `assembleTree`, `decompose`, `flattenTree`, `factorStyles`, `ConstructMarkerImbalanceError`, and the `TreeChildren` type for any caller composing its own boundary — import them from there, not from this package. documents.js consumes that transform at its own boundary and re-exports none of it; the readers, builders, layout engines, and editors here keep producing and consuming the flat form, so the tree exists only where a `DocumentTree` is constructed or consumed:
 
 ```ts
-import { assembleTree, decompose, factorStyles, flattenTree } from 'document-schema.js';
+import {
+  assembleTree,
+  decompose,
+  factorStyles,
+  flattenTree,
+} from "document-schema.js";
 
 const tree = assembleTree(content, pages); // decompose + mint: the tree a conversion reports
 const flat = flattenTree(tree); // the exact flat ContentDocument back, refs materialised
@@ -206,24 +244,30 @@ const again = factorStyles(tree); // re-mint: identical table and tree (law iii)
 `documentTreeWithSchema`/`documentFromJson` turn a `DocumentTree` into self-describing JSON and back (re-exported from `document-schema.js`); the version-pinned `$schema` URI the dumper stamps is the package's version — the hand-kept `formatVersion` integer is gone:
 
 ```ts
-import { documentFromJson, documentTreeWithSchema } from 'documents.js';
+import { documentFromJson, documentTreeWithSchema } from "documents.js";
 
 const tagged = documentTreeWithSchema(pkg);
-writeFileSync('converted.doc.json', JSON.stringify(tagged, null, 2));
+writeFileSync("converted.doc.json", JSON.stringify(tagged, null, 2));
 
-const { kind, value } = documentFromJson(JSON.parse(readFileSync('converted.doc.json', 'utf8')));
+const { kind, value } = documentFromJson(
+  JSON.parse(readFileSync("converted.doc.json", "utf8")),
+);
 // kind: 'DocumentTree' (here) | 'ContentDocument'
 ```
 
 `buildDocumentBytes` rebuilds any `DocumentFormat`'s bytes from a tree-form `DocumentTree` — it flattens once at the boundary and hands the flat form to the builders, whose signatures never changed. `'pdf'` rebuilds the pdf-codec view from the package's own frames+pages (`layoutDocumentFromPackage`, a mechanical inverse walking the flattened content and emitting `LayoutItem`s from each node's recorded placements; throwing if the package carries no `pages`), `'odf'` has no builder and throws, everything else rebuilds from the flattened `ContentDocument`. `layoutDocumentFromPackage` is exported too, for a caller wanting the rebuilt `LayoutDocument` without writing bytes. Two honest limits on the pdf rebuild, both structural properties of what a package records: a run's frames carry positions, not the wrap decisions that distributed its text across them, so a wrapped run re-renders once, whole, at its first recorded placement; and no font registry or positioned formula survives a bare package (a formula block's frame records where it sat while its glyphs render as nothing):
 
 ```ts
-import { buildDocumentBytes, docxToPdf } from 'documents.js';
+import { buildDocumentBytes, docxToPdf } from "documents.js";
 
 let captured;
-docxToPdf(docxBytes, { onDocument: (pkg) => { captured = pkg; } });
-const pdfBytesAgain = buildDocumentBytes(captured, 'pdf');
-const docxBytesAgain = buildDocumentBytes(captured, 'docx');
+docxToPdf(docxBytes, {
+  onDocument: (pkg) => {
+    captured = pkg;
+  },
+});
+const pdfBytesAgain = buildDocumentBytes(captured, "pdf");
+const docxBytesAgain = buildDocumentBytes(captured, "docx");
 ```
 
 ### Package decode/encode, metadata, and deep imports
@@ -231,33 +275,40 @@ const docxBytesAgain = buildDocumentBytes(captured, 'docx');
 `decodeDocumentPackage`/`encodeDocumentPackage` dispatch docx/pptx/xlsx through `ooxml.js`'s OPC codec and odt/odp/ods/odg/odf through `odf.js`'s ODF codec, throwing `UnsupportedPackageFormatError` for `markdown`/`csv`/`svg`/`pdf` (none of the four is a package — the first three are plain text, pdf is bytes). `decodeOdbPackage` is the `.odb`-specific sibling (`.odb` is not a `DocumentFormat` member):
 
 ```ts
-import { decodeDocumentPackage, decodeOdbPackage, encodeDocumentPackage } from 'documents.js';
+import {
+  decodeDocumentPackage,
+  decodeOdbPackage,
+  encodeDocumentPackage,
+} from "documents.js";
 
-const pkg = decodeDocumentPackage('docx', docxBytes);
-const docxBytesAgain = encodeDocumentPackage('docx', pkg);
+const pkg = decodeDocumentPackage("docx", docxBytes);
+const docxBytesAgain = encodeDocumentPackage("docx", pkg);
 const odbPkg = decodeOdbPackage(odbBytes);
 ```
 
 `readDocumentMetadata`/`setDocumentMetadata` read or patch metadata across any `DocumentFormat`. `setDocumentMetadata` patches in place (source/target formats must match); `odf` is rejected in both directions, and `csv` is rejected in both directions too (RFC 4180 text has no metadata container) — `readDocumentMetadata('csv', ...)` answers an empty `LayoutMetadata` for the same reason. `svg` reads its root `<title>` as `metadata.title` and is rejected as a `setDocumentMetadata` source/target for the mirror-image reason: `<title>` is svg's whole metadata surface, so any other override would be silently dropped by the rebuild. `readDocumentMetadata('xlsx', ...)` reads the workbook's own `docProps` like every other content format — `createdIso`/`modifiedIso` from `docProps/core.xml` when the file declares them, `docProps/app.xml`'s Application as `creator`, and `producer` unset (a PDF-only concept no semantic reader sets). It previously rendered a `xlsxToPdf` preview and read that PDF's metadata instead, which for a file carrying no timestamps of its own reported facts about the render rather than the workbook: timestamps stamped at the render moment and a producer naming the preview PDF's writer.
 
 ```ts
-import { readDocumentMetadata, setDocumentMetadata } from 'documents.js';
+import { readDocumentMetadata, setDocumentMetadata } from "documents.js";
 
-const metadata = readDocumentMetadata('docx', docxBytes);
-const patchedBytes = setDocumentMetadata('docx', 'docx', docxBytes, { title: 'New title', keywords: ['a', 'b'] });
+const metadata = readDocumentMetadata("docx", docxBytes);
+const patchedBytes = setDocumentMetadata("docx", "docx", docxBytes, {
+  title: "New title",
+  keywords: ["a", "b"],
+});
 ```
 
 Every module under `src/` is deep-importable by package-relative path:
 
 ```ts
-import { emuToPt } from 'documents.js/model/units';
-import { buildOdtPackage } from 'documents.js/edit/odt/content';
+import { emuToPt } from "documents.js/model/units";
+import { buildOdtPackage } from "documents.js/edit/odt/content";
 ```
 
 One subpath is a declared entry point in its own right: **`documents.js/read`** (an explicit `exports` entry onto `src/convert/from-pdf.ts`, where the `pdfTo*` family lives). A consumer that only ever converts FROM pdf and imports the root barrel statically reaches every X-to-PDF renderer — and through pdf-codec's root barrel, ~2.9 MB of vendored font binaries it can never execute, which on Cloudflare Workers' free plan (3 MB gzipped for an entire Worker) is most of the budget. The read entry's module graph provably excludes them, all the way across the workspace boundary into pdf-codec's own source:
 
 ```ts
-import { pdfToMarkdown } from 'documents.js/read';
+import { pdfToMarkdown } from "documents.js/read";
 ```
 
 It carries the ten `pdfTo*` conversions, `PdfToDocumentOptions`, and `readDocumentMetadata` (with `ReadDocumentMetadataOptions`) — identical functions to the root barrel's (the same forwarders, run through the composition engine's read half, and the same metadata reader dispatched through the read-only codec half `src/codecs/read.ts`), never a forked behaviour; `convertDocument` and every X-to-PDF direction stay on the root barrel. `src/read-graph.test.ts` walks the entry's static import graph, follows `pdf-codec` specifiers through that package's real `exports` map into its source, and fails the build if the write path or any font asset becomes reachable.
@@ -267,10 +318,15 @@ It carries the ten `pdfTo*` conversions, `PdfToDocumentOptions`, and `readDocume
 Every other content format has its own standalone `readXContent`-shaped entry point (`readDocxContent`, `readPptxContent`, `readOdtContent`, `readOdpContent`, `readOdsContent`, `readOdgContent`) — xlsx is no longer the exception. `readXlsxContent`/`buildXlsxPackage` are this package's names for `ooxml.js`'s own spreadsheet `ContentDocument` read/build pair — the same one the `ods⇄xlsx` bridge and every xlsx metadata-rebuild path already use internally — re-exported here directly rather than wrapped, since `readXlsxContent` already produces the right shape on its own. (Since `ooxml.js` 4.0.0 the upstream flat builder is named `buildXlsxPackageFromContent` — the bare `buildXlsxPackage` name moved to that package's tree-form `DocumentTree` builder — so this package re-exports the flat builder under its own long-standing `buildXlsxPackage` name and the `ContentDocument`-in/`Package`-out contract is unchanged.) csv's `readCsvContent`/`buildCsvText` are the same kind of directly-exported stage pair, one level further in: they operate on RFC 4180 text rather than a decoded package (see `src/csv/` under Architecture). svg's `readSvgContent`/`buildSvgText` are the drawing-variant counterpart of csv's pair, operating on SVG text rather than a decoded package (see `src/svg/` under Architecture).
 
 ```ts
-import { buildXlsxPackage, decodeDocumentPackage, encodeDocumentPackage, readXlsxContent } from 'documents.js';
+import {
+  buildXlsxPackage,
+  decodeDocumentPackage,
+  encodeDocumentPackage,
+  readXlsxContent,
+} from "documents.js";
 
-const content = readXlsxContent(decodeDocumentPackage('xlsx', xlsxBytes)); // ContentDocument, kind: 'spreadsheet'
-const rebuiltBytes = encodeDocumentPackage('xlsx', buildXlsxPackage(content));
+const content = readXlsxContent(decodeDocumentPackage("xlsx", xlsxBytes)); // ContentDocument, kind: 'spreadsheet'
+const rebuiltBytes = encodeDocumentPackage("xlsx", buildXlsxPackage(content));
 ```
 
 This pair is comparatively newer than the ODF/DrawingML readers above, and inherits their maturity level: percentage, currency, and date cell kinds round-trip with their semantic kind intact, but two narrower gaps are worth knowing before relying on it for more than read-only extraction — an ODS-style time-only value has no xlsx serial to write into and degrades to a plain string cell, and a written column width survives a read back only within about a point of its original value (an algebraic-inverse rounding artifact in the character-width unit conversion, not a dropped value). See `src/convert/bridges.test.ts`'s own `ods⇄xlsx` section for the exact, currently-tested numbers.
@@ -280,91 +336,144 @@ This pair is comparatively newer than the ODF/DrawingML readers above, and inher
 Read-and-write editors for docx/pptx/odt/odp/ods/odg content, holding a direct reference into the real `Package`/`XmlElement` objects. Saving is `encodePackage(pkg)` — everything you didn't touch stays byte-faithful.
 
 ```ts
-import { openDocx, createDocx } from 'documents.js';
+import { openDocx, createDocx } from "documents.js";
 
 const editor = openDocx(existingDocxBytes);
-const paragraph = editor.body.appendParagraph({ alignment: 'center' });
-const run = paragraph.appendRun({ text: 'Hello' });
+const paragraph = editor.body.appendParagraph({ alignment: "center" });
+const run = paragraph.appendRun({ text: "Hello" });
 run.bold = true;
 run.color = { r: 1, g: 0, b: 0 };
 const bytes = editor.toBytes();
 
 const fresh = createDocx();
-fresh.body.appendParagraph().appendRun({ text: 'New document' });
+fresh.body.appendParagraph().appendRun({ text: "New document" });
 ```
 
 A docx's comments, footnotes, header/footer parts, section header/footer references, and numbering definitions never fit `ContentDocument`'s section/block shape — `readDocxExtras` is a second, independent read returning exactly that data:
 
 ```ts
-import { readDocxExtras } from 'documents.js';
-import { decodePackage } from 'ooxml.js';
+import { readDocxExtras } from "documents.js";
+import { decodePackage } from "ooxml.js";
 
-const { comments, footnotes, headerFooterParts, sectionHeaderFooters, numbering } = readDocxExtras(decodePackage(docxBytes));
-console.log(Object.values(numbering)[0]?.levels['0']?.format); // numbering is keyed by numId, each level by its own level index
+const {
+  comments,
+  footnotes,
+  headerFooterParts,
+  sectionHeaderFooters,
+  numbering,
+} = readDocxExtras(decodePackage(docxBytes));
+console.log(Object.values(numbering)[0]?.levels["0"]?.format); // numbering is keyed by numId, each level by its own level index
 ```
 
 `openPptx`/`createPptx` and `PptxSlide`/`PptxShape` are the pptx equivalent. `embeddedPresentationSerialiser` is ooxml.js's embedded-presentation port wired from this package's own pptx builder. ooxml.js has no PresentationML writer and cannot depend on the one pptx writer in the ecosystem (`buildPptxPackage`, living here one layer above it), so its docx writer instead accepts an injected serialiser; pass this value as `BuildDocxContentOptions.serialiseEmbeddedPresentation` and a docx carrying an OLE-embedded presentation — which `readDocxContent` genuinely recovers as an `embeddedObject` block — round-trips through that writer, the nested deck re-serialised into a real `word/embeddings/oleObject<N>.pptx` payload rather than refused:
 
 ```ts
-import { embeddedPresentationSerialiser } from 'documents.js';
-import { buildDocxPackageFromContent, decodePackage, encodePackage, readDocxContent } from 'ooxml.js';
+import { embeddedPresentationSerialiser } from "documents.js";
+import {
+  buildDocxPackageFromContent,
+  decodePackage,
+  encodePackage,
+  readDocxContent,
+} from "ooxml.js";
 
 const content = readDocxContent(decodePackage(docxBytes)); // carries a presentation embed
-const rebuilt = encodePackage(buildDocxPackageFromContent(content, { serialiseEmbeddedPresentation: embeddedPresentationSerialiser }));
+const rebuilt = encodePackage(
+  buildDocxPackageFromContent(content, {
+    serialiseEmbeddedPresentation: embeddedPresentationSerialiser,
+  }),
+);
 ```
 
 `openOdt`/`createOdt` and `OdtParagraph`/`OdtRun`/`OdtTable`/`OdtList` are the odt equivalent, built on ODF's style-name-referencing model. `openOdp`/`createOdp` and `OdpSlide`/`OdpShape` reuse `OdtParagraph`/`OdtRun`/`OdtList` directly (a `draw:frame`'s `draw:text-box` holds the identical `text:p`/`text:span` model):
 
 ```ts
-import { createOdp } from 'documents.js';
+import { createOdp } from "documents.js";
 
 const editor = createOdp();
 const slide = editor.addSlide();
-const title = slide.addTextBox({ frame: { xPt: 40, yPt: 30, widthPt: 640, heightPt: 80 }, text: 'Title' });
+const title = slide.addTextBox({
+  frame: { xPt: 40, yPt: 30, widthPt: 640, heightPt: 80 },
+  text: "Title",
+});
 title.rotationDeg = 15; // OdpShape has a genuine draw:transform rotation setter
-const bullets = slide.addTextBox({ frame: { xPt: 40, yPt: 130, widthPt: 300, heightPt: 200 }, text: '' });
+const bullets = slide.addTextBox({
+  frame: { xPt: 40, yPt: 130, widthPt: 300, heightPt: 200 },
+  text: "",
+});
 bullets.paragraphs()[0].remove();
-bullets.addList().addItem().appendParagraph({ text: 'A real bulleted text:list' });
-slide.notes = 'Speaker notes for this slide';
+bullets
+  .addList()
+  .addItem()
+  .appendParagraph({ text: "A real bulleted text:list" });
+slide.notes = "Speaker notes for this slide";
 const bytes = editor.toBytes();
 ```
 
 `createOds`/`openOds` and `OdsEditor`/`OdsSheet`/`OdsCell` are the spreadsheet equivalent — the one editor family built from scratch (cell addressing has no docx/pptx analogue). Setting a cell far from the origin splits `table:number-*-repeated` runs in place rather than materialising every cell in between:
 
 ```ts
-import { createOds } from 'documents.js';
+import { createOds } from "documents.js";
 
 const editor = createOds();
-const sheet = editor.addSheet('Sheet1');
-sheet.printSettings = { pageSize: { widthPt: 595, heightPt: 842 }, margins: { topPt: 20, rightPt: 20, bottomPt: 20, leftPt: 20 }, gridlines: true, headers: true, pageOrder: 'downThenOver' };
-sheet.cell(0, 0).value = { kind: 'string', value: 'Total' }; // 0-based (row, column)
-sheet.cell(0, 1).value = { kind: 'currency', value: 42.5, currency: 'USD' };
-sheet.cell(500, 50).value = { kind: 'boolean', value: true }; // does not materialise 500x50 empty cells
+const sheet = editor.addSheet("Sheet1");
+sheet.printSettings = {
+  pageSize: { widthPt: 595, heightPt: 842 },
+  margins: { topPt: 20, rightPt: 20, bottomPt: 20, leftPt: 20 },
+  gridlines: true,
+  headers: true,
+  pageOrder: "downThenOver",
+};
+sheet.cell(0, 0).value = { kind: "string", value: "Total" }; // 0-based (row, column)
+sheet.cell(0, 1).value = { kind: "currency", value: 42.5, currency: "USD" };
+sheet.cell(500, 50).value = { kind: "boolean", value: true }; // does not materialise 500x50 empty cells
 const bytes = editor.toBytes();
 ```
 
 `createOdg`/`openOdg` and `OdgEditor`/`OdgPage` are the drawing equivalent. `OdgPage.addTextBox`/`.addImage` return `OdpShape` instances; `addRect`/`addEllipse`/`addLine`/`addPath` return vector classes writing real `draw:rect`/`draw:ellipse`/`draw:line`/`draw:path` elements:
 
 ```ts
-import { createOdg } from 'documents.js';
+import { createOdg } from "documents.js";
 
 const editor = createOdg();
 const page = editor.addPage();
-page.addRect({ frame: { xPt: 20, yPt: 20, widthPt: 100, heightPt: 60 }, fill: { r: 1, g: 0.5, b: 0 } });
-page.addEllipse({ frame: { xPt: 140, yPt: 20, widthPt: 100, heightPt: 60 }, stroke: { color: { r: 0, g: 0, b: 0 }, widthPt: 1 } });
+page.addRect({
+  frame: { xPt: 20, yPt: 20, widthPt: 100, heightPt: 60 },
+  fill: { r: 1, g: 0.5, b: 0 },
+});
+page.addEllipse({
+  frame: { xPt: 140, yPt: 20, widthPt: 100, heightPt: 60 },
+  stroke: { color: { r: 0, g: 0, b: 0 }, widthPt: 1 },
+});
 page.addPath({
   frame: { xPt: 20, yPt: 100, widthPt: 80, heightPt: 80 },
-  subpaths: [{ start: { xPt: 0, yPt: 80 }, closed: true, segments: [{ kind: 'line', to: { xPt: 60, yPt: 80 } }, { kind: 'cubic', control1: { xPt: 80, yPt: 80 }, control2: { xPt: 80, yPt: 0 }, to: { xPt: 40, yPt: 0 } }] }],
+  subpaths: [
+    {
+      start: { xPt: 0, yPt: 80 },
+      closed: true,
+      segments: [
+        { kind: "line", to: { xPt: 60, yPt: 80 } },
+        {
+          kind: "cubic",
+          control1: { xPt: 80, yPt: 80 },
+          control2: { xPt: 80, yPt: 0 },
+          to: { xPt: 40, yPt: 0 },
+        },
+      ],
+    },
+  ],
   fill: { r: 1, g: 1, b: 0 },
 }); // a genuine Bezier curve -- writes a real svg:d/svg:viewBox pair, not a polygon approximation
-page.addTextBox({ frame: { xPt: 20, yPt: 200, widthPt: 300, heightPt: 30 }, text: 'A label on top' });
+page.addTextBox({
+  frame: { xPt: 20, yPt: 200, widthPt: 300, heightPt: 30 },
+  text: "A label on top",
+});
 const bytes = editor.toBytes();
 ```
 
 ### PDF bytes and `z.codec()` pairs
 
 ```ts
-import { readPdf, writePdf } from 'documents.js';
+import { readPdf, writePdf } from "documents.js";
 
 const layout = readPdf(pdfBytes); // -> LayoutDocument: pages of positioned text/image/rect/link items
 const bytes = writePdf(layout);
@@ -373,8 +482,8 @@ const bytes = writePdf(layout);
 The eleven PDF round trips and sixteen PDF-bypassing bridge directions are also available as schema-validated [`z.codec()`](https://zod.dev) pairs (`pdfCodec`, `docxPdfCodec`, `pptxPdfCodec`, `odtPdfCodec`, `odpPdfCodec`, `odsPdfCodec`, `odgPdfCodec`, `svgPdfCodec`, `xlsxPdfCodec`, `csvPdfCodec`, `markdownPdfCodec`, `odtDocxCodec`, `odpPptxCodec`, `odsXlsxCodec`, `odsCsvCodec`, `xlsxCsvCodec`, `odgSvgCodec`, `markdownDocxCodec`, `markdownOdtCodec`) — the no-options form, adding automatic two-way schema validation. The two PDF-composed pairs have codec forms too (`xlsxMarkdownCodec`, `csvMarkdownCodec`):
 
 ```ts
-import { z } from 'zod';
-import { docxPdfCodec, pdfCodec } from 'documents.js';
+import { z } from "zod";
+import { docxPdfCodec, pdfCodec } from "documents.js";
 
 const layout = z.decode(pdfCodec, pdfBytes); // throws a ZodError if pdfBytes has no %PDF- header
 const pdfBytes2 = z.encode(pdfCodec, layout);
@@ -387,19 +496,21 @@ const docxBack = z.encode(docxPdfCodec, pdfFromDocx);
 **`odmToPdf`** — ODF master document → PDF. A `.odm` never carries its chapters' content (each `text:section` is an external `.odt` reference), so it requires a caller-supplied `resolveSubDocument` callback. Not wired into the `DocumentConverter` port (its contract is bytes-in/bytes-out):
 
 ```ts
-import { readFileSync } from 'node:fs';
-import { odmToPdf, OdmUnresolvedSectionError } from 'documents.js';
+import { readFileSync } from "node:fs";
+import { odmToPdf, OdmUnresolvedSectionError } from "documents.js";
 
 const chapterBytes = new Map([
-  ['../chapter1.odt', new Uint8Array(readFileSync('chapter1.odt'))],
-  ['../chapter2.odt', new Uint8Array(readFileSync('chapter2.odt'))],
+  ["../chapter1.odt", new Uint8Array(readFileSync("chapter1.odt"))],
+  ["../chapter2.odt", new Uint8Array(readFileSync("chapter2.odt"))],
 ]);
 
 try {
-  const pdfBytes = odmToPdf(odmBytes, { resolveSubDocument: (href) => chapterBytes.get(href) });
+  const pdfBytes = odmToPdf(odmBytes, {
+    resolveSubDocument: (href) => chapterBytes.get(href),
+  });
 } catch (error) {
   if (error instanceof OdmUnresolvedSectionError) {
-    console.error('missing chapters:', error.hrefs); // every unresolved href, not just the first
+    console.error("missing chapters:", error.hrefs); // every unresolved href, not just the first
   }
 }
 ```
@@ -407,19 +518,19 @@ try {
 **`.odb` database front-end** — `readOdbTables` extracts every table; `odbToXlsx`/`odbToCsv` produce xlsx or CSV. All four storage tiers are supported (HSQLDB TEXT-script Tier 1, HSQLDB CACHED binary Tier 2, Firebird gbak Tier 3, HSQLDB BINARY/COMPRESSED Tier 4), dispatched automatically:
 
 ```ts
-import { decodePackage } from 'odf.js';
-import { odbToCsv, odbToXlsx, readOdbTables } from 'documents.js';
+import { decodePackage } from "odf.js";
+import { odbToCsv, odbToXlsx, readOdbTables } from "documents.js";
 
 const xlsxBytes = odbToXlsx(odbBytes); // one xlsx sheet per table
-const csvBytes = odbToCsv(odbBytes, { table: 'CUSTOMERS' }); // required when the .odb has more than one table
+const csvBytes = odbToCsv(odbBytes, { table: "CUSTOMERS" }); // required when the .odb has more than one table
 const tables = readOdbTables(decodePackage(odbBytes)); // Package -> HsqldbTable[]
 ```
 
-Form/Report *structure*: `readOdbForms`/`readOdbReports` read every declared component's static structure (bound controls, bands/groups/functions):
+Form/Report _structure_: `readOdbForms`/`readOdbReports` read every declared component's static structure (bound controls, bands/groups/functions):
 
 ```ts
-import { decodePackage } from 'odf.js';
-import { readOdbForms, readOdbReports } from 'documents.js';
+import { decodePackage } from "odf.js";
+import { readOdbForms, readOdbReports } from "documents.js";
 
 const forms = readOdbForms(decodePackage(odbBytes));
 const reports = readOdbReports(decodePackage(odbBytes));
@@ -428,30 +539,42 @@ const reports = readOdbReports(decodePackage(odbBytes));
 `readFirebirdBackup` decodes a Firebird `.fbk` directly:
 
 ```ts
-import { readFirebirdBackup } from 'documents.js';
+import { readFirebirdBackup } from "documents.js";
 const { summary, tables } = readFirebirdBackup(firebirdBackupBytes);
 ```
 
 **SQL `SELECT` engine** — `parseSelect`/`evaluateSelect` run a bounded single-table `SELECT` over `readOdbTables`' output. Closed allowlist grammar: column list or `*` or aggregates (`COUNT`/`SUM`/`AVG`/`MIN`/`MAX`), `FROM` one table, optional `WHERE`/`GROUP BY`/`ORDER BY`. Everything else throws `HsqldbSqlUnsupportedError`:
 
 ```ts
-import { decodePackage, readOdbInventory } from 'odf.js';
-import { evaluateSelect, parseSelect, readOdbTables } from 'documents.js';
+import { decodePackage, readOdbInventory } from "odf.js";
+import { evaluateSelect, parseSelect, readOdbTables } from "documents.js";
 
 const pkg = decodePackage(odbBytes);
 const [query] = readOdbInventory(pkg).queries;
-const { columns, rows } = evaluateSelect(parseSelect(query.command), readOdbTables(pkg));
+const { columns, rows } = evaluateSelect(
+  parseSelect(query.command),
+  readOdbTables(pkg),
+);
 ```
 
 **rpt formula engine** — `runRptReport` evaluates a report's group breaks and per-group totals. Closed allowlist: `rpt:HASCHANGED(X)`, `rpt:LEFT(X;n)` (semicolon separator), `rpt:SUM`/`COUNT`/`AVG`/`MIN`/`MAX`, and `field:[COLUMN]`. Everything else throws `RptFormulaUnsupportedError`:
 
 ```ts
-import { decodePackage, readOdbInventory } from 'odf.js';
-import { evaluateSelect, parseSelect, readOdbReports, readOdbTables, rptDefinitionFromReport, runRptReport } from 'documents.js';
+import { decodePackage, readOdbInventory } from "odf.js";
+import {
+  evaluateSelect,
+  parseSelect,
+  readOdbReports,
+  readOdbTables,
+  rptDefinitionFromReport,
+  runRptReport,
+} from "documents.js";
 
 const pkg = decodePackage(odbBytes);
 const [report] = readOdbReports(pkg);
-const query = readOdbInventory(pkg).queries.find((candidate) => candidate.name === report.command);
+const query = readOdbInventory(pkg).queries.find(
+  (candidate) => candidate.name === report.command,
+);
 const rows = evaluateSelect(parseSelect(query.command), readOdbTables(pkg));
 const { bands } = runRptReport(rptDefinitionFromReport(report), rows);
 ```
@@ -459,10 +582,17 @@ const { bands } = runRptReport(rptDefinitionFromReport(report), rows);
 **Report rendering** — `readOdbReportContent` resolves data binding, runs the query, evaluates formulas, and renders bands as a real `ContentDocument`. `odbReportToDocx`/`odbReportToOdt`/`odbReportToPdf` dispatch it to bytes:
 
 ```ts
-import { decodePackage } from 'odf.js';
-import { odbReportToDocx, odbReportToOdt, odbReportToPdf, readOdbReportContent } from 'documents.js';
+import { decodePackage } from "odf.js";
+import {
+  odbReportToDocx,
+  odbReportToOdt,
+  odbReportToPdf,
+  readOdbReportContent,
+} from "documents.js";
 
-const report = readOdbReportContent(decodePackage(odbBytes), { report: 'SalesByRegion' });
+const report = readOdbReportContent(decodePackage(odbBytes), {
+  report: "SalesByRegion",
+});
 const docxBytes = odbReportToDocx(report);
 const pdfBytes = odbReportToPdf(report);
 ```
@@ -470,7 +600,7 @@ const pdfBytes = odbReportToPdf(report);
 **`odfToPdf`** — standalone `.odf` formula document → PDF via the MathML typesetting engine. No reverse `pdfToOdf` (recovering structured MathML from rendered glyphs is OCR-adjacent). Formulas embedded inside odt/odp/ods render automatically through `odtToPdf`/`odpToPdf`/`odsToPdf`:
 
 ```ts
-import { odtToPdf, odfToPdf } from 'documents.js';
+import { odtToPdf, odfToPdf } from "documents.js";
 
 const pdfBytes = odfToPdf(odfBytes); // a single formula, faithfully typeset
 const pdfFromOdtWithFormula = odtToPdf(odtBytes); // embedded formulas render as real typeset MathML
@@ -479,26 +609,44 @@ const pdfFromOdtWithFormula = odtToPdf(odtBytes); // embedded formulas render as
 A formula's MathML travels inside the `ContentDocument` as a `ContentEmbeddedObjectBlock` whose `document` is a `'formula'`-kind `ContentDocument`:
 
 ```ts
-import { convertWordprocessingToLayout, formulaOfBlock, readOdtContent } from 'documents.js';
+import {
+  convertWordprocessingToLayout,
+  formulaOfBlock,
+  readOdtContent,
+} from "documents.js";
 
 const document = readOdtContent(pkg);
-const block = document.sections[0].blocks.find((b) => b.kind === 'embeddedObject');
+const block = document.sections[0].blocks.find(
+  (b) => b.kind === "embeddedObject",
+);
 formulaOfBlock(block); // -> { mathml, starMath? }, or undefined for a non-formula embedded object
 
-const { document: layout, formulas: positioned } = convertWordprocessingToLayout(document, { measurer });
+const { document: layout, formulas: positioned } =
+  convertWordprocessingToLayout(document, { measurer });
 const pdfBytes = writePdf(layout, { formulas: positioned });
 ```
 
 `layoutFormula`/`loadMathFont` are exported for direct formula layout. `buildOfficeMath`/`buildOfficeMathParagraph` translate MathML into OMML for docx. `readOfficeMath`/`collectOfficeMathElements` are the read-side inverse:
 
 ```ts
-import { buildOfficeMathParagraph, layoutFormula, loadMathFont, openDocx } from 'documents.js';
+import {
+  buildOfficeMathParagraph,
+  layoutFormula,
+  loadMathFont,
+  openDocx,
+} from "documents.js";
 
 const { metricsAt } = loadMathFont();
-const { box, diagnostics } = layoutFormula(mathml, { metrics: metricsAt(12), sizePt: 12, color: { r: 0, g: 0, b: 0 } });
+const { box, diagnostics } = layoutFormula(mathml, {
+  metrics: metricsAt(12),
+  sizePt: 12,
+  color: { r: 0, g: 0, b: 0 },
+});
 
 const editor = openDocx(existingDocxBytes);
-const { diagnostics: ommlDiagnostics } = editor.body.appendParagraph().appendOfficeMath(mathml);
+const { diagnostics: ommlDiagnostics } = editor.body
+  .appendParagraph()
+  .appendOfficeMath(mathml);
 ```
 
 ### LaTeX lowering into the semantic core
@@ -513,13 +661,18 @@ A formula in the 3.2.0 schema carries two co-equal layers: `presentation` (a ver
 - **The coherence lint** (`lintMathCoherence`) re-parses and re-lowers every stored presentation string against the document's own symbol table and compares with the stored content layer — divergence means somebody edited one layer deliberately, so it reports a **warning carrying provenance** and re-derives nothing.
 
 ```ts
-import { latexToFormula, lintMathCoherence, lowerLatex } from 'documents.js';
+import { latexToFormula, lintMathCoherence, lowerLatex } from "documents.js";
 
-const { expression, diagnostics, mintedSymbols } = lowerLatex('\\sum_{i=1}^{n} \\frac{1}{i^2}');
+const { expression, diagnostics, mintedSymbols } = lowerLatex(
+  "\\sum_{i=1}^{n} \\frac{1}{i^2}",
+);
 // expression: { kind: 'sum', binder: 'i', lower: {kind:'num',numerator:'1',denominator:'1'}, ... }
 // diagnostics: [] — fully mechanical; '2x' would degrade to unparsed + 'latex/juxtaposition-unparsed'
 
-const { formula } = latexToFormula('x^2', { symbolEntries: table.symbols, source: 'my:pipeline' });
+const { formula } = latexToFormula("x^2", {
+  symbolEntries: table.symbols,
+  source: "my:pipeline",
+});
 // formula: { mathml, presentation: { latex: 'x^2' }, content, provenance } — ready to embed
 
 const warnings = lintMathCoherence(pkg); // [{ code: 'math/coherence-divergence', severity: 'warning', provenance, detail }]
@@ -537,23 +690,38 @@ Every X → PDF conversion resolves each typeface through a real `FontRegistry`,
 The same registry drives both the `TextMeasurer` (line breaking) and the writer (glyph emission) — measuring against one font's metrics and drawing through another would wrap text at wrong positions.
 
 ```ts
-import { docxToPdf } from 'documents.js';
+import { docxToPdf } from "documents.js";
 
 const pdfBytes = docxToPdf(docxBytes); // nothing to configure for embedded fonts
 
 const withFallbackFace = docxToPdf(docxBytes, {
-  fonts: [{ family: 'Brand Sans', bold: false, italic: false, bytes: brandSansTtfBytes }],
-  onFontSubstitution: (substitution) => console.warn(substitution.requestedFamily, '->', substitution.resolvedFamily),
+  fonts: [
+    {
+      family: "Brand Sans",
+      bold: false,
+      italic: false,
+      bytes: brandSansTtfBytes,
+    },
+  ],
+  onFontSubstitution: (substitution) =>
+    console.warn(
+      substitution.requestedFamily,
+      "->",
+      substitution.resolvedFamily,
+    ),
 });
 ```
 
 A document that embeds nothing and asks for no vendored-substitute family writes byte-identical output to the old standard-14-only pipeline. Two structural limits: an embedded face is normally subsetted, so it can legitimately lack a synthesised character (list bullet, `###` overflow marker) — resolved per character via `onMissingGlyph`. And `odfToPdf` accepts font options but consults neither — a standalone formula emits only the embedded STIX Two Math font's glyphs. `extractSourceFonts`/`extractSourceFontsForFormat`/`createDocumentFontRegistry` are exported for callers composing the pipeline manually. `describeFontFace` inspects a standalone `.ttf`/`.otf` file.
 
 ```ts
-import { describeFontFace, extractSourceFontsForFormat } from 'documents.js';
+import { describeFontFace, extractSourceFontsForFormat } from "documents.js";
 
-const faces = extractSourceFontsForFormat('docx', docxBytes); // -> readonly ProvidedFont[]
-const { family, bold, italic } = describeFontFace(fontBytes, 'BrandSans-Regular.ttf');
+const faces = extractSourceFontsForFormat("docx", docxBytes); // -> readonly ProvidedFont[]
+const { family, bold, italic } = describeFontFace(
+  fontBytes,
+  "BrandSans-Regular.ttf",
+);
 ```
 
 ## Architecture
@@ -617,7 +785,7 @@ To run a single test file: `pnpm vitest run src/path/to/file.test.ts`.
 - **ODF text content is not a plain string.** ODF represents runs of spaces as `<text:s>`, tabs as `<text:tab/>`, line breaks as `<text:line-break/>` — all elements, not text nodes. Every ODF text getter MUST call `decodeOdfText`, never `textContent()` — which silently drops them (no error, just shorter text).
 - **docx⇄PDF and pptx⇄PDF are explicitly not round-trip-lossless** — see [Fidelity](#fidelity). The cross-format bridge pairs are a genuinely different case.
 - **A `DocumentTree` from `onDocument`/`ConversionResult.package` is a snapshot, not a live view** — mutating the tree's content nodes after the layout pass leaves their `frames` stale; nothing detects or rejects that, and the schema keeps the tree's populated `frames` and `pages` in sync with nothing.
-- **A construct group is the one tree node that does not embed the block it came from.** Everywhere else `decompose` wraps rather than copies, so the tree and the flat form share node objects. `TreeBlockLeaf` excludes both marker kinds by construction, so a construct group can only hold the `constructStart`'s `ConstructDescriptor` — that descriptor object *is* shared, by identity — while the marker wrapper around it has no tree spelling and is rebuilt fresh by `flattenTree`. Two further boundary facts follow from promotion being a property of one container's own block flow: which group type a marker pair promotes to depends on where it sits (a `SectionConstructGroupNode`, whose children are a full section flow, at a section/heading scope; a `ShapeConstructGroupNode`, whose children are a list/shape flow where a heading paragraph is ordinary content, inside a list item or a shape) — and markers inside a table cell's blocks or inside an embedded document ride through on their leaf, neither promoted nor balance-checked, exactly as a heading level in the same position is not a grouping signal.
+- **A construct group is the one tree node that does not embed the block it came from.** Everywhere else `decompose` wraps rather than copies, so the tree and the flat form share node objects. `TreeBlockLeaf` excludes both marker kinds by construction, so a construct group can only hold the `constructStart`'s `ConstructDescriptor` — that descriptor object _is_ shared, by identity — while the marker wrapper around it has no tree spelling and is rebuilt fresh by `flattenTree`. Two further boundary facts follow from promotion being a property of one container's own block flow: which group type a marker pair promotes to depends on where it sits (a `SectionConstructGroupNode`, whose children are a full section flow, at a section/heading scope; a `ShapeConstructGroupNode`, whose children are a list/shape flow where a heading paragraph is ordinary content, inside a list item or a shape) — and markers inside a table cell's blocks or inside an embedded document ride through on their leaf, neither promoted nor balance-checked, exactly as a heading level in the same position is not a grouping signal.
 - **`frames` are stamped in place onto the caller's own content tree** — `convertXToLayout` mutates its `ContentDocument` argument (each node's placements are appended to its own `frames` array, one frame per rendered placement: per wrapped fragment on a run, the cell box on a cell, the emitted item's box on an image/vector/shape) and returns `pages` alongside the internal `LayoutDocument`. A run wrapped across three lines carries three frames; a repeat-row spreadsheet cell carries one per page it re-renders on. Reconstructors attach frames from the exact items each reconstructed node was clustered from, so every PDF-to-X conversion's content carries genuine positions too. The tree an `onDocument` callback receives embeds those same framed node objects (decompose wraps, it never copies — only a styles-minted paragraph or run is a copy), so the positions are identical in both encodings by construction.
 - **ODF text getters must call `decodeOdfText`.** See the dedicated gotcha above.
 - **`readPdf` recovers rect/ellipse/line as their own `LayoutRect`/`LayoutEllipse`/`LayoutLine` kinds** via pdf-codec's shape-pattern detection — an axis-aligned closed four-corner subpath is a rect, four kappa-ratio cubics at cardinal points is an ellipse, an open single straight stroke is a line. A false positive changes kind, never geometry. Off-axis rotations, freeform curves, and multi-subpath figures narrow to `LayoutPath`.
@@ -655,7 +823,7 @@ To run a single test file: `pnpm vitest run src/path/to/file.test.ts`.
 - **A docx inline image reads as a real `ContentImageBlock`** — `buildDocxPackage` recognises the flat docx reader's two-block pattern (empty-text paragraph + image) and writes it back as one paragraph, avoiding spurious blank paragraphs on round trip.
 - **pptx speaker notes survive via a hidden `/Subtype /Text` annotation** — specific to this package's writer/reader pair; other PDF producers/consumers won't see it.
 - **`odmToPdf` is the one non-bytes-in/bytes-out conversion** — chapters are external `.odt` references requiring `resolveSubDocument`. All unresolved sections are collected before throwing `OdmUnresolvedSectionError`.
-- **`.odb` has no `odbToPdf`** — a database front-end's tables/queries/reports are three unrelated output shapes. Rendered *reports* are the exception: `odbReportToDocx`/`odbReportToOdt`/`odbReportToPdf` take an already-rendered `ContentDocument`.
+- **`.odb` has no `odbToPdf`** — a database front-end's tables/queries/reports are three unrelated output shapes. Rendered _reports_ are the exception: `odbReportToDocx`/`odbReportToOdt`/`odbReportToPdf` take an already-rendered `ContentDocument`.
 - **The rpt formula engine's group scoping cascades enclosing breaks inward.** A group at level L starts a new instance when its own expression breaks OR when any enclosing group breaks — otherwise a "Q2" subtotal would span two regions. `HASCHANGED` itself knows nothing about groups; the cascade lives in the report structure. Aggregates are computed over complete ranges (not running totals); group expressions may not transitively depend on aggregates (circular).
 - **The rpt function set is a closed allowlist; separator is semicolon.** `rpt:HASCHANGED`/`rpt:LEFT`/`rpt:SUM`/`COUNT`/`AVG`/`MIN`/`MAX`/`field:[COLUMN]` — everything else throws. `[NAME]` and `"NAME"` are one concept. Three refusals where guessing would produce wrong values: non-boolean group expressions, `rpt:LEFT` over non-text, per-row formulas in report header/footer.
 - **The rpt engine emits no page headers/footers** — the renderer places them under a single-logical-page model, at report scope.
@@ -700,19 +868,19 @@ To run a single test file: `pnpm vitest run src/path/to/file.test.ts`.
 Read as **row → column**. `✓` lossless, `~` bounded, `✗` lossy, `✗✗` severe, `→` one-way, `–` no conversion. `.odm`/`.odb` sit outside this table.
 
 | ↓ from \ to → | docx | pptx | xlsx | odt | odp | ods | odg | svg | odf | markdown | csv | pdf |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| **docx** | — | ~ | – | ✓ | – | – | – | ✗ | – | ✗ | ✗ | ~ |
-| **pptx** | ~ | — | – | – | ✓ | – | – | ✗ | – | – | ✗ | ~ |
-| **xlsx** | – | – | — | – | – | ~ | – | ✗ | – | ✗✗ | ~ | ~ |
-| **odt** | ✓ | – | – | — | ~ | – | – | ✗ | – | ✗ | ✗ | ~ |
-| **odp** | – | ✓ | – | ~ | — | – | – | ✗ | – | – | ✗ | ~ |
-| **ods** | – | – | ~ | – | – | — | – | ✗ | – | – | ~ | ~ |
-| **odg** | – | – | – | – | – | – | — | ✓ | – | – | ✗ | ~ |
-| **svg** | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | — | – | ✗✗ | ✗✗ | ~ |
-| **odf** | – | – | – | – | – | – | – | – | — | – | – | → |
-| **markdown** | ~ | – | ✗✗ | ~ | – | – | – | ✗✗ | – | — | ✗✗ | ~ |
-| **csv** | ✗ | ✗ | ✓ | ✗ | ✗ | ✓ | ✗ | ✗ | – | ✗✗ | — | ~ |
-| **pdf** | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | – | ✗✗ | ✗ | — |
+| ------------- | ---- | ---- | ---- | --- | --- | --- | --- | --- | --- | -------- | --- | --- |
+| **docx**      | —    | ~    | –    | ✓   | –   | –   | –   | ✗   | –   | ✗        | ✗   | ~   |
+| **pptx**      | ~    | —    | –    | –   | ✓   | –   | –   | ✗   | –   | –        | ✗   | ~   |
+| **xlsx**      | –    | –    | —    | –   | –   | ~   | –   | ✗   | –   | ✗✗       | ~   | ~   |
+| **odt**       | ✓    | –    | –    | —   | ~   | –   | –   | ✗   | –   | ✗        | ✗   | ~   |
+| **odp**       | –    | ✓    | –    | ~   | —   | –   | –   | ✗   | –   | –        | ✗   | ~   |
+| **ods**       | –    | –    | ~    | –   | –   | —   | –   | ✗   | –   | –        | ~   | ~   |
+| **odg**       | –    | –    | –    | –   | –   | –   | —   | ✓   | –   | –        | ✗   | ~   |
+| **svg**       | ✗    | ✗    | ✗    | ✗   | ✗   | ✗   | ✓   | —   | –   | ✗✗       | ✗✗  | ~   |
+| **odf**       | –    | –    | –    | –   | –   | –   | –   | –   | —   | –        | –   | →   |
+| **markdown**  | ~    | –    | ✗✗   | ~   | –   | –   | –   | ✗✗  | –   | —        | ✗✗  | ~   |
+| **csv**       | ✗    | ✗    | ✓    | ✗   | ✗   | ✓   | ✗   | ✗   | –   | ✗✗       | —   | ~   |
+| **pdf**       | ✗    | ✗    | ✗    | ✗   | ✗   | ✗   | ✗   | ✗   | –   | ✗✗       | ✗   | —   |
 
 111 of 132 directional pairs are routable. The shared `ContentDocument` model is the hub, not PDF — twenty bridges bypass PDF entirely.
 

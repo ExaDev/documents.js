@@ -62,8 +62,8 @@ Under active development. Built and shipped:
 - **What each reader actually covers** — wordprocessing (`readOdt`), presentation (`readOdp`), drawing (`readOdg`: vector primitives in `draw:z-index`-aware paint order), spreadsheet (`readOds`: every `office:value-type`, cell/page-anchored images, and embedded sub-documents including charts), each expressed in `document-schema.js`'s own `ContentSection`/`ContentSlide`/`ContentDrawPage`/`ContentSheet` vocabulary — plus the fidelity construct vocabulary in `readOdt` (fields including the cross-reference displays, bookmarks and reference-marks, tracked changes, notes, annotations, divisions, index wrappers, forms, and anchored frames; see [Fidelity constructs](#fidelity-constructs)).
 - **`readOdfFormulaMathMl`** — resolves a standalone/embedded `.odf` formula's bare-MathML `content.xml` into raw MathML nodes plus a StarMath annotation, with no pivot shaping at all. **`readOdfFormulaContent`** wraps that into a real `'formula'`-kind `ContentDocument`, and **`readOdfFormula`** into a `DocumentTree`.
 - **`readOdm`** — resolves a `.odm` master document into an ordered list of chapter references (`{ name, href, filterName? }`); chapters are genuinely external `.odt` files by ODF design, never cached.
-- **`readOdbInventory`** — resolves a `.odb` into connection info, table names, query definitions (`{ name, command, escapeProcessing? }` with real SQL text), and form/report `{ name, href }` pairs. A sub-document directory is named after an opaque *persistent* name (`forms/Obj11`), not the user-visible name.
-- **`readOdbForm`/`readOdbReport`** — extract one sub-document's *static structure*, executing nothing: a form's control tree and data bindings, or a report's band stack, recursive group tree, bound fields, and computed expressions.
+- **`readOdbInventory`** — resolves a `.odb` into connection info, table names, query definitions (`{ name, command, escapeProcessing? }` with real SQL text), and form/report `{ name, href }` pairs. A sub-document directory is named after an opaque _persistent_ name (`forms/Obj11`), not the user-visible name.
+- **`readOdbForm`/`readOdbReport`** — extract one sub-document's _static structure_, executing nothing: a form's control tree and data bindings, or a report's band stack, recursive group tree, bound fields, and computed expressions.
 
 Not yet built: live-view editors and the `.odb` database-table-export subsystem. A general-purpose SQL query engine for rendering a Report against its data is **deliberately not attempted** — building even a bounded SQL engine means reimplementing HSQLDB's/Firebird's query semantics, a materially different undertaking from decoding their file formats, with unreviewed licensing questions. Gated on the requesting engineer's explicit sign-off.
 
@@ -102,26 +102,26 @@ To run a single test file: `pnpm vitest run src/path/to/file.test.ts`.
 A typed reader takes a `Package` (bytes go through `decodePackage`/`parsePackage` first) and returns a [`DocumentTree`](../document-schema.js/README.md#the-package-tree) — `document-schema.js`'s single hierarchical artefact, where structure, layout, and content are fused in one tree and a `styles` table has already been minted over it:
 
 ```ts
-import { decodePackage, readOdt } from 'odf.js';
+import { decodePackage, readOdt } from "odf.js";
 
 const pkg = decodePackage(new Uint8Array(await file.arrayBuffer()));
 const document = readOdt(pkg);
 
-document.kind;      // 'wordprocessing'
-document.metadata;  // title, author, keywords, ... from meta.xml
-document.children;  // one section group per ContentSection, headings and lists grouped inside it
-document.styles;    // the minted styles table the tree's `style` refs name
+document.kind; // 'wordprocessing'
+document.metadata; // title, author, keywords, ... from meta.xml
+document.children; // one section group per ContentSection, headings and lists grouped inside it
+document.styles; // the minted styles table the tree's `style` refs name
 ```
 
 One reader per format, each returning the `DocumentTree` arm its format produces:
 
-| Format | Reader | Package kind |
-| --- | --- | --- |
-| `.odt` | `readOdt` | `wordprocessing` |
-| `.odp` | `readOdp` | `presentation` |
-| `.ods` | `readOds` | `spreadsheet` |
-| `.odg` | `readOdg` | `drawing` |
-| `.odf` | `readOdfFormula` | `formula` |
+| Format | Reader           | Package kind     |
+| ------ | ---------------- | ---------------- |
+| `.odt` | `readOdt`        | `wordprocessing` |
+| `.odp` | `readOdp`        | `presentation`   |
+| `.ods` | `readOds`        | `spreadsheet`    |
+| `.odg` | `readOdg`        | `drawing`        |
+| `.odf` | `readOdfFormula` | `formula`        |
 
 Each is assembled through `document-schema.js`'s own `assembleTree`, so odf.js's packages are built exactly the way every other package construction site in this family builds one. No `pages` array is populated and no node carries `frames`: a reader runs before any layout pass, and rendered page geometry is a layout engine's to report, never a reader's to invent.
 
@@ -130,9 +130,9 @@ Each is assembled through `document-schema.js`'s own `assembleTree`, so odf.js's
 Beneath each package-native reader sits the flat reader it is built on, unchanged in behaviour and exported under a `*Content` name. Reach for these when you work in `document-schema.js`'s flat codec-exchange form — as `documents.js`'s own conversion pipeline does — rather than in the tree:
 
 ```ts
-import { readOdsContent, readOdfFormulaMathMl } from 'odf.js';
+import { readOdsContent, readOdfFormulaMathMl } from "odf.js";
 
-const { metadata, sheets } = readOdsContent(pkg);   // the flat ContentSheet[] shape, no tree, no styles table
+const { metadata, sheets } = readOdsContent(pkg); // the flat ContentSheet[] shape, no tree, no styles table
 const { mathml, starMath } = readOdfFormulaMathMl(formulaPkg); // rawest of all: MathML nodes and the StarMath annotation
 ```
 
@@ -144,14 +144,14 @@ Crossing between the levels is `document-schema.js`'s job, not this package's: `
 
 Every bare `readOdX` name now belongs to the package-native reader. Callers of the old flat functions rename; nothing about those functions' behaviour changed:
 
-| 4.x | 5.0 | Returns |
-| --- | --- | --- |
-| `readOdt` | `readOdtContent` | `OdtDocument` |
-| `readOdp` | `readOdpContent` | `OdpDocument` |
-| `readOdg` | `readOdgContent` | `OdgDocument` |
-| `readOds` | `readOdsContent` | `OdsDocument` |
-| `readOdfFormulaDocument` | `readOdfFormulaContent` | `ContentDocument` |
-| `readOdfFormula` | `readOdfFormulaMathMl` | `OdfFormulaDocument` |
+| 4.x                      | 5.0                     | Returns              |
+| ------------------------ | ----------------------- | -------------------- |
+| `readOdt`                | `readOdtContent`        | `OdtDocument`        |
+| `readOdp`                | `readOdpContent`        | `OdpDocument`        |
+| `readOdg`                | `readOdgContent`        | `OdgDocument`        |
+| `readOds`                | `readOdsContent`        | `OdsDocument`        |
+| `readOdfFormulaDocument` | `readOdfFormulaContent` | `ContentDocument`    |
+| `readOdfFormula`         | `readOdfFormulaMathMl`  | `OdfFormulaDocument` |
 
 The rename is a compile error at every call site, never a silent behaviour change: each new bare name returns a `DocumentTree`, which is assignable to none of the old return types.
 
@@ -162,7 +162,7 @@ The rename is a compile error at every call site, never a silent behaviour chang
 The ZIP-of-XML layer every reader above is built on:
 
 ```ts
-import { decodePackage, encodePackage } from 'odf.js';
+import { decodePackage, encodePackage } from "odf.js";
 
 // .odt / .ods / .odp bytes -> faithful JSON Package
 const pkg = decodePackage(new Uint8Array(await file.arrayBuffer()));
@@ -176,10 +176,15 @@ const bytes = encodePackage(pkg);
 Manifest and mimetype, ODF's own package-identity mechanism (no relationships, unlike OOXML):
 
 ```ts
-import { readManifest, syncManifest, setDocumentMediaType, readMimetype } from 'odf.js';
+import {
+  readManifest,
+  syncManifest,
+  setDocumentMediaType,
+  readMimetype,
+} from "odf.js";
 
 const manifest = readManifest(pkg); // { entries: [{ fullPath, mediaType }, ...] }
-setDocumentMediaType(pkg, 'application/vnd.oasis.opendocument.text'); // updates mimetype + manifest root entry atomically
+setDocumentMediaType(pkg, "application/vnd.oasis.opendocument.text"); // updates mimetype + manifest root entry atomically
 syncManifest(pkg); // rebuilds manifest.xml to exactly match pkg's current parts
 readMimetype(pkg); // 'application/vnd.oasis.opendocument.text'
 ```
@@ -189,9 +194,9 @@ readMimetype(pkg); // 'application/vnd.oasis.opendocument.text'
 Every module is also importable directly by its own subpath, without going through the barrel:
 
 ```ts
-import { parseOdfLength } from 'odf.js/typed/shared/units';
+import { parseOdfLength } from "odf.js/typed/shared/units";
 
-parseOdfLength('2.5cm'); // 70.86614173228347
+parseOdfLength("2.5cm"); // 70.86614173228347
 ```
 
 Any `src/**/*.ts` module (excluding tests and `test-support/` fixtures) resolves at its path relative to `src/` — `src/manifest.ts` as `odf.js/manifest`, `src/typed/odt/read.ts` as `odf.js/typed/odt/read`, and so on.
@@ -203,7 +208,7 @@ Layered from a lossless core outward, mirroring `ooxml.js`:
 - **`src/model/`** — `Package`/`XmlNode`/`XmlElement`: a duplicate-by-design copy of `ooxml.js`'s equivalent.
 - **`src/xml/`** — XML parse/build (`fast-xml-parser`), production element/text-node construction, entity encoding, and tree-query helpers.
 - **`src/image/`** — `sniffImageFormat`: a PNG/JPEG magic-byte sniffer consumed by `src/manifest.ts` and `src/typed/draw/shapes.ts`.
-- **`src/zip.ts`** — takes *ordered* `[path, entry]` tuples, not a `Record`, so the mimetype-first/stored/uncompressed requirement doesn't depend on insertion order surviving a Zod round trip.
+- **`src/zip.ts`** — takes _ordered_ `[path, entry]` tuples, not a `Record`, so the mimetype-first/stored/uncompressed requirement doesn't depend on insertion order surviving a Zod round trip.
 - **`src/package-io/`** — `write.ts` hoists `mimetype` first (stored) and `META-INF/manifest.xml` second if present; never fabricates either as a side effect.
 - **`src/manifest.ts`** — full manifest read/write; the manifest is ODF's one mandatory part, unlike `ooxml.js`'s read-only OPC-relationship stance.
 - **`src/styles/`** — `properties.ts`/`serialize.ts` (canonical property-bag ↔ XML attributes), `registry.ts` (`StyleRegistry`, the mandatory style-interning layer), `span.ts` (character-range `text:span` wrapping).
@@ -224,7 +229,7 @@ Layered from a lossless core outward, mirroring `ooxml.js`:
 
 - **Several ODF namespace URIs are not what you'd guess from the prefix.** `draw:` is `...drawing:1.0`, `number:` is `...datastyle:1.0`, `fo:`/`svg:`/`smil:` are `*-compatible:1.0`. See `src/ns.ts`.
 - **`.odb`'s media type is `application/vnd.oasis.opendocument.base`**, not `...database`.
-- **`dc:creator` records whoever most recently *saved* the document, not the author** — the original author is `meta:initial-creator`.
+- **`dc:creator` records whoever most recently _saved_ the document, not the author** — the original author is `meta:initial-creator`.
 - **`meta:keyword` appears once per keyword**, unlike OOXML's single comma-separated `cp:keywords`.
 - **`table:number-columns-repeated`/`-rows-repeated` must be cursor-advanced, never materialized** — real sheets have trailing repeat counts over a million.
 - **ODF cells carry no explicit cell-reference attribute** (unlike xlsx's `r="B7"`) — `typed/shared/a1.ts` computes references from a running cursor.
@@ -233,7 +238,7 @@ Layered from a lossless core outward, mirroring `ooxml.js`:
 - **`svg:fill-rule` and `draw:stroke` map onto `ContentVector.fillRule`/`ContentStroke.style`.** A dotted pattern and `"double"` stroke have no ODF vector-stroke counterpart and remain unread.
 - **`readOdsContent`/`readTableCell` resolve cell `background`/`borders`/`alignment`/`verticalAlignment` from the real style cascade.** An explicit `fo:border-*` of `"none"`/`"hidden"` clears an inherited edge.
 - **`readOdsContent` reads sheet-anchored drawings** — cell-anchored `draw:frame`s (coordinates relative to the cell) and page-anchored ones (in `table:shapes`). An embedded chart resolves as a `chart`-kind object whose document is a frame-sized drawing page carrying the chart's own cached data table, with the `chart:chart` element quarantined in residue. A sheet cannot carry a floating text box or bare vector; each is skipped.
-- **`readDrawObjectReference` resolves a frame's embedded sub-document kind from its own `content.xml`, not the manifest.** A `draw:object` must be checked *before* the frame's preview image, since an embedded-object frame also carries a preview `draw:image`.
+- **`readDrawObjectReference` resolves a frame's embedded sub-document kind from its own `content.xml`, not the manifest.** A `draw:object` must be checked _before_ the frame's preview image, since an embedded-object frame also carries a preview `draw:image`.
 
 ## Fidelity constructs
 
@@ -250,7 +255,8 @@ Layered from a lossless core outward, mirroring `ooxml.js`:
 - **The quarantined residue rows** — inline no-analogue constructs (`text:ruby`, `text:meta`, a heading's `text:is-list-header` flag) quarantine on their own paragraph beside the style-chain unknowns; document-level tenants nothing else owns (`xforms:model`, DDE connection declarations and `text:dde-source` links, vendor-extension elements) quarantine at the package tier on `OdtDocument.source`; `table:calculation-settings` and vendor-extension elements (Calc writes its `calcext:conditional-formats` inside each `table:table`) do the same on `OdsDocument.source`; an odp slide's presentation extras — the transition attributes off the slide's own drawing-page style, where every ODF schema version and real Impress output put them (the legacy `presentation:transition-*`/`presentation:duration` spelling and the ODF 1.2 `smil:type`/`-subtype`/`-direction`/`-fadeColor` one), plus `presentation:sound` and `anim:` trees — and every format's unmapped shape kinds (`dr3d:scene`, `draw:connector`, `draw:measure`, applet/plugin/floating-frame) quarantine on their own slide/page; an unrecognised `draw:custom-shape` preset's whole `draw:enhanced-geometry` quarantines in the text shape it degrades to; and every non-content XML part (`settings.xml`, `META-INF/manifest.rdf`, `Configurations2/…`) quarantines at the package tier keyed by its part path — never an embedded sub-document's own `Object N/` parts, which the semantic channel already carries whole.
 
 Every read-side construct has no write-side counterpart because this package's typed layer is read-only — the honest asymmetry of a reader with no content writer; the lossless `encodePackage` layer remains the byte-fidelity tier.
-- **An embedded Math object in a spreadsheet cell reads as `objectKind: 'formula'`** — its `content.xml` root *is* the MathML root, so `readDrawObjectReference` falls back to `findMathRoot` and dispatches to `readOdfFormulaContent`.
+
+- **An embedded Math object in a spreadsheet cell reads as `objectKind: 'formula'`** — its `content.xml` root _is_ the MathML root, so `readDrawObjectReference` falls back to `findMathRoot` and dispatches to `readOdfFormulaContent`.
 - **A `draw:frame`'s alternative text (`svg:title`, falling back to `svg:desc`) reads into `ContentImageBlock.altText`.**
 - **`readOdbInventory`'s `queries` carry real `db:command` SQL text**, not just names — a breaking rename from `string[]` to `OdbQueryInfo[]`.
 - **`.odb` Form/Report structure extraction is real** (`readOdbForm`/`readOdbReport`), grounded in a genuine fixture. **A SQL/`rpt:` rendering engine to execute a query or evaluate report totals is deliberately not attempted** — see the Status section. Even a fully bounded SQL engine would not suffice to render a report: grouping breaks (`rpt:HASCHANGED`), prefix functions (`rpt:LEFT`), and running totals (`rpt:SUM`) are evaluated by Report Builder's own `rpt:` formula language, not by SQL.
