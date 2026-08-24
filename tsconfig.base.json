@@ -1,0 +1,22 @@
+{
+  // The compiler options every package in this workspace shares, in one place. Each package's own tsconfig.json extends this and keeps only what genuinely differs for it -- its `lib` and `types` (the web-only isomorphism gate, the Node programs, the browser app), its `jsx`, its own `include`/`exclude`. Their tsconfig.node.json / tsconfig.worker.json variants extend that package's tsconfig.json in turn, so they inherit this transitively.
+  //
+  // Before this file the thirteen packages each declared the full set independently, so tightening one flag meant thirteen identical edits and a package could silently drift looser than its siblings -- the same duplication eslint.shared.ts removed for lint rules.
+  "compilerOptions": {
+    "target": "ES2024",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    // Every indexed read is typed as possibly-undefined. This is the flag that makes the codebase narrow properly instead of trusting a bound, and it is why several rules elsewhere had to be tuned rather than taken as shipped.
+    "noUncheckedIndexedAccess": true,
+    // A function with one returning branch must return on every branch, and a switch case may not fall through silently. Both were measured at zero violations across all thirteen packages before landing, so they cost nothing today and stop the first instance rather than the hundredth.
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  }
+}
