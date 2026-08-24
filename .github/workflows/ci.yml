@@ -232,7 +232,7 @@ jobs:
       pull-requests: write # to comment on released pull requests
       id-token: write # OIDC identity for npm trusted publishing (no NPM_TOKEN)
     outputs:
-      # JSON matrices for the three post-release jobs below, listing exactly what this run released. Each is [] when nothing released, which leaves the consuming job's matrix empty and the job skipped.
+      # JSON matrices for the three post-release jobs below, listing exactly what this run released. Each is [] when nothing released, which each consuming job tests for in its own `if` -- an empty include list does not skip a matrix job, it makes the matrix invalid and fails the run.
       github-packages-matrix: ${{ steps.released.outputs.github-packages-matrix }}
       npm-alias-matrix: ${{ steps.released.outputs.npm-alias-matrix }}
       attest-matrix: ${{ steps.released.outputs.attest-matrix }}
@@ -315,7 +315,8 @@ jobs:
   publish-github-packages:
     name: Mirror to GitHub Packages (${{ matrix.scoped }})
     needs: release
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    # The matrix-emptiness half of this condition is load-bearing: `matrix: include: []` is not an empty matrix that skips the job, it is an invalid matrix, and the run concludes failed with no failed job to point at. Guarding here is what makes a main push that released nothing finish green.
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && needs.release.outputs.github-packages-matrix != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -382,7 +383,8 @@ jobs:
   publish-npm-aliases:
     name: Publish npm alias (${{ matrix.alias }})
     needs: release
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    # See the note on publish-github-packages: an empty include list is an invalid matrix, not a skip.
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && needs.release.outputs.npm-alias-matrix != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -443,7 +445,8 @@ jobs:
   attest-release-artifacts:
     name: Attest SBOM and build provenance (${{ matrix.name }})
     needs: release
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    # See the note on publish-github-packages: an empty include list is an invalid matrix, not a skip.
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && needs.release.outputs.attest-matrix != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
