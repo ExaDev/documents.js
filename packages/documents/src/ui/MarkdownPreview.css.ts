@@ -1,1 +1,0 @@
-// Markdown-specific styles are now shared with other preview components via contentBlocks.css.ts. This file is kept for the barrel import pattern (import * as styles from './MarkdownPreview.css') but currently exports nothing -- all styles used by MarkdownPreview.tsx live in contentBlocks.css.ts.

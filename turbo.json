@@ -162,6 +162,18 @@
       ],
       "outputs": [".eslintcache"]
     },
+    // knip is a whole-workspace analysis by construction: it resolves the import graph across every package at once to decide what is unreachable, so there is no per-package equivalent to run. Registered as a root task for that reason, not as a convenience.
+    "//#_knip": {
+      "inputs": [
+        "knip.config.ts",
+        "package.json",
+        "pnpm-workspace.yaml",
+        "packages/*/package.json",
+        "packages/*/src/**",
+        "packages/*/index.html"
+      ],
+      "outputs": []
+    },
     "//#_typecheck": {
       "inputs": [
         "eslint.config.ts",

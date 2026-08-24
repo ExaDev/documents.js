@@ -9,12 +9,12 @@ export interface RecentFileRecord {
   handle?: FileSystemFileHandle;
 }
 
-export interface PreferenceRecord {
+interface PreferenceRecord {
   key: string;
   value: unknown;
 }
 
-export interface CustomFontRecord {
+interface CustomFontRecord {
   id?: number;
   family: string;
   bold: boolean;
@@ -22,7 +22,7 @@ export interface CustomFontRecord {
   bytes: Blob;
 }
 
-export interface EditorSessionRecord {
+interface EditorSessionRecord {
   id?: number;
   sessionId: string;
   format: string;
