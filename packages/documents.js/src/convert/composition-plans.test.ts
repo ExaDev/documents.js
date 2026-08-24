@@ -99,7 +99,7 @@ function wordprocessingRunText(doc: ContentDocument): string {
   return doc.sections
     .flatMap((section) => section.blocks)
     .filter((block): block is ContentParagraph => block.kind === 'paragraph')
-    .flatMap((block) => block.runs.map((run) => run.text ?? ''))
+    .flatMap((block) => block.runs.map((run) => run.text))
     .join('');
 }
 
@@ -112,7 +112,7 @@ describe('convertDocument: newly-exposed cross-variant pairs', () => {
       throw new Error(`expected a presentation ContentDocument, got ${content.kind}`);
     }
     expect(content.slides.length).toBeGreaterThanOrEqual(1);
-    const runText = content.slides.flatMap((slide) => slide.shapes).flatMap((shape) => shape.blocks).filter((block): block is ContentParagraph => block.kind === 'paragraph').flatMap((block) => block.runs.map((run) => run.text ?? '')).join('');
+    const runText = content.slides.flatMap((slide) => slide.shapes).flatMap((shape) => shape.blocks).filter((block): block is ContentParagraph => block.kind === 'paragraph').flatMap((block) => block.runs.map((run) => run.text)).join('');
     expect(runText).toContain('Report Title');
   });
 
@@ -165,7 +165,7 @@ describe('convertDocument: newly-exposed cross-variant pairs', () => {
       throw new Error(`expected a presentation ContentDocument, got ${content.kind}`);
     }
     expect(content.slides.length).toBeGreaterThanOrEqual(1);
-    const runText = content.slides.flatMap((slide) => slide.shapes).flatMap((shape) => shape.blocks).filter((block): block is ContentParagraph => block.kind === 'paragraph').flatMap((block) => block.runs.map((run) => run.text ?? '')).join('');
+    const runText = content.slides.flatMap((slide) => slide.shapes).flatMap((shape) => shape.blocks).filter((block): block is ContentParagraph => block.kind === 'paragraph').flatMap((block) => block.runs.map((run) => run.text)).join('');
     expect(runText).toContain('Hello from odt');
   });
 

@@ -57,7 +57,7 @@ function requireNonNegative(value: number, field: string): void {
 // Sets `node[key]` when `value` is defined, or removes the key entirely when it isn't -- matching every optional LayoutItem field's own Zod-schema shape (an absent key, never a present key holding `undefined`), the same convention DocxParagraph's own alignment/styleId setters follow for w:jc/w:pStyle by removing the element outright rather than writing one with no value.
 function setOrDelete<T extends object, K extends keyof T>(node: T, key: K, value: T[K]): void {
   if (value === undefined) {
-    delete node[key];
+    Reflect.deleteProperty(node, key);
     return;
   }
   node[key] = value;

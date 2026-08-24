@@ -227,7 +227,7 @@ function jpeg2000ChannelKind(image: Jpeg2000Image, dict: PdfDict, resolver: PdfO
 function readJpeg2000Image(dict: PdfDict, raw: Uint8Array<ArrayBuffer>, resolver: PdfObjectResolver, sink: PdfDiagnosticSink): ExtractedPdfImage | undefined {
   let image: Jpeg2000Image;
   try {
-    image = decodeJpeg2000(raw, { onWarning: (message) => sink({ code: 'image/jpx-degraded', severity: 'warning', message }) });
+    image = decodeJpeg2000(raw, { onWarning: (message) => { sink({ code: 'image/jpx-degraded', severity: 'warning', message }); } });
   } catch (error) {
     sink({ code: 'image/jpx-undecodable', severity: 'warning', message: `JPXDecode image could not be decoded (${error instanceof Error ? error.message : String(error)}); skipping this image` });
     return undefined;

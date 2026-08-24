@@ -128,7 +128,6 @@ function spliceContainerBlocks(
 
   let paragraphOrdinal = 0;
   let tableOrdinal = 0;
-  let mutated = false;
   const placements: BlockPlacement[] = [];
   const consumedIndices = new Set<number>();
 
@@ -145,7 +144,6 @@ function spliceContainerBlocks(
       }
       if (consume) {
         consumedIndices.add(blockIndex);
-        mutated = true;
       }
       return block;
     }
@@ -155,16 +153,14 @@ function spliceContainerBlocks(
       if (tableElement === undefined) {
         return block;
       }
-      const rebuilt = rebuildTable(block, tableElement, pageSize, `${sourcePathPrefix}[${blockIndex}]`, onMathDiagnostic);
-      if (rebuilt !== block) {
-        mutated = true;
-      }
-      return rebuilt;
+      return rebuildTable(block, tableElement, pageSize, `${sourcePathPrefix}[${blockIndex}]`, onMathDiagnostic);
     }
     return block;
   });
 
-  if (!mutated && placements.length === 0) {
+  // Derived from the walk's own output rather than tracked by a flag: a rebuilt table is observable as a changed element, and a consumed paragraph is already recorded in consumedIndices. A flag assigned inside the map callback would also read as its initialiser here, since TypeScript ignores nested-function assignments when narrowing the enclosing scope.
+  const rebuiltAnyBlock = consumedIndices.size > 0 || rebuiltBlocks.some((block, index) => block !== blocks[index]);
+  if (!rebuiltAnyBlock && placements.length === 0) {
     return [...blocks];
   }
   return spliceBlocks(rebuiltBlocks, placements, consumedIndices, (position) => `${sourcePathPrefix}[${position}]`);
@@ -173,7 +169,6 @@ function spliceContainerBlocks(
 // Rebuilds a table block with each of its cells' own blocks spliced independently. The cell correspondence is positional: the Nth ContentTableRow maps to the Nth w:tr child of `tblElement`, and within it the Nth ContentTableCell to the Nth w:tc -- exactly the row-major order ooxml.js's own readTable produces them in (one cell per real w:tc, since a horizontal merge collapses to one w:tc carrying w:gridSpan). Returns the original table unchanged when no cell carried a recoverable embedded object.
 function rebuildTable(table: ContentTable, tblElement: XmlElement, pageSize: PageSize, blockPath: string, onMathDiagnostic?: OmmlDiagnosticSink): ContentTable {
   const rowElements = childrenWithTag(tblElement, 'w:tr');
-  let changed = false;
   const rows = table.rows.map((row, rowIndex) => {
     const rowElement = rowElements[rowIndex];
     const cellElements = rowElement === undefined ? [] : childrenWithTag(rowElement, 'w:tc');
@@ -183,15 +178,12 @@ function rebuildTable(table: ContentTable, tblElement: XmlElement, pageSize: Pag
         return cell;
       }
       const blocks = spliceContainerBlocks(cell.blocks, cellElement.children, pageSize, `${blockPath}.rows[${rowIndex}].cells[${cellIndex}].blocks`, onMathDiagnostic);
-      if (blocks === cell.blocks) {
-        return cell;
-      }
-      changed = true;
-      return { ...cell, blocks };
+      return blocks === cell.blocks ? cell : { ...cell, blocks };
     });
-    return changed ? { ...row, cells } : row;
+    // Per row, not a function-scoped flag: the flag this replaces stayed true once any earlier row changed, so every later row was rebuilt into an element-wise identical copy for nothing.
+    return cells.some((cell, index) => cell !== row.cells[index]) ? { ...row, cells } : row;
   });
-  return changed ? { ...table, rows } : table;
+  return rows.some((row, index) => row !== table.rows[index]) ? { ...table, rows } : table;
 }
 
 // Rebuilds every section's block list with each recovered equation and vector-only shape spliced in at its own true position, descending into every table's cells (and nested tables) along the way. Returns the sections unchanged (a fresh array, never the input array) when the document carries no OOXML math and no recovered vectors at all, which is the overwhelmingly common case and costs one shallow walk to establish.
@@ -207,7 +199,6 @@ export function spliceDocxEmbeddedObjects(sections: readonly ContentSection[], b
   for (const [sectionIndex, section] of sections.entries()) {
     const placements: BlockPlacement[] = [];
     const consumedIndices = new Set<number>();
-    let mutated = false;
 
     const rebuiltBlocks: ContentBlock[] = section.blocks.map((block, blockIndex) => {
       if (block.kind === 'paragraph') {
@@ -222,7 +213,6 @@ export function spliceDocxEmbeddedObjects(sections: readonly ContentSection[], b
         }
         if (consume) {
           consumedIndices.add(blockIndex);
-          mutated = true;
         }
         return block;
       }
@@ -232,16 +222,14 @@ export function spliceDocxEmbeddedObjects(sections: readonly ContentSection[], b
         if (tableElement === undefined) {
           return block;
         }
-        const rebuilt = rebuildTable(block, tableElement, section.pageSize, `sections[${sectionIndex}].blocks`, onMathDiagnostic);
-        if (rebuilt !== block) {
-          mutated = true;
-        }
-        return rebuilt;
+        return rebuildTable(block, tableElement, section.pageSize, `sections[${sectionIndex}].blocks`, onMathDiagnostic);
       }
       return block;
     });
 
-    if (placements.length === 0 && consumedIndices.size === 0 && !mutated) {
+    // Same derivation as spliceContainerBlocks above.
+    const rebuiltAnyBlock = rebuiltBlocks.some((block, index) => block !== section.blocks[index]);
+    if (placements.length === 0 && consumedIndices.size === 0 && !rebuiltAnyBlock) {
       out.push(section);
       continue;
     }

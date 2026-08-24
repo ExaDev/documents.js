@@ -320,7 +320,7 @@ export function OdsSpreadsheetGridScreen(): ReactElement {
               <Text dimColor>{`${row + 1}`.padStart(ROW_HEADER_WIDTH - 1)} </Text>
               {visibleColumns.map((column) => {
                 const isCursor = row === clampedRow && column === clampedColumn;
-                const isAnchor = row === mergeAnchor?.row && column === mergeAnchor?.column;
+                const isAnchor = row === mergeAnchor?.row && column === mergeAnchor.column;
                 const cell = cells.get(cellKey(row, column));
                 return (
                   <Text key={column} inverse={isCursor} color={isCursor ? 'cyan' : isAnchor ? 'yellow' : undefined}>

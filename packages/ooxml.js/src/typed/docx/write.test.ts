@@ -626,7 +626,7 @@ describe('buildDocxPackageFromContent: construct round trip', () => {
         ],
       }],
     };
-    expect(() => buildDocxPackageFromContent(faulty)).toThrowError(/run-level construct extent/);
+    expect(() => buildDocxPackageFromContent(faulty)).toThrow(/run-level construct extent/);
   });
 
   it('round-trips a multi-paragraph complex field, putting its characters back inside the extent\'s own paragraphs', () => {

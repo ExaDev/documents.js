@@ -61,12 +61,12 @@ describe('orderKeyBetween', () => {
         iterations += 1;
         if (iterations > 1000) throw new Error('orderKeyBetween never refused -- unbounded growth');
       }
-    }).toThrowError(OrderKeyBudgetExhaustedError);
+    }).toThrow(OrderKeyBudgetExhaustedError);
   });
 
   it('refuses when low does not sort strictly before high', () => {
-    expect(() => orderKeyBetween('5', '5')).toThrowError(/low must sort strictly before high/);
-    expect(() => orderKeyBetween('6', '5')).toThrowError(/low must sort strictly before high/);
+    expect(() => orderKeyBetween('5', '5')).toThrow(/low must sort strictly before high/);
+    expect(() => orderKeyBetween('6', '5')).toThrow(/low must sort strictly before high/);
   });
 });
 
@@ -80,8 +80,8 @@ describe('orderKeyBefore', () => {
   });
 
   it('has no key before the all-zero floor and says so with the named error', () => {
-    expect(() => orderKeyBefore('00000000')).toThrowError(OrderKeyBudgetExhaustedError);
-    expect(() => orderKeyBefore('0')).toThrowError(OrderKeyBudgetExhaustedError);
+    expect(() => orderKeyBefore('00000000')).toThrow(OrderKeyBudgetExhaustedError);
+    expect(() => orderKeyBefore('0')).toThrow(OrderKeyBudgetExhaustedError);
   });
 
   it('walks toward the floor across repeated front inserts, then hands off to a renumberedOrderKeys rebalance', () => {

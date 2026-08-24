@@ -58,10 +58,10 @@ describe('readOlePackage', () => {
     const wrapped = packageStream('a', 'b', 'c', enc('payload'));
     const view = new DataView(wrapped.buffer);
     view.setUint32(wrapped.length - 'payload'.length - 4, 0x00ffffff, true);
-    expect(() => readOlePackage(wrapped)).toThrowError(OlePackageFormatError);
+    expect(() => readOlePackage(wrapped)).toThrow(OlePackageFormatError);
   });
 
   it('throws OlePackageFormatError for input too short to hold even the fixed fields', () => {
-    expect(() => readOlePackage(new Uint8Array(3))).toThrowError(OlePackageFormatError);
+    expect(() => readOlePackage(new Uint8Array(3))).toThrow(OlePackageFormatError);
   });
 });

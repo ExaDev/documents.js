@@ -47,7 +47,7 @@ describe('createEmptyPptxPackage', () => {
   it('p:presentation declares p:sldMasterIdLst before p:sldIdLst, per CT_Presentation element order', () => {
     const pkg = createEmptyPptxPackage();
     const root = rootElement(pkg.parts['ppt/presentation.xml']);
-    const tags = root?.children.filter((c) => c.type === 'element').map((c) => (c.type === 'element' ? c.tag : ''));
+    const tags = root?.children.filter((c) => c.type === 'element').map((c) => c.tag);
     const masterIndex = tags?.indexOf('p:sldMasterIdLst') ?? -1;
     const slideIndex = tags?.indexOf('p:sldIdLst') ?? -1;
     expect(masterIndex).toBeGreaterThanOrEqual(0);
@@ -59,7 +59,7 @@ describe('createEmptyPptxPackage', () => {
     const master = rootElement(pkg.parts['ppt/slideMasters/slideMaster1.xml']);
     const cSld = master === undefined ? undefined : childrenWithTag(master, 'p:cSld')[0];
     expect(cSld).toBeDefined();
-    const childTags = cSld?.children.filter((c) => c.type === 'element').map((c) => (c.type === 'element' ? c.tag : ''));
+    const childTags = cSld?.children.filter((c) => c.type === 'element').map((c) => c.tag);
     expect(childTags?.indexOf('p:bg')).toBe(0);
     expect(childTags?.indexOf('p:spTree')).toBe(1);
     const srgbClr = cSld === undefined ? undefined : childrenWithTag(cSld, 'p:bg')[0];
@@ -73,7 +73,7 @@ describe('createEmptyPptxPackage', () => {
       const root = rootElement(pkg.parts[partPath]);
       const cSld = root === undefined ? undefined : childrenWithTag(root, 'p:cSld')[0];
       const spTree = cSld === undefined ? undefined : childrenWithTag(cSld, 'p:spTree')[0];
-      const childTags = spTree?.children.filter((c) => c.type === 'element').map((c) => (c.type === 'element' ? c.tag : ''));
+      const childTags = spTree?.children.filter((c) => c.type === 'element').map((c) => c.tag);
       expect(childTags, partPath).toEqual(['p:nvGrpSpPr', 'p:grpSpPr']);
     }
   });
@@ -116,7 +116,7 @@ describe('ensureNotesMaster', () => {
     expect(pkg.parts['ppt/notesMasters/notesMaster1.xml']).toBeDefined();
 
     const root = rootElement(pkg.parts['ppt/presentation.xml']);
-    const tags = root?.children.filter((c) => c.type === 'element').map((c) => (c.type === 'element' ? c.tag : ''));
+    const tags = root?.children.filter((c) => c.type === 'element').map((c) => c.tag);
     expect(tags?.indexOf('p:sldMasterIdLst')).toBe(0);
     expect(tags?.indexOf('p:notesMasterIdLst')).toBe(1);
 

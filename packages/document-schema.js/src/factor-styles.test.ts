@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { canonicalise } from './canonicalise';
-import type { ContentBlock, ContentDocument, ContentParagraph, ContentRun } from './content';
+import { ContentParagraphSchema, type ContentBlock, type ContentDocument, type ContentParagraph, type ContentRun } from './content';
 import { assembleTree, factorStyles, mint } from './factor-styles';
 import { flattenTree } from './flatten';
 import { DocumentTreeSchema, type DocumentTree } from './package';
@@ -418,8 +418,9 @@ function findGroupByText(pkg: DocumentTree, text: string): { node: unknown; styl
     }
     if (typeof value !== 'object' || value === null) return;
     if ('node' in value && 'children' in value) {
-      const node = value.node as ContentParagraph;
-      if (node.kind === 'paragraph' && node.runs[0]?.text === text) {
+      // Parsed rather than asserted: a group's node is genuinely any of the descriptor/anchor shapes, so the paragraph check has to be a real runtime narrowing.
+      const node = ContentParagraphSchema.safeParse(value.node);
+      if (node.success && node.data.runs[0]?.text === text) {
         found = value;
         return;
       }

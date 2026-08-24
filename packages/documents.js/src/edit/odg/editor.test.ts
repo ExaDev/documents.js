@@ -300,7 +300,7 @@ describe('full editor round trip: open a real odg, add shapes and vectors includ
     const pathVectors = firstPage.vectors.filter((v) => v.kind === 'path');
     // The fixture already carries one real curve of its own (CurvePath1) -- the new one is disambiguated by its own distinctive fill colour.
     expect(pathVectors.length).toBeGreaterThanOrEqual(2);
-    const newPath = pathVectors.find((v) => v.kind === 'path' && v.fill?.g === 1 && v.fill.b === 1 && v.fill.r === 0);
+    const newPath = pathVectors.find((v) => v.fill?.g === 1 && v.fill.b === 1 && v.fill.r === 0);
     if (newPath?.kind !== 'path') {
       throw new Error('expected to find the newly added cyan curved path');
     }

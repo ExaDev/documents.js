@@ -97,7 +97,7 @@ export function lintMathCoherence(pkg: DocumentTree): readonly MathLintDiagnosti
         collectBlockFormulas(shape.blocks, `pages[${String(pageIndex)}].shapes[${String(shapeIndex)}]`, found);
       }
     }
-  } else if (content.kind === 'spreadsheet') {
+  } else {
     for (const [sheetIndex, sheet] of content.sheets.entries()) {
       for (const [objectIndex, object] of (sheet.embeddedObjects ?? []).entries()) {
         if (object.objectKind === 'formula' && object.document.kind === 'formula') {

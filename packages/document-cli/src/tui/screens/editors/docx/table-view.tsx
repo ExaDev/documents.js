@@ -112,7 +112,7 @@ export function TableViewScreen(): ReactElement {
           <Box key={rowIndex}>
             {row.cells().map((cell, columnIndex) => {
               const isSelected = rowIndex === clampedRow && columnIndex === clampedColumn;
-              const isAnchor = rowIndex === mergeAnchor?.row && columnIndex === mergeAnchor?.column;
+              const isAnchor = rowIndex === mergeAnchor?.row && columnIndex === mergeAnchor.column;
               return (
                 <Box key={columnIndex} width={CELL_WIDTH} borderStyle="single" borderColor={isSelected ? 'cyan' : isAnchor ? 'yellow' : 'gray'}>
                   <Text color={isSelected ? 'cyan' : undefined} inverse={isSelected}>

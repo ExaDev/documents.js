@@ -96,7 +96,7 @@ describe('TableCursor', () => {
     const cursor = new TableCursor();
     expect(() => cursor.nextCell(0)).toThrow(/positive integer/);
     expect(() => cursor.nextCell(-1)).toThrow(/positive integer/);
-    expect(() => cursor.nextRow(0)).toThrow(/positive integer/);
+    expect(() => { cursor.nextRow(0); }).toThrow(/positive integer/);
   });
 
   it('throws for a non-integer repeat count', () => {

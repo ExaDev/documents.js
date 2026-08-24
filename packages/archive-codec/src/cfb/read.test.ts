@@ -152,7 +152,7 @@ describe('readCompoundFile malformed-input handling', () => {
       { path: 'A', bytes: enc('x'.repeat(5000)) },
       { path: 'B', bytes: enc('y'.repeat(5000)) },
     ]);
-    expect(() => readCompoundFile(bytes, { maxTotalBytes: 6000 })).toThrowError(CompoundFileFormatError);
+    expect(() => readCompoundFile(bytes, { maxTotalBytes: 6000 })).toThrow(CompoundFileFormatError);
     // The same file under the default budget reads fine -- the guard fires on the budget, not on the structure.
     expect(readCompoundFile(bytes)).toHaveLength(2);
   });

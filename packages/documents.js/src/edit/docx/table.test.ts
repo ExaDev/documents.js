@@ -23,7 +23,7 @@ describe('buildTable', () => {
     }
     const widths = tblGrid.children
       .filter((c) => c.type === 'element')
-      .map((c) => (c.type === 'element' ? c.attributes.find((a) => a.name === 'w:w')?.value : undefined));
+      .map((c) => c.attributes.find((a) => a.name === 'w:w')?.value);
     expect(widths).toEqual(['3000', '6000']);
   });
 });
@@ -88,7 +88,7 @@ describe('DocxTable cell access and mutation', () => {
     const tc = tableElement.children.find((c) => c.type === 'element' && c.tag === 'w:tr');
     const row = tc?.type === 'element' ? tc.children.find((c) => c.type === 'element' && c.tag === 'w:tc') : undefined;
     const tcPr = row?.type === 'element' ? row.children.find((c) => c.type === 'element' && c.tag === 'w:tcPr') : undefined;
-    const childTags = tcPr?.type === 'element' ? tcPr.children.filter((c) => c.type === 'element').map((c) => (c.type === 'element' ? c.tag : '')) : [];
+    const childTags = tcPr?.type === 'element' ? tcPr.children.filter((c) => c.type === 'element').map((c) => c.tag) : [];
     expect(childTags).toEqual(['w:gridSpan', 'w:vMerge']);
   });
 

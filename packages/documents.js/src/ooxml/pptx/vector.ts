@@ -93,7 +93,7 @@ export function collapseVectorShapeRuns(slide: ContentSlide, slideIndex: number,
   while (index < slide.shapes.length) {
     const group = groups[groupIndex];
     const startsHere = group?.insertAt === index;
-    if (startsHere && group !== undefined) {
+    if (startsHere) {
       const sourcePath = `slides[${slideIndex}].shapes[${shapes.length}]`;
       shapes.push({
         frame: { xPt: 0, yPt: 0, widthPt: slide.size.widthPt, heightPt: slide.size.heightPt },

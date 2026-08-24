@@ -45,7 +45,7 @@ describe('OdsEditor.sheets / sheet / addSheet / removeSheetAt', () => {
 
   it('removeSheetAt throws for an out-of-range index', () => {
     const editor = createOds();
-    expect(() => editor.removeSheetAt(5)).toThrow(/sheet index 5/);
+    expect(() => { editor.removeSheetAt(5); }).toThrow(/sheet index 5/);
   });
 
   it('every sheet addSheet creates shares the same table-family print-settings style (reused, not re-minted per sheet)', () => {

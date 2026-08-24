@@ -39,7 +39,10 @@ describe('readFirebirdBackup: the rich fixture (four EMPLOYEES rows, three DEPAR
     }
     const byId = (id: number) => {
       const idIndex = employees.columns.findIndex((column) => column.name === 'ID');
-      const row = employees.rows.find((candidate) => candidate[idIndex]?.kind === 'number' && candidate[idIndex]?.value === id);
+      const row = employees.rows.find((candidate) => {
+        const idCell = candidate[idIndex];
+        return idCell?.kind === 'number' && idCell.value === id;
+      });
       if (row === undefined) {
         throw new Error(`no row found for ID ${id}`);
       }
@@ -90,7 +93,10 @@ describe('readFirebirdBackup: the rich fixture (four EMPLOYEES rows, three DEPAR
     const budgetIndex = departments.columns.findIndex((column) => column.name === 'BUDGET');
 
     expect(departments.rows).toHaveLength(3);
-    const byDeptId = (id: number) => departments.rows.find((row) => row[deptIdIndex]?.kind === 'number' && row[deptIdIndex]?.value === id);
+    const byDeptId = (id: number) => departments.rows.find((row) => {
+      const idCell = row[deptIdIndex];
+      return idCell?.kind === 'number' && idCell.value === id;
+    });
 
     const engineering = byDeptId(10);
     expect(engineering?.[nameIndex]).toEqual({ kind: 'string', value: 'Engineering' });

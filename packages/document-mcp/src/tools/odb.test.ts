@@ -19,7 +19,7 @@ const ResolvedOutputSchema = z.union([
 ]);
 
 // odb_tables/odb_forms/odb_reports each return a bare array as structuredContent, matching what the callback itself hands back to registerTool -- but the 2025-11-25 wire era's own SEP-2106 projection (WireCodec.projectCallToolResult) boxes a non-object structuredContent value as `{ result: [...] }` before it reaches a client, since that era's own wire result schema requires an object root (the 2026-07-28 era codec does not do this). Accepting either shape here keeps this suite correct regardless of which era this SDK version negotiates by default.
-function arrayStructuredContentSchema<Item extends z.ZodTypeAny>(item: Item): z.ZodType<z.infer<Item>[]> {
+function arrayStructuredContentSchema<Item extends z.ZodType>(item: Item): z.ZodType<z.infer<Item>[]> {
   return z.union([z.array(item), z.object({ result: z.array(item) })]).transform((value) => (Array.isArray(value) ? value : value.result));
 }
 

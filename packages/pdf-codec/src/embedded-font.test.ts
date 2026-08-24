@@ -192,7 +192,7 @@ describe('encodeForShowEmbedded', () => {
       previousGlyphId = glyphId;
     }
     expect(widthFromCodes).toBe(shown.width1000);
-    expect(shown.codes.length).toBe([...text].length * 2);
+    expect(shown.codes.length).toBe(Array.from(text).length * 2);
   });
 });
 

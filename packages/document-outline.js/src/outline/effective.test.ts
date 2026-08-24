@@ -198,7 +198,7 @@ describe('effectivePackage', () => {
 
   it('throws loudly on a ref the styles table does not carry', () => {
     const pkg = wordprocessingPackage([sectionGroup([paragraph('body')], { style: 'missing' })], { styles });
-    expect(() => effectivePackage(pkg)).toThrowError(/missing/);
+    expect(() => effectivePackage(pkg)).toThrow(/missing/);
   });
 
   it('law ii: the resolved factored tree deep-equals its unfactored twin', () => {

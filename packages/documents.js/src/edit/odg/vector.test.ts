@@ -190,8 +190,8 @@ describe('vector rotation', () => {
     vector.rotationDeg = 20;
     vector.frame = { xPt: 50, yPt: 60, widthPt: 300, heightPt: 150 };
     expect(vector.rotationDeg).toBeCloseTo(20, 6);
-    expect(vector.frame?.xPt).toBeCloseTo(50, 6);
-    expect(vector.frame?.yPt).toBeCloseTo(60, 6);
+    expect(vector.frame.xPt).toBeCloseTo(50, 6);
+    expect(vector.frame.yPt).toBeCloseTo(60, 6);
   });
 
   it('round-trips a path vector\'s own rotationDeg, and still reparses its subpaths against the rotated frame', () => {

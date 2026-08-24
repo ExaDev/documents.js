@@ -292,7 +292,7 @@ class Jbig2Decoder {
 
     if (mmr) {
       // T.88 6.2.6: an MMR-coded generic region is exactly a T.6 (Group 4) bitstream, which src/image/ccitt.ts already decodes -- with black in the 1 bits, matching JBIG2's own polarity.
-      const fax = decodeCcittFax(cursor.data.subarray(payload, dataEnd), { k: -1, columns: region.width, rows: region.height, blackIs1: true, onWarning: (message) => this.warn(message) });
+      const fax = decodeCcittFax(cursor.data.subarray(payload, dataEnd), { k: -1, columns: region.width, rows: region.height, blackIs1: true, onWarning: (message) => { this.warn(message); } });
       this.compose(region, unpackBitmapRows(fax.bytes, region.width, region.height));
       return;
     }

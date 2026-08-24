@@ -110,7 +110,7 @@ describe('DocxRun value properties', () => {
     if (rPr?.type !== 'element') {
       throw new Error('expected w:rPr');
     }
-    const tags = rPr.children.filter((c) => c.type === 'element').map((c) => (c.type === 'element' ? c.tag : ''));
+    const tags = rPr.children.filter((c) => c.type === 'element').map((c) => c.tag);
     expect(tags).toEqual(['w:rFonts', 'w:b', 'w:color', 'w:sz', 'w:szCs']);
   });
 });
