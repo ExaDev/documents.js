@@ -95,9 +95,8 @@ describe('walkArchive', () => {
 
 describe('walkArchive depth guard', () => {
   it('accepts nesting exactly at MAX_WALK_DEPTH', () => {
-    const innermostDepth = MAX_WALK_DEPTH;
-    // innermostDepth = wrappers + 1, so this archive's deepest entry sits exactly at the cap.
-    const bytes = nestZip(innermostDepth - 1);
+    // The deepest entry sits at wrappers + 1, so one fewer wrapper than the cap puts it exactly at the cap.
+    const bytes = nestZip(MAX_WALK_DEPTH - 1);
     const entries = walkArchive(bytes);
     expect(entries.filter((e) => e.path === 'innermost.txt')).toHaveLength(1);
   });

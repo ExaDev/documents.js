@@ -680,12 +680,11 @@ describe('order keys (#660)', () => {
     expect(first < mid && mid < second).toBe(true);
     // Nested midpoints keep landing in the shrinking interval until the digits run out -- the documented rebalance signal, not a silent duplicate.
     let low = first;
-    const high = mid;
     let landed = true;
     for (let i = 0; i < 10_000 && landed; i += 1) {
       try {
-        const next = orderKeyBetween(low, high);
-        if (!(low < next && next < high)) throw new Error('midpoint out of interval');
+        const next = orderKeyBetween(low, mid);
+        if (!(low < next && next < mid)) throw new Error('midpoint out of interval');
         low = next;
       } catch {
         landed = false;
