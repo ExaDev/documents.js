@@ -1,3 +1,40 @@
+## [6.1.0](https://github.com/ExaDev/documents.js/compare/documents.js%406.0.1...documents.js%406.1.0) (2026-08-24)
+
+### Features
+
+* **eslint:** enable strictTypeChecked across the workspace ([67eec04](https://github.com/ExaDev/documents.js/commit/67eec04a380b25142f5d1afd11cb9906ff2cfd5f))
+* **eslint:** lint JSON, Markdown, and YAML alongside the TypeScript ([016b127](https://github.com/ExaDev/documents.js/commit/016b127119733c50aa7694bad6265e9bc26bb215))
+
+### Code Refactoring
+
+* clear what strictTypeChecked's non-deviated rules found ([92a9fc9](https://github.com/ExaDev/documents.js/commit/92a9fc98f76244fca3a42ff0a12312ab0ce1a79b))
+* **eslint:** move the seven preset-using packages onto the shared config ([f91e3a5](https://github.com/ExaDev/documents.js/commit/f91e3a5d8708424963f10ebb7f2db07a11b5ff45))
+* **tsconfig:** share the strict compiler options through one base config ([43af382](https://github.com/ExaDev/documents.js/commit/43af382f726d7d42754ac0b6bf6d91b0ae302e25))
+
+### Styles
+
+* format the workspace with prettier ([56c3a1d](https://github.com/ExaDev/documents.js/commit/56c3a1dd1b0f05fbeccfc9b5e8b1d27ca97486b4))
+
+### Miscellaneous Chores
+
+* **deps:** bump byte-codec to ^1.2.0 in documents.js [skip ci] ([24e2b33](https://github.com/ExaDev/documents.js/commit/24e2b3315611dd4d3a79277e1f374bac20763043))
+* **deps:** bump document-schema.js to ^5.1.0 in documents.js [skip ci] ([e3c518d](https://github.com/ExaDev/documents.js/commit/e3c518d29011813239c19e788abd853304938397))
+* **deps:** bump markdown-codec to ^6.1.0 in documents.js [skip ci] ([829c5c0](https://github.com/ExaDev/documents.js/commit/829c5c06e5328a63c21817037104d674b5a4a8d2))
+* **deps:** bump odf.js to ^6.1.0 in documents.js [skip ci] ([871214b](https://github.com/ExaDev/documents.js/commit/871214b7d1e482baf077f4ba110083c277e745f0))
+* **deps:** bump ooxml.js to ^6.1.0 in documents.js [skip ci] ([ecefb85](https://github.com/ExaDev/documents.js/commit/ecefb85b35cfc6a9c37023b161cecc60c414f29f))
+* **deps:** bump pdf-codec to ^3.5.0 in documents.js [skip ci] ([e25ad7f](https://github.com/ExaDev/documents.js/commit/e25ad7fe9b906f7a87a022ab6e9e1ef1cb58506e))
+* **deps:** drop the dependencies each package no longer uses ([80094aa](https://github.com/ExaDev/documents.js/commit/80094aa6db412392ef6e6457014d5963a5e910a7))
+
+
+### Dependencies
+
+- Updated pdf-codec to ^3.5.0
+- Updated ooxml.js to ^6.1.0
+- Updated odf.js to ^6.1.0
+- Updated markdown-codec to ^6.1.0
+- Updated document-schema.js to ^5.1.0
+- Updated byte-codec to ^1.2.0
+
 ## [6.0.1](https://github.com/ExaDev/documents.js/compare/documents.js@6.0.0...documents.js@6.0.1) (2026-08-24)
 
 
