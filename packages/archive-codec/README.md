@@ -32,33 +32,33 @@ To run a single test file, pass its path to vitest directly, e.g. `pnpm exec vit
 Every module is importable by package-relative path as well as through the barrel — `tsdown` builds one dist file per src module (`root: 'src'`, the same layout ooxml.js ships), and `package.json`'s `./*` exports wildcard maps each subpath onto it:
 
 ```ts
-import { readCompoundFile } from 'archive-codec/cfb/read';
-import { walkArchive } from 'archive-codec/zip/walk';
+import { readCompoundFile } from "archive-codec/cfb/read";
+import { walkArchive } from "archive-codec/zip/walk";
 ```
 
 The smoke suite (`test/smoke.test.mjs`) is the guard on that advertisement: it loads each module below from the built `dist/` in both module systems, so a build config that stops serving an advertised subpath fails the suite — neither publint nor `attw` catches a wildcard whose targets are missing.
 
-| Module | Exports |
-|---|---|
-| `zip/container` | `zipPackage` (ordered-entries ZIP write with stored-uncompressed support), `unzipPackage`, `ZipEntry` |
-| `zip/detect` | `detectArchiveFormat` (`'zip' \| 'cfb' \| 'unknown'`), `isZipArchive`, `ArchiveFormat` |
-| `zip/walk` | `walkArchive` (recursive ZIP-in-ZIP walking), `ArchiveWalkEntry`, `ArchiveWalkLimitError`, `MAX_WALK_DEPTH`, `MAX_WALK_TOTAL_BYTES`, `WalkArchiveOptions` |
-| `cfb/detect` | `isCompoundFile` (the `D0 CF 11 E0 …` magic-byte check) |
-| `cfb/read` | `readCompoundFile` (bounded [MS-CFB] stream extraction), `CompoundFileStream`, `CompoundFileFormatError`, `MAX_CFB_TOTAL_STREAM_BYTES`, `ReadCompoundFileOptions` |
-| `cfb/ole-package` | `readOlePackage` (OLE Package stream unwrapping), `OlePackage`, `OlePackageFormatError` |
+| Module            | Exports                                                                                                                                                           |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `zip/container`   | `zipPackage` (ordered-entries ZIP write with stored-uncompressed support), `unzipPackage`, `ZipEntry`                                                             |
+| `zip/detect`      | `detectArchiveFormat` (`'zip' \| 'cfb' \| 'unknown'`), `isZipArchive`, `ArchiveFormat`                                                                            |
+| `zip/walk`        | `walkArchive` (recursive ZIP-in-ZIP walking), `ArchiveWalkEntry`, `ArchiveWalkLimitError`, `MAX_WALK_DEPTH`, `MAX_WALK_TOTAL_BYTES`, `WalkArchiveOptions`         |
+| `cfb/detect`      | `isCompoundFile` (the `D0 CF 11 E0 …` magic-byte check)                                                                                                           |
+| `cfb/read`        | `readCompoundFile` (bounded [MS-CFB] stream extraction), `CompoundFileStream`, `CompoundFileFormatError`, `MAX_CFB_TOTAL_STREAM_BYTES`, `ReadCompoundFileOptions` |
+| `cfb/ole-package` | `readOlePackage` (OLE Package stream unwrapping), `OlePackage`, `OlePackageFormatError`                                                                           |
 
 ### Recursive walking
 
 ```ts
-import { walkArchive } from 'archive-codec';
+import { walkArchive } from "archive-codec";
 
 // Every entry of every nested ZIP, flattened. Throws ArchiveWalkLimitError if
 // the walk exceeds the depth cap or the cumulative decompressed-bytes budget.
 for (const entry of walkArchive(docxBytes)) {
-  entry.path;      // e.g. 'xl/workbook.xml', the path within its own archive
+  entry.path; // e.g. 'xl/workbook.xml', the path within its own archive
   entry.ancestors; // e.g. ['word/embeddings/oleObject1.xlsx'] -- the nested
-                   // ZIP entries descended through to reach this one
-  entry.bytes;     // decompressed content
+  // ZIP entries descended through to reach this one
+  entry.bytes; // decompressed content
 }
 ```
 
@@ -67,18 +67,20 @@ Both guards throw rather than truncate: an input outside the contract must fail 
 ### Compound files
 
 ```ts
-import { readCompoundFile, readOlePackage } from 'archive-codec';
+import { readCompoundFile, readOlePackage } from "archive-codec";
 
 // Every stream of a classic OLE compound file, with its storage path.
 // Throws CompoundFileFormatError on any structural nonconformance.
 for (const stream of readCompoundFile(oleBinBytes)) {
-  stream.path;  // e.g. 'Package' -- root-level, or 'ObjectStorage/Package'
+  stream.path; // e.g. 'Package' -- root-level, or 'ObjectStorage/Package'
   stream.bytes; // the stream's content
 }
 
 // The OLE packaging a Word/PowerPoint embed wraps the real file in before
 // storing it as the 'Package' stream: label, paths, and the file's bytes.
-const packageStream = readCompoundFile(oleBinBytes).find((s) => s.path === 'Package');
+const packageStream = readCompoundFile(oleBinBytes).find(
+  (s) => s.path === "Package",
+);
 if (packageStream !== undefined) {
   readOlePackage(packageStream.bytes).fileBytes; // often a ZIP for a modern embed
 }
@@ -88,7 +90,7 @@ Reading is bounded the same way walking is: chain cycles and out-of-range sector
 
 ### ZIP container
 
-`zipPackage` takes an *ordered* array of `[path, entry]` tuples, not a `Record`, so the caller controls the exact emission order deterministically (the property formats with a fixed-offset first entry — ODF's `mimetype` — depend on), and any entry can be written stored-uncompressed via `stored: true`. `unzipPackage` is the read side; the returned `Record` makes no ordering promise and collapses duplicate paths.
+`zipPackage` takes an _ordered_ array of `[path, entry]` tuples, not a `Record`, so the caller controls the exact emission order deterministically (the property formats with a fixed-offset first entry — ODF's `mimetype` — depend on), and any entry can be written stored-uncompressed via `stored: true`. `unzipPackage` is the read side; the returned `Record` makes no ordering promise and collapses duplicate paths.
 
 ## Conventions
 
