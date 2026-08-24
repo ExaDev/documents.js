@@ -1,3 +1,24 @@
+## [1.2.0](https://github.com/ExaDev/documents.js/compare/byte-codec%401.1.13...byte-codec%401.2.0) (2026-08-24)
+
+### Features
+
+* **eslint:** enable strictTypeChecked across the workspace ([246d69b](https://github.com/ExaDev/documents.js/commit/246d69b8ca2e0cfaeec3813facbe4466f715bc1e))
+* **eslint:** lint JSON, Markdown, and YAML alongside the TypeScript ([5a150be](https://github.com/ExaDev/documents.js/commit/5a150be97d9d5d84024f935fae3deff5b4266eae))
+
+### Code Refactoring
+
+* clear what strictTypeChecked's non-deviated rules found ([4a7ad62](https://github.com/ExaDev/documents.js/commit/4a7ad62ebfabddbc4c3f7cc018838448a9abd926))
+* **eslint:** put type-aware linting on the last six packages ([e83df4b](https://github.com/ExaDev/documents.js/commit/e83df4b4c4781cb4ba33ae17b130a26545b459c9))
+* **tsconfig:** share the strict compiler options through one base config ([e86a366](https://github.com/ExaDev/documents.js/commit/e86a3661ac30c7f304206409272141b97b4fd3ee))
+
+### Styles
+
+* format the workspace with prettier ([c12e740](https://github.com/ExaDev/documents.js/commit/c12e74028aaf5f62cad1c64a414d091c7ecc83db))
+
+### Miscellaneous Chores
+
+* **deps:** drop the dependencies each package no longer uses ([62c2108](https://github.com/ExaDev/documents.js/commit/62c2108c1e8ff3db7f24e6de012c17d65993528d))
+
 ## [1.1.13](https://github.com/ExaDev/documents.js/compare/byte-codec@1.1.12...byte-codec@1.1.13) (2026-08-20)
 
 ## [1.1.12](https://github.com/ExaDev/documents.js/compare/byte-codec@1.1.11...byte-codec@1.1.12) (2026-08-20)
