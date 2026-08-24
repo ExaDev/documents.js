@@ -240,7 +240,7 @@ jobs:
       # main requires status checks to merge, and the default GITHUB_TOKEN has no bypass for that -- the orchestrator's release commits, dependency-bump commits, and tags are direct pushes to main, so they need a token from an actor the branch ruleset explicitly allows to bypass (see ExaDev/.github and this repo's own ruleset). Everything else in this job (release notes, GitHub Release creation, issue/PR comments, OIDC npm publish) keeps using secrets.GITHUB_TOKEN below, unaffected -- only checkout's own git credentials need the elevated token, since that's what the later pushes inherit.
       - name: Generate a token for the release pushes
         id: app-token
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@v3
         with:
           app-id: "4473709"
           private-key: ${{ secrets.AUTOMERGE_APP_PRIVATE_KEY }}
