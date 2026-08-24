@@ -1,5 +1,5 @@
 {
-  "$schema": "https://cdn.jsdelivr.net/npm/document-schema.js@4.10.0/schemas/document-tree.schema.json",
+  "$schema": "https://cdn.jsdelivr.net/npm/document-schema.js@5.0.0/schemas/document-tree.schema.json",
   "kind": "drawing",
   "metadata": {
     "title": "My Drawing"
