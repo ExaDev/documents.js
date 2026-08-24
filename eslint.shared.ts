@@ -46,6 +46,13 @@ const alwaysIgnored: readonly string[] = ['dist', 'coverage', 'node_modules', 't
 /** `exadev/barrel-policy`'s own modes, plus `off` for a package whose file layout the rule cannot describe. */
 export type BarrelPolicy = 'banned' | 'single' | 'siblings' | 'off';
 
+/** One `no-restricted-imports` pattern entry: a gitignore-semantics `group`, or an anchored `regex` tested against the raw specifier. */
+export interface RestrictedImportPattern {
+  readonly group?: readonly string[];
+  readonly regex?: string;
+  readonly message: string;
+}
+
 export interface PackageLintOptions {
   /** Always `import.meta.dirname` from the calling package's own `eslint.config.ts`. Pins the TSConfig root so the parser is not confused by another package's tsconfig elsewhere in the tree, which matters because lint-staged runs eslint at commit time. */
   readonly tsconfigRootDir: string;
@@ -71,6 +78,27 @@ export interface PackageLintOptions {
 
   /** Defaults to `single` -- every published package here exposes exactly one barrel at `src/index.ts`, named in its `exports` map. */
   readonly barrelPolicy?: BarrelPolicy;
+
+  /**
+   * Whether to put Node's globals in scope for every linted file. Defaults to true.
+   *
+   * True suits every library package here, including the Worker-isomorphic ones: what enforces their portability is the import ban and the web-only TSConfig program, not the absence of ambient global types. The web UI passes false and scopes browser, worker, and Node globals to the layers that actually have them -- handing that app Node globals everywhere would let a `process.env` read in browser code lint clean.
+   */
+  readonly nodeGlobals?: boolean;
+
+  /**
+   * Extra `no-restricted-imports` patterns, merged into the same rule the isomorphism guard writes.
+   *
+   * They have to be merged rather than declared in the calling package, because flat config REPLACES a same-key rule instead of merging it: a package that declared its own `no-restricted-imports` over the same files would silently drop the Node-builtin ban and keep passing. markdown-codec is the case this exists for -- it bans every third-party markdown library over exactly the files the isomorphism guard covers.
+   */
+  readonly additionalRestrictedImportPatterns?: readonly RestrictedImportPattern[];
+
+  /**
+   * Runtime `src/` paths that are exempt from the isomorphism guard, on top of the test files and test-support it always exempts.
+   *
+   * For an executed entry point rather than an importable one: `documents.js`'s `src/bin.ts` is a launcher that spawns `npx`/`pnpm`/`yarn`/`bunx`, so it is Node-only by definition. It is never imported into the isomorphic surface, so exempting it leaves that surface pure -- and the package's own `tsconfig.node.json` already routes it to the Node program, so the two agree.
+   */
+  readonly isomorphicExemptions?: readonly string[];
 }
 
 export function packageLintConfig(options: PackageLintOptions): ReturnType<typeof tseslint.config> {
@@ -80,14 +108,29 @@ export function packageLintConfig(options: PackageLintOptions): ReturnType<typeo
     additionalIgnores = [],
     isomorphic = false,
     barrelPolicy = 'single',
+    nodeGlobals = true,
+    additionalRestrictedImportPatterns = [],
+    isomorphicExemptions = [],
   } = options;
+
+  const runtimeSrcExemptions = ['src/**/*.test.ts', 'src/test-support/**', ...isomorphicExemptions];
+
+  const restrictedImportPatterns: readonly RestrictedImportPattern[] = [
+    ...additionalRestrictedImportPatterns,
+    ...(isomorphic
+      ? [
+          { group: ['node:*', 'node:*/**'], message: isomorphicNodeImportMessage },
+          { regex: bareNodeBuiltinPattern, message: isomorphicBareBuiltinMessage },
+        ]
+      : []),
+  ];
 
   return tseslint.config(
     { ignores: [...alwaysIgnored, ...additionalIgnores] },
     {
       languageOptions: {
         parserOptions: { project: [...projects], tsconfigRootDir },
-        globals: { ...globals.node },
+        ...(nodeGlobals ? { globals: { ...globals.node } } : {}),
       },
     },
     js.configs.recommended,
@@ -99,21 +142,23 @@ export function packageLintConfig(options: PackageLintOptions): ReturnType<typeo
         'exadev/barrel-policy': barrelPolicy === 'off' ? 'off' : ['error', { mode: barrelPolicy }],
       },
     },
+    ...(restrictedImportPatterns.length > 0
+      ? tseslint.config({
+          // The static half of the isomorphism guarantee. The workerd suite (pnpm test:workers) proves the same property dynamically, but only over the paths a test actually exercises; this catches an offending import at lint time on every file, before any test runs. Any package-specific bans are folded into the same rule here rather than declared separately, since a second no-restricted-imports over these files would replace this one outright.
+          files: ['src/**/*.ts'],
+          ignores: [...runtimeSrcExemptions],
+          rules: {
+            'no-restricted-imports': ['error', { patterns: [...restrictedImportPatterns] }],
+          },
+        })
+      : []),
     ...(isomorphic
       ? tseslint.config({
-          // The static half of the isomorphism guarantee. The workerd suite (pnpm test:workers) proves the same property dynamically, but only over the paths a test actually exercises; this catches an offending import at lint time on every file, before any test runs.
+          // Its own config object rather than a key alongside no-restricted-imports above, because that block also carries package-specific import bans and this ban is strictly about isomorphism. Different rule key, so there is nothing for flat config to replace either way.
           files: ['src/**/*.ts'],
-          ignores: ['src/**/*.test.ts', 'src/test-support/**'],
+          ignores: [...runtimeSrcExemptions],
           rules: {
-            'no-restricted-imports': [
-              'error',
-              {
-                patterns: [
-                  { group: ['node:*', 'node:*/**'], message: isomorphicNodeImportMessage },
-                  { regex: bareNodeBuiltinPattern, message: isomorphicBareBuiltinMessage },
-                ],
-              },
-            ],
+            // Each restriction is a separate option element after the severity, not wrapped in an inner array -- see the rule's own arrayOfGlobals schema. Only Buffer is banned; a typeof-process check stays legitimate, since the import ban above covers the real Node surface.
             'no-restricted-globals': ['error', { name: 'Buffer', message: isomorphicBufferMessage }],
           },
         })
