@@ -1,3 +1,10 @@
+## [6.0.1](https://github.com/ExaDev/documents.js/compare/documents.js@6.0.0...documents.js@6.0.1) (2026-08-24)
+
+
+### Bug Fixes
+
+* **documents.js:** restamp example goldens for document-schema.js@5.0.0 ([ce37078](https://github.com/ExaDev/documents.js/commit/ce37078f378274572d89c0d18a8fd15036aebfab))
+
 # [6.0.0](https://github.com/ExaDev/documents.js/compare/documents.js@5.0.3...documents.js@6.0.0) (2026-08-23)
 
 
