@@ -81,7 +81,7 @@
   "packageManager": "pnpm@11.6.0",
   "dependencies": {
     "archive-codec": "^1.2.0",
-    "document-schema.js": "^5.0.0",
+    "document-schema.js": "^5.1.0",
     "fast-xml-parser": "^5.10.1",
     "fflate": "^0.8.3",
     "zod": "^4.4.3"

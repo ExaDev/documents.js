@@ -754,7 +754,7 @@ importers:
         specifier: ^1.2.0
         version: link:../archive-codec
       document-schema.js:
-        specifier: ^5.0.0
+        specifier: ^5.1.0
         version: link:../document-schema.js
       fast-xml-parser:
         specifier: ^5.10.1
