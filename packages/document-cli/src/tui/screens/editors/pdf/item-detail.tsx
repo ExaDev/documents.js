@@ -107,9 +107,8 @@ function fieldsFor(item: LayoutItem): readonly Field[] {
       fields.push(['Size', formatSize(item.widthPt, item.heightPt)]);
       break;
     default: {
-      // Exhaustiveness check, not a runtime fallback: if `LayoutItem` ever grows a kind this switch does not handle, `item` stops narrowing to `never` here and the assignment below fails to compile.
-      const exhaustive: never = item;
-      return exhaustive;
+      // Exhaustiveness check, not a runtime fallback: if `LayoutItem` ever grows a kind this switch does not handle, `item` stops narrowing to `never` here and `satisfies never` fails to compile. Written as `satisfies` rather than an annotated `const` because the check is about the type alone -- there is no binding anyone reads, and introducing one only to return it reads as an alias.
+      return item satisfies never;
     }
   }
   // internalLink carries no sourcePath (an annotation rectangle is never laid out from a ContentDocument item), so the trailing rows read it only for the kinds that have one.

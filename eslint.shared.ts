@@ -169,12 +169,6 @@ export function packageLintConfig(options: PackageLintOptions): ReturnType<typeo
         // Making them agree would mean widening each setter to `T | undefined` and giving it a documented "clear the property" behaviour -- a genuine improvement, since there is currently no way to unset a font family or colour, but a feature addition to a published editor surface with its own tests to write. Worth doing on its own; not something to smuggle into a tooling change.
         '@typescript-eslint/related-getter-setter-pairs': 'off',
         'exadev/barrel-policy': barrelPolicy === 'off' ? 'off' : ['error', { mode: barrelPolicy }],
-        // Off because every alias it flagged in this workspace was load-bearing, and its autofix removes the binding while leaving the `export`/`const` keyword behind -- syntactically invalid code, not a behaviour change.
-        //
-        // All five sites were deliberate and carried a comment above them saying so: a `const exhaustive: never = item` exhaustiveness check whose whole purpose is the type annotation the fix deletes, a narrowing capture read inside a closure, a loop-invariant binding its own neighbouring comment refers to by name, and `export const contentHashV1 = stableContentHash` -- a deliberately separate, versioned public contract whose comment states it must be forked rather than folded if the underlying recipe ever changes. The fix rewrote that one to call `stableContentHash` directly at every site, i.e. it deleted the versioning indirection the comment exists to protect.
-        //
-        // A rule that was wrong at every occurrence, with a fix that does not produce parsable output, is not carrying its weight. Reported upstream against @exadev/eslint-config; re-enable if the fix is corrected and the "pointless" test learns to spare a binding whose type annotation or closure capture is the point.
-        'exadev/no-pointless-reassignment': 'off',
       },
     },
     {

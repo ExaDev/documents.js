@@ -20,15 +20,14 @@ interface EditableRow {
 // The fill/stroke row set for a live vector -- a `line` vector has no fill at all (ContentVectorSchema's own 'line' variant carries none), so that row is simply omitted rather than shown disabled. Kept a plain function (not a component) because both branches of VectorDetail below need the identical row list, one to render it and one only to size the "read-only" fallback's own reserved space consistently with ShapeDetail's.
 function buildVectorRows(vector: ContentVector, liveVector: OdgVector, dispatch: Dispatch<Action>): readonly EditableRow[] {
   const rows: EditableRow[] = [];
-  // Parity guarantees vector.kind === liveVector.kind (buildPageItems only populates liveVector when they agree), but each side still needs narrowing on its OWN discriminant -- `vector.fill` needs `vector` narrowed, `fillTarget` needs `liveVector` narrowed -- for the reasons noted below.
+  // Parity guarantees vector.kind === liveVector.kind (buildPageItems only populates liveVector when they agree), but each side still needs narrowing on its OWN discriminant -- `vector.fill` needs `vector` narrowed, the dispatched `vector` field needs `liveVector` narrowed -- for the reasons noted below.
   if (vector.kind !== 'line' && liveVector.kind !== 'line') {
-    // Narrowed to OdgBoxVector | OdgPathVector -- SET_VECTOR_FILL's own `vector` field excludes OdgLineVector (a line has nothing to fill), matching ContentVectorSchema's own 'line' variant, which carries no `fill` field at all.
-    const fillTarget = liveVector;
+    // liveVector is narrowed to OdgBoxVector | OdgPathVector here -- SET_VECTOR_FILL's own `vector` field excludes OdgLineVector (a line has nothing to fill), matching ContentVectorSchema's own 'line' variant, which carries no `fill` field at all.
     rows.push({
       label: `Fill: ${vector.fill === undefined ? 'none' : formatColor(vector.fill)}`,
       currentValue: vector.fill === undefined ? '' : `${vector.fill.r} ${vector.fill.g} ${vector.fill.b}`,
       commit: (raw) => {
-        dispatch({ type: 'SET_VECTOR_FILL', vector: fillTarget, fill: parseColorField(raw) });
+        dispatch({ type: 'SET_VECTOR_FILL', vector: liveVector, fill: parseColorField(raw) });
       },
     });
   }
