@@ -11,13 +11,3 @@ export function useExtractSourceFonts() {
     ) => getRpcClient().fonts.extractSourceFonts(input),
   });
 }
-
-export function useDescribeFontFace() {
-  return useMutation({
-    mutationFn: (
-      input: Parameters<
-        ReturnType<typeof getRpcClient>["fonts"]["describe"]
-      >[0],
-    ) => getRpcClient().fonts.describe(input),
-  });
-}

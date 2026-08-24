@@ -29,14 +29,14 @@ export function useReadContent() {
 }
 
 // Plain mirror of pdf.inspect's own SanitizedLayoutImageAssetSchema (src/rpc/router.ts) -- LayoutImageAsset minus its unbounded base64 payload, plus an estimated byteLength in its place.
-export interface SanitizedLayoutImageAsset {
+interface SanitizedLayoutImageAsset {
   format: "png" | "jpeg";
   widthPx: number;
   heightPx: number;
   byteLength: number;
 }
 
-export type SanitizedLayoutDocument = Omit<LayoutDocument, "images"> & {
+type SanitizedLayoutDocument = Omit<LayoutDocument, "images"> & {
   images: Record<string, SanitizedLayoutImageAsset>;
 };
 

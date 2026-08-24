@@ -20,6 +20,7 @@
     "eslint.config.ts",
     "eslint.shared.ts",
     "prettier.config.ts",
+    "knip.config.ts",
     "commitlint.config.ts",
     "lint-staged.config.ts"
   ]

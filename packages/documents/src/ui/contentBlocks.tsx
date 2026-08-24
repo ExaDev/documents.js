@@ -125,7 +125,7 @@ export function buildListForest(
   return root;
 }
 
-export interface ListGroup {
+interface ListGroup {
   readonly kind: "listGroup";
   readonly items: readonly ContentParagraph[];
 }
