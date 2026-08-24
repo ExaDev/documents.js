@@ -1,3 +1,28 @@
+## [1.2.0](https://github.com/ExaDev/documents.js/compare/archive-codec%401.1.2...archive-codec%401.2.0) (2026-08-24)
+
+### Features
+
+* **eslint:** lint JSON, Markdown, and YAML alongside the TypeScript ([016b127](https://github.com/ExaDev/documents.js/commit/016b127119733c50aa7694bad6265e9bc26bb215))
+
+### Code Refactoring
+
+* **archive-codec:** narrow the CFB stream partitions with a type predicate ([a979387](https://github.com/ExaDev/documents.js/commit/a979387b254b992e3e063ddcef78ec92db3f9a11))
+* clear what strictTypeChecked's non-deviated rules found ([92a9fc9](https://github.com/ExaDev/documents.js/commit/92a9fc98f76244fca3a42ff0a12312ab0ce1a79b))
+* **eslint:** put type-aware linting on the last six packages ([384e3be](https://github.com/ExaDev/documents.js/commit/384e3be118c912ba811bb9b00767ef689417deab))
+* **tsconfig:** share the strict compiler options through one base config ([43af382](https://github.com/ExaDev/documents.js/commit/43af382f726d7d42754ac0b6bf6d91b0ae302e25))
+
+### Styles
+
+* format the workspace with prettier ([56c3a1d](https://github.com/ExaDev/documents.js/commit/56c3a1dd1b0f05fbeccfc9b5e8b1d27ca97486b4))
+
+### Build System
+
+* **deps-dev:** take @exadev/eslint-config 2.1.2 and re-enable its alias rule ([8ecd6de](https://github.com/ExaDev/documents.js/commit/8ecd6de0290c472038fbfe0ec7e47d055cd5d24b))
+
+### Miscellaneous Chores
+
+* **deps:** drop the dependencies each package no longer uses ([80094aa](https://github.com/ExaDev/documents.js/commit/80094aa6db412392ef6e6457014d5963a5e910a7))
+
 ## [1.1.2](https://github.com/ExaDev/documents.js/compare/archive-codec@1.1.1...archive-codec@1.1.2) (2026-08-23)
 
 ## [1.1.1](https://github.com/ExaDev/documents.js/compare/archive-codec@1.1.0...archive-codec@1.1.1) (2026-08-21)
