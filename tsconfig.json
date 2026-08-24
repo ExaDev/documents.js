@@ -21,6 +21,8 @@
     "eslint.shared.ts",
     "prettier.config.ts",
     "knip.config.ts",
+    "vitest.root.config.ts",
+    ".github/scripts",
     "commitlint.config.ts",
     "lint-staged.config.ts"
   ]

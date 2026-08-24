@@ -21,6 +21,7 @@
     "lint": "turbo run _lint",
     "typecheck": "turbo run _typecheck _typecheck:node _typecheck:attw",
     "test": "turbo run _test",
+    "_test": "vitest run --config vitest.root.config.ts",
     "knip": "turbo run _knip",
     "_knip": "knip",
     "test:coverage": "turbo run _test:coverage",
@@ -47,6 +48,7 @@
     "@semantic-release/npm": "^13.1.5",
     "@semantic-release/release-notes-generator": "^14.1.1",
     "@types/node": "^26.2.0",
+    "@types/semver": "7.8.0",
     "eslint": "^10.8.1",
     "eslint-config-prettier": "10.1.8",
     "eslint-plugin-depend": "1.5.0",
@@ -59,8 +61,11 @@
     "lint-staged": "^17.3.0",
     "prettier": "3.9.6",
     "semantic-release": "^25.0.9",
+    "semver": "7.8.5",
     "turbo": "^2.10.8",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.66.0"
+    "typescript-eslint": "^8.66.0",
+    "vitest": "4.1.11",
+    "yaml": "2.9.0"
   }
 }

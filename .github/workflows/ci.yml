@@ -8,6 +8,11 @@ on:
   pull_request:
   workflow_dispatch:
 
+# A new push to a pull request supersedes that PR's in-flight run. A push to main never cancels: the release job publishes to npm and pushes tags mid-run, and the audit job polls a dispatched run to decide whether to merge its own fix -- cancelling either partway leaves real work half-done. The release and Pages jobs keep their own narrower groups below; this one only stops a PR racing itself.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   contents: read
 
@@ -123,9 +128,97 @@ jobs:
           task: test-smoke
           command: pnpm test:smoke $TURBO_FLAGS
 
+  knip:
+    name: Knip
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-workspace
+        with:
+          task: knip
+          # Deliberately no $TURBO_FLAGS. knip resolves the import graph across every package at once to decide what is unreachable, so --affected would hand it a subset of the workspace and it would report every module the omitted packages import as unused. The analysis is whole-workspace or it is wrong.
+          command: pnpm knip
+
+  audit:
+    name: Audit
+    runs-on: ubuntu-latest
+    # Generous because the fix-PR path below polls a dispatched CI run after the audit itself finishes.
+    timeout-minutes: 45
+    permissions:
+      contents: write # to push the fix branch
+      pull-requests: write # to open and merge the fix PR
+      actions: write # to dispatch CI on the fix branch
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Audit, applying an aged override where one exists and deferring the rest
+        uses: ./.github/actions/setup-workspace
+        with:
+          task: audit
+          command: node --experimental-strip-types .github/scripts/audit-autofix.ts
+        env:
+          AUDIT_LEVEL: high
+
+      # Only ever from main. A pull request run has nothing of its own to fix, and this keeps the fix branch out of branches this workflow does not own. Routing the fix through a PR rather than a direct push is what keeps a bad fix off main: the merge below happens only after a full run on the fix branch has passed.
+      #
+      # secrets.GITHUB_TOKEN deliberately, not the release job's GitHub App token. That token exists so the orchestrator can push to a protected main; an audit branch needs no bypass, and handing a maintenance job release credentials widens the blast radius for nothing.
+      - name: Open a pull request with the fixed overrides
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # The composite action declares no outputs, so the script reports through a file rather than a step output.
+          if [ "$(cat /tmp/audit-fix-fixed.txt 2>/dev/null)" != "true" ]; then
+            echo "Audit applied no override; nothing to open a pull request for."
+            exit 0
+          fi
+          BRANCH="audit-autofix/$(date -u +%Y%m%d%H%M%S)"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add pnpm-workspace.yaml pnpm-lock.yaml
+          git commit -m "fix(deps): apply aged security overrides
+
+          $(cat /tmp/audit-fix-commit-body.txt)"
+          git push origin "$BRANCH"
+          gh pr create --title "fix(deps): apply aged security overrides" --body-file /tmp/audit-fix-commit-body.txt --base main --head "$BRANCH"
+          # A push or PR authenticated with GITHUB_TOKEN never triggers another workflow run, so the fix branch's own checks have to be dispatched explicitly -- which is why workflow_dispatch is in this workflow's `on:` block.
+          gh workflow run ci.yml --ref "$BRANCH"
+          RUN_ID=""
+          for _ in 1 2 3 4 5; do
+            sleep 10
+            RUN_ID=$(gh run list --workflow=ci.yml --branch "$BRANCH" --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId' 2>/dev/null)
+            if [ -n "$RUN_ID" ]; then break; fi
+          done
+          if [ -z "$RUN_ID" ]; then
+            echo "::error::Dispatched run for $BRANCH never appeared; the fix pull request is left open for review."
+            exit 0
+          fi
+          echo "Waiting for run $RUN_ID on $BRANCH..."
+          for i in $(seq 1 60); do
+            STATUS=$(gh run view "$RUN_ID" --json status,conclusion --jq '.status + ":" + (.conclusion // "pending")' 2>/dev/null || echo "query_failed")
+            if [ "$STATUS" = "completed:success" ]; then
+              echo "Green on $BRANCH; rebase-merging the fix pull request."
+              gh pr merge --rebase "$BRANCH"
+              exit 0
+            fi
+            if [ "$STATUS" = "completed:failure" ] || [ "$STATUS" = "completed:cancelled" ]; then
+              echo "::error::Run on $BRANCH concluded $STATUS; the fix pull request is left open so a broken fix cannot reach main."
+              exit 0
+            fi
+            echo "Run on $BRANCH still pending ($i/60)..."
+            sleep 20
+          done
+          echo "::error::Timed out waiting for run $RUN_ID on $BRANCH; the fix pull request is left open."
+          exit 0
+
   release:
     name: Release
-    needs: [commitlint, lint, typecheck, test, test-workers, test-smoke]
+    needs: [commitlint, lint, typecheck, test, test-workers, test-smoke, knip]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     # Two pushes to main close together must never run this job at the same time. The orchestrator's own dependency-bump-and-release cascade pushes to main mid-run, and semantic-release's own stale-checkout guard (comparing this job's local HEAD against a fresh `git ls-remote` of the real repository on every per-package release) will correctly refuse to publish the instant it sees ANY commit land on main that this checkout doesn't have yet -- including a concurrent Release run's own pushes. One run racing another this way is how ooxml.js, pdf-codec, documents.js, document-cli, and document-mcp all silently skipped a release they needed (ExaDev/documents.js#735): every package after the point the two runs' pushes interleaved reported "no release", correctly by that check's own logic, but wrongly for what the cascade needed. `cancel-in-progress: false` queues the second run behind the first rather than cancelling either -- cancelling mid-release would leave whichever packages it had already published without their downstream dependents' bumps.
     concurrency:
