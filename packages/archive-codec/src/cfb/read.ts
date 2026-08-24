@@ -207,7 +207,7 @@ export function readCompoundFile(bytes: Uint8Array<ArrayBuffer>, options: ReadCo
   }
   const root = entries[0];
   // Only the root's type matters to reading -- its stream is the mini stream and its child starts the entry tree; its own name is the "Root Entry" convention and nothing depends on it.
-  if (root === undefined || root.objectType !== OBJECT_TYPE_ROOT) {
+  if (root?.objectType !== OBJECT_TYPE_ROOT) {
     throw new CompoundFileFormatError('the first directory entry is not the root storage entry (object type 5), as [MS-CFB] 2.6.1 requires');
   }
 

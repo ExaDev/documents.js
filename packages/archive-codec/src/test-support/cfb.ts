@@ -31,6 +31,15 @@ interface DirectoryRecord {
   rightId: number;
 }
 
+/** A directory record whose node genuinely carries a stream, so reads of it need no absent case. */
+interface StreamRecord extends DirectoryRecord {
+  readonly node: StorageNode & { stream: Uint8Array<ArrayBuffer> };
+}
+
+function hasStream(record: DirectoryRecord): record is StreamRecord {
+  return record.node.stream !== undefined;
+}
+
 const MINI_SECTOR_SIZE = 64;
 const MINI_STREAM_CUTOFF = 4096;
 const FREESECT = 0xffffffff;
@@ -143,11 +152,12 @@ export function compoundFile(entries: readonly CompoundFileEntrySpec[], options:
     }
   }
 
-  const smallStreamRecords = records.filter(({ node }) => node.stream !== undefined && node.stream.length < MINI_STREAM_CUTOFF);
-  const bigStreamRecords = records.filter(({ node }) => node.stream !== undefined && node.stream.length >= MINI_STREAM_CUTOFF);
+  // Narrowed through a type predicate rather than a boolean one, because `filter` with a boolean callback leaves the element type alone: the two partitions below would still carry `stream?: Uint8Array` even though the predicate is exactly what rules the absent case out, and every later read would need a fallback that can never be taken.
+  const smallStreamRecords = records.filter(hasStream).filter(({ node }) => node.stream.length < MINI_STREAM_CUTOFF);
+  const bigStreamRecords = records.filter(hasStream).filter(({ node }) => node.stream.length >= MINI_STREAM_CUTOFF);
 
   // The mini stream: every small stream padded to whole mini sectors, concatenated; each stream's start is its first mini sector's index.
-  const miniChunks = smallStreamRecords.map(({ node }) => padToMultiple(node.stream ?? new Uint8Array(0), MINI_SECTOR_SIZE));
+  const miniChunks = smallStreamRecords.map(({ node }) => padToMultiple(node.stream, MINI_SECTOR_SIZE));
   const miniStream = new Uint8Array(miniChunks.reduce((total, chunk) => total + chunk.length, 0));
   let miniOffset = 0;
   const miniStartOf = new Map<number, number>();
@@ -158,7 +168,7 @@ export function compoundFile(entries: readonly CompoundFileEntrySpec[], options:
   }
   const miniSectorCount = miniStream.length / MINI_SECTOR_SIZE;
 
-  const bigSectorCounts = bigStreamRecords.map(({ node }) => Math.ceil((node.stream ?? new Uint8Array(0)).length / sectorSize));
+  const bigSectorCounts = bigStreamRecords.map(({ node }) => Math.ceil(node.stream.length / sectorSize));
   const directorySectorCount = Math.ceil(records.length / entriesPerDirectorySector);
   const miniStreamSectorCount = Math.ceil(miniStream.length / sectorSize);
   const miniFatSectorCount = miniSectorCount === 0 ? 0 : Math.ceil(miniSectorCount / fatEntriesPerSector);
@@ -266,8 +276,8 @@ export function compoundFile(entries: readonly CompoundFileEntrySpec[], options:
   for (let i = 0; i < directorySectorCount; i++) {
     copySector(directoryStart + i, directory.subarray(i * sectorSize, (i + 1) * sectorSize));
   }
-  for (let i = 0; i < bigStreamRecords.length; i++) {
-    copySector(bigStartOf.get(bigStreamRecords[i]?.id ?? -1) ?? 0, padToMultiple(bigStreamRecords[i]?.node.stream ?? new Uint8Array(0), sectorSize));
+  for (const record of bigStreamRecords) {
+    copySector(bigStartOf.get(record.id) ?? 0, padToMultiple(record.node.stream, sectorSize));
   }
   if (miniStream.length > 0) {
     copySector(miniStreamStart, miniStream);
