@@ -1,3 +1,39 @@
+## [3.1.0](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.0.0...document-outline.js%403.1.0) (2026-08-24)
+
+### Features
+
+* **eslint:** enable strictTypeChecked across the workspace ([246d69b](https://github.com/ExaDev/documents.js/commit/246d69b8ca2e0cfaeec3813facbe4466f715bc1e))
+* **eslint:** lint JSON, Markdown, and YAML alongside the TypeScript ([5a150be](https://github.com/ExaDev/documents.js/commit/5a150be97d9d5d84024f935fae3deff5b4266eae))
+
+### Code Refactoring
+
+* clear what strictTypeChecked's non-deviated rules found ([4a7ad62](https://github.com/ExaDev/documents.js/commit/4a7ad62ebfabddbc4c3f7cc018838448a9abd926))
+* **document-outline.js:** export the order-key error from the barrel ([42f8cbd](https://github.com/ExaDev/documents.js/commit/42f8cbd2843c559b74de8f8c178774a98253eb44))
+* **eslint:** put type-aware linting on the last six packages ([e83df4b](https://github.com/ExaDev/documents.js/commit/e83df4b4c4781cb4ba33ae17b130a26545b459c9))
+* **tsconfig:** share the strict compiler options through one base config ([e86a366](https://github.com/ExaDev/documents.js/commit/e86a3661ac30c7f304206409272141b97b4fd3ee))
+
+### Documentation
+
+* **document-outline.js:** drop the speculative rationale from contentHashV1 ([ae00599](https://github.com/ExaDev/documents.js/commit/ae005996f56adfc11f60ec8b13bff25f49a72a6f))
+
+### Styles
+
+* format the workspace with prettier ([c12e740](https://github.com/ExaDev/documents.js/commit/c12e74028aaf5f62cad1c64a414d091c7ecc83db))
+
+### Build System
+
+* **deps-dev:** take @exadev/eslint-config 2.1.2 and re-enable its alias rule ([4b64ac4](https://github.com/ExaDev/documents.js/commit/4b64ac45c2e3baa3fdd8ccb22a6efa9866177cc2))
+
+### Miscellaneous Chores
+
+* **deps:** bump document-schema.js to ^5.1.0 in document-outline.js [skip ci] ([efac5ea](https://github.com/ExaDev/documents.js/commit/efac5ea706234d71063cdda385621960bfcde125))
+* **deps:** drop the dependencies each package no longer uses ([62c2108](https://github.com/ExaDev/documents.js/commit/62c2108c1e8ff3db7f24e6de012c17d65993528d))
+
+
+### Dependencies
+
+- Updated document-schema.js to ^5.1.0
+
 # [3.0.0](https://github.com/ExaDev/documents.js/compare/document-outline.js@2.1.2...document-outline.js@3.0.0) (2026-08-23)
 
 
