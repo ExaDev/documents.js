@@ -1,3 +1,44 @@
+## [5.1.0](https://github.com/ExaDev/documents.js/compare/document-cli%405.0.1...document-cli%405.1.0) (2026-08-24)
+
+### Features
+
+* **eslint:** enable strictTypeChecked across the workspace ([246d69b](https://github.com/ExaDev/documents.js/commit/246d69b8ca2e0cfaeec3813facbe4466f715bc1e))
+* **eslint:** lint JSON, Markdown, and YAML alongside the TypeScript ([5a150be](https://github.com/ExaDev/documents.js/commit/5a150be97d9d5d84024f935fae3deff5b4266eae))
+
+### Code Refactoring
+
+* clear what strictTypeChecked's non-deviated rules found ([4a7ad62](https://github.com/ExaDev/documents.js/commit/4a7ad62ebfabddbc4c3f7cc018838448a9abd926))
+* **eslint:** put type-aware linting on the last six packages ([e83df4b](https://github.com/ExaDev/documents.js/commit/e83df4b4c4781cb4ba33ae17b130a26545b459c9))
+* **tsconfig:** share the strict compiler options through one base config ([e86a366](https://github.com/ExaDev/documents.js/commit/e86a3661ac30c7f304206409272141b97b4fd3ee))
+
+### Documentation
+
+* add the licence, security, and issue-template files the repo was missing ([d7d1059](https://github.com/ExaDev/documents.js/commit/d7d10591ec11dfc523d45414e2ad7340e4b2ba75))
+
+### Styles
+
+* format the workspace with prettier ([c12e740](https://github.com/ExaDev/documents.js/commit/c12e74028aaf5f62cad1c64a414d091c7ecc83db))
+
+### Build System
+
+* **deps-dev:** take @exadev/eslint-config 2.1.2 and re-enable its alias rule ([4b64ac4](https://github.com/ExaDev/documents.js/commit/4b64ac45c2e3baa3fdd8ccb22a6efa9866177cc2))
+
+### Miscellaneous Chores
+
+* **deps:** bump document-outline.js to ^3.1.0 in document-cli [skip ci] ([d32dada](https://github.com/ExaDev/documents.js/commit/d32dada4d149eaa68614bdf750d9bacb7b4bb026))
+* **deps:** bump document-schema.js to ^5.1.0 in document-cli [skip ci] ([ac90b4d](https://github.com/ExaDev/documents.js/commit/ac90b4d3eac862c75b205080e6ec65b88758d58a))
+* **deps:** bump documents.js to ^6.1.0 in document-cli [skip ci] ([2c51137](https://github.com/ExaDev/documents.js/commit/2c51137838aff14658b0fd0d1e08326cbaec4d4b))
+* **deps:** bump odf.js to ^6.1.0 in document-cli [skip ci] ([60c3c50](https://github.com/ExaDev/documents.js/commit/60c3c50ad3ddd9c2804637f2baa1f82f76b819ca))
+* **deps:** drop the dependencies each package no longer uses ([62c2108](https://github.com/ExaDev/documents.js/commit/62c2108c1e8ff3db7f24e6de012c17d65993528d))
+
+
+### Dependencies
+
+- Updated documents.js to ^6.1.0
+- Updated odf.js to ^6.1.0
+- Updated document-outline.js to ^3.1.0
+- Updated document-schema.js to ^5.1.0
+
 ## [5.0.1](https://github.com/ExaDev/documents.js/compare/document-cli@5.0.0...document-cli@5.0.1) (2026-08-24)
 
 
